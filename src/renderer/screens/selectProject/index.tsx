@@ -306,6 +306,8 @@ const SelectProject: React.FC = () => {
     try {
       const project = await projectsServices.addProject(newProject);
       await projectsServices.selectProject({ projectId: project.id });
+      navigate('/app');
+      toast.success(`Project ${project.name} created successfully!`);
       setIsAddingProject(false);
       setNewProject({ name: '' });
     } catch (error) {
