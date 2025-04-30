@@ -42,15 +42,31 @@ export class WindowManager {
       }
     });
 
-    registerHandlers(this.mainWindow);
-    ipcMain.removeHandler('project:select');
-    ipcMain.handle(
-      'project:select',
-      async (_event, body: { projectId: string }) => {
-        await ProjectsService.selectProject(body);
-        // Removed this.mainWindow?.reload(); as it breaks the render
-      },
-    );
+    // Wait for the main window to be ready to show
+    return new Promise<void>((resolve) => {
+      if (!this.mainWindow) {
+        resolve();
+        return;
+      }
+
+      this.mainWindow.once('ready-to-show', () => {
+        if (this.mainWindow) {
+          this.mainWindow.show();
+          this.mainWindow.focus();
+        }
+        resolve();
+      });
+
+      registerHandlers(this.mainWindow);
+      ipcMain.removeHandler('project:select');
+      ipcMain.handle(
+        'project:select',
+        async (_event, body: { projectId: string }) => {
+          await ProjectsService.selectProject(body);
+          // Removed reload that breaks the render
+        },
+      );
+    });
   }
 
   public closeSplashScreen() {

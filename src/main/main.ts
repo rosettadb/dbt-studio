@@ -80,6 +80,7 @@ if (!gotTheLock) {
 
           // Ensure windowManager is not null before using it
           if (windowManager) {
+            // Wait for the main window to be fully ready before closing splash
             await windowManager.showMainWindow();
             windowManager.closeSplashScreen();
           }
