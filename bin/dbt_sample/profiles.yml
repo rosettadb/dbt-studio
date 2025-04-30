@@ -1,0 +1,11 @@
+my_dbt_project:
+  target: dev
+  outputs:
+    dev:
+      type:
+      host:
+      port:
+      user:
+      password:
+      dbname:
+      schema:

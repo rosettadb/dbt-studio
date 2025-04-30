@@ -1,0 +1,48 @@
+/*
+ * @NOTE: Prepend a `~` to css file paths that are in your node_modules
+ *        See https://github.com/webpack-contrib/sass-loader#imports
+ */
+body {
+  position: relative;
+  height: 100vh;
+  background: #fafafa;
+  font-family: sans-serif;
+  margin: 0;
+  padding: 0;
+}
+
+li {
+  list-style: none;
+}
+
+a {
+  text-decoration: none;
+  height: fit-content;
+  width: fit-content;
+  margin: 10px;
+}
+
+a:hover {
+  opacity: 1;
+  text-decoration: none;
+}
+
+.monaco-editor .line-added {
+  background-color: rgba(0, 255, 0, 0.1);
+}
+.monaco-editor .line-removed {
+  background-color: rgba(255, 0, 0, 0.1);
+}
+.monaco-editor .line-added-glyph {
+  background: rgba(0, 128, 0, 0.28);
+}
+.monaco-editor .line-removed-glyph {
+  background: rgba(255, 0, 0, 0.2);
+}
+
+.run-query-glyph {
+  background: url("data:image/svg+xml;utf8,<svg width='16' height='16' fill='limegreen' xmlns='http://www.w3.org/2000/svg'><path d='M4 3v10l9-5z'/></svg>")
+  center center no-repeat;
+  background-size: 14px 14px;
+  cursor: pointer;
+}

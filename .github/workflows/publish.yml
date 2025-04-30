@@ -1,0 +1,90 @@
+name: Publish
+
+on:
+  push:
+    branches:
+      - prod
+
+jobs:
+  publish-mac:
+    runs-on: macos-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Install Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: 18
+          cache: npm
+
+      - name: Install dependencies
+        run: |
+          npm install
+          npm run postinstall
+
+      - name: Build project
+        run: npm run build
+
+      - name: Publish for macOS
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_ID_PASS }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          CSC_LINK: ${{ secrets.CSC_LINK }}
+          CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
+        run: |
+          npm exec electron-builder -- --publish always --mac
+
+  publish-windows:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Install Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: 18
+          cache: npm
+
+      - name: Install dependencies
+        run: |
+          npm install
+          npm run postinstall
+
+      - name: Build project
+        run: npm run build
+
+      - name: Publish for Windows
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          npm exec electron-builder -- --publish always --win
+
+  publish-linux:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Install Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: 18
+          cache: npm
+
+      - name: Install dependencies
+        run: |
+          npm install
+          npm run postinstall
+
+      - name: Build project
+        run: npm run build
+
+      - name: Publish for Linux
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          npm exec electron-builder -- --publish always --linux deb rpm
