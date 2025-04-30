@@ -55,7 +55,7 @@ export const RosettaSettings: React.FC<RosettaSettingsProps> = ({
           color="primary"
           size="small"
           component="a"
-          href="https://github.com/AdaptiveScale/rosetta?tab=readme-ov-file#getting-started"
+          href="https://github.com/rosettadb/rosetta?tab=readme-ov-file#getting-started"
           target="_blank"
           rel="noopener noreferrer"
           sx={{ textTransform: 'none' }}

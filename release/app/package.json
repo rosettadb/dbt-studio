@@ -5,7 +5,7 @@
   "license": "MIT",
   "author": {
     "name": "Rosetta Labs",
-    "email": "info@adaptivescale.com",
+    "email": "info@rosettadb.com",
     "url": "https://rosettadb.io"
   },
   "main": "./dist/main/main.js",

@@ -33,7 +33,7 @@ export const AboutSettings: React.FC = () => {
 
       <Stack spacing={2}>
         <Link
-          href="https://github.com/AdaptiveScale/dbt-studio"
+          href="https://github.com/rosettadb/dbt-studio"
           target="_blank"
           rel="noopener noreferrer"
           sx={{
@@ -48,7 +48,7 @@ export const AboutSettings: React.FC = () => {
         </Link>
 
         <Link
-          href="https://github.com/AdaptiveScale/dbt-studio/issues"
+          href="https://github.com/rosettadb/dbt-studio/issues"
           target="_blank"
           rel="noopener noreferrer"
           sx={{
@@ -82,7 +82,7 @@ export const AboutSettings: React.FC = () => {
           Rosetta dbt™ Studio
         </Typography>
         <Typography variant="body2" color="text.secondary">
-          Copyright {new Date().getFullYear()} AdaptiveScale. All rights reserved.
+          Copyright {new Date().getFullYear()} Rosettadb. All rights reserved.
         </Typography>
       </Box>
 
@@ -98,7 +98,7 @@ export const AboutSettings: React.FC = () => {
           </Link>
           ,{' '}
           <Link
-            href="https://github.com/AdaptiveScale/rosetta"
+            href="https://github.com/rosettadb/rosetta"
             target="_blank"
             rel="noopener noreferrer"
           >

@@ -8,10 +8,10 @@
     "dbt-studio",
     "ts"
   ],
-  "homepage": "https://github.com/AdaptiveScale/dbt-studio#readme",
+  "homepage": "https://github.com/rosettadb/dbt-studio#readme",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/AdaptiveScale/dbt-studio.git"
+    "url": "git+https://github.com/rosettadb/dbt-studio.git"
   },
   "license": "MIT",
   "author": {
@@ -203,7 +203,7 @@
   },
   "build": {
     "productName": "Rosetta_dbt_Studio",
-    "appId": "org.adaptivescale.dbtStudio",
+    "appId": "org.rosettadb.dbtStudio",
     "asar": true,
     "asarUnpack": "**\\*.{node,dll}",
     "files": [
@@ -251,7 +251,7 @@
         "deb"
       ],
       "category": "Development",
-      "maintainer": "AdaptiveScale",
+      "maintainer": "RosettaDB",
       "synopsis": "Rosetta dbt Studio",
       "description": "A studio for managing dbt projects",
       "artifactName": "${productName}-${version}-${arch}.${ext}"
@@ -266,7 +266,7 @@
     ],
     "publish": {
       "provider": "github",
-      "owner": "AdaptiveScale",
+      "owner": "rosettadb",
       "repo": "dbt-studio"
     }
   },

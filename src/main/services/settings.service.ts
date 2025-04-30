@@ -155,12 +155,12 @@ export default class SettingsService {
     }
 
     const latestRelease = await axios.get(
-      'https://api.github.com/repos/AdaptiveScale/rosetta/releases/latest',
+      'https://api.github.com/repos/rosettadb/rosetta/releases/latest',
     );
     const version = latestRelease.data.tag_name.replace(/^v/, '');
 
     const zipName = `rosetta-${version}-${osName}_${archName}-with-drivers.zip`;
-    const downloadUrl = `https://github.com/AdaptiveScale/rosetta/releases/download/v${version}/${zipName}`;
+    const downloadUrl = `https://github.com/rosettadb/rosetta/releases/download/v${version}/${zipName}`;
 
     const rosettaBasePath = path.join(app.getPath('userData'), 'rosetta');
     const extractPath = path.join(
