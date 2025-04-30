@@ -136,11 +136,12 @@ export const Menu: React.FC = () => {
             ]}
             onSelect={async (value) => {
               if (value === 'new') {
-                window.close();
-                return;
+                await projectsServices.selectProject({ projectId: '' });
+                navigate('/app/select-project');
+              } else {
+                await projectsServices.selectProject({ projectId: value });
+                navigate('/app');
               }
-              await projectsServices.selectProject({ projectId: value });
-              window.location.reload();
             }}
             selectedItem={String(project?.id)}
             anchorElement={
