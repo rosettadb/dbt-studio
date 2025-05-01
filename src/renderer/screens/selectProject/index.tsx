@@ -1,4 +1,5 @@
 import React from 'react';
+import { useNavigate } from 'react-router-dom';
 import {
   Button,
   TextField,
@@ -195,6 +196,7 @@ const TaglineLogo = styled('img')`
 `;
 
 const SelectProject: React.FC = () => {
+  const navigate = useNavigate();
   const { data: projects = [] } = useGetProjects();
   const [isCloneModalOpen, setIsCloneModalOpen] = React.useState(false);
   const [searchQuery, setSearchQuery] = React.useState('');
@@ -304,6 +306,8 @@ const SelectProject: React.FC = () => {
     try {
       const project = await projectsServices.addProject(newProject);
       await projectsServices.selectProject({ projectId: project.id });
+      navigate('/app');
+      toast.success(`Project ${project.name} created successfully!`);
       setIsAddingProject(false);
       setNewProject({ name: '' });
     } catch (error) {
@@ -369,6 +373,8 @@ const SelectProject: React.FC = () => {
               await projectsServices.selectProject({
                 projectId: project.id,
               });
+              // Instead of reloading the window, navigate to the project details page
+              navigate('/app');
             }}
           >
             <ProjectInfo>
@@ -376,20 +382,6 @@ const SelectProject: React.FC = () => {
               <ProjectPath>{project.path || 'No path specified'}</ProjectPath>
             </ProjectInfo>
             <ProjectActions>
-              <ActionButton
-                variant="outlined"
-                color="primary"
-                size="small"
-                endIcon={<ArrowForwardIcon />}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  projectsServices.selectProject({
-                    projectId: project.id,
-                  });
-                }}
-              >
-                Open
-              </ActionButton>
               <IconButton
                 size="small"
                 onClick={(e) => handleOpenMenu(e, project.id)}
@@ -492,8 +484,8 @@ const SelectProject: React.FC = () => {
               />
             </SearchContainer>
             <Box sx={{ display: 'flex', gap: 1 }}>
-            <Tooltip title="Clone from git repository...">
-              <Button
+              <Tooltip title="Clone from git repository...">
+                <Button
                   variant="contained"
                   color="primary"
                   onClick={() => setIsCloneModalOpen(true)}
@@ -505,48 +497,47 @@ const SelectProject: React.FC = () => {
                     style={{ marginRight: 4 }}
                   />
                   Clone
-              </Button>
-            </Tooltip>
-            <Tooltip title="Load files from folder...">
-            <Button
-                variant="contained"
-                color="primary"
-                onClick={async () => {
-                  try {
-                    const project = await projectsServices.addProjectFromFolder();
-                    if (project && project.id) {
-                      await projectsServices.selectProject({
-                        projectId: project.id,
-                      });
-                      setIsAddingProject(false);
-                      setNewProject({ name: '' });
+                </Button>
+              </Tooltip>
+              <Tooltip title="Load files from folder...">
+                <Button
+                  variant="contained"
+                  color="primary"
+                  onClick={async () => {
+                    try {
+                      const project =
+                        await projectsServices.addProjectFromFolder();
+                      if (project && project.id) {
+                        await projectsServices.selectProject({
+                          projectId: project.id,
+                        });
+                        setIsAddingProject(false);
+                        setNewProject({ name: '' });
+                      }
+                    } catch (error) {
+                      // Show toast message instead of throwing an error
                     }
-                  } catch (error) {
-                    // Show toast message instead of throwing an error
-                  }
-                }}
-              >
-                <DriveFolderUploadIcon
-                  sx={{ marginRight: 1 }}
-                  fontSize="small"
-                />
-                Load
-              </Button>
-            </Tooltip>
-            <Tooltip title="Create a new project">
-              <Button
-                variant="contained"
-                color="primary"
-                startIcon={<AddIcon />}
-                onClick={() => setIsAddingProject(true)}
-                sx={{ height: 40 }}
-              >
-                New
-              </Button>
-            </Tooltip>
-
+                  }}
+                >
+                  <DriveFolderUploadIcon
+                    sx={{ marginRight: 1 }}
+                    fontSize="small"
+                  />
+                  Load
+                </Button>
+              </Tooltip>
+              <Tooltip title="Create a new project">
+                <Button
+                  variant="contained"
+                  color="primary"
+                  startIcon={<AddIcon />}
+                  onClick={() => setIsAddingProject(true)}
+                  sx={{ height: 40 }}
+                >
+                  New
+                </Button>
+              </Tooltip>
             </Box>
-
           </HeaderContainer>
 
           {renderConditionalContent()}

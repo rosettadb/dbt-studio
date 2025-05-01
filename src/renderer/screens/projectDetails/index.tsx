@@ -48,15 +48,30 @@ const ProjectDetails: React.FC = () => {
   const [isQueryOpen, setIsQueryOpen] = React.useState(false);
   const [isLoadingQuery, setIsLoadingQuery] = React.useState(false);
 
+  // Early return for loading state
+  if (isLoading) {
+    return <Loader />;
+  }
+
+  // Early return for no project
+  if (!project) {
+    return <Navigate to="/app/select-project" />;
+  }
+
+  // Early return for missing connection
+  if (project?.id && !project?.rosettaConnection) {
+    return <Navigate to="/app/add-connection/" />;
+  }
+
   const {
     data: directories,
     isLoading: isLoadingDirectories,
     refetch: fetchDirectories,
-  } = useGetProjectFiles(project as Project);
+  } = useGetProjectFiles(project);
 
   const { fn: rosettaDbt, isRunning: isRunningRosettaDbt } = useRosettaDBT(
     async () => {
-      await projectsServices.postRosettaDBTCopy(project!);
+      await projectsServices.postRosettaDBTCopy(project);
       await fetchDirectories();
     },
   );
@@ -74,7 +89,8 @@ const ProjectDetails: React.FC = () => {
   });
 
   const { data: statuses = [], refetch: updateStatuses } = useGetFileStatuses(
-    project?.path ?? '',
+    project.path,
+    { enabled: !!project.path },
   );
 
   const [selectedFilePath, setSelectedFilePath] = React.useState<string>();
@@ -258,18 +274,6 @@ const ProjectDetails: React.FC = () => {
   const isDbtConfigured = React.useMemo(() => {
     return settings?.dbtPath && settings.dbtPath.trim() !== '';
   }, [settings?.dbtPath]);
-
-  if (isLoading) {
-    return <Loader />;
-  }
-
-  if (!project) {
-    return <Navigate to="/" />;
-  }
-
-  if (!project?.rosettaConnection) {
-    return <Navigate to="/app/add-connection/" />;
-  }
 
   return (
     <AppLayout

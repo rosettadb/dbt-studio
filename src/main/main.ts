@@ -80,7 +80,8 @@ if (!gotTheLock) {
 
           // Ensure windowManager is not null before using it
           if (windowManager) {
-            await windowManager.showProjectWindow();
+            // Wait for the main window to be fully ready before closing splash
+            await windowManager.showMainWindow();
             windowManager.closeSplashScreen();
           }
         });
@@ -95,18 +96,12 @@ if (!gotTheLock) {
       app.on('activate', () => {
         if (windowManager) {
           const mainWindow = windowManager.getMainWindow();
-          const projectWindow = windowManager.getProjectWindow();
 
           if (mainWindow) {
             // Main window exists, show and focus it
             if (mainWindow.isMinimized()) mainWindow.restore();
             mainWindow.show();
             mainWindow.focus();
-          } else if (projectWindow) {
-            // Project window exists, show and focus it
-            if (projectWindow.isMinimized()) projectWindow.restore();
-            projectWindow.show();
-            projectWindow.focus();
           } else {
             // No windows exist, restart application
             windowManager.startApplication();
@@ -124,9 +119,8 @@ if (!gotTheLock) {
   app.on('second-instance', () => {
     if (!windowManager) return;
 
-    // Find the active window to focus (main window takes precedence)
-    const activeWindow =
-      windowManager.getMainWindow() || windowManager.getProjectWindow();
+    // Find the active window to focus
+    const activeWindow = windowManager.getMainWindow();
 
     if (activeWindow) {
       // Restore and focus the existing window
