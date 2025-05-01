@@ -37,6 +37,7 @@ const App: React.FC = () => {
         </Route>
         <Route path="/app">
           <Route path="" element={<ProjectDetails />} />
+          <Route path="select-project" element={<SelectProject />} />
           <Route path="edit-connection" element={<EditConnection />} />
           <Route path="add-connection" element={<AddConnection />} />
           <Route

@@ -1,6 +1,5 @@
 import { BrowserWindow, app, ipcMain } from 'electron';
 import { createSplashWindow } from './splash';
-import { createProjectWindow } from './selectProject';
 import { createMainWindow } from './main';
 import registerHandlers from '../ipcSetup';
 import { installExtensions } from '../utils/setupHelpers';
@@ -8,8 +7,6 @@ import { ProjectsService } from '../services';
 
 export class WindowManager {
   private splashWindow: BrowserWindow | null = null;
-
-  private projectWindow: BrowserWindow | null = null;
 
   private mainWindow: BrowserWindow | null = null;
 
@@ -37,38 +34,39 @@ export class WindowManager {
     });
   }
 
-  public async showProjectWindow() {
-    this.projectWindow = createProjectWindow(() => {
-      this.projectWindow = null;
-      if (!this.mainWindow && !this.isQuitting) {
+  public async showMainWindow() {
+    this.mainWindow = createMainWindow(() => {
+      this.mainWindow = null;
+      if (!this.isQuitting) {
         app.quit();
       }
     });
-    registerHandlers(this.projectWindow);
-    ipcMain.removeHandler('project:select');
-    ipcMain.handle(
-      'project:select',
-      async (_event, body: { projectId: string }) => {
-        await ProjectsService.selectProject(body);
-        this.closeProjectWindow(() => this.showMainWindow());
-      },
-    );
-  }
 
-  private async showMainWindow() {
-    this.mainWindow = createMainWindow(() => {
-      this.showProjectWindow();
-      this.mainWindow = null;
+    // Wait for the main window to be ready to show
+    return new Promise<void>((resolve) => {
+      if (!this.mainWindow) {
+        resolve();
+        return;
+      }
+
+      this.mainWindow.once('ready-to-show', () => {
+        if (this.mainWindow) {
+          this.mainWindow.show();
+          this.mainWindow.focus();
+        }
+        resolve();
+      });
+
+      registerHandlers(this.mainWindow);
+      ipcMain.removeHandler('project:select');
+      ipcMain.handle(
+        'project:select',
+        async (_event, body: { projectId: string }) => {
+          await ProjectsService.selectProject(body);
+          // Removed reload that breaks the render
+        },
+      );
     });
-    registerHandlers(this.mainWindow);
-    ipcMain.removeHandler('project:select');
-    ipcMain.handle(
-      'project:select',
-      async (_event, body: { projectId: string }) => {
-        await ProjectsService.selectProject(body);
-        this.mainWindow?.reload();
-      },
-    );
   }
 
   public closeSplashScreen() {
@@ -78,23 +76,11 @@ export class WindowManager {
     }
   }
 
-  private closeProjectWindow(cb: () => void) {
-    if (this.projectWindow && !this.projectWindow.isDestroyed()) {
-      this.projectWindow.close();
-      this.projectWindow = null;
-      cb();
-    }
-  }
-
   public getMainWindow() {
     return this.mainWindow;
   }
 
   public getSplash() {
     return this.splashWindow;
-  }
-
-  public getProjectWindow() {
-    return this.projectWindow;
   }
 }
