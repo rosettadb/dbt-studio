@@ -2,6 +2,7 @@ import React from 'react';
 import { TextField, IconButton, Button, Box } from '@mui/material';
 import { FolderOpen, OpenInNew } from '@mui/icons-material';
 import { SettingsType } from '../../../types/backend';
+import { utils } from '../../helpers';
 
 interface RosettaSettingsProps {
   settings: SettingsType;
@@ -55,9 +56,15 @@ export const RosettaSettings: React.FC<RosettaSettingsProps> = ({
           color="primary"
           size="small"
           component="a"
-          href="https://github.com/rosettadb/rosetta?tab=readme-ov-file#getting-started"
+          href="https://github.com/rosettadb/rosetta_cli?tab=readme-ov-file#getting-started"
           target="_blank"
           rel="noopener noreferrer"
+          onClick={(e) =>
+            utils.handleExternalLink(
+              e,
+              'https://github.com/rosettadb/rosetta_cli?tab=readme-ov-file#getting-started',
+            )
+          }
           sx={{ textTransform: 'none' }}
         >
           View RosettaDB documentation
