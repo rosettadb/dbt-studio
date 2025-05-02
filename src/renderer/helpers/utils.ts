@@ -142,6 +142,14 @@ export const getRandomColor = (seed: string): string => {
   return `hsl(${hash % 360}, 70%, 50%)`;
 };
 
+export const handleExternalLink = (
+  event: React.MouseEvent<HTMLAnchorElement, MouseEvent>,
+  url: string,
+): void => {
+  event.preventDefault();
+  window.electron.ipcRenderer.invoke('open:external', url);
+};
+
 export const generateMonacoCompletions = (
   tables: Table[],
 ): Omit<CompletionItem, 'range'>[] => {

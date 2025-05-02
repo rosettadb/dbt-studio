@@ -3,18 +3,15 @@ import { Typography, Box, Link, Divider, Stack } from '@mui/material';
 import { OpenInNew } from '@mui/icons-material';
 import { Icon } from '../index';
 import { icons } from '../../../../assets';
+import { utils } from '../../helpers';
 
 export const AboutSettings: React.FC = () => {
   return (
     <Box>
       <Box sx={{ display: 'flex', alignItems: 'center', mb: 3, gap: 2 }}>
-        <Icon
-          src={icons.dbtTm}
-          width={32}
-          height={32}
-        />
+        <Icon src={icons.dbtTm} width={32} height={32} />
         <Typography variant="h5" fontWeight="500">
-           Rosetta dbt™ Studio
+          Rosetta dbt™ Studio
         </Typography>
       </Box>
 
@@ -36,6 +33,12 @@ export const AboutSettings: React.FC = () => {
           href="https://github.com/rosettadb/dbt-studio"
           target="_blank"
           rel="noopener noreferrer"
+          onClick={(e) =>
+            utils.handleExternalLink(
+              e,
+              'https://github.com/rosettadb/dbt-studio',
+            )
+          }
           sx={{
             display: 'flex',
             alignItems: 'center',
@@ -43,7 +46,9 @@ export const AboutSettings: React.FC = () => {
             textDecoration: 'none',
           }}
         >
-          <Typography variant="body1">Get help with Rosetta dbt™ Studio</Typography>
+          <Typography variant="body1">
+            Get help with Rosetta dbt™ Studio
+          </Typography>
           <OpenInNew fontSize="small" />
         </Link>
 
@@ -51,6 +56,12 @@ export const AboutSettings: React.FC = () => {
           href="https://github.com/rosettadb/dbt-studio/issues"
           target="_blank"
           rel="noopener noreferrer"
+          onClick={(e) =>
+            utils.handleExternalLink(
+              e,
+              'https://github.com/rosettadb/dbt-studio/issues',
+            )
+          }
           sx={{
             display: 'flex',
             alignItems: 'center',
@@ -67,11 +78,17 @@ export const AboutSettings: React.FC = () => {
 
       <Box sx={{ mb: 3 }}>
         <Typography variant="body2" color="text.secondary" component="p">
-          Rosetta dbt™ Studio is an Open Source visual development environment (IDE) that combines the strengths of RosettaDB and dbt™ Core for data engineering, transformation and migration. It empowers you to develop, run, and manage dbt™ projects with ease through a powerful graphical interface.
+          Rosetta dbt™ Studio is an Open Source visual development environment
+          (IDE) that combines the strengths of RosettaDB and dbt™ Core for data
+          engineering, transformation and migration. It empowers you to develop,
+          run, and manage dbt™ projects with ease through a powerful graphical
+          interface.
         </Typography>
 
         <Typography variant="body2" color="text.secondary" component="p">
-          Key features include visual query editor, one-click dbt™ command execution, Git integration, multi-database support, and enhanced developer experience.
+          Key features include visual query editor, one-click dbt™ command
+          execution, Git integration, multi-database support, and enhanced
+          developer experience.
         </Typography>
       </Box>
 
@@ -93,14 +110,23 @@ export const AboutSettings: React.FC = () => {
             href="https://www.getdbt.com/"
             target="_blank"
             rel="noopener noreferrer"
+            onClick={(e) =>
+              utils.handleExternalLink(e, 'https://www.getdbt.com/')
+            }
           >
             dbt™
           </Link>
           ,{' '}
           <Link
-            href="https://github.com/rosettadb/rosetta"
+            href="https://github.com/rosettadb/rosetta_cli"
             target="_blank"
             rel="noopener noreferrer"
+            onClick={(e) =>
+              utils.handleExternalLink(
+                e,
+                'https://github.com/rosettadb/rosetta_cli',
+              )
+            }
           >
             RosettaDB
           </Link>
@@ -109,6 +135,7 @@ export const AboutSettings: React.FC = () => {
             href="https://reactjs.org/"
             target="_blank"
             rel="noopener noreferrer"
+            onClick={(e) => utils.handleExternalLink(e, 'https://reactjs.org/')}
           >
             React
           </Link>
@@ -121,8 +148,14 @@ export const AboutSettings: React.FC = () => {
           href="https://rosettaa.netlify.app/rosettadbtstudio"
           target="_blank"
           rel="noopener noreferrer"
+          onClick={(e) =>
+            utils.handleExternalLink(
+              e,
+              'https://rosettaa.netlify.app/rosettadbtstudio',
+            )
+          }
         >
-            Learn more about Rosetta dbt™ Studio
+          Learn more about Rosetta dbt™ Studio
         </Link>
       </Typography>
     </Box>
