@@ -1,8 +1,8 @@
 # Rosetta DBT Studio
 
-**Rosetta DBT Studio** is an open-source desktop application that simplifies your data transformation journey with [dbt](https://www.getdbt.com/) and brings the power of AI into your analytics engineering workflow.
+**Rosetta DBT Studio** is an open-source desktop application that simplifies your data transformation journey with [dbt™](https://www.getdbt.com/) and brings the power of AI into your analytics engineering workflow.
 
-Whether you're just getting started with dbt or looking to streamline your transformation logic with AI assistance, Rosetta DBT Studio offers an intuitive interface to help you build, explore, and maintain your data models efficiently.
+Whether you're just getting started with dbt™ or looking to streamline your transformation logic with AI assistance, Rosetta DBT Studio offers an intuitive interface to help you build, explore, and maintain your data models efficiently.
 
 ---
 
@@ -23,15 +23,19 @@ Whether you're just getting started with dbt or looking to streamline your trans
 
 - Explore your data using an in-app SQL editor with auto-run, formatting, and result preview.
 
-#### Run dbt Commands
+#### Git Integration
 
-- Compile, test, run, and document dbt projects directly from the UI—no terminal needed.
+- Use the built-in Git explorer with Select All feature to easily commit and manage project changes.
+
+#### Run dbt™ Commands
+
+- Compile, test, run, and document dbt™ projects directly from the UI—no terminal needed.
 
 #### AI-Powered Workflow
 
 Leverage AI to:
 
-- Automatically draft dbt models from descriptions or table schemas.
+- Automatically draft dbt™ models from descriptions or table schemas.
 - Generate joins, transformations, and aggregations with minimal input.
 - Translate business questions into SQL queries for analysis.
 
@@ -39,8 +43,8 @@ Leverage AI to:
 
 Rosetta DBT Studio includes an integrated Python environment to:
 
-- Install and manage dbt without external setup.
-- Seamlessly configure and run dbt from within the application.
+- Install and manage dbt™ without external setup.
+- Seamlessly configure and run dbt™ from within the application.
 
 #### Rosetta Integration
 
@@ -55,7 +59,7 @@ Rosetta DBT Studio embeds the open-source [Rosetta CLI tool](https://github.com/
 
 Download the latest release for your OS from the [Releases Page](https://github.com/rosettadb/dbt-studio/releases) and follow the instructions to get started.
 
-No prior Python or dbt installation required.
+No prior Python or dbt™ installation required.
 
 ---
 
