@@ -65,7 +65,7 @@ No prior Python or dbt installation required.
 
 ---
 
-## Install
+## Development
 
 ```bash
 cd project-dir
@@ -88,25 +88,6 @@ npm run package
 ```
 
 The build files after packaging can be found at: ```/release/build```
-
-
-## Requirements
-
-- A data warehouse with accessible **RAW layer** tables.
-- Appropriate database credentials.
-- Basic knowledge of dbt (beneficial but not mandatory).
-
----
-
-## Documentation
-
-Visit the [Documentation Site](https://your-docs-link) (coming soon) for setup guides, tutorials, and best practices.
-
----
-
-## Contributing
-
-We welcome contributions! See our [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
 
 ---
 
