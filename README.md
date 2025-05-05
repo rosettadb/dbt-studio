@@ -8,28 +8,26 @@ Whether you're just getting started with dbt or looking to streamline your trans
 
 ## Features
 
-### Easy Database Connectivity
+#### Easy Database Connectivity
 
 - Connect to your data warehouse assuming your **RAW layer** is already in place.
 
-### Layered Data Modeling
+#### Layered Data Modeling
 
 - **Staging Layer Generator**: Automatically create staging models based on RAW tables.
 - **Enhanced Layer Generator**: Build intermediate models to enrich and prepare your data.
 - **Business Models with AI**: Describe the business logic, and let the AI assist you in generating robust business models.
 - **AI-Generated Analytical Queries**: Generate analysis-ready queries and dashboard datasets using natural language.
 
-### SQL Editor
+#### SQL Editor
 
 - Explore your data using an in-app SQL editor with auto-run, formatting, and result preview.
 
-### Run dbt Commands
+#### Run dbt Commands
 
 - Compile, test, run, and document dbt projects directly from the UI—no terminal needed.
 
----
-
-## AI-Powered Workflow
+#### AI-Powered Workflow
 
 Leverage AI to:
 
@@ -37,18 +35,14 @@ Leverage AI to:
 - Generate joins, transformations, and aggregations with minimal input.
 - Translate business questions into SQL queries for analysis.
 
----
-
-## Built-in Python Environment
+#### Built-in Python Environment
 
 Rosetta DBT Studio includes an integrated Python environment to:
 
 - Install and manage dbt without external setup.
 - Seamlessly configure and run dbt from within the application.
 
----
-
-## Rosetta Integration
+#### Rosetta Integration
 
 Rosetta DBT Studio embeds the open-source [Rosetta CLI tool](https://github.com/adaptivescale/rosetta) to support metadata-driven dbt development:
 
@@ -59,7 +53,7 @@ Rosetta DBT Studio embeds the open-source [Rosetta CLI tool](https://github.com/
 
 ## Installation
 
-Download the latest release for your OS from the [Releases Page](https://github.com/your-org/rosetta-dbt-studio/releases) (link to be updated) and follow the instructions to get started.
+Download the latest release for your OS from the [Releases Page](https://github.com/rosettadb/dbt-studio/releases) and follow the instructions to get started.
 
 No prior Python or dbt installation required.
 
