@@ -147,7 +147,6 @@ export default class ProjectsService {
 
     const projects = await this.loadProjects();
 
-    // Avoid adding the same project twice
     if (projects.find((p) => p.path === selectedPath)) {
       throw new Error('This project is already imported.');
     }

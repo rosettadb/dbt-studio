@@ -4,9 +4,12 @@ import { createMainWindow } from './main';
 import registerHandlers from '../ipcSetup';
 import { installExtensions } from '../utils/setupHelpers';
 import { ProjectsService } from '../services';
+import { createProjectWindow } from './project';
 
 export class WindowManager {
   private splashWindow: BrowserWindow | null = null;
+
+  private projectWindow: BrowserWindow | null = null;
 
   private mainWindow: BrowserWindow | null = null;
 
@@ -19,6 +22,37 @@ export class WindowManager {
 
   private showSplashScreen() {
     this.splashWindow = createSplashWindow();
+  }
+
+  public showProjectWindow() {
+    this.projectWindow = createProjectWindow();
+
+    return new Promise<void>((resolve) => {
+      if (!this.projectWindow) {
+        resolve();
+        return;
+      }
+
+      this.projectWindow.once('ready-to-show', () => {
+        if (this.projectWindow) {
+          this.projectWindow.show();
+          this.projectWindow.focus();
+        }
+        resolve();
+      });
+    });
+  }
+
+  public closeProjectWindow() {
+    if (this.projectWindow) {
+      this.mainWindow?.reload();
+      this.projectWindow.close();
+      this.projectWindow = null;
+      if (this.mainWindow) {
+        this.mainWindow.show();
+        this.mainWindow.focus();
+      }
+    }
   }
 
   // eslint-disable-next-line class-methods-use-this
