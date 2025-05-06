@@ -49,10 +49,10 @@ export default class ProjectsService {
     await updateDatabase<'projects'>('projects', projects);
   }
 
-  static async addProject(name: string) {
+  static async addProject(projectPath: string) {
     const projects = await this.loadProjects();
-    const projectPath = await this.getProjectPath(name);
-    console.log('projectPath', projectPath);
+    const name = path.basename(projectPath);
+
     const project: Project = {
       id: Date.now().toString(),
       name,
@@ -60,6 +60,7 @@ export default class ProjectsService {
       path: projectPath,
       isExtracted: false,
     };
+
     await this.copyDbtTemplateFiles(project.path, project.name);
     await this.copyRosettaMainConf(project.path);
     projects.push(project);
