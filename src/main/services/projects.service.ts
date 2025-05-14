@@ -147,7 +147,6 @@ export default class ProjectsService {
 
     const projects = await this.loadProjects();
 
-    // Avoid adding the same project twice
     if (projects.find((p) => p.path === selectedPath)) {
       throw new Error('This project is already imported.');
     }
@@ -188,6 +187,12 @@ export default class ProjectsService {
     if (projectToDelete) {
       if (projectToDelete.path) {
         deleteDirectory(projectToDelete.path);
+      }
+      const selectedProject = await this.getSelectedProject();
+      if (selectedProject) {
+        if (selectedProject.id === id) {
+          await updateDatabase('selectedProject', undefined);
+        }
       }
       const filteredProjects = projects.filter((p) => p.id !== id);
       await this.saveProjects(filteredProjects);

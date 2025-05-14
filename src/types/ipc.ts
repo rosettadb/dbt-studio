@@ -73,7 +73,10 @@ export type GitChannels =
   | 'git:fileDiff'
   | 'git:fileStatusList';
 
-export type UtilChannels = 'open:external';
+export type UtilChannels =
+  | 'open:external'
+  | 'windows:openSelector'
+  | 'windows:closeSelector';
 
 export type Channels =
   | TestChannels

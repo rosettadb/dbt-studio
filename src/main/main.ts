@@ -1,5 +1,5 @@
 /* eslint global-require: off, no-console: off, promise/always-return: off, no-restricted-syntax: off, no-await-in-loop: off */
-import { app, protocol } from 'electron';
+import { app, ipcMain, protocol } from 'electron';
 import { WindowManager } from './windows';
 import { loadEnvironment } from './utils/setupHelpers';
 import { AssetUrl } from './utils/assetUrl';
@@ -92,22 +92,18 @@ if (!gotTheLock) {
         return AssetServer.fromNodeModules(asset.relativeUrl);
       });
 
-      // Enhanced macOS activate event handler - critical for dock icon clicks
       app.on('activate', () => {
         if (windowManager) {
           const mainWindow = windowManager.getMainWindow();
 
           if (mainWindow) {
-            // Main window exists, show and focus it
             if (mainWindow.isMinimized()) mainWindow.restore();
             mainWindow.show();
             mainWindow.focus();
           } else {
-            // No windows exist, restart application
             windowManager.startApplication();
           }
         } else {
-          // WindowManager doesn't exist, create one and start app
           windowManager = new WindowManager();
           windowManager.startApplication();
         }
@@ -115,21 +111,29 @@ if (!gotTheLock) {
     })
     .catch(console.log);
 
-  // Handle second instance attempt - simplified
   app.on('second-instance', () => {
     if (!windowManager) return;
 
-    // Find the active window to focus
     const activeWindow = windowManager.getMainWindow();
 
     if (activeWindow) {
-      // Restore and focus the existing window
       if (activeWindow.isMinimized()) activeWindow.restore();
       activeWindow.show();
       activeWindow.focus();
     } else {
-      // No visible windows, start fresh
       windowManager.startApplication();
+    }
+  });
+
+  ipcMain.handle('windows:openSelector', () => {
+    if (windowManager) {
+      windowManager.showProjectWindow();
+    }
+  });
+
+  ipcMain.handle('windows:closeSelector', () => {
+    if (windowManager) {
+      windowManager.closeProjectWindow();
     }
   });
 }

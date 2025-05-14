@@ -1,5 +1,4 @@
 import React from 'react';
-import { useNavigate } from 'react-router-dom';
 import {
   Button,
   TextField,
@@ -37,6 +36,7 @@ import {
 } from '../../controllers';
 import { CloneRepoModal, Icon } from '../../components';
 import { icons, logo } from '../../../../assets';
+import { client } from '../../config/client';
 
 const ProjectSelectionContainer = styled(Box)`
   padding: 0.5rem 2rem 2rem;
@@ -188,7 +188,6 @@ const TaglineLogo = styled('img')`
 `;
 
 const SelectProject: React.FC = () => {
-  const navigate = useNavigate();
   const { data: settings } = useGetSettings();
   const { data: projects = [] } = useGetProjects();
   const [isCloneModalOpen, setIsCloneModalOpen] = React.useState(false);
@@ -246,7 +245,6 @@ const SelectProject: React.FC = () => {
     handleCloseMenu();
   };
 
-  // Add function to perform the actual deletion
   const confirmDeleteProject = async () => {
     if (projectToDelete) {
       deleteProject({ id: projectToDelete.id });
@@ -269,7 +267,6 @@ const SelectProject: React.FC = () => {
       };
     }
 
-    // Check if project name follows DBT naming pattern
     if (!/^[a-zA-Z]\w*$/.test(name)) {
       return {
         isValid: false,
@@ -278,7 +275,6 @@ const SelectProject: React.FC = () => {
       };
     }
 
-    // Check if project name already exists
     const projectExists = projects.some(
       (p) => p.name.toLowerCase() === name.toLowerCase(),
     );
@@ -306,10 +302,10 @@ const SelectProject: React.FC = () => {
         name: `${defaultProjectPath}/${newProject.name}`,
       });
       await projectsServices.selectProject({ projectId: project.id });
-      navigate('/app');
       toast.success(`Project ${project.name} created successfully!`);
       setIsAddingProject(false);
       setNewProject({ name: '' });
+      await client.get('windows:closeSelector');
     } catch (error) {
       toast.error('Failed to create project. Please try again.');
     }
@@ -373,8 +369,7 @@ const SelectProject: React.FC = () => {
               await projectsServices.selectProject({
                 projectId: project.id,
               });
-              // Instead of reloading the window, navigate to the project details page
-              navigate('/app');
+              await client.get('windows:closeSelector');
             }}
           >
             <ProjectInfo>
@@ -392,7 +387,6 @@ const SelectProject: React.FC = () => {
           </ProjectCard>
         ))}
 
-        {/* Menu for project actions */}
         <Menu
           anchorEl={menuAnchorEl}
           open={Boolean(menuAnchorEl)}
@@ -550,8 +544,7 @@ const SelectProject: React.FC = () => {
                         await projectsServices.selectProject({
                           projectId: project.id,
                         });
-                        setIsAddingProject(false);
-                        setNewProject({ name: '' });
+                        await client.get('windows:closeSelector');
                       }
                     } catch (error) {
                       // Show toast message instead of throwing an error
