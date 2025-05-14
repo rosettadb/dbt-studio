@@ -25,6 +25,11 @@ export class WindowManager {
   }
 
   public showProjectWindow() {
+    if (this.projectWindow) {
+      return new Promise<void>((resolve) => {
+        resolve();
+      });
+    }
     this.projectWindow = createProjectWindow();
 
     return new Promise<void>((resolve) => {

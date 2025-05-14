@@ -1,9 +1,11 @@
 import React from 'react';
+import { useLocation } from 'react-router-dom';
 import { AppContextType } from '../../types/frontend';
 import { Splash } from '../components';
 import { useGetProjects, useGetSelectedProject } from '../controllers';
 import { Project, Table } from '../../types/backend';
 import { projectsServices } from '../services';
+import { client } from '../config/client';
 
 type Props = {
   children: React.ReactNode;
@@ -24,6 +26,7 @@ const AppProvider: React.FC<Props> = ({ children }) => {
   const { data: projects = [] } = useGetProjects();
   const { data: selectedProject, isLoading } = useGetSelectedProject();
 
+  const location = useLocation();
   const [isSidebarOpen, setIsSidebarOpen] = React.useState(true);
   const [isLoadingSchema, setIsLoadingSchema] = React.useState(false);
   const [schema, setSchema] = React.useState<Table[]>();
@@ -65,8 +68,18 @@ const AppProvider: React.FC<Props> = ({ children }) => {
     };
   }, [projects, sidebarContent, schema, isLoadingSchema, isSidebarOpen]);
 
+  React.useEffect(() => {
+    if (!selectedProject && !isLoading) {
+      client.get('windows:openSelector');
+    }
+  }, [selectedProject, isLoading]);
+
   if (isLoading) {
     return <Splash loaderMessage="Loading project..." />;
+  }
+
+  if (!selectedProject && !location.pathname.includes('select-project')) {
+    return <div />;
   }
 
   return <AppContext.Provider value={value}>{children}</AppContext.Provider>;
