@@ -105,12 +105,11 @@ export class WindowManager {
       });
 
       registerHandlers(this.mainWindow);
-      ipcMain.removeHandler('project:select');
       ipcMain.handle(
         'project:select',
         async (_event, body: { projectId: string }) => {
           await ProjectsService.selectProject(body);
-          // Removed reload that breaks the render
+          this.mainWindow?.reload();
         },
       );
     });
