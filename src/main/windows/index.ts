@@ -30,7 +30,15 @@ export class WindowManager {
         resolve();
       });
     }
+
     this.projectWindow = createProjectWindow();
+    this.projectWindow.on('closed', () => {
+      this.projectWindow = null;
+      if (this.mainWindow) {
+        this.mainWindow.reload();
+        this.mainWindow.focus();
+      }
+    });
 
     return new Promise<void>((resolve) => {
       if (!this.projectWindow) {
@@ -50,7 +58,6 @@ export class WindowManager {
 
   public closeProjectWindow() {
     if (this.projectWindow) {
-      this.mainWindow?.reload();
       this.projectWindow.close();
       this.projectWindow = null;
       if (this.mainWindow) {

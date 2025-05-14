@@ -188,6 +188,12 @@ export default class ProjectsService {
       if (projectToDelete.path) {
         deleteDirectory(projectToDelete.path);
       }
+      const selectedProject = await this.getSelectedProject();
+      if (selectedProject) {
+        if (selectedProject.id === id) {
+          await updateDatabase('selectedProject', undefined);
+        }
+      }
       const filteredProjects = projects.filter((p) => p.id !== id);
       await this.saveProjects(filteredProjects);
       return true;
