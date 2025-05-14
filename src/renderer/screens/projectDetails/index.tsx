@@ -32,7 +32,7 @@ import {
   SelectedFile,
 } from './styles';
 import { useRosettaDBT, useDbt } from '../../hooks';
-import { GenerateDashboardResponseType, Project } from '../../../types/backend';
+import { GenerateDashboardResponseType } from '../../../types/backend';
 import { AI_PROMPTS } from '../../config/constants';
 import { utils } from '../../helpers';
 import { AppLayout } from '../../layouts';
@@ -48,30 +48,15 @@ const ProjectDetails: React.FC = () => {
   const [isQueryOpen, setIsQueryOpen] = React.useState(false);
   const [isLoadingQuery, setIsLoadingQuery] = React.useState(false);
 
-  // Early return for loading state
-  if (isLoading) {
-    return <Loader />;
-  }
-
-  // Early return for no project
-  if (!project) {
-    return <Navigate to="/app/select-project" />;
-  }
-
-  // Early return for missing connection
-  if (project?.id && !project?.rosettaConnection) {
-    return <Navigate to="/app/add-connection/" />;
-  }
-
   const {
     data: directories,
     isLoading: isLoadingDirectories,
     refetch: fetchDirectories,
-  } = useGetProjectFiles(project);
+  } = useGetProjectFiles(project!);
 
   const { fn: rosettaDbt, isRunning: isRunningRosettaDbt } = useRosettaDBT(
     async () => {
-      await projectsServices.postRosettaDBTCopy(project);
+      await projectsServices.postRosettaDBTCopy(project!);
       await fetchDirectories();
     },
   );
@@ -89,8 +74,8 @@ const ProjectDetails: React.FC = () => {
   });
 
   const { data: statuses = [], refetch: updateStatuses } = useGetFileStatuses(
-    project.path,
-    { enabled: !!project.path },
+    project!.path,
+    { enabled: !!project!.path },
   );
 
   const [selectedFilePath, setSelectedFilePath] = React.useState<string>();
@@ -275,6 +260,18 @@ const ProjectDetails: React.FC = () => {
     return settings?.dbtPath && settings.dbtPath.trim() !== '';
   }, [settings?.dbtPath]);
 
+  if (isLoading) {
+    return <Loader />;
+  }
+
+  if (!project) {
+    return <Navigate to="/app/select-project" />;
+  }
+
+  if (project?.id && !project?.rosettaConnection) {
+    return <Navigate to="/app/add-connection/" />;
+  }
+
   return (
     <AppLayout
       sidebarContent={
@@ -341,7 +338,14 @@ const ProjectDetails: React.FC = () => {
             <EditorContainer>
               <Header>
                 {selectedFilePath && (
-                  <SelectedFile>
+                  <SelectedFile
+                    onClick={async () => {
+                      await window.navigator.clipboard.writeText(
+                        selectedFilePath ?? '',
+                      );
+                      toast.info('File path is copied to clipboard');
+                    }}
+                  >
                     {utils.splitPath(selectedFilePath ?? '', project.name)}
                   </SelectedFile>
                 )}

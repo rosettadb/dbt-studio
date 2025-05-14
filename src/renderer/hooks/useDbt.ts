@@ -31,11 +31,15 @@ const useDbt = (successCallback: () => void): UseDbtReturn => {
   const [isRunning, setIsRunning] = React.useState(false);
   const [activeCommand, setActiveCommand] =
     React.useState<DbtCommandType | null>(null);
+  const [disabledToaster, setDisabledToaster] = React.useState(false);
 
   React.useEffect(() => {
     if (!isRunning) return;
     if (error.length > 0) {
-      toast.error(`dbt ${activeCommand} failed`);
+      if (!disabledToaster) {
+        toast.error(`dbt ${activeCommand} failed`);
+      }
+
       setIsRunning(false);
       setActiveCommand(null);
       return;
@@ -52,11 +56,13 @@ const useDbt = (successCallback: () => void): UseDbtReturn => {
     command: DbtCommandType,
     project: Project,
     args: string = '',
+    disableToaster = false,
   ) => {
     if (isRunning) {
       toast.warning('Another dbt command is currently running');
       return;
     }
+    setDisabledToaster(disableToaster);
 
     setIsRunning(true);
     setActiveCommand(command);
@@ -75,7 +81,11 @@ const useDbt = (successCallback: () => void): UseDbtReturn => {
         cmdString = `cd "${project.path}" && "${settings?.dbtPath}" ${command} ${args}`;
     }
 
-    await runCommand(cmdString).catch((err) => toast.error(err));
+    await runCommand(cmdString).catch((err) => {
+      if (!disableToaster) {
+        toast.error(err);
+      }
+    });
   };
 
   return {
@@ -83,7 +93,12 @@ const useDbt = (successCallback: () => void): UseDbtReturn => {
       await executeCommand('run', project, path ? `--select ${path}` : '');
     },
     test: async (project: Project, path?: string) => {
-      await executeCommand('test', project, path ? `--select ${path}` : '');
+      await executeCommand(
+        'test',
+        project,
+        path ? `--select ${path}` : '',
+        true,
+      );
     },
     compile: async (project: Project, path?: string) => {
       await executeCommand('compile', project, path ? `--select ${path}` : '');

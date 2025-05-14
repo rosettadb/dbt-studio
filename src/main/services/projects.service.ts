@@ -49,10 +49,10 @@ export default class ProjectsService {
     await updateDatabase<'projects'>('projects', projects);
   }
 
-  static async addProject(name: string) {
+  static async addProject(projectPath: string) {
     const projects = await this.loadProjects();
-    const projectPath = await this.getProjectPath(name);
-    console.log('projectPath', projectPath);
+    const name = path.basename(projectPath);
+
     const project: Project = {
       id: Date.now().toString(),
       name,
@@ -60,6 +60,7 @@ export default class ProjectsService {
       path: projectPath,
       isExtracted: false,
     };
+
     await this.copyDbtTemplateFiles(project.path, project.name);
     await this.copyRosettaMainConf(project.path);
     projects.push(project);
@@ -146,7 +147,6 @@ export default class ProjectsService {
 
     const projects = await this.loadProjects();
 
-    // Avoid adding the same project twice
     if (projects.find((p) => p.path === selectedPath)) {
       throw new Error('This project is already imported.');
     }
@@ -187,6 +187,12 @@ export default class ProjectsService {
     if (projectToDelete) {
       if (projectToDelete.path) {
         deleteDirectory(projectToDelete.path);
+      }
+      const selectedProject = await this.getSelectedProject();
+      if (selectedProject) {
+        if (selectedProject.id === id) {
+          await updateDatabase('selectedProject', undefined);
+        }
       }
       const filteredProjects = projects.filter((p) => p.id !== id);
       await this.saveProjects(filteredProjects);

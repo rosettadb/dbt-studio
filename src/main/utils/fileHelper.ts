@@ -2,6 +2,7 @@ import path from 'path';
 import fs, { promises } from 'fs';
 import { app } from 'electron';
 import archiver from 'archiver';
+import os from 'os';
 import { DataBase, FileNode, SettingsType } from '../../types/backend';
 import { DATA_DIR, DB_FILE } from './setupHelpers';
 
@@ -49,6 +50,14 @@ export const deleteDirectory = (dirPath: string): boolean => {
 };
 
 export const loadDefaultSettings = (): SettingsType => {
+  const homeDir = os.homedir();
+  const projectsDir = path.join(homeDir, 'rosetta-dbt-studio-projects');
+
+  // Ensure the directory exists
+  if (!fs.existsSync(projectsDir)) {
+    fs.mkdirSync(projectsDir, { recursive: true });
+  }
+
   return {
     rosettaPath: '',
     rosettaVersion: '',
@@ -56,7 +65,7 @@ export const loadDefaultSettings = (): SettingsType => {
     dbtVersion: '',
     sampleRosettaMainConf: path.join(DATA_DIR, 'main.conf'),
     dbtPath: '',
-    projectsDirectory: DATA_DIR,
+    projectsDirectory: projectsDir,
     pythonVersion: '',
     pythonPath: '',
   };

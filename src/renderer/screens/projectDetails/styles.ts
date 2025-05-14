@@ -64,4 +64,5 @@ export const SelectedFile = styled('div')(({ theme }) => ({
   display: 'flex',
   color: theme.palette.primary.main,
   fontSize: 12,
+  cursor: 'copy',
 }));

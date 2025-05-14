@@ -4,9 +4,12 @@ import { createMainWindow } from './main';
 import registerHandlers from '../ipcSetup';
 import { installExtensions } from '../utils/setupHelpers';
 import { ProjectsService } from '../services';
+import { createProjectWindow } from './project';
 
 export class WindowManager {
   private splashWindow: BrowserWindow | null = null;
+
+  private projectWindow: BrowserWindow | null = null;
 
   private mainWindow: BrowserWindow | null = null;
 
@@ -19,6 +22,50 @@ export class WindowManager {
 
   private showSplashScreen() {
     this.splashWindow = createSplashWindow();
+  }
+
+  public showProjectWindow() {
+    if (this.projectWindow) {
+      return new Promise<void>((resolve) => {
+        resolve();
+      });
+    }
+
+    this.projectWindow = createProjectWindow();
+    this.projectWindow.setParentWindow(this.mainWindow);
+    this.projectWindow.on('closed', () => {
+      this.projectWindow = null;
+      if (this.mainWindow) {
+        this.mainWindow.reload();
+        this.mainWindow.focus();
+      }
+    });
+
+    return new Promise<void>((resolve) => {
+      if (!this.projectWindow) {
+        resolve();
+        return;
+      }
+
+      this.projectWindow.once('ready-to-show', () => {
+        if (this.projectWindow) {
+          this.projectWindow.show();
+          this.projectWindow.focus();
+        }
+        resolve();
+      });
+    });
+  }
+
+  public closeProjectWindow() {
+    if (this.projectWindow) {
+      this.projectWindow.close();
+      this.projectWindow = null;
+      if (this.mainWindow) {
+        this.mainWindow.show();
+        this.mainWindow.focus();
+      }
+    }
   }
 
   // eslint-disable-next-line class-methods-use-this

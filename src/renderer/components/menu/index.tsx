@@ -35,6 +35,7 @@ import { Icon } from '../icon';
 import { projectsServices } from '../../services';
 import { LetterAvatar } from '../letterAvatar';
 import { useAppContext } from '../../hooks';
+import { client } from '../../config/client';
 
 export const Menu: React.FC = () => {
   const navigate = useNavigate();
@@ -136,12 +137,11 @@ export const Menu: React.FC = () => {
             ]}
             onSelect={async (value) => {
               if (value === 'new') {
-                await projectsServices.selectProject({ projectId: '' });
-                navigate('/app/select-project');
-              } else {
-                await projectsServices.selectProject({ projectId: value });
-                navigate('/app');
+                client.get('windows:openSelector');
+                return;
               }
+              await projectsServices.selectProject({ projectId: value });
+              navigate('/app');
             }}
             selectedItem={String(project?.id)}
             anchorElement={

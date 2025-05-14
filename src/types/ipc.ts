@@ -73,13 +73,19 @@ export type GitChannels =
   | 'git:fileDiff'
   | 'git:fileStatusList';
 
+export type UtilChannels =
+  | 'open:external'
+  | 'windows:openSelector'
+  | 'windows:closeSelector';
+
 export type Channels =
   | TestChannels
   | CliChannels
   | ProjectChannels
   | SettingsChannels
   | ConnectorChannels
-  | GitChannels;
+  | GitChannels
+  | UtilChannels;
 
 export type ConfigureConnectionBody = {
   projectId: string;

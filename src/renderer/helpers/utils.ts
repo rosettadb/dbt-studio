@@ -56,13 +56,17 @@ export const extractSchemaAndTable = (
   return { schema, table };
 };
 
-export const splitPath = (path: string, projectName: string) => {
-  const paths = path.split(`${projectName}/`);
+export const splitPath = (path: string, projectName: string): string => {
+  const startIndex = path.indexOf(projectName);
 
-  if (paths.length > 2) {
-    return `${projectName}/${paths[1].trim()}/${projectName}/${paths[2]}`;
+  if (startIndex === -1) {
+    return path; // projectName not found, return full path
   }
-  return `${projectName}/${paths[1]}`;
+
+  const prefix = path.slice(0, 10); // Show first 10 characters (or adjust as needed)
+  const projectPart = path.slice(startIndex);
+
+  return `${prefix}...${projectPart}`;
 };
 
 export const getVersionsFromDiff = (newContent: string, diffString: string) => {
@@ -140,6 +144,14 @@ export const getRandomColor = (seed: string): string => {
     hash = seed.charCodeAt(i) + ((hash << 5) - hash);
   }
   return `hsl(${hash % 360}, 70%, 50%)`;
+};
+
+export const handleExternalLink = (
+  event: React.MouseEvent<HTMLAnchorElement, MouseEvent>,
+  url: string,
+): void => {
+  event.preventDefault();
+  window.electron.ipcRenderer.invoke('open:external', url);
 };
 
 export const generateMonacoCompletions = (

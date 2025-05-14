@@ -1,5 +1,4 @@
 import React from 'react';
-import { useNavigate } from 'react-router-dom';
 import {
   Button,
   TextField,
@@ -20,7 +19,6 @@ import {
   Tooltip,
 } from '@mui/material';
 import AddIcon from '@mui/icons-material/Add';
-import ArrowForwardIcon from '@mui/icons-material/ArrowForward';
 import SearchIcon from '@mui/icons-material/Search';
 import MoreVertIcon from '@mui/icons-material/MoreVert';
 import DeleteIcon from '@mui/icons-material/Delete';
@@ -28,12 +26,18 @@ import SearchOffIcon from '@mui/icons-material/SearchOff';
 import HelpOutlineIcon from '@mui/icons-material/HelpOutline';
 import DriveFolderUploadIcon from '@mui/icons-material/DriveFolderUpload';
 import { toast } from 'react-toastify';
+import { FolderOpen } from '@mui/icons-material';
 import { projectsServices } from '../../services';
-import { useDeleteProject, useGetProjects } from '../../controllers';
-import { CloneRepoModal } from '../../components';
-import { Icon } from '../../components/icon';
-import { icons } from '../../../../assets';
-import { logo } from '../../../../assets'; // Add this import
+import {
+  useDeleteProject,
+  useFilePicker,
+  useGetProjects,
+  useGetSettings,
+} from '../../controllers';
+import { CloneRepoModal, Icon } from '../../components';
+import { icons, logo } from '../../../../assets';
+import { client } from '../../config/client';
+
 const ProjectSelectionContainer = styled(Box)`
   padding: 0.5rem 2rem 2rem;
   max-width: 1200px;
@@ -107,18 +111,6 @@ const ProjectActions = styled(Box)`
   display: flex;
   align-items: center;
   gap: 8px;
-`;
-
-const ActionButton = styled(Button)`
-  visibility: hidden;
-  min-width: 80px;
-  ${({ theme }) => theme.breakpoints.down('sm')} {
-    visibility: visible;
-  }
-
-  ${ProjectCard}:hover & {
-    visibility: visible;
-  }
 `;
 
 const AddProjectForm = styled(Box)`
@@ -196,7 +188,7 @@ const TaglineLogo = styled('img')`
 `;
 
 const SelectProject: React.FC = () => {
-  const navigate = useNavigate();
+  const { data: settings } = useGetSettings();
   const { data: projects = [] } = useGetProjects();
   const [isCloneModalOpen, setIsCloneModalOpen] = React.useState(false);
   const [searchQuery, setSearchQuery] = React.useState('');
@@ -204,6 +196,11 @@ const SelectProject: React.FC = () => {
   const [newProject, setNewProject] = React.useState({
     name: '',
   });
+  const { mutate: getFiles } = useFilePicker();
+
+  const [defaultProjectPath, setDefaultProjectPath] = React.useState<string>(
+    settings?.projectsDirectory ?? '',
+  );
   const [menuAnchorEl, setMenuAnchorEl] = React.useState<HTMLElement | null>(
     null,
   );
@@ -248,7 +245,6 @@ const SelectProject: React.FC = () => {
     handleCloseMenu();
   };
 
-  // Add function to perform the actual deletion
   const confirmDeleteProject = async () => {
     if (projectToDelete) {
       deleteProject({ id: projectToDelete.id });
@@ -271,7 +267,6 @@ const SelectProject: React.FC = () => {
       };
     }
 
-    // Check if project name follows DBT naming pattern
     if (!/^[a-zA-Z]\w*$/.test(name)) {
       return {
         isValid: false,
@@ -280,7 +275,6 @@ const SelectProject: React.FC = () => {
       };
     }
 
-    // Check if project name already exists
     const projectExists = projects.some(
       (p) => p.name.toLowerCase() === name.toLowerCase(),
     );
@@ -304,12 +298,14 @@ const SelectProject: React.FC = () => {
     }
 
     try {
-      const project = await projectsServices.addProject(newProject);
+      const project = await projectsServices.addProject({
+        name: `${defaultProjectPath}/${newProject.name}`,
+      });
       await projectsServices.selectProject({ projectId: project.id });
-      navigate('/app');
       toast.success(`Project ${project.name} created successfully!`);
       setIsAddingProject(false);
       setNewProject({ name: '' });
+      await client.get('windows:closeSelector');
     } catch (error) {
       toast.error('Failed to create project. Please try again.');
     }
@@ -373,8 +369,7 @@ const SelectProject: React.FC = () => {
               await projectsServices.selectProject({
                 projectId: project.id,
               });
-              // Instead of reloading the window, navigate to the project details page
-              navigate('/app');
+              await client.get('windows:closeSelector');
             }}
           >
             <ProjectInfo>
@@ -392,7 +387,6 @@ const SelectProject: React.FC = () => {
           </ProjectCard>
         ))}
 
-        {/* Menu for project actions */}
         <Menu
           anchorEl={menuAnchorEl}
           open={Boolean(menuAnchorEl)}
@@ -417,6 +411,10 @@ const SelectProject: React.FC = () => {
     );
   };
 
+  React.useEffect(() => {
+    setDefaultProjectPath(settings?.projectsDirectory ?? '');
+  }, [settings?.projectsDirectory]);
+
   return (
     <ProjectSelectionContainer>
       {isAddingProject ? (
@@ -425,6 +423,41 @@ const SelectProject: React.FC = () => {
             Create New Project
           </Typography>
           <AddProjectForm>
+            <TextField
+              fullWidth
+              disabled
+              label="Project Path"
+              variant="outlined"
+              id="rosettaPath"
+              name="rosettaPath"
+              value={`${defaultProjectPath}/${newProject.name}`}
+              onChange={(event) => setDefaultProjectPath(event.target.value)}
+              sx={{ mb: 2 }}
+              slotProps={{
+                input: {
+                  endAdornment: (
+                    <IconButton
+                      onClick={() => {
+                        getFiles(
+                          {
+                            properties: ['openDirectory'],
+                            defaultPath: defaultProjectPath,
+                          },
+                          {
+                            onSuccess: (data) => {
+                              setDefaultProjectPath(data[0]);
+                            },
+                          },
+                        );
+                      }}
+                      edge="end"
+                    >
+                      <FolderOpen />
+                    </IconButton>
+                  ),
+                },
+              }}
+            />
             <TextField
               fullWidth
               label="Project Name"
@@ -511,8 +544,7 @@ const SelectProject: React.FC = () => {
                         await projectsServices.selectProject({
                           projectId: project.id,
                         });
-                        setIsAddingProject(false);
-                        setNewProject({ name: '' });
+                        await client.get('windows:closeSelector');
                       }
                     } catch (error) {
                       // Show toast message instead of throwing an error
