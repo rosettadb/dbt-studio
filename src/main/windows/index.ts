@@ -32,6 +32,7 @@ export class WindowManager {
     }
 
     this.projectWindow = createProjectWindow();
+    this.projectWindow.setParentWindow(this.mainWindow);
     this.projectWindow.on('closed', () => {
       this.projectWindow = null;
       if (this.mainWindow) {

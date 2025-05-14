@@ -338,7 +338,14 @@ const ProjectDetails: React.FC = () => {
             <EditorContainer>
               <Header>
                 {selectedFilePath && (
-                  <SelectedFile>
+                  <SelectedFile
+                    onClick={async () => {
+                      await window.navigator.clipboard.writeText(
+                        selectedFilePath ?? '',
+                      );
+                      toast.info('File path is copied to clipboard');
+                    }}
+                  >
                     {utils.splitPath(selectedFilePath ?? '', project.name)}
                   </SelectedFile>
                 )}
