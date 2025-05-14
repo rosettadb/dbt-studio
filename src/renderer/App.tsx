@@ -31,12 +31,12 @@ const AppWithProjectProvider: React.FC = () => {
   return (
     <Router>
       <QueryClientContextProvider>
-        <AppProvider>
-          <CssVarsProvider
-            theme={theme}
-            defaultMode={initialMode}
-            storageManager={themeStorageManager}
-          >
+        <CssVarsProvider
+          theme={theme}
+          defaultMode={initialMode}
+          storageManager={themeStorageManager}
+        >
+          <AppProvider>
             <CssBaseline />
             <ScrollbarStyles />
             <Routes>
@@ -74,8 +74,8 @@ const AppWithProjectProvider: React.FC = () => {
               pauseOnHover
               theme={initialMode === 'dark' ? 'dark' : 'light'}
             />
-          </CssVarsProvider>
-        </AppProvider>
+          </AppProvider>
+        </CssVarsProvider>
       </QueryClientContextProvider>
     </Router>
   );
