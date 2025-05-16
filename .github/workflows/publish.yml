@@ -54,6 +54,9 @@ jobs:
           npm install
           npm run postinstall
 
+      - name: Build project
+        run: npm run build
+
       - name: Build and upload unsigned draft release
         env:
           GH_TOKEN: ${{ secrets.GH_TOKEN }}
