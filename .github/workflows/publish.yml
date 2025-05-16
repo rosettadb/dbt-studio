@@ -54,34 +54,44 @@ jobs:
           npm install
           npm run postinstall
 
-      - name: Build Windows artifacts (no publish)
+      - name: Build project
+        run: npm run build
+
+      - name: Publish unsigned Windows artifacts
         env:
           GH_TOKEN: ${{ secrets.GH_TOKEN }}
         run: |
-          npm exec electron-builder --publish=never --win
+          npm exec electron-builder -- --publish always --win
 
-      - name: Sign Windows binaries
-        uses: azure/trusted-signing-action@v0
-        with:
-          azure-tenant-id: ${{ secrets.AZURE_TENANT_ID }}
-          azure-client-id: ${{ secrets.AZURE_CLIENT_ID }}
-          azure-client-secret: ${{ secrets.AZURE_CLIENT_SECRET }}
-          endpoint: https://eus.codesigning.azure.net/
-          trusted-signing-account-name: RosettaLabs
-          certificate-profile-name: dbt-studio
-          files-folder: ${{ github.workspace }}/release/build
-          files-folder-filter: exe,dll
-          file-digest: SHA256
-          timestamp-rfc3161: http://timestamp.acs.microsoft.com
-          timestamp-digest: SHA256
+      - name: Download AzureSignTool
+        run: |
+          dotnet tool install --global AzureSignTool
+
+      - name: Sign NSIS installer with Azure Code Signing
+        env:
+          AZURE_KEY_VAULT_URI: https://eus.codesigning.azure.net/
+          AZURE_CERTIFICATE_NAME: dbt-studio
+          AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+          AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+          AZURE_CLIENT_SECRET: ${{ secrets.AZURE_CLIENT_SECRET }}
+        run: |
+          $env:Path += ";$env:USERPROFILE\.dotnet\tools"
+          $installer = Get-ChildItem "release\build\*Setup*.exe" | Select-Object -First 1
+          AzureSignTool sign `
+            -kvu "$env:AZURE_KEY_VAULT_URI" `
+            -kvc "$env:AZURE_CERTIFICATE_NAME" `
+            -kvt "$env:AZURE_TENANT_ID" `
+            -kvi "$env:AZURE_CLIENT_ID" `
+            -kvs "$env:AZURE_CLIENT_SECRET" `
+            -tr http://timestamp.digicert.com `
+            -td sha256 -fd sha256 `
+            $installer.FullName
 
       - name: Publish signed Windows artifacts
         env:
           GH_TOKEN: ${{ secrets.GH_TOKEN }}
         run: |
-          npm exec electron-builder \
-           --prepackaged ${{ github.workspace }}/release/build \
-           --publish=always
+          npm exec electron-builder -- --publish always --win --config.win.sign=false
 
   publish-linux:
     runs-on: ubuntu-latest
