@@ -266,7 +266,7 @@
     ],
     "publish": {
       "provider": "github",
-      "owner": "rosettadb",
+      "owner": "jasir99",
       "repo": "dbt-studio"
     }
   },
