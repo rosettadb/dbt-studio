@@ -3,7 +3,7 @@ name: Publish
 on:
   push:
     branches:
-      - main
+      - dev
 
 jobs:
   publish-mac:
@@ -54,14 +54,34 @@ jobs:
           npm install
           npm run postinstall
 
-      - name: Build project
-        run: npm run build
-
-      - name: Publish for Windows
+      - name: Build Windows artifacts (no publish)
         env:
           GH_TOKEN: ${{ secrets.GH_TOKEN }}
         run: |
-          npm exec electron-builder -- --publish always --win
+          npm exec electron-builder --win --publish never
+
+      - name: Sign Windows binaries
+        uses: azure/trusted-signing-action@v0
+        with:
+          azure-tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          azure-client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          azure-client-secret: ${{ secrets.AZURE_CLIENT_SECRET }}
+          endpoint: https://eus.codesigning.azure.net/
+          trusted-signing-account-name: RosettaLabs
+          certificate-profile-name: dbt-studio
+          files-folder: ${{ github.workspace }}/release/build
+          files-folder-filter: exe,dll
+          file-digest: SHA256
+          timestamp-rfc3161: http://timestamp.acs.microsoft.com
+          timestamp-digest: SHA256
+
+      - name: Publish signed Windows artifacts
+        env:
+          GH_TOKEN: ${{ secrets.GH_TOKEN }}
+        run: |
+          npm exec electron-builder \
+            --prepackaged ${{ github.workspace }}/release/build \
+            --publish always
 
   publish-linux:
     runs-on: ubuntu-latest
