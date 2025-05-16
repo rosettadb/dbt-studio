@@ -54,21 +54,27 @@ jobs:
           npm install
           npm run postinstall
 
-      - name: Build project
-        run: npm run build
-
-      - name: Build and publish Windows artifacts (unsigned)
+      - name: Build and upload unsigned draft release
         env:
           GH_TOKEN: ${{ secrets.GH_TOKEN }}
         run: |
+          # Build and upload unsigned to draft release
           npm exec electron-builder -- --publish always --win
 
-      - name: Download release assets
+      - name: Fetch unsigned asset download URLs
+        id: fetch_assets
         run: |
+          TAG="v${{ steps.get_version.outputs.version }}"
+          RELEASE=$(gh api repos/${{ github.repository }}/releases --jq '.[] | select(.tag_name == "'$TAG'" and .draft == true)')
+
+          echo "$RELEASE" | jq -r '.assets[] | select(.name | endswith(".exe") or endswith(".dll")) | [.name, .browser_download_url] | @tsv' > assets.tsv
+
           mkdir unsigned
-          gh release download --repo ${{ github.repository }} --pattern "*.exe" --pattern "*.dll" --dir unsigned
-        env:
-          GH_TOKEN: ${{ secrets.GH_TOKEN }}
+
+          while IFS=$'\t' read -r name url; do
+            echo "Downloading $name..."
+            curl -L -H "Authorization: token ${{ secrets.GH_TOKEN }}" "$url" -o "unsigned/$name"
+          done < assets.tsv
 
       - name: Sign Windows binaries
         uses: azure/trusted-signing-action@v0
@@ -85,9 +91,16 @@ jobs:
           timestamp-rfc3161: http://timestamp.acs.microsoft.com
           timestamp-digest: SHA256
 
-      - name: Re-upload signed artifacts to GitHub Release
+      - name: Create final (published) GitHub Release
         run: |
-          gh release upload ${{ github.ref_name }} unsigned/*.exe unsigned/*.dll --clobber
+          gh release delete "1.0.7" --yes || true
+          gh release create "1.0.7" --title "Rosetta dbt Studio v1.0.7" --notes "Signed and published release"
+        env:
+          GH_TOKEN: ${{ secrets.GH_TOKEN }}
+
+      - name: Upload signed artifacts to GitHub Release
+        run: |
+          gh release upload "1.0.7" unsigned/*.exe unsigned/*.dll --clobber
         env:
           GH_TOKEN: ${{ secrets.GH_TOKEN }}
 
