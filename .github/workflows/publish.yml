@@ -58,7 +58,7 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GH_TOKEN }}
         run: |
-          npm exec electron-builder --publish=always --win
+          npm exec electron-builder -- --publish always --win
 
       - name: Download release assets
         run: |
