@@ -58,7 +58,7 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GH_TOKEN }}
         run: |
-          npm exec electron-builder --win --publish never
+          npm exec electron-builder --publish=never --win
 
       - name: Sign Windows binaries
         uses: azure/trusted-signing-action@v0
@@ -80,8 +80,8 @@ jobs:
           GH_TOKEN: ${{ secrets.GH_TOKEN }}
         run: |
           npm exec electron-builder \
-            --prepackaged ${{ github.workspace }}/release/build \
-            --publish always
+           --prepackaged ${{ github.workspace }}/release/build \
+           --publish=always
 
   publish-linux:
     runs-on: ubuntu-latest
