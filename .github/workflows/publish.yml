@@ -65,19 +65,30 @@ jobs:
           npm exec electron-builder -- --publish always --win
 
       - name: Fetch unsigned asset download URLs
-        id: fetch_assets
+        shell: pwsh
         run: |
-          TAG="v${{ steps.get_version.outputs.version }}"
-          RELEASE=$(gh api repos/${{ github.repository }}/releases --jq '.[] | select(.tag_name == "'$TAG'" and .draft == true)')
+          $version = "1.0.7"
+          $tag = "v$version"
 
-          echo "$RELEASE" | jq -r '.assets[] | select(.name | endswith(".exe") or endswith(".dll")) | [.name, .browser_download_url] | @tsv' > assets.tsv
+          $release = gh api "repos/${{ github.repository }}/releases" | ConvertFrom-Json |
+            Where-Object { $_.tag_name -eq $tag -and $_.draft -eq $true }
 
-          mkdir unsigned
+          if (-not $release) {
+            Write-Error "Draft release with tag $tag not found"
+            exit 1
+          }
 
-          while IFS=$'\t' read -r name url; do
-            echo "Downloading $name..."
-            curl -L -H "Authorization: token ${{ secrets.GH_TOKEN }}" "$url" -o "unsigned/$name"
-          done < assets.tsv
+          New-Item -ItemType Directory -Force -Path unsigned | Out-Null
+
+          foreach ($asset in $release.assets) {
+            if ($asset.name -like "*.exe" -or $asset.name -like "*.dll") {
+              $outputPath = "unsigned/$($asset.name)"
+              Write-Host "Downloading $($asset.name)..."
+              Invoke-WebRequest -Uri $asset.browser_download_url `
+                                -Headers @{ Authorization = "token ${{ secrets.GH_TOKEN }}" } `
+                                -OutFile $outputPath
+            }
+          }
 
       - name: Sign Windows binaries
         uses: azure/trusted-signing-action@v0
