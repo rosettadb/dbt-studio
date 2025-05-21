@@ -80,7 +80,7 @@ export default class SettingsService {
     const pythonDir = path.dirname(settings.pythonPath);
 
     if (process.platform === 'win32') {
-      return path.join(pythonDir, 'Scripts', 'dbt.exe');
+      return path.join(pythonDir, 'dbt.exe');
     }
     return path.join(pythonDir, 'dbt');
   }
