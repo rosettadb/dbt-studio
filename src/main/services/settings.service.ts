@@ -306,7 +306,7 @@ export default class SettingsService {
     settings.pythonPath = binaryPath;
     const cliAdapter = new CliAdapter();
     await cliAdapter.runCommandWithoutStreaming(
-      `cd ${userDataPath} && ${binaryPath} -m venv venv`,
+      `cd "${userDataPath}" && "${binaryPath}" -m venv venv`,
     );
     settings.pythonPath = path.join(
       userDataPath,
