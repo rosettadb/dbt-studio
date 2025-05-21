@@ -3,7 +3,7 @@ name: Publish
 on:
   push:
     branches:
-      - dev
+      - main
 
 jobs:
   publish-mac:
@@ -28,7 +28,7 @@ jobs:
 
       - name: Publish for macOS
         env:
-          GH_TOKEN: ${{ secrets.GH_TOKEN }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_ID_PASS }}
           APPLE_ID: ${{ secrets.APPLE_ID }}
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
@@ -57,66 +57,11 @@ jobs:
       - name: Build project
         run: npm run build
 
-      - name: Build and upload unsigned draft release
+      - name: Publish for Windows
         env:
-          GH_TOKEN: ${{ secrets.GH_TOKEN }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          # Build and upload unsigned to draft release
           npm exec electron-builder -- --publish always --win
-
-      - name: Fetch unsigned asset download URLs
-        shell: pwsh
-        run: |
-          $version = "1.0.7"
-          $tag = "v$version"
-
-          $release = gh api "repos/${{ github.repository }}/releases" | ConvertFrom-Json |
-            Where-Object { $_.tag_name -eq $tag -and $_.draft -eq $true }
-
-          if (-not $release) {
-            Write-Error "Draft release with tag $tag not found"
-            exit 1
-          }
-
-          New-Item -ItemType Directory -Force -Path unsigned | Out-Null
-
-          foreach ($asset in $release.assets) {
-            if ($asset.name -like "*.exe" -or $asset.name -like "*.dll") {
-              $outputPath = "unsigned/$($asset.name)"
-              Write-Host "Downloading $($asset.name)..."
-              Invoke-WebRequest -Uri $asset.browser_download_url `
-                                -Headers @{ Authorization = "token ${{ secrets.GH_TOKEN }}" } `
-                                -OutFile $outputPath
-            }
-          }
-
-      - name: Sign Windows binaries
-        uses: azure/trusted-signing-action@v0
-        with:
-          azure-tenant-id: ${{ secrets.AZURE_TENANT_ID }}
-          azure-client-id: ${{ secrets.AZURE_CLIENT_ID }}
-          azure-client-secret: ${{ secrets.AZURE_CLIENT_SECRET }}
-          endpoint: https://eus.codesigning.azure.net/
-          trusted-signing-account-name: RosettaLabs
-          certificate-profile-name: dbt-studio
-          files-folder: unsigned
-          files-folder-filter: exe,dll
-          file-digest: SHA256
-          timestamp-rfc3161: http://timestamp.acs.microsoft.com
-          timestamp-digest: SHA256
-
-      - name: Create final (published) GitHub Release
-        run: |
-          gh release delete "1.0.7" --yes || true
-          gh release create "1.0.7" --title "Rosetta dbt Studio v1.0.7" --notes "Signed and published release"
-        env:
-          GH_TOKEN: ${{ secrets.GH_TOKEN }}
-
-      - name: Upload signed artifacts to GitHub Release
-        run: |
-          gh release upload "1.0.7" unsigned/*.exe unsigned/*.dll --clobber
-        env:
-          GH_TOKEN: ${{ secrets.GH_TOKEN }}
 
   publish-linux:
     runs-on: ubuntu-latest
@@ -140,6 +85,6 @@ jobs:
 
       - name: Publish for Linux
         env:
-          GH_TOKEN: ${{ secrets.GH_TOKEN }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           npm exec electron-builder -- --publish always --linux deb rpm

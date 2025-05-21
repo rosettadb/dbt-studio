@@ -14,6 +14,7 @@ import {
 } from '../utils/fileHelper';
 import { CliUpdateResponseType, SettingsType } from '../../types/backend';
 import { ProjectsService } from './index';
+import { CliAdapter } from '../adapters';
 
 const cliConfig: Record<
   keyof CliUpdateResponseType,
@@ -303,6 +304,15 @@ export default class SettingsService {
 
     settings.pythonVersion = version;
     settings.pythonPath = binaryPath;
+    const cliAdapter = new CliAdapter();
+    await cliAdapter.runCommandWithoutStreaming(
+      `cd ${userDataPath} && ${binaryPath} -m venv venv`,
+    );
+    settings.pythonPath = path.join(
+      userDataPath,
+      'venv',
+      platform === 'win32' ? 'Scripts/python.exe' : 'bin/python3',
+    );
     await this.saveSettings(settings);
     await fs.remove(archivePath);
 

@@ -7,7 +7,6 @@ import {
   DialogContent,
   DialogActions,
   Typography,
-  Link,
   Button,
   Box,
   CircularProgress,
@@ -68,13 +67,14 @@ export const DbtSettings: React.FC<DbtSettingsProps> = ({
           /* Continue even if this fails */
         }
 
-        // Install each dbt package
+        // eslint-disable-next-line no-plusplus
         for (let i = 0; i < packages.length; i++) {
           const pkg = packages[i];
           setCurrentPackage(pkg);
-          setInstallProgress(((i) / packages.length) * 100);
+          setInstallProgress((i / packages.length) * 100);
 
           try {
+            // eslint-disable-next-line no-await-in-loop
             await runCommand(`${python} -m pip install ${pkg}`);
           } catch {
             /* Continue with next package */
@@ -83,20 +83,21 @@ export const DbtSettings: React.FC<DbtSettingsProps> = ({
       } else {
         // If no Python path is set, use system Python
         try {
-          // Install each dbt package using system Python
+          // eslint-disable-next-line no-plusplus
           for (let i = 0; i < packages.length; i++) {
             const pkg = packages[i];
             setCurrentPackage(pkg);
-            setInstallProgress(((i) / packages.length) * 100);
+            setInstallProgress((i / packages.length) * 100);
 
             try {
+              // eslint-disable-next-line no-await-in-loop
               await runCommand(`pip install ${pkg}`);
             } catch {
               /* Continue with next package */
             }
           }
-        } catch (error) {
-          console.error('Failed to install packages:', error);
+        } catch {
+          /* empty */
         }
       }
 
@@ -172,23 +173,36 @@ export const DbtSettings: React.FC<DbtSettingsProps> = ({
 
           {settings.pythonPath && settings.pythonVersion && (
             <Alert severity="info" sx={{ mt: 2, mb: 2 }}>
-              Python environment (version {settings.pythonVersion}) is already installed at: {settings.pythonPath}
+              Python environment (version {settings.pythonVersion}) is already
+              installed at: {settings.pythonPath}
             </Alert>
           )}
 
-          <Box sx={{ mt: 3, mb: 3, p: 2, bgcolor: 'background.paper', borderRadius: 1, border: '1px solid', borderColor: 'divider' }}>
+          <Box
+            sx={{
+              mt: 3,
+              mb: 3,
+              p: 2,
+              bgcolor: 'background.paper',
+              borderRadius: 1,
+              border: '1px solid',
+              borderColor: 'divider',
+            }}
+          >
             <Typography variant="h6" gutterBottom>
               Automated Installation
             </Typography>
 
             {settings.dbtPath ? (
               <Alert severity="success" sx={{ mt: 2, mb: 2 }}>
-                dbt™ packages are already installed and configured at: {settings.dbtPath}
+                dbt™ packages are already installed and configured at:{' '}
+                {settings.dbtPath}
               </Alert>
             ) : (
               <>
                 <Typography variant="body1" gutterBottom>
-                  Click the Install button below to automatically install dbt™ Core and all necessary adapters:
+                  Click the Install button below to automatically install dbt™
+                  Core and all necessary adapters:
                 </Typography>
                 <Box sx={{ mt: 2, mb: 2 }}>
                   <Typography variant="body2" component="div">
@@ -205,7 +219,13 @@ export const DbtSettings: React.FC<DbtSettingsProps> = ({
 
                 {isLoadingInstall && (
                   <Box sx={{ width: '100%', mb: 2 }}>
-                    <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 1 }}>
+                    <Box
+                      sx={{
+                        display: 'flex',
+                        justifyContent: 'space-between',
+                        mb: 1,
+                      }}
+                    >
                       <Typography variant="body2" color="text.secondary">
                         Installing: {currentPackage}
                       </Typography>
@@ -213,19 +233,30 @@ export const DbtSettings: React.FC<DbtSettingsProps> = ({
                         {Math.round(installProgress)}%
                       </Typography>
                     </Box>
-                    <LinearProgress variant="determinate" value={installProgress} />
+                    <LinearProgress
+                      variant="determinate"
+                      value={installProgress}
+                    />
                   </Box>
                 )}
 
-                <Box sx={{ mt: 2, display: 'flex', justifyContent: 'flex-start' }}>
+                <Box
+                  sx={{ mt: 2, display: 'flex', justifyContent: 'flex-start' }}
+                >
                   <Button
                     variant="contained"
                     color="primary"
                     onClick={handleInstallDbt}
                     disabled={isLoadingInstall || !!settings.dbtPath}
-                    startIcon={isLoadingInstall ? <CircularProgress size={14} color="inherit" /> : null}
+                    startIcon={
+                      isLoadingInstall ? (
+                        <CircularProgress size={14} color="inherit" />
+                      ) : null
+                    }
                   >
-                    {isLoadingInstall ? "Installing..." : "Install dbt™ Packages"}
+                    {isLoadingInstall
+                      ? 'Installing...'
+                      : 'Install dbt™ Packages'}
                   </Button>
                 </Box>
               </>
