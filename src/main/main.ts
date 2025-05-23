@@ -7,6 +7,7 @@ import { AssetServer } from './utils/assetServer';
 import { setupApplicationIcon } from './utils/iconUtils';
 import { SettingsService } from './services';
 import { copyAssetsToUserData } from './utils/fileHelper';
+import AnalyticsService from './services/analytics.service';
 
 const isProd = process.env.NODE_ENV === 'production';
 const isDebug =
@@ -37,7 +38,7 @@ if (!gotTheLock) {
 } else {
   app
     .whenReady()
-    .then(() => {
+    .then(async () => {
       windowManager = new WindowManager();
       windowManager.startApplication();
       copyAssetsToUserData();
@@ -108,6 +109,9 @@ if (!gotTheLock) {
           windowManager.startApplication();
         }
       });
+
+       // Track app updates and send telemetry
+       await AnalyticsService.trackAppUpdate();
     })
     .catch(console.log);
 
