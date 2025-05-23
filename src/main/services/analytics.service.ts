@@ -3,8 +3,9 @@ import { v4 as uuidv4 } from 'uuid';
 import { app } from 'electron';
 import os from 'os';
 import Store from 'electron-store';
+import { AppUpdateTrackURL } from '../utils/constants';
 
-const trackUrl = process.env.TRACK_URL || '';
+const trackUrl = AppUpdateTrackURL;
 
 interface UpdateEvent {
   event: string;

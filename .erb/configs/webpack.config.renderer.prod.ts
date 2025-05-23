@@ -109,7 +109,6 @@ const configuration: webpack.Configuration = {
     new webpack.EnvironmentPlugin({
       NODE_ENV: 'production',
       DEBUG_PROD: false,
-      TRACK_URL: process.env.TRACK_URL || '',
     }),
 
     new MiniCssExtractPlugin({

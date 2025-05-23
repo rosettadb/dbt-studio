@@ -47,23 +47,6 @@ const configuration: webpack.Configuration = {
     new webpack.DefinePlugin({
       'process.type': '"browser"',
     }),
-
-
-    /**
-     * Create global constants which can be configured at compile time.
-     *
-     * Useful for allowing different behaviour between development builds and
-     * release builds
-     *
-     * NODE_ENV should be production so that modules do not perform certain
-     * development checks
-     */
-    new webpack.EnvironmentPlugin({
-      NODE_ENV: 'development',
-      DEBUG_PROD: false,
-      START_MINIMIZED: false,
-      TRACK_URL: process.env.TRACK_URL || '',
-    }),
   ],
 
   /**

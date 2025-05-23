@@ -24,8 +24,6 @@ jobs:
           npm run postinstall
 
       - name: Build project
-        env:
-          TRACK_URL: ${{ secrets.TRACK_URL }}
         run: npm run build
 
       - name: Publish for macOS
@@ -57,8 +55,6 @@ jobs:
           npm run postinstall
 
       - name: Build project
-        env:
-          TRACK_URL: ${{ secrets.TRACK_URL }}
         run: npm run build
 
       - name: Build and publish Windows artifacts (unsigned)
@@ -113,8 +109,6 @@ jobs:
           npm run postinstall
 
       - name: Build project
-        env:
-          TRACK_URL: ${{ secrets.TRACK_URL }}
         run: npm run build
 
       - name: Publish for Linux
