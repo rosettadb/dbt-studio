@@ -1,5 +1,5 @@
 /* eslint global-require: off, no-console: off, promise/always-return: off, no-restricted-syntax: off, no-await-in-loop: off */
-import { app, ipcMain, protocol } from 'electron';
+import { app, protocol } from 'electron';
 import { WindowManager } from './windows';
 import { loadEnvironment } from './utils/setupHelpers';
 import { AssetUrl } from './utils/assetUrl';
@@ -126,18 +126,6 @@ if (!gotTheLock) {
       activeWindow.focus();
     } else {
       windowManager.startApplication();
-    }
-  });
-
-  ipcMain.handle('windows:openSelector', () => {
-    if (windowManager) {
-      windowManager.showProjectWindow();
-    }
-  });
-
-  ipcMain.handle('windows:closeSelector', () => {
-    if (windowManager) {
-      windowManager.closeProjectWindow();
     }
   });
 }
