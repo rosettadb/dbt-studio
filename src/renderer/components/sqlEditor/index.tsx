@@ -1,4 +1,4 @@
-import React, { useRef } from 'react';
+import React, { useEffect, useRef } from 'react';
 import { toast } from 'react-toastify';
 import type * as monacoType from 'monaco-editor';
 import { Inputs, RelativeContainer } from './styles';
@@ -77,6 +77,37 @@ export const SqlEditor: React.FC<Props> = ({
     });
   };
 
+  // Handle when a query from history is selected
+  const handleHistorySelect = (historyItem: QueryHistoryType) => {
+    // First update the project query in the database
+    handleQueryChange(historyItem.query);
+
+    // Then directly update the Monaco editor content if available
+    if (editorRef.current) {
+      const model = editorRef.current.getModel();
+      if (model) {
+        // Replace the entire editor content with the selected query
+        editorRef.current.executeEdits('history-selection', [
+          {
+            range: model.getFullModelRange(),
+            text: historyItem.query,
+            forceMoveMarkers: true
+          }
+        ]);
+
+        // Focus the editor
+        editorRef.current.focus();
+
+        // Position cursor at the end of the content
+        const lastLine = model.getLineCount();
+        const lastColumn = model.getLineMaxColumn(lastLine);
+        editorRef.current.setPosition({ lineNumber: lastLine, column: lastColumn });
+
+        console.log('Updated editor content from history selection');
+      }
+    }
+  };
+
   return (
     <Inputs>
       <RelativeContainer>
@@ -89,7 +120,7 @@ export const SqlEditor: React.FC<Props> = ({
         />
         {queryHistory.length > 0 && (
           <QueryHistory
-            onQuerySelect={(qh) => handleQueryChange(qh.query)}
+            onQuerySelect={handleHistorySelect}
             queryHistory={queryHistory}
             projectId={selectedProject.id}
           />
