@@ -1,4 +1,5 @@
 import React from 'react';
+import { useNavigate } from 'react-router-dom';
 import {
   Button,
   TextField,
@@ -36,7 +37,6 @@ import {
 } from '../../controllers';
 import { CloneRepoModal, Icon } from '../../components';
 import { icons, logo } from '../../../../assets';
-import { client } from '../../config/client';
 
 const ProjectSelectionContainer = styled(Box)`
   padding: 0.5rem 2rem 2rem;
@@ -188,6 +188,7 @@ const TaglineLogo = styled('img')`
 `;
 
 const SelectProject: React.FC = () => {
+  const navigate = useNavigate();
   const { data: settings } = useGetSettings();
   const { data: projects = [] } = useGetProjects();
   const [isCloneModalOpen, setIsCloneModalOpen] = React.useState(false);
@@ -302,10 +303,10 @@ const SelectProject: React.FC = () => {
         name: `${defaultProjectPath}/${newProject.name}`,
       });
       await projectsServices.selectProject({ projectId: project.id });
+      navigate('/app');
       toast.success(`Project ${project.name} created successfully!`);
       setIsAddingProject(false);
       setNewProject({ name: '' });
-      await client.get('windows:closeSelector');
     } catch (error) {
       toast.error('Failed to create project. Please try again.');
     }
@@ -369,7 +370,7 @@ const SelectProject: React.FC = () => {
               await projectsServices.selectProject({
                 projectId: project.id,
               });
-              await client.get('windows:closeSelector');
+              navigate('/app');
             }}
           >
             <ProjectInfo>
@@ -544,7 +545,8 @@ const SelectProject: React.FC = () => {
                         await projectsServices.selectProject({
                           projectId: project.id,
                         });
-                        await client.get('windows:closeSelector');
+                        setIsAddingProject(false);
+                        setNewProject({ name: '' });
                       }
                     } catch (error) {
                       // Show toast message instead of throwing an error
