@@ -14,8 +14,10 @@ import { ConfigureConnectionBody } from '../../types/ipc';
 import {
   executePostgresQuery,
   executeSnowflakeQuery,
+  executeBigQueryQuery,
   testPostgresConnection,
   testSnowflakeConnection,
+  testBigQueryConnection,
 } from '../utils/connectors';
 
 export default class ConnectorsService {
@@ -34,7 +36,6 @@ export default class ConnectorsService {
     }
 
     this.validateConnection(connection);
-    const jdbcUrl = this.generateJdbcUrl(connection);
 
     const updatedProject: Project = {
       ...projects[projectIndex],
@@ -43,7 +44,7 @@ export default class ConnectorsService {
         dbType: connection.type,
         databaseName: connection.database,
         schemaName: connection.schema,
-        url: jdbcUrl,
+        url: connection.type === 'bigquery' ? 'bigquery://' : this.generateJdbcUrl(connection),
         userName: connection.username,
         password: connection.password,
       },
@@ -82,6 +83,8 @@ export default class ConnectorsService {
         } catch {
           return false;
         }
+      case 'bigquery':
+        return testBigQueryConnection(connection);
       default:
         throw new Error(`Unsupported connection type: ${connection.type}`);
     }
@@ -102,6 +105,8 @@ export default class ConnectorsService {
         return executePostgresQuery(connection, query);
       case 'snowflake':
         return executeSnowflakeQuery(connection, query);
+      case 'bigquery':
+        return executeBigQueryQuery(connection, query);
       default:
         throw new Error(`Unsupported connection type: ${connection.type}`);
     }
@@ -175,7 +180,8 @@ export default class ConnectorsService {
       case 'redshift':
         return `jdbc:redshift://${conn.host}:${conn.port}/${conn.database}?user=${conn.username}&password=${conn.password}`;
       case 'bigquery':
-        throw new Error('BigQuery does not use JDBC URLs');
+        // BigQuery doesn't use JDBC URLs, return a placeholder
+        return 'bigquery://';
       default:
         throw new Error('Unsupported connection type!');
     }
@@ -285,14 +291,29 @@ export default class ConnectorsService {
           threads: 4,
         };
       case 'bigquery':
-        return {
+        const profile: any = {
           type: 'bigquery',
           method: conn.method,
           project: conn.project,
           dataset: conn.schema,
-          keyfile: conn.keyfile,
           threads: 4,
+          priority: conn.priority || 'interactive',
         };
+
+        if (conn.location) {
+          profile.location = conn.location;
+        }
+
+        if (conn.method === 'service-account') {
+          try {
+            profile.keyfile_json = JSON.parse(conn.keyfile || '{}');
+          } catch (err) {
+            throw new Error('Invalid service account key JSON format');
+          }
+        }
+
+        return profile;
+
       default:
         throw new Error('Unsupported connection type!');
     }

@@ -53,7 +53,7 @@ const baseItems: ItemType[] = [
     id: 'bigquery',
     name: 'BigQuery',
     img: 'bigquery',
-    disabled: true,
+    disabled: false,
   },
   {
     id: 'redshift',

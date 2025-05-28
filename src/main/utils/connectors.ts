@@ -1,10 +1,12 @@
 /* eslint-disable prefer-promise-reject-errors, consistent-return */
 import pg from 'pg';
 import snowflake from 'snowflake-sdk';
+import { BigQuery } from '@google-cloud/bigquery';
 import {
   PostgresConnection,
   QueryResponseType,
   SnowflakeConnection,
+  BigQueryConnection,
 } from '../../types/backend';
 import { SNOWFLAKE_TYPE_MAP } from './constants';
 
@@ -141,4 +143,111 @@ export const executeSnowflakeQuery = async (
       });
     });
   });
+};
+
+export async function testBigQueryConnection(
+  config: BigQueryConnection,
+): Promise<boolean> {
+  const bigqueryConfig: any = {
+    projectId: config.project,
+  };
+
+  if (config.method === 'service-account' && config.keyfile) {
+    try {
+      const credentials = JSON.parse(config.keyfile);
+      bigqueryConfig.credentials = credentials;
+    } catch (err) {
+      console.error('Invalid service account key JSON:', err);
+      throw new Error('Invalid service account key JSON format');
+    }
+  }
+
+  if (config.location) {
+    bigqueryConfig.location = config.location;
+  }
+
+  const client = new BigQuery(bigqueryConfig);
+
+  try {
+    // Test connection by running a simple query
+    await client.query('SELECT 1');
+    return true;
+  } catch (err: any) {
+    console.error('BigQuery connection test failed:', err);
+    if (err.code === 403) {
+      throw new Error('Permission denied. Please check your credentials and project access.');
+    } else if (err.code === 404) {
+      throw new Error('Project not found. Please verify your Project ID.');
+    } else if (err.code === 401) {
+      throw new Error('Authentication failed. Please check your service account key or OAuth setup.');
+    }
+    throw err;
+  }
+}
+
+export const executeBigQueryQuery = async (
+  config: BigQueryConnection,
+  query: string,
+): Promise<QueryResponseType> => {
+  const bigqueryConfig: any = {
+    projectId: config.project,
+  };
+
+  if (config.method === 'service-account' && config.keyfile) {
+    try {
+      const credentials = JSON.parse(config.keyfile);
+      bigqueryConfig.credentials = credentials;
+    } catch (err) {
+      return {
+        success: false,
+        error: 'Invalid service account key JSON format',
+      };
+    }
+  }
+
+  if (config.location) {
+    bigqueryConfig.location = config.location;
+  }
+
+  const client = new BigQuery(bigqueryConfig);
+
+  try {
+    const options: any = {
+      query,
+      location: config.location,
+    };
+
+    if (config.priority === 'batch') {
+      options.priority = 'BATCH';
+    }
+
+    const [rows] = await client.query(options);
+    const fields = rows.length > 0
+      ? Object.keys(rows[0]).map(name => ({
+          name,
+          type: typeof rows[0][name] === 'number' ? 1 : 0
+        }))
+      : [];
+
+    return {
+      success: true,
+      data: rows,
+      fields,
+    };
+  } catch (err: any) {
+    let errorMessage = err.message;
+
+    if (err.code === 403) {
+      errorMessage = 'Permission denied. Please check your credentials and project access.';
+    } else if (err.code === 404) {
+      errorMessage = 'Project or dataset not found. Please verify your Project ID and dataset.';
+    } else if (err.code === 401) {
+      errorMessage = 'Authentication failed. Please check your service account key or OAuth setup.';
+    }
+
+    return {
+      success: false,
+      error: errorMessage,
+    };
+  }
 };

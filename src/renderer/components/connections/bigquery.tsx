@@ -113,8 +113,10 @@ export const BigQuery: React.FC<Props> = ({ onCancel }) => {
         formState.method === 'service-account' ? formState.keyfile : undefined,
       username: '',
       password: '',
-      database: formState.project,
-      schema: formState.dataset,
+      database: formState.project, // Set database to project ID
+      schema: formState.dataset,   // Set schema to dataset
+      location: formState.location,
+      priority: formState.priority,
     };
 
     configureConnection({
@@ -233,7 +235,7 @@ export const BigQuery: React.FC<Props> = ({ onCancel }) => {
             onChange={handleChange}
             fullWidth
             multiline
-            rows={4}
+            rows={10}
             required={formState.method === 'service-account'}
             variant="outlined" // Explicitly set variant
             InputProps={{
