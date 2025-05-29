@@ -88,7 +88,9 @@ const AddConnection: React.FC = () => {
       }
       case 'bigquery': {
         return (
-          <Connections.BigQuery onCancel={() => setSelectedItem(undefined)} />
+          <Connections.BigQuery
+            onCancel={() => setSelectedItem(undefined)}
+          />
         );
       }
       case 'redshift': {

@@ -2,6 +2,7 @@ import yaml from 'js-yaml';
 import path from 'path';
 import fs from 'fs';
 import {
+  BigQueryTestResponse,
   ConnectionInput,
   DBTConnection,
   Project,
@@ -37,6 +38,13 @@ export default class ConnectorsService {
 
     this.validateConnection(connection);
 
+    // For BigQuery OAuth, ensure we have a valid access token
+    if (connection.type === 'bigquery' && connection.method === 'oauth') {
+      if (!connection.accessToken) {
+        throw new Error('Access token is required for BigQuery OAuth connection');
+      }
+    }
+
     const updatedProject: Project = {
       ...projects[projectIndex],
       rosettaConnection: {
@@ -44,9 +52,9 @@ export default class ConnectorsService {
         dbType: connection.type,
         databaseName: connection.database,
         schemaName: connection.schema,
-        url: connection.type === 'bigquery' ? 'bigquery://' : this.generateJdbcUrl(connection),
-        userName: connection.username,
-        password: connection.password,
+        url: this.generateJdbcUrl(connection),
+        userName: connection.type === 'bigquery' ? connection.project : connection.username,
+        password: connection.type === 'bigquery' ? '' : connection.password,
       },
       dbtConnection: this.mapToDbtConnection(connection),
     };
@@ -72,7 +80,7 @@ export default class ConnectorsService {
   /**
    * Test a connection configuration
    */
-  static async testConnection(connection: ConnectionInput): Promise<boolean> {
+  static async testConnection(connection: ConnectionInput): Promise<boolean | BigQueryTestResponse> {
     this.validateConnection(connection);
     switch (connection.type) {
       case 'postgres':
@@ -180,8 +188,32 @@ export default class ConnectorsService {
       case 'redshift':
         return `jdbc:redshift://${conn.host}:${conn.port}/${conn.database}?user=${conn.username}&password=${conn.password}`;
       case 'bigquery':
-        // BigQuery doesn't use JDBC URLs, return a placeholder
-        return 'bigquery://';
+        const host = 'https://www.googleapis.com';
+        const path = 'bigquery/v2';
+        const port = 443;
+        const projectId = conn.project;
+        const baseUrl = `jdbc:bigquery://${host}/${path}:${port}`;
+
+        if (conn.method === 'service-account' && conn.keyfile) {
+          try {
+            const credentials = JSON.parse(conn.keyfile);
+            return `${baseUrl};ProjectId=${projectId};OAuthType=2;OAuthServiceAcctEmail=${credentials.client_email};OAuthPvtKeyPath=${credentials.private_key}`;
+          } catch (err) {
+            throw new Error('Invalid service account key JSON format');
+          }
+        } else if (conn.method === 'oauth') {
+          if (conn.refreshToken) {
+            // Use refresh token authentication for more stable long-term connections
+            return `${baseUrl};ProjectId=${projectId};OAuthType=1;OAuthClientId=${conn.clientId};OAuthClientSecret=${conn.clientSecret};OAuthRefreshToken=${conn.refreshToken}`;
+          } else if (conn.accessToken) {
+            // Fallback to access token if no refresh token available
+            return `${baseUrl};ProjectId=${projectId};OAuthType=0;OAuthAccessToken=${encodeURIComponent(conn.accessToken)}`;
+          } else {
+            throw new Error('Neither refresh token nor access token available for OAuth');
+          }
+        } else {
+          throw new Error('Invalid authentication method for BigQuery');
+        }
       default:
         throw new Error('Unsupported connection type!');
     }
@@ -217,6 +249,14 @@ export default class ConnectorsService {
           method: conn.method,
           project: conn.project,
           ...(conn.keyfile && { keyfile: conn.keyfile }),
+          ...(conn.location && { location: conn.location }),
+          ...(conn.priority && { priority: conn.priority }),
+          ...(conn.method === 'oauth' && {
+            clientId: conn.clientId,
+            clientSecret: conn.clientSecret,
+            accessToken: conn.accessToken,
+            refreshToken: conn.refreshToken,
+          }),
         };
       case 'postgres':
         return {
@@ -310,6 +350,11 @@ export default class ConnectorsService {
           } catch (err) {
             throw new Error('Invalid service account key JSON format');
           }
+        } else if (conn.method === 'oauth') {
+          // Set OAuth credentials directly in profile instead of using oauth_credentials object
+          profile.client_id = conn.clientId;
+          profile.client_secret = conn.clientSecret;
+          profile.refresh_token = conn.refreshToken;
         }
 
         return profile;

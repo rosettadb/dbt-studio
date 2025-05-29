@@ -2,6 +2,7 @@ import path from 'path';
 import fs from 'fs';
 import yaml from 'js-yaml';
 import { dialog } from 'electron';
+import { OAuth2Client } from 'google-auth-library';
 import {
   PostgresDBTConnection,
   Project,
@@ -390,6 +391,26 @@ export default class ProjectsService {
       } catch (err) {
         throw new Error('Invalid service account key JSON');
       }
+    } else if (connection.method === 'oauth') {
+      if (!connection.accessToken || !connection.refreshToken) {
+        throw new Error('OAuth credentials not found. Please test the connection first.');
+      }
+
+      const oauth2Client = new OAuth2Client({
+        clientId: connection.clientId,
+        clientSecret: connection.clientSecret,
+      });
+
+      oauth2Client.setCredentials({
+        access_token: connection.accessToken,
+        refresh_token: connection.refreshToken,
+      });
+
+      config.authClient = oauth2Client;
+    }
+
+    if (connection.location) {
+      config.location = connection.location;
     }
 
     const extractor = new BigQueryExtractor(config);
