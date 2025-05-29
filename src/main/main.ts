@@ -1,5 +1,5 @@
 /* eslint global-require: off, no-console: off, promise/always-return: off, no-restricted-syntax: off, no-await-in-loop: off */
-import { app, protocol } from 'electron';
+import { app, ipcMain, protocol } from 'electron';
 import { WindowManager } from './windows';
 import { loadEnvironment } from './utils/setupHelpers';
 import { AssetUrl } from './utils/assetUrl';
@@ -79,10 +79,13 @@ if (!gotTheLock) {
             });
           }
 
-          // Ensure windowManager is not null before using it
           if (windowManager) {
-            // Wait for the main window to be fully ready before closing splash
-            await windowManager.showMainWindow();
+            const settings = await SettingsService.loadSettings();
+            if (settings.isSetup !== 'true') {
+              await windowManager.showSetupWindow();
+            } else {
+              await windowManager.showMainWindow();
+            }
             windowManager.closeSplashScreen();
           }
         });
@@ -110,8 +113,7 @@ if (!gotTheLock) {
         }
       });
 
-       // Track app updates and send telemetry
-       await AnalyticsService.trackAppUpdate();
+      await AnalyticsService.trackAppUpdate();
     })
     .catch(console.log);
 
@@ -129,6 +131,12 @@ if (!gotTheLock) {
     }
   });
 }
+
+ipcMain.handle('windows:closeSetup', () => {
+  if (windowManager) {
+    windowManager.closeSetupWindow();
+  }
+});
 
 app.on('window-all-closed', () => {
   // Don't quit - WindowManager will handle the actual quitting

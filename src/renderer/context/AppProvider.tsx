@@ -63,7 +63,14 @@ const AppProvider: React.FC<Props> = ({ children }) => {
       setIsSidebarOpen,
       isLoadingSchema,
     };
-  }, [projects, sidebarContent, schema, isLoadingSchema, isSidebarOpen]);
+  }, [
+    projects,
+    sidebarContent,
+    schema,
+    isLoadingSchema,
+    isSidebarOpen,
+    selectedProject,
+  ]);
 
   if (isLoading) {
     return <Splash loaderMessage="Loading project..." />;

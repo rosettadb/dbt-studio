@@ -28,6 +28,7 @@ import {
   useGitIsInitialized,
   useGitPull,
   useGitPush,
+  useSelectProject,
 } from '../../controllers';
 import { AddGitRemoteModal, GitCommitModal, NewBranchModal } from '../modals';
 import { SimpleDropdownMenu } from '../simpleDropdown';
@@ -49,6 +50,7 @@ export const Menu: React.FC = () => {
   const { data: projects = [] } = useGetProjects();
   const { data: isInitialized } = useGitIsInitialized(project?.path ?? '');
   const { data: remotes = [] } = useGetRemotes(project?.path ?? '');
+  const { mutate: selectProject } = useSelectProject();
   const { data: branches = [], refetch: updateBranches } = useGetBranches(
     project?.path ?? '',
   );
@@ -136,11 +138,11 @@ export const Menu: React.FC = () => {
             ]}
             onSelect={async (value) => {
               if (value === 'new') {
-                await projectsServices.selectProject({ projectId: '' });
                 navigate('/app/select-project');
               } else {
-                await projectsServices.selectProject({ projectId: value });
-                navigate('/app');
+                selectProject({
+                  projectId: value,
+                });
               }
             }}
             selectedItem={String(project?.id)}

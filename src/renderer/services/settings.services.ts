@@ -47,6 +47,10 @@ export const getDbtPath = async (): Promise<string> => {
   return data;
 };
 
+export const createVenv = async (): Promise<void> => {
+  await client.get('settings:createVenv');
+};
+
 export const usePathJoin = async (...body: string[]): Promise<string> => {
   const { data } = await client.post<string[], string>(
     'settings:usePathJoin',

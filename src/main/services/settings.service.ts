@@ -109,7 +109,7 @@ export default class SettingsService {
     // eslint-disable-next-line no-restricted-syntax
     for (const [key, cli] of Object.entries(cliConfig)) {
       try {
-        const currentVersion = settings[cli.settingsKey] || '0.0.0';
+        const currentVersion = settings[cli.settingsKey] ?? '0.0.0';
         // eslint-disable-next-line no-await-in-loop
         const latestRelease = await axios.get(
           `https://api.github.com/repos/cli/cli/releases/latest`,
@@ -303,16 +303,8 @@ export default class SettingsService {
     }
 
     settings.pythonVersion = version;
-    settings.pythonPath = binaryPath;
-    const cliAdapter = new CliAdapter();
-    await cliAdapter.runCommandWithoutStreaming(
-      `cd "${userDataPath}" && "${binaryPath}" -m venv venv`,
-    );
-    settings.pythonPath = path.join(
-      userDataPath,
-      'venv',
-      platform === 'win32' ? 'Scripts/python.exe' : 'bin/python3',
-    );
+    settings.pythonPath = '';
+    settings.pythonBinary = binaryPath;
     await this.saveSettings(settings);
     await fs.remove(archivePath);
 
@@ -321,5 +313,22 @@ export default class SettingsService {
       version,
       status: 'installed',
     };
+  }
+
+  static async createVenv() {
+    const settings = await this.loadSettings();
+    const { platform } = process;
+    const userDataPath = app.getPath('userData');
+
+    const cliAdapter = new CliAdapter();
+    await cliAdapter.runCommandWithoutStreaming(
+      `cd "${userDataPath}" && "${settings.pythonBinary}" -m venv venv`,
+    );
+    settings.pythonPath = path.join(
+      userDataPath,
+      'venv',
+      platform === 'win32' ? 'Scripts/python.exe' : 'bin/python3',
+    );
+    await this.saveSettings(settings);
   }
 }

@@ -18,6 +18,7 @@ import {
   AddConnection,
   EditConnection,
   SelectProject,
+  Setup,
 } from './screens';
 import { SelectProjectLayout } from './layouts';
 import { AppProvider } from './context';
@@ -33,6 +34,7 @@ const App: React.FC = () => {
       <Routes>
         <Route path="/" element={<SelectProjectLayout />}>
           <Route path="/select-project" element={<SelectProject />} />
+          <Route path="/setup" element={<Setup />} />
           <Route path="*" element={<Navigate to="/" />} />
         </Route>
         <Route path="/app">

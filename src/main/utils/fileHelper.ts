@@ -68,6 +68,8 @@ export const loadDefaultSettings = (): SettingsType => {
     projectsDirectory: projectsDir,
     pythonVersion: '',
     pythonPath: '',
+    pythonBinary: '',
+    isSetup: 'false',
   };
 };
 

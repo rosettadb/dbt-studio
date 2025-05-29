@@ -1,14 +1,16 @@
-import { BrowserWindow, app, ipcMain } from 'electron';
+import { BrowserWindow, app } from 'electron';
 import { createSplashWindow } from './splash';
 import { createMainWindow } from './main';
 import registerHandlers from '../ipcSetup';
 import { installExtensions } from '../utils/setupHelpers';
-import { ProjectsService } from '../services';
+import { createSetupWindow } from './setup';
 
 export class WindowManager {
   private splashWindow: BrowserWindow | null = null;
 
   private mainWindow: BrowserWindow | null = null;
+
+  private setupWindow: BrowserWindow | null = null;
 
   private isQuitting = false;
 
@@ -58,14 +60,53 @@ export class WindowManager {
       });
 
       registerHandlers(this.mainWindow);
-      ipcMain.handle(
-        'project:select',
-        async (_event, body: { projectId: string }) => {
-          await ProjectsService.selectProject(body);
-          // Removed reload that breaks the render
-        },
-      );
     });
+  }
+
+  public showSetupWindow() {
+    if (this.setupWindow) {
+      return new Promise<void>((resolve) => {
+        resolve();
+      });
+    }
+
+    this.setupWindow = createSetupWindow();
+    registerHandlers(this.setupWindow);
+    this.setupWindow.on('closed', () => {
+      this.setupWindow = null;
+      if (this.mainWindow) {
+        this.mainWindow.reload();
+        this.mainWindow.focus();
+      }
+    });
+
+    return new Promise<void>((resolve) => {
+      if (!this.setupWindow) {
+        resolve();
+        return;
+      }
+
+      this.setupWindow.once('ready-to-show', () => {
+        if (this.setupWindow) {
+          this.setupWindow.show();
+          this.setupWindow.focus();
+        }
+        resolve();
+      });
+    });
+  }
+
+  public closeSetupWindow() {
+    if (this.setupWindow) {
+      this.setupWindow.close();
+      this.setupWindow = null;
+      if (this.mainWindow) {
+        this.mainWindow.show();
+        this.mainWindow.focus();
+      } else {
+        this.showMainWindow();
+      }
+    }
   }
 
   public closeSplashScreen() {

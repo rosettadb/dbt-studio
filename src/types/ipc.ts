@@ -9,7 +9,8 @@ export type SettingsChannels =
   | 'settings:checkCliUpdates'
   | 'settings:updateCli'
   | 'settings:getDbtPath'
-  | 'settings:usePathJoin';
+  | 'settings:usePathJoin'
+  | 'settings:createVenv';
 
 export type ProjectChannels =
   | 'project:get'
@@ -76,7 +77,7 @@ export type GitChannels =
 export type UtilChannels =
   | 'open:external'
   | 'windows:openSelector'
-  | 'windows:closeSelector';
+  | 'windows:closeSetup';
 
 export type Channels =
   | TestChannels
