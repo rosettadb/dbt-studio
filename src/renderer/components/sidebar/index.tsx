@@ -18,14 +18,20 @@ export const Sidebar: React.FC<Props> = ({ content }) => {
   const { isSidebarOpen } = useAppContext();
   const location = useLocation();
 
+  // Check if project is selected
+  const isProjectSelected = Boolean(selectedProject?.id);
+  // Check if navigation should be enabled - requires project selection AND dbt connection
+  const isNavigationEnabled = Boolean(selectedProject?.id && selectedProject?.dbtConnection);
+
   const activeItem = React.useMemo(() => {
     if (location.pathname.includes('sql')) {
       return 1;
     }
-    // Don't highlight any sidebar item when on settings or connection pages
+    // Don't highlight any sidebar item when on settings, connection pages, or select-project
     if (location.pathname.includes('settings') ||
         location.pathname.includes('add-connection') ||
-        location.pathname.includes('edit-connection')) {
+        location.pathname.includes('edit-connection') ||
+        location.pathname.includes('select-project')) {
       return -1; // No item selected
     }
     return 0;
@@ -42,22 +48,33 @@ export const Sidebar: React.FC<Props> = ({ content }) => {
                 key={element.text}
                 to={element.path}
                 style={{
-                  pointerEvents: selectedProject?.dbtConnection
-                    ? 'auto'
-                    : 'none',
+                  pointerEvents: isProjectSelected ? (isNavigationEnabled ? 'auto' : 'none') : 'none',
+                  opacity: isNavigationEnabled ? 1 : 0.5,
+                  cursor: isProjectSelected ? 'pointer' : 'not-allowed',
                 }}
               >
                 <ListItem
                   sx={{
-                    cursor: 'pointer',
+                    cursor: isProjectSelected ? 'pointer' : 'not-allowed !important',
                     m: 0,
                     backgroundColor:
-                      activeItem === index
+                      (activeItem === index && isNavigationEnabled)
                         ? theme.palette.divider
                         : 'transparent',
+                    '&:hover': isNavigationEnabled ? {
+                      backgroundColor: theme.palette.action.hover,
+                    } : {},
+                    transition: 'background-color 0.2s ease',
+                    '& .MuiListItemIcon-root': {
+                      cursor: isProjectSelected ? 'pointer' : 'not-allowed !important',
+                    },
                   }}
                 >
-                  <ListItemIcon>
+                  <ListItemIcon
+                    sx={{
+                      cursor: isProjectSelected ? 'pointer' : 'not-allowed !important',
+                    }}
+                  >
                     <element.icon />
                   </ListItemIcon>
                 </ListItem>
