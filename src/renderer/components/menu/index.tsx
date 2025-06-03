@@ -9,7 +9,7 @@ import {
   CircularProgress,
 } from '@mui/material';
 import { Menu as MenuIcon, Settings, ArrowDownward } from '@mui/icons-material';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { toast } from 'react-toastify';
 import {
   BranchDropdownToggle,
@@ -38,6 +38,7 @@ import { useAppContext } from '../../hooks';
 
 export const Menu: React.FC = () => {
   const navigate = useNavigate();
+  const location = useLocation();
   const theme = useTheme();
   const { isSidebarOpen, setIsSidebarOpen } = useAppContext();
   const [commitModal, setCommitModal] = React.useState(false);
@@ -52,6 +53,11 @@ export const Menu: React.FC = () => {
   const { data: branches = [], refetch: updateBranches } = useGetBranches(
     project?.path ?? '',
   );
+
+  // Conditional logic for project state
+  const isProjectSelected = Boolean(project?.id);
+  const isProjectFullyConfigured = Boolean(project?.id && project?.dbtConnection);
+
   const { mutate: push } = useGitPush({
     onSuccess: (data) => {
       if (data.error) {
@@ -117,42 +123,54 @@ export const Menu: React.FC = () => {
             aria-label="open drawer"
             onClick={() => setIsSidebarOpen(!isSidebarOpen)}
             edge="start"
+            disabled={!isProjectSelected}
+            sx={{
+              opacity: isProjectSelected ? 1 : 0.5,
+              cursor: isProjectSelected ? 'pointer' : 'not-allowed'
+            }}
           >
             <MenuIcon />
           </IconButton>
           <Logo src={logo} alt="Rosetta Logo" onClick={handleLogoClick} />
-          <SimpleDropdownMenu
-            items={[
-              ...projects.map((p) => ({
-                value: String(p.id),
-                label: (
-                  <BranchDropdownToggle>
-                    <LetterAvatar name={p?.name ?? ''} size={18} />
-                    {p?.name}
-                  </BranchDropdownToggle>
-                ),
-              })),
-              { value: 'new', label: 'New Project' },
-            ]}
-            onSelect={async (value) => {
-              if (value === 'new') {
-                await projectsServices.selectProject({ projectId: '' });
-                navigate('/app/select-project');
-              } else {
-                await projectsServices.selectProject({ projectId: value });
-                navigate('/app');
+          {isProjectSelected && (
+            <SimpleDropdownMenu
+              items={[
+                ...projects.map((p) => ({
+                  value: String(p.id),
+                  label: (
+                    <BranchDropdownToggle>
+                      <LetterAvatar name={p?.name ?? ''} size={18} />
+                      {p?.name}
+                    </BranchDropdownToggle>
+                  ),
+                })),
+                { value: 'new', label: 'New Project' },
+              ]}
+              onSelect={async (value) => {
+                if (value === 'new') {
+                  await projectsServices.selectProject({ projectId: '' });
+                  navigate('/app/select-project');
+                } else {
+                  await projectsServices.selectProject({ projectId: value });
+                  if (location.pathname === '/app' || location.pathname === '/app/') {
+                    navigate('/app/settings/general');
+                    setTimeout(() => navigate('/app'), 0);
+                  } else {
+                    navigate('/app');
+                  }
+                }
+              }}
+              selectedItem={String(project?.id)}
+              anchorElement={
+                <BranchDropdownToggle>
+                  <LetterAvatar name={project?.name ?? ''} size={18} />
+                  {project?.name}
+                  <ArrowDownward style={{ fontSize: 10 }} />
+                </BranchDropdownToggle>
               }
-            }}
-            selectedItem={String(project?.id)}
-            anchorElement={
-              <BranchDropdownToggle>
-                <LetterAvatar name={project?.name ?? ''} size={18} />
-                {project?.name}
-                <ArrowDownward style={{ fontSize: 10 }} />
-              </BranchDropdownToggle>
-            }
-          />
-          {isInitialized && branches.length > 0 && (
+            />
+          )}
+          {isProjectSelected && isInitialized && branches.length > 0 && (
             <SimpleDropdownMenu
               items={[
                 ...branches.map((branch) => ({
@@ -186,85 +204,89 @@ export const Menu: React.FC = () => {
           )}
         </IconsContainer>
         <IconsContainer>
-          <Tooltip title="Git Integration">
-            <IconButton onClick={handleMenuOpen}>
-              <Icon
-                src={icons.git}
-                color={
-                  isInitialized
-                    ? theme.palette.success.main
-                    : theme.palette.error.main
-                }
-                width={22}
-                height={22}
-              />
-            </IconButton>
-          </Tooltip>
-          <DD
-            anchorEl={anchorEl}
-            open={Boolean(anchorEl)}
-            onClose={handleMenuClose}
-          >
-            {!isInitialized && (
-              <MenuItem
-                onClick={() => {
-                  if (!isInitialized && project?.path) {
-                    gitInit({ path: project.path });
+          {isProjectSelected && (
+            <Tooltip title="Git Integration">
+              <IconButton onClick={handleMenuOpen}>
+                <Icon
+                  src={icons.git}
+                  color={
+                    isInitialized
+                      ? theme.palette.success.main
+                      : theme.palette.error.main
                   }
-                }}
-              >
-                Enable Git
-              </MenuItem>
-            )}
-            {isInitialized && (
-              <>
+                  width={22}
+                  height={22}
+                />
+              </IconButton>
+            </Tooltip>
+          )}
+          {isProjectSelected && (
+            <DD
+              anchorEl={anchorEl}
+              open={Boolean(anchorEl)}
+              onClose={handleMenuClose}
+            >
+              {!isInitialized && (
                 <MenuItem
-                  onClick={(event) => {
-                    event.stopPropagation();
-                    setCommitModal(true);
-                  }}
-                >
-                  Git Commit
-                </MenuItem>
-                <MenuItem
-                  onClick={(event) => {
-                    event.stopPropagation();
-                    if (remotes.length === 0) {
-                      toast.info('Please add remote origin!');
-                      setIsModalOpen(true);
-                      return;
-                    }
-                    if (project?.path) {
-                      push({
-                        path: project.path,
-                      });
+                  onClick={() => {
+                    if (!isInitialized && project?.path) {
+                      gitInit({ path: project.path });
                     }
                   }}
                 >
-                  Git Push
+                  Enable Git
                 </MenuItem>
-                <MenuItem
-                  disabled={pulling}
-                  onClick={(event) => {
-                    event.stopPropagation();
-                    if (remotes.length === 0) {
-                      toast.info('Please add remote origin!');
-                      setIsModalOpen(true);
-                      return;
-                    }
-                    if (project?.path) {
-                      pull({ path: project.path });
-                    }
-                  }}
-                >
-                  Git Pull{' '}
-                  {pulling && (
-                    <CircularProgress size={18} style={{ marginLeft: 8 }} />
-                  )}
-                </MenuItem>
-              </>
-            )}
-          </DD>
+              )}
+              {isInitialized && (
+                <>
+                  <MenuItem
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      setCommitModal(true);
+                    }}
+                  >
+                    Git Commit
+                  </MenuItem>
+                  <MenuItem
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      if (remotes.length === 0) {
+                        toast.info('Please add remote origin!');
+                        setIsModalOpen(true);
+                        return;
+                      }
+                      if (project?.path) {
+                        push({
+                          path: project.path,
+                        });
+                      }
+                    }}
+                  >
+                    Git Push
+                  </MenuItem>
+                  <MenuItem
+                    disabled={pulling}
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      if (remotes.length === 0) {
+                        toast.info('Please add remote origin!');
+                        setIsModalOpen(true);
+                        return;
+                      }
+                      if (project?.path) {
+                        pull({ path: project.path });
+                      }
+                    }}
+                  >
+                    Git Pull{' '}
+                    {pulling && (
+                      <CircularProgress size={18} style={{ marginLeft: 8 }} />
+                    )}
+                  </MenuItem>
+                </>
+              )}
+            </DD>
+          )}
           <IconButton
             aria-label="account of current user"
             aria-controls="menu-appbar"

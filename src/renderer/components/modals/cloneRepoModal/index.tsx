@@ -4,6 +4,7 @@ import { toast } from 'react-toastify';
 import { Modal } from '../modal';
 import { StyledForm } from './styles';
 import { gitServices, projectsServices } from '../../../services';
+import { useNavigate } from 'react-router-dom';
 
 type Props = {
   isOpen: boolean;
@@ -16,36 +17,45 @@ export const CloneRepoModal: React.FC<Props> = ({
   onClose,
   successCallback,
 }) => {
+  const navigate = useNavigate();
   const [url, setUrl] = React.useState('');
+  const [loading, setLoading] = React.useState(false);
   return (
     <Modal isOpen={isOpen} onClose={onClose} title="Clone Repo">
       <StyledForm
         onSubmit={async (event) => {
           event.preventDefault();
-          const { error, authRequired, path, name } =
-            await gitServices.gitClone(url);
-          if (error) {
-            toast.error(error);
-            return;
-          }
-          if (authRequired) {
-            toast.error('Authentication required!');
-            return;
-          }
-
-          if (!path || !name) {
-            toast.error('Something went wrong!');
-            return;
-          }
+          setLoading(true);
           try {
+            const { error, authRequired, path, name } =
+              await gitServices.gitClone(url);
+            if (error) {
+              toast.error(error);
+              setLoading(false);
+              return;
+            }
+            if (authRequired) {
+              toast.error('Authentication required!');
+              setLoading(false);
+              return;
+            }
+
+            if (!path || !name) {
+              toast.error('Something went wrong!');
+              setLoading(false);
+              return;
+            }
             const project = await projectsServices.addProjectFromVCS({
               path,
               name,
             });
             await projectsServices.selectProject({ projectId: project.id });
+            navigate(`/app`);
             successCallback?.();
           } catch (err: any) {
             toast.error(err.message);
+          } finally {
+            setLoading(false);
           }
         }}
       >
@@ -56,8 +66,8 @@ export const CloneRepoModal: React.FC<Props> = ({
           value={url}
           fullWidth
         />
-        <Button type="submit" variant="outlined" disabled={url === ''}>
-          Clone
+        <Button type="submit" variant="outlined" disabled={url === '' || loading}>
+          {loading ? 'Cloning...' : 'Clone'}
         </Button>
       </StyledForm>
     </Modal>

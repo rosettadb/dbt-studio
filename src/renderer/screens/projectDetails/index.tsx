@@ -47,32 +47,22 @@ const ProjectDetails: React.FC = () => {
   >([]);
   const [isQueryOpen, setIsQueryOpen] = React.useState(false);
   const [isLoadingQuery, setIsLoadingQuery] = React.useState(false);
-
-  // Early return for loading state
-  if (isLoading) {
-    return <Loader />;
-  }
-
-  // Early return for no project
-  if (!project) {
-    return <Navigate to="/app/select-project" />;
-  }
-
-  // Early return for missing connection
-  if (project?.id && !project?.rosettaConnection) {
-    return <Navigate to="/app/add-connection/" />;
-  }
+  const [selectedFilePath, setSelectedFilePath] = React.useState<string>();
+  const [fileContent, setFileContent] = React.useState<string>();
+  const [businessQueryModal, setBusinessQueryModal] = React.useState(false);
 
   const {
     data: directories,
     isLoading: isLoadingDirectories,
     refetch: fetchDirectories,
-  } = useGetProjectFiles(project);
+  } = useGetProjectFiles(project as Project, { enabled: !!project?.id });
 
   const { fn: rosettaDbt, isRunning: isRunningRosettaDbt } = useRosettaDBT(
     async () => {
-      await projectsServices.postRosettaDBTCopy(project);
-      await fetchDirectories();
+      if (project) {
+        await projectsServices.postRosettaDBTCopy(project);
+        await fetchDirectories();
+      }
     },
   );
 
@@ -89,13 +79,22 @@ const ProjectDetails: React.FC = () => {
   });
 
   const { data: statuses = [], refetch: updateStatuses } = useGetFileStatuses(
-    project.path,
-    { enabled: !!project.path },
+    project?.path ?? '',
+    { enabled: !!project?.path }
   );
 
-  const [selectedFilePath, setSelectedFilePath] = React.useState<string>();
-  const [fileContent, setFileContent] = React.useState<string>();
-  const [businessQueryModal, setBusinessQueryModal] = React.useState(false);
+  React.useEffect(() => {
+    const fetchData = async () => {
+      if (project && project.path) {
+        await fetchDirectories();
+      }
+    };
+    fetchData();
+  }, [project]);
+
+  const isDbtConfigured = React.useMemo(() => {
+    return settings?.dbtPath && settings.dbtPath.trim() !== '';
+  }, [settings?.dbtPath]);
 
   const enhanceModel = async () => {
     if (!settings?.openAIApiKey || settings.openAIApiKey === '') {
@@ -262,18 +261,20 @@ const ProjectDetails: React.FC = () => {
     }
   };
 
-  React.useEffect(() => {
-    const fetchData = async () => {
-      if (project && project.path) {
-        await fetchDirectories();
-      }
-    };
-    fetchData();
-  }, [project]);
+  // Early return for loading state
+  if (isLoading) {
+    return <Loader />;
+  }
 
-  const isDbtConfigured = React.useMemo(() => {
-    return settings?.dbtPath && settings.dbtPath.trim() !== '';
-  }, [settings?.dbtPath]);
+  // Early return for no project
+  if (!project?.id) {
+    return <Navigate to="/app/select-project" />;
+  }
+
+  // Early return for missing connection
+  if (project?.id && !project?.rosettaConnection) {
+    return <Navigate to="/app/add-connection/" />;
+  }
 
   return (
     <AppLayout
