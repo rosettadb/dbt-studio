@@ -55,7 +55,7 @@ const ProjectDetails: React.FC = () => {
     data: directories,
     isLoading: isLoadingDirectories,
     refetch: fetchDirectories,
-  } = useGetProjectFiles(project, { enabled: !!project });
+  } = useGetProjectFiles(project as Project, { enabled: !!project?.id });
 
   const { fn: rosettaDbt, isRunning: isRunningRosettaDbt } = useRosettaDBT(
     async () => {
@@ -267,7 +267,7 @@ const ProjectDetails: React.FC = () => {
   }
 
   // Early return for no project
-  if (!project) {
+  if (!project?.id) {
     return <Navigate to="/app/select-project" />;
   }
 
