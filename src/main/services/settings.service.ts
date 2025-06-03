@@ -109,7 +109,7 @@ export default class SettingsService {
     // eslint-disable-next-line no-restricted-syntax
     for (const [key, cli] of Object.entries(cliConfig)) {
       try {
-        const currentVersion = settings[cli.settingsKey] || '0.0.0';
+        const currentVersion = settings[cli.settingsKey] ?? '0.0.0';
         // eslint-disable-next-line no-await-in-loop
         const latestRelease = await axios.get(
           `https://api.github.com/repos/cli/cli/releases/latest`,
@@ -304,6 +304,7 @@ export default class SettingsService {
 
     settings.pythonVersion = version;
     settings.pythonPath = binaryPath;
+    settings.pythonBinary = binaryPath;
     const cliAdapter = new CliAdapter();
     await cliAdapter.runCommandWithoutStreaming(
       `cd "${userDataPath}" && "${binaryPath}" -m venv venv`,

@@ -139,6 +139,8 @@ export type SettingsType = {
   openAIApiKey?: string;
   pythonVersion: string;
   pythonPath: string;
+  pythonBinary: string;
+  isSetup?: string;
 };
 
 export type FileDialogProperties = 'openFile' | 'openDirectory';

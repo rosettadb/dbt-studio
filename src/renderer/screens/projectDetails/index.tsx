@@ -80,7 +80,7 @@ const ProjectDetails: React.FC = () => {
 
   const { data: statuses = [], refetch: updateStatuses } = useGetFileStatuses(
     project?.path ?? '',
-    { enabled: !!project?.path }
+    { enabled: !!project?.path },
   );
 
   React.useEffect(() => {

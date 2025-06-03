@@ -54,9 +54,7 @@ export const Menu: React.FC = () => {
     project?.path ?? '',
   );
 
-  // Conditional logic for project state
   const isProjectSelected = Boolean(project?.id);
-  const isProjectFullyConfigured = Boolean(project?.id && project?.dbtConnection);
 
   const { mutate: push } = useGitPush({
     onSuccess: (data) => {
@@ -126,7 +124,7 @@ export const Menu: React.FC = () => {
             disabled={!isProjectSelected}
             sx={{
               opacity: isProjectSelected ? 1 : 0.5,
-              cursor: isProjectSelected ? 'pointer' : 'not-allowed'
+              cursor: isProjectSelected ? 'pointer' : 'not-allowed',
             }}
           >
             <MenuIcon />
@@ -152,7 +150,10 @@ export const Menu: React.FC = () => {
                   navigate('/app/select-project');
                 } else {
                   await projectsServices.selectProject({ projectId: value });
-                  if (location.pathname === '/app' || location.pathname === '/app/') {
+                  if (
+                    location.pathname === '/app' ||
+                    location.pathname === '/app/'
+                  ) {
                     navigate('/app/settings/general');
                     setTimeout(() => navigate('/app'), 0);
                   } else {

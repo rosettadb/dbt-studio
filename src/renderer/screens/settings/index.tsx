@@ -12,7 +12,7 @@ import {
   ListItemIcon,
   ListItemText,
 } from '@mui/material';
-import {Close, Save, DarkMode, LightMode, DarkModeTwoTone } from '@mui/icons-material';
+import { Close, Save, DarkMode, LightMode } from '@mui/icons-material';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useColorScheme } from '@mui/material/styles';
 import AppsIcon from '@mui/icons-material/Apps';
@@ -57,6 +57,7 @@ const Settings: React.FC = () => {
     sampleRosettaMainConf: '',
     pythonPath: '',
     pythonVersion: '',
+    pythonBinary: '',
   });
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -168,7 +169,9 @@ const Settings: React.FC = () => {
             </Box>
             <Tooltip
               title={
-                mode === 'dark' ? 'Switch to Light Theme' : 'Switch to Dark Theme'
+                mode === 'dark'
+                  ? 'Switch to Light Theme'
+                  : 'Switch to Dark Theme'
               }
             >
               <IconButton
@@ -214,7 +217,11 @@ const Settings: React.FC = () => {
                   <ListItemIcon sx={{ minWidth: 32 }}>
                     <element.icon
                       fontSize="small"
-                      color={location.pathname === element.path ? "primary" : "inherit"}
+                      color={
+                        location.pathname === element.path
+                          ? 'primary'
+                          : 'inherit'
+                      }
                     />
                   </ListItemIcon>
                   <ListItemText primary={element.text} />
