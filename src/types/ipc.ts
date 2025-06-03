@@ -81,7 +81,9 @@ export type UtilChannels =
 export type ProcessChannels =
   | 'process:start'
   | 'process:status'
-  | 'process:stop';
+  | 'process:stop'
+  | 'process:output'
+  | 'process:error';
 
 export type Channels =
   | TestChannels

@@ -21,7 +21,7 @@ import {
   Setup,
 } from './screens';
 import { SelectProjectLayout } from './layouts';
-import { AppProvider } from './context';
+import { AppProvider, ProcessProvider } from './context';
 import { QueryClientContextProvider } from './context/QueryClientContext';
 import { themeStorageManager, getStoredThemeMode } from './utils/themeStorage';
 import { ScrollbarStyles } from './components/scrollbarStyles';
@@ -68,24 +68,26 @@ const AppWithProjectProvider: React.FC = () => {
   return (
     <QueryClientContextProvider>
       <AppProvider>
-        <CssVarsProvider
-          theme={theme}
-          defaultMode={initialMode}
-          storageManager={themeStorageManager}
-        >
-          <App />
-          <ToastContainer
-            position="bottom-right"
-            autoClose={5000}
-            hideProgressBar={false}
-            newestOnTop={false}
-            closeOnClick={false}
-            rtl={false}
-            pauseOnFocusLoss
-            pauseOnHover
-            theme={initialMode === 'dark' ? 'dark' : 'light'}
-          />
-        </CssVarsProvider>
+        <ProcessProvider>
+          <CssVarsProvider
+            theme={theme}
+            defaultMode={initialMode}
+            storageManager={themeStorageManager}
+          >
+            <App />
+            <ToastContainer
+              position="bottom-right"
+              autoClose={5000}
+              hideProgressBar={false}
+              newestOnTop={false}
+              closeOnClick={false}
+              rtl={false}
+              pauseOnFocusLoss
+              pauseOnHover
+              theme={initialMode === 'dark' ? 'dark' : 'light'}
+            />
+          </CssVarsProvider>
+        </ProcessProvider>
       </AppProvider>
     </QueryClientContextProvider>
   );

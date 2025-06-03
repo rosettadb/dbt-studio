@@ -14,21 +14,21 @@ class ProcessAdapter {
     this.pid = this.process.pid ?? null;
 
     mainWindow.webContents.send(
-      'cli:output',
+      'process:output',
       `Started process (PID: ${this.pid})`,
     );
 
     this.process.stdout.on('data', (data) => {
-      mainWindow.webContents.send('cli:output', String(data));
+      mainWindow.webContents.send('process:output', String(data));
     });
 
     this.process.stderr.on('data', (data) => {
-      mainWindow.webContents.send('cli:error', String(data));
+      mainWindow.webContents.send('process:error', String(data));
     });
 
     this.process.on('close', (code) => {
       mainWindow.webContents.send(
-        'cli:output',
+        'process:output',
         `Process exited with code ${code}`,
       );
       this.process = null;

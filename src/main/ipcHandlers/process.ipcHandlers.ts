@@ -22,7 +22,6 @@ const registerProcessHandlers = (mainWindow: BrowserWindow) => {
     'process:start',
     async (_event, { command }: { command: string }) => {
       try {
-        console.log(command);
         processAdapter.start(command, mainWindow);
         return { success: true };
       } catch (err) {
@@ -32,7 +31,7 @@ const registerProcessHandlers = (mainWindow: BrowserWindow) => {
   );
 
   ipcMain.handle('process:stop', () => {
-    processAdapter.stop(mainWindow);
+    processAdapter.stop();
     return { success: true };
   });
 
@@ -44,7 +43,7 @@ const registerProcessHandlers = (mainWindow: BrowserWindow) => {
   });
 
   app.on('before-quit', () => {
-    processAdapter.stop(mainWindow);
+    processAdapter.stop();
   });
 };
 

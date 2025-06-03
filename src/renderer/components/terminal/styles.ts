@@ -3,7 +3,7 @@ import { Box, InputBase, styled } from '@mui/material';
 export const TerminalContainer = styled('form')(({ theme }) => ({
   display: 'flex',
   flexDirection: 'column',
-  backgroundColor: theme.palette.background.default,
+  backgroundColor: '#121212',
   color: '#0f0',
   fontFamily: 'monospace',
   padding: theme.spacing(2),
@@ -15,6 +15,7 @@ export const TerminalContainer = styled('form')(({ theme }) => ({
 export const OutputBox = styled(Box)(({ theme }) => ({
   flex: 1,
   overflowY: 'auto',
+  backgroundColor: '#121212',
   paddingRight: theme.spacing(1),
   marginBottom: theme.spacing(1),
   whiteSpace: 'pre-wrap',
@@ -65,12 +66,11 @@ export const TerminalWrapper = styled(Box)(({ theme }) => ({
 }));
 
 export const TerminalHeader = styled(Box)(({ theme }) => ({
-  backgroundColor: theme.palette.background.default,
+  backgroundColor: '#cdcdcd',
   color: theme.palette.success.main,
   display: 'flex',
-  justifyContent: 'flex-end',
   alignItems: 'center',
-  padding: '2px 8px',
+  padding: '2px 2px 0 2px',
   height: '40px',
 }));
 

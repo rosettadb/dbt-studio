@@ -34,13 +34,12 @@ import { SimpleDropdownMenu } from '../simpleDropdown';
 import { Icon } from '../icon';
 import { projectsServices } from '../../services';
 import { LetterAvatar } from '../letterAvatar';
-import { useAppContext, useProcess } from '../../hooks';
+import { useAppContext } from '../../hooks';
 
 export const Menu: React.FC = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const theme = useTheme();
-  const { start, running, loading, stop } = useProcess();
   const { isSidebarOpen, setIsSidebarOpen } = useAppContext();
   const [commitModal, setCommitModal] = React.useState(false);
   const [isModalOpen, setIsModalOpen] = React.useState(false);
