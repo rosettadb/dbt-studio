@@ -152,7 +152,7 @@ export const useGetProjectFiles = (
   customOptions?: UseQueryOptions<FileNode, CustomError, FileNode>,
 ) => {
   return useQuery({
-    queryKey: [QUERY_KEYS.GET_FILE_STRUCTURE, project.path],
+    queryKey: [QUERY_KEYS.GET_FILE_STRUCTURE, project?.path || 'no-project'],
     queryFn: async () => {
       return projectsServices.loadProjectDirectory(project);
     },
