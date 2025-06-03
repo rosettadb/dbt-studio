@@ -80,13 +80,13 @@ if (!gotTheLock) {
           }
 
           if (windowManager) {
+            windowManager.closeSplashScreen();
             const settings = await SettingsService.loadSettings();
             if (settings.isSetup !== 'true') {
               await windowManager.showSetupWindow();
             } else {
               await windowManager.showMainWindow();
             }
-            windowManager.closeSplashScreen();
           }
         });
       }
