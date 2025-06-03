@@ -71,7 +71,7 @@ const Setup: React.FC = () => {
           onInstallComplete={(path) => {
             toast.info('Installation completed');
             saveSetting('dbtPath', path);
-            handleSkip();
+            setCurrentStep(currentStep + 1);
           }}
         />
       )}
