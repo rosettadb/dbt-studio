@@ -39,12 +39,23 @@ export type SnowflakeConnection = ConnectionBase & {
 
 export type BigQueryConnection = ConnectionBase & {
   type: 'bigquery';
-  method: 'oauth' | 'service-account';
   project: string;
+  dataset: string;
+  method: 'oauth' | 'service-account';
   keyfile?: string;
   location?: string;
   priority?: 'interactive' | 'batch';
-  dataset: string;
+  clientId?: string;
+  clientSecret?: string;
+  accessToken?: string;
+  refreshToken?: string;
+  // Base properties that will be ignored for BigQuery but required by interface
+  host?: string;
+  port?: number;
+  database: string;  // Will be set to project ID
+  schema: string;    // Will be set to dataset
+  username: string;  // Will be set to project ID
+  password: string;  // Will be empty for BigQuery
 };
 
 export type RedshiftConnection = ConnectionBase & {
@@ -91,6 +102,10 @@ export type BigQueryDBTConnection = DBTConnectionBase & {
   keyfile?: string;
   location?: string;
   priority?: 'interactive' | 'batch';
+  clientId?: string;
+  clientSecret?: string;
+  accessToken?: string;  // Add access token
+  refreshToken?: string; // Add refresh token
 };
 
 export type RedshiftDBTConnection = DBTConnectionBase & {
@@ -252,4 +267,10 @@ export type FileStatus = {
     | 'deleted'
     | 'renamed'
     | 'conflicted';
+};
+
+export type BigQueryTestResponse = {
+  success: boolean;
+  accessToken: string;
+  refreshToken: string;
 };

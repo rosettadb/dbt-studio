@@ -2,11 +2,13 @@ import path from 'path';
 import fs from 'fs';
 import yaml from 'js-yaml';
 import { dialog } from 'electron';
+import { OAuth2Client } from 'google-auth-library';
 import {
   PostgresDBTConnection,
   Project,
   SnowflakeDBTConnection,
   Table,
+  BigQueryDBTConnection,
 } from '../../types/backend';
 import {
   createNewFile,
@@ -21,7 +23,7 @@ import {
   updateDatabase,
 } from '../utils/fileHelper';
 import SettingsService from './settings.service';
-import { PGSchemaExtractor, SnowflakeExtractor } from '../extractor';
+import { PGSchemaExtractor, SnowflakeExtractor, BigQueryExtractor } from '../extractor';
 
 export default class ProjectsService {
   static async loadProjects() {
@@ -377,6 +379,47 @@ export default class ProjectsService {
     return schema.tables;
   }
 
+  static async extractBigQuerySchema(connection: BigQueryDBTConnection) {
+    const config: any = {
+      projectId: connection.project,
+    };
+
+    if (connection.method === 'service-account' && connection.keyfile) {
+      try {
+        const credentials = JSON.parse(connection.keyfile);
+        config.credentials = credentials;
+      } catch (err) {
+        throw new Error('Invalid service account key JSON');
+      }
+    } else if (connection.method === 'oauth') {
+      if (!connection.accessToken || !connection.refreshToken) {
+        throw new Error('OAuth credentials not found. Please test the connection first.');
+      }
+
+      const oauth2Client = new OAuth2Client({
+        clientId: connection.clientId,
+        clientSecret: connection.clientSecret,
+      });
+
+      oauth2Client.setCredentials({
+        access_token: connection.accessToken,
+        refresh_token: connection.refreshToken,
+      });
+
+      config.authClient = oauth2Client;
+    }
+
+    if (connection.location) {
+      config.location = connection.location;
+    }
+
+    const extractor = new BigQueryExtractor(config);
+    await extractor.connect();
+    const schema = await extractor.extractSchema();
+    await extractor.disconnect();
+    return schema.tables;
+  }
+
   static async extractSchema(project: Project): Promise<Table[]> {
     const connection = project.dbtConnection;
     switch (connection?.type) {
@@ -385,6 +428,10 @@ export default class ProjectsService {
       case 'snowflake':
         return this.extractSnowflakeSchema(
           connection as SnowflakeDBTConnection,
+        );
+      case 'bigquery':
+        return this.extractBigQuerySchema(
+          connection as BigQueryDBTConnection,
         );
       default:
         throw new Error(`Unsupported type ${connection?.type}"`);

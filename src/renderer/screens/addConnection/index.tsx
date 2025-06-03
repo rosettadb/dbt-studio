@@ -53,7 +53,7 @@ const baseItems: ItemType[] = [
     id: 'bigquery',
     name: 'BigQuery',
     img: 'bigquery',
-    disabled: true,
+    disabled: false,
   },
   {
     id: 'redshift',
@@ -88,7 +88,9 @@ const AddConnection: React.FC = () => {
       }
       case 'bigquery': {
         return (
-          <Connections.BigQuery onCancel={() => setSelectedItem(undefined)} />
+          <Connections.BigQuery
+            onCancel={() => setSelectedItem(undefined)}
+          />
         );
       }
       case 'redshift': {

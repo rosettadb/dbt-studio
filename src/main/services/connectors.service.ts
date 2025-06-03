@@ -2,6 +2,7 @@ import yaml from 'js-yaml';
 import path from 'path';
 import fs from 'fs';
 import {
+  BigQueryTestResponse,
   ConnectionInput,
   DBTConnection,
   Project,
@@ -14,8 +15,10 @@ import { ConfigureConnectionBody } from '../../types/ipc';
 import {
   executePostgresQuery,
   executeSnowflakeQuery,
+  executeBigQueryQuery,
   testPostgresConnection,
   testSnowflakeConnection,
+  testBigQueryConnection,
 } from '../utils/connectors';
 
 export default class ConnectorsService {
@@ -34,16 +37,24 @@ export default class ConnectorsService {
     }
 
     this.validateConnection(connection);
-    const jdbcUrl = this.generateJdbcUrl(connection);
+
+    // For BigQuery OAuth, ensure we have a valid access token
+    if (connection.type === 'bigquery' && connection.method === 'oauth') {
+      if (!connection.accessToken) {
+        throw new Error('Access token is required for BigQuery OAuth connection');
+      }
+    }
+
+    const currentProject = projects[projectIndex];
 
     const updatedProject: Project = {
-      ...projects[projectIndex],
+      ...currentProject,
       rosettaConnection: {
-        name: connection.name || projects[projectIndex].name,
+        name: connection.name || currentProject.name,
         dbType: connection.type,
         databaseName: connection.database,
         schemaName: connection.schema,
-        url: jdbcUrl,
+        url: this.generateJdbcUrl(connection),
         userName: connection.username,
         password: connection.password,
       },
@@ -53,25 +64,22 @@ export default class ConnectorsService {
     projects[projectIndex] = updatedProject;
     await ProjectsService.saveProjects(projects);
     await updateDatabase<'selectedProject'>('selectedProject', updatedProject);
+
     const profilesPath = path.join(updatedProject.path, 'profiles.yml');
-    await fs.promises.writeFile(
-      profilesPath,
-      this.generateProfilesYml(connection),
-      'utf8',
-    );
+    const profilesContent = await this.generateProfilesYml(connection, updatedProject.path);
+    await fs.promises.writeFile(profilesPath, profilesContent, 'utf8');
+
     const mainConfPath = path.join(updatedProject.path, 'rosetta', 'main.conf');
-    const rosettaYaml = await this.generateRosettaYml(
-      connection,
-      updatedProject.name,
-    );
+    const rosettaYaml = await this.generateRosettaYml(connection, updatedProject.name);
     await fs.promises.writeFile(mainConfPath, rosettaYaml, 'utf8');
+
     return updatedProject;
   }
 
   /**
    * Test a connection configuration
    */
-  static async testConnection(connection: ConnectionInput): Promise<boolean> {
+  static async testConnection(connection: ConnectionInput): Promise<boolean | BigQueryTestResponse> {
     this.validateConnection(connection);
     switch (connection.type) {
       case 'postgres':
@@ -82,6 +90,8 @@ export default class ConnectorsService {
         } catch {
           return false;
         }
+      case 'bigquery':
+        return testBigQueryConnection(connection);
       default:
         throw new Error(`Unsupported connection type: ${connection.type}`);
     }
@@ -102,16 +112,11 @@ export default class ConnectorsService {
         return executePostgresQuery(connection, query);
       case 'snowflake':
         return executeSnowflakeQuery(connection, query);
+      case 'bigquery':
+        return executeBigQueryQuery(connection, query);
       default:
         throw new Error(`Unsupported connection type: ${connection.type}`);
     }
-  }
-
-  /**
-   * Generate profiles.yml content for dbt
-   */
-  static generateProfilesYml(connection: ConnectionInput): string {
-    return this.mapToDbtProfiles(connection);
   }
 
   static async generateRosettaYml(
@@ -175,7 +180,32 @@ export default class ConnectorsService {
       case 'redshift':
         return `jdbc:redshift://${conn.host}:${conn.port}/${conn.database}?user=${conn.username}&password=${conn.password}`;
       case 'bigquery':
-        throw new Error('BigQuery does not use JDBC URLs');
+        const host = 'https://www.googleapis.com';
+        const path = 'bigquery/v2';
+        const port = 443;
+        const projectId = conn.project;
+        const baseUrl = `jdbc:bigquery://${host}/${path}:${port}`;
+
+        if (conn.method === 'service-account' && conn.keyfile) {
+          try {
+            const credentials = JSON.parse(conn.keyfile);
+            return `${baseUrl};ProjectId=${projectId};OAuthType=2;OAuthServiceAcctEmail=${credentials.client_email};OAuthPvtKeyPath=${credentials.private_key}`;
+          } catch (err) {
+            throw new Error('Invalid service account key JSON format');
+          }
+        } else if (conn.method === 'oauth') {
+          if (conn.refreshToken) {
+            // Use refresh token authentication for more stable long-term connections
+            return `${baseUrl};ProjectId=${projectId};OAuthType=1;OAuthClientId=${conn.clientId};OAuthClientSecret=${conn.clientSecret};OAuthRefreshToken=${conn.refreshToken}`;
+          } else if (conn.accessToken) {
+            // Fallback to access token if no refresh token available
+            return `${baseUrl};ProjectId=${projectId};OAuthType=0;OAuthAccessToken=${encodeURIComponent(conn.accessToken)}`;
+          } else {
+            throw new Error('Neither refresh token nor access token available for OAuth');
+          }
+        } else {
+          throw new Error('Invalid authentication method for BigQuery');
+        }
       default:
         throw new Error('Unsupported connection type!');
     }
@@ -211,6 +241,14 @@ export default class ConnectorsService {
           method: conn.method,
           project: conn.project,
           ...(conn.keyfile && { keyfile: conn.keyfile }),
+          ...(conn.location && { location: conn.location }),
+          ...(conn.priority && { priority: conn.priority }),
+          ...(conn.method === 'oauth' && {
+            clientId: conn.clientId,
+            clientSecret: conn.clientSecret,
+            accessToken: conn.accessToken,
+            refreshToken: conn.refreshToken,
+          }),
         };
       case 'postgres':
         return {
@@ -231,7 +269,7 @@ export default class ConnectorsService {
     }
   }
 
-  private static mapToDbtProfiles(conn: ConnectionInput): string {
+  private static async mapToDbtProfiles(conn: ConnectionInput, projectPath?: string): Promise<string> {
     const profileConfig = {
       config: {
         send_anonymous_usage_stats: false,
@@ -240,7 +278,7 @@ export default class ConnectorsService {
       [conn.name]: {
         target: 'dev',
         outputs: {
-          dev: this.mapToDbtProfileOutput(conn),
+          dev: await this.mapToDbtProfileOutput(conn, projectPath),
         },
       },
     };
@@ -248,7 +286,11 @@ export default class ConnectorsService {
     return yaml.dump(profileConfig);
   }
 
-  private static mapToDbtProfileOutput(conn: ConnectionInput): any {
+  static generateProfilesYml(connection: ConnectionInput, projectPath?: string): Promise<string> {
+    return this.mapToDbtProfiles(connection, projectPath);
+  }
+
+  private static async mapToDbtProfileOutput(conn: ConnectionInput, projectPath?: string): Promise<any> {
     switch (conn.type) {
       case 'postgres':
         return {
@@ -285,16 +327,83 @@ export default class ConnectorsService {
           threads: 4,
         };
       case 'bigquery':
-        return {
+        const profile: any = {
           type: 'bigquery',
           method: conn.method,
           project: conn.project,
           dataset: conn.schema,
-          keyfile: conn.keyfile,
           threads: 4,
+          priority: conn.priority || 'interactive',
         };
+
+        if (conn.location) {
+          profile.location = conn.location;
+        }
+
+        if (conn.method === 'service-account') {
+          if (!conn.keyfile) {
+            throw new Error('Service account keyfile is required');
+          }
+          if (!projectPath) {
+            throw new Error('Project path is required for service account file creation');
+          }
+          const keyfilePath = await this.saveServiceAccountFile(projectPath, conn.keyfile);
+          profile.keyfile = keyfilePath;
+        } else if (conn.method === 'oauth') {
+          if (!conn.clientId || !conn.clientSecret || !conn.refreshToken) {
+            throw new Error('OAuth credentials (clientId, clientSecret, and refreshToken) are required');
+          }
+          profile.client_id = conn.clientId;
+          profile.client_secret = conn.clientSecret;
+          profile.refresh_token = conn.refreshToken;
+        }
+
+        return profile;
+
       default:
         throw new Error('Unsupported connection type!');
     }
+  }
+
+  private static async saveServiceAccountFile(projectPath: string, keyfile: string): Promise<string> {
+    // Create .secrets directory if it doesn't exist
+    const secretsDir = path.join(projectPath, '.secrets');
+    if (!fs.existsSync(secretsDir)) {
+      await fs.promises.mkdir(secretsDir, { recursive: true });
+    }
+
+    // Check if a BigQuery service account file already exists
+    const existingFiles = fs.readdirSync(secretsDir).filter(file =>
+      file.startsWith('bigquery-service-account-') && file.endsWith('.json')
+    );
+
+    let filePath: string;
+
+    if (existingFiles.length > 0) {
+      // Use the first existing service account file
+      filePath = path.join(secretsDir, existingFiles[0]);
+      // Update the content of the existing file
+      await fs.promises.writeFile(filePath, keyfile, 'utf8');
+    } else {
+      // Create a new service account file
+      const filename = `bigquery-service-account-${Date.now()}.json`;
+      filePath = path.join(secretsDir, filename);
+      await fs.promises.writeFile(filePath, keyfile, 'utf8');
+    }
+
+    // Add .secrets to .gitignore if not already there
+    const gitignorePath = path.join(projectPath, '.gitignore');
+    const gitignoreExists = fs.existsSync(gitignorePath);
+    const gitignoreContent = gitignoreExists ? await fs.promises.readFile(gitignorePath, 'utf8') : '';
+
+    if (!gitignoreContent.includes('.secrets')) {
+      await fs.promises.writeFile(
+        gitignorePath,
+        (gitignoreContent + '\n.secrets/\n').trim() + '\n',
+        'utf8'
+      );
+    }
+
+    return filePath;
   }
 }
