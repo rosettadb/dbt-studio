@@ -7,6 +7,7 @@ import useRosettaExtract from './useRosettaExtract';
 import useRosettaDBT from './useRosettaDBT';
 import useDbt from './useDbt';
 import useConnectionInput from './useConnectionInput';
+import useProcess from './useProcess';
 
 export {
   useIpcPromise,
@@ -18,4 +19,5 @@ export {
   useRosettaDBT,
   useDbt,
   useConnectionInput,
+  useProcess,
 };

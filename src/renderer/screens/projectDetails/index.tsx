@@ -1,6 +1,11 @@
 import React from 'react';
 import { Navigate, useNavigate } from 'react-router-dom';
-import { AutoAwesome, Cable } from '@mui/icons-material';
+import {
+  AutoAwesome,
+  Cable,
+  PlayCircleOutline,
+  StopCircleOutlined,
+} from '@mui/icons-material';
 import { IconButton, Tooltip } from '@mui/material';
 import { toast } from 'react-toastify';
 import yaml from 'js-yaml';
@@ -31,7 +36,7 @@ import {
   NoFileSelected,
   SelectedFile,
 } from './styles';
-import { useRosettaDBT, useDbt } from '../../hooks';
+import { useRosettaDBT, useDbt, useProcess } from '../../hooks';
 import { GenerateDashboardResponseType, Project } from '../../../types/backend';
 import { AI_PROMPTS } from '../../config/constants';
 import { utils } from '../../helpers';
@@ -50,6 +55,7 @@ const ProjectDetails: React.FC = () => {
   const [selectedFilePath, setSelectedFilePath] = React.useState<string>();
   const [fileContent, setFileContent] = React.useState<string>();
   const [businessQueryModal, setBusinessQueryModal] = React.useState(false);
+  const { start, stop, running } = useProcess();
 
   const {
     data: directories,
@@ -72,7 +78,6 @@ const ProjectDetails: React.FC = () => {
     compile: dbtCompile,
     debug: dbtDebug,
     docsGenerate: dbtDocsGenerate,
-    docsServe: dbtDocsServe,
     isRunning: isRunningDbt,
   } = useDbt(async () => {
     await fetchDirectories();
@@ -419,8 +424,31 @@ const ProjectDetails: React.FC = () => {
                         subTitle: 'Generate documentation for the project',
                       },
                       {
-                        name: 'Serve Docs',
-                        onClick: () => dbtDocsServe(project),
+                        name: (
+                          <div
+                            style={{
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: 4,
+                            }}
+                          >
+                            <span>Serve Docs</span>
+                            {running ? (
+                              <StopCircleOutlined />
+                            ) : (
+                              <PlayCircleOutline />
+                            )}
+                          </div>
+                        ),
+                        onClick: () => {
+                          if (running) {
+                            stop();
+                            return;
+                          }
+                          start(
+                            `cd "${project.path}" && "${settings?.dbtPath}" docs serve`,
+                          );
+                        },
                         subTitle: 'Serve the documentation website',
                       },
                     ]}
