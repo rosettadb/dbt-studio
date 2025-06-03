@@ -9,7 +9,7 @@ import {
   CircularProgress,
 } from '@mui/material';
 import { Menu as MenuIcon, Settings, ArrowDownward } from '@mui/icons-material';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { toast } from 'react-toastify';
 import {
   BranchDropdownToggle,
@@ -38,6 +38,7 @@ import { useAppContext } from '../../hooks';
 
 export const Menu: React.FC = () => {
   const navigate = useNavigate();
+  const location = useLocation();
   const theme = useTheme();
   const { isSidebarOpen, setIsSidebarOpen } = useAppContext();
   const [commitModal, setCommitModal] = React.useState(false);
@@ -140,7 +141,12 @@ export const Menu: React.FC = () => {
                 navigate('/app/select-project');
               } else {
                 await projectsServices.selectProject({ projectId: value });
-                navigate('/app');
+                if (location.pathname === '/app' || location.pathname === '/app/') {
+                  navigate('/app/settings/general');
+                  setTimeout(() => navigate('/app'), 0);
+                } else {
+                  navigate('/app');
+                }
               }
             }}
             selectedItem={String(project?.id)}
