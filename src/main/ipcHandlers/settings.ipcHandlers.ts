@@ -41,10 +41,6 @@ const registerSettingsHandlers = (mainWindow: BrowserWindow) => {
     return SettingsService.usePathJoin(body);
   });
 
-  ipcMain.handle('settings:createVenv', async () => {
-    return SettingsService.createVenv();
-  });
-
   ipcMain.handle(
     'settings:dialog',
     async (

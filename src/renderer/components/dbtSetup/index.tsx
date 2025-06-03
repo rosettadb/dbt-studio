@@ -151,7 +151,7 @@ export const DbtSetup: React.FC<Props> = ({
             </>
           ) : (
             <Button variant="contained" onClick={handleInstall}>
-              Start Installation
+              Install
             </Button>
           )
         }

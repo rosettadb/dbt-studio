@@ -63,26 +63,6 @@ export const useUpdateSettings = (
   });
 };
 
-export const useCreateVenv = (
-  customOptions?: UseMutationOptions<void, CustomError, void>,
-): UseMutationResult<void, CustomError, void> => {
-  const { onSuccess: onCustomSuccess, onError: onCustomError } =
-    customOptions || {};
-  const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: async () => {
-      return settingsServices.createVenv();
-    },
-    onSuccess: async (...args) => {
-      await queryClient.invalidateQueries([QUERY_KEYS.GET_SETTINGS]);
-      onCustomSuccess?.(...args);
-    },
-    onError: (...args) => {
-      onCustomError?.(...args);
-    },
-  });
-};
-
 export const useFilePicker = (
   customOptions?: UseMutationOptions<
     string[],

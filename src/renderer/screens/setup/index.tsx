@@ -1,7 +1,8 @@
 import React from 'react';
 import { Box, Button } from '@mui/material';
+import { toast } from 'react-toastify';
 import { useGetSettings, useUpdateSettings } from '../../controllers';
-import { Loader, FinishSetup, DbtSetup, PythonSetup } from '../../components';
+import { Loader, FinishSetup, DbtSetup } from '../../components';
 import { client } from '../../config/client';
 
 const ADAPTERS = [
@@ -37,9 +38,9 @@ const Setup: React.FC = () => {
     if (settings && !isInitialized) {
       if (settings.pythonPath && settings.pythonPath !== '') {
         if (settings.dbtPath && settings.dbtPath !== '') {
-          setCurrentStep(2);
-        } else {
           setCurrentStep(1);
+        } else {
+          setCurrentStep(0);
         }
       }
       setIsInitialized(true);
@@ -61,17 +62,20 @@ const Setup: React.FC = () => {
       >
         Rosetta dbt™ Studio - Setup
       </h2>
-      {currentStep === 0 && <PythonSetup settings={settings} />}
-      {currentStep === 1 && (
+      {currentStep === 0 && (
         <DbtSetup
           settings={settings}
           adapters={ADAPTERS}
           selectedAdapters={selectedAdapters}
           setSelectedAdapters={setSelectedAdapters}
-          onInstallComplete={(path) => saveSetting('dbtPath', path)}
+          onInstallComplete={(path) => {
+            toast.info('Installation completed');
+            saveSetting('dbtPath', path);
+            handleSkip();
+          }}
         />
       )}
-      {currentStep === 2 && <FinishSetup settings={settings} />}
+      {currentStep === 1 && <FinishSetup settings={settings} />}
       <div style={{ display: 'flex', justifyContent: 'space-between' }}>
         {currentStep > 0 && (
           <Button
@@ -84,20 +88,17 @@ const Setup: React.FC = () => {
         )}
         <Button
           variant="contained"
-          disabled={
-            (currentStep === 1 && !settings.dbtPath) ||
-            (currentStep === 0 && !settings.pythonPath)
-          }
+          disabled={currentStep === 0 && !settings.dbtPath}
           style={{ marginLeft: 'auto' }}
           onClick={() => {
-            if (currentStep === 2) {
+            if (currentStep === 1) {
               handleSkip();
               return;
             }
             setCurrentStep(currentStep + 1);
           }}
         >
-          {currentStep === 2 ? 'Finish' : 'Next'}
+          {currentStep === 11 ? 'Finish' : 'Next'}
         </Button>
       </div>
     </Box>

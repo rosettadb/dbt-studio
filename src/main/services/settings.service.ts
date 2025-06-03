@@ -303,8 +303,17 @@ export default class SettingsService {
     }
 
     settings.pythonVersion = version;
-    settings.pythonPath = '';
+    settings.pythonPath = binaryPath;
     settings.pythonBinary = binaryPath;
+    const cliAdapter = new CliAdapter();
+    await cliAdapter.runCommandWithoutStreaming(
+      `cd "${userDataPath}" && "${binaryPath}" -m venv venv`,
+    );
+    settings.pythonPath = path.join(
+      userDataPath,
+      'venv',
+      platform === 'win32' ? 'Scripts/python.exe' : 'bin/python3',
+    );
     await this.saveSettings(settings);
     await fs.remove(archivePath);
 
@@ -313,22 +322,5 @@ export default class SettingsService {
       version,
       status: 'installed',
     };
-  }
-
-  static async createVenv() {
-    const settings = await this.loadSettings();
-    const { platform } = process;
-    const userDataPath = app.getPath('userData');
-
-    const cliAdapter = new CliAdapter();
-    await cliAdapter.runCommandWithoutStreaming(
-      `cd "${userDataPath}" && "${settings.pythonBinary}" -m venv venv`,
-    );
-    settings.pythonPath = path.join(
-      userDataPath,
-      'venv',
-      platform === 'win32' ? 'Scripts/python.exe' : 'bin/python3',
-    );
-    await this.saveSettings(settings);
   }
 }
