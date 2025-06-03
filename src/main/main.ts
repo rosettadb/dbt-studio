@@ -99,11 +99,19 @@ if (!gotTheLock) {
       app.on('activate', () => {
         if (windowManager) {
           const mainWindow = windowManager.getMainWindow();
+          const splashWindow = windowManager.getSplash();
+          const setupWindow = windowManager.getSetupWindow();
 
           if (mainWindow) {
             if (mainWindow.isMinimized()) mainWindow.restore();
             mainWindow.show();
             mainWindow.focus();
+          } else if (setupWindow) {
+            if (setupWindow.isMinimized()) setupWindow.restore();
+            setupWindow.show();
+            setupWindow.focus();
+          } else if (splashWindow) {
+            splashWindow.focus();
           } else {
             windowManager.startApplication();
           }

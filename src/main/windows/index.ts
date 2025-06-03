@@ -123,4 +123,8 @@ export class WindowManager {
   public getSplash() {
     return this.splashWindow;
   }
+
+  public getSetupWindow() {
+    return this.setupWindow;
+  }
 }
