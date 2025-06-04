@@ -287,15 +287,17 @@ export const Menu: React.FC = () => {
               )}
             </DD>
           )}
-          <IconButton
-            aria-label="account of current user"
-            aria-controls="menu-appbar"
-            aria-haspopup="true"
-            onClick={() => navigate('/app/settings')}
-            color="primary"
-          >
-            <Settings fontSize="small" />
-          </IconButton>
+          <Tooltip title="Settings">
+            <IconButton
+              aria-label="account of current user"
+              aria-controls="menu-appbar"
+              aria-haspopup="true"
+              onClick={() => navigate('/app/settings')}
+              color="primary"
+            >
+              <Settings fontSize="small" />
+            </IconButton>
+          </Tooltip>
         </IconsContainer>
       </StyledToolbar>
       {isModalOpen && project?.path && (
