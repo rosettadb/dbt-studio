@@ -180,8 +180,6 @@ export const executeDatabricksQuery = async (
   config: DatabricksConnection,
   query: string,
 ): Promise<QueryResponseType> => {
-
-
   const client = new DBSQLClient();
 
   try {
@@ -208,7 +206,7 @@ export const executeDatabricksQuery = async (
 
     return {
       success: true,
-      data: result,
+      data: result as any[], // Cast to any[] to match expected type
       fields,
     };
   } catch (error: any) {
