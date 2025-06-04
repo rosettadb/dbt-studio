@@ -54,11 +54,22 @@ export type RedshiftConnection = ConnectionBase & {
   keepalives_idle?: number;
 };
 
+export type DatabricksConnection = ConnectionBase & {
+  type: 'databricks';
+  host: string;
+  port: number;
+  httpPath: string;
+  keepalives_idle?: number;
+
+};
+
 export type ConnectionInput =
   | PostgresConnection
   | SnowflakeConnection
   | BigQueryConnection
-  | RedshiftConnection;
+  | RedshiftConnection
+  | DatabricksConnection;
+
 
 export type DBTConnectionBase = {
   type: SupportedConnectionTypes;
@@ -100,11 +111,25 @@ export type RedshiftDBTConnection = DBTConnectionBase & {
   keepalives_idle?: number;
 };
 
+export type DatabricksDBTConnection = DBTConnectionBase & {
+  type: 'databricks';
+  host: string;
+  port: number;
+  http_path: string;
+  schema: string;
+  catalog?: string;
+  token: string;
+  keepalives_idle?: number;
+  query_tag?: string;
+};
+
 export type DBTConnection =
   | PostgresDBTConnection
   | SnowflakeDBTConnection
   | BigQueryDBTConnection
-  | RedshiftDBTConnection;
+  | RedshiftDBTConnection
+  | DatabricksDBTConnection;
+
 
 export type RosettaConnection = {
   name: string;

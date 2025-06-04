@@ -16,6 +16,8 @@ import {
   executeSnowflakeQuery,
   testPostgresConnection,
   testSnowflakeConnection,
+  testDatabricksConnection,
+  executeDatabricksQuery,
 } from '../utils/connectors';
 
 export default class ConnectorsService {
@@ -82,6 +84,8 @@ export default class ConnectorsService {
         } catch {
           return false;
         }
+      case 'databricks':
+        return testDatabricksConnection(connection);
       default:
         throw new Error(`Unsupported connection type: ${connection.type}`);
     }
@@ -102,6 +106,8 @@ export default class ConnectorsService {
         return executePostgresQuery(connection, query);
       case 'snowflake':
         return executeSnowflakeQuery(connection, query);
+      case 'databricks':
+        return executeDatabricksQuery(connection, query);
       default:
         throw new Error(`Unsupported connection type: ${connection.type}`);
     }
@@ -161,6 +167,11 @@ export default class ConnectorsService {
           throw new Error('Service account keyfile is required');
         }
         break;
+      case 'databricks':
+        if (!conn.host) throw new Error('Host is required');
+        if (!('httpPath' in conn)) throw new Error('HTTP Path is required');
+        if (!conn.password) throw new Error('Access token is required');
+        break;
       default:
         throw new Error('Unsupported connection type!');
     }
@@ -176,6 +187,8 @@ export default class ConnectorsService {
         return `jdbc:redshift://${conn.host}:${conn.port}/${conn.database}?user=${conn.username}&password=${conn.password}`;
       case 'bigquery':
         throw new Error('BigQuery does not use JDBC URLs');
+      case 'databricks':
+        return `jdbc:databricks://${conn.host}:${conn.port}/default;transportMode=http;ssl=1;AuthMech=3;httpPath=${conn.httpPath};`;
       default:
         throw new Error('Unsupported connection type!');
     }
@@ -184,7 +197,7 @@ export default class ConnectorsService {
   private static mapToDbtConnection(conn: ConnectionInput): DBTConnection {
     const base: Omit<
       DBTConnection,
-      'account' | 'warehouse' | 'role' | 'method' | 'project' | 'keyfile'
+      'account' | 'warehouse' | 'role' | 'method' | 'project' | 'keyfile' | 'http_path' | 'token' | 'catalog'
     > = {
       type: conn.type,
       username: conn.username,
@@ -225,6 +238,15 @@ export default class ConnectorsService {
           type: 'redshift',
           host: conn.host,
           port: conn.port,
+        };
+      case 'databricks':
+        return {
+          ...base,
+          type: 'databricks',
+          host: conn.host,
+          port: conn.port,
+          http_path: conn.httpPath,
+          token: conn.password, // Using password field for token
         };
       default:
         return conn;
@@ -291,6 +313,16 @@ export default class ConnectorsService {
           project: conn.project,
           dataset: conn.schema,
           keyfile: conn.keyfile,
+          threads: 4,
+        };
+      case 'databricks':
+        return {
+          type: 'databricks',
+          host: conn.host,
+          http_path: conn.httpPath,
+          token: conn.password, // Using password field for token
+          catalog: conn.database, // In Databricks, database maps to catalog
+          schema: conn.schema,
           threads: 4,
         };
       default:

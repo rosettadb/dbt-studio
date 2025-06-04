@@ -1,6 +1,7 @@
 /* eslint-disable no-case-declarations */
 import {
   BigQueryDBTConnection,
+  DatabricksDBTConnection,
   PostgresDBTConnection,
   Project,
   RedshiftDBTConnection,
@@ -57,6 +58,18 @@ const useConnectionInput = (selectedProject?: Project) => {
         keyfile: bq.keyfile,
         location: bq.location,
         priority: bq.priority,
+      };
+    case 'databricks':
+      const db = rest as DatabricksDBTConnection;
+      return {
+        type,
+        host: db.host,
+        port: db.port,
+        httpPath: db.http_path,
+        username: db.username,
+        password: db.token, // Map token back to password field
+        database: db.database,
+        schema: db.schema,
       };
     default:
       return undefined;
