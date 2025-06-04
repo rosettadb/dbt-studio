@@ -2,7 +2,12 @@ import React from 'react';
 import SplitPane from 'split-pane-react';
 import { IconButton, Typography } from '@mui/material';
 import TerminalIcon from '@mui/icons-material/Terminal';
-import { MinimizeRounded } from '@mui/icons-material';
+import {
+  CloseRounded,
+  CodeOutlined,
+  MinimizeRounded,
+  PauseOutlined,
+} from '@mui/icons-material';
 import { Terminal } from './terminal';
 import {
   Root,
@@ -13,13 +18,18 @@ import {
   Taskbar,
   TaskbarItem,
 } from './styles';
+import { ProcessTerminal } from './processTerminal';
+import { useProcess } from '../../hooks';
+import { Project } from '../../../types/backend';
 
 type Props = {
-  project: any;
+  project: Project;
   children: React.ReactNode;
 };
 
 export const TerminalLayout: React.FC<Props> = ({ children, project }) => {
+  const { running, stop } = useProcess();
+  const [selectedTab, setSelectadTab] = React.useState(0);
   const [lock, setLock] = React.useState(false);
   const [sizes, setSizes] = React.useState<number[]>([
     window.innerHeight - 300,
@@ -45,6 +55,10 @@ export const TerminalLayout: React.FC<Props> = ({ children, project }) => {
 
   const renderSash = () => (!isMinimized ? <Sash /> : null);
 
+  React.useEffect(() => {
+    setSelectadTab(running ? 1 : 0);
+  }, [running]);
+
   return (
     <Root>
       <SplitPane
@@ -67,13 +81,81 @@ export const TerminalLayout: React.FC<Props> = ({ children, project }) => {
           {!isMinimized && (
             <>
               <TerminalHeader>
-                <IconButton onClick={handleMinimize} size="small">
+                <IconButton
+                  style={{
+                    backgroundColor: selectedTab === 0 ? '#2e2e2e' : '#a0a0a0',
+                    borderRadius: '8px 8px 0 0',
+                    padding: '6px 32px',
+                    marginRight: '4px',
+                    transition: 'background-color 0.2s',
+                    height: 32,
+                  }}
+                  onClick={() => setSelectadTab(0)}
+                  size="small"
+                >
+                  <CodeOutlined
+                    style={{
+                      color: selectedTab === 0 ? '#fff' : '#000',
+                      fontSize: 20,
+                    }}
+                  />
+                </IconButton>
+
+                {running && (
+                  // eslint-disable-next-line jsx-a11y/click-events-have-key-events,jsx-a11y/no-static-element-interactions
+                  <div
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      backgroundColor:
+                        selectedTab === 1 ? '#2e2e2e' : '#a0a0a0',
+                      borderRadius: '8px 8px 0 0',
+                      padding: '6px 0 6px 32px',
+                      marginRight: '4px',
+                      position: 'relative',
+                      transition: 'background-color 0.2s',
+                      height: 32,
+                      cursor: 'pointer',
+                    }}
+                    onClick={() => setSelectadTab(1)}
+                  >
+                    <IconButton size="small" style={{ padding: 0 }}>
+                      <PauseOutlined
+                        style={{ color: '#368e2b', fontSize: 20 }}
+                      />
+                    </IconButton>
+                    <IconButton
+                      onClick={() => {
+                        stop();
+                        setSelectadTab(0);
+                      }}
+                      size="small"
+                      style={{
+                        padding: 4,
+                        marginLeft: 12,
+                        color: selectedTab === 1 ? '#fff' : '#000',
+                      }}
+                    >
+                      <CloseRounded
+                        style={{
+                          fontSize: 14,
+                        }}
+                      />
+                    </IconButton>
+                  </div>
+                )}
+                <IconButton
+                  onClick={handleMinimize}
+                  size="small"
+                  style={{ marginLeft: 'auto' }}
+                >
                   <div style={{ marginTop: -8 }}>
-                    <MinimizeRounded />
+                    <MinimizeRounded style={{ color: '#000' }} />
                   </div>
                 </IconButton>
               </TerminalHeader>
-              <Terminal project={project} />
+              {selectedTab === 0 && <Terminal project={project} />}
+              {selectedTab === 1 && <ProcessTerminal />}
             </>
           )}
         </TerminalWrapper>

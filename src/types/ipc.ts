@@ -78,6 +78,13 @@ export type UtilChannels =
   | 'windows:openSelector'
   | 'windows:closeSetup';
 
+export type ProcessChannels =
+  | 'process:start'
+  | 'process:status'
+  | 'process:stop'
+  | 'process:output'
+  | 'process:error';
+
 export type Channels =
   | TestChannels
   | CliChannels
@@ -85,7 +92,8 @@ export type Channels =
   | SettingsChannels
   | ConnectorChannels
   | GitChannels
-  | UtilChannels;
+  | UtilChannels
+  | ProcessChannels;
 
 export type ConfigureConnectionBody = {
   projectId: string;
