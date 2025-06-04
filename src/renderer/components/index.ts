@@ -19,4 +19,6 @@ export * from './letterAvatar';
 export * from './sqlEditor';
 export * from './errorMessage';
 export * from './settings';
+export * from './dbtSetup';
+export * from './finishSetup';
 export { ScrollbarStyles } from './scrollbarStyles';

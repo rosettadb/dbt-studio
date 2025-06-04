@@ -47,6 +47,13 @@ const registerProjectHandlers = () => {
   });
 
   ipcMain.handle(
+    'project:select',
+    async (_event, body: { projectId: string }) => {
+      await ProjectsService.selectProject(body);
+    },
+  );
+
+  ipcMain.handle(
     'project:addFromVCS',
     async (_event, body: { path: string; name: string }) => {
       return ProjectsService.addProjectFromVCS(body.path, body.name);

@@ -76,7 +76,7 @@ export type GitChannels =
 export type UtilChannels =
   | 'open:external'
   | 'windows:openSelector'
-  | 'windows:closeSelector';
+  | 'windows:closeSetup';
 
 export type Channels =
   | TestChannels
