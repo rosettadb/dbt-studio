@@ -67,10 +67,12 @@ export const SqlEditor: React.FC<Props> = ({
   };
 
   const query = React.useMemo(() => {
-    return selectedProject.queryEditor ?? '';
-  }, [selectedProject.queryEditor]);
+    return selectedProject?.queryEditor ?? '';
+  }, [selectedProject?.queryEditor]);
 
   const handleQueryChange = (content: string) => {
+    if (!selectedProject) return;
+
     projectsServices.updateProject({
       ...selectedProject,
       queryEditor: content,
@@ -107,6 +109,11 @@ export const SqlEditor: React.FC<Props> = ({
       }
     }
   };
+
+  // Don't render if selectedProject is not available
+  if (!selectedProject) {
+    return null;
+  }
 
   return (
     <Inputs>

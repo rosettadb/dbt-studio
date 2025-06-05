@@ -3,6 +3,7 @@ import fs from 'fs';
 import yaml from 'js-yaml';
 import { dialog } from 'electron';
 import {
+  DatabricksDBTConnection,
   PostgresDBTConnection,
   Project,
   SnowflakeDBTConnection,
@@ -21,7 +22,7 @@ import {
   updateDatabase,
 } from '../utils/fileHelper';
 import SettingsService from './settings.service';
-import { PGSchemaExtractor, SnowflakeExtractor } from '../extractor';
+import { PGSchemaExtractor, SnowflakeExtractor, DatabricksExtractor } from '../extractor';
 
 export default class ProjectsService {
   static async loadProjects() {
@@ -377,6 +378,22 @@ export default class ProjectsService {
     return schema.tables;
   }
 
+  // create a schema for databricks
+  static async extractSchemaDatabricks(connection: DatabricksDBTConnection) {
+    const extractor = new DatabricksExtractor({
+      token: connection.token,
+      host: connection.host,
+      path: connection.http_path,
+      catalog: connection.catalog || connection.database || 'default', // Fallback to database or default
+      schema: connection.schema,
+    });
+
+    await extractor.connect();
+    const schema = await extractor.extractSchema();
+    await extractor.disconnect();
+    return schema.tables;
+  }
+
   static async extractSchema(project: Project): Promise<Table[]> {
     const connection = project.dbtConnection;
     switch (connection?.type) {
@@ -386,10 +403,13 @@ export default class ProjectsService {
         return this.extractSnowflakeSchema(
           connection as SnowflakeDBTConnection,
         );
+      case 'databricks':
+        return this.extractSchemaDatabricks(connection as DatabricksDBTConnection);
       default:
         throw new Error(`Unsupported type ${connection?.type}"`);
     }
   }
+
 
   static async extractSchemaFromModelYaml(project: Project): Promise<Table[]> {
     const rosettaModelYamlPath = path.join(

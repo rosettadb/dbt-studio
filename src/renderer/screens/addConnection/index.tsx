@@ -65,7 +65,7 @@ const baseItems: ItemType[] = [
     id: 'databricks',
     name: 'Databricks',
     img: 'databricks',
-    disabled: true,
+    disabled: false,
   },
 ];
 
@@ -94,6 +94,11 @@ const AddConnection: React.FC = () => {
       case 'redshift': {
         return (
           <Connections.Redshift onCancel={() => setSelectedItem(undefined)} />
+        );
+      }
+      case 'databricks': {
+        return (
+          <Connections.Databricks onCancel={() => setSelectedItem(undefined)} />
         );
       }
       default: {
