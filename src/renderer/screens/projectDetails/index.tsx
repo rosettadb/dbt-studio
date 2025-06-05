@@ -1,6 +1,11 @@
 import React from 'react';
 import { Navigate, useNavigate } from 'react-router-dom';
-import { AutoAwesome, Cable } from '@mui/icons-material';
+import {
+  AutoAwesome,
+  Cable,
+  PlayCircleOutline,
+  StopCircleOutlined,
+} from '@mui/icons-material';
 import { IconButton, Tooltip } from '@mui/material';
 import { toast } from 'react-toastify';
 import yaml from 'js-yaml';
@@ -31,8 +36,8 @@ import {
   NoFileSelected,
   SelectedFile,
 } from './styles';
-import { useRosettaDBT, useDbt } from '../../hooks';
-import { GenerateDashboardResponseType } from '../../../types/backend';
+import { useRosettaDBT, useDbt, useProcess } from '../../hooks';
+import { GenerateDashboardResponseType, Project } from '../../../types/backend';
 import { AI_PROMPTS } from '../../config/constants';
 import { utils } from '../../helpers';
 import { AppLayout } from '../../layouts';
@@ -47,17 +52,23 @@ const ProjectDetails: React.FC = () => {
   >([]);
   const [isQueryOpen, setIsQueryOpen] = React.useState(false);
   const [isLoadingQuery, setIsLoadingQuery] = React.useState(false);
+  const [selectedFilePath, setSelectedFilePath] = React.useState<string>();
+  const [fileContent, setFileContent] = React.useState<string>();
+  const [businessQueryModal, setBusinessQueryModal] = React.useState(false);
+  const { start, stop, running } = useProcess();
 
   const {
     data: directories,
     isLoading: isLoadingDirectories,
     refetch: fetchDirectories,
-  } = useGetProjectFiles(project!);
+  } = useGetProjectFiles(project as Project, { enabled: !!project?.id });
 
   const { fn: rosettaDbt, isRunning: isRunningRosettaDbt } = useRosettaDBT(
     async () => {
-      await projectsServices.postRosettaDBTCopy(project!);
-      await fetchDirectories();
+      if (project) {
+        await projectsServices.postRosettaDBTCopy(project);
+        await fetchDirectories();
+      }
     },
   );
 
@@ -67,20 +78,28 @@ const ProjectDetails: React.FC = () => {
     compile: dbtCompile,
     debug: dbtDebug,
     docsGenerate: dbtDocsGenerate,
-    docsServe: dbtDocsServe,
     isRunning: isRunningDbt,
   } = useDbt(async () => {
     await fetchDirectories();
   });
 
   const { data: statuses = [], refetch: updateStatuses } = useGetFileStatuses(
-    project!.path,
-    { enabled: !!project!.path },
+    project?.path ?? '',
+    { enabled: !!project?.path },
   );
 
-  const [selectedFilePath, setSelectedFilePath] = React.useState<string>();
-  const [fileContent, setFileContent] = React.useState<string>();
-  const [businessQueryModal, setBusinessQueryModal] = React.useState(false);
+  React.useEffect(() => {
+    const fetchData = async () => {
+      if (project && project.path) {
+        await fetchDirectories();
+      }
+    };
+    fetchData();
+  }, [project]);
+
+  const isDbtConfigured = React.useMemo(() => {
+    return settings?.dbtPath && settings.dbtPath.trim() !== '';
+  }, [settings?.dbtPath]);
 
   const enhanceModel = async () => {
     if (!settings?.openAIApiKey || settings.openAIApiKey === '') {
@@ -247,27 +266,17 @@ const ProjectDetails: React.FC = () => {
     }
   };
 
-  React.useEffect(() => {
-    const fetchData = async () => {
-      if (project && project.path) {
-        await fetchDirectories();
-      }
-    };
-    fetchData();
-  }, [project]);
-
-  const isDbtConfigured = React.useMemo(() => {
-    return settings?.dbtPath && settings.dbtPath.trim() !== '';
-  }, [settings?.dbtPath]);
-
+  // Early return for loading state
   if (isLoading) {
     return <Loader />;
   }
 
-  if (!project) {
+  // Early return for no project
+  if (!project?.id) {
     return <Navigate to="/app/select-project" />;
   }
 
+  // Early return for missing connection
   if (project?.id && !project?.rosettaConnection) {
     return <Navigate to="/app/add-connection/" />;
   }
@@ -338,14 +347,7 @@ const ProjectDetails: React.FC = () => {
             <EditorContainer>
               <Header>
                 {selectedFilePath && (
-                  <SelectedFile
-                    onClick={async () => {
-                      await window.navigator.clipboard.writeText(
-                        selectedFilePath ?? '',
-                      );
-                      toast.info('File path is copied to clipboard');
-                    }}
-                  >
+                  <SelectedFile>
                     {utils.splitPath(selectedFilePath ?? '', project.name)}
                   </SelectedFile>
                 )}
@@ -422,8 +424,31 @@ const ProjectDetails: React.FC = () => {
                         subTitle: 'Generate documentation for the project',
                       },
                       {
-                        name: 'Serve Docs',
-                        onClick: () => dbtDocsServe(project),
+                        name: (
+                          <div
+                            style={{
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: 4,
+                            }}
+                          >
+                            <span>Serve Docs</span>
+                            {running ? (
+                              <StopCircleOutlined />
+                            ) : (
+                              <PlayCircleOutline />
+                            )}
+                          </div>
+                        ),
+                        onClick: () => {
+                          if (running) {
+                            stop();
+                            return;
+                          }
+                          start(
+                            `cd "${project.path}" && "${settings?.dbtPath}" docs serve`,
+                          );
+                        },
                         subTitle: 'Serve the documentation website',
                       },
                     ]}

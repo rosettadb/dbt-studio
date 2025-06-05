@@ -211,3 +211,43 @@ export const generateMonacoCompletions = (
 
   return completions;
 };
+
+// Function to safely register completion providers with Monaco
+export const registerMonacoCompletionProvider = (
+  monaco: any,
+  completions: Omit<CompletionItem, 'range'>[],
+  previousDisposable?: any
+): any => {
+  // Dispose previous provider if it exists
+  if (previousDisposable) {
+    try {
+      previousDisposable.dispose();
+    } catch (err) {
+      console.error('Error disposing previous completion provider:', err);
+    }
+  }
+
+  // Register new provider
+  if (monaco?.languages && completions.length > 0) {
+    return monaco.languages.registerCompletionItemProvider('sql', {
+      provideCompletionItems: (model: any, position: any) => {
+        const word = model.getWordUntilPosition(position);
+        const range = {
+          startLineNumber: position.lineNumber,
+          endLineNumber: position.lineNumber,
+          startColumn: word.startColumn,
+          endColumn: word.endColumn,
+        };
+
+        const suggestions = completions.map((item) => ({
+          ...item,
+          range,
+        }));
+
+        return { suggestions };
+      }
+    });
+  }
+
+  return null;
+};

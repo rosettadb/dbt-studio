@@ -1,4 +1,5 @@
 import React from 'react';
+import { useNavigate } from 'react-router-dom';
 import {
   Button,
   TextField,
@@ -36,7 +37,7 @@ import {
 } from '../../controllers';
 import { CloneRepoModal, Icon } from '../../components';
 import { icons, logo } from '../../../../assets';
-import { client } from '../../config/client';
+import { AppLayout } from '../../layouts';
 
 const ProjectSelectionContainer = styled(Box)`
   padding: 0.5rem 2rem 2rem;
@@ -188,6 +189,7 @@ const TaglineLogo = styled('img')`
 `;
 
 const SelectProject: React.FC = () => {
+  const navigate = useNavigate();
   const { data: settings } = useGetSettings();
   const { data: projects = [] } = useGetProjects();
   const [isCloneModalOpen, setIsCloneModalOpen] = React.useState(false);
@@ -302,10 +304,10 @@ const SelectProject: React.FC = () => {
         name: `${defaultProjectPath}/${newProject.name}`,
       });
       await projectsServices.selectProject({ projectId: project.id });
+      navigate('/app');
       toast.success(`Project ${project.name} created successfully!`);
       setIsAddingProject(false);
       setNewProject({ name: '' });
-      await client.get('windows:closeSelector');
     } catch (error) {
       toast.error('Failed to create project. Please try again.');
     }
@@ -369,7 +371,8 @@ const SelectProject: React.FC = () => {
               await projectsServices.selectProject({
                 projectId: project.id,
               });
-              await client.get('windows:closeSelector');
+              navigate('/app/loading');
+
             }}
           >
             <ProjectInfo>
@@ -416,201 +419,204 @@ const SelectProject: React.FC = () => {
   }, [settings?.projectsDirectory]);
 
   return (
-    <ProjectSelectionContainer>
-      {isAddingProject ? (
-        <>
-          <Typography variant="h4" component="h2" gutterBottom align="center">
-            Create New Project
-          </Typography>
-          <AddProjectForm>
-            <TextField
-              fullWidth
-              disabled
-              label="Project Path"
-              variant="outlined"
-              id="rosettaPath"
-              name="rosettaPath"
-              value={`${defaultProjectPath}/${newProject.name}`}
-              onChange={(event) => setDefaultProjectPath(event.target.value)}
-              sx={{ mb: 2 }}
-              slotProps={{
-                input: {
-                  endAdornment: (
-                    <IconButton
-                      onClick={() => {
-                        getFiles(
-                          {
-                            properties: ['openDirectory'],
-                            defaultPath: defaultProjectPath,
-                          },
-                          {
-                            onSuccess: (data) => {
-                              setDefaultProjectPath(data[0]);
-                            },
-                          },
-                        );
-                      }}
-                      edge="end"
-                    >
-                      <FolderOpen />
-                    </IconButton>
-                  ),
-                },
-              }}
-            />
-            <TextField
-              fullWidth
-              label="Project Name"
-              variant="outlined"
-              value={newProject.name}
-              onChange={(e) =>
-                setNewProject({ ...newProject, name: e.target.value })
-              }
-              autoFocus
-              sx={{ mb: 2 }}
-            />
-            <FormActions>
-              <Button
-                variant="outlined"
-                onClick={() => setIsAddingProject(false)}
-              >
-                Cancel
-              </Button>
-              <Button
-                variant="contained"
-                color="primary"
-                onClick={handleAddProject}
-                disabled={!newProject.name.trim()}
-              >
-                Create Project
-              </Button>
-            </FormActions>
-          </AddProjectForm>
-        </>
-      ) : (
-        <>
-          <TaglineContainer>
-            <TaglineLogo src={logo} alt="RosettaDB Logo" />
-            <TaglineText variant="h6">
-              Turn Raw Data into Business Insights—Faster with RosettaDB
-            </TaglineText>
-          </TaglineContainer>
-
-          <HeaderContainer>
-            <SearchContainer>
+    <AppLayout>
+      <ProjectSelectionContainer>
+        {isAddingProject ? (
+          <>
+            <Typography variant="h4" component="h2" gutterBottom align="center">
+              Create New Project
+            </Typography>
+            <AddProjectForm>
               <TextField
                 fullWidth
-                placeholder="Search Projects"
+                disabled
+                label="Project Path"
                 variant="outlined"
-                size="small"
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
+                id="rosettaPath"
+                name="rosettaPath"
+                value={`${defaultProjectPath}/${newProject.name}`}
+                onChange={(event) => setDefaultProjectPath(event.target.value)}
+                sx={{ mb: 2 }}
                 slotProps={{
                   input: {
-                    startAdornment: (
-                      <InputAdornment position="start">
-                        <SearchIcon color="action" />
-                      </InputAdornment>
+                    endAdornment: (
+                      <IconButton
+                        onClick={() => {
+                          getFiles(
+                            {
+                              properties: ['openDirectory'],
+                              defaultPath: defaultProjectPath,
+                            },
+                            {
+                              onSuccess: (data) => {
+                                setDefaultProjectPath(data[0]);
+                              },
+                            },
+                          );
+                        }}
+                        edge="end"
+                      >
+                        <FolderOpen />
+                      </IconButton>
                     ),
                   },
                 }}
               />
-            </SearchContainer>
-            <Box sx={{ display: 'flex', gap: 1 }}>
-              <Tooltip title="Clone from git repository...">
+              <TextField
+                fullWidth
+                label="Project Name"
+                variant="outlined"
+                value={newProject.name}
+                onChange={(e) =>
+                  setNewProject({ ...newProject, name: e.target.value })
+                }
+                autoFocus
+                sx={{ mb: 2 }}
+              />
+              <FormActions>
                 <Button
-                  variant="contained"
-                  color="primary"
-                  onClick={() => setIsCloneModalOpen(true)}
+                  variant="outlined"
+                  onClick={() => setIsAddingProject(false)}
                 >
-                  <Icon
-                    src={icons.git}
-                    width={20}
-                    height={20}
-                    style={{ marginRight: 4 }}
-                  />
-                  Clone
+                  Cancel
                 </Button>
-              </Tooltip>
-              <Tooltip title="Load files from folder...">
                 <Button
                   variant="contained"
                   color="primary"
-                  onClick={async () => {
-                    try {
-                      const project =
-                        await projectsServices.addProjectFromFolder();
-                      if (project && project.id) {
-                        await projectsServices.selectProject({
-                          projectId: project.id,
-                        });
-                        await client.get('windows:closeSelector');
-                      }
-                    } catch (error) {
-                      // Show toast message instead of throwing an error
-                    }
+                  onClick={handleAddProject}
+                  disabled={!newProject.name.trim()}
+                >
+                  Create Project
+                </Button>
+              </FormActions>
+            </AddProjectForm>
+          </>
+        ) : (
+          <>
+            <TaglineContainer>
+              {/* <TaglineLogo src={logo} alt="RosettaDB Logo" /> */}
+              <TaglineText variant="h6">
+                Turn Raw Data into Business Insights—Faster with RosettaDB
+              </TaglineText>
+            </TaglineContainer>
+
+            <HeaderContainer>
+              <SearchContainer>
+                <TextField
+                  fullWidth
+                  placeholder="Search Projects"
+                  variant="outlined"
+                  size="small"
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  slotProps={{
+                    input: {
+                      startAdornment: (
+                        <InputAdornment position="start">
+                          <SearchIcon color="action" />
+                        </InputAdornment>
+                      ),
+                    },
                   }}
-                >
-                  <DriveFolderUploadIcon
-                    sx={{ marginRight: 1 }}
-                    fontSize="small"
-                  />
-                  Load
-                </Button>
-              </Tooltip>
-              <Tooltip title="Create a new project">
-                <Button
-                  variant="contained"
-                  color="primary"
-                  startIcon={<AddIcon />}
-                  onClick={() => setIsAddingProject(true)}
-                  sx={{ height: 40 }}
-                >
-                  New
-                </Button>
-              </Tooltip>
-            </Box>
-          </HeaderContainer>
+                />
+              </SearchContainer>
+              <Box sx={{ display: 'flex', gap: 1 }}>
+                <Tooltip title="Clone from git repository...">
+                  <Button
+                    variant="contained"
+                    color="primary"
+                    onClick={() => setIsCloneModalOpen(true)}
+                  >
+                    <Icon
+                      src={icons.git}
+                      width={20}
+                      height={20}
+                      style={{ marginRight: 4 }}
+                    />
+                    Clone
+                  </Button>
+                </Tooltip>
+                <Tooltip title="Load files from folder...">
+                  <Button
+                    variant="contained"
+                    color="primary"
+                    onClick={async () => {
+                      try {
+                        const project =
+                          await projectsServices.addProjectFromFolder();
+                        if (project && project.id) {
+                          await projectsServices.selectProject({
+                            projectId: project.id,
+                          });
+                          setIsAddingProject(false);
+                          setNewProject({ name: '' });
+                        }
+                      } catch (error) {
+                        // Show toast message instead of throwing an error
+                      }
+                    }}
+                  >
+                    <DriveFolderUploadIcon
+                      sx={{ marginRight: 1 }}
+                      fontSize="small"
+                    />
+                    Load
+                  </Button>
+                </Tooltip>
+                <Tooltip title="Create a new project">
+                  <Button
+                    variant="contained"
+                    color="primary"
+                    startIcon={<AddIcon />}
+                    onClick={() => setIsAddingProject(true)}
+                    sx={{ height: 40 }}
+                  >
+                    New
+                  </Button>
+                </Tooltip>
+              </Box>
+            </HeaderContainer>
 
-          {renderConditionalContent()}
-        </>
-      )}
+            {renderConditionalContent()}
+          </>
+        )}
 
-      <Dialog
-        open={deleteDialogOpen}
-        onClose={() => setDeleteDialogOpen(false)}
-        aria-labelledby="alert-dialog-title"
-        aria-describedby="alert-dialog-description"
-      >
-        <DialogTitle id="alert-dialog-title">Delete Project</DialogTitle>
-        <DialogContent>
-          <DialogContentText id="alert-dialog-description">
-            Are you sure you want to delete the project &quot;
-            {projectToDelete?.name}
-            &quot;? This action cannot be undone.
-          </DialogContentText>
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setDeleteDialogOpen(false)} color="primary">
-            Cancel
-          </Button>
-          <Button
-            onClick={confirmDeleteProject}
-            color="error"
-            variant="contained"
-            autoFocus
-          >
-            Delete
-          </Button>
-        </DialogActions>
-      </Dialog>
-      {isCloneModalOpen && (
-        <CloneRepoModal
-          isOpen={isCloneModalOpen}
-          onClose={() => setIsCloneModalOpen(false)}
-        />
-      )}
-    </ProjectSelectionContainer>
+        <Dialog
+          open={deleteDialogOpen}
+          onClose={() => setDeleteDialogOpen(false)}
+          aria-labelledby="alert-dialog-title"
+          aria-describedby="alert-dialog-description"
+        >
+          <DialogTitle id="alert-dialog-title">Delete Project</DialogTitle>
+          <DialogContent>
+            <DialogContentText id="alert-dialog-description">
+              Are you sure you want to delete the project &quot;
+              {projectToDelete?.name}
+              &quot;? This action cannot be undone.
+            </DialogContentText>
+          </DialogContent>
+          <DialogActions>
+            <Button onClick={() => setDeleteDialogOpen(false)} color="primary">
+              Cancel
+            </Button>
+            <Button
+              onClick={confirmDeleteProject}
+              color="error"
+              variant="contained"
+              autoFocus
+            >
+              Delete
+            </Button>
+          </DialogActions>
+        </Dialog>
+        {isCloneModalOpen && (
+          <CloneRepoModal
+            isOpen={isCloneModalOpen}
+            onClose={() => setIsCloneModalOpen(false)}
+          />
+        )}
+      </ProjectSelectionContainer>
+    </AppLayout>
   );
 };
 

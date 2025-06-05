@@ -2,17 +2,17 @@ import { app, BrowserWindow, Menu } from 'electron';
 import path from 'path';
 import { resolveHtmlPath } from '../../utils/setupHelpers';
 
-export const createProjectWindow = (): BrowserWindow => {
+export const createSetupWindow = (): BrowserWindow => {
   const projectWindow = new BrowserWindow({
     width: 800,
-    height: 600,
+    height: 700,
     minWidth: 800,
-    minHeight: 600,
+    minHeight: 700,
     maxWidth: 800,
     maxHeight: 600,
     resizable: false,
     fullscreenable: false,
-    title: 'Select Project',
+    title: 'Setup',
     webPreferences: {
       preload: app.isPackaged
         ? path.join(__dirname, 'preload.js')
@@ -21,7 +21,7 @@ export const createProjectWindow = (): BrowserWindow => {
       nodeIntegration: false,
     },
   });
-  projectWindow.loadURL(resolveHtmlPath('index.html', '/select-project'));
+  projectWindow.loadURL(resolveHtmlPath('index.html', '/setup'));
   Menu.setApplicationMenu(null);
   return projectWindow;
 };

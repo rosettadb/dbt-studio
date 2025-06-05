@@ -7,6 +7,7 @@ import { AssetServer } from './utils/assetServer';
 import { setupApplicationIcon } from './utils/iconUtils';
 import { SettingsService } from './services';
 import { copyAssetsToUserData } from './utils/fileHelper';
+import AnalyticsService from './services/analytics.service';
 
 const isProd = process.env.NODE_ENV === 'production';
 const isDebug =
@@ -37,7 +38,7 @@ if (!gotTheLock) {
 } else {
   app
     .whenReady()
-    .then(() => {
+    .then(async () => {
       windowManager = new WindowManager();
       windowManager.startApplication();
       copyAssetsToUserData();
@@ -78,11 +79,14 @@ if (!gotTheLock) {
             });
           }
 
-          // Ensure windowManager is not null before using it
           if (windowManager) {
-            // Wait for the main window to be fully ready before closing splash
-            await windowManager.showMainWindow();
             windowManager.closeSplashScreen();
+            const settings = await SettingsService.loadSettings();
+            if (settings.isSetup !== 'true') {
+              await windowManager.showSetupWindow();
+            } else {
+              await windowManager.showMainWindow();
+            }
           }
         });
       }
@@ -95,11 +99,19 @@ if (!gotTheLock) {
       app.on('activate', () => {
         if (windowManager) {
           const mainWindow = windowManager.getMainWindow();
+          const splashWindow = windowManager.getSplash();
+          const setupWindow = windowManager.getSetupWindow();
 
           if (mainWindow) {
             if (mainWindow.isMinimized()) mainWindow.restore();
             mainWindow.show();
             mainWindow.focus();
+          } else if (setupWindow) {
+            if (setupWindow.isMinimized()) setupWindow.restore();
+            setupWindow.show();
+            setupWindow.focus();
+          } else if (splashWindow) {
+            splashWindow.focus();
           } else {
             windowManager.startApplication();
           }
@@ -108,6 +120,8 @@ if (!gotTheLock) {
           windowManager.startApplication();
         }
       });
+
+      await AnalyticsService.trackAppUpdate();
     })
     .catch(console.log);
 
@@ -124,19 +138,13 @@ if (!gotTheLock) {
       windowManager.startApplication();
     }
   });
-
-  ipcMain.handle('windows:openSelector', () => {
-    if (windowManager) {
-      windowManager.showProjectWindow();
-    }
-  });
-
-  ipcMain.handle('windows:closeSelector', () => {
-    if (windowManager) {
-      windowManager.closeProjectWindow();
-    }
-  });
 }
+
+ipcMain.handle('windows:closeSetup', () => {
+  if (windowManager) {
+    windowManager.closeSetupWindow();
+  }
+});
 
 app.on('window-all-closed', () => {
   // Don't quit - WindowManager will handle the actual quitting

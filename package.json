@@ -1,5 +1,5 @@
 {
-  "version": "1.0.0-beta",
+  "version": "1.0.1-beta",
   "name": "rosetta-dbt-studio",
   "description": "Turn Raw Data into Business Insights—Faster with RosettaDB",
   "keywords": [
@@ -107,6 +107,7 @@
     "diff": "^7.0.0",
     "electron-debug": "^3.2.0",
     "electron-log": "^4.4.8",
+    "electron-store": "^10.0.1",
     "electron-updater": "^6.1.4",
     "file-icons-js": "^1.1.0",
     "js-yaml": "^4.1.0",
@@ -114,6 +115,7 @@
     "monaco-editor": "^0.52.2",
     "openai": "^4.91.1",
     "pg": "^8.14.1",
+    "ps-tree": "^1.2.0",
     "react": "^18.2.0",
     "react-ace": "^13.0.0",
     "react-dom": "^18.2.0",
@@ -142,6 +144,7 @@
     "@types/js-yaml": "^4.0.9",
     "@types/node": "20.6.2",
     "@types/pg": "^8.11.11",
+    "@types/ps-tree": "^1.1.6",
     "@types/react": "^18.2.21",
     "@types/react-dom": "^18.2.7",
     "@types/react-file-icon": "^1.0.4",

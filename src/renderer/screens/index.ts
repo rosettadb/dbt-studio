@@ -4,6 +4,7 @@ import Sql from './sql';
 import AddConnection from './addConnection';
 import EditConnection from './editConnection';
 import SelectProject from './selectProject';
+import Setup from './setup';
 
 export {
   Settings,
@@ -12,4 +13,5 @@ export {
   AddConnection,
   EditConnection,
   SelectProject,
+  Setup,
 };
