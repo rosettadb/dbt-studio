@@ -34,7 +34,7 @@ export const Databricks: React.FC<Props> = ({ onCancel }) => {
 
   const existingConnection: DatabricksDBTConnection | undefined =
     React.useMemo(() => {
-      if (project) {
+      if (project && project.dbtConnection?.type === 'databricks') {
         return project.dbtConnection as DatabricksDBTConnection;
       }
       return undefined;
@@ -48,11 +48,10 @@ export const Databricks: React.FC<Props> = ({ onCancel }) => {
     httpPath: existingConnection?.http_path ?? '',
     database: existingConnection?.database ?? '',
     schema: existingConnection?.schema ?? '',
-    username: existingConnection?.username ?? '',
-    password: existingConnection?.token ?? '', // Using password field for token
+    token: existingConnection?.token ?? '', // Use token instead of password
   });
 
-  const [showPassword, setShowPassword] = React.useState(false);
+  const [showToken, setShowToken] = React.useState(false);
   const [isTesting, setIsTesting] = React.useState(false);
   const [connectionStatus, setConnectionStatus] = React.useState<
     'idle' | 'success' | 'failed'
@@ -222,19 +221,10 @@ export const Databricks: React.FC<Props> = ({ onCancel }) => {
         />
 
         <TextField
-          label="Username"
-          name="username"
-          value={formState.username}
-          onChange={handleChange}
-          fullWidth
-          placeholder="Your Databricks username or email"
-        />
-
-        <TextField
           label="Access Token"
-          name="password"
-          type={showPassword ? 'text' : 'password'}
-          value={formState.password}
+          name="token"
+          type={showToken ? 'text' : 'password'}
+          value={formState.token}
           onChange={handleChange}
           fullWidth
           required
@@ -245,11 +235,11 @@ export const Databricks: React.FC<Props> = ({ onCancel }) => {
               endAdornment: (
                 <InputAdornment position="end">
                   <IconButton
-                    onClick={() => setShowPassword(!showPassword)}
+                    onClick={() => setShowToken(!showToken)}
                     onMouseDown={(e) => e.preventDefault()}
                     edge="end"
                   >
-                    {showPassword ? <VisibilityOff /> : <Visibility />}
+                    {showToken ? <VisibilityOff /> : <Visibility />}
                   </IconButton>
                 </InputAdornment>
               ),

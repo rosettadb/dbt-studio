@@ -46,8 +46,12 @@ export default class ConnectorsService {
         databaseName: connection.database,
         schemaName: connection.schema,
         url: jdbcUrl,
-        userName: connection.username,
-        password: connection.password,
+        // For Databricks, don't include userName/password since auth is in URL
+        // For other connections, include userName and password
+        ...(connection.type !== 'databricks' && {
+          userName: connection.username,
+          password: connection.password,
+        }),
       },
       dbtConnection: this.mapToDbtConnection(connection),
     };
@@ -137,9 +141,13 @@ export default class ConnectorsService {
           databaseName: connection.database,
           schemaName: connection.schema,
           dbType: connection.type,
-          userName: connection.username,
-          password: connection.password,
           url: this.generateJdbcUrl(connection),
+          // For Databricks, don't include separate token field since it's in the URL
+          // For other connections, include userName and password
+          ...(connection.type !== 'databricks' && {
+            userName: connection.username,
+            password: connection.password,
+          }),
         },
       ],
     };
@@ -170,7 +178,7 @@ export default class ConnectorsService {
       case 'databricks':
         if (!conn.host) throw new Error('Host is required');
         if (!('httpPath' in conn)) throw new Error('HTTP Path is required');
-        if (!conn.password) throw new Error('Access token is required');
+        if (!conn.token) throw new Error('Access token is required');
         break;
       default:
         throw new Error('Unsupported connection type!');
@@ -188,68 +196,74 @@ export default class ConnectorsService {
       case 'bigquery':
         throw new Error('BigQuery does not use JDBC URLs');
       case 'databricks':
-        return `jdbc:databricks://${conn.host}:${conn.port}/default;transportMode=http;ssl=1;AuthMech=3;httpPath=${conn.httpPath};`;
+        // Use token-based authentication with no username (UID)
+        return `jdbc:databricks://${conn.host}:443/default;transportMode=http;ssl=1;AuthMech=3;httpPath=${conn.httpPath};PWD=${conn.token}`;
       default:
         throw new Error('Unsupported connection type!');
     }
   }
 
   private static mapToDbtConnection(conn: ConnectionInput): DBTConnection {
-    const base: Omit<
-      DBTConnection,
-      'account' | 'warehouse' | 'role' | 'method' | 'project' | 'keyfile' | 'http_path' | 'token' | 'catalog'
-    > = {
-      type: conn.type,
-      username: conn.username,
-      password: conn.password,
-      database: conn.database,
-      schema: conn.schema,
-      ...('host' in conn && { host: conn.host }),
-      ...('port' in conn && { port: conn.port }),
-    };
-
+    // Handle each connection type separately to ensure type safety
     switch (conn.type) {
       case 'snowflake':
         return {
-          ...base,
           type: 'snowflake',
+          username: conn.username,
+          password: conn.password,
+          database: conn.database,
+          schema: conn.schema,
           account: conn.account,
           warehouse: conn.warehouse,
           ...(conn.role && { role: conn.role }),
         };
       case 'bigquery':
         return {
-          ...base,
           type: 'bigquery',
+          username: conn.username,
+          password: conn.password,
+          database: conn.database,
+          schema: conn.schema,
           method: conn.method,
           project: conn.project,
           ...(conn.keyfile && { keyfile: conn.keyfile }),
         };
       case 'postgres':
         return {
-          ...base,
           type: 'postgres',
+          username: conn.username,
+          password: conn.password,
+          database: conn.database,
+          schema: conn.schema,
           host: conn.host,
           port: conn.port,
         };
       case 'redshift':
         return {
-          ...base,
           type: 'redshift',
+          username: conn.username,
+          password: conn.password,
+          database: conn.database,
+          schema: conn.schema,
           host: conn.host,
           port: conn.port,
         };
       case 'databricks':
+        // Special case for Databricks with token auth
         return {
-          ...base,
           type: 'databricks',
           host: conn.host,
           port: conn.port,
           http_path: conn.httpPath,
-          token: conn.password, // Using password field for token
+          token: conn.token,
+          database: conn.database,
+          schema: conn.schema,
         };
       default:
-        return conn;
+        // Use type assertion to access the type property for error message
+        throw new Error(
+          `Unsupported connection type: ${(conn as ConnectionInput).type}`,
+        );
     }
   }
 
@@ -320,7 +334,7 @@ export default class ConnectorsService {
           type: 'databricks',
           host: conn.host,
           http_path: conn.httpPath,
-          token: conn.password, // Using password field for token
+          token: conn.token, // Use token directly
           catalog: conn.database, // In Databricks, database maps to catalog
           schema: conn.schema,
           threads: 4,

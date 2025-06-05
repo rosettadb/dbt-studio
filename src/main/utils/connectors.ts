@@ -10,7 +10,6 @@ import {
 import { SNOWFLAKE_TYPE_MAP } from './constants';
 import { DBSQLClient } from '@databricks/sql';
 
-
 export async function testPostgresConnection(
   config: PostgresConnection,
 ): Promise<boolean> {
@@ -149,20 +148,22 @@ export const executeSnowflakeQuery = async (
 export async function testDatabricksConnection(
   config: DatabricksConnection,
 ): Promise<boolean> {
-
   const client = new DBSQLClient();
 
   try {
     const connection = await client.connect({
-      token: config.password, // Using password field for token
+      token: config.token, // Use token instead of password
       host: config.host,
       path: config.httpPath,
     });
 
     const session = await connection.openSession();
-    const queryOperation = await session.executeStatement('SELECT 1 as connection_test', {
-      runAsync: true,
-    });
+    const queryOperation = await session.executeStatement(
+      'SELECT 1 as connection_test',
+      {
+        runAsync: true,
+      },
+    );
 
     const result = await queryOperation.fetchAll();
     await queryOperation.close();
@@ -184,7 +185,7 @@ export const executeDatabricksQuery = async (
 
   try {
     const connection = await client.connect({
-      token: config.password, // Using password field for token
+      token: config.token, // Use token instead of password
       host: config.host,
       path: config.httpPath,
     });
@@ -200,9 +201,13 @@ export const executeDatabricksQuery = async (
     await client.close();
 
     // For now, we'll return basic field info since Databricks doesn't provide detailed type info easily
-    const fields = result.length > 0
-      ? Object.keys(result[0] as object).map((name, index) => ({ name, type: index }))
-      : [];
+    const fields =
+      result.length > 0
+        ? Object.keys(result[0] as object).map((name, index) => ({
+            name,
+            type: index,
+          }))
+        : [];
 
     return {
       success: true,

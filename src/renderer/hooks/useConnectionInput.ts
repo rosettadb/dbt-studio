@@ -66,8 +66,7 @@ const useConnectionInput = (selectedProject?: Project) => {
         host: db.host,
         port: db.port,
         httpPath: db.http_path,
-        username: db.username,
-        password: db.token, // Map token back to password field
+        token: db.token, // Use token directly
         database: db.database,
         schema: db.schema,
       };
