@@ -69,12 +69,8 @@ export const Databricks: React.FC<Props> = ({ onCancel }) => {
   });
 
   const { mutate: testConnection } = useTestConnection({
-    onMutate: () => {
-      setIsTesting(true);
-      setConnectionStatus('idle');
-    },
-    onSettled: () => setIsTesting(false),
     onSuccess: (success) => {
+      setIsTesting(false);
       if (success) {
         toast.success('Connection test successful!');
         setConnectionStatus('success');
@@ -84,6 +80,7 @@ export const Databricks: React.FC<Props> = ({ onCancel }) => {
       setConnectionStatus('failed');
     },
     onError: (error) => {
+      setIsTesting(false);
       toast.error(`Test failed: ${error.message}`);
       setConnectionStatus('failed');
     },
@@ -109,6 +106,8 @@ export const Databricks: React.FC<Props> = ({ onCancel }) => {
   };
 
   const handleTest = () => {
+    setIsTesting(true);
+    setConnectionStatus('idle');
     testConnection(formState);
   };
 
