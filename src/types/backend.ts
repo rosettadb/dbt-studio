@@ -61,7 +61,10 @@ export type RedshiftConnection = ConnectionBase & {
   keepalives_idle?: number;
 };
 
-export type DatabricksConnection = Omit<ConnectionBase, 'username' | 'password'> & {
+export type DatabricksConnection = Omit<
+  ConnectionBase,
+  'username' | 'password'
+> & {
   type: 'databricks';
   host: string;
   port: number;
@@ -292,6 +295,4 @@ export type FileStatus = {
 
 export type BigQueryTestResponse = {
   success: boolean;
-  accessToken: string;
-  refreshToken: string;
 };

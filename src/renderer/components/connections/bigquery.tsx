@@ -69,25 +69,22 @@ export const BigQuery: React.FC<Props> = ({ onCancel }) => {
   });
 
   const { mutate: testConnection } = useTestConnection({
-    onMutate: () => {
-      setIsTesting(true);
-      setConnectionStatus('idle');
-    },
-    onSettled: () => setIsTesting(false),
-    onSuccess: (response: BigQueryTestResponse | boolean, variables) => {
-      if (
-        typeof response !== 'boolean' &&
-        response.success &&
-        variables.type === 'bigquery'
-      ) {
+    onSuccess: (response: BigQueryTestResponse | boolean) => {
+      setIsTesting(false);
+      // Handle BigQuery specific response
+      if (typeof response === 'object' && response.success) {
         toast.success('Connection test successful!');
         setConnectionStatus('success');
-        return;
+      } else if (typeof response === 'boolean' && response) {
+        toast.success('Connection test successful!');
+        setConnectionStatus('success');
+      } else {
+        toast.error('Connection test failed');
+        setConnectionStatus('failed');
       }
-      toast.error('Connection test failed');
-      setConnectionStatus('failed');
     },
     onError: (error) => {
+      setIsTesting(false);
       toast.error(`Test failed: ${error.message}`);
       setConnectionStatus('failed');
     },
@@ -114,6 +111,8 @@ export const BigQuery: React.FC<Props> = ({ onCancel }) => {
   };
 
   const handleTest = () => {
+    setIsTesting(true);
+    setConnectionStatus('idle');
     testConnection({
       ...formState,
       database: formState.project,

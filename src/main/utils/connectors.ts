@@ -255,8 +255,6 @@ export async function testBigQueryConnection(
     console.log('BigQuery connection test successful');
     return {
       success: true,
-      accessToken: '',
-      refreshToken: '',
     };
   } catch (err: any) {
     console.error('BigQuery connection test failed:', err);
