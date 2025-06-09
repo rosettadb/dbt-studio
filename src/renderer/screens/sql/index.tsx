@@ -74,7 +74,11 @@ const Sql = () => {
       }
     >
       <Box sx={{ height: '100%' }}>
-        {queryResults || error ? (
+        {!selectedProject ? (
+          <Box sx={{ padding: 2, textAlign: 'center' }}>
+            <Loader />
+          </Box>
+        ) : queryResults || error ? (
           <SplitPane
             split="horizontal"
             sizes={sizes}
@@ -84,7 +88,7 @@ const Sql = () => {
             <SqlEditor
               completions={completions}
               connectionInput={connectionInput as ConnectionInput}
-              selectedProject={selectedProject as Project}
+              selectedProject={selectedProject}
               queryHistory={queryHistory}
               setQueryHistory={setQueryHistory}
               setLoadingQuery={setLoadingQuery}
@@ -113,7 +117,7 @@ const Sql = () => {
           <SqlEditor
             completions={completions}
             connectionInput={connectionInput as ConnectionInput}
-            selectedProject={selectedProject as Project}
+            selectedProject={selectedProject}
             queryHistory={queryHistory}
             setQueryHistory={setQueryHistory}
             setLoadingQuery={setLoadingQuery}
