@@ -183,6 +183,24 @@ export const runCliCommand = async (command: string): Promise<void> => {
   await client.post<{ command: string }>('cli:run', { command });
 };
 
+export const startProcess = async (command: string): Promise<void> => {
+  await client.post<{ command: string }>('process:start', { command });
+};
+
+export const getProcessStatus = async (): Promise<{
+  running: boolean;
+  pid: number | null;
+}> => {
+  const { data } = await client.get<{ running: boolean; pid: number | null }>(
+    'process:status',
+  );
+  return data;
+};
+
+export const stopProcess = async (): Promise<void> => {
+  await client.get('process:stop');
+};
+
 export const fileSync = async (project: Project): Promise<void> => {
   await client.post<Project, void>('cli:run', project);
 };

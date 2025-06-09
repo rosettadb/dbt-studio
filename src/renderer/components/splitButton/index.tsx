@@ -9,40 +9,39 @@ import {
   MenuItem,
   MenuList,
   Tooltip,
-  CircularProgress
+  CircularProgress,
 } from '@mui/material';
 import ArrowDropDownIcon from '@mui/icons-material/ArrowDropDown';
 import { useTheme, alpha } from '@mui/material/styles';
-import { load } from 'js-yaml';
 
 type Props = {
   title: string;
   disabled?: boolean;
-  isLoading?: boolean
+  isLoading?: boolean;
   leftIcon?: React.ReactNode;
   toltipTitle?: string;
   menuItems: {
-    name: string;
+    name: React.ReactNode;
     onClick: () => void;
     subTitle: string;
   }[];
 };
 
-export function SplitButton({title, disabled = false, isLoading = false, leftIcon, toltipTitle = '', menuItems}: Props) {
+export function SplitButton({
+  title,
+  disabled = false,
+  isLoading = false,
+  leftIcon,
+  toltipTitle = '',
+  menuItems,
+}: Props) {
   const theme = useTheme();
   const [open, setOpen] = React.useState(false);
   const anchorRef = React.useRef<HTMLDivElement>(null);
-  const [selectedIndex, setSelectedIndex] = React.useState(0);
 
-
-  const handleMenuItemClick = (
-    event: React.MouseEvent<HTMLLIElement, MouseEvent>,
-    index: number,
-  ) => {
-      // Execute the clicked menu item's function
-      menuItems[index].onClick();
-      setSelectedIndex(index);
-      setOpen(false);
+  const handleMenuItemClick = (index: number) => {
+    menuItems[index].onClick();
+    setOpen(false);
   };
 
   const handleToggle = () => {
@@ -71,7 +70,7 @@ export function SplitButton({title, disabled = false, isLoading = false, leftIco
           sx={{ height: '28px', minHeight: '28px' }}
         >
           <Button
-            size='small'
+            size="small"
             onClick={() => {}}
             sx={{
               padding: '2px 8px',
@@ -79,15 +78,24 @@ export function SplitButton({title, disabled = false, isLoading = false, leftIco
               minWidth: 'auto',
               fontWeight: 500,
               textTransform: 'none',
-              cursor: 'default'
+              cursor: 'default',
             }}
             disabled={isLoading || disabled}
           >
             {isLoading ? (
               <CircularProgress size={16} sx={{ marginRight: '4px' }} />
             ) : leftIcon ? (
-              <span style={{ display: 'flex', marginRight: '4px', fontSize: '0.8rem' }}>
-                {React.cloneElement(leftIcon as React.ReactElement, { fontSize: 'small', style: { fontSize: '14px' } })}
+              <span
+                style={{
+                  display: 'flex',
+                  marginRight: '4px',
+                  fontSize: '0.8rem',
+                }}
+              >
+                {React.cloneElement(leftIcon as React.ReactElement, {
+                  fontSize: 'small',
+                  style: { fontSize: '14px' },
+                })}
               </span>
             ) : null}
             {title}
@@ -102,7 +110,7 @@ export function SplitButton({title, disabled = false, isLoading = false, leftIco
             sx={{
               padding: '2px 4px',
               minWidth: 'auto',
-              color: theme.palette.primary.main
+              color: theme.palette.primary.main,
             }}
             disabled={isLoading || disabled}
           >
@@ -112,7 +120,7 @@ export function SplitButton({title, disabled = false, isLoading = false, leftIco
       </Tooltip>
       <Popper
         sx={{
-          zIndex: 9999 // Increased from 1 to 9999 to ensure it appears above the editor
+          zIndex: 9999, // Increased from 1 to 9999 to ensure it appears above the editor
         }}
         open={open}
         anchorEl={anchorRef.current}
@@ -136,31 +144,37 @@ export function SplitButton({title, disabled = false, isLoading = false, leftIco
                   dense
                   sx={{
                     paddingTop: '2px',
-                    paddingBottom: '2px'
+                    paddingBottom: '2px',
                   }}
                 >
                   {menuItems.map((option, index) => (
-                      <span style={{ display: 'block' }}>
-                        <MenuItem
-                          onClick={(event) => handleMenuItemClick(event, index)}
-                          sx={{
-                            fontSize: '0.8rem',
-                            minHeight: '24px',
-                            padding: '2px 10px',
-                            color: theme.palette.primary.main,
-                            fontWeight: 500,
-                            textTransform: 'none',
-                            '&.Mui-selected': {
-                              backgroundColor: alpha(theme.palette.primary.main, 0.08),
-                            },
-                            '&:hover': {
-                              backgroundColor: alpha(theme.palette.primary.main, 0.04),
-                            },
-                          }}
-                        >
-                          {option.name}
-                        </MenuItem>
-                      </span>
+                    <span style={{ display: 'block' }}>
+                      <MenuItem
+                        onClick={() => handleMenuItemClick(index)}
+                        sx={{
+                          fontSize: '0.8rem',
+                          minHeight: '24px',
+                          padding: '2px 10px',
+                          color: theme.palette.primary.main,
+                          fontWeight: 500,
+                          textTransform: 'none',
+                          '&.Mui-selected': {
+                            backgroundColor: alpha(
+                              theme.palette.primary.main,
+                              0.08,
+                            ),
+                          },
+                          '&:hover': {
+                            backgroundColor: alpha(
+                              theme.palette.primary.main,
+                              0.04,
+                            ),
+                          },
+                        }}
+                      >
+                        {option.name}
+                      </MenuItem>
+                    </span>
                   ))}
                 </MenuList>
               </ClickAwayListener>

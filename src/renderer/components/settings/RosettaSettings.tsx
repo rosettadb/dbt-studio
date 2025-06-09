@@ -1,6 +1,6 @@
 import React from 'react';
-import { TextField, IconButton, Button, Box } from '@mui/material';
-import { FolderOpen, OpenInNew } from '@mui/icons-material';
+import { TextField, Button, Box, Chip } from '@mui/material';
+import { OpenInNew } from '@mui/icons-material';
 import { SettingsType } from '../../../types/backend';
 import { utils } from '../../helpers';
 
@@ -17,7 +17,6 @@ interface RosettaSettingsProps {
 export const RosettaSettings: React.FC<RosettaSettingsProps> = ({
   settings,
   onSettingsChange,
-  onFilePicker,
 }) => {
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     onSettingsChange(e);
@@ -33,22 +32,18 @@ export const RosettaSettings: React.FC<RosettaSettingsProps> = ({
         name="rosettaPath"
         value={settings.rosettaPath}
         onChange={handleChange}
+        disabled
         sx={{ mb: 2 }}
-        slotProps={{
-          input: {
-            endAdornment: (
-              <IconButton
-                onClick={() =>
-                  onFilePicker('rosettaPath', false, settings.rosettaPath)
-                }
-                edge="end"
-              >
-                <FolderOpen />
-              </IconButton>
-            ),
-          },
-        }}
       />
+
+      <Box sx={{ mb: 2 }}>
+        <Chip
+          label={`Version: ${settings.rosettaVersion || 'Not installed'}`}
+          color={settings.rosettaVersion ? 'primary' : 'default'}
+          size="small"
+          variant="outlined"
+        />
+      </Box>
 
       <Box sx={{ mt: 1, mb: 3 }}>
         <Button

@@ -46,7 +46,6 @@ export const createMainWindow = (
 
   mainWindow.on('closed', onCloseCallback);
 
-
   mainWindow.webContents.setWindowOpenHandler((edata) => {
     shell.openExternal(edata.url);
     return { action: 'deny' };

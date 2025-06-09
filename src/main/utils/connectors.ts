@@ -6,14 +6,12 @@ import {
   PostgresConnection,
   QueryResponseType,
   SnowflakeConnection,
+  DatabricksConnection,
   BigQueryConnection,
   BigQueryTestResponse,
 } from '../../types/backend';
 import { SNOWFLAKE_TYPE_MAP } from './constants';
-
-const OAUTH_REDIRECT_PORT = 1212;
-const OAUTH_REDIRECT_HOST = 'localhost';
-const OAUTH_REDIRECT_URL = `http://${OAUTH_REDIRECT_HOST}:${OAUTH_REDIRECT_PORT}`;
+import { DBSQLClient } from '@databricks/sql';
 
 export async function testPostgresConnection(
   config: PostgresConnection,
@@ -148,6 +146,80 @@ export const executeSnowflakeQuery = async (
       });
     });
   });
+};
+
+export async function testDatabricksConnection(
+  config: DatabricksConnection,
+): Promise<boolean> {
+  const client = new DBSQLClient();
+
+  try {
+    const connection = await client.connect({
+      token: config.token, // Use token instead of password
+      host: config.host,
+      path: config.httpPath,
+    });
+
+    const session = await connection.openSession();
+    const queryOperation = await session.executeStatement(
+      'SELECT 1 as connection_test',
+      {
+        runAsync: true,
+      },
+    );
+
+    const result = await queryOperation.fetchAll();
+    await queryOperation.close();
+    await session.close();
+    await client.close();
+
+    return result.length > 0 && (result[0] as any)?.connection_test === 1;
+  } catch (error) {
+    console.log('Databricks connection test failed:', error);
+    return false;
+  }
+}
+
+export const executeDatabricksQuery = async (
+  config: DatabricksConnection,
+  query: string,
+): Promise<QueryResponseType> => {
+  const client = new DBSQLClient();
+
+  try {
+    const connection = await client.connect({
+      token: config.token, // Use token instead of password
+      host: config.host,
+      path: config.httpPath,
+    });
+
+    const session = await connection.openSession();
+    const queryOperation = await session.executeStatement(query, {
+      runAsync: true,
+    });
+
+    const result = await queryOperation.fetchAll();
+    await queryOperation.close();
+    await session.close();
+    await client.close();
+
+    // For now, we'll return basic field info since Databricks doesn't provide detailed type info easily
+    const fields =
+      result.length > 0
+        ? Object.keys(result[0] as object).map((name, index) => ({
+            name,
+            type: index,
+          }))
+        : [];
+
+    return {
+      success: true,
+      data: result as any[], // Cast to any[] to match expected type
+      fields,
+    };
+  } catch (error: any) {
+    return { success: false, error: error?.message };
+  }
 };
 
 export async function testBigQueryConnection(

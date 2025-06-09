@@ -145,13 +145,13 @@ export const AboutSettings: React.FC = () => {
 
       <Typography variant="body2" color="text.secondary">
         <Link
-          href="https://rosettaa.netlify.app/rosettadbtstudio"
+          href="https://rosettadb.io/"
           target="_blank"
           rel="noopener noreferrer"
           onClick={(e) =>
             utils.handleExternalLink(
               e,
-              'https://rosettaa.netlify.app/rosettadbtstudio',
+              'https://rosettadb.io/',
             )
           }
         >

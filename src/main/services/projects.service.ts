@@ -4,6 +4,7 @@ import yaml from 'js-yaml';
 import { dialog } from 'electron';
 import { OAuth2Client } from 'google-auth-library';
 import {
+  DatabricksDBTConnection,
   PostgresDBTConnection,
   Project,
   SnowflakeDBTConnection,
@@ -23,7 +24,12 @@ import {
   updateDatabase,
 } from '../utils/fileHelper';
 import SettingsService from './settings.service';
-import { PGSchemaExtractor, SnowflakeExtractor, BigQueryExtractor } from '../extractor';
+import {
+  PGSchemaExtractor,
+  SnowflakeExtractor,
+  DatabricksExtractor,
+  BigQueryExtractor,
+} from '../extractor';
 
 export default class ProjectsService {
   static async loadProjects() {
@@ -379,9 +385,27 @@ export default class ProjectsService {
     return schema.tables;
   }
 
+  // create a schema for databricks
+  static async extractSchemaDatabricks(connection: DatabricksDBTConnection) {
+    const extractor = new DatabricksExtractor({
+      token: connection.token,
+      host: connection.host,
+      path: connection.http_path,
+      catalog: connection.catalog || connection.database || 'default', // Fallback to database or default
+      schema: connection.schema,
+    });
+
+    await extractor.connect();
+    const schema = await extractor.extractSchema();
+    await extractor.disconnect();
+    return schema.tables;
+  }
+
   static async extractBigQuerySchema(connection: BigQueryDBTConnection) {
     if (connection.method !== 'service-account' || !connection.keyfile) {
-      throw new Error('Only service account authentication is supported for BigQuery');
+      throw new Error(
+        'Only service account authentication is supported for BigQuery',
+      );
     }
 
     const config: any = {
@@ -415,10 +439,12 @@ export default class ProjectsService {
         return this.extractSnowflakeSchema(
           connection as SnowflakeDBTConnection,
         );
-      case 'bigquery':
-        return this.extractBigQuerySchema(
-          connection as BigQueryDBTConnection,
+      case 'databricks':
+        return this.extractSchemaDatabricks(
+          connection as DatabricksDBTConnection,
         );
+      case 'bigquery':
+        return this.extractBigQuerySchema(connection as BigQueryDBTConnection);
       default:
         throw new Error(`Unsupported type ${connection?.type}"`);
     }

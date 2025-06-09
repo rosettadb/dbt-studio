@@ -18,12 +18,14 @@ import {
   AddConnection,
   EditConnection,
   SelectProject,
+  Setup,
 } from './screens';
 import { SelectProjectLayout } from './layouts';
-import { AppProvider } from './context';
+import { AppProvider, ProcessProvider } from './context';
 import { QueryClientContextProvider } from './context/QueryClientContext';
 import { themeStorageManager, getStoredThemeMode } from './utils/themeStorage';
 import { ScrollbarStyles } from './components/scrollbarStyles';
+import Loading from './screens/loading';
 
 const App: React.FC = () => {
   return (
@@ -33,6 +35,7 @@ const App: React.FC = () => {
       <Routes>
         <Route path="/" element={<SelectProjectLayout />}>
           <Route path="/select-project" element={<SelectProject />} />
+          <Route path="/setup" element={<Setup />} />
           <Route path="*" element={<Navigate to="/" />} />
         </Route>
         <Route path="/app">
@@ -50,6 +53,7 @@ const App: React.FC = () => {
           <Route path="settings/rosetta" element={<Settings />} />
           <Route path="settings/about" element={<Settings />} />
           <Route path="sql" element={<Sql />} />
+          <Route path="loading" element={<Loading />} />
           <Route path="*" element={<Navigate to="/app" />} />
         </Route>
       </Routes>
@@ -64,24 +68,26 @@ const AppWithProjectProvider: React.FC = () => {
   return (
     <QueryClientContextProvider>
       <AppProvider>
-        <CssVarsProvider
-          theme={theme}
-          defaultMode={initialMode}
-          storageManager={themeStorageManager}
-        >
-          <App />
-          <ToastContainer
-            position="bottom-right"
-            autoClose={5000}
-            hideProgressBar={false}
-            newestOnTop={false}
-            closeOnClick={false}
-            rtl={false}
-            pauseOnFocusLoss
-            pauseOnHover
-            theme={initialMode === 'dark' ? 'dark' : 'light'}
-          />
-        </CssVarsProvider>
+        <ProcessProvider>
+          <CssVarsProvider
+            theme={theme}
+            defaultMode={initialMode}
+            storageManager={themeStorageManager}
+          >
+            <App />
+            <ToastContainer
+              position="bottom-right"
+              autoClose={5000}
+              hideProgressBar={false}
+              newestOnTop={false}
+              closeOnClick={false}
+              rtl={false}
+              pauseOnFocusLoss
+              pauseOnHover
+              theme={initialMode === 'dark' ? 'dark' : 'light'}
+            />
+          </CssVarsProvider>
+        </ProcessProvider>
       </AppProvider>
     </QueryClientContextProvider>
   );

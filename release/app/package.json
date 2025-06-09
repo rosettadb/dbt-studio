@@ -1,6 +1,6 @@
 {
   "name": "rosetta-dbt-studio",
-  "version": "1.0.0-beta",
+  "version": "1.0.2-beta",
   "description": "A modern DBT desktop IDE",
   "license": "MIT",
   "author": {
@@ -14,5 +14,7 @@
     "postinstall": "npm run rebuild && npm run link-modules",
     "link-modules": "node -r ts-node/register ../../.erb/scripts/link-modules.ts"
   },
-  "dependencies": {}
+  "dependencies": {
+    "@databricks/sql": "^1.11.0"
+  }
 }

@@ -1,3 +1,11 @@
-export { default as PGSchemaExtractor } from './pg.extractor';
-export { default as SnowflakeExtractor } from './snowflake.extractor';
-export { default as BigQueryExtractor } from './bigquery.extractor';
+import DatabricksExtractor from './databrics.extractor';
+import PGSchemaExtractor from './pg.extractor';
+import SnowflakeExtractor from './snowflake.extractor';
+import BigQueryExtractor from './bigquery.extractor';
+
+export {
+  PGSchemaExtractor,
+  SnowflakeExtractor,
+  DatabricksExtractor,
+  BigQueryExtractor,
+};

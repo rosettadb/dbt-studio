@@ -31,7 +31,7 @@ const Terminal: React.FC<Props> = ({ project }) => {
         outputRef?.current as HTMLElement
       ).scrollHeight;
     }
-  }, [output]);
+  }, [output, error]);
 
   const handleSendCommand = () => {
     if (command.trim()) {

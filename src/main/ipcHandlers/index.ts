@@ -4,6 +4,7 @@ import registerSettingsHandlers from './settings.ipcHandlers';
 import registerConnectorsHandlers from './connectors.ipcHandlers';
 import registerGitHandlers from './git.ipcHandlers';
 import registerUtilsHandlers from './utils.ipcHandlers';
+import registerProcessHandlers from './process.ipcHandlers';
 
 export {
   registerCliHandlers,
@@ -12,4 +13,5 @@ export {
   registerConnectorsHandlers,
   registerGitHandlers,
   registerUtilsHandlers,
+  registerProcessHandlers,
 };

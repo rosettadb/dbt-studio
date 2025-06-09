@@ -6,33 +6,6 @@ import {
   Project,
 } from '../../types/backend';
 
-// const channels = [
-//   'project:list',
-//   'project:get',
-//   'project:add',
-//   'project:addFromVCS',
-//   'project:update',
-//   'project:delete',
-//   'project:getPath',
-//   'project:postRosettaDBTCopy',
-//   'project:extractSchema',
-//   'project:extractSchemaFromModelYaml',
-//   'project:getDirectory',
-//   'project:readFile',
-//   'project:updateFile',
-//   'project:createFolder',
-//   'project:createFile',
-//   'project:deleteItem',
-//   'project:selected',
-//   'project:generateDashboardsQuery',
-//   'project:enhanceModelQuery',
-//   'project:zipDir',
-// ];
-
-// const removeProjectIpcHandlers = () => {
-//   channels.forEach((channel) => ipcMain.removeHandler(channel));
-// };
-
 const registerProjectHandlers = () => {
   ipcMain.handle('project:list', async () => {
     return ProjectsService.loadProjects();
@@ -45,6 +18,13 @@ const registerProjectHandlers = () => {
   ipcMain.handle('project:add', async (_event, body: { name: string }) => {
     return ProjectsService.addProject(body.name);
   });
+
+  ipcMain.handle(
+    'project:select',
+    async (_event, body: { projectId: string }) => {
+      await ProjectsService.selectProject(body);
+    },
+  );
 
   ipcMain.handle(
     'project:addFromVCS',

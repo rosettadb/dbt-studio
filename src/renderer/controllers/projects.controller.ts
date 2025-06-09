@@ -42,6 +42,25 @@ export const useGetSelectedProject = (
   });
 };
 
+export const useSelectProject = (
+  customOptions?: UseMutationOptions<void, CustomError, { projectId: string }>,
+): UseMutationResult<void, CustomError, { projectId: string }> => {
+  const { onSuccess: onCustomSuccess, onError: onCustomError } =
+    customOptions || {};
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (data) => {
+      return projectsServices.selectProject(data);
+    },
+    onSuccess: async (...args) => {
+      await queryClient.invalidateQueries([QUERY_KEYS.GET_SELECTED_PROJECT]);
+      onCustomSuccess?.(...args);
+    },
+    onError: (...args) => {
+      onCustomError?.(...args);
+    },
+  });
+};
 export const useGetProjectById = (
   id: string,
   customOptions?: UseQueryOptions<
@@ -133,7 +152,7 @@ export const useGetProjectFiles = (
   customOptions?: UseQueryOptions<FileNode, CustomError, FileNode>,
 ) => {
   return useQuery({
-    queryKey: [QUERY_KEYS.GET_FILE_STRUCTURE, project.path],
+    queryKey: [QUERY_KEYS.GET_FILE_STRUCTURE, project?.path || 'no-project'],
     queryFn: async () => {
       return projectsServices.loadProjectDirectory(project);
     },
