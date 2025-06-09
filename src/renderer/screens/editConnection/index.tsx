@@ -28,6 +28,9 @@ const EditConnection: React.FC = () => {
       case 'redshift': {
         return <Connections.Redshift onCancel={handleCancel} />;
       }
+      case 'databricks': {
+        return <Connections.Databricks onCancel={handleCancel} />;
+      }
       default: {
         return <Connections.Postgres onCancel={handleCancel} />;
       }

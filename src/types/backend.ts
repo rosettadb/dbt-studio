@@ -54,11 +54,21 @@ export type RedshiftConnection = ConnectionBase & {
   keepalives_idle?: number;
 };
 
+export type DatabricksConnection = Omit<ConnectionBase, 'username' | 'password'> & {
+  type: 'databricks';
+  host: string;
+  port: number;
+  httpPath: string;
+  token: string; // Replace password with token
+  keepalives_idle?: number;
+};
+
 export type ConnectionInput =
   | PostgresConnection
   | SnowflakeConnection
   | BigQueryConnection
-  | RedshiftConnection;
+  | RedshiftConnection
+  | DatabricksConnection;
 
 export type DBTConnectionBase = {
   type: SupportedConnectionTypes;
@@ -100,11 +110,27 @@ export type RedshiftDBTConnection = DBTConnectionBase & {
   keepalives_idle?: number;
 };
 
+export type DatabricksDBTConnection = Omit<
+  DBTConnectionBase,
+  'username' | 'password'
+> & {
+  type: 'databricks';
+  host: string;
+  port: number;
+  http_path: string;
+  schema: string;
+  catalog?: string;
+  token: string;
+  keepalives_idle?: number;
+  query_tag?: string;
+};
+
 export type DBTConnection =
   | PostgresDBTConnection
   | SnowflakeDBTConnection
   | BigQueryDBTConnection
-  | RedshiftDBTConnection;
+  | RedshiftDBTConnection
+  | DatabricksDBTConnection;
 
 export type RosettaConnection = {
   name: string;
@@ -112,8 +138,9 @@ export type RosettaConnection = {
   schemaName: string;
   dbType: SupportedConnectionTypes;
   url: string;
-  userName: string;
-  password: string;
+  userName?: string; // Make userName optional
+  password?: string; // Make password optional
+  token?: string; // Add token field
 };
 
 export type Project = {
