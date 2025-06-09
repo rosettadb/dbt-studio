@@ -4,19 +4,15 @@ import {
   Box,
   Button,
   TextField,
-  FormControl,
-  FormLabel,
-  RadioGroup,
-  FormControlLabel,
-  Radio,
   CircularProgress,
-  IconButton,
-  InputAdornment,
   useTheme,
 } from '@mui/material';
-import { Visibility, VisibilityOff } from '@mui/icons-material';
 import { toast } from 'react-toastify';
-import { BigQueryConnection, BigQueryDBTConnection, BigQueryTestResponse } from '../../../types/backend';
+import {
+  BigQueryConnection,
+  BigQueryDBTConnection,
+  BigQueryTestResponse,
+} from '../../../types/backend';
 import connectionIcons from '../../../../assets/connectionIcons';
 import {
   useConfigureConnection,
@@ -34,36 +30,33 @@ export const BigQuery: React.FC<Props> = ({ onCancel }) => {
   const navigate = useNavigate();
   const theme = useTheme();
 
-  const existingConnection: BigQueryDBTConnection | undefined = React.useMemo(() => {
-    if (project?.dbtConnection?.type === 'bigquery') {
-      return project.dbtConnection as BigQueryDBTConnection;
-    }
-    return undefined;
-  }, [project]);
+  const existingConnection: BigQueryDBTConnection | undefined =
+    React.useMemo(() => {
+      if (project?.dbtConnection?.type === 'bigquery') {
+        return project.dbtConnection as BigQueryDBTConnection;
+      }
+      return undefined;
+    }, [project]);
 
   const [formState, setFormState] = React.useState<BigQueryConnection>({
     type: 'bigquery',
     name: project?.name || 'BigQuery Connection',
-    method: existingConnection?.method || 'oauth',
+    method: 'service-account',
     project: existingConnection?.project || '',
-    dataset: existingConnection?.schema || '', // Preserve dataset (schema)
+    dataset: existingConnection?.schema || '',
     keyfile: existingConnection?.keyfile || '',
     database: existingConnection?.database || '',
     schema: existingConnection?.schema || '',
     username: '',
     password: '',
-    clientId: existingConnection?.clientId || '',  // Preserve clientId
-    clientSecret: existingConnection?.clientSecret || '', // Preserve clientSecret
     location: existingConnection?.location,
     priority: existingConnection?.priority || 'interactive',
-    accessToken: existingConnection?.accessToken || '', // Initialize from existing connection
-    refreshToken: existingConnection?.refreshToken || '', // Initialize from existing connection
   });
 
-  const [showClientSecret, setShowClientSecret] = React.useState(false);
   const [isTesting, setIsTesting] = React.useState(false);
-  const [isAuthenticating, setIsAuthenticating] = React.useState(false);
-  const [connectionStatus, setConnectionStatus] = React.useState<'idle' | 'success' | 'failed'>('idle');
+  const [connectionStatus, setConnectionStatus] = React.useState<
+    'idle' | 'success' | 'failed'
+  >('idle');
 
   const { mutate: configureConnection } = useConfigureConnection({
     onSuccess: () => {
@@ -82,13 +75,11 @@ export const BigQuery: React.FC<Props> = ({ onCancel }) => {
     },
     onSettled: () => setIsTesting(false),
     onSuccess: (response: BigQueryTestResponse | boolean, variables) => {
-      if (typeof response !== 'boolean' && response.success && variables.type === 'bigquery') {
-        // Update form state with the tokens that were set in the backend
-        setFormState(prev => ({
-          ...prev,
-          accessToken: response?.accessToken || '',
-          refreshToken: response?.refreshToken || ''
-        }));
+      if (
+        typeof response !== 'boolean' &&
+        response.success &&
+        variables.type === 'bigquery'
+      ) {
         toast.success('Connection test successful!');
         setConnectionStatus('success');
         return;
@@ -108,29 +99,9 @@ export const BigQuery: React.FC<Props> = ({ onCancel }) => {
     setConnectionStatus('idle');
   };
 
-  const handleMethodChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const method = e.target.value as 'oauth' | 'service-account';
-    setFormState((prev) => ({
-      ...prev,
-      method,
-      keyfile: method === 'oauth' ? '' : prev.keyfile,
-      clientId: method === 'service-account' ? '' : prev.clientId,
-      clientSecret: method === 'service-account' ? '' : prev.clientSecret,
-      accessToken: '',  // Clear tokens when changing methods
-      refreshToken: '', // Clear tokens when changing methods
-    }));
-    setConnectionStatus('idle');
-  };
-
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!project?.id) return;
-
-    // If using OAuth and we have a successful test but no tokens, show error
-    if (formState.method === 'oauth' && !formState.accessToken) {
-      toast.error('Please test the connection first to authenticate with OAuth');
-      return;
-    }
 
     configureConnection({
       projectId: project.id,
@@ -169,7 +140,15 @@ export const BigQuery: React.FC<Props> = ({ onCancel }) => {
   };
 
   return (
-    <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', width: '100%', p: 3 }}>
+    <Box
+      sx={{
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        width: '100%',
+        p: 3,
+      }}
+    >
       <ConnectionHeader
         title={project?.name || 'BigQuery Connection'}
         imageSource={connectionIcons.images.bigquery}
@@ -199,23 +178,6 @@ export const BigQuery: React.FC<Props> = ({ onCancel }) => {
           required
         />
 
-        <FormControl component="fieldset">
-          <FormLabel component="legend">Authentication Method</FormLabel>
-          <RadioGroup
-            row
-            name="method"
-            value={formState.method}
-            onChange={handleMethodChange}
-          >
-            <FormControlLabel value="oauth" control={<Radio />} label="OAuth" />
-            <FormControlLabel
-              value="service-account"
-              control={<Radio />}
-              label="Service Account"
-            />
-          </RadioGroup>
-        </FormControl>
-
         <TextField
           label="Project ID"
           name="project"
@@ -234,64 +196,29 @@ export const BigQuery: React.FC<Props> = ({ onCancel }) => {
           required
         />
 
-        {formState.method === 'oauth' ? (
-          <>
-            <TextField
-              label="OAuth Client ID"
-              name="clientId"
-              value={formState.clientId}
-              onChange={handleChange}
-              fullWidth
-              required
-            />
-            <TextField
-              label="OAuth Client Secret"
-              name="clientSecret"
-              type={showClientSecret ? 'text' : 'password'}
-              value={formState.clientSecret}
-              onChange={handleChange}
-              fullWidth
-              required
-              InputProps={{
-                endAdornment: (
-                  <InputAdornment position="end">
-                    <IconButton
-                      onClick={() => setShowClientSecret(!showClientSecret)}
-                      onMouseDown={(e) => e.preventDefault()}
-                      edge="end"
-                    >
-                      {showClientSecret ? <VisibilityOff /> : <Visibility />}
-                    </IconButton>
-                  </InputAdornment>
-                ),
-              }}
-            />
-          </>
-        ) : (
-          <TextField
-            label="Service Account Key (JSON)"
-            name="keyfile"
-            value={formState.keyfile}
-            onChange={handleChange}
-            fullWidth
-            multiline
-            rows={10}
-            required
-            variant="outlined"
-            InputProps={{
-              style: { minHeight: '120px' },
-            }}
-            sx={{
-              '& .MuiOutlinedInput-root': {
-                height: 'auto',
-              },
-              '& .MuiInputBase-inputMultiline': {
-                height: 'auto !important',
-                resize: 'vertical',
-              },
-            }}
-          />
-        )}
+        <TextField
+          label="Service Account Key (JSON)"
+          name="keyfile"
+          value={formState.keyfile}
+          onChange={handleChange}
+          fullWidth
+          multiline
+          rows={10}
+          required
+          variant="outlined"
+          InputProps={{
+            style: { minHeight: '120px' },
+          }}
+          sx={{
+            '& .MuiOutlinedInput-root': {
+              height: 'auto',
+            },
+            '& .MuiInputBase-inputMultiline': {
+              height: 'auto !important',
+              resize: 'vertical',
+            },
+          }}
+        />
 
         <Box sx={{ mt: 3, display: 'flex', justifyContent: 'flex-start' }}>
           <Button
@@ -299,7 +226,7 @@ export const BigQuery: React.FC<Props> = ({ onCancel }) => {
             variant="contained"
             color="primary"
             onClick={handleTest}
-            disabled={isTesting || isAuthenticating}
+            disabled={isTesting}
             sx={{
               mr: 2,
               position: 'relative',

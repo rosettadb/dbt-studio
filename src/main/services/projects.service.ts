@@ -380,33 +380,19 @@ export default class ProjectsService {
   }
 
   static async extractBigQuerySchema(connection: BigQueryDBTConnection) {
+    if (connection.method !== 'service-account' || !connection.keyfile) {
+      throw new Error('Only service account authentication is supported for BigQuery');
+    }
+
     const config: any = {
       projectId: connection.project,
     };
 
-    if (connection.method === 'service-account' && connection.keyfile) {
-      try {
-        const credentials = JSON.parse(connection.keyfile);
-        config.credentials = credentials;
-      } catch (err) {
-        throw new Error('Invalid service account key JSON');
-      }
-    } else if (connection.method === 'oauth') {
-      if (!connection.accessToken || !connection.refreshToken) {
-        throw new Error('OAuth credentials not found. Please test the connection first.');
-      }
-
-      const oauth2Client = new OAuth2Client({
-        clientId: connection.clientId,
-        clientSecret: connection.clientSecret,
-      });
-
-      oauth2Client.setCredentials({
-        access_token: connection.accessToken,
-        refresh_token: connection.refreshToken,
-      });
-
-      config.authClient = oauth2Client;
+    try {
+      const credentials = JSON.parse(connection.keyfile);
+      config.credentials = credentials;
+    } catch (err) {
+      throw new Error('Invalid service account key JSON');
     }
 
     if (connection.location) {

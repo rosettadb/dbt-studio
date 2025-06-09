@@ -2,8 +2,6 @@
 import pg from 'pg';
 import snowflake from 'snowflake-sdk';
 import { BigQuery } from '@google-cloud/bigquery';
-import { OAuth2Client } from 'google-auth-library';
-import { app, BrowserWindow } from 'electron';
 import {
   PostgresConnection,
   QueryResponseType,
@@ -155,116 +153,27 @@ export const executeSnowflakeQuery = async (
 export async function testBigQueryConnection(
   config: BigQueryConnection,
 ): Promise<BigQueryTestResponse> {
+  if (config.method !== 'service-account' || !config.keyfile) {
+    throw new Error('Only service account authentication is supported');
+  }
+
   const bigqueryConfig: any = {
     projectId: config.project,
   };
 
-  if (config.method === 'service-account' && config.keyfile) {
-    try {
-      const credentials = JSON.parse(config.keyfile);
-      bigqueryConfig.credentials = credentials;
-    } catch (err) {
-      console.error('Invalid service account key JSON:', err);
-      throw new Error('Invalid service account key JSON format');
-    }
-  } else if (config.method === 'oauth') {
-    try {
-      console.log('Starting OAuth flow...');
-      const oauth2Client = new OAuth2Client({
-        clientId: config.clientId,
-        clientSecret: config.clientSecret,
-        redirectUri: OAUTH_REDIRECT_URL + '/',
-      });
-
-      // Generate the url that will be used for authorization
-      const authorizeUrl = oauth2Client.generateAuthUrl({
-        access_type: 'offline',
-        scope: ['https://www.googleapis.com/auth/bigquery'],
-        prompt: 'consent', // Force showing consent screen to get refresh token
-      });
-      console.log('Generated auth URL:', authorizeUrl);
-
-      // Create a new window to handle the OAuth flow
-      const win = new BrowserWindow({
-        width: 800,
-        height: 600,
-        webPreferences: {
-          nodeIntegration: false
-        }
-      });
-
-      // Handle the OAuth callback
-      const { session: { webRequest } } = win.webContents;
-
-      const p = new Promise<string>((resolve, reject) => {
-        // Create the callback handler
-        const handleCallback = (details: { url: string }) => {
-          console.log('Received callback URL:', details.url);
-          try {
-            // Parse the URL to handle the code properly
-            const urlObj = new URL(details.url);
-            const code = urlObj.searchParams.get('code');
-            if (code) {
-              console.log('Extracted authorization code');
-              // Remove the listener
-              webRequest.onBeforeRequest(null);
-              resolve(decodeURIComponent(code));
-              win.removeAllListeners('closed');
-              win.close();
-            }
-          } catch (err) {
-            console.error('Error parsing callback URL:', err);
-            reject(new Error('Invalid callback URL format'));
-          }
-        };
-
-        // Add the listener with URL filter
-        webRequest.onBeforeRequest({ urls: [`${OAUTH_REDIRECT_URL}/*`] }, handleCallback);
-
-        // Handle if user closes the window
-        win.on('closed', () => {
-          console.log('OAuth window was closed by user');
-          // Clean up the listener when window is closed
-          webRequest.onBeforeRequest(null);
-          reject(new Error('Authentication window was closed'));
-        });
-      });
-
-      // Load the authorization URL
-      await win.loadURL(authorizeUrl);
-
-      try {
-        // Wait for the code
-        console.log('Waiting for authorization code...');
-        const code = await p;
-        console.log('Received authorization code, exchanging for tokens...');
-
-        // Get the access token
-        const { tokens } = await oauth2Client.getToken(code);
-        console.log('Received tokens:', JSON.stringify(tokens, null, 2));
-        oauth2Client.setCredentials(tokens);
-
-        // Store tokens in the config - this will update the form state
-        config.accessToken = tokens.access_token || '';
-        config.refreshToken = tokens.refresh_token || '';
-      } catch (error) {
-        console.error('OAuth token exchange error:', error);
-        throw new Error('OAuth authentication failed. Please try again.');
-      }
-
-      // Set up auth client for BigQuery
-      bigqueryConfig.authClient = oauth2Client;
-    } catch (err) {
-      console.error('OAuth authentication failed:', err);
-      throw new Error('OAuth authentication failed. Please try again.');
-    }
+  try {
+    const credentials = JSON.parse(config.keyfile);
+    bigqueryConfig.credentials = credentials;
+  } catch (err) {
+    console.error('Invalid service account key JSON:', err);
+    throw new Error('Invalid service account key JSON format');
   }
 
   if (config.location) {
     bigqueryConfig.location = config.location;
   }
 
-  console.log('Creating BigQuery client with config:', JSON.stringify(bigqueryConfig, null, 2));
+  console.log('Creating BigQuery client with service account authentication');
   const client = new BigQuery(bigqueryConfig);
 
   try {
@@ -274,17 +183,21 @@ export async function testBigQueryConnection(
     console.log('BigQuery connection test successful');
     return {
       success: true,
-      accessToken: config.accessToken || '',
-      refreshToken: config.refreshToken || '',
-    }
+      accessToken: '',
+      refreshToken: '',
+    };
   } catch (err: any) {
     console.error('BigQuery connection test failed:', err);
     if (err.code === 403) {
-      throw new Error('Permission denied. Please check your credentials and project access.');
+      throw new Error(
+        'Permission denied. Please check your credentials and project access.',
+      );
     } else if (err.code === 404) {
       throw new Error('Project not found. Please verify your Project ID.');
     } else if (err.code === 401) {
-      throw new Error('Authentication failed. Please check your OAuth setup or service account key.');
+      throw new Error(
+        'Authentication failed. Please check your service account key.',
+      );
     }
     throw err;
   }
@@ -294,57 +207,34 @@ export const executeBigQueryQuery = async (
   config: BigQueryConnection,
   query: string,
 ): Promise<QueryResponseType> => {
+  if (config.method !== 'service-account' || !config.keyfile) {
+    return {
+      success: false,
+      error: 'Only service account authentication is supported',
+    };
+  }
+
   const bigqueryConfig: any = {
     projectId: config.project,
-    credentials: {} // Initialize empty credentials object to prevent default credentials lookup
   };
 
-  if (config.method === 'service-account' && config.keyfile) {
-    try {
-      const credentials = JSON.parse(config.keyfile);
-      bigqueryConfig.credentials = credentials;
-    } catch (err) {
-      return {
-        success: false,
-        error: 'Invalid service account key JSON format',
-      };
-    }
-  } else if (config.method === 'oauth') {
-    try {
-      const oauth2Client = new OAuth2Client({
-        clientId: config.clientId,
-        clientSecret: config.clientSecret,
-        redirectUri: `${OAUTH_REDIRECT_URL}/`,
-      });
-
-      // If we have existing tokens, try to use them
-      if (config.accessToken && config.refreshToken) {
-        console.log('Using existing OAuth tokens for query execution');
-        oauth2Client.setCredentials({
-          access_token: config.accessToken,
-          refresh_token: config.refreshToken,
-        });
-        bigqueryConfig.auth = oauth2Client;
-        delete bigqueryConfig.credentials; // Remove empty credentials when using OAuth
-      } else {
-        return {
-          success: false,
-          error: 'OAuth tokens not found. Please test the connection first.',
-        };
-      }
-    } catch (err) {
-      return {
-        success: false,
-        error: 'OAuth authentication failed. Please try again.',
-      };
-    }
+  try {
+    const credentials = JSON.parse(config.keyfile);
+    bigqueryConfig.credentials = credentials;
+  } catch (err) {
+    return {
+      success: false,
+      error: 'Invalid service account key JSON format',
+    };
   }
 
   if (config.location) {
     bigqueryConfig.location = config.location;
   }
 
-  console.log('Creating BigQuery client for query with config:', JSON.stringify(bigqueryConfig, null, 2));
+  console.log(
+    'Creating BigQuery client for query with service account authentication',
+  );
   const client = new BigQuery(bigqueryConfig);
 
   try {
@@ -358,12 +248,13 @@ export const executeBigQueryQuery = async (
     }
 
     const [rows] = await client.query(options);
-    const fields = rows.length > 0
-      ? Object.keys(rows[0]).map(name => ({
-          name,
-          type: typeof rows[0][name] === 'number' ? 1 : 0
-        }))
-      : [];
+    const fields =
+      rows.length > 0
+        ? Object.keys(rows[0]).map((name) => ({
+            name,
+            type: typeof rows[0][name] === 'number' ? 1 : 0,
+          }))
+        : [];
 
     return {
       success: true,
@@ -374,11 +265,14 @@ export const executeBigQueryQuery = async (
     let errorMessage = err.message;
 
     if (err.code === 403) {
-      errorMessage = 'Permission denied. Please check your credentials and project access.';
+      errorMessage =
+        'Permission denied. Please check your credentials and project access.';
     } else if (err.code === 404) {
-      errorMessage = 'Project or dataset not found. Please verify your Project ID and dataset.';
+      errorMessage =
+        'Project or dataset not found. Please verify your Project ID and dataset.';
     } else if (err.code === 401) {
-      errorMessage = 'Authentication failed. Please check your service account key or OAuth setup.';
+      errorMessage =
+        'Authentication failed. Please check your service account key.';
     }
 
     console.error('BigQuery query execution failed:', err);
