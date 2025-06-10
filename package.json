@@ -1,5 +1,5 @@
 {
-  "version": "1.0.2-beta",
+  "version": "1.0.3-beta",
   "name": "rosetta-dbt-studio",
   "description": "Turn Raw Data into Business Insights—Faster with RosettaDB",
   "keywords": [
@@ -91,7 +91,6 @@
     }
   },
   "dependencies": {
-    "@databricks/sql": "^1.11.0",
     "@electron/notarize": "^2.3.2",
     "@emotion/react": "^11.14.0",
     "@emotion/styled": "^11.14.0",
