@@ -2,12 +2,14 @@ import path from 'path';
 import fs from 'fs';
 import yaml from 'js-yaml';
 import { dialog } from 'electron';
+import { OAuth2Client } from 'google-auth-library';
 import {
   DatabricksDBTConnection,
   PostgresDBTConnection,
   Project,
   SnowflakeDBTConnection,
   Table,
+  BigQueryDBTConnection,
 } from '../../types/backend';
 import {
   createNewFile,
@@ -22,7 +24,12 @@ import {
   updateDatabase,
 } from '../utils/fileHelper';
 import SettingsService from './settings.service';
-import { PGSchemaExtractor, SnowflakeExtractor, DatabricksExtractor } from '../extractor';
+import {
+  PGSchemaExtractor,
+  SnowflakeExtractor,
+  DatabricksExtractor,
+  BigQueryExtractor,
+} from '../extractor';
 
 export default class ProjectsService {
   static async loadProjects() {
@@ -394,6 +401,35 @@ export default class ProjectsService {
     return schema.tables;
   }
 
+  static async extractBigQuerySchema(connection: BigQueryDBTConnection) {
+    if (connection.method !== 'service-account' || !connection.keyfile) {
+      throw new Error(
+        'Only service account authentication is supported for BigQuery',
+      );
+    }
+
+    const config: any = {
+      projectId: connection.project,
+    };
+
+    try {
+      const credentials = JSON.parse(connection.keyfile);
+      config.credentials = credentials;
+    } catch (err) {
+      throw new Error('Invalid service account key JSON');
+    }
+
+    if (connection.location) {
+      config.location = connection.location;
+    }
+
+    const extractor = new BigQueryExtractor(config);
+    await extractor.connect();
+    const schema = await extractor.extractSchema();
+    await extractor.disconnect();
+    return schema.tables;
+  }
+
   static async extractSchema(project: Project): Promise<Table[]> {
     const connection = project.dbtConnection;
     switch (connection?.type) {
@@ -404,12 +440,15 @@ export default class ProjectsService {
           connection as SnowflakeDBTConnection,
         );
       case 'databricks':
-        return this.extractSchemaDatabricks(connection as DatabricksDBTConnection);
+        return this.extractSchemaDatabricks(
+          connection as DatabricksDBTConnection,
+        );
+      case 'bigquery':
+        return this.extractBigQuerySchema(connection as BigQueryDBTConnection);
       default:
         throw new Error(`Unsupported type ${connection?.type}"`);
     }
   }
-
 
   static async extractSchemaFromModelYaml(project: Project): Promise<Table[]> {
     const rosettaModelYamlPath = path.join(
