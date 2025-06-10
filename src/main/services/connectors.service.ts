@@ -2,6 +2,7 @@ import yaml from 'js-yaml';
 import path from 'path';
 import fs from 'fs';
 import {
+  BigQueryTestResponse,
   ConnectionInput,
   DBTConnection,
   Project,
@@ -14,8 +15,10 @@ import { ConfigureConnectionBody } from '../../types/ipc';
 import {
   executePostgresQuery,
   executeSnowflakeQuery,
+  executeBigQueryQuery,
   testPostgresConnection,
   testSnowflakeConnection,
+  testBigQueryConnection,
   testDatabricksConnection,
   executeDatabricksQuery,
 } from '../utils/connectors';
@@ -36,16 +39,34 @@ export default class ConnectorsService {
     }
 
     this.validateConnection(connection);
-    const jdbcUrl = this.generateJdbcUrl(connection);
+
+    const currentProject = projects[projectIndex];
+
+    // Generate JDBC URL with proper file path handling for BigQuery service account
+    let rosettaJdbcUrl = this.generateJdbcUrl(connection);
+    if (
+      connection.type === 'bigquery' &&
+      connection.method === 'service-account' &&
+      connection.keyfile
+    ) {
+      const keyfilePath = await this.saveServiceAccountFile(
+        currentProject.path,
+        connection.keyfile,
+      );
+      rosettaJdbcUrl = rosettaJdbcUrl.replace(
+        'KEYFILE_PATH_PLACEHOLDER',
+        keyfilePath,
+      );
+    }
 
     const updatedProject: Project = {
-      ...projects[projectIndex],
+      ...currentProject,
       rosettaConnection: {
-        name: connection.name || projects[projectIndex].name,
+        name: connection.name || currentProject.name,
         dbType: connection.type,
         databaseName: connection.database,
         schemaName: connection.schema,
-        url: jdbcUrl,
+        url: rosettaJdbcUrl,
         // For Databricks, don't include userName/password since auth is in URL
         // For other connections, include userName and password
         ...(connection.type !== 'databricks' && {
@@ -59,25 +80,31 @@ export default class ConnectorsService {
     projects[projectIndex] = updatedProject;
     await ProjectsService.saveProjects(projects);
     await updateDatabase<'selectedProject'>('selectedProject', updatedProject);
+
     const profilesPath = path.join(updatedProject.path, 'profiles.yml');
-    await fs.promises.writeFile(
-      profilesPath,
-      this.generateProfilesYml(connection),
-      'utf8',
+    const profilesContent = await this.generateProfilesYml(
+      connection,
+      updatedProject.path,
     );
+    await fs.promises.writeFile(profilesPath, profilesContent, 'utf8');
+
     const mainConfPath = path.join(updatedProject.path, 'rosetta', 'main.conf');
     const rosettaYaml = await this.generateRosettaYml(
       connection,
       updatedProject.name,
+      updatedProject.path,
     );
     await fs.promises.writeFile(mainConfPath, rosettaYaml, 'utf8');
+
     return updatedProject;
   }
 
   /**
    * Test a connection configuration
    */
-  static async testConnection(connection: ConnectionInput): Promise<boolean> {
+  static async testConnection(
+    connection: ConnectionInput,
+  ): Promise<boolean | BigQueryTestResponse> {
     this.validateConnection(connection);
     switch (connection.type) {
       case 'postgres':
@@ -88,6 +115,8 @@ export default class ConnectorsService {
         } catch {
           return false;
         }
+      case 'bigquery':
+        return testBigQueryConnection(connection);
       case 'databricks':
         return testDatabricksConnection(connection);
       default:
@@ -110,6 +139,8 @@ export default class ConnectorsService {
         return executePostgresQuery(connection, query);
       case 'snowflake':
         return executeSnowflakeQuery(connection, query);
+      case 'bigquery':
+        return executeBigQueryQuery(connection, query);
       case 'databricks':
         return executeDatabricksQuery(connection, query);
       default:
@@ -117,18 +148,30 @@ export default class ConnectorsService {
     }
   }
 
-  /**
-   * Generate profiles.yml content for dbt
-   */
-  static generateProfilesYml(connection: ConnectionInput): string {
-    return this.mapToDbtProfiles(connection);
-  }
-
   static async generateRosettaYml(
     connection: ConnectionInput,
     projectName: string,
+    projectPath?: string,
   ): Promise<string> {
     const { openAIApiKey } = await SettingsService.loadSettings();
+
+    // Generate JDBC URL and handle BigQuery service account file path
+    let jdbcUrl = this.generateJdbcUrl(connection);
+
+    // For BigQuery service account, replace placeholder with actual file path
+    if (
+      connection.type === 'bigquery' &&
+      connection.method === 'service-account' &&
+      connection.keyfile &&
+      projectPath
+    ) {
+      const keyfilePath = await this.saveServiceAccountFile(
+        projectPath,
+        connection.keyfile,
+      );
+      jdbcUrl = jdbcUrl.replace('KEYFILE_PATH_PLACEHOLDER', keyfilePath);
+    }
+
     const yamlData: {
       connections: RosettaConnection[];
       openai_api_key?: string;
@@ -141,7 +184,7 @@ export default class ConnectorsService {
           databaseName: connection.database,
           schemaName: connection.schema,
           dbType: connection.type,
-          url: this.generateJdbcUrl(connection),
+          url: jdbcUrl,
           // For Databricks, don't include separate token field since it's in the URL
           // For other connections, include userName and password
           ...(connection.type !== 'databricks' && {
@@ -194,7 +237,25 @@ export default class ConnectorsService {
       case 'redshift':
         return `jdbc:redshift://${conn.host}:${conn.port}/${conn.database}?user=${conn.username}&password=${conn.password}`;
       case 'bigquery':
-        throw new Error('BigQuery does not use JDBC URLs');
+        const host = 'https://www.googleapis.com';
+        const path = 'bigquery/v2';
+        const port = 443;
+        const projectId = conn.project;
+        const baseUrl = `jdbc:bigquery://${host}/${path}:${port}`;
+
+        if (conn.method === 'service-account' && conn.keyfile) {
+          try {
+            const credentials = JSON.parse(conn.keyfile);
+            // Use Simba BigQuery JDBC driver format for service account authentication
+            return `${baseUrl};ProjectId=${projectId};OAuthType=0;OAuthServiceAcctEmail=${credentials.client_email};OAuthPvtKeyPath=KEYFILE_PATH_PLACEHOLDER`;
+          } catch (err) {
+            throw new Error('Invalid service account key JSON format');
+          }
+        } else {
+          throw new Error(
+            'Only service account authentication is supported for BigQuery',
+          );
+        }
       case 'databricks':
         // Use token-based authentication with no username (UID)
         return `jdbc:databricks://${conn.host}:443/default;transportMode=http;ssl=1;AuthMech=3;httpPath=${conn.httpPath};PWD=${conn.token}`;
@@ -227,6 +288,8 @@ export default class ConnectorsService {
           method: conn.method,
           project: conn.project,
           ...(conn.keyfile && { keyfile: conn.keyfile }),
+          ...(conn.location && { location: conn.location }),
+          ...(conn.priority && { priority: conn.priority }),
         };
       case 'postgres':
         return {
@@ -267,7 +330,10 @@ export default class ConnectorsService {
     }
   }
 
-  private static mapToDbtProfiles(conn: ConnectionInput): string {
+  private static async mapToDbtProfiles(
+    conn: ConnectionInput,
+    projectPath?: string,
+  ): Promise<string> {
     const profileConfig = {
       config: {
         send_anonymous_usage_stats: false,
@@ -276,7 +342,7 @@ export default class ConnectorsService {
       [conn.name]: {
         target: 'dev',
         outputs: {
-          dev: this.mapToDbtProfileOutput(conn),
+          dev: await this.mapToDbtProfileOutput(conn, projectPath),
         },
       },
     };
@@ -284,7 +350,17 @@ export default class ConnectorsService {
     return yaml.dump(profileConfig);
   }
 
-  private static mapToDbtProfileOutput(conn: ConnectionInput): any {
+  static generateProfilesYml(
+    connection: ConnectionInput,
+    projectPath?: string,
+  ): Promise<string> {
+    return this.mapToDbtProfiles(connection, projectPath);
+  }
+
+  private static async mapToDbtProfileOutput(
+    conn: ConnectionInput,
+    projectPath?: string,
+  ): Promise<any> {
     switch (conn.type) {
       case 'postgres':
         return {
@@ -321,14 +397,41 @@ export default class ConnectorsService {
           threads: 4,
         };
       case 'bigquery':
-        return {
+        const profile: any = {
           type: 'bigquery',
           method: conn.method,
           project: conn.project,
           dataset: conn.schema,
-          keyfile: conn.keyfile,
           threads: 4,
+          priority: conn.priority || 'interactive',
         };
+
+        if (conn.location) {
+          profile.location = conn.location;
+        }
+
+        if (conn.method === 'service-account') {
+          if (!conn.keyfile) {
+            throw new Error('Service account keyfile is required');
+          }
+          if (!projectPath) {
+            throw new Error(
+              'Project path is required for service account file creation',
+            );
+          }
+          const keyfilePath = await this.saveServiceAccountFile(
+            projectPath,
+            conn.keyfile,
+          );
+          profile.keyfile = keyfilePath;
+        } else {
+          throw new Error(
+            'Only service account authentication is supported for BigQuery',
+          );
+        }
+
+        return profile;
+
       case 'databricks':
         return {
           type: 'databricks',
@@ -342,5 +445,56 @@ export default class ConnectorsService {
       default:
         throw new Error('Unsupported connection type!');
     }
+  }
+
+  private static async saveServiceAccountFile(
+    projectPath: string,
+    keyfile: string,
+  ): Promise<string> {
+    // Create .secrets directory if it doesn't exist
+    const secretsDir = path.join(projectPath, '.secrets');
+    if (!fs.existsSync(secretsDir)) {
+      await fs.promises.mkdir(secretsDir, { recursive: true });
+    }
+
+    // Check if a BigQuery service account file already exists
+    const existingFiles = fs
+      .readdirSync(secretsDir)
+      .filter(
+        (file) =>
+          file.startsWith('bigquery-service-account-') &&
+          file.endsWith('.json'),
+      );
+
+    let filePath: string;
+
+    if (existingFiles.length > 0) {
+      // Use the first existing service account file
+      filePath = path.join(secretsDir, existingFiles[0]);
+      // Update the content of the existing file
+      await fs.promises.writeFile(filePath, keyfile, 'utf8');
+    } else {
+      // Create a new service account file
+      const filename = `bigquery-service-account-${Date.now()}.json`;
+      filePath = path.join(secretsDir, filename);
+      await fs.promises.writeFile(filePath, keyfile, 'utf8');
+    }
+
+    // Add .secrets to .gitignore if not already there
+    const gitignorePath = path.join(projectPath, '.gitignore');
+    const gitignoreExists = fs.existsSync(gitignorePath);
+    const gitignoreContent = gitignoreExists
+      ? await fs.promises.readFile(gitignorePath, 'utf8')
+      : '';
+
+    if (!gitignoreContent.includes('.secrets')) {
+      await fs.promises.writeFile(
+        gitignorePath,
+        (gitignoreContent + '\n.secrets/\n').trim() + '\n',
+        'utf8',
+      );
+    }
+
+    return filePath;
   }
 }

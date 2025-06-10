@@ -8,6 +8,7 @@ import type {
   ConnectionInput,
   Project,
   CustomError,
+  BigQueryTestResponse,
 } from '../../types/backend';
 import type { ConfigureConnectionBody } from '../../types/ipc';
 import { QUERY_KEYS } from '../config/constants';
@@ -39,12 +40,12 @@ export const useConfigureConnection = (
 };
 
 export const useTestConnection = (
-  customOptions?: UseMutationOptions<boolean, CustomError, ConnectionInput>,
-): UseMutationResult<boolean, CustomError, ConnectionInput> => {
+  customOptions?: UseMutationOptions<boolean | BigQueryTestResponse, CustomError, ConnectionInput>,
+): UseMutationResult<boolean | BigQueryTestResponse, CustomError, ConnectionInput> => {
   const { onSuccess: onCustomSuccess, onError: onCustomError } =
     customOptions || {};
 
-  return useMutation({
+  return useMutation<boolean | BigQueryTestResponse, CustomError, ConnectionInput>({
     mutationFn: async (data: ConnectionInput) => {
       return connectorsServices.testConnection(data);
     },

@@ -1,5 +1,5 @@
 {
-  "version": "1.0.2-beta",
+  "version": "1.0.3-beta",
   "name": "rosetta-dbt-studio",
   "description": "Turn Raw Data into Business Insights—Faster with RosettaDB",
   "keywords": [
@@ -94,6 +94,7 @@
     "@electron/notarize": "^2.3.2",
     "@emotion/react": "^11.14.0",
     "@emotion/styled": "^11.14.0",
+    "@google-cloud/bigquery": "^8.0.0",
     "@monaco-editor/react": "^4.7.0",
     "@mui/icons-material": "^6.4.5",
     "@mui/material": "^6.4.5",
