@@ -8,7 +8,17 @@ import webpackPaths from './webpack.paths';
 import { dependencies as externals } from '../../release/app/package.json';
 
 const configuration: webpack.Configuration = {
-  externals: [...Object.keys(externals || {})],
+  externals: [
+    ...Object.keys(externals || {}),
+    // Exclude DuckDB native modules from bundling
+    '@duckdb/node-api',
+    '@duckdb/node-bindings',
+    '@duckdb/node-bindings-linux-x64',
+    '@duckdb/node-bindings-linux-arm64',
+    '@duckdb/node-bindings-darwin-x64',
+    '@duckdb/node-bindings-darwin-arm64',
+    '@duckdb/node-bindings-win32-x64',
+  ],
 
   stats: 'errors-only',
 
