@@ -2,6 +2,7 @@
 import {
   BigQueryDBTConnection,
   DatabricksDBTConnection,
+  DuckDBDBTConnection,
   PostgresDBTConnection,
   Project,
   RedshiftDBTConnection,
@@ -69,6 +70,15 @@ const useConnectionInput = (selectedProject?: Project) => {
         token: db.token, // Use token directly
         database: db.database,
         schema: db.schema,
+      };
+    case 'duckdb':
+      const duck = rest as DuckDBDBTConnection;
+      return {
+        type,
+        database_path: duck.path,
+        database: duck.database,
+        schema: duck.schema || 'main',
+        name: selectedProject.name,
       };
     default:
       return undefined;

@@ -10,6 +10,7 @@ import {
   SnowflakeDBTConnection,
   Table,
   BigQueryDBTConnection,
+  DuckDBDBTConnection,
 } from '../../types/backend';
 import {
   createNewFile,
@@ -29,6 +30,7 @@ import {
   SnowflakeExtractor,
   DatabricksExtractor,
   BigQueryExtractor,
+  DuckDBExtractor,
 } from '../extractor';
 
 export default class ProjectsService {
@@ -430,9 +432,34 @@ export default class ProjectsService {
     return schema.tables;
   }
 
+  static async extractDuckDBSchema(connection: DuckDBDBTConnection) {
+    const extractor = new DuckDBExtractor({
+      database_path: connection.path, // Use the correct path field
+    });
+
+    const schema = await extractor.extractSchema();
+    return schema.tables;
+  }
+
   static async extractSchema(project: Project): Promise<Table[]> {
     const connection = project.dbtConnection;
-    switch (connection?.type) {
+
+    // Add debug logging to help diagnose the issue
+    console.log('🔍 Extracting schema for project:', project.name);
+    console.log('🔍 Connection object:', connection);
+    console.log('🔍 Connection type:', connection?.type);
+
+    if (!connection) {
+      throw new Error('No database connection configured for this project');
+    }
+
+    if (!connection.type) {
+      throw new Error(
+        'Database connection type is not defined. Please reconfigure your connection.',
+      );
+    }
+
+    switch (connection.type) {
       case 'postgres':
         return this.extractPgSchema(connection as PostgresDBTConnection);
       case 'snowflake':
@@ -445,8 +472,11 @@ export default class ProjectsService {
         );
       case 'bigquery':
         return this.extractBigQuerySchema(connection as BigQueryDBTConnection);
+      case 'duckdb':
+        console.log('🦆 Extracting DuckDB schema...');
+        return this.extractDuckDBSchema(connection as DuckDBDBTConnection);
       default:
-        throw new Error(`Unsupported type ${connection?.type}"`);
+        throw new Error(`Unsupported connection type: "${connection.type}"`);
     }
   }
 
