@@ -21,7 +21,11 @@ import { settingsServices } from '../../services';
 interface DbtSettingsProps {
   settings: SettingsType;
   onSettingsChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
-  onFilePicker?: (name: keyof SettingsType, isDir: boolean, defaultPath?: string) => Promise<void>;
+  onFilePicker?: (
+    name: keyof SettingsType,
+    isDir: boolean,
+    defaultPath?: string,
+  ) => Promise<void>;
   onInstallDbtSave: (key: string, value: string) => void;
 }
 
@@ -34,6 +38,7 @@ export const DbtSettings: React.FC<DbtSettingsProps> = ({
   const [isLoadingInstall, setIsLoadingInstall] = React.useState(false);
   const [currentPackage, setCurrentPackage] = React.useState('');
   const [installProgress, setInstallProgress] = React.useState(0);
+  const [isCheckingVersion, setIsCheckingVersion] = React.useState(false);
   const { runCommand, output, error } = useCli();
 
   const [isLoadingDialog, setIsLoadingDialog] = React.useState(false);
@@ -46,9 +51,12 @@ export const DbtSettings: React.FC<DbtSettingsProps> = ({
     'dbt-bigquery': true,
     'dbt-redshift': true,
     'dbt-databricks': true,
+    'dbt-duckdb': true,
   });
 
-  const [installedPackages, setInstalledPackages] = React.useState<{[key: string]: string}>({});
+  const [installedPackages, setInstalledPackages] = React.useState<{
+    [key: string]: string;
+  }>({});
   const [isCheckingPackages, setIsCheckingPackages] = React.useState(false);
 
   const packageDescriptions = {
@@ -58,21 +66,28 @@ export const DbtSettings: React.FC<DbtSettingsProps> = ({
     'dbt-bigquery': 'Adapter for Google BigQuery',
     'dbt-redshift': 'Adapter for Amazon Redshift',
     'dbt-databricks': 'Adapter for Databricks',
+    'dbt-duckdb': 'Adapter for DuckDB - embedded analytics database',
   };
 
   const handlePackageToggle = (packageName: string) => {
     if (packageName === 'dbt-core') return; // Don't allow unchecking dbt-core
 
-    setSelectedPackages(prev => ({
+    setSelectedPackages((prev) => ({
       ...prev,
-      [packageName]: !prev[packageName as keyof typeof prev]
+      [packageName]: !prev[packageName as keyof typeof prev],
     }));
   };
 
   // Function to get dbt-core version
   const getDbtVersion = async (): Promise<string | null> => {
+    setIsCheckingVersion(true);
+    setIsLoadingDialog(true);
+    setLoadingMessage('Checking dbt version...');
+
     try {
-      const python = settings.pythonPath ? `"${settings.pythonPath}"` : 'python';
+      const python = settings.pythonPath
+        ? `"${settings.pythonPath}"`
+        : 'python';
       console.log(`Checking dbt version using: ${python} -m pip show dbt-core`);
       const result = await runCommand(`${python} -m pip show dbt-core`);
       console.log('Command output:', result.output);
@@ -91,6 +106,10 @@ export const DbtSettings: React.FC<DbtSettingsProps> = ({
     } catch (error) {
       console.error('Failed to get dbt version:', error);
       return null;
+    } finally {
+      setIsCheckingVersion(false);
+      setIsLoadingDialog(false);
+      setLoadingMessage('');
     }
   };
 
@@ -102,9 +121,12 @@ export const DbtSettings: React.FC<DbtSettingsProps> = ({
       'dbt-bigquery',
       'dbt-redshift',
       'dbt-databricks',
+      'dbt-duckdb',
     ];
 
-    const packages = allPackages.filter(pkg => selectedPackages[pkg as keyof typeof selectedPackages]);
+    const packages = allPackages.filter(
+      (pkg) => selectedPackages[pkg as keyof typeof selectedPackages],
+    );
 
     setIsLoadingInstall(true);
     setInstallProgress(0);
@@ -178,11 +200,16 @@ export const DbtSettings: React.FC<DbtSettingsProps> = ({
         'dbt-bigquery',
         'dbt-snowflake',
         'dbt-postgres',
+        'dbt-duckdb',
         'dbt-core',
       ];
 
-      const packages = allPackages.filter(pkg => selectedPackages[pkg as keyof typeof selectedPackages]);
-      const python = settings.pythonPath ? `"${settings.pythonPath}"` : 'python';
+      const packages = allPackages.filter(
+        (pkg) => selectedPackages[pkg as keyof typeof selectedPackages],
+      );
+      const python = settings.pythonPath
+        ? `"${settings.pythonPath}"`
+        : 'python';
 
       for (let i = 0; i < packages.length; i++) {
         const pkg = packages[i];
@@ -213,7 +240,7 @@ export const DbtSettings: React.FC<DbtSettingsProps> = ({
     setIsCheckingPackages(true);
     const python = settings.pythonPath ? `"${settings.pythonPath}"` : 'python';
     const packages = Object.keys(packageDescriptions);
-    const installed: {[key: string]: string} = {};
+    const installed: { [key: string]: string } = {};
 
     try {
       // Check all packages in a single command to avoid conflicts
@@ -236,7 +263,11 @@ export const DbtSettings: React.FC<DbtSettingsProps> = ({
             if (line.startsWith('[') && jsonStartIndex === -1) {
               jsonStartIndex = i;
             }
-            if (line.endsWith(']') && jsonStartIndex !== -1 && jsonEndIndex === -1) {
+            if (
+              line.endsWith(']') &&
+              jsonStartIndex !== -1 &&
+              jsonEndIndex === -1
+            ) {
               jsonEndIndex = i;
               break;
             }
@@ -249,7 +280,7 @@ export const DbtSettings: React.FC<DbtSettingsProps> = ({
 
             const pipList = JSON.parse(jsonString);
 
-            packages.forEach(pkg => {
+            packages.forEach((pkg) => {
               const found = pipList.find((item: any) => item.name === pkg);
               if (found) {
                 installed[pkg] = found.version;
@@ -267,7 +298,9 @@ export const DbtSettings: React.FC<DbtSettingsProps> = ({
           await checkPackagesIndividually(python, packages, installed);
         }
       } else {
-        console.log('No output or error in pip list, falling back to individual checks');
+        console.log(
+          'No output or error in pip list, falling back to individual checks',
+        );
         await checkPackagesIndividually(python, packages, installed);
       }
     } catch (error) {
@@ -280,7 +313,11 @@ export const DbtSettings: React.FC<DbtSettingsProps> = ({
   };
 
   // Fallback function for individual package checking
-  const checkPackagesIndividually = async (python: string, packages: string[], installed: {[key: string]: string}) => {
+  const checkPackagesIndividually = async (
+    python: string,
+    packages: string[],
+    installed: { [key: string]: string },
+  ) => {
     console.log('Checking packages individually...');
 
     for (const pkg of packages) {
@@ -288,7 +325,7 @@ export const DbtSettings: React.FC<DbtSettingsProps> = ({
 
       try {
         // Add small delay between commands to prevent conflicts
-        await new Promise(resolve => setTimeout(resolve, 200));
+        await new Promise((resolve) => setTimeout(resolve, 200));
 
         console.log(`Checking package: ${pkg}`);
         const result = await runCommand(`${python} -m pip show ${pkg}`);
@@ -314,11 +351,13 @@ export const DbtSettings: React.FC<DbtSettingsProps> = ({
     setLoadingMessage(`Uninstalling ${packageName}...`);
 
     try {
-      const python = settings.pythonPath ? `"${settings.pythonPath}"` : 'python';
+      const python = settings.pythonPath
+        ? `"${settings.pythonPath}"`
+        : 'python';
       await runCommand(`${python} -m pip uninstall -y ${packageName}`);
 
       // Remove from installed packages
-      setInstalledPackages(prev => {
+      setInstalledPackages((prev) => {
         const updated = { ...prev };
         delete updated[packageName];
         return updated;
@@ -339,7 +378,11 @@ export const DbtSettings: React.FC<DbtSettingsProps> = ({
 
   useEffect(() => {
     const fetchDbtVersion = async () => {
-      if(settings.dbtPath && settings.dbtPath !== 'dbt' && settings.dbtVersion === '') {
+      if (
+        settings.dbtPath &&
+        settings.dbtPath !== 'dbt' &&
+        settings.dbtVersion === ''
+      ) {
         try {
           const version = await getDbtVersion();
           if (version) {
@@ -349,7 +392,10 @@ export const DbtSettings: React.FC<DbtSettingsProps> = ({
           console.error('Failed to get dbt version:', error);
         }
       }
-      if((!settings.dbtPath || settings.dbtPath === 'dbt') && settings.dbtVersion !== '') {
+      if (
+        (!settings.dbtPath || settings.dbtPath === 'dbt') &&
+        settings.dbtVersion !== ''
+      ) {
         onInstallDbtSave('dbtVersion', '');
       }
     };
@@ -359,7 +405,11 @@ export const DbtSettings: React.FC<DbtSettingsProps> = ({
         await fetchDbtVersion();
 
         // Check installed packages when component mounts or dbtPath changes
-        if (settings.dbtPath && settings.dbtPath !== 'dbt' && !isCheckingPackages) {
+        if (
+          settings.dbtPath &&
+          settings.dbtPath !== 'dbt' &&
+          !isCheckingPackages
+        ) {
           // Add delay to ensure previous commands complete
           setTimeout(() => {
             if (!isCheckingPackages) {
@@ -383,8 +433,6 @@ export const DbtSettings: React.FC<DbtSettingsProps> = ({
 
   return (
     <Box sx={{ p: 2 }}>
-
-
       <Box display="flex" alignItems="center" gap={1} sx={{ mb: 2 }}>
         <TextField
           fullWidth
@@ -405,7 +453,7 @@ export const DbtSettings: React.FC<DbtSettingsProps> = ({
         </Alert>
       )}
 
-      {(settings.dbtPath && settings.dbtPath !=='dbt') ? (
+      {settings.dbtPath && settings.dbtPath !== 'dbt' ? (
         <Box sx={{ mt: 2 }}>
           <Alert
             severity="success"
@@ -430,7 +478,10 @@ export const DbtSettings: React.FC<DbtSettingsProps> = ({
             )}
           </Alert>
 
-          <Typography variant="h6" sx={{ mb: 2, display: 'flex', alignItems: 'center', gap: 1 }}>
+          <Typography
+            variant="h6"
+            sx={{ mb: 2, display: 'flex', alignItems: 'center', gap: 1 }}
+          >
             Installed Packages
             {isCheckingPackages && <CircularProgress size={16} />}
             <Button
@@ -466,7 +517,11 @@ export const DbtSettings: React.FC<DbtSettingsProps> = ({
                       {pkg} v{version}
                     </Typography>
                     <Typography variant="body2" color="text.secondary">
-                      {packageDescriptions[pkg as keyof typeof packageDescriptions]}
+                      {
+                        packageDescriptions[
+                          pkg as keyof typeof packageDescriptions
+                        ]
+                      }
                     </Typography>
                   </Box>
                 </Alert>
@@ -511,17 +566,27 @@ export const DbtSettings: React.FC<DbtSettingsProps> = ({
                 key={pkg}
                 control={
                   <Checkbox
-                    checked={selectedPackages[pkg as keyof typeof selectedPackages]}
+                    checked={
+                      selectedPackages[pkg as keyof typeof selectedPackages]
+                    }
                     onChange={() => handlePackageToggle(pkg)}
                     disabled={pkg === 'dbt-core'} // dbt-core is always required
                   />
                 }
                 label={
                   <Box>
-                    <Typography variant="body2" component="span" sx={{ fontWeight: 'medium' }}>
+                    <Typography
+                      variant="body2"
+                      component="span"
+                      sx={{ fontWeight: 'medium' }}
+                    >
                       {pkg}
                     </Typography>
-                    <Typography variant="body2" color="text.secondary" component="div">
+                    <Typography
+                      variant="body2"
+                      color="text.secondary"
+                      component="div"
+                    >
                       {description}
                     </Typography>
                   </Box>
@@ -551,14 +616,19 @@ export const DbtSettings: React.FC<DbtSettingsProps> = ({
               variant="contained"
               color="primary"
               onClick={() => handleInstallDbt()}
-              disabled={isLoadingInstall || Object.values(selectedPackages).every(v => !v)}
+              disabled={
+                isLoadingInstall ||
+                Object.values(selectedPackages).every((v) => !v)
+              }
               startIcon={
                 isLoadingInstall ? (
                   <CircularProgress size={14} color="inherit" />
                 ) : null
               }
             >
-              {isLoadingInstall ? 'Installing...' : `Install Selected Packages (${Object.values(selectedPackages).filter(Boolean).length})`}
+              {isLoadingInstall
+                ? 'Installing...'
+                : `Install Selected Packages (${Object.values(selectedPackages).filter(Boolean).length})`}
             </Button>
             <Button
               onClick={() => {
@@ -574,11 +644,7 @@ export const DbtSettings: React.FC<DbtSettingsProps> = ({
           </Box>
         </Box>
       )}
-      <Dialog
-        open={isLoadingDialog}
-        fullWidth
-        maxWidth="xs"
-      >
+      <Dialog open={isLoadingDialog} fullWidth maxWidth="xs">
         <DialogContent>
           <Box
             display="flex"

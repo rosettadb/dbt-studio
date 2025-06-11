@@ -32,6 +32,9 @@ const EditConnection: React.FC = () => {
       case 'databricks': {
         return <Connections.Databricks onCancel={handleCancel} />;
       }
+      case 'duckdb': {
+        return <Connections.DuckDB onCancel={handleCancel} />;
+      }
       default: {
         return <Connections.Postgres onCancel={handleCancel} />;
       }

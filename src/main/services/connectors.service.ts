@@ -21,6 +21,8 @@ import {
   testBigQueryConnection,
   testDatabricksConnection,
   executeDatabricksQuery,
+  testDuckDBConnection,
+  executeDuckDBQuery,
 } from '../utils/connectors';
 
 export default class ConnectorsService {
@@ -64,15 +66,20 @@ export default class ConnectorsService {
       rosettaConnection: {
         name: connection.name || currentProject.name,
         dbType: connection.type,
-        databaseName: connection.database,
+        databaseName:
+          connection.type === 'duckdb'
+            ? connection.database_path
+            : connection.database,
         schemaName: connection.schema,
         url: rosettaJdbcUrl,
-        // For Databricks, don't include userName/password since auth is in URL
-        // For other connections, include userName and password
-        ...(connection.type !== 'databricks' && {
-          userName: connection.username,
-          password: connection.password,
-        }),
+        // For Databricks and DuckDB, don't include userName/password since auth is different
+        ...(connection.type !== 'databricks' &&
+          connection.type !== 'duckdb' &&
+          'username' in connection &&
+          'password' in connection && {
+            userName: connection.username,
+            password: connection.password,
+          }),
       },
       dbtConnection: this.mapToDbtConnection(connection),
     };
@@ -119,6 +126,8 @@ export default class ConnectorsService {
         return testBigQueryConnection(connection);
       case 'databricks':
         return testDatabricksConnection(connection);
+      case 'duckdb':
+        return testDuckDBConnection(connection);
       default:
         throw new Error(`Unsupported connection type: ${connection.type}`);
     }
@@ -143,6 +152,8 @@ export default class ConnectorsService {
         return executeBigQueryQuery(connection, query);
       case 'databricks':
         return executeDatabricksQuery(connection, query);
+      case 'duckdb':
+        return executeDuckDBQuery(connection, query);
       default:
         throw new Error(`Unsupported connection type: ${connection.type}`);
     }
@@ -181,16 +192,19 @@ export default class ConnectorsService {
       connections: [
         {
           name: projectName,
-          databaseName: connection.database,
+          databaseName:
+            connection.type === 'duckdb'
+              ? connection.database_path
+              : connection.database,
           schemaName: connection.schema,
           dbType: connection.type,
           url: jdbcUrl,
-          // For Databricks, don't include separate token field since it's in the URL
-          // For other connections, include userName and password
-          ...(connection.type !== 'databricks' && {
-            userName: connection.username,
-            password: connection.password,
-          }),
+          // For Databricks and DuckDB, don't include userName/password since auth is different
+          ...(connection.type !== 'databricks' &&
+            connection.type !== 'duckdb' && {
+              userName: connection.username,
+              password: connection.password,
+            }),
         },
       ],
     };
@@ -222,6 +236,10 @@ export default class ConnectorsService {
         if (!conn.host) throw new Error('Host is required');
         if (!('httpPath' in conn)) throw new Error('HTTP Path is required');
         if (!conn.token) throw new Error('Access token is required');
+        break;
+      case 'duckdb':
+        // DuckDB specific validations
+        if (!conn.database_path) throw new Error('Database path is required');
         break;
       default:
         throw new Error('Unsupported connection type!');
@@ -259,6 +277,9 @@ export default class ConnectorsService {
       case 'databricks':
         // Use token-based authentication with no username (UID)
         return `jdbc:databricks://${conn.host}:443/default;transportMode=http;ssl=1;AuthMech=3;httpPath=${conn.httpPath};PWD=${conn.token}`;
+      case 'duckdb':
+        // DuckDB JDBC URL format
+        return `jdbc:duckdb:${conn.database_path}`;
       default:
         throw new Error('Unsupported connection type!');
     }
@@ -319,6 +340,13 @@ export default class ConnectorsService {
           port: conn.port,
           http_path: conn.httpPath,
           token: conn.token,
+          database: conn.database,
+          schema: conn.schema,
+        };
+      case 'duckdb':
+        return {
+          type: 'duckdb',
+          path: conn.database_path, // Map database_path to path for DBT connection
           database: conn.database,
           schema: conn.schema,
         };
@@ -439,6 +467,13 @@ export default class ConnectorsService {
           http_path: conn.httpPath,
           token: conn.token, // Use token directly
           catalog: conn.database, // In Databricks, database maps to catalog
+          schema: conn.schema,
+          threads: 4,
+        };
+      case 'duckdb':
+        return {
+          type: 'duckdb',
+          path: conn.database_path, // Use the file path for DuckDB
           schema: conn.schema,
           threads: 4,
         };

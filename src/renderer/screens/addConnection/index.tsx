@@ -67,6 +67,12 @@ const baseItems: ItemType[] = [
     img: 'databricks',
     disabled: false,
   },
+  {
+    id: 'duckdb',
+    name: 'DuckDB',
+    img: 'duckdb',
+    disabled: false,
+  },
 ];
 
 const AddConnection: React.FC = () => {
@@ -88,9 +94,7 @@ const AddConnection: React.FC = () => {
       }
       case 'bigquery': {
         return (
-          <Connections.BigQuery
-            onCancel={() => setSelectedItem(undefined)}
-          />
+          <Connections.BigQuery onCancel={() => setSelectedItem(undefined)} />
         );
       }
       case 'redshift': {
@@ -101,6 +105,11 @@ const AddConnection: React.FC = () => {
       case 'databricks': {
         return (
           <Connections.Databricks onCancel={() => setSelectedItem(undefined)} />
+        );
+      }
+      case 'duckdb': {
+        return (
+          <Connections.DuckDB onCancel={() => setSelectedItem(undefined)} />
         );
       }
       default: {

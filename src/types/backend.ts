@@ -11,7 +11,8 @@ export type SupportedConnectionTypes =
   | 'db2'
   | 'mssql'
   | 'kinetica'
-  | 'googlecloud';
+  | 'googlecloud'
+  | 'duckdb';
 
 export type ConnectionBase = {
   type: SupportedConnectionTypes;
@@ -73,12 +74,19 @@ export type DatabricksConnection = Omit<
   keepalives_idle?: number;
 };
 
+export type DuckDBConnection = Omit<ConnectionBase, 'username' | 'password'> & {
+  type: 'duckdb';
+  database_path: string; // Path to .duckdb file
+  // No username/password needed for DuckDB
+};
+
 export type ConnectionInput =
   | PostgresConnection
   | SnowflakeConnection
   | BigQueryConnection
   | RedshiftConnection
-  | DatabricksConnection;
+  | DatabricksConnection
+  | DuckDBConnection;
 
 export type DBTConnectionBase = {
   type: SupportedConnectionTypes;
@@ -135,12 +143,21 @@ export type DatabricksDBTConnection = Omit<
   query_tag?: string;
 };
 
+export type DuckDBDBTConnection = Omit<
+  DBTConnectionBase,
+  'username' | 'password'
+> & {
+  type: 'duckdb';
+  path: string; // Database file path
+};
+
 export type DBTConnection =
   | PostgresDBTConnection
   | SnowflakeDBTConnection
   | BigQueryDBTConnection
   | RedshiftDBTConnection
-  | DatabricksDBTConnection;
+  | DatabricksDBTConnection
+  | DuckDBDBTConnection;
 
 export type RosettaConnection = {
   name: string;

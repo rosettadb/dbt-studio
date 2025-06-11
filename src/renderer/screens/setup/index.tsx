@@ -12,6 +12,10 @@ const ADAPTERS = [
   { name: 'dbt-bigquery', description: 'Adapter for Google BigQuery' },
   { name: 'dbt-redshift', description: 'Adapter for Amazon Redshift' },
   { name: 'dbt-databricks', description: 'Adapter for Databricks' },
+  {
+    name: 'dbt-duckdb',
+    description: 'Adapter for DuckDB - embedded analytics database',
+  },
 ];
 
 const Setup: React.FC = () => {
