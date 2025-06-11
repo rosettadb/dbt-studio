@@ -2,6 +2,7 @@ import axios from 'axios';
 import fs from 'fs-extra';
 import path from 'path';
 import { app } from 'electron';
+import os from 'os';
 import AdmZip from 'adm-zip';
 import * as tar from 'tar';
 import yaml from 'js-yaml';
@@ -163,7 +164,19 @@ export default class SettingsService {
     const zipName = `rosetta-${version}-${osName}_${archName}-with-drivers.zip`;
     const downloadUrl = `https://github.com/adaptivescale/rosetta/releases/download/v${version}/${zipName}`;
 
-    const rosettaBasePath = path.join(app.getPath('userData'), 'rosetta');
+    let rosettaBasePath: string;
+    switch (platform) {
+      case 'darwin':
+      case 'linux':
+        rosettaBasePath = path.join(os.homedir(), '.rosetta');
+        break;
+      case 'win32':
+        rosettaBasePath = 'C:/rosetta';
+        break;
+      default:
+        throw new Error(`Unsupported platform: ${platform}`);
+    }
+
     const extractPath = path.join(
       rosettaBasePath,
       `rosetta-${version}-${osName}_${archName}`,
