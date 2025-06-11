@@ -10,7 +10,6 @@ import { dependencies as externals } from '../../release/app/package.json';
 const configuration: webpack.Configuration = {
   externals: [
     ...Object.keys(externals || {}),
-    // Exclude DuckDB native modules from bundling
     '@duckdb/node-api',
     '@duckdb/node-bindings',
     '@duckdb/node-bindings-linux-x64',
