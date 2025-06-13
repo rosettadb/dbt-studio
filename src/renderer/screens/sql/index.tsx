@@ -1,6 +1,8 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import SplitPane from 'split-pane-react';
-import { Box, useTheme } from '@mui/material';
+import { Box, useTheme, Button } from '@mui/material';
+import { PlayArrow } from '@mui/icons-material';
+import { toast } from 'react-toastify';
 import { useGetSelectedProject } from '../../controllers';
 import {
   useAppContext,
@@ -15,8 +17,8 @@ import {
   ErrorMessage,
   Loader,
   SchemaTreeViewer,
-  SqlEditor,
 } from '../../components';
+import { SqlEditor, SqlEditorRef } from '../../components/sqlEditor';
 import { QueryResult } from './queryResult';
 import { ConnectionInput, Project } from '../../../types/backend';
 
@@ -28,7 +30,7 @@ const Sql = () => {
   const { data: selectedProject } = useGetSelectedProject();
   const [loadingQuery, setLoadingQuery] = useState(false);
   const [queryResults, setQueryResults] = useState(null);
-  const [error, setError] = useState<any>();
+  const [queryError, setQueryError] = useState<string | null>(null);
   const [queryHistory, setQueryHistory] = useLocalStorage<QueryHistoryType[]>(
     QUERY_HISTORY_KEY,
     JSON.stringify([]),
@@ -36,10 +38,15 @@ const Sql = () => {
   const [completions, setCompletions] = useState<
     Omit<CompletionItem, 'range'>[]
   >([]);
+
+  // 40/60 split sizes - 40% for editor, 60% for results
   const [sizes, setSizes] = useState<[number, number]>([
-    window.innerHeight - 250,
-    250,
+    window.innerHeight * 0.4,
+    window.innerHeight * 0.6,
   ]);
+
+  // Ref to access the SqlEditor's run function
+  const sqlEditorRef = useRef<SqlEditorRef | null>(null);
 
   const connectionInput = useConnectionInput(selectedProject);
 
@@ -48,6 +55,23 @@ const Sql = () => {
       setCompletions(utils.generateMonacoCompletions(schema));
     }
   }, [schema]);
+
+  // Handle success messages with toast (keeping only for success)
+  const handleSuccess = (message: string) => {
+    toast.success(message);
+  };
+
+  // Handle error messages by setting error state (no toast)
+  const handleError = (error: any) => {
+    const errorMessage = typeof error === 'string' ? error : error?.message || 'An error occurred';
+    setQueryError(errorMessage);
+  };
+
+  const handleRunClick = () => {
+    if (sqlEditorRef.current) {
+      sqlEditorRef.current.runQuery();
+    }
+  };
 
   const renderSash = () => (
     <Box
@@ -78,14 +102,16 @@ const Sql = () => {
           <Box sx={{ padding: 2, textAlign: 'center' }}>
             <Loader />
           </Box>
-        ) : queryResults || error ? (
+        ) : (
           <SplitPane
             split="horizontal"
             sizes={sizes}
             onChange={(newSizes) => setSizes(newSizes as [number, number])}
             sashRender={renderSash}
           >
+            {/* Top 40% - Monaco Editor */}
             <SqlEditor
+              ref={sqlEditorRef}
               completions={completions}
               connectionInput={connectionInput as ConnectionInput}
               selectedProject={selectedProject}
@@ -93,37 +119,71 @@ const Sql = () => {
               setQueryHistory={setQueryHistory}
               setLoadingQuery={setLoadingQuery}
               setQueryResults={setQueryResults}
-              setError={setError}
+              setQueryError={setQueryError}
+              onError={handleError}
+              onSuccess={handleSuccess}
             />
 
+            {/* Bottom 60% - Run Button and Results */}
             <Box
               sx={{
                 height: '100%',
-                padding: 1,
-                overflowY: 'auto',
+                display: 'flex',
+                flexDirection: 'column',
                 background: theme.palette.background.paper,
               }}
             >
-              {loadingQuery && <Loader />}
-              {!loadingQuery && error && (
-                <ErrorMessage title="Query Failed" description={error} />
-              )}
-              {!loadingQuery && !error && queryResults && (
-                <QueryResult results={queryResults} />
-              )}
+              {/* Run Button Area */}
+              <Box
+                sx={{
+                  padding: 1,
+                  borderBottom: `1px solid ${theme.palette.divider}`,
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 1,
+                }}
+              >
+                <Button
+                  variant="contained"
+                  color="primary"
+                  startIcon={<PlayArrow />}
+                  onClick={handleRunClick}
+                  disabled={loadingQuery || !connectionInput}
+                  sx={{ minWidth: 120 }}
+                >
+                  {loadingQuery ? 'Running...' : 'Run Query'}
+                </Button>
+              </Box>
+
+              {/* Results Area */}
+              <Box
+                sx={{
+                  flex: 1,
+                  padding: 1,
+                  overflowY: 'auto',
+                }}
+              >
+                {loadingQuery && <Loader />}
+                {!loadingQuery && queryError && (
+                  <ErrorMessage title="Query Error" description={queryError} />
+                )}
+                {!loadingQuery && !queryError && queryResults && (
+                  <QueryResult results={queryResults} />
+                )}
+                {!loadingQuery && !queryError && !queryResults && (
+                  <Box sx={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    height: '100%',
+                    color: theme.palette.text.secondary
+                  }}>
+                    Click "Run Query" to execute your SQL and see results here
+                  </Box>
+                )}
+              </Box>
             </Box>
           </SplitPane>
-        ) : (
-          <SqlEditor
-            completions={completions}
-            connectionInput={connectionInput as ConnectionInput}
-            selectedProject={selectedProject}
-            queryHistory={queryHistory}
-            setQueryHistory={setQueryHistory}
-            setLoadingQuery={setLoadingQuery}
-            setQueryResults={setQueryResults}
-            setError={setError}
-          />
         )}
       </Box>
     </AppLayout>

@@ -158,54 +158,89 @@ export const generateMonacoCompletions = (
   tables: Table[],
 ): Omit<CompletionItem, 'range'>[] => {
   const completions: Omit<CompletionItem, 'range'>[] = [];
+  const seenLabels = new Set<string>(); // Track seen labels to prevent duplicates
 
+  // Add SQL keywords (only once)
   MonacoAutocompleteSQLKeywords.forEach((keyword) => {
-    completions.push({
-      label: keyword,
-      kind: MonacoCompletionItemKind.Keyword,
-      insertText: keyword,
-      detail: 'SQL keyword',
-    });
+    if (!seenLabels.has(keyword)) {
+      seenLabels.add(keyword);
+      completions.push({
+        label: keyword,
+        kind: MonacoCompletionItemKind.Keyword,
+        insertText: keyword,
+        detail: 'SQL keyword',
+      });
+    }
+  });
+
+  // Collect unique schemas first
+  const uniqueSchemas = new Set<string>();
+  tables.forEach((table) => {
+    uniqueSchemas.add(table.schema);
+  });
+
+  // Add unique schemas
+  uniqueSchemas.forEach((schema) => {
+    if (!seenLabels.has(schema)) {
+      seenLabels.add(schema);
+      completions.push({
+        label: schema,
+        kind: MonacoCompletionItemKind.Module,
+        insertText: schema,
+        detail: 'Schema',
+      });
+    }
   });
 
   tables.forEach((table) => {
     const { schema, name, columns = [] } = table;
 
-    completions.push({
-      label: schema,
-      kind: MonacoCompletionItemKind.Module,
-      insertText: schema,
-      detail: 'Schema',
-    });
+    // Add table name (unique)
+    if (!seenLabels.has(name)) {
+      seenLabels.add(name);
+      completions.push({
+        label: name,
+        kind: MonacoCompletionItemKind.Struct,
+        insertText: name,
+        detail: `Table in ${schema}`,
+      });
+    }
 
-    completions.push({
-      label: name,
-      kind: MonacoCompletionItemKind.Struct,
-      insertText: name,
-      detail: `Table in ${schema}`,
-    });
-
-    completions.push({
-      label: `${schema}.${name}`,
-      kind: MonacoCompletionItemKind.Struct,
-      insertText: `${schema}.${name}`,
-      detail: 'Qualified table name',
-    });
+    // Add qualified table name (always unique due to schema.table format)
+    const qualifiedTableName = `${schema}.${name}`;
+    if (!seenLabels.has(qualifiedTableName)) {
+      seenLabels.add(qualifiedTableName);
+      completions.push({
+        label: qualifiedTableName,
+        kind: MonacoCompletionItemKind.Struct,
+        insertText: qualifiedTableName,
+        detail: 'Qualified table name',
+      });
+    }
 
     columns.forEach((column) => {
-      completions.push({
-        label: column.name,
-        kind: MonacoCompletionItemKind.Field,
-        insertText: column.name,
-        detail: `Column in ${name}`,
-      });
+      // Add column name (deduplicated)
+      if (!seenLabels.has(column.name)) {
+        seenLabels.add(column.name);
+        completions.push({
+          label: column.name,
+          kind: MonacoCompletionItemKind.Field,
+          insertText: column.name,
+          detail: `Column`,
+        });
+      }
 
-      completions.push({
-        label: `${schema}.${name}.${column.name}`,
-        kind: MonacoCompletionItemKind.Value,
-        insertText: `${schema}.${name}.${column.name}`,
-        detail: 'Fully qualified column',
-      });
+      // Add fully qualified column (always unique due to schema.table.column format)
+      const fullyQualifiedColumn = `${schema}.${name}.${column.name}`;
+      if (!seenLabels.has(fullyQualifiedColumn)) {
+        seenLabels.add(fullyQualifiedColumn);
+        completions.push({
+          label: fullyQualifiedColumn,
+          kind: MonacoCompletionItemKind.Value,
+          insertText: fullyQualifiedColumn,
+          detail: 'Fully qualified column',
+        });
+      }
     });
   });
 
@@ -225,6 +260,27 @@ export const registerMonacoCompletionProvider = (
     } catch (err) {
       console.error('Error disposing previous completion provider:', err);
     }
+  }
+
+  // Clear ALL existing completion providers for SQL to prevent duplicates
+  try {
+    // Get all existing providers for 'sql' language and dispose them
+    const existingProviders = monaco?.languages?._completionProviders?.get?.('sql');
+    if (existingProviders && Array.isArray(existingProviders)) {
+      existingProviders.forEach((provider: any) => {
+        try {
+          if (provider && typeof provider.dispose === 'function') {
+            provider.dispose();
+          }
+        } catch (err) {
+          // Ignore disposal errors
+        }
+      });
+      // Clear the array
+      existingProviders.length = 0;
+    }
+  } catch (err) {
+    // Ignore errors accessing internal Monaco structures
   }
 
   // Register new provider

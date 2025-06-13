@@ -53,6 +53,7 @@ export const executePostgresQuery = async (
       success: true,
       data: result.rows,
       fields: result.fields.map((f) => ({ name: f.name, type: f.dataTypeID })),
+      rowCount: result.rowCount ?? undefined, // Convert null to undefined
     };
   } catch (err: any) {
     return { success: false, error: err?.message };
