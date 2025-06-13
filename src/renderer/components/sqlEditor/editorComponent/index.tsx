@@ -65,7 +65,7 @@ export const SqlEditorComponent: React.FC<Props> = ({
     const completionsChanged = prevCompletionsLengthRef.current !== completions.length;
     prevCompletionsLengthRef.current = completions.length;
 
-    if (completionsChanged || completionProviderVersion === 0) {
+    if (completionsChanged && completions.length > 0) {
       console.log(`Updating completions provider with ${completions.length} items`);
 
       // Use the utility function to register the provider
@@ -80,7 +80,7 @@ export const SqlEditorComponent: React.FC<Props> = ({
 
       // If there's an editor instance and completions were added,
       // force Monaco to refresh intellisense
-      if (editorRef?.current && completions.length > 0) {
+      if (editorRef?.current) {
         try {
           editorRef.current.trigger('', 'editor.action.triggerSuggest', {});
         } catch (err) {
@@ -88,7 +88,7 @@ export const SqlEditorComponent: React.FC<Props> = ({
         }
       }
     }
-  }, [completions, monacoLoaded, completionProviderVersion]);
+  }, [completions, monacoLoaded]);
 
   // Handle Monaco editor mounting
   const handleEditorMount: OnMount = (editor, monacoInstance) => {
@@ -98,15 +98,8 @@ export const SqlEditorComponent: React.FC<Props> = ({
     // Mark Monaco as loaded
     setMonacoLoaded(true);
 
-    // Initial registration of completion provider
-    completionProviderRef.current = utils.registerMonacoCompletionProvider(
-      monacoInstance,
-      completions,
-      null
-    );
-
-    // Update version to track provider changes
-    setCompletionProviderVersion(1);
+    // Don't register completion provider here - let the useEffect handle it
+    // This prevents double registration on mount
   };
 
   // Cleanup effect
