@@ -26,6 +26,7 @@ import DeleteIcon from '@mui/icons-material/Delete';
 import SearchOffIcon from '@mui/icons-material/SearchOff';
 import HelpOutlineIcon from '@mui/icons-material/HelpOutline';
 import DriveFolderUploadIcon from '@mui/icons-material/DriveFolderUpload';
+import DatabaseIcon from '@mui/icons-material/Storage';
 import { toast } from 'react-toastify';
 import { FolderOpen } from '@mui/icons-material';
 import { projectsServices } from '../../services';
@@ -37,7 +38,9 @@ import {
 } from '../../controllers';
 import { CloneRepoModal, Icon } from '../../components';
 import { icons, logo } from '../../../../assets';
+import connectionIcons from '../../../../assets/connectionIcons';
 import { AppLayout } from '../../layouts';
+import { SupportedConnectionTypes } from '../../../types/backend';
 
 const ProjectSelectionContainer = styled(Box)`
   padding: 0.5rem 2rem 2rem;
@@ -188,6 +191,38 @@ const TaglineLogo = styled('img')`
   width: auto;
 `;
 
+const ProjectIcon = styled('img')`
+  width: 24px;
+  height: 24px;
+  margin-right: 12px;
+  flex-shrink: 0;
+  border-radius: 4px;
+  object-fit: contain;
+`;
+
+const ProjectMuiIcon = styled(Box)`
+  width: 24px;
+  height: 24px;
+  margin-right: 12px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  .MuiSvgIcon-root {
+    width: 20px;
+    height: 20px;
+    color: ${({ theme }) => theme.palette.text.secondary};
+  }
+`;
+
+const ProjectCardContent = styled(Box)`
+  display: flex;
+  align-items: center;
+  flex-grow: 1;
+  overflow: hidden;
+`;
+
 const SelectProject: React.FC = () => {
   const navigate = useNavigate();
   const { data: settings } = useGetSettings();
@@ -220,6 +255,40 @@ const SelectProject: React.FC = () => {
       toast.info(`Project ${projectToDelete?.name} successfully deleted!`);
     },
   });
+
+  // Helper function to get connection icon
+  const getConnectionIcon = (project: any) => {
+    const connectionType = project?.dbtConnection?.type;
+
+    if (!connectionType) {
+      // Return null to indicate we should use MUI icon instead
+      return null;
+    }
+
+    return connectionIcons.images[connectionType as SupportedConnectionTypes];
+  };
+
+  // Helper function to render the appropriate icon component
+  const renderProjectIcon = (project: any) => {
+    const connectionIcon = getConnectionIcon(project);
+
+    if (connectionIcon) {
+      // Render image icon for connected projects
+      return (
+        <ProjectIcon
+          src={connectionIcon}
+          alt={project?.dbtConnection?.type || 'database'}
+        />
+      );
+    } else {
+      // Render MUI icon for disconnected projects
+      return (
+        <ProjectMuiIcon>
+          <DatabaseIcon />
+        </ProjectMuiIcon>
+      );
+    }
+  };
 
   const handleOpenMenu = (
     event: React.MouseEvent<HTMLElement>,
@@ -304,10 +373,10 @@ const SelectProject: React.FC = () => {
         name: `${defaultProjectPath}/${newProject.name}`,
       });
       await projectsServices.selectProject({ projectId: project.id });
-      navigate('/app');
       toast.success(`Project ${project.name} created successfully!`);
       setIsAddingProject(false);
       setNewProject({ name: '' });
+      navigate('/app/loading');
     } catch (error) {
       toast.error('Failed to create project. Please try again.');
     }
@@ -372,13 +441,15 @@ const SelectProject: React.FC = () => {
                 projectId: project.id,
               });
               navigate('/app/loading');
-
             }}
           >
-            <ProjectInfo>
-              <ProjectTitle variant="body1">{project.name}</ProjectTitle>
-              <ProjectPath>{project.path || 'No path specified'}</ProjectPath>
-            </ProjectInfo>
+            <ProjectCardContent>
+              {renderProjectIcon(project)}
+              <ProjectInfo>
+                <ProjectTitle variant="body1">{project.name}</ProjectTitle>
+                <ProjectPath>{project.path || 'No path specified'}</ProjectPath>
+              </ProjectInfo>
+            </ProjectCardContent>
             <ProjectActions>
               <IconButton
                 size="small"
@@ -550,9 +621,19 @@ const SelectProject: React.FC = () => {
                           });
                           setIsAddingProject(false);
                           setNewProject({ name: '' });
+                          toast.success(
+                            `Project ${project.name} loaded successfully!`,
+                          );
+                          navigate('/app/loading');
+                        } else {
+                          toast.error('Failed to load project from folder.');
                         }
                       } catch (error) {
                         // Show toast message instead of throwing an error
+                        toast.error(
+                          'Failed to load project from folder. Please try again.',
+                        );
+                        console.error('Error loading project from folder:', error);
                       }
                     }}
                   >
