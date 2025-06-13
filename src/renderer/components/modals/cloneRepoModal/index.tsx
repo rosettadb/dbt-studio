@@ -50,7 +50,7 @@ export const CloneRepoModal: React.FC<Props> = ({
               name,
             });
             await projectsServices.selectProject({ projectId: project.id });
-            navigate(`/app`);
+            navigate(`/app/loading`);
             successCallback?.();
           } catch (err: any) {
             toast.error(err.message);
