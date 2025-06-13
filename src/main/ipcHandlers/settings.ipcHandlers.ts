@@ -48,11 +48,17 @@ const registerSettingsHandlers = (mainWindow: BrowserWindow) => {
       {
         properties,
         defaultPath,
-      }: { properties: FileDialogProperties[]; defaultPath?: string },
+        filters,
+      }: {
+        properties: FileDialogProperties[];
+        defaultPath?: string;
+        filters?: { name: string; extensions: string[] }[];
+      },
     ) => {
       const result = await dialog.showOpenDialog(mainWindow, {
         properties,
         defaultPath,
+        filters,
       });
       return result.filePaths;
     },
