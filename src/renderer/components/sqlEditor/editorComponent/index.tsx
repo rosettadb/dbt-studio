@@ -15,7 +15,6 @@ type Props = {
   setContent: (value: string) => void;
   completions?: Omit<CompletionItem, 'range'>[];
   editorRef?: React.MutableRefObject<monaco.editor.IStandaloneCodeEditor | null>;
-  onRunSelected?: (query: string) => void;
 };
 
 export const SqlEditorComponent: React.FC<Props> = ({
@@ -24,7 +23,6 @@ export const SqlEditorComponent: React.FC<Props> = ({
   setContent,
   completions = [],
   editorRef,
-  onRunSelected,
 }) => {
   const theme = useTheme();
   const isDarkMode = theme.palette.mode === 'dark';
@@ -44,83 +42,18 @@ export const SqlEditorComponent: React.FC<Props> = ({
   });
 
   const saveDebounce = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const decorationIdsRef = useRef<string[]>([]);
 
   const handleChange: OnChange = (value) => {
     if (value === undefined) return;
     setContent(value);
 
     if (saveDebounce.current) clearTimeout(saveDebounce.current);
+
     saveDebounce.current = setTimeout(() => {
       if (filePath) {
         projectsServices.saveFileContent({ path: filePath, content: value });
       }
     }, 500);
-  };
-
-  const extractQueryBlock = (
-    model: monaco.editor.ITextModel,
-    lineNumber: number,
-  ) => {
-    const totalLines = model.getLineCount();
-    let start = lineNumber;
-    let end = lineNumber;
-
-    // Expand upward
-    for (let i = lineNumber - 1; i >= 1; i--) {
-      const line = model.getLineContent(i).trim();
-      if (line === '') break;
-      start = i;
-    }
-
-    // Expand downward
-    for (let i = lineNumber + 1; i <= totalLines; i++) {
-      const line = model.getLineContent(i).trim();
-      if (line === '') break;
-      end = i;
-    }
-
-    return model
-      .getValueInRange(
-        new monaco.Range(start, 1, end, model.getLineMaxColumn(end)),
-      )
-      .trim();
-  };
-
-  const addRunIconsToBlocks = (editor: monaco.editor.IStandaloneCodeEditor) => {
-    const model = editor.getModel();
-    const monacoInstance = monacoInstanceRef.current;
-    if (!model || !monacoInstance) return;
-
-    const totalLines = model.getLineCount();
-    const newDecorations: monaco.editor.IModelDeltaDecoration[] = [];
-
-    let isInsideBlock = false;
-    for (let i = 1; i <= totalLines; i++) {
-      const line = model.getLineContent(i).trim();
-
-      if (line === '') {
-        isInsideBlock = false;
-        continue;
-      }
-
-      if (!isInsideBlock) {
-        newDecorations.push({
-          range: new monacoInstance.Range(i, 1, i, 1),
-          options: {
-            isWholeLine: true,
-            glyphMarginClassName: 'run-query-glyph',
-            glyphMarginHoverMessage: { value: '▶ Run this query block' },
-          },
-        });
-        isInsideBlock = true;
-      }
-    }
-
-    decorationIdsRef.current = editor.deltaDecorations(
-      decorationIdsRef.current,
-      newDecorations,
-    );
   };
 
   // Update completion provider when completions change
@@ -174,27 +107,6 @@ export const SqlEditorComponent: React.FC<Props> = ({
 
     // Update version to track provider changes
     setCompletionProviderVersion(1);
-
-    addRunIconsToBlocks(editor);
-
-    editor.onDidChangeModelContent(() => {
-      setTimeout(() => addRunIconsToBlocks(editor), 150);
-    });
-
-    editor.onMouseDown((e) => {
-      if (
-        e.target.type ===
-          monacoInstance.editor.MouseTargetType.GUTTER_GLYPH_MARGIN &&
-        onRunSelected
-      ) {
-        const lineNumber = e.target.position?.lineNumber;
-        const model = editor.getModel();
-        if (!lineNumber || !model) return;
-
-        const query = extractQueryBlock(model, lineNumber);
-        if (query) onRunSelected(query);
-      }
-    });
   };
 
   // Cleanup effect
@@ -220,11 +132,11 @@ export const SqlEditorComponent: React.FC<Props> = ({
         loading={<Shimmer text="Loading editor..." />}
         options={{
           fontSize: 14,
-          glyphMargin: true,
           minimap: { enabled: false },
           lineNumbers: 'on',
           scrollBeyondLastLine: false,
           automaticLayout: true,
+          glyphMargin: false, // Disable glyph margin since we don't need run icons
         }}
         key={`monaco-editor-${completionProviderVersion}`}
       />
