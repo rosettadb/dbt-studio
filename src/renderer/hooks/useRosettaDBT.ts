@@ -5,7 +5,7 @@ import { useGetSettings } from '../controllers';
 import { Project } from '../../types/backend';
 import { projectsServices, settingsServices } from '../services';
 
-const useRosettaDBT = (successCallback: () => void) => {
+const useRosettaDBT = (successCallback: () => Promise<void>) => {
   const { data: settings } = useGetSettings();
   const { error, runCommand } = useCli();
   const [isSuccess, setIsSuccess] = React.useState(false);
@@ -18,10 +18,13 @@ const useRosettaDBT = (successCallback: () => void) => {
       setIsRunning(false);
       return;
     }
-    if (isSuccess) {
+    const handleSuccess = async () => {
+      await successCallback();
       toast.success('Rosetta dbt completed successfully');
-      successCallback();
       setIsRunning(false);
+    };
+    if (isSuccess) {
+      handleSuccess();
     }
   }, [isSuccess, error]);
 

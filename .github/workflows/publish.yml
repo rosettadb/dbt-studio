@@ -6,45 +6,14 @@ on:
       - main
 
 jobs:
-#  publish-mac-arm64:
-#    runs-on: macos-latest
-#    steps:
-#      - name: Checkout code
-#        uses: actions/checkout@v3
-#
-#      - name: Install Node.js
-#        uses: actions/setup-node@v3
-#        with:
-#          node-version: 18
-#          cache: npm
-#
-#      - name: Install dependencies
-#        run: |
-#          npm install
-#          npm run postinstall
-#
-#      - name: Build project
-#        run: npm run build
-#
-#      - name: Publish for macOS ARM64
-#        env:
-#          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-#          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_ID_PASS }}
-#          APPLE_ID: ${{ secrets.APPLE_ID }}
-#          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
-#          CSC_LINK: ${{ secrets.CSC_LINK }}
-#          CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
-#        run: |
-#          npm exec electron-builder -- --publish always --mac --arm64
-
-  publish-mac-x64:
-    runs-on: macos-13  # Intel-based runners
+  publish-mac-arm64:
+    runs-on: macos-latest
     steps:
       - name: Checkout code
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
       - name: Install Node.js
-        uses: actions/setup-node@v3
+        uses: actions/setup-node@v4
         with:
           node-version: 18
           cache: npm
@@ -57,25 +26,105 @@ jobs:
       - name: Build project
         run: npm run build
 
-      - name: Publish for macOS x64
+      - name: Build for macOS ARM64 (no publish yet)
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_ID_PASS }}
           APPLE_ID: ${{ secrets.APPLE_ID }}
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
           CSC_LINK: ${{ secrets.CSC_LINK }}
           CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
         run: |
-          npm exec electron-builder -- --publish always --mac --x64
+          npm exec electron-builder -- --publish never --mac --arm64
+
+      - name: Filter ARM64 artifacts only
+        run: |
+          cd dist
+
+          # Remove all files that DON'T contain -arm64
+          find . -name "*.dmg" ! -name "*-arm64*" -type f -delete
+          find . -name "*.zip" ! -name "*-arm64*" -type f -delete
+          find . -name "*.blockmap" ! -name "*-arm64*" -type f -delete
+
+          echo "Files kept for ARM64 build:"
+          ls -la *arm64* 2>/dev/null || echo "No ARM64 files found"
+
+      - name: Upload ARM64 artifacts to GitHub Releases
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          cd dist
+          # Upload only ARM64 files
+          for file in *arm64*; do
+            if [[ -f "$file" ]]; then
+              echo "Uploading ARM64 file: $file"
+              gh release upload ${{ github.ref_name }} "$file" --clobber
+            fi
+          done
+
+  publish-mac-x64:
+    runs-on: macos-13  # Intel-based runners
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 18
+          cache: npm
+
+      - name: Install dependencies
+        run: |
+          npm install
+          npm run postinstall
+
+      - name: Build project
+        run: npm run build
+
+      - name: Build for macOS x64 (no publish yet)
+        env:
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_ID_PASS }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          CSC_LINK: ${{ secrets.CSC_LINK }}
+          CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
+        run: |
+          npm exec electron-builder -- --publish never --mac --x64
+
+      - name: Filter x64 artifacts only
+        run: |
+          cd dist
+
+          # Remove all ARM64 files (files containing -arm64)
+          find . -name "*-arm64*" -type f -delete
+
+          # Remove any other architecture-specific files that might exist
+          find . -name "*.dmg" -name "*-x64*" -type f -delete  # Remove x64 suffix if any
+
+          echo "Files kept for x64 build:"
+          ls -la *.dmg *.zip 2>/dev/null || echo "No files found"
+
+      - name: Upload x64 artifacts to GitHub Releases
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          cd dist
+          # Upload the main DMG and ZIP (without arm64 in name)
+          for file in *.dmg *.zip; do
+            if [[ -f "$file" ]] && [[ ! "$file" =~ arm64 ]]; then
+              echo "Uploading x64 file: $file"
+              gh release upload ${{ github.ref_name }} "$file" --clobber
+            fi
+          done
 
   publish-windows:
     runs-on: windows-latest
     steps:
       - name: Checkout code
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
       - name: Install Node.js
-        uses: actions/setup-node@v3
+        uses: actions/setup-node@v4
         with:
           node-version: 18
           cache: npm
@@ -98,10 +147,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
       - name: Install Node.js
-        uses: actions/setup-node@v3
+        uses: actions/setup-node@v4
         with:
           node-version: 18
           cache: npm

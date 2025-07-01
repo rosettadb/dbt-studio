@@ -306,7 +306,12 @@ export default class ProjectsService {
     const targetPath = path.join(project.path, 'models');
 
     if (fs.existsSync(targetPath)) {
-      await fs.promises.rm(targetPath, { recursive: true, force: true });
+      await fs.promises.rm(targetPath, {
+        recursive: true,
+        force: true,
+        maxRetries: 3,
+        retryDelay: 100,
+      });
     }
     await fs.promises.mkdir(targetPath, { recursive: true });
 
