@@ -3,14 +3,14 @@ import fs from 'fs';
 import yaml from 'js-yaml';
 import { dialog } from 'electron';
 import {
+  BigQueryDBTConnection,
   DatabricksDBTConnection,
+  DuckDBDBTConnection,
   PostgresDBTConnection,
   Project,
+  RedshiftDBTConnection,
   SnowflakeDBTConnection,
   Table,
-  BigQueryDBTConnection,
-  DuckDBDBTConnection,
-  RedshiftDBTConnection,
 } from '../../types/backend';
 import {
   createNewFile,
@@ -26,12 +26,12 @@ import {
 } from '../utils/fileHelper';
 import SettingsService from './settings.service';
 import {
-  PGSchemaExtractor,
-  SnowflakeExtractor,
-  DatabricksExtractor,
   BigQueryExtractor,
+  DatabricksExtractor,
   DuckDBExtractor,
+  PGSchemaExtractor,
   RedshiftExtractor,
+  SnowflakeExtractor,
 } from '../extractor';
 
 export default class ProjectsService {
@@ -53,7 +53,9 @@ export default class ProjectsService {
   }
 
   static async getSelectedProject(): Promise<Project | undefined> {
-    return (await loadDatabaseFile()).selectedProject;
+    const projects = await this.loadProjects();
+    const selected = (await loadDatabaseFile()).selectedProject;
+    return projects?.find((p) => p.id === selected?.id);
   }
 
   static async saveProjects(projects: Project[]) {
@@ -434,8 +436,7 @@ export default class ProjectsService {
     };
 
     try {
-      const credentials = JSON.parse(connection.keyfile);
-      config.credentials = credentials;
+      config.credentials = JSON.parse(connection.keyfile);
     } catch (err) {
       throw new Error('Invalid service account key JSON');
     }
