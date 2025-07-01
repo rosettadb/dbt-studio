@@ -38,7 +38,7 @@ jobs:
           npm exec electron-builder -- --publish always --mac --arm64
 
   publish-mac-x64:
-    runs-on: macos-latest
+    runs-on: macos-13  # Intel-based runners
     steps:
       - name: Checkout code
         uses: actions/checkout@v3
