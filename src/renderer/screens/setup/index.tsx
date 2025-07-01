@@ -81,15 +81,6 @@ const Setup: React.FC = () => {
       )}
       {currentStep === 1 && <FinishSetup settings={settings} />}
       <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-        {currentStep > 0 && (
-          <Button
-            variant="outlined"
-            disabled={currentStep === 0}
-            onClick={() => setCurrentStep(currentStep - 1)}
-          >
-            Previous
-          </Button>
-        )}
         <Button
           variant="contained"
           disabled={currentStep === 0 && !settings.dbtPath}

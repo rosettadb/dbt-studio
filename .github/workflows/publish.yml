@@ -6,7 +6,7 @@ on:
       - main
 
 jobs:
-  publish-mac:
+  publish-mac-arm64:
     runs-on: macos-latest
     steps:
       - name: Checkout code
@@ -26,7 +26,7 @@ jobs:
       - name: Build project
         run: npm run build
 
-      - name: Publish for macOS
+      - name: Publish for macOS ARM64
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_ID_PASS }}
@@ -35,7 +35,38 @@ jobs:
           CSC_LINK: ${{ secrets.CSC_LINK }}
           CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
         run: |
-          npm exec electron-builder -- --publish always --mac
+          npm exec electron-builder -- --publish always --mac --arm64
+
+  publish-mac-x64:
+    runs-on: macos-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Install Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: 18
+          cache: npm
+
+      - name: Install dependencies
+        run: |
+          npm install
+          npm run postinstall
+
+      - name: Build project
+        run: npm run build
+
+      - name: Publish for macOS x64
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_ID_PASS }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          CSC_LINK: ${{ secrets.CSC_LINK }}
+          CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
+        run: |
+          npm exec electron-builder -- --publish always --mac --x64
 
   publish-windows:
     runs-on: windows-latest

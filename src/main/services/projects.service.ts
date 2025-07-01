@@ -2,7 +2,6 @@ import path from 'path';
 import fs from 'fs';
 import yaml from 'js-yaml';
 import { dialog } from 'electron';
-import { OAuth2Client } from 'google-auth-library';
 import {
   DatabricksDBTConnection,
   PostgresDBTConnection,
