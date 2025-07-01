@@ -73,12 +73,27 @@ jobs:
         run: |
           cd "$BUILD_DIR"
 
-          # Upload only ARM64 files to the same release as Windows/Linux
+          # Extract version from package.json and create release tag
+          VERSION=$(node -p "require('./package.json').version")
+          RELEASE_TAG=$(echo "$VERSION" | sed 's/-beta$//' | sed 's/-alpha$//' | sed 's/-rc.*$//')
+
+          echo "App version: $VERSION"
+          echo "Release tag: $RELEASE_TAG"
+
+          # Check if draft release exists, create if not
+          if ! gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
+            echo "Draft release $RELEASE_TAG does not exist, creating it..."
+            gh release create "$RELEASE_TAG" --title "Release $RELEASE_TAG" --notes "Release $RELEASE_TAG" --draft
+          else
+            echo "Found existing release: $RELEASE_TAG"
+          fi
+
+          # Upload only ARM64 files to the draft release
           uploaded=false
           for file in *arm64*; do
             if [[ -f "$file" ]]; then
-              echo "Uploading ARM64 file: $file"
-              gh release upload ${{ github.ref_name }} "$file" --clobber
+              echo "Uploading ARM64 file: $file to release $RELEASE_TAG"
+              gh release upload "$RELEASE_TAG" "$file" --clobber
               uploaded=true
             fi
           done
@@ -86,6 +101,9 @@ jobs:
           if [ "$uploaded" = false ]; then
             echo "Warning: No ARM64 files found to upload"
             ls -la
+          else
+            echo "Upload completed. Checking release:"
+            gh release view "$RELEASE_TAG"
           fi
 
   publish-mac-x64:
@@ -156,12 +174,27 @@ jobs:
         run: |
           cd "$BUILD_DIR"
 
-          # Upload x64 files to the same release as Windows/Linux
+          # Extract version from package.json and create release tag
+          VERSION=$(node -p "require('./package.json').version")
+          RELEASE_TAG=$(echo "$VERSION" | sed 's/-beta$//' | sed 's/-alpha$//' | sed 's/-rc.*$//')
+
+          echo "App version: $VERSION"
+          echo "Release tag: $RELEASE_TAG"
+
+          # Check if draft release exists, create if not
+          if ! gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
+            echo "Draft release $RELEASE_TAG does not exist, creating it..."
+            gh release create "$RELEASE_TAG" --title "Release $RELEASE_TAG" --notes "Release $RELEASE_TAG" --draft
+          else
+            echo "Found existing release: $RELEASE_TAG"
+          fi
+
+          # Upload x64 files to the draft release
           uploaded=false
           for file in *.dmg *.zip; do
             if [[ -f "$file" ]] && [[ ! "$file" =~ arm64 ]]; then
-              echo "Uploading x64 file: $file"
-              gh release upload ${{ github.ref_name }} "$file" --clobber
+              echo "Uploading x64 file: $file to release $RELEASE_TAG"
+              gh release upload "$RELEASE_TAG" "$file" --clobber
               uploaded=true
             fi
           done
@@ -169,7 +202,11 @@ jobs:
           if [ "$uploaded" = false ]; then
             echo "Warning: No x64 files found to upload"
             ls -la
-          fi
+          else
+            echo "Upload completed. Checking release:"
+            gh release view "$RELEASE_TAG"
+          fifi
+          done
 
   publish-windows:
     runs-on: windows-latest

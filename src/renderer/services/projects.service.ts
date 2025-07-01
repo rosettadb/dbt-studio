@@ -223,10 +223,6 @@ export const stopProcess = async (): Promise<void> => {
   await client.get('process:stop');
 };
 
-export const fileSync = async (project: Project): Promise<void> => {
-  await client.post<Project, void>('cli:run', project);
-};
-
 export const generateDashboardQuery = async (
   prompt: string,
 ): Promise<GenerateDashboardResponseType[]> => {

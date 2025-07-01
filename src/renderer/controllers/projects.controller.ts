@@ -32,11 +32,7 @@ export const useGetSelectedProject = (
   return useQuery({
     queryKey: [QUERY_KEYS.GET_SELECTED_PROJECT],
     queryFn: async () => {
-      const project = await projectsServices.getSelectedProject();
-      if (project) {
-        await projectsServices.fileSync(project);
-      }
-      return project;
+      return projectsServices.getSelectedProject();
     },
     ...customOptions,
   });

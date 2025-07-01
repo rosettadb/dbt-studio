@@ -48,7 +48,7 @@ import { AppContext } from '../../context';
 
 const ProjectDetails: React.FC = () => {
   const navigate = useNavigate();
-  const { data: project, isLoading } = useGetSelectedProject();
+  const { data: project, isLoading, refetch } = useGetSelectedProject();
   const { data: settings } = useGetSettings();
   const { isAiProviderSet } = React.useContext(AppContext);
   const [queryData, setQueryData] = React.useState<
@@ -71,9 +71,12 @@ const ProjectDetails: React.FC = () => {
   const { fn: rosettaDbt, isRunning: isRunningRosettaDbt } = useRosettaDBT(
     async () => {
       if (project) {
-        await new Promise((resolve) => setTimeout(resolve, 2000));
+        await new Promise((resolve) => {
+          setTimeout(resolve, 2000);
+        });
         await projectsServices.postRosettaDBTCopy(project);
         await fetchDirectories();
+        refetch();
       }
     },
   );
