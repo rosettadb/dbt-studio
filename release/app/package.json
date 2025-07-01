@@ -1,6 +1,6 @@
 {
   "name": "rosetta-dbt-studio",
-  "version": "1.0.11-beta",
+  "version": "1.0.12-beta",
   "description": "A modern DBT desktop IDE",
   "license": "MIT",
   "author": {
