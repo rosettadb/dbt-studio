@@ -478,7 +478,9 @@ const ProjectDetails: React.FC = () => {
                       menuItems={[
                         {
                           name: 'Auto-Fix Incremental & Unique Key Columns',
-                          onClick: isAiProviderSet ? enhanceModel : () => setNoAiSetModal(true),
+                          onClick: isAiProviderSet
+                            ? enhanceModel
+                            : () => setNoAiSetModal(true),
                           subTitle: '',
                         },
                       ]}
@@ -494,7 +496,9 @@ const ProjectDetails: React.FC = () => {
                       menuItems={[
                         {
                           name: 'Suggest Basic Transformations',
-                          onClick: isAiProviderSet ? enhanceStagingModel : () => setNoAiSetModal(true),
+                          onClick: isAiProviderSet
+                            ? enhanceStagingModel
+                            : () => setNoAiSetModal(true),
                           subTitle: '',
                         },
                       ]}
@@ -509,7 +513,9 @@ const ProjectDetails: React.FC = () => {
                       menuItems={[
                         {
                           name: 'Generate Dashboards',
-                          onClick: isAiProviderSet ? generateDashboards : () => setNoAiSetModal(true),
+                          onClick: isAiProviderSet
+                            ? generateDashboards
+                            : () => setNoAiSetModal(true),
                           subTitle: '',
                         },
                       ]}

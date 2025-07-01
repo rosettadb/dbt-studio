@@ -72,7 +72,9 @@ const useCli = () => {
     };
   }, []);
 
-  const runCommand = async (command: string): Promise<{ output: string[]; error: string[] }> => {
+  const runCommand = async (
+    command: string,
+  ): Promise<{ output: string[]; error: string[] }> => {
     // Prevent multiple concurrent commands
     if (commandInProgressRef.current) {
       throw new Error('Another command is already running');
@@ -87,71 +89,83 @@ const useCli = () => {
       isSuccess: null,
     });
 
-    return new Promise<{ output: string[]; error: string[] }>((resolve, reject) => {
-      let currentOutput: string[] = [];
-      let currentError: string[] = [];
-      let resolved = false;
+    return new Promise<{ output: string[]; error: string[] }>(
+      (resolve, reject) => {
+        let currentOutput: string[] = [];
+        let currentError: string[] = [];
+        let resolved = false;
 
-      const handleOutput = (msg: any) => {
-        if (!resolved) {
-          currentOutput = [...currentOutput, msg];
-          setCliState((prev) => ({ ...prev, output: [...prev.output, msg] }));
-        }
-      };
+        const handleOutput = (msg: any) => {
+          if (!resolved) {
+            currentOutput = [...currentOutput, msg];
+            setCliState((prev) => ({ ...prev, output: [...prev.output, msg] }));
+          }
+        };
 
-      const handleError = (err: any) => {
-        if (!resolved) {
-          currentError = [...currentError, err];
-          setCliState((prev) => ({
-            ...prev,
-            error: [...prev.error, err],
-            isRunning: false,
-            isSuccess: false,
-          }));
-        }
-      };
+        const handleError = (err: any) => {
+          if (!resolved) {
+            currentError = [...currentError, err];
+            setCliState((prev) => ({
+              ...prev,
+              error: [...prev.error, err],
+              isRunning: false,
+              isSuccess: false,
+            }));
+          }
+        };
 
-      const cleanup = () => {
-        if (!resolved) {
-          resolved = true;
-          commandInProgressRef.current = false;
-          clearTimeout(timeoutId);
-          window.electron.ipcRenderer.removeListener('cli:output', handleOutput);
-          window.electron.ipcRenderer.removeListener('cli:error', handleError);
-          window.electron.ipcRenderer.removeListener('cli:done', handleDone);
-        }
-      };
+        const cleanup = () => {
+          if (!resolved) {
+            resolved = true;
+            commandInProgressRef.current = false;
+            clearTimeout(timeoutId);
+            window.electron.ipcRenderer.removeListener(
+              'cli:output',
+              handleOutput,
+            );
+            window.electron.ipcRenderer.removeListener(
+              'cli:error',
+              handleError,
+            );
+            window.electron.ipcRenderer.removeListener('cli:done', handleDone);
+          }
+        };
 
-      const handleDone = () => {
-        if (!resolved) {
-          cleanup();
-          setCliState((prev) => ({ ...prev, isRunning: false, isSuccess: true }));
-          resolve({
-            output: currentOutput,
-            error: currentError
-          });
-        }
-      };
+        const handleDone = () => {
+          if (!resolved) {
+            cleanup();
+            setCliState((prev) => ({
+              ...prev,
+              isRunning: false,
+              isSuccess: true,
+            }));
+            resolve({
+              output: currentOutput,
+              error: currentError,
+            });
+          }
+        };
 
-      // Add timeout to prevent hanging
-      const timeoutId = setTimeout(() => {
-        if (!resolved) {
-          cleanup();
-          reject(new Error('Command timeout'));
-        }
-      }, 60000); // 60 second timeout
+        // Add timeout to prevent hanging
+        const timeoutId = setTimeout(() => {
+          if (!resolved) {
+            cleanup();
+            reject(new Error('Command timeout'));
+          }
+        }, 60000); // 60 second timeout
 
-      window.electron.ipcRenderer.on('cli:output', handleOutput);
-      window.electron.ipcRenderer.on('cli:error', handleError);
-      window.electron.ipcRenderer.on('cli:done', handleDone);
+        window.electron.ipcRenderer.on('cli:output', handleOutput);
+        window.electron.ipcRenderer.on('cli:error', handleError);
+        window.electron.ipcRenderer.on('cli:done', handleDone);
 
-      projectsServices.runCliCommand(command).catch((err) => {
-        if (!resolved) {
-          cleanup();
-          reject(new Error(err.message || 'Command failed'));
-        }
-      });
-    });
+        projectsServices.runCliCommand(command).catch((err) => {
+          if (!resolved) {
+            cleanup();
+            reject(new Error(err.message || 'Command failed'));
+          }
+        });
+      },
+    );
   };
 
   const sendInput = (input: string) => {

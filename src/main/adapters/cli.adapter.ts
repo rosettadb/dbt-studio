@@ -81,7 +81,7 @@ class CliAdapter {
             },
             mainWindow,
           );
-          resolve();
+          reject();
         }
       });
 
