@@ -1,6 +1,6 @@
 import { BrowserWindow, shell, app, screen, Menu } from 'electron';
 import path from 'path';
-import { AppUpdater, resolveHtmlPath } from '../../utils/setupHelpers';
+import { resolveHtmlPath } from '../../utils/setupHelpers';
 
 export const createMainWindow = (
   onCloseCallback: () => void,
@@ -50,9 +50,6 @@ export const createMainWindow = (
     shell.openExternal(edata.url);
     return { action: 'deny' };
   });
-
-  // eslint-disable-next-line no-new
-  new AppUpdater();
 
   return mainWindow;
 };

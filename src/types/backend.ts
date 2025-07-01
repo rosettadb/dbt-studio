@@ -320,3 +320,16 @@ export type FileStatus = {
 export type BigQueryTestResponse = {
   success: boolean;
 };
+
+export type UpdateInfo = {
+  currentVersion: string;
+  newVersion: string;
+  releaseNotes: string;
+};
+
+export type UpdateSettingsInfo = {
+  currentVersion: string;
+  newVersion: string;
+  lastInstalledVersion: string;
+  releaseNotes: string;
+};
