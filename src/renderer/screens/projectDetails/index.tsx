@@ -71,7 +71,9 @@ const ProjectDetails: React.FC = () => {
   const { fn: rosettaDbt, isRunning: isRunningRosettaDbt } = useRosettaDBT(
     async () => {
       if (project) {
-        await new Promise((resolve) => setTimeout(resolve, 2000));
+        await new Promise((resolve) => {
+          setTimeout(resolve, 2000);
+        });
         await projectsServices.postRosettaDBTCopy(project);
         await fetchDirectories();
       }
