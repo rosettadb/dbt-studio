@@ -36,9 +36,25 @@ jobs:
         run: |
           npm exec electron-builder -- --publish never --mac --arm64
 
-      - name: Filter ARM64 artifacts only
+      - name: Find and filter ARM64 artifacts
         run: |
-          cd dist
+          # Electron-builder is using release/build/ as output directory
+          BUILD_DIR="release/build"
+
+          echo "Using build directory: $BUILD_DIR"
+
+          if [ ! -d "$BUILD_DIR" ]; then
+            echo "Error: Build directory $BUILD_DIR not found"
+            echo "Current directory contents:"
+            ls -la
+            echo "Searching for build artifacts..."
+            find . -name "*.dmg" -o -name "*.zip" | head -10
+            exit 1
+          fi
+
+          cd "$BUILD_DIR"
+          echo "Build directory contents:"
+          ls -la
 
           # Remove all files that DON'T contain -arm64
           find . -name "*.dmg" ! -name "*-arm64*" -type f -delete
@@ -48,18 +64,35 @@ jobs:
           echo "Files kept for ARM64 build:"
           ls -la *arm64* 2>/dev/null || echo "No ARM64 files found"
 
+          # Store the build directory for next step
+          echo "BUILD_DIR=$BUILD_DIR" >> $GITHUB_ENV
+
       - name: Upload ARM64 artifacts to GitHub Releases
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          cd dist
+          cd "$BUILD_DIR"
+
+          # Create release if it doesn't exist
+          if ! gh release view ${{ github.ref_name }} >/dev/null 2>&1; then
+            echo "Creating release ${{ github.ref_name }}"
+            gh release create ${{ github.ref_name }} --title "Release ${{ github.ref_name }}" --notes "Automated release"
+          fi
+
           # Upload only ARM64 files
+          uploaded=false
           for file in *arm64*; do
             if [[ -f "$file" ]]; then
               echo "Uploading ARM64 file: $file"
               gh release upload ${{ github.ref_name }} "$file" --clobber
+              uploaded=true
             fi
           done
+
+          if [ "$uploaded" = false ]; then
+            echo "Warning: No ARM64 files found to upload"
+            ls -la
+          fi
 
   publish-mac-x64:
     runs-on: macos-13  # Intel-based runners
@@ -91,9 +124,25 @@ jobs:
         run: |
           npm exec electron-builder -- --publish never --mac --x64
 
-      - name: Filter x64 artifacts only
+      - name: Find and filter x64 artifacts
         run: |
-          cd dist
+          # Electron-builder is using release/build/ as output directory
+          BUILD_DIR="release/build"
+
+          echo "Using build directory: $BUILD_DIR"
+
+          if [ ! -d "$BUILD_DIR" ]; then
+            echo "Error: Build directory $BUILD_DIR not found"
+            echo "Current directory contents:"
+            ls -la
+            echo "Searching for build artifacts..."
+            find . -name "*.dmg" -o -name "*.zip" | head -10
+            exit 1
+          fi
+
+          cd "$BUILD_DIR"
+          echo "Build directory contents:"
+          ls -la
 
           # Remove all ARM64 files (files containing -arm64)
           find . -name "*-arm64*" -type f -delete
@@ -104,17 +153,35 @@ jobs:
           echo "Files kept for x64 build:"
           ls -la *.dmg *.zip 2>/dev/null || echo "No files found"
 
+          # Store the build directory for next step
+          echo "BUILD_DIR=$BUILD_DIR" >> $GITHUB_ENV
+
       - name: Upload x64 artifacts to GitHub Releases
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          cd dist
+          cd "$BUILD_DIR"
+
+          # Create release if it doesn't exist
+          if ! gh release view ${{ github.ref_name }} >/dev/null 2>&1; then
+            echo "Creating release ${{ github.ref_name }}"
+            gh release create ${{ github.ref_name }} --title "Release ${{ github.ref_name }}" --notes "Automated release"
+          fi
+
           # Upload the main DMG and ZIP (without arm64 in name)
+          uploaded=false
           for file in *.dmg *.zip; do
             if [[ -f "$file" ]] && [[ ! "$file" =~ arm64 ]]; then
               echo "Uploading x64 file: $file"
               gh release upload ${{ github.ref_name }} "$file" --clobber
+              uploaded=true
             fi
+          done
+
+          if [ "$uploaded" = false ]; then
+            echo "Warning: No x64 files found to upload"
+            ls -la
+          fifi
           done
 
   publish-windows:
