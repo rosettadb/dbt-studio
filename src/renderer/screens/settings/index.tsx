@@ -118,12 +118,7 @@ const Settings: React.FC = () => {
           />
         );
       case 'ai-providers':
-        return (
-          <AIProviderSettings
-            settings={localSettings}
-            onSettingsChange={handleChange}
-          />
-        );
+        return <AIProviderSettings />;
       case 'dbt':
         return (
           <DbtSettings
@@ -259,7 +254,7 @@ const Settings: React.FC = () => {
           </div>
           <div style={{ maxWidth: '600px' }}>{renderContent()}</div>
 
-          {currentSection !== 'about' && (
+          {currentSection !== 'about' && currentSection !== 'ai-providers' && (
             <Box sx={{ mt: 3 }}>
               <Button
                 type="submit"

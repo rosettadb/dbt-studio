@@ -87,6 +87,11 @@ export type ProcessChannels =
   | 'process:output'
   | 'process:error';
 
+export type SecureStorageChannels =
+  | 'secure-storage:set'
+  | 'secure-storage:get'
+  | 'secure-storage:delete';
+
 export type Channels =
   | TestChannels
   | CliChannels
@@ -95,7 +100,8 @@ export type Channels =
   | ConnectorChannels
   | GitChannels
   | UtilChannels
-  | ProcessChannels;
+  | ProcessChannels
+  | SecureStorageChannels;
 
 export type ConfigureConnectionBody = {
   projectId: string;

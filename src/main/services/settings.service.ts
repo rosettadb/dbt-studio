@@ -5,16 +5,16 @@ import { app } from 'electron';
 import os from 'os';
 import AdmZip from 'adm-zip';
 import * as tar from 'tar';
-import yaml from 'js-yaml';
+// import yaml from 'js-yaml';
 import {
   loadDatabaseFile,
   loadDefaultSettings,
-  readFileContent,
-  saveFileContent,
+  // readFileContent,
+  // saveFileContent,
   updateDatabase,
 } from '../utils/fileHelper';
 import { CliUpdateResponseType, SettingsType } from '../../types/backend';
-import { ProjectsService } from './index';
+// import { ProjectsService } from './index';
 import { CliAdapter } from '../adapters';
 
 const cliConfig: Record<
@@ -52,27 +52,27 @@ export default class SettingsService {
   }
 
   static async saveSettings(settings: SettingsType) {
-    if (settings.openAIApiKey || settings.openAIApiKey !== '') {
-      const projects = await ProjectsService.loadProjects();
-      projects.forEach((project) => {
-        const mainConfPath = path.join(project.path, 'rosetta', 'main.conf');
-        try {
-          const content = readFileContent(mainConfPath);
-          if (content) {
-            const parsedContent: any = yaml.load(content);
-            if (!parsedContent.open_api_key) {
-              const newContent = {
-                openai_api_key: settings.openAIApiKey,
-                ...parsedContent,
-              };
-              saveFileContent(mainConfPath, yaml.dump(newContent));
-            }
-          }
-        } catch (error) {
-          /* empty */
-        }
-      });
-    }
+    // if (settings.openAIApiKey || settings.openAIApiKey !== '') {
+    //   const projects = await ProjectsService.loadProjects();
+    //   projects.forEach((project) => {
+    //     const mainConfPath = path.join(project.path, 'rosetta', 'main.conf');
+    //     try {
+    //       const content = readFileContent(mainConfPath);
+    //       if (content) {
+    //         const parsedContent: any = yaml.load(content);
+    //         if (!parsedContent.open_api_key) {
+    //           const newContent = {
+    //             openai_api_key: settings.openAIApiKey,
+    //             ...parsedContent,
+    //           };
+    //           saveFileContent(mainConfPath, yaml.dump(newContent));
+    //         }
+    //       }
+    //     } catch (error) {
+    //       /* empty */
+    //     }
+    //   });
+    // }
     await updateDatabase<'settings'>('settings', settings);
   }
 

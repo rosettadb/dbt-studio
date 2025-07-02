@@ -111,7 +111,7 @@ const ProjectDetails: React.FC = () => {
   }, [settings?.dbtPath]);
 
   const enhanceModel = async () => {
-    if (!settings?.openAIApiKey || settings.openAIApiKey === '') {
+    if (!isAiProviderSet) {
       toast.error('Open AI API Key not provided');
       return;
     }
@@ -156,7 +156,7 @@ const ProjectDetails: React.FC = () => {
   };
 
   const enhanceStagingModel = async () => {
-    if (!settings?.openAIApiKey || settings.openAIApiKey === '') {
+    if (!isAiProviderSet) {
       toast.error('Open AI API Key not provided');
       return;
     }
@@ -234,7 +234,7 @@ const ProjectDetails: React.FC = () => {
   };
 
   const generateDashboards = async () => {
-    if (!settings?.openAIApiKey || settings.openAIApiKey === '') {
+    if (!isAiProviderSet) {
       toast.error('Open AI API Key not provided');
       return;
     }

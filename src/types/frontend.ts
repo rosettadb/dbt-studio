@@ -13,6 +13,7 @@ export type AppContextType = {
   fetchSchema: () => Promise<void>;
   isLoadingSchema?: boolean;
   isAiProviderSet: boolean;
+  setIsAiProviderSet: (isSet: boolean) => void;
 };
 
 export type ItemProps = {
@@ -33,3 +34,5 @@ export type QueryHistoryType = {
 };
 
 export type CompletionItem = Monaco.languages.CompletionItem;
+
+export type SecureStorageAccount = 'openai-api-key';

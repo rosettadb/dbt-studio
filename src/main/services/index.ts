@@ -3,6 +3,7 @@ import SettingsService from './settings.service';
 import ConnectorsService from './connectors.service';
 import OpenAIService from './openAI.service';
 import GitService from './git.service';
+import SecureStorageService from './secureStorage.service';
 
 export {
   ProjectsService,
@@ -10,4 +11,5 @@ export {
   ConnectorsService,
   OpenAIService,
   GitService,
+  SecureStorageService,
 };
