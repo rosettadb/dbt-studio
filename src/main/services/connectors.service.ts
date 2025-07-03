@@ -1,3 +1,5 @@
+/* eslint-disable no-case-declarations */
+/* eslint-disable @typescript-eslint/no-shadow */
 import yaml from 'js-yaml';
 import path from 'path';
 import fs from 'fs';
@@ -10,7 +12,7 @@ import {
   RosettaConnection,
 } from '../../types/backend';
 import { updateDatabase } from '../utils/fileHelper';
-import { ProjectsService, SettingsService } from './index';
+import { ProjectsService } from './index';
 import { ConfigureConnectionBody } from '../../types/ipc';
 import {
   executePostgresQuery,
@@ -175,7 +177,7 @@ export default class ConnectorsService {
     projectName: string,
     projectPath?: string,
   ): Promise<string> {
-    const { openAIApiKey } = await SettingsService.loadSettings();
+    // const { openAIApiKey } = await SettingsService.loadSettings();
 
     // Generate JDBC URL and handle BigQuery service account file path
     let jdbcUrl = this.generateJdbcUrl(connection);
@@ -198,8 +200,8 @@ export default class ConnectorsService {
       connections: RosettaConnection[];
       openai_api_key?: string;
     } = {
-      openai_api_key:
-        openAIApiKey && openAIApiKey !== '' ? openAIApiKey : undefined,
+      // openai_api_key:
+      //   openAIApiKey && openAIApiKey !== '' ? openAIApiKey : undefined,
       connections: [
         {
           name: projectName,
@@ -263,7 +265,7 @@ export default class ConnectorsService {
         return `jdbc:postgresql://${conn.host}:${conn.port}/${conn.database}?user=${conn.username}&password=${conn.password}&currentSchema=${conn.schema}`;
       case 'snowflake':
         return `jdbc:snowflake://${conn.account}.snowflakecomputing.com/?user=${conn.username}&password=${conn.password}&warehouse=${conn.warehouse}&db=${conn.database}&schema=${conn.schema}`;
-      case 'redshift':
+      case 'redshift': {
         let redshiftUrl = `jdbc:redshift://${conn.host}:${conn.port}/${conn.database}?user=${conn.username}&password=${conn.password}`;
 
         // Add SSL parameters if enabled
@@ -275,11 +277,14 @@ export default class ConnectorsService {
         }
 
         return redshiftUrl;
+      }
       case 'bigquery':
+        // eslint-disable-next-line no-case-declarations
         const host = 'https://www.googleapis.com';
         const path = 'bigquery/v2';
         const port = 443;
         const projectId = conn.project;
+        // eslint-disable-next-line no-case-declarations
         const baseUrl = `jdbc:bigquery://${host}/${path}:${port}`;
 
         if (conn.method === 'service-account' && conn.keyfile) {
