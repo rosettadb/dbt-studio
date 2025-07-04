@@ -57,3 +57,13 @@ export const queryData = async (body: {
   >('connector:query', body);
   return data;
 };
+
+export const setConnectionEnvVariable = async (
+  key: string,
+  value: string,
+): Promise<void> => {
+  await client.post<{ key: string; value: string }, void>(
+    'connector:setConnectionEnvVariable',
+    { key, value },
+  );
+};

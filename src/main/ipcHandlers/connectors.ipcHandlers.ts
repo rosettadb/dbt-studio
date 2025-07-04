@@ -62,6 +62,13 @@ const registerConnectorsHandlers = () => {
       }
     },
   );
+
+  ipcMain.handle(
+    'connector:setConnectionEnvVariable',
+    async (_event, { key, value }: { key: string; value: string }) => {
+      return ConnectorsService.setConnectionEnvVariable(key, value);
+    },
+  );
 };
 
 export default registerConnectorsHandlers;

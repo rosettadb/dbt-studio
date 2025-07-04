@@ -77,3 +77,59 @@ export const deleteOpenAIKey = async (): Promise<void> => {
     { account: 'openai-api-key' },
   );
 };
+
+export const setDatabaseUsername = async (
+  userName: string,
+  projectName: string,
+): Promise<void> => {
+  await client.post<{ account: string; password: string }, void>(
+    'secure-storage:set',
+    { account: `db-user-${projectName}`, password: userName },
+  );
+};
+
+export const getDatabaseUsername = async (
+  projectName: string,
+): Promise<string | null> => {
+  const { data } = await client.post<{ account: string }, string | null>(
+    'secure-storage:get',
+    { account: `db-user-${projectName}` },
+  );
+  return data;
+};
+
+export const deleteDatabaseUsername = async (
+  projectName: string,
+): Promise<void> => {
+  await client.post<{ account: string }, void>('secure-storage:delete', {
+    account: `db-user-${projectName}`,
+  });
+};
+
+export const setDatabasePassword = async (
+  databasePassword: string,
+  projectName: string,
+): Promise<void> => {
+  await client.post<{ account: string; password: string }, void>(
+    'secure-storage:set',
+    { account: `db-password-${projectName}`, password: databasePassword },
+  );
+};
+
+export const getDatabasePassword = async (
+  projectName: string,
+): Promise<string | null> => {
+  const { data } = await client.post<{ account: string }, string | null>(
+    'secure-storage:get',
+    { account: `db-password-${projectName}` },
+  );
+  return data;
+};
+
+export const deleteDatabasePassword = async (
+  projectName: string,
+): Promise<void> => {
+  await client.post<{ account: string }, void>('secure-storage:delete', {
+    account: `db-password-${projectName}`,
+  });
+};

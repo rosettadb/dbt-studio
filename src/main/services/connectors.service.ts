@@ -96,6 +96,7 @@ export default class ConnectorsService {
     const profilesContent = await this.generateProfilesYml(
       connection,
       updatedProject.path,
+      currentProject.name,
     );
     await fs.promises.writeFile(profilesPath, profilesContent, 'utf8');
 
@@ -195,7 +196,8 @@ export default class ConnectorsService {
       );
       jdbcUrl = jdbcUrl.replace('KEYFILE_PATH_PLACEHOLDER', keyfilePath);
     }
-
+    const USER = `db-user-${projectName}`;
+    const PASSWORD = `db-password-${projectName}`;
     const yamlData: {
       connections: RosettaConnection[];
       openai_api_key?: string;
@@ -213,10 +215,12 @@ export default class ConnectorsService {
           dbType: connection.type,
           url: jdbcUrl,
           // For Databricks and DuckDB, don't include userName/password since auth is different
+          // userName: ${USER}
+          // password: ${PASSWORD}
           ...(connection.type !== 'databricks' &&
             connection.type !== 'duckdb' && {
-              userName: connection.username,
-              password: connection.password,
+              userName: `\${${USER}}`,
+              password: `\${${PASSWORD}}`,
             }),
         },
       ],
@@ -262,7 +266,7 @@ export default class ConnectorsService {
   static generateJdbcUrl(conn: ConnectionInput): string {
     switch (conn.type) {
       case 'postgres':
-        return `jdbc:postgresql://${conn.host}:${conn.port}/${conn.database}?user=${conn.username}&password=${conn.password}&currentSchema=${conn.schema}`;
+        return `jdbc:postgresql://${conn.host}:${conn.port}/${conn.database}?currentSchema=${conn.schema}`;
       case 'snowflake':
         return `jdbc:snowflake://${conn.account}.snowflakecomputing.com/?user=${conn.username}&password=${conn.password}&warehouse=${conn.warehouse}&db=${conn.database}&schema=${conn.schema}`;
       case 'redshift': {
@@ -389,6 +393,7 @@ export default class ConnectorsService {
   private static async mapToDbtProfiles(
     conn: ConnectionInput,
     projectPath?: string,
+    projectName?: string,
   ): Promise<string> {
     const profileConfig = {
       config: {
@@ -398,7 +403,7 @@ export default class ConnectorsService {
       [conn.name]: {
         target: 'dev',
         outputs: {
-          dev: await this.mapToDbtProfileOutput(conn, projectPath),
+          dev: await this.mapToDbtProfileOutput(conn, projectPath, projectName),
         },
       },
     };
@@ -409,22 +414,26 @@ export default class ConnectorsService {
   static generateProfilesYml(
     connection: ConnectionInput,
     projectPath?: string,
+    projectName?: string,
   ): Promise<string> {
-    return this.mapToDbtProfiles(connection, projectPath);
+    return this.mapToDbtProfiles(connection, projectPath, projectName);
   }
 
   private static async mapToDbtProfileOutput(
     conn: ConnectionInput,
     projectPath?: string,
+    projectName?: string,
   ): Promise<any> {
+    const dbUserName = `{{ env_var("db-user-${projectName}") }}`;
+    const dbPassword = `{{ env_var("db-password-${projectName}") }}`;
     switch (conn.type) {
       case 'postgres':
         return {
           type: 'postgres',
           host: conn.host,
           port: conn.port,
-          user: conn.username,
-          password: conn.password,
+          user: dbUserName,
+          password: dbPassword,
           dbname: conn.database,
           schema: conn.schema,
           threads: 4,
@@ -750,5 +759,12 @@ export default class ConnectorsService {
       console.error('Error parsing main.conf:', error);
       return null;
     }
+  }
+
+  static async setConnectionEnvVariable(
+    key: string,
+    value: string,
+  ): Promise<void> {
+    process.env[key] = value;
   }
 }

@@ -1,13 +1,18 @@
 import React from 'react';
 import { toast } from 'react-toastify';
 import { useCli } from './index';
-import { useGetSettings } from '../controllers';
+import { useGetSettings, useSetConnectionEnvVariable } from '../controllers';
 import { Project } from '../../types/backend';
 import { projectsServices, settingsServices } from '../services';
+import {
+  getDatabasePassword,
+  getDatabaseUsername,
+} from '../services/settings.services';
 
 const useRosettaDBT = (successCallback: () => Promise<void>) => {
   const { data: settings } = useGetSettings();
   const { error, runCommand } = useCli();
+  const setEnvVariables = useSetConnectionEnvVariable();
   const [isSuccess, setIsSuccess] = React.useState(false);
   const [isRunning, setIsRunning] = React.useState(false);
 
@@ -31,6 +36,21 @@ const useRosettaDBT = (successCallback: () => Promise<void>) => {
   return {
     fn: async (project: Project, incremental = '') => {
       setIsRunning(true);
+      const secureUserName = await getDatabaseUsername(project.name);
+      if (secureUserName) {
+        setEnvVariables.mutate({
+          key: `db-user-${project.name}`,
+          value: secureUserName || '',
+        });
+      }
+      const securePassword = await getDatabasePassword(project.name);
+
+      if (securePassword) {
+        setEnvVariables.mutate({
+          key: `db-password-${project.name}`,
+          value: securePassword || '',
+        });
+      }
       const projectPath = await settingsServices.usePathJoin(
         project.path,
         'rosetta',

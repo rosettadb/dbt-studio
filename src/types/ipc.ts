@@ -46,7 +46,8 @@ export type ConnectorChannels =
   | 'connector:validate'
   | 'connector:getJdbcUrl'
   | 'connector:query'
-  | 'project:addFromFolder';
+  | 'project:addFromFolder'
+  | 'connector:setConnectionEnvVariable';
 
 export type CliChannels =
   | 'cli:run'
