@@ -33,6 +33,7 @@ import {
   RedshiftExtractor,
   SnowflakeExtractor,
 } from '../extractor';
+import SecureStorageService from './secureStorage.service';
 
 export default class ProjectsService {
   static async loadProjects() {
@@ -489,6 +490,20 @@ export default class ProjectsService {
       throw new Error(
         'Database connection type is not defined. Please reconfigure your connection.',
       );
+    }
+
+    const storeUser = await SecureStorageService.getCredential(
+      `db-user-${project.name}`,
+    );
+    const storePassword = await SecureStorageService.getCredential(
+      `db-password-${project.name}`,
+    );
+
+    if (storeUser) {
+      connection.username = storeUser;
+    }
+    if (storePassword) {
+      connection.password = storePassword;
     }
 
     switch (connection.type) {

@@ -28,6 +28,7 @@ import {
   testRedshiftConnection,
   executeRedshiftQuery,
 } from '../utils/connectors';
+import SecureStorageService from './secureStorage.service';
 
 export default class ConnectorsService {
   /**
@@ -81,8 +82,8 @@ export default class ConnectorsService {
           connection.type !== 'duckdb' &&
           'username' in connection &&
           'password' in connection && {
-            userName: connection.username,
-            password: connection.password,
+            userName: `db-user-${currentProject.name}`,
+            password: `db-password-${currentProject.name}`,
           }),
       },
       dbtConnection: this.mapToDbtConnection(connection),
@@ -148,10 +149,25 @@ export default class ConnectorsService {
   static async executeSelectStatement({
     connection,
     query,
+    projectName,
   }: {
     connection: ConnectionInput;
     query: string;
+    projectName: string;
   }): Promise<QueryResponseType> {
+    const storeUser = await SecureStorageService.getCredential(
+      `db-user-${projectName}`,
+    );
+    const storePassword = await SecureStorageService.getCredential(
+      `db-password-${projectName}`,
+    );
+
+    if (storeUser) {
+      (connection as any).username = storeUser;
+    }
+    if (storePassword) {
+      (connection as any).password = storePassword;
+    }
     switch (connection.type) {
       case 'postgres':
         return executePostgresQuery(connection, query);
@@ -345,8 +361,8 @@ export default class ConnectorsService {
       case 'postgres':
         return {
           type: 'postgres',
-          username: conn.username,
-          password: conn.password,
+          username: `db-user-${conn.name}`,
+          password: `db-password-${conn.name}`,
           database: conn.database,
           schema: conn.schema,
           host: conn.host,

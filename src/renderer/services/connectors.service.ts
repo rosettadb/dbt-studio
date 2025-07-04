@@ -50,6 +50,7 @@ export const generateJdbcUrl = async (
 export const queryData = async (body: {
   connection: ConnectionInput;
   query: string;
+  projectName: string;
 }): Promise<QueryResponseType> => {
   const { data } = await client.post<
     { connection: ConnectionInput; query: string },

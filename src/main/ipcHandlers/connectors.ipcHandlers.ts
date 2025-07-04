@@ -53,7 +53,7 @@ const registerConnectorsHandlers = () => {
     'connector:query',
     async (
       _event,
-      body: { connection: ConnectionInput; query: string },
+      body: { connection: ConnectionInput; query: string; projectName: string },
     ): Promise<QueryResponseType> => {
       try {
         return ConnectorsService.executeSelectStatement(body);
