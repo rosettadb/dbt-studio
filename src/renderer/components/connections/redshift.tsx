@@ -1,3 +1,4 @@
+/* eslint-disable no-nested-ternary */
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
@@ -16,7 +17,12 @@ import {
   DialogContent,
   DialogActions,
 } from '@mui/material';
-import { Visibility, VisibilityOff, FolderOpen, InfoOutlined } from '@mui/icons-material';
+import {
+  Visibility,
+  VisibilityOff,
+  FolderOpen,
+  InfoOutlined,
+} from '@mui/icons-material';
 import { toast } from 'react-toastify';
 import {
   RedshiftConnection,
@@ -30,6 +36,12 @@ import {
   useFilePicker,
 } from '../../controllers';
 import ConnectionHeader from './connection-header';
+import {
+  getDatabasePassword,
+  getDatabaseUsername,
+  setDatabasePassword,
+  setDatabaseUsername,
+} from '../../services/settings.services';
 
 type Props = {
   onCancel: () => void;
@@ -57,8 +69,8 @@ export const Redshift: React.FC<Props> = ({ onCancel }) => {
     port: existingConnection?.port ?? 5439,
     database: existingConnection?.database ?? '',
     schema: existingConnection?.schema ?? 'public',
-    username: existingConnection?.username ?? '',
-    password: existingConnection?.password ?? '',
+    username: '',
+    password: '',
     ssl: existingConnection?.ssl ?? true,
     sslrootcert: existingConnection?.sslrootcert ?? '',
   });
@@ -107,7 +119,8 @@ export const Redshift: React.FC<Props> = ({ onCancel }) => {
     const { name, value, type, checked } = e.target;
     setFormState((prev) => ({
       ...prev,
-      [name]: type === 'checkbox' ? checked : name === 'port' ? Number(value) : value,
+      [name]:
+        type === 'checkbox' ? checked : name === 'port' ? Number(value) : value,
     }));
 
     setConnectionStatus('idle');
@@ -122,25 +135,29 @@ export const Redshift: React.FC<Props> = ({ onCancel }) => {
         {
           onSuccess: (filePaths) => {
             if (filePaths && filePaths.length > 0) {
-              setFormState(prev => ({
+              setFormState((prev) => ({
                 ...prev,
-                sslrootcert: filePaths[0]
+                sslrootcert: filePaths[0],
               }));
             }
           },
           onError: () => {
             toast.error('Failed to select certificate file');
-          }
-        }
+          },
+        },
       );
     } catch (error) {
       toast.error('Failed to select certificate file');
     }
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!project?.id) return;
+    if (project?.name) {
+      await setDatabaseUsername(formState.username, project.name);
+      await setDatabasePassword(formState.password, project.name);
+    }
     configureConnection({
       projectId: project.id,
       connection: formState,
@@ -169,6 +186,21 @@ export const Redshift: React.FC<Props> = ({ onCancel }) => {
     }
     return null;
   };
+
+  React.useEffect(() => {
+    const fetchCredentials = async () => {
+      if (project?.name) {
+        const storedUsername = await getDatabaseUsername(project.name);
+        const storedPassword = await getDatabasePassword(project.name);
+        setFormState((prev) => ({
+          ...prev,
+          username: storedUsername || '',
+          password: storedPassword || '',
+        }));
+      }
+    };
+    fetchCredentials();
+  }, [project?.name]);
 
   return (
     <Box
@@ -395,7 +427,9 @@ export const Redshift: React.FC<Props> = ({ onCancel }) => {
             <Typography variant="body2" sx={{ mb: 2, ml: 2 }}>
               Visit the official AWS Redshift SSL documentation:
               <br />
-              <strong>https://docs.aws.amazon.com/redshift/latest/mgmt/connecting-ssl-support.html</strong>
+              <strong>
+                https://docs.aws.amazon.com/redshift/latest/mgmt/connecting-ssl-support.html
+              </strong>
             </Typography>
 
             <Typography variant="body1" sx={{ mb: 2, fontWeight: 'bold' }}>
@@ -404,7 +438,9 @@ export const Redshift: React.FC<Props> = ({ onCancel }) => {
             <Typography variant="body2" sx={{ mb: 2, ml: 2 }}>
               You can directly download the certificate bundle:
               <br />
-              <strong>https://s3.amazonaws.com/redshift-downloads/redshift-ca-bundle.crt</strong>
+              <strong>
+                https://s3.amazonaws.com/redshift-downloads/redshift-ca-bundle.crt
+              </strong>
             </Typography>
 
             <Typography variant="body1" sx={{ mb: 2, fontWeight: 'bold' }}>
@@ -414,7 +450,8 @@ export const Redshift: React.FC<Props> = ({ onCancel }) => {
               • <strong>US East (N. Virginia):</strong> redshift-ca-bundle.crt
             </Typography>
             <Typography variant="body2" sx={{ mb: 1, ml: 2 }}>
-              • <strong>Other AWS regions:</strong> Check the AWS documentation for region-specific certificates
+              • <strong>Other AWS regions:</strong> Check the AWS documentation
+              for region-specific certificates
             </Typography>
 
             <Typography variant="body1" sx={{ mb: 2, fontWeight: 'bold' }}>
@@ -424,16 +461,27 @@ export const Redshift: React.FC<Props> = ({ onCancel }) => {
               • Download the certificate file to your local machine
             </Typography>
             <Typography variant="body2" sx={{ mb: 1, ml: 2 }}>
-              • Save it in a secure location (e.g., ~/.ssl/redshift-ca-bundle.crt)
+              • Save it in a secure location (e.g.,
+              ~/.ssl/redshift-ca-bundle.crt)
             </Typography>
             <Typography variant="body2" sx={{ mb: 1, ml: 2 }}>
-              • Use the "Browse" button to select the downloaded certificate file
+              • Use the &quot;Browse&quot; button to select the downloaded
+              certificate file
             </Typography>
 
-            <Box sx={{ mt: 3, p: 2, bgcolor: 'info.main', color: 'info.contrastText', borderRadius: 1 }}>
+            <Box
+              sx={{
+                mt: 3,
+                p: 2,
+                bgcolor: 'info.main',
+                color: 'info.contrastText',
+                borderRadius: 1,
+              }}
+            >
               <Typography variant="body2">
-                <strong>Note:</strong> SSL certificates are required for secure connections to Redshift clusters.
-                The certificate ensures that your connection is encrypted and authenticated.
+                <strong>Note:</strong> SSL certificates are required for secure
+                connections to Redshift clusters. The certificate ensures that
+                your connection is encrypted and authenticated.
               </Typography>
             </Box>
           </Box>

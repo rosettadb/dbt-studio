@@ -286,7 +286,7 @@ export default class ConnectorsService {
       case 'snowflake':
         return `jdbc:snowflake://${conn.account}.snowflakecomputing.com/?warehouse=${conn.warehouse}&db=${conn.database}&schema=${conn.schema}`;
       case 'redshift': {
-        let redshiftUrl = `jdbc:redshift://${conn.host}:${conn.port}/${conn.database}?user=${conn.username}&password=${conn.password}`;
+        let redshiftUrl = `jdbc:redshift://${conn.host}:${conn.port}/${conn.database}?currentSchema=${conn.schema}`;
 
         // Add SSL parameters if enabled
         if (conn.ssl) {
@@ -370,8 +370,8 @@ export default class ConnectorsService {
       case 'redshift':
         return {
           type: 'redshift',
-          username: conn.username,
-          password: conn.password,
+          username: `db-user-${conn.name}`,
+          password: `db-password-${conn.name}`,
           database: conn.database,
           schema: conn.schema,
           host: conn.host,
@@ -470,8 +470,8 @@ export default class ConnectorsService {
           type: 'redshift',
           host: conn.host,
           port: conn.port,
-          user: conn.username,
-          password: conn.password,
+          user: dbUserName,
+          password: dbPassword,
           dbname: conn.database,
           schema: conn.schema,
           threads: 4,
