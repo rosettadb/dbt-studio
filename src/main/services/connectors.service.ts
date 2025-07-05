@@ -284,7 +284,7 @@ export default class ConnectorsService {
       case 'postgres':
         return `jdbc:postgresql://${conn.host}:${conn.port}/${conn.database}?currentSchema=${conn.schema}`;
       case 'snowflake':
-        return `jdbc:snowflake://${conn.account}.snowflakecomputing.com/?user=${conn.username}&password=${conn.password}&warehouse=${conn.warehouse}&db=${conn.database}&schema=${conn.schema}`;
+        return `jdbc:snowflake://${conn.account}.snowflakecomputing.com/?warehouse=${conn.warehouse}&db=${conn.database}&schema=${conn.schema}`;
       case 'redshift': {
         let redshiftUrl = `jdbc:redshift://${conn.host}:${conn.port}/${conn.database}?user=${conn.username}&password=${conn.password}`;
 
@@ -295,7 +295,6 @@ export default class ConnectorsService {
             redshiftUrl += `&sslrootcert=${conn.sslrootcert}`;
           }
         }
-
         return redshiftUrl;
       }
       case 'bigquery':
@@ -337,8 +336,8 @@ export default class ConnectorsService {
       case 'snowflake':
         return {
           type: 'snowflake',
-          username: conn.username,
-          password: conn.password,
+          username: `db-user-${conn.name}`,
+          password: `db-password-${conn.name}`,
           database: conn.database,
           schema: conn.schema,
           account: conn.account,
@@ -458,8 +457,8 @@ export default class ConnectorsService {
         return {
           type: 'snowflake',
           account: conn.account,
-          user: conn.username,
-          password: conn.password,
+          user: dbUserName,
+          password: dbPassword,
           role: conn.role || 'SYSADMIN',
           warehouse: conn.warehouse,
           database: conn.database,

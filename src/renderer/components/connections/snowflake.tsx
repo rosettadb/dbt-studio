@@ -22,6 +22,12 @@ import {
   useGetSelectedProject,
 } from '../../controllers';
 import ConnectionHeader from './connection-header';
+import {
+  getDatabasePassword,
+  getDatabaseUsername,
+  setDatabasePassword,
+  setDatabaseUsername,
+} from '../../services/settings.services';
 
 type Props = {
   onCancel: () => void;
@@ -53,8 +59,8 @@ export const Snowflake: React.FC<Props> = ({ onCancel }) => {
     warehouse: existingConnection?.warehouse ?? '',
     database: existingConnection?.database ?? '',
     schema: existingConnection?.schema ?? '',
-    username: existingConnection?.username ?? '',
-    password: existingConnection?.password ?? '',
+    username: '',
+    password: '',
     role: 'SYSADMIN',
   });
 
@@ -87,6 +93,21 @@ export const Snowflake: React.FC<Props> = ({ onCancel }) => {
     },
   });
 
+  React.useEffect(() => {
+    const fetchCredentials = async () => {
+      if (project?.name) {
+        const storedUsername = await getDatabaseUsername(project.name);
+        const storedPassword = await getDatabasePassword(project.name);
+        setFormState((prev) => ({
+          ...prev,
+          username: storedUsername || '',
+          password: storedPassword || '',
+        }));
+      }
+    };
+    fetchCredentials();
+  }, [project?.name]);
+
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
     setFormState((prev) => ({ ...prev, [name]: value }));
@@ -95,9 +116,13 @@ export const Snowflake: React.FC<Props> = ({ onCancel }) => {
     setConnectionStatus('idle');
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!project?.id) return;
+    if (project?.name) {
+      await setDatabaseUsername(formState.username, project.name);
+      await setDatabasePassword(formState.password, project.name);
+    }
     configureConnection({
       projectId: project.id,
       connection: formState,

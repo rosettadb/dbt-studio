@@ -500,10 +500,10 @@ export default class ProjectsService {
     );
 
     if (storeUser) {
-      connection.username = storeUser;
+      (connection as { username: string }).username = storeUser;
     }
     if (storePassword) {
-      connection.password = storePassword;
+      (connection as { password: string }).password = storePassword;
     }
 
     switch (connection.type) {
