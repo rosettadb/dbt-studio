@@ -50,7 +50,7 @@ export default class ConnectorsService {
     const currentProject = projects[projectIndex];
 
     // Generate JDBC URL with proper file path handling for BigQuery service account
-    let rosettaJdbcUrl = this.generateJdbcUrl(connection);
+    let rosettaJdbcUrl = this.generateJdbcUrl(connection, currentProject.name);
     if (
       connection.type === 'bigquery' &&
       connection.method === 'service-account' &&
@@ -162,12 +162,20 @@ export default class ConnectorsService {
       `db-password-${projectName}`,
     );
 
+    const storeToken = await SecureStorageService.getCredential(
+      `db-token-${projectName}`,
+    );
+
     if (storeUser) {
       (connection as any).username = storeUser;
     }
     if (storePassword) {
       (connection as any).password = storePassword;
     }
+    if (storeToken) {
+      (connection as any).token = storeToken;
+    }
+
     switch (connection.type) {
       case 'postgres':
         return executePostgresQuery(connection, query);
@@ -197,7 +205,7 @@ export default class ConnectorsService {
     // const { openAIApiKey } = await SettingsService.loadSettings();
 
     // Generate JDBC URL and handle BigQuery service account file path
-    let jdbcUrl = this.generateJdbcUrl(connection);
+    let jdbcUrl = this.generateJdbcUrl(connection, projectName);
 
     // For BigQuery service account, replace placeholder with actual file path
     if (
@@ -231,8 +239,6 @@ export default class ConnectorsService {
           dbType: connection.type,
           url: jdbcUrl,
           // For Databricks and DuckDB, don't include userName/password since auth is different
-          // userName: ${USER}
-          // password: ${PASSWORD}
           ...(connection.type !== 'databricks' &&
             connection.type !== 'duckdb' && {
               userName: `\${${USER}}`,
@@ -279,7 +285,7 @@ export default class ConnectorsService {
     }
   }
 
-  static generateJdbcUrl(conn: ConnectionInput): string {
+  static generateJdbcUrl(conn: ConnectionInput, projectName: string): string {
     switch (conn.type) {
       case 'postgres':
         return `jdbc:postgresql://${conn.host}:${conn.port}/${conn.database}?currentSchema=${conn.schema}`;
@@ -321,7 +327,8 @@ export default class ConnectorsService {
         }
       case 'databricks':
         // Use token-based authentication with no username (UID)
-        return `jdbc:databricks://${conn.host}:443/default;transportMode=http;ssl=1;AuthMech=3;httpPath=${conn.httpPath};PWD=${conn.token}`;
+        const TOKEN = `db-token-${projectName}`;
+        return `jdbc:databricks://${conn.host}:443/default;transportMode=http;ssl=1;AuthMech=3;httpPath=${conn.httpPath};PWD=\${${TOKEN}}`;
       case 'duckdb':
         // DuckDB JDBC URL format
         return `jdbc:duckdb:${conn.database_path}`;
@@ -386,7 +393,7 @@ export default class ConnectorsService {
           host: conn.host,
           port: conn.port,
           http_path: conn.httpPath,
-          token: conn.token,
+          token: `db-token-${conn.name}`, // Use token directly
           database: conn.database,
           schema: conn.schema,
         };
@@ -441,6 +448,7 @@ export default class ConnectorsService {
   ): Promise<any> {
     const dbUserName = `{{ env_var("db-user-${projectName}") }}`;
     const dbPassword = `{{ env_var("db-password-${projectName}") }}`;
+    const dbToken = `{{ env_var("db-token-${projectName}") }}`;
     switch (conn.type) {
       case 'postgres':
         return {
@@ -527,7 +535,7 @@ export default class ConnectorsService {
           type: 'databricks',
           host: conn.host,
           http_path: conn.httpPath,
-          token: conn.token, // Use token directly
+          token: dbToken, // Use token directly
           catalog: conn.database, // In Databricks, database maps to catalog
           schema: conn.schema,
           threads: 4,

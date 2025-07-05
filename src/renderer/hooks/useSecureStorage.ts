@@ -53,7 +53,7 @@ const useSecureStorage = () => {
     await secureStorageService.delete(`db-password-${projectName}`);
   };
 
-  const setDatabasToken = async (
+  const setDatabaseToken = async (
     databaseToken: string,
     projectName: string,
   ): Promise<void> => {
@@ -81,7 +81,7 @@ const useSecureStorage = () => {
     setDatabasePassword,
     getDatabasePassword,
     deleteDatabasePassword,
-    setDatabasToken,
+    setDatabaseToken,
     getDatabaseToken,
     deleteDatabaseToken,
   };

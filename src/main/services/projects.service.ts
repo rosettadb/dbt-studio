@@ -506,6 +506,13 @@ export default class ProjectsService {
       (connection as { password: string }).password = storePassword;
     }
 
+    const storeToken = await SecureStorageService.getCredential(
+      `db-token-${project.name}`,
+    );
+    if (storeToken) {
+      (connection as { token: string }).token = storeToken;
+    }
+
     switch (connection.type) {
       case 'postgres':
         return this.extractPgSchema(connection as PostgresDBTConnection);
