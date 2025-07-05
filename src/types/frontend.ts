@@ -35,4 +35,8 @@ export type QueryHistoryType = {
 
 export type CompletionItem = Monaco.languages.CompletionItem;
 
-export type SecureStorageAccount = 'openai-api-key';
+export type SecureStorageAccount =
+  | 'openai-api-key'
+  | `db-user-${string}`
+  | `db-password-${string}`
+  | `db-token-${string}`;

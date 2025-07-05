@@ -1,15 +1,12 @@
 import React from 'react';
 import { toast } from 'react-toastify';
-import { useCli } from './index';
+import { useCli, useSecureStorage } from './index';
 import { useGetSettings, useSetConnectionEnvVariable } from '../controllers';
 import { Project } from '../../types/backend';
 import { settingsServices } from '../services';
-import {
-  getDatabasePassword,
-  getDatabaseUsername,
-} from '../services/settings.services';
 
 const useRosettaExtract = (successCallback: () => void) => {
+  const { getDatabaseUsername, getDatabasePassword } = useSecureStorage();
   const { data: settings } = useGetSettings();
   const { error, runCommand, isSuccess } = useCli();
   const setEnvVariables = useSetConnectionEnvVariable();

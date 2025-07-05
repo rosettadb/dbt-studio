@@ -2,17 +2,14 @@ import React from 'react';
 import { Visibility, VisibilityOff } from '@mui/icons-material';
 import { TextField, Button, IconButton, InputAdornment } from '@mui/material';
 import { toast } from 'react-toastify';
-import {
-  setOpenAIKey,
-  getOpenAIKey,
-  deleteOpenAIKey,
-} from '../../services/settings.services';
+import { useSecureStorage } from '../../hooks';
 import { AppContext } from '../../context';
 
 export const AIProviderSettings: React.FC = () => {
   const { setIsAiProviderSet } = React.useContext(AppContext);
   const [apiKey, setApiKey] = React.useState('');
   const [showApiKey, setShowApiKey] = React.useState(false);
+  const { getOpenAIKey, setOpenAIKey, deleteOpenAIKey } = useSecureStorage();
 
   React.useEffect(() => {
     const fetchApiKey = async () => {

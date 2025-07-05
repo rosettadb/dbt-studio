@@ -22,12 +22,7 @@ import {
   useGetSelectedProject,
 } from '../../controllers';
 import ConnectionHeader from './connection-header';
-import {
-  getDatabasePassword,
-  getDatabaseUsername,
-  setDatabasePassword,
-  setDatabaseUsername,
-} from '../../services/settings.services';
+import useSecureStorage from '../../hooks/useSecureStorage';
 
 type Props = {
   onCancel: () => void;
@@ -37,6 +32,12 @@ export const Snowflake: React.FC<Props> = ({ onCancel }) => {
   const { data: project } = useGetSelectedProject();
   const navigate = useNavigate();
   const theme = useTheme();
+  const {
+    getDatabaseUsername,
+    getDatabasePassword,
+    setDatabaseUsername,
+    setDatabasePassword,
+  } = useSecureStorage();
 
   const existingConnection: SnowflakeDBTConnection | undefined =
     React.useMemo(() => {

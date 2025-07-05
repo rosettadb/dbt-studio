@@ -1,12 +1,8 @@
 import React from 'react';
 import { toast } from 'react-toastify';
-import { useCli } from './index';
+import { useCli, useSecureStorage } from './index';
 import { useGetSettings, useSetConnectionEnvVariable } from '../controllers';
 import { Project } from '../../types/backend';
-import {
-  getDatabasePassword,
-  getDatabaseUsername,
-} from '../services/settings.services';
 
 type DbtCommandType =
   | 'run'
@@ -32,6 +28,7 @@ interface UseDbtReturn {
 const useDbt = (successCallback: () => void): UseDbtReturn => {
   const { data: settings } = useGetSettings();
   const { error, runCommand, isSuccess } = useCli();
+  const { getDatabaseUsername, getDatabasePassword } = useSecureStorage();
   const setEnvVariables = useSetConnectionEnvVariable();
   const [isRunning, setIsRunning] = React.useState(false);
   const [activeCommand, setActiveCommand] =

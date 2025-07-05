@@ -1,17 +1,14 @@
 import React from 'react';
 import { toast } from 'react-toastify';
-import { useCli } from './index';
+import { useCli, useSecureStorage } from './index';
 import { useGetSettings, useSetConnectionEnvVariable } from '../controllers';
 import { Project } from '../../types/backend';
 import { projectsServices, settingsServices } from '../services';
-import {
-  getDatabasePassword,
-  getDatabaseUsername,
-} from '../services/settings.services';
 
 const useRosettaDBT = (successCallback: () => Promise<void>) => {
   const { data: settings } = useGetSettings();
   const { error, runCommand } = useCli();
+  const { getDatabaseUsername, getDatabasePassword } = useSecureStorage();
   const setEnvVariables = useSetConnectionEnvVariable();
   const [isSuccess, setIsSuccess] = React.useState(false);
   const [isRunning, setIsRunning] = React.useState(false);

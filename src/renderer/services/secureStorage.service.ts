@@ -1,25 +1,29 @@
+import { SecureStorageAccount } from '../../types/frontend';
 import { client } from '../config/client';
 
 export const secureStorageService = {
-  get: async (key: string): Promise<string | null> => {
-    const { data } = await client.post<{ key: string }, string | null>(
+  get: async (key: SecureStorageAccount): Promise<string | null> => {
+    const { data } = await client.post<{ account: string }, string | null>(
       'secure-storage:get',
-      { key },
+      { account: key },
     );
     return data;
   },
-  set: async (key: string, value: string): Promise<void> => {
-    await client.post<{ key: string; value: string }, void>(
-      'secure-storage:set',
+  set: async (key: SecureStorageAccount, value: string): Promise<void> => {
+    await client.post<
+      { account: SecureStorageAccount; password: string },
+      void
+    >('secure-storage:set', {
+      account: key,
+      password: value,
+    });
+  },
+  delete: async (key: SecureStorageAccount): Promise<void> => {
+    await client.post<{ account: SecureStorageAccount }, void>(
+      'secure-storage:delete',
       {
-        key,
-        value,
+        account: key,
       },
     );
-  },
-  delete: async (key: string): Promise<void> => {
-    await client.post<{ key: string }, void>('secure-storage:delete', {
-      key,
-    });
   },
 };
