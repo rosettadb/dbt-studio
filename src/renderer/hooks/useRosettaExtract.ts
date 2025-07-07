@@ -6,7 +6,8 @@ import { Project } from '../../types/backend';
 import { settingsServices } from '../services';
 
 const useRosettaExtract = (successCallback: () => void) => {
-  const { getDatabaseUsername, getDatabasePassword } = useSecureStorage();
+  const { getDatabaseUsername, getDatabasePassword, getDatabaseToken } =
+    useSecureStorage();
   const { data: settings } = useGetSettings();
   const { error, runCommand, isSuccess } = useCli();
   const setEnvVariables = useSetConnectionEnvVariable();
@@ -29,6 +30,7 @@ const useRosettaExtract = (successCallback: () => void) => {
   return {
     fn: async (project: Project) => {
       setIsRunning(true);
+      // Set environment variables for the project
       const secureUserName = await getDatabaseUsername(project.name);
       if (secureUserName) {
         setEnvVariables.mutate({
@@ -37,13 +39,20 @@ const useRosettaExtract = (successCallback: () => void) => {
         });
       }
       const securePassword = await getDatabasePassword(project.name);
-
       if (securePassword) {
         setEnvVariables.mutate({
           key: `db-password-${project.name}`,
           value: securePassword || '',
         });
       }
+      const secureToken = await getDatabaseToken(project.name);
+      if (secureToken) {
+        setEnvVariables.mutate({
+          key: `db-token-${project.name}`,
+          value: secureToken || '',
+        });
+      }
+
       const projectPath = await settingsServices.usePathJoin(
         project.path,
         'rosetta',

@@ -8,7 +8,8 @@ import { projectsServices, settingsServices } from '../services';
 const useRosettaDBT = (successCallback: () => Promise<void>) => {
   const { data: settings } = useGetSettings();
   const { error, runCommand } = useCli();
-  const { getDatabaseUsername, getDatabasePassword } = useSecureStorage();
+  const { getDatabaseUsername, getDatabasePassword, getDatabaseToken } =
+    useSecureStorage();
   const setEnvVariables = useSetConnectionEnvVariable();
   const [isSuccess, setIsSuccess] = React.useState(false);
   const [isRunning, setIsRunning] = React.useState(false);
@@ -33,6 +34,7 @@ const useRosettaDBT = (successCallback: () => Promise<void>) => {
   return {
     fn: async (project: Project, incremental = '') => {
       setIsRunning(true);
+      // Set environment variables for the project
       const secureUserName = await getDatabaseUsername(project.name);
       if (secureUserName) {
         setEnvVariables.mutate({
@@ -41,13 +43,20 @@ const useRosettaDBT = (successCallback: () => Promise<void>) => {
         });
       }
       const securePassword = await getDatabasePassword(project.name);
-
       if (securePassword) {
         setEnvVariables.mutate({
           key: `db-password-${project.name}`,
           value: securePassword || '',
         });
       }
+      const secureToken = await getDatabaseToken(project.name);
+      if (secureToken) {
+        setEnvVariables.mutate({
+          key: `db-token-${project.name}`,
+          value: secureToken || '',
+        });
+      }
+
       const projectPath = await settingsServices.usePathJoin(
         project.path,
         'rosetta',

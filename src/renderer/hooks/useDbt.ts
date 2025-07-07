@@ -28,7 +28,8 @@ interface UseDbtReturn {
 const useDbt = (successCallback: () => void): UseDbtReturn => {
   const { data: settings } = useGetSettings();
   const { error, runCommand, isSuccess } = useCli();
-  const { getDatabaseUsername, getDatabasePassword } = useSecureStorage();
+  const { getDatabaseUsername, getDatabasePassword, getDatabaseToken } =
+    useSecureStorage();
   const setEnvVariables = useSetConnectionEnvVariable();
   const [isRunning, setIsRunning] = React.useState(false);
   const [activeCommand, setActiveCommand] =
@@ -83,6 +84,14 @@ const useDbt = (successCallback: () => void): UseDbtReturn => {
       setEnvVariables.mutate({
         key: `db-password-${project.name}`,
         value: securePassword || '',
+      });
+    }
+
+    const secureToken = await getDatabaseToken(project.name);
+    if (secureToken) {
+      setEnvVariables.mutate({
+        key: `db-token-${project.name}`,
+        value: secureToken || '',
       });
     }
 
