@@ -5,7 +5,6 @@ import {
   IconButton,
   Typography,
   Box,
-  Tooltip,
   List,
   ListItem,
   useTheme,
@@ -97,10 +96,6 @@ const Settings: React.FC = () => {
     navigate('/app');
   };
 
-  const handleToggleTheme = () => {
-    setMode(mode === 'light' ? 'dark' : 'light');
-  };
-
   React.useEffect(() => {
     if (settings) {
       setLocalSettings(settings);
@@ -147,84 +142,113 @@ const Settings: React.FC = () => {
   return (
     <AppLayout
       sidebarContent={
-        <Box sx={{ p: 2 }}>
+        <Box
+          sx={{
+            p: 2,
+            display: 'flex',
+            flexDirection: 'column',
+            justifyContent: 'space-between',
+            height: '100%',
+          }}
+        >
+          <Box>
+            <Box
+              sx={{
+                display: 'flex',
+                alignItems: 'center',
+                mb: 2,
+                gap: 1,
+                justifyContent: 'space-between',
+              }}
+            >
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                <AppsIcon color="primary" fontSize="small" />
+                <Typography variant="h6" sx={{ m: 0 }}>
+                  Settings
+                </Typography>
+              </Box>
+            </Box>
+            <List
+              sx={{
+                py: 0,
+                width: '100%',
+                '& .MuiListItem-root': {
+                  py: 0.25,
+                  px: 1,
+                  minHeight: '32px',
+                  width: '100%',
+                },
+              }}
+            >
+              {settingsSidebarElements.map((element) => (
+                <StyledSettingsNavLink key={element.text} to={element.path}>
+                  <ListItem
+                    sx={{
+                      cursor: 'pointer',
+                      borderRadius: 1,
+                      mb: 0,
+                      width: '100%',
+                      backgroundColor:
+                        location.pathname === element.path
+                          ? theme.palette.divider
+                          : 'transparent',
+                    }}
+                  >
+                    <ListItemIcon sx={{ minWidth: 32 }}>
+                      <element.icon
+                        fontSize="small"
+                        color={
+                          location.pathname === element.path
+                            ? 'primary'
+                            : 'inherit'
+                        }
+                      />
+                    </ListItemIcon>
+                    <ListItemText primary={element.text} />
+                  </ListItem>
+                </StyledSettingsNavLink>
+              ))}
+            </List>
+          </Box>
+          {/* Theme Section */}
           <Box
             sx={{
-              display: 'flex',
-              alignItems: 'center',
-              mb: 2,
-              gap: 1,
-              justifyContent: 'space-between',
+              textAlign: 'left',
+              borderTop: `1px solid ${theme.palette.divider}`,
+              pt: 2,
             }}
           >
-            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-              <AppsIcon color="primary" fontSize="small" />
-              <Typography variant="h6" sx={{ m: 0 }}>
-                Settings
-              </Typography>
-            </Box>
-            <Tooltip
-              title={
-                mode === 'dark'
-                  ? 'Switch to Light Theme'
-                  : 'Switch to Dark Theme'
-              }
+            <Typography variant="subtitle2" sx={{ mb: 1 }}>
+              Theme
+            </Typography>
+            <Button
+              variant={mode === 'light' ? 'contained' : 'outlined'}
+              size="small"
+              onClick={() => setMode('light')}
+              sx={{ mx: 0.5 }}
+              startIcon={<LightMode fontSize="small" />}
             >
-              <IconButton
-                aria-label="toggle theme"
-                onClick={handleToggleTheme}
-                color="primary"
-                size="small"
-              >
-                {mode === 'dark' ? (
-                  <LightMode fontSize="small" />
-                ) : (
-                  <DarkMode fontSize="small" />
-                )}
-              </IconButton>
-            </Tooltip>
+              Light
+            </Button>
+            <Button
+              variant={mode === 'dark' ? 'contained' : 'outlined'}
+              size="small"
+              onClick={() => setMode('dark')}
+              sx={{ mx: 0.5 }}
+              startIcon={<DarkMode fontSize="small" />}
+            >
+              Dark
+            </Button>
+            <Button
+              variant={mode === 'system' ? 'contained' : 'outlined'}
+              size="small"
+              onClick={() => setMode('system')}
+              sx={{ mx: 0.5 }}
+              startIcon={<AppsIcon fontSize="small" />}
+            >
+              System
+            </Button>
           </Box>
-          <List
-            sx={{
-              py: 0,
-              width: '100%',
-              '& .MuiListItem-root': {
-                py: 0.25,
-                px: 1,
-                minHeight: '32px',
-                width: '100%',
-              },
-            }}
-          >
-            {settingsSidebarElements.map((element) => (
-              <StyledSettingsNavLink key={element.text} to={element.path}>
-                <ListItem
-                  sx={{
-                    cursor: 'pointer',
-                    borderRadius: 1,
-                    mb: 0,
-                    width: '100%',
-                    backgroundColor:
-                      location.pathname === element.path
-                        ? theme.palette.divider
-                        : 'transparent',
-                  }}
-                >
-                  <ListItemIcon sx={{ minWidth: 32 }}>
-                    <element.icon
-                      fontSize="small"
-                      color={
-                        location.pathname === element.path
-                          ? 'primary'
-                          : 'inherit'
-                      }
-                    />
-                  </ListItemIcon>
-                  <ListItemText primary={element.text} />
-                </ListItem>
-              </StyledSettingsNavLink>
-            ))}
-          </List>
         </Box>
       }
     >

@@ -3,8 +3,11 @@ import { Box, InputBase, styled } from '@mui/material';
 export const TerminalContainer = styled('form')(({ theme }) => ({
   display: 'flex',
   flexDirection: 'column',
-  backgroundColor: '#121212',
-  color: '#0f0',
+  backgroundColor:
+    theme.palette.mode === 'dark'
+      ? theme.palette.grey[900]
+      : theme.palette.grey[50],
+  color: theme.palette.text.primary,
   fontFamily: 'monospace',
   padding: theme.spacing(2),
   height: '100%',
@@ -15,16 +18,19 @@ export const TerminalContainer = styled('form')(({ theme }) => ({
 export const OutputBox = styled(Box)(({ theme }) => ({
   flex: 1,
   overflowY: 'auto',
-  color: '#fff',
-  backgroundColor: '#121212',
+  color: theme.palette.text.primary,
+  backgroundColor:
+    theme.palette.mode === 'dark'
+      ? theme.palette.grey[900]
+      : theme.palette.grey[50],
   paddingRight: theme.spacing(1),
   marginBottom: theme.spacing(1),
   whiteSpace: 'pre-wrap',
   fontFamily: 'monospace',
 }));
 
-export const StyledInput = styled(InputBase)(() => ({
-  color: '#0f0',
+export const StyledInput = styled(InputBase)(({ theme }) => ({
+  color: theme.palette.text.primary,
   fontFamily: 'monospace',
   fontSize: 14,
   backgroundColor: 'transparent',
@@ -35,10 +41,11 @@ export const StyledInput = styled(InputBase)(() => ({
   height: 16,
 }));
 
-export const InputLine = styled('div')(() => ({
+export const InputLine = styled('div')(({ theme }) => ({
   display: 'flex',
   alignItems: 'center',
   gap: '8px',
+  padding: `${theme.spacing(1)} 0`,
 }));
 
 export const Root = styled(Box)(() => ({
@@ -67,22 +74,23 @@ export const TerminalWrapper = styled(Box)(({ theme }) => ({
 }));
 
 export const TerminalHeader = styled(Box)(({ theme }) => ({
-  backgroundColor: '#cdcdcd',
-  color: theme.palette.success.main,
+  backgroundColor: theme.palette.background.paper,
+  color: theme.palette.text.primary,
   display: 'flex',
   alignItems: 'center',
   padding: '2px 2px 0 2px',
   height: '40px',
+  borderBottom: `1px solid ${theme.palette.divider}`,
 }));
 
 export const Taskbar = styled(Box)(({ theme }) => ({
   height: 40,
-  backgroundColor: theme.palette.grey[900],
+  backgroundColor: theme.palette.background.paper,
   display: 'flex',
   alignItems: 'center',
   paddingLeft: theme.spacing(1),
   paddingRight: theme.spacing(1),
-  borderTop: `1px solid ${theme.palette.grey[800]}`,
+  borderTop: `1px solid ${theme.palette.divider}`,
   fontFamily: 'monospace',
 }));
 
@@ -95,6 +103,6 @@ export const TaskbarItem = styled(Box)(({ theme }) => ({
   padding: `${theme.spacing(0.5)} ${theme.spacing(1.5)}`,
   borderRadius: theme.shape.borderRadius,
   '&:hover': {
-    backgroundColor: theme.palette.grey[800],
+    backgroundColor: theme.palette.action.hover,
   },
 }));
