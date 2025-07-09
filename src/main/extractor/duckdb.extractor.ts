@@ -18,29 +18,22 @@ export default class DuckDBSchemaExtractor {
       connection = await instance.connect();
 
       const result = await connection.run(query);
-      const rows = await result.getRows();
-      return rows;
-    } catch (error) {
-      console.error('❌ DuckDB query execution failed:', error);
-      throw error;
+      return await result.getRows();
     } finally {
-      // Ensure proper cleanup in all cases
       try {
         if (connection) {
-          // Close connection first
           if (typeof connection.close === 'function') {
             await connection.close();
           } else if (typeof connection.closeSync === 'function') {
             connection.closeSync();
           }
         }
-      } catch (closeError) {
-        console.warn('Warning: Error closing DuckDB connection:', closeError);
+      } catch {
+        /* empty */
       }
 
       try {
         if (instance) {
-          // Close instance to release the database lock
           if (typeof instance.close === 'function') {
             await instance.close();
           } else if (typeof instance.closeSync === 'function') {
@@ -49,8 +42,8 @@ export default class DuckDBSchemaExtractor {
             await instance.terminate();
           }
         }
-      } catch (instanceError) {
-        console.warn('Warning: Error closing DuckDB instance:', instanceError);
+      } catch {
+        /* empty */
       }
     }
   }
@@ -63,29 +56,26 @@ export default class DuckDBSchemaExtractor {
         WHERE table_schema = 'main'
           AND table_type = 'BASE TABLE'
       `);
-      // DuckDB returns 2D arrays, so we need to handle both object and array formats
       return rows
         .map((row) => {
           if (Array.isArray(row)) {
-            return row[0]; // For 2D array format: [["table1"], ["table2"]]
+            return row[0];
           }
-          return row.table_name; // For object format: [{table_name: "table1"}]
+          return row.table_name;
         })
-        .filter((name) => name && typeof name === 'string'); // Filter out undefined/null values
+        .filter((name) => name && typeof name === 'string');
     } catch (error) {
-      // Fallback to SHOW TABLES if information_schema is not available
       try {
         const rows = await this.executeQuery('SHOW TABLES');
         return rows
           .map((row) => {
             if (Array.isArray(row)) {
-              return row[0]; // For 2D array format
+              return row[0];
             }
-            return row.name; // For object format
+            return row.name;
           })
           .filter((name) => name && typeof name === 'string');
       } catch (fallbackError) {
-        console.error('Failed to get tables:', fallbackError);
         return [];
       }
     }
@@ -102,21 +92,18 @@ export default class DuckDBSchemaExtractor {
       return rows
         .map((row) => {
           if (Array.isArray(row)) {
-            return row[0]; // For 2D array format
+            return row[0];
           }
-          return row.table_name; // For object format
+          return row.table_name;
         })
         .filter((name) => name && typeof name === 'string');
     } catch (error) {
-      // DuckDB might not have views in information_schema, return empty array
-      console.warn('Failed to get views, likely not supported:', error);
       return [];
     }
   }
 
   private async getDetailedColumns(tableName: string): Promise<Column[]> {
     try {
-      // Try using information_schema first
       const rows = await this.executeQuery(`
         SELECT
           column_name,
@@ -132,43 +119,36 @@ export default class DuckDBSchemaExtractor {
 
       return rows
         .map((row, index) => {
-          // Handle both 2D array and object formats
           let columnName;
           let dataType;
           let ordinalPosition;
           let isNullable;
-          let columnDefault;
 
           if (Array.isArray(row)) {
-            // 2D array format: [column_name, data_type, ordinal_position, is_nullable, column_default]
-            [columnName, dataType, ordinalPosition, isNullable, columnDefault] =
-              row;
+            [columnName, dataType, ordinalPosition, isNullable] = row;
           } else {
-            // Object format
             columnName = row.column_name;
             dataType = row.data_type;
             ordinalPosition = row.ordinal_position;
             isNullable = row.is_nullable;
-            columnDefault = row.column_default;
           }
 
           return {
             name: columnName,
             typeName: dataType,
             ordinalPosition: ordinalPosition || index + 1,
-            primaryKeySequenceId: 0, // DuckDB doesn't easily expose PK info in information_schema
+            primaryKeySequenceId: 0,
             columnDisplaySize: 0,
             scale: 0,
             precision: 0,
             columnProperties: [],
             autoincrement: false,
-            primaryKey: false, // Would need additional logic to determine
+            primaryKey: false,
             nullable: isNullable === 'YES',
           };
         })
-        .filter((col) => col.name && typeof col.name === 'string'); // Filter out invalid columns
+        .filter((col) => col.name && typeof col.name === 'string');
     } catch (error) {
-      // Fallback to DESCRIBE table
       try {
         const rows = await this.executeQuery(`DESCRIBE ${tableName}`);
         return rows
@@ -178,9 +158,8 @@ export default class DuckDBSchemaExtractor {
             let nullable;
 
             if (Array.isArray(row)) {
-              // DESCRIBE typically returns: [column_name, column_type, null, key, default, extra]
               [columnName, columnType, , , ,] = row;
-              nullable = true; // Default assumption for DESCRIBE fallback
+              nullable = true;
             } else {
               columnName = row.column_name;
               columnType = row.column_type;
@@ -202,59 +181,48 @@ export default class DuckDBSchemaExtractor {
             };
           })
           .filter((col) => col.name && typeof col.name === 'string');
-      } catch (fallbackError) {
-        console.error(
-          `Failed to get columns for table ${tableName}:`,
-          fallbackError,
-        );
+      } catch {
         return [];
       }
     }
   }
 
   async extractSchema(): Promise<{ tables: Table[] }> {
-    try {
-      const [tableNames, viewNames] = await Promise.all([
-        this.getTables(),
-        this.getViews(),
-      ]);
+    const [tableNames, viewNames] = await Promise.all([
+      this.getTables(),
+      this.getViews(),
+    ]);
 
-      const allTables: Table[] = [];
+    const allTables: Table[] = [];
 
-      // Process tables
-      for (const tableName of tableNames) {
-        try {
-          const columns = await this.getDetailedColumns(tableName);
-          allTables.push({
-            name: tableName,
-            type: 'TABLE',
-            schema: 'main',
-            columns,
-          });
-        } catch (error) {
-          console.error(`Failed to extract table ${tableName}:`, error);
-        }
+    for (const tableName of tableNames) {
+      try {
+        const columns = await this.getDetailedColumns(tableName);
+        allTables.push({
+          name: tableName,
+          type: 'TABLE',
+          schema: 'main',
+          columns,
+        });
+      } catch {
+        /* empty */
       }
-
-      // Process views
-      for (const viewName of viewNames) {
-        try {
-          const columns = await this.getDetailedColumns(viewName);
-          allTables.push({
-            name: viewName,
-            type: 'VIEW',
-            schema: 'main',
-            columns,
-          });
-        } catch (error) {
-          console.error(`Failed to extract view ${viewName}:`, error);
-        }
-      }
-
-      return { tables: allTables };
-    } catch (error) {
-      console.error('Failed to extract DuckDB schema:', error);
-      throw error;
     }
+
+    for (const viewName of viewNames) {
+      try {
+        const columns = await this.getDetailedColumns(viewName);
+        allTables.push({
+          name: viewName,
+          type: 'VIEW',
+          schema: 'main',
+          columns,
+        });
+      } catch {
+        /* empty */
+      }
+    }
+
+    return { tables: allTables };
   }
 }

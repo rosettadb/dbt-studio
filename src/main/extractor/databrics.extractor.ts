@@ -1,10 +1,12 @@
 /* eslint-disable no-restricted-syntax, no-await-in-loop, consistent-return */
-import { Column, Table } from '../../types/backend';
 import { DBSQLClient } from '@databricks/sql';
+import { Column, Table } from '../../types/backend';
 
 export default class DatabricksExtractor {
   private client: any;
+
   private session: any = null;
+
   private config: {
     token: string;
     host: string;
@@ -67,7 +69,7 @@ export default class DatabricksExtractor {
           FROM information_schema.schemata
           WHERE catalog_name = '${this.config.catalog}'
           ORDER BY schema_name;
-        `
+        `,
       });
     }
 
@@ -76,17 +78,17 @@ export default class DatabricksExtractor {
         SELECT DISTINCT schema_name
         FROM information_schema.schemata
         ORDER BY schema_name;
-      `
+      `,
     });
 
     if (this.config.catalog) {
       queries.push({
-        sql: `SHOW SCHEMAS IN ${this.config.catalog}`
+        sql: `SHOW SCHEMAS IN ${this.config.catalog}`,
       });
     }
 
     queries.push({
-      sql: `SHOW SCHEMAS`
+      sql: `SHOW SCHEMAS`,
     });
 
     for (const query of queries) {
@@ -107,8 +109,8 @@ export default class DatabricksExtractor {
           }
 
           if (this.config.schema && this.config.schema !== 'default') {
-            const filteredSchemas = schemaNames.filter(name =>
-              name.toLowerCase() === this.config.schema.toLowerCase()
+            const filteredSchemas = schemaNames.filter(
+              (name) => name.toLowerCase() === this.config.schema.toLowerCase(),
             );
             if (filteredSchemas.length > 0) {
               return filteredSchemas;
@@ -117,15 +119,17 @@ export default class DatabricksExtractor {
 
           return schemaNames;
         }
-      } catch (error: unknown) {
-        continue;
+      } catch {
+        /* empty */
       }
     }
 
     return [];
   }
 
-  private async getTables(schema: string): Promise<{ table_name: string; table_type: string }[]> {
+  private async getTables(
+    schema: string,
+  ): Promise<{ table_name: string; table_type: string }[]> {
     const queries = [];
 
     if (this.config.catalog) {
@@ -136,7 +140,7 @@ export default class DatabricksExtractor {
           WHERE table_schema = '${schema}' AND catalog_name = '${this.config.catalog}'
           AND table_type IN ('BASE TABLE', 'VIEW')
           ORDER BY table_name;
-        `
+        `,
       });
     }
 
@@ -147,17 +151,17 @@ export default class DatabricksExtractor {
         WHERE table_schema = '${schema}'
         AND table_type IN ('BASE TABLE', 'VIEW')
         ORDER BY table_name;
-      `
+      `,
     });
 
     if (this.config.catalog) {
       queries.push({
-        sql: `SHOW TABLES IN ${this.config.catalog}.${schema}`
+        sql: `SHOW TABLES IN ${this.config.catalog}.${schema}`,
       });
     }
 
     queries.push({
-      sql: `SHOW TABLES IN ${schema}`
+      sql: `SHOW TABLES IN ${schema}`,
     });
 
     for (const query of queries) {
@@ -167,40 +171,48 @@ export default class DatabricksExtractor {
         if (rows && rows.length > 0) {
           let tables: { table_name: string; table_type: string }[] = [];
 
-          if (rows[0].table_name !== undefined && rows[0].table_type !== undefined) {
+          if (
+            rows[0].table_name !== undefined &&
+            rows[0].table_type !== undefined
+          ) {
             tables = rows.map((row) => ({
               table_name: row.table_name,
-              table_type: row.table_type
+              table_type: row.table_type,
             }));
           } else if (rows[0].tableName !== undefined) {
             tables = rows.map((row) => ({
               table_name: row.tableName,
-              table_type: row.isTemporary ? 'VIEW' : 'BASE TABLE'
+              table_type: row.isTemporary ? 'VIEW' : 'BASE TABLE',
             }));
-          } else if (rows[0].database !== undefined && rows[0].tableName !== undefined) {
+          } else if (rows[0].database !== undefined) {
             tables = rows.map((row) => ({
               table_name: row.tableName,
-              table_type: 'BASE TABLE'
+              table_type: 'BASE TABLE',
             }));
           } else {
-            const tableNames = rows.map((row) => Object.values(row)[0] as string);
+            const tableNames = rows.map(
+              (row) => Object.values(row)[0] as string,
+            );
             tables = tableNames.map((name) => ({
               table_name: name,
-              table_type: 'BASE TABLE'
+              table_type: 'BASE TABLE',
             }));
           }
 
           return tables;
         }
-      } catch (error: unknown) {
-        continue;
+      } catch {
+        /* empty */
       }
     }
 
     return [];
   }
 
-  private async getColumns(schema: string, tableName: string): Promise<Column[]> {
+  private async getColumns(
+    schema: string,
+    tableName: string,
+  ): Promise<Column[]> {
     const queries = [];
 
     if (this.config.catalog) {
@@ -219,7 +231,7 @@ export default class DatabricksExtractor {
           WHERE table_schema = '${schema}'
           AND table_name = '${tableName}' AND catalog_name = '${this.config.catalog}'
           ORDER BY ordinal_position;
-        `
+        `,
       });
     }
 
@@ -238,17 +250,17 @@ export default class DatabricksExtractor {
         WHERE table_schema = '${schema}'
         AND table_name = '${tableName}'
         ORDER BY ordinal_position;
-      `
+      `,
     });
 
     if (this.config.catalog) {
       queries.push({
-        sql: `DESCRIBE ${this.config.catalog}.${schema}.${tableName}`
+        sql: `DESCRIBE ${this.config.catalog}.${schema}.${tableName}`,
       });
     }
 
     queries.push({
-      sql: `DESCRIBE ${schema}.${tableName}`
+      sql: `DESCRIBE ${schema}.${tableName}`,
     });
 
     for (const query of queries) {
@@ -258,13 +270,17 @@ export default class DatabricksExtractor {
         if (rows && rows.length > 0) {
           let columns: Column[] = [];
 
-          if (rows[0].column_name !== undefined && rows[0].data_type !== undefined) {
+          if (
+            rows[0].column_name !== undefined &&
+            rows[0].data_type !== undefined
+          ) {
             columns = rows.map((row) => ({
               name: row.column_name,
               typeName: row.data_type,
               ordinalPosition: row.ordinal_position || 0,
               primaryKeySequenceId: 0,
-              columnDisplaySize: row.character_maximum_length || row.numeric_precision || 0,
+              columnDisplaySize:
+                row.character_maximum_length || row.numeric_precision || 0,
               scale: row.numeric_scale || 0,
               precision: row.numeric_precision || 0,
               columnProperties: [],
@@ -272,7 +288,10 @@ export default class DatabricksExtractor {
               primaryKey: false,
               nullable: row.is_nullable === 'YES',
             }));
-          } else if (rows[0].col_name !== undefined && rows[0].data_type !== undefined) {
+          } else if (
+            rows[0].col_name !== undefined &&
+            rows[0].data_type !== undefined
+          ) {
             columns = rows.map((row, index) => ({
               name: row.col_name,
               typeName: row.data_type,
@@ -288,7 +307,7 @@ export default class DatabricksExtractor {
             }));
           } else {
             columns = rows.map((row, index) => ({
-              name: row.name || row.column || Object.values(row)[0] as string,
+              name: row.name || row.column || (Object.values(row)[0] as string),
               typeName: row.type || row.dataType || 'string',
               ordinalPosition: index + 1,
               primaryKeySequenceId: 0,
@@ -304,8 +323,8 @@ export default class DatabricksExtractor {
 
           return columns;
         }
-      } catch (error: unknown) {
-        continue;
+      } catch {
+        /* empty */
       }
     }
 
@@ -313,30 +332,29 @@ export default class DatabricksExtractor {
   }
 
   async extractSchema(): Promise<{ tables: Table[] }> {
-    try {
-      const schemas = await this.getSchemas();
-      const allTables: Table[] = [];
+    const schemas = await this.getSchemas();
+    const allTables: Table[] = [];
 
-      for (const schema of schemas) {
-        const tables = await this.getTables(schema);
+    for (const schema of schemas) {
+      const tables = await this.getTables(schema);
 
-        for (const { table_name, table_type } of tables) {
-          const columns = await this.getColumns(schema, table_name);
+      // eslint-disable-next-line camelcase
+      for (const { table_name, table_type } of tables) {
+        const columns = await this.getColumns(schema, table_name);
 
-          const table: Table = {
-            name: table_name,
-            type: table_type === 'BASE TABLE' ? 'TABLE' : 'VIEW',
-            schema,
-            columns,
-          };
+        const table: Table = {
+          // eslint-disable-next-line camelcase
+          name: table_name,
+          // eslint-disable-next-line camelcase
+          type: table_type === 'BASE TABLE' ? 'TABLE' : 'VIEW',
+          schema,
+          columns,
+        };
 
-          allTables.push(table);
-        }
+        allTables.push(table);
       }
-
-      return { tables: allTables };
-    } catch (error) {
-      throw error;
     }
+
+    return { tables: allTables };
   }
 }

@@ -44,9 +44,9 @@ export type ConnectorChannels =
   | 'connector:generateProfiles'
   | 'connector:generateRosetta'
   | 'connector:validate'
-  | 'connector:getJdbcUrl'
   | 'connector:query'
-  | 'project:addFromFolder';
+  | 'project:addFromFolder'
+  | 'connector:setConnectionEnvVariable';
 
 export type CliChannels =
   | 'cli:run'
@@ -87,6 +87,18 @@ export type ProcessChannels =
   | 'process:output'
   | 'process:error';
 
+export type SecureStorageChannels =
+  | 'secure-storage:set'
+  | 'secure-storage:get'
+  | 'secure-storage:delete';
+
+export type UpdateChannels =
+  | 'updates:check'
+  | 'updates:check-settings'
+  | 'updates:download'
+  | 'updates:restart'
+  | 'updates:reject-version';
+
 export type Channels =
   | TestChannels
   | CliChannels
@@ -95,7 +107,9 @@ export type Channels =
   | ConnectorChannels
   | GitChannels
   | UtilChannels
-  | ProcessChannels;
+  | ProcessChannels
+  | SecureStorageChannels
+  | UpdateChannels;
 
 export type ConfigureConnectionBody = {
   projectId: string;

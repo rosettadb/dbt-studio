@@ -20,4 +20,5 @@ export const SNOWFLAKE_TYPE_MAP: Record<string, number> = {
   UNKNOWN: 0,
 } as const;
 
-export const AppUpdateTrackURL ='https://dbt-studio-tracker.adaptivescale.workers.dev/api/track';
+export const AppUpdateTrackURL =
+  'https://dbt-studio-tracker.adaptivescale.workers.dev/api/track';

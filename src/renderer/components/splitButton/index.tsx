@@ -1,3 +1,4 @@
+/* eslint-disable react/jsx-props-no-spreading */
 import React from 'react';
 import {
   Button,
@@ -19,22 +20,23 @@ type Props = {
   disabled?: boolean;
   isLoading?: boolean;
   leftIcon?: React.ReactNode;
-  toltipTitle?: string;
+  tooltipTitle?: string;
   menuItems: {
     name: React.ReactNode;
     onClick: () => void;
     subTitle: string;
+    leftIcon?: React.ReactNode;
   }[];
 };
 
-export function SplitButton({
+export const SplitButton: React.FC<Props> = ({
   title,
   disabled = false,
   isLoading = false,
   leftIcon,
-  toltipTitle = '',
+  tooltipTitle = '',
   menuItems,
-}: Props) {
+}) => {
   const theme = useTheme();
   const [open, setOpen] = React.useState(false);
   const anchorRef = React.useRef<HTMLDivElement>(null);
@@ -59,9 +61,31 @@ export function SplitButton({
     setOpen(false);
   };
 
+  const renderIcon = React.useMemo(() => {
+    if (isLoading) {
+      return <CircularProgress size={16} sx={{ marginRight: '4px' }} />;
+    }
+    if (leftIcon) {
+      return (
+        <span
+          style={{
+            display: 'flex',
+            marginRight: '4px',
+            fontSize: '0.8rem',
+          }}
+        >
+          {React.cloneElement(leftIcon as React.ReactElement, {
+            fontSize: 'small',
+            style: { fontSize: '14px' },
+          })}
+        </span>
+      );
+    }
+    return null;
+  }, [isLoading, leftIcon]);
   return (
     <>
-      <Tooltip title={toltipTitle}>
+      <Tooltip title={tooltipTitle}>
         <ButtonGroup
           variant="outlined"
           size="small"
@@ -82,22 +106,7 @@ export function SplitButton({
             }}
             disabled={isLoading || disabled}
           >
-            {isLoading ? (
-              <CircularProgress size={16} sx={{ marginRight: '4px' }} />
-            ) : leftIcon ? (
-              <span
-                style={{
-                  display: 'flex',
-                  marginRight: '4px',
-                  fontSize: '0.8rem',
-                }}
-              >
-                {React.cloneElement(leftIcon as React.ReactElement, {
-                  fontSize: 'small',
-                  style: { fontSize: '14px' },
-                })}
-              </span>
-            ) : null}
+            {renderIcon}
             {title}
           </Button>
           <Button
@@ -172,6 +181,22 @@ export function SplitButton({
                           },
                         }}
                       >
+                        {React.isValidElement(option.leftIcon) ? (
+                          <span
+                            style={{
+                              display: 'flex',
+                              marginRight: '4px',
+                              fontSize: '0.8rem',
+                            }}
+                          >
+                            {React.cloneElement(
+                              option.leftIcon as React.ReactElement,
+                              {
+                                style: { fontSize: '14px' },
+                              },
+                            )}
+                          </span>
+                        ) : null}
                         {option.name}
                       </MenuItem>
                     </span>
@@ -184,4 +209,4 @@ export function SplitButton({
       </Popper>
     </>
   );
-}
+};

@@ -195,7 +195,6 @@ export type SettingsType = {
   sampleRosettaMainConf: string;
   dbtPath: string;
   dbtVersion: string;
-  openAIApiKey?: string;
   pythonVersion: string;
   pythonPath: string;
   pythonBinary: string;
@@ -319,4 +318,53 @@ export type FileStatus = {
 
 export type BigQueryTestResponse = {
   success: boolean;
+};
+
+export type UpdateInfo = {
+  currentVersion: string;
+  newVersion: string;
+  releaseNotes: string;
+};
+
+export type UpdateSettingsInfo = {
+  currentVersion: string;
+  newVersion: string;
+  lastInstalledVersion: string;
+  releaseNotes: string;
+};
+
+export type StoreSchema = {
+  clientId: string;
+  clientIdCreatedAt: string;
+  lastVersion: string;
+  lastVersionUpdatedAt: string;
+};
+
+export type UpdateEvent = {
+  event: string;
+  version: string;
+  previousVersion?: string;
+  platform: string;
+  arch: string;
+  timestamp: string;
+  hostname?: string;
+  clientId: string;
+};
+
+export type AnalyticsEvent = {
+  category: string;
+  action: string;
+  label?: string;
+  timestamp: string;
+  response?: {
+    status?: number;
+    statusText?: string;
+    serverResponse: any;
+  };
+  error?: {
+    message: string;
+    code?: string;
+    status?: number;
+    statusText?: string;
+  };
 };

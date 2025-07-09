@@ -112,7 +112,6 @@ export default class GitService {
       }
     >();
 
-    // Local branches
     local.all.forEach((localName) => {
       branchMap.set(localName, {
         name: localName,
@@ -122,9 +121,8 @@ export default class GitService {
       });
     });
 
-    // Remote branches
     remote.all.forEach((remoteName) => {
-      if (remoteName.includes('->')) return; // Skip symbolic refs like origin/HEAD -> origin/main
+      if (remoteName.includes('->')) return;
 
       const cleanName = remoteName.replace(/^origin\//, '');
 
@@ -286,11 +284,9 @@ export default class GitService {
         ? injectCredentialsIntoRemoteUrl(origin.refs.push, credentials)
         : origin.refs.push;
 
-      // Temporarily override origin
       await git.remote(['set-url', 'origin', remoteWithAuth]);
 
       try {
-        // Attempt to push normally first
         await git.push('origin', currentBranch);
       } catch (err: any) {
         const msg = err.message?.toLowerCase() ?? '';
@@ -302,14 +298,12 @@ export default class GitService {
           msg.includes('has no upstream');
 
         if (shouldTryUpstreamPush) {
-          // Try setting upstream on push
           await git.push(['-u', 'origin', currentBranch]);
         } else {
           throw err;
         }
       }
 
-      // Reset origin to clean version
       await git.remote(['set-url', 'origin', origin.refs.push]);
 
       return { success: true };
@@ -339,14 +333,14 @@ export default class GitService {
 
       await git.clone(urlToUse, destinationPath);
 
-      // Parse connection files if they exist
-      const connections = await ConnectorsService.parseProjectConnectionFiles(destinationPath);
+      const connections =
+        await ConnectorsService.parseProjectConnectionFiles(destinationPath);
 
       return {
         path: destinationPath,
         name: repoName,
         dbtConnection: connections.dbtConnection,
-        rosettaConnection: connections.rosettaConnection
+        rosettaConnection: connections.rosettaConnection,
       };
     } catch (err: any) {
       if (isAuthError(err)) throw new AuthError();
@@ -371,32 +365,26 @@ export default class GitService {
 
     const results: FileStatus[] = [];
 
-    // Untracked
     status.not_added.forEach((file) =>
       results.push({ path: `${repoPath}/${file}`, status: 'untracked' }),
     );
 
-    // Modified (unstaged)
     status.modified.forEach((file) =>
       results.push({ path: `${repoPath}/${file}`, status: 'modified' }),
     );
 
-    // Staged files (added or modified)
     status.staged.forEach((file) =>
       results.push({ path: `${repoPath}/${file}`, status: 'staged' }),
     );
 
-    // Deleted
     status.deleted.forEach((file) =>
       results.push({ path: `${repoPath}/${file}`, status: 'deleted' }),
     );
 
-    // Renamed
     status.renamed.forEach((entry) =>
       results.push({ path: entry.to, status: 'renamed' }),
     );
 
-    // Conflicted
     status.conflicted.forEach((file) =>
       results.push({ path: `${repoPath}/${file}`, status: 'conflicted' }),
     );

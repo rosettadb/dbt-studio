@@ -58,7 +58,8 @@ export const NoAiSetModal: React.FC<NoAiSetModalProps> = ({
 
       <StyledDialogContent>
         <Typography variant="body1" paragraph>
-          To use AI-powered features like generating dbt business layers, you need to configure an AI provider first.
+          To use AI-powered features like generating dbt business layers, you
+          need to configure an AI provider first.
         </Typography>
 
         <Typography variant="body1" paragraph>
@@ -72,14 +73,13 @@ export const NoAiSetModal: React.FC<NoAiSetModalProps> = ({
         </Box>
 
         <Typography variant="body2" color="text.secondary">
-          Click "Configure AI Provider" to set up your API keys in the settings.
+          Click &#34;Configure AI Provider&#34; to set up your API keys in the
+          settings.
         </Typography>
       </StyledDialogContent>
 
       <DialogActions sx={{ padding: '16px 24px' }}>
-        <Button onClick={onClose}>
-          Cancel
-        </Button>
+        <Button onClick={onClose}>Cancel</Button>
         <Button
           onClick={handleGoToSettings}
           variant="contained"

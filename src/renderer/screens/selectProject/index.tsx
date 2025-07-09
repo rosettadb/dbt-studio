@@ -38,7 +38,7 @@ import {
   useGetSettings,
 } from '../../controllers';
 import { CloneRepoModal, Icon, GetStartedModal } from '../../components';
-import { icons, logo } from '../../../../assets';
+import { icons } from '../../../../assets';
 import connectionIcons from '../../../../assets/connectionIcons';
 import { AppLayout } from '../../layouts';
 import { SupportedConnectionTypes } from '../../../types/backend';
@@ -140,7 +140,7 @@ const EmptyStateContainer = styled(Box)`
   margin-top: 2rem;
   border-radius: 8px;
   border: 0.5px solid ${({ theme }) => theme.palette.divider};
-  overflow-y: auto; /* Make this scrollable too if content is too large */
+  overflow-y: auto;
   flex: 1;
 `;
 
@@ -151,7 +151,6 @@ const EmptyStateIcon = styled(Box)`
 
   svg {
     font-size: 3rem;
-    /* Animation removed */
   }
 `;
 
@@ -178,18 +177,13 @@ const TaglineContainer = styled(Box)`
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 0.25rem; /* Reduced gap from 0.75rem to 0.25rem */
+  gap: 0.25rem;
 `;
 
 const TaglineText = styled(Typography)`
   font-size: 1rem;
   font-weight: 500;
   color: ${({ theme }) => theme.palette.primary.main};
-`;
-
-const TaglineLogo = styled('img')`
-  height: 40px;
-  width: auto;
 `;
 
 const ProjectIcon = styled('img')`
@@ -209,12 +203,6 @@ const ProjectMuiIcon = styled(Box)`
   display: flex;
   align-items: center;
   justify-content: center;
-
-  .MuiSvgIcon-root {
-    width: 20px;
-    height: 20px;
-    color: ${({ theme }) => theme.palette.text.secondary};
-  }
 `;
 
 const ProjectCardContent = styled(Box)`
@@ -250,7 +238,8 @@ const SelectProject: React.FC = () => {
     id: string;
     name: string;
   } | null>(null);
-  const [isGetStartedModalOpen, setIsGetStartedModalOpen] = React.useState(false);
+  const [isGetStartedModalOpen, setIsGetStartedModalOpen] =
+    React.useState(false);
 
   const { mutate: deleteProject } = useDeleteProject({
     onSuccess: () => {
@@ -282,14 +271,13 @@ const SelectProject: React.FC = () => {
           alt={project?.dbtConnection?.type || 'database'}
         />
       );
-    } else {
-      // Render MUI icon for disconnected projects
-      return (
-        <ProjectMuiIcon>
-          <DatabaseIcon />
-        </ProjectMuiIcon>
-      );
     }
+    // Render MUI icon for disconnected projects
+    return (
+      <ProjectMuiIcon>
+        <DatabaseIcon />
+      </ProjectMuiIcon>
+    );
   };
 
   const handleOpenMenu = (
@@ -403,7 +391,14 @@ const SelectProject: React.FC = () => {
           <EmptyStateDescription variant="body1">
             You don&apos;t have any projects yet.
           </EmptyStateDescription>
-          <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 2 }}>
+          <Box
+            sx={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: 2,
+            }}
+          >
             <Button
               variant="contained"
               color="primary"
@@ -609,7 +604,9 @@ const SelectProject: React.FC = () => {
                 />
               </SearchContainer>
               <Box sx={{ display: 'flex', gap: 1 }}>
-                {!projects.some(p => p.name === 'dbtstudio_getting_started') && (
+                {!projects.some(
+                  (p) => p.name === 'dbtstudio_getting_started',
+                ) && (
                   <Tooltip title="Import getting started example project">
                     <Button
                       variant="outlined"
@@ -617,7 +614,10 @@ const SelectProject: React.FC = () => {
                       onClick={handleGetStarted}
                       sx={{ height: 40 }}
                     >
-                      <RocketLaunchIcon sx={{ marginRight: 1 }} fontSize="small" />
+                      <RocketLaunchIcon
+                        sx={{ marginRight: 1 }}
+                        fontSize="small"
+                      />
                       Get Started
                     </Button>
                   </Tooltip>
@@ -659,11 +659,9 @@ const SelectProject: React.FC = () => {
                           toast.error('Failed to load project from folder.');
                         }
                       } catch (error) {
-                        // Show toast message instead of throwing an error
                         toast.error(
                           'Failed to load project from folder. Please try again.',
                         );
-                        console.error('Error loading project from folder:', error);
                       }
                     }}
                   >

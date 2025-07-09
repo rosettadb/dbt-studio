@@ -24,7 +24,7 @@ import { SelectProjectLayout } from './layouts';
 import { AppProvider, ProcessProvider } from './context';
 import { QueryClientContextProvider } from './context/QueryClientContext';
 import { themeStorageManager, getStoredThemeMode } from './utils/themeStorage';
-import { ScrollbarStyles } from './components/scrollbarStyles';
+import { ScrollbarStyles, UpdateDialog } from './components';
 import Loading from './screens/loading';
 
 const App: React.FC = () => {
@@ -51,6 +51,7 @@ const App: React.FC = () => {
           <Route path="settings/ai-providers" element={<Settings />} />
           <Route path="settings/dbt" element={<Settings />} />
           <Route path="settings/rosetta" element={<Settings />} />
+          <Route path="settings/installation" element={<Settings />} />
           <Route path="settings/about" element={<Settings />} />
           <Route path="sql" element={<Sql />} />
           <Route path="loading" element={<Loading />} />
@@ -75,6 +76,7 @@ const AppWithProjectProvider: React.FC = () => {
             storageManager={themeStorageManager}
           >
             <App />
+            <UpdateDialog />
             <ToastContainer
               position="bottom-right"
               autoClose={5000}

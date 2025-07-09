@@ -74,56 +74,62 @@ const Sql = () => {
       }
     >
       <Box sx={{ height: '100%' }}>
-        {!selectedProject ? (
+        {!selectedProject && (
           <Box sx={{ padding: 2, textAlign: 'center' }}>
             <Loader />
           </Box>
-        ) : queryResults || error ? (
-          <SplitPane
-            split="horizontal"
-            sizes={sizes}
-            onChange={(newSizes) => setSizes(newSizes as [number, number])}
-            sashRender={renderSash}
-          >
-            <SqlEditor
-              completions={completions}
-              connectionInput={connectionInput as ConnectionInput}
-              selectedProject={selectedProject}
-              queryHistory={queryHistory}
-              setQueryHistory={setQueryHistory}
-              setLoadingQuery={setLoadingQuery}
-              setQueryResults={setQueryResults}
-              setError={setError}
-            />
+        )}
+        {selectedProject && (
+          // eslint-disable-next-line react/jsx-no-useless-fragment
+          <>
+            {queryResults || error ? (
+              <SplitPane
+                split="horizontal"
+                sizes={sizes}
+                onChange={(newSizes) => setSizes(newSizes as [number, number])}
+                sashRender={renderSash}
+              >
+                <SqlEditor
+                  completions={completions}
+                  connectionInput={connectionInput as ConnectionInput}
+                  selectedProject={selectedProject}
+                  queryHistory={queryHistory}
+                  setQueryHistory={setQueryHistory}
+                  setLoadingQuery={setLoadingQuery}
+                  setQueryResults={setQueryResults}
+                  setError={setError}
+                />
 
-            <Box
-              sx={{
-                height: '100%',
-                padding: 1,
-                overflowY: 'auto',
-                background: theme.palette.background.paper,
-              }}
-            >
-              {loadingQuery && <Loader />}
-              {!loadingQuery && error && (
-                <ErrorMessage title="Query Failed" description={error} />
-              )}
-              {!loadingQuery && !error && queryResults && (
-                <QueryResult results={queryResults} />
-              )}
-            </Box>
-          </SplitPane>
-        ) : (
-          <SqlEditor
-            completions={completions}
-            connectionInput={connectionInput as ConnectionInput}
-            selectedProject={selectedProject}
-            queryHistory={queryHistory}
-            setQueryHistory={setQueryHistory}
-            setLoadingQuery={setLoadingQuery}
-            setQueryResults={setQueryResults}
-            setError={setError}
-          />
+                <Box
+                  sx={{
+                    height: '100%',
+                    padding: 1,
+                    overflowY: 'auto',
+                    background: theme.palette.background.paper,
+                  }}
+                >
+                  {loadingQuery && <Loader />}
+                  {!loadingQuery && error && (
+                    <ErrorMessage title="Query Failed" description={error} />
+                  )}
+                  {!loadingQuery && !error && queryResults && (
+                    <QueryResult results={queryResults} />
+                  )}
+                </Box>
+              </SplitPane>
+            ) : (
+              <SqlEditor
+                completions={completions}
+                connectionInput={connectionInput as ConnectionInput}
+                selectedProject={selectedProject}
+                queryHistory={queryHistory}
+                setQueryHistory={setQueryHistory}
+                setLoadingQuery={setLoadingQuery}
+                setQueryResults={setQueryResults}
+                setError={setError}
+              />
+            )}
+          </>
         )}
       </Box>
     </AppLayout>

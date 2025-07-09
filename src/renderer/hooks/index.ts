@@ -8,6 +8,7 @@ import useRosettaDBT from './useRosettaDBT';
 import useDbt from './useDbt';
 import useConnectionInput from './useConnectionInput';
 import useProcess from './useProcessContext';
+import useSecureStorage from './useSecureStorage';
 
 export {
   useIpcPromise,
@@ -20,4 +21,5 @@ export {
   useDbt,
   useConnectionInput,
   useProcess,
+  useSecureStorage,
 };

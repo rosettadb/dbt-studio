@@ -78,7 +78,7 @@ export const ComingSoonBanner = styled(Box)(({ theme }) => ({
   position: 'absolute',
   width: '120%',
   height: '20px',
-  background: `${theme.palette.primary.main}40`,  // Adding 40 for 25% opacity
+  background: `${theme.palette.primary.main}40`,
   color: 'white',
   display: 'flex',
   justifyContent: 'center',

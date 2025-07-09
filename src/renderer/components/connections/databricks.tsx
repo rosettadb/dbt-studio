@@ -22,6 +22,7 @@ import {
   useGetSelectedProject,
 } from '../../controllers';
 import ConnectionHeader from './connection-header';
+import useSecureStorage from '../../hooks/useSecureStorage';
 
 type Props = {
   onCancel: () => void;
@@ -31,6 +32,7 @@ export const Databricks: React.FC<Props> = ({ onCancel }) => {
   const { data: project } = useGetSelectedProject();
   const navigate = useNavigate();
   const theme = useTheme();
+  const { getDatabaseToken, setDatabaseToken } = useSecureStorage();
 
   const existingConnection: DatabricksDBTConnection | undefined =
     React.useMemo(() => {
@@ -48,7 +50,7 @@ export const Databricks: React.FC<Props> = ({ onCancel }) => {
     httpPath: existingConnection?.http_path ?? '',
     database: existingConnection?.database ?? '',
     schema: existingConnection?.schema ?? '',
-    token: existingConnection?.token ?? '', // Use token instead of password
+    token: '', // Use token instead of password
   });
 
   const [showToken, setShowToken] = React.useState(false);
@@ -85,6 +87,23 @@ export const Databricks: React.FC<Props> = ({ onCancel }) => {
     },
   });
 
+  React.useEffect(() => {
+    const fetchCredentials = async () => {
+      if (project?.name) {
+        try {
+          const storedToken = await getDatabaseToken(project.name);
+          setFormState((prev) => ({
+            ...prev,
+            token: storedToken || '',
+          }));
+        } catch (error) {
+          toast.error('Failed to retrieve token. Please try again.');
+        }
+      }
+    };
+    fetchCredentials();
+  }, [project?.name]);
+
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
     setFormState((prev) => ({
@@ -95,9 +114,17 @@ export const Databricks: React.FC<Props> = ({ onCancel }) => {
     setConnectionStatus('idle');
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!project?.id) return;
+    if (formState.token && project.name) {
+      try {
+        await setDatabaseToken(formState.token, project.name);
+      } catch (error) {
+        toast.error('Failed to save token. Please try again.');
+        return;
+      }
+    }
     configureConnection({
       projectId: project.id,
       connection: formState,

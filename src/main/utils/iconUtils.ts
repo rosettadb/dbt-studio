@@ -2,7 +2,7 @@ import { app, nativeImage } from 'electron';
 import path from 'path';
 
 /**
- * Returns the absolute path to the assets directory.
+ * Returns the absolute path to the assets` directory.
  */
 const getAssetsPath = () => {
   return app.isPackaged
@@ -16,18 +16,17 @@ const getAssetsPath = () => {
 export const createAppIcon = () => {
   const RESOURCES_PATH = getAssetsPath();
 
-  let iconPath = '';
+  let iconPath;
   if (process.platform === 'darwin') {
-    iconPath = path.join(RESOURCES_PATH, 'icon.png'); // macOS prefers PNG
+    iconPath = path.join(RESOURCES_PATH, 'icon.png');
   } else if (process.platform === 'win32') {
-    iconPath = path.join(RESOURCES_PATH, 'icon.ico'); // Windows requires .ico
+    iconPath = path.join(RESOURCES_PATH, 'icon.ico');
   } else {
-    iconPath = path.join(RESOURCES_PATH, 'icon.png'); // Linux typically uses PNG
+    iconPath = path.join(RESOURCES_PATH, 'icon.png');
   }
 
   const icon = nativeImage.createFromPath(iconPath);
   if (icon.isEmpty()) {
-    console.warn(`Could not load application icon from: ${iconPath}`);
     return nativeImage.createEmpty();
   }
 
@@ -60,12 +59,7 @@ export const createMultiResolutionIcon = () => {
     path.join(RESOURCES_PATH, 'icon.png'),
   );
   if (baseIcon.isEmpty()) {
-    console.warn('Could not load base PNG icon for multi-resolution icon.');
     return nativeImage.createEmpty();
   }
-
-  // Electron automatically handles different scale factors if the image is large enough.
-  // So you don't need to manually add multiple resolutions unless you have them.
-
   return baseIcon;
 };

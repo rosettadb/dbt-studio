@@ -1,9 +1,10 @@
 import React from 'react';
 import { AppContextType } from '../../types/frontend';
 import { Splash } from '../components';
-import { useGetProjects, useGetSelectedProject, useGetSettings } from '../controllers';
+import { useGetProjects, useGetSelectedProject } from '../controllers';
 import { Project, Table } from '../../types/backend';
 import { projectsServices } from '../services';
+import { getOpenAIKey } from '../services/settings.services';
 
 type Props = {
   children: React.ReactNode;
@@ -19,12 +20,12 @@ export const AppContext = React.createContext<AppContextType>({
   fetchSchema: async () => {},
   schema: [],
   isAiProviderSet: false,
+  setIsAiProviderSet: () => {},
 });
 
 const AppProvider: React.FC<Props> = ({ children }) => {
   const { data: projects = [] } = useGetProjects();
   const { data: selectedProject, isLoading } = useGetSelectedProject();
-  const { data: settings } = useGetSettings();
 
   const [isSidebarOpen, setIsSidebarOpen] = React.useState(true);
   const [isLoadingSchema, setIsLoadingSchema] = React.useState(false);
@@ -32,6 +33,7 @@ const AppProvider: React.FC<Props> = ({ children }) => {
   const [sidebarContent, setSidebarContent] = React.useState<React.ReactNode>(
     <div />,
   );
+  const [isAiProviderSet, setIsAiProviderSet] = React.useState(false);
 
   const fetchSchema = async () => {
     if (selectedProject) {
@@ -47,10 +49,17 @@ const AppProvider: React.FC<Props> = ({ children }) => {
     }
   };
 
-  // Check if AI provider is set
-  const isAiProviderSet = React.useMemo(() => {
-    return !!(settings?.openAIApiKey && settings.openAIApiKey.trim() !== '');
-  }, [settings?.openAIApiKey]);
+  React.useEffect(() => {
+    const checkAiProvider = async () => {
+      try {
+        const apiKey = await getOpenAIKey();
+        setIsAiProviderSet(!!apiKey && apiKey.trim() !== '');
+      } catch (error) {
+        setIsAiProviderSet(false);
+      }
+    };
+    checkAiProvider();
+  }, []);
 
   React.useEffect(() => {
     fetchSchema();
@@ -70,6 +79,7 @@ const AppProvider: React.FC<Props> = ({ children }) => {
       setIsSidebarOpen,
       isLoadingSchema,
       isAiProviderSet,
+      setIsAiProviderSet,
     };
   }, [
     projects,
@@ -79,6 +89,7 @@ const AppProvider: React.FC<Props> = ({ children }) => {
     isSidebarOpen,
     selectedProject,
     isAiProviderSet,
+    setIsAiProviderSet,
   ]);
 
   if (isLoading) {

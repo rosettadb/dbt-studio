@@ -43,23 +43,23 @@ const registerConnectorsHandlers = () => {
   );
 
   ipcMain.handle(
-    'connector:getJdbcUrl',
-    async (_event, connection: ConnectionInput) => {
-      return ConnectorsService.generateJdbcUrl(connection);
-    },
-  );
-
-  ipcMain.handle(
     'connector:query',
     async (
       _event,
-      body: { connection: ConnectionInput; query: string },
+      body: { connection: ConnectionInput; query: string; projectName: string },
     ): Promise<QueryResponseType> => {
       try {
         return ConnectorsService.executeSelectStatement(body);
       } catch (error: any) {
         return { success: false, error: error.message };
       }
+    },
+  );
+
+  ipcMain.handle(
+    'connector:setConnectionEnvVariable',
+    async (_event, { key, value }: { key: string; value: string }) => {
+      return ConnectorsService.setConnectionEnvVariable(key, value);
     },
   );
 };

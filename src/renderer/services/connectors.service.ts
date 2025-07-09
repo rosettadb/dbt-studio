@@ -37,23 +37,24 @@ export const validateConnection = async (
   return data;
 };
 
-export const generateJdbcUrl = async (
-  body: ConnectionInput,
-): Promise<string> => {
-  const { data } = await client.post<ConnectionInput, string>(
-    'connector:getJdbcUrl',
-    body,
-  );
-  return data;
-};
-
 export const queryData = async (body: {
   connection: ConnectionInput;
   query: string;
+  projectName: string;
 }): Promise<QueryResponseType> => {
   const { data } = await client.post<
     { connection: ConnectionInput; query: string },
     QueryResponseType
   >('connector:query', body);
   return data;
+};
+
+export const setConnectionEnvVariable = async (
+  key: string,
+  value: string,
+): Promise<void> => {
+  await client.post<{ key: string; value: string }, void>(
+    'connector:setConnectionEnvVariable',
+    { key, value },
+  );
 };

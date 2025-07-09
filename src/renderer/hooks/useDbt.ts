@@ -1,7 +1,7 @@
 import React from 'react';
 import { toast } from 'react-toastify';
-import { useCli } from './index';
-import { useGetSettings } from '../controllers';
+import { useCli, useSecureStorage } from './index';
+import { useGetSettings, useSetConnectionEnvVariable } from '../controllers';
 import { Project } from '../../types/backend';
 
 type DbtCommandType =
@@ -28,6 +28,9 @@ interface UseDbtReturn {
 const useDbt = (successCallback: () => void): UseDbtReturn => {
   const { data: settings } = useGetSettings();
   const { error, runCommand, isSuccess } = useCli();
+  const { getDatabaseUsername, getDatabasePassword, getDatabaseToken } =
+    useSecureStorage();
+  const setEnvVariables = useSetConnectionEnvVariable();
   const [isRunning, setIsRunning] = React.useState(false);
   const [activeCommand, setActiveCommand] =
     React.useState<DbtCommandType | null>(null);
@@ -35,16 +38,17 @@ const useDbt = (successCallback: () => void): UseDbtReturn => {
 
   React.useEffect(() => {
     if (!isRunning) return;
-    if (error.length > 0) {
+
+    if (error.length > 0 && !isSuccess) {
       if (!disabledToaster) {
         toast.error(`dbt ${activeCommand} failed`);
       }
-
       setIsRunning(false);
       setActiveCommand(null);
       return;
     }
-    if (isSuccess) {
+
+    if (isSuccess && error.length === 0) {
       toast.success(`dbt ${activeCommand} completed successfully`);
       setIsRunning(false);
       setActiveCommand(null);
@@ -66,6 +70,30 @@ const useDbt = (successCallback: () => void): UseDbtReturn => {
 
     setIsRunning(true);
     setActiveCommand(command);
+    // get values fro Keytar
+    const secureUserName = await getDatabaseUsername(project.name);
+    if (secureUserName) {
+      setEnvVariables.mutate({
+        key: `db-user-${project.name}`,
+        value: secureUserName || '',
+      });
+    }
+    const securePassword = await getDatabasePassword(project.name);
+
+    if (securePassword) {
+      setEnvVariables.mutate({
+        key: `db-password-${project.name}`,
+        value: securePassword || '',
+      });
+    }
+
+    const secureToken = await getDatabaseToken(project.name);
+    if (secureToken) {
+      setEnvVariables.mutate({
+        key: `db-token-${project.name}`,
+        value: secureToken || '',
+      });
+    }
 
     let cmdString = '';
 

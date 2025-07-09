@@ -89,17 +89,26 @@ export const useValidateConnection = (
   });
 };
 
-export const useGenerateJdbcUrl = (
-  customOptions?: UseMutationOptions<string, CustomError, ConnectionInput>,
-): UseMutationResult<string, CustomError, ConnectionInput> => {
+export const useSetConnectionEnvVariable = (
+  customOptions?: UseMutationOptions<
+    void,
+    CustomError,
+    { key: string; value: string }
+  >,
+): UseMutationResult<void, CustomError, { key: string; value: string }> => {
   const { onSuccess: onCustomSuccess, onError: onCustomError } =
     customOptions || {};
-
+  const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: async (data: ConnectionInput) => {
-      return connectorsServices.generateJdbcUrl(data);
+    mutationFn: async ({ key, value }) => {
+      return connectorsServices.setConnectionEnvVariable(key, value);
     },
-    onSuccess: onCustomSuccess,
-    onError: onCustomError,
+    onSuccess: async (...args) => {
+      await queryClient.invalidateQueries([QUERY_KEYS.GET_SELECTED_PROJECT]);
+      onCustomSuccess?.(...args);
+    },
+    onError: (...args) => {
+      onCustomError?.(...args);
+    },
   });
 };

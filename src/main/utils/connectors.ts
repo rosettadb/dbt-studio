@@ -6,14 +6,14 @@ import { DuckDBInstance } from '@duckdb/node-api';
 import { DBSQLClient } from '@databricks/sql';
 import fs from 'fs';
 import {
-  PostgresConnection,
-  QueryResponseType,
-  SnowflakeConnection,
-  DatabricksConnection,
   BigQueryConnection,
   BigQueryTestResponse,
+  DatabricksConnection,
   DuckDBConnection,
+  PostgresConnection,
+  QueryResponseType,
   RedshiftConnection,
+  SnowflakeConnection,
 } from '../../types/backend';
 import { SNOWFLAKE_TYPE_MAP } from './constants';
 
@@ -44,13 +44,12 @@ export async function testRedshiftConnection(
     user: config.username,
     password: config.password,
     database: config.database,
-    connectionTimeoutMillis: 15000, // Increased timeout for Redshift
+    connectionTimeoutMillis: 15000,
   };
 
-  // Enable SSL by default for Redshift (required for Redshift Serverless)
   if (config.ssl !== false) {
     clientConfig.ssl = {
-      rejectUnauthorized: false, // Use permissive SSL by default
+      rejectUnauthorized: false,
       ...(config.sslrootcert && { ca: fs.readFileSync(config.sslrootcert) }),
     };
   }
@@ -87,7 +86,7 @@ export const executePostgresQuery = async (
       success: true,
       data: result.rows,
       fields: result.fields.map((f) => ({ name: f.name, type: f.dataTypeID })),
-      rowCount: result.rowCount ?? undefined, // Convert null to undefined
+      rowCount: result.rowCount ?? undefined,
     };
   } catch (err: any) {
     return { success: false, error: err?.message };
@@ -106,13 +105,12 @@ export const executeRedshiftQuery = async (
     user: config.username,
     password: config.password,
     database: config.database,
-    connectionTimeoutMillis: 15000, // Increased timeout for Redshift
+    connectionTimeoutMillis: 15000,
   };
 
-  // Enable SSL by default for Redshift (required for Redshift Serverless)
   if (config.ssl !== false) {
     clientConfig.ssl = {
-      rejectUnauthorized: false, // Use permissive SSL by default
+      rejectUnauthorized: false,
       ...(config.sslrootcert && { ca: fs.readFileSync(config.sslrootcert) }),
     };
   }
@@ -261,7 +259,7 @@ export const executeDatabricksQuery = async (
 
   try {
     const connection = await client.connect({
-      token: config.token, // Use token instead of password
+      token: config.token,
       host: config.host,
       path: config.httpPath,
     });
@@ -276,7 +274,6 @@ export const executeDatabricksQuery = async (
     await session.close();
     await client.close();
 
-    // For now, we'll return basic field info since Databricks doesn't provide detailed type info easily
     const fields =
       result.length > 0
         ? Object.keys(result[0] as object).map((name, index) => ({
@@ -287,7 +284,7 @@ export const executeDatabricksQuery = async (
 
     return {
       success: true,
-      data: result as any[], // Cast to any[] to match expected type
+      data: result as any[],
       fields,
     };
   } catch (error: any) {
@@ -307,8 +304,7 @@ export async function testBigQueryConnection(
   };
 
   try {
-    const credentials = JSON.parse(config.keyfile);
-    bigqueryConfig.credentials = credentials;
+    bigqueryConfig.credentials = JSON.parse(config.keyfile);
   } catch (err) {
     throw new Error('Invalid service account key JSON format');
   }
@@ -356,8 +352,7 @@ export const executeBigQueryQuery = async (
   };
 
   try {
-    const credentials = JSON.parse(config.keyfile);
-    bigqueryConfig.credentials = credentials;
+    bigqueryConfig.credentials = JSON.parse(config.keyfile);
   } catch (err) {
     return {
       success: false,
@@ -424,25 +419,17 @@ export async function testDuckDBConnection(
 
   try {
     if (!config.database_path) {
-      console.error(
-        '❌ DuckDB connection test failed: No database path provided',
-      );
       return false;
     }
 
     try {
       const stats = fs.statSync(config.database_path);
       if (stats.isDirectory()) {
-        console.error(
-          '❌ DuckDB connection test failed: Path is a directory, not a file',
-        );
         return false;
       }
-    } catch (error) {
-      // File doesn't exist yet - DuckDB will create it
+    } catch {
+      /* empty */
     }
-
-    // Create instance and connection
     instance = await DuckDBInstance.create(config.database_path);
     connection = await instance.connect();
 
@@ -463,21 +450,12 @@ export async function testDuckDBConnection(
 
       return success;
     } catch (queryError) {
-      console.error('❌ Error during query execution:', queryError);
       return false;
     }
   } catch (error: any) {
-    console.error('❌ DuckDB database creation/connection failed:', error);
-    console.error('Error details:', {
-      message: error.message,
-      stack: error.stack,
-      name: error.name,
-    });
-
     if (error.message?.includes('Is a directory')) {
       const errorMsg =
         'The selected path is a directory. Please select a DuckDB file (.duckdb)';
-      console.error('🔍 Specific error:', errorMsg);
       throw new Error(errorMsg);
     }
 
@@ -485,31 +463,27 @@ export async function testDuckDBConnection(
       const pidMatch = error.message.match(/PID (\d+)/);
       const pid = pidMatch ? pidMatch[1] : 'unknown';
       const errorMsg = `The DuckDB file is locked by another process (PID: ${pid}). Please close any DuckDB CLI sessions or run: kill ${pid}`;
-      console.error('🔍 Specific error:', errorMsg);
       throw new Error(errorMsg);
     }
 
     if (error.message?.includes('Permission denied')) {
       const errorMsg =
         'Permission denied. Please check file permissions or select a different location.';
-      console.error('🔍 Specific error:', errorMsg);
       throw new Error(errorMsg);
     }
 
     throw error;
   } finally {
-    // Ensure proper cleanup in all cases
     try {
       if (connection) {
-        // Close connection first
         if (typeof connection.close === 'function') {
           await connection.close();
         } else if (typeof connection.closeSync === 'function') {
           connection.closeSync();
         }
       }
-    } catch (closeError) {
-      console.warn('Warning: Error closing DuckDB connection:', closeError);
+    } catch {
+      /* empty */
     }
 
     try {
@@ -522,8 +496,8 @@ export async function testDuckDBConnection(
           await instance.terminate();
         }
       }
-    } catch (instanceError) {
-      console.warn('Warning: Error closing DuckDB instance:', instanceError);
+    } catch {
+      /* empty */
     }
   }
 }
@@ -542,12 +516,11 @@ export const executeDuckDBQuery = async (
     const result = await connection.run(query);
     const rows = await result.getRows();
 
-    // Extract field information from the result schema
     const fields =
       rows.length > 0
         ? Object.keys(rows[0] as any).map((name, index) => ({
             name,
-            type: index, // Simple type mapping for now
+            type: index,
           }))
         : [];
 
@@ -557,29 +530,25 @@ export const executeDuckDBQuery = async (
       fields,
     };
   } catch (error: any) {
-    console.error('❌ DuckDB query execution failed:', error);
     return {
       success: false,
       error: error?.message || 'Unknown error occurred during query execution',
     };
   } finally {
-    // Ensure proper cleanup in all cases
     try {
       if (connection) {
-        // Close connection first
         if (typeof connection.close === 'function') {
           await connection.close();
         } else if (typeof connection.closeSync === 'function') {
           connection.closeSync();
         }
       }
-    } catch (closeError) {
-      console.warn('Warning: Error closing DuckDB connection:', closeError);
+    } catch {
+      /* empty */
     }
 
     try {
       if (instance) {
-        // Close instance to release the database lock
         if (typeof instance.close === 'function') {
           await instance.close();
         } else if (typeof instance.closeSync === 'function') {
@@ -588,8 +557,8 @@ export const executeDuckDBQuery = async (
           await instance.terminate();
         }
       }
-    } catch (instanceError) {
-      console.warn('Warning: Error closing DuckDB instance:', instanceError);
+    } catch {
+      /* empty */
     }
   }
 };
