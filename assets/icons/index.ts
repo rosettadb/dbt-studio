@@ -7,6 +7,7 @@ import git from './git.svg';
 import dbtTm from './dbt-bit_tm.svg';
 import dbtBlack from './dbt-black.svg';
 import rosetta from './rosetta.png';
+import rosettaLabs from './rosetta-labs.png';
 
 export const icons = {
   settings,
@@ -18,4 +19,5 @@ export const icons = {
   dbtTm,
   dbtBlack,
   rosetta,
+  rosettaLabs,
 };

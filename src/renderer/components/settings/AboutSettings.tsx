@@ -1,7 +1,6 @@
 import React from 'react';
 import { Typography, Box, Link, Divider, Stack } from '@mui/material';
 import { OpenInNew } from '@mui/icons-material';
-import { Icon } from '../icon';
 import { icons } from '../../../../assets';
 import { utils } from '../../helpers';
 
@@ -9,9 +8,14 @@ export const AboutSettings: React.FC = () => {
   return (
     <Box>
       <Box sx={{ display: 'flex', alignItems: 'center', mb: 3, gap: 2 }}>
-        <Icon src={icons.dbtTm} width={32} height={32} />
+        <img
+          src={icons.rosettaLabs}
+          width={32}
+          height={32}
+          alt="Rosetta Labs"
+        />
         <Typography variant="h5" fontWeight="500">
-          Rosetta dbt™ Studio
+          Rosetta DBT Studio
         </Typography>
       </Box>
 
