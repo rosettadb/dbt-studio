@@ -606,7 +606,7 @@ const ProjectDetails: React.FC = () => {
                       isLoading={isLoadingQuery}
                       menuItems={[
                         {
-                          name: 'Generate Dashboards',
+                          name: 'Generate Analitics',
                           onClick: isAiProviderSet
                             ? generateDashboards
                             : () => setNoAiSetModal(true),
