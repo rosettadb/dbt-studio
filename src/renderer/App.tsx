@@ -24,9 +24,8 @@ import { SelectProjectLayout } from './layouts';
 import { AppProvider, ProcessProvider } from './context';
 import { QueryClientContextProvider } from './context/QueryClientContext';
 import { themeStorageManager, getStoredThemeMode } from './utils/themeStorage';
-import { ScrollbarStyles } from './components/scrollbarStyles';
+import { ScrollbarStyles, UpdateDialog } from './components';
 import Loading from './screens/loading';
-import { UpdateDialog } from './components/modals/updateDialog';
 
 const App: React.FC = () => {
   return (
