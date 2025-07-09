@@ -6,6 +6,7 @@ import registerGitHandlers from './git.ipcHandlers';
 import registerUtilsHandlers from './utils.ipcHandlers';
 import registerProcessHandlers from './process.ipcHandlers';
 import registerSecureStorageHandlers from './secureStorage.ipcHandlers';
+import registerUpdateHandlers from './updates.ipcHandlers';
 
 export {
   registerCliHandlers,
@@ -16,4 +17,5 @@ export {
   registerUtilsHandlers,
   registerProcessHandlers,
   registerSecureStorageHandlers,
+  registerUpdateHandlers,
 };

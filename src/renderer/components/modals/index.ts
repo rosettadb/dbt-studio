@@ -8,3 +8,4 @@ export * from './gitCommitModal';
 export * from './newBranchModal';
 export * from './cloneRepoModal';
 export * from './noAiSetModal';
+export * from './updateDialog';

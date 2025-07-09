@@ -93,6 +93,13 @@ export type SecureStorageChannels =
   | 'secure-storage:get'
   | 'secure-storage:delete';
 
+export type UpdateChannels =
+  | 'updates:check'
+  | 'updates:check-settings'
+  | 'updates:download'
+  | 'updates:restart'
+  | 'updates:reject-version';
+
 export type Channels =
   | TestChannels
   | CliChannels
@@ -102,7 +109,8 @@ export type Channels =
   | GitChannels
   | UtilChannels
   | ProcessChannels
-  | SecureStorageChannels;
+  | SecureStorageChannels
+  | UpdateChannels;
 
 export type ConfigureConnectionBody = {
   projectId: string;
