@@ -96,6 +96,12 @@ const Settings: React.FC = () => {
     navigate('/app');
   };
 
+  const getSectionTitle = (section: string) => {
+    if (section === 'dbt') return 'dbt™ Core';
+    if (section === 'ai-providers') return 'AI Providers';
+    return section.charAt(0).toUpperCase() + section.slice(1).replace('-', ' ');
+  };
+
   React.useEffect(() => {
     if (settings) {
       setLocalSettings(settings);
@@ -268,10 +274,7 @@ const Settings: React.FC = () => {
             }}
           >
             <Title style={{ margin: 0 }}>
-              {currentSection === 'dbt'
-                ? 'dbt™'
-                : currentSection.charAt(0).toUpperCase() +
-                  currentSection.slice(1).replace('-', ' ')}
+              {getSectionTitle(currentSection)}
             </Title>
             <IconButton onClick={handleClose} edge="end" aria-label="close">
               <Close />
