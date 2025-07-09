@@ -8,6 +8,7 @@ type Props = {
 };
 
 export const QueryResult: React.FC<Props> = ({ results }) => {
+  console.log(results);
   const columns = React.useMemo(() => {
     return results.fields?.map((field) => field.name) ?? [];
   }, [results]);

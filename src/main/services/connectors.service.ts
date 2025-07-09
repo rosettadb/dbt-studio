@@ -1,5 +1,4 @@
-/* eslint-disable no-case-declarations */
-/* eslint-disable @typescript-eslint/no-shadow */
+/* eslint-disable no-case-declarations, @typescript-eslint/no-shadow */
 import yaml from 'js-yaml';
 import path from 'path';
 import fs from 'fs';

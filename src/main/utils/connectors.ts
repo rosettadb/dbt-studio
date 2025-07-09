@@ -515,18 +515,26 @@ export const executeDuckDBQuery = async (
 
     const result = await connection.run(query);
     const rows = await result.getRows();
+    const columns = await result.columnNamesAndTypesJson();
 
-    const fields =
-      rows.length > 0
-        ? Object.keys(rows[0] as any).map((name, index) => ({
-            name,
-            type: index,
-          }))
-        : [];
+    const fields: { name: string; type: number }[] = columns.columnNames.map(
+      (name: string, index: number) => ({
+        name,
+        type: columns.columnTypes[index]?.typeId || -1,
+      }),
+    );
+
+    const mappedRows = rows.map((row: any[]) => {
+      const r: any = {};
+      fields.forEach((field, index) => {
+        r[field.name] = row[index];
+      });
+      return r;
+    });
 
     return {
       success: true,
-      data: rows as any[],
+      data: mappedRows as any[],
       fields,
     };
   } catch (error: any) {
