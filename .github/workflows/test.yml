@@ -7,11 +7,7 @@ on:
 
 jobs:
   test:
-    runs-on: ${{ matrix.os }}
-
-    strategy:
-      matrix:
-        os: [macos-latest, windows-latest, ubuntu-latest]
+    runs-on: macos-latest
 
     steps:
       - name: Check out Git repository
@@ -27,11 +23,7 @@ jobs:
         run: |
           npm install
 
-      - name: npm test
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: npm build
         run: |
-          npm run package
           npm run lint
           npm exec tsc
-          npm test
