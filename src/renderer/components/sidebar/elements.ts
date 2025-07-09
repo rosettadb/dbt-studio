@@ -11,11 +11,11 @@ export const sidebarElements: SideBarElementType[] = [
   {
     path: '/app',
     text: 'Projects',
-    icon: Icons.DataSources,
+    icon: Icons.DBTProjects,
   },
   {
     path: '/app/sql',
     text: 'SQL',
-    icon: Icons.SQL,
+    icon: Icons.DataSources,
   },
 ];

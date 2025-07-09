@@ -25,6 +25,7 @@ type Props = {
     name: React.ReactNode;
     onClick: () => void;
     subTitle: string;
+    leftIcon?: React.ReactNode;
   }[];
 };
 
@@ -180,6 +181,22 @@ export const SplitButton: React.FC<Props> = ({
                           },
                         }}
                       >
+                        {React.isValidElement(option.leftIcon) ? (
+                          <span
+                            style={{
+                              display: 'flex',
+                              marginRight: '4px',
+                              fontSize: '0.8rem',
+                            }}
+                          >
+                            {React.cloneElement(
+                              option.leftIcon as React.ReactElement,
+                              {
+                                style: { fontSize: '14px' },
+                              },
+                            )}
+                          </span>
+                        ) : null}
                         {option.name}
                       </MenuItem>
                     </span>

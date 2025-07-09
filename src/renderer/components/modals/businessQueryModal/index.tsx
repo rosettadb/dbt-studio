@@ -1,6 +1,6 @@
 import React from 'react';
 import { Button, TextField, Stack } from '@mui/material';
-import SendIcon from '@mui/icons-material/Send';
+import { AutoAwesome } from '@mui/icons-material';
 import { Modal } from '../modal';
 import { StyledForm } from './styles';
 
@@ -17,7 +17,7 @@ export const BusinessQueryModal: React.FC<Props> = ({
 }) => {
   const [query, setQuery] = React.useState('');
   return (
-    <Modal isOpen={isOpen} onClose={onClose} title="Enter query">
+    <Modal isOpen={isOpen} onClose={onClose} title="Enter prompt">
       <StyledForm
         onSubmit={async (event) => {
           event.preventDefault();
@@ -28,8 +28,8 @@ export const BusinessQueryModal: React.FC<Props> = ({
         <Stack spacing={3} width="100%">
           <TextField
             variant="outlined"
-            label="Query"
-            placeholder="Write your prompt to generate a dbt business models from your enhanced/incremental dbt layer."
+            label="Prompt"
+            placeholder="Write your prompt to generate a dbt business models."
             onChange={(event) => setQuery(event.target.value)}
             value={query}
             fullWidth
@@ -54,8 +54,8 @@ export const BusinessQueryModal: React.FC<Props> = ({
             type="submit"
             variant="outlined"
             disabled={query === ''}
-            sx={{ alignSelf: 'center' }}
-            endIcon={<SendIcon />}
+            sx={{ alignSelf: 'flex-end' }}
+            endIcon={<AutoAwesome />}
           >
             Generate
           </Button>

@@ -37,3 +37,11 @@ export const Model: React.FC = () => (
 );
 
 export const SQL: React.FC = () => <CodeSharp />;
+
+export const DBTProjects: React.FC = () => (
+  <img
+    src={icons.dbtTm}
+    alt="dbt projects"
+    style={{ ...style, width: 24, height: 24 }}
+  />
+);
