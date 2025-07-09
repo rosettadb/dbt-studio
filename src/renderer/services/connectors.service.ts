@@ -37,16 +37,6 @@ export const validateConnection = async (
   return data;
 };
 
-export const generateJdbcUrl = async (
-  body: ConnectionInput,
-): Promise<string> => {
-  const { data } = await client.post<ConnectionInput, string>(
-    'connector:getJdbcUrl',
-    body,
-  );
-  return data;
-};
-
 export const queryData = async (body: {
   connection: ConnectionInput;
   query: string;

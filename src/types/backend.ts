@@ -332,3 +332,39 @@ export type UpdateSettingsInfo = {
   lastInstalledVersion: string;
   releaseNotes: string;
 };
+
+export type StoreSchema = {
+  clientId: string;
+  clientIdCreatedAt: string;
+  lastVersion: string;
+  lastVersionUpdatedAt: string;
+};
+
+export type UpdateEvent = {
+  event: string;
+  version: string;
+  previousVersion?: string;
+  platform: string;
+  arch: string;
+  timestamp: string;
+  hostname?: string;
+  clientId: string;
+};
+
+export type AnalyticsEvent = {
+  category: string;
+  action: string;
+  label?: string;
+  timestamp: string;
+  response?: {
+    status?: number;
+    statusText?: string;
+    serverResponse: any;
+  };
+  error?: {
+    message: string;
+    code?: string;
+    status?: number;
+    statusText?: string;
+  };
+};

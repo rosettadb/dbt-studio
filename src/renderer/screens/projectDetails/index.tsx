@@ -408,7 +408,7 @@ const ProjectDetails: React.FC = () => {
                   />
                   <SplitButton
                     title="dbt"
-                    toltipTitle={
+                    tooltipTitle={
                       isDbtConfigured
                         ? ''
                         : 'Please configure dbt path in settings'

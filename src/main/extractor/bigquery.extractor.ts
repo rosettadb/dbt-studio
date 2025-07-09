@@ -1,3 +1,4 @@
+/* eslint-disable no-restricted-syntax, no-await-in-loop, consistent-return */
 import { BigQuery } from '@google-cloud/bigquery';
 import { Column, Table } from '../../types/backend';
 
@@ -44,11 +45,6 @@ export default class BigQueryExtractor {
     } catch (err) {
       return Promise.reject(err);
     }
-  }
-
-  async disconnect(): Promise<void> {
-    // BigQuery client doesn't require explicit disconnection
-    return Promise.resolve();
   }
 
   private async getDatasets(): Promise<string[]> {
@@ -115,13 +111,8 @@ export default class BigQueryExtractor {
             schema: dataset,
             columns,
           });
-        } catch (err) {
-          console.error(
-            `Error getting schema for ${dataset}.${table.name}:`,
-            err,
-          );
-          // Continue with other tables even if one fails
-          continue;
+        } catch {
+          /* empty */
         }
       }
     }

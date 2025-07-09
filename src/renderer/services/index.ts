@@ -5,4 +5,11 @@ import * as gitServices from './git.service';
 import * as updateServices from './update.service';
 import * as secureStorageService from './secureStorage.service';
 
-export { settingsServices, projectsServices, connectorsServices, gitServices, updateServices, secureStorageService };
+export {
+  settingsServices,
+  projectsServices,
+  connectorsServices,
+  gitServices,
+  updateServices,
+  secureStorageService,
+};

@@ -1,3 +1,4 @@
+/* eslint-disable no-restricted-syntax, no-await-in-loop, no-plusplus */
 import React, { useEffect } from 'react';
 import {
   TextField,
@@ -21,25 +22,18 @@ import { settingsServices } from '../../services';
 interface DbtSettingsProps {
   settings: SettingsType;
   onSettingsChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
-  onFilePicker?: (
-    name: keyof SettingsType,
-    isDir: boolean,
-    defaultPath?: string,
-  ) => Promise<void>;
   onInstallDbtSave: (key: string, value: string) => void;
 }
 
 export const DbtSettings: React.FC<DbtSettingsProps> = ({
   settings,
   onSettingsChange,
-  onFilePicker,
   onInstallDbtSave,
 }) => {
   const [isLoadingInstall, setIsLoadingInstall] = React.useState(false);
   const [currentPackage, setCurrentPackage] = React.useState('');
   const [installProgress, setInstallProgress] = React.useState(0);
-  const [isCheckingVersion, setIsCheckingVersion] = React.useState(false);
-  const { runCommand, output, error } = useCli();
+  const { runCommand } = useCli();
 
   const [isLoadingDialog, setIsLoadingDialog] = React.useState(false);
   const [loadingMessage, setLoadingMessage] = React.useState('');
@@ -78,9 +72,7 @@ export const DbtSettings: React.FC<DbtSettingsProps> = ({
     }));
   };
 
-  // Function to get dbt-core version
   const getDbtVersion = async (): Promise<string | null> => {
-    setIsCheckingVersion(true);
     setIsLoadingDialog(true);
     setLoadingMessage('Checking dbt version...');
 
@@ -88,26 +80,18 @@ export const DbtSettings: React.FC<DbtSettingsProps> = ({
       const python = settings.pythonPath
         ? `"${settings.pythonPath}"`
         : 'python';
-      console.log(`Checking dbt version using: ${python} -m pip show dbt-core`);
       const result = await runCommand(`${python} -m pip show dbt-core`);
-      console.log('Command output:', result.output);
-      console.log('Command error:', result.error);
 
       if (result.error.length > 0) {
-        console.error('Error getting dbt version:', result.error);
         return null;
       }
 
       const outputText = result.output.join('\n');
-      console.log('Full output text:', outputText);
       const versionMatch = outputText.match(/Version:\s*(.+)/);
-      console.log('Version match:', versionMatch);
       return versionMatch ? versionMatch[1].trim() : null;
     } catch (error) {
-      console.error('Failed to get dbt version:', error);
       return null;
     } finally {
-      setIsCheckingVersion(false);
       setIsLoadingDialog(false);
       setLoadingMessage('');
     }
@@ -133,11 +117,9 @@ export const DbtSettings: React.FC<DbtSettingsProps> = ({
     setIsLoadingDialog(true);
 
     try {
-      // Use existing Python path if available
       if (settings.pythonPath) {
         const python = `"${settings.pythonPath}"`;
 
-        // Install pip first if needed
         setCurrentPackage('Setting up pip...');
         setLoadingMessage('Setting up pip...');
         try {
@@ -233,9 +215,36 @@ export const DbtSettings: React.FC<DbtSettingsProps> = ({
     }
   };
 
-  // Function to check installed packages
+  const checkPackagesIndividually = async (
+    python: string,
+    packages: string[],
+    installed: { [key: string]: string },
+  ) => {
+    for (const pkg of packages) {
+      if (!isCheckingPackages) break;
+
+      try {
+        await new Promise((resolve) => {
+          setTimeout(resolve, 200);
+        });
+
+        const result = await runCommand(`${python} -m pip show ${pkg}`);
+
+        if (result.output.length > 0 && result.error.length === 0) {
+          const outputText = result.output.join('\n');
+          const versionMatch = outputText.match(/Version:\s*(.+)/);
+          if (versionMatch) {
+            installed[pkg] = versionMatch[1].trim();
+          }
+        }
+      } catch {
+        /* empty */
+      }
+    }
+  };
+
   const checkInstalledPackages = async (): Promise<void> => {
-    if (isCheckingPackages) return; // Prevent multiple simultaneous checks
+    if (isCheckingPackages) return;
 
     setIsCheckingPackages(true);
     const python = settings.pythonPath ? `"${settings.pythonPath}"` : 'python';
@@ -243,21 +252,16 @@ export const DbtSettings: React.FC<DbtSettingsProps> = ({
     const installed: { [key: string]: string } = {};
 
     try {
-      // Check all packages in a single command to avoid conflicts
       const result = await runCommand(`${python} -m pip list --format=json`);
 
       if (result.output.length > 0 && result.error.length === 0) {
         const outputText = result.output.join('\n').trim();
-        console.log('Raw pip list output:', outputText);
 
         try {
-          // Extract only the JSON part - look for the array that starts with [ and ends with ]
-          // Split by lines and find the JSON array
           const lines = outputText.split('\n');
           let jsonStartIndex = -1;
           let jsonEndIndex = -1;
 
-          // Find the start and end of the JSON array
           for (let i = 0; i < lines.length; i++) {
             const line = lines[i].trim();
             if (line.startsWith('[') && jsonStartIndex === -1) {
@@ -276,7 +280,6 @@ export const DbtSettings: React.FC<DbtSettingsProps> = ({
           if (jsonStartIndex !== -1 && jsonEndIndex !== -1) {
             const jsonLines = lines.slice(jsonStartIndex, jsonEndIndex + 1);
             const jsonString = jsonLines.join('\n');
-            console.log('Extracted JSON:', jsonString);
 
             const pipList = JSON.parse(jsonString);
 
@@ -286,25 +289,16 @@ export const DbtSettings: React.FC<DbtSettingsProps> = ({
                 installed[pkg] = found.version;
               }
             });
-
-            console.log('Found installed packages:', installed);
           } else {
-            console.warn('No valid JSON array found in pip list output');
             await checkPackagesIndividually(python, packages, installed);
           }
         } catch (parseError) {
-          console.error('Failed to parse pip list output:', parseError);
-          console.log('Attempting individual package checks...');
           await checkPackagesIndividually(python, packages, installed);
         }
       } else {
-        console.log(
-          'No output or error in pip list, falling back to individual checks',
-        );
         await checkPackagesIndividually(python, packages, installed);
       }
     } catch (error) {
-      console.error('Failed to check installed packages:', error);
       await checkPackagesIndividually(python, packages, installed);
     } finally {
       setInstalledPackages(installed);
@@ -312,39 +306,6 @@ export const DbtSettings: React.FC<DbtSettingsProps> = ({
     }
   };
 
-  // Fallback function for individual package checking
-  const checkPackagesIndividually = async (
-    python: string,
-    packages: string[],
-    installed: { [key: string]: string },
-  ) => {
-    console.log('Checking packages individually...');
-
-    for (const pkg of packages) {
-      if (isCheckingPackages === false) break; // Exit if checking was cancelled
-
-      try {
-        // Add small delay between commands to prevent conflicts
-        await new Promise((resolve) => setTimeout(resolve, 200));
-
-        console.log(`Checking package: ${pkg}`);
-        const result = await runCommand(`${python} -m pip show ${pkg}`);
-
-        if (result.output.length > 0 && result.error.length === 0) {
-          const outputText = result.output.join('\n');
-          const versionMatch = outputText.match(/Version:\s*(.+)/);
-          if (versionMatch) {
-            installed[pkg] = versionMatch[1].trim();
-            console.log(`Found ${pkg} version ${installed[pkg]}`);
-          }
-        }
-      } catch (error) {
-        console.log(`Package ${pkg} not found or error occurred:`, error);
-      }
-    }
-  };
-
-  // Function to uninstall individual package
   const handleUninstallPackage = async (packageName: string) => {
     setIsLoadingInstall(true);
     setIsLoadingDialog(true);
@@ -356,19 +317,15 @@ export const DbtSettings: React.FC<DbtSettingsProps> = ({
         : 'python';
       await runCommand(`${python} -m pip uninstall -y ${packageName}`);
 
-      // Remove from installed packages
       setInstalledPackages((prev) => {
         const updated = { ...prev };
         delete updated[packageName];
         return updated;
       });
 
-      // If dbt-core is uninstalled, clear the dbt path
       if (packageName === 'dbt-core') {
         onInstallDbtSave('dbtPath', '');
       }
-    } catch (error) {
-      console.error(`Failed to uninstall ${packageName}:`, error);
     } finally {
       setIsLoadingInstall(false);
       setIsLoadingDialog(false);
@@ -388,8 +345,8 @@ export const DbtSettings: React.FC<DbtSettingsProps> = ({
           if (version) {
             onInstallDbtSave('dbtVersion', version);
           }
-        } catch (error) {
-          console.error('Failed to get dbt version:', error);
+        } catch {
+          /* empty */
         }
       }
       if (
@@ -403,14 +360,11 @@ export const DbtSettings: React.FC<DbtSettingsProps> = ({
     const initializePackageCheck = async () => {
       try {
         await fetchDbtVersion();
-
-        // Check installed packages when component mounts or dbtPath changes
         if (
           settings.dbtPath &&
           settings.dbtPath !== 'dbt' &&
           !isCheckingPackages
         ) {
-          // Add delay to ensure previous commands complete
           setTimeout(() => {
             if (!isCheckingPackages) {
               checkInstalledPackages();
@@ -418,14 +372,12 @@ export const DbtSettings: React.FC<DbtSettingsProps> = ({
           }, 1000);
         }
       } catch (error) {
-        console.error('Error in initializePackageCheck:', error);
         setIsCheckingPackages(false);
       }
     };
 
     initializePackageCheck();
 
-    // Cleanup function to prevent stuck loader
     return () => {
       setIsCheckingPackages(false);
     };

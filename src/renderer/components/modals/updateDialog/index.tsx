@@ -35,16 +35,13 @@ export const UpdateDialog: React.FC = () => {
       if (result) {
         setUpdateInfo(result);
       }
-    } catch (error) {
-      console.error('Error checking for updates:', error);
+    } catch {
+      /* empty */
     }
   };
 
   useEffect(() => {
-    // Check for updates when component mounts
     handleCheckForUpdates();
-
-    // Check every hour
     const interval = setInterval(handleCheckForUpdates, 60 * 60 * 1000);
     return () => clearInterval(interval);
   }, []);
@@ -64,7 +61,6 @@ export const UpdateDialog: React.FC = () => {
       );
       setShowRestartButton(true);
     } catch (error) {
-      console.error('Error downloading update:', error);
       toast.error('Failed to download update.');
       setIsDownloading(false);
     }

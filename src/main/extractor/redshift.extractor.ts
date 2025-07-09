@@ -14,21 +14,22 @@ export default class RedshiftExtractor {
     ssl?: boolean;
     sslrootcert?: string;
   }) {
-    // Build PostgreSQL client config with SSL support
     const clientConfig: any = {
       user: config.user,
       host: config.host,
       database: config.database,
       password: config.password,
       port: config.port,
-      connectionTimeoutMillis: 15000, // 15 second timeout for Redshift
+      connectionTimeoutMillis: 15000,
     };
 
-    // Add SSL configuration - default to SSL for Redshift
-    if (config.ssl !== false) { // Default to SSL unless explicitly disabled
+    if (config.ssl !== false) {
       clientConfig.ssl = {
-        rejectUnauthorized: false, // Use permissive SSL by default
-        ...(config.sslrootcert && { ca: require('fs').readFileSync(config.sslrootcert) }),
+        rejectUnauthorized: false,
+        ...(config.sslrootcert && {
+          // eslint-disable-next-line global-require
+          ca: require('fs').readFileSync(config.sslrootcert),
+        }),
       };
     }
 
@@ -44,21 +45,17 @@ export default class RedshiftExtractor {
   }
 
   private async getSchemas(): Promise<string[]> {
-    // Try multiple approaches to get schemas since Redshift might have different permissions
     const queries = [
-      // Standard information_schema query
       `SELECT schema_name
        FROM information_schema.schemata
        WHERE schema_name NOT IN ('pg_catalog', 'information_schema', 'pg_toast', 'pg_temp_1')`,
 
-      // Alternative query using pg_namespace (might work better in Redshift)
       `SELECT nspname as schema_name
        FROM pg_namespace
        WHERE nspname NOT LIKE 'pg_%'
        AND nspname != 'information_schema'`,
 
-      // Simple query to get current schema if others fail
-      `SELECT current_schema() as schema_name`
+      `SELECT current_schema() as schema_name`,
     ];
 
     for (const query of queries) {
@@ -66,19 +63,18 @@ export default class RedshiftExtractor {
         const res = await this.client.query(query);
 
         if (res.rows && res.rows.length > 0) {
-          const schemas = res.rows.map((row) => row.schema_name).filter(Boolean);
+          const schemas = res.rows
+            .map((row) => row.schema_name)
+            .filter(Boolean);
           if (schemas.length > 0) {
             return schemas;
           }
         }
-      } catch (error) {
-        const errorMessage = error instanceof Error ? error.message : String(error);
-        console.error(`Schema query failed: ${errorMessage}`);
-        continue;
+      } catch {
+        /* empty */
       }
     }
 
-    // If all queries fail, default to 'public' schema
     return ['public'];
   }
 
@@ -135,8 +131,10 @@ export default class RedshiftExtractor {
     );
 
     return res.rows.map((row, index) => {
-      const autoincrement = row.column_default?.includes('identity') ||
-                           row.column_default?.includes('nextval') || false;
+      const autoincrement =
+        row.column_default?.includes('identity') ||
+        row.column_default?.includes('nextval') ||
+        false;
       return {
         name: row.column_name,
         typeName: row.data_type,

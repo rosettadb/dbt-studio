@@ -58,7 +58,14 @@ export const GetStartedModal: React.FC<GetStartedModalProps> = ({
     const url = 'https://github.com/rosettadb/dbtstudio_getting_started.git';
 
     try {
-      const { error, authRequired, path, name, dbtConnection, rosettaConnection } = await gitServices.gitClone(url);
+      const {
+        error,
+        authRequired,
+        path,
+        name,
+        dbtConnection,
+        rosettaConnection,
+      } = await gitServices.gitClone(url);
 
       if (error) {
         toast.error(error);
@@ -87,8 +94,9 @@ export const GetStartedModal: React.FC<GetStartedModalProps> = ({
       onClose();
       navigate('/app/edit-connection');
     } catch (error) {
-      console.error('Error creating getting started project:', error);
-      toast.error('Failed to create getting started project. Please try again.');
+      toast.error(
+        'Failed to create getting started project. Please try again.',
+      );
     } finally {
       setIsCreatingProject(false);
     }
@@ -112,13 +120,14 @@ export const GetStartedModal: React.FC<GetStartedModalProps> = ({
       </DialogTitle>
 
       <StyledDialogContent>
-        <Typography variant="body1" paragraph>
-          Import our example project to quickly explore RosettaDB's capabilities.
-          This project demonstrates best practices and includes sample data to help you get started.
+        <Typography variant="body1">
+          Import our example project to quickly explore RosettaDB&#39;s
+          capabilities. This project demonstrates best practices and includes
+          sample data to help you get started.
         </Typography>
 
         <Typography variant="h6" gutterBottom sx={{ mt: 2, mb: 1 }}>
-          What's included:
+          What&#39;s included:
         </Typography>
 
         <FeaturesList>
@@ -164,7 +173,8 @@ export const GetStartedModal: React.FC<GetStartedModalProps> = ({
         </FeaturesList>
 
         <Typography variant="body2" color="text.secondary" sx={{ mt: 2 }}>
-          This will open the clone dialog with the getting started repository URL pre-filled.
+          This will open the clone dialog with the getting started repository
+          URL pre-filled.
         </Typography>
       </StyledDialogContent>
 
@@ -185,4 +195,3 @@ export const GetStartedModal: React.FC<GetStartedModalProps> = ({
     </Dialog>
   );
 };
-

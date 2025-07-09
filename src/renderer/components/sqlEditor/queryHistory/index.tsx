@@ -42,7 +42,8 @@ export const QueryHistoryToolbar: React.FC<ToolbarProps> = ({
   onQuerySelect,
 }) => {
   const [anchorEl, setAnchorEl] = React.useState<null | HTMLElement>(null);
-  const [selectedQueryHistory, setSelectedQueryHistory] = React.useState<QueryHistoryType>();
+  const [selectedQueryHistory, setSelectedQueryHistory] =
+    React.useState<QueryHistoryType>();
   const theme = useTheme();
   const isDarkMode = theme.palette.mode === 'dark';
 
@@ -145,7 +146,7 @@ export const QueryHistoryToolbar: React.FC<ToolbarProps> = ({
               editorProps={{ $blockScrolling: true }}
               setOptions={{
                 showLineNumbers: true,
-                highlightActiveLine: false
+                highlightActiveLine: false,
               }}
             />
             <div
@@ -350,7 +351,7 @@ const QueryHistory: React.FC<Props> = ({
               editorProps={{ $blockScrolling: true }}
               setOptions={{
                 showLineNumbers: true,
-                highlightActiveLine: false
+                highlightActiveLine: false,
               }}
             />
             <div

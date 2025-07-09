@@ -29,13 +29,10 @@ const ProcessTerminal: React.FC = () => {
     if (!container) return;
 
     const handleKeyDown = (e: KeyboardEvent) => {
-      console.log(e);
       const isMac = window.electron.app.os === 'darwin';
       const isStopCombo =
         (isMac && e.metaKey && e.key === 'c') ||
         (!isMac && e.ctrlKey && e.key === 'c');
-
-      console.log(isStopCombo);
 
       if (isStopCombo) {
         e.preventDefault();

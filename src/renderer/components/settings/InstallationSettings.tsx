@@ -17,14 +17,9 @@ import {
   useCheckForSettingsUpdates,
   useDownloadUpdate,
   useRestartUpdate,
-} from '../../controllers/update.controller';
+} from '../../controllers';
 import { UpdateSettingsInfo } from '../../../types/backend';
 
-interface InstallationSettingsProps {
-  // You can add props here if needed
-}
-
-// Helper function to compare semantic versions (returns 1 if v1>v2, -1 if v1<v2, 0 if equal)
 function compareVersions(v1: string, v2: string): number {
   const a = v1.split('.').map(Number);
   const b = v2.split('.').map(Number);
@@ -37,7 +32,7 @@ function compareVersions(v1: string, v2: string): number {
   return 0;
 }
 
-const InstallationSettings: React.FC<InstallationSettingsProps> = () => {
+const InstallationSettings: React.FC = () => {
   const [currentVersion, setCurrentVersion] = useState<string>('');
   const [latestVersion, setLatestVersion] = useState<string>('');
   const [updateInfo, setUpdateInfo] = useState<UpdateSettingsInfo | null>(null);
@@ -126,7 +121,6 @@ const InstallationSettings: React.FC<InstallationSettingsProps> = () => {
       setLastChecked(new Date());
     } catch (err) {
       setError('Failed to check for updates.');
-      console.error('Error checking for updates:', error);
     } finally {
       setIsCheckingForUpdates(false);
     }

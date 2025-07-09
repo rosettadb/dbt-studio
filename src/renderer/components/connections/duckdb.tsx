@@ -10,7 +10,6 @@ import {
   CircularProgress,
   IconButton,
   Typography,
-  Link,
 } from '@mui/material';
 import { FolderOpen } from '@mui/icons-material';
 import { DuckDBConnection, DuckDBDBTConnection } from '../../../types/backend';
@@ -55,7 +54,9 @@ export const DuckDB: React.FC<Props> = ({ onCancel }) => {
     database_path: existingConnection?.path || '',
     database: existingConnection?.database || 'main', // For compatibility
     schema: 'main', // DuckDB default schema
-    short_database_path: existingConnection?.path ? shortDuckdbPath(existingConnection.path) : '',
+    short_database_path: existingConnection?.path
+      ? shortDuckdbPath(existingConnection.path)
+      : '',
   });
 
   const [isTesting, setIsTesting] = React.useState(false);
@@ -94,11 +95,12 @@ export const DuckDB: React.FC<Props> = ({ onCancel }) => {
         const pidMatch = error.message.match(/PID: (\d+)/);
         const pid = pidMatch ? pidMatch[1] : 'unknown';
 
-
         // Custom toast with kill command
         toast.error(
           <Box>
-            <Typography>Database is locked by another process, pid {pid}.</Typography>
+            <Typography>
+              Database is locked by another process, pid {pid}.
+            </Typography>
             <Typography>Close any open DuckDB CLI sessions.</Typography>
           </Box>,
         );
@@ -117,7 +119,7 @@ export const DuckDB: React.FC<Props> = ({ onCancel }) => {
     }));
 
     setConnectionStatus('idle');
-  }
+  };
 
   const handleFileSelect = () => {
     getFiles(

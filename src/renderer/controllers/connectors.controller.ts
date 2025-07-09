@@ -89,21 +89,6 @@ export const useValidateConnection = (
   });
 };
 
-export const useGenerateJdbcUrl = (
-  customOptions?: UseMutationOptions<string, CustomError, ConnectionInput>,
-): UseMutationResult<string, CustomError, ConnectionInput> => {
-  const { onSuccess: onCustomSuccess, onError: onCustomError } =
-    customOptions || {};
-
-  return useMutation({
-    mutationFn: async (data: ConnectionInput) => {
-      return connectorsServices.generateJdbcUrl(data);
-    },
-    onSuccess: onCustomSuccess,
-    onError: onCustomError,
-  });
-};
-
 export const useSetConnectionEnvVariable = (
   customOptions?: UseMutationOptions<
     void,

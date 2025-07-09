@@ -7,11 +7,6 @@ import { utils } from '../../helpers';
 interface RosettaSettingsProps {
   settings: SettingsType;
   onSettingsChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
-  onFilePicker: (
-    name: keyof SettingsType,
-    isDir: boolean,
-    defaultPath?: string,
-  ) => void;
 }
 
 export const RosettaSettings: React.FC<RosettaSettingsProps> = ({

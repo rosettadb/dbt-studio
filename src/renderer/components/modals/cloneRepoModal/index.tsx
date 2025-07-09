@@ -1,10 +1,10 @@
 import React from 'react';
 import { Button, TextField } from '@mui/material';
 import { toast } from 'react-toastify';
+import { useNavigate } from 'react-router-dom';
 import { Modal } from '../modal';
 import { StyledForm } from './styles';
 import { gitServices, projectsServices } from '../../../services';
-import { useNavigate } from 'react-router-dom';
 
 type Props = {
   isOpen: boolean;
@@ -27,8 +27,14 @@ export const CloneRepoModal: React.FC<Props> = ({
           event.preventDefault();
           setLoading(true);
           try {
-            const { error, authRequired, path, name, dbtConnection, rosettaConnection } =
-              await gitServices.gitClone(url);
+            const {
+              error,
+              authRequired,
+              path,
+              name,
+              dbtConnection,
+              rosettaConnection,
+            } = await gitServices.gitClone(url);
             if (error) {
               toast.error(error);
               setLoading(false);
@@ -70,7 +76,11 @@ export const CloneRepoModal: React.FC<Props> = ({
           value={url}
           fullWidth
         />
-        <Button type="submit" variant="outlined" disabled={url === '' || loading}>
+        <Button
+          type="submit"
+          variant="outlined"
+          disabled={url === '' || loading}
+        >
           {loading ? 'Cloning...' : 'Clone'}
         </Button>
       </StyledForm>
