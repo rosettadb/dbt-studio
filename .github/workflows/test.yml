@@ -12,6 +12,7 @@ jobs:
       - name: Validate source branch
         run: |
           if [ "${{ github.head_ref }}" != "dev" ]; then
+            echo "Test workflow update"
             echo "❌ Error: Pull requests to main can only be created from dev branch"
             exit 1
           fi
