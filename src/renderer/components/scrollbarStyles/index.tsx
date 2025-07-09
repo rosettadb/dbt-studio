@@ -10,14 +10,16 @@ export const ScrollbarStyles: React.FC = () => {
   const theme = useTheme();
 
   // Determine scrollbar colors based on current theme
-  const thumbColor = theme.palette.mode === 'dark' 
-    ? theme.palette.grey[700]
-    : theme.palette.grey[400];
-  
-  const thumbHoverColor = theme.palette.mode === 'dark'
-    ? theme.palette.grey[600]
-    : theme.palette.grey[500];
-  
+  const thumbColor =
+    theme.palette.mode === 'dark'
+      ? theme.palette.grey[700]
+      : theme.palette.grey[400];
+
+  const thumbHoverColor =
+    theme.palette.mode === 'dark'
+      ? theme.palette.grey[600]
+      : theme.palette.grey[500];
+
   const trackColor = 'transparent';
 
   return (

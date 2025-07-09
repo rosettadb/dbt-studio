@@ -1,3 +1,5 @@
+/* eslint-disable no-plusplus */
+import React from 'react';
 import { parsePatch, diffLines } from 'diff';
 import { Table } from '../../types/backend';
 import { CompletionItem } from '../../types/frontend';
@@ -60,20 +62,20 @@ export const splitPath = (path: string, projectName: string): string => {
   const startIndex = path.indexOf(projectName);
 
   if (startIndex === -1) {
-    return path; // projectName not found, return full path
+    return path;
   }
 
-  const prefix = path.slice(0, 10); // Show first 10 characters (or adjust as needed)
+  const prefix = path.slice(0, 10);
   const projectPart = path.slice(startIndex);
 
   return `${prefix}...${projectPart}`;
 };
 
 export const getVersionsFromDiff = (newContent: string, diffString: string) => {
-  const patch = parsePatch(diffString)[0]; // get first file diff
+  const patch = parsePatch(diffString)[0];
   const newLines = newContent.split('\n');
 
-  const oldLines = [...newLines]; // clone current content
+  const oldLines = [...newLines];
   let offset = 0;
 
   patch.hunks.forEach((hunk) => {
@@ -89,10 +91,8 @@ export const getVersionsFromDiff = (newContent: string, diffString: string) => {
         removedCount += 1;
       } else if (type === '-') {
         oldLines.splice(newIndex, 0, value);
-        // eslint-disable-next-line no-plusplus
         newIndex++;
       } else {
-        // eslint-disable-next-line no-plusplus
         newIndex++;
       }
     });
@@ -115,11 +115,9 @@ export function getChangedLineNumbers(oldStr: string, newStr: string) {
   changes.forEach((part) => {
     const lines = part.value.split('\n').length - 1;
     if (part.added) {
-      // eslint-disable-next-line no-plusplus
       for (let i = 0; i < lines; i++) added.push(line + i);
       line += lines;
     } else if (part.removed) {
-      // eslint-disable-next-line no-plusplus
       for (let i = 0; i < lines; i++) removed.push(line + i);
     } else {
       line += lines;
@@ -138,7 +136,6 @@ export const getInitials = (name: string): string => {
 
 export const getRandomColor = (seed: string): string => {
   let hash = 0;
-  // eslint-disable-next-line no-plusplus
   for (let i = 0; i < seed.length; i++) {
     // eslint-disable-next-line no-bitwise
     hash = seed.charCodeAt(i) + ((hash << 5) - hash);
@@ -158,9 +155,8 @@ export const generateMonacoCompletions = (
   tables: Table[],
 ): Omit<CompletionItem, 'range'>[] => {
   const completions: Omit<CompletionItem, 'range'>[] = [];
-  const seenLabels = new Set<string>(); // Track seen labels to prevent duplicates
+  const seenLabels = new Set<string>();
 
-  // Add SQL keywords (only once)
   MonacoAutocompleteSQLKeywords.forEach((keyword) => {
     if (!seenLabels.has(keyword)) {
       seenLabels.add(keyword);
@@ -173,13 +169,11 @@ export const generateMonacoCompletions = (
     }
   });
 
-  // Collect unique schemas first
   const uniqueSchemas = new Set<string>();
   tables.forEach((table) => {
     uniqueSchemas.add(table.schema);
   });
 
-  // Add unique schemas
   uniqueSchemas.forEach((schema) => {
     if (!seenLabels.has(schema)) {
       seenLabels.add(schema);
@@ -194,8 +188,6 @@ export const generateMonacoCompletions = (
 
   tables.forEach((table) => {
     const { schema, name, columns = [] } = table;
-
-    // Add table name (unique)
     if (!seenLabels.has(name)) {
       seenLabels.add(name);
       completions.push({
@@ -206,7 +198,6 @@ export const generateMonacoCompletions = (
       });
     }
 
-    // Add qualified table name (always unique due to schema.table format)
     const qualifiedTableName = `${schema}.${name}`;
     if (!seenLabels.has(qualifiedTableName)) {
       seenLabels.add(qualifiedTableName);
@@ -219,7 +210,6 @@ export const generateMonacoCompletions = (
     }
 
     columns.forEach((column) => {
-      // Add column name (deduplicated)
       if (!seenLabels.has(column.name)) {
         seenLabels.add(column.name);
         completions.push({
@@ -230,7 +220,6 @@ export const generateMonacoCompletions = (
         });
       }
 
-      // Add fully qualified column (always unique due to schema.table.column format)
       const fullyQualifiedColumn = `${schema}.${name}.${column.name}`;
       if (!seenLabels.has(fullyQualifiedColumn)) {
         seenLabels.add(fullyQualifiedColumn);
@@ -247,76 +236,14 @@ export const generateMonacoCompletions = (
   return completions;
 };
 
-// Function to safely register completion providers with Monaco
-export const registerMonacoCompletionProvider = (
-  monaco: any,
-  completions: Omit<CompletionItem, 'range'>[],
-  previousDisposable?: any
-): any => {
-  // Dispose previous provider if it exists
-  if (previousDisposable) {
-    try {
-      previousDisposable.dispose();
-    } catch (err) {
-      console.error('Error disposing previous completion provider:', err);
-    }
-  }
-
-  // Clear ALL existing completion providers for SQL to prevent duplicates
-  try {
-    // Get all existing providers for 'sql' language and dispose them
-    const existingProviders = monaco?.languages?._completionProviders?.get?.('sql');
-    if (existingProviders && Array.isArray(existingProviders)) {
-      existingProviders.forEach((provider: any) => {
-        try {
-          if (provider && typeof provider.dispose === 'function') {
-            provider.dispose();
-          }
-        } catch (err) {
-          // Ignore disposal errors
-        }
-      });
-      // Clear the array
-      existingProviders.length = 0;
-    }
-  } catch (err) {
-    // Ignore errors accessing internal Monaco structures
-  }
-
-  // Register new provider
-  if (monaco?.languages && completions.length > 0) {
-    return monaco.languages.registerCompletionItemProvider('sql', {
-      provideCompletionItems: (model: any, position: any) => {
-        const word = model.getWordUntilPosition(position);
-        const range = {
-          startLineNumber: position.lineNumber,
-          endLineNumber: position.lineNumber,
-          startColumn: word.startColumn,
-          endColumn: word.endColumn,
-        };
-
-        const suggestions = completions.map((item) => ({
-          ...item,
-          range,
-        }));
-
-        return { suggestions };
-      }
-    });
-  }
-
-  return null;
-};
-
 export const convertToSourcePath = (path: string): string => {
   const parts = path.split('/');
-  const modelName = parts[parts.length - 1]; // Get the last part (filename)
+  const modelName = parts[parts.length - 1];
 
-  // Parse schema_table format (e.g., "public_users" -> "public.users")
   const underscoreParts = modelName.split('_');
   if (underscoreParts.length >= 2) {
-    const schema = underscoreParts[0]; // e.g., "public"
-    const table = underscoreParts.slice(1).join('_'); // e.g., "users"
+    const schema = underscoreParts[0];
+    const table = underscoreParts.slice(1).join('_');
     return `source:${schema}.${table}`;
   }
   return `source:${modelName}`;

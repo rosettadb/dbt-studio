@@ -60,7 +60,6 @@ export default class SnowflakeExtractor {
 
     await Promise.all(
       schemas.map(async (schema) => {
-        // Fetch all tables and views from INFORMATION_SCHEMA.TABLES
         const tableRows = await this.execute<{
           TABLE_NAME: string;
           TABLE_TYPE: string;
@@ -70,7 +69,6 @@ export default class SnowflakeExtractor {
         WHERE TABLE_SCHEMA = '${schema}' AND TABLE_TYPE IN ('BASE TABLE', 'VIEW');
       `);
 
-        // Fetch all columns for this schema in one query
         const columnRows = await this.execute<any>(`
         SELECT
           TABLE_NAME,
@@ -88,7 +86,6 @@ export default class SnowflakeExtractor {
         ORDER BY TABLE_NAME, ORDINAL_POSITION;
       `);
 
-        // Group columns by table name
         const columnsByTable = columnRows.reduce<Record<string, Column[]>>(
           (acc, row) => {
             const column: Column = {
@@ -113,7 +110,6 @@ export default class SnowflakeExtractor {
           {},
         );
 
-        // Assemble table/view metadata
         for (const { TABLE_NAME, TABLE_TYPE } of tableRows) {
           allTables.push({
             name: TABLE_NAME,

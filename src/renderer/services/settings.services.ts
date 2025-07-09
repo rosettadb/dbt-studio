@@ -4,6 +4,7 @@ import {
   SettingsType,
 } from '../../types/backend';
 import { client } from '../config/client';
+import { SecureStorageAccount } from '../../types/frontend';
 
 export const getSettings = async (): Promise<SettingsType> => {
   const { data } = await client.get<SettingsType>('settings:load');
@@ -53,4 +54,26 @@ export const usePathJoin = async (...body: string[]): Promise<string> => {
     body,
   );
   return data;
+};
+
+export const setOpenAIKey = async (apiKey: string): Promise<void> => {
+  await client.post<{ account: SecureStorageAccount; password: string }, void>(
+    'secure-storage:set',
+    { account: 'openai-api-key', password: apiKey },
+  );
+};
+
+export const getOpenAIKey = async (): Promise<string | null> => {
+  const { data } = await client.post<
+    { account: SecureStorageAccount },
+    string | null
+  >('secure-storage:get', { account: 'openai-api-key' });
+  return data;
+};
+
+export const deleteOpenAIKey = async (): Promise<void> => {
+  await client.post<{ account: SecureStorageAccount }, void>(
+    'secure-storage:delete',
+    { account: 'openai-api-key' },
+  );
 };

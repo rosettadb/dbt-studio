@@ -43,13 +43,6 @@ const registerConnectorsHandlers = () => {
   );
 
   ipcMain.handle(
-    'connector:getJdbcUrl',
-    async (_event, connection: ConnectionInput) => {
-      return ConnectorsService.generateJdbcUrl(connection);
-    },
-  );
-
-  ipcMain.handle(
     'connector:query',
     async (
       _event,

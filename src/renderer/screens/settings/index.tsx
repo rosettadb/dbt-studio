@@ -126,7 +126,6 @@ const Settings: React.FC = () => {
             settings={localSettings}
             onInstallDbtSave={handleChangeV2}
             onSettingsChange={handleChange}
-            onFilePicker={handleFilePicker}
           />
         );
       case 'rosetta':
@@ -134,7 +133,6 @@ const Settings: React.FC = () => {
           <RosettaSettings
             settings={localSettings}
             onSettingsChange={handleChange}
-            onFilePicker={handleFilePicker}
           />
         );
       case 'installation':
@@ -257,22 +255,24 @@ const Settings: React.FC = () => {
           </div>
           <div style={{ maxWidth: '600px' }}>{renderContent()}</div>
 
-          {currentSection !== 'about' && currentSection !== 'installation' && currentSection !== 'ai-providers' && (
-            <Box sx={{ mt: 3 }}>
-              <Button
-                type="submit"
-                color="primary"
-                variant="contained"
-                startIcon={<Save />}
-                sx={{
-                  padding: '8px 24px',
-                  fontWeight: '500',
-                }}
-              >
-                Save
-              </Button>
-            </Box>
-          )}
+          {currentSection !== 'about' &&
+            currentSection !== 'installation' &&
+            currentSection !== 'ai-providers' && (
+              <Box sx={{ mt: 3 }}>
+                <Button
+                  type="submit"
+                  color="primary"
+                  variant="contained"
+                  startIcon={<Save />}
+                  sx={{
+                    padding: '8px 24px',
+                    fontWeight: '500',
+                  }}
+                >
+                  Save
+                </Button>
+              </Box>
+            )}
         </StyledForm>
       </Container>
     </AppLayout>

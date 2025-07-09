@@ -90,14 +90,22 @@ jobs:
             exit 1
           fi
 
-          RELEASE_TAG="$VERSION"
+          # Check for suffix like beta in the filename
+          SUFFIX=""
+          if echo "$DMG_FILE" | grep -q "beta"; then
+            SUFFIX="-beta"
+          elif echo "$DMG_FILE" | grep -q "alpha"; then
+            SUFFIX="-alpha"
+          fi
+
+          RELEASE_TAG="${VERSION}${SUFFIX}"
           echo "Extracted version: $VERSION"
           echo "Release tag: $RELEASE_TAG"
 
           # Check if draft release exists, create if not
           if ! gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
             echo "Draft release $RELEASE_TAG does not exist, creating it..."
-            gh release create "$RELEASE_TAG" --title "Release $RELEASE_TAG" --notes "Release $RELEASE_TAG" --draft
+            gh release create "$RELEASE_TAG" --title "$RELEASE_TAG" --notes "$RELEASE_TAG" --draft
           else
             echo "Found existing release: $RELEASE_TAG"
           fi
@@ -204,14 +212,22 @@ jobs:
             exit 1
           fi
 
-          RELEASE_TAG="$VERSION"
+          # Check for suffix like beta in the filename
+          SUFFIX=""
+          if echo "$DMG_FILE" | grep -q "beta"; then
+            SUFFIX="-beta"
+          elif echo "$DMG_FILE" | grep -q "alpha"; then
+            SUFFIX="-alpha"
+          fi
+
+          RELEASE_TAG="${VERSION}${SUFFIX}"
           echo "Extracted version: $VERSION"
           echo "Release tag: $RELEASE_TAG"
 
           # Check if draft release exists, create if not
           if ! gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
             echo "Draft release $RELEASE_TAG does not exist, creating it..."
-            gh release create "$RELEASE_TAG" --title "Release $RELEASE_TAG" --notes "Release $RELEASE_TAG" --draft
+            gh release create "$RELEASE_TAG" --title "$RELEASE_TAG" --notes "$RELEASE_TAG" --draft
           else
             echo "Found existing release: $RELEASE_TAG"
           fi

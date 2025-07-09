@@ -1,3 +1,4 @@
+/* eslint-disable no-restricted-syntax, no-await-in-loop */
 import axios from 'axios';
 import fs from 'fs-extra';
 import path from 'path';
@@ -5,16 +6,12 @@ import { app } from 'electron';
 import os from 'os';
 import AdmZip from 'adm-zip';
 import * as tar from 'tar';
-// import yaml from 'js-yaml';
 import {
   loadDatabaseFile,
   loadDefaultSettings,
-  // readFileContent,
-  // saveFileContent,
   updateDatabase,
 } from '../utils/fileHelper';
 import { CliUpdateResponseType, SettingsType } from '../../types/backend';
-// import { ProjectsService } from './index';
 import { CliAdapter } from '../adapters';
 
 const cliConfig: Record<
@@ -52,27 +49,6 @@ export default class SettingsService {
   }
 
   static async saveSettings(settings: SettingsType) {
-    // if (settings.openAIApiKey || settings.openAIApiKey !== '') {
-    //   const projects = await ProjectsService.loadProjects();
-    //   projects.forEach((project) => {
-    //     const mainConfPath = path.join(project.path, 'rosetta', 'main.conf');
-    //     try {
-    //       const content = readFileContent(mainConfPath);
-    //       if (content) {
-    //         const parsedContent: any = yaml.load(content);
-    //         if (!parsedContent.open_api_key) {
-    //           const newContent = {
-    //             openai_api_key: settings.openAIApiKey,
-    //             ...parsedContent,
-    //           };
-    //           saveFileContent(mainConfPath, yaml.dump(newContent));
-    //         }
-    //       }
-    //     } catch (error) {
-    //       /* empty */
-    //     }
-    //   });
-    // }
     await updateDatabase<'settings'>('settings', settings);
   }
 
@@ -107,11 +83,9 @@ export default class SettingsService {
       },
     };
 
-    // eslint-disable-next-line no-restricted-syntax
     for (const [key, cli] of Object.entries(cliConfig)) {
       try {
         const currentVersion = settings[cli.settingsKey] ?? '0.0.0';
-        // eslint-disable-next-line no-await-in-loop
         const latestRelease = await axios.get(
           `https://api.github.com/repos/cli/cli/releases/latest`,
         );

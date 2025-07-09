@@ -15,18 +15,18 @@ import { updateDatabase } from '../utils/fileHelper';
 import { ProjectsService } from './index';
 import { ConfigureConnectionBody } from '../../types/ipc';
 import {
-  executePostgresQuery,
-  executeSnowflakeQuery,
   executeBigQueryQuery,
-  testPostgresConnection,
-  testSnowflakeConnection,
+  executeDatabricksQuery,
+  executeDuckDBQuery,
+  executePostgresQuery,
+  executeRedshiftQuery,
+  executeSnowflakeQuery,
   testBigQueryConnection,
   testDatabricksConnection,
-  executeDatabricksQuery,
   testDuckDBConnection,
-  executeDuckDBQuery,
+  testPostgresConnection,
   testRedshiftConnection,
-  executeRedshiftQuery,
+  testSnowflakeConnection,
 } from '../utils/connectors';
 import SecureStorageService from './secureStorage.service';
 
@@ -517,11 +517,10 @@ export default class ConnectorsService {
               'Project path is required for service account file creation',
             );
           }
-          const keyfilePath = await this.saveServiceAccountFile(
+          profile.keyfile = await this.saveServiceAccountFile(
             projectPath,
             conn.keyfile,
           );
-          profile.keyfile = keyfilePath;
         } else {
           throw new Error(
             'Only service account authentication is supported for BigQuery',
@@ -535,15 +534,15 @@ export default class ConnectorsService {
           type: 'databricks',
           host: conn.host,
           http_path: conn.httpPath,
-          token: dbToken, // Use token directly
-          catalog: conn.database, // In Databricks, database maps to catalog
+          token: dbToken,
+          catalog: conn.database,
           schema: conn.schema,
           threads: 4,
         };
       case 'duckdb':
         return {
           type: 'duckdb',
-          path: conn.database_path, // Use the file path for DuckDB
+          path: conn.database_path,
           schema: conn.schema,
           threads: 4,
         };
@@ -556,13 +555,10 @@ export default class ConnectorsService {
     projectPath: string,
     keyfile: string,
   ): Promise<string> {
-    // Create .secrets directory if it doesn't exist
     const secretsDir = path.join(projectPath, '.secrets');
     if (!fs.existsSync(secretsDir)) {
       await fs.promises.mkdir(secretsDir, { recursive: true });
     }
-
-    // Check if a BigQuery service account file already exists
     const existingFiles = fs
       .readdirSync(secretsDir)
       .filter(
@@ -574,18 +570,14 @@ export default class ConnectorsService {
     let filePath: string;
 
     if (existingFiles.length > 0) {
-      // Use the first existing service account file
       filePath = path.join(secretsDir, existingFiles[0]);
-      // Update the content of the existing file
       await fs.promises.writeFile(filePath, keyfile, 'utf8');
     } else {
-      // Create a new service account file
       const filename = `bigquery-service-account-${Date.now()}.json`;
       filePath = path.join(secretsDir, filename);
       await fs.promises.writeFile(filePath, keyfile, 'utf8');
     }
 
-    // Add .secrets to .gitignore if not already there
     const gitignorePath = path.join(projectPath, '.gitignore');
     const gitignoreExists = fs.existsSync(gitignorePath);
     const gitignoreContent = gitignoreExists
@@ -625,7 +617,6 @@ export default class ConnectorsService {
         }
       }
 
-      // Parse main.conf (Rosetta configuration)
       const mainConfPath = path.join(projectPath, 'rosetta', 'main.conf');
       if (fs.existsSync(mainConfPath)) {
         const rosettaConnection = await this.parseMainConf(mainConfPath);
@@ -633,8 +624,8 @@ export default class ConnectorsService {
           result.rosettaConnection = rosettaConnection;
         }
       }
-    } catch (error) {
-      console.error('Error parsing project connection files:', error);
+    } catch {
+      /* empty */
     }
 
     return result;
@@ -696,7 +687,7 @@ export default class ConnectorsService {
             keyfile: devOutput.keyfile,
             location: devOutput.location,
             priority: devOutput.priority,
-            username: '', // BigQuery doesn't use traditional username/password
+            username: '',
             password: '',
           };
 
@@ -739,11 +730,9 @@ export default class ConnectorsService {
           };
 
         default:
-          console.warn(`Unsupported DBT connection type: ${devOutput.type}`);
           return null;
       }
     } catch (error) {
-      console.error('Error parsing profiles.yml:', error);
       return null;
     }
   }
@@ -779,7 +768,6 @@ export default class ConnectorsService {
         password: connection.password,
       };
     } catch (error) {
-      console.error('Error parsing main.conf:', error);
       return null;
     }
   }

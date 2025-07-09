@@ -1,7 +1,7 @@
 import React from 'react';
 import { Typography, Box, Link, Divider, Stack } from '@mui/material';
 import { OpenInNew } from '@mui/icons-material';
-import { Icon } from '../index';
+import { Icon } from '../icon';
 import { icons } from '../../../../assets';
 import { utils } from '../../helpers';
 
@@ -148,12 +148,7 @@ export const AboutSettings: React.FC = () => {
           href="https://rosettadb.io/"
           target="_blank"
           rel="noopener noreferrer"
-          onClick={(e) =>
-            utils.handleExternalLink(
-              e,
-              'https://rosettadb.io/',
-            )
-          }
+          onClick={(e) => utils.handleExternalLink(e, 'https://rosettadb.io/')}
         >
           Learn more about Rosetta dbt™ Studio
         </Link>

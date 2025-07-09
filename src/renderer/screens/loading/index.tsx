@@ -1,13 +1,7 @@
 import React, { useEffect } from 'react';
-import { useGetSelectedProject } from '../../controllers';
 import { useNavigate } from 'react-router-dom';
-import {
-  Box,
-  CircularProgress,
-  Button,
-  styled,
-  useTheme
-} from '@mui/material';
+import { Box, CircularProgress, Button, styled, useTheme } from '@mui/material';
+import { useGetSelectedProject } from '../../controllers';
 import { logo } from '../../../../assets';
 
 const LoadingContainer = styled(Box)(({ theme }) => ({

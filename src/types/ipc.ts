@@ -44,7 +44,6 @@ export type ConnectorChannels =
   | 'connector:generateProfiles'
   | 'connector:generateRosetta'
   | 'connector:validate'
-  | 'connector:getJdbcUrl'
   | 'connector:query'
   | 'project:addFromFolder'
   | 'connector:setConnectionEnvVariable';

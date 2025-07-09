@@ -66,7 +66,6 @@ export const SqlEditor: React.FC<Props> = ({
 
       setQueryHistory([...queryHistory, newHistoryItem]);
     } catch (error) {
-      console.error('Query execution error:', error);
       toast.error('An unexpected error occurred while executing the query');
       setError(error);
     } finally {
@@ -77,7 +76,6 @@ export const SqlEditor: React.FC<Props> = ({
   const [queryContent, setQueryContent] = React.useState('');
   const saveDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // Load query content when selectedProject changes
   React.useEffect(() => {
     const loadQuery = async () => {
       if (selectedProject?.id) {
@@ -85,7 +83,6 @@ export const SqlEditor: React.FC<Props> = ({
           const query = await projectsServices.getQuery(selectedProject);
           setQueryContent(query);
         } catch (error) {
-          console.error('Failed to load query:', error);
           setQueryContent('');
         }
       }
@@ -94,7 +91,6 @@ export const SqlEditor: React.FC<Props> = ({
     loadQuery();
   }, [selectedProject?.id]);
 
-  // Cleanup debounce on unmount
   React.useEffect(() => {
     return () => {
       if (saveDebounceRef.current) {
@@ -121,8 +117,7 @@ export const SqlEditor: React.FC<Props> = ({
               projectId: selectedProject.id,
               query: content,
             })
-            .catch((error) => {
-              console.error('Failed to save query:', error);
+            .catch(() => {
               toast.error('Failed to save query');
             });
         }

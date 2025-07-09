@@ -1,3 +1,4 @@
+/* eslint-disable no-restricted-syntax, no-await-in-loop */
 import path from 'path';
 import fs from 'fs';
 import yaml from 'js-yaml';
@@ -121,7 +122,6 @@ export default class ProjectsService {
       createdAt: new Date().toISOString(),
       path: projectPath,
       isExtracted: false,
-      // Add parsed connection information if available
       ...(dbtConnection && { dbtConnection }),
       ...(rosettaConnection && { rosettaConnection }),
     };
@@ -333,18 +333,13 @@ export default class ProjectsService {
   private static async copyRecursive(src: string, dest: string) {
     const entries = await fs.promises.readdir(src, { withFileTypes: true });
 
-    // eslint-disable-next-line no-restricted-syntax
     for (const entry of entries) {
       const srcPath = path.join(src, entry.name);
       const destPath = path.join(dest, entry.name);
-
       if (entry.isDirectory()) {
-        // eslint-disable-next-line no-await-in-loop
         await fs.promises.mkdir(destPath, { recursive: true });
-        // eslint-disable-next-line no-await-in-loop
         await this.copyRecursive(srcPath, destPath);
       } else if (entry.isFile()) {
-        // eslint-disable-next-line no-await-in-loop
         await fs.promises.copyFile(srcPath, destPath);
       }
     }
@@ -409,13 +404,12 @@ export default class ProjectsService {
     return schema.tables;
   }
 
-  // create a schema for databricks
   static async extractSchemaDatabricks(connection: DatabricksDBTConnection) {
     const extractor = new DatabricksExtractor({
       token: connection.token,
       host: connection.host,
       path: connection.http_path,
-      catalog: connection.catalog || connection.database || 'default', // Fallback to database or default
+      catalog: connection.catalog || connection.database || 'default',
       schema: connection.schema,
     });
 
@@ -449,13 +443,12 @@ export default class ProjectsService {
     const extractor = new BigQueryExtractor(config);
     await extractor.connect();
     const schema = await extractor.extractSchema();
-    await extractor.disconnect();
     return schema.tables;
   }
 
   static async extractDuckDBSchema(connection: DuckDBDBTConnection) {
     const extractor = new DuckDBExtractor({
-      database_path: connection.path, // Use the correct path field
+      database_path: connection.path,
     });
 
     const schema = await extractor.extractSchema();
@@ -469,7 +462,7 @@ export default class ProjectsService {
       database: connection.database,
       password: connection.password,
       port: connection.port,
-      ssl: connection.ssl ?? true, // Default to SSL enabled
+      ssl: connection.ssl ?? true,
       sslrootcert: connection.sslrootcert,
     });
 

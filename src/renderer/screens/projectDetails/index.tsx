@@ -373,7 +373,7 @@ const ProjectDetails: React.FC = () => {
                 <ButtonsContainer>
                   <SplitButton
                     title="Actions"
-                    toltipTitle={
+                    tooltipTitle={
                       isDbtConfigured
                         ? ''
                         : 'Please configure dbt path in settings'
@@ -606,7 +606,7 @@ const ProjectDetails: React.FC = () => {
                       isLoading={isLoadingQuery}
                       menuItems={[
                         {
-                          name: 'Generate Analitics',
+                          name: 'Generate Analytics',
                           onClick: isAiProviderSet
                             ? generateDashboards
                             : () => setNoAiSetModal(true),
