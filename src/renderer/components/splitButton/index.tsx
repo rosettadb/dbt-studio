@@ -1,3 +1,4 @@
+/* eslint-disable no-nested-ternary */
 import React from 'react';
 import {
   Button,
@@ -24,6 +25,7 @@ type Props = {
     name: React.ReactNode;
     onClick: () => void;
     subTitle: string;
+    leftIcon?: React.ReactNode;
   }[];
 };
 
@@ -130,6 +132,7 @@ export function SplitButton({
       >
         {({ TransitionProps, placement }) => (
           <Grow
+            // eslint-disable-next-line react/jsx-props-no-spreading
             {...TransitionProps}
             style={{
               transformOrigin:
@@ -172,6 +175,22 @@ export function SplitButton({
                           },
                         }}
                       >
+                        {React.isValidElement(option.leftIcon) ? (
+                          <span
+                            style={{
+                              display: 'flex',
+                              marginRight: '4px',
+                              fontSize: '0.8rem',
+                            }}
+                          >
+                            {React.cloneElement(
+                              option.leftIcon as React.ReactElement,
+                              {
+                                style: { fontSize: '14px' },
+                              },
+                            )}
+                          </span>
+                        ) : null}
                         {option.name}
                       </MenuItem>
                     </span>

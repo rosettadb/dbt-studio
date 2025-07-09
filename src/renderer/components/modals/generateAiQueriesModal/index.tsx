@@ -52,7 +52,7 @@ export const GenerateAiQueriesModal: React.FC<Props> = ({
         },
       }}
     >
-      <DialogTitle>Generated Dashboards</DialogTitle>
+      <DialogTitle>Generated Analtics</DialogTitle>
       <DialogContent>
         <Container>
           <AceEditor
