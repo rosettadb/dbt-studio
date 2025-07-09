@@ -103,3 +103,27 @@ export const useGenerateJdbcUrl = (
     onError: onCustomError,
   });
 };
+
+export const useSetConnectionEnvVariable = (
+  customOptions?: UseMutationOptions<
+    void,
+    CustomError,
+    { key: string; value: string }
+  >,
+): UseMutationResult<void, CustomError, { key: string; value: string }> => {
+  const { onSuccess: onCustomSuccess, onError: onCustomError } =
+    customOptions || {};
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ key, value }) => {
+      return connectorsServices.setConnectionEnvVariable(key, value);
+    },
+    onSuccess: async (...args) => {
+      await queryClient.invalidateQueries([QUERY_KEYS.GET_SELECTED_PROJECT]);
+      onCustomSuccess?.(...args);
+    },
+    onError: (...args) => {
+      onCustomError?.(...args);
+    },
+  });
+};

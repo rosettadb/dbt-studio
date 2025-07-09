@@ -1,3 +1,5 @@
+/* eslint-disable no-case-declarations */
+/* eslint-disable @typescript-eslint/no-shadow */
 import yaml from 'js-yaml';
 import path from 'path';
 import fs from 'fs';
@@ -10,7 +12,7 @@ import {
   RosettaConnection,
 } from '../../types/backend';
 import { updateDatabase } from '../utils/fileHelper';
-import { ProjectsService, SettingsService } from './index';
+import { ProjectsService } from './index';
 import { ConfigureConnectionBody } from '../../types/ipc';
 import {
   executePostgresQuery,
@@ -26,6 +28,7 @@ import {
   testRedshiftConnection,
   executeRedshiftQuery,
 } from '../utils/connectors';
+import SecureStorageService from './secureStorage.service';
 
 export default class ConnectorsService {
   /**
@@ -47,7 +50,7 @@ export default class ConnectorsService {
     const currentProject = projects[projectIndex];
 
     // Generate JDBC URL with proper file path handling for BigQuery service account
-    let rosettaJdbcUrl = this.generateJdbcUrl(connection);
+    let rosettaJdbcUrl = this.generateJdbcUrl(connection, currentProject.name);
     if (
       connection.type === 'bigquery' &&
       connection.method === 'service-account' &&
@@ -79,8 +82,8 @@ export default class ConnectorsService {
           connection.type !== 'duckdb' &&
           'username' in connection &&
           'password' in connection && {
-            userName: connection.username,
-            password: connection.password,
+            userName: `db-user-${currentProject.name}`,
+            password: `db-password-${currentProject.name}`,
           }),
       },
       dbtConnection: this.mapToDbtConnection(connection),
@@ -94,6 +97,7 @@ export default class ConnectorsService {
     const profilesContent = await this.generateProfilesYml(
       connection,
       updatedProject.path,
+      currentProject.name,
     );
     await fs.promises.writeFile(profilesPath, profilesContent, 'utf8');
 
@@ -145,10 +149,33 @@ export default class ConnectorsService {
   static async executeSelectStatement({
     connection,
     query,
+    projectName,
   }: {
     connection: ConnectionInput;
     query: string;
+    projectName: string;
   }): Promise<QueryResponseType> {
+    const storeUser = await SecureStorageService.getCredential(
+      `db-user-${projectName}`,
+    );
+    const storePassword = await SecureStorageService.getCredential(
+      `db-password-${projectName}`,
+    );
+
+    const storeToken = await SecureStorageService.getCredential(
+      `db-token-${projectName}`,
+    );
+
+    if (storeUser) {
+      (connection as any).username = storeUser;
+    }
+    if (storePassword) {
+      (connection as any).password = storePassword;
+    }
+    if (storeToken) {
+      (connection as any).token = storeToken;
+    }
+
     switch (connection.type) {
       case 'postgres':
         return executePostgresQuery(connection, query);
@@ -175,10 +202,10 @@ export default class ConnectorsService {
     projectName: string,
     projectPath?: string,
   ): Promise<string> {
-    const { openAIApiKey } = await SettingsService.loadSettings();
+    // const { openAIApiKey } = await SettingsService.loadSettings();
 
     // Generate JDBC URL and handle BigQuery service account file path
-    let jdbcUrl = this.generateJdbcUrl(connection);
+    let jdbcUrl = this.generateJdbcUrl(connection, projectName);
 
     // For BigQuery service account, replace placeholder with actual file path
     if (
@@ -193,13 +220,14 @@ export default class ConnectorsService {
       );
       jdbcUrl = jdbcUrl.replace('KEYFILE_PATH_PLACEHOLDER', keyfilePath);
     }
-
+    const USER = `db-user-${projectName}`;
+    const PASSWORD = `db-password-${projectName}`;
     const yamlData: {
       connections: RosettaConnection[];
       openai_api_key?: string;
     } = {
-      openai_api_key:
-        openAIApiKey && openAIApiKey !== '' ? openAIApiKey : undefined,
+      // openai_api_key:
+      //   openAIApiKey && openAIApiKey !== '' ? openAIApiKey : undefined,
       connections: [
         {
           name: projectName,
@@ -213,8 +241,8 @@ export default class ConnectorsService {
           // For Databricks and DuckDB, don't include userName/password since auth is different
           ...(connection.type !== 'databricks' &&
             connection.type !== 'duckdb' && {
-              userName: connection.username,
-              password: connection.password,
+              userName: `\${${USER}}`,
+              password: `\${${PASSWORD}}`,
             }),
         },
       ],
@@ -257,14 +285,14 @@ export default class ConnectorsService {
     }
   }
 
-  static generateJdbcUrl(conn: ConnectionInput): string {
+  static generateJdbcUrl(conn: ConnectionInput, projectName: string): string {
     switch (conn.type) {
       case 'postgres':
-        return `jdbc:postgresql://${conn.host}:${conn.port}/${conn.database}?user=${conn.username}&password=${conn.password}&currentSchema=${conn.schema}`;
+        return `jdbc:postgresql://${conn.host}:${conn.port}/${conn.database}?currentSchema=${conn.schema}`;
       case 'snowflake':
-        return `jdbc:snowflake://${conn.account}.snowflakecomputing.com/?user=${conn.username}&password=${conn.password}&warehouse=${conn.warehouse}&db=${conn.database}&schema=${conn.schema}`;
-      case 'redshift':
-        let redshiftUrl = `jdbc:redshift://${conn.host}:${conn.port}/${conn.database}?user=${conn.username}&password=${conn.password}`;
+        return `jdbc:snowflake://${conn.account}.snowflakecomputing.com/?warehouse=${conn.warehouse}&db=${conn.database}&schema=${conn.schema}`;
+      case 'redshift': {
+        let redshiftUrl = `jdbc:redshift://${conn.host}:${conn.port}/${conn.database}?currentSchema=${conn.schema}`;
 
         // Add SSL parameters if enabled
         if (conn.ssl) {
@@ -273,13 +301,15 @@ export default class ConnectorsService {
             redshiftUrl += `&sslrootcert=${conn.sslrootcert}`;
           }
         }
-
         return redshiftUrl;
+      }
       case 'bigquery':
+        // eslint-disable-next-line no-case-declarations
         const host = 'https://www.googleapis.com';
         const path = 'bigquery/v2';
         const port = 443;
         const projectId = conn.project;
+        // eslint-disable-next-line no-case-declarations
         const baseUrl = `jdbc:bigquery://${host}/${path}:${port}`;
 
         if (conn.method === 'service-account' && conn.keyfile) {
@@ -297,7 +327,8 @@ export default class ConnectorsService {
         }
       case 'databricks':
         // Use token-based authentication with no username (UID)
-        return `jdbc:databricks://${conn.host}:443/default;transportMode=http;ssl=1;AuthMech=3;httpPath=${conn.httpPath};PWD=${conn.token}`;
+        const TOKEN = `db-token-${projectName}`;
+        return `jdbc:databricks://${conn.host}:443/default;transportMode=http;ssl=1;AuthMech=3;httpPath=${conn.httpPath};PWD=\${${TOKEN}}`;
       case 'duckdb':
         // DuckDB JDBC URL format
         return `jdbc:duckdb:${conn.database_path}`;
@@ -312,8 +343,8 @@ export default class ConnectorsService {
       case 'snowflake':
         return {
           type: 'snowflake',
-          username: conn.username,
-          password: conn.password,
+          username: `db-user-${conn.name}`,
+          password: `db-password-${conn.name}`,
           database: conn.database,
           schema: conn.schema,
           account: conn.account,
@@ -336,8 +367,8 @@ export default class ConnectorsService {
       case 'postgres':
         return {
           type: 'postgres',
-          username: conn.username,
-          password: conn.password,
+          username: `db-user-${conn.name}`,
+          password: `db-password-${conn.name}`,
           database: conn.database,
           schema: conn.schema,
           host: conn.host,
@@ -346,8 +377,8 @@ export default class ConnectorsService {
       case 'redshift':
         return {
           type: 'redshift',
-          username: conn.username,
-          password: conn.password,
+          username: `db-user-${conn.name}`,
+          password: `db-password-${conn.name}`,
           database: conn.database,
           schema: conn.schema,
           host: conn.host,
@@ -362,7 +393,7 @@ export default class ConnectorsService {
           host: conn.host,
           port: conn.port,
           http_path: conn.httpPath,
-          token: conn.token,
+          token: `db-token-${conn.name}`, // Use token directly
           database: conn.database,
           schema: conn.schema,
         };
@@ -384,6 +415,7 @@ export default class ConnectorsService {
   private static async mapToDbtProfiles(
     conn: ConnectionInput,
     projectPath?: string,
+    projectName?: string,
   ): Promise<string> {
     const profileConfig = {
       config: {
@@ -393,7 +425,7 @@ export default class ConnectorsService {
       [conn.name]: {
         target: 'dev',
         outputs: {
-          dev: await this.mapToDbtProfileOutput(conn, projectPath),
+          dev: await this.mapToDbtProfileOutput(conn, projectPath, projectName),
         },
       },
     };
@@ -404,22 +436,27 @@ export default class ConnectorsService {
   static generateProfilesYml(
     connection: ConnectionInput,
     projectPath?: string,
+    projectName?: string,
   ): Promise<string> {
-    return this.mapToDbtProfiles(connection, projectPath);
+    return this.mapToDbtProfiles(connection, projectPath, projectName);
   }
 
   private static async mapToDbtProfileOutput(
     conn: ConnectionInput,
     projectPath?: string,
+    projectName?: string,
   ): Promise<any> {
+    const dbUserName = `{{ env_var("db-user-${projectName}") }}`;
+    const dbPassword = `{{ env_var("db-password-${projectName}") }}`;
+    const dbToken = `{{ env_var("db-token-${projectName}") }}`;
     switch (conn.type) {
       case 'postgres':
         return {
           type: 'postgres',
           host: conn.host,
           port: conn.port,
-          user: conn.username,
-          password: conn.password,
+          user: dbUserName,
+          password: dbPassword,
           dbname: conn.database,
           schema: conn.schema,
           threads: 4,
@@ -428,8 +465,8 @@ export default class ConnectorsService {
         return {
           type: 'snowflake',
           account: conn.account,
-          user: conn.username,
-          password: conn.password,
+          user: dbUserName,
+          password: dbPassword,
           role: conn.role || 'SYSADMIN',
           warehouse: conn.warehouse,
           database: conn.database,
@@ -441,8 +478,8 @@ export default class ConnectorsService {
           type: 'redshift',
           host: conn.host,
           port: conn.port,
-          user: conn.username,
-          password: conn.password,
+          user: dbUserName,
+          password: dbPassword,
           dbname: conn.database,
           schema: conn.schema,
           threads: 4,
@@ -498,7 +535,7 @@ export default class ConnectorsService {
           type: 'databricks',
           host: conn.host,
           http_path: conn.httpPath,
-          token: conn.token, // Use token directly
+          token: dbToken, // Use token directly
           catalog: conn.database, // In Databricks, database maps to catalog
           schema: conn.schema,
           threads: 4,
@@ -745,5 +782,12 @@ export default class ConnectorsService {
       console.error('Error parsing main.conf:', error);
       return null;
     }
+  }
+
+  static async setConnectionEnvVariable(
+    key: string,
+    value: string,
+  ): Promise<void> {
+    process.env[key] = value;
   }
 }

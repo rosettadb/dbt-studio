@@ -43,6 +43,7 @@ export const SqlEditor: React.FC<Props> = ({
       const result = await connectorsServices.queryData({
         connection: connectionInput,
         query: selectedQuery,
+        projectName: selectedProject.name,
       });
 
       if (result.error) {

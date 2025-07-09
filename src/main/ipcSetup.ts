@@ -7,6 +7,7 @@ import {
   registerGitHandlers,
   registerUtilsHandlers,
   registerProcessHandlers,
+  registerSecureStorageHandlers,
   registerUpdateHandlers,
 } from './ipcHandlers';
 
@@ -18,6 +19,7 @@ const registerHandlers = (mainWindow: BrowserWindow) => {
   registerGitHandlers();
   registerUtilsHandlers();
   registerProcessHandlers(mainWindow);
+  registerSecureStorageHandlers();
   registerUpdateHandlers();
 };
 

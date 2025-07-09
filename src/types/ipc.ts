@@ -46,7 +46,8 @@ export type ConnectorChannels =
   | 'connector:validate'
   | 'connector:getJdbcUrl'
   | 'connector:query'
-  | 'project:addFromFolder';
+  | 'project:addFromFolder'
+  | 'connector:setConnectionEnvVariable';
 
 export type CliChannels =
   | 'cli:run'
@@ -87,6 +88,11 @@ export type ProcessChannels =
   | 'process:output'
   | 'process:error';
 
+export type SecureStorageChannels =
+  | 'secure-storage:set'
+  | 'secure-storage:get'
+  | 'secure-storage:delete';
+
 export type UpdateChannels =
   | 'updates:check'
   | 'updates:check-settings'
@@ -103,6 +109,7 @@ export type Channels =
   | GitChannels
   | UtilChannels
   | ProcessChannels
+  | SecureStorageChannels
   | UpdateChannels;
 
 export type ConfigureConnectionBody = {

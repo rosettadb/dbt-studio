@@ -3,11 +3,20 @@ import {
   EnhanceModelResponseType,
   GenerateDashboardResponseType,
 } from '../../types/backend';
+import SecureStorageService from './secureStorage.service';
 
 export default class OpenAIService {
-  private openai: OpenAI;
+  private openai?: OpenAI;
 
-  constructor(apiKey: string) {
+  constructor() {
+    this.initializeOpenAI();
+  }
+
+  private async initializeOpenAI() {
+    const apiKey = await SecureStorageService.getCredential('openai-api-key');
+    if (!apiKey) {
+      throw new Error('OpenAI API key is not set in secure storage.');
+    }
     this.openai = new OpenAI({
       apiKey,
     });
@@ -16,6 +25,12 @@ export default class OpenAIService {
   async generateDashboardsQuery(
     prompt: string,
   ): Promise<GenerateDashboardResponseType[]> {
+    if (!this.openai) {
+      await this.initializeOpenAI();
+      if (!this.openai) {
+        throw new Error('OpenAI instance is not initialized.');
+      }
+    }
     const response = await this.openai.chat.completions.create({
       model: 'gpt-4o',
       messages: [{ role: 'user', content: prompt }],
@@ -68,6 +83,12 @@ export default class OpenAIService {
   }
 
   async enhanceModelQuery(prompt: string): Promise<EnhanceModelResponseType> {
+    if (!this.openai) {
+      await this.initializeOpenAI();
+      if (!this.openai) {
+        throw new Error('OpenAI instance is not initialized.');
+      }
+    }
     const response = await this.openai.chat.completions.create({
       model: 'gpt-4o',
       messages: [{ role: 'user', content: prompt }],

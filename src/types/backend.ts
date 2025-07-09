@@ -195,7 +195,6 @@ export type SettingsType = {
   sampleRosettaMainConf: string;
   dbtPath: string;
   dbtVersion: string;
-  openAIApiKey?: string;
   pythonVersion: string;
   pythonPath: string;
   pythonBinary: string;

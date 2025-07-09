@@ -1,5 +1,5 @@
 import { ipcMain } from 'electron';
-import { OpenAIService, ProjectsService, SettingsService } from '../services';
+import { OpenAIService, ProjectsService } from '../services';
 import {
   EnhanceModelResponseType,
   GenerateDashboardResponseType,
@@ -135,16 +135,16 @@ const registerProjectHandlers = () => {
       _event,
       prompt: string,
     ): Promise<GenerateDashboardResponseType[]> => {
-      const apiKey = (await SettingsService.loadSettings()).openAIApiKey ?? '';
-      return new OpenAIService(apiKey).generateDashboardsQuery(prompt);
+      const openAIService = new OpenAIService();
+      return openAIService.generateDashboardsQuery(prompt);
     },
   );
 
   ipcMain.handle(
     'project:enhanceModelQuery',
     async (_event, prompt: string): Promise<EnhanceModelResponseType> => {
-      const apiKey = (await SettingsService.loadSettings()).openAIApiKey ?? '';
-      return new OpenAIService(apiKey).enhanceModelQuery(prompt);
+      const openAIService = new OpenAIService();
+      return openAIService.enhanceModelQuery(prompt);
     },
   );
   ipcMain.handle('project:zipDir', async (_event, path: string) => {
