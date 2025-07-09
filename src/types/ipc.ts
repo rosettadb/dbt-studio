@@ -87,6 +87,13 @@ export type ProcessChannels =
   | 'process:output'
   | 'process:error';
 
+export type UpdateChannels =
+  | 'updates:check'
+  | 'updates:check-settings'
+  | 'updates:download'
+  | 'updates:restart'
+  | 'updates:reject-version';
+
 export type Channels =
   | TestChannels
   | CliChannels
@@ -95,7 +102,8 @@ export type Channels =
   | ConnectorChannels
   | GitChannels
   | UtilChannels
-  | ProcessChannels;
+  | ProcessChannels
+  | UpdateChannels;
 
 export type ConfigureConnectionBody = {
   projectId: string;

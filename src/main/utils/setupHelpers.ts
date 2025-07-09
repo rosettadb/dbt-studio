@@ -1,5 +1,3 @@
-import log from 'electron-log';
-import { autoUpdater } from 'electron-updater';
 import fs from 'fs';
 import { app } from 'electron';
 import path from 'path';
@@ -17,14 +15,6 @@ export const initializeDataStorage = () => {
     fs.writeFileSync(DB_FILE, JSON.stringify({ projects: [] }, null, 2));
   }
 };
-
-export class AppUpdater {
-  constructor() {
-    log.transports.file.level = 'info';
-    autoUpdater.logger = log;
-    autoUpdater.checkForUpdatesAndNotify();
-  }
-}
 
 export const installExtensions = async () => {
   // eslint-disable-next-line global-require

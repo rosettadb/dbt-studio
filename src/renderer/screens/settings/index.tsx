@@ -29,6 +29,7 @@ import {
   DbtSettings,
   RosettaSettings,
   AboutSettings,
+  InstallationSettings,
 } from '../../components';
 import { AppLayout } from '../../layouts';
 import { settingsSidebarElements } from './settingsElements';
@@ -141,6 +142,8 @@ const Settings: React.FC = () => {
             onFilePicker={handleFilePicker}
           />
         );
+      case 'installation':
+        return <InstallationSettings />;
       case 'about':
         return <AboutSettings />;
       default:
@@ -259,7 +262,7 @@ const Settings: React.FC = () => {
           </div>
           <div style={{ maxWidth: '600px' }}>{renderContent()}</div>
 
-          {currentSection !== 'about' && (
+          {currentSection !== 'about' && currentSection !== 'installation' && (
             <Box sx={{ mt: 3 }}>
               <Button
                 type="submit"
