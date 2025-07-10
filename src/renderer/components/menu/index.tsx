@@ -8,7 +8,12 @@ import {
   useTheme,
   CircularProgress,
 } from '@mui/material';
-import { Menu as MenuIcon, Settings, ArrowDownward } from '@mui/icons-material';
+import {
+  Menu as MenuIcon,
+  Settings,
+  ArrowDownward,
+  FormatListNumbered,
+} from '@mui/icons-material';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { toast } from 'react-toastify';
 import {
@@ -133,6 +138,15 @@ export const Menu: React.FC = () => {
           {isProjectSelected && (
             <SimpleDropdownMenu
               items={[
+                {
+                  value: 'new',
+                  label: (
+                    <BranchDropdownToggle>
+                      <FormatListNumbered fontSize="small" />
+                      All Projects
+                    </BranchDropdownToggle>
+                  ),
+                },
                 ...projects.map((p) => ({
                   value: String(p.id),
                   label: (
@@ -142,7 +156,6 @@ export const Menu: React.FC = () => {
                     </BranchDropdownToggle>
                   ),
                 })),
-                { value: 'new', label: 'New Project' },
               ]}
               onSelect={async (value) => {
                 if (value === 'new') {
