@@ -4,6 +4,7 @@ import { useCli, useSecureStorage } from './index';
 import { useGetSettings, useSetConnectionEnvVariable } from '../controllers';
 import { Project } from '../../types/backend';
 import { projectsServices, settingsServices } from '../services';
+import { getOpenAIKey } from '../services/settings.services';
 
 const useRosettaDBT = (successCallback: () => Promise<void>) => {
   const { data: settings } = useGetSettings();
@@ -33,6 +34,8 @@ const useRosettaDBT = (successCallback: () => Promise<void>) => {
 
   return {
     fn: async (project: Project, incremental = '') => {
+      console.log('Running Rosetta dbt command...');
+      console.log('Project:', project);
       setIsRunning(true);
       // Set environment variables for the project
       const secureUserName = await getDatabaseUsername(project.name);
@@ -54,6 +57,14 @@ const useRosettaDBT = (successCallback: () => Promise<void>) => {
         setEnvVariables.mutate({
           key: `db-token-${project.name}`,
           value: secureToken || '',
+        });
+      }
+
+      const openaiKey = await getOpenAIKey();
+      if (openaiKey) {
+        setEnvVariables.mutate({
+          key: 'openai-api-key',
+          value: openaiKey,
         });
       }
 

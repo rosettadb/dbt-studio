@@ -7,6 +7,7 @@ import {
   DialogTitle,
   useTheme,
 } from '@mui/material';
+import { ContentCopy, Close } from '@mui/icons-material';
 import AceEditor from 'react-ace';
 import { toast } from 'react-toastify';
 
@@ -42,55 +43,67 @@ export const GenerateAiQueriesModal: React.FC<Props> = ({
       open={isOpen}
       onClose={onClose}
       fullWidth
+      maxWidth="lg"
       slotProps={{
         paper: {
           style: {
             backgroundColor: isDarkMode
               ? theme.palette.background.default
               : undefined,
+            width: '90vw',
+            maxWidth: '1200px',
+            height: '80vh',
+            maxHeight: '800px',
           },
         },
       }}
     >
-      <DialogTitle>Generated Analtics</DialogTitle>
-      <DialogContent>
-        <Container>
+      <DialogTitle>Generated Analitics</DialogTitle>
+      <DialogContent
+        sx={{
+          display: 'flex',
+          flexDirection: 'column',
+          height: '100%',
+          overflow: 'hidden',
+        }}
+      >
+        <Container
+          style={{ display: 'flex', flexDirection: 'column', height: '100%' }}
+        >
           <AceEditor
             style={{
               cursor: 'pointer',
             }}
             mode="sql"
-            width="auto"
+            width="100%"
             fontSize={18}
-            height="400px"
+            height="100%"
             value={value}
             readOnly
             theme={isDarkMode ? 'dracula' : 'tomorrow'}
           />
-          <div
-            style={{
-              display: 'flex',
-              width: '100%',
-              marginTop: 8,
-            }}
-          >
-            <Button
-              onClick={async () => {
-                await navigator.clipboard.writeText(value);
-                toast.info('Copied to clipboard!');
-              }}
-              variant="outlined"
-              style={{
-                marginLeft: 'auto',
-              }}
-            >
-              Copy
-            </Button>
-          </div>
         </Container>
       </DialogContent>
       <DialogActions>
-        <Button onClick={onClose}>Close</Button>
+        <Button
+          onClick={async () => {
+            await navigator.clipboard.writeText(value);
+            toast.info('Copied to clipboard!');
+          }}
+          variant="outlined"
+          startIcon={<ContentCopy />}
+          className="mb-2"
+        >
+          Copy
+        </Button>
+        <Button
+          onClick={onClose}
+          variant="outlined"
+          startIcon={<Close />}
+          className="mb-2"
+        >
+          Close
+        </Button>
       </DialogActions>
     </Dialog>
   );
