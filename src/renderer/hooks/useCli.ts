@@ -32,13 +32,17 @@ const useCli = () => {
     const handleError = (err: any) => {
       // Only handle if not in command-specific mode
       if (!commandInProgressRef.current) {
+        const errorMessage =
+          typeof err === 'string'
+            ? err
+            : err?.message || err?.toString() || 'Unknown error';
         setCliState((prev) => ({
           ...prev,
-          error: [...prev.error, err],
+          error: [...prev.error, errorMessage],
           isRunning: false,
           isSuccess: false,
         }));
-        errorHandlerRef.current?.(err);
+        errorHandlerRef.current?.(errorMessage);
       }
     };
 
@@ -104,10 +108,14 @@ const useCli = () => {
 
         const handleError = (err: any) => {
           if (!resolved) {
-            currentError = [...currentError, err];
+            const errorMessage =
+              typeof err === 'string'
+                ? err
+                : err?.message || err?.toString() || 'Unknown error';
+            currentError = [...currentError, errorMessage];
             setCliState((prev) => ({
               ...prev,
-              error: [...prev.error, err],
+              error: [...prev.error, errorMessage],
               isRunning: false,
               isSuccess: false,
             }));
@@ -161,7 +169,9 @@ const useCli = () => {
         projectsServices.runCliCommand(command).catch((err) => {
           if (!resolved) {
             cleanup();
-            reject(new Error(err.message || 'Command failed'));
+            const errorMessage =
+              err?.message || err?.toString() || 'Command failed';
+            reject(new Error(errorMessage));
           }
         });
       },
