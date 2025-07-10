@@ -34,8 +34,6 @@ const useRosettaDBT = (successCallback: () => Promise<void>) => {
 
   return {
     fn: async (project: Project, incremental = '') => {
-      console.log('Running Rosetta dbt command...');
-      console.log('Project:', project);
       setIsRunning(true);
       // Set environment variables for the project
       const secureUserName = await getDatabaseUsername(project.name);
