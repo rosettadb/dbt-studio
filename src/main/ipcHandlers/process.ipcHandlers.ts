@@ -24,8 +24,10 @@ const registerProcessHandlers = (mainWindow: BrowserWindow) => {
       try {
         processAdapter.start(command, mainWindow);
         return { success: true };
-      } catch (err) {
-        return { success: false, error: (err as Error).message };
+      } catch (err: any) {
+        const errorMessage =
+          err?.message || err?.toString() || 'Process failed';
+        return { success: false, error: errorMessage };
       }
     },
   );

@@ -4,6 +4,7 @@ import { useCli, useSecureStorage } from './index';
 import { useGetSettings, useSetConnectionEnvVariable } from '../controllers';
 import { Project } from '../../types/backend';
 import { projectsServices, settingsServices } from '../services';
+import { getOpenAIKey } from '../services/settings.services';
 
 const useRosettaDBT = (successCallback: () => Promise<void>) => {
   const { data: settings } = useGetSettings();
@@ -54,6 +55,14 @@ const useRosettaDBT = (successCallback: () => Promise<void>) => {
         setEnvVariables.mutate({
           key: `db-token-${project.name}`,
           value: secureToken || '',
+        });
+      }
+
+      const openaiKey = await getOpenAIKey();
+      if (openaiKey) {
+        setEnvVariables.mutate({
+          key: 'openai-api-key',
+          value: openaiKey,
         });
       }
 
