@@ -89,7 +89,7 @@ class CliAdapter {
         this.messageHandler(
           {
             type: 'error',
-            message: err.message,
+            message: err?.message || err?.toString() || 'Unknown error',
           },
           mainWindow,
         );

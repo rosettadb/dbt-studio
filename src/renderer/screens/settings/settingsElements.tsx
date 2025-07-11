@@ -4,6 +4,22 @@ import ManageAccountsIcon from '@mui/icons-material/ManageAccounts';
 import InfoIcon from '@mui/icons-material/Info';
 import SystemUpdateAltIcon from '@mui/icons-material/SystemUpdateAlt';
 import { SvgIconComponent } from '@mui/icons-material';
+import React from 'react';
+import { Icon } from '../../components/icon';
+import { icons } from '../../../../assets';
+
+// Custom icon wrapper to make custom SVG icons compatible with Material-UI icon interface
+const DbtBlackIcon: React.FC<{ fontSize?: string; color?: string }> = ({
+  fontSize = 'small',
+  color = 'inherit',
+}) => (
+  <Icon
+    src={icons.dbtBlack}
+    width={fontSize === 'small' ? 16 : 20}
+    height={fontSize === 'small' ? 16 : 20}
+    color={color === 'primary' ? 'currentColor' : color}
+  />
+);
 
 export interface SettingsSidebarElement {
   icon: SvgIconComponent;
@@ -18,8 +34,8 @@ export const settingsSidebarElements: SettingsSidebarElement[] = [
     path: '/app/settings/general',
   },
   {
-    icon: FolderIcon,
-    text: 'dbt™',
+    icon: DbtBlackIcon as any,
+    text: 'dbt™ Core',
     path: '/app/settings/dbt',
   },
   {

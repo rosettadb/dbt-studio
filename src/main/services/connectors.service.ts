@@ -227,6 +227,7 @@ export default class ConnectorsService {
     } = {
       // openai_api_key:
       //   openAIApiKey && openAIApiKey !== '' ? openAIApiKey : undefined,
+      openai_api_key: `\${openai-api-key}`,
       connections: [
         {
           name: projectName,

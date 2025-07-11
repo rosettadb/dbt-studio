@@ -1,5 +1,5 @@
 import React from 'react';
-import { Typography } from '@mui/material';
+import { Typography, useColorScheme, useTheme } from '@mui/material';
 import { toast } from 'react-toastify';
 import AnsiToHtml from 'ansi-to-html';
 import { useCli } from '../../hooks';
@@ -11,19 +11,58 @@ type Props = {
   project: Project;
 };
 
-const ansiConverter = new AnsiToHtml({
-  fg: '#fff',
-  bg: '#1e1e1e',
-  newline: true,
-  escapeXML: true,
-  stream: false,
-});
-
 const Terminal: React.FC<Props> = ({ project }) => {
+  const { mode } = useColorScheme();
+  const theme = useTheme();
   const { output, runCommand, error } = useCli();
   const [command, setCommand] = React.useState('');
   const outputRef = React.useRef(null);
   const { data: settings } = useGetSettings();
+
+  // Theme-based terminal colors using Material UI theme
+  const getTerminalColors = (themeMode: string | undefined) => {
+    switch (themeMode) {
+      case 'dark':
+        return {
+          fg: theme.palette.common.white,
+          bg: theme.palette.grey[900],
+          promptColor: theme.palette.success.main,
+        };
+      case 'light':
+        return {
+          fg: theme.palette.common.black,
+          bg: theme.palette.grey[50],
+          promptColor: theme.palette.success.dark,
+        };
+      case 'system':
+        return {
+          fg: theme.palette.text.primary,
+          bg: theme.palette.background.paper,
+          promptColor: theme.palette.success.main,
+        };
+      default:
+        return {
+          fg: theme.palette.text.primary,
+          bg: theme.palette.background.default,
+          promptColor: theme.palette.success.main,
+        };
+    }
+  };
+
+  const terminalColors = getTerminalColors(mode);
+
+  // Create ansiConverter based on current theme
+  const ansiConverter = React.useMemo(
+    () =>
+      new AnsiToHtml({
+        fg: terminalColors.fg,
+        bg: terminalColors.bg,
+        newline: true,
+        escapeXML: true,
+        stream: false,
+      }),
+    [terminalColors.fg, terminalColors.bg],
+  );
 
   React.useEffect(() => {
     if (outputRef.current) {
@@ -77,12 +116,22 @@ const Terminal: React.FC<Props> = ({ project }) => {
         handleSendCommand();
       }}
     >
-      <OutputBox ref={outputRef}>
+      <OutputBox
+        ref={outputRef}
+        style={{
+          backgroundColor: terminalColors.bg,
+          color: terminalColors.fg,
+        }}
+      >
         {output.map((line, index) => (
           <Typography
             key={`out-${index}`}
             variant="body2"
-            sx={{ fontFamily: 'monospace', whiteSpace: 'pre-wrap' }}
+            sx={{
+              fontFamily: 'monospace',
+              whiteSpace: 'pre-wrap',
+              color: terminalColors.fg,
+            }}
             dangerouslySetInnerHTML={{ __html: ansiConverter.toHtml(line) }}
           />
         ))}
@@ -91,16 +140,27 @@ const Terminal: React.FC<Props> = ({ project }) => {
             key={`err-${index}`}
             variant="body2"
             color="error"
-            sx={{ fontFamily: 'monospace', whiteSpace: 'pre-wrap' }}
+            sx={{
+              fontFamily: 'monospace',
+              whiteSpace: 'pre-wrap',
+            }}
             dangerouslySetInnerHTML={{ __html: ansiConverter.toHtml(line) }}
           />
         ))}
       </OutputBox>
 
-      <InputLine>
+      <InputLine
+        style={{
+          backgroundColor: terminalColors.bg,
+          borderTop: `1px solid ${theme.palette.divider}`,
+        }}
+      >
         <Typography
           variant="body2"
-          sx={{ fontFamily: 'monospace', color: 'limegreen' }}
+          sx={{
+            fontFamily: 'monospace',
+            color: terminalColors.promptColor,
+          }}
         >
           @{project.name} $
         </Typography>
@@ -109,6 +169,16 @@ const Terminal: React.FC<Props> = ({ project }) => {
           placeholder="Type a rosetta or dbt command..."
           value={command}
           onChange={(e) => setCommand(e.target.value)}
+          sx={{
+            '& .MuiInputBase-input': {
+              color: terminalColors.fg,
+              fontFamily: 'monospace',
+            },
+            '& .MuiInputBase-input::placeholder': {
+              color: theme.palette.text.secondary,
+              opacity: 1,
+            },
+          }}
         />
       </InputLine>
     </TerminalContainer>

@@ -1,20 +1,55 @@
 import React from 'react';
-import { Typography } from '@mui/material';
+import { Typography, useColorScheme, useTheme } from '@mui/material';
 import AnsiToHtml from 'ansi-to-html';
 import { useProcess } from '../../hooks';
 import { OutputBox, TerminalContainer } from './styles';
 
-const ansiConverter = new AnsiToHtml({
-  fg: '#fff',
-  bg: '#1e1e1e',
-  newline: true,
-  escapeXML: true,
-  stream: false,
-});
-
 const ProcessTerminal: React.FC = () => {
+  const { mode } = useColorScheme();
+  const theme = useTheme();
   const { output, error, stop } = useProcess();
   const outputRef = React.useRef<HTMLDivElement>(null);
+
+  // Theme-based terminal colors using Material UI theme
+  const getTerminalColors = (themeMode: string | undefined) => {
+    switch (themeMode) {
+      case 'dark':
+        return {
+          fg: theme.palette.common.white,
+          bg: theme.palette.grey[900],
+        };
+      case 'light':
+        return {
+          fg: theme.palette.common.black,
+          bg: theme.palette.grey[50],
+        };
+      case 'system':
+        return {
+          fg: theme.palette.text.primary,
+          bg: theme.palette.background.paper,
+        };
+      default:
+        return {
+          fg: theme.palette.text.primary,
+          bg: theme.palette.background.default,
+        };
+    }
+  };
+
+  const terminalColors = getTerminalColors(mode);
+
+  // Create ansiConverter based on current theme
+  const ansiConverter = React.useMemo(
+    () =>
+      new AnsiToHtml({
+        fg: terminalColors.fg,
+        bg: terminalColors.bg,
+        newline: true,
+        escapeXML: true,
+        stream: false,
+      }),
+    [terminalColors.fg, terminalColors.bg],
+  );
 
   React.useEffect(() => {
     if (outputRef.current) {
@@ -50,13 +85,23 @@ const ProcessTerminal: React.FC = () => {
 
   return (
     <TerminalContainer>
-      <OutputBox ref={outputRef} tabIndex={0}>
+      <OutputBox
+        ref={outputRef}
+        tabIndex={0}
+        style={{
+          backgroundColor: terminalColors.bg,
+          color: terminalColors.fg,
+        }}
+      >
         {output.map((line, index) => (
           <Typography
             key={`out-${index}`}
             variant="body2"
-            color="#fff"
-            sx={{ fontFamily: 'monospace', whiteSpace: 'pre-wrap' }}
+            sx={{
+              fontFamily: 'monospace',
+              whiteSpace: 'pre-wrap',
+              color: terminalColors.fg,
+            }}
             dangerouslySetInnerHTML={{ __html: ansiConverter.toHtml(line) }}
           />
         ))}
@@ -65,7 +110,10 @@ const ProcessTerminal: React.FC = () => {
             key={`err-${index}`}
             variant="body2"
             color="error"
-            sx={{ fontFamily: 'monospace', whiteSpace: 'pre-wrap' }}
+            sx={{
+              fontFamily: 'monospace',
+              whiteSpace: 'pre-wrap',
+            }}
             dangerouslySetInnerHTML={{ __html: ansiConverter.toHtml(line) }}
           />
         ))}

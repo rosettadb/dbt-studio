@@ -36,8 +36,10 @@ const registerConnectorsHandlers = () => {
       try {
         ConnectorsService.validateConnection(connection);
         return { valid: true };
-      } catch (error) {
-        return { valid: false, error: (error as Error).message };
+      } catch (error: any) {
+        const errorMessage =
+          error?.message || error?.toString() || 'Validation failed';
+        return { valid: false, error: errorMessage };
       }
     },
   );

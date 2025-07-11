@@ -43,8 +43,10 @@ const registerCliHandlers = (mainWindow: BrowserWindow) => {
       try {
         await cliAdapter.runCommand(mainWindow, args.command);
         return { success: true };
-      } catch (error) {
-        return { success: false, error: (error as Error).message };
+      } catch (error: any) {
+        const errorMessage =
+          error?.message || error?.toString() || 'Command failed';
+        return { success: false, error: errorMessage };
       }
     },
   );
