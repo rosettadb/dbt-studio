@@ -4,6 +4,7 @@ import {
   Project,
   QueryResponseType,
   BigQueryTestResponse,
+  ConnectionModel,
 } from '../../types/backend';
 import { ConfigureConnectionBody } from '../../types/ipc';
 
@@ -24,6 +25,11 @@ export const testConnection = async (
     ConnectionInput,
     boolean | BigQueryTestResponse
   >('connector:test', body);
+  return data;
+};
+
+export const listConnections = async (): Promise<ConnectionModel[]> => {
+  const { data } = await client.get<ConnectionModel[]>('connector:list');
   return data;
 };
 

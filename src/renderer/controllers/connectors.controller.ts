@@ -2,17 +2,36 @@ import {
   useMutation,
   UseMutationOptions,
   UseMutationResult,
+  useQuery,
   useQueryClient,
+  UseQueryOptions,
 } from 'react-query';
 import type {
   ConnectionInput,
   Project,
   CustomError,
   BigQueryTestResponse,
+  ConnectionModel,
 } from '../../types/backend';
 import type { ConfigureConnectionBody } from '../../types/ipc';
 import { QUERY_KEYS } from '../config/constants';
 import { connectorsServices } from '../services';
+
+export const useGetConnections = (
+  customOptions?: UseQueryOptions<
+    ConnectionModel[],
+    CustomError,
+    ConnectionModel[]
+  >,
+) => {
+  return useQuery({
+    queryKey: [QUERY_KEYS.GET_CONNECTIONS],
+    queryFn: async () => {
+      return connectorsServices.listConnections();
+    },
+    ...customOptions,
+  });
+};
 
 export const useConfigureConnection = (
   customOptions?: UseMutationOptions<

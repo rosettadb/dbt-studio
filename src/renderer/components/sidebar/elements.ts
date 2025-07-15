@@ -18,4 +18,9 @@ export const sidebarElements: SideBarElementType[] = [
     text: 'SQL',
     icon: Icons.DataSources,
   },
+  {
+    path: '/app/connections',
+    text: 'Connections',
+    icon: Icons.DataSources,
+  },
 ];

@@ -9,6 +9,7 @@ const handlerChannels = [
   'connector:validate',
   'connector:getJdbcUrl',
   'connector:query',
+  'connector:list',
 ];
 
 const removeConnectorsIpcHandlers = () => {
@@ -25,6 +26,10 @@ const registerConnectorsHandlers = () => {
       return ConnectorsService.configureConnection(body);
     },
   );
+
+  ipcMain.handle('connector:list', async () => {
+    return ConnectorsService.loadConnections();
+  });
 
   ipcMain.handle('connector:test', async (_event, body: ConnectionInput) => {
     return ConnectorsService.testConnection(body);

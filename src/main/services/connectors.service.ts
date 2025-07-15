@@ -2,15 +2,18 @@
 import yaml from 'js-yaml';
 import path from 'path';
 import fs from 'fs';
+import { v4 as uuidV4 } from 'uuid';
 import {
   BigQueryTestResponse,
   ConnectionInput,
+  ConnectionModel,
   DBTConnection,
+  ExecuteStatementType,
   Project,
   QueryResponseType,
   RosettaConnection,
 } from '../../types/backend';
-import { updateDatabase } from '../utils/fileHelper';
+import { loadDatabaseFile, updateDatabase } from '../utils/fileHelper';
 import { ProjectsService } from './index';
 import { ConfigureConnectionBody } from '../../types/ipc';
 import {
@@ -30,12 +33,31 @@ import {
 import SecureStorageService from './secureStorage.service';
 
 export default class ConnectorsService {
+  static async loadConnections(): Promise<ConnectionModel[]> {
+    const db = await loadDatabaseFile();
+    return db.connections;
+  }
+
+  static async saveNewConnection(connection: ConnectionInput): Promise<void> {
+    const connectionId = uuidV4();
+    const connections = await this.loadConnections();
+    const newConnection: ConnectionModel = {
+      id: connectionId,
+      connection,
+    };
+    await updateDatabase<'connections'>('connections', [
+      ...connections,
+      newConnection,
+    ]);
+  }
+
   /**
    * Configure a connection for a specific project
    */
   static async configureConnection({
     projectId,
-    connection,
+    connection: conn,
+    connectionId,
   }: ConfigureConnectionBody): Promise<Project> {
     const projects = await ProjectsService.loadProjects();
     const projectIndex = projects.findIndex((p) => p.id === projectId);
@@ -44,48 +66,33 @@ export default class ConnectorsService {
       throw new Error(`Project not found: ${projectId}`);
     }
 
+    const connections = await this.loadConnections();
+
+    const connection =
+      conn ?? connections.find((c) => c.id === connectionId)?.connection;
+
+    if (!connection) {
+      throw new Error('Connection not found!');
+    }
+
+    if (!connectionId) {
+      await this.saveNewConnection(connection);
+    }
+
     this.validateConnection(connection);
 
     const currentProject = projects[projectIndex];
 
-    // Generate JDBC URL with proper file path handling for BigQuery service account
-    let rosettaJdbcUrl = this.generateJdbcUrl(connection, currentProject.name);
-    if (
-      connection.type === 'bigquery' &&
-      connection.method === 'service-account' &&
-      connection.keyfile
-    ) {
-      const keyfilePath = await this.saveServiceAccountFile(
-        currentProject.path,
-        connection.keyfile,
-      );
-      rosettaJdbcUrl = rosettaJdbcUrl.replace(
-        'KEYFILE_PATH_PLACEHOLDER',
-        keyfilePath,
-      );
-    }
+    const rosettaConnection = await this.mapToRosettaConnection(
+      connection,
+      currentProject,
+    );
+    const dbtConnection = this.mapToDbtConnection(connection);
 
     const updatedProject: Project = {
       ...currentProject,
-      rosettaConnection: {
-        name: connection.name || currentProject.name,
-        dbType: connection.type,
-        databaseName:
-          connection.type === 'duckdb'
-            ? connection.database_path
-            : connection.database,
-        schemaName: connection.schema,
-        url: rosettaJdbcUrl,
-        // For Databricks and DuckDB, don't include userName/password since auth is different
-        ...(connection.type !== 'databricks' &&
-          connection.type !== 'duckdb' &&
-          'username' in connection &&
-          'password' in connection && {
-            userName: `db-user-${currentProject.name}`,
-            password: `db-password-${currentProject.name}`,
-          }),
-      },
-      dbtConnection: this.mapToDbtConnection(connection),
+      rosettaConnection,
+      dbtConnection,
     };
 
     projects[projectIndex] = updatedProject;
@@ -149,11 +156,7 @@ export default class ConnectorsService {
     connection,
     query,
     projectName,
-  }: {
-    connection: ConnectionInput;
-    query: string;
-    projectName: string;
-  }): Promise<QueryResponseType> {
+  }: ExecuteStatementType): Promise<QueryResponseType> {
     const storeUser = await SecureStorageService.getCredential(
       `db-user-${projectName}`,
     );
@@ -201,12 +204,7 @@ export default class ConnectorsService {
     projectName: string,
     projectPath?: string,
   ): Promise<string> {
-    // const { openAIApiKey } = await SettingsService.loadSettings();
-
-    // Generate JDBC URL and handle BigQuery service account file path
     let jdbcUrl = this.generateJdbcUrl(connection, projectName);
-
-    // For BigQuery service account, replace placeholder with actual file path
     if (
       connection.type === 'bigquery' &&
       connection.method === 'service-account' &&
@@ -337,8 +335,46 @@ export default class ConnectorsService {
     }
   }
 
+  private static async mapToRosettaConnection(
+    connection: ConnectionInput,
+    project: Project,
+  ): Promise<RosettaConnection> {
+    let rosettaJdbcUrl = this.generateJdbcUrl(connection, project.name);
+    if (
+      connection.type === 'bigquery' &&
+      connection.method === 'service-account' &&
+      connection.keyfile
+    ) {
+      const keyfilePath = await this.saveServiceAccountFile(
+        project.path,
+        connection.keyfile,
+      );
+      rosettaJdbcUrl = rosettaJdbcUrl.replace(
+        'KEYFILE_PATH_PLACEHOLDER',
+        keyfilePath,
+      );
+    }
+
+    return {
+      name: connection.name || project.name,
+      dbType: connection.type,
+      databaseName:
+        connection.type === 'duckdb'
+          ? connection.database_path
+          : connection.database,
+      schemaName: connection.schema,
+      url: rosettaJdbcUrl,
+      ...(connection.type !== 'databricks' &&
+        connection.type !== 'duckdb' &&
+        'username' in connection &&
+        'password' in connection && {
+          userName: `db-user-${project.name}`,
+          password: `db-password-${project.name}`,
+        }),
+    };
+  }
+
   private static mapToDbtConnection(conn: ConnectionInput): DBTConnection {
-    // Handle each connection type separately to ensure type safety
     switch (conn.type) {
       case 'snowflake':
         return {

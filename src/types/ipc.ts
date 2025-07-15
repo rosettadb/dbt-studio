@@ -46,7 +46,8 @@ export type ConnectorChannels =
   | 'connector:validate'
   | 'connector:query'
   | 'project:addFromFolder'
-  | 'connector:setConnectionEnvVariable';
+  | 'connector:setConnectionEnvVariable'
+  | 'connector:list';
 
 export type CliChannels =
   | 'cli:run'
@@ -113,5 +114,6 @@ export type Channels =
 
 export type ConfigureConnectionBody = {
   projectId: string;
-  connection: ConnectionInput;
+  connection?: ConnectionInput;
+  connectionId?: string;
 };
