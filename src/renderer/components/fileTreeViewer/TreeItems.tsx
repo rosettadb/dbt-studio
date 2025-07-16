@@ -32,7 +32,18 @@ const FileTreeItem: React.FC<ItemProps> = ({ label, color }) => {
   );
 };
 
+const RootTreeItem: React.FC<ItemProps> = ({label, color}) => {
+  return (
+    <StyledTreeItem>
+      <StyledLabel variant="caption" style={{paddingTop:0, paddingBottom:0, }}>
+        <OverflowTip style={{ color, fontWeight: 600, }}>{label}</OverflowTip>
+      </StyledLabel>
+    </StyledTreeItem>
+  );
+};
+
 export const TreeItems = {
+  Root: RootTreeItem,
   Folder: FolderTreeItem,
   File: FileTreeItem,
 };
