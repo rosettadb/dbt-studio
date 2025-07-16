@@ -29,6 +29,9 @@ export const Sidebar: React.FC<Props> = ({ content }) => {
     if (location.pathname.includes('sql')) {
       return 1;
     }
+    if (location.pathname.includes('cloud-explorer')) {
+      return 2;
+    }
     if (
       location.pathname.includes('settings') ||
       location.pathname.includes('add-connection') ||

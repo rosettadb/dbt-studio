@@ -5,6 +5,7 @@ import AddConnection from './addConnection';
 import EditConnection from './editConnection';
 import SelectProject from './selectProject';
 import Setup from './setup';
+import CloudExplorer from './cloudExplorer';
 
 export {
   Settings,
@@ -14,4 +15,5 @@ export {
   EditConnection,
   SelectProject,
   Setup,
+  CloudExplorer,
 };
