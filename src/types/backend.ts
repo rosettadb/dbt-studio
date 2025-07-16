@@ -185,6 +185,7 @@ export type Project = {
   name: string;
   path: string;
   createdAt: string;
+  connectionId?: string;
   rosettaConnection?: RosettaConnection;
   dbtConnection?: DBTConnection;
   lastOpenedAt?: number;

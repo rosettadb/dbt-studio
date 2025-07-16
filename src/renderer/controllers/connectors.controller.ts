@@ -33,6 +33,24 @@ export const useGetConnections = (
   });
 };
 
+export const useGetConnectionById = (
+  connectionId?: string,
+  customOptions?: UseQueryOptions<
+    ConnectionModel | undefined,
+    CustomError,
+    ConnectionModel | undefined
+  >,
+) => {
+  return useQuery({
+    queryKey: [QUERY_KEYS.GET_CONNECTION_BY_ID],
+    queryFn: async () => {
+      return connectorsServices.getConnectionById(connectionId!);
+    },
+    enabled: !!connectionId,
+    ...customOptions,
+  });
+};
+
 export const useConfigureConnection = (
   customOptions?: UseMutationOptions<
     Project,

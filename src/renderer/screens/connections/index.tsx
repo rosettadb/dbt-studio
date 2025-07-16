@@ -1,6 +1,7 @@
 import React from 'react';
 import { useGetConnections } from '../../controllers';
 import { Loader } from '../../components';
+import { AppLayout } from '../../layouts';
 
 const Connections: React.FC = () => {
   const { data: connections = [], isLoading } = useGetConnections();
@@ -10,11 +11,11 @@ const Connections: React.FC = () => {
   }
 
   return (
-    <div>
+    <AppLayout>
       {connections.map(({ id, connection }) => (
         <div key={id}>{connection.name}</div>
       ))}
-    </div>
+    </AppLayout>
   );
 };
 

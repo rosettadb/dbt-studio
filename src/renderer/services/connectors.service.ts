@@ -64,3 +64,13 @@ export const setConnectionEnvVariable = async (
     { key, value },
   );
 };
+
+export const getConnectionById = async (
+  connectionId: string,
+): Promise<ConnectionModel | undefined> => {
+  const { data } = await client.post<string, ConnectionModel | undefined>(
+    'connector:get',
+    connectionId,
+  );
+  return data;
+};

@@ -31,6 +31,10 @@ const registerConnectorsHandlers = () => {
     return ConnectorsService.loadConnections();
   });
 
+  ipcMain.handle('connector:get', async (_event, connectionId: string) => {
+    return ConnectorsService.getConnectionById(connectionId);
+  });
+
   ipcMain.handle('connector:test', async (_event, body: ConnectionInput) => {
     return ConnectorsService.testConnection(body);
   });

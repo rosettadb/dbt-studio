@@ -35,10 +35,17 @@ import SecureStorageService from './secureStorage.service';
 export default class ConnectorsService {
   static async loadConnections(): Promise<ConnectionModel[]> {
     const db = await loadDatabaseFile();
-    return db.connections;
+    return db.connections ?? [];
   }
 
-  static async saveNewConnection(connection: ConnectionInput): Promise<void> {
+  static async getConnectionById(
+    connectionId: string,
+  ): Promise<ConnectionModel | undefined> {
+    const connections = await this.loadConnections();
+    return connections.find((connection) => connection.id === connectionId);
+  }
+
+  static async saveNewConnection(connection: ConnectionInput): Promise<string> {
     const connectionId = uuidV4();
     const connections = await this.loadConnections();
     const newConnection: ConnectionModel = {
@@ -49,6 +56,58 @@ export default class ConnectorsService {
       ...connections,
       newConnection,
     ]);
+    return connectionId;
+  }
+
+  static async getProjectById(projectId: string): Promise<Project | undefined> {
+    const { projects } = await loadDatabaseFile();
+    return projects.find((p) => p.id === projectId);
+  }
+
+  static async loadConfigurations(projectId: string): Promise<Project> {
+    const project = await this.getProjectById(projectId);
+
+    if (!project) {
+      throw new Error('Project not found');
+    }
+    if (!project?.connectionId) {
+      return project;
+    }
+    const connections = await this.loadConnections();
+    const connection = connections.find((c) => c.id === project.connectionId);
+
+    if (!connection) {
+      throw new Error('Missing connection');
+    }
+
+    const rosettaConnection = await this.mapToRosettaConnection(
+      connection.connection,
+      project,
+    );
+    const dbtConnection = this.mapToDbtConnection(connection.connection);
+
+    const profilesPath = path.join(project.path, 'profiles.yml');
+    const profilesContent = await this.generateProfilesYml(
+      connection.connection,
+      project.path,
+    );
+    await fs.promises.writeFile(profilesPath, profilesContent, 'utf8');
+
+    const mainConfPath = path.join(project.path, 'rosetta', 'main.conf');
+    const rosettaYaml = await this.generateRosettaYml(
+      connection.connection,
+      project.name,
+      project.path,
+    );
+    await fs.promises.writeFile(mainConfPath, rosettaYaml, 'utf8');
+    return {
+      ...project,
+      rosettaConnection: {
+        ...rosettaConnection,
+        name: project.name,
+      },
+      dbtConnection,
+    };
   }
 
   /**
@@ -57,7 +116,7 @@ export default class ConnectorsService {
   static async configureConnection({
     projectId,
     connection: conn,
-    connectionId,
+    connectionId: connId,
   }: ConfigureConnectionBody): Promise<Project> {
     const projects = await ProjectsService.loadProjects();
     const projectIndex = projects.findIndex((p) => p.id === projectId);
@@ -67,7 +126,7 @@ export default class ConnectorsService {
     }
 
     const connections = await this.loadConnections();
-
+    let connectionId = connId;
     const connection =
       conn ?? connections.find((c) => c.id === connectionId)?.connection;
 
@@ -75,47 +134,19 @@ export default class ConnectorsService {
       throw new Error('Connection not found!');
     }
 
-    if (!connectionId) {
-      await this.saveNewConnection(connection);
-    }
-
     this.validateConnection(connection);
 
+    if (!connectionId) {
+      connectionId = await this.saveNewConnection(connection);
+    }
+
     const currentProject = projects[projectIndex];
-
-    const rosettaConnection = await this.mapToRosettaConnection(
-      connection,
-      currentProject,
-    );
-    const dbtConnection = this.mapToDbtConnection(connection);
-
-    const updatedProject: Project = {
+    await ProjectsService.updateProject({
       ...currentProject,
-      rosettaConnection,
-      dbtConnection,
-    };
+      connectionId,
+    });
 
-    projects[projectIndex] = updatedProject;
-    await ProjectsService.saveProjects(projects);
-    await updateDatabase<'selectedProject'>('selectedProject', updatedProject);
-
-    const profilesPath = path.join(updatedProject.path, 'profiles.yml');
-    const profilesContent = await this.generateProfilesYml(
-      connection,
-      updatedProject.path,
-      currentProject.name,
-    );
-    await fs.promises.writeFile(profilesPath, profilesContent, 'utf8');
-
-    const mainConfPath = path.join(updatedProject.path, 'rosetta', 'main.conf');
-    const rosettaYaml = await this.generateRosettaYml(
-      connection,
-      updatedProject.name,
-      updatedProject.path,
-    );
-    await fs.promises.writeFile(mainConfPath, rosettaYaml, 'utf8');
-
-    return updatedProject;
+    return this.loadConfigurations(currentProject.id);
   }
 
   /**
@@ -217,8 +248,8 @@ export default class ConnectorsService {
       );
       jdbcUrl = jdbcUrl.replace('KEYFILE_PATH_PLACEHOLDER', keyfilePath);
     }
-    const USER = `db-user-${projectName}`;
-    const PASSWORD = `db-password-${projectName}`;
+    const USER = `db-user-${connection.name}`;
+    const PASSWORD = `db-password-${connection.name}`;
     const yamlData: {
       connections: RosettaConnection[];
       openai_api_key?: string;
@@ -368,8 +399,8 @@ export default class ConnectorsService {
         connection.type !== 'duckdb' &&
         'username' in connection &&
         'password' in connection && {
-          userName: `db-user-${project.name}`,
-          password: `db-password-${project.name}`,
+          userName: `db-user-${connection.name}`,
+          password: `db-password-${connection.name}`,
         }),
     };
   }
@@ -451,7 +482,6 @@ export default class ConnectorsService {
   private static async mapToDbtProfiles(
     conn: ConnectionInput,
     projectPath?: string,
-    projectName?: string,
   ): Promise<string> {
     const profileConfig = {
       config: {
@@ -461,7 +491,7 @@ export default class ConnectorsService {
       [conn.name]: {
         target: 'dev',
         outputs: {
-          dev: await this.mapToDbtProfileOutput(conn, projectPath, projectName),
+          dev: await this.mapToDbtProfileOutput(conn, projectPath),
         },
       },
     };
@@ -472,19 +502,17 @@ export default class ConnectorsService {
   static generateProfilesYml(
     connection: ConnectionInput,
     projectPath?: string,
-    projectName?: string,
   ): Promise<string> {
-    return this.mapToDbtProfiles(connection, projectPath, projectName);
+    return this.mapToDbtProfiles(connection, projectPath);
   }
 
   private static async mapToDbtProfileOutput(
     conn: ConnectionInput,
     projectPath?: string,
-    projectName?: string,
   ): Promise<any> {
-    const dbUserName = `{{ env_var("db-user-${projectName}") }}`;
-    const dbPassword = `{{ env_var("db-password-${projectName}") }}`;
-    const dbToken = `{{ env_var("db-token-${projectName}") }}`;
+    const dbUserName = `{{ env_var("db-user-${conn.name}") }}`;
+    const dbPassword = `{{ env_var("db-password-${conn.name}") }}`;
+    const dbToken = `{{ env_var("db-token-${conn.name}") }}`;
     switch (conn.type) {
       case 'postgres':
         return {

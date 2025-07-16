@@ -18,6 +18,9 @@ import {
   DialogContentText,
   DialogTitle,
   Tooltip,
+  FormControl,
+  InputLabel,
+  Select,
 } from '@mui/material';
 import AddIcon from '@mui/icons-material/Add';
 import SearchIcon from '@mui/icons-material/Search';
@@ -34,6 +37,7 @@ import { projectsServices } from '../../services';
 import {
   useDeleteProject,
   useFilePicker,
+  useGetConnections,
   useGetProjects,
   useGetSettings,
 } from '../../controllers';
@@ -212,10 +216,29 @@ const ProjectCardContent = styled(Box)`
   overflow: hidden;
 `;
 
+const ConnectionIconContainer = styled(Box)`
+  display: flex;
+  align-items: center;
+  margin-right: 8px;
+`;
+
+const ConnectionIcon = styled('img')`
+  width: 20px;
+  height: 20px;
+  margin-right: 6px;
+  flex-shrink: 0;
+  border-radius: 2px;
+  object-fit: contain;
+`;
+
 const SelectProject: React.FC = () => {
   const navigate = useNavigate();
   const { data: settings } = useGetSettings();
   const { data: projects = [] } = useGetProjects();
+  const { data: connections = [], isLoading: isLoadingConnections } =
+    useGetConnections();
+  const [selectedConnection, setSelectedConnection] =
+    React.useState<string>('');
   const [isCloneModalOpen, setIsCloneModalOpen] = React.useState(false);
   const [searchQuery, setSearchQuery] = React.useState('');
   const [isAddingProject, setIsAddingProject] = React.useState(false);
@@ -278,6 +301,16 @@ const SelectProject: React.FC = () => {
         <DatabaseIcon />
       </ProjectMuiIcon>
     );
+  };
+
+  // Helper function to render connection icon for the selector
+  const renderConnectionIcon = (connectionType: string) => {
+    const iconSrc =
+      connectionIcons.images[connectionType as SupportedConnectionTypes];
+    if (iconSrc) {
+      return <ConnectionIcon src={iconSrc} alt={connectionType} />;
+    }
+    return <DatabaseIcon sx={{ fontSize: 20, marginRight: 0.75 }} />;
   };
 
   const handleOpenMenu = (
@@ -361,11 +394,13 @@ const SelectProject: React.FC = () => {
     try {
       const project = await projectsServices.addProject({
         name: `${defaultProjectPath}/${newProject.name}`,
+        connectionId: selectedConnection || undefined,
       });
       await projectsServices.selectProject({ projectId: project.id });
       toast.success(`Project ${project.name} created successfully!`);
       setIsAddingProject(false);
       setNewProject({ name: '' });
+      setSelectedConnection('');
       navigate('/app/loading');
     } catch (error) {
       toast.error('Failed to create project. Please try again.');
@@ -556,10 +591,43 @@ const SelectProject: React.FC = () => {
                 autoFocus
                 sx={{ mb: 2 }}
               />
+              <FormControl fullWidth sx={{ mb: 2 }}>
+                <InputLabel id="connection-select-label">
+                  Connection (Optional)
+                </InputLabel>
+                <Select
+                  labelId="connection-select-label"
+                  value={selectedConnection}
+                  label="Connection (Optional)"
+                  onChange={(e) => setSelectedConnection(e.target.value)}
+                  disabled={isLoadingConnections}
+                >
+                  <MenuItem value="">
+                    <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                      <DatabaseIcon sx={{ fontSize: 20, marginRight: 1 }} />
+                      No Connection
+                    </Box>
+                  </MenuItem>
+                  {connections.map((connection) => (
+                    <MenuItem key={connection.id} value={connection.id}>
+                      <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                        <ConnectionIconContainer>
+                          {renderConnectionIcon(connection.connection.type)}
+                        </ConnectionIconContainer>
+                        {connection.connection.name} -{' '}
+                        {connection.connection.type}
+                      </Box>
+                    </MenuItem>
+                  ))}
+                </Select>
+              </FormControl>
               <FormActions>
                 <Button
                   variant="outlined"
-                  onClick={() => setIsAddingProject(false)}
+                  onClick={() => {
+                    setIsAddingProject(false);
+                    setSelectedConnection('');
+                  }}
                 >
                   Cancel
                 </Button>

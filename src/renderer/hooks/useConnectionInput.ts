@@ -1,21 +1,23 @@
-/* eslint-disable no-case-declarations */
+/* eslint-disable no-case-declarations, consistent-return */
 import {
-  BigQueryDBTConnection,
-  DatabricksDBTConnection,
-  DuckDBDBTConnection,
-  PostgresDBTConnection,
-  Project,
-  RedshiftDBTConnection,
-  SnowflakeDBTConnection,
+  BigQueryConnection,
+  ConnectionModel,
+  DatabricksConnection,
+  DuckDBConnection,
+  PostgresConnection,
+  RedshiftConnection,
+  SnowflakeConnection,
 } from '../../types/backend';
 
-const useConnectionInput = (selectedProject?: Project) => {
-  if (!selectedProject?.dbtConnection) return undefined;
-  const { type, ...rest } = selectedProject.dbtConnection;
-
+const getConnectionInput = (conn: ConnectionModel) => {
+  if (!conn) {
+    return;
+  }
+  const { connection } = conn;
+  const { type } = connection;
   switch (type) {
     case 'postgres':
-      const pg = rest as PostgresDBTConnection;
+      const pg = connection as PostgresConnection;
       return {
         type,
         host: pg.host,
@@ -26,7 +28,7 @@ const useConnectionInput = (selectedProject?: Project) => {
         schema: pg.schema || 'public',
       };
     case 'redshift':
-      const rs = rest as RedshiftDBTConnection;
+      const rs = connection as RedshiftConnection;
       return {
         type,
         host: rs.host,
@@ -37,7 +39,7 @@ const useConnectionInput = (selectedProject?: Project) => {
         schema: rs.schema || 'public',
       };
     case 'snowflake':
-      const sf = rest as SnowflakeDBTConnection;
+      const sf = connection as SnowflakeConnection;
       return {
         type,
         account: sf.account,
@@ -49,7 +51,7 @@ const useConnectionInput = (selectedProject?: Project) => {
         role: sf.role,
       };
     case 'bigquery':
-      const bq = rest as BigQueryDBTConnection;
+      const bq = connection as BigQueryConnection;
       return {
         type,
         projectId: bq.project,
@@ -61,28 +63,28 @@ const useConnectionInput = (selectedProject?: Project) => {
         priority: bq.priority,
       };
     case 'databricks':
-      const db = rest as DatabricksDBTConnection;
+      const db = connection as DatabricksConnection;
       return {
         type,
         host: db.host,
         port: db.port,
-        httpPath: db.http_path,
+        httpPath: db.httpPath,
         token: db.token, // Use token directly
         database: db.database,
         schema: db.schema,
       };
     case 'duckdb':
-      const duck = rest as DuckDBDBTConnection;
+      const duck = connection as DuckDBConnection;
       return {
         type,
-        database_path: duck.path,
+        database_path: duck.database_path,
         database: duck.database,
         schema: duck.schema || 'main',
-        name: selectedProject.name,
+        name: connection.name,
       };
     default:
       return undefined;
   }
 };
 
-export default useConnectionInput;
+export default getConnectionInput;

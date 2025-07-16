@@ -1,10 +1,12 @@
 import { RemoteWithRefs } from 'simple-git';
 import { client } from '../config/client';
 import {
+  DBTConnection,
   DiffResponse,
   FileStatus,
   GitBranch,
   GitCredentials,
+  RosettaConnection,
 } from '../../types/backend';
 
 export const gitInit = async (path: string) => {
@@ -19,8 +21,8 @@ export const gitClone = async (url: string, credentials?: GitCredentials) => {
       authRequired?: boolean;
       name?: string;
       path?: string;
-      dbtConnection?: any;
-      rosettaConnection?: any;
+      dbtConnection?: DBTConnection;
+      rosettaConnection?: RosettaConnection;
     }
   >('git:clone', {
     url,

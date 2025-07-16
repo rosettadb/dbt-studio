@@ -15,9 +15,12 @@ const registerProjectHandlers = () => {
     return ProjectsService.getProject(body.id);
   });
 
-  ipcMain.handle('project:add', async (_event, body: { name: string }) => {
-    return ProjectsService.addProject(body.name);
-  });
+  ipcMain.handle(
+    'project:add',
+    async (_event, body: { name: string; connectionId?: string }) => {
+      return ProjectsService.addProject(body.name, body.connectionId);
+    },
+  );
 
   ipcMain.handle(
     'project:select',

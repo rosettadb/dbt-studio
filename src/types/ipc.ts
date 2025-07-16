@@ -47,7 +47,8 @@ export type ConnectorChannels =
   | 'connector:query'
   | 'project:addFromFolder'
   | 'connector:setConnectionEnvVariable'
-  | 'connector:list';
+  | 'connector:list'
+  | 'connector:get';
 
 export type CliChannels =
   | 'cli:run'
