@@ -99,6 +99,12 @@ export type UpdateChannels =
   | 'updates:restart'
   | 'updates:reject-version';
 
+export type CloudExplorerChannels =
+  | 'cloudExplorer:listBuckets'
+  | 'cloudExplorer:listObjects'
+  | 'cloudExplorer:getDownloadUrl'
+  | 'cloudExplorer:testConnection';
+
 export type Channels =
   | TestChannels
   | CliChannels
@@ -109,7 +115,8 @@ export type Channels =
   | UtilChannels
   | ProcessChannels
   | SecureStorageChannels
-  | UpdateChannels;
+  | UpdateChannels
+  | CloudExplorerChannels;
 
 export type ConfigureConnectionBody = {
   projectId: string;

@@ -40,3 +40,63 @@ export type SecureStorageAccount =
   | `db-user-${string}`
   | `db-password-${string}`
   | `db-token-${string}`;
+
+// Cloud Explorer Types
+export interface Bucket {
+  name: string;
+  created?: Date;
+  location?: string;
+}
+
+export interface StorageObject {
+  name: string;
+  size: number;
+  updated: Date;
+  contentType?: string;
+  isDirectory: boolean;
+}
+
+export interface CloudListResult {
+  objects: StorageObject[];
+  nextPageToken?: string;
+}
+
+export interface S3Config {
+  region: string;
+  accessKeyId: string;
+  secretAccessKey: string;
+}
+
+export interface AzureConfig {
+  accountName: string;
+  accountKey: string;
+  connectionString?: string;
+}
+
+export interface GCSConfig {
+  projectId: string;
+  credentials?: any;
+}
+
+export type CloudStorageConfig = S3Config | AzureConfig | GCSConfig;
+
+export type CloudProvider = 'aws' | 'azure' | 'gcs';
+
+export interface CloudConnection {
+  id: string;
+  name: string;
+  provider: CloudProvider;
+  config: CloudStorageConfig;
+  created: Date;
+  lastUsed?: Date;
+}
+
+export interface RecentItem {
+  id: string;
+  name: string;
+  path: string;
+  connectionId: string;
+  connectionName: string;
+  provider: CloudProvider;
+  accessedAt: Date;
+}

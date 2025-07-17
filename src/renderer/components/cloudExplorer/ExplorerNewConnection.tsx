@@ -1,5 +1,6 @@
 import React from 'react';
+import { ConnectionForm } from './ConnectionForm';
 
-export const ExplorerNewConnection = () => {
-  return <div>ExplorerNewConnection</div>;
+export const ExplorerNewConnection: React.FC = () => {
+  return <ConnectionForm />;
 };

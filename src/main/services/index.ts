@@ -6,6 +6,7 @@ import GitService from './git.service';
 import SecureStorageService from './secureStorage.service';
 import AnalyticsService from './analytics.service';
 import UpdateService from './update.service';
+import CloudExplorerService from './cloudExplorer.service';
 
 export {
   ProjectsService,
@@ -16,4 +17,5 @@ export {
   SecureStorageService,
   AnalyticsService,
   UpdateService,
+  CloudExplorerService,
 };

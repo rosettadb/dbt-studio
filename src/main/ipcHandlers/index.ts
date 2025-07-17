@@ -7,6 +7,7 @@ import registerUtilsHandlers from './utils.ipcHandlers';
 import registerProcessHandlers from './process.ipcHandlers';
 import registerSecureStorageHandlers from './secureStorage.ipcHandlers';
 import registerUpdateHandlers from './updates.ipcHandlers';
+import registerCloudExplorerHandlers from './cloudExplorer.ipcHandlers';
 
 export {
   registerCliHandlers,
@@ -18,4 +19,5 @@ export {
   registerProcessHandlers,
   registerSecureStorageHandlers,
   registerUpdateHandlers,
+  registerCloudExplorerHandlers,
 };

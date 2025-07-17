@@ -72,6 +72,10 @@ const App: React.FC = () => {
             path="cloud-explorer/new-connection"
             element={<CloudExplorer />}
           />
+          <Route
+            path="cloud-explorer/edit-connection/:id"
+            element={<CloudExplorer />}
+          />
           <Route path="loading" element={<Loading />} />
           <Route path="*" element={<Navigate to="/app" />} />
         </Route>

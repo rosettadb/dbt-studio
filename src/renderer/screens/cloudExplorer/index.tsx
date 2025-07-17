@@ -9,12 +9,21 @@ import {
   ExplorerConnections,
   ExplorerRecentItems,
   ExplorerNewConnection,
+  ExplorerEditConnection,
 } from '../../components/cloudExplorer';
 
 const CloudExplorer: React.FC = () => {
   const location = useLocation();
   const navigate = useNavigate();
-  const currentSection = location.pathname.split('/').pop() || 'dashboard';
+
+  // Parse the current section from the pathname
+  const pathSegments = location.pathname.split('/');
+  const currentSection = (() => {
+    if (pathSegments.includes('edit-connection')) {
+      return 'edit-connection';
+    }
+    return pathSegments.pop() || 'dashboard';
+  })();
 
   const handleClose = () => {
     navigate('/app');
@@ -30,6 +39,8 @@ const CloudExplorer: React.FC = () => {
         return 'Recent Items';
       case 'new-connection':
         return 'New Connection';
+      case 'edit-connection':
+        return 'Edit Connection';
       default:
         return 'Cloud Explorer';
     }
@@ -46,6 +57,8 @@ const CloudExplorer: React.FC = () => {
         return <ExplorerRecentItems />;
       case 'new-connection':
         return <ExplorerNewConnection />;
+      case 'edit-connection':
+        return <ExplorerEditConnection />;
       default:
         return <Typography>Select a section</Typography>;
     }
