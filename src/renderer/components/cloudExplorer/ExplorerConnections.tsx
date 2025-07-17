@@ -277,9 +277,7 @@ export const ExplorerConnections: React.FC = () => {
                       size="small"
                       variant="outlined"
                       onClick={() =>
-                        navigate(
-                          `/app/cloud-explorer/dashboard?connectionId=${connection.id}`,
-                        )
+                        navigate(`/app/cloud-explorer/buckets/${connection.id}`)
                       }
                     >
                       View Buckets

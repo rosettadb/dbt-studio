@@ -5,3 +5,5 @@ export * from './ExplorerRecentItems';
 export * from './ExplorerNewConnection';
 export * from './ExplorerEditConnection';
 export * from './ConnectionForm';
+export * from './ExplorerBuckets';
+export * from './ExplorerBucketContent';
