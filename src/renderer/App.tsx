@@ -20,8 +20,6 @@ import {
   SelectProject,
   Setup,
   CloudExplorer,
-  CloudExplorerBuckets,
-  CloudExplorerBucketContent,
 } from './screens';
 import { SelectProjectLayout } from './layouts';
 import { AppProvider, ProcessProvider } from './context';
@@ -80,11 +78,11 @@ const App: React.FC = () => {
           />
           <Route
             path="cloud-explorer/buckets/:connectionId"
-            element={<CloudExplorerBuckets />}
+            element={<CloudExplorer />}
           />
           <Route
             path="cloud-explorer/bucket/:connectionId/:bucketName"
-            element={<CloudExplorerBucketContent />}
+            element={<CloudExplorer />}
           />
           <Route path="loading" element={<Loading />} />
           <Route path="*" element={<Navigate to="/app" />} />

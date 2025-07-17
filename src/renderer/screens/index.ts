@@ -6,8 +6,6 @@ import EditConnection from './editConnection';
 import SelectProject from './selectProject';
 import Setup from './setup';
 import CloudExplorer from './cloudExplorer';
-import CloudExplorerBuckets from './cloudExplorer/CloudExplorerBuckets';
-import CloudExplorerBucketContent from './cloudExplorer/CloudExplorerBucketContent';
 
 export {
   Settings,
@@ -18,6 +16,4 @@ export {
   SelectProject,
   Setup,
   CloudExplorer,
-  CloudExplorerBuckets,
-  CloudExplorerBucketContent,
 };

@@ -10,6 +10,8 @@ import {
   ExplorerRecentItems,
   ExplorerNewConnection,
   ExplorerEditConnection,
+  CloudExplorerBuckets,
+  CloudExplorerBucketContent,
 } from '../../components/cloudExplorer';
 
 const CloudExplorer: React.FC = () => {
@@ -21,6 +23,12 @@ const CloudExplorer: React.FC = () => {
   const currentSection = (() => {
     if (pathSegments.includes('edit-connection')) {
       return 'edit-connection';
+    }
+    if (pathSegments.includes('buckets')) {
+      return 'buckets';
+    }
+    if (pathSegments.includes('bucket') && pathSegments.length > 4) {
+      return 'bucket-content';
     }
     return pathSegments.pop() || 'dashboard';
   })();
@@ -41,6 +49,10 @@ const CloudExplorer: React.FC = () => {
         return 'New Connection';
       case 'edit-connection':
         return 'Edit Connection';
+      case 'buckets':
+        return 'Buckets';
+      case 'bucket-content':
+        return 'Bucket Content';
       default:
         return 'Cloud Explorer';
     }
@@ -59,6 +71,10 @@ const CloudExplorer: React.FC = () => {
         return <ExplorerNewConnection />;
       case 'edit-connection':
         return <ExplorerEditConnection />;
+      case 'buckets':
+        return <CloudExplorerBuckets />;
+      case 'bucket-content':
+        return <CloudExplorerBucketContent />;
       default:
         return <Typography>Select a section</Typography>;
     }
