@@ -82,26 +82,24 @@ const CloudExplorer: React.FC = () => {
 
   return (
     <AppLayout sidebarContent={<ExplorerSidebar />}>
-      <Container>
-        <Box sx={{ mb: 2 }}>
-          <Box
-            sx={{
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'space-between',
-              mb: 2,
-            }}
-          >
-            <Typography variant="h4" sx={{ m: 0 }}>
-              {getSectionTitle(currentSection)}
-            </Typography>
-            <IconButton onClick={handleClose} edge="end" aria-label="close">
-              <Close />
-            </IconButton>
-          </Box>
-          <Box sx={{ maxWidth: '800px' }}>{renderContent()}</Box>
+      <Box sx={{ mb: 2, p: 2 }}>
+        <Box
+          sx={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            mb: 2,
+          }}
+        >
+          <Typography variant="h4" sx={{ m: 0 }}>
+            {getSectionTitle(currentSection)}
+          </Typography>
+          <IconButton onClick={handleClose} edge="end" aria-label="close">
+            <Close />
+          </IconButton>
         </Box>
-      </Container>
+        <Box>{renderContent()}</Box>
+      </Box>
     </AppLayout>
   );
 };
