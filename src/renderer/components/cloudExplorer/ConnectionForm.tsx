@@ -10,14 +10,19 @@ import {
   Typography,
   FormControl,
   FormLabel,
-  RadioGroup,
-  FormControlLabel,
-  Radio,
   Alert,
   CircularProgress,
   Divider,
+  Grid,
+  CardActionArea,
 } from '@mui/material';
-import { CheckCircle, Error as ErrorIcon } from '@mui/icons-material';
+import {
+  CheckCircle,
+  Error as ErrorIcon,
+  Cable,
+  Add,
+  Edit,
+} from '@mui/icons-material';
 
 import {
   CloudProvider,
@@ -30,6 +35,7 @@ import {
   useTestCloudConnection,
   useSaveConnection,
 } from '../../controllers/cloudExplorer.controller';
+import { cloudStorageImages } from '../../../../assets/connectionIcons';
 
 interface ConnectionFormProps {
   initialValues?: CloudConnection;
@@ -75,6 +81,24 @@ export const ConnectionForm: React.FC<ConnectionFormProps> = ({
     accountKey: '',
     connectionString: '',
   });
+
+  const getProviderIcon = (provider: CloudProvider, size: number = 20) => {
+    const iconSrc = cloudStorageImages[provider];
+    if (iconSrc) {
+      return (
+        <img
+          src={iconSrc}
+          alt={provider}
+          style={{
+            width: size,
+            height: size,
+            objectFit: 'contain',
+          }}
+        />
+      );
+    }
+    return null;
+  };
 
   // Initialize form data from initial values
   useEffect(() => {
@@ -327,7 +351,177 @@ export const ConnectionForm: React.FC<ConnectionFormProps> = ({
     <Box sx={{ maxWidth: 600, mx: 'auto', p: 2 }}>
       <Card>
         <CardContent>
+          <Box sx={{ mb: 3 }}>
+            <Typography
+              variant="h5"
+              component="h1"
+              sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}
+            >
+              {isEditing ? <Edit color="primary" /> : <Add color="primary" />}
+              {isEditing ? 'Edit Connection' : 'New Connection'}
+            </Typography>
+            <Typography variant="body2" color="text.secondary">
+              {isEditing
+                ? 'Update your cloud storage connection settings'
+                : 'Connect to your cloud storage provider'}
+            </Typography>
+          </Box>
           <form onSubmit={handleSubmit}>
+            <FormControl component="fieldset" margin="normal" fullWidth>
+              <FormLabel
+                component="legend"
+                sx={{ display: 'flex', alignItems: 'center', gap: 1 }}
+              >
+                <Cable fontSize="small" />
+                Connection Type
+              </FormLabel>
+              <Grid container spacing={2} sx={{ mt: 1 }}>
+                <Grid item xs={12} sm={4}>
+                  <Card
+                    variant={
+                      formData.provider === 'gcs' ? 'elevation' : 'outlined'
+                    }
+                    sx={{
+                      cursor: 'pointer',
+                      transition: 'all 0.2s',
+                      height: '120px',
+                      border:
+                        formData.provider === 'gcs' ? '2px solid' : '1px solid',
+                      borderColor:
+                        formData.provider === 'gcs'
+                          ? 'primary.main'
+                          : 'divider',
+                      '&:hover': {
+                        elevation: 4,
+                        borderColor: 'primary.main',
+                      },
+                    }}
+                  >
+                    <CardActionArea
+                      onClick={() => handleChange('provider', 'gcs')}
+                      sx={{ p: 2, height: '100%' }}
+                    >
+                      <Box
+                        sx={{
+                          display: 'flex',
+                          flexDirection: 'column',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          gap: 1,
+                          height: '100%',
+                        }}
+                      >
+                        {getProviderIcon('gcs', 48)}
+                        <Typography
+                          variant="body2"
+                          textAlign="center"
+                          fontWeight="medium"
+                        >
+                          Google Cloud Storage
+                        </Typography>
+                      </Box>
+                    </CardActionArea>
+                  </Card>
+                </Grid>
+                <Grid item xs={12} sm={4}>
+                  <Card
+                    variant={
+                      formData.provider === 'aws' ? 'elevation' : 'outlined'
+                    }
+                    sx={{
+                      cursor: 'pointer',
+                      transition: 'all 0.2s',
+                      height: '120px',
+                      border:
+                        formData.provider === 'aws' ? '2px solid' : '1px solid',
+                      borderColor:
+                        formData.provider === 'aws'
+                          ? 'primary.main'
+                          : 'divider',
+                      '&:hover': {
+                        elevation: 4,
+                        borderColor: 'primary.main',
+                      },
+                    }}
+                  >
+                    <CardActionArea
+                      onClick={() => handleChange('provider', 'aws')}
+                      sx={{ p: 2, height: '100%' }}
+                    >
+                      <Box
+                        sx={{
+                          display: 'flex',
+                          flexDirection: 'column',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          gap: 1,
+                          height: '100%',
+                        }}
+                      >
+                        {getProviderIcon('aws', 48)}
+                        <Typography
+                          variant="body2"
+                          textAlign="center"
+                          fontWeight="medium"
+                        >
+                          Amazon S3
+                        </Typography>
+                      </Box>
+                    </CardActionArea>
+                  </Card>
+                </Grid>
+                <Grid item xs={12} sm={4}>
+                  <Card
+                    variant={
+                      formData.provider === 'azure' ? 'elevation' : 'outlined'
+                    }
+                    sx={{
+                      cursor: 'pointer',
+                      transition: 'all 0.2s',
+                      height: '120px',
+                      border:
+                        formData.provider === 'azure'
+                          ? '2px solid'
+                          : '1px solid',
+                      borderColor:
+                        formData.provider === 'azure'
+                          ? 'primary.main'
+                          : 'divider',
+                      '&:hover': {
+                        elevation: 4,
+                        borderColor: 'primary.main',
+                      },
+                    }}
+                  >
+                    <CardActionArea
+                      onClick={() => handleChange('provider', 'azure')}
+                      sx={{ p: 2, height: '100%' }}
+                    >
+                      <Box
+                        sx={{
+                          display: 'flex',
+                          flexDirection: 'column',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          gap: 1,
+                          height: '100%',
+                        }}
+                      >
+                        {getProviderIcon('azure', 48)}
+                        <Typography
+                          variant="body2"
+                          textAlign="center"
+                          fontWeight="medium"
+                        >
+                          Azure Blob Storage
+                        </Typography>
+                      </Box>
+                    </CardActionArea>
+                  </Card>
+                </Grid>
+              </Grid>
+            </FormControl>
+
             <TextField
               label="Connection Name"
               placeholder="My Storage Connection"
@@ -338,33 +532,6 @@ export const ConnectionForm: React.FC<ConnectionFormProps> = ({
               required
               helperText="A friendly name to identify this connection"
             />
-
-            <FormControl component="fieldset" margin="normal" fullWidth>
-              <FormLabel component="legend">Connection Type</FormLabel>
-              <RadioGroup
-                value={formData.provider}
-                onChange={(e) => {
-                  const newProvider = e.target.value as CloudProvider;
-                  handleChange('provider', newProvider);
-                }}
-              >
-                <FormControlLabel
-                  value="gcs"
-                  control={<Radio />}
-                  label="Google Cloud Storage"
-                />
-                <FormControlLabel
-                  value="aws"
-                  control={<Radio />}
-                  label="Amazon S3"
-                />
-                <FormControlLabel
-                  value="azure"
-                  control={<Radio />}
-                  label="Azure Blob Storage"
-                />
-              </RadioGroup>
-            </FormControl>
 
             {renderProviderFields()}
 

@@ -10,9 +10,18 @@ import db2 from './db2.png';
 import mssql from './mssql.png';
 import kinetica from './kinetica.png';
 import googlecloud from './googlecloud.png';
+import azureBlob from './azure_blob.png';
+import s3Bucket from './s3_bucktet.png';
 import { SupportedConnectionTypes } from '../../src/types/backend';
 
 type Image = Record<SupportedConnectionTypes, string>;
+
+// Cloud storage specific images
+export const cloudStorageImages = {
+  gcs: googlecloud,
+  aws: s3Bucket,
+  azure: azureBlob,
+};
 
 const obj: { images: Image } = {
   images: {

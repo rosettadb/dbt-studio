@@ -21,6 +21,8 @@ import {
 import { NavLink, useLocation, useNavigate } from 'react-router-dom';
 import { SettingsSidebarElement } from '../../screens/settings/settingsElements';
 import { useConnections } from '../../controllers/cloudExplorer.controller';
+import { cloudStorageImages } from '../../../../assets/connectionIcons';
+import { CloudProvider } from '../../../types/frontend';
 
 export const StyledSettingsNavLink = styled(NavLink)(({ theme }) => ({
   textDecoration: 'none',
@@ -80,6 +82,24 @@ export const ExplorerSidebar: React.FC = () => {
   const selectedConnection = connections.find(
     (conn) => conn.id === connectionId,
   );
+
+  const getProviderIcon = (provider: CloudProvider) => {
+    const iconSrc = cloudStorageImages[provider];
+    if (iconSrc) {
+      return (
+        <img
+          src={iconSrc}
+          alt={provider}
+          style={{
+            width: 20,
+            height: 20,
+            objectFit: 'contain',
+          }}
+        />
+      );
+    }
+    return <Cable fontSize="small" />;
+  };
 
   return (
     <Box
@@ -246,14 +266,7 @@ export const ExplorerSidebar: React.FC = () => {
                       }}
                     >
                       <ListItemIcon sx={{ minWidth: 32 }}>
-                        <Cable
-                          fontSize="small"
-                          color={
-                            selectedConnection?.id === connection.id
-                              ? 'primary'
-                              : 'inherit'
-                          }
-                        />
+                        {getProviderIcon(connection.provider)}
                       </ListItemIcon>
                       <ListItemText
                         primary={connection.name}

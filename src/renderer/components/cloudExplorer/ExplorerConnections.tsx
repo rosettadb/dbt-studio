@@ -22,45 +22,45 @@ import {
 import {
   Add,
   Edit,
-  Delete,
-  Cloud,
-  Storage,
   Cable,
   Refresh,
+  Visibility,
+  DeleteOutline,
 } from '@mui/icons-material';
 
 import { CloudProvider } from '../../../types/frontend';
 import {
   useConnections,
   useDeleteConnection,
-  useTestCloudConnection,
 } from '../../controllers/cloudExplorer.controller';
+import { cloudStorageImages } from '../../../../assets/connectionIcons';
 
 export const ExplorerConnections: React.FC = () => {
   const navigate = useNavigate();
   const connectionsQuery = useConnections();
   const deleteConnection = useDeleteConnection();
-  const testConnection = useTestCloudConnection();
 
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [connectionToDelete, setConnectionToDelete] = useState<string | null>(
     null,
   );
-  const [testingConnections, setTestingConnections] = useState<Set<string>>(
-    new Set(),
-  );
 
   const getProviderIcon = (provider: CloudProvider) => {
-    switch (provider) {
-      case 'gcs':
-        return <Cloud sx={{ color: '#4285f4' }} />;
-      case 'aws':
-        return <Storage sx={{ color: '#ff9900' }} />;
-      case 'azure':
-        return <Cloud sx={{ color: '#0078d4' }} />;
-      default:
-        return <Cable />;
+    const iconSrc = cloudStorageImages[provider];
+    if (iconSrc) {
+      return (
+        <img
+          src={iconSrc}
+          alt={provider}
+          style={{
+            width: 24,
+            height: 24,
+            objectFit: 'contain',
+          }}
+        />
+      );
     }
+    return <Cable />;
   };
 
   const getProviderName = (provider: CloudProvider) => {
@@ -99,33 +99,6 @@ export const ExplorerConnections: React.FC = () => {
         // eslint-disable-next-line no-console
         console.error('Failed to delete connection:', error);
       }
-    }
-  };
-
-  const handleTestConnection = async (connectionId: string) => {
-    const connection = connectionsQuery.data?.find(
-      (c) => c.id === connectionId,
-    );
-    if (!connection) return;
-
-    setTestingConnections((prev) => new Set(prev).add(connectionId));
-
-    try {
-      await testConnection.mutateAsync({
-        provider: connection.provider,
-        config: connection.config,
-      });
-      // Could show a success message here
-    } catch (error) {
-      // eslint-disable-next-line no-console
-      console.error('Connection test failed:', error);
-      // Could show an error message here
-    } finally {
-      setTestingConnections((prev) => {
-        const newSet = new Set(prev);
-        newSet.delete(connectionId);
-        return newSet;
-      });
     }
   };
 
@@ -181,14 +154,21 @@ export const ExplorerConnections: React.FC = () => {
 
   return (
     <Box sx={{ p: 2 }}>
+      {/* Header with title and icon */}
       <Box
         sx={{
           display: 'flex',
-          justifyContent: 'flex-end',
+          justifyContent: 'space-between',
           alignItems: 'center',
-          mb: 2,
+          mb: 3,
         }}
       >
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+          <Typography variant="h4" component="h1" sx={{ fontWeight: 'bold' }}>
+            Connections
+          </Typography>
+          <Cable sx={{ color: 'text.secondary', fontSize: 28 }} />
+        </Box>
         <Box sx={{ display: 'flex', gap: 1 }}>
           <IconButton
             onClick={() => connectionsQuery.refetch()}
@@ -232,7 +212,16 @@ export const ExplorerConnections: React.FC = () => {
         <Grid container spacing={2}>
           {connections.map((connection) => (
             <Grid item xs={12} md={6} lg={4} key={connection.id}>
-              <Card>
+              <Card
+                sx={{
+                  boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
+                  transition: 'all 0.3s ease',
+                  '&:hover': {
+                    boxShadow: '0 4px 16px rgba(0,0,0,0.15)',
+                    transform: 'translateY(-2px)',
+                  },
+                }}
+              >
                 <CardHeader
                   avatar={getProviderIcon(connection.provider)}
                   title={connection.name}
@@ -276,11 +265,12 @@ export const ExplorerConnections: React.FC = () => {
                     <Button
                       size="small"
                       variant="outlined"
+                      startIcon={<Visibility />}
                       onClick={() =>
                         navigate(`/app/cloud-explorer/buckets/${connection.id}`)
                       }
                     >
-                      View Buckets
+                      Explore
                     </Button>
                     <Button
                       size="small"
@@ -299,28 +289,23 @@ export const ExplorerConnections: React.FC = () => {
                     <Button
                       size="small"
                       variant="outlined"
-                      onClick={() => handleTestConnection(connection.id)}
-                      disabled={testingConnections.has(connection.id)}
-                      startIcon={
-                        testingConnections.has(connection.id) ? (
-                          <CircularProgress size={16} />
-                        ) : (
-                          <Cable />
-                        )
-                      }
-                    >
-                      Test
-                    </Button>
-                    <IconButton
-                      size="small"
                       color="error"
+                      startIcon={<DeleteOutline />}
+                      sx={{
+                        borderRadius: '8px',
+                        '&:hover': {
+                          backgroundColor: 'error.light',
+                          color: 'error.contrastText',
+                          borderColor: 'error.light',
+                        },
+                      }}
                       onClick={() => {
                         setConnectionToDelete(connection.id);
                         setDeleteDialogOpen(true);
                       }}
                     >
-                      <Delete />
-                    </IconButton>
+                      Delete
+                    </Button>
                   </Box>
                 </CardActions>
               </Card>

@@ -1,5 +1,6 @@
-import React, { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import React, { useState, useEffect } from 'react';
+import { useNavigate, useLocation } from 'react-router-dom';
+import { formatDistanceToNow } from 'date-fns';
 import {
   Box,
   Typography,
@@ -8,11 +9,6 @@ import {
   CardContent,
   CardHeader,
   CardActions,
-  List,
-  ListItem,
-  ListItemAvatar,
-  ListItemText,
-  Avatar,
   IconButton,
   Dialog,
   DialogTitle,
@@ -21,7 +17,14 @@ import {
   DialogContentText,
   Alert,
   CircularProgress,
-  Divider,
+  ButtonGroup,
+  Table,
+  TableBody,
+  TableCell,
+  TableContainer,
+  TableHead,
+  TableRow,
+  Paper,
 } from '@mui/material';
 import {
   InsertDriveFile,
@@ -29,11 +32,10 @@ import {
   Delete,
   Clear,
   Refresh,
-  Cloud,
-  Storage,
+  AccessTime,
+  OpenInNew,
 } from '@mui/icons-material';
 
-import { CloudProvider } from '../../../types/frontend';
 import {
   useRecentItems,
   useRemoveRecentItem,
@@ -42,6 +44,7 @@ import {
 
 export const ExplorerRecentItems: React.FC = () => {
   const navigate = useNavigate();
+  const location = useLocation();
   const recentItemsQuery = useRecentItems();
   const removeRecentItem = useRemoveRecentItem();
   const clearRecentItems = useClearRecentItems();
@@ -49,26 +52,51 @@ export const ExplorerRecentItems: React.FC = () => {
   const [clearDialogOpen, setClearDialogOpen] = useState(false);
   const [itemToDelete, setItemToDelete] = useState<string | null>(null);
 
-  const getProviderIcon = (provider: CloudProvider) => {
-    switch (provider) {
-      case 'gcs':
-        return <Cloud sx={{ color: '#4285f4' }} />;
-      case 'aws':
-        return <Storage sx={{ color: '#ff9900' }} />;
-      case 'azure':
-        return <Cloud sx={{ color: '#0078d4' }} />;
-      default:
-        return <Storage />;
+  // Get filter from URL parameters
+  const urlParams = new URLSearchParams(location.search);
+  const urlFilter = urlParams.get('filter') as
+    | 'all'
+    | 'files'
+    | 'directories'
+    | null;
+  const [filter, setFilter] = useState<'all' | 'files' | 'directories'>(
+    urlFilter || 'all',
+  );
+
+  // Update filter when URL changes
+  useEffect(() => {
+    if (urlFilter && urlFilter !== filter) {
+      setFilter(urlFilter);
     }
-  };
+  }, [urlFilter, filter]);
 
   const handleItemClick = (item: any) => {
-    // Navigate to the dashboard with the connection and path
-    navigate(
-      `/app/cloud-explorer/dashboard?connectionId=${item.connectionId}&path=${encodeURIComponent(
-        item.path,
-      )}`,
-    );
+    // Check if we have a bucket name in the path (format: bucket/path/to/file)
+    const pathParts = item.path.split('/');
+
+    // If path doesn't contain bucket info, navigate to buckets list
+    if (pathParts.length < 2) {
+      navigate(`/app/cloud-explorer/buckets/${item.connectionId}`);
+      return;
+    }
+
+    const bucketName = pathParts[0];
+    const relativePath = pathParts.slice(1).join('/');
+
+    // Navigate to the proper cloud explorer location
+    if (item.path.endsWith('/')) {
+      // Directory - navigate to the bucket with the directory prefix
+      navigate(
+        `/app/cloud-explorer/bucket/${item.connectionId}/${bucketName}${relativePath ? `?prefix=${encodeURIComponent(relativePath)}` : ''}`,
+      );
+    } else {
+      // File - navigate to the directory containing the file
+      const directory = relativePath.split('/').slice(0, -1).join('/');
+      const directoryWithSlash = directory ? `${directory}/` : '';
+      navigate(
+        `/app/cloud-explorer/bucket/${item.connectionId}/${bucketName}${directoryWithSlash ? `?prefix=${encodeURIComponent(directoryWithSlash)}` : ''}`,
+      );
+    }
   };
 
   const handleRemoveItem = async (itemId: string) => {
@@ -91,22 +119,17 @@ export const ExplorerRecentItems: React.FC = () => {
     }
   };
 
-  const formatDate = (date: Date) => {
-    const now = new Date();
-    const diffInMinutes = Math.floor(
-      (now.getTime() - date.getTime()) / (1000 * 60),
-    );
-
-    if (diffInMinutes < 1) return 'Just now';
-    if (diffInMinutes < 60) return `${diffInMinutes} minutes ago`;
-
-    const diffInHours = Math.floor(diffInMinutes / 60);
-    if (diffInHours < 24) return `${diffInHours} hours ago`;
-
-    const diffInDays = Math.floor(diffInHours / 24);
-    if (diffInDays < 7) return `${diffInDays} days ago`;
-
-    return date.toLocaleDateString();
+  // Handle filter changes and update URL
+  const handleFilterChange = (newFilter: 'all' | 'files' | 'directories') => {
+    setFilter(newFilter);
+    const params = new URLSearchParams();
+    if (newFilter !== 'all') {
+      params.set('filter', newFilter);
+    }
+    const newUrl = params.toString()
+      ? `/app/cloud-explorer/recent-items?${params.toString()}`
+      : '/app/cloud-explorer/recent-items';
+    navigate(newUrl, { replace: true });
   };
 
   if (recentItemsQuery.isLoading) {
@@ -132,17 +155,55 @@ export const ExplorerRecentItems: React.FC = () => {
 
   const recentItems = recentItemsQuery.data || [];
 
+  // Filter items based on selected filter
+  const filteredItems = recentItems.filter((item) => {
+    if (filter === 'all') return true;
+    if (filter === 'files') return !item.path.endsWith('/');
+    if (filter === 'directories') return item.path.endsWith('/');
+    return true;
+  });
+
   return (
     <Box sx={{ p: 2 }}>
+      {/* Header with title and actions */}
       <Box
         sx={{
           display: 'flex',
-          justifyContent: 'flex-end',
+          justifyContent: 'space-between',
           alignItems: 'center',
-          mb: 2,
+          mb: 3,
         }}
       >
-        <Box sx={{ display: 'flex', gap: 1 }}>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+          <Typography variant="h4" component="h1" sx={{ fontWeight: 'bold' }}>
+            Recent Items
+          </Typography>
+          <AccessTime sx={{ color: 'text.secondary', fontSize: 28 }} />
+        </Box>
+        <Box sx={{ display: 'flex', gap: 2 }}>
+          {/* Filter buttons */}
+          <ButtonGroup variant="outlined" size="small">
+            <Button
+              variant={filter === 'all' ? 'contained' : 'outlined'}
+              onClick={() => handleFilterChange('all')}
+            >
+              All
+            </Button>
+            <Button
+              variant={filter === 'files' ? 'contained' : 'outlined'}
+              onClick={() => handleFilterChange('files')}
+            >
+              Files
+            </Button>
+            <Button
+              variant={filter === 'directories' ? 'contained' : 'outlined'}
+              onClick={() => handleFilterChange('directories')}
+            >
+              Directories
+            </Button>
+          </ButtonGroup>
+
+          {/* Action buttons */}
           <IconButton
             onClick={() => recentItemsQuery.refetch()}
             disabled={recentItemsQuery.isRefetching}
@@ -162,11 +223,17 @@ export const ExplorerRecentItems: React.FC = () => {
         </Box>
       </Box>
 
-      {recentItems.length === 0 ? (
+      {filteredItems.length === 0 ? (
         <Card>
           <CardHeader
             title="No recent items"
-            subheader="Items you access will appear here for quick access."
+            subheader={(() => {
+              if (filter === 'all')
+                return "You haven't accessed any files or directories yet.";
+              if (filter === 'files')
+                return "You haven't accessed any files yet.";
+              return "You haven't accessed any directories yet.";
+            })()}
           />
           <CardContent>
             <Typography variant="body2" color="text.secondary">
@@ -183,75 +250,111 @@ export const ExplorerRecentItems: React.FC = () => {
           </CardActions>
         </Card>
       ) : (
-        <Card>
-          <CardHeader
-            title={`${recentItems.length} Recent Items`}
-            subheader="Click an item to navigate to its location"
-          />
-          <List>
-            {recentItems.map((item, index) => (
-              <React.Fragment key={item.id}>
-                <ListItem
-                  onClick={() => handleItemClick(item)}
-                  sx={{ cursor: 'pointer' }}
-                  secondaryAction={
-                    <IconButton
-                      edge="end"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setItemToDelete(item.id);
+        <TableContainer component={Paper} sx={{ borderRadius: 1 }}>
+          <Table>
+            <TableHead>
+              <TableRow>
+                <TableCell sx={{ width: 60 }} />
+                <TableCell>Name</TableCell>
+                <TableCell>Accessed</TableCell>
+                <TableCell align="center" sx={{ width: 200 }}>
+                  Actions
+                </TableCell>
+              </TableRow>
+            </TableHead>
+            <TableBody>
+              {filteredItems.map((item) => (
+                <TableRow key={item.id} hover sx={{ cursor: 'pointer' }}>
+                  <TableCell>
+                    <Box
+                      sx={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
                       }}
                     >
-                      <Delete />
-                    </IconButton>
-                  }
-                >
-                  <ListItemAvatar>
-                    <Avatar>
-                      {item.name.includes('.') ? (
-                        <InsertDriveFile />
+                      {item.path.endsWith('/') ? (
+                        <Folder sx={{ color: 'text.secondary' }} />
                       ) : (
-                        <Folder />
+                        <InsertDriveFile sx={{ color: 'text.secondary' }} />
                       )}
-                    </Avatar>
-                  </ListItemAvatar>
-                  <ListItemText
-                    primary={
-                      <Box
-                        sx={{ display: 'flex', alignItems: 'center', gap: 1 }}
+                    </Box>
+                  </TableCell>
+                  <TableCell>
+                    <Box>
+                      <Button
+                        variant="text"
+                        onClick={() => handleItemClick(item)}
+                        sx={{
+                          textAlign: 'left',
+                          justifyContent: 'flex-start',
+                          fontWeight: 500,
+                          textTransform: 'none',
+                          p: 0,
+                          minWidth: 'auto',
+                          '&:hover': { textDecoration: 'underline' },
+                        }}
                       >
-                        <Typography variant="body1">{item.name}</Typography>
-                        <Box
-                          sx={{
-                            display: 'flex',
-                            alignItems: 'center',
-                            gap: 0.5,
-                          }}
-                        >
-                          {getProviderIcon(item.provider)}
-                          <Typography variant="caption" color="text.secondary">
-                            {item.connectionName}
-                          </Typography>
-                        </Box>
-                      </Box>
-                    }
-                    secondary={
-                      <Box>
-                        <Typography variant="body2" color="text.secondary">
-                          {item.path}
-                        </Typography>
+                        {item.name}
+                      </Button>
+                      <Box sx={{ mt: 0.5 }}>
                         <Typography variant="caption" color="text.secondary">
-                          {formatDate(new Date(item.accessedAt))}
+                          {item.connectionName}
                         </Typography>
+                        {item.path && (
+                          <Typography
+                            variant="caption"
+                            color="text.secondary"
+                            sx={{
+                              display: 'block',
+                              fontFamily: 'monospace',
+                              mt: 0.25,
+                            }}
+                          >
+                            {item.path.endsWith('/')
+                              ? `/${item.path}`
+                              : `/${item.path.split('/').slice(0, -1).join('/')}`}
+                          </Typography>
+                        )}
                       </Box>
-                    }
-                  />
-                </ListItem>
-                {index < recentItems.length - 1 && <Divider component="li" />}
-              </React.Fragment>
-            ))}
-          </List>
-        </Card>
+                    </Box>
+                  </TableCell>
+                  <TableCell>
+                    <Typography variant="body2" color="text.secondary">
+                      {formatDistanceToNow(new Date(item.accessedAt), {
+                        addSuffix: true,
+                      })}
+                    </Typography>
+                  </TableCell>
+                  <TableCell align="center">
+                    <Box
+                      sx={{ display: 'flex', gap: 1, justifyContent: 'center' }}
+                    >
+                      <Button
+                        variant="outlined"
+                        size="small"
+                        startIcon={<OpenInNew />}
+                        onClick={() => handleItemClick(item)}
+                      >
+                        Open
+                      </Button>
+                      <IconButton
+                        size="small"
+                        color="error"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setItemToDelete(item.id);
+                        }}
+                      >
+                        <Delete />
+                      </IconButton>
+                    </Box>
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </TableContainer>
       )}
 
       {/* Delete Item Dialog */}

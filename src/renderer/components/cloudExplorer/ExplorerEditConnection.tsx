@@ -39,10 +39,12 @@ export const ExplorerEditConnection: React.FC = () => {
   }
 
   return (
-    <ConnectionForm
-      initialValues={connectionQuery.data}
-      isEditing
-      connectionId={id}
-    />
+    <Box sx={{ p: 2 }}>
+      <ConnectionForm
+        initialValues={connectionQuery.data}
+        isEditing
+        connectionId={id}
+      />
+    </Box>
   );
 };

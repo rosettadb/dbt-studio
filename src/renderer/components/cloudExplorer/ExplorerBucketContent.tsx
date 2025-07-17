@@ -214,6 +214,24 @@ export const ExplorerBucketContent: React.FC<ExplorerBucketContentProps> = ({
 
   return (
     <Box sx={{ p: 2 }}>
+      {/* Page Header */}
+      <Box
+        sx={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: 2,
+          mb: 3,
+          borderBottom: 1,
+          borderColor: 'divider',
+          pb: 2,
+        }}
+      >
+        <Folder sx={{ fontSize: 28, color: 'primary.main' }} />
+        <Typography variant="h4" component="h1">
+          {bucketName}
+        </Typography>
+      </Box>
+
       <Box
         sx={{
           display: 'flex',
@@ -230,7 +248,6 @@ export const ExplorerBucketContent: React.FC<ExplorerBucketContentProps> = ({
           >
             Back to Buckets
           </Button>
-          <Typography variant="h4">{bucketName}</Typography>
         </Box>
         <Button
           variant="outlined"

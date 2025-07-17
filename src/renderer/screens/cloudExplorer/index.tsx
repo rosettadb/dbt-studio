@@ -1,7 +1,6 @@
 import React from 'react';
-import { Typography, Box, IconButton } from '@mui/material';
-import { Close } from '@mui/icons-material';
-import { useNavigate, useLocation } from 'react-router-dom';
+import { Typography, Box } from '@mui/material';
+import { useLocation } from 'react-router-dom';
 import { AppLayout } from '../../layouts';
 import {
   ExplorerSidebar,
@@ -16,7 +15,6 @@ import {
 
 const CloudExplorer: React.FC = () => {
   const location = useLocation();
-  const navigate = useNavigate();
 
   // Parse the current section from the pathname
   const pathSegments = location.pathname.split('/');
@@ -32,31 +30,6 @@ const CloudExplorer: React.FC = () => {
     }
     return pathSegments.pop() || 'dashboard';
   })();
-
-  const handleClose = () => {
-    navigate('/app');
-  };
-
-  const getSectionTitle = (section: string) => {
-    switch (section) {
-      case 'dashboard':
-        return 'Dashboard';
-      case 'connections':
-        return 'Connections';
-      case 'recent-items':
-        return 'Recent Items';
-      case 'new-connection':
-        return 'New Connection';
-      case 'edit-connection':
-        return 'Edit Connection';
-      case 'buckets':
-        return 'Buckets';
-      case 'bucket-content':
-        return 'Bucket Content';
-      default:
-        return 'Cloud Explorer';
-    }
-  };
 
   // Render content based on current section
   const renderContent = () => {
@@ -82,22 +55,7 @@ const CloudExplorer: React.FC = () => {
 
   return (
     <AppLayout sidebarContent={<ExplorerSidebar />}>
-      <Box sx={{ mb: 2, p: 2 }}>
-        <Box
-          sx={{
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            mb: 2,
-          }}
-        >
-          <Typography variant="h4" sx={{ m: 0 }}>
-            {getSectionTitle(currentSection)}
-          </Typography>
-          <IconButton onClick={handleClose} edge="end" aria-label="close">
-            <Close />
-          </IconButton>
-        </Box>
+      <Box sx={{ my: 2, p: 2 }}>
         <Box>{renderContent()}</Box>
       </Box>
     </AppLayout>
