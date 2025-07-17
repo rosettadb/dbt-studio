@@ -1,5 +1,5 @@
 import React from 'react';
-import { Container, Typography, Box, IconButton } from '@mui/material';
+import { Typography, Box, IconButton } from '@mui/material';
 import { Close } from '@mui/icons-material';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { AppLayout } from '../../layouts';
