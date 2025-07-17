@@ -10,9 +10,17 @@ import {
   styled,
   Button,
 } from '@mui/material';
-import { Cloud, Dashboard, Cable, History, Add } from '@mui/icons-material';
+import {
+  Cloud,
+  Dashboard,
+  Cable,
+  History,
+  Add,
+  Folder,
+} from '@mui/icons-material';
 import { NavLink, useLocation, useNavigate } from 'react-router-dom';
 import { SettingsSidebarElement } from '../../screens/settings/settingsElements';
+import { useConnections } from '../../controllers/cloudExplorer.controller';
 
 export const StyledSettingsNavLink = styled(NavLink)(({ theme }) => ({
   textDecoration: 'none',
@@ -54,6 +62,25 @@ export const ExplorerSidebar: React.FC = () => {
   const theme = useTheme();
   const location = useLocation();
   const navigate = useNavigate();
+  const connectionsQuery = useConnections();
+
+  // Extract connectionId and bucketName from current path
+  const pathSegments = location.pathname.split('/');
+  const connectionId =
+    pathSegments.includes('buckets') || pathSegments.includes('bucket')
+      ? pathSegments[pathSegments.indexOf('buckets') + 1] ||
+        pathSegments[pathSegments.indexOf('bucket') + 1]
+      : null;
+  const bucketName =
+    pathSegments.includes('bucket') && pathSegments.length > 5
+      ? decodeURIComponent(pathSegments[pathSegments.indexOf('bucket') + 2])
+      : null;
+
+  const connections = connectionsQuery.data || [];
+  const selectedConnection = connections.find(
+    (conn) => conn.id === connectionId,
+  );
+
   return (
     <Box
       sx={{
@@ -62,9 +89,10 @@ export const ExplorerSidebar: React.FC = () => {
         flexDirection: 'column',
         justifyContent: 'space-between',
         height: '100%',
+        overflow: 'hidden',
       }}
     >
-      <Box>
+      <Box sx={{ flex: 1, overflow: 'hidden' }}>
         <Box
           sx={{
             display: 'flex',
@@ -77,51 +105,179 @@ export const ExplorerSidebar: React.FC = () => {
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
             <Cloud color="primary" fontSize="small" />
             <Typography variant="h6" sx={{ m: 0 }}>
-              Cloud Explorer
+              Bucket Browser
             </Typography>
           </Box>
         </Box>
-        <List
-          sx={{
-            py: 0,
-            width: '100%',
-            '& .MuiListItem-root': {
-              py: 0.25,
-              px: 1,
-              minHeight: '32px',
+
+        <Box sx={{ overflow: 'auto', maxHeight: 'calc(100vh - 200px)' }}>
+          {/* Main Navigation */}
+          <List
+            sx={{
+              py: 0,
               width: '100%',
-            },
-          }}
-        >
-          {explorerSidebarElements.map((element) => (
-            <StyledSettingsNavLink key={element.text} to={element.path}>
+              '& .MuiListItem-root': {
+                py: 0.25,
+                px: 1,
+                minHeight: '32px',
+                width: '100%',
+              },
+            }}
+          >
+            {explorerSidebarElements.map((element) => (
+              <StyledSettingsNavLink key={element.text} to={element.path}>
+                <ListItem
+                  sx={{
+                    cursor: 'pointer',
+                    borderRadius: 1,
+                    mb: 0,
+                    width: '100%',
+                    backgroundColor:
+                      location.pathname === element.path
+                        ? theme.palette.divider
+                        : 'transparent',
+                  }}
+                >
+                  <ListItemIcon sx={{ minWidth: 32 }}>
+                    <element.icon
+                      fontSize="small"
+                      color={
+                        location.pathname === element.path
+                          ? 'primary'
+                          : 'inherit'
+                      }
+                    />
+                  </ListItemIcon>
+                  <ListItemText primary={element.text} />
+                </ListItem>
+              </StyledSettingsNavLink>
+            ))}
+          </List>
+
+          {/* Connections List */}
+          {connections.length > 0 && (
+            <Box sx={{ mt: 3 }}>
+              <Typography
+                variant="caption"
+                sx={{
+                  display: 'block',
+                  px: 2,
+                  pb: 1,
+                  fontWeight: 600,
+                  color: theme.palette.text.secondary,
+                  textTransform: 'uppercase',
+                  letterSpacing: '0.5px',
+                }}
+              >
+                Connections
+              </Typography>
+              <List
+                sx={{
+                  py: 0,
+                  width: '100%',
+                  '& .MuiListItem-root': {
+                    py: 0.25,
+                    px: 1,
+                    minHeight: '32px',
+                    width: '100%',
+                  },
+                }}
+              >
+                {connections.map((connection) => (
+                  <StyledSettingsNavLink
+                    key={connection.id}
+                    to={`/app/cloud-explorer/buckets/${connection.id}`}
+                  >
+                    <ListItem
+                      sx={{
+                        cursor: 'pointer',
+                        borderRadius: 1,
+                        mb: 0,
+                        width: '100%',
+                        backgroundColor:
+                          selectedConnection?.id === connection.id
+                            ? theme.palette.divider
+                            : 'transparent',
+                      }}
+                    >
+                      <ListItemIcon sx={{ minWidth: 32 }}>
+                        <Cable
+                          fontSize="small"
+                          color={
+                            selectedConnection?.id === connection.id
+                              ? 'primary'
+                              : 'inherit'
+                          }
+                        />
+                      </ListItemIcon>
+                      <ListItemText
+                        primary={connection.name}
+                        primaryTypographyProps={{
+                          variant: 'body2',
+                          sx: { fontSize: '0.875rem' },
+                        }}
+                      />
+                    </ListItem>
+                  </StyledSettingsNavLink>
+                ))}
+              </List>
+            </Box>
+          )}
+
+          {/* Current Bucket */}
+          {selectedConnection && bucketName && (
+            <Box sx={{ mt: 3 }}>
+              <Typography
+                variant="caption"
+                sx={{
+                  display: 'block',
+                  px: 2,
+                  pb: 1,
+                  fontWeight: 600,
+                  color: theme.palette.text.secondary,
+                  textTransform: 'uppercase',
+                  letterSpacing: '0.5px',
+                }}
+              >
+                Current Bucket
+              </Typography>
               <ListItem
                 sx={{
-                  cursor: 'pointer',
                   borderRadius: 1,
+                  backgroundColor: theme.palette.divider,
                   mb: 0,
                   width: '100%',
-                  backgroundColor:
-                    location.pathname === element.path
-                      ? theme.palette.divider
-                      : 'transparent',
+                  py: 0.25,
+                  px: 1,
+                  minHeight: '32px',
                 }}
               >
                 <ListItemIcon sx={{ minWidth: 32 }}>
-                  <element.icon
-                    fontSize="small"
-                    color={
-                      location.pathname === element.path ? 'primary' : 'inherit'
-                    }
-                  />
+                  <Folder fontSize="small" color="primary" />
                 </ListItemIcon>
-                <ListItemText primary={element.text} />
+                <ListItemText
+                  primary={bucketName}
+                  primaryTypographyProps={{
+                    variant: 'body2',
+                    sx: {
+                      fontSize: '0.875rem',
+                      color: theme.palette.primary.main,
+                    },
+                  }}
+                />
               </ListItem>
-            </StyledSettingsNavLink>
-          ))}
-        </List>
+            </Box>
+          )}
+        </Box>
       </Box>
-      <Box sx={{ mt: 'auto' }}>
+
+      <Box
+        sx={{
+          mt: 'auto',
+          pt: 2,
+          borderTop: `1px solid ${theme.palette.divider}`,
+        }}
+      >
         <Button
           variant="contained"
           color="primary"
@@ -129,7 +285,7 @@ export const ExplorerSidebar: React.FC = () => {
           startIcon={<Add />}
           onClick={() => navigate('/app/cloud-explorer/new-connection')}
         >
-          New Connection
+          Add Connection
         </Button>
       </Box>
     </Box>
