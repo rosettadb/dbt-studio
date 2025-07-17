@@ -154,6 +154,51 @@ export const ExplorerSidebar: React.FC = () => {
             ))}
           </List>
 
+          {/* Current Bucket */}
+          {selectedConnection && bucketName && (
+            <Box sx={{ mt: 3 }}>
+              <Typography
+                variant="caption"
+                sx={{
+                  display: 'block',
+                  px: 2,
+                  pb: 1,
+                  fontWeight: 600,
+                  color: theme.palette.text.secondary,
+                  textTransform: 'uppercase',
+                  letterSpacing: '0.5px',
+                }}
+              >
+                Current Bucket
+              </Typography>
+              <ListItem
+                sx={{
+                  borderRadius: 1,
+                  backgroundColor: theme.palette.divider,
+                  mb: 0,
+                  width: '100%',
+                  py: 0.25,
+                  px: 1,
+                  minHeight: '32px',
+                }}
+              >
+                <ListItemIcon sx={{ minWidth: 32 }}>
+                  <Folder fontSize="small" color="primary" />
+                </ListItemIcon>
+                <ListItemText
+                  primary={bucketName}
+                  primaryTypographyProps={{
+                    variant: 'body2',
+                    sx: {
+                      fontSize: '0.875rem',
+                      color: theme.palette.primary.main,
+                    },
+                  }}
+                />
+              </ListItem>
+            </Box>
+          )}
+
           {/* Connections List */}
           {connections.length > 0 && (
             <Box sx={{ mt: 3 }}>
@@ -221,51 +266,6 @@ export const ExplorerSidebar: React.FC = () => {
                   </StyledSettingsNavLink>
                 ))}
               </List>
-            </Box>
-          )}
-
-          {/* Current Bucket */}
-          {selectedConnection && bucketName && (
-            <Box sx={{ mt: 3 }}>
-              <Typography
-                variant="caption"
-                sx={{
-                  display: 'block',
-                  px: 2,
-                  pb: 1,
-                  fontWeight: 600,
-                  color: theme.palette.text.secondary,
-                  textTransform: 'uppercase',
-                  letterSpacing: '0.5px',
-                }}
-              >
-                Current Bucket
-              </Typography>
-              <ListItem
-                sx={{
-                  borderRadius: 1,
-                  backgroundColor: theme.palette.divider,
-                  mb: 0,
-                  width: '100%',
-                  py: 0.25,
-                  px: 1,
-                  minHeight: '32px',
-                }}
-              >
-                <ListItemIcon sx={{ minWidth: 32 }}>
-                  <Folder fontSize="small" color="primary" />
-                </ListItemIcon>
-                <ListItemText
-                  primary={bucketName}
-                  primaryTypographyProps={{
-                    variant: 'body2',
-                    sx: {
-                      fontSize: '0.875rem',
-                      color: theme.palette.primary.main,
-                    },
-                  }}
-                />
-              </ListItem>
             </Box>
           )}
         </Box>
