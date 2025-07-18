@@ -53,8 +53,8 @@ export const ExplorerConnections: React.FC = () => {
           src={iconSrc}
           alt={provider}
           style={{
-            width: 24,
-            height: 24,
+            width: 48,
+            height: 48,
             objectFit: 'contain',
           }}
         />

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useMemo } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { formatDistanceToNow } from 'date-fns';
 import {
@@ -46,7 +46,6 @@ import {
 import type {
   CloudProvider,
   CloudStorageConfig,
-  StorageObject,
 } from '../../../types/frontend';
 import { DataPreviewModal } from './DataPreviewModal';
 
@@ -63,7 +62,6 @@ export const ExplorerBucketContent: React.FC<ExplorerBucketContentProps> = ({
   const [searchParams, setSearchParams] = useSearchParams();
   const prefix = searchParams.get('prefix') || '';
   const [searchTerm, setSearchTerm] = useState('');
-  const [filteredObjects, setFilteredObjects] = useState<StorageObject[]>([]);
   const [downloadUrls, setDownloadUrls] = useState<Record<string, string>>({});
   const [loadingUrls, setLoadingUrls] = useState<Record<string, boolean>>({});
   const [previewModal, setPreviewModal] = useState<{
@@ -89,17 +87,15 @@ export const ExplorerBucketContent: React.FC<ExplorerBucketContentProps> = ({
 
   const objects = objectsQuery.data?.objects || [];
 
-  // Filter objects based on search term
-  useEffect(() => {
+  // Filter objects based on search term using useMemo to prevent infinite re-renders
+  const filteredObjects = useMemo(() => {
     if (searchTerm) {
-      const filtered = objects.filter((obj) => {
+      return objects.filter((obj) => {
         const name = obj.name.split('/').pop() || obj.name;
         return name.toLowerCase().includes(searchTerm.toLowerCase());
       });
-      setFilteredObjects(filtered);
-    } else {
-      setFilteredObjects(objects);
     }
+    return objects;
   }, [objects, searchTerm]);
 
   const pathParts = prefix.split('/').filter(Boolean);
