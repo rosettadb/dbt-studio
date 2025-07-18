@@ -23,6 +23,7 @@ export const gitClone = async (url: string, credentials?: GitCredentials) => {
       path?: string;
       dbtConnection?: DBTConnection;
       rosettaConnection?: RosettaConnection;
+      connectionId?: string;
     }
   >('git:clone', {
     url,

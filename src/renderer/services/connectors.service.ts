@@ -6,7 +6,7 @@ import {
   BigQueryTestResponse,
   ConnectionModel,
 } from '../../types/backend';
-import { ConfigureConnectionBody } from '../../types/ipc';
+import { ConfigureConnectionBody, UpdateConnectionBody } from '../../types/ipc';
 
 export const configureConnection = async (
   body: ConfigureConnectionBody,
@@ -16,6 +16,16 @@ export const configureConnection = async (
     body,
   );
   return data;
+};
+
+export const updateConnection = async (
+  body: UpdateConnectionBody,
+): Promise<void> => {
+  await client.post<UpdateConnectionBody>('connector:update', body);
+};
+
+export const deleteConnection = async (body: string): Promise<void> => {
+  await client.post<string>('connector:delete', body);
 };
 
 export const testConnection = async (

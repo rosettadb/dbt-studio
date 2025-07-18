@@ -9,27 +9,29 @@ import {
   IconButton,
   InputAdornment,
 } from '@mui/material';
-import { Visibility, VisibilityOff } from '@mui/icons-material'; // Removed Save import
+import { Visibility, VisibilityOff } from '@mui/icons-material';
 import { toast } from 'react-toastify';
-import {
-  SnowflakeConnection,
-  SnowflakeDBTConnection,
-} from '../../../types/backend';
+import { ConnectionModel, SnowflakeConnection } from '../../../types/backend';
 import connectionIcons from '../../../../assets/connectionIcons';
 import {
   useConfigureConnection,
   useTestConnection,
-  useGetSelectedProject,
+  useUpdateConnection,
 } from '../../controllers';
 import ConnectionHeader from './connection-header';
 import useSecureStorage from '../../hooks/useSecureStorage';
 
 type Props = {
   onCancel: () => void;
+  connection?: ConnectionModel;
+  projectId?: string;
 };
 
-export const Snowflake: React.FC<Props> = ({ onCancel }) => {
-  const { data: project } = useGetSelectedProject();
+export const Snowflake: React.FC<Props> = ({
+  onCancel,
+  connection,
+  projectId,
+}) => {
   const navigate = useNavigate();
   const theme = useTheme();
   const {
@@ -39,13 +41,10 @@ export const Snowflake: React.FC<Props> = ({ onCancel }) => {
     setDatabasePassword,
   } = useSecureStorage();
 
-  const existingConnection: SnowflakeDBTConnection | undefined =
-    React.useMemo(() => {
-      if (project) {
-        return project.dbtConnection as SnowflakeDBTConnection;
-      }
-      return undefined;
-    }, [project]);
+  const existingConnection = React.useMemo(
+    () => connection?.connection as SnowflakeConnection,
+    [connection],
+  );
 
   const [isTesting, setIsTesting] = React.useState(false);
   const [connectionStatus, setConnectionStatus] = React.useState<
@@ -55,7 +54,7 @@ export const Snowflake: React.FC<Props> = ({ onCancel }) => {
 
   const [formState, setFormState] = React.useState<SnowflakeConnection>({
     type: 'snowflake',
-    name: project?.name || 'Snowflake Connection',
+    name: existingConnection?.name || 'Snowflake Connection',
     account: existingConnection?.account ?? '',
     warehouse: existingConnection?.warehouse ?? '',
     database: existingConnection?.database ?? '',
@@ -68,7 +67,20 @@ export const Snowflake: React.FC<Props> = ({ onCancel }) => {
   const { mutate: configureConnection } = useConfigureConnection({
     onSuccess: () => {
       toast.success('Snowflake connection configured successfully!');
-      navigate(`/app/project-details`);
+      if (projectId) {
+        navigate('/app');
+        return;
+      }
+      navigate('/app/connections');
+    },
+    onError: (error) => {
+      toast.error(`Configuration failed: ${error}`);
+    },
+  });
+
+  const { mutate: updateConnection } = useUpdateConnection({
+    onSuccess: () => {
+      toast.success('Snowflake connection updated successfully!');
     },
     onError: (error) => {
       toast.error(`Configuration failed: ${error}`);
@@ -96,18 +108,18 @@ export const Snowflake: React.FC<Props> = ({ onCancel }) => {
 
   React.useEffect(() => {
     const fetchCredentials = async () => {
-      if (project?.name) {
-        const storedUsername = await getDatabaseUsername(project.name);
-        const storedPassword = await getDatabasePassword(project.name);
-        setFormState((prev) => ({
-          ...prev,
-          username: storedUsername || '',
-          password: storedPassword || '',
-        }));
-      }
+      const storedUsername = await getDatabaseUsername(existingConnection.name);
+      const storedPassword = await getDatabasePassword(existingConnection.name);
+      setFormState((prev) => ({
+        ...prev,
+        username: storedUsername || '',
+        password: storedPassword || '',
+      }));
     };
-    fetchCredentials();
-  }, [project?.name]);
+    if (existingConnection) {
+      fetchCredentials();
+    }
+  }, [existingConnection]);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
@@ -119,13 +131,21 @@ export const Snowflake: React.FC<Props> = ({ onCancel }) => {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!project?.id) return;
-    if (project?.name) {
-      await setDatabaseUsername(formState.username, project.name);
-      await setDatabasePassword(formState.password, project.name);
+    await setDatabaseUsername(formState.username, formState.name);
+    await setDatabasePassword(formState.password, formState.name);
+
+    if (connection) {
+      updateConnection({
+        connection: {
+          id: connection.id,
+          connection: formState,
+        },
+      });
+      return;
     }
+
     configureConnection({
-      projectId: project.id,
+      projectId,
       connection: formState,
     });
   };
@@ -158,7 +178,7 @@ export const Snowflake: React.FC<Props> = ({ onCancel }) => {
       }}
     >
       <ConnectionHeader
-        title={project?.name || 'Snowflake Connection'}
+        title="Snowflake Connection"
         imageSource={connectionIcons.images.snowflake}
         onClose={onCancel}
         onSave={handleSubmit}

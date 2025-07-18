@@ -1,7 +1,11 @@
 import React from 'react';
 import { toast } from 'react-toastify';
 import { useCli, useSecureStorage } from './index';
-import { useGetSettings, useSetConnectionEnvVariable } from '../controllers';
+import {
+  useGetConnections,
+  useGetSettings,
+  useSetConnectionEnvVariable,
+} from '../controllers';
 import { Project } from '../../types/backend';
 
 type DbtCommandType =
@@ -28,6 +32,7 @@ interface UseDbtReturn {
 const useDbt = (successCallback: () => void): UseDbtReturn => {
   const { data: settings } = useGetSettings();
   const { error, runCommand, isSuccess } = useCli();
+  const { data: connections = [] } = useGetConnections();
   const { getDatabaseUsername, getDatabasePassword, getDatabaseToken } =
     useSecureStorage();
   const setEnvVariables = useSetConnectionEnvVariable();
@@ -66,38 +71,47 @@ const useDbt = (successCallback: () => void): UseDbtReturn => {
       toast.warning('Another dbt command is currently running');
       return;
     }
+
+    const connection = connections.find((c) => c.id === project.connectionId);
+
+    if (!connection) {
+      toast.error('Connection not found!');
+      return;
+    }
     setDisabledToaster(disableToaster);
 
     setIsRunning(true);
     setActiveCommand(command);
-    // get values fro Keytar
-    const secureUserName = await getDatabaseUsername(project.name);
+    const secureUserName = await getDatabaseUsername(
+      connection.connection.name,
+    );
     if (secureUserName) {
       setEnvVariables.mutate({
-        key: `db-user-${project.name}`,
+        key: `db-user-${connection.connection.name}`,
         value: secureUserName || '',
       });
     }
-    const securePassword = await getDatabasePassword(project.name);
+    const securePassword = await getDatabasePassword(
+      connection.connection.name,
+    );
 
     if (securePassword) {
       setEnvVariables.mutate({
-        key: `db-password-${project.name}`,
+        key: `db-password-${connection.connection.name}`,
         value: securePassword || '',
       });
     }
 
-    const secureToken = await getDatabaseToken(project.name);
+    const secureToken = await getDatabaseToken(connection.connection.name);
     if (secureToken) {
       setEnvVariables.mutate({
-        key: `db-token-${project.name}`,
+        key: `db-token-${connection.connection.name}`,
         value: secureToken || '',
       });
     }
 
     let cmdString = '';
 
-    // Format the command string based on the command type
     switch (command) {
       case 'docs:generate':
         cmdString = `cd "${project.path}" && "${settings?.dbtPath}" docs generate`;

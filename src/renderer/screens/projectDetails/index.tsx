@@ -285,9 +285,8 @@ const ProjectDetails: React.FC = () => {
     return <Navigate to="/app/select-project" />;
   }
 
-  // Early return for missing connection
-  if (project?.id && !project?.rosettaConnection) {
-    return <Navigate to="/app/add-connection/" />;
+  if (project?.id && !project?.connectionId) {
+    return <Navigate to={`/app/add-connection/${project.id}`} />;
   }
 
   const handleBusinessLayerClick = () => {

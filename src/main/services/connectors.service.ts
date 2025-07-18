@@ -15,7 +15,7 @@ import {
 } from '../../types/backend';
 import { loadDatabaseFile, updateDatabase } from '../utils/fileHelper';
 import { ProjectsService } from './index';
-import { ConfigureConnectionBody } from '../../types/ipc';
+import { ConfigureConnectionBody, UpdateConnectionBody } from '../../types/ipc';
 import {
   executeBigQueryQuery,
   executeDatabricksQuery,
@@ -117,13 +117,9 @@ export default class ConnectorsService {
     projectId,
     connection: conn,
     connectionId: connId,
-  }: ConfigureConnectionBody): Promise<Project> {
+  }: ConfigureConnectionBody): Promise<string> {
     const projects = await ProjectsService.loadProjects();
     const projectIndex = projects.findIndex((p) => p.id === projectId);
-
-    if (projectIndex === -1) {
-      throw new Error(`Project not found: ${projectId}`);
-    }
 
     const connections = await this.loadConnections();
     let connectionId = connId;
@@ -140,13 +136,68 @@ export default class ConnectorsService {
       connectionId = await this.saveNewConnection(connection);
     }
 
-    const currentProject = projects[projectIndex];
-    await ProjectsService.updateProject({
-      ...currentProject,
-      connectionId,
-    });
+    if (projectIndex !== -1) {
+      const currentProject = projects[projectIndex];
+      await ProjectsService.updateProject({
+        ...currentProject,
+        connectionId,
+      });
 
-    return this.loadConfigurations(currentProject.id);
+      await this.loadConfigurations(currentProject.id);
+    }
+    return connectionId;
+  }
+
+  /**
+   * Configure a connection for a specific project
+   */
+  static async updateConnection({
+    connection,
+  }: UpdateConnectionBody): Promise<void> {
+    this.validateConnection(connection.connection);
+    const connections = await this.loadConnections();
+    const connectionIndex = connections.findIndex(
+      (c) => c.id === connection.id,
+    );
+    connections[connectionIndex] = connection;
+    await updateDatabase<'connections'>('connections', connections);
+  }
+
+  /**
+   * Delete a connection if it's not being used by any projects
+   */
+  static async deleteConnection(connectionId: string): Promise<void> {
+    // Check if the connection exists
+    const connections = await this.loadConnections();
+    const connectionIndex = connections.findIndex(
+      (connection) => connection.id === connectionId,
+    );
+
+    if (connectionIndex === -1) {
+      throw new Error('Connection not found');
+    }
+
+    // Check if any projects are using this connection
+    const projects = await ProjectsService.loadProjects();
+    const projectsUsingConnection = projects.filter(
+      (project) => project.connectionId === connectionId,
+    );
+
+    if (projectsUsingConnection.length > 0) {
+      const projectNames = projectsUsingConnection
+        .map((p) => p.name)
+        .join(', ');
+      throw new Error(
+        `Cannot delete connection. It is currently being used by the following project(s): ${projectNames}. Please remove the connection from these projects first.`,
+      );
+    }
+
+    // Remove the connection from the database
+    const updatedConnections = connections.filter(
+      (connection) => connection.id !== connectionId,
+    );
+
+    await updateDatabase<'connections'>('connections', updatedConnections);
   }
 
   /**
@@ -665,10 +716,12 @@ export default class ConnectorsService {
   static async parseProjectConnectionFiles(projectPath: string): Promise<{
     dbtConnection?: DBTConnection;
     rosettaConnection?: RosettaConnection;
+    connectionInput?: ConnectionInput;
   }> {
     const result: {
       dbtConnection?: DBTConnection;
       rosettaConnection?: RosettaConnection;
+      connectionInput?: ConnectionInput;
     } = {};
 
     try {
@@ -678,6 +731,8 @@ export default class ConnectorsService {
         const dbtConnection = await this.parseProfilesYml(profilesPath);
         if (dbtConnection) {
           result.dbtConnection = dbtConnection;
+          result.connectionInput =
+            this.mapDBTConnectionToConnectionInput(dbtConnection) ?? undefined;
         }
       }
 
@@ -791,6 +846,111 @@ export default class ConnectorsService {
             path: absolutePath,
             database: absolutePath,
             schema: devOutput.schema || 'main',
+          };
+
+        default:
+          return null;
+      }
+    } catch (error) {
+      return null;
+    }
+  }
+
+  /**
+   * Maps a DBTConnection to a ConnectionInput
+   * @param dbtConnection - The DBT connection configuration
+   * @param connectionName - Name for the connection (since DBT connections don't have names)
+   * @returns ConnectionInput or null if mapping fails
+   */
+  private static mapDBTConnectionToConnectionInput(
+    dbtConnection: DBTConnection,
+    connectionName: string = 'DBT Connection',
+  ): ConnectionInput | null {
+    try {
+      switch (dbtConnection.type) {
+        case 'postgres':
+          return {
+            type: 'postgres',
+            name: connectionName,
+            host: dbtConnection.host,
+            port: dbtConnection.port,
+            username: dbtConnection.username,
+            password: dbtConnection.password,
+            database: dbtConnection.database,
+            schema: dbtConnection.schema,
+            keepalives_idle: dbtConnection.keepalives_idle,
+          };
+
+        case 'snowflake':
+          return {
+            type: 'snowflake',
+            name: connectionName,
+            account: dbtConnection.account,
+            warehouse: dbtConnection.warehouse,
+            username: dbtConnection.username,
+            password: dbtConnection.password,
+            database: dbtConnection.database,
+            schema: dbtConnection.schema,
+            role: dbtConnection.role,
+            client_session_keep_alive: dbtConnection.client_session_keep_alive,
+          };
+
+        case 'bigquery':
+          return {
+            type: 'bigquery',
+            name: connectionName,
+            project: dbtConnection.project,
+            dataset: dbtConnection.database, // In DBT, dataset is stored in database field
+            method: dbtConnection.method,
+            keyfile: dbtConnection.keyfile || '',
+            location: dbtConnection.location,
+            priority: dbtConnection.priority,
+            // Required by ConnectionBase but not used in BigQuery
+            host: '',
+            port: 443,
+            database: dbtConnection.project, // Set to project ID
+            schema: dbtConnection.schema,
+            username: dbtConnection.project, // Set to project ID
+            password: '', // Empty for BigQuery
+          };
+
+        case 'redshift':
+          return {
+            type: 'redshift',
+            name: connectionName,
+            host: dbtConnection.host,
+            port: dbtConnection.port,
+            username: dbtConnection.username,
+            password: dbtConnection.password,
+            database: dbtConnection.database,
+            schema: dbtConnection.schema,
+            keepalives_idle: dbtConnection.keepalives_idle,
+            ssl: dbtConnection.ssl,
+            sslrootcert: dbtConnection.sslrootcert,
+          };
+
+        case 'databricks':
+          return {
+            type: 'databricks',
+            name: connectionName,
+            host: dbtConnection.host,
+            port: dbtConnection.port,
+            httpPath: dbtConnection.http_path, // Note: property name differs between types
+            token: dbtConnection.token,
+            database: dbtConnection.catalog || dbtConnection.database,
+            schema: dbtConnection.schema,
+            keepalives_idle: dbtConnection.keepalives_idle,
+          };
+
+        case 'duckdb':
+          return {
+            type: 'duckdb',
+            name: connectionName,
+            database_path: dbtConnection.path,
+            short_database_path:
+              dbtConnection.path.split('/').pop() || dbtConnection.path,
+            database: dbtConnection.database,
+            schema: dbtConnection.schema,
           };
 
         default:

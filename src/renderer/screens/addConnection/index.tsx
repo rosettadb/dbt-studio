@@ -10,16 +10,12 @@ import {
   Button,
   Divider,
 } from '@mui/material';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useParams } from 'react-router-dom';
 import { toast } from 'react-toastify';
 import { ConnectionCard } from '../../components/connectionCards';
 import connectionIcons from '../../../../assets/connectionIcons';
 import { Connections } from '../../components';
-import {
-  useConfigureConnection,
-  useGetConnections,
-  useGetSelectedProject,
-} from '../../controllers';
+import { useConfigureConnection, useGetConnections } from '../../controllers';
 import { SupportedConnectionTypes } from '../../../types/backend';
 import { AppLayout } from '../../layouts';
 
@@ -106,7 +102,7 @@ const baseItems: ItemType[] = [
 
 const AddConnection: React.FC = () => {
   const navigate = useNavigate();
-  const { data: project } = useGetSelectedProject();
+  const { projectId } = useParams<{ projectId: string }>();
   const [selectedItem, setSelectedItem] = React.useState<ItemType>();
   const [selectedConnectionId, setSelectedConnectionId] =
     React.useState<string>('');
@@ -125,13 +121,13 @@ const AddConnection: React.FC = () => {
     });
 
   const handleUseExistingConnection = () => {
-    if (!selectedConnectionId || !project?.id) {
+    if (!selectedConnectionId) {
       toast.error('Please select a connection');
       return;
     }
 
     configureConnection({
-      projectId: project.id,
+      projectId,
       connectionId: selectedConnectionId,
     });
   };
@@ -140,47 +136,62 @@ const AddConnection: React.FC = () => {
     switch (selectedItem?.id) {
       case 'postgres': {
         return (
-          <Connections.Postgres onCancel={() => setSelectedItem(undefined)} />
+          <Connections.Postgres
+            onCancel={() => setSelectedItem(undefined)}
+            projectId={projectId}
+          />
         );
       }
       case 'snowflake': {
         return (
-          <Connections.Snowflake onCancel={() => setSelectedItem(undefined)} />
+          <Connections.Snowflake
+            onCancel={() => setSelectedItem(undefined)}
+            projectId={projectId}
+          />
         );
       }
       case 'bigquery': {
         return (
-          <Connections.BigQuery onCancel={() => setSelectedItem(undefined)} />
+          <Connections.BigQuery
+            onCancel={() => setSelectedItem(undefined)}
+            projectId={projectId}
+          />
         );
       }
       case 'redshift': {
         return (
-          <Connections.Redshift onCancel={() => setSelectedItem(undefined)} />
+          <Connections.Redshift
+            onCancel={() => setSelectedItem(undefined)}
+            projectId={projectId}
+          />
         );
       }
       case 'databricks': {
         return (
-          <Connections.Databricks onCancel={() => setSelectedItem(undefined)} />
+          <Connections.Databricks
+            onCancel={() => setSelectedItem(undefined)}
+            projectId={projectId}
+          />
         );
       }
       case 'duckdb': {
         return (
-          <Connections.DuckDB onCancel={() => setSelectedItem(undefined)} />
+          <Connections.DuckDB
+            onCancel={() => setSelectedItem(undefined)}
+            projectId={projectId}
+          />
         );
       }
       default: {
         return (
-          <Connections.Postgres onCancel={() => setSelectedItem(undefined)} />
+          <Connections.Postgres
+            onCancel={() => setSelectedItem(undefined)}
+            projectId={projectId}
+          />
         );
       }
     }
   };
-
-  React.useEffect(() => {
-    if (project?.rosettaConnection) {
-      navigate('/app/project-details');
-    }
-  }, [project]);
 
   return (
     <AppLayout>

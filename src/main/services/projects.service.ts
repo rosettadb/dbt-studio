@@ -6,12 +6,10 @@ import { dialog } from 'electron';
 import {
   BigQueryConnection,
   DatabricksConnection,
-  DBTConnection,
   DuckDBConnection,
   PostgresConnection,
   Project,
   RedshiftConnection,
-  RosettaConnection,
   SnowflakeConnection,
   Table,
 } from '../../types/backend';
@@ -93,13 +91,11 @@ export default class ProjectsService {
   static async addProjectFromVCS({
     path: projectPath,
     name,
-    dbtConnection,
-    rosettaConnection,
+    connectionId,
   }: {
     path: string;
     name: string;
-    dbtConnection?: DBTConnection;
-    rosettaConnection?: RosettaConnection;
+    connectionId?: string;
   }) {
     const dbtProjectYmlPath = path.join(projectPath, 'dbt_project.yml');
 
@@ -129,8 +125,7 @@ export default class ProjectsService {
       createdAt: new Date().toISOString(),
       path: projectPath,
       isExtracted: false,
-      ...(dbtConnection && { dbtConnection }),
-      ...(rosettaConnection && { rosettaConnection }),
+      connectionId,
     };
 
     const rosettaPath = path.join(projectPath, 'rosetta');

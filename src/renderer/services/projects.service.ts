@@ -6,8 +6,6 @@ import {
   Project,
   Table,
   EnhanceModelResponseType,
-  DBTConnection,
-  RosettaConnection,
 } from '../../types/backend';
 
 export const getProjects = async (): Promise<Project[]> => {
@@ -39,15 +37,13 @@ export const addProject = async (body: {
 export const addProjectFromVCS = async (body: {
   name: string;
   path: string;
-  dbtConnection?: DBTConnection;
-  rosettaConnection?: RosettaConnection;
+  connectionId?: string;
 }): Promise<Project> => {
   const { data } = await client.post<
     {
       name: string;
       path: string;
-      dbtConnection?: DBTConnection;
-      rosettaConnection?: RosettaConnection;
+      connectionId?: string;
     },
     Project
   >('project:addFromVCS', body);

@@ -42,6 +42,6 @@ export const DBTProjects: React.FC = () => (
   <img
     src={icons.dbtTm}
     alt="dbt projects"
-    style={{ ...style, width: 24, height: 24 }}
+    style={{ ...style, width: 24, height: 24, marginLeft: 2 }}
   />
 );

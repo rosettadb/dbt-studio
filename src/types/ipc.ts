@@ -1,4 +1,4 @@
-import { ConnectionInput } from './backend';
+import { ConnectionInput, ConnectionModel } from './backend';
 
 export type TestChannels = 'test:create' | 'test:getAll';
 
@@ -48,7 +48,9 @@ export type ConnectorChannels =
   | 'project:addFromFolder'
   | 'connector:setConnectionEnvVariable'
   | 'connector:list'
-  | 'connector:get';
+  | 'connector:get'
+  | 'connector:update'
+  | 'connector:delete';
 
 export type CliChannels =
   | 'cli:run'
@@ -114,7 +116,11 @@ export type Channels =
   | UpdateChannels;
 
 export type ConfigureConnectionBody = {
-  projectId: string;
+  projectId?: string;
   connection?: ConnectionInput;
   connectionId?: string;
+};
+
+export type UpdateConnectionBody = {
+  connection: ConnectionModel;
 };

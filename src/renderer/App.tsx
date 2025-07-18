@@ -43,8 +43,9 @@ const App: React.FC = () => {
           <Route path="" element={<ProjectDetails />} />
           <Route path="connections" element={<Connections />} />
           <Route path="select-project" element={<SelectProject />} />
-          <Route path="edit-connection" element={<EditConnection />} />
+          <Route path="edit-connection/:id" element={<EditConnection />} />
           <Route path="add-connection" element={<AddConnection />} />
+          <Route path="add-connection/:projectId" element={<AddConnection />} />
           <Route
             path="settings"
             element={<Navigate to="/app/settings/general" />}

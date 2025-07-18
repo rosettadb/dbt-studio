@@ -1,7 +1,11 @@
 import React from 'react';
 import { toast } from 'react-toastify';
 import { useCli, useSecureStorage } from './index';
-import { useGetSettings, useSetConnectionEnvVariable } from '../controllers';
+import {
+  useGetConnections,
+  useGetSettings,
+  useSetConnectionEnvVariable,
+} from '../controllers';
 import { Project } from '../../types/backend';
 import { projectsServices, settingsServices } from '../services';
 import { getOpenAIKey } from '../services/settings.services';
@@ -14,6 +18,7 @@ const useRosettaDBT = (successCallback: () => Promise<void>) => {
   const setEnvVariables = useSetConnectionEnvVariable();
   const [isSuccess, setIsSuccess] = React.useState(false);
   const [isRunning, setIsRunning] = React.useState(false);
+  const { data: connections = [] } = useGetConnections();
 
   React.useEffect(() => {
     if (!isRunning) return;
@@ -35,25 +40,36 @@ const useRosettaDBT = (successCallback: () => Promise<void>) => {
   return {
     fn: async (project: Project, incremental = '') => {
       setIsRunning(true);
+      const connection = connections.find((c) => c.id === project.connectionId);
+      if (!connection) {
+        toast.error('Connection not found!');
+        setIsRunning(false);
+        setIsSuccess(false);
+        return;
+      }
       // Set environment variables for the project
-      const secureUserName = await getDatabaseUsername(project.name);
+      const secureUserName = await getDatabaseUsername(
+        connection.connection.name,
+      );
       if (secureUserName) {
         setEnvVariables.mutate({
-          key: `db-user-${project.name}`,
+          key: `db-user-${connection.connection.name}`,
           value: secureUserName || '',
         });
       }
-      const securePassword = await getDatabasePassword(project.name);
+      const securePassword = await getDatabasePassword(
+        connection.connection.name,
+      );
       if (securePassword) {
         setEnvVariables.mutate({
-          key: `db-password-${project.name}`,
+          key: `db-password-${connection.connection.name}`,
           value: securePassword || '',
         });
       }
-      const secureToken = await getDatabaseToken(project.name);
+      const secureToken = await getDatabaseToken(connection.connection.name);
       if (secureToken) {
         setEnvVariables.mutate({
-          key: `db-token-${project.name}`,
+          key: `db-token-${connection.connection.name}`,
           value: secureToken || '',
         });
       }

@@ -9,6 +9,11 @@ interface SideBarElementType {
 
 export const sidebarElements: SideBarElementType[] = [
   {
+    path: '/app/connections',
+    text: 'Connections',
+    icon: Icons.DataSources,
+  },
+  {
     path: '/app',
     text: 'Projects',
     icon: Icons.DBTProjects,
@@ -16,11 +21,6 @@ export const sidebarElements: SideBarElementType[] = [
   {
     path: '/app/sql',
     text: 'SQL',
-    icon: Icons.DataSources,
-  },
-  {
-    path: '/app/connections',
-    text: 'Connections',
-    icon: Icons.DataSources,
+    icon: Icons.SQL,
   },
 ];

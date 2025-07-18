@@ -1,7 +1,7 @@
 import { ipcMain } from 'electron';
 import { ConnectorsService } from '../services';
 import type { ConnectionInput, QueryResponseType } from '../../types/backend';
-import { ConfigureConnectionBody } from '../../types/ipc';
+import { ConfigureConnectionBody, UpdateConnectionBody } from '../../types/ipc';
 
 const handlerChannels = [
   'connector:configure',
@@ -37,6 +37,17 @@ const registerConnectorsHandlers = () => {
 
   ipcMain.handle('connector:test', async (_event, body: ConnectionInput) => {
     return ConnectorsService.testConnection(body);
+  });
+
+  ipcMain.handle(
+    'connector:update',
+    async (_event, body: UpdateConnectionBody) => {
+      return ConnectorsService.updateConnection(body);
+    },
+  );
+
+  ipcMain.handle('connector:delete', async (_event, connectionId: string) => {
+    return ConnectorsService.deleteConnection(connectionId);
   });
 
   ipcMain.handle(

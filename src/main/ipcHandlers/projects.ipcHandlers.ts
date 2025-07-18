@@ -36,8 +36,7 @@ const registerProjectHandlers = () => {
       body: {
         path: string;
         name: string;
-        dbtConnection?: any;
-        rosettaConnection?: any;
+        connectionId?: string;
       },
     ) => {
       return ProjectsService.addProjectFromVCS(body);

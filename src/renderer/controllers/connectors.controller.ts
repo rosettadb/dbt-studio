@@ -13,7 +13,10 @@ import type {
   BigQueryTestResponse,
   ConnectionModel,
 } from '../../types/backend';
-import type { ConfigureConnectionBody } from '../../types/ipc';
+import type {
+  ConfigureConnectionBody,
+  UpdateConnectionBody,
+} from '../../types/ipc';
 import { QUERY_KEYS } from '../config/constants';
 import { connectorsServices } from '../services';
 
@@ -68,6 +71,51 @@ export const useConfigureConnection = (
     },
     onSuccess: async (...args) => {
       await queryClient.invalidateQueries([QUERY_KEYS.GET_SELECTED_PROJECT]);
+      onCustomSuccess?.(...args);
+    },
+    onError: (...args) => {
+      onCustomError?.(...args);
+    },
+  });
+};
+
+export const useUpdateConnection = (
+  customOptions?: UseMutationOptions<void, CustomError, UpdateConnectionBody>,
+): UseMutationResult<void, CustomError, UpdateConnectionBody> => {
+  const { onSuccess: onCustomSuccess, onError: onCustomError } =
+    customOptions || {};
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (data: UpdateConnectionBody) => {
+      return connectorsServices.updateConnection(data);
+    },
+    onSuccess: async (...args) => {
+      await queryClient.invalidateQueries([
+        QUERY_KEYS.GET_CONNECTION_BY_ID,
+        args[1].connection.id,
+      ]);
+      onCustomSuccess?.(...args);
+    },
+    onError: (...args) => {
+      onCustomError?.(...args);
+    },
+  });
+};
+
+export const useDeleteConnection = (
+  customOptions?: UseMutationOptions<void, CustomError, string>,
+): UseMutationResult<void, CustomError, string> => {
+  const { onSuccess: onCustomSuccess, onError: onCustomError } =
+    customOptions || {};
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (data: string) => {
+      return connectorsServices.deleteConnection(data);
+    },
+    onSuccess: async (...args) => {
+      await queryClient.invalidateQueries([QUERY_KEYS.GET_CONNECTIONS]);
       onCustomSuccess?.(...args);
     },
     onError: (...args) => {
