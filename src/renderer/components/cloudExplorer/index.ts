@@ -9,3 +9,4 @@ export * from './ExplorerBuckets';
 export * from './ExplorerBucketContent';
 export * from './CloudExplorerBuckets';
 export * from './CloudExplorerBucketContent';
+export * from './DataPreviewModal';

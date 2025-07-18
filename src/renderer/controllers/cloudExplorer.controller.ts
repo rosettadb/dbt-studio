@@ -105,6 +105,35 @@ export const useGetDownloadUrl = () => {
   );
 };
 
+// Mutation for previewing data
+export const usePreviewData = () => {
+  return useMutation(
+    ({
+      provider,
+      config,
+      bucketName,
+      objectName,
+      previewType = 'sample',
+      limit = 100,
+    }: {
+      provider: CloudProvider;
+      config: CloudStorageConfig;
+      bucketName: string;
+      objectName: string;
+      previewType?: 'sample' | 'schema' | 'stats';
+      limit?: number;
+    }) =>
+      cloudExplorerService.previewData(
+        provider,
+        config,
+        bucketName,
+        objectName,
+        previewType,
+        limit,
+      ),
+  );
+};
+
 // Custom hook for paginated object listing
 export const usePaginatedObjects = (
   provider: CloudProvider,

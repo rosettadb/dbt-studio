@@ -100,3 +100,22 @@ export interface RecentItem {
   provider: CloudProvider;
   accessedAt: Date;
 }
+
+// Cloud Preview Types
+export interface PreviewResult {
+  success: boolean;
+  data?: any[];
+  columns?: Array<{ name: string; type: string }>;
+  totalRows?: number;
+  error?: string;
+  objectPath: string;
+  previewType: 'sample' | 'schema' | 'stats';
+}
+
+export interface PreviewOptions {
+  provider: CloudProvider;
+  cloudConfig: CloudStorageConfig;
+  objectPath: string;
+  previewType?: 'sample' | 'schema' | 'stats';
+  limit?: number;
+}

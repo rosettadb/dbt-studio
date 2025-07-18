@@ -7,6 +7,7 @@ import SecureStorageService from './secureStorage.service';
 import AnalyticsService from './analytics.service';
 import UpdateService from './update.service';
 import CloudExplorerService from './cloudExplorer.service';
+import CloudPreviewService from './cloudPreview.service';
 
 export {
   ProjectsService,
@@ -18,4 +19,5 @@ export {
   AnalyticsService,
   UpdateService,
   CloudExplorerService,
+  CloudPreviewService,
 };

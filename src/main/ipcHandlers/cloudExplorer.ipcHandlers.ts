@@ -1,12 +1,13 @@
 import { ipcMain } from 'electron';
-import { CloudExplorerService } from '../services';
 import type { CloudStorageConfig } from '../../types/frontend';
+import { CloudExplorerService, CloudPreviewService } from '../services';
 
 const handlerChannels = [
   'cloudExplorer:listBuckets',
   'cloudExplorer:listObjects',
   'cloudExplorer:getDownloadUrl',
   'cloudExplorer:testConnection',
+  'cloudExplorer:previewData',
 ];
 
 const removeCloudExplorerIpcHandlers = () => {
@@ -119,6 +120,50 @@ const registerCloudExplorerHandlers = () => {
       }
 
       return CloudExplorerService.testConnection(provider, config);
+    },
+  );
+
+  ipcMain.handle(
+    'cloudExplorer:previewData',
+    async (
+      _event,
+      {
+        provider,
+        config,
+        bucketName,
+        objectName,
+        previewType = 'sample',
+        limit = 100,
+      }: {
+        provider: 'aws' | 'azure' | 'gcs';
+        config: CloudStorageConfig;
+        bucketName: string;
+        objectName: string;
+        previewType?: 'sample' | 'schema' | 'stats';
+        limit?: number;
+      },
+    ) => {
+      const objectPath = CloudPreviewService.getCloudUrl(
+        provider,
+        bucketName,
+        objectName,
+      );
+
+      try {
+        const result = await CloudPreviewService.previewCloudData({
+          provider,
+          cloudConfig: config,
+          objectPath,
+          previewType,
+          limit,
+        });
+
+        return result;
+      } catch (error) {
+        // eslint-disable-next-line no-console
+        console.error('IPC Handler - Preview error:', error);
+        throw error;
+      }
     },
   );
 };

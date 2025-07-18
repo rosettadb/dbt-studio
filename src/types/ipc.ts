@@ -103,7 +103,8 @@ export type CloudExplorerChannels =
   | 'cloudExplorer:listBuckets'
   | 'cloudExplorer:listObjects'
   | 'cloudExplorer:getDownloadUrl'
-  | 'cloudExplorer:testConnection';
+  | 'cloudExplorer:testConnection'
+  | 'cloudExplorer:previewData';
 
 export type Channels =
   | TestChannels

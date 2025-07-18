@@ -34,18 +34,21 @@ import {
   Clear,
   Refresh,
   NavigateNext,
+  TableView,
 } from '@mui/icons-material';
 import {
   useConnection,
   useListObjects,
   useGetDownloadUrl,
   useAddRecentItem,
+  usePreviewData,
 } from '../../controllers/cloudExplorer.controller';
 import type {
   CloudProvider,
   CloudStorageConfig,
   StorageObject,
 } from '../../../types/frontend';
+import { DataPreviewModal } from './DataPreviewModal';
 
 interface ExplorerBucketContentProps {
   connectionId: string;
@@ -63,6 +66,11 @@ export const ExplorerBucketContent: React.FC<ExplorerBucketContentProps> = ({
   const [filteredObjects, setFilteredObjects] = useState<StorageObject[]>([]);
   const [downloadUrls, setDownloadUrls] = useState<Record<string, string>>({});
   const [loadingUrls, setLoadingUrls] = useState<Record<string, boolean>>({});
+  const [previewModal, setPreviewModal] = useState<{
+    open: boolean;
+    fileName: string;
+    objectName: string;
+  }>({ open: false, fileName: '', objectName: '' });
 
   const connectionQuery = useConnection(connectionId);
   const connection = connectionQuery.data;
@@ -77,6 +85,7 @@ export const ExplorerBucketContent: React.FC<ExplorerBucketContentProps> = ({
 
   const getDownloadUrl = useGetDownloadUrl();
   const addRecentItem = useAddRecentItem();
+  const previewData = usePreviewData();
 
   const objects = objectsQuery.data?.objects || [];
 
@@ -182,6 +191,47 @@ export const ExplorerBucketContent: React.FC<ExplorerBucketContentProps> = ({
     const sizes = ['Bytes', 'KB', 'MB', 'GB'];
     const i = Math.floor(Math.log(bytes) / Math.log(k));
     return `${parseFloat((bytes / k ** i).toFixed(2))} ${sizes[i]}`;
+  };
+
+  // Check if file supports DuckDB preview
+  const isPreviewSupported = (fileName: string): boolean => {
+    const extension = fileName.split('.').pop()?.toLowerCase();
+    const supportedTypes = [
+      'parquet',
+      'csv',
+      'json',
+      'jsonl',
+      'xlsx',
+      'xls',
+      'sqlite',
+      'db',
+      'arrow',
+      'avro',
+      'delta',
+      'iceberg',
+    ];
+    return supportedTypes.includes(extension || '');
+  };
+
+  const handlePreview = async (objectName: string) => {
+    if (!connection) return;
+
+    const fileName = objectName.split('/').pop() || objectName;
+    setPreviewModal({
+      open: true,
+      fileName,
+      objectName,
+    });
+
+    // Trigger the preview data fetch
+    previewData.mutate({
+      provider: connection.provider,
+      config: connection.config,
+      bucketName,
+      objectName,
+      previewType: 'sample',
+      limit: 100,
+    });
   };
 
   const handleBackToBuckets = () => {
@@ -397,22 +447,37 @@ export const ExplorerBucketContent: React.FC<ExplorerBucketContentProps> = ({
                           </TableCell>
                           <TableCell align="right">
                             {!object.isDirectory && (
-                              <Tooltip title="Download">
-                                <IconButton
-                                  size="small"
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    handleDownload(object.name);
-                                  }}
-                                  disabled={loadingUrls[object.name]}
-                                >
-                                  {loadingUrls[object.name] ? (
-                                    <CircularProgress size={20} />
-                                  ) : (
-                                    <Download />
-                                  )}
-                                </IconButton>
-                              </Tooltip>
+                              <Box sx={{ display: 'flex', gap: 1 }}>
+                                {isPreviewSupported(object.name) && (
+                                  <Tooltip title="Preview Data">
+                                    <IconButton
+                                      size="small"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        handlePreview(object.name);
+                                      }}
+                                    >
+                                      <TableView />
+                                    </IconButton>
+                                  </Tooltip>
+                                )}
+                                <Tooltip title="Download">
+                                  <IconButton
+                                    size="small"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      handleDownload(object.name);
+                                    }}
+                                    disabled={loadingUrls[object.name]}
+                                  >
+                                    {loadingUrls[object.name] ? (
+                                      <CircularProgress size={20} />
+                                    ) : (
+                                      <Download />
+                                    )}
+                                  </IconButton>
+                                </Tooltip>
+                              </Box>
                             )}
                           </TableCell>
                         </TableRow>
@@ -424,6 +489,17 @@ export const ExplorerBucketContent: React.FC<ExplorerBucketContentProps> = ({
             )}
         </CardContent>
       </Card>
+
+      <DataPreviewModal
+        open={previewModal.open}
+        onClose={() =>
+          setPreviewModal({ open: false, fileName: '', objectName: '' })
+        }
+        fileName={previewModal.fileName}
+        previewResult={previewData.data || null}
+        loading={previewData.isLoading}
+        error={previewData.error ? String(previewData.error) : undefined}
+      />
     </Box>
   );
 };

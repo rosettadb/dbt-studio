@@ -2,6 +2,7 @@ import type {
   Bucket,
   CloudListResult,
   CloudStorageConfig,
+  PreviewResult,
 } from '../../types/frontend';
 import { client } from '../config/client';
 
@@ -75,6 +76,42 @@ class CloudExplorerService {
       boolean
     >('cloudExplorer:testConnection', { provider, config });
     return data;
+  }
+
+  static async previewData(
+    provider: 'aws' | 'azure' | 'gcs',
+    config: CloudStorageConfig,
+    bucketName: string,
+    objectName: string,
+    previewType: 'sample' | 'schema' | 'stats' = 'sample',
+    limit: number = 100,
+  ): Promise<PreviewResult> {
+    try {
+      const { data } = await client.post<
+        {
+          provider: 'aws' | 'azure' | 'gcs';
+          config: CloudStorageConfig;
+          bucketName: string;
+          objectName: string;
+          previewType?: 'sample' | 'schema' | 'stats';
+          limit?: number;
+        },
+        PreviewResult
+      >('cloudExplorer:previewData', {
+        provider,
+        config,
+        bucketName,
+        objectName,
+        previewType,
+        limit,
+      });
+
+      return data;
+    } catch (error) {
+      // eslint-disable-next-line no-console
+      console.error('previewData error:', error);
+      throw error;
+    }
   }
 }
 
