@@ -47,7 +47,7 @@ import type {
   CloudProvider,
   CloudStorageConfig,
 } from '../../../types/frontend';
-import { DataPreviewModal } from './DataPreviewModal';
+import { InlineDataPreview } from './InlineDataPreview';
 
 interface ExplorerBucketContentProps {
   connectionId: string;
@@ -64,11 +64,10 @@ export const ExplorerBucketContent: React.FC<ExplorerBucketContentProps> = ({
   const [searchTerm, setSearchTerm] = useState('');
   const [downloadUrls, setDownloadUrls] = useState<Record<string, string>>({});
   const [loadingUrls, setLoadingUrls] = useState<Record<string, boolean>>({});
-  const [previewModal, setPreviewModal] = useState<{
-    open: boolean;
+  const [previewFile, setPreviewFile] = useState<{
     fileName: string;
     objectName: string;
-  }>({ open: false, fileName: '', objectName: '' });
+  } | null>(null);
 
   const connectionQuery = useConnection(connectionId);
   const connection = connectionQuery.data;
@@ -213,8 +212,7 @@ export const ExplorerBucketContent: React.FC<ExplorerBucketContentProps> = ({
     if (!connection) return;
 
     const fileName = objectName.split('/').pop() || objectName;
-    setPreviewModal({
-      open: true,
+    setPreviewFile({
       fileName,
       objectName,
     });
@@ -232,6 +230,11 @@ export const ExplorerBucketContent: React.FC<ExplorerBucketContentProps> = ({
 
   const handleBackToBuckets = () => {
     navigate(`/app/cloud-explorer/buckets/${connectionId}`);
+  };
+
+  const handleBackToFiles = () => {
+    setPreviewFile(null);
+    previewData.reset();
   };
 
   if (connectionQuery.isLoading) {
@@ -255,6 +258,19 @@ export const ExplorerBucketContent: React.FC<ExplorerBucketContentProps> = ({
           Back to Buckets
         </Button>
       </Box>
+    );
+  }
+
+  // If we're previewing a file, show the inline preview instead
+  if (previewFile) {
+    return (
+      <InlineDataPreview
+        fileName={previewFile.fileName}
+        previewResult={previewData.data || null}
+        loading={previewData.isLoading}
+        error={previewData.error ? String(previewData.error) : undefined}
+        onBack={handleBackToFiles}
+      />
     );
   }
 
@@ -485,17 +501,6 @@ export const ExplorerBucketContent: React.FC<ExplorerBucketContentProps> = ({
             )}
         </CardContent>
       </Card>
-
-      <DataPreviewModal
-        open={previewModal.open}
-        onClose={() =>
-          setPreviewModal({ open: false, fileName: '', objectName: '' })
-        }
-        fileName={previewModal.fileName}
-        previewResult={previewData.data || null}
-        loading={previewData.isLoading}
-        error={previewData.error ? String(previewData.error) : undefined}
-      />
     </Box>
   );
 };

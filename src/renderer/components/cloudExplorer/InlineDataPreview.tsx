@@ -1,10 +1,5 @@
 import React, { useState } from 'react';
 import {
-  Dialog,
-  DialogTitle,
-  DialogContent,
-  DialogActions,
-  Button,
   Box,
   Typography,
   Table,
@@ -19,27 +14,28 @@ import {
   CircularProgress,
   Tabs,
   Tab,
-  IconButton,
   TextField,
   InputAdornment,
   TablePagination,
+  Button,
 } from '@mui/material';
 import {
-  Close,
   Search,
   TableView,
   Schema,
   Analytics,
+  ArrowBack,
+  Fullscreen,
 } from '@mui/icons-material';
 import type { PreviewResult } from '../../../types/frontend';
+import { DataPreviewModal } from './DataPreviewModal';
 
-interface DataPreviewModalProps {
-  open: boolean;
-  onClose: () => void;
+interface InlineDataPreviewProps {
   fileName: string;
   previewResult: PreviewResult | null;
   loading: boolean;
   error?: string;
+  onBack: () => void;
 }
 
 /**
@@ -64,18 +60,18 @@ const sanitizeText = (text: string): string => {
     .trim();
 };
 
-export const DataPreviewModal: React.FC<DataPreviewModalProps> = ({
-  open,
-  onClose,
+export const InlineDataPreview: React.FC<InlineDataPreviewProps> = ({
   fileName,
   previewResult,
   loading,
   error,
+  onBack,
 }) => {
   const [currentTab, setCurrentTab] = useState(0);
   const [searchTerm, setSearchTerm] = useState('');
   const [page, setPage] = useState(0);
   const [rowsPerPage, setRowsPerPage] = useState(25);
+  const [fullscreenOpen, setFullscreenOpen] = useState(false);
 
   const handleTabChange = (_event: React.SyntheticEvent, newValue: number) => {
     setCurrentTab(newValue);
@@ -154,104 +150,116 @@ export const DataPreviewModal: React.FC<DataPreviewModalProps> = ({
           </Typography>
         </Box>
 
-        <TableContainer
-          component={Paper}
-          sx={{
-            height: 'calc(100vh - 320px)',
-            minHeight: 400,
-            maxHeight: 'calc(100vh - 320px)',
-          }}
-        >
-          <Table stickyHeader size="small" sx={{ minWidth: 'max-content' }}>
-            <TableHead>
-              <TableRow>
-                {previewResult.columns?.map((column) => (
-                  <TableCell
-                    key={column.name}
+        <Box sx={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
+          <TableContainer
+            component={Paper}
+            sx={{
+              flex: 1,
+              minHeight: 300,
+              overflow: 'auto',
+              maxHeight: 'calc(100vh - 430px)',
+              maxWidth: 'calc(100vw - 430px)',
+            }}
+          >
+            <Table
+              stickyHeader
+              size="small"
+              sx={{
+                minWidth: 'max-content',
+              }}
+            >
+              <TableHead>
+                <TableRow>
+                  {previewResult.columns?.map((column) => (
+                    <TableCell
+                      key={column.name}
+                      sx={{
+                        fontWeight: 'bold',
+                        minWidth: 150,
+                        whiteSpace: 'nowrap',
+                        py: 1,
+                      }}
+                    >
+                      <Box>
+                        <Typography variant="body2">{column.name}</Typography>
+                        <Typography variant="caption" color="text.secondary">
+                          {column.type}
+                        </Typography>
+                      </Box>
+                    </TableCell>
+                  ))}
+                </TableRow>
+              </TableHead>
+              <TableBody>
+                {paginatedData.map((row, index) => (
+                  <TableRow
+                    key={index}
+                    hover
                     sx={{
-                      fontWeight: 'bold',
-                      minWidth: 150,
-                      whiteSpace: 'nowrap',
-                      py: 1,
+                      '& .MuiTableCell-root': {
+                        py: 0.5,
+                      },
                     }}
                   >
-                    <Box>
-                      <Typography variant="body2">{column.name}</Typography>
-                      <Typography variant="caption" color="text.secondary">
-                        {column.type}
-                      </Typography>
-                    </Box>
-                  </TableCell>
-                ))}
-              </TableRow>
-            </TableHead>
-            <TableBody>
-              {paginatedData.map((row, index) => (
-                <TableRow
-                  key={index}
-                  hover
-                  sx={{
-                    '& .MuiTableCell-root': {
-                      py: 0.5,
-                    },
-                  }}
-                >
-                  {previewResult.columns?.map((column, colIndex) => {
-                    // Handle both array and object data formats
-                    let cellValue: any;
-                    if (Array.isArray(row)) {
-                      // Array format - use column index
-                      cellValue = row[colIndex];
-                    } else {
-                      // Object format - use column name
-                      cellValue = row[column.name];
-                    }
+                    {previewResult.columns?.map((column, colIndex) => {
+                      // Handle both array and object data formats
+                      let cellValue: any;
+                      if (Array.isArray(row)) {
+                        // Array format - use column index
+                        cellValue = row[colIndex];
+                      } else {
+                        // Object format - use column name
+                        cellValue = row[column.name];
+                      }
 
-                    return (
-                      <TableCell
-                        key={column.name}
-                        sx={{
-                          minWidth: 150,
-                          py: 0.5,
-                        }}
-                      >
-                        <Typography
-                          variant="body2"
+                      return (
+                        <TableCell
+                          key={column.name}
                           sx={{
-                            maxWidth: 200,
-                            overflow: 'hidden',
-                            textOverflow: 'ellipsis',
-                            whiteSpace: 'nowrap',
-                            fontFamily: 'monospace',
+                            minWidth: 150,
+                            py: 0.5,
                           }}
-                          title={
-                            cellValue !== null && cellValue !== undefined
-                              ? sanitizeText(String(cellValue))
-                              : '—'
-                          }
                         >
-                          {cellValue !== null && cellValue !== undefined
-                            ? sanitizeText(String(cellValue))
-                            : '—'}
-                        </Typography>
-                      </TableCell>
-                    );
-                  })}
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </TableContainer>
+                          <Typography
+                            variant="body2"
+                            sx={{
+                              maxWidth: 200,
+                              overflow: 'hidden',
+                              textOverflow: 'ellipsis',
+                              whiteSpace: 'nowrap',
+                              fontFamily: 'monospace',
+                            }}
+                            title={
+                              cellValue !== null && cellValue !== undefined
+                                ? sanitizeText(String(cellValue))
+                                : '—'
+                            }
+                          >
+                            {cellValue !== null && cellValue !== undefined
+                              ? sanitizeText(String(cellValue))
+                              : '—'}
+                          </Typography>
+                        </TableCell>
+                      );
+                    })}
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </TableContainer>
 
-        <TablePagination
-          component="div"
-          count={filteredData.length}
-          page={page}
-          onPageChange={handleChangePage}
-          rowsPerPage={rowsPerPage}
-          onRowsPerPageChange={handleChangeRowsPerPage}
-          rowsPerPageOptions={[10, 25, 50, 100]}
-        />
+          <Box sx={{ flexShrink: 0, borderTop: 1, borderColor: 'divider' }}>
+            <TablePagination
+              component="div"
+              count={filteredData.length}
+              page={page}
+              onPageChange={handleChangePage}
+              rowsPerPage={rowsPerPage}
+              onRowsPerPageChange={handleChangeRowsPerPage}
+              rowsPerPageOptions={[10, 25, 50, 100]}
+            />
+          </Box>
+        </Box>
       </Box>
     );
   };
@@ -285,12 +293,9 @@ export const DataPreviewModal: React.FC<DataPreviewModalProps> = ({
                   </Typography>
                 </TableCell>
                 <TableCell>
-                  <Chip
-                    label={column.type}
-                    size="small"
-                    color="primary"
-                    variant="outlined"
-                  />
+                  <Typography variant="body2" color="text.secondary">
+                    {column.type}
+                  </Typography>
                 </TableCell>
               </TableRow>
             ))}
@@ -318,7 +323,7 @@ export const DataPreviewModal: React.FC<DataPreviewModalProps> = ({
               Total Rows
             </Typography>
             <Typography variant="h4">
-              {previewResult?.totalRows?.toLocaleString() || '—'}
+              {previewResult?.data?.length || 0}
             </Typography>
           </Paper>
           <Paper sx={{ p: 2 }}>
@@ -326,16 +331,14 @@ export const DataPreviewModal: React.FC<DataPreviewModalProps> = ({
               Total Columns
             </Typography>
             <Typography variant="h4">
-              {previewResult?.columns?.length || '—'}
+              {previewResult?.columns?.length || 0}
             </Typography>
           </Paper>
           <Paper sx={{ p: 2 }}>
             <Typography variant="body2" color="text.secondary">
-              Preview Type
+              File Size
             </Typography>
-            <Typography variant="h4">
-              {previewResult?.previewType || '—'}
-            </Typography>
+            <Typography variant="h4">N/A</Typography>
           </Paper>
         </Box>
       </Box>
@@ -394,42 +397,74 @@ export const DataPreviewModal: React.FC<DataPreviewModalProps> = ({
   };
 
   return (
-    <Dialog open={open} onClose={onClose} maxWidth="xl" fullWidth fullScreen>
-      <DialogTitle>
-        <Box
-          sx={{
-            display: 'flex',
-            justifyContent: 'space-between',
-            alignItems: 'center',
-          }}
-        >
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-            <TableView />
-            <Typography variant="h6">Data Preview</Typography>
-            <Chip label={fileName} size="small" variant="outlined" />
-          </Box>
-          <IconButton onClick={onClose} size="small">
-            <Close />
-          </IconButton>
-        </Box>
-      </DialogTitle>
-
-      <DialogContent
+    <Box
+      sx={{
+        height: '100%',
+        display: 'flex',
+        flexDirection: 'column',
+        overflow: 'hidden',
+        backgroundColor: 'background.paper',
+      }}
+    >
+      {/* Header */}
+      <Box
         sx={{
           p: 2,
           display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          mb: 1,
+          borderBottom: 1,
+          borderColor: 'divider',
+          pb: 2,
+          flexShrink: 0,
+        }}
+      >
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+          <Button variant="outlined" startIcon={<ArrowBack />} onClick={onBack}>
+            Back to Files
+          </Button>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+            <TableView />
+            <Typography variant="h4" component="h1">
+              Preview:
+            </Typography>
+            <Chip label={fileName} size="medium" variant="outlined" />
+          </Box>
+        </Box>
+        <Box>
+          <Button
+            variant="outlined"
+            startIcon={<Fullscreen />}
+            onClick={() => setFullscreenOpen(true)}
+          >
+            Fullscreen
+          </Button>
+        </Box>
+      </Box>
+
+      {/* Content */}
+      <Box
+        sx={{
+          flex: 1,
+          display: 'flex',
           flexDirection: 'column',
-          height: '100%',
+          p: 2,
+          pt: 0,
         }}
       >
         {renderContent()}
-      </DialogContent>
+      </Box>
 
-      <DialogActions>
-        <Button onClick={onClose} variant="outlined">
-          Close
-        </Button>
-      </DialogActions>
-    </Dialog>
+      {/* Fullscreen Modal */}
+      <DataPreviewModal
+        open={fullscreenOpen}
+        onClose={() => setFullscreenOpen(false)}
+        fileName={fileName}
+        previewResult={previewResult}
+        loading={loading}
+        error={error}
+      />
+    </Box>
   );
 };
