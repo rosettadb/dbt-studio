@@ -2,7 +2,7 @@ import React from 'react';
 import { Box, List, ListItem, ListItemIcon } from '@mui/material';
 import { useTheme } from '@mui/material/styles';
 import { useLocation } from 'react-router-dom';
-import { sidebarElements } from './elements';
+import { getSidebarElements } from './elements';
 import { Menu } from '../menu';
 import { SidebarContent, StyledDrawer, StyledNavLink } from './styles';
 import { useAppContext } from '../../hooks';
@@ -36,19 +36,17 @@ export const Sidebar: React.FC<Props> = ({ content }) => {
       <StyledDrawer variant="permanent" open={content ? isSidebarOpen : false}>
         <Box flexGrow={1} display="flex">
           <List sx={{ width: 55, marginTop: '-24px' }}>
-            {sidebarElements.map((element, index) => (
+            {getSidebarElements(isProjectSelected).map((element, index) => (
               <StyledNavLink
                 key={element.text}
                 to={element.path}
                 style={{
-                  cursor: isProjectSelected ? 'pointer' : 'not-allowed',
+                  cursor: 'pointer',
                 }}
               >
                 <ListItem
                   sx={{
-                    cursor: isProjectSelected
-                      ? 'pointer'
-                      : 'not-allowed !important',
+                    cursor: 'pointer',
                     m: 0,
                     backgroundColor:
                       activeItem === index
@@ -59,17 +57,13 @@ export const Sidebar: React.FC<Props> = ({ content }) => {
                     },
                     transition: 'background-color 0.2s ease',
                     '& .MuiListItemIcon-root': {
-                      cursor: isProjectSelected
-                        ? 'pointer'
-                        : 'not-allowed !important',
+                      cursor: 'pointer',
                     },
                   }}
                 >
                   <ListItemIcon
                     sx={{
-                      cursor: isProjectSelected
-                        ? 'pointer'
-                        : 'not-allowed !important',
+                      cursor: 'pointer',
                     }}
                   >
                     <element.icon />
