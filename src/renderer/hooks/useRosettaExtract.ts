@@ -5,11 +5,11 @@ import { useGetSettings, useSetConnectionEnvVariable } from '../controllers';
 import { Project } from '../../types/backend';
 import { settingsServices } from '../services';
 
-const useRosettaExtract = (successCallback: () => void) => {
+const useRosettaExtract = () => {
   const { getDatabaseUsername, getDatabasePassword, getDatabaseToken } =
     useSecureStorage();
   const { data: settings } = useGetSettings();
-  const { error, runCommand, isSuccess } = useCli();
+  const { error, runCommand } = useCli();
   const setEnvVariables = useSetConnectionEnvVariable();
   const [isRunning, setIsRunning] = React.useState(false);
 
@@ -18,14 +18,8 @@ const useRosettaExtract = (successCallback: () => void) => {
     if (error.length > 0) {
       toast.error('Extract command failed');
       setIsRunning(false);
-      return;
     }
-    if (isSuccess) {
-      toast.success('Extract completed successfully');
-      setIsRunning(false);
-      successCallback();
-    }
-  }, [isSuccess, error]);
+  }, [error]);
 
   return {
     fn: async (project: Project) => {

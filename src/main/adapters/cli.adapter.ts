@@ -18,6 +18,7 @@ class CliAdapter {
       this.process = spawn(command, { shell: true });
 
       this.process.on('close', (code) => {
+        this.process = null; // Reset after close
         if (code === 0) {
           resolve();
         } else {
@@ -26,6 +27,7 @@ class CliAdapter {
       });
 
       this.process.on('error', (err) => {
+        this.process = null; // Reset on error
         reject(err);
       });
     });
@@ -37,8 +39,10 @@ class CliAdapter {
         reject(new Error('A command is already running. Please wait.'));
         return;
       }
+
       mainWindow.webContents.send('cli:clear');
       this.process = spawn(command, { shell: true });
+
       this.messageHandler(
         {
           type: 'info',
@@ -64,6 +68,16 @@ class CliAdapter {
       });
 
       this.process.on('close', (code) => {
+        // Send exit event first
+        mainWindow.webContents.send('cli:exit', code);
+
+        // Always send done event for frontend to know command completed
+        mainWindow.webContents.send('cli:done');
+
+        // Reset process
+        this.process = null;
+
+        // Handle promise resolution
         if (code === 0) {
           this.messageHandler(
             {
@@ -74,14 +88,13 @@ class CliAdapter {
           );
           resolve();
         } else {
-          this.messageHandler(
-            {
-              type: 'error',
-              message: `Process exited with error code ${code}`,
-            },
-            mainWindow,
+          // Don't call messageHandler with error type here since it calls stopCommand
+          // Just add the exit code message directly
+          mainWindow.webContents.send(
+            'cli:output',
+            `Process exited with code ${code}`,
           );
-          reject();
+          reject(new Error(`Process exited with error code ${code}`));
         }
       });
 
@@ -93,7 +106,6 @@ class CliAdapter {
           },
           mainWindow,
         );
-        this.process = null;
         reject(err);
       });
     });
@@ -118,6 +130,8 @@ class CliAdapter {
     }
     if (message.type === 'error') {
       mainWindow.webContents.send('cli:error', message.message);
+      // Send done event before stopping so frontend knows command finished
+      mainWindow.webContents.send('cli:done');
       this.stopCommand();
     }
     if (message.type === 'success') {

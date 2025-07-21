@@ -46,6 +46,7 @@ const registerGitHandlers = () => {
           path: result.path,
           dbtConnection: result.dbtConnection,
           rosettaConnection: result.rosettaConnection,
+          connectionId: result.connectionId,
         };
       } catch (err: any) {
         if (err instanceof AuthError) return { authRequired: true };

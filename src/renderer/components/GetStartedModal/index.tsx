@@ -21,6 +21,7 @@ import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import { toast } from 'react-toastify';
 import { useNavigate } from 'react-router-dom';
 import { gitServices, projectsServices } from '../../services';
+import { useSelectProject } from '../../controllers';
 
 const StyledDialogContent = styled(DialogContent)`
   padding: 24px;
@@ -51,6 +52,7 @@ export const GetStartedModal: React.FC<GetStartedModalProps> = ({
   onClose,
 }) => {
   const navigate = useNavigate();
+  const { mutate: selectProject } = useSelectProject();
   const [isCreatingProject, setIsCreatingProject] = React.useState(false);
 
   const handleCreateProject = async () => {
@@ -58,14 +60,8 @@ export const GetStartedModal: React.FC<GetStartedModalProps> = ({
     const url = 'https://github.com/rosettadb/dbtstudio_getting_started.git';
 
     try {
-      const {
-        error,
-        authRequired,
-        path,
-        name,
-        dbtConnection,
-        rosettaConnection,
-      } = await gitServices.gitClone(url);
+      const { error, authRequired, path, name, connectionId } =
+        await gitServices.gitClone(url);
 
       if (error) {
         toast.error(error);
@@ -85,14 +81,15 @@ export const GetStartedModal: React.FC<GetStartedModalProps> = ({
       const project = await projectsServices.addProjectFromVCS({
         path,
         name,
-        dbtConnection,
-        rosettaConnection,
+        connectionId,
       });
 
-      await projectsServices.selectProject({ projectId: project.id });
+      selectProject({
+        projectId: project.id,
+      });
       toast.success('Getting started project created successfully!');
       onClose();
-      navigate('/app/edit-connection');
+      navigate('/app');
     } catch (error) {
       toast.error(
         'Failed to create getting started project. Please try again.',

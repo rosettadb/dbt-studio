@@ -11,12 +11,12 @@ type Props = {
   project: Project;
 };
 
-const Terminal: React.FC<Props> = ({ project }) => {
+export const Terminal: React.FC<Props> = ({ project }) => {
   const { mode } = useColorScheme();
   const theme = useTheme();
-  const { output, runCommand, error } = useCli();
+  const { output, error, runCommandAsync, isRunning, clearOutput } = useCli();
   const [command, setCommand] = React.useState('');
-  const outputRef = React.useRef(null);
+  const outputRef = React.useRef<HTMLDivElement>(null);
   const { data: settings } = useGetSettings();
 
   // Theme-based terminal colors using Material UI theme
@@ -64,30 +64,34 @@ const Terminal: React.FC<Props> = ({ project }) => {
     [terminalColors.fg, terminalColors.bg],
   );
 
+  // Auto scroll to bottom when output changes
   React.useEffect(() => {
     if (outputRef.current) {
-      (outputRef.current as HTMLElement).scrollTop = (
-        outputRef?.current as HTMLElement
-      ).scrollHeight;
+      outputRef.current.scrollTop = outputRef.current.scrollHeight;
     }
   }, [output, error]);
 
   const handleSendCommand = () => {
     if (command.trim()) {
       let newCommand = command.trim();
-      if (
-        !newCommand.startsWith('rosetta') &&
-        !newCommand.startsWith('dbt') &&
-        !newCommand.startsWith('git') &&
-        !newCommand.startsWith('python')
-      ) {
-        toast.error('Only rosetta and dbt commands are allowed!');
+
+      // Validate allowed commands
+      const allowedCommands = ['rosetta', 'dbt', 'git', 'python'];
+      const isAllowed = allowedCommands.some((cmd) =>
+        newCommand.startsWith(cmd),
+      );
+
+      if (!isAllowed) {
+        toast.error('Only rosetta, dbt, git, and python commands are allowed!');
         return;
       }
+
+      // Transform commands based on type
       if (newCommand.startsWith('git')) {
         const navigateCommand = `cd "${project.path}"`;
         newCommand = `${navigateCommand} && ${newCommand}`;
       }
+
       if (newCommand.startsWith('rosetta')) {
         const tmpCommand = newCommand.replace(
           'rosetta',
@@ -96,32 +100,43 @@ const Terminal: React.FC<Props> = ({ project }) => {
         const navigateCommand = `cd "${project.path}/rosetta"`;
         newCommand = `${navigateCommand} && ${tmpCommand}`;
       }
+
       if (newCommand.startsWith('python')) {
         newCommand = newCommand.replace('python', `"${settings?.pythonPath}"`);
       }
+
       if (newCommand.startsWith('dbt')) {
         const tmpCommand = newCommand.replace('dbt', `"${settings?.dbtPath}"`);
         const navigateCommand = `cd "${project.path}"`;
         newCommand = `${navigateCommand} && ${tmpCommand}`;
       }
-      runCommand(newCommand).catch(() => {});
+
+      // Use runCommandAsync for terminal - fire and forget
+      runCommandAsync(newCommand);
       setCommand('');
     }
   };
 
+  const handleKeyPress = (event: React.KeyboardEvent) => {
+    if (event.key === 'Enter' && !event.shiftKey) {
+      event.preventDefault();
+      handleSendCommand();
+    }
+  };
+
+  const handleClearTerminal = () => {
+    clearOutput();
+  };
+
   return (
-    <TerminalContainer
-      onSubmit={(event) => {
-        event.preventDefault();
-        handleSendCommand();
-      }}
-    >
+    <TerminalContainer>
       <OutputBox
         ref={outputRef}
         style={{
           backgroundColor: terminalColors.bg,
           color: terminalColors.fg,
         }}
+        onDoubleClick={handleClearTerminal}
       >
         {output.map((line, index) => (
           <Typography
@@ -147,6 +162,18 @@ const Terminal: React.FC<Props> = ({ project }) => {
             dangerouslySetInnerHTML={{ __html: ansiConverter.toHtml(line) }}
           />
         ))}
+        {isRunning && (
+          <Typography
+            variant="body2"
+            sx={{
+              fontFamily: 'monospace',
+              color: theme.palette.info.main,
+              opacity: 0.7,
+            }}
+          >
+            Command running...
+          </Typography>
+        )}
       </OutputBox>
 
       <InputLine
@@ -169,6 +196,8 @@ const Terminal: React.FC<Props> = ({ project }) => {
           placeholder="Type a rosetta or dbt command..."
           value={command}
           onChange={(e) => setCommand(e.target.value)}
+          onKeyPress={handleKeyPress}
+          disabled={isRunning}
           sx={{
             '& .MuiInputBase-input': {
               color: terminalColors.fg,
@@ -184,5 +213,3 @@ const Terminal: React.FC<Props> = ({ project }) => {
     </TerminalContainer>
   );
 };
-
-export { Terminal };

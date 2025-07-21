@@ -4,13 +4,13 @@ import fs from 'fs';
 import yaml from 'js-yaml';
 import { dialog } from 'electron';
 import {
-  BigQueryDBTConnection,
-  DatabricksDBTConnection,
-  DuckDBDBTConnection,
-  PostgresDBTConnection,
+  BigQueryConnection,
+  DatabricksConnection,
+  DuckDBConnection,
+  PostgresConnection,
   Project,
-  RedshiftDBTConnection,
-  SnowflakeDBTConnection,
+  RedshiftConnection,
+  SnowflakeConnection,
   Table,
 } from '../../types/backend';
 import {
@@ -35,36 +35,49 @@ import {
   SnowflakeExtractor,
 } from '../extractor';
 import SecureStorageService from './secureStorage.service';
+import { ConnectorsService } from './index';
 
 export default class ProjectsService {
-  static async loadProjects() {
-    return (await loadDatabaseFile()).projects;
+  static async loadProjects(): Promise<Project[]> {
+    const db = await loadDatabaseFile();
+    const { connections } = db;
+    const { projects } = db;
+
+    return projects.map((project) => ({
+      ...project,
+      connection: connections.find(
+        (connection) => connection.id === project.connectionId,
+      )?.connection,
+    }));
   }
 
-  static async getProject(id: string): Promise<Project | undefined> {
-    let projects = await this.loadProjects();
+  static async getProject(id?: string): Promise<Project | undefined> {
+    const projects = await this.loadProjects();
     const project = projects.find((p) => p.id === id);
     if (project) {
-      projects = (await this.updateProject({
+      await this.updateProject({
         ...project,
         lastOpenedAt: Date.now(),
-      })) as Project[];
-      return projects?.find((p) => p.id === id);
+      });
+      try {
+        return ConnectorsService.loadConfigurations(project.id);
+      } catch {
+        return project;
+      }
     }
-    return project;
+    return undefined;
   }
 
   static async getSelectedProject(): Promise<Project | undefined> {
-    const projects = await this.loadProjects();
     const selected = (await loadDatabaseFile()).selectedProject;
-    return projects?.find((p) => p.id === selected?.id);
+    return this.getProject(selected?.id);
   }
 
   static async saveProjects(projects: Project[]) {
     await updateDatabase<'projects'>('projects', projects);
   }
 
-  static async addProject(projectPath: string) {
+  static async addProject(projectPath: string, connectionId?: string) {
     const projects = await this.loadProjects();
     const name = path.basename(projectPath);
 
@@ -74,25 +87,24 @@ export default class ProjectsService {
       createdAt: new Date().toISOString(),
       path: projectPath,
       isExtracted: false,
+      connectionId,
     };
 
     await this.copyDbtTemplateFiles(project.path, project.name);
     await this.copyRosettaMainConf(project.path);
     projects.push(project);
     await this.saveProjects(projects);
-    return project;
+    return (await this.getProject(project.id)) ?? project;
   }
 
   static async addProjectFromVCS({
     path: projectPath,
     name,
-    dbtConnection,
-    rosettaConnection,
+    connectionId,
   }: {
     path: string;
     name: string;
-    dbtConnection?: any;
-    rosettaConnection?: any;
+    connectionId?: string;
   }) {
     const dbtProjectYmlPath = path.join(projectPath, 'dbt_project.yml');
 
@@ -122,8 +134,7 @@ export default class ProjectsService {
       createdAt: new Date().toISOString(),
       path: projectPath,
       isExtracted: false,
-      ...(dbtConnection && { dbtConnection }),
-      ...(rosettaConnection && { rosettaConnection }),
+      connectionId,
     };
 
     const rosettaPath = path.join(projectPath, 'rosetta');
@@ -205,6 +216,7 @@ export default class ProjectsService {
     projects[index] = updatedProject;
     await updateDatabase<'selectedProject'>('selectedProject', updatedProject);
     await this.saveProjects(projects);
+    await ConnectorsService.loadConfigurations(project.id);
     return projects;
   }
 
@@ -370,7 +382,7 @@ export default class ProjectsService {
     await updateDatabase<'selectedProject'>('selectedProject', project);
   }
 
-  static async extractPgSchema(connection: PostgresDBTConnection) {
+  static async extractPgSchema(connection: PostgresConnection) {
     const extractor = new PGSchemaExtractor({
       user: connection.username,
       host: connection.host,
@@ -386,7 +398,7 @@ export default class ProjectsService {
     return schema.tables;
   }
 
-  static async extractSnowflakeSchema(connection: SnowflakeDBTConnection) {
+  static async extractSnowflakeSchema(connection: SnowflakeConnection) {
     const extractor = new SnowflakeExtractor({
       account: connection.account.split('.')[0],
       username: connection.username,
@@ -404,12 +416,12 @@ export default class ProjectsService {
     return schema.tables;
   }
 
-  static async extractSchemaDatabricks(connection: DatabricksDBTConnection) {
+  static async extractSchemaDatabricks(connection: DatabricksConnection) {
     const extractor = new DatabricksExtractor({
       token: connection.token,
       host: connection.host,
-      path: connection.http_path,
-      catalog: connection.catalog || connection.database || 'default',
+      path: connection.httpPath,
+      catalog: connection.database || 'default',
       schema: connection.schema,
     });
 
@@ -419,7 +431,7 @@ export default class ProjectsService {
     return schema.tables;
   }
 
-  static async extractBigQuerySchema(connection: BigQueryDBTConnection) {
+  static async extractBigQuerySchema(connection: BigQueryConnection) {
     if (connection.method !== 'service-account' || !connection.keyfile) {
       throw new Error(
         'Only service account authentication is supported for BigQuery',
@@ -446,16 +458,16 @@ export default class ProjectsService {
     return schema.tables;
   }
 
-  static async extractDuckDBSchema(connection: DuckDBDBTConnection) {
+  static async extractDuckDBSchema(connection: DuckDBConnection) {
     const extractor = new DuckDBExtractor({
-      database_path: connection.path,
+      database_path: connection.database_path,
     });
 
     const schema = await extractor.extractSchema();
     return schema.tables;
   }
 
-  static async extractRedshiftSchema(connection: RedshiftDBTConnection) {
+  static async extractRedshiftSchema(connection: RedshiftConnection) {
     const extractor = new RedshiftExtractor({
       user: connection.username,
       host: connection.host,
@@ -473,11 +485,19 @@ export default class ProjectsService {
   }
 
   static async extractSchema(project: Project): Promise<Table[]> {
-    const connection = project.dbtConnection;
-
-    if (!connection) {
+    if (!project.connectionId) {
       throw new Error('No database connection configured for this project');
     }
+
+    const conn = await ConnectorsService.getConnectionById(
+      project.connectionId!,
+    );
+
+    if (!conn) {
+      throw new Error(`Connection with id ${project.connectionId} not found`);
+    }
+
+    const { connection } = conn;
 
     if (!connection.type) {
       throw new Error(
@@ -486,10 +506,10 @@ export default class ProjectsService {
     }
 
     const storeUser = await SecureStorageService.getCredential(
-      `db-user-${project.name}`,
+      `db-user-${connection.name}`,
     );
     const storePassword = await SecureStorageService.getCredential(
-      `db-password-${project.name}`,
+      `db-password-${connection.name}`,
     );
 
     if (storeUser) {
@@ -508,21 +528,17 @@ export default class ProjectsService {
 
     switch (connection.type) {
       case 'postgres':
-        return this.extractPgSchema(connection as PostgresDBTConnection);
+        return this.extractPgSchema(connection as PostgresConnection);
       case 'redshift':
-        return this.extractRedshiftSchema(connection as RedshiftDBTConnection);
+        return this.extractRedshiftSchema(connection as RedshiftConnection);
       case 'snowflake':
-        return this.extractSnowflakeSchema(
-          connection as SnowflakeDBTConnection,
-        );
+        return this.extractSnowflakeSchema(connection as SnowflakeConnection);
       case 'databricks':
-        return this.extractSchemaDatabricks(
-          connection as DatabricksDBTConnection,
-        );
+        return this.extractSchemaDatabricks(connection as DatabricksConnection);
       case 'bigquery':
-        return this.extractBigQuerySchema(connection as BigQueryDBTConnection);
+        return this.extractBigQuerySchema(connection as BigQueryConnection);
       case 'duckdb':
-        return this.extractDuckDBSchema(connection as DuckDBDBTConnection);
+        return this.extractDuckDBSchema(connection as DuckDBConnection);
       default:
         throw new Error(
           `Unsupported connection type: "${(connection as any).type}"`,

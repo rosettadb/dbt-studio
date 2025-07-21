@@ -1,4 +1,3 @@
-export * from './extractModal';
 export * from './newFileModal';
 export * from './confirmationModal';
 export * from './businessQueryModal';

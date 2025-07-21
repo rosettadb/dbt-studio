@@ -52,6 +52,6 @@ export const ActionsContainer = styled('div')(() => ({
   gap: 4,
   opacity: 0,
   transition: 'opacity 0.2s ease-in-out',
-  position:'absolute',
-  right:0,
+  position: 'absolute',
+  right: 0,
 }));

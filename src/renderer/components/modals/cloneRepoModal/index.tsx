@@ -27,14 +27,9 @@ export const CloneRepoModal: React.FC<Props> = ({
           event.preventDefault();
           setLoading(true);
           try {
-            const {
-              error,
-              authRequired,
-              path,
-              name,
-              dbtConnection,
-              rosettaConnection,
-            } = await gitServices.gitClone(url);
+            const { error, authRequired, path, name, connectionId } =
+              await gitServices.gitClone(url);
+
             if (error) {
               toast.error(error);
               setLoading(false);
@@ -54,8 +49,7 @@ export const CloneRepoModal: React.FC<Props> = ({
             const project = await projectsServices.addProjectFromVCS({
               path,
               name,
-              dbtConnection,
-              rosettaConnection,
+              connectionId,
             });
             await projectsServices.selectProject({ projectId: project.id });
             toast.success('Project cloned successfully!');

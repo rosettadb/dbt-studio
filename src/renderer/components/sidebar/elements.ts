@@ -7,15 +7,28 @@ interface SideBarElementType {
   subItems?: Array<{ path: string; text: string; icon?: any }>;
 }
 
-export const sidebarElements: SideBarElementType[] = [
-  {
-    path: '/app',
-    text: 'Projects',
-    icon: Icons.DBTProjects,
-  },
-  {
-    path: '/app/sql',
-    text: 'SQL',
-    icon: Icons.DataSources,
-  },
-];
+export const getSidebarElements = (
+  isProjectSelected: boolean,
+): SideBarElementType[] => {
+  const elements = [
+    {
+      path: '/app/connections',
+      text: 'Connections',
+      icon: Icons.Connections,
+    },
+    {
+      path: isProjectSelected ? '/app' : '/app/select-project',
+      text: 'Projects',
+      icon: Icons.DBTProjects,
+    },
+  ];
+
+  if (isProjectSelected) {
+    elements.push({
+      path: '/app/sql',
+      text: 'SQL',
+      icon: Icons.SQL,
+    });
+  }
+  return elements;
+};

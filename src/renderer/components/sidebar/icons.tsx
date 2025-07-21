@@ -1,5 +1,5 @@
 import React from 'react';
-import { CodeSharp } from '@mui/icons-material';
+import { CodeSharp, Cable } from '@mui/icons-material';
 import { icons } from '../../../../assets';
 
 const style = {
@@ -28,6 +28,8 @@ export const DataSources: React.FC = () => (
   </svg>
 );
 
+export const Connections: React.FC = () => <Cable color="primary" />;
+
 export const Model: React.FC = () => (
   <img
     src={icons.collection}
@@ -42,6 +44,6 @@ export const DBTProjects: React.FC = () => (
   <img
     src={icons.dbtTm}
     alt="dbt projects"
-    style={{ ...style, width: 24, height: 24 }}
+    style={{ ...style, width: 24, height: 24, marginLeft: 2 }}
   />
 );
