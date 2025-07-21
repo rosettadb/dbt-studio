@@ -14,7 +14,7 @@ export const getSidebarElements = (
     {
       path: '/app/connections',
       text: 'Connections',
-      icon: Icons.DataSources,
+      icon: Icons.Connections,
     },
     {
       path: isProjectSelected ? '/app' : '/app/select-project',

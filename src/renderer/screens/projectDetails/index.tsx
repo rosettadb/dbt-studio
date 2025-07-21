@@ -617,7 +617,13 @@ const ProjectDetails: React.FC = () => {
                   )}
                   <Tooltip title="Edit database connection" placement="bottom">
                     <IconButton
-                      onClick={() => navigate('/app/edit-connection')}
+                      onClick={() => {
+                        if (connection?.id) {
+                          navigate(`/app/edit-connection/${connection.id}`);
+                        } else {
+                          toast.error('No connection found to edit');
+                        }
+                      }}
                     >
                       <Cable color="primary" fontSize="small" />
                     </IconButton>
