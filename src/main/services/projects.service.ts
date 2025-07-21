@@ -38,8 +38,17 @@ import SecureStorageService from './secureStorage.service';
 import { ConnectorsService } from './index';
 
 export default class ProjectsService {
-  static async loadProjects() {
-    return (await loadDatabaseFile()).projects;
+  static async loadProjects(): Promise<Project[]> {
+    const db = await loadDatabaseFile();
+    const { connections } = db;
+    const { projects } = db;
+
+    return projects.map((project) => ({
+      ...project,
+      connection: connections.find(
+        (connection) => connection.id === project.connectionId,
+      )?.connection,
+    }));
   }
 
   static async getProject(id?: string): Promise<Project | undefined> {

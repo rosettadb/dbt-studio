@@ -13,10 +13,14 @@ import {
   DialogTitle,
   Button,
   Chip,
+  TextField,
+  InputAdornment,
 } from '@mui/material';
 import DatabaseIcon from '@mui/icons-material/Storage';
 import EditIcon from '@mui/icons-material/Edit';
 import DeleteIcon from '@mui/icons-material/Delete';
+import AddIcon from '@mui/icons-material/Add';
+import SearchIcon from '@mui/icons-material/Search';
 import { toast } from 'react-toastify';
 import {
   useDeleteConnection,
@@ -43,6 +47,11 @@ const HeaderContainer = styled(Box)`
   align-items: center;
   margin-bottom: 1.5rem;
   gap: 1rem;
+`;
+
+const SearchContainer = styled(Box)`
+  flex-grow: 1;
+  max-width: 400px;
 `;
 
 const ConnectionsListContainer = styled(Box)`
@@ -182,6 +191,7 @@ const Connections: React.FC = () => {
   const { data: connections = [], isLoading } = useGetConnections();
   const navigate = useNavigate();
   const { data: projects = [] } = useGetProjects();
+  const [searchQuery, setSearchQuery] = React.useState('');
 
   const [deleteDialogOpen, setDeleteDialogOpen] = React.useState(false);
   const [connectionToDelete, setConnectionToDelete] = React.useState<{
@@ -247,6 +257,17 @@ const Connections: React.FC = () => {
     );
   };
 
+  // Filter connections based on search query
+  const filteredConnections = connections.filter(
+    (connection) =>
+      connection.connection.name
+        .toLowerCase()
+        .includes(searchQuery.toLowerCase()) ||
+      connection.connection.type
+        .toLowerCase()
+        .includes(searchQuery.toLowerCase()),
+  );
+
   if (isLoading) {
     return <Loader />;
   }
@@ -259,12 +280,63 @@ const Connections: React.FC = () => {
         </TaglineContainer>
 
         <HeaderContainer>
-          <Typography variant="h4" component="h1">
-            Connections
-          </Typography>
+          <SearchContainer>
+            <TextField
+              fullWidth
+              placeholder="Search Connections"
+              variant="outlined"
+              size="small"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              slotProps={{
+                input: {
+                  startAdornment: (
+                    <InputAdornment position="start">
+                      <SearchIcon color="action" />
+                    </InputAdornment>
+                  ),
+                },
+              }}
+            />
+          </SearchContainer>
+          <Box sx={{ display: 'flex', gap: 1 }}>
+            <Tooltip title="Create a new connection">
+              <Button
+                variant="contained"
+                color="primary"
+                startIcon={<AddIcon />}
+                onClick={() => navigate('/app/add-connection')}
+                sx={{ height: 40 }}
+              >
+                New Connection
+              </Button>
+            </Tooltip>
+          </Box>
         </HeaderContainer>
 
-        {connections.length === 0 ? (
+        {/* eslint-disable-next-line no-nested-ternary */}
+        {filteredConnections.length === 0 && searchQuery ? (
+          <EmptyStateContainer>
+            <EmptyStateIcon>
+              <DatabaseIcon />
+            </EmptyStateIcon>
+            <EmptyStateTitle variant="h5">
+              No Matching Connections
+            </EmptyStateTitle>
+            <EmptyStateDescription variant="body1">
+              No connections match your search query.
+            </EmptyStateDescription>
+            <Button
+              variant="contained"
+              color="primary"
+              startIcon={<AddIcon />}
+              onClick={() => navigate('/app/add-connection')}
+              sx={{ height: 40 }}
+            >
+              New Connection
+            </Button>
+          </EmptyStateContainer>
+        ) : connections.length === 0 ? (
           <EmptyStateContainer>
             <EmptyStateIcon>
               <DatabaseIcon />
@@ -273,10 +345,19 @@ const Connections: React.FC = () => {
             <EmptyStateDescription variant="body1">
               You don&#39;t have any connections configured yet.
             </EmptyStateDescription>
+            <Button
+              variant="contained"
+              color="primary"
+              startIcon={<AddIcon />}
+              onClick={() => navigate('/app/add-connection')}
+              sx={{ height: 40 }}
+            >
+              New Connection
+            </Button>
           </EmptyStateContainer>
         ) : (
           <ConnectionsListContainer>
-            {connections.map(({ id, connection }) => {
+            {filteredConnections.map(({ id, connection }) => {
               const projectsUsing = getProjectsUsingConnection(id);
               return (
                 <ConnectionCard key={id}>

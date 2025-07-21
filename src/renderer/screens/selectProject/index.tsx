@@ -40,12 +40,13 @@ import {
   useGetConnections,
   useGetProjects,
   useGetSettings,
+  useSelectProject,
 } from '../../controllers';
 import { CloneRepoModal, Icon, GetStartedModal } from '../../components';
 import { icons } from '../../../../assets';
 import connectionIcons from '../../../../assets/connectionIcons';
 import { AppLayout } from '../../layouts';
-import { SupportedConnectionTypes } from '../../../types/backend';
+import { Project, SupportedConnectionTypes } from '../../../types/backend';
 
 const ProjectSelectionContainer = styled(Box)`
   padding: 0.5rem 2rem 2rem;
@@ -233,6 +234,7 @@ const ConnectionIcon = styled('img')`
 
 const SelectProject: React.FC = () => {
   const navigate = useNavigate();
+  const { mutateAsync: selectProject } = useSelectProject();
   const { data: settings } = useGetSettings();
   const { data: projects = [] } = useGetProjects();
   const { data: connections = [], isLoading: isLoadingConnections } =
@@ -270,24 +272,20 @@ const SelectProject: React.FC = () => {
     },
   });
 
-  // Helper function to get connection icon
-  const getConnectionIcon = (project: any) => {
-    const connectionType = project?.dbtConnection?.type;
+  const getConnectionIcon = (project: Project) => {
+    const connectionType = project?.connection?.type;
 
     if (!connectionType) {
-      // Return null to indicate we should use MUI icon instead
       return null;
     }
 
     return connectionIcons.images[connectionType as SupportedConnectionTypes];
   };
 
-  // Helper function to render the appropriate icon component
-  const renderProjectIcon = (project: any) => {
+  const renderProjectIcon = (project: Project) => {
     const connectionIcon = getConnectionIcon(project);
 
     if (connectionIcon) {
-      // Render image icon for connected projects
       return (
         <ProjectIcon
           src={connectionIcon}
@@ -295,7 +293,6 @@ const SelectProject: React.FC = () => {
         />
       );
     }
-    // Render MUI icon for disconnected projects
     return (
       <ProjectMuiIcon>
         <DatabaseIcon />
@@ -714,7 +711,7 @@ const SelectProject: React.FC = () => {
                         const project =
                           await projectsServices.addProjectFromFolder();
                         if (project && project.id) {
-                          await projectsServices.selectProject({
+                          await selectProject({
                             projectId: project.id,
                           });
                           setIsAddingProject(false);
@@ -722,7 +719,7 @@ const SelectProject: React.FC = () => {
                           toast.success(
                             `Project ${project.name} loaded successfully!`,
                           );
-                          navigate('/app/loading');
+                          navigate('/app');
                         } else {
                           toast.error('Failed to load project from folder.');
                         }

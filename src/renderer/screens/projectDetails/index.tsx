@@ -277,14 +277,12 @@ const ProjectDetails: React.FC = () => {
     }
   };
 
-  // Early return for loading state
   if (isLoading) {
     return <Loader />;
   }
 
-  // Early return for no project
   if (!project?.id) {
-    return <Navigate to="/app/select-project" />;
+    return <Navigate to="/app/connections" />;
   }
 
   if (project?.id && !project?.connectionId) {

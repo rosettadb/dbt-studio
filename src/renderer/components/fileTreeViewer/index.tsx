@@ -153,7 +153,7 @@ const FileTreeViewer: React.FC<Props> = ({
             onDbtTest={onDbtTest}
             projectName={project!.name}
             projectPath={project!.path}
-            onRefresh={()=>refreshFiles()}
+            onRefresh={() => refreshFiles()}
           />
         )}
       </StyledTreeView>

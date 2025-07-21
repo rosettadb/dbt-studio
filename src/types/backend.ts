@@ -191,6 +191,7 @@ export type Project = {
   lastOpenedAt?: number;
   isExtracted?: boolean;
   queryEditor?: string;
+  connection?: ConnectionInput;
 };
 
 export type SettingsType = {
