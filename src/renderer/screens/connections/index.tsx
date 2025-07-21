@@ -53,7 +53,7 @@ const ConnectionsListContainer = styled(Box)`
   border-bottom: 1px solid ${({ theme }) => theme.palette.divider};
   flex: 1;
   overflow-y: auto;
-  min-height: 0; /* Critical for Firefox */
+  min-height: 0;
 `;
 
 const ConnectionCard = styled(Box)`

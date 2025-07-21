@@ -89,7 +89,11 @@ export type ProcessChannels =
   | 'process:status'
   | 'process:stop'
   | 'process:output'
-  | 'process:error';
+  | 'process:error'
+  | 'process:forceStop'
+  | 'process:started'
+  | 'process:exit'
+  | 'process:done';
 
 export type SecureStorageChannels =
   | 'secure-storage:set'

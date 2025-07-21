@@ -88,6 +88,7 @@ export default class ConnectorsService {
 
     const profilesPath = path.join(project.path, 'profiles.yml');
     const profilesContent = await this.generateProfilesYml(
+      project.name,
       connection.connection,
       project.path,
     );
@@ -531,6 +532,7 @@ export default class ConnectorsService {
   }
 
   private static async mapToDbtProfiles(
+    name: string,
     conn: ConnectionInput,
     projectPath?: string,
   ): Promise<string> {
@@ -539,7 +541,7 @@ export default class ConnectorsService {
         send_anonymous_usage_stats: false,
         partial_parse: true,
       },
-      [conn.name]: {
+      [name]: {
         target: 'dev',
         outputs: {
           dev: await this.mapToDbtProfileOutput(conn, projectPath),
@@ -551,10 +553,11 @@ export default class ConnectorsService {
   }
 
   static generateProfilesYml(
+    name: string,
     connection: ConnectionInput,
     projectPath?: string,
   ): Promise<string> {
-    return this.mapToDbtProfiles(connection, projectPath);
+    return this.mapToDbtProfiles(name, connection, projectPath);
   }
 
   private static async mapToDbtProfileOutput(

@@ -21,6 +21,7 @@ import {
   NoAiSetModal,
 } from '../../components';
 import {
+  useGetConnectionById,
   useGetFileStatuses,
   useGetProjectFiles,
   useGetSelectedProject,
@@ -49,6 +50,7 @@ import { AppContext } from '../../context';
 const ProjectDetails: React.FC = () => {
   const navigate = useNavigate();
   const { data: project, isLoading, refetch } = useGetSelectedProject();
+  const { data: connection } = useGetConnectionById(project?.connectionId);
   const { data: settings } = useGetSettings();
   const { isAiProviderSet } = React.useContext(AppContext);
   const [queryData, setQueryData] = React.useState<
@@ -60,7 +62,7 @@ const ProjectDetails: React.FC = () => {
   const [fileContent, setFileContent] = React.useState<string>();
   const [businessQueryModal, setBusinessQueryModal] = React.useState(false);
   const [noAiSetModal, setNoAiSetModal] = React.useState(false);
-  const { start, stop, running } = useProcess();
+  const { start, stop, isRunning } = useProcess();
 
   const {
     data: directories,
@@ -538,7 +540,7 @@ const ProjectDetails: React.FC = () => {
                             }}
                           >
                             <span>Serve Docs</span>
-                            {running ? (
+                            {isRunning ? (
                               <StopCircleOutlined />
                             ) : (
                               <PlayCircleOutline />
@@ -546,12 +548,13 @@ const ProjectDetails: React.FC = () => {
                           </div>
                         ),
                         onClick: () => {
-                          if (running) {
+                          if (isRunning) {
                             stop();
                             return;
                           }
                           start(
                             `cd "${project.path}" && "${settings?.dbtPath}" docs serve`,
+                            connection?.connection?.name ?? '',
                           );
                         },
                         leftIcon: (
