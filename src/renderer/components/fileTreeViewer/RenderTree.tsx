@@ -5,9 +5,17 @@ import {
   IconButton,
   Menu,
   MenuItem,
+  PopoverPosition,
   Tooltip,
 } from '@mui/material';
-import { MoreVert, PlayArrow, Speed } from '@mui/icons-material';
+import { 
+  MoreVert, 
+  PlayArrow, 
+  Speed, 
+  NoteAddOutlined, 
+  CreateNewFolderOutlined, 
+  RefreshOutlined,
+} from '@mui/icons-material';
 import { TreeItems } from './TreeItems';
 import { FileNode } from '../../../types/backend';
 import { ActionsContainer, LabelContainer } from './styles';
@@ -23,6 +31,8 @@ type Props = {
   onDbtRun: (file: FileNode) => Promise<void>;
   onDbtTest: (file: FileNode) => Promise<void>;
   projectName: string;
+  projectPath: string;
+  onRefresh?: ()=>void;
 };
 
 const getColorByStatus = (status?: string) => {
@@ -54,14 +64,19 @@ const RenderTree: React.FC<Props> = ({
   onDbtRun,
   onDbtTest,
   projectName,
+  projectPath,
+  onRefresh,
 }) => {
-  const [anchorEl, setAnchorEl] = React.useState<null | HTMLElement>(null);
+  const [menuPosition, setMenuPosition] = React.useState<null | PopoverPosition>(null);
   const [isRunning, setIsRunning] = React.useState(false);
 
   const fileStatus = fileStatuses[node.path];
   const labelColor = getColorByStatus(fileStatus);
 
   const label = React.useMemo(() => {
+    if (node.type === 'folder' && node.path === projectPath) {
+      return <TreeItems.Root label={node.name} />
+    }
     if (node.type === 'folder') {
       return <TreeItems.Folder label={node.name} />;
     }
@@ -70,22 +85,73 @@ const RenderTree: React.FC<Props> = ({
     );
   }, [node, labelColor]);
 
-  const handleMenuOpen = (event: React.MouseEvent<HTMLButtonElement>) => {
+  const handleMenuOpen = (event: React.MouseEvent<HTMLElement>) => {
     event.stopPropagation();
-    setAnchorEl(event.currentTarget);
+    setMenuPosition({
+      top: event.clientY,
+      left: event.clientX,
+    })
   };
 
   const handleMenuClose = () => {
-    setAnchorEl(null);
+    setMenuPosition(null);
   };
 
   return (
     <TreeItem
       itemId={node.path}
+      onContextMenu={handleMenuOpen}
       label={
         <LabelContainer>
           {label}
           <ActionsContainer className="actions-container">
+            {node.path === projectPath && 
+              <IconButton
+                size='small'
+                edge='end'
+                onClick={(event) => {
+                  event.stopPropagation();
+                  if(typeof onRefresh === 'function') {
+                    onRefresh();
+                  }
+                  handleMenuClose();
+                }}
+              >
+                <Tooltip title='Refresh'>
+                  <RefreshOutlined fontSize='small' />
+                </Tooltip>
+              </IconButton>
+            }
+            {node.type === 'folder' &&
+              <IconButton
+                size='small'
+                edge='end'
+                onClick={(event) => {
+                  event.stopPropagation();
+                  onNewFile(node.path);
+                  handleMenuClose();
+                }}
+              >
+                <Tooltip title='Create new file'>
+                  <NoteAddOutlined fontSize='small' />
+                </Tooltip>
+              </IconButton>
+            }
+            {node.type === 'folder' &&
+              <IconButton
+                size='small'
+                edge='end'
+                onClick={(event) => {
+                  event.stopPropagation();
+                  onNewFolder(node.path);
+                  handleMenuClose();
+                }}
+              >
+                <Tooltip title='Create new folder'>
+                  <CreateNewFolderOutlined fontSize='small' />
+                </Tooltip>
+              </IconButton>
+            }
             {/* Add run button for staging folder */}
             {node.type === 'folder' &&
               node.path.includes(`/${projectName}/models/`) &&
@@ -161,17 +227,19 @@ const RenderTree: React.FC<Props> = ({
                   )}
                 </IconButton>
               )}
-            <IconButton
-              size="small"
-              onClick={handleMenuOpen}
-              style={{ marginLeft: -16 }}
-            >
-              <MoreVert fontSize="small" />
-            </IconButton>
+            {node.path !== projectPath && 
+              <IconButton
+                size="small"
+                onClick={handleMenuOpen}
+              >
+                <MoreVert fontSize="small" />
+              </IconButton>
+            }
           </ActionsContainer>
           <Menu
-            anchorEl={anchorEl}
-            open={Boolean(anchorEl)}
+            anchorReference='anchorPosition'
+            open={Boolean(menuPosition)}
+            anchorPosition={menuPosition?{top:menuPosition.top, left: menuPosition.left}:undefined}
             onClose={handleMenuClose}
           >
             <MenuItem
@@ -244,6 +312,7 @@ const RenderTree: React.FC<Props> = ({
           onDbtRun={onDbtRun}
           onDbtTest={onDbtTest}
           projectName={projectName}
+          projectPath={projectPath}
         />
       ))}
     </TreeItem>
