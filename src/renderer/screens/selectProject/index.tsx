@@ -18,9 +18,6 @@ import {
   DialogContentText,
   DialogTitle,
   Tooltip,
-  FormControl,
-  InputLabel,
-  Select,
   Chip,
 } from '@mui/material';
 import AddIcon from '@mui/icons-material/Add';
@@ -33,7 +30,7 @@ import DriveFolderUploadIcon from '@mui/icons-material/DriveFolderUpload';
 import DatabaseIcon from '@mui/icons-material/Storage';
 import RocketLaunchIcon from '@mui/icons-material/RocketLaunch';
 import { toast } from 'react-toastify';
-import { Cable, FolderOpen } from '@mui/icons-material';
+import { Cable } from '@mui/icons-material';
 import { projectsServices } from '../../services';
 import {
   useDeleteProject,
@@ -43,7 +40,12 @@ import {
   useGetSettings,
   useSelectProject,
 } from '../../controllers';
-import { CloneRepoModal, Icon, GetStartedModal } from '../../components';
+import {
+  CloneRepoModal,
+  Icon,
+  GetStartedModal,
+  NewProject,
+} from '../../components';
 import { icons } from '../../../../assets';
 import connectionIcons from '../../../../assets/connectionIcons';
 import { AppLayout } from '../../layouts';
@@ -134,22 +136,6 @@ const ProjectActions = styled(Box)`
   gap: 8px;
 `;
 
-const AddProjectForm = styled(Box)`
-  width: 100%;
-  max-width: 600px;
-  margin: 2rem auto;
-  padding: 2rem;
-  border-radius: 8px;
-  border: 1px solid ${({ theme }) => theme.palette.divider};
-`;
-
-const FormActions = styled(Box)`
-  display: flex;
-  justify-content: flex-end;
-  gap: 1rem;
-  margin-top: 1.5rem;
-`;
-
 const EmptyStateContainer = styled(Box)`
   text-align: center;
   padding: 2rem;
@@ -226,12 +212,6 @@ const ProjectCardContent = styled(Box)`
   align-items: center;
   flex-grow: 1;
   overflow: hidden;
-`;
-
-const ConnectionIconContainer = styled(Box)`
-  display: flex;
-  align-items: center;
-  margin-right: 8px;
 `;
 
 const ConnectionIcon = styled('img')`
@@ -582,112 +562,21 @@ const SelectProject: React.FC = () => {
     <AppLayout>
       <ProjectSelectionContainer>
         {isAddingProject ? (
-          <>
-            <Typography variant="h4" component="h2" gutterBottom align="center">
-              Create New Project
-            </Typography>
-            <AddProjectForm>
-              <TextField
-                fullWidth
-                disabled
-                label="Project Path"
-                variant="outlined"
-                id="rosettaPath"
-                name="rosettaPath"
-                value={`${defaultProjectPath}/${newProject.name}`}
-                onChange={(event) => setDefaultProjectPath(event.target.value)}
-                sx={{ mb: 2 }}
-                slotProps={{
-                  input: {
-                    endAdornment: (
-                      <IconButton
-                        onClick={() => {
-                          getFiles(
-                            {
-                              properties: ['openDirectory'],
-                              defaultPath: defaultProjectPath,
-                            },
-                            {
-                              onSuccess: (data) => {
-                                setDefaultProjectPath(data[0]);
-                              },
-                            },
-                          );
-                        }}
-                        edge="end"
-                      >
-                        <FolderOpen />
-                      </IconButton>
-                    ),
-                  },
-                }}
-              />
-              <TextField
-                fullWidth
-                label="Project Name"
-                variant="outlined"
-                value={newProject.name}
-                onChange={(e) =>
-                  setNewProject({ ...newProject, name: e.target.value })
-                }
-                autoFocus
-                sx={{ mb: 2 }}
-              />
-              <FormControl fullWidth sx={{ mb: 2 }}>
-                <InputLabel id="connection-select-label">Connection</InputLabel>
-                <Select
-                  labelId="connection-select-label"
-                  value={selectedConnection}
-                  label="Connection"
-                  onChange={(e) => setSelectedConnection(e.target.value)}
-                  disabled={isLoadingConnections}
-                >
-                  <MenuItem onClick={() => navigate('/app/add-connection')}>
-                    <Box
-                      sx={{
-                        display: 'flex',
-                        alignItems: 'center',
-                        width: '100%',
-                      }}
-                    >
-                      <AddIcon sx={{ fontSize: 20, marginRight: 1 }} />
-                      <Typography>New Connection</Typography>
-                    </Box>
-                  </MenuItem>
-                  {connections.map((connection) => (
-                    <MenuItem key={connection.id} value={connection.id}>
-                      <Box sx={{ display: 'flex', alignItems: 'center' }}>
-                        <ConnectionIconContainer>
-                          {renderConnectionIcon(connection.connection.type)}
-                        </ConnectionIconContainer>
-                        {connection.connection.name} -{' '}
-                        {connection.connection.type}
-                      </Box>
-                    </MenuItem>
-                  ))}
-                </Select>
-              </FormControl>
-              <FormActions>
-                <Button
-                  variant="outlined"
-                  onClick={() => {
-                    setIsAddingProject(false);
-                    setSelectedConnection('');
-                  }}
-                >
-                  Cancel
-                </Button>
-                <Button
-                  variant="contained"
-                  color="primary"
-                  onClick={handleAddProject}
-                  disabled={!newProject.name.trim() || !selectedConnection}
-                >
-                  Create Project
-                </Button>
-              </FormActions>
-            </AddProjectForm>
-          </>
+          <NewProject
+            defaultProjectPath={defaultProjectPath}
+            setDefaultProjectPath={setDefaultProjectPath}
+            newProject={newProject}
+            setNewProject={setNewProject}
+            selectedConnection={selectedConnection}
+            setSelectedConnection={setSelectedConnection}
+            isLoadingConnections={isLoadingConnections}
+            connections={connections}
+            navigate={navigate}
+            getFiles={getFiles}
+            handleAddProject={handleAddProject}
+            setIsAddingProject={setIsAddingProject}
+            renderConnectionIcon={renderConnectionIcon}
+          />
         ) : (
           <>
             <TaglineContainer>

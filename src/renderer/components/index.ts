@@ -23,4 +23,5 @@ export * from './dbtSetup';
 export * from './finishSetup';
 export * from './GetStartedModal';
 export * from './sidebarConnections';
+export * from './newProject';
 export { ScrollbarStyles } from './scrollbarStyles';
