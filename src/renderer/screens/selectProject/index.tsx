@@ -21,6 +21,7 @@ import {
   FormControl,
   InputLabel,
   Select,
+  Chip,
 } from '@mui/material';
 import AddIcon from '@mui/icons-material/Add';
 import SearchIcon from '@mui/icons-material/Search';
@@ -32,7 +33,7 @@ import DriveFolderUploadIcon from '@mui/icons-material/DriveFolderUpload';
 import DatabaseIcon from '@mui/icons-material/Storage';
 import RocketLaunchIcon from '@mui/icons-material/RocketLaunch';
 import { toast } from 'react-toastify';
-import { FolderOpen } from '@mui/icons-material';
+import { Cable, FolderOpen } from '@mui/icons-material';
 import { projectsServices } from '../../services';
 import {
   useDeleteProject,
@@ -115,6 +116,16 @@ const ProjectPath = styled(Typography)`
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+`;
+
+const ConnectionName = styled(Typography)`
+  font-size: 11px;
+  color: ${({ theme }) => theme.palette.primary.main};
+  font-weight: 500;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-top: 2px;
 `;
 
 const ProjectActions = styled(Box)`
@@ -500,6 +511,35 @@ const SelectProject: React.FC = () => {
               </ProjectInfo>
             </ProjectCardContent>
             <ProjectActions>
+              {/* Only show badge if connection name exists */}
+              {project.connection?.name && (
+                <Chip
+                  label={
+                    <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                      <Cable sx={{ fontSize: 12, mr: 0.5 }} />
+                      {project.connection.name}
+                    </Box>
+                  }
+                  size="small"
+                  sx={{
+                    mr: 1,
+                    fontWeight: 500,
+                    fontSize: 12,
+                    textTransform: 'none',
+                    bgcolor: 'background.paper',
+                    color: 'primary.main',
+                    border: '1px solid',
+                    borderColor: 'divider',
+                  }}
+                  title="Connection Name"
+                />
+              )}
+              {!project.connection?.name && (
+                <ConnectionName sx={{ color: 'text.disabled', mr: 1 }}>
+                  <DatabaseIcon sx={{ fontSize: 12 }} />
+                  No connection configured
+                </ConnectionName>
+              )}
               <IconButton
                 size="small"
                 onClick={(e) => handleOpenMenu(e, project.id)}
