@@ -17,9 +17,11 @@ import {
   useConfigureConnection,
   useTestConnection,
   useUpdateConnection,
+  useGetConnections,
 } from '../../controllers';
 import ConnectionHeader from './connection-header';
 import useSecureStorage from '../../hooks/useSecureStorage';
+import { useConnectionNameValidation } from '../../utils/connectionValidation';
 
 type Props = {
   onCancel: () => void;
@@ -62,6 +64,14 @@ export const Postgres: React.FC<Props> = ({
   const [connectionStatus, setConnectionStatus] = React.useState<
     'idle' | 'success' | 'failed'
   >('idle');
+  const [nameError, setNameError] = React.useState<string>('');
+
+  // Get existing connections for validation
+  const { data: existingConnections = [] } = useGetConnections();
+  const { validateName } = useConnectionNameValidation(
+    existingConnections,
+    connection?.id,
+  );
 
   const { mutate: updateConnection } = useUpdateConnection({
     onSuccess: () => {
@@ -123,16 +133,33 @@ export const Postgres: React.FC<Props> = ({
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
+
+    // Update form state
     setFormState((prev) => ({
       ...prev,
       [name]: name === 'port' ? Number(value) : value,
     }));
+
+    // Validate connection name in real-time
+    if (name === 'name') {
+      const validation = validateName(value);
+      setNameError(validation.isValid ? '' : validation.message || '');
+    }
 
     setConnectionStatus('idle');
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+
+    // Validate connection name before submission
+    const nameValidation = validateName(formState.name);
+    if (!nameValidation.isValid) {
+      toast.error(nameValidation.message || 'Invalid connection name');
+      setNameError(nameValidation.message || '');
+      return;
+    }
+
     await setDatabaseUsername(formState.username, formState.name);
     await setDatabasePassword(formState.password, formState.name);
 
@@ -211,6 +238,8 @@ export const Postgres: React.FC<Props> = ({
           fullWidth
           margin="normal"
           required
+          error={!!nameError}
+          helperText={nameError || 'Enter a unique name for this connection'}
         />
 
         <TextField

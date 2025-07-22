@@ -45,9 +45,53 @@ export default class ConnectorsService {
     return connections.find((connection) => connection.id === connectionId);
   }
 
-  static async saveNewConnection(connection: ConnectionInput): Promise<string> {
-    const connectionId = uuidV4();
+  /**
+   * Save a new connection, allowing reserved names for Getting Started template
+   */
+  static async saveNewConnectionForTemplate(
+    connection: ConnectionInput,
+    allowReservedNames: boolean = false,
+  ): Promise<string> {
     const connections = await this.loadConnections();
+
+    // Validate connection name with optional allowReservedNames flag
+    const nameValidation = this.validateConnectionName(
+      connection.name,
+      connections,
+      undefined,
+      allowReservedNames,
+    );
+
+    if (!nameValidation.isValid) {
+      throw new Error(nameValidation.message);
+    }
+
+    const connectionId = uuidV4();
+    const newConnection: ConnectionModel = {
+      id: connectionId,
+      connection,
+    };
+    await updateDatabase<'connections'>('connections', [
+      ...connections,
+      newConnection,
+    ]);
+    return connectionId;
+  }
+
+  static async saveNewConnection(connection: ConnectionInput): Promise<string> {
+    const connections = await this.loadConnections();
+
+    // Validate connection name
+    const nameValidation = this.validateConnectionName(
+      connection.name,
+      connections,
+    );
+
+    if (!nameValidation.isValid) {
+      throw new Error(nameValidation.message);
+    }
+
+    const connectionId = uuidV4();
     const newConnection: ConnectionModel = {
       id: connectionId,
       connection,
@@ -134,7 +178,17 @@ export default class ConnectorsService {
     this.validateConnection(connection);
 
     if (!connectionId) {
-      connectionId = await this.saveNewConnection(connection);
+      // Allow reserved name "DBT Connection" for Getting Started template
+      const isTemplateConnection =
+        connection.name.toLowerCase().trim() === 'dbt connection';
+      if (isTemplateConnection) {
+        connectionId = await this.saveNewConnectionForTemplate(
+          connection,
+          true,
+        );
+      } else {
+        connectionId = await this.saveNewConnection(connection);
+      }
     }
 
     if (projectIndex !== -1) {
@@ -156,10 +210,28 @@ export default class ConnectorsService {
     connection,
   }: UpdateConnectionBody): Promise<void> {
     this.validateConnection(connection.connection);
+
     const connections = await this.loadConnections();
+
+    // Validate connection name (exclude current connection from uniqueness check)
+    const nameValidation = this.validateConnectionName(
+      connection.connection.name,
+      connections,
+      connection.id,
+    );
+
+    if (!nameValidation.isValid) {
+      throw new Error(nameValidation.message);
+    }
+
     const connectionIndex = connections.findIndex(
       (c) => c.id === connection.id,
     );
+
+    if (connectionIndex === -1) {
+      throw new Error('Connection not found');
+    }
+
     connections[connectionIndex] = connection;
     await updateDatabase<'connections'>('connections', connections);
   }
@@ -1004,5 +1076,48 @@ export default class ConnectorsService {
     value: string,
   ): Promise<void> {
     process.env[key] = value;
+  }
+
+  /**
+   * Validate connection name for uniqueness and reserved names
+   */
+  private static validateConnectionName(
+    name: string,
+    existingConnections: ConnectionModel[],
+    excludeId?: string,
+    allowReservedNames?: boolean,
+  ): { isValid: boolean; message?: string } {
+    // Check for empty name
+    if (!name.trim()) {
+      return {
+        isValid: false,
+        message: 'Connection name cannot be empty',
+      };
+    }
+
+    // Check for reserved names (case-insensitive) - skip if allowed
+    if (!allowReservedNames && name.toLowerCase().trim() === 'dbt connection') {
+      return {
+        isValid: false,
+        message:
+          'Connection name "DBT Connection" is reserved for the getting started template',
+      };
+    }
+
+    // Check for uniqueness (case-insensitive)
+    const duplicateExists = existingConnections.some(
+      (conn) =>
+        conn.connection.name.toLowerCase().trim() ===
+          name.toLowerCase().trim() && conn.id !== excludeId,
+    );
+
+    if (duplicateExists) {
+      return {
+        isValid: false,
+        message: 'A connection with this name already exists',
+      };
+    }
+
+    return { isValid: true };
   }
 }

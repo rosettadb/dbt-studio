@@ -1,12 +1,14 @@
 import React from 'react';
 import { styled } from '@mui/material/styles';
 import { Typography, Box, Button } from '@mui/material';
+import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import { useParams, useNavigate } from 'react-router-dom';
 import { ConnectionCard } from '../../components/connectionCards';
 import connectionIcons from '../../../../assets/connectionIcons';
 import { Connections } from '../../components';
 import { SupportedConnectionTypes } from '../../../types/backend';
 import { AppLayout } from '../../layouts';
+import { ConnectionsSidebar } from '../../components/sidebarConnections';
 
 const ConnectionContainer = styled(Box)`
   padding: 1rem 2rem 2rem;
@@ -27,8 +29,8 @@ const ConnectionCardsContainer = styled(Box)`
 
 const BackButtonContainer = styled(Box)`
   display: flex;
-  justify-content: center;
-  margin-top: 2rem;
+  justify-content: flex-end;
+  margin-bottom: 1rem;
 `;
 
 type ItemType = {
@@ -148,12 +150,24 @@ const AddConnection: React.FC = () => {
   };
 
   return (
-    <AppLayout>
+    <AppLayout sidebarContent={<ConnectionsSidebar />}>
       {selectedItem ? (
         <ConnectionContainer>{renderComponent()}</ConnectionContainer>
       ) : (
         <ConnectionContainer>
           <Box>
+            {!projectId && (
+              <BackButtonContainer>
+                <Button
+                  variant="outlined"
+                  onClick={handleBack}
+                  startIcon={<ArrowBackIcon />}
+                >
+                  Back
+                </Button>
+              </BackButtonContainer>
+            )}
+
             <Typography variant="h6" component="h6" gutterBottom>
               Create New Connection
             </Typography>
@@ -170,14 +184,6 @@ const AddConnection: React.FC = () => {
                 />
               ))}
             </ConnectionCardsContainer>
-
-            {!projectId && (
-              <BackButtonContainer>
-                <Button variant="outlined" onClick={handleBack} size="large">
-                  Back
-                </Button>
-              </BackButtonContainer>
-            )}
           </Box>
         </ConnectionContainer>
       )}

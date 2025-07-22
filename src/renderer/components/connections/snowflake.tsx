@@ -17,9 +17,11 @@ import {
   useConfigureConnection,
   useTestConnection,
   useUpdateConnection,
+  useGetConnections,
 } from '../../controllers';
 import ConnectionHeader from './connection-header';
 import useSecureStorage from '../../hooks/useSecureStorage';
+import { useConnectionNameValidation } from '../../utils/connectionValidation';
 
 type Props = {
   onCancel: () => void;
@@ -106,6 +108,13 @@ export const Snowflake: React.FC<Props> = ({
     },
   });
 
+  // Get existing connections for name validation
+  const { data: connections = [] } = useGetConnections();
+  const { validateName } = useConnectionNameValidation(
+    connections,
+    connection?.id,
+  );
+
   React.useEffect(() => {
     const fetchCredentials = async () => {
       const storedUsername = await getDatabaseUsername(existingConnection.name);
@@ -131,6 +140,14 @@ export const Snowflake: React.FC<Props> = ({
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+
+    // Validate connection name before submitting
+    const nameValidation = validateName(formState.name);
+    if (!nameValidation.isValid) {
+      toast.error(nameValidation.message || 'Invalid connection name');
+      return;
+    }
+
     await setDatabaseUsername(formState.username, formState.name);
     await setDatabasePassword(formState.password, formState.name);
 
@@ -166,6 +183,9 @@ export const Snowflake: React.FC<Props> = ({
         return '#9e9e9e'; // silver/grey for idle state
     }
   };
+
+  // Get real-time validation result for name field
+  const nameValidation = validateName(formState.name);
 
   return (
     <Box
@@ -204,6 +224,8 @@ export const Snowflake: React.FC<Props> = ({
           fullWidth
           margin="normal"
           required
+          error={!nameValidation.isValid}
+          helperText={!nameValidation.isValid ? nameValidation.message : ''}
         />
 
         <TextField
