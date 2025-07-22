@@ -45,6 +45,39 @@ export default class ConnectorsService {
     return connections.find((connection) => connection.id === connectionId);
   }
 
+  /**
+   * Save a new connection, allowing reserved names for Getting Started template
+   */
+  static async saveNewConnectionForTemplate(
+    connection: ConnectionInput,
+    allowReservedNames: boolean = false,
+  ): Promise<string> {
+    const connections = await this.loadConnections();
+
+    // Validate connection name with optional allowReservedNames flag
+    const nameValidation = this.validateConnectionName(
+      connection.name,
+      connections,
+      undefined,
+      allowReservedNames,
+    );
+
+    if (!nameValidation.isValid) {
+      throw new Error(nameValidation.message);
+    }
+
+    const connectionId = uuidV4();
+    const newConnection: ConnectionModel = {
+      id: connectionId,
+      connection,
+    };
+    await updateDatabase<'connections'>('connections', [
+      ...connections,
+      newConnection,
+    ]);
+    return connectionId;
+  }
+
   static async saveNewConnection(connection: ConnectionInput): Promise<string> {
     const connections = await this.loadConnections();
 
@@ -145,7 +178,17 @@ export default class ConnectorsService {
     this.validateConnection(connection);
 
     if (!connectionId) {
-      connectionId = await this.saveNewConnection(connection);
+      // Allow reserved name "DBT Connection" for Getting Started template
+      const isTemplateConnection =
+        connection.name.toLowerCase().trim() === 'dbt connection';
+      if (isTemplateConnection) {
+        connectionId = await this.saveNewConnectionForTemplate(
+          connection,
+          true,
+        );
+      } else {
+        connectionId = await this.saveNewConnection(connection);
+      }
     }
 
     if (projectIndex !== -1) {
@@ -1042,9 +1085,18 @@ export default class ConnectorsService {
     name: string,
     existingConnections: ConnectionModel[],
     excludeId?: string,
+    allowReservedNames?: boolean,
   ): { isValid: boolean; message?: string } {
-    // Check for reserved names (case-insensitive)
-    if (name.toLowerCase().trim() === 'dbt connection') {
+    // Check for empty name
+    if (!name.trim()) {
+      return {
+        isValid: false,
+        message: 'Connection name cannot be empty',
+      };
+    }
+
+    // Check for reserved names (case-insensitive) - skip if allowed
+    if (!allowReservedNames && name.toLowerCase().trim() === 'dbt connection') {
       return {
         isValid: false,
         message:
@@ -1063,14 +1115,6 @@ export default class ConnectorsService {
       return {
         isValid: false,
         message: 'A connection with this name already exists',
-      };
-    }
-
-    // Check for empty name
-    if (!name.trim()) {
-      return {
-        isValid: false,
-        message: 'Connection name cannot be empty',
       };
     }
 

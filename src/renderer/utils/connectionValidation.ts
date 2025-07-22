@@ -5,12 +5,14 @@ import { ConnectionModel } from '../../types/backend';
  * @param name The connection name to validate
  * @param existingConnections Array of existing connections
  * @param excludeId ID to exclude from uniqueness check (for updates)
+ * @param allowReservedNames Whether to allow reserved names (for Getting Started template)
  * @returns Validation result with isValid flag and optional message
  */
 export const validateConnectionName = (
   name: string,
   existingConnections: ConnectionModel[],
   excludeId?: string,
+  allowReservedNames?: boolean,
 ): { isValid: boolean; message?: string } => {
   // Check for empty name
   if (!name.trim()) {
@@ -20,8 +22,8 @@ export const validateConnectionName = (
     };
   }
 
-  // Check for reserved names (case-insensitive)
-  if (name.toLowerCase().trim() === 'dbt connection') {
+  // Check for reserved names (case-insensitive) - skip if allowed
+  if (!allowReservedNames && name.toLowerCase().trim() === 'dbt connection') {
     return {
       isValid: false,
       message:
