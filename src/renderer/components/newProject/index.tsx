@@ -118,8 +118,8 @@ export const NewProject: React.FC<NewProjectProps> = ({
             mb: 2,
           }}
         >
-          <Typography variant="h4" component="h4" color="primary">
-            New Project
+          <Typography variant="h5" component="h5" color="primary">
+            Setup New Project
           </Typography>
           <Box sx={{ display: 'flex', gap: 1 }}>
             <Button
