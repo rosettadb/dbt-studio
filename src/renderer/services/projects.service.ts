@@ -23,26 +23,27 @@ export const getProjectById = async (body: {
   return data;
 };
 
-export const addProject = async (body: { name: string }): Promise<Project> => {
-  const { data } = await client.post<{ name: string }, Project>(
-    'project:add',
-    body,
-  );
+export const addProject = async (body: {
+  name: string;
+  connectionId?: string;
+}): Promise<Project> => {
+  const { data } = await client.post<
+    { name: string; connectionId?: string },
+    Project
+  >('project:add', body);
   return data;
 };
 
 export const addProjectFromVCS = async (body: {
   name: string;
   path: string;
-  dbtConnection?: any;
-  rosettaConnection?: any;
+  connectionId?: string;
 }): Promise<Project> => {
   const { data } = await client.post<
     {
       name: string;
       path: string;
-      dbtConnection?: any;
-      rosettaConnection?: any;
+      connectionId?: string;
     },
     Project
   >('project:addFromVCS', body);

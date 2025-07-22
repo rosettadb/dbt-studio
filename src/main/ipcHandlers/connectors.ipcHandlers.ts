@@ -1,7 +1,7 @@
 import { ipcMain } from 'electron';
 import { ConnectorsService } from '../services';
 import type { ConnectionInput, QueryResponseType } from '../../types/backend';
-import { ConfigureConnectionBody } from '../../types/ipc';
+import { ConfigureConnectionBody, UpdateConnectionBody } from '../../types/ipc';
 
 const handlerChannels = [
   'connector:configure',
@@ -9,6 +9,7 @@ const handlerChannels = [
   'connector:validate',
   'connector:getJdbcUrl',
   'connector:query',
+  'connector:list',
 ];
 
 const removeConnectorsIpcHandlers = () => {
@@ -26,8 +27,27 @@ const registerConnectorsHandlers = () => {
     },
   );
 
+  ipcMain.handle('connector:list', async () => {
+    return ConnectorsService.loadConnections();
+  });
+
+  ipcMain.handle('connector:get', async (_event, connectionId: string) => {
+    return ConnectorsService.getConnectionById(connectionId);
+  });
+
   ipcMain.handle('connector:test', async (_event, body: ConnectionInput) => {
     return ConnectorsService.testConnection(body);
+  });
+
+  ipcMain.handle(
+    'connector:update',
+    async (_event, body: UpdateConnectionBody) => {
+      return ConnectorsService.updateConnection(body);
+    },
+  );
+
+  ipcMain.handle('connector:delete', async (_event, connectionId: string) => {
+    return ConnectorsService.deleteConnection(connectionId);
   });
 
   ipcMain.handle(

@@ -5,6 +5,7 @@ import AddConnection from './addConnection';
 import EditConnection from './editConnection';
 import SelectProject from './selectProject';
 import Setup from './setup';
+import Connections from './connections';
 
 export {
   Settings,
@@ -14,4 +15,5 @@ export {
   EditConnection,
   SelectProject,
   Setup,
+  Connections,
 };

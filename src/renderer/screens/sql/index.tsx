@@ -1,12 +1,8 @@
 import React, { useEffect, useState } from 'react';
 import SplitPane from 'split-pane-react';
 import { Box, useTheme } from '@mui/material';
-import { useGetSelectedProject } from '../../controllers';
-import {
-  useAppContext,
-  useConnectionInput,
-  useLocalStorage,
-} from '../../hooks';
+import { useGetConnectionById, useGetSelectedProject } from '../../controllers';
+import { useAppContext, useLocalStorage } from '../../hooks';
 import { CompletionItem, QueryHistoryType } from '../../../types/frontend';
 import { AppLayout } from '../../layouts';
 import { utils } from '../../helpers';
@@ -19,6 +15,7 @@ import {
 } from '../../components';
 import { QueryResult } from './queryResult';
 import { ConnectionInput } from '../../../types/backend';
+import { getConnectionInput } from '../../helpers/utils';
 
 const QUERY_HISTORY_KEY = 'query_history_key';
 
@@ -26,6 +23,9 @@ const Sql = () => {
   const theme = useTheme();
   const { schema } = useAppContext();
   const { data: selectedProject } = useGetSelectedProject();
+  const { data: connection } = useGetConnectionById(
+    selectedProject?.connectionId,
+  );
   const [loadingQuery, setLoadingQuery] = useState(false);
   const [queryResults, setQueryResults] = useState(null);
   const [error, setError] = useState<any>();
@@ -41,7 +41,9 @@ const Sql = () => {
     250,
   ]);
 
-  const connectionInput = useConnectionInput(selectedProject);
+  const connectionInput = React.useMemo(() => {
+    return connection ? getConnectionInput(connection) : undefined;
+  }, [connection]);
 
   useEffect(() => {
     if (schema) {

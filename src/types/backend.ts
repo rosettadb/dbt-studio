@@ -91,6 +91,11 @@ export type ConnectionInput =
   | DatabricksConnection
   | DuckDBConnection;
 
+export type ConnectionModel = {
+  id: string;
+  connection: ConnectionInput;
+};
+
 export type DBTConnectionBase = {
   type: SupportedConnectionTypes;
   username: string;
@@ -180,11 +185,13 @@ export type Project = {
   name: string;
   path: string;
   createdAt: string;
+  connectionId?: string;
   rosettaConnection?: RosettaConnection;
   dbtConnection?: DBTConnection;
   lastOpenedAt?: number;
   isExtracted?: boolean;
   queryEditor?: string;
+  connection?: ConnectionInput;
 };
 
 export type SettingsType = {
@@ -208,6 +215,7 @@ export type DataBase = {
   settings: SettingsType;
   selectedProject?: Project;
   queries: Record<string, string>;
+  connections: ConnectionModel[];
 };
 
 export type FileNode = {
@@ -367,4 +375,10 @@ export type AnalyticsEvent = {
     status?: number;
     statusText?: string;
   };
+};
+
+export type ExecuteStatementType = {
+  connection: ConnectionInput;
+  query: string;
+  projectName: string;
 };

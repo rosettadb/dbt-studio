@@ -78,7 +78,12 @@ export const loadDatabaseFile = async (): Promise<DataBase> => {
     const data = await fs.promises.readFile(DB_FILE, 'utf8');
     return JSON.parse(data);
   } catch (error) {
-    return { projects: [], settings: loadDefaultSettings(), queries: {} };
+    return {
+      projects: [],
+      settings: loadDefaultSettings(),
+      queries: {},
+      connections: [],
+    };
   }
 };
 
