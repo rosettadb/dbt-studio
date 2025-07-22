@@ -1,5 +1,5 @@
 import React from 'react';
-import { CodeSharp, Cable } from '@mui/icons-material';
+import { CodeSharp, Cable, Assignment } from '@mui/icons-material';
 import { icons } from '../../../../assets';
 
 const style = {
@@ -29,6 +29,8 @@ export const DataSources: React.FC = () => (
 );
 
 export const Connections: React.FC = () => <Cable color="primary" />;
+
+export const SelectProject: React.FC = () => <Assignment color="primary" />;
 
 export const Model: React.FC = () => (
   <img

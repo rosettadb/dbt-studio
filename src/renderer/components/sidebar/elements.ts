@@ -4,31 +4,48 @@ interface SideBarElementType {
   path: string;
   text: string;
   icon: any;
+  disabled?: boolean;
   subItems?: Array<{ path: string; text: string; icon?: any }>;
 }
+
+const baseSidebarElements: SideBarElementType[] = [
+  {
+    path: '/app/connections',
+    text: 'Database Connections',
+    icon: Icons.Connections,
+  },
+  {
+    path: '/app/select-project',
+    text: 'Projects',
+    icon: Icons.SelectProject,
+  },
+  {
+    path: '/app',
+    text: 'DBT Studio',
+    icon: Icons.DBTProjects,
+  },
+  {
+    path: '/app/sql',
+    text: 'SQL Editor',
+    icon: Icons.SQL,
+  },
+];
 
 export const getSidebarElements = (
   isProjectSelected: boolean,
 ): SideBarElementType[] => {
-  const elements = [
-    {
-      path: '/app/connections',
-      text: 'Connections',
-      icon: Icons.Connections,
-    },
-    {
-      path: isProjectSelected ? '/app' : '/app/select-project',
-      text: 'Projects',
-      icon: Icons.DBTProjects,
-    },
-  ];
-
-  if (isProjectSelected) {
-    elements.push({
-      path: '/app/sql',
-      text: 'SQL',
-      icon: Icons.SQL,
-    });
-  }
-  return elements;
+  return baseSidebarElements.map((element) => {
+    // Disable project-dependent features when no project is selected
+    if (
+      !isProjectSelected &&
+      (element.path === '/app' || element.path === '/app/sql')
+    ) {
+      return {
+        ...element,
+        disabled: true,
+        tooltip: `${element.text}`,
+      };
+    }
+    return element;
+  });
 };

@@ -388,6 +388,11 @@ const SelectProject: React.FC = () => {
       return;
     }
 
+    if (!selectedConnection) {
+      toast.error('Please select a database connection or create a new one.');
+      return;
+    }
+
     try {
       const project = await projectsServices.addProject({
         name: `${defaultProjectPath}/${newProject.name}`,
@@ -589,20 +594,24 @@ const SelectProject: React.FC = () => {
                 sx={{ mb: 2 }}
               />
               <FormControl fullWidth sx={{ mb: 2 }}>
-                <InputLabel id="connection-select-label">
-                  Connection (Optional)
-                </InputLabel>
+                <InputLabel id="connection-select-label">Connection</InputLabel>
                 <Select
                   labelId="connection-select-label"
                   value={selectedConnection}
-                  label="Connection (Optional)"
+                  label="Connection"
                   onChange={(e) => setSelectedConnection(e.target.value)}
                   disabled={isLoadingConnections}
                 >
-                  <MenuItem value="">
-                    <Box sx={{ display: 'flex', alignItems: 'center' }}>
-                      <DatabaseIcon sx={{ fontSize: 20, marginRight: 1 }} />
-                      No Connection
+                  <MenuItem onClick={() => navigate('/app/add-connection')}>
+                    <Box
+                      sx={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        width: '100%',
+                      }}
+                    >
+                      <AddIcon sx={{ fontSize: 20, marginRight: 1 }} />
+                      <Typography>New Connection</Typography>
                     </Box>
                   </MenuItem>
                   {connections.map((connection) => (
@@ -632,7 +641,7 @@ const SelectProject: React.FC = () => {
                   variant="contained"
                   color="primary"
                   onClick={handleAddProject}
-                  disabled={!newProject.name.trim()}
+                  disabled={!newProject.name.trim() || !selectedConnection}
                 >
                   Create Project
                 </Button>

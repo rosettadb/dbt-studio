@@ -1,5 +1,5 @@
 import React from 'react';
-import { Box, List, ListItem, ListItemIcon } from '@mui/material';
+import { Box, List, ListItem, ListItemIcon, Tooltip } from '@mui/material';
 import { useTheme } from '@mui/material/styles';
 import { useLocation } from 'react-router-dom';
 import { getSidebarElements } from './elements';
@@ -24,10 +24,16 @@ export const Sidebar: React.FC<Props> = ({ content }) => {
     if (location.pathname.includes('connection')) {
       return 0;
     }
+    if (location.pathname.includes('select-project')) {
+      return 1;
+    }
     if (location.pathname.includes('sql')) {
+      return 3;
+    }
+    if (location.pathname === '/app' || location.pathname.includes('/app/')) {
       return 2;
     }
-    return 1;
+    return -1;
   }, [location.pathname]);
 
   return (
@@ -36,41 +42,72 @@ export const Sidebar: React.FC<Props> = ({ content }) => {
       <StyledDrawer variant="permanent" open={content ? isSidebarOpen : false}>
         <Box flexGrow={1} display="flex">
           <List sx={{ width: 55, marginTop: '-24px' }}>
-            {getSidebarElements(isProjectSelected).map((element, index) => (
-              <StyledNavLink
-                key={element.text}
-                to={element.path}
-                style={{
-                  cursor: 'pointer',
-                }}
-              >
+            {getSidebarElements(isProjectSelected).map((element, index) => {
+              const isActive = activeItem === index;
+              const isDisabled = element.disabled;
+              const listItem = (
                 <ListItem
                   sx={{
-                    cursor: 'pointer',
+                    cursor: isDisabled ? 'not-allowed' : 'pointer',
                     m: 0,
-                    backgroundColor:
-                      activeItem === index
-                        ? theme.palette.divider
-                        : 'transparent',
+                    opacity: isDisabled ? 0.5 : 1,
+                    backgroundColor: isActive
+                      ? theme.palette.divider
+                      : 'transparent',
                     '&:hover': {
-                      backgroundColor: theme.palette.action.hover,
+                      backgroundColor: isDisabled
+                        ? 'transparent'
+                        : theme.palette.action.hover,
                     },
-                    transition: 'background-color 0.2s ease',
+                    transition: 'all 0.2s ease',
+                    pointerEvents: isDisabled ? 'none' : 'auto',
                     '& .MuiListItemIcon-root': {
-                      cursor: 'pointer',
+                      cursor: isDisabled ? 'not-allowed' : 'pointer',
                     },
                   }}
                 >
                   <ListItemIcon
                     sx={{
-                      cursor: 'pointer',
+                      cursor: isDisabled ? 'not-allowed' : 'pointer',
+                      opacity: isDisabled ? 0.5 : 1,
                     }}
                   >
                     <element.icon />
                   </ListItemIcon>
                 </ListItem>
-              </StyledNavLink>
-            ))}
+              );
+
+              if (isDisabled) {
+                return (
+                  <Tooltip
+                    key={element.text}
+                    title={element.text}
+                    placement="right"
+                    arrow
+                  >
+                    <Box>{listItem}</Box>
+                  </Tooltip>
+                );
+              }
+
+              return (
+                <Tooltip
+                  key={element.text}
+                  title={element.text}
+                  placement="right"
+                  arrow
+                >
+                  <StyledNavLink
+                    to={element.path}
+                    style={{
+                      cursor: 'pointer',
+                    }}
+                  >
+                    {listItem}
+                  </StyledNavLink>
+                </Tooltip>
+              );
+            })}
           </List>
           {isSidebarOpen && <SidebarContent>{content}</SidebarContent>}
         </Box>
