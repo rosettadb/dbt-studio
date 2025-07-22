@@ -19,8 +19,10 @@ import {
   useTestConnection,
   useFilePicker,
   useUpdateConnection,
+  useGetConnections,
 } from '../../controllers';
 import ConnectionHeader from './connection-header';
+import { useConnectionNameValidation } from '../../utils/connectionValidation';
 
 type Props = {
   onCancel: () => void;
@@ -126,6 +128,16 @@ export const DuckDB: React.FC<Props> = ({
     },
   });
 
+  // Get existing connections for name validation
+  const { data: existingConnections = [] } = useGetConnections();
+  const { validateName } = useConnectionNameValidation(
+    existingConnections,
+    connection?.id,
+  );
+
+  // Get real-time validation result for name field
+  const nameValidation = validateName(formState.name);
+
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
     setFormState((prev) => ({
@@ -162,6 +174,12 @@ export const DuckDB: React.FC<Props> = ({
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+
+    // Validate connection name before submitting
+    if (!nameValidation.isValid) {
+      toast.error(nameValidation.message || 'Invalid connection name');
+      return;
+    }
 
     const connectionData = {
       ...formState,
@@ -253,6 +271,8 @@ export const DuckDB: React.FC<Props> = ({
           fullWidth
           margin="normal"
           required
+          error={!nameValidation.isValid}
+          helperText={!nameValidation.isValid ? nameValidation.message : ''}
         />
 
         <TextField
