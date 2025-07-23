@@ -30,8 +30,8 @@ class CloudExplorerService {
     return new S3Client({
       region: config.region,
       credentials: {
-        accessKeyId: config.accessKeyId,
-        secretAccessKey: config.secretAccessKey,
+        accessKeyId: config.accessKeyId || '',
+        secretAccessKey: config.secretAccessKey || '',
       },
     });
   }
@@ -133,7 +133,7 @@ class CloudExplorerService {
 
     const credential = new StorageSharedKeyCredential(
       config.accountName,
-      config.accountKey,
+      config.accountKey || '',
     );
     const url = `https://${config.accountName}.blob.core.windows.net`;
     return new BlobServiceClient(url, credential);
@@ -242,7 +242,10 @@ class CloudExplorerService {
           expiresOn,
           protocol: SASProtocol.Https,
         },
-        new StorageSharedKeyCredential(config.accountName, config.accountKey),
+        new StorageSharedKeyCredential(
+          config.accountName,
+          config.accountKey || '',
+        ),
       ).toString();
 
       return `${blobClient.url}?${sas}`;

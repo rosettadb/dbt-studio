@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Box,
@@ -29,6 +29,7 @@ import type {
   CloudStorageConfig,
 } from '../../../types/frontend';
 import { cloudStorageImages } from '../../../../assets/connectionIcons';
+import useSecureStorage from '../../hooks/useSecureStorage';
 
 interface ExplorerBucketsProps {
   connectionId: string;
@@ -41,10 +42,42 @@ export const ExplorerBuckets: React.FC<ExplorerBucketsProps> = ({
   const connectionQuery = useConnection(connectionId);
   const connection = connectionQuery.data;
 
+  // Secure storage logic
+  const { getCloudAwsSecret, getCloudAzureKey, getCloudGcsCredential } =
+    useSecureStorage();
+  const [secureConfig, setSecureConfig] = useState<any | null>(null);
+
+  useEffect(() => {
+    const fetchSecrets = async () => {
+      if (!connection) {
+        setSecureConfig(null);
+        return;
+      }
+      const config = { ...connection.config };
+      try {
+        if (connection.provider === 'aws') {
+          const secret = await getCloudAwsSecret(connection.name);
+          (config as { secretAccessKey?: string }).secretAccessKey =
+            secret || '';
+        } else if (connection.provider === 'azure') {
+          const key = await getCloudAzureKey(connection.name);
+          (config as { accountKey?: string }).accountKey = key || '';
+        } else if (connection.provider === 'gcs') {
+          const cred = await getCloudGcsCredential(connection.name);
+          (config as { credentials?: any }).credentials = cred || '';
+        }
+      } catch (e) {
+        // handle error if needed
+      }
+      setSecureConfig(config);
+    };
+    fetchSecrets();
+  }, [connection]);
+
   const bucketsQuery = useListBuckets(
     connection?.provider as CloudProvider,
-    connection?.config as CloudStorageConfig,
-    !!connection,
+    secureConfig as CloudStorageConfig,
+    !!connection && !!secureConfig,
   );
 
   const buckets = bucketsQuery.data || [];
