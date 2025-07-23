@@ -1,5 +1,22 @@
 #!/usr/bin/env sh
-. "$(dirname -- "$0")/_/husky.sh"
+
+# Ensure we're in the project directory
+cd "$(dirname "$0")/.."
+
+# Load nvm if available (for nvm users)
+if [ -s "$HOME/.nvm/nvm.sh" ]; then
+  . "$HOME/.nvm/nvm.sh"
+  # Use the node version specified in .nvmrc if it exists
+  if [ -f ".nvmrc" ]; then
+    nvm use
+  fi
+fi
+
+# Fallback: Use node from PATH or common locations
+if ! command -v node > /dev/null 2>&1; then
+  # Try to add common node paths
+  export PATH="/usr/local/bin:/opt/homebrew/bin:$PATH"
+fi
 
 # Run TypeScript type checking
 npx tsc --noEmit
