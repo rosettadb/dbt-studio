@@ -2,17 +2,20 @@
 import yaml from 'js-yaml';
 import path from 'path';
 import fs from 'fs';
+import { v4 as uuidV4 } from 'uuid';
 import {
   BigQueryTestResponse,
   ConnectionInput,
+  ConnectionModel,
   DBTConnection,
+  ExecuteStatementType,
   Project,
   QueryResponseType,
   RosettaConnection,
 } from '../../types/backend';
-import { updateDatabase } from '../utils/fileHelper';
+import { loadDatabaseFile, updateDatabase } from '../utils/fileHelper';
 import { ProjectsService } from './index';
-import { ConfigureConnectionBody } from '../../types/ipc';
+import { ConfigureConnectionBody, UpdateConnectionBody } from '../../types/ipc';
 import {
   executeBigQueryQuery,
   executeDatabricksQuery,
@@ -30,85 +33,244 @@ import {
 import SecureStorageService from './secureStorage.service';
 
 export default class ConnectorsService {
+  static async loadConnections(): Promise<ConnectionModel[]> {
+    const db = await loadDatabaseFile();
+    return db.connections ?? [];
+  }
+
+  static async getConnectionById(
+    connectionId: string,
+  ): Promise<ConnectionModel | undefined> {
+    const connections = await this.loadConnections();
+    return connections.find((connection) => connection.id === connectionId);
+  }
+
+  /**
+   * Save a new connection, allowing reserved names for Getting Started template
+   */
+  static async saveNewConnectionForTemplate(
+    connection: ConnectionInput,
+    allowReservedNames: boolean = false,
+  ): Promise<string> {
+    const connections = await this.loadConnections();
+
+    // Validate connection name with optional allowReservedNames flag
+    const nameValidation = this.validateConnectionName(
+      connection.name,
+      connections,
+      undefined,
+      allowReservedNames,
+    );
+
+    if (!nameValidation.isValid) {
+      throw new Error(nameValidation.message);
+    }
+
+    const connectionId = uuidV4();
+    const newConnection: ConnectionModel = {
+      id: connectionId,
+      connection,
+    };
+    await updateDatabase<'connections'>('connections', [
+      ...connections,
+      newConnection,
+    ]);
+    return connectionId;
+  }
+
+  static async saveNewConnection(connection: ConnectionInput): Promise<string> {
+    const connections = await this.loadConnections();
+
+    // Validate connection name
+    const nameValidation = this.validateConnectionName(
+      connection.name,
+      connections,
+    );
+
+    if (!nameValidation.isValid) {
+      throw new Error(nameValidation.message);
+    }
+
+    const connectionId = uuidV4();
+    const newConnection: ConnectionModel = {
+      id: connectionId,
+      connection,
+    };
+    await updateDatabase<'connections'>('connections', [
+      ...connections,
+      newConnection,
+    ]);
+    return connectionId;
+  }
+
+  static async getProjectById(projectId: string): Promise<Project | undefined> {
+    const { projects } = await loadDatabaseFile();
+    return projects.find((p) => p.id === projectId);
+  }
+
+  static async loadConfigurations(projectId: string): Promise<Project> {
+    const project = await this.getProjectById(projectId);
+
+    if (!project) {
+      throw new Error('Project not found');
+    }
+    if (!project?.connectionId) {
+      return project;
+    }
+    const connections = await this.loadConnections();
+    const connection = connections.find((c) => c.id === project.connectionId);
+
+    if (!connection) {
+      throw new Error('Missing connection');
+    }
+
+    const rosettaConnection = await this.mapToRosettaConnection(
+      connection.connection,
+      project,
+    );
+    const dbtConnection = this.mapToDbtConnection(connection.connection);
+
+    const profilesPath = path.join(project.path, 'profiles.yml');
+    const profilesContent = await this.generateProfilesYml(
+      project.name,
+      connection.connection,
+      project.path,
+    );
+    await fs.promises.writeFile(profilesPath, profilesContent, 'utf8');
+
+    const mainConfPath = path.join(project.path, 'rosetta', 'main.conf');
+    const rosettaYaml = await this.generateRosettaYml(
+      connection.connection,
+      project.name,
+      project.path,
+    );
+    await fs.promises.writeFile(mainConfPath, rosettaYaml, 'utf8');
+    return {
+      ...project,
+      rosettaConnection: {
+        ...rosettaConnection,
+        name: project.name,
+      },
+      dbtConnection,
+    };
+  }
+
   /**
    * Configure a connection for a specific project
    */
   static async configureConnection({
     projectId,
-    connection,
-  }: ConfigureConnectionBody): Promise<Project> {
+    connection: conn,
+    connectionId: connId,
+  }: ConfigureConnectionBody): Promise<string> {
     const projects = await ProjectsService.loadProjects();
     const projectIndex = projects.findIndex((p) => p.id === projectId);
 
-    if (projectIndex === -1) {
-      throw new Error(`Project not found: ${projectId}`);
+    const connections = await this.loadConnections();
+    let connectionId = connId;
+    const connection =
+      conn ?? connections.find((c) => c.id === connectionId)?.connection;
+
+    if (!connection) {
+      throw new Error('Connection not found!');
     }
 
     this.validateConnection(connection);
 
-    const currentProject = projects[projectIndex];
+    if (!connectionId) {
+      // Allow reserved name "DBT Connection" for Getting Started template
+      const isTemplateConnection =
+        connection.name.toLowerCase().trim() === 'dbt connection';
+      if (isTemplateConnection) {
+        connectionId = await this.saveNewConnectionForTemplate(
+          connection,
+          true,
+        );
+      } else {
+        connectionId = await this.saveNewConnection(connection);
+      }
+    }
 
-    // Generate JDBC URL with proper file path handling for BigQuery service account
-    let rosettaJdbcUrl = this.generateJdbcUrl(connection, currentProject.name);
-    if (
-      connection.type === 'bigquery' &&
-      connection.method === 'service-account' &&
-      connection.keyfile
-    ) {
-      const keyfilePath = await this.saveServiceAccountFile(
-        currentProject.path,
-        connection.keyfile,
-      );
-      rosettaJdbcUrl = rosettaJdbcUrl.replace(
-        'KEYFILE_PATH_PLACEHOLDER',
-        keyfilePath,
+    if (projectIndex !== -1) {
+      const currentProject = projects[projectIndex];
+      await ProjectsService.updateProject({
+        ...currentProject,
+        connectionId,
+      });
+
+      await this.loadConfigurations(currentProject.id);
+    }
+    return connectionId;
+  }
+
+  /**
+   * Configure a connection for a specific project
+   */
+  static async updateConnection({
+    connection,
+  }: UpdateConnectionBody): Promise<void> {
+    this.validateConnection(connection.connection);
+
+    const connections = await this.loadConnections();
+
+    // Validate connection name (exclude current connection from uniqueness check)
+    const nameValidation = this.validateConnectionName(
+      connection.connection.name,
+      connections,
+      connection.id,
+    );
+
+    if (!nameValidation.isValid) {
+      throw new Error(nameValidation.message);
+    }
+
+    const connectionIndex = connections.findIndex(
+      (c) => c.id === connection.id,
+    );
+
+    if (connectionIndex === -1) {
+      throw new Error('Connection not found');
+    }
+
+    connections[connectionIndex] = connection;
+    await updateDatabase<'connections'>('connections', connections);
+  }
+
+  /**
+   * Delete a connection if it's not being used by any projects
+   */
+  static async deleteConnection(connectionId: string): Promise<void> {
+    // Check if the connection exists
+    const connections = await this.loadConnections();
+    const connectionIndex = connections.findIndex(
+      (connection) => connection.id === connectionId,
+    );
+
+    if (connectionIndex === -1) {
+      throw new Error('Connection not found');
+    }
+
+    // Check if any projects are using this connection
+    const projects = await ProjectsService.loadProjects();
+    const projectsUsingConnection = projects.filter(
+      (project) => project.connectionId === connectionId,
+    );
+
+    if (projectsUsingConnection.length > 0) {
+      const projectNames = projectsUsingConnection
+        .map((p) => p.name)
+        .join(', ');
+      throw new Error(
+        `Cannot delete connection. It is currently being used by the following project(s): ${projectNames}. Please remove the connection from these projects first.`,
       );
     }
 
-    const updatedProject: Project = {
-      ...currentProject,
-      rosettaConnection: {
-        name: connection.name || currentProject.name,
-        dbType: connection.type,
-        databaseName:
-          connection.type === 'duckdb'
-            ? connection.database_path
-            : connection.database,
-        schemaName: connection.schema,
-        url: rosettaJdbcUrl,
-        // For Databricks and DuckDB, don't include userName/password since auth is different
-        ...(connection.type !== 'databricks' &&
-          connection.type !== 'duckdb' &&
-          'username' in connection &&
-          'password' in connection && {
-            userName: `db-user-${currentProject.name}`,
-            password: `db-password-${currentProject.name}`,
-          }),
-      },
-      dbtConnection: this.mapToDbtConnection(connection),
-    };
-
-    projects[projectIndex] = updatedProject;
-    await ProjectsService.saveProjects(projects);
-    await updateDatabase<'selectedProject'>('selectedProject', updatedProject);
-
-    const profilesPath = path.join(updatedProject.path, 'profiles.yml');
-    const profilesContent = await this.generateProfilesYml(
-      connection,
-      updatedProject.path,
-      currentProject.name,
+    // Remove the connection from the database
+    const updatedConnections = connections.filter(
+      (connection) => connection.id !== connectionId,
     );
-    await fs.promises.writeFile(profilesPath, profilesContent, 'utf8');
 
-    const mainConfPath = path.join(updatedProject.path, 'rosetta', 'main.conf');
-    const rosettaYaml = await this.generateRosettaYml(
-      connection,
-      updatedProject.name,
-      updatedProject.path,
-    );
-    await fs.promises.writeFile(mainConfPath, rosettaYaml, 'utf8');
-
-    return updatedProject;
+    await updateDatabase<'connections'>('connections', updatedConnections);
   }
 
   /**
@@ -149,11 +311,7 @@ export default class ConnectorsService {
     connection,
     query,
     projectName,
-  }: {
-    connection: ConnectionInput;
-    query: string;
-    projectName: string;
-  }): Promise<QueryResponseType> {
+  }: ExecuteStatementType): Promise<QueryResponseType> {
     const storeUser = await SecureStorageService.getCredential(
       `db-user-${projectName}`,
     );
@@ -201,12 +359,7 @@ export default class ConnectorsService {
     projectName: string,
     projectPath?: string,
   ): Promise<string> {
-    // const { openAIApiKey } = await SettingsService.loadSettings();
-
-    // Generate JDBC URL and handle BigQuery service account file path
     let jdbcUrl = this.generateJdbcUrl(connection, projectName);
-
-    // For BigQuery service account, replace placeholder with actual file path
     if (
       connection.type === 'bigquery' &&
       connection.method === 'service-account' &&
@@ -219,8 +372,8 @@ export default class ConnectorsService {
       );
       jdbcUrl = jdbcUrl.replace('KEYFILE_PATH_PLACEHOLDER', keyfilePath);
     }
-    const USER = `db-user-${projectName}`;
-    const PASSWORD = `db-password-${projectName}`;
+    const USER = `db-user-${connection.name}`;
+    const PASSWORD = `db-password-${connection.name}`;
     const yamlData: {
       connections: RosettaConnection[];
       openai_api_key?: string;
@@ -337,8 +490,46 @@ export default class ConnectorsService {
     }
   }
 
+  private static async mapToRosettaConnection(
+    connection: ConnectionInput,
+    project: Project,
+  ): Promise<RosettaConnection> {
+    let rosettaJdbcUrl = this.generateJdbcUrl(connection, project.name);
+    if (
+      connection.type === 'bigquery' &&
+      connection.method === 'service-account' &&
+      connection.keyfile
+    ) {
+      const keyfilePath = await this.saveServiceAccountFile(
+        project.path,
+        connection.keyfile,
+      );
+      rosettaJdbcUrl = rosettaJdbcUrl.replace(
+        'KEYFILE_PATH_PLACEHOLDER',
+        keyfilePath,
+      );
+    }
+
+    return {
+      name: connection.name || project.name,
+      dbType: connection.type,
+      databaseName:
+        connection.type === 'duckdb'
+          ? connection.database_path
+          : connection.database,
+      schemaName: connection.schema,
+      url: rosettaJdbcUrl,
+      ...(connection.type !== 'databricks' &&
+        connection.type !== 'duckdb' &&
+        'username' in connection &&
+        'password' in connection && {
+          userName: `db-user-${connection.name}`,
+          password: `db-password-${connection.name}`,
+        }),
+    };
+  }
+
   private static mapToDbtConnection(conn: ConnectionInput): DBTConnection {
-    // Handle each connection type separately to ensure type safety
     switch (conn.type) {
       case 'snowflake':
         return {
@@ -413,19 +604,19 @@ export default class ConnectorsService {
   }
 
   private static async mapToDbtProfiles(
+    name: string,
     conn: ConnectionInput,
     projectPath?: string,
-    projectName?: string,
   ): Promise<string> {
     const profileConfig = {
       config: {
         send_anonymous_usage_stats: false,
         partial_parse: true,
       },
-      [conn.name]: {
+      [name]: {
         target: 'dev',
         outputs: {
-          dev: await this.mapToDbtProfileOutput(conn, projectPath, projectName),
+          dev: await this.mapToDbtProfileOutput(conn, projectPath),
         },
       },
     };
@@ -434,21 +625,20 @@ export default class ConnectorsService {
   }
 
   static generateProfilesYml(
+    name: string,
     connection: ConnectionInput,
     projectPath?: string,
-    projectName?: string,
   ): Promise<string> {
-    return this.mapToDbtProfiles(connection, projectPath, projectName);
+    return this.mapToDbtProfiles(name, connection, projectPath);
   }
 
   private static async mapToDbtProfileOutput(
     conn: ConnectionInput,
     projectPath?: string,
-    projectName?: string,
   ): Promise<any> {
-    const dbUserName = `{{ env_var("db-user-${projectName}") }}`;
-    const dbPassword = `{{ env_var("db-password-${projectName}") }}`;
-    const dbToken = `{{ env_var("db-token-${projectName}") }}`;
+    const dbUserName = `{{ env_var("db-user-${conn.name}") }}`;
+    const dbPassword = `{{ env_var("db-password-${conn.name}") }}`;
+    const dbToken = `{{ env_var("db-token-${conn.name}") }}`;
     switch (conn.type) {
       case 'postgres':
         return {
@@ -601,10 +791,12 @@ export default class ConnectorsService {
   static async parseProjectConnectionFiles(projectPath: string): Promise<{
     dbtConnection?: DBTConnection;
     rosettaConnection?: RosettaConnection;
+    connectionInput?: ConnectionInput;
   }> {
     const result: {
       dbtConnection?: DBTConnection;
       rosettaConnection?: RosettaConnection;
+      connectionInput?: ConnectionInput;
     } = {};
 
     try {
@@ -614,6 +806,8 @@ export default class ConnectorsService {
         const dbtConnection = await this.parseProfilesYml(profilesPath);
         if (dbtConnection) {
           result.dbtConnection = dbtConnection;
+          result.connectionInput =
+            this.mapDBTConnectionToConnectionInput(dbtConnection) ?? undefined;
         }
       }
 
@@ -738,6 +932,111 @@ export default class ConnectorsService {
   }
 
   /**
+   * Maps a DBTConnection to a ConnectionInput
+   * @param dbtConnection - The DBT connection configuration
+   * @param connectionName - Name for the connection (since DBT connections don't have names)
+   * @returns ConnectionInput or null if mapping fails
+   */
+  private static mapDBTConnectionToConnectionInput(
+    dbtConnection: DBTConnection,
+    connectionName: string = 'DBT Connection',
+  ): ConnectionInput | null {
+    try {
+      switch (dbtConnection.type) {
+        case 'postgres':
+          return {
+            type: 'postgres',
+            name: connectionName,
+            host: dbtConnection.host,
+            port: dbtConnection.port,
+            username: dbtConnection.username,
+            password: dbtConnection.password,
+            database: dbtConnection.database,
+            schema: dbtConnection.schema,
+            keepalives_idle: dbtConnection.keepalives_idle,
+          };
+
+        case 'snowflake':
+          return {
+            type: 'snowflake',
+            name: connectionName,
+            account: dbtConnection.account,
+            warehouse: dbtConnection.warehouse,
+            username: dbtConnection.username,
+            password: dbtConnection.password,
+            database: dbtConnection.database,
+            schema: dbtConnection.schema,
+            role: dbtConnection.role,
+            client_session_keep_alive: dbtConnection.client_session_keep_alive,
+          };
+
+        case 'bigquery':
+          return {
+            type: 'bigquery',
+            name: connectionName,
+            project: dbtConnection.project,
+            dataset: dbtConnection.database, // In DBT, dataset is stored in database field
+            method: dbtConnection.method,
+            keyfile: dbtConnection.keyfile || '',
+            location: dbtConnection.location,
+            priority: dbtConnection.priority,
+            // Required by ConnectionBase but not used in BigQuery
+            host: '',
+            port: 443,
+            database: dbtConnection.project, // Set to project ID
+            schema: dbtConnection.schema,
+            username: dbtConnection.project, // Set to project ID
+            password: '', // Empty for BigQuery
+          };
+
+        case 'redshift':
+          return {
+            type: 'redshift',
+            name: connectionName,
+            host: dbtConnection.host,
+            port: dbtConnection.port,
+            username: dbtConnection.username,
+            password: dbtConnection.password,
+            database: dbtConnection.database,
+            schema: dbtConnection.schema,
+            keepalives_idle: dbtConnection.keepalives_idle,
+            ssl: dbtConnection.ssl,
+            sslrootcert: dbtConnection.sslrootcert,
+          };
+
+        case 'databricks':
+          return {
+            type: 'databricks',
+            name: connectionName,
+            host: dbtConnection.host,
+            port: dbtConnection.port,
+            httpPath: dbtConnection.http_path, // Note: property name differs between types
+            token: dbtConnection.token,
+            database: dbtConnection.catalog || dbtConnection.database,
+            schema: dbtConnection.schema,
+            keepalives_idle: dbtConnection.keepalives_idle,
+          };
+
+        case 'duckdb':
+          return {
+            type: 'duckdb',
+            name: connectionName,
+            database_path: dbtConnection.path,
+            short_database_path:
+              dbtConnection.path.split('/').pop() || dbtConnection.path,
+            database: dbtConnection.database,
+            schema: dbtConnection.schema,
+          };
+
+        default:
+          return null;
+      }
+    } catch (error) {
+      return null;
+    }
+  }
+
+  /**
    * Parse main.conf file and extract Rosetta connection information
    */
   private static async parseMainConf(
@@ -777,5 +1076,48 @@ export default class ConnectorsService {
     value: string,
   ): Promise<void> {
     process.env[key] = value;
+  }
+
+  /**
+   * Validate connection name for uniqueness and reserved names
+   */
+  private static validateConnectionName(
+    name: string,
+    existingConnections: ConnectionModel[],
+    excludeId?: string,
+    allowReservedNames?: boolean,
+  ): { isValid: boolean; message?: string } {
+    // Check for empty name
+    if (!name.trim()) {
+      return {
+        isValid: false,
+        message: 'Connection name cannot be empty',
+      };
+    }
+
+    // Check for reserved names (case-insensitive) - skip if allowed
+    if (!allowReservedNames && name.toLowerCase().trim() === 'dbt connection') {
+      return {
+        isValid: false,
+        message:
+          'Connection name "DBT Connection" is reserved for the getting started template',
+      };
+    }
+
+    // Check for uniqueness (case-insensitive)
+    const duplicateExists = existingConnections.some(
+      (conn) =>
+        conn.connection.name.toLowerCase().trim() ===
+          name.toLowerCase().trim() && conn.id !== excludeId,
+    );
+
+    if (duplicateExists) {
+      return {
+        isValid: false,
+        message: 'A connection with this name already exists',
+      };
+    }
+
+    return { isValid: true };
   }
 }

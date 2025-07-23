@@ -1,4 +1,4 @@
-import { ConnectionInput } from './backend';
+import { ConnectionInput, ConnectionModel } from './backend';
 
 export type TestChannels = 'test:create' | 'test:getAll';
 
@@ -46,7 +46,11 @@ export type ConnectorChannels =
   | 'connector:validate'
   | 'connector:query'
   | 'project:addFromFolder'
-  | 'connector:setConnectionEnvVariable';
+  | 'connector:setConnectionEnvVariable'
+  | 'connector:list'
+  | 'connector:get'
+  | 'connector:update'
+  | 'connector:delete';
 
 export type CliChannels =
   | 'cli:run'
@@ -85,7 +89,11 @@ export type ProcessChannels =
   | 'process:status'
   | 'process:stop'
   | 'process:output'
-  | 'process:error';
+  | 'process:error'
+  | 'process:forceStop'
+  | 'process:started'
+  | 'process:exit'
+  | 'process:done';
 
 export type SecureStorageChannels =
   | 'secure-storage:set'
@@ -120,6 +128,11 @@ export type Channels =
   | CloudExplorerChannels;
 
 export type ConfigureConnectionBody = {
-  projectId: string;
-  connection: ConnectionInput;
+  projectId?: string;
+  connection?: ConnectionInput;
+  connectionId?: string;
+};
+
+export type UpdateConnectionBody = {
+  connection: ConnectionModel;
 };

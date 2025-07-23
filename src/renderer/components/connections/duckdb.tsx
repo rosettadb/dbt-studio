@@ -12,18 +12,22 @@ import {
   Typography,
 } from '@mui/material';
 import { FolderOpen } from '@mui/icons-material';
-import { DuckDBConnection, DuckDBDBTConnection } from '../../../types/backend';
+import { ConnectionModel, DuckDBConnection } from '../../../types/backend';
 import connectionIcons from '../../../../assets/connectionIcons';
 import {
   useConfigureConnection,
   useTestConnection,
-  useGetSelectedProject,
   useFilePicker,
+  useUpdateConnection,
+  useGetConnections,
 } from '../../controllers';
 import ConnectionHeader from './connection-header';
+import { useConnectionNameValidation } from '../../utils/connectionValidation';
 
 type Props = {
   onCancel: () => void;
+  connection?: ConnectionModel;
+  projectId?: string;
 };
 
 function shortDuckdbPath(databasePath: string): string {
@@ -33,29 +37,29 @@ function shortDuckdbPath(databasePath: string): string {
   return baseName.replace(/\.duckdb$/, '');
 }
 
-export const DuckDB: React.FC<Props> = ({ onCancel }) => {
-  const { data: project } = useGetSelectedProject();
+export const DuckDB: React.FC<Props> = ({
+  onCancel,
+  connection,
+  projectId,
+}) => {
   const navigate = useNavigate();
   const theme = useTheme();
 
   const { mutate: getFiles } = useFilePicker();
 
-  const existingConnection: DuckDBDBTConnection | undefined =
-    React.useMemo(() => {
-      if (project && project.dbtConnection?.type === 'duckdb') {
-        return project.dbtConnection as DuckDBDBTConnection;
-      }
-      return undefined;
-    }, [project]);
+  const existingConnection = React.useMemo(
+    () => connection?.connection as DuckDBConnection,
+    [connection],
+  );
 
   const [formState, setFormState] = React.useState<DuckDBConnection>({
     type: 'duckdb',
-    name: project?.name || 'DuckDB Connection',
-    database_path: existingConnection?.path || '',
-    database: existingConnection?.database || 'main', // For compatibility
-    schema: 'main', // DuckDB default schema
-    short_database_path: existingConnection?.path
-      ? shortDuckdbPath(existingConnection.path)
+    name: existingConnection?.name || 'DuckDB Connection',
+    database_path: existingConnection?.database_path || '',
+    database: existingConnection?.database || 'main',
+    schema: 'main',
+    short_database_path: existingConnection?.database_path
+      ? shortDuckdbPath(existingConnection.database_path)
       : '',
   });
 
@@ -64,10 +68,23 @@ export const DuckDB: React.FC<Props> = ({ onCancel }) => {
     'idle' | 'success' | 'failed'
   >('idle');
 
+  const { mutate: updateConnection } = useUpdateConnection({
+    onSuccess: () => {
+      toast.success('DuckDB connection updated successfully!');
+    },
+    onError: (error) => {
+      toast.error(`Update failed: ${error}`);
+    },
+  });
+
   const { mutate: configureConnection } = useConfigureConnection({
     onSuccess: () => {
       toast.success('DuckDB connection configured successfully!');
-      navigate(`/app/project-details`);
+      if (projectId) {
+        navigate('/app');
+        return;
+      }
+      navigate('/app/connections');
     },
     onError: (error) => {
       toast.error(`Configuration failed: ${error}`);
@@ -111,6 +128,16 @@ export const DuckDB: React.FC<Props> = ({ onCancel }) => {
     },
   });
 
+  // Get existing connections for name validation
+  const { data: existingConnections = [] } = useGetConnections();
+  const { validateName } = useConnectionNameValidation(
+    existingConnections,
+    connection?.id,
+  );
+
+  // Get real-time validation result for name field
+  const nameValidation = validateName(formState.name);
+
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
     setFormState((prev) => ({
@@ -147,15 +174,29 @@ export const DuckDB: React.FC<Props> = ({ onCancel }) => {
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!project?.id) return;
+
+    // Validate connection name before submitting
+    if (!nameValidation.isValid) {
+      toast.error(nameValidation.message || 'Invalid connection name');
+      return;
+    }
 
     const connectionData = {
       ...formState,
       database: formState.database_path,
     };
 
+    if (connection) {
+      updateConnection({
+        connection: {
+          id: connection.id,
+          connection: connectionData,
+        },
+      });
+      return;
+    }
     configureConnection({
-      projectId: project.id,
+      projectId,
       connection: connectionData,
     });
   };
@@ -205,7 +246,7 @@ export const DuckDB: React.FC<Props> = ({ onCancel }) => {
       }}
     >
       <ConnectionHeader
-        title={project?.name || 'DuckDB Connection'}
+        title="DuckDB Connection"
         imageSource={connectionIcons.images.duckdb}
         onClose={onCancel}
         onSave={handleSubmit}
@@ -230,6 +271,8 @@ export const DuckDB: React.FC<Props> = ({ onCancel }) => {
           fullWidth
           margin="normal"
           required
+          error={!nameValidation.isValid}
+          helperText={!nameValidation.isValid ? nameValidation.message : ''}
         />
 
         <TextField

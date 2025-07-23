@@ -1,7 +1,16 @@
-/* eslint-disable no-plusplus */
+/* eslint-disable no-plusplus, consistent-return, no-case-declarations */
 import React from 'react';
 import { parsePatch, diffLines } from 'diff';
-import { Table } from '../../types/backend';
+import {
+  BigQueryConnection,
+  ConnectionModel,
+  DatabricksConnection,
+  DuckDBConnection,
+  PostgresConnection,
+  RedshiftConnection,
+  SnowflakeConnection,
+  Table,
+} from '../../types/backend';
 import { CompletionItem } from '../../types/frontend';
 import {
   MonacoAutocompleteSQLKeywords,
@@ -247,4 +256,82 @@ export const convertToSourcePath = (path: string): string => {
     return `source:${schema}.${table}`;
   }
   return `source:${modelName}`;
+};
+
+export const getConnectionInput = (conn: ConnectionModel) => {
+  if (!conn) {
+    return;
+  }
+  const { connection } = conn;
+  const { type } = connection;
+  switch (type) {
+    case 'postgres':
+      const pg = connection as PostgresConnection;
+      return {
+        type,
+        host: pg.host,
+        port: pg.port,
+        username: pg.username,
+        password: pg.password,
+        database: pg.database,
+        schema: pg.schema || 'public',
+      };
+    case 'redshift':
+      const rs = connection as RedshiftConnection;
+      return {
+        type,
+        host: rs.host,
+        port: rs.port,
+        username: rs.username,
+        password: rs.password,
+        database: rs.database,
+        schema: rs.schema || 'public',
+      };
+    case 'snowflake':
+      const sf = connection as SnowflakeConnection;
+      return {
+        type,
+        account: sf.account,
+        username: sf.username,
+        password: sf.password,
+        database: sf.database,
+        warehouse: sf.warehouse,
+        schema: sf.schema || 'PUBLIC',
+        role: sf.role,
+      };
+    case 'bigquery':
+      const bq = connection as BigQueryConnection;
+      return {
+        type,
+        projectId: bq.project,
+        keyFilename: bq.keyfile,
+        schema: bq.database,
+        method: bq.method,
+        keyfile: bq.keyfile,
+        location: bq.location,
+        priority: bq.priority,
+      };
+    case 'databricks':
+      const db = connection as DatabricksConnection;
+      return {
+        type,
+        host: db.host,
+        port: db.port,
+        httpPath: db.httpPath,
+        token: db.token, // Use token directly
+        database: db.database,
+        schema: db.schema,
+      };
+    case 'duckdb':
+      const duck = connection as DuckDBConnection;
+      return {
+        type,
+        database_path: duck.database_path,
+        database: duck.database,
+        schema: duck.schema || 'main',
+        name: connection.name,
+      };
+    default:
+      return undefined;
+  }
 };

@@ -245,7 +245,7 @@ export const useSaveConnection = () => {
   );
 };
 
-export const useDeleteConnection = () => {
+export const useDeleteBucketConnection = () => {
   const queryClient = useQueryClient();
 
   return useMutation((id: string) => connectionStorage.deleteConnection(id), {

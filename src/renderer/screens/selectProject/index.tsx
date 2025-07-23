@@ -18,6 +18,7 @@ import {
   DialogContentText,
   DialogTitle,
   Tooltip,
+  Chip,
 } from '@mui/material';
 import AddIcon from '@mui/icons-material/Add';
 import SearchIcon from '@mui/icons-material/Search';
@@ -29,19 +30,26 @@ import DriveFolderUploadIcon from '@mui/icons-material/DriveFolderUpload';
 import DatabaseIcon from '@mui/icons-material/Storage';
 import RocketLaunchIcon from '@mui/icons-material/RocketLaunch';
 import { toast } from 'react-toastify';
-import { FolderOpen } from '@mui/icons-material';
+import { Cable } from '@mui/icons-material';
 import { projectsServices } from '../../services';
 import {
   useDeleteProject,
   useFilePicker,
+  useGetConnections,
   useGetProjects,
   useGetSettings,
+  useSelectProject,
 } from '../../controllers';
-import { CloneRepoModal, Icon, GetStartedModal } from '../../components';
+import {
+  CloneRepoModal,
+  Icon,
+  GetStartedModal,
+  NewProject,
+} from '../../components';
 import { icons } from '../../../../assets';
 import connectionIcons from '../../../../assets/connectionIcons';
 import { AppLayout } from '../../layouts';
-import { SupportedConnectionTypes } from '../../../types/backend';
+import { Project, SupportedConnectionTypes } from '../../../types/backend';
 
 const ProjectSelectionContainer = styled(Box)`
   padding: 0.5rem 2rem 2rem;
@@ -112,26 +120,20 @@ const ProjectPath = styled(Typography)`
   text-overflow: ellipsis;
 `;
 
+const ConnectionName = styled(Typography)`
+  font-size: 11px;
+  color: ${({ theme }) => theme.palette.primary.main};
+  font-weight: 500;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-top: 2px;
+`;
+
 const ProjectActions = styled(Box)`
   display: flex;
   align-items: center;
   gap: 8px;
-`;
-
-const AddProjectForm = styled(Box)`
-  width: 100%;
-  max-width: 600px;
-  margin: 2rem auto;
-  padding: 2rem;
-  border-radius: 8px;
-  border: 1px solid ${({ theme }) => theme.palette.divider};
-`;
-
-const FormActions = styled(Box)`
-  display: flex;
-  justify-content: flex-end;
-  gap: 1rem;
-  margin-top: 1.5rem;
 `;
 
 const EmptyStateContainer = styled(Box)`
@@ -212,10 +214,24 @@ const ProjectCardContent = styled(Box)`
   overflow: hidden;
 `;
 
+const ConnectionIcon = styled('img')`
+  width: 20px;
+  height: 20px;
+  margin-right: 6px;
+  flex-shrink: 0;
+  border-radius: 2px;
+  object-fit: contain;
+`;
+
 const SelectProject: React.FC = () => {
   const navigate = useNavigate();
+  const { mutateAsync: selectProject } = useSelectProject();
   const { data: settings } = useGetSettings();
   const { data: projects = [] } = useGetProjects();
+  const { data: connections = [], isLoading: isLoadingConnections } =
+    useGetConnections();
+  const [selectedConnection, setSelectedConnection] =
+    React.useState<string>('');
   const [isCloneModalOpen, setIsCloneModalOpen] = React.useState(false);
   const [searchQuery, setSearchQuery] = React.useState('');
   const [isAddingProject, setIsAddingProject] = React.useState(false);
@@ -247,24 +263,20 @@ const SelectProject: React.FC = () => {
     },
   });
 
-  // Helper function to get connection icon
-  const getConnectionIcon = (project: any) => {
-    const connectionType = project?.dbtConnection?.type;
+  const getConnectionIcon = (project: Project) => {
+    const connectionType = project?.connection?.type;
 
     if (!connectionType) {
-      // Return null to indicate we should use MUI icon instead
       return null;
     }
 
     return connectionIcons.images[connectionType as SupportedConnectionTypes];
   };
 
-  // Helper function to render the appropriate icon component
-  const renderProjectIcon = (project: any) => {
+  const renderProjectIcon = (project: Project) => {
     const connectionIcon = getConnectionIcon(project);
 
     if (connectionIcon) {
-      // Render image icon for connected projects
       return (
         <ProjectIcon
           src={connectionIcon}
@@ -272,12 +284,21 @@ const SelectProject: React.FC = () => {
         />
       );
     }
-    // Render MUI icon for disconnected projects
     return (
       <ProjectMuiIcon>
         <DatabaseIcon />
       </ProjectMuiIcon>
     );
+  };
+
+  // Helper function to render connection icon for the selector
+  const renderConnectionIcon = (connectionType: string) => {
+    const iconSrc =
+      connectionIcons.images[connectionType as SupportedConnectionTypes];
+    if (iconSrc) {
+      return <ConnectionIcon src={iconSrc} alt={connectionType} />;
+    }
+    return <DatabaseIcon sx={{ fontSize: 20, marginRight: 0.75 }} />;
   };
 
   const handleOpenMenu = (
@@ -358,14 +379,21 @@ const SelectProject: React.FC = () => {
       return;
     }
 
+    if (!selectedConnection) {
+      toast.error('Please select a database connection or create a new one.');
+      return;
+    }
+
     try {
       const project = await projectsServices.addProject({
         name: `${defaultProjectPath}/${newProject.name}`,
+        connectionId: selectedConnection || undefined,
       });
       await projectsServices.selectProject({ projectId: project.id });
       toast.success(`Project ${project.name} created successfully!`);
       setIsAddingProject(false);
       setNewProject({ name: '' });
+      setSelectedConnection('');
       navigate('/app/loading');
     } catch (error) {
       toast.error('Failed to create project. Please try again.');
@@ -463,6 +491,35 @@ const SelectProject: React.FC = () => {
               </ProjectInfo>
             </ProjectCardContent>
             <ProjectActions>
+              {/* Only show badge if connection name exists */}
+              {project.connection?.name && (
+                <Chip
+                  label={
+                    <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                      <Cable sx={{ fontSize: 12, mr: 0.5 }} />
+                      {project.connection.name}
+                    </Box>
+                  }
+                  size="small"
+                  sx={{
+                    mr: 1,
+                    fontWeight: 500,
+                    fontSize: 12,
+                    textTransform: 'none',
+                    bgcolor: 'background.paper',
+                    color: 'primary.main',
+                    border: '1px solid',
+                    borderColor: 'divider',
+                  }}
+                  title="Connection Name"
+                />
+              )}
+              {!project.connection?.name && (
+                <ConnectionName sx={{ color: 'text.disabled', mr: 1 }}>
+                  <DatabaseIcon sx={{ fontSize: 12 }} />
+                  No connection configured
+                </ConnectionName>
+              )}
               <IconButton
                 size="small"
                 onClick={(e) => handleOpenMenu(e, project.id)}
@@ -505,75 +562,21 @@ const SelectProject: React.FC = () => {
     <AppLayout>
       <ProjectSelectionContainer>
         {isAddingProject ? (
-          <>
-            <Typography variant="h4" component="h2" gutterBottom align="center">
-              Create New Project
-            </Typography>
-            <AddProjectForm>
-              <TextField
-                fullWidth
-                disabled
-                label="Project Path"
-                variant="outlined"
-                id="rosettaPath"
-                name="rosettaPath"
-                value={`${defaultProjectPath}/${newProject.name}`}
-                onChange={(event) => setDefaultProjectPath(event.target.value)}
-                sx={{ mb: 2 }}
-                slotProps={{
-                  input: {
-                    endAdornment: (
-                      <IconButton
-                        onClick={() => {
-                          getFiles(
-                            {
-                              properties: ['openDirectory'],
-                              defaultPath: defaultProjectPath,
-                            },
-                            {
-                              onSuccess: (data) => {
-                                setDefaultProjectPath(data[0]);
-                              },
-                            },
-                          );
-                        }}
-                        edge="end"
-                      >
-                        <FolderOpen />
-                      </IconButton>
-                    ),
-                  },
-                }}
-              />
-              <TextField
-                fullWidth
-                label="Project Name"
-                variant="outlined"
-                value={newProject.name}
-                onChange={(e) =>
-                  setNewProject({ ...newProject, name: e.target.value })
-                }
-                autoFocus
-                sx={{ mb: 2 }}
-              />
-              <FormActions>
-                <Button
-                  variant="outlined"
-                  onClick={() => setIsAddingProject(false)}
-                >
-                  Cancel
-                </Button>
-                <Button
-                  variant="contained"
-                  color="primary"
-                  onClick={handleAddProject}
-                  disabled={!newProject.name.trim()}
-                >
-                  Create Project
-                </Button>
-              </FormActions>
-            </AddProjectForm>
-          </>
+          <NewProject
+            defaultProjectPath={defaultProjectPath}
+            setDefaultProjectPath={setDefaultProjectPath}
+            newProject={newProject}
+            setNewProject={setNewProject}
+            selectedConnection={selectedConnection}
+            setSelectedConnection={setSelectedConnection}
+            isLoadingConnections={isLoadingConnections}
+            connections={connections}
+            navigate={navigate}
+            getFiles={getFiles}
+            handleAddProject={handleAddProject}
+            setIsAddingProject={setIsAddingProject}
+            renderConnectionIcon={renderConnectionIcon}
+          />
         ) : (
           <>
             <TaglineContainer>
@@ -646,7 +649,7 @@ const SelectProject: React.FC = () => {
                         const project =
                           await projectsServices.addProjectFromFolder();
                         if (project && project.id) {
-                          await projectsServices.selectProject({
+                          await selectProject({
                             projectId: project.id,
                           });
                           setIsAddingProject(false);
@@ -654,7 +657,7 @@ const SelectProject: React.FC = () => {
                           toast.success(
                             `Project ${project.name} loaded successfully!`,
                           );
-                          navigate('/app/loading');
+                          navigate('/app');
                         } else {
                           toast.error('Failed to load project from folder.');
                         }

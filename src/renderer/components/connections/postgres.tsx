@@ -11,27 +11,31 @@ import {
 } from '@mui/material';
 import { Visibility, VisibilityOff } from '@mui/icons-material';
 import { toast } from 'react-toastify';
-import {
-  PostgresConnection,
-  PostgresDBTConnection,
-} from '../../../types/backend';
+import { ConnectionModel, PostgresConnection } from '../../../types/backend';
 import connectionIcons from '../../../../assets/connectionIcons';
 import {
   useConfigureConnection,
   useTestConnection,
-  useGetSelectedProject,
+  useUpdateConnection,
+  useGetConnections,
 } from '../../controllers';
 import ConnectionHeader from './connection-header';
 import useSecureStorage from '../../hooks/useSecureStorage';
+import { useConnectionNameValidation } from '../../utils/connectionValidation';
 
 type Props = {
   onCancel: () => void;
+  connection?: ConnectionModel;
+  projectId?: string;
 };
 
-export const Postgres: React.FC<Props> = ({ onCancel }) => {
-  const { data: project } = useGetSelectedProject();
-  const navigate = useNavigate();
+export const Postgres: React.FC<Props> = ({
+  onCancel,
+  connection,
+  projectId,
+}) => {
   const theme = useTheme();
+  const navigate = useNavigate();
   const {
     getDatabaseUsername,
     getDatabasePassword,
@@ -39,17 +43,14 @@ export const Postgres: React.FC<Props> = ({ onCancel }) => {
     setDatabasePassword,
   } = useSecureStorage();
 
-  const existingConnection: PostgresDBTConnection | undefined =
-    React.useMemo(() => {
-      if (project) {
-        return project.dbtConnection as PostgresDBTConnection;
-      }
-      return undefined;
-    }, [project]);
+  const existingConnection = React.useMemo(
+    () => connection?.connection as PostgresConnection,
+    [connection],
+  );
 
   const [formState, setFormState] = React.useState<PostgresConnection>({
     type: existingConnection?.type ?? 'postgres',
-    name: project!.name,
+    name: existingConnection?.name ?? '',
     host: existingConnection?.host ?? '',
     port: existingConnection?.port ?? 5432,
     database: existingConnection?.database ?? '',
@@ -63,21 +64,40 @@ export const Postgres: React.FC<Props> = ({ onCancel }) => {
   const [connectionStatus, setConnectionStatus] = React.useState<
     'idle' | 'success' | 'failed'
   >('idle');
+  const [nameError, setNameError] = React.useState<string>('');
+
+  // Get existing connections for validation
+  const { data: existingConnections = [] } = useGetConnections();
+  const { validateName } = useConnectionNameValidation(
+    existingConnections,
+    connection?.id,
+  );
+
+  const { mutate: updateConnection } = useUpdateConnection({
+    onSuccess: () => {
+      toast.success('PostgreSQL connection updated successfully!');
+    },
+    onError: (error) => {
+      toast.error(`Update failed: ${error}`);
+    },
+  });
 
   const { mutate: configureConnection } = useConfigureConnection({
     onSuccess: () => {
-      toast.success('PostgreSQL connection configured successfully!');
-      navigate(`/app/project-details`);
+      toast.success('PostgreSQL connection created successfully!');
+      if (projectId) {
+        navigate('/app');
+        return;
+      }
+      navigate('/app/connections');
     },
     onError: (error) => {
       toast.error(`Configuration failed: ${error}`);
     },
   });
-
   const { mutate: testConnection } = useTestConnection({
     onMutate: () => {
       setIsTesting(true);
-      // Reset connection status when starting a new test
       setConnectionStatus('idle');
     },
     onSettled: () => setIsTesting(false),
@@ -98,41 +118,62 @@ export const Postgres: React.FC<Props> = ({ onCancel }) => {
 
   React.useEffect(() => {
     const fetchCredentials = async () => {
-      if (project?.name) {
-        const storedUsername = await getDatabaseUsername(project.name);
-        const storedPassword = await getDatabasePassword(project.name);
-        setFormState((prev) => ({
-          ...prev,
-          username: storedUsername || '',
-          password: storedPassword || '',
-        }));
-      }
+      const storedUsername = await getDatabaseUsername(existingConnection.name);
+      const storedPassword = await getDatabasePassword(existingConnection.name);
+      setFormState((prev) => ({
+        ...prev,
+        username: storedUsername || '',
+        password: storedPassword || '',
+      }));
     };
-    fetchCredentials();
-  }, [project?.name]);
+    if (existingConnection) {
+      fetchCredentials();
+    }
+  }, [existingConnection]);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
+
+    // Update form state
     setFormState((prev) => ({
       ...prev,
       [name]: name === 'port' ? Number(value) : value,
     }));
 
-    // Reset connection status whenever an input changes
+    // Validate connection name in real-time
+    if (name === 'name') {
+      const validation = validateName(value);
+      setNameError(validation.isValid ? '' : validation.message || '');
+    }
+
     setConnectionStatus('idle');
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!project?.id) return;
 
-    if (project?.name) {
-      await setDatabaseUsername(formState.username, project.name);
-      await setDatabasePassword(formState.password, project.name);
+    // Validate connection name before submission
+    const nameValidation = validateName(formState.name);
+    if (!nameValidation.isValid) {
+      toast.error(nameValidation.message || 'Invalid connection name');
+      setNameError(nameValidation.message || '');
+      return;
     }
 
+    await setDatabaseUsername(formState.username, formState.name);
+    await setDatabasePassword(formState.password, formState.name);
+
+    if (connection) {
+      updateConnection({
+        connection: {
+          id: connection.id,
+          connection: formState,
+        },
+      });
+      return;
+    }
     configureConnection({
-      projectId: project.id,
+      projectId,
       connection: formState,
     });
   };
@@ -172,7 +213,7 @@ export const Postgres: React.FC<Props> = ({ onCancel }) => {
       }}
     >
       <ConnectionHeader
-        title={project?.name || 'No name'}
+        title="No name"
         imageSource={connectionIcons.images.postgres}
         onClose={onCancel}
         onSave={handleSubmit}
@@ -197,6 +238,8 @@ export const Postgres: React.FC<Props> = ({ onCancel }) => {
           fullWidth
           margin="normal"
           required
+          error={!!nameError}
+          helperText={nameError || 'Enter a unique name for this connection'}
         />
 
         <TextField

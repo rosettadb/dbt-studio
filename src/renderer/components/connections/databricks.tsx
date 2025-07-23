@@ -11,46 +11,47 @@ import {
 } from '@mui/material';
 import { Visibility, VisibilityOff } from '@mui/icons-material';
 import { toast } from 'react-toastify';
-import {
-  DatabricksConnection,
-  DatabricksDBTConnection,
-} from '../../../types/backend';
+import { ConnectionModel, DatabricksConnection } from '../../../types/backend';
 import connectionIcons from '../../../../assets/connectionIcons';
 import {
   useConfigureConnection,
+  useUpdateConnection,
   useTestConnection,
-  useGetSelectedProject,
+  useGetConnections,
 } from '../../controllers';
 import ConnectionHeader from './connection-header';
 import useSecureStorage from '../../hooks/useSecureStorage';
+import { useConnectionNameValidation } from '../../utils/connectionValidation';
 
 type Props = {
   onCancel: () => void;
+  connection?: ConnectionModel;
+  projectId?: string;
 };
 
-export const Databricks: React.FC<Props> = ({ onCancel }) => {
-  const { data: project } = useGetSelectedProject();
+export const Databricks: React.FC<Props> = ({
+  onCancel,
+  connection,
+  projectId,
+}) => {
   const navigate = useNavigate();
   const theme = useTheme();
   const { getDatabaseToken, setDatabaseToken } = useSecureStorage();
 
-  const existingConnection: DatabricksDBTConnection | undefined =
-    React.useMemo(() => {
-      if (project && project.dbtConnection?.type === 'databricks') {
-        return project.dbtConnection as DatabricksDBTConnection;
-      }
-      return undefined;
-    }, [project]);
+  const existingConnection = React.useMemo(
+    () => connection?.connection as DatabricksConnection,
+    [connection],
+  );
 
   const [formState, setFormState] = React.useState<DatabricksConnection>({
     type: existingConnection?.type ?? 'databricks',
-    name: project!.name,
+    name: existingConnection?.name ?? '',
     host: existingConnection?.host ?? '',
     port: existingConnection?.port ?? 443,
-    httpPath: existingConnection?.http_path ?? '',
+    httpPath: existingConnection?.httpPath ?? '',
     database: existingConnection?.database ?? '',
     schema: existingConnection?.schema ?? '',
-    token: '', // Use token instead of password
+    token: '',
   });
 
   const [showToken, setShowToken] = React.useState(false);
@@ -62,10 +63,23 @@ export const Databricks: React.FC<Props> = ({ onCancel }) => {
   const { mutate: configureConnection } = useConfigureConnection({
     onSuccess: () => {
       toast.success('Databricks connection configured successfully!');
-      navigate(`/app/project-details`);
+      if (projectId) {
+        navigate('/app');
+        return;
+      }
+      navigate('/app/connections');
     },
     onError: (error) => {
       toast.error(`Configuration failed: ${error}`);
+    },
+  });
+
+  const { mutate: updateConnection } = useUpdateConnection({
+    onSuccess: () => {
+      toast.success('Databricks connection updated successfully!');
+    },
+    onError: (error) => {
+      toast.error(`Update failed: ${error}`);
     },
   });
 
@@ -87,22 +101,28 @@ export const Databricks: React.FC<Props> = ({ onCancel }) => {
     },
   });
 
+  // Get existing connections for name validation
+  const { data: existingConnections = [] } = useGetConnections();
+  const { validateName } = useConnectionNameValidation(
+    existingConnections,
+    connection?.id,
+  );
+
+  // Get real-time validation result for name field
+  const nameValidation = validateName(formState.name);
+
   React.useEffect(() => {
     const fetchCredentials = async () => {
-      if (project?.name) {
-        try {
-          const storedToken = await getDatabaseToken(project.name);
-          setFormState((prev) => ({
-            ...prev,
-            token: storedToken || '',
-          }));
-        } catch (error) {
-          toast.error('Failed to retrieve token. Please try again.');
-        }
-      }
+      const storedToken = await getDatabaseToken(existingConnection.name);
+      setFormState((prev) => ({
+        ...prev,
+        token: storedToken || '',
+      }));
     };
-    fetchCredentials();
-  }, [project?.name]);
+    if (existingConnection) {
+      fetchCredentials();
+    }
+  }, [existingConnection]);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
@@ -116,17 +136,26 @@ export const Databricks: React.FC<Props> = ({ onCancel }) => {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!project?.id) return;
-    if (formState.token && project.name) {
-      try {
-        await setDatabaseToken(formState.token, project.name);
-      } catch (error) {
-        toast.error('Failed to save token. Please try again.');
-        return;
-      }
+
+    // Validate connection name before submitting
+    if (!nameValidation.isValid) {
+      toast.error(nameValidation.message || 'Invalid connection name');
+      return;
+    }
+
+    await setDatabaseToken(formState.token, formState.name);
+
+    if (connection) {
+      updateConnection({
+        connection: {
+          id: connection.id,
+          connection: formState,
+        },
+      });
+      return;
     }
     configureConnection({
-      projectId: project.id,
+      projectId,
       connection: formState,
     });
   };
@@ -166,7 +195,7 @@ export const Databricks: React.FC<Props> = ({ onCancel }) => {
       }}
     >
       <ConnectionHeader
-        title={project?.name || 'Databricks Connection'}
+        title="Databricks Connection"
         imageSource={connectionIcons.images.databricks}
         onClose={onCancel}
         onSave={handleSubmit}
@@ -191,6 +220,8 @@ export const Databricks: React.FC<Props> = ({ onCancel }) => {
           fullWidth
           margin="normal"
           required
+          error={!nameValidation.isValid}
+          helperText={!nameValidation.isValid ? nameValidation.message : ''}
         />
 
         <TextField

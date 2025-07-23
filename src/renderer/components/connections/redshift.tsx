@@ -24,26 +24,30 @@ import {
   InfoOutlined,
 } from '@mui/icons-material';
 import { toast } from 'react-toastify';
-import {
-  RedshiftConnection,
-  RedshiftDBTConnection,
-} from '../../../types/backend';
+import { ConnectionModel, RedshiftConnection } from '../../../types/backend';
 import connectionIcons from '../../../../assets/connectionIcons';
 import {
   useConfigureConnection,
   useTestConnection,
-  useGetSelectedProject,
   useFilePicker,
+  useUpdateConnection,
+  useGetConnections,
 } from '../../controllers';
 import ConnectionHeader from './connection-header';
 import useSecureStorage from '../../hooks/useSecureStorage';
+import { useConnectionNameValidation } from '../../utils/connectionValidation';
 
 type Props = {
   onCancel: () => void;
+  connection?: ConnectionModel;
+  projectId?: string;
 };
 
-export const Redshift: React.FC<Props> = ({ onCancel }) => {
-  const { data: project } = useGetSelectedProject();
+export const Redshift: React.FC<Props> = ({
+  onCancel,
+  connection,
+  projectId,
+}) => {
   const navigate = useNavigate();
   const theme = useTheme();
   const {
@@ -55,17 +59,14 @@ export const Redshift: React.FC<Props> = ({ onCancel }) => {
 
   const { mutate: getFiles } = useFilePicker();
 
-  const existingConnection: RedshiftDBTConnection | undefined =
-    React.useMemo(() => {
-      if (project) {
-        return project.dbtConnection as RedshiftDBTConnection;
-      }
-      return undefined;
-    }, [project]);
+  const existingConnection = React.useMemo(
+    () => connection?.connection as RedshiftConnection,
+    [connection],
+  );
 
   const [formState, setFormState] = React.useState<RedshiftConnection>({
     type: existingConnection?.type ?? 'redshift',
-    name: project?.name || 'Redshift Connection',
+    name: existingConnection?.name || 'Redshift Connection',
     host: existingConnection?.host ?? '',
     port: existingConnection?.port ?? 5439,
     database: existingConnection?.database ?? '',
@@ -82,6 +83,15 @@ export const Redshift: React.FC<Props> = ({ onCancel }) => {
     'idle' | 'success' | 'failed'
   >('idle');
   const [infoModalOpen, setInfoModalOpen] = React.useState(false);
+
+  const { mutate: updateConnection } = useUpdateConnection({
+    onSuccess: () => {
+      toast.success('Redshift connection updated successfully!');
+    },
+    onError: (error) => {
+      toast.error(`Update failed: ${error}`);
+    },
+  });
 
   const { mutate: configureConnection } = useConfigureConnection({
     onSuccess: () => {
@@ -115,6 +125,16 @@ export const Redshift: React.FC<Props> = ({ onCancel }) => {
       setConnectionStatus('failed');
     },
   });
+
+  // Get existing connections for name validation
+  const { data: existingConnections = [] } = useGetConnections();
+  const { validateName } = useConnectionNameValidation(
+    existingConnections,
+    connection?.id,
+  );
+
+  // Get real-time validation result for name field
+  const nameValidation = validateName(formState.name);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value, type, checked } = e.target;
@@ -154,13 +174,28 @@ export const Redshift: React.FC<Props> = ({ onCancel }) => {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!project?.id) return;
-    if (project?.name) {
-      await setDatabaseUsername(formState.username, project.name);
-      await setDatabasePassword(formState.password, project.name);
+
+    // Validate connection name before submitting
+    if (!nameValidation.isValid) {
+      toast.error(nameValidation.message || 'Invalid connection name');
+      return;
     }
+
+    await setDatabaseUsername(formState.username, formState.name);
+    await setDatabasePassword(formState.password, formState.name);
+
+    if (connection) {
+      updateConnection({
+        connection: {
+          id: connection.id,
+          connection: formState,
+        },
+      });
+      return;
+    }
+
     configureConnection({
-      projectId: project.id,
+      projectId,
       connection: formState,
     });
   };
@@ -190,18 +225,18 @@ export const Redshift: React.FC<Props> = ({ onCancel }) => {
 
   React.useEffect(() => {
     const fetchCredentials = async () => {
-      if (project?.name) {
-        const storedUsername = await getDatabaseUsername(project.name);
-        const storedPassword = await getDatabasePassword(project.name);
-        setFormState((prev) => ({
-          ...prev,
-          username: storedUsername || '',
-          password: storedPassword || '',
-        }));
-      }
+      const storedUsername = await getDatabaseUsername(existingConnection.name);
+      const storedPassword = await getDatabasePassword(existingConnection.name);
+      setFormState((prev) => ({
+        ...prev,
+        username: storedUsername || '',
+        password: storedPassword || '',
+      }));
     };
-    fetchCredentials();
-  }, [project?.name]);
+    if (existingConnection) {
+      fetchCredentials();
+    }
+  }, [existingConnection]);
 
   return (
     <Box
@@ -214,7 +249,7 @@ export const Redshift: React.FC<Props> = ({ onCancel }) => {
       }}
     >
       <ConnectionHeader
-        title={project?.name || 'Redshift Connection'}
+        title="Redshift Connection"
         imageSource={connectionIcons.images.redshift}
         onClose={onCancel}
         onSave={handleSubmit}
@@ -240,6 +275,8 @@ export const Redshift: React.FC<Props> = ({ onCancel }) => {
           fullWidth
           margin="normal"
           required
+          error={!nameValidation.isValid}
+          helperText={!nameValidation.isValid ? nameValidation.message : ''}
         />
 
         <TextField
@@ -297,18 +334,20 @@ export const Redshift: React.FC<Props> = ({ onCancel }) => {
           onChange={handleChange}
           fullWidth
           required
-          InputProps={{
-            endAdornment: (
-              <InputAdornment position="end">
-                <IconButton
-                  onClick={() => setShowPassword(!showPassword)}
-                  onMouseDown={(e) => e.preventDefault()}
-                  edge="end"
-                >
-                  {showPassword ? <VisibilityOff /> : <Visibility />}
-                </IconButton>
-              </InputAdornment>
-            ),
+          slotProps={{
+            input: {
+              endAdornment: (
+                <InputAdornment position="end">
+                  <IconButton
+                    onClick={() => setShowPassword(!showPassword)}
+                    onMouseDown={(e) => e.preventDefault()}
+                    edge="end"
+                  >
+                    {showPassword ? <VisibilityOff /> : <Visibility />}
+                  </IconButton>
+                </InputAdornment>
+              ),
+            },
           }}
         />
 
@@ -334,27 +373,29 @@ export const Redshift: React.FC<Props> = ({ onCancel }) => {
             onChange={handleChange}
             fullWidth
             placeholder="/path/to/redshift-ca-bundle.crt"
-            InputProps={{
-              endAdornment: (
-                <InputAdornment position="end">
-                  <IconButton
-                    onClick={handleCertificateSelect}
-                    edge="end"
-                    title="Browse for certificate file"
-                    sx={{ mr: 1 }}
-                  >
-                    <FolderOpen />
-                  </IconButton>
-                  <IconButton
-                    onClick={() => setInfoModalOpen(true)}
-                    edge="end"
-                    title="SSL certificate information"
-                    sx={{ color: theme.palette.info.main }}
-                  >
-                    <InfoOutlined fontSize="small" />
-                  </IconButton>
-                </InputAdornment>
-              ),
+            slotProps={{
+              input: {
+                endAdornment: (
+                  <InputAdornment position="end">
+                    <IconButton
+                      onClick={handleCertificateSelect}
+                      edge="end"
+                      title="Browse for certificate file"
+                      sx={{ mr: 1 }}
+                    >
+                      <FolderOpen />
+                    </IconButton>
+                    <IconButton
+                      onClick={() => setInfoModalOpen(true)}
+                      edge="end"
+                      title="SSL certificate information"
+                      sx={{ color: theme.palette.info.main }}
+                    >
+                      <InfoOutlined fontSize="small" />
+                    </IconButton>
+                  </InputAdornment>
+                ),
+              },
             }}
             helperText="Leave empty to use default SSL settings, or provide path to custom certificate"
           />

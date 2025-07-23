@@ -15,9 +15,12 @@ const registerProjectHandlers = () => {
     return ProjectsService.getProject(body.id);
   });
 
-  ipcMain.handle('project:add', async (_event, body: { name: string }) => {
-    return ProjectsService.addProject(body.name);
-  });
+  ipcMain.handle(
+    'project:add',
+    async (_event, body: { name: string; connectionId?: string }) => {
+      return ProjectsService.addProject(body.name, body.connectionId);
+    },
+  );
 
   ipcMain.handle(
     'project:select',
@@ -33,8 +36,7 @@ const registerProjectHandlers = () => {
       body: {
         path: string;
         name: string;
-        dbtConnection?: any;
-        rosettaConnection?: any;
+        connectionId?: string;
       },
     ) => {
       return ProjectsService.addProjectFromVCS(body);

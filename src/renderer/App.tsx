@@ -20,6 +20,7 @@ import {
   SelectProject,
   Setup,
   CloudExplorer,
+  Connections,
 } from './screens';
 import { SelectProjectLayout } from './layouts';
 import { AppProvider, ProcessProvider } from './context';
@@ -27,6 +28,7 @@ import { QueryClientContextProvider } from './context/QueryClientContext';
 import { themeStorageManager, getStoredThemeMode } from './utils/themeStorage';
 import { ScrollbarStyles, UpdateDialog } from './components';
 import Loading from './screens/loading';
+import { CliProvider } from './hooks/useCli';
 
 const App: React.FC = () => {
   return (
@@ -41,9 +43,11 @@ const App: React.FC = () => {
         </Route>
         <Route path="/app">
           <Route path="" element={<ProjectDetails />} />
+          <Route path="connections" element={<Connections />} />
           <Route path="select-project" element={<SelectProject />} />
-          <Route path="edit-connection" element={<EditConnection />} />
+          <Route path="edit-connection/:id" element={<EditConnection />} />
           <Route path="add-connection" element={<AddConnection />} />
+          <Route path="add-connection/:projectId" element={<AddConnection />} />
           <Route
             path="settings"
             element={<Navigate to="/app/settings/general" />}
@@ -99,27 +103,29 @@ const AppWithProjectProvider: React.FC = () => {
   return (
     <QueryClientContextProvider>
       <AppProvider>
-        <ProcessProvider>
-          <CssVarsProvider
-            theme={theme}
-            defaultMode={initialMode}
-            storageManager={themeStorageManager}
-          >
-            <App />
-            <UpdateDialog />
-            <ToastContainer
-              position="bottom-right"
-              autoClose={5000}
-              hideProgressBar={false}
-              newestOnTop={false}
-              closeOnClick={false}
-              rtl={false}
-              pauseOnFocusLoss
-              pauseOnHover
-              theme={initialMode === 'dark' ? 'dark' : 'light'}
-            />
-          </CssVarsProvider>
-        </ProcessProvider>
+        <CliProvider>
+          <ProcessProvider>
+            <CssVarsProvider
+              theme={theme}
+              defaultMode={initialMode}
+              storageManager={themeStorageManager}
+            >
+              <App />
+              <UpdateDialog />
+              <ToastContainer
+                position="bottom-right"
+                autoClose={5000}
+                hideProgressBar={false}
+                newestOnTop={false}
+                closeOnClick={false}
+                rtl={false}
+                pauseOnFocusLoss
+                pauseOnHover
+                theme={initialMode === 'dark' ? 'dark' : 'light'}
+              />
+            </CssVarsProvider>
+          </ProcessProvider>
+        </CliProvider>
       </AppProvider>
     </QueryClientContextProvider>
   );

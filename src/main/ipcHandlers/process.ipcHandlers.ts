@@ -1,10 +1,23 @@
+// Updated IPC Handlers
 import { ipcMain, BrowserWindow, app } from 'electron';
 import { ProcessAdapter } from '../adapters';
 
 const processAdapter = new ProcessAdapter();
 
-const handlerChannels = ['process:start', 'process:stop', 'process:status'];
-const listenerChannels: string[] = [];
+const handlerChannels = [
+  'process:start',
+  'process:stop',
+  'process:status',
+  'process:forceStop',
+];
+
+const listenerChannels = [
+  'process:output',
+  'process:error',
+  'process:started',
+  'process:exit',
+  'process:done',
+];
 
 const removeProcessIpcHandlers = () => {
   handlerChannels.forEach((channel) => {
@@ -32,20 +45,47 @@ const registerProcessHandlers = (mainWindow: BrowserWindow) => {
     },
   );
 
-  ipcMain.handle('process:stop', () => {
-    processAdapter.stop();
-    return { success: true };
+  ipcMain.handle(
+    'process:stop',
+    async (_event, { force = false }: { force?: boolean } = {}) => {
+      try {
+        const result = await processAdapter.stop(force);
+        return { success: true, message: result.message };
+      } catch (err: any) {
+        return {
+          success: false,
+          error: err?.message || err?.toString() || 'Stop failed',
+        };
+      }
+    },
+  );
+
+  ipcMain.handle('process:forceStop', async () => {
+    try {
+      const result = await processAdapter.stop(true);
+      return { success: true, message: result.message };
+    } catch (err: any) {
+      return {
+        success: false,
+        error: err?.message || err?.toString() || 'Force stop failed',
+      };
+    }
   });
 
   ipcMain.handle('process:status', () => {
-    return {
-      running: processAdapter.isRunning(),
-      pid: processAdapter.getPid(),
-    };
+    return processAdapter.getStatus();
   });
 
-  app.on('before-quit', () => {
-    processAdapter.stop();
+  app.on('before-quit', async () => {
+    if (processAdapter.isRunning()) {
+      await processAdapter.stop(true);
+    }
+  });
+
+  app.on('window-all-closed', async () => {
+    if (processAdapter.isRunning()) {
+      await processAdapter.stop(true);
+    }
   });
 };
 

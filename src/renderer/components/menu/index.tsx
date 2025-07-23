@@ -14,7 +14,7 @@ import {
   ArrowDownward,
   FormatListNumbered,
 } from '@mui/icons-material';
-import { useNavigate, useLocation } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import { toast } from 'react-toastify';
 import {
   BranchDropdownToggle,
@@ -33,17 +33,17 @@ import {
   useGitIsInitialized,
   useGitPull,
   useGitPush,
+  useSelectProject,
 } from '../../controllers';
 import { AddGitRemoteModal, GitCommitModal, NewBranchModal } from '../modals';
 import { SimpleDropdownMenu } from '../simpleDropdown';
 import { Icon } from '../icon';
-import { projectsServices } from '../../services';
 import { LetterAvatar } from '../letterAvatar';
 import { useAppContext } from '../../hooks';
 
 export const Menu: React.FC = () => {
   const navigate = useNavigate();
-  const location = useLocation();
+  const { mutateAsync: selectProject } = useSelectProject();
   const theme = useTheme();
   const { isSidebarOpen, setIsSidebarOpen } = useAppContext();
   const [commitModal, setCommitModal] = React.useState(false);
@@ -159,19 +159,11 @@ export const Menu: React.FC = () => {
               ]}
               onSelect={async (value) => {
                 if (value === 'new') {
-                  await projectsServices.selectProject({ projectId: '' });
+                  await selectProject({ projectId: '' });
                   navigate('/app/select-project');
                 } else {
-                  await projectsServices.selectProject({ projectId: value });
-                  if (
-                    location.pathname === '/app' ||
-                    location.pathname === '/app/'
-                  ) {
-                    navigate('/app/settings/general');
-                    setTimeout(() => navigate('/app'), 0);
-                  } else {
-                    navigate('/app');
-                  }
+                  await selectProject({ projectId: value });
+                  navigate('/app');
                 }
               }}
               selectedItem={String(project?.id)}

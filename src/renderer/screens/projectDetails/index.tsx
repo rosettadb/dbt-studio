@@ -21,6 +21,7 @@ import {
   NoAiSetModal,
 } from '../../components';
 import {
+  useGetConnectionById,
   useGetFileStatuses,
   useGetProjectFiles,
   useGetSelectedProject,
@@ -49,6 +50,7 @@ import { AppContext } from '../../context';
 const ProjectDetails: React.FC = () => {
   const navigate = useNavigate();
   const { data: project, isLoading, refetch } = useGetSelectedProject();
+  const { data: connection } = useGetConnectionById(project?.connectionId);
   const { data: settings } = useGetSettings();
   const { isAiProviderSet } = React.useContext(AppContext);
   const [queryData, setQueryData] = React.useState<
@@ -60,7 +62,7 @@ const ProjectDetails: React.FC = () => {
   const [fileContent, setFileContent] = React.useState<string>();
   const [businessQueryModal, setBusinessQueryModal] = React.useState(false);
   const [noAiSetModal, setNoAiSetModal] = React.useState(false);
-  const { start, stop, running } = useProcess();
+  const { start, stop, isRunning } = useProcess();
 
   const {
     data: directories,
@@ -275,19 +277,16 @@ const ProjectDetails: React.FC = () => {
     }
   };
 
-  // Early return for loading state
   if (isLoading) {
     return <Loader />;
   }
 
-  // Early return for no project
   if (!project?.id) {
-    return <Navigate to="/app/select-project" />;
+    return <Navigate to="/app/connections" />;
   }
 
-  // Early return for missing connection
-  if (project?.id && !project?.rosettaConnection) {
-    return <Navigate to="/app/add-connection/" />;
+  if (project?.id && !project?.connectionId) {
+    return <Navigate to={`/app/add-connection/${project.id}`} />;
   }
 
   const handleBusinessLayerClick = () => {
@@ -539,7 +538,7 @@ const ProjectDetails: React.FC = () => {
                             }}
                           >
                             <span>Serve Docs</span>
-                            {running ? (
+                            {isRunning ? (
                               <StopCircleOutlined />
                             ) : (
                               <PlayCircleOutline />
@@ -547,12 +546,13 @@ const ProjectDetails: React.FC = () => {
                           </div>
                         ),
                         onClick: () => {
-                          if (running) {
+                          if (isRunning) {
                             stop();
                             return;
                           }
                           start(
                             `cd "${project.path}" && "${settings?.dbtPath}" docs serve`,
+                            connection?.connection?.name ?? '',
                           );
                         },
                         leftIcon: (
@@ -617,7 +617,13 @@ const ProjectDetails: React.FC = () => {
                   )}
                   <Tooltip title="Edit database connection" placement="bottom">
                     <IconButton
-                      onClick={() => navigate('/app/edit-connection')}
+                      onClick={() => {
+                        if (connection?.id) {
+                          navigate(`/app/edit-connection/${connection.id}`);
+                        } else {
+                          toast.error('No connection found to edit');
+                        }
+                      }}
                     >
                       <Cable color="primary" fontSize="small" />
                     </IconButton>

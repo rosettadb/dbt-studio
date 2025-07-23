@@ -31,14 +31,14 @@ import {
 import { CloudProvider } from '../../../types/frontend';
 import {
   useConnections,
-  useDeleteConnection,
+  useDeleteBucketConnection,
 } from '../../controllers/cloudExplorer.controller';
 import { cloudStorageImages } from '../../../../assets/connectionIcons';
 
 export const ExplorerConnections: React.FC = () => {
   const navigate = useNavigate();
   const connectionsQuery = useConnections();
-  const deleteConnection = useDeleteConnection();
+  const deleteConnection = useDeleteBucketConnection();
 
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [connectionToDelete, setConnectionToDelete] = useState<string | null>(

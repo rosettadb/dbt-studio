@@ -4,8 +4,9 @@ import {
   Project,
   QueryResponseType,
   BigQueryTestResponse,
+  ConnectionModel,
 } from '../../types/backend';
-import { ConfigureConnectionBody } from '../../types/ipc';
+import { ConfigureConnectionBody, UpdateConnectionBody } from '../../types/ipc';
 
 export const configureConnection = async (
   body: ConfigureConnectionBody,
@@ -17,6 +18,16 @@ export const configureConnection = async (
   return data;
 };
 
+export const updateConnection = async (
+  body: UpdateConnectionBody,
+): Promise<void> => {
+  await client.post<UpdateConnectionBody>('connector:update', body);
+};
+
+export const deleteConnection = async (body: string): Promise<void> => {
+  await client.post<string>('connector:delete', body);
+};
+
 export const testConnection = async (
   body: ConnectionInput,
 ): Promise<boolean | BigQueryTestResponse> => {
@@ -24,6 +35,11 @@ export const testConnection = async (
     ConnectionInput,
     boolean | BigQueryTestResponse
   >('connector:test', body);
+  return data;
+};
+
+export const listConnections = async (): Promise<ConnectionModel[]> => {
+  const { data } = await client.get<ConnectionModel[]>('connector:list');
   return data;
 };
 
@@ -57,4 +73,14 @@ export const setConnectionEnvVariable = async (
     'connector:setConnectionEnvVariable',
     { key, value },
   );
+};
+
+export const getConnectionById = async (
+  connectionId: string,
+): Promise<ConnectionModel | undefined> => {
+  const { data } = await client.post<string, ConnectionModel | undefined>(
+    'connector:get',
+    connectionId,
+  );
+  return data;
 };

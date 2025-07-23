@@ -1,13 +1,14 @@
 import React from 'react';
 import { styled } from '@mui/material/styles';
-import { Typography, Box } from '@mui/material';
-import { useNavigate } from 'react-router-dom';
+import { Typography, Box, Button } from '@mui/material';
+import ArrowBackIcon from '@mui/icons-material/ArrowBack';
+import { useParams, useNavigate } from 'react-router-dom';
 import { ConnectionCard } from '../../components/connectionCards';
 import connectionIcons from '../../../../assets/connectionIcons';
 import { Connections } from '../../components';
-import { useGetSelectedProject } from '../../controllers';
 import { SupportedConnectionTypes } from '../../../types/backend';
 import { AppLayout } from '../../layouts';
+import { ConnectionsSidebar } from '../../components/sidebarConnections';
 
 const ConnectionContainer = styled(Box)`
   padding: 1rem 2rem 2rem;
@@ -16,18 +17,20 @@ const ConnectionContainer = styled(Box)`
   height: 100%;
 `;
 
-const HeaderContainer = styled(Box)`
-  margin-bottom: 2rem;
-  text-align: left;
-`;
-
 const ConnectionCardsContainer = styled(Box)`
   display: flex;
-  justify-content: start;
+  justify-content: center;
   flex-wrap: wrap;
   gap: 32px;
   padding: 12px 0 36px;
   max-width: 1000px;
+  margin: 0 auto;
+`;
+
+const BackButtonContainer = styled(Box)`
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: 1rem;
 `;
 
 type ItemType = {
@@ -77,79 +80,111 @@ const baseItems: ItemType[] = [
 ];
 
 const AddConnection: React.FC = () => {
+  const { projectId } = useParams<{ projectId: string }>();
   const navigate = useNavigate();
-  const { data: project } = useGetSelectedProject();
   const [selectedItem, setSelectedItem] = React.useState<ItemType>();
+
+  const handleBack = () => {
+    navigate(-1); // Go back to previous page
+  };
 
   const renderComponent = () => {
     switch (selectedItem?.id) {
       case 'postgres': {
         return (
-          <Connections.Postgres onCancel={() => setSelectedItem(undefined)} />
+          <Connections.Postgres
+            onCancel={() => setSelectedItem(undefined)}
+            projectId={projectId}
+          />
         );
       }
       case 'snowflake': {
         return (
-          <Connections.Snowflake onCancel={() => setSelectedItem(undefined)} />
+          <Connections.Snowflake
+            onCancel={() => setSelectedItem(undefined)}
+            projectId={projectId}
+          />
         );
       }
       case 'bigquery': {
         return (
-          <Connections.BigQuery onCancel={() => setSelectedItem(undefined)} />
+          <Connections.BigQuery
+            onCancel={() => setSelectedItem(undefined)}
+            projectId={projectId}
+          />
         );
       }
       case 'redshift': {
         return (
-          <Connections.Redshift onCancel={() => setSelectedItem(undefined)} />
+          <Connections.Redshift
+            onCancel={() => setSelectedItem(undefined)}
+            projectId={projectId}
+          />
         );
       }
       case 'databricks': {
         return (
-          <Connections.Databricks onCancel={() => setSelectedItem(undefined)} />
+          <Connections.Databricks
+            onCancel={() => setSelectedItem(undefined)}
+            projectId={projectId}
+          />
         );
       }
       case 'duckdb': {
         return (
-          <Connections.DuckDB onCancel={() => setSelectedItem(undefined)} />
+          <Connections.DuckDB
+            onCancel={() => setSelectedItem(undefined)}
+            projectId={projectId}
+          />
         );
       }
       default: {
         return (
-          <Connections.Postgres onCancel={() => setSelectedItem(undefined)} />
+          <Connections.Postgres
+            onCancel={() => setSelectedItem(undefined)}
+            projectId={projectId}
+          />
         );
       }
     }
   };
 
-  React.useEffect(() => {
-    if (project?.rosettaConnection) {
-      navigate('/app/project-details');
-    }
-  }, [project]);
-
   return (
-    <AppLayout>
+    <AppLayout sidebarContent={<ConnectionsSidebar />}>
       {selectedItem ? (
         <ConnectionContainer>{renderComponent()}</ConnectionContainer>
       ) : (
         <ConnectionContainer>
-          <HeaderContainer>
-            <Typography variant="h5" component="h5">
-              Connection
+          <Box>
+            {!projectId && (
+              <BackButtonContainer>
+                <Button
+                  variant="outlined"
+                  onClick={handleBack}
+                  startIcon={<ArrowBackIcon />}
+                >
+                  Back
+                </Button>
+              </BackButtonContainer>
+            )}
+
+            <Typography variant="h6" component="h6" gutterBottom>
+              Create New Connection
             </Typography>
-            <Typography variant="body1" color="text.secondary">
-              Please select the database to connect
+            <Typography variant="body2" color="text.secondary" gutterBottom>
+              Select a database type to create a new connection
             </Typography>
-          </HeaderContainer>
-          <ConnectionCardsContainer>
-            {baseItems.map((item, index) => (
-              <ConnectionCard
-                itemDetails={item}
-                onClick={() => setSelectedItem(item)}
-                key={index}
-              />
-            ))}
-          </ConnectionCardsContainer>
+
+            <ConnectionCardsContainer>
+              {baseItems.map((item, index) => (
+                <ConnectionCard
+                  itemDetails={item}
+                  onClick={() => setSelectedItem(item)}
+                  key={index}
+                />
+              ))}
+            </ConnectionCardsContainer>
+          </Box>
         </ConnectionContainer>
       )}
     </AppLayout>

@@ -1,7 +1,7 @@
 import { useContext } from 'react';
-import { ProcessContextType, ProcessContext } from '../context';
+import { ProcessContext, ProcessContextValue } from '../context';
 
-const useProcess = (): ProcessContextType => {
+const useProcess = (): ProcessContextValue => {
   const context = useContext(ProcessContext);
   if (!context) {
     throw new Error('useProcess must be used within a ProcessProvider');

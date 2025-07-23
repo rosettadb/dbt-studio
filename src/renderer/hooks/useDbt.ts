@@ -1,7 +1,12 @@
-import React from 'react';
+import { useCallback, useState } from 'react';
 import { toast } from 'react-toastify';
-import { useCli, useSecureStorage } from './index';
-import { useGetSettings, useSetConnectionEnvVariable } from '../controllers';
+import useCli from './useCli';
+import { useSecureStorage } from './index';
+import {
+  useGetConnections,
+  useGetSettings,
+  useSetConnectionEnvVariable,
+} from '../controllers';
 import { Project } from '../../types/backend';
 
 type DbtCommandType =
@@ -21,128 +26,215 @@ interface UseDbtReturn {
   docsGenerate: (project: Project) => Promise<void>;
   docsServe: (project: Project) => Promise<void>;
   deps: (project: Project) => Promise<void>;
+  stopCurrentCommand: () => void;
   isRunning: boolean;
   activeCommand: DbtCommandType | null;
 }
 
-const useDbt = (successCallback: () => void): UseDbtReturn => {
+const useDbt = (successCallback?: () => void): UseDbtReturn => {
   const { data: settings } = useGetSettings();
-  const { error, runCommand, isSuccess } = useCli();
+  const { runCommand, stopCommand, isRunning } = useCli();
+  const { data: connections = [] } = useGetConnections();
   const { getDatabaseUsername, getDatabasePassword, getDatabaseToken } =
     useSecureStorage();
   const setEnvVariables = useSetConnectionEnvVariable();
-  const [isRunning, setIsRunning] = React.useState(false);
-  const [activeCommand, setActiveCommand] =
-    React.useState<DbtCommandType | null>(null);
-  const [disabledToaster, setDisabledToaster] = React.useState(false);
 
-  React.useEffect(() => {
-    if (!isRunning) return;
+  const [activeCommand, setActiveCommand] = useState<DbtCommandType | null>(
+    null,
+  );
 
-    if (error.length > 0 && !isSuccess) {
-      if (!disabledToaster) {
-        toast.error(`dbt ${activeCommand} failed`);
+  // Setup environment variables for connection
+  const setupConnectionEnv = useCallback(
+    async (connectionName: string) => {
+      try {
+        const [username, password, token] = await Promise.all([
+          getDatabaseUsername(connectionName),
+          getDatabasePassword(connectionName),
+          getDatabaseToken(connectionName),
+        ]);
+
+        const envPromises = [];
+
+        if (username) {
+          envPromises.push(
+            setEnvVariables.mutateAsync({
+              key: `db-user-${connectionName}`,
+              value: username,
+            }),
+          );
+        }
+
+        if (password) {
+          envPromises.push(
+            setEnvVariables.mutateAsync({
+              key: `db-password-${connectionName}`,
+              value: password,
+            }),
+          );
+        }
+
+        if (token) {
+          envPromises.push(
+            setEnvVariables.mutateAsync({
+              key: `db-token-${connectionName}`,
+              value: token,
+            }),
+          );
+        }
+
+        await Promise.all(envPromises);
+      } catch (error) {
+        throw new Error(`Failed to setup environment variables: ${error}`);
       }
-      setIsRunning(false);
-      setActiveCommand(null);
-      return;
-    }
+    },
+    [
+      getDatabaseUsername,
+      getDatabasePassword,
+      getDatabaseToken,
+      setEnvVariables,
+    ],
+  );
 
-    if (isSuccess && error.length === 0) {
-      toast.success(`dbt ${activeCommand} completed successfully`);
-      setIsRunning(false);
-      setActiveCommand(null);
-      successCallback();
-    }
-  }, [isSuccess, error, activeCommand, successCallback]);
-
-  const executeCommand = async (
-    command: DbtCommandType,
-    project: Project,
-    args: string = '',
-    disableToaster = false,
-  ) => {
-    if (isRunning) {
-      toast.warning('Another dbt command is currently running');
-      return;
-    }
-    setDisabledToaster(disableToaster);
-
-    setIsRunning(true);
-    setActiveCommand(command);
-    // get values fro Keytar
-    const secureUserName = await getDatabaseUsername(project.name);
-    if (secureUserName) {
-      setEnvVariables.mutate({
-        key: `db-user-${project.name}`,
-        value: secureUserName || '',
-      });
-    }
-    const securePassword = await getDatabasePassword(project.name);
-
-    if (securePassword) {
-      setEnvVariables.mutate({
-        key: `db-password-${project.name}`,
-        value: securePassword || '',
-      });
-    }
-
-    const secureToken = await getDatabaseToken(project.name);
-    if (secureToken) {
-      setEnvVariables.mutate({
-        key: `db-token-${project.name}`,
-        value: secureToken || '',
-      });
-    }
-
-    let cmdString = '';
-
-    // Format the command string based on the command type
-    switch (command) {
-      case 'docs:generate':
-        cmdString = `cd "${project.path}" && "${settings?.dbtPath}" docs generate`;
-        break;
-      case 'docs:serve':
-        cmdString = `cd "${project.path}" && "${settings?.dbtPath}" docs serve`;
-        break;
-      default:
-        cmdString = `cd "${project.path}" && "${settings?.dbtPath}" ${command} ${args}`;
-    }
-
-    await runCommand(cmdString).catch((err) => {
-      if (!disableToaster) {
-        toast.error(err);
+  // Build command string
+  const buildCommand = useCallback(
+    (command: DbtCommandType, project: Project, args: string = '') => {
+      if (!settings?.dbtPath) {
+        throw new Error('DBT path not configured in settings');
       }
-    });
-  };
+
+      switch (command) {
+        case 'docs:generate':
+          return `cd "${project.path}" && "${settings.dbtPath}" docs generate`;
+        case 'docs:serve':
+          return `cd "${project.path}" && "${settings.dbtPath}" docs serve`;
+        default:
+          return `cd "${project.path}" && "${settings.dbtPath}" ${command} ${args}`.trim();
+      }
+    },
+    [settings?.dbtPath],
+  );
+
+  // Execute DBT command
+  const executeCommand = useCallback(
+    async (
+      command: DbtCommandType,
+      project: Project,
+      args: string = '',
+      options: { showToast?: boolean } = { showToast: true },
+    ) => {
+      if (isRunning) {
+        if (options.showToast) {
+          toast.warning('Another dbt command is currently running');
+        }
+        throw new Error('Another dbt command is currently running');
+      }
+
+      try {
+        // Find connection
+        const connection = connections.find(
+          (c) => c.id === project.connectionId,
+        );
+        if (!connection) {
+          throw new Error('Connection not found');
+        }
+
+        setActiveCommand(command);
+
+        // Setup environment variables
+        await setupConnectionEnv(connection.connection.name);
+
+        // Build command string
+        const cmdString = buildCommand(command, project, args);
+
+        // Execute command
+        const result = await runCommand(cmdString);
+
+        // Handle success
+        if (result.error.length === 0) {
+          if (options.showToast) {
+            toast.success(`dbt ${command} completed successfully`);
+          }
+          successCallback?.();
+        } else {
+          if (options.showToast) {
+            toast.error(`dbt ${command} failed`);
+          }
+          throw new Error(
+            `Command failed with errors: ${result.error.join('\n')}`,
+          );
+        }
+      } catch (error) {
+        if (options.showToast) {
+          const errorMessage =
+            error instanceof Error ? error.message : 'Unknown error';
+          toast.error(`dbt ${command} failed: ${errorMessage}`);
+        }
+        throw error;
+      } finally {
+        setActiveCommand(null);
+      }
+    },
+    [
+      isRunning,
+      connections,
+      setupConnectionEnv,
+      buildCommand,
+      runCommand,
+      successCallback,
+    ],
+  );
+
+  // Stop current command
+  const stopCurrentCommand = useCallback(() => {
+    if (isRunning && activeCommand) {
+      stopCommand();
+      setActiveCommand(null);
+      toast.info(`Stopped dbt ${activeCommand}`);
+    }
+  }, [isRunning, activeCommand, stopCommand]);
 
   return {
-    run: async (project: Project, path?: string) => {
-      await executeCommand('run', project, path ? `--select ${path}` : '');
-    },
-    test: async (project: Project, path?: string) => {
-      await executeCommand(
-        'test',
-        project,
-        path ? `--select ${path}` : '',
-        true,
-      );
-    },
-    compile: async (project: Project, path?: string) => {
-      await executeCommand('compile', project, path ? `--select ${path}` : '');
-    },
-    debug: async (project: Project) => {
-      await executeCommand('debug', project);
-    },
-    docsGenerate: async (project: Project) => {
-      await executeCommand('docs:generate', project);
-    },
-    docsServe: async (project: Project) => {
-      await executeCommand('docs:serve', project);
-    },
-    deps: async (project: Project) => {
-      await executeCommand('deps', project);
-    },
+    run: useCallback(
+      (project: Project, path?: string) =>
+        executeCommand('run', project, path ? `--select ${path}` : ''),
+      [executeCommand],
+    ),
+
+    test: useCallback(
+      (project: Project, path?: string) =>
+        executeCommand('test', project, path ? `--select ${path}` : '', {
+          showToast: false,
+        }),
+      [executeCommand],
+    ),
+
+    compile: useCallback(
+      (project: Project, path?: string) =>
+        executeCommand('compile', project, path ? `--select ${path}` : ''),
+      [executeCommand],
+    ),
+
+    debug: useCallback(
+      (project: Project) => executeCommand('debug', project),
+      [executeCommand],
+    ),
+
+    docsGenerate: useCallback(
+      (project: Project) => executeCommand('docs:generate', project),
+      [executeCommand],
+    ),
+
+    docsServe: useCallback(
+      (project: Project) => executeCommand('docs:serve', project),
+      [executeCommand],
+    ),
+
+    deps: useCallback(
+      (project: Project) => executeCommand('deps', project),
+      [executeCommand],
+    ),
+
+    stopCurrentCommand,
     isRunning,
     activeCommand,
   };

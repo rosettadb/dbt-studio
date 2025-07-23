@@ -336,11 +336,16 @@ export default class GitService {
       const connections =
         await ConnectorsService.parseProjectConnectionFiles(destinationPath);
 
+      const connectionId = await ConnectorsService.configureConnection({
+        connection: connections.connectionInput,
+      });
+
       return {
         path: destinationPath,
         name: repoName,
         dbtConnection: connections.dbtConnection,
         rosettaConnection: connections.rosettaConnection,
+        connectionId,
       };
     } catch (err: any) {
       if (isAuthError(err)) throw new AuthError();

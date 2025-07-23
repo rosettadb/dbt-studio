@@ -26,7 +26,7 @@ export const StyledTreeItem = styled('div')(() => ({
 export const StyledLabel = styled(Typography)(({ theme }) => ({
   color: theme.palette.text.primary,
   fontSize: 15,
-  marginLeft: 5,
+  paddingLeft: 5,
   width: 140,
 }));
 
@@ -52,4 +52,6 @@ export const ActionsContainer = styled('div')(() => ({
   gap: 4,
   opacity: 0,
   transition: 'opacity 0.2s ease-in-out',
+  position: 'absolute',
+  right: 0,
 }));

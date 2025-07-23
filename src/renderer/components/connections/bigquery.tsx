@@ -10,37 +10,41 @@ import {
 import { toast } from 'react-toastify';
 import {
   BigQueryConnection,
-  BigQueryDBTConnection,
   BigQueryTestResponse,
+  ConnectionModel,
 } from '../../../types/backend';
 import connectionIcons from '../../../../assets/connectionIcons';
 import {
   useConfigureConnection,
   useTestConnection,
-  useGetSelectedProject,
+  useUpdateConnection,
+  useGetConnections,
 } from '../../controllers';
 import ConnectionHeader from './connection-header';
+import { useConnectionNameValidation } from '../../utils/connectionValidation';
 
 type Props = {
   onCancel: () => void;
+  connection?: ConnectionModel;
+  projectId?: string;
 };
 
-export const BigQuery: React.FC<Props> = ({ onCancel }) => {
-  const { data: project } = useGetSelectedProject();
+export const BigQuery: React.FC<Props> = ({
+  onCancel,
+  connection,
+  projectId,
+}) => {
   const navigate = useNavigate();
   const theme = useTheme();
 
-  const existingConnection: BigQueryDBTConnection | undefined =
-    React.useMemo(() => {
-      if (project?.dbtConnection?.type === 'bigquery') {
-        return project.dbtConnection as BigQueryDBTConnection;
-      }
-      return undefined;
-    }, [project]);
+  const existingConnection = React.useMemo(
+    () => connection?.connection as BigQueryConnection,
+    [connection],
+  );
 
   const [formState, setFormState] = React.useState<BigQueryConnection>({
     type: 'bigquery',
-    name: project?.name || 'BigQuery Connection',
+    name: existingConnection?.name || '',
     method: 'service-account',
     project: existingConnection?.project || '',
     dataset: existingConnection?.schema || '',
@@ -61,10 +65,24 @@ export const BigQuery: React.FC<Props> = ({ onCancel }) => {
   const { mutate: configureConnection } = useConfigureConnection({
     onSuccess: () => {
       toast.success('BigQuery connection configured successfully!');
-      navigate('/app/project-details');
+      if (projectId) {
+        navigate('/app');
+        return;
+      }
+      navigate('/app/connections');
     },
     onError: (error) => {
       toast.error(`Configuration failed: ${error}`);
+    },
+  });
+
+  const { mutate: updateConnection } = useUpdateConnection({
+    onSuccess: () => {
+      toast.success('BigQuery connection updated successfully!');
+      navigate('/app/project-details');
+    },
+    onError: (error) => {
+      toast.error(`Update failed: ${error}`);
     },
   });
 
@@ -90,6 +108,16 @@ export const BigQuery: React.FC<Props> = ({ onCancel }) => {
     },
   });
 
+  // Get existing connections for name validation
+  const { data: existingConnections = [] } = useGetConnections();
+  const { validateName } = useConnectionNameValidation(
+    existingConnections,
+    connection?.id,
+  );
+
+  // Get real-time validation result for name field
+  const nameValidation = validateName(formState.name);
+
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
     setFormState((prev) => ({ ...prev, [name]: value }));
@@ -98,10 +126,25 @@ export const BigQuery: React.FC<Props> = ({ onCancel }) => {
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!project?.id) return;
+
+    // Validate connection name before submitting
+    if (!nameValidation.isValid) {
+      toast.error(nameValidation.message || 'Invalid connection name');
+      return;
+    }
+
+    if (connection) {
+      updateConnection({
+        connection: {
+          id: connection.id,
+          connection: formState,
+        },
+      });
+      return;
+    }
 
     configureConnection({
-      projectId: project.id,
+      projectId,
       connection: {
         ...formState,
         database: formState.project,
@@ -149,7 +192,7 @@ export const BigQuery: React.FC<Props> = ({ onCancel }) => {
       }}
     >
       <ConnectionHeader
-        title={project?.name || 'BigQuery Connection'}
+        title="BigQuery Connection"
         imageSource={connectionIcons.images.bigquery}
         onClose={onCancel}
         onSave={handleSubmit}
@@ -175,6 +218,8 @@ export const BigQuery: React.FC<Props> = ({ onCancel }) => {
           fullWidth
           margin="normal"
           required
+          error={!nameValidation.isValid}
+          helperText={!nameValidation.isValid ? nameValidation.message : ''}
         />
 
         <TextField

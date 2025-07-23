@@ -1,96 +1,71 @@
-import React, { createContext, useCallback, useEffect, useState } from 'react';
-import { projectsServices } from '../services';
+import React, {
+  createContext,
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  ReactNode,
+} from 'react';
+import { useSecureStorage } from '../hooks';
+import { useSetConnectionEnvVariable } from '../controllers';
 
-type ProcessState = {
+interface ProcessState {
   output: string[];
   error: string[];
-  running: boolean;
+  isRunning: boolean;
   pid: number | null;
-  loading: boolean;
-  errorMessage: string | null;
-};
+  command: string | null;
+  startTime: number | null;
+  duration: number | null;
+  status: 'starting' | 'running' | 'stopping' | 'stopped';
+}
 
-export type ProcessContextType = ProcessState & {
-  start: (command: string) => Promise<void>;
-  stop: () => Promise<void>;
-  refreshStatus: () => Promise<void>;
-};
+export interface ProcessContextValue extends ProcessState {
+  start: (
+    command: string,
+    connectionName: string,
+  ) => Promise<{ success: boolean; error?: string }>;
+  stop: (
+    force?: boolean,
+  ) => Promise<{ success: boolean; message?: string; error?: string }>;
+  forceStop: () => Promise<{
+    success: boolean;
+    message?: string;
+    error?: string;
+  }>;
+  clearOutput: () => void;
+  getStatus: () => Promise<any>;
+}
 
-export const ProcessContext = createContext<ProcessContextType | undefined>(
-  undefined,
-);
+export const ProcessContext = createContext<ProcessContextValue | null>(null);
 
-export const ProcessProvider: React.FC<{ children: React.ReactNode }> = ({
+interface ProcessProviderProps {
+  children: ReactNode;
+}
+
+export const ProcessProvider: React.FC<ProcessProviderProps> = ({
   children,
 }) => {
+  const { getDatabaseUsername, getDatabasePassword, getDatabaseToken } =
+    useSecureStorage();
+  const setEnvVariables = useSetConnectionEnvVariable();
+
   const [state, setState] = useState<ProcessState>({
     output: [],
     error: [],
-    running: false,
+    isRunning: false,
     pid: null,
-    loading: false,
-    errorMessage: null,
+    command: null,
+    startTime: null,
+    duration: null,
+    status: 'stopped',
   });
 
-  const refreshStatus = useCallback(async () => {
-    try {
-      const status = await projectsServices.getProcessStatus();
-      setState((prev) => ({
-        ...prev,
-        running: status.running,
-        pid: status.pid,
-        errorMessage: null,
-      }));
-    } catch (err: any) {
-      setState((prev) => ({
-        ...prev,
-        errorMessage: err.message || 'Failed to get process status',
-      }));
-    }
-  }, []);
+  // eslint-disable-next-line no-undef
+  const durationIntervalRef = useRef<NodeJS.Timeout | null>(null);
 
-  const start = useCallback(
-    async (command: string) => {
-      setState((prev) => ({
-        ...prev,
-        loading: true,
-        errorMessage: null,
-        output: [],
-        error: [],
-      }));
-      try {
-        await projectsServices.startProcess(command);
-        await refreshStatus();
-      } catch (err: any) {
-        setState((prev) => ({
-          ...prev,
-          errorMessage: err.message || 'Failed to start process',
-        }));
-      } finally {
-        setState((prev) => ({ ...prev, loading: false }));
-      }
-    },
-    [refreshStatus],
-  );
-
-  const stop = useCallback(async () => {
-    setState((prev) => ({ ...prev, loading: true, errorMessage: null }));
-    try {
-      await projectsServices.stopProcess();
-      await refreshStatus();
-    } catch (err: any) {
-      setState((prev) => ({
-        ...prev,
-        errorMessage: err.message || 'Failed to stop process',
-      }));
-    } finally {
-      setState((prev) => ({ ...prev, loading: false }));
-    }
-  }, [refreshStatus]);
-
+  // Setup event listeners
   useEffect(() => {
-    refreshStatus();
-
     const handleOutput = (msg: any) => {
       setState((prev) => ({
         ...prev,
@@ -105,8 +80,59 @@ export const ProcessProvider: React.FC<{ children: React.ReactNode }> = ({
       }));
     };
 
+    const handleStarted = (info: any) => {
+      setState((prev) => ({
+        ...prev,
+        isRunning: true,
+        pid: info.pid,
+        command: info.command,
+        startTime: info.startTime,
+        status: 'running',
+      }));
+
+      // Start duration counter
+      if (durationIntervalRef.current) {
+        clearInterval(durationIntervalRef.current);
+      }
+      durationIntervalRef.current = setInterval(() => {
+        setState((prev) =>
+          prev.startTime
+            ? {
+                ...prev,
+                duration: Date.now() - prev.startTime,
+              }
+            : prev,
+        );
+      }, 1000);
+    };
+
+    const handleExit = () => {
+      setState((prev) => ({
+        ...prev,
+        status: 'stopped',
+      }));
+    };
+
+    const handleDone = () => {
+      setState((prev) => ({
+        ...prev,
+        isRunning: false,
+        status: 'stopped',
+      }));
+
+      // Clear duration counter
+      if (durationIntervalRef.current) {
+        clearInterval(durationIntervalRef.current);
+        durationIntervalRef.current = null;
+      }
+    };
+
+    // Setup listeners
     window.electron.ipcRenderer.on('process:output', handleOutput);
     window.electron.ipcRenderer.on('process:error', handleError);
+    window.electron.ipcRenderer.on('process:started', handleStarted);
+    window.electron.ipcRenderer.on('process:exit', handleExit);
+    window.electron.ipcRenderer.on('process:done', handleDone);
 
     return () => {
       window.electron.ipcRenderer.removeListener(
@@ -114,18 +140,106 @@ export const ProcessProvider: React.FC<{ children: React.ReactNode }> = ({
         handleOutput,
       );
       window.electron.ipcRenderer.removeListener('process:error', handleError);
-    };
-  }, [refreshStatus]);
+      window.electron.ipcRenderer.removeListener(
+        'process:started',
+        handleStarted,
+      );
+      window.electron.ipcRenderer.removeListener('process:exit', handleExit);
+      window.electron.ipcRenderer.removeListener('process:done', handleDone);
 
-  const contextValue: ProcessContextType = React.useMemo(
-    () => ({
-      ...state,
-      start,
-      stop,
-      refreshStatus,
-    }),
-    [stop, start, state.output, state.running, state.error],
+      if (durationIntervalRef.current) {
+        clearInterval(durationIntervalRef.current);
+      }
+    };
+  }, []);
+
+  const setupConnectionEnv = useCallback(
+    async (connectionName: string) => {
+      try {
+        const [username, password, token] = await Promise.all([
+          getDatabaseUsername(connectionName),
+          getDatabasePassword(connectionName),
+          getDatabaseToken(connectionName),
+        ]);
+
+        const envPromises = [];
+
+        if (username) {
+          envPromises.push(
+            setEnvVariables.mutateAsync({
+              key: `db-user-${connectionName}`,
+              value: username,
+            }),
+          );
+        }
+
+        if (password) {
+          envPromises.push(
+            setEnvVariables.mutateAsync({
+              key: `db-password-${connectionName}`,
+              value: password,
+            }),
+          );
+        }
+
+        if (token) {
+          envPromises.push(
+            setEnvVariables.mutateAsync({
+              key: `db-token-${connectionName}`,
+              value: token,
+            }),
+          );
+        }
+
+        await Promise.all(envPromises);
+      } catch (error) {
+        throw new Error(`Failed to setup environment variables: ${error}`);
+      }
+    },
+    [
+      getDatabaseUsername,
+      getDatabasePassword,
+      getDatabaseToken,
+      setEnvVariables,
+    ],
   );
+
+  const start = useCallback(async (command: string, connectionName: string) => {
+    setupConnectionEnv(connectionName);
+    return window.electron.ipcRenderer.invoke('process:start', { command });
+  }, []);
+
+  const stop = useCallback(async (force: boolean = false) => {
+    setState((prev) => ({ ...prev, status: 'stopping' }));
+    return window.electron.ipcRenderer.invoke('process:stop', { force });
+  }, []);
+
+  const forceStop = useCallback(async () => {
+    setState((prev) => ({ ...prev, status: 'stopping' }));
+    return window.electron.ipcRenderer.invoke('process:forceStop');
+  }, []);
+
+  const clearOutput = useCallback(() => {
+    setState((prev) => ({
+      ...prev,
+      output: [],
+      error: [],
+    }));
+  }, []);
+
+  const getStatus = useCallback(async () => {
+    return window.electron.ipcRenderer.invoke('process:status');
+  }, []);
+
+  // eslint-disable-next-line react/jsx-no-constructed-context-values
+  const contextValue: ProcessContextValue = {
+    ...state,
+    start,
+    stop,
+    forceStop,
+    clearOutput,
+    getStatus,
+  };
 
   return (
     <ProcessContext.Provider value={contextValue}>
