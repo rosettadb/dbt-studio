@@ -31,6 +31,7 @@ import {
   testSnowflakeConnection,
 } from '../utils/connectors';
 import SecureStorageService from './secureStorage.service';
+import { CloudConnection, RecentItem } from '../../types/frontend';
 
 export default class ConnectorsService {
   static async loadConnections(): Promise<ConnectionModel[]> {
@@ -1119,5 +1120,85 @@ export default class ConnectorsService {
     }
 
     return { isValid: true };
+  }
+
+  static async loadCloudConnections(): Promise<CloudConnection[]> {
+    const db = await loadDatabaseFile();
+    return db.sources ?? [];
+  }
+
+  static async saveCloudConnection(connection: CloudConnection): Promise<void> {
+    const db = await loadDatabaseFile();
+    const sources = db.sources ?? [];
+
+    const existingIndex = sources.findIndex((c) => c.id === connection.id);
+
+    if (existingIndex >= 0) {
+      sources[existingIndex] = connection;
+    } else {
+      sources.push(connection);
+    }
+
+    await updateDatabase<'sources'>('sources', sources);
+  }
+
+  static async deleteCloudConnection(id: string): Promise<void> {
+    const db = await loadDatabaseFile();
+    const sources = db.sources ?? [];
+
+    const filteredSources = sources.filter((c) => c.id !== id);
+
+    await updateDatabase<'sources'>('sources', filteredSources);
+  }
+
+  static async getCloudConnectionById(
+    id: string,
+  ): Promise<CloudConnection | null> {
+    try {
+      const connections = await this.loadCloudConnections();
+      return connections.find((c) => c.id === id) || null;
+    } catch (error) {
+      return null;
+    }
+  }
+
+  static async loadRecentItems(): Promise<RecentItem[]> {
+    try {
+      const db = await loadDatabaseFile();
+      return db.recentItems ?? [];
+    } catch (error) {
+      return [];
+    }
+  }
+
+  static async addRecentItem(
+    item: Omit<RecentItem, 'accessedAt'>,
+  ): Promise<void> {
+    const db = await loadDatabaseFile();
+    const items = db.recentItems ?? [];
+
+    const existingIndex = items.findIndex((i) => i.id === item.id);
+
+    if (existingIndex >= 0) {
+      items[existingIndex] = { ...item, accessedAt: new Date() };
+    } else {
+      items.unshift({ ...item, accessedAt: new Date() });
+    }
+
+    const recentItems = items.slice(0, 50);
+    await updateDatabase<'recentItems'>('recentItems', recentItems);
+  }
+
+  static async removeRecentItem(id: string): Promise<void> {
+    const db = await loadDatabaseFile();
+    const items = db.recentItems ?? [];
+
+    const filteredItems = items.filter((i) => i.id !== id);
+
+    await updateDatabase<'recentItems'>('recentItems', filteredItems);
+  }
+
+  static async clearRecentItems(): Promise<void> {
+    await updateDatabase<'recentItems'>('recentItems', []);
   }
 }

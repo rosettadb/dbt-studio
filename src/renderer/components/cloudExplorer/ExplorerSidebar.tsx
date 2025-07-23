@@ -20,7 +20,7 @@ import {
 } from '@mui/icons-material';
 import { NavLink, useLocation, useNavigate } from 'react-router-dom';
 import { SettingsSidebarElement } from '../../screens/settings/settingsElements';
-import { useConnections } from '../../controllers/cloudExplorer.controller';
+import { useGetCloudConnections } from '../../controllers/cloudExplorer.controller';
 import { cloudStorageImages } from '../../../../assets/connectionIcons';
 import { CloudProvider } from '../../../types/frontend';
 
@@ -64,7 +64,7 @@ export const ExplorerSidebar: React.FC = () => {
   const theme = useTheme();
   const location = useLocation();
   const navigate = useNavigate();
-  const connectionsQuery = useConnections();
+  const connectionsQuery = useGetCloudConnections();
 
   // Extract connectionId and bucketName from current path
   const pathSegments = location.pathname.split('/');

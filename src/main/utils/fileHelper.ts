@@ -83,6 +83,8 @@ export const loadDatabaseFile = async (): Promise<DataBase> => {
       settings: loadDefaultSettings(),
       queries: {},
       connections: [],
+      sources: [],
+      recentItems: [],
     };
   }
 };

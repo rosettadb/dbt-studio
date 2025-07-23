@@ -82,16 +82,16 @@ export type CloudStorageConfig = S3Config | AzureConfig | GCSConfig;
 
 export type CloudProvider = 'aws' | 'azure' | 'gcs';
 
-export interface CloudConnection {
+export type CloudConnection = {
   id: string;
   name: string;
   provider: CloudProvider;
   config: CloudStorageConfig;
   created: Date;
   lastUsed?: Date;
-}
+};
 
-export interface RecentItem {
+export type RecentItem = {
   id: string;
   name: string;
   path: string;
@@ -99,10 +99,10 @@ export interface RecentItem {
   connectionName: string;
   provider: CloudProvider;
   accessedAt: Date;
-}
+};
 
 // Cloud Preview Types
-export interface PreviewResult {
+export type PreviewResult = {
   success: boolean;
   data?: any[];
   columns?: Array<{ name: string; type: string }>;
@@ -110,12 +110,17 @@ export interface PreviewResult {
   error?: string;
   objectPath: string;
   previewType: 'sample' | 'schema' | 'stats';
-}
+};
 
-export interface PreviewOptions {
+export type PreviewOptions = {
   provider: CloudProvider;
   cloudConfig: CloudStorageConfig;
   objectPath: string;
   previewType?: 'sample' | 'schema' | 'stats';
   limit?: number;
-}
+};
+
+export type DatabaseSources = {
+  cloudConnections: CloudConnection[];
+  recentItems: RecentItem[];
+};

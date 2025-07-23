@@ -52,6 +52,16 @@ export type ConnectorChannels =
   | 'connector:update'
   | 'connector:delete';
 
+export type SourcesChannels =
+  | 'source:create'
+  | 'source:list'
+  | 'source:get'
+  | 'source:delete'
+  | 'source:recentItems'
+  | 'source:addRecentItem'
+  | 'source:clearRecentItems'
+  | 'source:deleteRecentItem';
+
 export type CliChannels =
   | 'cli:run'
   | 'cli:input'
@@ -125,7 +135,8 @@ export type Channels =
   | ProcessChannels
   | SecureStorageChannels
   | UpdateChannels
-  | CloudExplorerChannels;
+  | CloudExplorerChannels
+  | SourcesChannels;
 
 export type ConfigureConnectionBody = {
   projectId?: string;

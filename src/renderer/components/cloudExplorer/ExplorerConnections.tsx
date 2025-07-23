@@ -30,14 +30,14 @@ import {
 
 import { CloudProvider } from '../../../types/frontend';
 import {
-  useConnections,
+  useGetCloudConnections,
   useDeleteBucketConnection,
 } from '../../controllers/cloudExplorer.controller';
 import { cloudStorageImages } from '../../../../assets/connectionIcons';
 
 export const ExplorerConnections: React.FC = () => {
   const navigate = useNavigate();
-  const connectionsQuery = useConnections();
+  const connectionsQuery = useGetCloudConnections();
   const deleteConnection = useDeleteBucketConnection();
 
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);

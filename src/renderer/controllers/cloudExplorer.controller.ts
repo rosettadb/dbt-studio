@@ -8,7 +8,6 @@ import type {
   RecentItem,
 } from '../../types/frontend';
 
-// Query keys
 export const cloudExplorerKeys = {
   all: ['cloudExplorer'] as const,
   connections: ['cloudExplorer', 'connections'] as const,
@@ -34,7 +33,6 @@ export const cloudExplorerKeys = {
     [...cloudExplorerKeys.all, 'testConnection', provider, config] as const,
 };
 
-// Hooks for listing buckets
 export const useListBuckets = (
   provider: CloudProvider,
   config: CloudStorageConfig,
@@ -47,7 +45,6 @@ export const useListBuckets = (
   );
 };
 
-// Hooks for listing objects
 export const useListObjects = (
   provider: CloudProvider,
   config: CloudStorageConfig,
@@ -69,7 +66,6 @@ export const useListObjects = (
   );
 };
 
-// Mutation for testing connection
 export const useTestCloudConnection = () => {
   return useMutation(
     ({
@@ -209,8 +205,7 @@ export const useInvalidateObjects = () => {
   };
 };
 
-// Connection management hooks
-export const useConnections = () => {
+export const useGetCloudConnections = () => {
   return useQuery(
     cloudExplorerKeys.connections,
     () => connectionStorage.getConnections(),

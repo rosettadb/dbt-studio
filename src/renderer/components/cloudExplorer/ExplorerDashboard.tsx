@@ -19,7 +19,7 @@ import {
   Dashboard,
 } from '@mui/icons-material';
 import {
-  useConnections,
+  useGetCloudConnections,
   useRecentItems,
   useListBuckets,
 } from '../../controllers/cloudExplorer.controller';
@@ -38,7 +38,7 @@ export const ExplorerDashboard = ({
 }: ExplorerDashboardProps) => {
   const navigate = useNavigate();
 
-  const connectionsQuery = useConnections();
+  const connectionsQuery = useGetCloudConnections();
   const recentItemsQuery = useRecentItems();
 
   const connections = connectionsQuery.data || [];
