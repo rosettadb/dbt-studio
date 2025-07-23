@@ -40,3 +40,87 @@ export type SecureStorageAccount =
   | `db-user-${string}`
   | `db-password-${string}`
   | `db-token-${string}`;
+
+// Cloud Explorer Types
+export interface Bucket {
+  name: string;
+  created?: Date;
+  location?: string;
+}
+
+export interface StorageObject {
+  name: string;
+  size: number;
+  updated: Date;
+  contentType?: string;
+  isDirectory: boolean;
+}
+
+export interface CloudListResult {
+  objects: StorageObject[];
+  nextPageToken?: string;
+}
+
+export interface S3Config {
+  region: string;
+  accessKeyId: string;
+  secretAccessKey: string;
+}
+
+export interface AzureConfig {
+  accountName: string;
+  accountKey: string;
+  connectionString?: string;
+}
+
+export interface GCSConfig {
+  projectId: string;
+  credentials?: any;
+}
+
+export type CloudStorageConfig = S3Config | AzureConfig | GCSConfig;
+
+export type CloudProvider = 'aws' | 'azure' | 'gcs';
+
+export type CloudConnection = {
+  id: string;
+  name: string;
+  provider: CloudProvider;
+  config: CloudStorageConfig;
+  created: Date;
+  lastUsed?: Date;
+};
+
+export type RecentItem = {
+  id: string;
+  name: string;
+  path: string;
+  connectionId: string;
+  connectionName: string;
+  provider: CloudProvider;
+  accessedAt: Date;
+};
+
+// Cloud Preview Types
+export type PreviewResult = {
+  success: boolean;
+  data?: any[];
+  columns?: Array<{ name: string; type: string }>;
+  totalRows?: number;
+  error?: string;
+  objectPath: string;
+  previewType: 'sample' | 'schema' | 'stats';
+};
+
+export type PreviewOptions = {
+  provider: CloudProvider;
+  cloudConfig: CloudStorageConfig;
+  objectPath: string;
+  previewType?: 'sample' | 'schema' | 'stats';
+  limit?: number;
+};
+
+export type DatabaseSources = {
+  cloudConnections: CloudConnection[];
+  recentItems: RecentItem[];
+};

@@ -29,6 +29,11 @@ const baseSidebarElements: SideBarElementType[] = [
     text: 'SQL Editor',
     icon: Icons.SQL,
   },
+  {
+    path: '/app/cloud-explorer',
+    text: 'Cloud Object Explorer',
+    icon: Icons.CloudIcon,
+  },
 ];
 
 export const getSidebarElements = (

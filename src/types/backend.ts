@@ -1,4 +1,5 @@
 import { QueryResult } from 'pg';
+import { CloudConnection, RecentItem } from './frontend';
 
 export type SupportedConnectionTypes =
   | 'postgres'
@@ -216,6 +217,8 @@ export type DataBase = {
   selectedProject?: Project;
   queries: Record<string, string>;
   connections: ConnectionModel[];
+  sources: CloudConnection[];
+  recentItems: RecentItem[];
 };
 
 export type FileNode = {

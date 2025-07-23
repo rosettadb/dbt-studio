@@ -2,6 +2,7 @@ import { ipcMain } from 'electron';
 import { ConnectorsService } from '../services';
 import type { ConnectionInput, QueryResponseType } from '../../types/backend';
 import { ConfigureConnectionBody, UpdateConnectionBody } from '../../types/ipc';
+import { CloudConnection, RecentItem } from '../../types/frontend';
 
 const handlerChannels = [
   'connector:configure',
@@ -84,6 +85,41 @@ const registerConnectorsHandlers = () => {
       return ConnectorsService.setConnectionEnvVariable(key, value);
     },
   );
+
+  ipcMain.handle('source:create', async (_event, body: CloudConnection) => {
+    return ConnectorsService.saveCloudConnection(body);
+  });
+
+  ipcMain.handle('source:list', async () => {
+    return ConnectorsService.loadCloudConnections();
+  });
+
+  ipcMain.handle('source:get', async (_event, id: string) => {
+    return ConnectorsService.getCloudConnectionById(id);
+  });
+
+  ipcMain.handle('source:delete', async (_event, id: string) => {
+    return ConnectorsService.deleteCloudConnection(id);
+  });
+
+  ipcMain.handle('source:recentItems', async () => {
+    return ConnectorsService.loadRecentItems();
+  });
+
+  ipcMain.handle(
+    'source:addRecentItem',
+    async (_event, item: Omit<RecentItem, 'accessedAt'>) => {
+      return ConnectorsService.addRecentItem(item);
+    },
+  );
+
+  ipcMain.handle('source:clearRecentItems', async () => {
+    return ConnectorsService.clearRecentItems();
+  });
+
+  ipcMain.handle('source:deleteRecentItem', async (_event, id: string) => {
+    return ConnectorsService.removeRecentItem(id);
+  });
 };
 
 export default registerConnectorsHandlers;

@@ -1,5 +1,5 @@
 import React from 'react';
-import { CodeSharp, Cable, Assignment } from '@mui/icons-material';
+import { CodeSharp, Cable, Assignment, Cloud } from '@mui/icons-material';
 import { icons } from '../../../../assets';
 
 const style = {
@@ -40,7 +40,9 @@ export const Model: React.FC = () => (
   />
 );
 
-export const SQL: React.FC = () => <CodeSharp />;
+export const SQL: React.FC = () => <CodeSharp color="primary" />;
+
+export const CloudIcon: React.FC = () => <Cloud color="primary" />;
 
 export const DBTProjects: React.FC = () => (
   <img

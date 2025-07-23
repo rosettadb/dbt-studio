@@ -1,0 +1,204 @@
+import * as crypto from 'crypto';
+import type {
+  CloudStorageConfig,
+  CloudProvider,
+  S3Config,
+  AzureConfig,
+  GCSConfig,
+} from '../../types/frontend';
+
+/**
+ * Cloud Authentication Helper
+ * Contains methods for building cloud authentication secrets and token generation
+ */
+
+/**
+ * Generate GCS Bearer token from service account credentials
+ */
+export async function generateGCSBearerToken(
+  credentials: string,
+): Promise<string> {
+  try {
+    // Parse the service account credentials
+    const serviceAccount = JSON.parse(credentials);
+
+    // Create JWT header
+    const header = {
+      alg: 'RS256',
+      typ: 'JWT',
+      kid: serviceAccount.private_key_id,
+    };
+
+    // Create JWT payload
+    const now = Math.floor(Date.now() / 1000);
+    const payload = {
+      iss: serviceAccount.client_email,
+      scope: 'https://www.googleapis.com/auth/devstorage.read_only',
+      aud: 'https://oauth2.googleapis.com/token',
+      exp: now + 3600, // Token expires in 1 hour
+      iat: now,
+    };
+
+    // Encode header and payload
+    const encodedHeader = Buffer.from(JSON.stringify(header)).toString(
+      'base64url',
+    );
+    const encodedPayload = Buffer.from(JSON.stringify(payload)).toString(
+      'base64url',
+    );
+
+    // Create signature
+    const signatureInput = `${encodedHeader}.${encodedPayload}`;
+    const signature = crypto
+      .createSign('RSA-SHA256')
+      .update(signatureInput)
+      .sign(serviceAccount.private_key, 'base64url');
+
+    // Create JWT
+    const jwt = `${encodedHeader}.${encodedPayload}.${signature}`;
+
+    // Exchange JWT for access token
+    const tokenResponse = await fetch('https://oauth2.googleapis.com/token', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded',
+      },
+      body: new URLSearchParams({
+        grant_type: 'urn:ietf:params:oauth:grant-type:jwt-bearer',
+        assertion: jwt,
+      }),
+    });
+
+    if (!tokenResponse.ok) {
+      throw new Error(
+        `Token exchange failed: ${tokenResponse.status} ${tokenResponse.statusText}`,
+      );
+    }
+
+    const tokenData = await tokenResponse.json();
+
+    if (!tokenData.access_token) {
+      throw new Error('No access token received from Google OAuth2');
+    }
+
+    return tokenData.access_token;
+  } catch (error) {
+    // eslint-disable-next-line no-console
+    console.error('Error generating GCS Bearer token:', error);
+    throw error;
+  }
+}
+
+/**
+ * Build cloud authentication secret query based on provider
+ */
+export async function buildCloudSecretQuery(
+  provider: CloudProvider,
+  config: CloudStorageConfig,
+): Promise<string> {
+  switch (provider) {
+    case 'aws': {
+      const awsConfig = config as S3Config;
+      return `
+        CREATE OR REPLACE SECRET s3_secret (
+          TYPE s3,
+          PROVIDER config,
+          KEY_ID '${awsConfig.accessKeyId}',
+          SECRET '${awsConfig.secretAccessKey}',
+          REGION '${awsConfig.region}'
+        );
+      `;
+    }
+    case 'gcs': {
+      const gcsConfig = config as GCSConfig;
+
+      // Check if we have service account credentials
+      if (gcsConfig.credentials) {
+        try {
+          // Generate Bearer token from service account credentials
+          const token = await generateGCSBearerToken(gcsConfig.credentials);
+
+          // Set up HTTP authentication secret for GCS
+          return `
+            CREATE OR REPLACE SECRET gcs_secret (
+              TYPE http,
+              EXTRA_HTTP_HEADERS MAP {'Authorization': 'Bearer ${token}'}
+            );
+          `;
+        } catch (error) {
+          // eslint-disable-next-line no-console
+          console.error('Failed to generate GCS Bearer token:', error);
+          // Fall back to no authentication (will only work for public files)
+          return `SELECT 'GCS HTTPS access enabled (public files only)' as message;`;
+        }
+      } else {
+        // No credentials provided, only public files will work
+        return `SELECT 'GCS HTTPS access enabled (public files only)' as message;`;
+      }
+    }
+    case 'azure': {
+      const azureConfig = config as AzureConfig;
+
+      // Check if we have account name and key to build connection string
+      if (azureConfig.accountName && azureConfig.accountKey) {
+        // Build proper Azure connection string format
+        const connectionString = `DefaultEndpointsProtocol=https;AccountName=${azureConfig.accountName};AccountKey=${azureConfig.accountKey};EndpointSuffix=core.windows.net`;
+
+        return `
+          CREATE OR REPLACE SECRET azure_secret (
+            TYPE azure,
+            CONNECTION_STRING '${connectionString}'
+          );
+        `;
+      }
+
+      if (azureConfig.connectionString) {
+        // Use provided connection string
+        return `
+          CREATE OR REPLACE SECRET azure_secret (
+            TYPE azure,
+            CONNECTION_STRING '${azureConfig.connectionString}'
+          );
+        `;
+      }
+
+      if (azureConfig.accountName) {
+        // Use account name only (for anonymous access)
+        return `
+          CREATE OR REPLACE SECRET azure_secret (
+            TYPE azure,
+            PROVIDER config,
+            ACCOUNT_NAME '${azureConfig.accountName}'
+          );
+        `;
+      }
+
+      throw new Error(
+        'Azure configuration must include either accountName+accountKey, connectionString, or accountName for anonymous access',
+      );
+    }
+    default:
+      throw new Error(`Unsupported cloud provider: ${provider}`);
+  }
+}
+
+/**
+ * Get the appropriate cloud storage URL format for the provider
+ */
+export function getCloudUrl(
+  provider: CloudProvider,
+  bucketName: string,
+  objectName: string,
+): string {
+  switch (provider) {
+    case 'aws':
+      return `s3://${bucketName}/${objectName}`;
+    case 'gcs':
+      // Use HTTPS URL for GCS since native gcs:// might not be supported
+      return `https://storage.googleapis.com/${bucketName}/${objectName}`;
+    case 'azure':
+      return `az://${bucketName}/${objectName}`;
+    default:
+      throw new Error(`Unsupported cloud provider: ${provider}`);
+  }
+}
