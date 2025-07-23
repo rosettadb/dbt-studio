@@ -32,7 +32,7 @@ import { CloudProvider } from '../../../types/frontend';
 import {
   useGetCloudConnections,
   useDeleteBucketConnection,
-} from '../../controllers/cloudExplorer.controller';
+} from '../../controllers';
 import { cloudStorageImages } from '../../../../assets/connectionIcons';
 
 export const ExplorerConnections: React.FC = () => {
