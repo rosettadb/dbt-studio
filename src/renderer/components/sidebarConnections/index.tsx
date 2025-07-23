@@ -18,8 +18,11 @@ import {
 } from '@mui/icons-material';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useGetConnections, useGetCloudConnections } from '../../controllers';
-import connectionIcons from '../../../../assets/connectionIcons';
 import { SupportedConnectionTypes } from '../../../types/backend';
+import connectionIcons, {
+  cloudStorageImages,
+} from '../../../../assets/connectionIcons';
+import { CloudProvider } from '../../../types/frontend';
 
 export const ConnectionsSidebar: React.FC = () => {
   const theme = useTheme();
@@ -63,38 +66,27 @@ export const ConnectionsSidebar: React.FC = () => {
     return <DatabaseIcon fontSize="small" />;
   };
 
-  const getCloudProviderIcon = (provider: string) => {
-    switch (provider) {
-      case 'aws':
-        return '☁️'; // You can replace with actual AWS icon
-      case 'azure':
-        return '🔷'; // You can replace with actual Azure icon
-      case 'gcs':
-        return '🌐'; // You can replace with actual GCS icon
-      default:
-        return <CloudIcon fontSize="small" />;
+  const getCloudProviderIcon = (provider: CloudProvider) => {
+    const iconSrc = cloudStorageImages[provider];
+    if (iconSrc) {
+      return (
+        <img
+          src={iconSrc}
+          alt={provider}
+          style={{
+            width: 20,
+            height: 20,
+            objectFit: 'contain',
+          }}
+        />
+      );
     }
+    return <CloudIcon fontSize="small" />;
   };
 
   const renderCloudProviderIcon = (provider: string) => {
-    const icon = getCloudProviderIcon(provider);
-    if (typeof icon === 'string') {
-      return (
-        <Box
-          sx={{
-            fontSize: 16,
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            width: 20,
-            height: 20,
-          }}
-        >
-          {icon}
-        </Box>
-      );
-    }
-    return icon;
+    // Cast provider to CloudProvider for type safety
+    return getCloudProviderIcon(provider as CloudProvider);
   };
 
   const getConnectionTypeName = (connectionType: string) => {

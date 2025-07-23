@@ -21,6 +21,9 @@ export const Sidebar: React.FC<Props> = ({ content }) => {
   const isProjectSelected = Boolean(selectedProject?.id);
 
   const activeItem = React.useMemo(() => {
+    if (location.pathname.includes('cloud-explorer')) {
+      return 4;
+    }
     if (location.pathname.includes('connection')) {
       return 0;
     }
@@ -31,9 +34,6 @@ export const Sidebar: React.FC<Props> = ({ content }) => {
       return 3;
     }
     if (location.pathname === '/app' || location.pathname.includes('/app/')) {
-      return 2;
-    }
-    if (location.pathname.includes('cloud-explorer')) {
       return 2;
     }
     if (

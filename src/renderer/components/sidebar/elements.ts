@@ -1,4 +1,3 @@
-import CloudIcon from '@mui/icons-material/Cloud';
 import * as Icons from './icons';
 
 interface SideBarElementType {
@@ -33,7 +32,7 @@ const baseSidebarElements: SideBarElementType[] = [
   {
     path: '/app/cloud-explorer',
     text: 'Cloud Object Explorer',
-    icon: CloudIcon,
+    icon: Icons.CloudIcon,
   },
 ];
 

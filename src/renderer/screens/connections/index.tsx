@@ -36,9 +36,11 @@ import {
 } from '../../controllers';
 import { Loader, ConnectionsSidebar } from '../../components';
 import { AppLayout } from '../../layouts';
-import connectionIcons from '../../../../assets/connectionIcons';
+import connectionIcons, {
+  cloudStorageImages,
+} from '../../../../assets/connectionIcons';
 import { SupportedConnectionTypes } from '../../../types/backend';
-import { CloudConnection } from '../../../types/frontend';
+import { CloudProvider, CloudConnection } from '../../../types/frontend';
 
 const Connections: React.FC = () => {
   const {
@@ -122,16 +124,17 @@ const Connections: React.FC = () => {
 
   // Helper function to get cloud provider icon
   const getCloudProviderIcon = (provider: string) => {
-    switch (provider) {
-      case 'aws':
-        return '☁️'; // You can replace with actual AWS icon
-      case 'azure':
-        return '🔷'; // You can replace with actual Azure icon
-      case 'gcs':
-        return '🌐'; // You can replace with actual GCS icon
-      default:
-        return <CloudIcon sx={{ fontSize: 48 }} />;
+    const iconSrc = cloudStorageImages[provider as CloudProvider];
+    if (iconSrc) {
+      return (
+        <img
+          src={iconSrc}
+          alt={provider}
+          style={{ width: 48, height: 48, objectFit: 'contain' }}
+        />
+      );
     }
+    return <CloudIcon sx={{ fontSize: 48 }} />;
   };
 
   // Helper function to get connection type name
