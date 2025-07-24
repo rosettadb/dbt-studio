@@ -69,8 +69,20 @@ export default class ProjectsService {
   }
 
   static async getSelectedProject(): Promise<Project | undefined> {
-    const selected = (await loadDatabaseFile()).selectedProject;
-    return this.getProject(selected?.id);
+    const db = await loadDatabaseFile();
+    const selected = db.selectedProject;
+    try {
+      const project = await this.getProject(selected?.id);
+      if (!project) {
+        await updateDatabase<'selectedProject'>('selectedProject', undefined);
+        return undefined;
+      }
+      return project;
+    } catch (err) {
+      // If loading the project or its configuration fails, clear selection
+      await updateDatabase<'selectedProject'>('selectedProject', undefined);
+      return undefined;
+    }
   }
 
   static async saveProjects(projects: Project[]) {
@@ -432,12 +444,6 @@ export default class ProjectsService {
   }
 
   static async extractBigQuerySchema(connection: BigQueryConnection) {
-    if (connection.method !== 'service-account' || !connection.keyfile) {
-      throw new Error(
-        'Only service account authentication is supported for BigQuery',
-      );
-    }
-
     const config: any = {
       projectId: connection.project,
     };
