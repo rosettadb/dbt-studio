@@ -348,7 +348,14 @@ export const InlineDataPreview: React.FC<InlineDataPreviewProps> = ({
   const renderContent = () => {
     if (loading) {
       return (
-        <Box sx={{ display: 'flex', justifyContent: 'center', p: 4 }}>
+        <Box
+          sx={{
+            display: 'flex',
+            justifyContent: 'center',
+            p: 4,
+            alignItems: 'center',
+          }}
+        >
           <CircularProgress />
           <Typography sx={{ ml: 2 }}>Loading data preview...</Typography>
         </Box>
@@ -426,7 +433,7 @@ export const InlineDataPreview: React.FC<InlineDataPreviewProps> = ({
           </Button>
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
             <TableView />
-            <Typography variant="h4" component="h1">
+            <Typography variant="h5" component="h1">
               Preview:
             </Typography>
             <Chip label={fileName} size="medium" variant="outlined" />
