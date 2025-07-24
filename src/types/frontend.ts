@@ -39,7 +39,10 @@ export type SecureStorageAccount =
   | 'openai-api-key'
   | `db-user-${string}`
   | `db-password-${string}`
-  | `db-token-${string}`;
+  | `db-token-${string}`
+  | `cloud-gcs-${string}`
+  | `cloud-aws-${string}`
+  | `cloud-azure-${string}`;
 
 // Cloud Explorer Types
 export interface Bucket {
@@ -64,12 +67,12 @@ export interface CloudListResult {
 export interface S3Config {
   region: string;
   accessKeyId: string;
-  secretAccessKey: string;
+  secretAccessKey?: string;
 }
 
 export interface AzureConfig {
   accountName: string;
-  accountKey: string;
+  accountKey?: string;
   connectionString?: string;
 }
 

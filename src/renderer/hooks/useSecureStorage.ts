@@ -71,6 +71,62 @@ const useSecureStorage = () => {
     await secureStorageService.delete(`db-token-${projectName}`);
   };
 
+  // Cloud credential storage
+  const setCloudGcsCredential = async (
+    credential: string,
+    connectionName: string,
+  ): Promise<void> => {
+    await secureStorageService.set(`cloud-gcs-${connectionName}`, credential);
+  };
+
+  const getCloudGcsCredential = async (
+    connectionName: string,
+  ): Promise<string | null> => {
+    return secureStorageService.get(`cloud-gcs-${connectionName}`);
+  };
+
+  const deleteCloudGcsCredential = async (
+    connectionName: string,
+  ): Promise<void> => {
+    await secureStorageService.delete(`cloud-gcs-${connectionName}`);
+  };
+
+  const setCloudAwsSecret = async (
+    secret: string,
+    connectionName: string,
+  ): Promise<void> => {
+    await secureStorageService.set(`cloud-aws-${connectionName}`, secret);
+  };
+
+  const getCloudAwsSecret = async (
+    connectionName: string,
+  ): Promise<string | null> => {
+    return secureStorageService.get(`cloud-aws-${connectionName}`);
+  };
+
+  const deleteCloudAwsSecret = async (
+    connectionName: string,
+  ): Promise<void> => {
+    await secureStorageService.delete(`cloud-aws-${connectionName}`);
+  };
+
+  const setCloudAzureKey = async (
+    key: string,
+    connectionName: string,
+  ): Promise<void> => {
+    await secureStorageService.set(`cloud-azure-${connectionName}`, key);
+  };
+
+  const getCloudAzureKey = async (
+    connectionName: string,
+  ): Promise<string | null> => {
+    return secureStorageService.get(`cloud-azure-${connectionName}`);
+  };
+
+  const deleteCloudAzureKey = async (connectionName: string): Promise<void> => {
+    await secureStorageService.delete(`cloud-azure-${connectionName}`);
+  };
+
   return {
     setOpenAIKey,
     getOpenAIKey,
@@ -84,6 +140,15 @@ const useSecureStorage = () => {
     setDatabaseToken,
     getDatabaseToken,
     deleteDatabaseToken,
+    setCloudGcsCredential,
+    getCloudGcsCredential,
+    deleteCloudGcsCredential,
+    setCloudAwsSecret,
+    getCloudAwsSecret,
+    deleteCloudAwsSecret,
+    setCloudAzureKey,
+    getCloudAzureKey,
+    deleteCloudAzureKey,
   };
 };
 

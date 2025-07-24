@@ -36,6 +36,7 @@ import {
   useSaveConnection,
 } from '../../controllers/cloudExplorer.controller';
 import { cloudStorageImages } from '../../../../assets/connectionIcons';
+import useSecureStorage from '../../hooks/useSecureStorage';
 
 interface ConnectionFormProps {
   initialValues?: CloudConnection;
@@ -64,6 +65,14 @@ export const ConnectionForm: React.FC<ConnectionFormProps> = ({
   const navigate = useNavigate();
   const saveConnection = useSaveConnection();
   const testConnection = useTestCloudConnection();
+  const {
+    setCloudGcsCredential,
+    getCloudGcsCredential,
+    setCloudAwsSecret,
+    getCloudAwsSecret,
+    setCloudAzureKey,
+    getCloudAzureKey,
+  } = useSecureStorage();
 
   const [testStatus, setTestStatus] = useState<
     'idle' | 'testing' | 'success' | 'error'
@@ -116,6 +125,25 @@ export const ConnectionForm: React.FC<ConnectionFormProps> = ({
         accountKey: (config as AzureConfig).accountKey || '',
         connectionString: (config as AzureConfig).connectionString || '',
       });
+    }
+  }, [initialValues]);
+
+  // On edit, fetch credentials from secure storage
+  useEffect(() => {
+    if (initialValues) {
+      const { name, provider } = initialValues;
+      (async () => {
+        if (provider === 'gcs') {
+          const stored = await getCloudGcsCredential(name);
+          setFormData((prev) => ({ ...prev, credentials: stored || '' }));
+        } else if (provider === 'aws') {
+          const stored = await getCloudAwsSecret(name);
+          setFormData((prev) => ({ ...prev, secretAccessKey: stored || '' }));
+        } else if (provider === 'azure') {
+          const stored = await getCloudAzureKey(name);
+          setFormData((prev) => ({ ...prev, accountKey: stored || '' }));
+        }
+      })();
     }
   }, [initialValues]);
 
@@ -175,8 +203,8 @@ export const ConnectionForm: React.FC<ConnectionFormProps> = ({
     setErrorMessage('');
 
     try {
-      const config = createConfigFromFormData();
-
+      const rawConfig = createConfigFromFormData();
+      const config = rawConfig;
       // Validate config before sending
       if (!config) {
         throw new Error('Failed to create configuration object');
@@ -200,16 +228,41 @@ export const ConnectionForm: React.FC<ConnectionFormProps> = ({
     if (!validateForm()) return;
 
     try {
-      const config = createConfigFromFormData();
+      const rawConfig = createConfigFromFormData();
+      let finalConfig: typeof rawConfig;
+      if (formData.provider === 'gcs') {
+        await setCloudGcsCredential(formData.credentials, formData.name);
+        // Omit credentials if present
+        const config = { ...rawConfig };
+        if ('credentials' in config) {
+          delete (config as any).credentials;
+        }
+        finalConfig = config;
+      } else if (formData.provider === 'aws') {
+        await setCloudAwsSecret(formData.secretAccessKey, formData.name);
+        const config = { ...rawConfig };
+        if ('secretAccessKey' in config) {
+          delete (config as any).secretAccessKey;
+        }
+        finalConfig = config;
+      } else if (formData.provider === 'azure') {
+        await setCloudAzureKey(formData.accountKey, formData.name);
+        const config = { ...rawConfig };
+        if ('accountKey' in config) {
+          delete (config as any).accountKey;
+        }
+        finalConfig = config;
+      } else {
+        finalConfig = rawConfig;
+      }
       const connection: CloudConnection = {
         id: connectionId || uuidv4(),
         name: formData.name,
         provider: formData.provider,
-        config,
+        config: finalConfig,
         created: initialValues?.created || new Date(),
         lastUsed: new Date(),
       };
-
       await saveConnection.mutateAsync(connection);
       navigate('/app/cloud-explorer/connections');
     } catch (error) {

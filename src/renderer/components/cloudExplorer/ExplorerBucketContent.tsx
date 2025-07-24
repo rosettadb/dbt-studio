@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { formatDistanceToNow } from 'date-fns';
 import {
@@ -43,11 +43,9 @@ import {
   useAddRecentItem,
   usePreviewData,
 } from '../../controllers/cloudExplorer.controller';
-import type {
-  CloudProvider,
-  CloudStorageConfig,
-} from '../../../types/frontend';
+import type { CloudProvider } from '../../../types/frontend';
 import { InlineDataPreview } from './InlineDataPreview';
+import useSecureStorage from '../../hooks/useSecureStorage';
 
 interface ExplorerBucketContentProps {
   connectionId: string;
@@ -68,18 +66,50 @@ export const ExplorerBucketContent: React.FC<ExplorerBucketContentProps> = ({
     fileName: string;
     objectName: string;
   } | null>(null);
+  const [secureConfig, setSecureConfig] = useState<any | null>(null);
 
   const connectionQuery = useConnection(connectionId);
   const connection = connectionQuery.data;
+  const { getCloudAwsSecret, getCloudAzureKey, getCloudGcsCredential } =
+    useSecureStorage();
+
+  useEffect(() => {
+    const fetchSecrets = async () => {
+      if (!connection) {
+        setSecureConfig(null);
+        return;
+      }
+      const config = { ...connection.config };
+      try {
+        if (connection.provider === 'aws') {
+          const secret = await getCloudAwsSecret(connection.name);
+          (config as { secretAccessKey?: string }).secretAccessKey =
+            secret || '';
+        } else if (connection.provider === 'azure') {
+          const key = await getCloudAzureKey(connection.name);
+          (config as { accountKey?: string }).accountKey = key || '';
+        } else if (connection.provider === 'gcs') {
+          const cred = await getCloudGcsCredential(connection.name);
+          (config as { credentials?: any }).credentials = cred || '';
+        }
+      } catch (e) {
+        // eslint-disable-next-line no-console
+        console.error('Failed to fetch secure credentials', e);
+      }
+      setSecureConfig(config);
+    };
+    fetchSecrets();
+    // Only refetch if connection changes
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [connection]);
 
   const objectsQuery = useListObjects(
     connection?.provider as CloudProvider,
-    connection?.config as CloudStorageConfig,
+    secureConfig as any,
     bucketName,
     prefix,
-    !!connection,
+    !!connection && !!secureConfig,
   );
-
   const getDownloadUrl = useGetDownloadUrl();
   const addRecentItem = useAddRecentItem();
   const previewData = usePreviewData();
@@ -127,18 +157,17 @@ export const ExplorerBucketContent: React.FC<ExplorerBucketContentProps> = ({
       return;
     }
 
-    if (!connection) return;
+    if (!connection || !secureConfig) return;
 
     try {
       setLoadingUrls((prev) => ({ ...prev, [objectName]: true }));
 
       const url = await getDownloadUrl.mutateAsync({
         provider: connection.provider,
-        config: connection.config,
+        config: secureConfig,
         bucketName,
         objectName,
       });
-
       if (url) {
         setDownloadUrls((prev) => ({ ...prev, [objectName]: url }));
         window.open(url, '_blank');
@@ -209,7 +238,7 @@ export const ExplorerBucketContent: React.FC<ExplorerBucketContentProps> = ({
   };
 
   const handlePreview = async (objectName: string) => {
-    if (!connection) return;
+    if (!connection || !secureConfig) return;
 
     const fileName = objectName.split('/').pop() || objectName;
     setPreviewFile({
@@ -220,7 +249,7 @@ export const ExplorerBucketContent: React.FC<ExplorerBucketContentProps> = ({
     // Trigger the preview data fetch
     previewData.mutate({
       provider: connection.provider,
-      config: connection.config,
+      config: secureConfig,
       bucketName,
       objectName,
       previewType: 'sample',
