@@ -88,18 +88,18 @@ export const Sidebar: React.FC<Props> = ({ content }) => {
                 </ListItem>
               );
 
-              if (isDisabled) {
-                return (
-                  <Tooltip
-                    key={element.text}
-                    title={element.text}
-                    placement="right"
-                    arrow
-                  >
-                    <Box>{listItem}</Box>
-                  </Tooltip>
-                );
-              }
+              // if (isDisabled) {
+              //   return (
+              //     <Tooltip
+              //       key={element.text}
+              //       title={element.text}
+              //       placement="right"
+              //       arrow
+              //     >
+              //       <Box>{listItem}</Box>
+              //     </Tooltip>
+              //   );
+              // }
 
               return (
                 <Tooltip
@@ -112,6 +112,7 @@ export const Sidebar: React.FC<Props> = ({ content }) => {
                     to={element.path}
                     style={{
                       cursor: 'pointer',
+                      pointerEvents: isDisabled ? 'none' : 'auto',
                     }}
                   >
                     {listItem}

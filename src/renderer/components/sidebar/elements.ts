@@ -12,7 +12,7 @@ const baseSidebarElements: SideBarElementType[] = [
   {
     path: '/app/connections',
     text: 'Database Connections',
-    icon: Icons.Connections,
+    icon: Icons.DataSources,
   },
   {
     path: '/app/select-project',
