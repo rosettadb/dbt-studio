@@ -7,6 +7,7 @@ import {
   useTheme,
   ListItemIcon,
   ListItemText,
+  styled,
   Button,
   Divider,
 } from '@mui/material';
@@ -16,13 +17,35 @@ import {
   Storage as DatabaseIcon,
   Cloud as CloudIcon,
 } from '@mui/icons-material';
-import { useLocation, useNavigate } from 'react-router-dom';
+import { NavLink, useLocation, useNavigate } from 'react-router-dom';
 import { useGetConnections, useGetCloudConnections } from '../../controllers';
 import { SupportedConnectionTypes } from '../../../types/backend';
 import connectionIcons, {
   cloudStorageImages,
 } from '../../../../assets/connectionIcons';
 import { CloudProvider } from '../../../types/frontend';
+
+// Styled NavLink for consistent hover/active styles
+const StyledNavLink = styled(NavLink)(({ theme }) => ({
+  textDecoration: 'none',
+  color: theme.palette.text.primary,
+  display: 'block',
+  width: '100%',
+  '&.active': {
+    color: theme.palette.primary.main,
+    textDecoration: 'none',
+    '& .MuiListItem-root': {
+      backgroundColor: theme.palette.divider,
+      borderColor: theme.palette.primary.main,
+    },
+  },
+  '&:hover': {
+    color: theme.palette.primary.main,
+    '& .MuiListItem-root': {
+      backgroundColor: theme.palette.action.hover,
+    },
+  },
+}));
 
 export const ConnectionsSidebar: React.FC = () => {
   const theme = useTheme();
@@ -89,38 +112,6 @@ export const ConnectionsSidebar: React.FC = () => {
     return getCloudProviderIcon(provider as CloudProvider);
   };
 
-  const getConnectionTypeName = (connectionType: string) => {
-    switch (connectionType) {
-      case 'postgres':
-        return 'PostgreSQL';
-      case 'snowflake':
-        return 'Snowflake';
-      case 'bigquery':
-        return 'BigQuery';
-      case 'redshift':
-        return 'Redshift';
-      case 'databricks':
-        return 'Databricks';
-      case 'duckdb':
-        return 'DuckDB';
-      default:
-        return connectionType.toUpperCase();
-    }
-  };
-
-  const getCloudProviderName = (provider: string) => {
-    switch (provider) {
-      case 'aws':
-        return 'Amazon S3';
-      case 'azure':
-        return 'Azure Blob';
-      case 'gcs':
-        return 'Google Cloud';
-      default:
-        return provider.toUpperCase();
-    }
-  };
-
   return (
     <Box
       sx={{
@@ -129,9 +120,20 @@ export const ConnectionsSidebar: React.FC = () => {
         flexDirection: 'column',
         height: '100%',
         overflow: 'hidden',
+        overflowX: 'hidden',
+        width: '100%',
+        boxSizing: 'border-box',
       }}
     >
-      <Box sx={{ flex: 1, overflow: 'hidden' }}>
+      <Box
+        sx={{
+          flex: 1,
+          overflow: 'hidden',
+          overflowX: 'hidden',
+          width: '100%',
+          boxSizing: 'border-box',
+        }}
+      >
         <Box
           sx={{
             display: 'flex',
@@ -146,7 +148,16 @@ export const ConnectionsSidebar: React.FC = () => {
           </Typography>
         </Box>
 
-        <Box sx={{ overflow: 'auto', flex: 1 }}>
+        <Box
+          sx={{
+            overflow: 'auto',
+            flex: 1,
+            overflowX: 'hidden',
+            maxHeight: 'calc(100vh - 200px)',
+            width: '100%',
+            boxSizing: 'border-box',
+          }}
+        >
           {/* Database Connections List */}
           {connections.length > 0 && (
             <Box sx={{ mb: 2 }}>
@@ -167,59 +178,49 @@ export const ConnectionsSidebar: React.FC = () => {
                 <DatabaseIcon fontSize="small" />
                 Connections ({connections.length})
               </Typography>
-              <List sx={{ py: 0 }}>
+              <List sx={{ py: 0, width: '100%' }}>
                 {connections.map((connection) => (
-                  <ListItem
+                  <StyledNavLink
                     key={connection.id}
-                    sx={{
-                      cursor: 'pointer',
-                      borderRadius: 1,
-                      mb: 0.5,
-                      py: 0.5,
-                      px: 1,
-                      backgroundColor:
-                        selectedConnection?.id === connection.id
-                          ? `${theme.palette.primary.light}20`
-                          : 'transparent',
-                      border:
-                        selectedConnection?.id === connection.id
-                          ? `1px solid ${theme.palette.primary.main}`
-                          : '1px solid transparent',
-                      '&:hover': {
-                        backgroundColor: theme.palette.action.hover,
-                      },
-                    }}
-                    onClick={() => {
-                      navigate(`/app/edit-connection/${connection.id}`);
-                    }}
+                    to={`/app/edit-connection/${connection.id}`}
                   >
-                    <ListItemIcon sx={{ minWidth: 32 }}>
-                      {getConnectionIcon(connection.connection.type)}
-                    </ListItemIcon>
-                    <ListItemText
-                      primary={connection.connection.name}
-                      secondary={getConnectionTypeName(
-                        connection.connection.type,
-                      )}
-                      primaryTypographyProps={{
-                        variant: 'body2',
-                        sx: {
-                          fontSize: '0.875rem',
-                          fontWeight:
-                            selectedConnection?.id === connection.id
-                              ? 600
-                              : 400,
-                        },
+                    <ListItem
+                      sx={{
+                        cursor: 'pointer',
+                        borderRadius: 1,
+                        mb: 0.5,
+                        py: 0.5,
+                        px: 1,
+                        backgroundColor:
+                          selectedConnection?.id === connection.id
+                            ? theme.palette.divider
+                            : 'transparent',
+                        overflow: 'hidden',
+                        minHeight: '32px',
+                        width: '270px',
                       }}
-                      secondaryTypographyProps={{
-                        variant: 'caption',
-                        sx: {
-                          fontSize: '0.75rem',
-                          color: theme.palette.text.secondary,
-                        },
-                      }}
-                    />
-                  </ListItem>
+                    >
+                      <ListItemIcon sx={{ minWidth: 32 }}>
+                        {getConnectionIcon(connection.connection.type)}
+                      </ListItemIcon>
+                      <ListItemText
+                        primary={connection.connection.name}
+                        primaryTypographyProps={{
+                          variant: 'body2',
+                          sx: {
+                            fontSize: '0.875rem',
+                            fontWeight:
+                              selectedConnection?.id === connection.id
+                                ? 600
+                                : 400,
+                            whiteSpace: 'nowrap',
+                            overflow: 'hidden',
+                            textOverflow: 'ellipsis',
+                          },
+                        }}
+                      />
+                    </ListItem>
+                  </StyledNavLink>
                 ))}
               </List>
             </Box>
@@ -246,59 +247,56 @@ export const ConnectionsSidebar: React.FC = () => {
                 <CloudIcon fontSize="small" />
                 Sources ({cloudConnections.length})
               </Typography>
-              <List sx={{ py: 0 }}>
+              <List sx={{ py: 0, width: '100%' }}>
                 {cloudConnections.map((cloudConnection) => (
-                  <ListItem
+                  <StyledNavLink
                     key={cloudConnection.id}
-                    sx={{
-                      cursor: 'pointer',
-                      borderRadius: 1,
-                      mb: 0.5,
-                      py: 0.5,
-                      px: 1,
-                      backgroundColor:
-                        selectedCloudConnection?.id === cloudConnection.id
-                          ? `${theme.palette.primary.light}20`
-                          : 'transparent',
-                      border:
-                        selectedCloudConnection?.id === cloudConnection.id
-                          ? `1px solid ${theme.palette.primary.main}`
-                          : '1px solid transparent',
-                      '&:hover': {
-                        backgroundColor: theme.palette.action.hover,
-                      },
-                    }}
-                    onClick={() => {
-                      navigate(
-                        `/app/cloud-explorer/edit-connection/${cloudConnection.id}`,
-                      );
-                    }}
+                    to={`/app/cloud-explorer/buckets/${cloudConnection.id}`}
                   >
-                    <ListItemIcon sx={{ minWidth: 32 }}>
-                      {renderCloudProviderIcon(cloudConnection.provider)}
-                    </ListItemIcon>
-                    <ListItemText
-                      primary={cloudConnection.name}
-                      secondary={getCloudProviderName(cloudConnection.provider)}
-                      primaryTypographyProps={{
-                        variant: 'body2',
-                        sx: {
-                          fontSize: '0.875rem',
-                          fontWeight:
-                            selectedCloudConnection?.id === cloudConnection.id
-                              ? 600
-                              : 400,
+                    <ListItem
+                      sx={{
+                        cursor: 'pointer',
+                        borderRadius: 1,
+                        mb: 0.5,
+                        py: 0.5,
+                        px: 1,
+                        backgroundColor:
+                          selectedCloudConnection?.id === cloudConnection.id
+                            ? theme.palette.divider
+                            : 'transparent',
+                        border:
+                          selectedCloudConnection?.id === cloudConnection.id
+                            ? `1px solid ${theme.palette.primary.main}`
+                            : '1px solid transparent',
+                        '&:hover': {
+                          backgroundColor: theme.palette.action.hover,
                         },
+                        overflow: 'hidden',
+                        minHeight: '32px',
+                        width: '270px',
                       }}
-                      secondaryTypographyProps={{
-                        variant: 'caption',
-                        sx: {
-                          fontSize: '0.75rem',
-                          color: theme.palette.text.secondary,
-                        },
-                      }}
-                    />
-                  </ListItem>
+                    >
+                      <ListItemIcon sx={{ minWidth: 32 }}>
+                        {renderCloudProviderIcon(cloudConnection.provider)}
+                      </ListItemIcon>
+                      <ListItemText
+                        primary={cloudConnection.name}
+                        primaryTypographyProps={{
+                          variant: 'body2',
+                          sx: {
+                            fontSize: '0.875rem',
+                            fontWeight:
+                              selectedCloudConnection?.id === cloudConnection.id
+                                ? 600
+                                : 400,
+                            whiteSpace: 'nowrap',
+                            overflow: 'hidden',
+                            textOverflow: 'ellipsis',
+                          },
+                        }}
+                      />
+                    </ListItem>
+                  </StyledNavLink>
                 ))}
               </List>
             </Box>
@@ -337,6 +335,11 @@ export const ConnectionsSidebar: React.FC = () => {
           mt: 'auto',
           pt: 2,
           borderTop: `1px solid ${theme.palette.divider}`,
+          width: '270px',
+          boxSizing: 'border-box',
+          display: 'flex',
+          flexDirection: 'column',
+          gap: 1,
         }}
       >
         <Button
@@ -345,7 +348,7 @@ export const ConnectionsSidebar: React.FC = () => {
           fullWidth
           startIcon={<Add />}
           onClick={() => navigate('/app/add-connection')}
-          sx={{ mb: 1 }}
+          sx={{ mb: 1, width: '100%', boxSizing: 'border-box' }}
         >
           New Connection
         </Button>
@@ -354,7 +357,8 @@ export const ConnectionsSidebar: React.FC = () => {
           color="primary"
           fullWidth
           startIcon={<CloudIcon />}
-          onClick={() => navigate('/app/add-cloud-connection')}
+          onClick={() => navigate('/app/cloud-explorer/new-connection')}
+          sx={{ width: '100%', boxSizing: 'border-box' }}
         >
           New Cloud Source
         </Button>
