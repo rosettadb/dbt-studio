@@ -13,8 +13,12 @@ import { getOpenAIKey } from '../services/settings.services';
 const useRosettaDBT = (successCallback: () => Promise<void>) => {
   const { data: settings } = useGetSettings();
   const { error, runCommand } = useCli();
-  const { getDatabaseUsername, getDatabasePassword, getDatabaseToken } =
-    useSecureStorage();
+  const {
+    getDatabaseUsername,
+    getDatabasePassword,
+    getDatabaseToken,
+    getBigQueryServiceAccountKey,
+  } = useSecureStorage();
   const setEnvVariables = useSetConnectionEnvVariable();
   const [isSuccess, setIsSuccess] = React.useState(false);
   const [isRunning, setIsRunning] = React.useState(false);
@@ -48,30 +52,46 @@ const useRosettaDBT = (successCallback: () => Promise<void>) => {
         return;
       }
       // Set environment variables for the project
-      const secureUserName = await getDatabaseUsername(
-        connection.connection.name,
-      );
-      if (secureUserName) {
-        setEnvVariables.mutate({
-          key: `db-user-${connection.connection.name}`,
-          value: secureUserName || '',
-        });
+      const connectionName = connection.connection.name;
+      const [username, password, token, bigQueryKey] = await Promise.all([
+        getDatabaseUsername(connectionName),
+        getDatabasePassword(connectionName),
+        getDatabaseToken(connectionName),
+        getBigQueryServiceAccountKey(connectionName),
+      ]);
+
+      const envPromises = [];
+      if (username) {
+        envPromises.push(
+          setEnvVariables.mutateAsync({
+            key: `db-user-${connectionName}`,
+            value: username || '',
+          }),
+        );
       }
-      const securePassword = await getDatabasePassword(
-        connection.connection.name,
-      );
-      if (securePassword) {
-        setEnvVariables.mutate({
-          key: `db-password-${connection.connection.name}`,
-          value: securePassword || '',
-        });
+      if (password) {
+        envPromises.push(
+          setEnvVariables.mutateAsync({
+            key: `db-password-${connectionName}`,
+            value: password || '',
+          }),
+        );
       }
-      const secureToken = await getDatabaseToken(connection.connection.name);
-      if (secureToken) {
-        setEnvVariables.mutate({
-          key: `db-token-${connection.connection.name}`,
-          value: secureToken || '',
-        });
+      if (token) {
+        envPromises.push(
+          setEnvVariables.mutateAsync({
+            key: `db-token-${connectionName}`,
+            value: token || '',
+          }),
+        );
+      }
+      if (bigQueryKey) {
+        envPromises.push(
+          setEnvVariables.mutateAsync({
+            key: `db-bigquery-${connectionName}`,
+            value: bigQueryKey,
+          }),
+        );
       }
 
       const openaiKey = await getOpenAIKey();

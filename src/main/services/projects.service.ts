@@ -52,14 +52,17 @@ export default class ProjectsService {
   }
 
   static async getProject(id?: string): Promise<Project | undefined> {
+    console.log('getProject', id);
     const projects = await this.loadProjects();
     const project = projects.find((p) => p.id === id);
+    console.log('project', project);
     if (project) {
       await this.updateProject({
         ...project,
         lastOpenedAt: Date.now(),
       });
       try {
+        console.log('loading configurations');
         return ConnectorsService.loadConfigurations(project.id);
       } catch {
         return project;
@@ -90,8 +93,10 @@ export default class ProjectsService {
   }
 
   static async addProject(projectPath: string, connectionId?: string) {
+    console.log('addProject', projectPath, connectionId);
     const projects = await this.loadProjects();
     const name = path.basename(projectPath);
+    console.log('name', name);
 
     const project: Project = {
       id: Date.now().toString(),
@@ -102,10 +107,15 @@ export default class ProjectsService {
       connectionId,
     };
 
+    console.log('project', project);
+
     await this.copyDbtTemplateFiles(project.path, project.name);
+    console.log('copied dbt template files');
     await this.copyRosettaMainConf(project.path);
+    console.log('copied rosetta main conf');
     projects.push(project);
     await this.saveProjects(projects);
+    console.log('saved projects');
     return (await this.getProject(project.id)) ?? project;
   }
 
@@ -221,14 +231,27 @@ export default class ProjectsService {
   }
 
   static async updateProject(project: Project) {
+    console.log('updateProject.....');
+    console.log('updateProject.....');
+    console.log('updateProject.....');
     const projects = await this.loadProjects();
     const index = projects.findIndex((p) => p.id === project.id);
     if (index === -1) return null;
     const updatedProject = { ...projects[index], ...project };
     projects[index] = updatedProject;
     await updateDatabase<'selectedProject'>('selectedProject', updatedProject);
+    console.log('saving projects.....');
+    console.log('saving projects.....');
+    console.log('saving projects.....');
+    console.log('saving projects.....');
     await this.saveProjects(projects);
+    console.log('loaded configurations.....');
+    console.log('loaded configurations.....');
+    console.log('loaded configurations.....');
     await ConnectorsService.loadConfigurations(project.id);
+    console.log('returning projects.....');
+    console.log('returning projects.....');
+    console.log('returning projects.....');
     return projects;
   }
 
@@ -530,6 +553,14 @@ export default class ProjectsService {
     );
     if (storeToken) {
       (connection as { token: string }).token = storeToken;
+    }
+
+    const bigqueryKey = await SecureStorageService.getCredential(
+      `db-bigquery-${project.name}`,
+    );
+
+    if (bigqueryKey) {
+      (connection as { keyfile: string }).keyfile = bigqueryKey;
     }
 
     switch (connection.type) {

@@ -2,6 +2,7 @@
 import yaml from 'js-yaml';
 import path from 'path';
 import fs from 'fs';
+import os from 'os';
 import { v4 as uuidV4 } from 'uuid';
 import {
   BigQueryTestResponse,
@@ -110,6 +111,7 @@ export default class ConnectorsService {
   }
 
   static async loadConfigurations(projectId: string): Promise<Project> {
+    console.log('loadConfigurations', projectId);
     const project = await this.getProjectById(projectId);
 
     if (!project) {
@@ -135,7 +137,6 @@ export default class ConnectorsService {
     const profilesContent = await this.generateProfilesYml(
       project.name,
       connection.connection,
-      project.path,
     );
     await fs.promises.writeFile(profilesPath, profilesContent, 'utf8');
 
@@ -143,7 +144,6 @@ export default class ConnectorsService {
     const rosettaYaml = await this.generateRosettaYml(
       connection.connection,
       project.name,
-      project.path,
     );
     await fs.promises.writeFile(mainConfPath, rosettaYaml, 'utf8');
     return {
@@ -176,7 +176,7 @@ export default class ConnectorsService {
       throw new Error('Connection not found!');
     }
 
-    this.validateConnection(connection);
+    await this.validateConnection(connection);
 
     if (!connectionId) {
       // Allow reserved name "DBT Connection" for Getting Started template
@@ -210,7 +210,7 @@ export default class ConnectorsService {
   static async updateConnection({
     connection,
   }: UpdateConnectionBody): Promise<void> {
-    this.validateConnection(connection.connection);
+    await this.validateConnection(connection.connection);
 
     const connections = await this.loadConnections();
 
@@ -280,7 +280,8 @@ export default class ConnectorsService {
   static async testConnection(
     connection: ConnectionInput,
   ): Promise<boolean | BigQueryTestResponse> {
-    this.validateConnection(connection);
+    console.log('testConnection', connection);
+    await this.validateConnection(connection);
     switch (connection.type) {
       case 'postgres':
         return testPostgresConnection(connection);
@@ -324,6 +325,10 @@ export default class ConnectorsService {
       `db-token-${projectName}`,
     );
 
+    const bigQueryKey = await SecureStorageService.getCredential(
+      `db-bigquery-${projectName}`,
+    );
+
     if (storeUser) {
       (connection as any).username = storeUser;
     }
@@ -332,6 +337,10 @@ export default class ConnectorsService {
     }
     if (storeToken) {
       (connection as any).token = storeToken;
+    }
+
+    if (bigQueryKey) {
+      (connection as any).keyfile = bigQueryKey;
     }
 
     switch (connection.type) {
@@ -358,20 +367,22 @@ export default class ConnectorsService {
   static async generateRosettaYml(
     connection: ConnectionInput,
     projectName: string,
-    projectPath?: string,
   ): Promise<string> {
-    let jdbcUrl = this.generateJdbcUrl(connection, projectName);
+    const jdbcUrl = await this.generateJdbcUrl(connection, projectName);
     if (
       connection.type === 'bigquery' &&
-      connection.method === 'service-account' &&
-      connection.keyfile &&
-      projectPath
+      connection.method === 'service-account'
     ) {
-      const keyfilePath = await this.saveServiceAccountFile(
-        projectPath,
-        connection.keyfile,
+      // Fetch the key from secure storage
+      const key = await SecureStorageService.getCredential(
+        `db-bigquery-${connection.name}`,
       );
-      jdbcUrl = jdbcUrl.replace('KEYFILE_PATH_PLACEHOLDER', keyfilePath);
+      if (!key) {
+        throw new Error(
+          'BigQuery service account key not found in secure storage',
+        );
+      }
+      (connection as any).keyfile = key;
     }
     const USER = `db-user-${connection.name}`;
     const PASSWORD = `db-password-${connection.name}`;
@@ -379,8 +390,6 @@ export default class ConnectorsService {
       connections: RosettaConnection[];
       openai_api_key?: string;
     } = {
-      // openai_api_key:
-      //   openAIApiKey && openAIApiKey !== '' ? openAIApiKey : undefined,
       openai_api_key: `\${openai-api-key}`,
       connections: [
         {
@@ -392,9 +401,10 @@ export default class ConnectorsService {
           schemaName: connection.schema,
           dbType: connection.type,
           url: jdbcUrl,
-          // For Databricks and DuckDB, don't include userName/password since auth is different
+          // Only add userName/password for non-BigQuery, non-Databricks, non-DuckDB
           ...(connection.type !== 'databricks' &&
-            connection.type !== 'duckdb' && {
+            connection.type !== 'duckdb' &&
+            connection.type !== 'bigquery' && {
               userName: `\${${USER}}`,
               password: `\${${PASSWORD}}`,
             }),
@@ -404,7 +414,7 @@ export default class ConnectorsService {
     return yaml.dump(yamlData);
   }
 
-  static validateConnection(conn: ConnectionInput): void {
+  static async validateConnection(conn: ConnectionInput): Promise<void> {
     if (!conn.type) {
       throw new Error('Connection type is required');
     }
@@ -421,8 +431,15 @@ export default class ConnectorsService {
         break;
       case 'bigquery':
         if (!('project' in conn)) throw new Error('Project ID is required');
-        if (conn.method === 'service-account' && !conn.keyfile) {
-          throw new Error('Service account keyfile is required');
+        if (conn.method === 'service-account') {
+          const key = await SecureStorageService.getCredential(
+            `db-bigquery-${conn.name}`,
+          );
+          if (!key) {
+            throw new Error(
+              'BigQuery service account key not found in secure storage',
+            );
+          }
         }
         break;
       case 'databricks':
@@ -439,7 +456,10 @@ export default class ConnectorsService {
     }
   }
 
-  static generateJdbcUrl(conn: ConnectionInput, projectName: string): string {
+  static async generateJdbcUrl(
+    conn: ConnectionInput,
+    projectName: string,
+  ): Promise<string> {
     switch (conn.type) {
       case 'postgres':
         return `jdbc:postgresql://${conn.host}:${conn.port}/${conn.database}?currentSchema=${conn.schema}`;
@@ -457,28 +477,43 @@ export default class ConnectorsService {
         }
         return redshiftUrl;
       }
-      case 'bigquery':
-        // eslint-disable-next-line no-case-declarations
+      case 'bigquery': {
         const host = 'https://www.googleapis.com';
-        const path = 'bigquery/v2';
+        const pathStr = 'bigquery/v2';
         const port = 443;
         const projectId = conn.project;
-        // eslint-disable-next-line no-case-declarations
-        const baseUrl = `jdbc:bigquery://${host}/${path}:${port}`;
+        const baseUrl = `jdbc:bigquery://${host}/${pathStr}:${port}`;
 
-        if (conn.method === 'service-account' && conn.keyfile) {
-          try {
-            const credentials = JSON.parse(conn.keyfile);
-            // Use Simba BigQuery JDBC driver format for service account authentication
-            return `${baseUrl};ProjectId=${projectId};OAuthType=0;OAuthServiceAcctEmail=${credentials.client_email};OAuthPvtKeyPath=KEYFILE_PATH_PLACEHOLDER`;
-          } catch (err) {
-            throw new Error('Invalid service account key JSON format');
+        // Retrieve the key from secure storage if not present
+        let { keyfile } = conn;
+        if (!keyfile) {
+          keyfile =
+            (await SecureStorageService.getCredential(
+              `db-bigquery-${conn.name}`,
+            )) || '';
+          if (!keyfile) {
+            throw new Error(
+              'BigQuery service account key not found in secure storage',
+            );
           }
-        } else {
-          throw new Error(
-            'Only service account authentication is supported for BigQuery',
-          );
         }
+        // Write the key to a temp file
+        const tempKeyPath = path.join(
+          os.tmpdir(),
+          `bq_key_${conn.name}_${Date.now()}.json`,
+        );
+        fs.writeFileSync(tempKeyPath, keyfile, { mode: 0o600 });
+        // Parse the key to get client_email
+        let clientEmail;
+        try {
+          const credentials = JSON.parse(keyfile);
+          clientEmail = credentials.client_email;
+        } catch (err) {
+          throw new Error('Invalid service account key JSON format');
+        }
+        // Return JDBC string with OAuthPvtKeyPath set to temp file
+        return `${baseUrl};ProjectId=${projectId};OAuthType=0;OAuthServiceAcctEmail=${clientEmail};OAuthPvtKeyPath=${tempKeyPath};OAuthPvtKeyPassword=notasecret`;
+      }
       case 'databricks':
         // Use token-based authentication with no username (UID)
         const TOKEN = `db-token-${projectName}`;
@@ -495,20 +530,21 @@ export default class ConnectorsService {
     connection: ConnectionInput,
     project: Project,
   ): Promise<RosettaConnection> {
-    let rosettaJdbcUrl = this.generateJdbcUrl(connection, project.name);
+    const rosettaJdbcUrl = await this.generateJdbcUrl(connection, project.name);
     if (
       connection.type === 'bigquery' &&
-      connection.method === 'service-account' &&
-      connection.keyfile
+      connection.method === 'service-account'
     ) {
-      const keyfilePath = await this.saveServiceAccountFile(
-        project.path,
-        connection.keyfile,
+      // Fetch the key from secure storage
+      const key = await SecureStorageService.getCredential(
+        `db-bigquery-${connection.name}`,
       );
-      rosettaJdbcUrl = rosettaJdbcUrl.replace(
-        'KEYFILE_PATH_PLACEHOLDER',
-        keyfilePath,
-      );
+      if (!key) {
+        throw new Error(
+          'BigQuery service account key not found in secure storage',
+        );
+      }
+      (connection as any).keyfile = key;
     }
 
     return {
@@ -522,6 +558,7 @@ export default class ConnectorsService {
       url: rosettaJdbcUrl,
       ...(connection.type !== 'databricks' &&
         connection.type !== 'duckdb' &&
+        connection.type !== 'bigquery' &&
         'username' in connection &&
         'password' in connection && {
           userName: `db-user-${connection.name}`,
@@ -552,7 +589,7 @@ export default class ConnectorsService {
           schema: conn.schema,
           method: conn.method,
           project: conn.project,
-          ...(conn.keyfile && { keyfile: conn.keyfile }),
+          ...(conn.keyfile && { keyfile: `db-bigquery-${conn.name}` }),
           ...(conn.location && { location: conn.location }),
           ...(conn.priority && { priority: conn.priority }),
         };
@@ -607,7 +644,6 @@ export default class ConnectorsService {
   private static async mapToDbtProfiles(
     name: string,
     conn: ConnectionInput,
-    projectPath?: string,
   ): Promise<string> {
     const profileConfig = {
       config: {
@@ -617,7 +653,7 @@ export default class ConnectorsService {
       [name]: {
         target: 'dev',
         outputs: {
-          dev: await this.mapToDbtProfileOutput(conn, projectPath),
+          dev: await this.mapToDbtProfileOutput(conn),
         },
       },
     };
@@ -625,21 +661,45 @@ export default class ConnectorsService {
     return yaml.dump(profileConfig);
   }
 
-  static generateProfilesYml(
+  static async generateProfilesYml(
     name: string,
     connection: ConnectionInput,
-    projectPath?: string,
   ): Promise<string> {
-    return this.mapToDbtProfiles(name, connection, projectPath);
+    // If BigQuery, write key to temp file and set env var
+    if (
+      connection.type === 'bigquery' &&
+      connection.method === 'service-account'
+    ) {
+      let { keyfile } = connection;
+      if (!keyfile) {
+        keyfile =
+          (await SecureStorageService.getCredential(
+            `db-bigquery-${connection.name}`,
+          )) || '';
+        if (!keyfile) {
+          throw new Error(
+            'BigQuery service account key not found in secure storage',
+          );
+        }
+      }
+      const tempKeyPath = path.join(
+        os.tmpdir(),
+        `dbt_bq_key_${connection.name}_${Date.now()}.json`,
+      );
+      fs.writeFileSync(tempKeyPath, keyfile, { mode: 0o600 });
+      process.env[`db-bigquery-${connection.name}`] = tempKeyPath;
+      // Optionally, schedule cleanup after dbt run
+    }
+    return this.mapToDbtProfiles(name, connection);
   }
 
   private static async mapToDbtProfileOutput(
     conn: ConnectionInput,
-    projectPath?: string,
   ): Promise<any> {
     const dbUserName = `{{ env_var("db-user-${conn.name}") }}`;
     const dbPassword = `{{ env_var("db-password-${conn.name}") }}`;
     const dbToken = `{{ env_var("db-token-${conn.name}") }}`;
+    const dbKeyfile = `{{ env_var("db-bigquery-${conn.name}") }}`;
     switch (conn.type) {
       case 'postgres':
         return {
@@ -693,30 +753,8 @@ export default class ConnectorsService {
           dataset: conn.schema,
           threads: 4,
           priority: conn.priority || 'interactive',
+          keyfile: dbKeyfile,
         };
-
-        if (conn.location) {
-          profile.location = conn.location;
-        }
-
-        if (conn.method === 'service-account') {
-          if (!conn.keyfile) {
-            throw new Error('Service account keyfile is required');
-          }
-          if (!projectPath) {
-            throw new Error(
-              'Project path is required for service account file creation',
-            );
-          }
-          profile.keyfile = await this.saveServiceAccountFile(
-            projectPath,
-            conn.keyfile,
-          );
-        } else {
-          throw new Error(
-            'Only service account authentication is supported for BigQuery',
-          );
-        }
 
         return profile;
 
@@ -740,50 +778,6 @@ export default class ConnectorsService {
       default:
         throw new Error('Unsupported connection type!');
     }
-  }
-
-  private static async saveServiceAccountFile(
-    projectPath: string,
-    keyfile: string,
-  ): Promise<string> {
-    const secretsDir = path.join(projectPath, '.secrets');
-    if (!fs.existsSync(secretsDir)) {
-      await fs.promises.mkdir(secretsDir, { recursive: true });
-    }
-    const existingFiles = fs
-      .readdirSync(secretsDir)
-      .filter(
-        (file) =>
-          file.startsWith('bigquery-service-account-') &&
-          file.endsWith('.json'),
-      );
-
-    let filePath: string;
-
-    if (existingFiles.length > 0) {
-      filePath = path.join(secretsDir, existingFiles[0]);
-      await fs.promises.writeFile(filePath, keyfile, 'utf8');
-    } else {
-      const filename = `bigquery-service-account-${Date.now()}.json`;
-      filePath = path.join(secretsDir, filename);
-      await fs.promises.writeFile(filePath, keyfile, 'utf8');
-    }
-
-    const gitignorePath = path.join(projectPath, '.gitignore');
-    const gitignoreExists = fs.existsSync(gitignorePath);
-    const gitignoreContent = gitignoreExists
-      ? await fs.promises.readFile(gitignorePath, 'utf8')
-      : '';
-
-    if (!gitignoreContent.includes('.secrets')) {
-      await fs.promises.writeFile(
-        gitignorePath,
-        `${`${gitignoreContent}\n.secrets/\n`.trim()}\n`,
-        'utf8',
-      );
-    }
-
-    return filePath;
   }
 
   /**
