@@ -8,6 +8,7 @@ import {
   SupportedConnectionTypes,
 } from '../../../types/backend';
 import { AppLayout } from '../../layouts';
+import { ConnectionsSidebar } from '../../components/sidebarConnections';
 import { Container } from './styles';
 
 const EditConnection: React.FC = () => {
@@ -62,7 +63,7 @@ const EditConnection: React.FC = () => {
 
   if (isLoading) {
     return (
-      <AppLayout>
+      <AppLayout sidebarContent={<ConnectionsSidebar />}>
         <Container>
           <Typography variant="h6">Loading connection...</Typography>
         </Container>
@@ -73,7 +74,7 @@ const EditConnection: React.FC = () => {
   // Handle case where connection ID is missing from URL
   if (!id) {
     return (
-      <AppLayout>
+      <AppLayout sidebarContent={<ConnectionsSidebar />}>
         <Container>
           <Typography variant="h6">
             Connection ID is required. Please provide a valid connection ID.
@@ -86,7 +87,7 @@ const EditConnection: React.FC = () => {
   // Handle case where connection is not found or error occurred
   if (error || !connection) {
     return (
-      <AppLayout>
+      <AppLayout sidebarContent={<ConnectionsSidebar />}>
         <Container>
           <Typography variant="h6">
             Connection not found. Please check the connection ID and try again.
@@ -97,7 +98,7 @@ const EditConnection: React.FC = () => {
   }
 
   return (
-    <AppLayout>
+    <AppLayout sidebarContent={<ConnectionsSidebar />}>
       <Container>
         {renderComponent(connection.connection.type, connection)}
       </Container>

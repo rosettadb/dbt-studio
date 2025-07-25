@@ -52,6 +52,16 @@ export type ConnectorChannels =
   | 'connector:update'
   | 'connector:delete';
 
+export type SourcesChannels =
+  | 'source:create'
+  | 'source:list'
+  | 'source:get'
+  | 'source:delete'
+  | 'source:recentItems'
+  | 'source:addRecentItem'
+  | 'source:clearRecentItems'
+  | 'source:deleteRecentItem';
+
 export type CliChannels =
   | 'cli:run'
   | 'cli:input'
@@ -107,6 +117,13 @@ export type UpdateChannels =
   | 'updates:restart'
   | 'updates:reject-version';
 
+export type CloudExplorerChannels =
+  | 'cloudExplorer:listBuckets'
+  | 'cloudExplorer:listObjects'
+  | 'cloudExplorer:getDownloadUrl'
+  | 'cloudExplorer:testConnection'
+  | 'cloudExplorer:previewData';
+
 export type Channels =
   | TestChannels
   | CliChannels
@@ -117,7 +134,9 @@ export type Channels =
   | UtilChannels
   | ProcessChannels
   | SecureStorageChannels
-  | UpdateChannels;
+  | UpdateChannels
+  | CloudExplorerChannels
+  | SourcesChannels;
 
 export type ConfigureConnectionBody = {
   projectId?: string;

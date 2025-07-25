@@ -3,3 +3,4 @@ export * from './projects.controller';
 export * from './connectors.controller';
 export * from './git.controller';
 export * from './update.controller';
+export * from './cloudExplorer.controller';

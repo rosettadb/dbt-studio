@@ -17,9 +17,11 @@ import {
   useConfigureConnection,
   useUpdateConnection,
   useTestConnection,
+  useGetConnections,
 } from '../../controllers';
 import ConnectionHeader from './connection-header';
 import useSecureStorage from '../../hooks/useSecureStorage';
+import { useConnectionNameValidation } from '../../utils/connectionValidation';
 
 type Props = {
   onCancel: () => void;
@@ -57,6 +59,7 @@ export const Databricks: React.FC<Props> = ({
   const [connectionStatus, setConnectionStatus] = React.useState<
     'idle' | 'success' | 'failed'
   >('idle');
+  const [nameTouched, setNameTouched] = React.useState(false);
 
   const { mutate: configureConnection } = useConfigureConnection({
     onSuccess: () => {
@@ -99,6 +102,16 @@ export const Databricks: React.FC<Props> = ({
     },
   });
 
+  // Get existing connections for name validation
+  const { data: existingConnections = [] } = useGetConnections();
+  const { validateName } = useConnectionNameValidation(
+    existingConnections,
+    connection?.id,
+  );
+
+  // Get real-time validation result for name field
+  const nameValidation = validateName(formState.name);
+
   React.useEffect(() => {
     const fetchCredentials = async () => {
       const storedToken = await getDatabaseToken(existingConnection.name);
@@ -124,6 +137,13 @@ export const Databricks: React.FC<Props> = ({
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+
+    // Validate connection name before submitting
+    if (!nameValidation.isValid) {
+      toast.error(nameValidation.message || 'Invalid connection name');
+      return;
+    }
+
     await setDatabaseToken(formState.token, formState.name);
 
     if (connection) {
@@ -198,9 +218,14 @@ export const Databricks: React.FC<Props> = ({
           name="name"
           value={formState.name}
           onChange={handleChange}
+          onBlur={() => setNameTouched(true)}
           fullWidth
           margin="normal"
           required
+          error={nameTouched && !nameValidation.isValid}
+          helperText={
+            nameTouched && !nameValidation.isValid ? nameValidation.message : ''
+          }
         />
 
         <TextField

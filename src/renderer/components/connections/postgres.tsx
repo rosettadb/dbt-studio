@@ -17,9 +17,11 @@ import {
   useConfigureConnection,
   useTestConnection,
   useUpdateConnection,
+  useGetConnections,
 } from '../../controllers';
 import ConnectionHeader from './connection-header';
 import useSecureStorage from '../../hooks/useSecureStorage';
+import { useConnectionNameValidation } from '../../utils/connectionValidation';
 
 type Props = {
   onCancel: () => void;
@@ -62,6 +64,15 @@ export const Postgres: React.FC<Props> = ({
   const [connectionStatus, setConnectionStatus] = React.useState<
     'idle' | 'success' | 'failed'
   >('idle');
+  const [nameTouched, setNameTouched] = React.useState(false);
+
+  // Get existing connections for validation
+  const { data: existingConnections = [] } = useGetConnections();
+  const { validateName } = useConnectionNameValidation(
+    existingConnections,
+    connection?.id,
+  );
+  const nameValidation = validateName(formState.name);
 
   const { mutate: updateConnection } = useUpdateConnection({
     onSuccess: () => {
@@ -123,6 +134,8 @@ export const Postgres: React.FC<Props> = ({
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
+
+    // Update form state
     setFormState((prev) => ({
       ...prev,
       [name]: name === 'port' ? Number(value) : value,
@@ -133,6 +146,14 @@ export const Postgres: React.FC<Props> = ({
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+
+    // Validate connection name before submission
+    if (!nameValidation.isValid) {
+      toast.error(nameValidation.message || 'Invalid connection name');
+      setNameTouched(true);
+      return;
+    }
+
     await setDatabaseUsername(formState.username, formState.name);
     await setDatabasePassword(formState.password, formState.name);
 
@@ -208,9 +229,16 @@ export const Postgres: React.FC<Props> = ({
           name="name"
           value={formState.name}
           onChange={handleChange}
+          onBlur={() => setNameTouched(true)}
           fullWidth
           margin="normal"
           required
+          error={nameTouched && !nameValidation.isValid}
+          helperText={
+            nameTouched && !nameValidation.isValid
+              ? nameValidation.message
+              : 'Enter a unique name for this connection'
+          }
         />
 
         <TextField

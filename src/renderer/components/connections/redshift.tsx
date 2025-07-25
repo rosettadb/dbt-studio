@@ -31,9 +31,11 @@ import {
   useTestConnection,
   useFilePicker,
   useUpdateConnection,
+  useGetConnections,
 } from '../../controllers';
 import ConnectionHeader from './connection-header';
 import useSecureStorage from '../../hooks/useSecureStorage';
+import { useConnectionNameValidation } from '../../utils/connectionValidation';
 
 type Props = {
   onCancel: () => void;
@@ -81,6 +83,7 @@ export const Redshift: React.FC<Props> = ({
     'idle' | 'success' | 'failed'
   >('idle');
   const [infoModalOpen, setInfoModalOpen] = React.useState(false);
+  const [nameTouched, setNameTouched] = React.useState(false);
 
   const { mutate: updateConnection } = useUpdateConnection({
     onSuccess: () => {
@@ -124,6 +127,16 @@ export const Redshift: React.FC<Props> = ({
     },
   });
 
+  // Get existing connections for name validation
+  const { data: existingConnections = [] } = useGetConnections();
+  const { validateName } = useConnectionNameValidation(
+    existingConnections,
+    connection?.id,
+  );
+
+  // Get real-time validation result for name field
+  const nameValidation = validateName(formState.name);
+
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value, type, checked } = e.target;
     setFormState((prev) => ({
@@ -162,6 +175,13 @@ export const Redshift: React.FC<Props> = ({
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+
+    // Validate connection name before submitting
+    if (!nameValidation.isValid) {
+      toast.error(nameValidation.message || 'Invalid connection name');
+      return;
+    }
+
     await setDatabaseUsername(formState.username, formState.name);
     await setDatabasePassword(formState.password, formState.name);
 
@@ -253,9 +273,14 @@ export const Redshift: React.FC<Props> = ({
           name="name"
           value={formState.name}
           onChange={handleChange}
+          onBlur={() => setNameTouched(true)}
           fullWidth
           margin="normal"
           required
+          error={nameTouched && !nameValidation.isValid}
+          helperText={
+            nameTouched && !nameValidation.isValid ? nameValidation.message : ''
+          }
         />
 
         <TextField

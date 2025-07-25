@@ -45,7 +45,7 @@ export const useGetConnectionById = (
   >,
 ) => {
   return useQuery({
-    queryKey: [QUERY_KEYS.GET_CONNECTION_BY_ID],
+    queryKey: [QUERY_KEYS.GET_CONNECTION_BY_ID, connectionId],
     queryFn: async () => {
       return connectorsServices.getConnectionById(connectionId!);
     },

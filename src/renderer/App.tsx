@@ -19,6 +19,7 @@ import {
   EditConnection,
   SelectProject,
   Setup,
+  CloudExplorer,
   Connections,
 } from './screens';
 import { SelectProjectLayout } from './layouts';
@@ -58,6 +59,35 @@ const App: React.FC = () => {
           <Route path="settings/installation" element={<Settings />} />
           <Route path="settings/about" element={<Settings />} />
           <Route path="sql" element={<Sql />} />
+          <Route
+            path="cloud-explorer"
+            element={<Navigate to="/app/cloud-explorer/dashboard" />}
+          />
+          <Route path="cloud-explorer/dashboard" element={<CloudExplorer />} />
+          <Route
+            path="cloud-explorer/connections"
+            element={<CloudExplorer />}
+          />
+          <Route
+            path="cloud-explorer/recent-items"
+            element={<CloudExplorer />}
+          />
+          <Route
+            path="cloud-explorer/new-connection"
+            element={<CloudExplorer />}
+          />
+          <Route
+            path="cloud-explorer/edit-connection/:id"
+            element={<CloudExplorer />}
+          />
+          <Route
+            path="cloud-explorer/buckets/:connectionId"
+            element={<CloudExplorer />}
+          />
+          <Route
+            path="cloud-explorer/bucket/:connectionId/:bucketName"
+            element={<CloudExplorer />}
+          />
           <Route path="loading" element={<Loading />} />
           <Route path="*" element={<Navigate to="/app" />} />
         </Route>

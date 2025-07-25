@@ -17,9 +17,11 @@ import {
   useConfigureConnection,
   useTestConnection,
   useUpdateConnection,
+  useGetConnections,
 } from '../../controllers';
 import ConnectionHeader from './connection-header';
 import useSecureStorage from '../../hooks/useSecureStorage';
+import { useConnectionNameValidation } from '../../utils/connectionValidation';
 
 type Props = {
   onCancel: () => void;
@@ -51,6 +53,7 @@ export const Snowflake: React.FC<Props> = ({
     'idle' | 'success' | 'failed'
   >('idle');
   const [showPassword, setShowPassword] = React.useState(false);
+  const [nameTouched, setNameTouched] = React.useState(false);
 
   const [formState, setFormState] = React.useState<SnowflakeConnection>({
     type: 'snowflake',
@@ -106,6 +109,13 @@ export const Snowflake: React.FC<Props> = ({
     },
   });
 
+  // Get existing connections for name validation
+  const { data: connections = [] } = useGetConnections();
+  const { validateName } = useConnectionNameValidation(
+    connections,
+    connection?.id,
+  );
+
   React.useEffect(() => {
     const fetchCredentials = async () => {
       const storedUsername = await getDatabaseUsername(existingConnection.name);
@@ -131,6 +141,14 @@ export const Snowflake: React.FC<Props> = ({
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+
+    // Validate connection name before submitting
+    const nameValidation = validateName(formState.name);
+    if (!nameValidation.isValid) {
+      toast.error(nameValidation.message || 'Invalid connection name');
+      return;
+    }
+
     await setDatabaseUsername(formState.username, formState.name);
     await setDatabasePassword(formState.password, formState.name);
 
@@ -167,6 +185,9 @@ export const Snowflake: React.FC<Props> = ({
     }
   };
 
+  // Get real-time validation result for name field
+  const nameValidation = validateName(formState.name);
+
   return (
     <Box
       sx={{
@@ -201,9 +222,14 @@ export const Snowflake: React.FC<Props> = ({
           name="name"
           value={formState.name}
           onChange={handleChange}
+          onBlur={() => setNameTouched(true)}
           fullWidth
           margin="normal"
           required
+          error={nameTouched && !nameValidation.isValid}
+          helperText={
+            nameTouched && !nameValidation.isValid ? nameValidation.message : ''
+          }
         />
 
         <TextField

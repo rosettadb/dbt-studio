@@ -3,9 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import {
   Typography,
   Box,
-  styled,
   IconButton,
-  Tooltip,
   Dialog,
   DialogActions,
   DialogContent,
@@ -13,190 +11,62 @@ import {
   DialogTitle,
   Button,
   Chip,
-  TextField,
-  InputAdornment,
+  Card,
+  CardContent,
+  CardHeader,
+  CardActions,
+  Grid,
+  Divider,
 } from '@mui/material';
-import DatabaseIcon from '@mui/icons-material/Storage';
-import EditIcon from '@mui/icons-material/Edit';
-import DeleteIcon from '@mui/icons-material/Delete';
-import AddIcon from '@mui/icons-material/Add';
-import SearchIcon from '@mui/icons-material/Search';
+import {
+  Add,
+  Edit,
+  Refresh,
+  DeleteOutline,
+  Storage as DatabaseIcon,
+  Cloud as CloudIcon,
+  ElectricalServices as ElectricalServicesIcon,
+  Visibility,
+} from '@mui/icons-material';
 import { toast } from 'react-toastify';
 import {
   useDeleteConnection,
+  useGetCloudConnections,
   useGetConnections,
   useGetProjects,
 } from '../../controllers';
-import { Loader } from '../../components';
+import { useDeleteBucketConnection } from '../../controllers/cloudExplorer.controller';
+import { Loader, ConnectionsSidebar } from '../../components';
 import { AppLayout } from '../../layouts';
-import connectionIcons from '../../../../assets/connectionIcons';
+import connectionIcons, {
+  cloudStorageImages,
+} from '../../../../assets/connectionIcons';
 import { SupportedConnectionTypes } from '../../../types/backend';
-
-const ConnectionsContainer = styled(Box)`
-  padding: 0.5rem 2rem 2rem;
-  max-width: 1200px;
-  margin: 0 auto;
-  height: 100%;
-  display: flex;
-  flex-direction: column;
-`;
-
-const HeaderContainer = styled(Box)`
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 1.5rem;
-  gap: 1rem;
-`;
-
-const SearchContainer = styled(Box)`
-  flex-grow: 1;
-  max-width: 400px;
-`;
-
-const ConnectionsListContainer = styled(Box)`
-  display: flex;
-  flex-direction: column;
-  gap: 1px;
-  border-top: 1px solid ${({ theme }) => theme.palette.divider};
-  border-bottom: 1px solid ${({ theme }) => theme.palette.divider};
-  flex: 1;
-  overflow-y: auto;
-  min-height: 0;
-`;
-
-const ConnectionCard = styled(Box)`
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 12px 16px;
-  border-bottom: 1px solid ${({ theme }) => theme.palette.divider};
-
-  &:last-child {
-    border-bottom: none;
-  }
-`;
-
-const ConnectionInfo = styled(Box)`
-  flex-grow: 1;
-  overflow: hidden;
-`;
-
-const ConnectionTitle = styled(Typography)`
-  font-weight: 500;
-  margin-bottom: 4px;
-`;
-
-const ConnectionType = styled(Typography)`
-  font-size: 12px;
-  color: ${({ theme }) => theme.palette.text.secondary};
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  margin-bottom: 4px;
-`;
-
-const ProjectsUsing = styled(Box)`
-  display: flex;
-  flex-wrap: wrap;
-  gap: 4px;
-  margin-top: 4px;
-`;
-
-const ConnectionIcon = styled('img')`
-  width: 24px;
-  height: 24px;
-  margin-right: 12px;
-  flex-shrink: 0;
-  border-radius: 4px;
-  object-fit: contain;
-`;
-
-const ConnectionMuiIcon = styled(Box)`
-  width: 24px;
-  height: 24px;
-  margin-right: 12px;
-  flex-shrink: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-`;
-
-const ConnectionCardContent = styled(Box)`
-  display: flex;
-  align-items: center;
-  flex-grow: 1;
-  overflow: hidden;
-`;
-
-const TaglineContainer = styled(Box)`
-  text-align: center;
-  margin-bottom: 1.5rem;
-  margin-top: 0.5rem;
-  padding: 0.75rem;
-  border-radius: 8px;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 0.25rem;
-`;
-
-const TaglineText = styled(Typography)`
-  font-size: 1rem;
-  font-weight: 500;
-  color: ${({ theme }) => theme.palette.primary.main};
-`;
-
-const ConnectionActions = styled(Box)`
-  display: flex;
-  align-items: center;
-  gap: 8px;
-`;
-
-const EmptyStateContainer = styled(Box)`
-  text-align: center;
-  padding: 2rem;
-  margin-top: 2rem;
-  border-radius: 8px;
-  border: 0.5px solid ${({ theme }) => theme.palette.divider};
-  overflow-y: auto;
-  flex: 1;
-`;
-
-const EmptyStateIcon = styled(Box)`
-  margin-bottom: 1rem;
-  color: ${({ theme }) => theme.palette.text.secondary};
-  opacity: 0.7;
-
-  svg {
-    font-size: 3rem;
-  }
-`;
-
-const EmptyStateTitle = styled(Typography)`
-  font-weight: 500;
-  margin-bottom: 1rem;
-  font-size: 1.5rem;
-  color: ${({ theme }) => theme.palette.text.primary};
-`;
-
-const EmptyStateDescription = styled(Typography)`
-  color: ${({ theme }) => theme.palette.text.secondary};
-  margin: 0 auto 2rem;
-  line-height: 1.6;
-`;
+import { CloudProvider, CloudConnection } from '../../../types/frontend';
 
 const Connections: React.FC = () => {
-  const { data: connections = [], isLoading } = useGetConnections();
+  const {
+    data: connections = [],
+    isLoading,
+    refetch,
+    isRefetching,
+  } = useGetConnections();
+
+  const {
+    data: cloudConnections = [],
+    isLoading: isLoadingCloudConnections,
+    refetch: refetchCloudConnections,
+    isRefetching: isRefetchingCloudConnections,
+  } = useGetCloudConnections();
+
   const navigate = useNavigate();
   const { data: projects = [] } = useGetProjects();
-  const [searchQuery, setSearchQuery] = React.useState('');
 
   const [deleteDialogOpen, setDeleteDialogOpen] = React.useState(false);
   const [connectionToDelete, setConnectionToDelete] = React.useState<{
     id: string;
     name: string;
+    type: 'database' | 'cloud';
   } | null>(null);
 
   const { mutate: deleteConnection } = useDeleteConnection({
@@ -206,6 +76,7 @@ const Connections: React.FC = () => {
       );
     },
   });
+  const { mutate: deleteBucketConnection } = useDeleteBucketConnection();
 
   // Helper function to get projects using a connection
   const getProjectsUsingConnection = (connectionId: string) => {
@@ -217,20 +88,37 @@ const Connections: React.FC = () => {
     return getProjectsUsingConnection(connectionId).length === 0;
   };
 
-  const handleDeleteConnection = (id: string) => {
-    const connectionToRemove = connections.find((c) => c.id === id);
-    if (connectionToRemove) {
-      setConnectionToDelete({
-        id: connectionToRemove.id,
-        name: connectionToRemove.connection.name,
-      });
-      setDeleteDialogOpen(true);
+  const handleDeleteConnection = (id: string, type: 'database' | 'cloud') => {
+    if (type === 'database') {
+      const connectionToRemove = connections.find((c) => c.id === id);
+      if (connectionToRemove) {
+        setConnectionToDelete({
+          id: connectionToRemove.id,
+          name: connectionToRemove.connection.name,
+          type: 'database',
+        });
+        setDeleteDialogOpen(true);
+      }
+    } else {
+      const cloudConnectionToRemove = cloudConnections.find((c) => c.id === id);
+      if (cloudConnectionToRemove) {
+        setConnectionToDelete({
+          id: cloudConnectionToRemove.id,
+          name: cloudConnectionToRemove.name,
+          type: 'cloud',
+        });
+        setDeleteDialogOpen(true);
+      }
     }
   };
 
   const confirmDeleteConnection = async () => {
     if (connectionToDelete) {
-      deleteConnection(connectionToDelete.id);
+      if (connectionToDelete.type === 'cloud') {
+        deleteBucketConnection(connectionToDelete.id);
+      } else {
+        deleteConnection(connectionToDelete.id);
+      }
     }
     setDeleteDialogOpen(false);
     setConnectionToDelete(null);
@@ -241,183 +129,559 @@ const Connections: React.FC = () => {
     return connectionIcons.images[connectionType as SupportedConnectionTypes];
   };
 
+  // Helper function to get cloud provider icon
+  const getCloudProviderIcon = (provider: string) => {
+    const iconSrc = cloudStorageImages[provider as CloudProvider];
+    if (iconSrc) {
+      return (
+        <img
+          src={iconSrc}
+          alt={provider}
+          style={{ width: 48, height: 48, objectFit: 'contain' }}
+        />
+      );
+    }
+    return <CloudIcon sx={{ fontSize: 48 }} />;
+  };
+
+  // Helper function to get connection type name
+  const getConnectionTypeName = (connectionType: string) => {
+    switch (connectionType) {
+      case 'postgres':
+        return 'PostgreSQL';
+      case 'snowflake':
+        return 'Snowflake';
+      case 'bigquery':
+        return 'BigQuery';
+      case 'redshift':
+        return 'Redshift';
+      case 'databricks':
+        return 'Databricks';
+      case 'duckdb':
+        return 'DuckDB';
+      default:
+        return connectionType.toUpperCase();
+    }
+  };
+
+  // Helper function to get cloud provider name
+  const getCloudProviderName = (provider: string) => {
+    switch (provider) {
+      case 'aws':
+        return 'Amazon S3';
+      case 'azure':
+        return 'Azure Blob Storage';
+      case 'gcs':
+        return 'Google Cloud Storage';
+      default:
+        return provider.toUpperCase();
+    }
+  };
+
+  // Helper function to get connection type color
+  const getConnectionTypeColor = (connectionType: string) => {
+    switch (connectionType) {
+      case 'postgres':
+        return '#336791';
+      case 'snowflake':
+        return '#29b5e8';
+      case 'bigquery':
+        return '#4285f4';
+      case 'redshift':
+        return '#8c4fff';
+      case 'databricks':
+        return '#ff3621';
+      case 'duckdb':
+        return '#fff000';
+      default:
+        return '#666';
+    }
+  };
+
+  // Helper function to get cloud provider color
+  const getCloudProviderColor = (provider: string) => {
+    switch (provider) {
+      case 'aws':
+        return '#ff9900';
+      case 'azure':
+        return '#0078d4';
+      case 'gcs':
+        return '#4285f4';
+      default:
+        return '#666';
+    }
+  };
+
   // Helper function to render the appropriate icon component
   const renderConnectionIcon = (connectionType: string) => {
     const connectionIcon = getConnectionIcon(connectionType);
 
     if (connectionIcon) {
-      // Render image icon for supported connection types
-      return <ConnectionIcon src={connectionIcon} alt={connectionType} />;
+      return (
+        <img
+          src={connectionIcon}
+          alt={connectionType}
+          style={{
+            width: 48,
+            height: 48,
+            objectFit: 'contain',
+          }}
+        />
+      );
     }
-    // Render MUI icon for unsupported connection types
-    return (
-      <ConnectionMuiIcon>
-        <DatabaseIcon />
-      </ConnectionMuiIcon>
-    );
+    return <DatabaseIcon sx={{ fontSize: 48 }} />;
   };
 
-  // Filter connections based on search query
-  const filteredConnections = connections.filter(
-    (connection) =>
-      connection.connection.name
-        .toLowerCase()
-        .includes(searchQuery.toLowerCase()) ||
-      connection.connection.type
-        .toLowerCase()
-        .includes(searchQuery.toLowerCase()),
-  );
+  // Helper function to render cloud provider icon
+  const renderCloudProviderIcon = (provider: string) => {
+    const icon = getCloudProviderIcon(provider);
+    if (typeof icon === 'string') {
+      return (
+        <Box sx={{ fontSize: 48, display: 'flex', alignItems: 'center' }}>
+          {icon}
+        </Box>
+      );
+    }
+    return icon;
+  };
 
-  if (isLoading) {
+  const renderConnectionDetails = (connection: any) => {
+    switch (connection.type) {
+      case 'postgres':
+      case 'redshift':
+        return (
+          <Typography variant="body2" color="text.secondary">
+            Host: {connection.host}:{connection.port}
+          </Typography>
+        );
+      case 'snowflake':
+        return (
+          <Typography variant="body2" color="text.secondary">
+            Account: {connection.account}
+          </Typography>
+        );
+      case 'bigquery':
+        return (
+          <Typography variant="body2" color="text.secondary">
+            Project: {connection.project || connection.projectId}
+          </Typography>
+        );
+      case 'databricks':
+        return (
+          <Typography variant="body2" color="text.secondary">
+            Host: {connection.host}
+          </Typography>
+        );
+      case 'duckdb':
+        return (
+          <Typography variant="body2" color="text.secondary">
+            Path: {connection.short_database_path || connection.database_path}
+          </Typography>
+        );
+      default:
+        return null;
+    }
+  };
+
+  const renderCloudConnectionDetails = (cloudConnection: CloudConnection) => {
+    switch (cloudConnection.provider) {
+      case 'aws':
+        return (
+          <Typography variant="body2" color="text.secondary">
+            Region: {(cloudConnection.config as any).region}
+          </Typography>
+        );
+      case 'azure':
+        return (
+          <Typography variant="body2" color="text.secondary">
+            Account: {(cloudConnection.config as any).accountName}
+          </Typography>
+        );
+      case 'gcs':
+        return (
+          <Typography variant="body2" color="text.secondary">
+            Project: {(cloudConnection.config as any).projectId}
+          </Typography>
+        );
+      default:
+        return null;
+    }
+  };
+
+  const handleRefresh = () => {
+    refetch();
+    refetchCloudConnections();
+  };
+
+  if (isLoading || isLoadingCloudConnections) {
     return <Loader />;
   }
 
-  return (
-    <AppLayout>
-      <ConnectionsContainer>
-        <TaglineContainer>
-          <TaglineText variant="h6">Manage Your Data Connections</TaglineText>
-        </TaglineContainer>
+  const totalConnections = connections.length + cloudConnections.length;
 
-        <HeaderContainer>
-          <SearchContainer>
-            <TextField
-              fullWidth
-              placeholder="Search Connections"
-              variant="outlined"
-              size="small"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              slotProps={{
-                input: {
-                  startAdornment: (
-                    <InputAdornment position="start">
-                      <SearchIcon color="action" />
-                    </InputAdornment>
-                  ),
-                },
-              }}
+  return (
+    <AppLayout sidebarContent={<ConnectionsSidebar />}>
+      <Box sx={{ p: 3 }}>
+        {/* Header with title and icon */}
+        <Box
+          sx={{
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            mb: 3,
+          }}
+        >
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+            <Typography variant="h4" component="h1" sx={{ fontWeight: 'bold' }}>
+              Connections
+            </Typography>
+            <ElectricalServicesIcon
+              sx={{ color: 'primary.main', fontSize: 28 }}
             />
-          </SearchContainer>
+          </Box>
           <Box sx={{ display: 'flex', gap: 1 }}>
-            <Tooltip title="Create a new connection">
+            <IconButton
+              onClick={handleRefresh}
+              disabled={isRefetching || isRefetchingCloudConnections}
+            >
+              <Refresh />
+            </IconButton>
+          </Box>
+        </Box>
+
+        <Box sx={{ mb: 2 }}>
+          <Typography
+            variant="h6"
+            sx={{ color: 'primary.main', textAlign: 'center' }}
+          >
+            Manage Your Data Connections & Sources
+          </Typography>
+        </Box>
+
+        {totalConnections === 0 ? (
+          <Card>
+            <CardHeader
+              title="No connections found"
+              subheader="Add a connection to get started with your dbt projects."
+              avatar={
+                <DatabaseIcon sx={{ fontSize: 48, color: 'text.secondary' }} />
+              }
+            />
+            <CardContent>
+              <Typography variant="body2" color="text.secondary" paragraph>
+                Database connections allow you to connect your dbt projects to
+                various data sources like PostgreSQL, Snowflake, BigQuery, and
+                more. Cloud sources let you connect to storage services like S3,
+                Azure Blob Storage, and Google Cloud Storage.
+              </Typography>
+            </CardContent>
+            <CardActions>
               <Button
                 variant="contained"
-                color="primary"
-                startIcon={<AddIcon />}
+                startIcon={<Add />}
                 onClick={() => navigate('/app/add-connection')}
-                sx={{ height: 40 }}
               >
-                New Connection
+                Add Connection
               </Button>
-            </Tooltip>
-          </Box>
-        </HeaderContainer>
-
-        {/* eslint-disable-next-line no-nested-ternary */}
-        {filteredConnections.length === 0 && searchQuery ? (
-          <EmptyStateContainer>
-            <EmptyStateIcon>
-              <DatabaseIcon />
-            </EmptyStateIcon>
-            <EmptyStateTitle variant="h5">
-              No Matching Connections
-            </EmptyStateTitle>
-            <EmptyStateDescription variant="body1">
-              No connections match your search query.
-            </EmptyStateDescription>
-            <Button
-              variant="contained"
-              color="primary"
-              startIcon={<AddIcon />}
-              onClick={() => navigate('/app/add-connection')}
-              sx={{ height: 40 }}
-            >
-              New Connection
-            </Button>
-          </EmptyStateContainer>
-        ) : connections.length === 0 ? (
-          <EmptyStateContainer>
-            <EmptyStateIcon>
-              <DatabaseIcon />
-            </EmptyStateIcon>
-            <EmptyStateTitle variant="h5">No Connections found</EmptyStateTitle>
-            <EmptyStateDescription variant="body1">
-              You don&#39;t have any connections configured yet.
-            </EmptyStateDescription>
-            <Button
-              variant="contained"
-              color="primary"
-              startIcon={<AddIcon />}
-              onClick={() => navigate('/app/add-connection')}
-              sx={{ height: 40 }}
-            >
-              New Connection
-            </Button>
-          </EmptyStateContainer>
+            </CardActions>
+          </Card>
         ) : (
-          <ConnectionsListContainer>
-            {filteredConnections.map(({ id, connection }) => {
-              const projectsUsing = getProjectsUsingConnection(id);
-              return (
-                <ConnectionCard key={id}>
-                  <ConnectionCardContent>
-                    {renderConnectionIcon(connection.type)}
-                    <ConnectionInfo>
-                      <ConnectionTitle variant="body1">
-                        {connection.name}
-                      </ConnectionTitle>
-                      <ConnectionType>{connection.type}</ConnectionType>
-                      {projectsUsing.length > 0 && (
-                        <ProjectsUsing>
-                          {projectsUsing.map((project) => (
-                            <Chip
-                              key={project.id}
-                              label={project.name}
+          <Box>
+            {/* Database Connections Section */}
+            {connections.length > 0 && (
+              <Box sx={{ mb: 4 }}>
+                <Typography
+                  variant="h6"
+                  sx={{ mb: 2, display: 'flex', alignItems: 'center', gap: 1 }}
+                >
+                  <DatabaseIcon />
+                  Database Connections ({connections.length})
+                </Typography>
+                <Grid container spacing={2}>
+                  {connections.map(({ id, connection }) => {
+                    const projectsUsing = getProjectsUsingConnection(id);
+                    return (
+                      <Grid item xs={12} md={6} lg={4} key={id}>
+                        <Card
+                          sx={{
+                            height: '100%',
+                            display: 'flex',
+                            flexDirection: 'column',
+                            boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
+                            transition: 'all 0.3s ease',
+                            '&:hover': {
+                              boxShadow: '0 4px 16px rgba(0,0,0,0.15)',
+                              transform: 'translateY(-2px)',
+                            },
+                          }}
+                        >
+                          <CardHeader
+                            avatar={renderConnectionIcon(connection.type)}
+                            title={connection.name}
+                            subheader={
+                              <Box
+                                sx={{
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  gap: 1,
+                                  mt: 1,
+                                }}
+                              >
+                                <Chip
+                                  label={getConnectionTypeName(connection.type)}
+                                  size="small"
+                                  sx={{
+                                    bgcolor: getConnectionTypeColor(
+                                      connection.type,
+                                    ),
+                                    color: 'white',
+                                    fontWeight: 'bold',
+                                  }}
+                                />
+                              </Box>
+                            }
+                          />
+                          <CardContent
+                            sx={{
+                              pt: 0,
+                              flexGrow: 1,
+                              display: 'flex',
+                              flexDirection: 'column',
+                            }}
+                          >
+                            {renderConnectionDetails(connection)}
+                            {projectsUsing.length > 0 && (
+                              <Box sx={{ mt: 2 }}>
+                                <Typography
+                                  variant="caption"
+                                  color="text.secondary"
+                                  display="block"
+                                  sx={{ mb: 1 }}
+                                >
+                                  Used by projects:
+                                </Typography>
+                                <Box
+                                  sx={{
+                                    display: 'flex',
+                                    flexWrap: 'wrap',
+                                    gap: 0.5,
+                                  }}
+                                >
+                                  {projectsUsing.map((project) => (
+                                    <Chip
+                                      key={project.id}
+                                      label={project.name}
+                                      size="small"
+                                      variant="outlined"
+                                      sx={{ fontSize: '10px', height: '20px' }}
+                                    />
+                                  ))}
+                                </Box>
+                              </Box>
+                            )}
+                            <Box sx={{ flexGrow: 1 }} />
+                          </CardContent>
+                          <CardActions sx={{ justifyContent: 'space-between' }}>
+                            <Box sx={{ display: 'flex', gap: 1 }}>
+                              <Button
+                                size="small"
+                                variant="outlined"
+                                startIcon={<Edit />}
+                                onClick={() =>
+                                  navigate(`/app/edit-connection/${id}`)
+                                }
+                              >
+                                Edit
+                              </Button>
+                            </Box>
+                            <Box sx={{ display: 'flex', gap: 1 }}>
+                              <Button
+                                size="small"
+                                variant="outlined"
+                                color="error"
+                                startIcon={<DeleteOutline />}
+                                sx={{
+                                  borderRadius: '8px',
+                                  '&:hover': {
+                                    backgroundColor: 'error.light',
+                                    color: 'error.contrastText',
+                                    borderColor: 'error.light',
+                                  },
+                                }}
+                                onClick={() => {
+                                  if (canDeleteConnection(id)) {
+                                    handleDeleteConnection(id, 'database');
+                                    return;
+                                  }
+                                  toast.error(
+                                    'Cannot delete! Connection already used!',
+                                  );
+                                }}
+                                disabled={!canDeleteConnection(id)}
+                              >
+                                Delete
+                              </Button>
+                            </Box>
+                          </CardActions>
+                        </Card>
+                      </Grid>
+                    );
+                  })}
+                </Grid>
+              </Box>
+            )}
+
+            {/* Cloud Sources Section */}
+            {cloudConnections.length > 0 && (
+              <Box>
+                {connections.length > 0 && <Divider sx={{ mb: 3 }} />}
+                <Typography
+                  variant="h6"
+                  sx={{ mb: 2, display: 'flex', alignItems: 'center', gap: 1 }}
+                >
+                  <CloudIcon />
+                  Cloud Sources ({cloudConnections.length})
+                </Typography>
+                <Grid container spacing={2}>
+                  {cloudConnections.map((cloudConnection) => (
+                    <Grid item xs={12} md={6} lg={4} key={cloudConnection.id}>
+                      <Card
+                        sx={{
+                          height: '100%',
+                          display: 'flex',
+                          flexDirection: 'column',
+                          boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
+                          transition: 'all 0.3s ease',
+                          border: '1px solid',
+                          borderColor: 'divider',
+                          '&:hover': {
+                            boxShadow: '0 4px 16px rgba(0,0,0,0.15)',
+                            transform: 'translateY(-2px)',
+                            borderColor: 'primary.main',
+                          },
+                        }}
+                      >
+                        <CardHeader
+                          avatar={renderCloudProviderIcon(
+                            cloudConnection.provider,
+                          )}
+                          title={cloudConnection.name}
+                          subheader={
+                            <Box
+                              sx={{
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: 1,
+                                mt: 1,
+                              }}
+                            >
+                              <Chip
+                                label={getCloudProviderName(
+                                  cloudConnection.provider,
+                                )}
+                                size="small"
+                                sx={{
+                                  bgcolor: getCloudProviderColor(
+                                    cloudConnection.provider,
+                                  ),
+                                  color: 'white',
+                                  fontWeight: 'bold',
+                                }}
+                              />
+                            </Box>
+                          }
+                        />
+                        <CardContent
+                          sx={{
+                            pt: 0,
+                            flexGrow: 1,
+                            display: 'flex',
+                            flexDirection: 'column',
+                          }}
+                        >
+                          {renderCloudConnectionDetails(cloudConnection)}
+                          <Typography
+                            variant="caption"
+                            color="text.secondary"
+                            sx={{ mt: 1 }}
+                          >
+                            Created:{' '}
+                            {new Date(
+                              cloudConnection.created,
+                            ).toLocaleDateString()}
+                          </Typography>
+                          {cloudConnection.lastUsed && (
+                            <Typography
+                              variant="caption"
+                              color="text.secondary"
+                            >
+                              Last used:{' '}
+                              {new Date(
+                                cloudConnection.lastUsed,
+                              ).toLocaleDateString()}
+                            </Typography>
+                          )}
+                          <Box sx={{ flexGrow: 1 }} />
+                        </CardContent>
+                        <CardActions sx={{ justifyContent: 'space-between' }}>
+                          <Box sx={{ display: 'flex', gap: 1 }}>
+                            <Button
                               size="small"
                               variant="outlined"
-                              sx={{ fontSize: '10px', height: '20px' }}
-                            />
-                          ))}
-                        </ProjectsUsing>
-                      )}
-                    </ConnectionInfo>
-                  </ConnectionCardContent>
-                  <ConnectionActions>
-                    <Tooltip title="Edit connection">
-                      <IconButton
-                        size="small"
-                        onClick={() => {
-                          navigate(`/app/edit-connection/${id}`);
-                        }}
-                      >
-                        <EditIcon />
-                      </IconButton>
-                    </Tooltip>
-                    <Tooltip
-                      title={
-                        canDeleteConnection(id) ? 'Delete' : 'Connection in use'
-                      }
-                    >
-                      <IconButton
-                        onClick={() => {
-                          if (canDeleteConnection(id)) {
-                            handleDeleteConnection(id);
-                            return;
-                          }
-                          toast.error(
-                            'Cannot delete! Connection already used!',
-                          );
-                        }}
-                      >
-                        <DeleteIcon fontSize="small" color="error" />
-                      </IconButton>
-                    </Tooltip>
-                  </ConnectionActions>
-                </ConnectionCard>
-              );
-            })}
-          </ConnectionsListContainer>
+                              startIcon={<Visibility />}
+                              onClick={() =>
+                                navigate(
+                                  `/app/cloud-explorer/buckets/${cloudConnection.id}`,
+                                )
+                              }
+                            >
+                              Explore
+                            </Button>
+                            <Button
+                              size="small"
+                              variant="outlined"
+                              startIcon={<Edit />}
+                              onClick={() =>
+                                navigate(
+                                  `/app/cloud-explorer/edit-connection/${cloudConnection.id}`,
+                                )
+                              }
+                            >
+                              Edit
+                            </Button>
+                          </Box>
+                          <Box sx={{ display: 'flex', gap: 1 }}>
+                            <Button
+                              size="small"
+                              variant="outlined"
+                              color="error"
+                              startIcon={<DeleteOutline />}
+                              sx={{
+                                borderRadius: '8px',
+                                '&:hover': {
+                                  backgroundColor: 'error.light',
+                                  color: 'error.contrastText',
+                                  borderColor: 'error.light',
+                                },
+                              }}
+                              onClick={() =>
+                                handleDeleteConnection(
+                                  cloudConnection.id,
+                                  'cloud',
+                                )
+                              }
+                            >
+                              Delete
+                            </Button>
+                          </Box>
+                        </CardActions>
+                      </Card>
+                    </Grid>
+                  ))}
+                </Grid>
+              </Box>
+            )}
+          </Box>
         )}
 
         <Dialog
@@ -426,10 +690,19 @@ const Connections: React.FC = () => {
           aria-labelledby="alert-dialog-title"
           aria-describedby="alert-dialog-description"
         >
-          <DialogTitle id="alert-dialog-title">Delete Connection</DialogTitle>
+          <DialogTitle id="alert-dialog-title">
+            Delete{' '}
+            {connectionToDelete?.type === 'cloud'
+              ? 'Cloud Source'
+              : 'Connection'}
+          </DialogTitle>
           <DialogContent>
             <DialogContentText id="alert-dialog-description">
-              Are you sure you want to delete the connection &quot;
+              Are you sure you want to delete the{' '}
+              {connectionToDelete?.type === 'cloud'
+                ? 'cloud source'
+                : 'connection'}{' '}
+              &quot;
               {connectionToDelete?.name}
               &quot;? This action cannot be undone.
             </DialogContentText>
@@ -448,7 +721,7 @@ const Connections: React.FC = () => {
             </Button>
           </DialogActions>
         </Dialog>
-      </ConnectionsContainer>
+      </Box>
     </AppLayout>
   );
 };
