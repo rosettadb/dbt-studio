@@ -345,7 +345,14 @@ export const DataPreviewModal: React.FC<DataPreviewModalProps> = ({
   const renderContent = () => {
     if (loading) {
       return (
-        <Box sx={{ display: 'flex', justifyContent: 'center', p: 4 }}>
+        <Box
+          sx={{
+            display: 'flex',
+            justifyContent: 'center',
+            alignItems: 'center',
+            p: 4,
+          }}
+        >
           <CircularProgress />
           <Typography sx={{ ml: 2 }}>Loading data preview...</Typography>
         </Box>
