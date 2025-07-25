@@ -183,7 +183,7 @@ export const ExplorerConnections: React.FC = () => {
       >
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
           <Typography variant="h4" component="h1" sx={{ fontWeight: 'bold' }}>
-            Connections
+            Sources
           </Typography>
           <Cable sx={{ color: 'text.secondary', fontSize: 28 }} />
         </Box>
@@ -194,13 +194,6 @@ export const ExplorerConnections: React.FC = () => {
           >
             <Refresh />
           </IconButton>
-          <Button
-            variant="contained"
-            startIcon={<Add />}
-            onClick={() => navigate('/app/cloud-explorer/new-connection')}
-          >
-            Add Connection
-          </Button>
         </Box>
       </Box>
 
@@ -222,7 +215,7 @@ export const ExplorerConnections: React.FC = () => {
               startIcon={<Add />}
               onClick={() => navigate('/app/cloud-explorer/new-connection')}
             >
-              Add Connection
+              Add Source
             </Button>
           </CardActions>
         </Card>

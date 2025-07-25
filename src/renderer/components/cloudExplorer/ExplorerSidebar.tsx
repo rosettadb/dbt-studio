@@ -10,14 +10,7 @@ import {
   styled,
   Button,
 } from '@mui/material';
-import {
-  Cloud,
-  Dashboard,
-  Cable,
-  History,
-  Add,
-  Folder,
-} from '@mui/icons-material';
+import { Cloud, Dashboard, Cable, History, Folder } from '@mui/icons-material';
 import { NavLink, useLocation, useNavigate } from 'react-router-dom';
 import { SettingsSidebarElement } from '../../screens/settings/settingsElements';
 import { useGetCloudConnections } from '../../controllers/cloudExplorer.controller';
@@ -28,7 +21,7 @@ export const StyledSettingsNavLink = styled(NavLink)(({ theme }) => ({
   textDecoration: 'none',
   color: theme.palette.grey[600],
   display: 'block',
-  width: '100%',
+  width: '270px',
   marginBottom: '2px',
   '&.active': {
     color: theme.palette.primary.main,
@@ -50,7 +43,7 @@ export const explorerSidebarElements: SettingsSidebarElement[] = [
   },
   {
     icon: Cable,
-    text: 'Connections',
+    text: 'Sources',
     path: '/app/cloud-explorer/connections',
   },
   {
@@ -125,7 +118,7 @@ export const ExplorerSidebar: React.FC = () => {
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
             <Cloud color="primary" fontSize="small" />
             <Typography variant="h6" sx={{ m: 0 }}>
-              Bucket Browser
+              Cloud Explorer
             </Typography>
           </Box>
         </Box>
@@ -140,7 +133,7 @@ export const ExplorerSidebar: React.FC = () => {
                 py: 0.25,
                 px: 1,
                 minHeight: '32px',
-                width: '100%',
+                width: '270px',
               },
             }}
           >
@@ -151,7 +144,7 @@ export const ExplorerSidebar: React.FC = () => {
                     cursor: 'pointer',
                     borderRadius: 1,
                     mb: 0,
-                    width: '100%',
+                    width: '270px',
                     backgroundColor:
                       location.pathname === element.path
                         ? theme.palette.divider
@@ -196,7 +189,7 @@ export const ExplorerSidebar: React.FC = () => {
                   borderRadius: 1,
                   backgroundColor: theme.palette.divider,
                   mb: 0,
-                  width: '100%',
+                  width: '270px',
                   py: 0.25,
                   px: 1,
                   minHeight: '32px',
@@ -258,7 +251,7 @@ export const ExplorerSidebar: React.FC = () => {
                         cursor: 'pointer',
                         borderRadius: 1,
                         mb: 0,
-                        width: '100%',
+                        width: '270px',
                         backgroundColor:
                           selectedConnection?.id === connection.id
                             ? theme.palette.divider
@@ -295,10 +288,10 @@ export const ExplorerSidebar: React.FC = () => {
           variant="contained"
           color="primary"
           fullWidth
-          startIcon={<Add />}
+          startIcon={<Cloud />}
           onClick={() => navigate('/app/cloud-explorer/new-connection')}
         >
-          Add Connection
+          New Source
         </Button>
       </Box>
     </Box>

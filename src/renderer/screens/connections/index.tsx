@@ -21,11 +21,12 @@ import {
 import {
   Add,
   Edit,
-  Cable,
   Refresh,
   DeleteOutline,
   Storage as DatabaseIcon,
   Cloud as CloudIcon,
+  ElectricalServices as ElectricalServicesIcon,
+  Visibility,
 } from '@mui/icons-material';
 import { toast } from 'react-toastify';
 import {
@@ -34,6 +35,7 @@ import {
   useGetConnections,
   useGetProjects,
 } from '../../controllers';
+import { useDeleteBucketConnection } from '../../controllers/cloudExplorer.controller';
 import { Loader, ConnectionsSidebar } from '../../components';
 import { AppLayout } from '../../layouts';
 import connectionIcons, {
@@ -74,6 +76,7 @@ const Connections: React.FC = () => {
       );
     },
   });
+  const { mutate: deleteBucketConnection } = useDeleteBucketConnection();
 
   // Helper function to get projects using a connection
   const getProjectsUsingConnection = (connectionId: string) => {
@@ -111,7 +114,11 @@ const Connections: React.FC = () => {
 
   const confirmDeleteConnection = async () => {
     if (connectionToDelete) {
-      deleteConnection(connectionToDelete.id);
+      if (connectionToDelete.type === 'cloud') {
+        deleteBucketConnection(connectionToDelete.id);
+      } else {
+        deleteConnection(connectionToDelete.id);
+      }
     }
     setDeleteDialogOpen(false);
     setConnectionToDelete(null);
@@ -314,7 +321,7 @@ const Connections: React.FC = () => {
 
   return (
     <AppLayout sidebarContent={<ConnectionsSidebar />}>
-      <Box sx={{ p: 2 }}>
+      <Box sx={{ p: 3 }}>
         {/* Header with title and icon */}
         <Box
           sx={{
@@ -328,7 +335,9 @@ const Connections: React.FC = () => {
             <Typography variant="h4" component="h1" sx={{ fontWeight: 'bold' }}>
               Connections
             </Typography>
-            <Cable sx={{ color: 'primary.main', fontSize: 28 }} />
+            <ElectricalServicesIcon
+              sx={{ color: 'primary.main', fontSize: 28 }}
+            />
           </Box>
           <Box sx={{ display: 'flex', gap: 1 }}>
             <IconButton
@@ -337,13 +346,6 @@ const Connections: React.FC = () => {
             >
               <Refresh />
             </IconButton>
-            <Button
-              variant="contained"
-              startIcon={<Add />}
-              onClick={() => navigate('/app/add-connection')}
-            >
-              New Connection
-            </Button>
           </Box>
         </Box>
 
@@ -623,6 +625,18 @@ const Connections: React.FC = () => {
                         </CardContent>
                         <CardActions sx={{ justifyContent: 'space-between' }}>
                           <Box sx={{ display: 'flex', gap: 1 }}>
+                            <Button
+                              size="small"
+                              variant="outlined"
+                              startIcon={<Visibility />}
+                              onClick={() =>
+                                navigate(
+                                  `/app/cloud-explorer/buckets/${cloudConnection.id}`,
+                                )
+                              }
+                            >
+                              Explore
+                            </Button>
                             <Button
                               size="small"
                               variant="outlined"
