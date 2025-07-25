@@ -53,6 +53,7 @@ export const Snowflake: React.FC<Props> = ({
     'idle' | 'success' | 'failed'
   >('idle');
   const [showPassword, setShowPassword] = React.useState(false);
+  const [nameTouched, setNameTouched] = React.useState(false);
 
   const [formState, setFormState] = React.useState<SnowflakeConnection>({
     type: 'snowflake',
@@ -221,11 +222,14 @@ export const Snowflake: React.FC<Props> = ({
           name="name"
           value={formState.name}
           onChange={handleChange}
+          onBlur={() => setNameTouched(true)}
           fullWidth
           margin="normal"
           required
-          error={!nameValidation.isValid}
-          helperText={!nameValidation.isValid ? nameValidation.message : ''}
+          error={nameTouched && !nameValidation.isValid}
+          helperText={
+            nameTouched && !nameValidation.isValid ? nameValidation.message : ''
+          }
         />
 
         <TextField

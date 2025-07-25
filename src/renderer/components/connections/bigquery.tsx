@@ -61,6 +61,7 @@ export const BigQuery: React.FC<Props> = ({
   const [connectionStatus, setConnectionStatus] = React.useState<
     'idle' | 'success' | 'failed'
   >('idle');
+  const [nameTouched, setNameTouched] = React.useState(false);
 
   const { mutate: configureConnection } = useConfigureConnection({
     onSuccess: () => {
@@ -215,11 +216,14 @@ export const BigQuery: React.FC<Props> = ({
           name="name"
           value={formState.name}
           onChange={handleChange}
+          onBlur={() => setNameTouched(true)}
           fullWidth
           margin="normal"
           required
-          error={!nameValidation.isValid}
-          helperText={!nameValidation.isValid ? nameValidation.message : ''}
+          error={nameTouched && !nameValidation.isValid}
+          helperText={
+            nameTouched && !nameValidation.isValid ? nameValidation.message : ''
+          }
         />
 
         <TextField

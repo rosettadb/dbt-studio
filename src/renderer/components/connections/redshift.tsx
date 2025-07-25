@@ -83,6 +83,7 @@ export const Redshift: React.FC<Props> = ({
     'idle' | 'success' | 'failed'
   >('idle');
   const [infoModalOpen, setInfoModalOpen] = React.useState(false);
+  const [nameTouched, setNameTouched] = React.useState(false);
 
   const { mutate: updateConnection } = useUpdateConnection({
     onSuccess: () => {
@@ -272,11 +273,14 @@ export const Redshift: React.FC<Props> = ({
           name="name"
           value={formState.name}
           onChange={handleChange}
+          onBlur={() => setNameTouched(true)}
           fullWidth
           margin="normal"
           required
-          error={!nameValidation.isValid}
-          helperText={!nameValidation.isValid ? nameValidation.message : ''}
+          error={nameTouched && !nameValidation.isValid}
+          helperText={
+            nameTouched && !nameValidation.isValid ? nameValidation.message : ''
+          }
         />
 
         <TextField
