@@ -111,7 +111,6 @@ export default class ConnectorsService {
   }
 
   static async loadConfigurations(projectId: string): Promise<Project> {
-    console.log('loadConfigurations', projectId);
     const project = await this.getProjectById(projectId);
 
     if (!project) {
@@ -280,7 +279,6 @@ export default class ConnectorsService {
   static async testConnection(
     connection: ConnectionInput,
   ): Promise<boolean | BigQueryTestResponse> {
-    console.log('testConnection', connection);
     await this.validateConnection(connection);
     switch (connection.type) {
       case 'postgres':
@@ -369,21 +367,8 @@ export default class ConnectorsService {
     projectName: string,
   ): Promise<string> {
     const jdbcUrl = await this.generateJdbcUrl(connection, projectName);
-    if (
-      connection.type === 'bigquery' &&
-      connection.method === 'service-account'
-    ) {
-      // Fetch the key from secure storage
-      const key = await SecureStorageService.getCredential(
-        `db-bigquery-${connection.name}`,
-      );
-      if (!key) {
-        throw new Error(
-          'BigQuery service account key not found in secure storage',
-        );
-      }
-      (connection as any).keyfile = key;
-    }
+    // Removed BigQuery keyfile fetch/validation here
+    // USER and PASSWORD only declared here
     const USER = `db-user-${connection.name}`;
     const PASSWORD = `db-password-${connection.name}`;
     const yamlData: {
@@ -431,16 +416,6 @@ export default class ConnectorsService {
         break;
       case 'bigquery':
         if (!('project' in conn)) throw new Error('Project ID is required');
-        if (conn.method === 'service-account') {
-          const key = await SecureStorageService.getCredential(
-            `db-bigquery-${conn.name}`,
-          );
-          if (!key) {
-            throw new Error(
-              'BigQuery service account key not found in secure storage',
-            );
-          }
-        }
         break;
       case 'databricks':
         if (!conn.host) throw new Error('Host is required');
@@ -478,41 +453,10 @@ export default class ConnectorsService {
         return redshiftUrl;
       }
       case 'bigquery': {
-        const host = 'https://www.googleapis.com';
-        const pathStr = 'bigquery/v2';
-        const port = 443;
+        // For project creation/update, do NOT require or parse keyfile
+        // Just return a minimal JDBC URL
         const projectId = conn.project;
-        const baseUrl = `jdbc:bigquery://${host}/${pathStr}:${port}`;
-
-        // Retrieve the key from secure storage if not present
-        let { keyfile } = conn;
-        if (!keyfile) {
-          keyfile =
-            (await SecureStorageService.getCredential(
-              `db-bigquery-${conn.name}`,
-            )) || '';
-          if (!keyfile) {
-            throw new Error(
-              'BigQuery service account key not found in secure storage',
-            );
-          }
-        }
-        // Write the key to a temp file
-        const tempKeyPath = path.join(
-          os.tmpdir(),
-          `bq_key_${conn.name}_${Date.now()}.json`,
-        );
-        fs.writeFileSync(tempKeyPath, keyfile, { mode: 0o600 });
-        // Parse the key to get client_email
-        let clientEmail;
-        try {
-          const credentials = JSON.parse(keyfile);
-          clientEmail = credentials.client_email;
-        } catch (err) {
-          throw new Error('Invalid service account key JSON format');
-        }
-        // Return JDBC string with OAuthPvtKeyPath set to temp file
-        return `${baseUrl};ProjectId=${projectId};OAuthType=0;OAuthServiceAcctEmail=${clientEmail};OAuthPvtKeyPath=${tempKeyPath};OAuthPvtKeyPassword=notasecret`;
+        return `jdbc:bigquery://https://www.googleapis.com/bigquery/v2:443;ProjectId=${projectId};`;
       }
       case 'databricks':
         // Use token-based authentication with no username (UID)

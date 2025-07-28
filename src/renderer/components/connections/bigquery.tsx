@@ -63,6 +63,7 @@ export const BigQuery: React.FC<Props> = ({
     'idle' | 'success' | 'failed'
   >('idle');
   const [nameTouched, setNameTouched] = React.useState(false);
+  const [keyfileError, setKeyfileError] = React.useState<string>('');
 
   const { mutate: configureConnection } = useConfigureConnection({
     onSuccess: () => {
@@ -153,6 +154,20 @@ export const BigQuery: React.FC<Props> = ({
       return;
     }
 
+    // Validate keyfile is valid JSON
+    try {
+      JSON.parse(formState.keyfile);
+      setKeyfileError('');
+    } catch (err) {
+      setKeyfileError(
+        'Service account key must be valid JSON. Paste the full JSON, not a filename.',
+      );
+      toast.error(
+        'Service account key must be valid JSON. Paste the full JSON, not a filename.',
+      );
+      return;
+    }
+
     // Save the service account key in secure storage
     if (formState.name && formState.keyfile) {
       await setBigQueryServiceAccountKey(formState.keyfile, formState.name);
@@ -165,7 +180,7 @@ export const BigQuery: React.FC<Props> = ({
           connection: {
             ...formState,
             method: 'service-account', // Always set method
-            keyfile: `db-bigquery-${formState.name}`,
+            keyfile: formState.keyfile,
           },
         },
       });
@@ -179,7 +194,7 @@ export const BigQuery: React.FC<Props> = ({
         method: 'service-account', // Always set method
         database: formState.project,
         schema: formState.dataset,
-        keyfile: `db-bigquery-${formState.name}`,
+        keyfile: formState.keyfile,
       },
     });
   };
@@ -290,6 +305,11 @@ export const BigQuery: React.FC<Props> = ({
           rows={10}
           required
           variant="outlined"
+          error={!!keyfileError}
+          helperText={
+            keyfileError ||
+            'Paste the full contents of your Google Cloud service account key JSON file here.'
+          }
           InputProps={{
             style: { minHeight: '120px' },
           }}

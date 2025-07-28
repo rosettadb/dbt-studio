@@ -52,17 +52,14 @@ export default class ProjectsService {
   }
 
   static async getProject(id?: string): Promise<Project | undefined> {
-    console.log('getProject', id);
     const projects = await this.loadProjects();
     const project = projects.find((p) => p.id === id);
-    console.log('project', project);
     if (project) {
       await this.updateProject({
         ...project,
         lastOpenedAt: Date.now(),
       });
       try {
-        console.log('loading configurations');
         return ConnectorsService.loadConfigurations(project.id);
       } catch {
         return project;
@@ -89,14 +86,23 @@ export default class ProjectsService {
   }
 
   static async saveProjects(projects: Project[]) {
+    // Patch: For all projects, if the connection is bigquery and keyfile is a JSON string, store only the key name
+    for (const project of projects) {
+      if (
+        project.connection &&
+        project.connection.type === 'bigquery' &&
+        project.connection.keyfile &&
+        project.connection.keyfile.startsWith('{')
+      ) {
+        project.connection.keyfile = `db-bigquery-${project.connection.name}`;
+      }
+    }
     await updateDatabase<'projects'>('projects', projects);
   }
 
   static async addProject(projectPath: string, connectionId?: string) {
-    console.log('addProject', projectPath, connectionId);
     const projects = await this.loadProjects();
     const name = path.basename(projectPath);
-    console.log('name', name);
 
     const project: Project = {
       id: Date.now().toString(),
@@ -107,15 +113,19 @@ export default class ProjectsService {
       connectionId,
     };
 
-    console.log('project', project);
-
+    // Patch: If the project has a bigquery connection, store only the key name
+    if (project.connection && project.connection.type === 'bigquery') {
+      if (
+        project.connection.keyfile &&
+        project.connection.keyfile.startsWith('{')
+      ) {
+        project.connection.keyfile = `db-bigquery-${project.connection.name}`;
+      }
+    }
     await this.copyDbtTemplateFiles(project.path, project.name);
-    console.log('copied dbt template files');
     await this.copyRosettaMainConf(project.path);
-    console.log('copied rosetta main conf');
     projects.push(project);
     await this.saveProjects(projects);
-    console.log('saved projects');
     return (await this.getProject(project.id)) ?? project;
   }
 
@@ -158,6 +168,16 @@ export default class ProjectsService {
       isExtracted: false,
       connectionId,
     };
+
+    // Patch: If the project has a bigquery connection, store only the key name
+    if (project.connection && project.connection.type === 'bigquery') {
+      if (
+        project.connection.keyfile &&
+        project.connection.keyfile.startsWith('{')
+      ) {
+        project.connection.keyfile = `db-bigquery-${project.connection.name}`;
+      }
+    }
 
     const rosettaPath = path.join(projectPath, 'rosetta');
 
@@ -231,27 +251,28 @@ export default class ProjectsService {
   }
 
   static async updateProject(project: Project) {
-    console.log('updateProject.....');
-    console.log('updateProject.....');
-    console.log('updateProject.....');
     const projects = await this.loadProjects();
     const index = projects.findIndex((p) => p.id === project.id);
     if (index === -1) return null;
     const updatedProject = { ...projects[index], ...project };
+
+    // Patch: If the project has a bigquery connection, store only the key name
+    if (
+      updatedProject.connection &&
+      updatedProject.connection.type === 'bigquery'
+    ) {
+      if (
+        updatedProject.connection.keyfile &&
+        updatedProject.connection.keyfile.startsWith('{')
+      ) {
+        updatedProject.connection.keyfile = `db-bigquery-${updatedProject.connection.name}`;
+      }
+    }
+
     projects[index] = updatedProject;
     await updateDatabase<'selectedProject'>('selectedProject', updatedProject);
-    console.log('saving projects.....');
-    console.log('saving projects.....');
-    console.log('saving projects.....');
-    console.log('saving projects.....');
     await this.saveProjects(projects);
-    console.log('loaded configurations.....');
-    console.log('loaded configurations.....');
-    console.log('loaded configurations.....');
     await ConnectorsService.loadConfigurations(project.id);
-    console.log('returning projects.....');
-    console.log('returning projects.....');
-    console.log('returning projects.....');
     return projects;
   }
 
