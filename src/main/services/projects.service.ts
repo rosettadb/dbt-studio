@@ -492,8 +492,23 @@ export default class ProjectsService {
       projectId: connection.project,
     };
 
+    let keyfileValue = connection.keyfile;
+    if (
+      typeof keyfileValue === 'string' &&
+      keyfileValue.startsWith('db-bigquery-')
+    ) {
+      // Fetch from secure storage
+      const stored = await SecureStorageService.getCredential(keyfileValue);
+      if (!stored) {
+        throw new Error(
+          'BigQuery service account key not found in secure storage',
+        );
+      }
+      keyfileValue = stored;
+    }
+
     try {
-      config.credentials = JSON.parse(connection.keyfile);
+      config.credentials = JSON.parse(keyfileValue);
     } catch (err) {
       throw new Error('Invalid service account key JSON');
     }
