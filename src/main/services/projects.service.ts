@@ -69,11 +69,34 @@ export default class ProjectsService {
   }
 
   static async getSelectedProject(): Promise<Project | undefined> {
-    const selected = (await loadDatabaseFile()).selectedProject;
-    return this.getProject(selected?.id);
+    const db = await loadDatabaseFile();
+    const selected = db.selectedProject;
+    try {
+      const project = await this.getProject(selected?.id);
+      if (!project) {
+        await updateDatabase<'selectedProject'>('selectedProject', undefined);
+        return undefined;
+      }
+      return project;
+    } catch (err) {
+      // If loading the project or its configuration fails, clear selection
+      await updateDatabase<'selectedProject'>('selectedProject', undefined);
+      return undefined;
+    }
   }
 
   static async saveProjects(projects: Project[]) {
+    // Patch: For all projects, if the connection is bigquery and keyfile is a JSON string, store only the key name
+    for (const project of projects) {
+      if (
+        project.connection &&
+        project.connection.type === 'bigquery' &&
+        project.connection.keyfile &&
+        project.connection.keyfile.startsWith('{')
+      ) {
+        project.connection.keyfile = `db-bigquery-${project.connection.name}`;
+      }
+    }
     await updateDatabase<'projects'>('projects', projects);
   }
 
@@ -90,6 +113,15 @@ export default class ProjectsService {
       connectionId,
     };
 
+    // Patch: If the project has a bigquery connection, store only the key name
+    if (project.connection && project.connection.type === 'bigquery') {
+      if (
+        project.connection.keyfile &&
+        project.connection.keyfile.startsWith('{')
+      ) {
+        project.connection.keyfile = `db-bigquery-${project.connection.name}`;
+      }
+    }
     await this.copyDbtTemplateFiles(project.path, project.name);
     await this.copyRosettaMainConf(project.path);
     projects.push(project);
@@ -136,6 +168,16 @@ export default class ProjectsService {
       isExtracted: false,
       connectionId,
     };
+
+    // Patch: If the project has a bigquery connection, store only the key name
+    if (project.connection && project.connection.type === 'bigquery') {
+      if (
+        project.connection.keyfile &&
+        project.connection.keyfile.startsWith('{')
+      ) {
+        project.connection.keyfile = `db-bigquery-${project.connection.name}`;
+      }
+    }
 
     const rosettaPath = path.join(projectPath, 'rosetta');
 
@@ -213,6 +255,20 @@ export default class ProjectsService {
     const index = projects.findIndex((p) => p.id === project.id);
     if (index === -1) return null;
     const updatedProject = { ...projects[index], ...project };
+
+    // Patch: If the project has a bigquery connection, store only the key name
+    if (
+      updatedProject.connection &&
+      updatedProject.connection.type === 'bigquery'
+    ) {
+      if (
+        updatedProject.connection.keyfile &&
+        updatedProject.connection.keyfile.startsWith('{')
+      ) {
+        updatedProject.connection.keyfile = `db-bigquery-${updatedProject.connection.name}`;
+      }
+    }
+
     projects[index] = updatedProject;
     await updateDatabase<'selectedProject'>('selectedProject', updatedProject);
     await this.saveProjects(projects);
@@ -432,18 +488,27 @@ export default class ProjectsService {
   }
 
   static async extractBigQuerySchema(connection: BigQueryConnection) {
-    if (connection.method !== 'service-account' || !connection.keyfile) {
-      throw new Error(
-        'Only service account authentication is supported for BigQuery',
-      );
-    }
-
     const config: any = {
       projectId: connection.project,
     };
 
+    let keyfileValue = connection.keyfile;
+    if (
+      typeof keyfileValue === 'string' &&
+      keyfileValue.startsWith('db-bigquery-')
+    ) {
+      // Fetch from secure storage
+      const stored = await SecureStorageService.getCredential(keyfileValue);
+      if (!stored) {
+        throw new Error(
+          'BigQuery service account key not found in secure storage',
+        );
+      }
+      keyfileValue = stored;
+    }
+
     try {
-      config.credentials = JSON.parse(connection.keyfile);
+      config.credentials = JSON.parse(keyfileValue);
     } catch (err) {
       throw new Error('Invalid service account key JSON');
     }
@@ -524,6 +589,14 @@ export default class ProjectsService {
     );
     if (storeToken) {
       (connection as { token: string }).token = storeToken;
+    }
+
+    const bigqueryKey = await SecureStorageService.getCredential(
+      `db-bigquery-${project.name}`,
+    );
+
+    if (bigqueryKey) {
+      (connection as { keyfile: string }).keyfile = bigqueryKey;
     }
 
     switch (connection.type) {

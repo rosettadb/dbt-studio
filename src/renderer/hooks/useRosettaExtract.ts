@@ -6,8 +6,12 @@ import { Project } from '../../types/backend';
 import { settingsServices } from '../services';
 
 const useRosettaExtract = () => {
-  const { getDatabaseUsername, getDatabasePassword, getDatabaseToken } =
-    useSecureStorage();
+  const {
+    getDatabaseUsername,
+    getDatabasePassword,
+    getDatabaseToken,
+    getBigQueryServiceAccountKey,
+  } = useSecureStorage();
   const { data: settings } = useGetSettings();
   const { error, runCommand } = useCli();
   const setEnvVariables = useSetConnectionEnvVariable();
@@ -44,6 +48,13 @@ const useRosettaExtract = () => {
         setEnvVariables.mutate({
           key: `db-token-${project.name}`,
           value: secureToken || '',
+        });
+      }
+      const bigQueryKey = await getBigQueryServiceAccountKey(project.name);
+      if (bigQueryKey) {
+        setEnvVariables.mutate({
+          key: `db-bigquery-${project.name}`,
+          value: bigQueryKey,
         });
       }
 

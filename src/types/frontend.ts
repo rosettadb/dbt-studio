@@ -42,7 +42,8 @@ export type SecureStorageAccount =
   | `db-token-${string}`
   | `cloud-gcs-${string}`
   | `cloud-aws-${string}`
-  | `cloud-azure-${string}`;
+  | `cloud-azure-${string}`
+  | `db-bigquery-${string}`;
 
 // Cloud Explorer Types
 export interface Bucket {
