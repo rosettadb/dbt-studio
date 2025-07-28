@@ -79,6 +79,9 @@ export default class UpdateService {
     log.transports.file.level = 'info';
     autoUpdater.logger = log;
 
+    // Configure autoUpdater for prerelease handling
+    autoUpdater.allowPrerelease = true; // Allow beta/alpha updates
+
     autoUpdater.on('checking-for-update', () => {
       log.info('Checking for update...');
     });
