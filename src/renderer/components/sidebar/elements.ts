@@ -12,7 +12,7 @@ const baseSidebarElements: SideBarElementType[] = [
   {
     path: '/app/connections',
     text: 'Database Connections',
-    icon: Icons.DataSources,
+    icon: Icons.ElectricalServices,
   },
   {
     path: '/app/select-project',
@@ -27,7 +27,7 @@ const baseSidebarElements: SideBarElementType[] = [
   {
     path: '/app/sql',
     text: 'SQL Editor',
-    icon: Icons.SQL,
+    icon: Icons.DataSources,
   },
   {
     path: '/app/cloud-explorer',

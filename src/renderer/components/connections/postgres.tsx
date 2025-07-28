@@ -64,7 +64,7 @@ export const Postgres: React.FC<Props> = ({
   const [connectionStatus, setConnectionStatus] = React.useState<
     'idle' | 'success' | 'failed'
   >('idle');
-  const [nameError, setNameError] = React.useState<string>('');
+  const [nameTouched, setNameTouched] = React.useState(false);
 
   // Get existing connections for validation
   const { data: existingConnections = [] } = useGetConnections();
@@ -72,6 +72,7 @@ export const Postgres: React.FC<Props> = ({
     existingConnections,
     connection?.id,
   );
+  const nameValidation = validateName(formState.name);
 
   const { mutate: updateConnection } = useUpdateConnection({
     onSuccess: () => {
@@ -140,12 +141,6 @@ export const Postgres: React.FC<Props> = ({
       [name]: name === 'port' ? Number(value) : value,
     }));
 
-    // Validate connection name in real-time
-    if (name === 'name') {
-      const validation = validateName(value);
-      setNameError(validation.isValid ? '' : validation.message || '');
-    }
-
     setConnectionStatus('idle');
   };
 
@@ -153,10 +148,9 @@ export const Postgres: React.FC<Props> = ({
     e.preventDefault();
 
     // Validate connection name before submission
-    const nameValidation = validateName(formState.name);
     if (!nameValidation.isValid) {
       toast.error(nameValidation.message || 'Invalid connection name');
-      setNameError(nameValidation.message || '');
+      setNameTouched(true);
       return;
     }
 
@@ -235,11 +229,16 @@ export const Postgres: React.FC<Props> = ({
           name="name"
           value={formState.name}
           onChange={handleChange}
+          onBlur={() => setNameTouched(true)}
           fullWidth
           margin="normal"
           required
-          error={!!nameError}
-          helperText={nameError || 'Enter a unique name for this connection'}
+          error={nameTouched && !nameValidation.isValid}
+          helperText={
+            nameTouched && !nameValidation.isValid
+              ? nameValidation.message
+              : 'Enter a unique name for this connection'
+          }
         />
 
         <TextField
