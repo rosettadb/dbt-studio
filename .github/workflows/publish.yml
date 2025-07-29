@@ -61,7 +61,7 @@ jobs:
           find . -name "*.blockmap" ! -name "*-arm64*" -type f -delete
 
           echo "Files kept for ARM64 build:"
-          ls -la *arm64* 2>/dev/null || echo "No ARM64 files found"
+          ls -la *arm64* latest-mac.yml 2>/dev/null || echo "No ARM64 files or latest-mac.yml found"
 
           # Store the build directory for next step
           echo "BUILD_DIR=$BUILD_DIR" >> $GITHUB_ENV
@@ -110,18 +110,18 @@ jobs:
             echo "Found existing release: $RELEASE_TAG"
           fi
 
-          # Upload only ARM64 files to the draft release
+          # Upload ARM64 files and latest-mac.yml to the draft release
           uploaded=false
-          for file in *arm64*; do
+          for file in *arm64* latest-mac.yml; do
             if [[ -f "$file" ]]; then
-              echo "Uploading ARM64 file: $file to release $RELEASE_TAG"
+              echo "Uploading file: $file to release $RELEASE_TAG"
               gh release upload "$RELEASE_TAG" "$file" --clobber
               uploaded=true
             fi
           done
 
           if [ "$uploaded" = false ]; then
-            echo "Warning: No ARM64 files found to upload"
+            echo "Warning: No ARM64 files or latest-mac.yml found to upload"
             ls -la
           else
             echo "Upload completed. Checking release:"
