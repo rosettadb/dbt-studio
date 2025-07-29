@@ -5,15 +5,16 @@ import { loadEnvironment } from './utils/setupHelpers';
 import { AssetUrl } from './utils/assetUrl';
 import { AssetServer } from './utils/assetServer';
 import { setupApplicationIcon } from './utils/iconUtils';
-import { SettingsService } from './services';
+import { SettingsService, AnalyticsService, UpdateService } from './services';
 import { copyAssetsToUserData } from './utils/fileHelper';
-import AnalyticsService from './services/analytics.service';
 
 const isProd = process.env.NODE_ENV === 'production';
 const isDebug =
   process.env.NODE_ENV === 'development' || process.env.DEBUG_PROD === 'true';
 
 loadEnvironment(isDebug, isProd);
+
+UpdateService.initialize();
 
 protocol.registerSchemesAsPrivileged([
   {
