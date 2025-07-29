@@ -1,7 +1,7 @@
 import { useCallback, useState } from 'react';
 import { toast } from 'react-toastify';
 import useCli from './useCli';
-import { useSecureStorage } from './index';
+import useSecureStorage from './useSecureStorage';
 import {
   useGetConnections,
   useGetSettings,
@@ -35,8 +35,12 @@ const useDbt = (successCallback?: () => void): UseDbtReturn => {
   const { data: settings } = useGetSettings();
   const { runCommand, stopCommand, isRunning } = useCli();
   const { data: connections = [] } = useGetConnections();
-  const { getDatabaseUsername, getDatabasePassword, getDatabaseToken } =
-    useSecureStorage();
+  const {
+    getDatabaseUsername,
+    getDatabasePassword,
+    getDatabaseToken,
+    getBigQueryServiceAccountKey,
+  } = useSecureStorage();
   const setEnvVariables = useSetConnectionEnvVariable();
 
   const [activeCommand, setActiveCommand] = useState<DbtCommandType | null>(
@@ -47,10 +51,11 @@ const useDbt = (successCallback?: () => void): UseDbtReturn => {
   const setupConnectionEnv = useCallback(
     async (connectionName: string) => {
       try {
-        const [username, password, token] = await Promise.all([
+        const [username, password, token, bigQueryKey] = await Promise.all([
           getDatabaseUsername(connectionName),
           getDatabasePassword(connectionName),
           getDatabaseToken(connectionName),
+          getBigQueryServiceAccountKey(connectionName),
         ]);
 
         const envPromises = [];
@@ -82,6 +87,15 @@ const useDbt = (successCallback?: () => void): UseDbtReturn => {
           );
         }
 
+        if (bigQueryKey) {
+          envPromises.push(
+            setEnvVariables.mutateAsync({
+              key: `db-bigquery-${connectionName}`,
+              value: bigQueryKey,
+            }),
+          );
+        }
+
         await Promise.all(envPromises);
       } catch (error) {
         throw new Error(`Failed to setup environment variables: ${error}`);
@@ -91,6 +105,7 @@ const useDbt = (successCallback?: () => void): UseDbtReturn => {
       getDatabaseUsername,
       getDatabasePassword,
       getDatabaseToken,
+      getBigQueryServiceAccountKey,
       setEnvVariables,
     ],
   );

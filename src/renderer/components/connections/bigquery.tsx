@@ -22,6 +22,7 @@ import {
 } from '../../controllers';
 import ConnectionHeader from './connection-header';
 import { useConnectionNameValidation } from '../../utils/connectionValidation';
+import useSecureStorage from '../../hooks/useSecureStorage';
 
 type Props = {
   onCancel: () => void;
@@ -62,6 +63,7 @@ export const BigQuery: React.FC<Props> = ({
     'idle' | 'success' | 'failed'
   >('idle');
   const [nameTouched, setNameTouched] = React.useState(false);
+  const [keyfileError, setKeyfileError] = React.useState<string>('');
 
   const { mutate: configureConnection } = useConfigureConnection({
     onSuccess: () => {
@@ -109,6 +111,24 @@ export const BigQuery: React.FC<Props> = ({
     },
   });
 
+  const { setBigQueryServiceAccountKey, getBigQueryServiceAccountKey } =
+    useSecureStorage();
+
+  React.useEffect(() => {
+    // On edit, load the service account key from secure storage
+    const fetchKey = async () => {
+      if (existingConnection?.name) {
+        const storedKey = await getBigQueryServiceAccountKey(
+          existingConnection.name,
+        );
+        setFormState((prev) => ({ ...prev, keyfile: storedKey || 'wtf' }));
+      }
+    };
+    if (existingConnection) {
+      fetchKey();
+    }
+  }, [existingConnection]);
+
   // Get existing connections for name validation
   const { data: existingConnections = [] } = useGetConnections();
   const { validateName } = useConnectionNameValidation(
@@ -125,7 +145,7 @@ export const BigQuery: React.FC<Props> = ({
     setConnectionStatus('idle');
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
     // Validate connection name before submitting
@@ -134,11 +154,34 @@ export const BigQuery: React.FC<Props> = ({
       return;
     }
 
+    // Validate keyfile is valid JSON
+    try {
+      JSON.parse(formState.keyfile);
+      setKeyfileError('');
+    } catch (err) {
+      setKeyfileError(
+        'Service account key must be valid JSON. Paste the full JSON, not a filename.',
+      );
+      toast.error(
+        'Service account key must be valid JSON. Paste the full JSON, not a filename.',
+      );
+      return;
+    }
+
+    // Save the service account key in secure storage
+    if (formState.name && formState.keyfile) {
+      await setBigQueryServiceAccountKey(formState.keyfile, formState.name);
+    }
+
     if (connection) {
       updateConnection({
         connection: {
           id: connection.id,
-          connection: formState,
+          connection: {
+            ...formState,
+            method: 'service-account', // Always set method
+            keyfile: formState.keyfile,
+          },
         },
       });
       return;
@@ -148,19 +191,27 @@ export const BigQuery: React.FC<Props> = ({
       projectId,
       connection: {
         ...formState,
+        method: 'service-account', // Always set method
         database: formState.project,
         schema: formState.dataset,
+        keyfile: formState.keyfile,
       },
     });
   };
 
-  const handleTest = () => {
+  const handleTest = async () => {
+    // Save the key to secure storage before testing
+    if (formState.name && formState.keyfile) {
+      await setBigQueryServiceAccountKey(formState.keyfile, formState.name);
+    }
     setIsTesting(true);
     setConnectionStatus('idle');
     testConnection({
       ...formState,
+      method: 'service-account', // Always set method
       database: formState.project,
       schema: formState.dataset,
+      keyfile: formState.keyfile,
     });
   };
 
@@ -254,6 +305,11 @@ export const BigQuery: React.FC<Props> = ({
           rows={10}
           required
           variant="outlined"
+          error={!!keyfileError}
+          helperText={
+            keyfileError ||
+            'Paste the full contents of your Google Cloud service account key JSON file here.'
+          }
           InputProps={{
             style: { minHeight: '120px' },
           }}

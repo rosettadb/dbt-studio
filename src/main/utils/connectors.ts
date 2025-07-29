@@ -16,6 +16,7 @@ import {
   SnowflakeConnection,
 } from '../../types/backend';
 import { SNOWFLAKE_TYPE_MAP } from './constants';
+import SecureStorageService from '../services/secureStorage.service';
 
 export async function testPostgresConnection(
   config: PostgresConnection,
@@ -299,12 +300,26 @@ export async function testBigQueryConnection(
     throw new Error('Only service account authentication is supported');
   }
 
+  let keyfileValue = config.keyfile;
+  if (
+    typeof keyfileValue === 'string' &&
+    keyfileValue.startsWith('db-bigquery-')
+  ) {
+    const stored = await SecureStorageService.getCredential(keyfileValue);
+    if (!stored) {
+      throw new Error(
+        'BigQuery service account key not found in secure storage',
+      );
+    }
+    keyfileValue = stored;
+  }
+
   const bigqueryConfig: any = {
     projectId: config.project,
   };
 
   try {
-    bigqueryConfig.credentials = JSON.parse(config.keyfile);
+    bigqueryConfig.credentials = JSON.parse(keyfileValue);
   } catch (err) {
     throw new Error('Invalid service account key JSON format');
   }
@@ -347,12 +362,27 @@ export const executeBigQueryQuery = async (
     };
   }
 
+  let keyfileValue = config.keyfile;
+  if (
+    typeof keyfileValue === 'string' &&
+    keyfileValue.startsWith('db-bigquery-')
+  ) {
+    const stored = await SecureStorageService.getCredential(keyfileValue);
+    if (!stored) {
+      return {
+        success: false,
+        error: 'BigQuery service account key not found in secure storage',
+      };
+    }
+    keyfileValue = stored;
+  }
+
   const bigqueryConfig: any = {
     projectId: config.project,
   };
 
   try {
-    bigqueryConfig.credentials = JSON.parse(config.keyfile);
+    bigqueryConfig.credentials = JSON.parse(keyfileValue);
   } catch (err) {
     return {
       success: false,

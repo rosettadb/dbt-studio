@@ -93,6 +93,22 @@ export const updateDatabase = async <K extends keyof DataBase>(
   key: K,
   value: DataBase[K],
 ) => {
+  // Patch: For connections array, ensure BigQuery keyfile is only the key name
+  if (key === 'connections' && Array.isArray(value)) {
+    value.forEach((conn) => {
+      if (
+        conn &&
+        typeof conn === 'object' &&
+        'connection' in conn &&
+        conn.connection &&
+        conn.connection.type === 'bigquery' &&
+        conn.connection.keyfile &&
+        conn.connection.keyfile.startsWith('{')
+      ) {
+        conn.connection.keyfile = `db-bigquery-${conn.connection.name}`;
+      }
+    });
+  }
   const data = await loadDatabaseFile();
   data[key] = value;
   await saveFileContent(DB_FILE, JSON.stringify(data, null, 2));

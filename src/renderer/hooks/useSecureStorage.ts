@@ -127,6 +127,26 @@ const useSecureStorage = () => {
     await secureStorageService.delete(`cloud-azure-${connectionName}`);
   };
 
+  // BigQuery service account key storage
+  const setBigQueryServiceAccountKey = async (
+    key: string,
+    connectionName: string,
+  ): Promise<void> => {
+    await secureStorageService.set(`db-bigquery-${connectionName}`, key);
+  };
+
+  const getBigQueryServiceAccountKey = async (
+    connectionName: string,
+  ): Promise<string | null> => {
+    return secureStorageService.get(`db-bigquery-${connectionName}`);
+  };
+
+  const deleteBigQueryServiceAccountKey = async (
+    connectionName: string,
+  ): Promise<void> => {
+    await secureStorageService.delete(`db-bigquery-${connectionName}`);
+  };
+
   return {
     setOpenAIKey,
     getOpenAIKey,
@@ -149,6 +169,9 @@ const useSecureStorage = () => {
     setCloudAzureKey,
     getCloudAzureKey,
     deleteCloudAzureKey,
+    setBigQueryServiceAccountKey,
+    getBigQueryServiceAccountKey,
+    deleteBigQueryServiceAccountKey,
   };
 };
 
