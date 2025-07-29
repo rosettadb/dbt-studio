@@ -270,6 +270,7 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           RELEASE_TAG: ${{ needs.extract-version.outputs.release_tag }}
+        shell: bash
         run: |
           BUILD_DIR="release/build"
 
