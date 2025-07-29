@@ -16,6 +16,16 @@ filesToUpdate.forEach((file) => {
   if (fs.existsSync(filePath)) {
     const content = JSON.parse(fs.readFileSync(filePath, 'utf8'));
     content.version = version;
+    if (content.packages) {
+      Object.keys(content.packages).forEach((key) => {
+        if (content.packages[key].name === 'rosetta-dbt-studio') {
+          content.packages[key] = {
+            ...content.packages[key],
+            version,
+          };
+        }
+      });
+    }
     fs.writeFileSync(filePath, JSON.stringify(content, null, 2));
     console.log(`Updated ${file} to version ${version}`);
   }

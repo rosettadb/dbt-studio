@@ -43,7 +43,7 @@ jobs:
             CLEAN_VERSION="$VERSION"
           fi
 
-          RELEASE_TAG="v${CLEAN_VERSION}${SUFFIX}"
+          RELEASE_TAG="${CLEAN_VERSION}${SUFFIX}"
           echo "Release tag: $RELEASE_TAG"
 
           echo "release_tag=$RELEASE_TAG" >> $GITHUB_OUTPUT
