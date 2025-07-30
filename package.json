@@ -1,5 +1,5 @@
 {
-  "version": "1.1.7-beta",
+  "version": "1.1.6-beta",
   "name": "rosetta-dbt-studio",
   "description": "Turn Raw Data into Business Insights—Faster with RosettaDB",
   "keywords": [
@@ -216,6 +216,7 @@
   },
   "build": {
     "productName": "Rosetta dbt Studio",
+    "artifactName": "Rosetta-dbt-Studio-${version}-${arch}.${ext}",
     "appId": "org.rosettadb.dbtStudio",
     "asar": true,
     "asarUnpack": "**\\*.{node,dll}",
@@ -266,8 +267,7 @@
       "category": "Development",
       "maintainer": "RosettaDB",
       "synopsis": "Rosetta dbt Studio",
-      "description": "A studio for managing dbt projects",
-      "artifactName": "${productName}-${version}-${arch}.${ext}"
+      "description": "A studio for managing dbt projects"
     },
     "directories": {
       "app": "release/app",
