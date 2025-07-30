@@ -169,7 +169,7 @@ export default class ConnectorsService {
     const connections = await this.loadConnections();
     let connectionId = connId;
     const connection =
-      conn ?? connections.find((c) => c.id === connectionId)?.connection;
+      conn ?? connections?.find((c) => c.id === connectionId)?.connection;
 
     if (!connection) {
       throw new Error('Connection not found!');
