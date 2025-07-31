@@ -98,10 +98,8 @@ jobs:
           echo "Build directory contents:"
           ls -la
 
-          # Remove all files that DON'T contain -arm64, but keep latest-mac.yml
-          find . -name "*.dmg" ! -name "*-arm64*" -type f -delete
-          find . -name "*.zip" ! -name "*-arm64*" -type f -delete
-          find . -name "*.blockmap" ! -name "*-arm64*" -type f -delete
+          # Remove all x64 files (files containing -x64), but keep ARM64 files
+          find . -name "*-x64*" -type f -delete
 
           echo "Files kept for ARM64 build:"
           ls -la *arm64* latest-mac.yml 2>/dev/null || echo "No ARM64 files or latest-mac.yml found"
@@ -194,14 +192,11 @@ jobs:
           echo "Build directory contents:"
           ls -la
 
-          # Remove all ARM64 files (files containing -arm64)
+          # Remove all ARM64 files (files containing -arm64), but keep x64 files
           find . -name "*-arm64*" -type f -delete
 
-          # Remove any other architecture-specific files that might exist
-          find . -name "*.dmg" -name "*-x64*" -type f -delete
-
           echo "Files kept for x64 build:"
-          ls -la *.dmg *.zip latest-mac.yml 2>/dev/null || echo "No files found"
+          ls -la *x64* latest-mac.yml 2>/dev/null || echo "No x64 files or latest-mac.yml found"
 
           # Store the build directory for next step
           echo "BUILD_DIR=$BUILD_DIR" >> $GITHUB_ENV
@@ -225,8 +220,8 @@ jobs:
 
           # Upload x64 files and latest-mac.yml to the draft release
           uploaded=false
-          for file in *.dmg *.zip latest-mac.yml; do
-            if [[ -f "$file" ]] && [[ ! "$file" =~ arm64 ]]; then
+          for file in *x64* latest-mac.yml; do
+            if [[ -f "$file" ]]; then
               echo "Uploading file: $file to release $RELEASE_TAG"
               gh release upload "$RELEASE_TAG" "$file" --clobber
               uploaded=true
