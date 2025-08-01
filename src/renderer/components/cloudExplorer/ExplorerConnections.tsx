@@ -20,7 +20,7 @@ import {
   CircularProgress,
 } from '@mui/material';
 import {
-  Add,
+  Cloud,
   Edit,
   Cable,
   Refresh,
@@ -193,10 +193,11 @@ export const ExplorerConnections: React.FC = () => {
           <CardActions>
             <Button
               variant="contained"
-              startIcon={<Add />}
+              color="primary"
+              startIcon={<Cloud />}
               onClick={() => navigate('/app/cloud-explorer/new-connection')}
             >
-              Add Source
+              New Source
             </Button>
           </CardActions>
         </Card>
