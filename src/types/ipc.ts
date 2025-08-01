@@ -9,7 +9,9 @@ export type SettingsChannels =
   | 'settings:checkCliUpdates'
   | 'settings:updateCli'
   | 'settings:getDbtPath'
-  | 'settings:usePathJoin';
+  | 'settings:usePathJoin'
+  | 'settings:reset-factory'
+  | 'settings:restart';
 
 export type ProjectChannels =
   | 'project:get'

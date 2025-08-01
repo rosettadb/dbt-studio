@@ -77,3 +77,11 @@ export const deleteOpenAIKey = async (): Promise<void> => {
     { account: 'openai-api-key' },
   );
 };
+
+export const resetFactorySettings = async (): Promise<void> => {
+  await client.post<void, void>('settings:reset-factory', undefined);
+};
+
+export const restartApp = async (): Promise<void> => {
+  await client.post<void, void>('settings:restart', undefined);
+};

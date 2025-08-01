@@ -34,18 +34,11 @@ import {
   useDeleteBucketConnection,
 } from '../../controllers';
 import { cloudStorageImages } from '../../../../assets/connectionIcons';
-import useSecureStorage from '../../hooks/useSecureStorage';
 
 export const ExplorerConnections: React.FC = () => {
   const navigate = useNavigate();
   const connectionsQuery = useGetCloudConnections();
   const deleteConnection = useDeleteBucketConnection();
-  const {
-    deleteCloudAwsSecret,
-    deleteCloudAzureKey,
-    deleteCloudGcsCredential,
-  } = useSecureStorage();
-
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [connectionToDelete, setConnectionToDelete] = useState<string | null>(
     null,
@@ -98,19 +91,7 @@ export const ExplorerConnections: React.FC = () => {
   const handleDeleteConnection = async () => {
     if (connectionToDelete) {
       try {
-        const connection = connectionsQuery.data?.find(
-          (c) => c.id === connectionToDelete,
-        );
         await deleteConnection.mutateAsync(connectionToDelete);
-        if (connection) {
-          if (connection.provider === 'aws') {
-            await deleteCloudAwsSecret(connection.name);
-          } else if (connection.provider === 'azure') {
-            await deleteCloudAzureKey(connection.name);
-          } else if (connection.provider === 'gcs') {
-            await deleteCloudGcsCredential(connection.name);
-          }
-        }
         setDeleteDialogOpen(false);
         setConnectionToDelete(null);
       } catch (error) {
