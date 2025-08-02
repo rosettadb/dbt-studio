@@ -10,13 +10,13 @@ import { SchemaViewContainer, SchemaViewGrid } from './styles';
 import {
   ErrorMessage,
   Loader,
+  NoConnectionMessage,
   SchemaTreeViewer,
   SqlEditor,
 } from '../../components';
 import { QueryResult } from './queryResult';
 import { ConnectionInput } from '../../../types/backend';
 import { getConnectionInput } from '../../helpers/utils';
-import { NoConnectionMessage } from '../../components/sqlEditor/noConnectioMessage';
 
 const QUERY_HISTORY_KEY = 'query_history_key';
 
