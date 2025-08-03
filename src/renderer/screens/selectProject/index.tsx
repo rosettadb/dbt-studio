@@ -37,8 +37,10 @@ import {
   useGetProjects,
   useGetSettings,
   useSelectProject,
+  useUpdateProject,
 } from '../../controllers';
 import {
+  AddConnectionModal,
   CloneRepoModal,
   Icon,
   GetStartedModal,
@@ -103,12 +105,18 @@ const SelectProject: React.FC = () => {
   } | null>(null);
   const [isGetStartedModalOpen, setIsGetStartedModalOpen] =
     React.useState(false);
+  const [isAddConnectionModalOpen, setIsAddConnectionModalOpen] =
+    React.useState(false);
+  const [selectedProjectForConnection, setSelectedProjectForConnection] =
+    React.useState<Project | null>(null);
 
   const { mutate: deleteProject } = useDeleteProject({
     onSuccess: () => {
       toast.info(`Project ${projectToDelete?.name} successfully deleted!`);
     },
   });
+
+  const { mutate: updateProject } = useUpdateProject();
 
   const getConnectionIcon = (project: Project) => {
     const connectionType = project?.connection?.type;
@@ -246,6 +254,26 @@ const SelectProject: React.FC = () => {
     setIsGetStartedModalOpen(true);
   };
 
+  const handleAddConnection = (project: Project) => {
+    setSelectedProjectForConnection(project);
+    setIsAddConnectionModalOpen(true);
+  };
+
+  const handleConnectionModalClose = () => {
+    setIsAddConnectionModalOpen(false);
+    setSelectedProjectForConnection(null);
+  };
+
+  const handleRemoveConnection = (project: Project) => {
+    updateProject({
+      ...project,
+      connectionId: undefined,
+    });
+    toast.success(
+      `Connection removed from project ${project.name} successfully!`,
+    );
+  };
+
   const filteredProjects = projects.filter((project) =>
     project.name.toLowerCase().includes(searchQuery.toLowerCase()),
   );
@@ -374,8 +402,16 @@ const SelectProject: React.FC = () => {
                     color: 'text.disabled',
                     border: '1px solid',
                     borderColor: 'divider',
+                    cursor: 'pointer',
+                    '&:hover': {
+                      bgcolor: 'action.hover',
+                    },
                   }}
-                  title="No database connection configured"
+                  title="Click to add database connection"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleAddConnection(project);
+                  }}
                 />
               )}
               <IconButton
@@ -401,6 +437,39 @@ const SelectProject: React.FC = () => {
             horizontal: 'right',
           }}
         >
+          {!projects.find((p) => p.id === activeProjectId)?.connection
+            ?.name && (
+            <MenuItem
+              onClick={() => {
+                const project = projects.find((p) => p.id === activeProjectId);
+                if (project) {
+                  handleAddConnection(project);
+                }
+                handleCloseMenu();
+              }}
+            >
+              <ListItemIcon>
+                <Cable fontSize="small" color="primary" />
+              </ListItemIcon>
+              <ListItemText>Add Connection</ListItemText>
+            </MenuItem>
+          )}
+          {projects.find((p) => p.id === activeProjectId)?.connection?.name && (
+            <MenuItem
+              onClick={() => {
+                const project = projects.find((p) => p.id === activeProjectId);
+                if (project) {
+                  handleRemoveConnection(project);
+                }
+                handleCloseMenu();
+              }}
+            >
+              <ListItemIcon>
+                <Cable fontSize="small" color="error" />
+              </ListItemIcon>
+              <ListItemText>Remove Connection</ListItemText>
+            </MenuItem>
+          )}
           <MenuItem onClick={handleDeleteProject}>
             <ListItemIcon>
               <DeleteIcon fontSize="small" color="error" />
@@ -498,7 +567,7 @@ const SelectProject: React.FC = () => {
                     Clone
                   </Button>
                 </Tooltip>
-                <Tooltip title="Load files from folder...">
+                <Tooltip title="Import project from folder or compressed file...">
                   <Button
                     variant="contained"
                     color="primary"
@@ -512,17 +581,39 @@ const SelectProject: React.FC = () => {
                           });
                           setIsAddingProject(false);
                           setNewProject({ name: '' });
-                          toast.success(
-                            `Project ${project.name} loaded successfully!`,
-                          );
+
+                          // Show different success messages based on whether it was extracted
+                          if (project.isExtracted) {
+                            toast.success(
+                              `Project ${project.name} imported from compressed file successfully!`,
+                            );
+                          } else {
+                            toast.success(
+                              `Project ${project.name} loaded successfully!`,
+                            );
+                          }
+
                           navigate('/app');
                         } else {
-                          toast.error('Failed to load project from folder.');
+                          toast.error('Failed to import project.');
                         }
-                      } catch (error) {
-                        toast.error(
-                          'Failed to load project from folder. Please try again.',
-                        );
+                      } catch (error: any) {
+                        // Show more specific error messages
+                        if (error.message.includes('compressed')) {
+                          toast.error(
+                            'Failed to extract compressed file. Please ensure it contains a valid dbt project.',
+                          );
+                        } else if (error.message.includes('validation')) {
+                          toast.error(
+                            'Invalid dbt project structure. Please ensure the folder contains a valid dbt_project.yml file.',
+                          );
+                        } else if (error.message.includes('already exists')) {
+                          toast.error(error.message);
+                        } else {
+                          toast.error(
+                            'Failed to import project. Please try again.',
+                          );
+                        }
                       }
                     }}
                   >
@@ -530,7 +621,7 @@ const SelectProject: React.FC = () => {
                       sx={{ marginRight: 1 }}
                       fontSize="small"
                     />
-                    Load
+                    Import
                   </Button>
                 </Tooltip>
                 <Tooltip title="Create a new project">
@@ -589,6 +680,16 @@ const SelectProject: React.FC = () => {
             onClose={() => setIsCloneModalOpen(false)}
           />
         )}
+        <AddConnectionModal
+          isOpen={isAddConnectionModalOpen}
+          onClose={handleConnectionModalClose}
+          project={selectedProjectForConnection}
+          connections={connections}
+          onSuccess={() => {
+            // Projects will be automatically refreshed via React Query
+          }}
+          onUpdateProject={updateProject}
+        />
       </ProjectSelectionContainer>
     </AppLayout>
   );

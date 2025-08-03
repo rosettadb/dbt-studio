@@ -1,3 +1,4 @@
+export * from './addConnectionModal';
 export * from './newFileModal';
 export * from './confirmationModal';
 export * from './businessQueryModal';
