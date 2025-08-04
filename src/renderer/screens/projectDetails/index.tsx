@@ -132,6 +132,7 @@ const ProjectDetails: React.FC = () => {
         ...project,
         connectionId: undefined,
       });
+      setSelectedFilePath(undefined);
       toast.success('Connection removed from project successfully!');
     }
     setConnectionMenuAnchor(null);
@@ -772,6 +773,7 @@ const ProjectDetails: React.FC = () => {
           connections={connections}
           onSuccess={() => {
             // Refresh the project data
+            setSelectedFilePath(undefined);
             refetch();
           }}
           onUpdateProject={updateProject}

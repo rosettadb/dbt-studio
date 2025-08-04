@@ -193,7 +193,6 @@ export type Project = {
   isExtracted?: boolean;
   queryEditor?: string;
   connection?: ConnectionInput;
-  profilesYmlCreated?: boolean;
 };
 
 export type SettingsType = {

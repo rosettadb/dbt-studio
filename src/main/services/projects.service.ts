@@ -220,18 +220,14 @@ export default class ProjectsService {
 
     // Check if profiles.yml exists, if not create an empty one
     const profilesYmlPath = path.join(projectPath, 'profiles.yml');
-    const profilesYmlCreated = !fs.existsSync(profilesYmlPath);
-    if (profilesYmlCreated) {
+    if (!fs.existsSync(profilesYmlPath)) {
       await this.createEmptyProfilesYml(projectPath, finalProjectName);
     } else {
       // Update existing profiles.yml with correct project name
       await this.updateProfilesYmlProjectName(projectPath, finalProjectName);
     }
 
-    return {
-      ...project,
-      profilesYmlCreated,
-    };
+    return project;
   }
 
   static async detectFileType(
@@ -533,18 +529,14 @@ export default class ProjectsService {
 
       // Check if profiles.yml exists, if not create an empty one, or update existing one
       const profilesYmlPath = path.join(projectPath, 'profiles.yml');
-      const profilesYmlCreated = !fs.existsSync(profilesYmlPath);
-      if (profilesYmlCreated) {
+      if (!fs.existsSync(profilesYmlPath)) {
         await this.createEmptyProfilesYml(projectPath, finalProjectName);
       } else {
         // Update existing profiles.yml with correct project name
         await this.updateProfilesYmlProjectName(projectPath, finalProjectName);
       }
 
-      return {
-        ...newProject,
-        profilesYmlCreated,
-      };
+      return newProject;
     } catch (error) {
       // Clean up extracted files if there was an error
       if (
