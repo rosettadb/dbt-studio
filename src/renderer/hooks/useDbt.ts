@@ -18,18 +18,21 @@ type DbtCommandType =
   | 'debug'
   | 'docs:generate'
   | 'docs:serve'
-  | 'deps';
+  | 'deps'
+  | 'clean';
 
 interface UseDbtReturn {
   run: (project: Project, path?: string) => Promise<void>;
   test: (project: Project, path?: string) => Promise<void>;
   compile: (project: Project, path?: string) => Promise<string>;
+  compileProject: (project: Project, path?: string) => Promise<void>;
   build: (project: Project, path?: string) => Promise<void>;
   list: (project: Project) => Promise<string>;
   debug: (project: Project) => Promise<void>;
   docsGenerate: (project: Project) => Promise<void>;
   docsServe: (project: Project) => Promise<void>;
   deps: (project: Project) => Promise<void>;
+  clean: (project: Project) => Promise<void>;
   stopCurrentCommand: () => void;
   isRunning: boolean;
   activeCommand: DbtCommandType | null;
@@ -317,6 +320,12 @@ const useDbt = (successCallback?: () => void): UseDbtReturn => {
       [connections, setupConnectionEnv, buildCommand, runCommand],
     ),
 
+    compileProject: useCallback(
+      (project: Project, path?: string) =>
+        executeCommand('compile', project, path ? `--select ${path}` : ''),
+      [executeCommand],
+    ),
+
     build: useCallback(
       (project: Project, path?: string) =>
         executeCommand('build', project, path ? `--select ${path}` : ''),
@@ -371,6 +380,11 @@ const useDbt = (successCallback?: () => void): UseDbtReturn => {
 
     deps: useCallback(
       (project: Project) => executeCommand('deps', project),
+      [executeCommand],
+    ),
+
+    clean: useCallback(
+      (project: Project) => executeCommand('clean', project),
       [executeCommand],
     ),
 
