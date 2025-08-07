@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { PlayCircleOutline } from '@mui/icons-material';
+import { DirectionsRun } from '@mui/icons-material';
 import { toast } from 'react-toastify';
 import { SplitButton } from '../splitButton';
 import { Project } from '../../../types/backend';
@@ -49,7 +49,6 @@ export const ModelSplitButton: React.FC<ModelSplitButtonProps> = ({
     compile: dbtCompileModel,
     run: dbtRunModel,
     test: dbtTestModel,
-    build: dbtBuildModel,
     isRunning: isRunningDbtModel,
     list: dbtList,
   } = useDbt();
@@ -245,35 +244,172 @@ export const ModelSplitButton: React.FC<ModelSplitButtonProps> = ({
     }
   };
 
-  const handleBuildModel = async () => {
+  const handleRunModelDownstream = async () => {
     if (!isDbtConfigured) {
       toast.info('Please configure dbt path in settings');
       return;
     }
 
     try {
-      // Extract model name from path for single model building
+      // Extract model name from path for downstream execution
       const modelName = extractModelNameFromPath(modelPath);
       if (!modelName) {
         toast.error('Could not extract model name from path');
         return;
       }
 
-      // Build the single model using dbt build --select
-      // This will run the model + tests + seeds + snapshots
-      await dbtBuildModel(project, modelName);
-      toast.success(`Model '${modelName}' built successfully with tests`);
+      // Run the model and all its downstream dependencies using dbt run --select model_name+
+      // The + suffix tells dbt to include all downstream models
+      await dbtRunModel(project, `${modelName}+`);
+      toast.success(
+        `Model '${modelName}' and downstream models executed successfully`,
+      );
     } catch (error) {
       const errorMessage =
         error instanceof Error ? error.message : 'Unknown error';
-      toast.error(`Model build failed: ${errorMessage}`);
+      toast.error(`Downstream run failed: ${errorMessage}`);
+    }
+  };
+
+  const handleRunModelUpstream = async () => {
+    if (!isDbtConfigured) {
+      toast.info('Please configure dbt path in settings');
+      return;
+    }
+
+    try {
+      // Extract model name from path for upstream execution
+      const modelName = extractModelNameFromPath(modelPath);
+      if (!modelName) {
+        toast.error('Could not extract model name from path');
+        return;
+      }
+
+      // Run the model and all its upstream dependencies using dbt run --select +model_name
+      // The + prefix tells dbt to include all upstream models (parents)
+      await dbtRunModel(project, `+${modelName}`);
+      toast.success(
+        `Model '${modelName}' and upstream models executed successfully`,
+      );
+    } catch (error) {
+      const errorMessage =
+        error instanceof Error ? error.message : 'Unknown error';
+      toast.error(`Upstream run failed: ${errorMessage}`);
+    }
+  };
+
+  const handleRunModelBothDirections = async () => {
+    if (!isDbtConfigured) {
+      toast.info('Please configure dbt path in settings');
+      return;
+    }
+
+    try {
+      // Extract model name from path for both directions execution
+      const modelName = extractModelNameFromPath(modelPath);
+      if (!modelName) {
+        toast.error('Could not extract model name from path');
+        return;
+      }
+
+      // Run the model and all its upstream and downstream dependencies using dbt run --select +model_name+
+      // The + prefix and suffix tells dbt to include both upstream and downstream models
+      await dbtRunModel(project, `+${modelName}+`);
+      toast.success(
+        `Model '${modelName}' and all related models (upstream + downstream) executed successfully`,
+      );
+    } catch (error) {
+      const errorMessage =
+        error instanceof Error ? error.message : 'Unknown error';
+      toast.error(`Full dependency run failed: ${errorMessage}`);
+    }
+  };
+
+  const handleTestModelDownstream = async () => {
+    if (!isDbtConfigured) {
+      toast.info('Please configure dbt path in settings');
+      return;
+    }
+
+    try {
+      // Extract model name from path for downstream testing
+      const modelName = extractModelNameFromPath(modelPath);
+      if (!modelName) {
+        toast.error('Could not extract model name from path');
+        return;
+      }
+
+      // Run tests on the model and all its downstream dependencies using dbt test --select model_name+
+      // The + suffix tells dbt to include all downstream models
+      await dbtTestModel(project, `${modelName}+`);
+      toast.success(
+        `Model '${modelName}' and downstream models tests completed successfully`,
+      );
+    } catch (error) {
+      const errorMessage =
+        error instanceof Error ? error.message : 'Unknown error';
+      toast.error(`Downstream tests failed: ${errorMessage}`);
+    }
+  };
+
+  const handleTestModelUpstream = async () => {
+    if (!isDbtConfigured) {
+      toast.info('Please configure dbt path in settings');
+      return;
+    }
+
+    try {
+      // Extract model name from path for upstream testing
+      const modelName = extractModelNameFromPath(modelPath);
+      if (!modelName) {
+        toast.error('Could not extract model name from path');
+        return;
+      }
+
+      // Run tests on the model and all its upstream dependencies using dbt test --select +model_name
+      // The + prefix tells dbt to include all upstream models (parents)
+      await dbtTestModel(project, `+${modelName}`);
+      toast.success(
+        `Model '${modelName}' and upstream models tests completed successfully`,
+      );
+    } catch (error) {
+      const errorMessage =
+        error instanceof Error ? error.message : 'Unknown error';
+      toast.error(`Upstream tests failed: ${errorMessage}`);
+    }
+  };
+
+  const handleTestModelBothDirections = async () => {
+    if (!isDbtConfigured) {
+      toast.info('Please configure dbt path in settings');
+      return;
+    }
+
+    try {
+      // Extract model name from path for both directions testing
+      const modelName = extractModelNameFromPath(modelPath);
+      if (!modelName) {
+        toast.error('Could not extract model name from path');
+        return;
+      }
+
+      // Run tests on the model and all its upstream and downstream dependencies using dbt test --select +model_name+
+      // The + prefix and suffix tells dbt to include both upstream and downstream models
+      await dbtTestModel(project, `+${modelName}+`);
+      toast.success(
+        `Model '${modelName}' and all related models (upstream + downstream) tests completed successfully`,
+      );
+    } catch (error) {
+      const errorMessage =
+        error instanceof Error ? error.message : 'Unknown error';
+      toast.error(`Full dependency tests failed: ${errorMessage}`);
     }
   };
 
   return (
     <>
       <SplitButton
-        title="Actions"
+        title="Model"
         tooltipTitle={
           isDbtConfigured ? '' : 'Please configure dbt path in settings'
         }
@@ -291,37 +427,69 @@ export const ModelSplitButton: React.FC<ModelSplitButtonProps> = ({
           isRunningDbtModel ||
           isPreviewing
         }
-        leftIcon={<PlayCircleOutline />}
+        leftIcon={<DirectionsRun />}
         menuItems={[
           {
-            name: 'Run Model',
+            name: 'Run',
             onClick: handleRunModel,
             leftIcon: <Icon src={icons.dbtTm} width={16} height={16} />,
             subTitle: 'Run the dbt model',
           },
           {
-            name: 'Test Model',
+            name: 'Run model+ (Downstream)',
+            onClick: handleRunModelDownstream,
+            leftIcon: <Icon src={icons.dbtTm} width={16} height={16} />,
+            subTitle: 'Run the model and all its downstream dependencies',
+          },
+          {
+            name: 'Run +model (Upstream)',
+            onClick: handleRunModelUpstream,
+            leftIcon: <Icon src={icons.dbtTm} width={16} height={16} />,
+            subTitle: 'Run the model and all its upstream dependencies',
+          },
+          {
+            name: 'Run +model+ (Up/downstream)',
+            onClick: handleRunModelBothDirections,
+            leftIcon: <Icon src={icons.dbtTm} width={16} height={16} />,
+            subTitle:
+              'Run the model and all its upstream and downstream dependencies',
+          },
+          {
+            name: 'Test',
             onClick: handleTestModel,
             leftIcon: <Icon src={icons.dbtTm} width={16} height={16} />,
             subTitle: 'Run the dbt test',
           },
           {
-            name: 'Compile Model',
+            name: 'Test model+ (Downstream)',
+            onClick: handleTestModelDownstream,
+            leftIcon: <Icon src={icons.dbtTm} width={16} height={16} />,
+            subTitle: 'Test the model and all its downstream dependencies',
+          },
+          {
+            name: 'Test +model (Upstream)',
+            onClick: handleTestModelUpstream,
+            leftIcon: <Icon src={icons.dbtTm} width={16} height={16} />,
+            subTitle: 'Test the model and all its upstream dependencies',
+          },
+          {
+            name: 'Test +model+ (Up/downstream)',
+            onClick: handleTestModelBothDirections,
+            leftIcon: <Icon src={icons.dbtTm} width={16} height={16} />,
+            subTitle:
+              'Test the model and all its upstream and downstream dependencies',
+          },
+          {
+            name: 'Compile',
             onClick: handleCompileModel,
             leftIcon: <Icon src={icons.dbtTm} width={16} height={16} />,
             subTitle: 'Compile the dbt model',
           },
           {
-            name: 'Preview Model',
+            name: 'Preview',
             onClick: handlePreviewModel,
             leftIcon: <Icon src={icons.dbtTm} width={16} height={16} />,
             subTitle: 'Preview the dbt model data',
-          },
-          {
-            name: 'Build Model',
-            onClick: handleBuildModel,
-            leftIcon: <Icon src={icons.dbtTm} width={16} height={16} />,
-            subTitle: 'Build model with tests and validation',
           },
         ]}
       />
