@@ -13,6 +13,7 @@ type DbtCommandType =
   | 'run'
   | 'test'
   | 'compile'
+  | 'list'
   | 'debug'
   | 'docs:generate'
   | 'docs:serve'
@@ -21,7 +22,8 @@ type DbtCommandType =
 interface UseDbtReturn {
   run: (project: Project, path?: string) => Promise<void>;
   test: (project: Project, path?: string) => Promise<void>;
-  compile: (project: Project, path?: string) => Promise<void>;
+  compile: (project: Project, path?: string) => Promise<string>;
+  list: (project: Project) => Promise<string>;
   debug: (project: Project) => Promise<void>;
   docsGenerate: (project: Project) => Promise<void>;
   docsServe: (project: Project) => Promise<void>;
@@ -224,9 +226,124 @@ const useDbt = (successCallback?: () => void): UseDbtReturn => {
     ),
 
     compile: useCallback(
-      (project: Project, path?: string) =>
-        executeCommand('compile', project, path ? `--select ${path}` : ''),
-      [executeCommand],
+      async (project: Project, path?: string) => {
+        try {
+          // Find connection
+          const connection = connections.find(
+            (c) => c.id === project.connectionId,
+          );
+          if (!connection) {
+            throw new Error('Connection not found');
+          }
+
+          setActiveCommand('compile');
+
+          // Setup environment variables
+          await setupConnectionEnv(connection.connection.name);
+
+          // Build command string
+          const cmdString = buildCommand(
+            'compile',
+            project,
+            path ? `--select ${path}` : '',
+          );
+
+          // Execute command and capture output
+          const result = await runCommand(cmdString);
+
+          if (result.error.length === 0) {
+            // Extract the compiled SQL from the output
+            let compiledSql = '';
+
+            // Split the output into lines and filter out the command
+            const fullOutput = result.output.join('\n');
+            const lines = fullOutput.split('\n');
+
+            // Filter out the command line and find the SQL block
+            const dbtOutputLines = lines.filter(
+              (line) =>
+                !line.includes('cd "') &&
+                !line.includes('&&') &&
+                !line.includes('dbt" compile'),
+            );
+
+            // Find the SQL block between "Compiled node ... is:" and the next warning
+            let inSqlBlock = false;
+            const sqlLines: string[] = [];
+
+            for (let i = 0; i < dbtOutputLines.length; i += 1) {
+              const line = dbtOutputLines[i].replace(/\[[0-9;]*m/g, ''); // Remove ANSI codes
+
+              if (line.includes("Compiled node '") && line.includes(' is:')) {
+                inSqlBlock = true;
+              } else if (inSqlBlock) {
+                // Stop at warning patterns or timestamp, but not at empty lines within SQL
+                if (
+                  line.includes('[WARNING]') ||
+                  line.includes('DeprecationsSummary') ||
+                  line.includes('Deprecated') ||
+                  line.match(/^\d{2}:\d{2}:\d{2}/)
+                ) {
+                  break;
+                }
+                // Only add non-empty lines or lines that are part of SQL
+                if (line.trim() !== '' || sqlLines.length > 0) {
+                  sqlLines.push(line);
+                }
+              }
+            }
+
+            compiledSql = sqlLines.join('\n');
+            const finalResult = compiledSql.trim();
+
+            if (!finalResult) {
+              throw new Error('Failed to extract compiled SQL from dbt output');
+            }
+
+            return finalResult;
+          }
+          throw new Error(`dbt compile failed: ${result.error.join('\n')}`);
+        } catch (error) {
+          const errorMessage =
+            error instanceof Error ? error.message : 'Unknown error';
+          toast.error(`dbt compile failed: ${errorMessage}`);
+          throw error;
+        } finally {
+          setActiveCommand(null);
+        }
+      },
+      [connections, setupConnectionEnv, buildCommand, runCommand],
+    ),
+
+    list: useCallback(
+      async (project: Project) => {
+        try {
+          const connection = connections.find(
+            (c) => c.id === project.connectionId,
+          );
+          if (!connection) {
+            throw new Error('Connection not found');
+          }
+
+          setActiveCommand('list');
+          await setupConnectionEnv(connection.connection.name);
+          const cmdString = buildCommand('list', project, '');
+          const result = await runCommand(cmdString);
+
+          if (result.error.length === 0) {
+            return result.output.join('\n');
+          }
+          throw new Error(`dbt list failed: ${result.error.join('\n')}`);
+        } catch (error) {
+          const errorMessage =
+            error instanceof Error ? error.message : 'Unknown error';
+          toast.error(`dbt list failed: ${errorMessage}`);
+          throw error;
+        } finally {
+          setActiveCommand(null);
+        }
+      },
+      [connections, setupConnectionEnv, buildCommand, runCommand],
     ),
 
     debug: useCallback(

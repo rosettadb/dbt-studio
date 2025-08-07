@@ -19,6 +19,7 @@ import {
   SplitButton,
   Icon,
   NoAiSetModal,
+  ModelSplitButton,
 } from '../../components';
 import {
   useGetConnectionById,
@@ -370,8 +371,21 @@ const ProjectDetails: React.FC = () => {
                   </SelectedFile>
                 )}
                 <ButtonsContainer>
+                  {/* Single model command buttons - only for .sql files */}
+                  {selectedFilePath?.endsWith('.sql') &&
+                    selectedFilePath?.includes('/models/') &&
+                    project && (
+                      <ModelSplitButton
+                        modelPath={selectedFilePath}
+                        project={project}
+                        isDbtConfigured={!!settings?.dbtPath}
+                        fileContent={fileContent}
+                        isRunningDbt={isRunningDbt}
+                        isRunningRosettaDbt={isRunningRosettaDbt}
+                      />
+                    )}
                   <SplitButton
-                    title="Actions"
+                    title="Project"
                     tooltipTitle={
                       isDbtConfigured
                         ? ''
@@ -566,7 +580,7 @@ const ProjectDetails: React.FC = () => {
                     `${project.path}/models/enhanced`,
                   ) && (
                     <SplitButton
-                      title="AI Assistant"
+                      title="AI"
                       isLoading={isLoadingQuery}
                       leftIcon={<AutoAwesome />}
                       menuItems={[
@@ -584,7 +598,7 @@ const ProjectDetails: React.FC = () => {
                     `${project.path}/models/staging`,
                   ) && (
                     <SplitButton
-                      title="AI Assistant"
+                      title="AI"
                       isLoading={isLoadingQuery}
                       leftIcon={<AutoAwesome />}
                       menuItems={[
@@ -602,7 +616,7 @@ const ProjectDetails: React.FC = () => {
                     `${project.path}/models/business`,
                   ) && (
                     <SplitButton
-                      title="AI Assistant"
+                      title="AI"
                       isLoading={isLoadingQuery}
                       menuItems={[
                         {
