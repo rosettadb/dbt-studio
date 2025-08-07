@@ -13,6 +13,7 @@ type DbtCommandType =
   | 'run'
   | 'test'
   | 'compile'
+  | 'build'
   | 'list'
   | 'debug'
   | 'docs:generate'
@@ -23,6 +24,7 @@ interface UseDbtReturn {
   run: (project: Project, path?: string) => Promise<void>;
   test: (project: Project, path?: string) => Promise<void>;
   compile: (project: Project, path?: string) => Promise<string>;
+  build: (project: Project, path?: string) => Promise<void>;
   list: (project: Project) => Promise<string>;
   debug: (project: Project) => Promise<void>;
   docsGenerate: (project: Project) => Promise<void>;
@@ -313,6 +315,12 @@ const useDbt = (successCallback?: () => void): UseDbtReturn => {
         }
       },
       [connections, setupConnectionEnv, buildCommand, runCommand],
+    ),
+
+    build: useCallback(
+      (project: Project, path?: string) =>
+        executeCommand('build', project, path ? `--select ${path}` : ''),
+      [executeCommand],
     ),
 
     list: useCallback(

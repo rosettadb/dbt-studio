@@ -47,6 +47,9 @@ export const ModelSplitButton: React.FC<ModelSplitButtonProps> = ({
 
   const {
     compile: dbtCompileModel,
+    run: dbtRunModel,
+    test: dbtTestModel,
+    build: dbtBuildModel,
     isRunning: isRunningDbtModel,
     list: dbtList,
   } = useDbt();
@@ -194,10 +197,83 @@ export const ModelSplitButton: React.FC<ModelSplitButtonProps> = ({
     }
   };
 
+  const handleRunModel = async () => {
+    if (!isDbtConfigured) {
+      toast.info('Please configure dbt path in settings');
+      return;
+    }
+
+    try {
+      // Extract model name from path for single model execution
+      const modelName = extractModelNameFromPath(modelPath);
+      if (!modelName) {
+        toast.error('Could not extract model name from path');
+        return;
+      }
+
+      // Run the single model using dbt run --select
+      await dbtRunModel(project, modelName);
+      toast.success(`Model '${modelName}' executed successfully`);
+    } catch (error) {
+      const errorMessage =
+        error instanceof Error ? error.message : 'Unknown error';
+      toast.error(`Model execution failed: ${errorMessage}`);
+    }
+  };
+
+  const handleTestModel = async () => {
+    if (!isDbtConfigured) {
+      toast.info('Please configure dbt path in settings');
+      return;
+    }
+
+    try {
+      // Extract model name from path for single model testing
+      const modelName = extractModelNameFromPath(modelPath);
+      if (!modelName) {
+        toast.error('Could not extract model name from path');
+        return;
+      }
+
+      // Run tests on the single model using dbt test --select
+      await dbtTestModel(project, modelName);
+      toast.success(`Model '${modelName}' tests completed successfully`);
+    } catch (error) {
+      const errorMessage =
+        error instanceof Error ? error.message : 'Unknown error';
+      toast.error(`Model tests failed: ${errorMessage}`);
+    }
+  };
+
+  const handleBuildModel = async () => {
+    if (!isDbtConfigured) {
+      toast.info('Please configure dbt path in settings');
+      return;
+    }
+
+    try {
+      // Extract model name from path for single model building
+      const modelName = extractModelNameFromPath(modelPath);
+      if (!modelName) {
+        toast.error('Could not extract model name from path');
+        return;
+      }
+
+      // Build the single model using dbt build --select
+      // This will run the model + tests + seeds + snapshots
+      await dbtBuildModel(project, modelName);
+      toast.success(`Model '${modelName}' built successfully with tests`);
+    } catch (error) {
+      const errorMessage =
+        error instanceof Error ? error.message : 'Unknown error';
+      toast.error(`Model build failed: ${errorMessage}`);
+    }
+  };
+
   return (
     <>
       <SplitButton
-        title="Model"
+        title="Actions"
         tooltipTitle={
           isDbtConfigured ? '' : 'Please configure dbt path in settings'
         }
@@ -219,27 +295,13 @@ export const ModelSplitButton: React.FC<ModelSplitButtonProps> = ({
         menuItems={[
           {
             name: 'Run Model',
-            onClick: () => {
-              if (!isDbtConfigured) {
-                toast.info('Please configure dbt path in settings');
-                return;
-              }
-              // TODO: Implement model run
-              toast.info('Running model');
-            },
+            onClick: handleRunModel,
             leftIcon: <Icon src={icons.dbtTm} width={16} height={16} />,
             subTitle: 'Run the dbt model',
           },
           {
             name: 'Test Model',
-            onClick: () => {
-              if (!isDbtConfigured) {
-                toast.info('Please configure dbt path in settings');
-                return;
-              }
-              // TODO: Implement model test
-              toast.info('Testing model');
-            },
+            onClick: handleTestModel,
             leftIcon: <Icon src={icons.dbtTm} width={16} height={16} />,
             subTitle: 'Run the dbt test',
           },
@@ -257,12 +319,9 @@ export const ModelSplitButton: React.FC<ModelSplitButtonProps> = ({
           },
           {
             name: 'Build Model',
-            onClick: () => {
-              // TODO: Implement model build
-              toast.info('Building model');
-            },
+            onClick: handleBuildModel,
             leftIcon: <Icon src={icons.dbtTm} width={16} height={16} />,
-            subTitle: 'Build the dbt model',
+            subTitle: 'Build model with tests and validation',
           },
         ]}
       />
