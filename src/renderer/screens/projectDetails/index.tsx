@@ -14,7 +14,6 @@ import {
   SplitButton,
   NoAiSetModal,
   ModelSplitButton,
-  BuildDbtSplitButton,
   ProjectDbtSplitButton,
 } from '../../components';
 import {
@@ -325,24 +324,14 @@ const ProjectDetails: React.FC = () => {
                   {selectedFilePath?.endsWith('.sql') &&
                     selectedFilePath?.includes('/models/') &&
                     project && (
-                      <>
-                        <BuildDbtSplitButton
-                          modelPath={selectedFilePath}
-                          project={project}
-                          isDbtConfigured={!!settings?.dbtPath}
-                          fileContent={fileContent}
-                          isRunningDbt={isRunningDbt}
-                          isRunningRosettaDbt={isRunningRosettaDbt}
-                        />
-                        <ModelSplitButton
-                          modelPath={selectedFilePath}
-                          project={project}
-                          isDbtConfigured={!!settings?.dbtPath}
-                          fileContent={fileContent}
-                          isRunningDbt={isRunningDbt}
-                          isRunningRosettaDbt={isRunningRosettaDbt}
-                        />
-                      </>
+                      <ModelSplitButton
+                        modelPath={selectedFilePath}
+                        project={project}
+                        isDbtConfigured={!!settings?.dbtPath}
+                        fileContent={fileContent}
+                        isRunningDbt={isRunningDbt}
+                        isRunningRosettaDbt={isRunningRosettaDbt}
+                      />
                     )}
                   <ProjectDbtSplitButton
                     rosettaPath={settings?.rosettaPath}
