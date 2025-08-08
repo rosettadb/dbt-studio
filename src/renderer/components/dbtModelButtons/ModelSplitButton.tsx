@@ -167,7 +167,11 @@ export const ModelSplitButton: React.FC<ModelSplitButtonProps> = ({
       });
 
       if (!queryResult.success) {
-        throw new Error(queryResult.error || 'Query execution failed');
+        const errorMessage = queryResult.error || 'Query execution failed';
+        toast.error(`Preview failed: ${errorMessage}`);
+        setPreviewError(errorMessage);
+        setIsPreviewing(false);
+        return;
       }
 
       // Convert the query result to PreviewResult format
