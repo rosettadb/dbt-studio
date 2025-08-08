@@ -19,7 +19,8 @@ type DbtCommandType =
   | 'docs:generate'
   | 'docs:serve'
   | 'deps'
-  | 'clean';
+  | 'clean'
+  | 'seed';
 
 interface UseDbtReturn {
   run: (project: Project, path?: string) => Promise<void>;
@@ -33,6 +34,7 @@ interface UseDbtReturn {
   docsServe: (project: Project) => Promise<void>;
   deps: (project: Project) => Promise<void>;
   clean: (project: Project) => Promise<void>;
+  seed: (project: Project, path?: string) => Promise<void>;
   stopCurrentCommand: () => void;
   isRunning: boolean;
   activeCommand: DbtCommandType | null;
@@ -385,6 +387,12 @@ const useDbt = (successCallback?: () => void): UseDbtReturn => {
 
     clean: useCallback(
       (project: Project) => executeCommand('clean', project),
+      [executeCommand],
+    ),
+
+    seed: useCallback(
+      (project: Project, path?: string) =>
+        executeCommand('seed', project, path ? `--select ${path}` : ''),
       [executeCommand],
     ),
 
