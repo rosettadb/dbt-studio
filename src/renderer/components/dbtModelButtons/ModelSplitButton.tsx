@@ -537,18 +537,6 @@ export const ModelSplitButton: React.FC<ModelSplitButtonProps> = ({
         leftIcon={<DirectionsRun />}
         menuItems={[
           {
-            name: 'Compile',
-            onClick: handleCompileModel,
-            leftIcon: <Icon src={icons.dbtTm} width={16} height={16} />,
-            subTitle: 'Compile the dbt model',
-          },
-          {
-            name: 'Preview',
-            onClick: handlePreviewModel,
-            leftIcon: <Icon src={icons.dbtTm} width={16} height={16} />,
-            subTitle: 'Preview the dbt model data',
-          },
-          {
             name: 'Run',
             onClick: handleRunModel,
             leftIcon: <Icon src={icons.dbtTm} width={16} height={16} />,
@@ -622,6 +610,18 @@ export const ModelSplitButton: React.FC<ModelSplitButtonProps> = ({
             leftIcon: <Icon src={icons.dbtTm} width={16} height={16} />,
             subTitle:
               'Test the model and all its upstream and downstream dependencies',
+          },
+          {
+            name: 'Compile',
+            onClick: handleCompileModel,
+            leftIcon: <Icon src={icons.dbtTm} width={16} height={16} />,
+            subTitle: 'Compile the dbt model',
+          },
+          {
+            name: 'Preview',
+            onClick: handlePreviewModel,
+            leftIcon: <Icon src={icons.dbtTm} width={16} height={16} />,
+            subTitle: 'Preview the dbt model data',
           },
         ]}
       />
