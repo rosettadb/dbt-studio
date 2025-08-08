@@ -1,6 +1,6 @@
 import React from 'react';
 import { Navigate, useNavigate } from 'react-router-dom';
-import { AutoAwesome, Cable } from '@mui/icons-material';
+import { AutoAwesome, Cable, AutoFixHigh } from '@mui/icons-material';
 import { IconButton, Tooltip } from '@mui/material';
 import { toast } from 'react-toastify';
 import yaml from 'js-yaml';
@@ -358,6 +358,7 @@ const ProjectDetails: React.FC = () => {
                             ? enhanceModel
                             : () => setNoAiSetModal(true),
                           subTitle: '',
+                          leftIcon: <AutoFixHigh />,
                         },
                       ]}
                     />
@@ -376,6 +377,7 @@ const ProjectDetails: React.FC = () => {
                             ? enhanceStagingModel
                             : () => setNoAiSetModal(true),
                           subTitle: '',
+                          leftIcon: <AutoFixHigh />,
                         },
                       ]}
                     />
@@ -393,6 +395,7 @@ const ProjectDetails: React.FC = () => {
                             ? generateDashboards
                             : () => setNoAiSetModal(true),
                           subTitle: '',
+                          leftIcon: <AutoFixHigh />,
                         },
                       ]}
                     />

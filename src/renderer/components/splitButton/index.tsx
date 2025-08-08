@@ -150,7 +150,6 @@ export const SplitButton: React.FC<Props> = ({
                 <MenuList
                   id="split-button-menu"
                   autoFocusItem
-                  dense
                   sx={{
                     paddingTop: '2px',
                     paddingBottom: '2px',
@@ -163,7 +162,7 @@ export const SplitButton: React.FC<Props> = ({
                         sx={{
                           fontSize: '0.8rem',
                           minHeight: '24px',
-                          padding: '2px 10px',
+                          padding: '4px 10px',
                           color: theme.palette.primary.main,
                           fontWeight: 500,
                           textTransform: 'none',
