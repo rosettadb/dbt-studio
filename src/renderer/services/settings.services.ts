@@ -2,6 +2,8 @@ import {
   CliUpdateResponseType,
   FileDialogProperties,
   SettingsType,
+  RosettaVersionInfo,
+  InstallResult,
 } from '../../types/backend';
 import { client } from '../config/client';
 import { SecureStorageAccount } from '../../types/frontend';
@@ -76,4 +78,26 @@ export const deleteOpenAIKey = async (): Promise<void> => {
     'secure-storage:delete',
     { account: 'openai-api-key' },
   );
+};
+
+// Rosetta version management services
+export const checkRosettaVersions = async (): Promise<RosettaVersionInfo> => {
+  const { data } = await client.get<RosettaVersionInfo>(
+    'version:rosetta:check',
+  );
+  return data;
+};
+
+export const installRosettaVersion = async (
+  version: string,
+): Promise<InstallResult> => {
+  const { data } = await client.post<string, InstallResult>(
+    'version:rosetta:install',
+    version,
+  );
+  return data;
+};
+
+export const uninstallRosetta = async (): Promise<void> => {
+  await client.get<void>('version:rosetta:uninstall');
 };

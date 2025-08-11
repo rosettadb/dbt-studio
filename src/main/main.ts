@@ -1,5 +1,6 @@
 /* eslint global-require: off, no-console: off, promise/always-return: off, no-restricted-syntax: off, no-await-in-loop: off */
 import { app, ipcMain, protocol } from 'electron';
+import fs from 'fs-extra';
 import { WindowManager } from './windows';
 import { loadEnvironment } from './utils/setupHelpers';
 import { AssetUrl } from './utils/assetUrl';
@@ -53,18 +54,50 @@ if (!gotTheLock) {
             );
           };
 
-          await updateMessage('Downloading latest Rosetta release...');
-          try {
-            await SettingsService.updateRosetta();
-          } catch (e) {
-            console.error(e);
+          // Load settings to check if this is first run
+          const settings = await SettingsService.loadSettings();
+          const isFirstRun = settings.isSetup !== 'true';
+
+          // Only auto-install Rosetta on first run
+          if (isFirstRun) {
+            await updateMessage('Downloading latest Rosetta release...');
+            try {
+              await SettingsService.updateRosetta();
+            } catch (e) {
+              console.error('Failed to install Rosetta:', e);
+            }
+          } else if (
+            !settings.rosettaPath ||
+            !fs.existsSync(settings.rosettaPath)
+          ) {
+            await updateMessage(
+              'Rosetta not configured - please set up in Settings > Rosetta',
+            );
+          } else {
+            await updateMessage(
+              `Rosetta ready - version ${settings.rosettaVersion}`,
+            );
           }
 
-          await updateMessage('Embedding Python...');
-          try {
-            await SettingsService.updatePython();
-          } catch (e) {
-            console.error(e);
+          // Only auto-install Python on first run
+          if (isFirstRun) {
+            await updateMessage('Embedding Python...');
+            try {
+              await SettingsService.updatePython();
+            } catch (e) {
+              console.error('Failed to install Python:', e);
+            }
+          } else if (
+            !settings.pythonPath ||
+            !fs.existsSync(settings.pythonPath)
+          ) {
+            await updateMessage(
+              'Python not configured - please set up in Settings > General',
+            );
+          } else {
+            await updateMessage(
+              `Python ready - version ${settings.pythonVersion}`,
+            );
           }
 
           const fakeStages = [
@@ -82,7 +115,7 @@ if (!gotTheLock) {
 
           if (windowManager) {
             windowManager.closeSplashScreen();
-            const settings = await SettingsService.loadSettings();
+            // Use already loaded settings instead of loading again
             if (settings.isSetup !== 'true') {
               await windowManager.showSetupWindow();
             } else {

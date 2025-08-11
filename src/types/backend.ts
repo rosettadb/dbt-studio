@@ -221,6 +221,32 @@ export type DataBase = {
   recentItems: RecentItem[];
 };
 
+// Rosetta Version Management Types
+export type RosettaVersionInfo = {
+  currentVersion: string | null;
+  currentPath: string | null;
+  availableVersions: {
+    version: string;
+    releaseDate: string;
+    isPrerelease: boolean;
+    downloadUrl: string;
+    isNewer: boolean;
+    isOlder: boolean;
+    releaseNotes?: string;
+  }[];
+  latestStable: string;
+  latestPrerelease?: string;
+};
+
+export type InstallResult = {
+  success: boolean;
+  version: string;
+  path: string;
+  error?: string;
+  warnings?: string[];
+  installLog?: string[];
+};
+
 export type FileNode = {
   name: string;
   path: string;

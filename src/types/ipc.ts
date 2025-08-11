@@ -9,7 +9,10 @@ export type SettingsChannels =
   | 'settings:checkCliUpdates'
   | 'settings:updateCli'
   | 'settings:getDbtPath'
-  | 'settings:usePathJoin';
+  | 'settings:usePathJoin'
+  | 'version:rosetta:check'
+  | 'version:rosetta:install'
+  | 'version:rosetta:uninstall';
 
 export type ProjectChannels =
   | 'project:get'
