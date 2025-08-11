@@ -26,6 +26,7 @@ export type ProjectChannels =
   | 'project:createFile'
   | 'project:deleteItem'
   | 'project:createFolder'
+  | 'project:copyPath'
   | 'project:select'
   | 'project:selected'
   | 'project:extractSchema'

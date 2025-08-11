@@ -184,6 +184,17 @@ export const createFolder = async (body: {
   return data;
 };
 
+export const copyPath = async (body: {
+  source: string;
+  target: string;
+}): Promise<void> => {
+  const { data } = await client.post<{
+    source: string;
+    target: string;
+  }>('project:copyPath', body);
+  return data;
+};
+
 export const deleteItem = async (body: { filePath: string }): Promise<void> => {
   const { data } = await client.post<{
     filePath: string;

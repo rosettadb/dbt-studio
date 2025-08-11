@@ -354,6 +354,14 @@ const ProjectDetails: React.FC = () => {
                 await fetchDirectories();
                 await updateStatuses();
               }}
+              copyPath={async (source, target) => {
+                await projectsServices.copyPath({
+                  source,
+                  target,
+                });
+                await fetchDirectories();
+                await updateStatuses();
+              }}
             />
           )}
         </FileTreeContainer>

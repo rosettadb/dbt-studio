@@ -121,6 +121,13 @@ const registerProjectHandlers = () => {
   );
 
   ipcMain.handle(
+    'project:copyPath',
+    async (_event, body: { source: string; target: string }) => {
+      return ProjectsService.copyPath(body);
+    },
+  );
+
+  ipcMain.handle(
     'project:deleteItem',
     async (_event, body: { filePath: string }) => {
       await ProjectsService.deleteItem(body);
