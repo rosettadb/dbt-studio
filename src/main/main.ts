@@ -79,25 +79,11 @@ if (!gotTheLock) {
             );
           }
 
-          // Only auto-install Python on first run
-          if (isFirstRun) {
-            await updateMessage('Embedding Python...');
-            try {
-              await SettingsService.updatePython();
-            } catch (e) {
-              console.error('Failed to install Python:', e);
-            }
-          } else if (
-            !settings.pythonPath ||
-            !fs.existsSync(settings.pythonPath)
-          ) {
-            await updateMessage(
-              'Python not configured - please set up in Settings > General',
-            );
-          } else {
-            await updateMessage(
-              `Python ready - version ${settings.pythonVersion}`,
-            );
+          await updateMessage('Embedding Python...');
+          try {
+            await SettingsService.updatePython();
+          } catch (e) {
+            console.error('Failed to install Python:', e);
           }
 
           const fakeStages = [
