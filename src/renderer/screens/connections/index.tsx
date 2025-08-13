@@ -27,6 +27,7 @@ import {
   Cloud as CloudIcon,
   ElectricalServices as ElectricalServicesIcon,
   Visibility,
+  Cloud,
 } from '@mui/icons-material';
 import { toast } from 'react-toastify';
 import {
@@ -359,7 +360,7 @@ const Connections: React.FC = () => {
         </Box>
 
         {totalConnections === 0 ? (
-          <Card>
+          <Card sx={{ p: 2 }}>
             <CardHeader
               title="No connections found"
               subheader="Add a connection to get started with your dbt projects."
@@ -381,7 +382,15 @@ const Connections: React.FC = () => {
                 startIcon={<Add />}
                 onClick={() => navigate('/app/add-connection')}
               >
-                Add Connection
+                New Connection
+              </Button>
+              <Button
+                variant="outlined"
+                startIcon={<Cloud />}
+                onClick={() => navigate('/app/cloud-explorer/new-connection')}
+                sx={{ ml: 2 }}
+              >
+                Add Cloud Source
               </Button>
             </CardActions>
           </Card>
