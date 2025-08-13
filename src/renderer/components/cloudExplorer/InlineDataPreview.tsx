@@ -29,6 +29,7 @@ import {
 } from '@mui/icons-material';
 import type { PreviewResult } from '../../../types/frontend';
 import { DataPreviewModal } from './DataPreviewModal';
+import { formatFileSize } from '../../utils/fileUtils';
 
 interface InlineDataPreviewProps {
   fileName: string;
@@ -36,6 +37,7 @@ interface InlineDataPreviewProps {
   loading: boolean;
   error?: string;
   onBack: () => void;
+  fileSize?: number; // Size in bytes
 }
 
 /**
@@ -66,6 +68,7 @@ export const InlineDataPreview: React.FC<InlineDataPreviewProps> = ({
   loading,
   error,
   onBack,
+  fileSize,
 }) => {
   const [currentTab, setCurrentTab] = useState(0);
   const [searchTerm, setSearchTerm] = useState('');
@@ -338,7 +341,7 @@ export const InlineDataPreview: React.FC<InlineDataPreviewProps> = ({
             <Typography variant="body2" color="text.secondary">
               File Size
             </Typography>
-            <Typography variant="h4">N/A</Typography>
+            <Typography variant="h4">{formatFileSize(fileSize)}</Typography>
           </Paper>
         </Box>
       </Box>
@@ -471,6 +474,7 @@ export const InlineDataPreview: React.FC<InlineDataPreviewProps> = ({
         previewResult={previewResult}
         loading={loading}
         error={error}
+        fileSize={fileSize}
       />
     </Box>
   );

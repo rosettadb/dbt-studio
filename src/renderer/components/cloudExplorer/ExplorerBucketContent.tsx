@@ -46,6 +46,7 @@ import {
 import type { CloudProvider } from '../../../types/frontend';
 import { InlineDataPreview } from './InlineDataPreview';
 import useSecureStorage from '../../hooks/useSecureStorage';
+import { formatFileSize, isPreviewSupported } from '../../utils/fileUtils';
 
 interface ExplorerBucketContentProps {
   connectionId: string;
@@ -65,6 +66,7 @@ export const ExplorerBucketContent: React.FC<ExplorerBucketContentProps> = ({
   const [previewFile, setPreviewFile] = useState<{
     fileName: string;
     objectName: string;
+    fileSize?: number;
   } | null>(null);
   const [secureConfig, setSecureConfig] = useState<any | null>(null);
 
@@ -209,41 +211,16 @@ export const ExplorerBucketContent: React.FC<ExplorerBucketContentProps> = ({
     return <InsertDriveFile color="action" />;
   };
 
-  const formatFileSize = (bytes: number) => {
-    if (bytes === 0) return '0 Bytes';
-    const k = 1024;
-    const sizes = ['Bytes', 'KB', 'MB', 'GB'];
-    const i = Math.floor(Math.log(bytes) / Math.log(k));
-    return `${parseFloat((bytes / k ** i).toFixed(2))} ${sizes[i]}`;
-  };
-
-  // Check if file supports DuckDB preview
-  const isPreviewSupported = (fileName: string): boolean => {
-    const extension = fileName.split('.').pop()?.toLowerCase();
-    const supportedTypes = [
-      'parquet',
-      'csv',
-      'json',
-      'jsonl',
-      'xlsx',
-      'xls',
-      'sqlite',
-      'db',
-      'arrow',
-      'avro',
-      'delta',
-      'iceberg',
-    ];
-    return supportedTypes.includes(extension || '');
-  };
-
   const handlePreview = async (objectName: string) => {
     if (!connection || !secureConfig) return;
 
     const fileName = objectName.split('/').pop() || objectName;
+    const targetObject = objects.find((obj) => obj.name === objectName);
+
     setPreviewFile({
       fileName,
       objectName,
+      fileSize: targetObject?.size,
     });
 
     // Trigger the preview data fetch
@@ -299,6 +276,7 @@ export const ExplorerBucketContent: React.FC<ExplorerBucketContentProps> = ({
         loading={previewData.isLoading}
         error={previewData.error ? String(previewData.error) : undefined}
         onBack={handleBackToFiles}
+        fileSize={previewFile.fileSize}
       />
     );
   }
@@ -477,7 +455,9 @@ export const ExplorerBucketContent: React.FC<ExplorerBucketContentProps> = ({
                           <TableCell align="right">
                             {object.isDirectory
                               ? '-'
-                              : formatFileSize(object.size)}
+                              : formatFileSize(object.size, {
+                                  showZeroAsNA: false,
+                                })}
                           </TableCell>
                           <TableCell align="right">
                             {object.updated
