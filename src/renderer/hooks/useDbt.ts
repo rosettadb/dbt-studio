@@ -141,16 +141,31 @@ const useDbt = (successCallback?: () => void): UseDbtReturn => {
         if (options.showToast) {
           toast.warning('Another dbt command is currently running');
         }
-        throw new Error('Another dbt command is currently running');
+        return;
       }
 
       try {
+        // Check if DBT path is configured
+        if (!settings?.dbtPath) {
+          if (options.showToast) {
+            toast.error(
+              'DBT path not configured in settings. Please configure it in settings.',
+            );
+          }
+          return;
+        }
+
         // Find connection
         const connection = connections.find(
           (c) => c.id === project.connectionId,
         );
         if (!connection) {
-          throw new Error('Connection not found');
+          if (options.showToast) {
+            toast.error(
+              'No database connection configured for this project. Please add a connection first.',
+            );
+          }
+          return;
         }
 
         setActiveCommand(command);
@@ -196,6 +211,7 @@ const useDbt = (successCallback?: () => void): UseDbtReturn => {
       buildCommand,
       runCommand,
       successCallback,
+      settings?.dbtPath,
     ],
   );
 
