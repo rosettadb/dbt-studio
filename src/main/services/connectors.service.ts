@@ -250,6 +250,8 @@ export default class ConnectorsService {
       throw new Error('Connection not found');
     }
 
+    const connectionToDelete = connections[connectionIndex];
+
     // Check if any projects are using this connection
     const projects = await ProjectsService.loadProjects();
     const projectsUsingConnection = projects.filter(
@@ -262,6 +264,19 @@ export default class ConnectorsService {
         .join(', ');
       throw new Error(
         `Cannot delete connection. It is currently being used by the following project(s): ${projectNames}. Please remove the connection from these projects first.`,
+      );
+    }
+
+    // Clean up connection-specific credentials from secure storage
+    try {
+      await SecureStorageService.cleanupConnectionCredentials(
+        connectionToDelete.connection.name,
+      );
+    } catch (error) {
+      // eslint-disable-next-line no-console
+      console.error(
+        `Failed to cleanup credentials for connection ${connectionToDelete.connection.name}:`,
+        error,
       );
     }
 
@@ -1083,6 +1098,22 @@ export default class ConnectorsService {
   static async deleteCloudConnection(id: string): Promise<void> {
     const db = await loadDatabaseFile();
     const sources = db.sources ?? [];
+
+    const connectionToDelete = sources.find((c) => c.id === id);
+    if (connectionToDelete) {
+      // Clean up cloud connection-specific credentials from secure storage
+      try {
+        await SecureStorageService.cleanupConnectionCredentials(
+          connectionToDelete.name,
+        );
+      } catch (error) {
+        // eslint-disable-next-line no-console
+        console.error(
+          `Failed to cleanup credentials for cloud connection ${connectionToDelete.name}:`,
+          error,
+        );
+      }
+    }
 
     const filteredSources = sources.filter((c) => c.id !== id);
 

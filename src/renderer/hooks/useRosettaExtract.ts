@@ -1,7 +1,11 @@
 import React from 'react';
 import { toast } from 'react-toastify';
 import { useCli, useSecureStorage } from './index';
-import { useGetSettings, useSetConnectionEnvVariable } from '../controllers';
+import {
+  useGetSettings,
+  useSetConnectionEnvVariable,
+  useGetConnections,
+} from '../controllers';
 import { Project } from '../../types/backend';
 import { settingsServices } from '../services';
 
@@ -13,6 +17,7 @@ const useRosettaExtract = () => {
     getBigQueryServiceAccountKey,
   } = useSecureStorage();
   const { data: settings } = useGetSettings();
+  const { data: connections = [] } = useGetConnections();
   const { error, runCommand } = useCli();
   const setEnvVariables = useSetConnectionEnvVariable();
   const [isRunning, setIsRunning] = React.useState(false);
@@ -28,35 +33,61 @@ const useRosettaExtract = () => {
   return {
     fn: async (project: Project) => {
       setIsRunning(true);
-      // Set environment variables for the project
-      const secureUserName = await getDatabaseUsername(project.name);
-      if (secureUserName) {
-        setEnvVariables.mutate({
-          key: `db-user-${project.name}`,
-          value: secureUserName || '',
-        });
+
+      // Check if connection exists
+      const connection = connections.find((c) => c.id === project.connectionId);
+      if (!connection) {
+        toast.error(
+          'No database connection configured for this project. Please add a connection first.',
+        );
+        setIsRunning(false);
+        return;
       }
-      const securePassword = await getDatabasePassword(project.name);
-      if (securePassword) {
-        setEnvVariables.mutate({
-          key: `db-password-${project.name}`,
-          value: securePassword || '',
-        });
+
+      // Set environment variables for the project using connection name
+      const connectionName = connection.connection.name;
+      const [username, password, token, bigQueryKey] = await Promise.all([
+        getDatabaseUsername(connectionName),
+        getDatabasePassword(connectionName),
+        getDatabaseToken(connectionName),
+        getBigQueryServiceAccountKey(connectionName),
+      ]);
+
+      const envPromises = [];
+      if (username) {
+        envPromises.push(
+          setEnvVariables.mutateAsync({
+            key: `db-user-${connectionName}`,
+            value: username || '',
+          }),
+        );
       }
-      const secureToken = await getDatabaseToken(project.name);
-      if (secureToken) {
-        setEnvVariables.mutate({
-          key: `db-token-${project.name}`,
-          value: secureToken || '',
-        });
+      if (password) {
+        envPromises.push(
+          setEnvVariables.mutateAsync({
+            key: `db-password-${connectionName}`,
+            value: password || '',
+          }),
+        );
       }
-      const bigQueryKey = await getBigQueryServiceAccountKey(project.name);
+      if (token) {
+        envPromises.push(
+          setEnvVariables.mutateAsync({
+            key: `db-token-${connectionName}`,
+            value: token || '',
+          }),
+        );
+      }
       if (bigQueryKey) {
-        setEnvVariables.mutate({
-          key: `db-bigquery-${project.name}`,
-          value: bigQueryKey,
-        });
+        envPromises.push(
+          setEnvVariables.mutateAsync({
+            key: `db-bigquery-${connectionName}`,
+            value: bigQueryKey,
+          }),
+        );
       }
+
+      await Promise.all(envPromises);
 
       const projectPath = await settingsServices.usePathJoin(
         project.path,

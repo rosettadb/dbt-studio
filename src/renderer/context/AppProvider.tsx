@@ -39,13 +39,22 @@ const AppProvider: React.FC<Props> = ({ children }) => {
     if (selectedProject) {
       setIsLoadingSchema(true);
       try {
+        // Clear schema first to avoid showing stale data
+        setSchema([]);
+
         const schemaRes = await projectsServices.extractSchema(selectedProject);
         setSchema(schemaRes);
-      } catch (_) {
-        /* empty */
+      } catch (error) {
+        // Clear schema on error to ensure no stale data is shown
+        setSchema([]);
+        // eslint-disable-next-line no-console
+        console.error('Failed to fetch schema:', error);
       } finally {
         setIsLoadingSchema(false);
       }
+    } else {
+      // Clear schema when no project is selected
+      setSchema([]);
     }
   };
 

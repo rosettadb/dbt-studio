@@ -28,6 +28,9 @@ type Props = {
   projectName: string;
   projectPath: string;
   onRefresh?: () => void;
+  onCopyPath: (path: string) => void;
+  copyPathData: string;
+  onPastePath: (source: string, target: string) => void;
 };
 
 const getColorByStatus = (status?: string) => {
@@ -59,6 +62,9 @@ const RenderTree: React.FC<Props> = ({
   projectName,
   projectPath,
   onRefresh,
+  onCopyPath,
+  onPastePath,
+  copyPathData,
 }) => {
   const [menuPosition, setMenuPosition] =
     React.useState<null | PopoverPosition>(null);
@@ -179,8 +185,28 @@ const RenderTree: React.FC<Props> = ({
             >
               Copy Path
             </MenuItem>
+            <MenuItem
+              onClick={(event) => {
+                event.stopPropagation();
+                onCopyPath(node.path);
+                handleMenuClose();
+              }}
+            >
+              Copy
+            </MenuItem>
             {node.type === 'folder' && (
               <>
+                {copyPathData !== '' && (
+                  <MenuItem
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      onPastePath(copyPathData, node.path);
+                      handleMenuClose();
+                    }}
+                  >
+                    Paste
+                  </MenuItem>
+                )}
                 <MenuItem
                   onClick={(event) => {
                     event.stopPropagation();
@@ -230,6 +256,9 @@ const RenderTree: React.FC<Props> = ({
           onNewFile={onNewFile}
           projectName={projectName}
           projectPath={projectPath}
+          onCopyPath={onCopyPath}
+          onPastePath={onPastePath}
+          copyPathData={copyPathData}
         />
       ))}
     </TreeItem>

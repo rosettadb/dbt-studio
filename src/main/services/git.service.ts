@@ -11,11 +11,19 @@ function getRepoNameFromUrl(url: string): string {
   const parts = url.split('/');
   let repoNameWithGit = parts[parts.length - 1];
   repoNameWithGit = repoNameWithGit.replace(/\.git$/, '');
-  let clean = repoNameWithGit.replace(/[^\w]/g, '_');
 
+  // Keep the original repository name, only replace invalid characters
+  // Allow hyphens and underscores which are common in repo names
+  let clean = repoNameWithGit.replace(/[^\w-]/g, '_');
+
+  // Convert hyphens to underscores for dbt convention
+  clean = clean.replace(/-/g, '_');
+
+  // Only add underscore prefix if it starts with a number or special character
   if (/^[\d\W]/.test(clean)) {
     clean = `_${clean}`;
   }
+
   return clean;
 }
 
@@ -336,9 +344,14 @@ export default class GitService {
       const connections =
         await ConnectorsService.parseProjectConnectionFiles(destinationPath);
 
-      const connectionId = await ConnectorsService.configureConnection({
-        connection: connections.connectionInput,
-      });
+      let connectionId: string | undefined;
+
+      // Only configure connection if connection files were found
+      if (connections.connectionInput) {
+        connectionId = await ConnectorsService.configureConnection({
+          connection: connections.connectionInput,
+        });
+      }
 
       return {
         path: destinationPath,

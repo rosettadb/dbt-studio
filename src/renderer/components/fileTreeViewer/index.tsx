@@ -15,6 +15,7 @@ type Props = {
   refreshFiles: () => void;
   onDeleteFileCallback: (filePath: string) => void;
   statuses: FileStatus[];
+  copyPath: (source: string, target: string) => Promise<void>;
 };
 
 const filterTreeAndCollectExpanded = (
@@ -58,6 +59,7 @@ const FileTreeViewer: React.FC<Props> = ({
   refreshFiles,
   onDeleteFileCallback,
   statuses,
+  copyPath,
 }) => {
   const { data: project } = useGetSelectedProject();
   const [expandedItems, setExpandedItems] = React.useState<string[]>([]);
@@ -69,6 +71,7 @@ const FileTreeViewer: React.FC<Props> = ({
   const [fileStatuses, setFileStatuses] = React.useState<
     Record<string, string>
   >({});
+  const [copyPathData, setCopyPathData] = React.useState<string>('');
 
   React.useEffect(() => {
     if (node.path) setExpandedItems([node.path]);
@@ -148,6 +151,9 @@ const FileTreeViewer: React.FC<Props> = ({
             projectName={project!.name}
             projectPath={project!.path}
             onRefresh={() => refreshFiles()}
+            onCopyPath={(path) => setCopyPathData(path)}
+            onPastePath={(source, target) => copyPath(source, target)}
+            copyPathData={copyPathData}
           />
         )}
       </StyledTreeView>

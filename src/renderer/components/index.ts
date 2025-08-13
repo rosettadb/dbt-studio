@@ -7,6 +7,7 @@ export * from './modals';
 export * from './loader';
 export * from './schemaTreeViewer';
 export * from './sqlEditor/queryHistory';
+export * from './sqlEditor/noConnectioMessage';
 export * from './terminal';
 export * from './fileIcon';
 export * from './connections';

@@ -34,7 +34,10 @@ export const SqlEditor: React.FC<Props> = ({
   );
 
   const handleRunQuery = async (selectedQuery: string) => {
-    if (!connectionInput || !selectedProject) return;
+    if (!connectionInput || !selectedProject) {
+      toast.error('No database connection configured for this project');
+      return;
+    }
 
     setError(undefined);
     setLoadingQuery(true);

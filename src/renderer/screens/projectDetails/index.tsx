@@ -1,10 +1,24 @@
 import React from 'react';
 import { Navigate, useNavigate } from 'react-router-dom';
-import { AutoAwesome, Cable, AutoFixHigh } from '@mui/icons-material';
-import { IconButton, Tooltip } from '@mui/material';
+import {
+  AutoAwesome,
+  AutoFixHigh,
+  Cable,
+  Delete,
+  Edit,
+} from '@mui/icons-material';
+import {
+  IconButton,
+  ListItemIcon,
+  ListItemText,
+  Menu,
+  MenuItem,
+  Tooltip,
+} from '@mui/material';
 import { toast } from 'react-toastify';
 import yaml from 'js-yaml';
 import {
+  AddConnectionModal,
   BusinessQueryModal,
   Editor,
   FileTreeViewer,
@@ -18,10 +32,12 @@ import {
 } from '../../components';
 import {
   useGetConnectionById,
+  useGetConnections,
   useGetFileStatuses,
   useGetProjectFiles,
   useGetSelectedProject,
   useGetSettings,
+  useUpdateProject,
 } from '../../controllers';
 import { projectsServices } from '../../services';
 import {
@@ -56,6 +72,10 @@ const ProjectDetails: React.FC = () => {
   const [fileContent, setFileContent] = React.useState<string>();
   const [businessQueryModal, setBusinessQueryModal] = React.useState(false);
   const [noAiSetModal, setNoAiSetModal] = React.useState(false);
+  const [isAddConnectionModalOpen, setIsAddConnectionModalOpen] =
+    React.useState(false);
+  const [connectionMenuAnchor, setConnectionMenuAnchor] =
+    React.useState<HTMLElement | null>(null);
 
   const {
     data: directories,
@@ -84,6 +104,37 @@ const ProjectDetails: React.FC = () => {
     project?.path ?? '',
     { enabled: !!project?.path },
   );
+
+  const { data: connections = [] } = useGetConnections();
+  const { mutate: updateProject } = useUpdateProject();
+
+  const handleAddConnection = () => {
+    setIsAddConnectionModalOpen(true);
+  };
+
+  const handleConnectionModalClose = () => {
+    setIsAddConnectionModalOpen(false);
+  };
+
+  const handleRemoveConnection = () => {
+    if (project) {
+      updateProject({
+        ...project,
+        connectionId: undefined,
+      });
+      setSelectedFilePath(undefined);
+      toast.success('Connection removed from project successfully!');
+    }
+    setConnectionMenuAnchor(null);
+  };
+
+  const handleConnectionMenuOpen = (event: React.MouseEvent<HTMLElement>) => {
+    setConnectionMenuAnchor(event.currentTarget);
+  };
+
+  const handleConnectionMenuClose = () => {
+    setConnectionMenuAnchor(null);
+  };
 
   React.useEffect(() => {
     const fetchData = async () => {
@@ -264,12 +315,12 @@ const ProjectDetails: React.FC = () => {
   }
 
   if (!project?.id) {
-    return <Navigate to="/app/connections" />;
+    return <Navigate to="/app/select-project" />;
   }
 
-  if (project?.id && !project?.connectionId) {
-    return <Navigate to={`/app/add-connection/${project.id}`} />;
-  }
+  // if (project?.id && !project?.connectionId) {
+  //   return <Navigate to={`/app/add-connection/${project.id}`} />;
+  // }
 
   const handleBusinessLayerClick = () => {
     if (isAiProviderSet) {
@@ -301,6 +352,14 @@ const ProjectDetails: React.FC = () => {
               }}
               isLoadingFiles={isLoadingDirectories}
               refreshFiles={async () => {
+                await fetchDirectories();
+                await updateStatuses();
+              }}
+              copyPath={async (source, target) => {
+                await projectsServices.copyPath({
+                  source,
+                  target,
+                });
                 await fetchDirectories();
                 await updateStatuses();
               }}
@@ -400,19 +459,69 @@ const ProjectDetails: React.FC = () => {
                       ]}
                     />
                   )}
-                  <Tooltip title="Edit database connection" placement="bottom">
-                    <IconButton
-                      onClick={() => {
-                        if (connection?.id) {
-                          navigate(`/app/edit-connection/${connection.id}`);
-                        } else {
-                          toast.error('No connection found to edit');
-                        }
-                      }}
-                    >
-                      <Cable color="primary" fontSize="small" />
-                    </IconButton>
-                  </Tooltip>
+                  {connection?.id ? (
+                    <>
+                      <Tooltip
+                        title="Database connection options"
+                        placement="bottom"
+                      >
+                        <IconButton onClick={handleConnectionMenuOpen}>
+                          <Cable color="primary" fontSize="small" />
+                        </IconButton>
+                      </Tooltip>
+                      <Menu
+                        anchorEl={connectionMenuAnchor}
+                        open={Boolean(connectionMenuAnchor)}
+                        onClose={handleConnectionMenuClose}
+                        anchorOrigin={{
+                          vertical: 'bottom',
+                          horizontal: 'right',
+                        }}
+                        transformOrigin={{
+                          vertical: 'top',
+                          horizontal: 'right',
+                        }}
+                      >
+                        <MenuItem
+                          onClick={() => {
+                            navigate(`/app/edit-connection/${connection.id}`);
+                            handleConnectionMenuClose();
+                          }}
+                        >
+                          <ListItemIcon>
+                            <Edit fontSize="small" color="primary" />
+                          </ListItemIcon>
+                          <ListItemText>Edit</ListItemText>
+                        </MenuItem>
+                        <MenuItem onClick={handleRemoveConnection}>
+                          <ListItemIcon>
+                            <Delete fontSize="small" color="error" />
+                          </ListItemIcon>
+                          <ListItemText>Remove</ListItemText>
+                        </MenuItem>
+                      </Menu>
+                    </>
+                  ) : (
+                    <Tooltip title="Add database connection" placement="bottom">
+                      <IconButton
+                        onClick={handleAddConnection}
+                        sx={{
+                          border: '1px solid',
+                          borderColor: 'divider',
+                          borderRadius: '16px',
+                          padding: '4px 12px',
+                          fontSize: '12px',
+                          color: 'text.secondary',
+                          '&:hover': {
+                            bgcolor: 'action.hover',
+                          },
+                        }}
+                      >
+                        <Cable fontSize="small" sx={{ mr: 0.5 }} />
+                        No connection
+                      </IconButton>
+                    </Tooltip>
+                  )}
                 </ButtonsContainer>
               </Header>
               {!selectedFilePath && (
@@ -454,6 +563,18 @@ const ProjectDetails: React.FC = () => {
             data={queryData}
           />
         )}
+        <AddConnectionModal
+          isOpen={isAddConnectionModalOpen}
+          onClose={handleConnectionModalClose}
+          project={project || null}
+          connections={connections}
+          onSuccess={() => {
+            // Refresh the project data
+            setSelectedFilePath(undefined);
+            refetch();
+          }}
+          onUpdateProject={updateProject}
+        />
       </Container>
     </AppLayout>
   );

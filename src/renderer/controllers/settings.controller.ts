@@ -113,3 +113,24 @@ export const useUpdateCli = (
     },
   });
 };
+
+export const useResetFactorySettings = (
+  customOptions?: UseMutationOptions<void, CustomError, void>,
+): UseMutationResult<void, CustomError, void> => {
+  const { onSuccess: onCustomSuccess, onError: onCustomError } =
+    customOptions || {};
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async () => {
+      return settingsServices.resetFactorySettings();
+    },
+    onSuccess: async (...args) => {
+      // Invalidate all queries since we're resetting everything
+      await queryClient.invalidateQueries();
+      onCustomSuccess?.(...args);
+    },
+    onError: (...args) => {
+      onCustomError?.(...args);
+    },
+  });
+};

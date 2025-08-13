@@ -10,9 +10,12 @@ import {
   loadDatabaseFile,
   loadDefaultSettings,
   updateDatabase,
+  deleteDirectory,
 } from '../utils/fileHelper';
 import { CliUpdateResponseType, SettingsType } from '../../types/backend';
 import { CliAdapter } from '../adapters';
+import { DB_FILE, initializeDataStorage } from '../utils/setupHelpers';
+import SecureStorageService from './secureStorage.service';
 
 const cliConfig: Record<
   keyof CliUpdateResponseType,
@@ -309,5 +312,64 @@ export default class SettingsService {
       version,
       status: 'installed',
     };
+  }
+
+  static async resetFactorySettings(): Promise<void> {
+    try {
+      // 1. Load current database to get project paths
+      const dataBase = await loadDatabaseFile();
+
+      // 2. Delete all project directories
+      for (const project of dataBase.projects) {
+        if (project.path && fs.existsSync(project.path)) {
+          try {
+            deleteDirectory(project.path);
+          } catch (error) {
+            // eslint-disable-next-line no-console
+            console.error(
+              `Failed to delete project directory ${project.path}:`,
+              error,
+            );
+          }
+        }
+      }
+
+      // 3. Clear all secure storage credentials
+      await this.clearAllSecureCredentials();
+
+      // 4. Delete database.json
+      if (fs.existsSync(DB_FILE)) {
+        await fs.remove(DB_FILE);
+      }
+
+      // 5. Reinitialize with default settings
+      initializeDataStorage();
+    } catch (error: unknown) {
+      const errorMessage =
+        error instanceof Error ? error.message : 'Unknown error';
+      throw new Error(`Failed to reset factory settings: ${errorMessage}`);
+    }
+  }
+
+  private static async clearAllSecureCredentials(): Promise<void> {
+    try {
+      // Get all stored credentials from keytar
+      const accounts = await SecureStorageService.findCredentials();
+
+      // Delete all found credentials
+      await Promise.all(
+        accounts.map(async (account) => {
+          try {
+            await SecureStorageService.deleteCredential(account);
+          } catch (error) {
+            // eslint-disable-next-line no-console
+            console.error(`Failed to delete credential ${account}:`, error);
+          }
+        }),
+      );
+    } catch (error) {
+      // eslint-disable-next-line no-console
+      console.error('Failed to clear secure credentials:', error);
+    }
   }
 }
