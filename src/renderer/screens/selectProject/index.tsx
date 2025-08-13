@@ -593,7 +593,7 @@ const SelectProject: React.FC = () => {
                             );
                           }
 
-                          navigate('/app');
+                          navigate('/app/loading');
                         } else {
                           toast.error('Failed to import project.');
                         }
