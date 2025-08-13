@@ -13,6 +13,7 @@ import {
 } from '@mui/material';
 import AddIcon from '@mui/icons-material/Add';
 import { Close, FolderOpen, Save } from '@mui/icons-material';
+import DatabaseIcon from '@mui/icons-material/Storage';
 
 import { styled } from '@mui/material/styles';
 
@@ -198,14 +199,29 @@ export const NewProject: React.FC<NewProjectProps> = ({
             sx={{ mb: 2 }}
           />
           <FormControl fullWidth sx={{ mb: 2 }}>
-            <InputLabel id="connection-select-label">Connection</InputLabel>
+            <InputLabel id="connection-select-label">
+              Connection (Optional)
+            </InputLabel>
             <Select
               labelId="connection-select-label"
               value={selectedConnection}
-              label="Connection"
+              label="Connection (Optional)"
               onChange={(e) => setSelectedConnection(e.target.value)}
               disabled={isLoadingConnections}
             >
+              <MenuItem value="">
+                <Box
+                  sx={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    width: '100%',
+                    color: 'text.secondary',
+                  }}
+                >
+                  <DatabaseIcon sx={{ fontSize: 20, marginRight: 1 }} />
+                  <Typography>No connection (add later)</Typography>
+                </Box>
+              </MenuItem>
               <MenuItem onClick={() => navigate('/app/add-connection')}>
                 <Box
                   sx={{

@@ -12,7 +12,9 @@ export type SettingsChannels =
   | 'settings:usePathJoin'
   | 'version:rosetta:check'
   | 'version:rosetta:install'
-  | 'version:rosetta:uninstall';
+  | 'version:rosetta:uninstall'
+  | 'settings:reset-factory'
+  | 'settings:restart';
 
 export type ProjectChannels =
   | 'project:get'
@@ -29,6 +31,7 @@ export type ProjectChannels =
   | 'project:createFile'
   | 'project:deleteItem'
   | 'project:createFolder'
+  | 'project:copyPath'
   | 'project:select'
   | 'project:selected'
   | 'project:extractSchema'

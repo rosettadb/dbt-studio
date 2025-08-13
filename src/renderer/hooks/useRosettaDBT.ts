@@ -46,7 +46,9 @@ const useRosettaDBT = (successCallback: () => Promise<void>) => {
       setIsRunning(true);
       const connection = connections.find((c) => c.id === project.connectionId);
       if (!connection) {
-        toast.error('Connection not found!');
+        toast.error(
+          'No database connection configured for this project. Please add a connection first.',
+        );
         setIsRunning(false);
         setIsSuccess(false);
         return;

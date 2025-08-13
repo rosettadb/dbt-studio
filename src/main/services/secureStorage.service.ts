@@ -18,6 +18,36 @@ class SecureStorageService {
   async deleteCredential(account: string): Promise<void> {
     await keytar.deletePassword(this.serviceName, account);
   }
+
+  async findCredentials(): Promise<string[]> {
+    const credentials = await keytar.findCredentials(this.serviceName);
+    return credentials.map((cred) => cred.account);
+  }
+
+  /**
+   * Clean up all credentials associated with a specific connection
+   */
+  async cleanupConnectionCredentials(connectionName: string): Promise<void> {
+    const credentialTypes = [
+      `cloud-gcs-${connectionName}`,
+      `cloud-aws-${connectionName}`,
+      `cloud-azure-${connectionName}`,
+    ];
+
+    await Promise.all(
+      credentialTypes.map(async (credentialType) => {
+        try {
+          await this.deleteCredential(credentialType);
+        } catch (error) {
+          // eslint-disable-next-line no-console
+          console.error(
+            `Failed to delete credential ${credentialType}:`,
+            error,
+          );
+        }
+      }),
+    );
+  }
 }
 
 export default new SecureStorageService('dbt-studio');

@@ -1,9 +1,10 @@
-import { BrowserWindow, dialog, ipcMain } from 'electron';
+import { BrowserWindow, dialog, ipcMain, app } from 'electron';
 import { initializeDataStorage } from '../utils/setupHelpers';
 import { FileDialogProperties, SettingsType } from '../../types/backend';
 import { SettingsService } from '../services';
+import { SettingsChannels } from '../../types/ipc';
 
-const handlerChannels = [
+const handlerChannels: SettingsChannels[] = [
   'settings:load',
   'settings:save',
   'settings:checkCliUpdates',
@@ -12,6 +13,8 @@ const handlerChannels = [
   'version:rosetta:check',
   'version:rosetta:install',
   'version:rosetta:uninstall',
+  'settings:reset-factory',
+  'settings:restart',
 ];
 
 const removeSettingsIpcHandlers = () => {
@@ -78,6 +81,15 @@ const registerSettingsHandlers = (mainWindow: BrowserWindow) => {
 
   ipcMain.handle('version:rosetta:uninstall', async () => {
     return SettingsService.uninstallRosetta();
+  });
+
+  ipcMain.handle('settings:reset-factory', async () => {
+    return SettingsService.resetFactorySettings();
+  });
+
+  ipcMain.handle('settings:restart', async () => {
+    app.relaunch();
+    app.exit(0);
   });
 };
 

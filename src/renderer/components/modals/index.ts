@@ -1,3 +1,4 @@
+export * from './addConnectionModal';
 export * from './newFileModal';
 export * from './confirmationModal';
 export * from './businessQueryModal';
@@ -8,3 +9,5 @@ export * from './newBranchModal';
 export * from './cloneRepoModal';
 export * from './noAiSetModal';
 export * from './updateDialog';
+export * from './CompileModal';
+export * from './resetFactoryModal';

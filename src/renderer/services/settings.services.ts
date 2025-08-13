@@ -80,6 +80,14 @@ export const deleteOpenAIKey = async (): Promise<void> => {
   );
 };
 
+export const resetFactorySettings = async (): Promise<void> => {
+  await client.post<void, void>('settings:reset-factory', undefined);
+};
+
+export const restartApp = async (): Promise<void> => {
+  await client.post<void, void>('settings:restart', undefined);
+};
+
 // Rosetta version management services
 export const checkRosettaVersions = async (): Promise<RosettaVersionInfo> => {
   const { data } = await client.get<RosettaVersionInfo>(
