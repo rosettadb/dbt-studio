@@ -130,12 +130,7 @@ const Settings: React.FC = () => {
           />
         );
       case 'rosetta':
-        return (
-          <RosettaSettings
-            settings={localSettings}
-            onSettingsChange={handleChange}
-          />
-        );
+        return <RosettaSettings settings={localSettings} />;
       case 'installation':
         return <InstallationSettings />;
       case 'about':
@@ -280,11 +275,12 @@ const Settings: React.FC = () => {
               <Close />
             </IconButton>
           </div>
-          <div style={{ maxWidth: '600px' }}>{renderContent()}</div>
+          <div style={{ maxWidth: '800px' }}>{renderContent()}</div>
 
           {currentSection !== 'about' &&
             currentSection !== 'installation' &&
-            currentSection !== 'ai-providers' && (
+            currentSection !== 'ai-providers' &&
+            currentSection !== 'rosetta' && (
               <Box sx={{ mt: 3 }}>
                 <Button
                   type="submit"

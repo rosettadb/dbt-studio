@@ -10,6 +10,9 @@ export type SettingsChannels =
   | 'settings:updateCli'
   | 'settings:getDbtPath'
   | 'settings:usePathJoin'
+  | 'version:rosetta:check'
+  | 'version:rosetta:install'
+  | 'version:rosetta:uninstall'
   | 'settings:reset-factory'
   | 'settings:restart';
 

@@ -12,7 +12,12 @@ import {
   updateDatabase,
   deleteDirectory,
 } from '../utils/fileHelper';
-import { CliUpdateResponseType, SettingsType } from '../../types/backend';
+import {
+  CliUpdateResponseType,
+  SettingsType,
+  RosettaVersionInfo,
+  InstallResult,
+} from '../../types/backend';
 import { CliAdapter } from '../adapters';
 import { DB_FILE, initializeDataStorage } from '../utils/setupHelpers';
 import SecureStorageService from './secureStorage.service';
@@ -371,5 +376,213 @@ export default class SettingsService {
       // eslint-disable-next-line no-console
       console.error('Failed to clear secure credentials:', error);
     }
+  }
+
+  // Rosetta version management
+  static async checkRosettaVersions(): Promise<RosettaVersionInfo> {
+    const settings = await this.loadSettings();
+    const currentVersion = settings.rosettaVersion;
+    const currentPath = settings.rosettaPath;
+
+    try {
+      // Get all available versions from GitHub releases
+      const response = await axios.get(
+        'https://api.github.com/repos/adaptivescale/rosetta/releases',
+      );
+      const releases = response.data;
+
+      const availableVersions = releases.map((release: any) => {
+        const version = release.tag_name.replace(/^v/, '');
+        return {
+          version,
+          releaseDate: release.published_at,
+          isPrerelease: release.prerelease,
+          downloadUrl: this.getRosettaDownloadUrl(release),
+          isNewer: this.compareVersions(version, currentVersion || '0.0.0') > 0,
+          isOlder: this.compareVersions(version, currentVersion || '0.0.0') < 0,
+          releaseNotes: release.body,
+        };
+      });
+
+      const latestStable = releases
+        .find((r: any) => !r.prerelease)
+        ?.tag_name.replace(/^v/, '');
+      const latestPrerelease = releases
+        .find((r: any) => r.prerelease)
+        ?.tag_name.replace(/^v/, '');
+
+      return {
+        currentVersion,
+        currentPath,
+        availableVersions,
+        latestStable,
+        latestPrerelease,
+      };
+    } catch (error) {
+      // eslint-disable-next-line no-console
+      console.error('Failed to check Rosetta versions:', error);
+      return {
+        currentVersion,
+        currentPath,
+        availableVersions: [],
+        latestStable: '',
+        latestPrerelease: undefined,
+      };
+    }
+  }
+
+  static async installRosettaVersion(version: string): Promise<InstallResult> {
+    try {
+      const settings = await this.loadSettings();
+      const { platform, arch } = process;
+
+      const osMap: Record<string, string> = {
+        darwin: 'mac',
+        win32: 'win',
+        linux: 'linux',
+      };
+
+      const archMap: Record<string, string> = {
+        arm64: 'aarch64',
+        x64: 'x64',
+      };
+
+      const osName = osMap[platform];
+      const archName = archMap[arch];
+
+      if (!osName || !archName) {
+        throw new Error(`Unsupported OS or architecture: ${platform}-${arch}`);
+      }
+
+      const zipName = `rosetta-${version}-${osName}_${archName}-with-drivers.zip`;
+      const downloadUrl = `https://github.com/adaptivescale/rosetta/releases/download/v${version}/${zipName}`;
+
+      let rosettaBasePath: string;
+      switch (platform) {
+        case 'darwin':
+        case 'linux':
+          rosettaBasePath = path.join(os.homedir(), '.rosetta');
+          break;
+        case 'win32':
+          rosettaBasePath = 'C:/rosetta';
+          break;
+        default:
+          throw new Error(`Unsupported platform: ${platform}`);
+      }
+
+      const extractPath = path.join(
+        rosettaBasePath,
+        `rosetta-${version}-${osName}_${archName}`,
+      );
+      const binPath = path.join(
+        extractPath,
+        `rosetta-${version}-${osName}_${archName}`,
+        'bin',
+      );
+      const binaryPath = path.join(binPath, 'rosetta');
+
+      // Remove old installation if exists
+      if (settings.rosettaPath && fs.existsSync(settings.rosettaPath)) {
+        const oldRoot = path.resolve(settings.rosettaPath, '../../');
+        await fs.remove(oldRoot);
+      }
+
+      await fs.mkdirp(rosettaBasePath);
+      const zipPath = path.join(rosettaBasePath, zipName);
+
+      // Download the release
+      const response = await axios.get(downloadUrl, {
+        responseType: 'arraybuffer',
+      });
+      await fs.writeFile(zipPath, response.data);
+
+      // Extract the archive
+      const zip = new AdmZip(zipPath);
+      zip.extractAllTo(extractPath, true);
+
+      // Set executable permissions
+      const binFiles = await fs.readdir(binPath);
+      await Promise.all(
+        binFiles.map(async (file) => {
+          const filePath = path.join(binPath, file);
+          await fs.chmod(filePath, 0o755);
+        }),
+      );
+
+      // Update settings
+      settings.rosettaVersion = version;
+      settings.rosettaPath = binaryPath;
+      await this.saveSettings(settings);
+
+      // Clean up download file
+      await fs.remove(zipPath);
+
+      return {
+        success: true,
+        version,
+        path: binaryPath,
+      };
+    } catch (error) {
+      return {
+        success: false,
+        version,
+        path: '',
+        error:
+          error instanceof Error ? error.message : 'Unknown error occurred',
+      };
+    }
+  }
+
+  static async uninstallRosetta(): Promise<void> {
+    const settings = await this.loadSettings();
+    if (settings.rosettaPath && fs.existsSync(settings.rosettaPath)) {
+      const rosettaRoot = path.resolve(settings.rosettaPath, '../../');
+      await fs.remove(rosettaRoot);
+    }
+
+    settings.rosettaVersion = '';
+    settings.rosettaPath = '';
+    await this.saveSettings(settings);
+  }
+
+  private static getRosettaDownloadUrl(release: any): string {
+    const { platform, arch } = process;
+    const osMap: Record<string, string> = {
+      darwin: 'mac',
+      win32: 'win',
+      linux: 'linux',
+    };
+
+    const archMap: Record<string, string> = {
+      arm64: 'aarch64',
+      x64: 'x64',
+    };
+
+    const osName = osMap[platform];
+    const archName = archMap[arch];
+    const version = release.tag_name.replace(/^v/, '');
+
+    if (!osName || !archName) {
+      return '';
+    }
+
+    return `https://github.com/adaptivescale/rosetta/releases/download/v${version}/rosetta-${version}-${osName}_${archName}-with-drivers.zip`;
+  }
+
+  private static compareVersions(version1: string, version2: string): number {
+    const v1Parts = version1.split('.').map(Number);
+    const v2Parts = version2.split('.').map(Number);
+
+    const maxLength = Math.max(v1Parts.length, v2Parts.length);
+
+    for (let i = 0; i < maxLength; i += 1) {
+      const v1Part = v1Parts[i] || 0;
+      const v2Part = v2Parts[i] || 0;
+
+      if (v1Part > v2Part) return 1;
+      if (v1Part < v2Part) return -1;
+    }
+
+    return 0;
   }
 }

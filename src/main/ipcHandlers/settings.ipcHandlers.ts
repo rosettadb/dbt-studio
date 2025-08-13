@@ -10,6 +10,9 @@ const handlerChannels: SettingsChannels[] = [
   'settings:checkCliUpdates',
   'settings:updateCli',
   'settings:dialog',
+  'version:rosetta:check',
+  'version:rosetta:install',
+  'version:rosetta:uninstall',
   'settings:reset-factory',
   'settings:restart',
 ];
@@ -66,6 +69,19 @@ const registerSettingsHandlers = (mainWindow: BrowserWindow) => {
       return result.filePaths;
     },
   );
+
+  // Rosetta version management handlers
+  ipcMain.handle('version:rosetta:check', async () => {
+    return SettingsService.checkRosettaVersions();
+  });
+
+  ipcMain.handle('version:rosetta:install', async (_event, version: string) => {
+    return SettingsService.installRosettaVersion(version);
+  });
+
+  ipcMain.handle('version:rosetta:uninstall', async () => {
+    return SettingsService.uninstallRosetta();
+  });
 
   ipcMain.handle('settings:reset-factory', async () => {
     return SettingsService.resetFactorySettings();
