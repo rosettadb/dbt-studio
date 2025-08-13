@@ -8,3 +8,4 @@ export * from './newBranchModal';
 export * from './cloneRepoModal';
 export * from './noAiSetModal';
 export * from './updateDialog';
+export * from './resetFactoryModal';

@@ -29,3 +29,8 @@ npm-debug.log.*
 *.scss.d.ts
 data/*
 bin/rosetta/*
+
+
+# Ai Context
+.github/copilot-instructions.md
+docs/ai-context/*
