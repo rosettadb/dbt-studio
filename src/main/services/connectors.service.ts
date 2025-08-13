@@ -396,7 +396,7 @@ export default class ConnectorsService {
           name: projectName,
           databaseName:
             connection.type === 'duckdb'
-              ? connection.short_database_path
+              ? connection.short_database_path.replace(/\.duckdb$/, '')
               : connection.database,
           schemaName: connection.schema,
           dbType: connection.type,
