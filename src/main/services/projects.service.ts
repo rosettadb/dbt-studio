@@ -16,6 +16,7 @@ import {
 import {
   createNewFile,
   createNewFolder,
+  copyPath,
   createZipArchive,
   deleteDirectory,
   deleteItem,
@@ -415,6 +416,10 @@ export default class ProjectsService {
 
   static createFolder({ filePath, name }: { filePath: string; name: string }) {
     createNewFolder(filePath, name);
+  }
+
+  static copyPath({ source, target }: { source: string; target: string }) {
+    copyPath(source, target);
   }
 
   static async deleteItem({ filePath }: { filePath: string }) {
