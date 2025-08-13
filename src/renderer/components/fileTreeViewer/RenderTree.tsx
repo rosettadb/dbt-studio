@@ -1,7 +1,6 @@
 import React from 'react';
 import { TreeItem } from '@mui/x-tree-view';
 import {
-  CircularProgress,
   IconButton,
   Menu,
   MenuItem,
@@ -10,8 +9,6 @@ import {
 } from '@mui/material';
 import {
   MoreVert,
-  PlayArrow,
-  Speed,
   NoteAddOutlined,
   CreateNewFolderOutlined,
   RefreshOutlined,
@@ -28,8 +25,6 @@ type Props = {
   onDelete: (path: string) => void;
   onNewFolder: (path: string) => void;
   onNewFile: (path: string) => void;
-  onDbtRun: (file: FileNode) => Promise<void>;
-  onDbtTest: (file: FileNode) => Promise<void>;
   projectName: string;
   projectPath: string;
   onRefresh?: () => void;
@@ -64,8 +59,6 @@ const RenderTree: React.FC<Props> = ({
   onDelete,
   onNewFolder,
   onNewFile,
-  onDbtRun,
-  onDbtTest,
   projectName,
   projectPath,
   onRefresh,
@@ -75,7 +68,6 @@ const RenderTree: React.FC<Props> = ({
 }) => {
   const [menuPosition, setMenuPosition] =
     React.useState<null | PopoverPosition>(null);
-  const [isRunning, setIsRunning] = React.useState(false);
 
   const fileStatus = fileStatuses[node.path];
   const labelColor = getColorByStatus(fileStatus);
@@ -159,81 +151,6 @@ const RenderTree: React.FC<Props> = ({
                 </Tooltip>
               </IconButton>
             )}
-            {/* Add run button for staging folder */}
-            {node.type === 'folder' &&
-              node.path.includes(`/${projectName}/models/`) &&
-              node.name === 'staging' && (
-                <IconButton
-                  disabled={isRunning}
-                  onClick={async (event) => {
-                    event.stopPropagation();
-                    setIsRunning(true);
-                    await onDbtRun(node);
-                    setIsRunning(false);
-                  }}
-                >
-                  {isRunning ? (
-                    <CircularProgress size={16} color="primary" />
-                  ) : (
-                    <Tooltip title="dbt run --select staging">
-                      <PlayArrow
-                        sx={{ height: 16, width: 16 }}
-                        color="primary"
-                      />
-                    </Tooltip>
-                  )}
-                </IconButton>
-              )}
-            {/* Existing SQL file run button */}
-            {node.path.includes(`/${projectName}/models/`) &&
-              node.path.endsWith('sql') && (
-                <IconButton
-                  disabled={isRunning}
-                  onClick={async (event) => {
-                    event.stopPropagation();
-                    setIsRunning(true);
-                    await onDbtRun(node);
-                    setIsRunning(false);
-                  }}
-                >
-                  {isRunning ? (
-                    <CircularProgress size={16} color="primary" />
-                  ) : (
-                    <Tooltip
-                      title={`dbt run --select ${node.path.split('/').slice(-2).join('/')}`}
-                    >
-                      <PlayArrow
-                        sx={{ height: 16, width: 16 }}
-                        color="primary"
-                      />
-                    </Tooltip>
-                  )}
-                </IconButton>
-              )}
-            {/* Existing YAML test button */}
-            {node.path.includes(`/${projectName}/models/`) &&
-              !node.path.endsWith('models/model.yaml') &&
-              node.path.endsWith('yaml') && (
-                <IconButton
-                  disabled={isRunning}
-                  onClick={async (event) => {
-                    event.stopPropagation();
-                    setIsRunning(true);
-                    await onDbtTest(node);
-                    setIsRunning(false);
-                  }}
-                >
-                  {isRunning ? (
-                    <CircularProgress size={16} color="primary" />
-                  ) : (
-                    <Tooltip
-                      title={`dbt test --select ${node.path.split('/').slice(-2).join('/')}`}
-                    >
-                      <Speed sx={{ height: 16, width: 16 }} color="primary" />
-                    </Tooltip>
-                  )}
-                </IconButton>
-              )}
             {node.path !== projectPath && (
               <IconButton size="small" onClick={handleMenuOpen}>
                 <MoreVert fontSize="small" />
@@ -337,8 +254,6 @@ const RenderTree: React.FC<Props> = ({
           onDelete={onDelete}
           onNewFolder={onNewFolder}
           onNewFile={onNewFile}
-          onDbtRun={onDbtRun}
-          onDbtTest={onDbtTest}
           projectName={projectName}
           projectPath={projectPath}
           onCopyPath={onCopyPath}

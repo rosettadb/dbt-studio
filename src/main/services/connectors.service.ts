@@ -273,6 +273,7 @@ export default class ConnectorsService {
         connectionToDelete.connection.name,
       );
     } catch (error) {
+      // eslint-disable-next-line no-console
       console.error(
         `Failed to cleanup credentials for connection ${connectionToDelete.connection.name}:`,
         error,
@@ -1106,6 +1107,7 @@ export default class ConnectorsService {
           connectionToDelete.name,
         );
       } catch (error) {
+        // eslint-disable-next-line no-console
         console.error(
           `Failed to cleanup credentials for cloud connection ${connectionToDelete.name}:`,
           error,

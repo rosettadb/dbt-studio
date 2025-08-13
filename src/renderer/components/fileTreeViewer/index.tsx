@@ -13,8 +13,6 @@ type Props = {
   onFileSelect: (file: FileNode) => void;
   isLoadingFiles: boolean;
   refreshFiles: () => void;
-  onDbtRun: (file: FileNode) => Promise<void>;
-  onDbtTest: (file: FileNode) => Promise<void>;
   onDeleteFileCallback: (filePath: string) => void;
   statuses: FileStatus[];
   copyPath: (source: string, target: string) => Promise<void>;
@@ -59,8 +57,6 @@ const FileTreeViewer: React.FC<Props> = ({
   onFileSelect,
   isLoadingFiles,
   refreshFiles,
-  onDbtRun,
-  onDbtTest,
   onDeleteFileCallback,
   statuses,
   copyPath,
@@ -152,8 +148,6 @@ const FileTreeViewer: React.FC<Props> = ({
             onDelete={(path) => setDeleteModal(path)}
             onNewFile={(path) => setFileModal(path)}
             onNewFolder={(path) => setFolderModal(path)}
-            onDbtRun={onDbtRun}
-            onDbtTest={onDbtTest}
             projectName={project!.name}
             projectPath={project!.path}
             onRefresh={() => refreshFiles()}

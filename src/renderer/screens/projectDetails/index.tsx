@@ -2,19 +2,18 @@ import React from 'react';
 import { Navigate, useNavigate } from 'react-router-dom';
 import {
   AutoAwesome,
+  AutoFixHigh,
   Cable,
-  Edit,
   Delete,
-  PlayCircleOutline,
-  StopCircleOutlined,
+  Edit,
 } from '@mui/icons-material';
 import {
   IconButton,
-  Tooltip,
-  Menu,
-  MenuItem,
   ListItemIcon,
   ListItemText,
+  Menu,
+  MenuItem,
+  Tooltip,
 } from '@mui/material';
 import { toast } from 'react-toastify';
 import yaml from 'js-yaml';
@@ -27,8 +26,9 @@ import {
   Loader,
   TerminalLayout,
   SplitButton,
-  Icon,
   NoAiSetModal,
+  ModelSplitButton,
+  ProjectDbtSplitButton,
 } from '../../components';
 import {
   useGetConnectionById,
@@ -50,13 +50,11 @@ import {
   NoFileSelected,
   SelectedFile,
 } from './styles';
-import { useRosettaDBT, useDbt, useProcess } from '../../hooks';
+import { useRosettaDBT, useDbt } from '../../hooks';
 import { GenerateDashboardResponseType, Project } from '../../../types/backend';
 import { AI_PROMPTS } from '../../config/constants';
 import { utils } from '../../helpers';
 import { AppLayout } from '../../layouts';
-import { icons } from '../../../../assets';
-import { convertToSourcePath } from '../../helpers/utils';
 import { AppContext } from '../../context';
 
 const ProjectDetails: React.FC = () => {
@@ -78,7 +76,6 @@ const ProjectDetails: React.FC = () => {
     React.useState(false);
   const [connectionMenuAnchor, setConnectionMenuAnchor] =
     React.useState<HTMLElement | null>(null);
-  const { start, stop, isRunning } = useProcess();
 
   const {
     data: directories,
@@ -99,14 +96,7 @@ const ProjectDetails: React.FC = () => {
     },
   );
 
-  const {
-    run: dbtRun,
-    test: dbtTest,
-    compile: dbtCompile,
-    debug: dbtDebug,
-    docsGenerate: dbtDocsGenerate,
-    isRunning: isRunningDbt,
-  } = useDbt(async () => {
+  const { isRunning: isRunningDbt } = useDbt(async () => {
     await fetchDirectories();
   });
 
@@ -154,10 +144,6 @@ const ProjectDetails: React.FC = () => {
     };
     fetchData();
   }, [project]);
-
-  const isDbtConfigured = React.useMemo(() => {
-    return settings?.dbtPath && settings.dbtPath.trim() !== '';
-  }, [settings?.dbtPath]);
 
   const enhanceModel = async () => {
     if (!isAiProviderSet) {
@@ -364,38 +350,6 @@ const ProjectDetails: React.FC = () => {
                 setSelectedFilePath(fileNode.path);
                 setFileContent(content);
               }}
-              onDbtRun={async (fileNode) => {
-                let filePath = fileNode.path;
-                const modelsPathIndex = filePath.indexOf(
-                  `${project?.name}/models/`,
-                );
-                if (modelsPathIndex !== -1) {
-                  filePath = filePath.slice(
-                    modelsPathIndex + `${project?.name}/models/`.length,
-                  );
-                }
-                if (filePath.endsWith('.sql')) {
-                  filePath = filePath.slice(0, -4);
-                }
-                const dbtPath = filePath.replace(/\//g, '.');
-                await dbtRun(project, dbtPath);
-              }}
-              onDbtTest={async (fileNode) => {
-                let filePath = fileNode.path;
-                const modelsPathIndex = filePath.indexOf(
-                  `${project?.name}/models/`,
-                );
-                if (modelsPathIndex !== -1) {
-                  filePath = filePath.slice(
-                    modelsPathIndex + `${project?.name}/models/`.length,
-                  );
-                }
-                if (filePath.endsWith('.yaml')) {
-                  filePath = filePath.slice(0, -5);
-                }
-                const dbtSelection = convertToSourcePath(filePath);
-                await dbtTest(project, dbtSelection);
-              }}
               isLoadingFiles={isLoadingDirectories}
               refreshFiles={async () => {
                 await fetchDirectories();
@@ -425,203 +379,35 @@ const ProjectDetails: React.FC = () => {
                   </SelectedFile>
                 )}
                 <ButtonsContainer>
-                  <SplitButton
-                    title="Actions"
-                    tooltipTitle={
-                      isDbtConfigured
-                        ? ''
-                        : 'Please configure dbt path in settings'
-                    }
-                    disabled={isRunningDbt || isRunningRosettaDbt}
-                    isLoading={isRunningDbt || isRunningRosettaDbt}
-                    leftIcon={<PlayCircleOutline />}
-                    menuItems={[
-                      {
-                        name: 'Staging Layer',
-                        onClick: () => {
-                          if (!settings?.rosettaPath) {
-                            toast.info(
-                              'Please configure RosettaDB path in settings',
-                            );
-                            return;
-                          }
-                          rosettaDbt(project, '');
-                        },
-                        leftIcon: (
-                          <img
-                            src={icons.rosetta}
-                            alt="Rosetta"
-                            width={18}
-                            height={18}
-                            style={{
-                              display: 'inline-block',
-                              objectFit: 'contain',
-                            }}
-                          />
-                        ),
-                        subTitle:
-                          'Generate dbt Staging Layer (runs extract first)',
-                      },
-                      {
-                        name: 'Incremental/Enhanced Layer',
-                        onClick: () => {
-                          if (!settings?.rosettaPath) {
-                            toast.info(
-                              'Please configure RosettaDB path in settings',
-                            );
-                            return;
-                          }
-                          rosettaDbt(project, '--incremental');
-                        },
-                        leftIcon: (
-                          <img
-                            src={icons.rosetta}
-                            alt="Rosetta"
-                            width={18}
-                            height={18}
-                            style={{
-                              display: 'inline-block',
-                              objectFit: 'contain',
-                            }}
-                          />
-                        ),
-                        subTitle: 'Generate dbt Incremental Layer',
-                      },
-                      {
-                        name: 'Business Layer',
-                        // onClick: handleBusinessLayerClick,
-                        onClick: () => {
-                          if (!settings?.rosettaPath) {
-                            toast.info(
-                              'Please configure RosettaDB path in settings',
-                            );
-                            return;
-                          }
-                          handleBusinessLayerClick();
-                        },
-                        leftIcon: (
-                          <img
-                            src={icons.rosetta}
-                            alt="Rosetta"
-                            width={18}
-                            height={18}
-                            style={{
-                              display: 'inline-block',
-                              objectFit: 'contain',
-                            }}
-                          />
-                        ),
-                        subTitle: 'Generate dbt Business Layer',
-                      },
-                      {
-                        name: 'Run',
-                        onClick: () => {
-                          if (!isDbtConfigured) {
-                            toast.info('Please configure dbt path in settings');
-                            return;
-                          }
-                          dbtRun(project);
-                        },
-                        leftIcon: (
-                          <Icon src={icons.dbtTm} width={16} height={16} />
-                        ),
-                        subTitle: 'Run the dbt project',
-                      },
-                      {
-                        name: 'Test',
-                        onClick: () => {
-                          if (!isDbtConfigured) {
-                            toast.info('Please configure dbt path in settings');
-                            return;
-                          }
-                          dbtTest(project);
-                        },
-                        leftIcon: (
-                          <Icon src={icons.dbtTm} width={16} height={16} />
-                        ),
-                        subTitle: 'Run the dbt test',
-                      },
-                      {
-                        name: 'Compile',
-                        onClick: () => {
-                          if (!isDbtConfigured) {
-                            toast.info('Please configure dbt path in settings');
-                            return;
-                          }
-                          dbtCompile(project);
-                        },
-                        leftIcon: (
-                          <Icon src={icons.dbtTm} width={16} height={16} />
-                        ),
-                        subTitle: 'Compile the dbt project',
-                      },
-                      {
-                        name: 'Debug',
-                        onClick: () => {
-                          if (!isDbtConfigured) {
-                            toast.info('Please configure dbt path in settings');
-                            return;
-                          }
-                          dbtDebug(project);
-                        },
-                        leftIcon: (
-                          <Icon src={icons.dbtTm} width={16} height={16} />
-                        ),
-                        subTitle: 'Debug dbt connections and project',
-                      },
-                      {
-                        name: 'Generate Docs',
-                        onClick: () => {
-                          if (!isDbtConfigured) {
-                            toast.info('Please configure dbt path in settings');
-                            return;
-                          }
-                          dbtDocsGenerate(project);
-                        },
-                        leftIcon: (
-                          <Icon src={icons.dbtTm} width={16} height={16} />
-                        ),
-                        subTitle: 'Generate documentation for the project',
-                      },
-                      {
-                        name: (
-                          <div
-                            style={{
-                              display: 'flex',
-                              alignItems: 'center',
-                              gap: 4,
-                            }}
-                          >
-                            <span>Serve Docs</span>
-                            {isRunning ? (
-                              <StopCircleOutlined />
-                            ) : (
-                              <PlayCircleOutline />
-                            )}
-                          </div>
-                        ),
-                        onClick: () => {
-                          if (isRunning) {
-                            stop();
-                            return;
-                          }
-                          start(
-                            `cd "${project.path}" && "${settings?.dbtPath}" docs serve`,
-                            connection?.connection?.name ?? '',
-                          );
-                        },
-                        leftIcon: (
-                          <Icon src={icons.dbtTm} width={16} height={16} />
-                        ),
-                        subTitle: 'Serve the documentation website',
-                      },
-                    ]}
+                  {/* Single model command buttons - only for .sql files */}
+                  {selectedFilePath?.endsWith('.sql') &&
+                    selectedFilePath?.includes('/models/') &&
+                    project && (
+                      <ModelSplitButton
+                        modelPath={selectedFilePath}
+                        project={project}
+                        isDbtConfigured={!!settings?.dbtPath}
+                        fileContent={fileContent}
+                        isRunningDbt={isRunningDbt}
+                        isRunningRosettaDbt={isRunningRosettaDbt}
+                      />
+                    )}
+                  <ProjectDbtSplitButton
+                    rosettaPath={settings?.rosettaPath}
+                    dbtPath={settings?.dbtPath}
+                    project={project}
+                    isDbtConfigured={!!settings?.dbtPath}
+                    isRunningDbt={isRunningDbt}
+                    isRunningRosettaDbt={isRunningRosettaDbt}
+                    connection={connection}
+                    rosettaDbt={rosettaDbt}
+                    handleBusinessLayerClick={handleBusinessLayerClick}
                   />
                   {selectedFilePath?.includes(
                     `${project.path}/models/enhanced`,
                   ) && (
                     <SplitButton
-                      title="AI Assistant"
+                      title="AI"
                       isLoading={isLoadingQuery}
                       leftIcon={<AutoAwesome />}
                       menuItems={[
@@ -631,6 +417,7 @@ const ProjectDetails: React.FC = () => {
                             ? enhanceModel
                             : () => setNoAiSetModal(true),
                           subTitle: '',
+                          leftIcon: <AutoFixHigh />,
                         },
                       ]}
                     />
@@ -639,7 +426,7 @@ const ProjectDetails: React.FC = () => {
                     `${project.path}/models/staging`,
                   ) && (
                     <SplitButton
-                      title="AI Assistant"
+                      title="AI"
                       isLoading={isLoadingQuery}
                       leftIcon={<AutoAwesome />}
                       menuItems={[
@@ -649,6 +436,7 @@ const ProjectDetails: React.FC = () => {
                             ? enhanceStagingModel
                             : () => setNoAiSetModal(true),
                           subTitle: '',
+                          leftIcon: <AutoFixHigh />,
                         },
                       ]}
                     />
@@ -657,7 +445,7 @@ const ProjectDetails: React.FC = () => {
                     `${project.path}/models/business`,
                   ) && (
                     <SplitButton
-                      title="AI Assistant"
+                      title="AI"
                       isLoading={isLoadingQuery}
                       menuItems={[
                         {
@@ -666,6 +454,7 @@ const ProjectDetails: React.FC = () => {
                             ? generateDashboards
                             : () => setNoAiSetModal(true),
                           subTitle: '',
+                          leftIcon: <AutoFixHigh />,
                         },
                       ]}
                     />

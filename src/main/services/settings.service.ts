@@ -325,6 +325,7 @@ export default class SettingsService {
           try {
             deleteDirectory(project.path);
           } catch (error) {
+            // eslint-disable-next-line no-console
             console.error(
               `Failed to delete project directory ${project.path}:`,
               error,
@@ -361,13 +362,14 @@ export default class SettingsService {
           try {
             await SecureStorageService.deleteCredential(account);
           } catch (error) {
+            // eslint-disable-next-line no-console
             console.error(`Failed to delete credential ${account}:`, error);
           }
         }),
       );
     } catch (error) {
+      // eslint-disable-next-line no-console
       console.error('Failed to clear secure credentials:', error);
-      // Don't throw here as this is not critical for the reset operation
     }
   }
 }

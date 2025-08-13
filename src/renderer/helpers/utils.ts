@@ -335,3 +335,18 @@ export const getConnectionInput = (conn: ConnectionModel) => {
       return undefined;
   }
 };
+
+export const extractModelNameFromPath = (filePath: string): string => {
+  // Extract model name from file path
+  // Example: /path/to/project/models/staging/my_model.sql -> staging.my_model
+  const pathParts = filePath.split('/');
+  const modelsIndex = pathParts.findIndex((part) => part === 'models');
+  if (modelsIndex === -1) return '';
+
+  // Get the path after 'models/' and before '.sql'
+  const modelPath = pathParts.slice(modelsIndex + 1).join('/');
+  const modelName = modelPath.replace('.sql', '');
+
+  // Convert path separators to dots for dbt selection
+  return modelName.replace(/\//g, '.');
+};

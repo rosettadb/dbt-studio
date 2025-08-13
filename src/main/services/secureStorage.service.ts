@@ -39,6 +39,7 @@ class SecureStorageService {
         try {
           await this.deleteCredential(credentialType);
         } catch (error) {
+          // eslint-disable-next-line no-console
           console.error(
             `Failed to delete credential ${credentialType}:`,
             error,
