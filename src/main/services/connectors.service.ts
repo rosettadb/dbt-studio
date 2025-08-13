@@ -48,6 +48,19 @@ export default class ConnectorsService {
   }
 
   /**
+   * Find a connection by name (case-insensitive)
+   */
+  static async findConnectionByName(
+    name: string,
+  ): Promise<ConnectionModel | undefined> {
+    const connections = await this.loadConnections();
+    return connections.find(
+      (conn) =>
+        conn.connection.name.toLowerCase().trim() === name.toLowerCase().trim(),
+    );
+  }
+
+  /**
    * Save a new connection, allowing reserved names for Getting Started template
    */
   static async saveNewConnectionForTemplate(
@@ -182,10 +195,20 @@ export default class ConnectorsService {
       const isTemplateConnection =
         connection.name.toLowerCase().trim() === 'dbt connection';
       if (isTemplateConnection) {
-        connectionId = await this.saveNewConnectionForTemplate(
-          connection,
-          true,
+        // Check if a connection with the reserved name already exists
+        const existingConnection = await this.findConnectionByName(
+          connection.name,
         );
+        if (existingConnection) {
+          // Reuse existing connection for the starter project
+          connectionId = existingConnection.id;
+        } else {
+          // Create new connection if none exists
+          connectionId = await this.saveNewConnectionForTemplate(
+            connection,
+            true,
+          );
+        }
       } else {
         connectionId = await this.saveNewConnection(connection);
       }
@@ -200,6 +223,11 @@ export default class ConnectorsService {
 
       await this.loadConfigurations(currentProject.id);
     }
+
+    if (!connectionId) {
+      throw new Error('Failed to create or find connection');
+    }
+
     return connectionId;
   }
 
