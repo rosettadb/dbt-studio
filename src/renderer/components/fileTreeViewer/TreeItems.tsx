@@ -10,10 +10,14 @@ type ItemProps = {
   color?: string;
 };
 
+const HIDDEN_FOLDERS = [
+  '.git',
+];
+
 const FolderTreeItem: React.FC<ItemProps> = ({ label }) => {
   return (
     <StyledTreeItem>
-      <Folder sx={{ color: '#5f89f4', width: 18, height: 18 }} />
+      <Folder sx={{ color: HIDDEN_FOLDERS.indexOf(label)==-1 ?'#5f89f4':'#aabdefff', width: 18, height: 18 }} />
       <StyledLabel variant="caption">
         <OverflowTip>{label}</OverflowTip>
       </StyledLabel>
