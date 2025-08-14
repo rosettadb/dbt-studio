@@ -179,7 +179,7 @@ export const ExplorerConnections: React.FC = () => {
       </Box>
 
       {connections.length === 0 ? (
-        <Card>
+        <Card sx={{ p: 2 }}>
           <CardHeader
             title="No connections found"
             subheader="Add a connection to get started with Cloud Explorer."

@@ -224,7 +224,7 @@ export const ExplorerRecentItems: React.FC = () => {
       </Box>
 
       {filteredItems.length === 0 ? (
-        <Card>
+        <Card sx={{ p: 2 }}>
           <CardHeader
             title="No recent items"
             subheader={(() => {

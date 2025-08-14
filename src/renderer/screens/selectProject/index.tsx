@@ -508,9 +508,7 @@ const SelectProject: React.FC = () => {
           <>
             <TaglineContainer>
               {/* <TaglineLogo src={logo} alt="RosettaDB Logo" /> */}
-              <TaglineText variant="h6">
-                Turn Raw Data into Business Insights—Faster with RosettaDB
-              </TaglineText>
+              <TaglineText>Manage your dbt projects</TaglineText>
             </TaglineContainer>
 
             <HeaderContainer>
@@ -593,7 +591,7 @@ const SelectProject: React.FC = () => {
                             );
                           }
 
-                          navigate('/app');
+                          navigate('/app/loading');
                         } else {
                           toast.error('Failed to import project.');
                         }

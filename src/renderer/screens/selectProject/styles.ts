@@ -132,7 +132,7 @@ export const TaglineContainer = styled(Box)`
 `;
 
 export const TaglineText = styled(Typography)`
-  font-size: 1rem;
+  font-size: 1.5rem;
   font-weight: 500;
   color: ${({ theme }) => theme.palette.primary.main};
 `;
