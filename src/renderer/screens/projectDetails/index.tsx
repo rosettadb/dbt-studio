@@ -344,6 +344,16 @@ const ProjectDetails: React.FC = () => {
                 }
               }}
               onFileSelect={async (fileNode) => {
+                // Check if file is editable before trying to read its content
+                if (!utils.isEditableFile(fileNode.path)) {
+                  setSelectedFilePath(fileNode.path);
+                  setFileContent(
+                    utils.getNonEditableFileMessage(fileNode.path),
+                  );
+                  return;
+                }
+
+                // For editable files, load content normally
                 const content = await projectsServices.getFileContent({
                   path: fileNode.path,
                 });

@@ -12,6 +12,7 @@ export const CodeEditor = ({
   theme,
   onChange,
   completions = [],
+  readOnly = false,
 }: {
   content: string;
   originalContent: string | null;
@@ -19,6 +20,7 @@ export const CodeEditor = ({
   theme: string;
   onChange: OnChange;
   completions?: Omit<CompletionItem, 'range'>[];
+  readOnly?: boolean;
 }) => {
   const editorRef = useRef<monaco.editor.IStandaloneCodeEditor | null>(null);
   const monacoRef = useRef<typeof import('monaco-editor') | null>(null);
@@ -119,6 +121,7 @@ export const CodeEditor = ({
         scrollBeyondLastLine: false,
         automaticLayout: true,
         glyphMargin: true,
+        readOnly,
       }}
     />
   );

@@ -350,3 +350,77 @@ export const extractModelNameFromPath = (filePath: string): string => {
   // Convert path separators to dots for dbt selection
   return modelName.replace(/\//g, '.');
 };
+
+/**
+ * List of file extensions that should not be edited as text
+ */
+const NON_EDITABLE_EXTENSIONS = ['.duckdb', '.db', '.sqlite', '.sqlite3'];
+
+/**
+ * Gets the file extension from a file path
+ * @param filePath - The path to the file
+ * @returns the file extension in lowercase (including the dot)
+ */
+export const getFileExtension = (filePath: string): string => {
+  const parts = filePath.toLowerCase().split('.');
+  if (parts.length < 2) return '';
+  return `.${parts[parts.length - 1]}`;
+};
+
+/**
+ * Checks if a file is editable based on its extension
+ * @param filePath - The path to the file
+ * @returns true if the file can be edited as text, false otherwise
+ */
+export const isEditableFile = (filePath: string): boolean => {
+  const extension = getFileExtension(filePath);
+  return !NON_EDITABLE_EXTENSIONS.includes(extension);
+};
+
+/**
+ * Gets an appropriate message for non-editable files
+ * @param filePath - The path to the file
+ * @returns a message explaining why the file cannot be edited
+ */
+export const getNonEditableFileMessage = (filePath: string): string => {
+  const extension = getFileExtension(filePath);
+  const fileName = filePath.split('/').pop() || 'Unknown file';
+
+  switch (extension) {
+    case '.duckdb':
+      return `# DuckDB Database File
+
+This file is a DuckDB database file and cannot be edited as text.
+
+**File:** ${fileName}
+
+DuckDB files contain binary data and should be accessed through:
+- Database queries and connections
+- DuckDB CLI tools
+- Database management applications
+
+**Note:** Attempting to edit this file as text could corrupt the database.`;
+
+    case '.db':
+    case '.sqlite':
+    case '.sqlite3':
+      return `# Database File
+
+This file is a database file and cannot be edited as text.
+
+**File:** ${fileName}
+
+Database files contain binary data and should be accessed through appropriate database tools and applications.
+
+**Note:** Attempting to edit this file as text could corrupt the database.`;
+
+    default:
+      return `# Non-Editable File
+
+This file type cannot be edited as text.
+
+**File:** ${fileName}
+
+Please use an appropriate application to view or edit this file type.`;
+  }
+};

@@ -2,7 +2,7 @@ import React from 'react';
 import { OnChange, loader } from '@monaco-editor/react';
 import { useTheme, IconButton, Tooltip } from '@mui/material';
 import { VerticalSplit } from '@mui/icons-material';
-import { getVersionsFromDiff } from '../../helpers/utils';
+import { getVersionsFromDiff, isEditableFile } from '../../helpers/utils';
 import { gitServices, projectsServices } from '../../services';
 import { CompletionItem } from '../../../types/frontend';
 import {
@@ -58,6 +58,9 @@ export const Editor = ({
   const theme = useTheme();
   const monacoTheme = theme.palette.mode === 'dark' ? 'vs-dark' : 'light';
   const language = getLanguageFromExtension(filePath ?? 'txt');
+
+  // Check if the file is editable
+  const isFileEditable = filePath ? isEditableFile(filePath) : true;
 
   const [originalContent, setOriginalContent] = React.useState<string | null>(
     null,
@@ -135,6 +138,7 @@ export const Editor = ({
           theme={monacoTheme}
           onChange={handleChange}
           completions={completions}
+          readOnly={!isFileEditable}
         />
       )}
     </Container>
