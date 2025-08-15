@@ -1,5 +1,8 @@
 import keytar from 'keytar';
 
+// AI Provider types for secure storage
+export type AIProviderType = 'openai' | 'ollama' | 'gemini' | 'anthropic';
+
 class SecureStorageService {
   private serviceName: string;
 
@@ -42,6 +45,64 @@ class SecureStorageService {
           // eslint-disable-next-line no-console
           console.error(
             `Failed to delete credential ${credentialType}:`,
+            error,
+          );
+        }
+      }),
+    );
+  }
+
+  /**
+   * AI Provider credential management methods
+   */
+  async setAIProviderCredential(
+    providerType: AIProviderType,
+    apiKey: string,
+  ): Promise<void> {
+    const credentialKey = `${providerType}-api-key`;
+    await this.setCredential(credentialKey, apiKey);
+  }
+
+  async getAIProviderCredential(
+    providerType: AIProviderType,
+  ): Promise<string | null> {
+    const credentialKey = `${providerType}-api-key`;
+    return this.getCredential(credentialKey);
+  }
+
+  async deleteAIProviderCredential(
+    providerType: AIProviderType,
+  ): Promise<void> {
+    const credentialKey = `${providerType}-api-key`;
+    await this.deleteCredential(credentialKey);
+  }
+
+  async listAIProviderCredentials(): Promise<string[]> {
+    const allCredentials = await this.findCredentials();
+    return allCredentials
+      .filter((account) => account.endsWith('-api-key'))
+      .map((account) => account.replace('-api-key', ''));
+  }
+
+  /**
+   * Clean up all AI provider credentials
+   */
+  async cleanupAIProviderCredentials(): Promise<void> {
+    const aiProviderTypes: AIProviderType[] = [
+      'openai',
+      'ollama',
+      'gemini',
+      'anthropic',
+    ];
+
+    await Promise.all(
+      aiProviderTypes.map(async (providerType) => {
+        try {
+          await this.deleteAIProviderCredential(providerType);
+        } catch (error) {
+          // eslint-disable-next-line no-console
+          console.error(
+            `Failed to delete AI credential ${providerType}:`,
             error,
           );
         }

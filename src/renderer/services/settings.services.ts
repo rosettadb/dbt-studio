@@ -13,6 +13,11 @@ export const getSettings = async (): Promise<SettingsType> => {
   return data;
 };
 
+export const getSettingsWithDatabaseInfo = async (): Promise<SettingsType> => {
+  const { data } = await client.get<SettingsType>('settings:load-with-db-info');
+  return data;
+};
+
 export const updateSettings = async (settings: SettingsType): Promise<void> => {
   await client.post<SettingsType>('settings:save', settings);
 };

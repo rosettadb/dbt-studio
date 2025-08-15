@@ -4,6 +4,7 @@ export type TestChannels = 'test:create' | 'test:getAll';
 
 export type SettingsChannels =
   | 'settings:load'
+  | 'settings:load-with-db-info'
   | 'settings:save'
   | 'settings:dialog'
   | 'settings:checkCliUpdates'
@@ -59,14 +60,41 @@ export type ConnectorChannels =
   | 'connector:delete';
 
 export type SourcesChannels =
-  | 'source:create'
+  | 'sources:create'
+  | 'sources:update'
+  | 'sources:delete'
+  | 'sources:getAll'
+  | 'sources:test'
   | 'source:list'
-  | 'source:get'
+  | 'source:create'
   | 'source:delete'
+  | 'source:get'
   | 'source:recentItems'
   | 'source:addRecentItem'
-  | 'source:clearRecentItems'
-  | 'source:deleteRecentItem';
+  | 'source:deleteRecentItem'
+  | 'source:clearRecentItems';
+
+export type AIChannels =
+  | 'ai:create-provider'
+  | 'ai:get-providers'
+  | 'ai:update-provider'
+  | 'ai:delete-provider'
+  | 'ai:create-conversation'
+  | 'ai:get-conversations'
+  | 'ai:update-conversation'
+  | 'ai:delete-conversation'
+  | 'ai:add-message'
+  | 'ai:get-messages'
+  | 'ai:update-message'
+  | 'ai:delete-message'
+  | 'ai:create-template'
+  | 'ai:get-templates'
+  | 'ai:update-template'
+  | 'ai:delete-template'
+  | 'ai:log-usage'
+  | 'ai:get-usage-stats'
+  | 'ai:get-database-info'
+  | 'ai:test-provider';
 
 export type CliChannels =
   | 'cli:run'
@@ -142,7 +170,8 @@ export type Channels =
   | SecureStorageChannels
   | UpdateChannels
   | CloudExplorerChannels
-  | SourcesChannels;
+  | SourcesChannels
+  | AIChannels;
 
 export type ConfigureConnectionBody = {
   projectId?: string;

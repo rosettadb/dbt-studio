@@ -6,6 +6,7 @@ import { SettingsChannels } from '../../types/ipc';
 
 const handlerChannels: SettingsChannels[] = [
   'settings:load',
+  'settings:load-with-db-info',
   'settings:save',
   'settings:checkCliUpdates',
   'settings:updateCli',
@@ -29,6 +30,10 @@ const registerSettingsHandlers = (mainWindow: BrowserWindow) => {
 
   ipcMain.handle('settings:load', async () => {
     return SettingsService.loadSettings();
+  });
+
+  ipcMain.handle('settings:load-with-db-info', async () => {
+    return SettingsService.loadSettingsWithDatabaseInfo();
   });
 
   ipcMain.handle('settings:save', async (_event, body: SettingsType) => {

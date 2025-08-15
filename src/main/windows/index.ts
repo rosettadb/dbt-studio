@@ -2,7 +2,10 @@ import { BrowserWindow, app } from 'electron';
 import { createSplashWindow } from './splash';
 import { createMainWindow } from './main';
 import registerHandlers from '../ipcSetup';
-import { installExtensions } from '../utils/setupHelpers';
+import {
+  installExtensions,
+  initializeDataStorage,
+} from '../utils/setupHelpers';
 import { createSetupWindow } from './setup';
 
 export class WindowManager {
@@ -25,6 +28,9 @@ export class WindowManager {
 
   // eslint-disable-next-line class-methods-use-this
   private async initializeApp() {
+    // Initialize data storage and main database
+    await initializeDataStorage();
+
     if (
       process.env.NODE_ENV === 'development' ||
       process.env.DEBUG_PROD === 'true'

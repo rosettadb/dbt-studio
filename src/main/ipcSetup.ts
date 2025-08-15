@@ -11,6 +11,7 @@ import {
   registerUpdateHandlers,
   registerCloudExplorerHandlers,
 } from './ipcHandlers';
+import { registerAIHandlers } from './ipcHandlers/ai.ipcHandlers';
 
 const registerHandlers = (mainWindow: BrowserWindow) => {
   registerCliHandlers(mainWindow);
@@ -23,6 +24,7 @@ const registerHandlers = (mainWindow: BrowserWindow) => {
   registerSecureStorageHandlers();
   registerUpdateHandlers();
   registerCloudExplorerHandlers();
+  registerAIHandlers(); // Add AI providers and chat functionality
 };
 
 export default registerHandlers;

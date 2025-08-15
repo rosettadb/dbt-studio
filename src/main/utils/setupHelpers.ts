@@ -2,17 +2,27 @@ import fs from 'fs';
 import { app } from 'electron';
 import path from 'path';
 import { URL } from 'url';
+import MainDatabaseService from '../services/mainDatabase.service';
 
 export const DATA_DIR = app.getPath('userData');
 export const DB_FILE = path.join(DATA_DIR, 'database.json');
 
-export const initializeDataStorage = () => {
+export const initializeDataStorage = async () => {
   if (!fs.existsSync(DATA_DIR)) {
     fs.mkdirSync(DATA_DIR, { recursive: true });
   }
 
   if (!fs.existsSync(DB_FILE)) {
     fs.writeFileSync(DB_FILE, JSON.stringify({ projects: [] }, null, 2));
+  }
+
+  // Initialize main database for AI and future features
+  try {
+    await MainDatabaseService.initializeDatabase();
+  } catch (error) {
+    // eslint-disable-next-line no-console
+    console.error('Failed to initialize main database:', error);
+    // Don't throw error to prevent app startup failure
   }
 };
 
@@ -22,15 +32,11 @@ export const installExtensions = async () => {
   const forceDownload = !!process.env.UPGRADE_EXTENSIONS;
   const extensions = ['REACT_DEVELOPER_TOOLS'];
 
-  return (
-    installer
-      .default(
-        extensions.map((name) => installer[name]),
-        forceDownload,
-      )
-      // eslint-disable-next-line no-console
-      .catch(console.log)
+  return installer.default(
+    extensions.map((name) => installer[name]),
+    forceDownload,
   );
+  // eslint-disable-next-line no-console
 };
 
 export const loadEnvironment = (isDebug: boolean, isProd: boolean) => {
