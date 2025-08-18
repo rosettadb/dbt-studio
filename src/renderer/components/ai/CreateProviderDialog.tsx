@@ -167,6 +167,12 @@ export const CreateProviderDialog: React.FC<CreateProviderDialogProps> = ({
     [],
   );
 
+  // Clear discovered models when provider type changes
+  React.useEffect(() => {
+    // Clear discovered models when provider type changes since they're type-specific
+    setDiscoveredModels([]);
+  }, [watchedType]);
+
   const onSubmit = (data: ProviderFormData) => {
     const config: any = {};
 
@@ -376,6 +382,7 @@ export const CreateProviderDialog: React.FC<CreateProviderDialogProps> = ({
             render={({ field }) => {
               return (
                 <SmartModelSelector
+                  key={`model-selector-${watchedType}`} // Force remount when provider type changes
                   providerId={
                     isEdit && provider ? String(provider.id) : undefined
                   }
