@@ -1,5 +1,5 @@
 export * from './GeneralSettings';
-export * from './AIProviderSettings';
+export * from './AIProvidersSettings';
 export * from './DbtSettings';
 export * from './RosettaSettings';
 export * from './AboutSettings';

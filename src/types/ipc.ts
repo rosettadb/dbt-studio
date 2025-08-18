@@ -75,10 +75,30 @@ export type SourcesChannels =
   | 'source:clearRecentItems';
 
 export type AIChannels =
-  | 'ai:create-provider'
-  | 'ai:get-providers'
-  | 'ai:update-provider'
-  | 'ai:delete-provider'
+  // Modern provider management channels (standardized)
+  | 'ai:provider:list'
+  | 'ai:provider:get'
+  | 'ai:provider:save'
+  | 'ai:provider:update'
+  | 'ai:provider:delete'
+  | 'ai:provider:get-active'
+  | 'ai:provider:set-active'
+  | 'ai:provider:test-connection'
+  | 'ai:provider:test-temp-connection'
+  | 'ai:provider:get-models'
+  | 'ai:provider:get-all-models'
+  | 'ai:provider:get-status'
+  | 'ai:provider:get-credential'
+  | 'ai:provider:health-check'
+  | 'ai:provider:cleanup-api-keys'
+
+  // Provider manager
+  | 'ai:provider-manager:initialize'
+
+  // AI completion
+  | 'ai:completion:generate'
+
+  // Database operations (using main database - not database.json)
   | 'ai:create-conversation'
   | 'ai:get-conversations'
   | 'ai:update-conversation'
@@ -94,7 +114,28 @@ export type AIChannels =
   | 'ai:log-usage'
   | 'ai:get-usage-stats'
   | 'ai:get-database-info'
-  | 'ai:test-provider';
+  | 'ai:test-provider'
+
+  // Modern chat functionality (standardized naming)
+  | 'chat:conversation:list'
+  | 'chat:conversation:get'
+  | 'chat:conversation:create'
+  | 'chat:conversation:update'
+  | 'chat:conversation:delete'
+  | 'chat:message:list'
+  | 'chat:message:send'
+  | 'chat:message:update'
+  | 'chat:message:delete'
+
+  // Modern template functionality (standardized naming)
+  | 'ai:template:list'
+  | 'ai:template:save'
+  | 'ai:template:update'
+  | 'ai:template:delete'
+
+  // Modern usage functionality (standardized naming)
+  | 'ai:usage:log'
+  | 'ai:usage:stats';
 
 export type CliChannels =
   | 'cli:run'

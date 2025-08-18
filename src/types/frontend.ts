@@ -13,7 +13,6 @@ export type AppContextType = {
   fetchSchema: () => Promise<void>;
   isLoadingSchema?: boolean;
   isAiProviderSet: boolean;
-  setIsAiProviderSet: (isSet: boolean) => void;
 };
 
 export type ItemProps = {

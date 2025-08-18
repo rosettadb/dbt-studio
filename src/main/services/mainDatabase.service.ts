@@ -9,7 +9,7 @@ import Database from 'better-sqlite3';
 import { drizzle, BetterSQLite3Database } from 'drizzle-orm/better-sqlite3';
 import { eq, desc, and, count } from 'drizzle-orm';
 import * as schema from '../schemas/mainDatabase.schema';
-import { MainDatabaseInfo } from '../../types/backend';
+import { MainDatabaseInfo, UsageStats } from '../../types/backend';
 import {
   AIProvider,
   NewAIProvider,
@@ -22,30 +22,6 @@ import {
   NewAIUsageLog,
   ChatConversationWithMessages,
 } from '../schemas/mainDatabase.schema';
-
-// Type definitions following existing backend patterns
-export interface UsageStats {
-  totalRequests: number;
-  totalTokens: number;
-  totalCost: number;
-  averageResponseTime: number;
-  successRate: number;
-  byProvider: {
-    [providerId: number]: {
-      requests: number;
-      tokens: number;
-      cost: number;
-      avgResponseTime: number;
-    };
-  };
-  byOperation: {
-    [operation: string]: {
-      requests: number;
-      tokens: number;
-      avgResponseTime: number;
-    };
-  };
-}
 
 export default class MainDatabaseService {
   private static sqlite: Database.Database | null = null;
@@ -103,6 +79,8 @@ export default class MainDatabaseService {
       // For now, we'll create tables manually until migration files are set up
       await this.createTables();
     } catch (error) {
+      // eslint-disable-next-line no-console
+      console.error('[MAIN DATABASE] Migration error:', error);
       throw error;
     }
   }
@@ -110,6 +88,8 @@ export default class MainDatabaseService {
   // Create tables manually (temporary until proper migrations are set up)
   private static async createTables(): Promise<void> {
     if (!this.sqlite) {
+      // eslint-disable-next-line no-console
+      console.error('[MAIN DATABASE] SQLite connection not initialized');
       throw new Error('SQLite connection not initialized');
     }
 
@@ -226,11 +206,18 @@ export default class MainDatabaseService {
     const db = await this.getDatabase();
 
     try {
-      return await db
+      const providers = await db
         .select()
         .from(schema.aiProviders)
         .orderBy(desc(schema.aiProviders.createdAt));
+
+      return providers;
     } catch (error) {
+      // eslint-disable-next-line no-console
+      console.error(
+        '[MAIN DATABASE] getProviders - Error fetching providers:',
+        error,
+      );
       throw error;
     }
   }
@@ -246,6 +233,11 @@ export default class MainDatabaseService {
 
       return result || null;
     } catch (error) {
+      // eslint-disable-next-line no-console
+      console.error(
+        `[MAIN DATABASE] getProvider - Error getting provider ${id}:`,
+        error,
+      );
       throw error;
     }
   }
@@ -257,14 +249,25 @@ export default class MainDatabaseService {
     const db = await this.getDatabase();
 
     try {
+      const updateData = {
+        ...updates,
+        updatedAt: new Date().toISOString(),
+      };
+
       await db
         .update(schema.aiProviders)
-        .set({
-          ...updates,
-          updatedAt: new Date().toISOString(),
-        })
+        .set(updateData)
         .where(eq(schema.aiProviders.id, id));
     } catch (error) {
+      // eslint-disable-next-line no-console
+      console.error('[MAIN DATABASE] Error during provider update:', error);
+      // eslint-disable-next-line no-console
+      console.error('[MAIN DATABASE] Error details:', {
+        id,
+        updates,
+        errorMessage: error instanceof Error ? error.message : String(error),
+        errorStack: error instanceof Error ? error.stack : undefined,
+      });
       throw error;
     }
   }
