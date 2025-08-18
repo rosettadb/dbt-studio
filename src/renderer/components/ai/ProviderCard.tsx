@@ -202,6 +202,17 @@ export const ProviderCard: React.FC<ProviderCardProps> = ({
     return defaultIcon;
   };
 
+  // Helper function to get model from config
+  const getProviderModel = () => {
+    try {
+      const config = provider.config ? JSON.parse(provider.config) : {};
+      return config.model || '';
+    } catch (error) {
+      // If config is not valid JSON, return empty string
+      return '';
+    }
+  };
+
   return (
     <Card
       sx={{
@@ -286,6 +297,23 @@ export const ProviderCard: React.FC<ProviderCardProps> = ({
       </Box>
 
       <CardContent sx={{ pt: 0 }}>
+        {/* Model Information */}
+        <Box sx={{ mb: 2, display: 'flex', alignItems: 'center', gap: 1 }}>
+          <Typography variant="body2" color="text.secondary">
+            Model:
+          </Typography>
+          <Typography
+            variant="body1"
+            sx={{
+              fontWeight: 'medium',
+              color: getProviderModel() ? 'text.primary' : 'text.secondary',
+              fontStyle: getProviderModel() ? 'normal' : 'italic',
+            }}
+          >
+            {getProviderModel() || 'No model configured'}
+          </Typography>
+        </Box>
+
         <Button
           size="small"
           variant={isActive ? 'contained' : 'outlined'}
