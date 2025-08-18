@@ -77,6 +77,10 @@ const registerAIHandlers = () => {
     },
   );
 
+  ipcMain.handle('ai:provider:deactivate-all', async (): Promise<void> => {
+    await MainDatabaseService.deactivateAllProviders();
+  });
+
   // Chat Conversation Handlers
   ipcMain.handle(
     'chat:conversation:list',
@@ -224,14 +228,6 @@ const registerAIHandlers = () => {
   });
 
   // Enhanced Provider Management Handlers (Phase 2)
-
-  // Provider health check
-  ipcMain.handle(
-    'ai:provider:health-check',
-    async (): Promise<Map<string, any>> => {
-      return ProviderManager.checkAllProviderHealth();
-    },
-  );
 
   // Test specific provider
   ipcMain.handle(

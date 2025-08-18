@@ -14,7 +14,6 @@ import { toast } from 'react-toastify';
 import {
   useGetAIProviders,
   useGetActiveAIProvider,
-  useProviderHealthCheck,
   useInitializeProviderManager,
 } from '../../controllers/aiProviders.controller';
 import type { AIProvider } from '../../controllers/aiProviders.controller';
@@ -61,23 +60,6 @@ export const AIProvidersSettings: React.FC = () => {
     },
   });
 
-  const {
-    data: healthStatus,
-    isLoading: isLoadingHealth,
-    refetch: refetchHealth,
-  } = useProviderHealthCheck({
-    onSuccess: (status) => {
-      if (!status || status.size === 0) {
-        toast.info('No AI provider health status available');
-      }
-    },
-    onError: (error) => {
-      toast.error(
-        `Failed to load AI provider health status: ${error?.message}`,
-      );
-    },
-  });
-
   // Initialize on mount
   React.useEffect(() => {
     initializeProviderManager();
@@ -86,7 +68,6 @@ export const AIProvidersSettings: React.FC = () => {
   const handleRefreshAll = () => {
     refetchProviders();
     refetchActiveProvider();
-    refetchHealth();
   };
 
   const handleCreateProvider = () => {
@@ -106,7 +87,6 @@ export const AIProvidersSettings: React.FC = () => {
     setTimeout(() => {
       refetchProviders();
       refetchActiveProvider();
-      refetchHealth();
     }, 100);
   };
 
@@ -152,9 +132,6 @@ export const AIProvidersSettings: React.FC = () => {
         mb={3}
       >
         <Box>
-          <Typography variant="h5" gutterBottom>
-            AI Providers
-          </Typography>
           <Typography variant="body2" color="text.secondary">
             Configure and manage AI providers for enhanced dbt functionality
           </Typography>
@@ -164,7 +141,6 @@ export const AIProvidersSettings: React.FC = () => {
             variant="outlined"
             startIcon={<Refresh />}
             onClick={handleRefreshAll}
-            disabled={isLoadingHealth}
           >
             Refresh
           </Button>
@@ -190,23 +166,6 @@ export const AIProvidersSettings: React.FC = () => {
               color="primary"
               size="small"
             />
-            {healthStatus &&
-              activeProvider.id &&
-              healthStatus.get(activeProvider.id.toString()) && (
-                <Chip
-                  label={
-                    healthStatus.get(activeProvider.id.toString())?.success
-                      ? 'Healthy'
-                      : 'Unhealthy'
-                  }
-                  color={
-                    healthStatus.get(activeProvider.id.toString())?.success
-                      ? 'success'
-                      : 'error'
-                  }
-                  size="small"
-                />
-              )}
           </Box>
         </Paper>
       )}
@@ -239,13 +198,8 @@ export const AIProvidersSettings: React.FC = () => {
               <ProviderCard
                 provider={provider}
                 isActive={activeProvider?.id === provider.id}
-                healthStatus={
-                  provider.id
-                    ? healthStatus?.get(provider.id.toString())
-                    : undefined
-                }
                 onEdit={handleEditProvider}
-                onRefresh={refetchHealth}
+                onRefresh={handleRefreshAll}
               />
             </Grid>
           ))}

@@ -83,13 +83,13 @@ export type AIChannels =
   | 'ai:provider:delete'
   | 'ai:provider:get-active'
   | 'ai:provider:set-active'
+  | 'ai:provider:deactivate-all'
   | 'ai:provider:test-connection'
   | 'ai:provider:test-temp-connection'
   | 'ai:provider:get-models'
   | 'ai:provider:get-all-models'
   | 'ai:provider:get-status'
   | 'ai:provider:get-credential'
-  | 'ai:provider:health-check'
   | 'ai:provider:cleanup-api-keys'
 
   // Provider manager

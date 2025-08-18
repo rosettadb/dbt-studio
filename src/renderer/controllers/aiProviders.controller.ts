@@ -203,6 +203,29 @@ export const useSetActiveAIProvider = (
   });
 };
 
+// Deactivate all AI providers
+export const useDeactivateAllAIProviders = (
+  customOptions?: UseMutationOptions<void, CustomError, void>,
+): UseMutationResult<void, CustomError, void> => {
+  const { onSuccess: onCustomSuccess, onError: onCustomError } =
+    customOptions || {};
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async () => {
+      return aiProvidersService.deactivateAllProviders();
+    },
+    onSuccess: async (...args) => {
+      await queryClient.invalidateQueries([QUERY_KEYS.GET_AI_PROVIDERS]);
+      await queryClient.invalidateQueries([QUERY_KEYS.GET_ACTIVE_AI_PROVIDER]);
+      onCustomSuccess?.(...args);
+    },
+    onError: (...args) => {
+      onCustomError?.(...args);
+    },
+  });
+};
+
 // Test AI provider connection
 export const useTestAIProvider = (
   customOptions?: UseMutationOptions<ProviderTestResult, CustomError, string>,
@@ -285,24 +308,6 @@ export const useGetAllProviderModels = (
     queryFn: async () => {
       return aiProvidersService.getAllProviderModels();
     },
-    ...customOptions,
-  });
-};
-
-// Health check for all providers
-export const useProviderHealthCheck = (
-  customOptions?: UseQueryOptions<
-    Map<string, ProviderTestResult>,
-    CustomError,
-    Map<string, ProviderTestResult>
-  >,
-) => {
-  return useQuery({
-    queryKey: [QUERY_KEYS.AI_PROVIDER_HEALTH_CHECK],
-    queryFn: async () => {
-      return aiProvidersService.checkProviderHealth();
-    },
-    refetchInterval: 30000, // Refetch every 30 seconds
     ...customOptions,
   });
 };

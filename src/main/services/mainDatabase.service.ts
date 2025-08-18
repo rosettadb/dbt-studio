@@ -314,6 +314,17 @@ export default class MainDatabaseService {
     }
   }
 
+  static async deactivateAllProviders(): Promise<void> {
+    const db = await this.getDatabase();
+
+    try {
+      // Deactivate all providers
+      await db.update(schema.aiProviders).set({ isActive: false });
+    } catch (error) {
+      throw error;
+    }
+  }
+
   // Chat Conversation Management
   static async createConversation(
     title: string,

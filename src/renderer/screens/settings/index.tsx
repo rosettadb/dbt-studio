@@ -275,7 +275,7 @@ const Settings: React.FC = () => {
               <Close />
             </IconButton>
           </div>
-          <div style={{ maxWidth: '800px' }}>{renderContent()}</div>
+          <div style={{ maxWidth: '100%' }}>{renderContent()}</div>
 
           {currentSection !== 'about' &&
             currentSection !== 'installation' &&

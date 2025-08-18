@@ -373,30 +373,6 @@ export class AIProviderManager {
     }
   }
 
-  static async checkAllProviderHealth(): Promise<
-    Map<string, ProviderTestResult>
-  > {
-    try {
-      const healthMap = new Map<string, ProviderTestResult>();
-
-      // Get all providers from database
-      const dbProviders = await MainDatabaseService.getProviders();
-
-      dbProviders.forEach((provider) => {
-        healthMap.set(provider.id.toString(), {
-          success: true,
-          message: 'Provider is healthy',
-        });
-      });
-
-      return healthMap;
-    } catch (error) {
-      // eslint-disable-next-line no-console
-      console.error('Failed to check provider health:', error);
-      throw error;
-    }
-  }
-
   static async testProvider(providerId: string): Promise<ProviderTestResult> {
     try {
       // Parse the providerId (it might be a string number)

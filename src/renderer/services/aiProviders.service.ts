@@ -72,6 +72,11 @@ class AIProvidersService {
     await client.post<string>('ai:provider:set-active', providerId);
   }
 
+  // Deactivate all AI providers
+  static async deactivateAllProviders(): Promise<void> {
+    await client.get('ai:provider:deactivate-all');
+  }
+
   // Test AI provider connection
   static async testProviderConnection(
     providerId: string,
@@ -121,14 +126,6 @@ class AIProvidersService {
     return data;
   }
 
-  // Health check for all providers
-  static async checkProviderHealth(): Promise<Map<string, ProviderTestResult>> {
-    const { data } = await client.get<Map<string, ProviderTestResult>>(
-      'ai:provider:health-check',
-    );
-    return data;
-  }
-
   // Initialize provider manager
   static async initializeProviderManager(): Promise<void> {
     await client.get('ai:provider-manager:initialize');
@@ -143,11 +140,11 @@ export const aiProvidersService = {
   updateProvider: AIProvidersService.updateProvider,
   deleteProvider: AIProvidersService.deleteProvider,
   setActiveProvider: AIProvidersService.setActiveProvider,
+  deactivateAllProviders: AIProvidersService.deactivateAllProviders,
   testProviderConnection: AIProvidersService.testProviderConnection,
   testTemporaryProvider: AIProvidersService.testTemporaryProvider,
   getProviderModels: AIProvidersService.getProviderModels,
   getAllProviderModels: AIProvidersService.getAllProviderModels,
-  checkProviderHealth: AIProvidersService.checkProviderHealth,
   getProviderCredential: AIProvidersService.getProviderCredential,
   initializeProviderManager: AIProvidersService.initializeProviderManager,
 };
