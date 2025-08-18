@@ -33,18 +33,17 @@ export const Sidebar: React.FC<Props> = ({ content }) => {
     if (location.pathname.includes('sql')) {
       return 3;
     }
-    if (location.pathname === '/app' || location.pathname.includes('/app/')) {
-      return 2;
-    }
     if (
       location.pathname.includes('settings') ||
       location.pathname.includes('add-connection') ||
-      location.pathname.includes('edit-connection') ||
-      location.pathname.includes('select-project')
+      location.pathname.includes('edit-connection')
     ) {
-      return -1;
+      return -1; // No sidebar item should be active for these routes
     }
-    return 0;
+    if (location.pathname === '/app') {
+      return 2; // Only exact match for /app should activate DBT Studio
+    }
+    return -1; // Default to no active item for other routes
   }, [location.pathname]);
 
   return (

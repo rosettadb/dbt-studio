@@ -13,7 +13,7 @@ import {
   ArrowDownward,
   FormatListNumbered,
 } from '@mui/icons-material';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { toast } from 'react-toastify';
 import {
   BranchDropdownToggle,
@@ -43,6 +43,7 @@ import { CollapseLeftIcon, ExpandRightIcon } from './collapse-icons';
 
 export const Menu: React.FC = () => {
   const navigate = useNavigate();
+  const location = useLocation();
   const { mutateAsync: selectProject } = useSelectProject();
   const theme = useTheme();
   const { isSidebarOpen, setIsSidebarOpen } = useAppContext();
@@ -60,6 +61,7 @@ export const Menu: React.FC = () => {
   );
 
   const isProjectSelected = Boolean(project?.id);
+  const isSettingsActive = location.pathname.includes('/settings');
 
   const { mutate: push } = useGitPush({
     onSuccess: (data) => {
@@ -295,8 +297,17 @@ export const Menu: React.FC = () => {
               aria-haspopup="true"
               onClick={() => navigate('/app/settings')}
               color="primary"
+              sx={{
+                backgroundColor: isSettingsActive
+                  ? theme.palette.divider
+                  : 'transparent',
+                '&:hover': {
+                  backgroundColor: theme.palette.action.hover,
+                },
+                transition: 'background-color 0.2s ease',
+              }}
             >
-              <Settings fontSize="small" />
+              <Settings sx={{ fontSize: 22 }} />
             </IconButton>
           </Tooltip>
         </IconsContainer>
