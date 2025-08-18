@@ -9,7 +9,6 @@ import {
   CircularProgress,
 } from '@mui/material';
 import {
-  Menu as MenuIcon,
   Settings,
   ArrowDownward,
   FormatListNumbered,
@@ -40,6 +39,7 @@ import { SimpleDropdownMenu } from '../simpleDropdown';
 import { Icon } from '../icon';
 import { LetterAvatar } from '../letterAvatar';
 import { useAppContext } from '../../hooks';
+import { CollapseLeftIcon, ExpandRightIcon } from './collapse-icons';
 
 export const Menu: React.FC = () => {
   const navigate = useNavigate();
@@ -122,17 +122,12 @@ export const Menu: React.FC = () => {
       <StyledToolbar variant="dense">
         <IconsContainer>
           <IconButton
-            color="default"
+            color="primary"
             aria-label="open drawer"
             onClick={() => setIsSidebarOpen(!isSidebarOpen)}
             edge="start"
-            disabled={!isProjectSelected}
-            sx={{
-              opacity: isProjectSelected ? 1 : 0.5,
-              cursor: isProjectSelected ? 'pointer' : 'not-allowed',
-            }}
           >
-            <MenuIcon />
+            {isSidebarOpen ? <CollapseLeftIcon /> : <ExpandRightIcon />}
           </IconButton>
           <Logo src={logo} alt="Rosetta Logo" onClick={handleLogoClick} />
           {isProjectSelected && (
