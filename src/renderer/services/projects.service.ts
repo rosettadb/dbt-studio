@@ -258,3 +258,13 @@ export const enhanceModelQuery = async (
 export const zipDir = async (path: string): Promise<void> => {
   await client.post<string>('project:zipDir', path);
 };
+
+export const chooseDir = async (body: { path: string }): Promise<string> => {
+  const response = await client.post<
+    {
+      path: string;
+    },
+    string
+  >('project:chooseDir', body);
+  return response.data;
+};

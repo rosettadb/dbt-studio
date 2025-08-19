@@ -1065,4 +1065,13 @@ export default class ProjectsService {
     await createZipArchive(sourcePath, zipFilePath);
     return { success: true, filePath: zipFilePath };
   };
+
+  static async chooseDir(_path: string) {
+    const result = await dialog.showOpenDialog({
+      defaultPath: _path,
+      properties: ['openDirectory'],
+    });
+
+    return result.canceled ? 'false' : result.filePaths[0];
+  }
 }

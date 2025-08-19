@@ -42,7 +42,7 @@ const useRosettaDBT = (successCallback: () => Promise<void>) => {
   }, [isSuccess, error]);
 
   return {
-    fn: async (project: Project, incremental = '') => {
+    fn: async (project: Project, incremental = '', updatedPath = '') => {
       setIsRunning(true);
       const connection = connections.find((c) => c.id === project.connectionId);
       if (!connection) {
@@ -126,9 +126,15 @@ const useRosettaDBT = (successCallback: () => Promise<void>) => {
         }
       }
 
-      await runCommand(
-        `cd "${projectPath}" && "${settings?.rosettaPath}" dbt ${incremental} -s ${project.rosettaConnection?.name}`,
-      );
+      if (updatedPath === '') {
+        await runCommand(
+          `cd "${projectPath}" && "${settings?.rosettaPath}" dbt ${incremental} -s ${project.rosettaConnection?.name}`,
+        );
+      } else {
+        await runCommand(
+          `cd "${projectPath}" && "${settings?.rosettaPath}" dbt ${incremental} -s ${project.rosettaConnection?.name} -o ${updatedPath}`,
+        );
+      }
       setIsSuccess(true);
     },
     isRunning,
