@@ -50,11 +50,6 @@ export const AIProvidersSettings: React.FC = () => {
     isLoading: isLoadingActiveProvider,
     refetch: refetchActiveProvider,
   } = useGetActiveAIProvider({
-    onSuccess: (provider) => {
-      if (!provider) {
-        toast.info('No active AI provider configured');
-      }
-    },
     onError: (error) => {
       toast.error(`Failed to load active AI provider: ${error?.message}`);
     },
