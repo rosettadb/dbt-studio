@@ -7,20 +7,7 @@ import {
   useGetSettings,
   useSetConnectionEnvVariable,
 } from '../controllers';
-import { Project } from '../../types/backend';
-
-type DbtCommandType =
-  | 'run'
-  | 'test'
-  | 'compile'
-  | 'build'
-  | 'list'
-  | 'debug'
-  | 'docs:generate'
-  | 'docs:serve'
-  | 'deps'
-  | 'clean'
-  | 'seed';
+import { Project, DbtCommandType } from '../../types/backend';
 
 interface UseDbtReturn {
   run: (project: Project, path?: string) => Promise<void>;

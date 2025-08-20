@@ -6,9 +6,10 @@ import {
   useGetSettings,
   useSetConnectionEnvVariable,
 } from '../controllers';
-import { Project } from '../../types/backend';
-import { projectsServices, settingsServices } from '../services';
+import { Command, CommandType, Project } from '../../types/backend';
+import { projectsServices } from '../services';
 import { getOpenAIKey } from '../services/settings.services';
+import { compileCommand } from '../helpers/utils';
 
 const useRosettaDBT = (successCallback: () => Promise<void>) => {
   const { data: settings } = useGetSettings();
@@ -42,7 +43,7 @@ const useRosettaDBT = (successCallback: () => Promise<void>) => {
   }, [isSuccess, error]);
 
   return {
-    fn: async (project: Project, incremental = '') => {
+    fn: async (project: Project, command: Command) => {
       setIsRunning(true);
       const connection = connections.find((c) => c.id === project.connectionId);
       if (!connection) {
@@ -104,16 +105,17 @@ const useRosettaDBT = (successCallback: () => Promise<void>) => {
         });
       }
 
-      const projectPath = await settingsServices.usePathJoin(
-        project.path,
-        'rosetta',
-      );
-
       if (!project.isExtracted) {
         try {
-          await runCommand(
-            `cd "${projectPath}" && "${settings?.rosettaPath}" extract -s ${project.rosettaConnection?.name}`,
-          );
+          const compiledCommand = await compileCommand(project, settings, {
+            commandType: CommandType.Rosetta,
+            command: 'extract',
+            arguments: new Map<string, string | number>().set(
+              '-s',
+              `${project.rosettaConnection?.name}`,
+            ),
+          } as Command);
+          await runCommand(compiledCommand);
           await projectsServices.updateProject({
             ...project,
             isExtracted: true,
@@ -125,10 +127,8 @@ const useRosettaDBT = (successCallback: () => Promise<void>) => {
           return;
         }
       }
-
-      await runCommand(
-        `cd "${projectPath}" && "${settings?.rosettaPath}" dbt ${incremental} -s ${project.rosettaConnection?.name}`,
-      );
+      const compiledCommand = await compileCommand(project, settings, command);
+      await runCommand(compiledCommand);
       setIsSuccess(true);
     },
     isRunning,

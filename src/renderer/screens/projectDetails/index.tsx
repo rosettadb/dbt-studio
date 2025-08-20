@@ -51,7 +51,12 @@ import {
   SelectedFile,
 } from './styles';
 import { useRosettaDBT, useDbt } from '../../hooks';
-import { GenerateDashboardResponseType, Project } from '../../../types/backend';
+import {
+  GenerateDashboardResponseType,
+  Project,
+  Command,
+  CommandType,
+} from '../../../types/backend';
 import { AI_PROMPTS } from '../../config/constants';
 import { utils } from '../../helpers';
 import { AppLayout } from '../../layouts';
@@ -556,7 +561,13 @@ const ProjectDetails: React.FC = () => {
             isOpen={businessQueryModal}
             onClose={() => setBusinessQueryModal(false)}
             onSubmit={(query) =>
-              rosettaDbt(project, `--business -q "${query}"`)
+              rosettaDbt(project, {
+                command: 'dbt',
+                commandType: CommandType.Rosetta,
+                arguments: new Map<string, any>()
+                  .set('--business', null)
+                  .set('-q', `"${query}"`),
+              } as Command)
             }
           />
         )}
