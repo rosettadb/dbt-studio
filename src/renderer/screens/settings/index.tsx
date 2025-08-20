@@ -126,7 +126,6 @@ const Settings: React.FC = () => {
           <DbtSettings
             settings={localSettings}
             onInstallDbtSave={handleChangeV2}
-            onSettingsChange={handleChange}
           />
         );
       case 'rosetta':
@@ -280,6 +279,7 @@ const Settings: React.FC = () => {
           {currentSection !== 'about' &&
             currentSection !== 'installation' &&
             currentSection !== 'ai-providers' &&
+            currentSection !== 'dbt' &&
             currentSection !== 'rosetta' && (
               <Box sx={{ mt: 3 }}>
                 <Button
