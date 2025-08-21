@@ -562,11 +562,9 @@ const ProjectDetails: React.FC = () => {
             onClose={() => setBusinessQueryModal(false)}
             onSubmit={(query) =>
               rosettaDbt(project, {
-                command: 'dbt',
-                commandType: CommandType.Rosetta,
-                arguments: new Map<string, any>()
-                  .set('--business', null)
-                  .set('-q', `"${query}"`),
+                command: 'business',
+                commandType: CommandType.DBTNext,
+                arguments: new Map<string, any>().set('-q', `"${query}"`),
               } as Command)
             }
           />

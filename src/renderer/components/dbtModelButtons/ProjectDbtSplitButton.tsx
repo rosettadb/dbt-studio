@@ -62,8 +62,8 @@ export const ProjectDbtSplitButton: React.FC<ProjectDbtSplitButtonProps> = ({
               return;
             }
             rosettaDbt(project, {
-              command: 'dbt',
-              commandType: CommandType.Rosetta,
+              command: 'staging',
+              commandType: CommandType.DBTNext,
               arguments: new Map<string, any>(),
             } as Command);
           },
@@ -89,9 +89,9 @@ export const ProjectDbtSplitButton: React.FC<ProjectDbtSplitButtonProps> = ({
               return;
             }
             rosettaDbt(project, {
-              commandType: CommandType.Rosetta,
-              command: 'dbt',
-              arguments: new Map<string, any>().set('--incremental', null),
+              commandType: CommandType.DBTNext,
+              command: 'incremental',
+              arguments: new Map<string, any>(),
             } as Command);
           },
           leftIcon: (

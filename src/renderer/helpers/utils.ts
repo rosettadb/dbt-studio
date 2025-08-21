@@ -461,7 +461,7 @@ export const compileCommand = async (
       commandStack.push(`"${settings?.rosettaPath}"`);
       break;
     case CommandType.DBTNext:
-      commandStack.push(`"${settings?.dbPath}"`);
+      commandStack.push(`"${settings?.rosettaPath}"`);
       commandStack.push(`dbt-next`);
       break;
     default:
