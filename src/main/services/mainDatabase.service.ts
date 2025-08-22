@@ -17,6 +17,12 @@ import {
   NewChatConversation,
   ChatMessage,
   NewChatMessage,
+  ChatMessageWithContext,
+  ContextItem,
+  NewContextItem,
+  SessionMetadata,
+  ToolCall,
+  NewToolCall,
   PromptTemplate,
   NewPromptTemplate,
   NewAIUsageLog,
@@ -78,6 +84,9 @@ export default class MainDatabaseService {
       // Drizzle will handle migrations automatically
       // For now, we'll create tables manually until migration files are set up
       await this.createTables();
+
+      // After creating tables, ensure schema is up to date for existing installs
+      await this.ensureSchemaUpToDate();
     } catch (error) {
       // eslint-disable-next-line no-console
       console.error('[MAIN DATABASE] Migration error:', error);
@@ -116,15 +125,61 @@ export default class MainDatabaseService {
         FOREIGN KEY (provider_id) REFERENCES ai_providers(id) ON DELETE SET NULL
       );
 
-      -- Chat Messages table
+      -- Chat Messages table - Enhanced with Continue.dev features
       CREATE TABLE IF NOT EXISTS chat_messages (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         conversation_id INTEGER NOT NULL,
         role TEXT NOT NULL,
         content TEXT NOT NULL,
         metadata TEXT,
+        tool_calls TEXT,
+        context_items TEXT,
+        thinking_content TEXT,
+        signature TEXT,
+        is_streaming INTEGER DEFAULT 0,
+        parent_message_id INTEGER,
         created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+        updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (conversation_id) REFERENCES chat_conversations(id) ON DELETE CASCADE,
+        FOREIGN KEY (parent_message_id) REFERENCES chat_messages(id) ON DELETE SET NULL
+      );
+
+      -- Context Items table - For Continue.dev context providers
+      CREATE TABLE IF NOT EXISTS context_items (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        message_id INTEGER NOT NULL,
+        type TEXT NOT NULL,
+        name TEXT NOT NULL,
+        description TEXT,
+        content TEXT NOT NULL,
+        metadata TEXT,
+        created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (message_id) REFERENCES chat_messages(id) ON DELETE CASCADE
+      );
+
+      -- Session Metadata table - For Continue.dev session-specific data
+      CREATE TABLE IF NOT EXISTS session_metadata (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        conversation_id INTEGER NOT NULL,
+        key TEXT NOT NULL,
+        value TEXT NOT NULL,
+        created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+        updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
         FOREIGN KEY (conversation_id) REFERENCES chat_conversations(id) ON DELETE CASCADE
+      );
+
+      -- Tool Calls table - For Continue.dev tool execution tracking
+      CREATE TABLE IF NOT EXISTS tool_calls (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        message_id INTEGER NOT NULL,
+        tool_name TEXT NOT NULL,
+        tool_input TEXT NOT NULL,
+        tool_output TEXT,
+        status TEXT NOT NULL DEFAULT 'pending',
+        started_at TEXT DEFAULT CURRENT_TIMESTAMP,
+        completed_at TEXT,
+        error_message TEXT,
+        FOREIGN KEY (message_id) REFERENCES chat_messages(id) ON DELETE CASCADE
       );
 
       -- Prompt Templates table
@@ -160,19 +215,34 @@ export default class MainDatabaseService {
       CREATE INDEX IF NOT EXISTS ai_providers_name_idx ON ai_providers(name);
       CREATE INDEX IF NOT EXISTS ai_providers_type_idx ON ai_providers(type);
       CREATE INDEX IF NOT EXISTS ai_providers_active_idx ON ai_providers(is_active);
-      
+
       CREATE INDEX IF NOT EXISTS chat_conversations_project_idx ON chat_conversations(project_id);
       CREATE INDEX IF NOT EXISTS chat_conversations_provider_idx ON chat_conversations(provider_id);
       CREATE INDEX IF NOT EXISTS chat_conversations_created_at_idx ON chat_conversations(created_at);
-      
+
       CREATE INDEX IF NOT EXISTS chat_messages_conversation_idx ON chat_messages(conversation_id);
       CREATE INDEX IF NOT EXISTS chat_messages_role_idx ON chat_messages(role);
+      CREATE INDEX IF NOT EXISTS chat_messages_parent_idx ON chat_messages(parent_message_id);
+      CREATE INDEX IF NOT EXISTS chat_messages_streaming_idx ON chat_messages(is_streaming);
       CREATE INDEX IF NOT EXISTS chat_messages_created_at_idx ON chat_messages(created_at);
-      
+
+      CREATE INDEX IF NOT EXISTS context_items_message_idx ON context_items(message_id);
+      CREATE INDEX IF NOT EXISTS context_items_type_idx ON context_items(type);
+      CREATE INDEX IF NOT EXISTS context_items_name_idx ON context_items(name);
+
+      CREATE INDEX IF NOT EXISTS session_metadata_conversation_idx ON session_metadata(conversation_id);
+      CREATE INDEX IF NOT EXISTS session_metadata_key_idx ON session_metadata(key);
+      CREATE UNIQUE INDEX IF NOT EXISTS session_metadata_unique_idx ON session_metadata(conversation_id, key);
+
+      CREATE INDEX IF NOT EXISTS tool_calls_message_idx ON tool_calls(message_id);
+      CREATE INDEX IF NOT EXISTS tool_calls_tool_name_idx ON tool_calls(tool_name);
+      CREATE INDEX IF NOT EXISTS tool_calls_status_idx ON tool_calls(status);
+      CREATE INDEX IF NOT EXISTS tool_calls_started_at_idx ON tool_calls(started_at);
+
       CREATE INDEX IF NOT EXISTS prompt_templates_category_idx ON prompt_templates(category);
       CREATE INDEX IF NOT EXISTS prompt_templates_provider_type_idx ON prompt_templates(provider_type);
       CREATE INDEX IF NOT EXISTS prompt_templates_system_idx ON prompt_templates(is_system);
-      
+
       CREATE INDEX IF NOT EXISTS ai_usage_logs_provider_idx ON ai_usage_logs(provider_id);
       CREATE INDEX IF NOT EXISTS ai_usage_logs_conversation_idx ON ai_usage_logs(conversation_id);
       CREATE INDEX IF NOT EXISTS ai_usage_logs_operation_idx ON ai_usage_logs(operation_type);
@@ -183,18 +253,115 @@ export default class MainDatabaseService {
     this.sqlite.exec(createTablesSQL);
   }
 
+  // Ensure schema is up-to-date for users with older DB files
+  private static async ensureSchemaUpToDate(): Promise<void> {
+    if (!this.sqlite) {
+      throw new Error('SQLite connection not initialized');
+    }
+
+    // Helper to get current columns of a table
+    const getColumns = (table: string): Set<string> => {
+      const stmt = this.sqlite!.prepare(`PRAGMA table_info(${table});`);
+      const rows = stmt.all() as Array<{ name: string }>;
+      return new Set(rows.map((r) => r.name));
+    };
+
+    try {
+      // chat_messages: ensure enhanced columns exist
+      const chatMsgCols = getColumns('chat_messages');
+
+      const alterStatements: string[] = [];
+      if (!chatMsgCols.has('tool_calls')) {
+        alterStatements.push(
+          'ALTER TABLE chat_messages ADD COLUMN tool_calls TEXT;',
+        );
+      }
+      if (!chatMsgCols.has('context_items')) {
+        alterStatements.push(
+          'ALTER TABLE chat_messages ADD COLUMN context_items TEXT;',
+        );
+      }
+      if (!chatMsgCols.has('thinking_content')) {
+        alterStatements.push(
+          'ALTER TABLE chat_messages ADD COLUMN thinking_content TEXT;',
+        );
+      }
+      if (!chatMsgCols.has('signature')) {
+        alterStatements.push(
+          'ALTER TABLE chat_messages ADD COLUMN signature TEXT;',
+        );
+      }
+      if (!chatMsgCols.has('is_streaming')) {
+        alterStatements.push(
+          'ALTER TABLE chat_messages ADD COLUMN is_streaming INTEGER DEFAULT 0;',
+        );
+      }
+      if (!chatMsgCols.has('parent_message_id')) {
+        alterStatements.push(
+          'ALTER TABLE chat_messages ADD COLUMN parent_message_id INTEGER;',
+        );
+      }
+
+      if (alterStatements.length > 0) {
+        const transaction = this.sqlite.transaction((sqls: string[]) => {
+          sqls.forEach((sql) => {
+            this.sqlite!.prepare(sql).run();
+          });
+        });
+        transaction(alterStatements);
+        // Note: SQLite cannot add foreign keys via ALTER TABLE; acceptable for legacy DBs.
+      }
+
+      // tool_calls table might be missing entirely on older DBs; create if absent
+      const tables = this.sqlite
+        .prepare("SELECT name FROM sqlite_master WHERE type='table'")
+        .all() as Array<{ name: string }>;
+      const tableNames = new Set(tables.map((t) => t.name));
+      if (!tableNames.has('tool_calls')) {
+        this.sqlite.exec(`
+          CREATE TABLE IF NOT EXISTS tool_calls (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            message_id INTEGER NOT NULL,
+            tool_name TEXT NOT NULL,
+            tool_input TEXT NOT NULL,
+            tool_output TEXT,
+            status TEXT NOT NULL DEFAULT 'pending',
+            started_at TEXT DEFAULT CURRENT_TIMESTAMP,
+            completed_at TEXT,
+            error_message TEXT,
+            FOREIGN KEY (message_id) REFERENCES chat_messages(id) ON DELETE CASCADE
+          );
+          CREATE INDEX IF NOT EXISTS tool_calls_message_idx ON tool_calls(message_id);
+          CREATE INDEX IF NOT EXISTS tool_calls_tool_name_idx ON tool_calls(tool_name);
+          CREATE INDEX IF NOT EXISTS tool_calls_status_idx ON tool_calls(status);
+          CREATE INDEX IF NOT EXISTS tool_calls_started_at_idx ON tool_calls(started_at);
+        `);
+      }
+    } catch (error) {
+      // eslint-disable-next-line no-console
+      console.error('[MAIN DATABASE] ensureSchemaUpToDate error:', error);
+      // Re-throw to surface during init so we know something went wrong
+      throw error;
+    }
+  }
+
   // AI Provider Management (following SettingsService patterns)
   static async saveProvider(provider: NewAIProvider): Promise<AIProvider> {
     const db = await this.getDatabase();
 
     try {
-      const [result] = await db
+      const results = await db
         .insert(schema.aiProviders)
         .values({
           ...provider,
           updatedAt: new Date().toISOString(),
         })
         .returning();
+
+      const [result] = Array.isArray(results) ? results : [results];
+      if (!result) {
+        throw new Error('Failed to save provider');
+      }
 
       return result;
     } catch (error) {
@@ -226,12 +393,15 @@ export default class MainDatabaseService {
     const db = await this.getDatabase();
 
     try {
-      const [result] = await db
+      const results = await db
         .select()
         .from(schema.aiProviders)
         .where(eq(schema.aiProviders.id, id));
 
-      return result || null;
+      if (Array.isArray(results)) {
+        return results[0] || null;
+      }
+      return null;
     } catch (error) {
       // eslint-disable-next-line no-console
       console.error(
@@ -286,12 +456,12 @@ export default class MainDatabaseService {
     const db = await this.getDatabase();
 
     try {
-      const [result] = await db
+      const results = await db
         .select()
         .from(schema.aiProviders)
         .where(eq(schema.aiProviders.isActive, true));
 
-      return result || null;
+      return results[0] || null;
     } catch (error) {
       throw error;
     }
@@ -334,7 +504,7 @@ export default class MainDatabaseService {
     const db = await this.getDatabase();
 
     try {
-      const [result] = await db
+      const results = await db
         .insert(schema.chatConversations)
         .values({
           title,
@@ -342,6 +512,11 @@ export default class MainDatabaseService {
           providerId,
         })
         .returning();
+
+      const [result] = Array.isArray(results) ? results : [results];
+      if (!result) {
+        throw new Error('Failed to create conversation');
+      }
 
       return result;
     } catch (error) {
@@ -443,13 +618,18 @@ export default class MainDatabaseService {
     const db = await this.getDatabase();
 
     try {
-      const [result] = await db
+      const results = await db
         .insert(schema.chatMessages)
         .values({
           ...message,
           conversationId,
         })
         .returning();
+
+      const [result] = Array.isArray(results) ? results : [results];
+      if (!result) {
+        throw new Error('Failed to insert message');
+      }
 
       // Update conversation's updatedAt timestamp
       await db
@@ -571,10 +751,15 @@ export default class MainDatabaseService {
     const db = await this.getDatabase();
 
     try {
-      const [result] = await db
+      const results = await db
         .insert(schema.promptTemplates)
         .values(template)
         .returning();
+
+      const result = results[0];
+      if (!result) {
+        throw new Error('Failed to save prompt template');
+      }
 
       return result;
     } catch (error) {
@@ -803,7 +988,7 @@ export default class MainDatabaseService {
         size: sizeFormatted,
         sqliteVersion,
         status: this.db ? 'connected' : 'disconnected',
-        tablesCount: 5, // Fixed number of AI tables
+        tablesCount: 8, // Updated count: ai_providers, chat_conversations, chat_messages, context_items, session_metadata, tool_calls, prompt_templates, ai_usage_logs
         conversationsCount: conversationsResult[0]?.count || 0,
         messagesCount: messagesResult[0]?.count || 0,
         providersCount: providersResult[0]?.count || 0,
@@ -825,6 +1010,374 @@ export default class MainDatabaseService {
         createdAt: new Date().toISOString(),
         lastModified: new Date().toISOString(),
       };
+    }
+  }
+
+  // Continue.dev Enhanced Methods
+
+  // Context Items Management
+  static async addContextItems(
+    messageId: number,
+    contextItems: Omit<NewContextItem, 'messageId'>[],
+  ): Promise<ContextItem[]> {
+    const db = await this.getDatabase();
+
+    try {
+      const itemsToInsert = contextItems.map((item) => ({
+        ...item,
+        messageId,
+      }));
+
+      const results = await db
+        .insert(schema.contextItems)
+        .values(itemsToInsert)
+        .returning();
+
+      return results;
+    } catch (error) {
+      throw error;
+    }
+  }
+
+  static async getContextItems(messageId: number): Promise<ContextItem[]> {
+    const db = await this.getDatabase();
+
+    try {
+      return await db
+        .select()
+        .from(schema.contextItems)
+        .where(eq(schema.contextItems.messageId, messageId));
+    } catch (error) {
+      throw error;
+    }
+  }
+
+  // Enhanced Message Methods with Context
+  static async addMessageWithContext(
+    conversationId: number,
+    message: Omit<NewChatMessage, 'conversationId'>,
+    contextItems?: Omit<NewContextItem, 'messageId'>[],
+    toolCalls?: Omit<NewToolCall, 'messageId'>[],
+  ): Promise<ChatMessageWithContext> {
+    const db = await this.getDatabase();
+
+    try {
+      // Insert message
+      const messageResults = await db
+        .insert(schema.chatMessages)
+        .values({
+          ...message,
+          conversationId,
+        })
+        .returning();
+
+      const [newMessage] = Array.isArray(messageResults)
+        ? messageResults
+        : [messageResults];
+      if (!newMessage) {
+        throw new Error('Failed to insert message');
+      }
+
+      // Insert context items if provided
+      let contextItemsResult: ContextItem[] = [];
+      if (contextItems && contextItems.length > 0) {
+        contextItemsResult = await this.addContextItems(
+          newMessage.id,
+          contextItems,
+        );
+      }
+
+      // Insert tool calls if provided
+      let toolCallsResult: ToolCall[] = [];
+      if (toolCalls && toolCalls.length > 0) {
+        toolCallsResult = await this.addToolCalls(newMessage.id, toolCalls);
+      }
+
+      return {
+        ...newMessage,
+        contextItems: contextItemsResult,
+        toolCalls: toolCallsResult,
+      };
+    } catch (error) {
+      throw error;
+    }
+  }
+
+  static async getMessageWithContext(
+    messageId: number,
+  ): Promise<ChatMessageWithContext | null> {
+    const db = await this.getDatabase();
+
+    try {
+      const message = await db
+        .select()
+        .from(schema.chatMessages)
+        .where(eq(schema.chatMessages.id, messageId));
+
+      if (!message[0]) {
+        return null;
+      }
+
+      const [contextItems, toolCalls] = await Promise.all([
+        this.getContextItems(messageId),
+        this.getToolCalls(messageId),
+      ]);
+
+      return {
+        ...message[0],
+        contextItems,
+        toolCalls,
+      };
+    } catch (error) {
+      throw error;
+    }
+  }
+
+  // Tool Calls Management
+  static async addToolCalls(
+    messageId: number,
+    toolCalls: Omit<NewToolCall, 'messageId'>[],
+  ): Promise<ToolCall[]> {
+    const db = await this.getDatabase();
+
+    try {
+      const callsToInsert = toolCalls.map((call) => ({
+        ...call,
+        messageId,
+      }));
+
+      const results = await db
+        .insert(schema.toolCalls)
+        .values(callsToInsert)
+        .returning();
+
+      return results;
+    } catch (error) {
+      throw error;
+    }
+  }
+
+  static async getToolCalls(messageId: number): Promise<ToolCall[]> {
+    const db = await this.getDatabase();
+
+    try {
+      return await db
+        .select()
+        .from(schema.toolCalls)
+        .where(eq(schema.toolCalls.messageId, messageId));
+    } catch (error) {
+      throw error;
+    }
+  }
+
+  static async updateToolCall(
+    id: number,
+    updates: Partial<Omit<NewToolCall, 'messageId'>>,
+  ): Promise<void> {
+    const db = await this.getDatabase();
+
+    try {
+      await db
+        .update(schema.toolCalls)
+        .set(updates)
+        .where(eq(schema.toolCalls.id, id));
+    } catch (error) {
+      throw error;
+    }
+  }
+
+  // Session Metadata Management
+  static async setSessionMetadata(
+    conversationId: number,
+    key: string,
+    value: string,
+  ): Promise<void> {
+    const db = await this.getDatabase();
+
+    try {
+      await db
+        .insert(schema.sessionMetadata)
+        .values({
+          conversationId,
+          key,
+          value,
+          updatedAt: new Date().toISOString(),
+        })
+        .onConflictDoUpdate({
+          target: [
+            schema.sessionMetadata.conversationId,
+            schema.sessionMetadata.key,
+          ],
+          set: {
+            value,
+            updatedAt: new Date().toISOString(),
+          },
+        });
+    } catch (error) {
+      throw error;
+    }
+  }
+
+  static async getSessionMetadata(
+    conversationId: number,
+    key?: string,
+  ): Promise<SessionMetadata[]> {
+    const db = await this.getDatabase();
+
+    try {
+      if (key) {
+        return await db
+          .select()
+          .from(schema.sessionMetadata)
+          .where(
+            and(
+              eq(schema.sessionMetadata.conversationId, conversationId),
+              eq(schema.sessionMetadata.key, key),
+            ),
+          );
+      }
+
+      return await db
+        .select()
+        .from(schema.sessionMetadata)
+        .where(eq(schema.sessionMetadata.conversationId, conversationId));
+    } catch (error) {
+      throw error;
+    }
+  }
+
+  static async deleteSessionMetadata(
+    conversationId: number,
+    key?: string,
+  ): Promise<void> {
+    const db = await this.getDatabase();
+
+    try {
+      if (key) {
+        await db
+          .delete(schema.sessionMetadata)
+          .where(
+            and(
+              eq(schema.sessionMetadata.conversationId, conversationId),
+              eq(schema.sessionMetadata.key, key),
+            ),
+          );
+      } else {
+        await db
+          .delete(schema.sessionMetadata)
+          .where(eq(schema.sessionMetadata.conversationId, conversationId));
+      }
+    } catch (error) {
+      throw error;
+    }
+  }
+
+  // Enhanced Conversation Methods
+  static async getConversationWithContext(
+    id: number,
+  ): Promise<ChatConversationWithMessages | null> {
+    const db = await this.getDatabase();
+
+    try {
+      const conversation = await db
+        .select()
+        .from(schema.chatConversations)
+        .where(eq(schema.chatConversations.id, id));
+
+      if (!conversation[0]) {
+        return null;
+      }
+
+      // Get messages with their context items and tool calls
+      const messages: ChatMessage[] = await db
+        .select()
+        .from(schema.chatMessages)
+        .where(eq(schema.chatMessages.conversationId, id))
+        .orderBy(schema.chatMessages.createdAt);
+
+      // Get session metadata
+      const sessionMetadata = await this.getSessionMetadata(id);
+
+      return {
+        ...conversation[0],
+        messages,
+        messageCount: messages.length,
+        lastMessageAt: messages[messages.length - 1]?.createdAt || undefined,
+        sessionMetadata,
+      };
+    } catch (error) {
+      throw error;
+    }
+  }
+
+  // Streaming Message Support
+  static async updateMessageStreaming(
+    messageId: number,
+    isStreaming: boolean,
+    content?: string,
+  ): Promise<void> {
+    const db = await this.getDatabase();
+
+    try {
+      const updates: Partial<NewChatMessage> = {
+        isStreaming,
+        updatedAt: new Date().toISOString(),
+      };
+
+      if (content !== undefined) {
+        updates.content = content;
+      }
+
+      await db
+        .update(schema.chatMessages)
+        .set(updates)
+        .where(eq(schema.chatMessages.id, messageId));
+    } catch (error) {
+      throw error;
+    }
+  }
+
+  // Message Regeneration Support
+  static async createMessageVariant(
+    originalMessageId: number,
+    newContent: string,
+    metadata?: any,
+  ): Promise<ChatMessage> {
+    const db = await this.getDatabase();
+
+    try {
+      // Get original message
+      const originalMessage = await db
+        .select()
+        .from(schema.chatMessages)
+        .where(eq(schema.chatMessages.id, originalMessageId));
+
+      if (!originalMessage[0]) {
+        throw new Error('Original message not found');
+      }
+
+      // Create new message as variant
+      const messageResults = await db
+        .insert(schema.chatMessages)
+        .values({
+          conversationId: originalMessage[0].conversationId,
+          role: originalMessage[0].role,
+          content: newContent,
+          metadata: metadata || originalMessage[0].metadata,
+          parentMessageId: originalMessageId,
+        })
+        .returning();
+
+      const [newMessage] = Array.isArray(messageResults)
+        ? messageResults
+        : [messageResults];
+      if (!newMessage) {
+        throw new Error('Failed to create message variant');
+      }
+
+      return newMessage;
+    } catch (error) {
+      throw error;
     }
   }
 

@@ -82,6 +82,7 @@ export type AIChannels =
   | 'ai:provider:update'
   | 'ai:provider:delete'
   | 'ai:provider:get-active'
+  | 'ai:provider:get-active-info'
   | 'ai:provider:set-active'
   | 'ai:provider:deactivate-all'
   | 'ai:provider:test-connection'
@@ -98,34 +99,42 @@ export type AIChannels =
   // AI completion
   | 'ai:completion:generate'
 
-  // Database operations (using main database - not database.json)
-  | 'ai:create-conversation'
-  | 'ai:get-conversations'
-  | 'ai:update-conversation'
-  | 'ai:delete-conversation'
-  | 'ai:add-message'
-  | 'ai:get-messages'
-  | 'ai:update-message'
-  | 'ai:delete-message'
-  | 'ai:create-template'
-  | 'ai:get-templates'
-  | 'ai:update-template'
-  | 'ai:delete-template'
-  | 'ai:log-usage'
-  | 'ai:get-usage-stats'
-  | 'ai:get-database-info'
-  | 'ai:test-provider'
-
   // Modern chat functionality (standardized naming)
   | 'chat:conversation:list'
   | 'chat:conversation:get'
+  | 'chat:conversation:get-with-context'
   | 'chat:conversation:create'
   | 'chat:conversation:update'
   | 'chat:conversation:delete'
   | 'chat:message:list'
+  | 'chat:message:get-with-context'
   | 'chat:message:send'
+  | 'chat:message:stream'
+  | 'chat:message:stream-chunk'
   | 'chat:message:update'
   | 'chat:message:delete'
+  | 'chat:message:regenerate'
+  | 'chat:message:add-with-context'
+
+  // Continue.dev context management
+  | 'chat:context:add-items'
+  | 'chat:context:get-items'
+  | 'chat:context:resolve-file'
+  | 'chat:context:resolve-folder'
+  | 'chat:context:search-codebase'
+  | 'chat:context:resolve-url'
+
+  // Continue.dev tool calls
+  | 'chat:tool:add-calls'
+  | 'chat:tool:get-calls'
+  | 'chat:tool:update-call'
+  | 'chat:tool:execute'
+  | 'chat:tool:cancel'
+
+  // Continue.dev session metadata
+  | 'chat:session:set-metadata'
+  | 'chat:session:get-metadata'
+  | 'chat:session:delete-metadata'
 
   // Modern template functionality (standardized naming)
   | 'ai:template:list'

@@ -8,12 +8,14 @@ import {
   Edit,
 } from '@mui/icons-material';
 import {
+  Box,
   IconButton,
   ListItemIcon,
   ListItemText,
   Menu,
   MenuItem,
   Tooltip,
+  Slide,
 } from '@mui/material';
 import { toast } from 'react-toastify';
 import yaml from 'js-yaml';
@@ -56,13 +58,14 @@ import { AI_PROMPTS } from '../../config/constants';
 import { utils } from '../../helpers';
 import { AppLayout } from '../../layouts';
 import { AppContext } from '../../context';
+import ChatScreen from '../chat';
 
 const ProjectDetails: React.FC = () => {
   const navigate = useNavigate();
   const { data: project, isLoading, refetch } = useGetSelectedProject();
   const { data: connection } = useGetConnectionById(project?.connectionId);
   const { data: settings } = useGetSettings();
-  const { isAiProviderSet } = React.useContext(AppContext);
+  const { isAiProviderSet, isChatOpen } = React.useContext(AppContext);
   const [queryData, setQueryData] = React.useState<
     GenerateDashboardResponseType[]
   >([]);
@@ -378,214 +381,238 @@ const ProjectDetails: React.FC = () => {
         </FileTreeContainer>
       }
     >
-      <Container>
-        <TerminalLayout project={project}>
-          <Content>
-            <EditorContainer>
-              <Header>
-                {selectedFilePath && (
-                  <SelectedFile>
-                    {utils.splitPath(selectedFilePath ?? '', project.name)}
-                  </SelectedFile>
-                )}
-                <ButtonsContainer>
-                  {/* Single model command buttons - only for .sql files */}
-                  {selectedFilePath?.endsWith('.sql') &&
-                    selectedFilePath?.includes('/models/') &&
-                    project && (
-                      <ModelSplitButton
-                        modelPath={selectedFilePath}
+      <Box display="flex" flexDirection="row" width="100%" height="100%">
+        <Box flex={1}>
+          <Container>
+            <TerminalLayout project={project}>
+              <Content>
+                <EditorContainer>
+                  <Header>
+                    {selectedFilePath && (
+                      <SelectedFile>
+                        {utils.splitPath(selectedFilePath ?? '', project.name)}
+                      </SelectedFile>
+                    )}
+                    <ButtonsContainer>
+                      {/* Single model command buttons - only for .sql files */}
+                      {selectedFilePath?.endsWith('.sql') &&
+                        selectedFilePath?.includes('/models/') &&
+                        project && (
+                          <ModelSplitButton
+                            modelPath={selectedFilePath}
+                            project={project}
+                            isDbtConfigured={!!settings?.dbtPath}
+                            fileContent={fileContent}
+                            isRunningDbt={isRunningDbt}
+                            isRunningRosettaDbt={isRunningRosettaDbt}
+                          />
+                        )}
+                      <ProjectDbtSplitButton
+                        rosettaPath={settings?.rosettaPath}
+                        dbtPath={settings?.dbtPath}
                         project={project}
                         isDbtConfigured={!!settings?.dbtPath}
-                        fileContent={fileContent}
                         isRunningDbt={isRunningDbt}
                         isRunningRosettaDbt={isRunningRosettaDbt}
+                        connection={connection}
+                        rosettaDbt={rosettaDbt}
+                        handleBusinessLayerClick={handleBusinessLayerClick}
                       />
-                    )}
-                  <ProjectDbtSplitButton
-                    rosettaPath={settings?.rosettaPath}
-                    dbtPath={settings?.dbtPath}
-                    project={project}
-                    isDbtConfigured={!!settings?.dbtPath}
-                    isRunningDbt={isRunningDbt}
-                    isRunningRosettaDbt={isRunningRosettaDbt}
-                    connection={connection}
-                    rosettaDbt={rosettaDbt}
-                    handleBusinessLayerClick={handleBusinessLayerClick}
-                  />
-                  {selectedFilePath?.includes(
-                    `${project.path}/models/enhanced`,
-                  ) && (
-                    <SplitButton
-                      title="AI"
-                      isLoading={isLoadingQuery}
-                      leftIcon={<AutoAwesome />}
-                      menuItems={[
-                        {
-                          name: 'Auto-Fix Incremental & Unique Key Columns',
-                          onClick: isAiProviderSet
-                            ? enhanceModel
-                            : () => setNoAiSetModal(true),
-                          subTitle: '',
-                          leftIcon: <AutoFixHigh />,
-                        },
-                      ]}
-                    />
-                  )}
-                  {selectedFilePath?.includes(
-                    `${project.path}/models/staging`,
-                  ) && (
-                    <SplitButton
-                      title="AI"
-                      isLoading={isLoadingQuery}
-                      leftIcon={<AutoAwesome />}
-                      menuItems={[
-                        {
-                          name: 'Suggest Basic Transformations',
-                          onClick: isAiProviderSet
-                            ? enhanceStagingModel
-                            : () => setNoAiSetModal(true),
-                          subTitle: '',
-                          leftIcon: <AutoFixHigh />,
-                        },
-                      ]}
-                    />
-                  )}
-                  {selectedFilePath?.includes(
-                    `${project.path}/models/business`,
-                  ) && (
-                    <SplitButton
-                      title="AI"
-                      isLoading={isLoadingQuery}
-                      menuItems={[
-                        {
-                          name: 'Generate Analytics',
-                          onClick: isAiProviderSet
-                            ? generateDashboards
-                            : () => setNoAiSetModal(true),
-                          subTitle: '',
-                          leftIcon: <AutoFixHigh />,
-                        },
-                      ]}
-                    />
-                  )}
-                  {connection?.id ? (
-                    <>
-                      <Tooltip
-                        title="Database connection options"
-                        placement="bottom"
-                      >
-                        <IconButton onClick={handleConnectionMenuOpen}>
-                          <Cable color="primary" fontSize="small" />
-                        </IconButton>
-                      </Tooltip>
-                      <Menu
-                        anchorEl={connectionMenuAnchor}
-                        open={Boolean(connectionMenuAnchor)}
-                        onClose={handleConnectionMenuClose}
-                        anchorOrigin={{
-                          vertical: 'bottom',
-                          horizontal: 'right',
-                        }}
-                        transformOrigin={{
-                          vertical: 'top',
-                          horizontal: 'right',
-                        }}
-                      >
-                        <MenuItem
-                          onClick={() => {
-                            navigate(`/app/edit-connection/${connection.id}`);
-                            handleConnectionMenuClose();
-                          }}
+                      {selectedFilePath?.includes(
+                        `${project.path}/models/enhanced`,
+                      ) && (
+                        <SplitButton
+                          title="AI"
+                          isLoading={isLoadingQuery}
+                          leftIcon={<AutoAwesome />}
+                          menuItems={[
+                            {
+                              name: 'Auto-Fix Incremental & Unique Key Columns',
+                              onClick: isAiProviderSet
+                                ? enhanceModel
+                                : () => setNoAiSetModal(true),
+                              subTitle: '',
+                              leftIcon: <AutoFixHigh />,
+                            },
+                          ]}
+                        />
+                      )}
+                      {selectedFilePath?.includes(
+                        `${project.path}/models/staging`,
+                      ) && (
+                        <SplitButton
+                          title="AI"
+                          isLoading={isLoadingQuery}
+                          leftIcon={<AutoAwesome />}
+                          menuItems={[
+                            {
+                              name: 'Suggest Basic Transformations',
+                              onClick: isAiProviderSet
+                                ? enhanceStagingModel
+                                : () => setNoAiSetModal(true),
+                              subTitle: '',
+                              leftIcon: <AutoFixHigh />,
+                            },
+                          ]}
+                        />
+                      )}
+                      {selectedFilePath?.includes(
+                        `${project.path}/models/business`,
+                      ) && (
+                        <SplitButton
+                          title="AI"
+                          isLoading={isLoadingQuery}
+                          menuItems={[
+                            {
+                              name: 'Generate Analytics',
+                              onClick: isAiProviderSet
+                                ? generateDashboards
+                                : () => setNoAiSetModal(true),
+                              subTitle: '',
+                              leftIcon: <AutoFixHigh />,
+                            },
+                          ]}
+                        />
+                      )}
+                      {connection?.id ? (
+                        <>
+                          <Tooltip
+                            title="Database connection options"
+                            placement="bottom"
+                          >
+                            <IconButton onClick={handleConnectionMenuOpen}>
+                              <Cable color="primary" fontSize="small" />
+                            </IconButton>
+                          </Tooltip>
+                          <Menu
+                            anchorEl={connectionMenuAnchor}
+                            open={Boolean(connectionMenuAnchor)}
+                            onClose={handleConnectionMenuClose}
+                            anchorOrigin={{
+                              vertical: 'bottom',
+                              horizontal: 'right',
+                            }}
+                            transformOrigin={{
+                              vertical: 'top',
+                              horizontal: 'right',
+                            }}
+                          >
+                            <MenuItem
+                              onClick={() => {
+                                navigate(
+                                  `/app/edit-connection/${connection.id}`,
+                                );
+                                handleConnectionMenuClose();
+                              }}
+                            >
+                              <ListItemIcon>
+                                <Edit fontSize="small" color="primary" />
+                              </ListItemIcon>
+                              <ListItemText>Edit</ListItemText>
+                            </MenuItem>
+                            <MenuItem onClick={handleRemoveConnection}>
+                              <ListItemIcon>
+                                <Delete fontSize="small" color="error" />
+                              </ListItemIcon>
+                              <ListItemText>Remove</ListItemText>
+                            </MenuItem>
+                          </Menu>
+                        </>
+                      ) : (
+                        <Tooltip
+                          title="Add database connection"
+                          placement="bottom"
                         >
-                          <ListItemIcon>
-                            <Edit fontSize="small" color="primary" />
-                          </ListItemIcon>
-                          <ListItemText>Edit</ListItemText>
-                        </MenuItem>
-                        <MenuItem onClick={handleRemoveConnection}>
-                          <ListItemIcon>
-                            <Delete fontSize="small" color="error" />
-                          </ListItemIcon>
-                          <ListItemText>Remove</ListItemText>
-                        </MenuItem>
-                      </Menu>
-                    </>
-                  ) : (
-                    <Tooltip title="Add database connection" placement="bottom">
-                      <IconButton
-                        onClick={handleAddConnection}
-                        sx={{
-                          border: '1px solid',
-                          borderColor: 'divider',
-                          borderRadius: '16px',
-                          padding: '4px 12px',
-                          fontSize: '12px',
-                          color: 'text.secondary',
-                          '&:hover': {
-                            bgcolor: 'action.hover',
-                          },
-                        }}
-                      >
-                        <Cable fontSize="small" sx={{ mr: 0.5 }} />
-                        No connection
-                      </IconButton>
-                    </Tooltip>
+                          <IconButton
+                            onClick={handleAddConnection}
+                            sx={{
+                              border: '1px solid',
+                              borderColor: 'divider',
+                              borderRadius: '16px',
+                              padding: '4px 12px',
+                              fontSize: '12px',
+                              color: 'text.secondary',
+                              '&:hover': {
+                                bgcolor: 'action.hover',
+                              },
+                            }}
+                          >
+                            <Cable fontSize="small" sx={{ mr: 0.5 }} />
+                            No connection
+                          </IconButton>
+                        </Tooltip>
+                      )}
+                    </ButtonsContainer>
+                  </Header>
+                  {!selectedFilePath && (
+                    <NoFileSelected>
+                      Please select a file from the explorer on the left!
+                    </NoFileSelected>
                   )}
-                </ButtonsContainer>
-              </Header>
-              {!selectedFilePath && (
-                <NoFileSelected>
-                  Please select a file from the explorer on the left!
-                </NoFileSelected>
-              )}
-              {selectedFilePath && (
-                <Editor
-                  filePath={selectedFilePath}
-                  content={fileContent ?? ''}
-                  setContent={setFileContent}
-                  enableDiff
-                />
-              )}
-            </EditorContainer>
-          </Content>
-        </TerminalLayout>
+                  {selectedFilePath && (
+                    <Editor
+                      filePath={selectedFilePath}
+                      content={fileContent ?? ''}
+                      setContent={setFileContent}
+                      enableDiff
+                    />
+                  )}
+                </EditorContainer>
+              </Content>
+            </TerminalLayout>
 
-        {businessQueryModal && (
-          <BusinessQueryModal
-            isOpen={businessQueryModal}
-            onClose={() => setBusinessQueryModal(false)}
-            onSubmit={(query) =>
-              rosettaDbt(project, `--business -q "${query}"`)
-            }
-          />
-        )}
-        {noAiSetModal && (
-          <NoAiSetModal
-            isOpen={noAiSetModal}
-            onClose={() => setNoAiSetModal(false)}
-          />
-        )}
-        {isQueryOpen && (
-          <GenerateAiQueriesModal
-            isOpen={isQueryOpen}
-            onClose={() => setIsQueryOpen(false)}
-            data={queryData}
-          />
-        )}
-        <AddConnectionModal
-          isOpen={isAddConnectionModalOpen}
-          onClose={handleConnectionModalClose}
-          project={project || null}
-          connections={connections}
-          onSuccess={() => {
-            // Refresh the project data
-            setSelectedFilePath(undefined);
-            refetch();
+            {businessQueryModal && (
+              <BusinessQueryModal
+                isOpen={businessQueryModal}
+                onClose={() => setBusinessQueryModal(false)}
+                onSubmit={(query) =>
+                  rosettaDbt(project, `--business -q "${query}"`)
+                }
+              />
+            )}
+            {noAiSetModal && (
+              <NoAiSetModal
+                isOpen={noAiSetModal}
+                onClose={() => setNoAiSetModal(false)}
+              />
+            )}
+            {isQueryOpen && (
+              <GenerateAiQueriesModal
+                isOpen={isQueryOpen}
+                onClose={() => setIsQueryOpen(false)}
+                data={queryData}
+              />
+            )}
+            <AddConnectionModal
+              isOpen={isAddConnectionModalOpen}
+              onClose={handleConnectionModalClose}
+              project={project || null}
+              connections={connections}
+              onSuccess={() => {
+                // Refresh the project data
+                setSelectedFilePath(undefined);
+                refetch();
+              }}
+              onUpdateProject={updateProject}
+            />
+          </Container>
+        </Box>
+        <Box
+          sx={{
+            width: isChatOpen ? '400px' : 0,
+            transition: 'width 200ms ease',
+            borderLeft: isChatOpen ? '1px solid' : 'none',
+            borderColor: 'divider',
+            overflow: 'hidden',
           }}
-          onUpdateProject={updateProject}
-        />
-      </Container>
+        >
+          <Slide in={isChatOpen} direction="left" mountOnEnter unmountOnExit>
+            <Box height="100%">
+              <ChatScreen />
+            </Box>
+          </Slide>
+        </Box>
+      </Box>
     </AppLayout>
   );
 };

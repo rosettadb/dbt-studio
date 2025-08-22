@@ -20,6 +20,8 @@ export const AppContext = React.createContext<AppContextType>({
   fetchSchema: async () => {},
   schema: [],
   isAiProviderSet: false,
+  isChatOpen: false,
+  setIsChatOpen: () => {},
 });
 
 const AppProvider: React.FC<Props> = ({ children }) => {
@@ -28,6 +30,7 @@ const AppProvider: React.FC<Props> = ({ children }) => {
   const { data: activeAIProvider } = useGetActiveAIProvider();
 
   const [isSidebarOpen, setIsSidebarOpen] = React.useState(true);
+  const [isChatOpen, setIsChatOpen] = React.useState(false);
   const [isLoadingSchema, setIsLoadingSchema] = React.useState(false);
   const [schema, setSchema] = React.useState<Table[]>();
   const [sidebarContent, setSidebarContent] = React.useState<React.ReactNode>(
@@ -78,6 +81,8 @@ const AppProvider: React.FC<Props> = ({ children }) => {
       setIsSidebarOpen,
       isLoadingSchema,
       isAiProviderSet,
+      isChatOpen,
+      setIsChatOpen,
     };
   }, [
     projects,
@@ -87,6 +92,7 @@ const AppProvider: React.FC<Props> = ({ children }) => {
     isSidebarOpen,
     selectedProject,
     isAiProviderSet,
+    isChatOpen,
   ]);
 
   if (isLoading) {

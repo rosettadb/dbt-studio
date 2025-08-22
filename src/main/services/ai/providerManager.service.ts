@@ -49,6 +49,83 @@ export class AIProviderManager {
     }
   }
 
+  /**
+   * Returns an initialized active provider instance and a selected model compatible with it.
+   * This is useful for services that need to directly call provider methods (e.g., streaming).
+   */
+  static async getInitializedActiveProviderAndModel(
+    requestedModel?: string,
+  ): Promise<{
+    providerInstance: BaseAIProvider;
+    selectedModel: string;
+    providerType: string;
+  }> {
+    // Get the active provider from DB
+    const activeProvider = await MainDatabaseService.getActiveProvider();
+    if (!activeProvider) {
+      throw new Error(
+        'No active AI provider configured. Please configure and activate a provider in settings.',
+      );
+    }
+
+    // Credentials (if needed)
+    let apiKey: string | undefined;
+    const providersNeedingApiKey = ['openai', 'anthropic', 'gemini'];
+    if (providersNeedingApiKey.includes(activeProvider.type)) {
+      apiKey = (await SecureStorageService.getAIProviderCredential(
+        activeProvider.id!,
+        activeProvider.type as AIProviderType,
+      )) as any;
+      if (!apiKey) {
+        throw new Error(
+          `No API key configured for ${activeProvider.type} provider. Please configure credentials in settings.`,
+        );
+      }
+    }
+
+    // Parse provider config
+    let config: any = {};
+    try {
+      config =
+        typeof activeProvider.config === 'string'
+          ? JSON.parse(activeProvider.config)
+          : activeProvider.config || {};
+    } catch (configError) {
+      throw new Error(
+        'Invalid provider configuration. Please reconfigure the provider in settings.',
+      );
+    }
+
+    // Select model
+    let selectedModel = requestedModel;
+    if (
+      !selectedModel ||
+      !this.isModelValidForProvider(selectedModel, activeProvider.type)
+    ) {
+      selectedModel = this.getDefaultModelForProvider(
+        activeProvider.type,
+        config,
+      );
+    }
+
+    // Create and initialize instance
+    const providerInstance = this.createProviderInstance(
+      activeProvider.type,
+      config,
+    );
+    if (!providerInstance) {
+      throw new Error(`Unsupported provider type: ${activeProvider.type}`);
+    }
+
+    await providerInstance.initialize({ ...config, apiKey });
+
+    return {
+      providerInstance,
+      selectedModel,
+      providerType: activeProvider.type,
+    };
+  }
+
   static async initializeAllProviders(): Promise<void> {
     try {
       // Set active provider if one exists
@@ -958,6 +1035,26 @@ export class AIProviderManager {
     // For now, return null
     // TODO: Implement actual active provider tracking when provider classes are ready
     return this.activeProvider;
+  }
+
+  // Returns enriched info about the active provider for IPC consumption
+  static getActiveProviderInfo(): {
+    name: string;
+    type: string;
+    capabilities: any;
+    supportedModels: any;
+  } | null {
+    const activeProvider = this.getActiveProvider();
+    if (!activeProvider) {
+      return null;
+    }
+
+    return {
+      name: activeProvider.name,
+      type: activeProvider.type,
+      capabilities: activeProvider.capabilities,
+      supportedModels: activeProvider.supportedModels,
+    };
   }
 
   static enhanceModelQuery(prompt: string): Promise<EnhanceModelResponseType> {
