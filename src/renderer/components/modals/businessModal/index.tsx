@@ -520,7 +520,7 @@ export const BusinessModal: React.FC<Props> = ({
             },
           }}
         >
-          Generate Business Models ({selectedFiles.size})
+          Generate Business Models
         </Button>
       </DialogActions>
     </Dialog>

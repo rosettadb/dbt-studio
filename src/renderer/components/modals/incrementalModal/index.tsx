@@ -396,7 +396,7 @@ export const IncrementalModal: React.FC<Props> = ({
           }
           disabled={selectedFiles.size === 0}
         >
-          Process Selected SQL Files ({selectedFiles.size})
+          Generate Incremental Models
         </Button>
       </DialogActions>
     </Dialog>
