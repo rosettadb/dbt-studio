@@ -71,6 +71,7 @@ import {
   TaglineContainer,
   TaglineText,
 } from './styles';
+import { pathJoin } from '../../services/settings.services';
 
 const SelectProject: React.FC = () => {
   const navigate = useNavigate();
@@ -235,8 +236,9 @@ const SelectProject: React.FC = () => {
     }
 
     try {
+      const path = await pathJoin(defaultProjectPath, newProject.name);
       const project = await projectsServices.addProject({
-        name: `${defaultProjectPath}/${newProject.name}`,
+        name: path,
         connectionId: selectedConnection || undefined,
       });
       await projectsServices.selectProject({ projectId: project.id });

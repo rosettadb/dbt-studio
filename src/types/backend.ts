@@ -193,6 +193,9 @@ export type Project = {
   isExtracted?: boolean;
   queryEditor?: string;
   connection?: ConnectionInput;
+  stagingDir?: string;
+  incrementalDir?: string;
+  businessDir?: string;
 };
 
 export type SettingsType = {

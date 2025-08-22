@@ -160,9 +160,12 @@ const registerProjectHandlers = () => {
     return ProjectsService.zipDirectory(path);
   });
 
-  ipcMain.handle('project:chooseDir', async (_event, path: string) => {
-    return ProjectsService.chooseDir(path);
-  });
+  ipcMain.handle(
+    'project:chooseDir',
+    async (_event, { path }: { path: string }) => {
+      return ProjectsService.chooseDir(path);
+    },
+  );
 };
 
 export default registerProjectHandlers;

@@ -22,12 +22,12 @@ import { Project } from '../../../../types/backend';
 type Props = {
   isOpen: boolean;
   onClose: () => void;
-  processCallback: (path: string) => void;
+  processCallback: (path: string, inputPath: string, query: string) => void;
   path: string;
   project: Project;
 };
 
-export const StagingModal: React.FC<Props> = ({
+export const BusinessModal: React.FC<Props> = ({
   isOpen,
   onClose,
   processCallback,
@@ -40,10 +40,35 @@ export const StagingModal: React.FC<Props> = ({
     setSelectAll(!selectAll);
   };
   const updateProject = useUpdateProject();
+  const [query, setQuery] = React.useState('');
 
   return (
-    <Dialog open={isOpen} onClose={onClose} title="Staging Layer">
-      <DialogTitle>Rosetta DBT Staging</DialogTitle>
+    <Dialog open={isOpen} onClose={onClose} title="Business Layer">
+      <DialogTitle>Rosetta DBT Business</DialogTitle>
+      <TextField
+        variant="outlined"
+        label="Prompt"
+        placeholder="Write your prompt to generate a dbt business models."
+        onChange={(event) => setQuery(event.target.value)}
+        value={query}
+        fullWidth
+        multiline
+        rows={5}
+        InputProps={{
+          style: {
+            minHeight: '120px',
+          },
+        }}
+        sx={{
+          '& .MuiOutlinedInput-root': {
+            height: 'auto',
+          },
+          '& .MuiInputBase-inputMultiline': {
+            height: '150px !important',
+            resize: 'none',
+          },
+        }}
+      />
       <IconButton
         aria-label="close"
         onClick={onClose}
@@ -57,7 +82,7 @@ export const StagingModal: React.FC<Props> = ({
         <CloseIcon />
       </IconButton>
       <DialogContent>
-        <DialogContentText>Please select input files</DialogContentText>
+        <DialogContentText>{`Please select input files from ${project.stagingDir}`}</DialogContentText>
         <Box
           noValidate
           component="form"
@@ -84,7 +109,7 @@ export const StagingModal: React.FC<Props> = ({
           <DialogContentText>Please select output path</DialogContentText>
           <TextField
             label="Output path"
-            variant="outlined" // or "filled", "standard"
+            variant="outlined"
             value={updatedPath}
             InputProps={{
               endAdornment: (
@@ -100,7 +125,7 @@ export const StagingModal: React.FC<Props> = ({
                       if (result !== 'false') {
                         await updateProject.mutateAsync({
                           ...project,
-                          stagingDir: result,
+                          businessDir: result,
                         });
                         setUpdatedPath(result);
                       }
@@ -115,8 +140,12 @@ export const StagingModal: React.FC<Props> = ({
         </Box>
       </DialogContent>
       <DialogActions>
-        <Button onClick={() => processCallback(updatedPath)}>
-          Rosetta DBT Staging
+        <Button
+          onClick={() =>
+            processCallback(updatedPath, project.incrementalDir ?? '', query)
+          }
+        >
+          Rosetta DBT Business
         </Button>
       </DialogActions>
     </Dialog>

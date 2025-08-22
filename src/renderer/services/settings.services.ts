@@ -58,6 +58,14 @@ export const usePathJoin = async (...body: string[]): Promise<string> => {
   return data;
 };
 
+export const pathJoin = async (...body: string[]): Promise<string> => {
+  const { data } = await client.post<string[], string>(
+    'settings:usePathJoin',
+    body,
+  );
+  return data;
+};
+
 export const setOpenAIKey = async (apiKey: string): Promise<void> => {
   await client.post<{ account: SecureStorageAccount; password: string }, void>(
     'secure-storage:set',

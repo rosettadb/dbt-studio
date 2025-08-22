@@ -7,6 +7,7 @@ import { Icon } from '../icon';
 import { Command, CommandType, Project } from '../../../types/backend';
 import { useDbt, useProcess } from '../../hooks';
 import { StagingModal } from '../modals/stagingModal';
+import { IncrementalModal } from '../modals/incrementalModal';
 
 interface ProjectDbtSplitButtonProps {
   rosettaPath?: string;
@@ -33,6 +34,7 @@ export const ProjectDbtSplitButton: React.FC<ProjectDbtSplitButtonProps> = ({
   handleBusinessLayerClick,
 }) => {
   // Functions that are only used in this component - moved inside
+
   const {
     run: dbtRun,
     test: dbtTest,
@@ -45,6 +47,7 @@ export const ProjectDbtSplitButton: React.FC<ProjectDbtSplitButtonProps> = ({
   } = useDbt();
   const { start, stop, isRunning } = useProcess();
   const [stagingModal, setStagingModal] = React.useState(false);
+  const [incrementalModal, setIncrementalModal] = React.useState(false);
 
   return (
     <>
@@ -65,11 +68,6 @@ export const ProjectDbtSplitButton: React.FC<ProjectDbtSplitButtonProps> = ({
                 return;
               }
               setStagingModal(true);
-              rosettaDbt(project, {
-                command: 'staging',
-                commandType: CommandType.DBTNext,
-                arguments: new Map<string, any>(),
-              } as Command);
             },
             leftIcon: (
               <img
@@ -92,11 +90,7 @@ export const ProjectDbtSplitButton: React.FC<ProjectDbtSplitButtonProps> = ({
                 toast.info('Please configure RosettaDB path in settings');
                 return;
               }
-              rosettaDbt(project, {
-                commandType: CommandType.DBTNext,
-                command: 'incremental',
-                arguments: new Map<string, any>(),
-              } as Command);
+              setIncrementalModal(true);
             },
             leftIcon: (
               <img
@@ -263,11 +257,32 @@ export const ProjectDbtSplitButton: React.FC<ProjectDbtSplitButtonProps> = ({
         <StagingModal
           isOpen={stagingModal}
           onClose={() => setStagingModal(false)}
-          path={project.path}
+          path={project.stagingDir ?? project.path}
+          project={project}
           processCallback={(updatedPath) => {
-            if (updatedPath) {
-              toast.info(updatedPath);
-            }
+            rosettaDbt(project, {
+              command: 'staging',
+              commandType: CommandType.DBTNext,
+              arguments: new Map([['--output', updatedPath]]),
+            } as Command);
+          }}
+        />
+      )}
+      {incrementalModal && project?.path && (
+        <IncrementalModal
+          isOpen={incrementalModal}
+          onClose={() => setIncrementalModal(false)}
+          path={project.incrementalDir ?? project.path}
+          project={project}
+          processCallback={(updatedPath, inputPath) => {
+            rosettaDbt(project, {
+              commandType: CommandType.DBTNext,
+              command: 'incremental',
+              arguments: new Map([
+                ['--output', updatedPath],
+                ['--input', inputPath],
+              ]),
+            } as Command);
           }}
         />
       )}

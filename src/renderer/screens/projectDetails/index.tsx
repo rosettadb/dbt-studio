@@ -19,7 +19,6 @@ import { toast } from 'react-toastify';
 import yaml from 'js-yaml';
 import {
   AddConnectionModal,
-  BusinessQueryModal,
   Editor,
   FileTreeViewer,
   GenerateAiQueriesModal,
@@ -61,6 +60,7 @@ import { AI_PROMPTS } from '../../config/constants';
 import { utils } from '../../helpers';
 import { AppLayout } from '../../layouts';
 import { AppContext } from '../../context';
+import { BusinessModal } from '../../components/modals/businessModal';
 
 const ProjectDetails: React.FC = () => {
   const navigate = useNavigate();
@@ -94,9 +94,7 @@ const ProjectDetails: React.FC = () => {
         await new Promise((resolve) => {
           setTimeout(resolve, 2000);
         });
-        await projectsServices.postRosettaDBTCopy(project);
         await fetchDirectories();
-        refetch();
       }
     },
   );
@@ -557,16 +555,22 @@ const ProjectDetails: React.FC = () => {
         </TerminalLayout>
 
         {businessQueryModal && (
-          <BusinessQueryModal
+          <BusinessModal
             isOpen={businessQueryModal}
+            project={project}
+            path={project.businessDir ?? project.path}
             onClose={() => setBusinessQueryModal(false)}
-            onSubmit={(query) =>
+            processCallback={(updatedPath, inputPath, query) => {
               rosettaDbt(project, {
                 command: 'business',
                 commandType: CommandType.DBTNext,
-                arguments: new Map<string, any>().set('-q', `"${query}"`),
-              } as Command)
-            }
+                arguments: new Map([
+                  ['-q', `"${query}"`],
+                  ['--output', updatedPath],
+                  ['--input', inputPath],
+                ]),
+              } as Command);
+            }}
           />
         )}
         {noAiSetModal && (

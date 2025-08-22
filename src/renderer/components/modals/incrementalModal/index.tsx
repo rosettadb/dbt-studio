@@ -22,12 +22,12 @@ import { Project } from '../../../../types/backend';
 type Props = {
   isOpen: boolean;
   onClose: () => void;
-  processCallback: (path: string) => void;
+  processCallback: (path: string, inputPath: string) => void;
   path: string;
   project: Project;
 };
 
-export const StagingModal: React.FC<Props> = ({
+export const IncrementalModal: React.FC<Props> = ({
   isOpen,
   onClose,
   processCallback,
@@ -42,8 +42,8 @@ export const StagingModal: React.FC<Props> = ({
   const updateProject = useUpdateProject();
 
   return (
-    <Dialog open={isOpen} onClose={onClose} title="Staging Layer">
-      <DialogTitle>Rosetta DBT Staging</DialogTitle>
+    <Dialog open={isOpen} onClose={onClose} title="Incremental Layer">
+      <DialogTitle>Rosetta DBT Incremental</DialogTitle>
       <IconButton
         aria-label="close"
         onClick={onClose}
@@ -57,7 +57,7 @@ export const StagingModal: React.FC<Props> = ({
         <CloseIcon />
       </IconButton>
       <DialogContent>
-        <DialogContentText>Please select input files</DialogContentText>
+        <DialogContentText>{`Please select input files from ${project.stagingDir}`}</DialogContentText>
         <Box
           noValidate
           component="form"
@@ -100,7 +100,7 @@ export const StagingModal: React.FC<Props> = ({
                       if (result !== 'false') {
                         await updateProject.mutateAsync({
                           ...project,
-                          stagingDir: result,
+                          incrementalDir: result,
                         });
                         setUpdatedPath(result);
                       }
@@ -115,8 +115,10 @@ export const StagingModal: React.FC<Props> = ({
         </Box>
       </DialogContent>
       <DialogActions>
-        <Button onClick={() => processCallback(updatedPath)}>
-          Rosetta DBT Staging
+        <Button
+          onClick={() => processCallback(updatedPath, project.stagingDir ?? '')}
+        >
+          Rosetta DBT Incremental
         </Button>
       </DialogActions>
     </Dialog>
