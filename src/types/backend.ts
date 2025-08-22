@@ -588,3 +588,64 @@ export interface MainDatabaseInfo {
   createdAt: string;
   lastModified: string;
 }
+
+export type DbtCommandType =
+  | 'run'
+  | 'test'
+  | 'compile'
+  | 'build'
+  | 'list'
+  | 'debug'
+  | 'docs:generate'
+  | 'docs:serve'
+  | 'deps'
+  | 'clean'
+  | 'seed';
+
+enum RosettaCommands {
+  Config = 'config',
+  Init = 'init',
+  Extract = 'extract',
+  Validate = 'validate',
+  Compile = 'compile',
+  Apply = 'apply',
+  Diff = 'diff',
+  Test = 'test',
+  Generate = 'generate',
+  Query = 'query',
+  DBT = 'dbt',
+  DBT_NEXT = 'dbt_next',
+  Drivers = 'drivers',
+}
+
+export type DbtNextCommandType =
+  | 'extract'
+  | 'staging'
+  | 'incremental'
+  | 'business';
+
+export enum CommandType {
+  Rosetta = 'rosetta',
+  Dbt = 'dbt',
+  DBTNext = 'dbt-next',
+}
+
+export type Command =
+  | {
+      command: RosettaCommands;
+      commandType: CommandType.Rosetta;
+      arguments: Map<string, string | number>;
+      options?: Map<string, string | number>;
+    }
+  | {
+      command: DbtCommandType;
+      commandType: CommandType.Dbt;
+      arguments: Map<string, string | number>;
+      options?: Map<string, string | number>;
+    }
+  | {
+      command: DbtNextCommandType;
+      commandType: CommandType.DBTNext;
+      arguments: Map<string, string | number>;
+      options?: Map<string, string | number>;
+    };

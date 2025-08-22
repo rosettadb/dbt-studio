@@ -14,20 +14,25 @@ import {
   FormControlLabel,
   Checkbox,
 } from '@mui/material';
-import { Info } from '@mui/icons-material';
+import {
+  Info,
+  Delete,
+  Refresh,
+  GetApp,
+  Description,
+  CloudDownload,
+} from '@mui/icons-material';
 import { SettingsType } from '../../../types/backend';
 import { useCli } from '../../hooks';
 import { settingsServices } from '../../services';
 
 interface DbtSettingsProps {
   settings: SettingsType;
-  onSettingsChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
   onInstallDbtSave: (key: string, value: string) => void;
 }
 
 export const DbtSettings: React.FC<DbtSettingsProps> = ({
   settings,
-  onSettingsChange,
   onInstallDbtSave,
 }) => {
   const [isLoadingInstall, setIsLoadingInstall] = React.useState(false);
@@ -333,6 +338,36 @@ export const DbtSettings: React.FC<DbtSettingsProps> = ({
     }
   };
 
+  const handleInstallSinglePackage = async (packageName: string) => {
+    setIsLoadingInstall(true);
+    setIsLoadingDialog(true);
+    setLoadingMessage(`Installing ${packageName}...`);
+
+    try {
+      const python = settings.pythonPath
+        ? `"${settings.pythonPath}"`
+        : 'python';
+      await runCommand(`${python} -m pip install ${packageName}`);
+
+      // Check if the package was installed successfully
+      const result = await runCommand(`${python} -m pip show ${packageName}`);
+      if (result.output.length > 0 && result.error.length === 0) {
+        const outputText = result.output.join('\n');
+        const versionMatch = outputText.match(/Version:\s*(.+)/);
+        const version = versionMatch ? versionMatch[1].trim() : 'unknown';
+
+        setInstalledPackages((prev) => ({
+          ...prev,
+          [packageName]: version,
+        }));
+      }
+    } finally {
+      setIsLoadingInstall(false);
+      setIsLoadingDialog(false);
+      setLoadingMessage('');
+    }
+  };
+
   useEffect(() => {
     const fetchDbtVersion = async () => {
       if (
@@ -393,7 +428,6 @@ export const DbtSettings: React.FC<DbtSettingsProps> = ({
           id="dbtPath"
           name="dbtPath"
           value={settings.dbtPath}
-          onChange={onSettingsChange}
           disabled
         />
       </Box>
@@ -417,6 +451,7 @@ export const DbtSettings: React.FC<DbtSettingsProps> = ({
                 onClick={handleUninstallDbt}
                 disabled={isLoadingInstall}
                 size="small"
+                startIcon={<Delete />}
               >
                 Uninstall All
               </Button>
@@ -440,6 +475,7 @@ export const DbtSettings: React.FC<DbtSettingsProps> = ({
               size="small"
               onClick={checkInstalledPackages}
               disabled={isCheckingPackages}
+              startIcon={<Refresh />}
             >
               Refresh
             </Button>
@@ -447,37 +483,53 @@ export const DbtSettings: React.FC<DbtSettingsProps> = ({
 
           {Object.keys(installedPackages).length > 0 ? (
             <Box sx={{ mb: 2 }}>
-              {Object.entries(installedPackages).map(([pkg, version]) => (
-                <Alert
-                  key={pkg}
-                  severity="info"
-                  sx={{ mb: 1 }}
-                  action={
-                    <Button
-                      color="error"
-                      variant="outlined"
-                      size="small"
-                      onClick={() => handleUninstallPackage(pkg)}
-                      disabled={isLoadingInstall}
-                    >
-                      Uninstall
-                    </Button>
-                  }
-                >
-                  <Box>
-                    <Typography variant="body2" sx={{ fontWeight: 'medium' }}>
-                      {pkg} v{version}
-                    </Typography>
-                    <Typography variant="body2" color="text.secondary">
-                      {
-                        packageDescriptions[
-                          pkg as keyof typeof packageDescriptions
-                        ]
-                      }
-                    </Typography>
-                  </Box>
-                </Alert>
-              ))}
+              {/* Show all packages from packageDescriptions, not just installed ones */}
+              {Object.entries(packageDescriptions).map(([pkg, description]) => {
+                const version = installedPackages[pkg];
+                const isInstalled = !!version;
+
+                return (
+                  <Alert
+                    key={pkg}
+                    severity={isInstalled ? 'info' : 'warning'}
+                    sx={{ mb: 1 }}
+                    action={
+                      isInstalled ? (
+                        <Button
+                          color="error"
+                          variant="outlined"
+                          size="small"
+                          onClick={() => handleUninstallPackage(pkg)}
+                          disabled={isLoadingInstall || pkg === 'dbt-core'}
+                          startIcon={<Delete />}
+                        >
+                          Uninstall
+                        </Button>
+                      ) : (
+                        <Button
+                          color="primary"
+                          variant="contained"
+                          size="small"
+                          onClick={() => handleInstallSinglePackage(pkg)}
+                          disabled={isLoadingInstall}
+                          startIcon={<GetApp />}
+                        >
+                          Install
+                        </Button>
+                      )
+                    }
+                  >
+                    <Box>
+                      <Typography variant="body2" sx={{ fontWeight: 'medium' }}>
+                        {pkg} {isInstalled ? `v${version}` : '(not installed)'}
+                      </Typography>
+                      <Typography variant="body2" color="text.secondary">
+                        {description}
+                      </Typography>
+                    </Box>
+                  </Alert>
+                );
+              })}
             </Box>
           ) : (
             !isCheckingPackages && (
@@ -575,7 +627,9 @@ export const DbtSettings: React.FC<DbtSettingsProps> = ({
               startIcon={
                 isLoadingInstall ? (
                   <CircularProgress size={14} color="inherit" />
-                ) : null
+                ) : (
+                  <CloudDownload />
+                )
               }
             >
               {isLoadingInstall
@@ -590,6 +644,7 @@ export const DbtSettings: React.FC<DbtSettingsProps> = ({
                 );
               }}
               color="primary"
+              startIcon={<Description />}
             >
               View Documentation
             </Button>
