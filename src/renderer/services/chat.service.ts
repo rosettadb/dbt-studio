@@ -226,6 +226,15 @@ class ChatService {
     }
   }
 
+  // Cancel an in-flight streaming message for a session
+  static async cancelStream(sessionId: number): Promise<{ success: boolean }> {
+    const { data } = await client.post<
+      { conversationId: number },
+      { success: boolean }
+    >('chat:message:cancel', { conversationId: sessionId });
+    return data;
+  }
+
   // Context Management
 
   // Add context items to a message
@@ -436,6 +445,7 @@ export const chatService = {
   sendMessageWithContext: ChatService.sendMessageWithContext,
   regenerateMessage: ChatService.regenerateMessage,
   streamMessage: ChatService.streamMessage,
+  cancelStream: ChatService.cancelStream,
 
   // Context management
   addContextItems: ChatService.addContextItems,

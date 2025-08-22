@@ -111,6 +111,7 @@ export type AIChannels =
   | 'chat:message:send'
   | 'chat:message:stream'
   | 'chat:message:stream-chunk'
+  | 'chat:message:cancel'
   | 'chat:message:update'
   | 'chat:message:delete'
   | 'chat:message:regenerate'

@@ -20,14 +20,16 @@ const MessageContainer = styled(Box)(({ theme }) => ({
       ? theme.palette.background.paper
       : theme.palette.background.paper,
   borderRadius: 12,
-  padding: theme.spacing(1),
-  marginBottom: theme.spacing(0.75),
+  padding: theme.spacing(0.75),
+  marginBottom: theme.spacing(0.5),
   maxWidth: 'min(75%, 720px)',
   wordBreak: 'break-word',
   boxShadow:
     theme.palette.mode === 'dark'
       ? '0 1px 2px rgba(0,0,0,0.4)'
       : '0 1px 2px rgba(0,0,0,0.08)',
+  fontSize: '13px',
+  lineHeight: 1.55,
 }));
 
 const UserMessage = styled(MessageContainer)(({ theme }) => ({
@@ -89,7 +91,8 @@ const MarkdownCodeBlock = ({
       sx={{
         background: '#222',
         color: '#fff',
-        p: 1,
+        p: 0.75,
+        fontSize: '12px',
         borderRadius: 1,
         overflowX: 'auto',
         position: 'relative',
@@ -123,6 +126,7 @@ const MarkdownCodeBlock = ({
         background: '#eee',
         borderRadius: 4,
         padding: '0 4px',
+        fontSize: '12px',
       }}
     >
       {children}
@@ -131,7 +135,7 @@ const MarkdownCodeBlock = ({
 };
 
 const MarkdownParagraph: React.FC<React.PropsWithChildren> = ({ children }) => (
-  <Box component="p" sx={{ m: 0, '&:not(:last-child)': { mb: 0.5 } }}>
+  <Box component="p" sx={{ m: 0, '&:not(:last-child)': { mb: 0.4 } }}>
     {children}
   </Box>
 );

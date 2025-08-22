@@ -39,6 +39,34 @@ export const useGetChatSessions = (
   });
 };
 
+// Cancel an active streaming chat message
+export const useCancelChatStream = (
+  customOptions?: UseMutationOptions<
+    { success: boolean },
+    CustomError,
+    { sessionId: number }
+  >,
+): UseMutationResult<
+  { success: boolean },
+  CustomError,
+  { sessionId: number }
+> => {
+  const { onSuccess: onCustomSuccess, onError: onCustomError } =
+    customOptions || {};
+
+  return useMutation({
+    mutationFn: async ({ sessionId }) => {
+      return chatService.cancelStream(sessionId);
+    },
+    onSuccess: (result, variables, ...args) => {
+      onCustomSuccess?.(result, variables, ...args);
+    },
+    onError: (...args) => {
+      onCustomError?.(...args);
+    },
+  });
+};
+
 // Get specific chat session
 export const useGetChatSession = (
   sessionId?: number,

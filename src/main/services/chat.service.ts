@@ -4,6 +4,17 @@ import { AIProviderManager } from './ai/providerManager.service';
 import type { CompletionRequest } from './ai/types/completion.types';
 
 class ChatService {
+  // Track active streaming requests by conversationId
+  private static activeStreams: Map<number, { aborted: boolean }> = new Map();
+
+  static cancelAssistantStream(conversationId: number) {
+    const entry = ChatService.activeStreams.get(conversationId);
+    if (entry) {
+      entry.aborted = true;
+      ChatService.activeStreams.set(conversationId, entry);
+    }
+  }
+
   // Streams an assistant reply based on user content. Emits chunks via onChunk.
   // Returns the final persisted assistant message.
   static async streamAssistantReply(
@@ -33,12 +44,20 @@ class ChatService {
         type: 'chat',
         context: { conversationId },
       };
+      // mark this conversation as actively streaming
+      ChatService.activeStreams.set(conversationId, { aborted: false });
 
       /* eslint-disable no-restricted-syntax */
       for await (const {
         content: chunk,
         done,
       } of providerInstance.streamCompletion(request)) {
+        const state = ChatService.activeStreams.get(conversationId);
+        if (state?.aborted) {
+          // emit final done and stop streaming
+          onChunk('', true);
+          throw new Error('aborted');
+        }
         if (chunk) {
           fullContent += chunk;
           onChunk(chunk, !!done);
@@ -46,9 +65,15 @@ class ChatService {
       }
       /* eslint-enable no-restricted-syntax */
     } catch (err) {
-      // Emit done=false? We signal completion via error by sending done=true with empty chunk
-      onChunk('', true);
+      // If aborted, we've already emitted a final done signal above.
+      if (!(err instanceof Error && err.message === 'aborted')) {
+        // For other errors, ensure the stream is closed for the renderer
+        onChunk('', true);
+      }
       throw err;
+    } finally {
+      // cleanup active stream entry whether success or error
+      ChatService.activeStreams.delete(conversationId);
     }
 
     // 4) Persist ASSISTANT message

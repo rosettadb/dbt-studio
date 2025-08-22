@@ -8,9 +8,9 @@ const EditorContainer = styled('div')(({ theme }) => ({
   position: 'relative',
   border: `1px solid ${theme.palette.divider}`,
   borderRadius: theme.shape.borderRadius * 1.25,
-  padding: theme.spacing(1.25, 1.5),
-  minHeight: 88,
-  maxHeight: 300,
+  padding: theme.spacing(1, 1.25),
+  minHeight: 64,
+  maxHeight: 200,
   overflowY: 'auto',
   backgroundColor: theme.palette.background.paper,
   '& .ProseMirror': {
@@ -18,8 +18,8 @@ const EditorContainer = styled('div')(({ theme }) => ({
     background: 'transparent',
     color: theme.palette.text.primary,
     fontFamily: theme.typography.fontFamily,
-    fontSize: theme.typography.body1.fontSize as any,
-    lineHeight: 1.5,
+    fontSize: '13px' as any,
+    lineHeight: 1.4,
     '& p': {
       margin: 0,
     },
@@ -112,8 +112,8 @@ const TipTapEditor: React.FC<TipTapEditorProps> = ({
         <Box
           sx={(theme) => ({
             position: 'absolute',
-            top: theme.spacing(1.25), // match container vertical padding
-            left: theme.spacing(1.5), // match container horizontal padding
+            top: theme.spacing(1), // match container vertical padding
+            left: theme.spacing(1.25), // match container horizontal padding
             color: 'text.disabled',
             pointerEvents: 'none',
           })}

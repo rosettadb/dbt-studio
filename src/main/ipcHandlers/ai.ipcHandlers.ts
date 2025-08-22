@@ -56,6 +56,7 @@ const aiHandlerChannels: string[] = [
   'chat:message:add-with-context',
   'chat:message:regenerate',
   'chat:message:stream',
+  'chat:message:cancel',
   'chat:context:add-items',
   'chat:context:get-items',
   'chat:context:resolve-file',
@@ -93,6 +94,18 @@ const registerAIHandlers = () => {
     'ai:provider:get',
     async (_, id: number): Promise<AIProvider | null> => {
       return MainDatabaseService.getProvider(id);
+    },
+  );
+
+  // Cancel an active streaming response for a conversation
+  ipcMain.handle(
+    'chat:message:cancel',
+    async (
+      _,
+      { conversationId }: { conversationId: number },
+    ): Promise<{ success: boolean }> => {
+      ChatService.cancelAssistantStream(conversationId);
+      return { success: true };
     },
   );
 

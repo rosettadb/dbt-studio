@@ -26,10 +26,18 @@ const ChatMessageList: React.FC<ChatMessageListProps> = ({ sessionId }) => {
     [],
   );
 
-  // Auto-scroll to bottom on new messages and session changes
+  // Derive a key that changes when the last message content grows during streaming
+  const lastMessageContentKey = React.useMemo(() => {
+    if (!messages || messages.length === 0) return '';
+    const last = messages[messages.length - 1];
+    return `${last.id}:${last.content?.length ?? 0}`;
+  }, [messages]);
+
+  // Auto-scroll to bottom on new messages, session changes, and when the last
+  // message content updates during streaming
   React.useEffect(() => {
     scrollToBottom('smooth');
-  }, [messages.length, sessionId, scrollToBottom]);
+  }, [messages.length, sessionId, lastMessageContentKey, scrollToBottom]);
 
   // Keep scrolled to bottom on container resize (layout changes)
   React.useEffect(() => {
@@ -53,19 +61,19 @@ const ChatMessageList: React.FC<ChatMessageListProps> = ({ sessionId }) => {
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
-          p: 3,
+          p: 2,
         }}
       >
-        <Stack alignItems="center" spacing={2}>
-          <ChatIcon sx={{ fontSize: 48, color: 'text.disabled' }} />
-          <Typography variant="h6" color="text.secondary" align="center">
+        <Stack alignItems="center" spacing={1.25}>
+          <ChatIcon sx={{ fontSize: 36, color: 'text.disabled' }} />
+          <Typography variant="body1" color="text.secondary" align="center">
             Start a conversation
           </Typography>
           <Typography
-            variant="body2"
+            variant="caption"
             color="text.disabled"
             align="center"
-            sx={{ maxWidth: 300 }}
+            sx={{ maxWidth: 280 }}
           >
             Ask questions about your dbt project, get help with SQL, or discuss
             your data models.
@@ -80,26 +88,27 @@ const ChatMessageList: React.FC<ChatMessageListProps> = ({ sessionId }) => {
       ref={containerRef}
       sx={{
         flex: 1,
+        minHeight: 0,
         display: 'flex',
         flexDirection: 'column',
         px: 1,
-        py: 2,
-        pb: 2,
+        py: 1.5,
+        pb: 1.5,
         overflowY: 'auto',
-        gap: 1,
+        gap: 0.75,
       }}
     >
       {isLoading && (
-        <Typography variant="body2" color="text.disabled">
+        <Typography variant="caption" color="text.disabled">
           Loading messages...
         </Typography>
       )}
       {!isLoading && messages.length === 0 && (
-        <Typography variant="body2" color="text.disabled">
+        <Typography variant="caption" color="text.disabled">
           No messages yet. Say hello!
         </Typography>
       )}
-      <Stack spacing={1}>
+      <Stack spacing={0.75}>
         {messages.map((m) => (
           <MessageRenderer key={m.id} content={m.content || ''} role={m.role} />
         ))}

@@ -1,9 +1,13 @@
 import React from 'react';
 import { Box, IconButton, Tooltip } from '@mui/material';
 import { useTheme } from '@mui/material/styles';
-import SendIcon from '@mui/icons-material/Send';
+import ArrowUpwardIcon from '@mui/icons-material/ArrowUpward';
+import StopIcon from '@mui/icons-material/Stop';
 import { useQueryClient } from 'react-query';
-import { useStreamChatMessage } from '../../controllers/chat.controller';
+import {
+  useStreamChatMessage,
+  useCancelChatStream,
+} from '../../controllers/chat.controller';
 import { QUERY_KEYS } from '../../config/constants';
 import {
   useGetAIProviders,
@@ -30,7 +34,8 @@ const ChatInputBox: React.FC<ChatInputBoxProps> = ({ sessionId }) => {
   const userTempIdRef = React.useRef<number | null>(null);
   const { mutate: streamMessage, isLoading: isStreaming } =
     useStreamChatMessage();
-
+  const { mutate: cancelStream, isLoading: isCancelling } =
+    useCancelChatStream();
   const { data: providers = [] } = useGetAIProviders();
   const { data: activeProvider } = useGetActiveAIProvider();
   const { mutate: setActiveProvider, isLoading: switching } =
@@ -156,21 +161,68 @@ const ChatInputBox: React.FC<ChatInputBoxProps> = ({ sessionId }) => {
             assistantTempIdRef.current = null;
             userTempIdRef.current = null;
           },
-          onError: () => {
-            // Remove temp assistant on error
+          onError: async (error: any) => {
             const current = queryClient.getQueryData<typeof prev>(msgKey) || [];
             const aId = assistantTempIdRef.current;
-            const uId = userTempIdRef.current;
-            queryClient.setQueryData(
-              msgKey,
-              current.filter((m) => m.id !== aId && m.id !== uId),
-            );
-            assistantTempIdRef.current = null;
-            userTempIdRef.current = null;
+            if (error?.message === 'aborted') {
+              // Cancelled by user: remove only the temp assistant and refresh to reconcile persisted user message
+              queryClient.setQueryData(
+                msgKey,
+                current.filter((m) => m.id !== aId),
+              );
+              assistantTempIdRef.current = null;
+              await queryClient.invalidateQueries(msgKey);
+              // Clear user temp ref after refresh
+              userTempIdRef.current = null;
+            } else {
+              // Real error: remove both temp assistant and temp user
+              const uId = userTempIdRef.current;
+              queryClient.setQueryData(
+                msgKey,
+                current.filter((m) => m.id !== aId && m.id !== uId),
+              );
+              assistantTempIdRef.current = null;
+              userTempIdRef.current = null;
+            }
           },
         },
       );
     }
+  };
+
+  const handleCancel = () => {
+    if (!sessionId) return;
+    const msgKey = [
+      QUERY_KEYS.GET_CHAT_MESSAGES,
+      sessionId,
+      undefined,
+      undefined,
+    ] as const;
+
+    cancelStream(
+      { sessionId },
+      {
+        onSettled: async () => {
+          // Remove only the temp streaming assistant; keep user and refresh to persist
+          const current =
+            queryClient.getQueryData<
+              Array<{
+                id: number;
+                [k: string]: any;
+              }>
+            >(msgKey) || [];
+          const aId = assistantTempIdRef.current;
+          queryClient.setQueryData(
+            msgKey,
+            current.filter((m) => m.id !== aId),
+          );
+          assistantTempIdRef.current = null;
+          await queryClient.invalidateQueries(msgKey);
+          // Clear user temp ref after refresh
+          userTempIdRef.current = null;
+        },
+      },
+    );
   };
 
   // Note: Enter-to-send is implemented in TipTapEditor via onSubmit (Enter) and Shift+Enter for newline.
@@ -245,13 +297,48 @@ const ChatInputBox: React.FC<ChatInputBoxProps> = ({ sessionId }) => {
           </span>
         )}
         {(() => {
+          if (isStreaming) {
+            return (
+              <Tooltip
+                title="Stop generation"
+                placement="top"
+                arrow
+                disableInteractive
+              >
+                <span>
+                  <IconButton
+                    color="primary"
+                    size="small"
+                    onClick={handleCancel}
+                    disabled={isCancelling}
+                    aria-label="Stop generation"
+                    sx={{
+                      bgcolor: 'primary.main',
+                      color: 'primary.contrastText',
+                      width: 28,
+                      height: 28,
+                      borderRadius: '50%',
+                      p: 0,
+                      ml: 'auto',
+                      '&:hover': { bgcolor: 'primary.dark' },
+                      '&:disabled': {
+                        bgcolor: 'action.disabledBackground',
+                        color: 'action.disabled',
+                      },
+                    }}
+                  >
+                    <StopIcon fontSize="small" />
+                  </IconButton>
+                </span>
+              </Tooltip>
+            );
+          }
+
           const sendDisabled =
-            !sessionId || !plainText.trim() || isStreaming || !activeProvider;
+            !sessionId || !plainText.trim() || !activeProvider;
           let tooltipTitle = 'Send message (Enter)';
           if (!activeProvider) tooltipTitle = 'Select an AI provider to send';
           else if (!sessionId) tooltipTitle = 'Open or create a chat session';
-          else if (isStreaming)
-            tooltipTitle = 'Please wait for the response to finish';
           else if (!plainText.trim())
             tooltipTitle = 'Type a message to enable send';
 
@@ -286,7 +373,7 @@ const ChatInputBox: React.FC<ChatInputBoxProps> = ({ sessionId }) => {
                     },
                   }}
                 >
-                  <SendIcon fontSize="small" />
+                  <ArrowUpwardIcon fontSize="small" />
                 </IconButton>
               </span>
             </Tooltip>
