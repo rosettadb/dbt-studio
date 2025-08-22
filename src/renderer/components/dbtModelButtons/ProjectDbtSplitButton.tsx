@@ -274,14 +274,15 @@ export const ProjectDbtSplitButton: React.FC<ProjectDbtSplitButtonProps> = ({
           onClose={() => setIncrementalModal(false)}
           path={project.incrementalDir ?? project.path}
           project={project}
-          processCallback={(updatedPath, inputPath) => {
+          processCallback={(updatedPath, selectedFiles) => {
+            const args = new Map([['-o', updatedPath]]);
+            if (selectedFiles.length > 0) {
+              args.set('-i', selectedFiles.map((s) => `"${s}"`).join(' '));
+            }
             rosettaDbt(project, {
               commandType: CommandType.DBTNext,
               command: 'incremental',
-              arguments: new Map([
-                ['--output', updatedPath],
-                ['--input', inputPath],
-              ]),
+              arguments: args,
             } as Command);
           }}
         />

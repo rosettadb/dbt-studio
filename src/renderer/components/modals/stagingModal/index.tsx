@@ -5,13 +5,10 @@ import {
   DialogActions,
   DialogContent,
   DialogTitle,
-  Checkbox,
   TextField,
   IconButton,
-  FormControlLabel,
   Box,
   DialogContentText,
-  Divider,
   InputAdornment,
 } from '@mui/material';
 import React from 'react';
@@ -35,10 +32,6 @@ export const StagingModal: React.FC<Props> = ({
   project,
 }) => {
   const [updatedPath, setUpdatedPath] = React.useState<string>(path);
-  const [selectAll, setSelectAll] = React.useState(false);
-  const handleSelectAllChange = () => {
-    setSelectAll(!selectAll);
-  };
   const updateProject = useUpdateProject();
 
   return (
@@ -69,47 +62,37 @@ export const StagingModal: React.FC<Props> = ({
             gap: 2,
           }}
         >
-          <FormControlLabel
-            sx={{ mt: 1 }}
-            control={
-              <Checkbox
-                name="selectAll"
-                checked={selectAll}
-                onChange={handleSelectAllChange}
-              />
-            }
-            label="Select All"
-          />
-          <Divider />
           <DialogContentText>Please select output path</DialogContentText>
           <TextField
             label="Output path"
-            variant="outlined" // or "filled", "standard"
+            variant="outlined"
             value={updatedPath}
-            InputProps={{
-              endAdornment: (
-                <InputAdornment position="end" sx={{ p: 0 }}>
-                  <Button
-                    variant="contained"
-                    color="primary"
-                    fullWidth
-                    onClick={async () => {
-                      const result = await projectsServices.chooseDir({
-                        path: updatedPath,
-                      });
-                      if (result !== 'false') {
-                        await updateProject.mutateAsync({
-                          ...project,
-                          stagingDir: result,
+            slotProps={{
+              input: {
+                endAdornment: (
+                  <InputAdornment position="end" sx={{ p: 0 }}>
+                    <Button
+                      variant="contained"
+                      color="primary"
+                      fullWidth
+                      onClick={async () => {
+                        const result = await projectsServices.chooseDir({
+                          path: updatedPath,
                         });
-                        setUpdatedPath(result);
-                      }
-                    }}
-                  >
-                    Browse
-                  </Button>
-                </InputAdornment>
-              ),
+                        if (result !== 'false') {
+                          await updateProject.mutateAsync({
+                            ...project,
+                            stagingDir: result,
+                          });
+                          setUpdatedPath(result);
+                        }
+                      }}
+                    >
+                      Browse
+                    </Button>
+                  </InputAdornment>
+                ),
+              },
             }}
           />
         </Box>

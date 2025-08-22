@@ -610,8 +610,8 @@ export default class ProjectsService {
     );
   }
 
-  static async getDirectoryStructure(project: Project) {
-    return getDirectoryStructure(project.path);
+  static async getDirectoryStructure(body: { path: string }) {
+    return getDirectoryStructure(body.path);
   }
 
   static readFileContent(filePath: string) {

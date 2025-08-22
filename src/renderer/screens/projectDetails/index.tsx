@@ -560,15 +560,18 @@ const ProjectDetails: React.FC = () => {
             project={project}
             path={project.businessDir ?? project.path}
             onClose={() => setBusinessQueryModal(false)}
-            processCallback={(updatedPath, inputPath, query) => {
+            processCallback={(updatedPath, query, selectedFiles) => {
+              const args = new Map([
+                ['-o', updatedPath],
+                ['-q', `"${query}"`],
+              ]);
+              if (selectedFiles.length > 0) {
+                args.set('-i', selectedFiles.map((s) => `"${s}"`).join(' '));
+              }
               rosettaDbt(project, {
                 command: 'business',
                 commandType: CommandType.DBTNext,
-                arguments: new Map([
-                  ['-q', `"${query}"`],
-                  ['--output', updatedPath],
-                  ['--input', inputPath],
-                ]),
+                arguments: args,
               } as Command);
             }}
           />
