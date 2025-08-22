@@ -4,7 +4,7 @@ import { toast } from 'react-toastify';
 import { SplitButton } from '../splitButton';
 import { icons } from '../../../../assets';
 import { Icon } from '../icon';
-import { Project } from '../../../types/backend';
+import { Command, CommandType, Project } from '../../../types/backend';
 import { useDbt, useProcess } from '../../hooks';
 import { StagingModal } from '../modals/stagingModal';
 
@@ -17,11 +17,7 @@ interface ProjectDbtSplitButtonProps {
   isRunningRosettaDbt: boolean;
   connection?: any;
   // Function handlers that are used elsewhere in ProjectDetails
-  rosettaDbt: (
-    project: Project,
-    args: string,
-    targetDir?: string,
-  ) => Promise<void>;
+  rosettaDbt: (project: Project, command: Command) => Promise<void>;
   handleBusinessLayerClick: () => void;
 }
 
@@ -69,6 +65,11 @@ export const ProjectDbtSplitButton: React.FC<ProjectDbtSplitButtonProps> = ({
                 return;
               }
               setStagingModal(true);
+              rosettaDbt(project, {
+                command: 'staging',
+                commandType: CommandType.DBTNext,
+                arguments: new Map<string, any>(),
+              } as Command);
             },
             leftIcon: (
               <img
@@ -91,7 +92,11 @@ export const ProjectDbtSplitButton: React.FC<ProjectDbtSplitButtonProps> = ({
                 toast.info('Please configure RosettaDB path in settings');
                 return;
               }
-              rosettaDbt(project, '--incremental');
+              rosettaDbt(project, {
+                commandType: CommandType.DBTNext,
+                command: 'incremental',
+                arguments: new Map<string, any>(),
+              } as Command);
             },
             leftIcon: (
               <img
@@ -260,7 +265,9 @@ export const ProjectDbtSplitButton: React.FC<ProjectDbtSplitButtonProps> = ({
           onClose={() => setStagingModal(false)}
           path={project.path}
           processCallback={(updatedPath) => {
-            rosettaDbt(project, '', updatedPath);
+            if (updatedPath) {
+              toast.info(updatedPath);
+            }
           }}
         />
       )}

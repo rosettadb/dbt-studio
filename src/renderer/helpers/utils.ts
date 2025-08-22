@@ -3,10 +3,13 @@ import React from 'react';
 import { parsePatch, diffLines } from 'diff';
 import {
   BigQueryConnection,
+  Command,
+  CommandType,
   ConnectionModel,
   DatabricksConnection,
   DuckDBConnection,
   PostgresConnection,
+  Project,
   RedshiftConnection,
   SnowflakeConnection,
   Table,
@@ -16,6 +19,7 @@ import {
   MonacoAutocompleteSQLKeywords,
   MonacoCompletionItemKind,
 } from '../config/constants';
+import { settingsServices } from '../services';
 
 export const capitalizeFirstLetter = (str: string): string => {
   if (!str) return '';
@@ -423,4 +427,57 @@ This file type cannot be edited as text.
 
 Please use an appropriate application to view or edit this file type.`;
   }
+};
+
+/**
+ * Compiles command with arguments
+ * TODO - settings is not enforced type - we should change settings to have a type and then update it here
+ * @param project
+ * @param settings
+ * @param command
+ */
+export const compileCommand = async (
+  project: Project,
+  settings: any,
+  command: Command,
+): Promise<string> => {
+  const projectPath = await settingsServices.usePathJoin(
+    project.path,
+    'rosetta',
+  );
+  // Set command missing defaults for rosetta
+  if (
+    !command.arguments.has('-s') &&
+    [CommandType.Rosetta, CommandType.DBTNext].indexOf(command.commandType) > -1
+  ) {
+    command.arguments.set('-s', `${project.rosettaConnection?.name}`);
+  }
+
+  // Prep command stack
+  const commandStack: string[] = [];
+  // Prep for specific command type
+  switch (command.commandType) {
+    case CommandType.Rosetta:
+      commandStack.push(`"${settings?.rosettaPath}"`);
+      break;
+    case CommandType.DBTNext:
+      commandStack.push(`"${settings?.rosettaPath}"`);
+      commandStack.push(`dbt-next`);
+      break;
+    default:
+      break;
+  }
+  commandStack.push(command.command);
+
+  // Include argument
+  if (command.arguments) {
+    command.arguments.forEach((tmpCommand, tmpKey) => {
+      commandStack.push(`${tmpKey} ${tmpCommand || ''}`);
+    });
+  }
+
+  const compiledCommand = [`cd "${projectPath}" && `]
+    .concat(commandStack)
+    .join(' ');
+  return compiledCommand;
 };
