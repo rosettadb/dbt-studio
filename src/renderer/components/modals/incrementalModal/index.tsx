@@ -47,45 +47,64 @@ export const IncrementalModal: React.FC<Props> = ({
     new Set(),
   );
   const [files, setFiles] = React.useState<FileNode>();
+  const [expandedItems, setExpandedItems] = React.useState<string[]>([]);
 
   const updateProject = useUpdateProject();
 
-  // Recursive function to get all SQL file paths
-  const getAllSqlFilePaths = (node: FileNode): string[] => {
+  // Recursive function to get all SQL file paths from models directory only
+  const getAllSqlFilePaths = (
+    node: FileNode,
+    isInModelsDir: boolean = false,
+  ): string[] => {
     const paths: string[] = [];
-    if (node.type === 'file' && node.name.endsWith('.sql')) {
+
+    // Check if current node is the models directory
+    const isModelsDir = node.type === 'folder' && node.name === 'models';
+    const shouldIncludeFiles = isInModelsDir || isModelsDir;
+
+    if (
+      node.type === 'file' &&
+      shouldIncludeFiles &&
+      node.name.endsWith('.sql')
+    ) {
       paths.push(node.path);
     }
+
     if (node.children) {
       node.children.forEach((child) => {
-        paths.push(...getAllSqlFilePaths(child));
+        paths.push(...getAllSqlFilePaths(child, shouldIncludeFiles));
       });
     }
+
     return paths;
   };
 
-  // Filter function to show only SQL files and folders that contain SQL files
-  const filterSqlFiles = (node: FileNode): FileNode | null => {
-    if (node.type === 'file') {
-      return node.name.endsWith('.sql') ? node : null;
+  // Filter function to exclude rosetta and .git folders
+  const shouldExcludeNode = (
+    node: FileNode,
+    isDirectChild: boolean = false,
+  ): boolean => {
+    if (isDirectChild && node.type === 'folder') {
+      return node.name === 'rosetta' || node.name === '.git';
     }
+    return false;
+  };
 
-    // For folders, recursively filter children
-    if (node.children) {
-      const filteredChildren = node.children
-        .map((child) => filterSqlFiles(child))
-        .filter((child) => child !== null) as FileNode[];
-
-      // Only include folder if it has SQL files in it (directly or in subfolders)
-      if (filteredChildren.length > 0) {
-        return {
-          ...node,
-          children: filteredChildren,
-        };
+  // Get all directory paths for initial expansion (excluding rosetta and .git)
+  const getAllDirectoryPaths = (
+    node: FileNode,
+    isDirectChild: boolean = false,
+  ): string[] => {
+    const paths: string[] = [];
+    if (node.type === 'folder' && !shouldExcludeNode(node, isDirectChild)) {
+      paths.push(node.path);
+      if (node.children) {
+        node.children.forEach((child) => {
+          paths.push(...getAllDirectoryPaths(child, false));
+        });
       }
     }
-
-    return null;
+    return paths;
   };
 
   const handleSelectAllChange = () => {
@@ -123,9 +142,25 @@ export const IncrementalModal: React.FC<Props> = ({
     }
   };
 
-  const renderFileTree = (node: FileNode): React.ReactNode => {
+  const renderFileTree = (
+    node: FileNode,
+    isDirectChild: boolean = false,
+    isInModelsDir: boolean = false,
+  ): React.ReactNode => {
+    // Skip excluded folders
+    if (shouldExcludeNode(node, isDirectChild)) {
+      return null;
+    }
+
     const nodeId = node.path;
     const isFile = node.type === 'file';
+
+    // Check if current node is the models directory
+    const isModelsDir = node.type === 'folder' && node.name === 'models';
+    const shouldEnableSelection = isInModelsDir || isModelsDir;
+
+    const isSqlFile = isFile && node.name.endsWith('.sql');
+    const canSelect = isSqlFile && shouldEnableSelection;
     const isSelected = selectedFiles.has(node.path);
 
     return (
@@ -144,14 +179,26 @@ export const IncrementalModal: React.FC<Props> = ({
                       handleFileSelection(node.path, e.target.checked)
                     }
                     onClick={(e) => e.stopPropagation()}
+                    disabled={!canSelect}
                   />
                 }
                 label={
                   <Box sx={{ display: 'flex', alignItems: 'center', ml: 1 }}>
                     <InsertDriveFile
-                      sx={{ mr: 1, fontSize: 18, color: 'action.active' }}
+                      sx={{
+                        mr: 1,
+                        fontSize: 18,
+                        color: canSelect ? 'primary.main' : 'action.disabled',
+                      }}
                     />
-                    <Typography variant="body2">{node.name}</Typography>
+                    <Typography
+                      variant="body2"
+                      sx={{
+                        color: canSelect ? 'text.primary' : 'text.disabled',
+                      }}
+                    >
+                      {node.name}
+                    </Typography>
                   </Box>
                 }
                 sx={{ m: 0 }}
@@ -162,14 +209,14 @@ export const IncrementalModal: React.FC<Props> = ({
                   sx={{
                     mr: 1.5,
                     fontSize: 18,
-                    color: 'text.secondary',
+                    color: isModelsDir ? 'primary.main' : 'text.secondary',
                   }}
                 />
                 <Typography
                   variant="body2"
                   sx={{
-                    fontWeight: 500,
-                    color: 'text.primary',
+                    fontWeight: isModelsDir ? 600 : 500,
+                    color: isModelsDir ? 'primary.main' : 'text.primary',
                   }}
                 >
                   {node.name}
@@ -179,28 +226,49 @@ export const IncrementalModal: React.FC<Props> = ({
           </Box>
         }
       >
-        {node.children?.map((child) => renderFileTree(child))}
+        {node.children?.map((child) =>
+          renderFileTree(child, false, shouldEnableSelection),
+        )}
       </TreeItem>
     );
   };
 
   React.useEffect(() => {
-    const loadDirectory = async (stagingPath: string) => {
+    const loadDirectory = async (projectPath: string) => {
       const data = await projectsServices.loadProjectDirectory({
-        path: stagingPath,
+        path: projectPath,
       });
       setFiles(data);
+
+      // Auto-expand all directories for better UX (excluding rosetta and .git)
+      if (data && data.children) {
+        const filteredChildren = data.children.filter(
+          (child) => !shouldExcludeNode(child, true),
+        );
+        const allDirPaths = filteredChildren.flatMap((child) =>
+          getAllDirectoryPaths(child, false),
+        );
+        setExpandedItems(allDirPaths);
+      }
     };
-    if (project.stagingDir) {
-      loadDirectory(project.stagingDir);
+
+    if (project.path) {
+      loadDirectory(project.path);
     }
-  }, [project.stagingDir]);
+  }, [project.path]);
 
   // Reset selections when files change
   React.useEffect(() => {
     setSelectedFiles(new Set());
     setSelectAll(false);
   }, [files]);
+
+  const handleExpandedItemsChange = (
+    event: React.SyntheticEvent,
+    itemIds: string[],
+  ) => {
+    setExpandedItems(itemIds);
+  };
 
   return (
     <Dialog
@@ -232,7 +300,7 @@ export const IncrementalModal: React.FC<Props> = ({
         sx={{ display: 'flex', flexDirection: 'column', gap: 3, pt: 3 }}
       >
         <DialogContentText sx={{ color: 'text.secondary', mb: 1 }}>
-          Please select SQL files from {project.stagingDir}
+          Please select SQL files from {project.path}/models directory
         </DialogContentText>
 
         {/* File Selection Section */}
@@ -253,7 +321,7 @@ export const IncrementalModal: React.FC<Props> = ({
             }
             label={
               <Typography variant="body2" sx={{ fontWeight: 500 }}>
-                Select All SQL Files
+                Select All SQL Files (models directory only)
               </Typography>
             }
             sx={{ mb: 2 }}
@@ -268,34 +336,18 @@ export const IncrementalModal: React.FC<Props> = ({
             }}
           >
             {files ? (
-              (() => {
-                const filteredFiles = filterSqlFiles(files);
-                return filteredFiles ? (
-                  <TreeView
-                    expandedItems={[files.path]}
-                    sx={{
-                      flexGrow: 1,
-                      overflowY: 'auto',
-                    }}
-                  >
-                    {renderFileTree(filteredFiles)}
-                  </TreeView>
-                ) : (
-                  <Box
-                    sx={{
-                      display: 'flex',
-                      justifyContent: 'center',
-                      alignItems: 'center',
-                      height: '100%',
-                      color: 'text.secondary',
-                    }}
-                  >
-                    <Typography>
-                      No SQL files found in this directory
-                    </Typography>
-                  </Box>
-                );
-              })()
+              <TreeView
+                expandedItems={expandedItems}
+                onExpandedItemsChange={handleExpandedItemsChange}
+                sx={{
+                  flexGrow: 1,
+                  overflowY: 'auto',
+                }}
+              >
+                {files.children
+                  ?.map((child) => renderFileTree(child, true))
+                  .filter(Boolean)}
+              </TreeView>
             ) : (
               <Box
                 sx={{

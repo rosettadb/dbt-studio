@@ -193,6 +193,7 @@ export type Project = {
   isExtracted?: boolean;
   queryEditor?: string;
   connection?: ConnectionInput;
+  rawLayerDir?: string;
   stagingDir?: string;
   incrementalDir?: string;
   businessDir?: string;

@@ -8,6 +8,8 @@ import { Command, CommandType, Project } from '../../../types/backend';
 import { useDbt, useProcess } from '../../hooks';
 import { StagingModal } from '../modals/stagingModal';
 import { IncrementalModal } from '../modals/incrementalModal';
+import { RawLayerModal } from '../modals/rawLayerModal';
+import { pathJoin } from '../../services/settings.services';
 
 interface ProjectDbtSplitButtonProps {
   rosettaPath?: string;
@@ -19,7 +21,7 @@ interface ProjectDbtSplitButtonProps {
   connection?: any;
   // Function handlers that are used elsewhere in ProjectDetails
   rosettaDbt: (project: Project, command: Command) => Promise<void>;
-  handleBusinessLayerClick: () => void;
+  handleBusinessLayerClick: (path: string) => void;
 }
 
 export const ProjectDbtSplitButton: React.FC<ProjectDbtSplitButtonProps> = ({
@@ -46,8 +48,43 @@ export const ProjectDbtSplitButton: React.FC<ProjectDbtSplitButtonProps> = ({
     seed: dbtSeed,
   } = useDbt();
   const { start, stop, isRunning } = useProcess();
+  const [stagingPath, setStagingPath] = React.useState('');
+  const [businessPath, setBusinessPath] = React.useState('');
+  const [rawPath, setRawPath] = React.useState('');
+  const [incrementalPath, setIncrementalPath] = React.useState('');
   const [stagingModal, setStagingModal] = React.useState(false);
+  const [openRawLayerModal, setOpenRawLayerModal] = React.useState(false);
   const [incrementalModal, setIncrementalModal] = React.useState(false);
+
+  React.useEffect(() => {
+    const loadDefaults = async () => {
+      if (project.rawLayerDir) {
+        setRawPath(project.rawLayerDir);
+      } else {
+        const p = await pathJoin(project.path, 'models', 'raw');
+        setRawPath(p);
+      }
+      if (project.stagingDir) {
+        setStagingPath(project.stagingDir);
+      } else {
+        const p = await pathJoin(project.path, 'models', 'staging');
+        setStagingPath(p);
+      }
+      if (project.incrementalDir) {
+        setIncrementalPath(project.incrementalDir);
+      } else {
+        const p = await pathJoin(project.path, 'models', 'enhanced');
+        setIncrementalPath(p);
+      }
+      if (project.businessDir) {
+        setBusinessPath(project.businessDir);
+      } else {
+        const p = await pathJoin(project.path, 'models', 'business');
+        setBusinessPath(p);
+      }
+    };
+    loadDefaults();
+  }, [project.path]);
 
   return (
     <>
@@ -60,6 +97,29 @@ export const ProjectDbtSplitButton: React.FC<ProjectDbtSplitButtonProps> = ({
         isLoading={isRunningDbt || isRunningRosettaDbt}
         leftIcon={<PlayCircleOutline />}
         menuItems={[
+          {
+            name: 'Raw Layer',
+            onClick: () => {
+              if (!rosettaPath) {
+                toast.info('Please configure RosettaDB path in settings');
+                return;
+              }
+              setOpenRawLayerModal(true);
+            },
+            leftIcon: (
+              <img
+                src={icons.rosetta}
+                alt="Rosetta"
+                width={18}
+                height={18}
+                style={{
+                  display: 'inline-block',
+                  objectFit: 'contain',
+                }}
+              />
+            ),
+            subTitle: 'Generate dbt Raw Layer',
+          },
           {
             name: 'Staging Layer',
             onClick: () => {
@@ -113,7 +173,7 @@ export const ProjectDbtSplitButton: React.FC<ProjectDbtSplitButtonProps> = ({
                 toast.info('Please configure RosettaDB path in settings');
                 return;
               }
-              handleBusinessLayerClick();
+              handleBusinessLayerClick(businessPath);
             },
             leftIcon: (
               <img
@@ -253,18 +313,43 @@ export const ProjectDbtSplitButton: React.FC<ProjectDbtSplitButtonProps> = ({
           },
         ]}
       />
+      {openRawLayerModal && project?.path && (
+        <RawLayerModal
+          isOpen={openRawLayerModal}
+          onClose={() => setOpenRawLayerModal(false)}
+          path={rawPath}
+          project={project}
+          processCallback={async (updatedPath) => {
+            await rosettaDbt(project, {
+              command: 'extract',
+              commandType: CommandType.DBTNext,
+              arguments: new Map([['-o', updatedPath]]),
+            } as Command);
+            setOpenRawLayerModal(false);
+          }}
+        />
+      )}
       {stagingModal && project?.path && (
         <StagingModal
           isOpen={stagingModal}
           onClose={() => setStagingModal(false)}
-          path={project.stagingDir ?? project.path}
+          path={stagingPath}
           project={project}
-          processCallback={(updatedPath) => {
-            rosettaDbt(project, {
+          processCallback={async (updatedPath, selectedFiles) => {
+            const args = new Map([['-o', updatedPath]]);
+            if (selectedFiles.length > 0) {
+              let command = '';
+              selectedFiles.forEach((file) => {
+                command += `-i "${file}" `;
+              });
+              args.set(' ', command);
+            }
+            await rosettaDbt(project, {
               command: 'staging',
               commandType: CommandType.DBTNext,
-              arguments: new Map([['--output', updatedPath]]),
+              arguments: args,
             } as Command);
+            setStagingModal(false);
           }}
         />
       )}
@@ -272,18 +357,23 @@ export const ProjectDbtSplitButton: React.FC<ProjectDbtSplitButtonProps> = ({
         <IncrementalModal
           isOpen={incrementalModal}
           onClose={() => setIncrementalModal(false)}
-          path={project.incrementalDir ?? project.path}
+          path={incrementalPath}
           project={project}
-          processCallback={(updatedPath, selectedFiles) => {
+          processCallback={async (updatedPath, selectedFiles) => {
             const args = new Map([['-o', updatedPath]]);
             if (selectedFiles.length > 0) {
-              args.set('-i', selectedFiles.map((s) => `"${s}"`).join(' '));
+              let command = '';
+              selectedFiles.forEach((file) => {
+                command += `-i "${file}" `;
+              });
+              args.set(' ', command);
             }
-            rosettaDbt(project, {
+            await rosettaDbt(project, {
               commandType: CommandType.DBTNext,
               command: 'incremental',
               arguments: args,
             } as Command);
+            setIncrementalModal(false);
           }}
         />
       )}
