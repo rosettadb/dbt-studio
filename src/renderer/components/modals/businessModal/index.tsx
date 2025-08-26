@@ -15,11 +15,9 @@ import {
   IconButton,
   FormControlLabel,
   Box,
-  DialogContentText,
   Divider,
   InputAdornment,
   Typography,
-  Paper,
 } from '@mui/material';
 import React from 'react';
 import { TreeItem, SimpleTreeView as TreeView } from '@mui/x-tree-view';
@@ -500,127 +498,108 @@ export const BusinessModal: React.FC<Props> = ({
       slotProps={{
         paper: {
           sx: {
-            height: '85vh',
+            maxHeight: '90vh',
             borderRadius: 2,
             boxShadow: '0px 8px 32px rgba(0, 0, 0, 0.12)',
           },
         },
       }}
     >
-      <DialogTitle
-        sx={{
-          fontWeight: 500,
-          fontSize: '1.25rem',
-          borderBottom: 1,
-          borderColor: 'divider',
-          pb: 2,
-        }}
-      >
-        Rosetta DBT Business
-        <IconButton
-          aria-label="close"
-          onClick={onClose}
+      <DialogTitle sx={{ pb: 2, borderBottom: 1, borderColor: 'divider' }}>
+        <Box
           sx={{
-            position: 'absolute',
-            right: 12,
-            top: 12,
-            color: 'text.secondary',
-            '&:hover': {
-              backgroundColor: 'action.hover',
-            },
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
           }}
         >
-          <CloseIcon />
-        </IconButton>
+          <Typography variant="h6" sx={{ fontWeight: 600 }}>
+            Rosetta DBT Business
+          </Typography>
+          <IconButton onClick={onClose} size="small">
+            <CloseIcon />
+          </IconButton>
+        </Box>
       </DialogTitle>
 
-      <DialogContent
-        sx={{ display: 'flex', flexDirection: 'column', gap: 3, pt: 3 }}
-      >
-        {/* Query Input Section */}
-        <Box>
-          <DialogContentText sx={{ mb: 2, color: 'text.secondary' }}>
+      <DialogContent sx={{ py: 3 }}>
+        {/* Query Section */}
+        <Box sx={{ mb: 4 }}>
+          <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
             Write your prompt to generate DBT business models
-          </DialogContentText>
-
+          </Typography>
           <TextField
             variant="outlined"
-            label="Business Logic Prompt"
-            placeholder="Describe the business logic you want to implement in your DBT models..."
+            label="Prompt"
+            placeholder="Write your prompt to generate a dbt business models."
             onChange={(event) => setQuery(event.target.value)}
             value={query}
             fullWidth
             multiline
-            rows={4}
-            sx={{
-              '& .MuiOutlinedInput-root': {
-                borderRadius: 2,
-                '&:hover .MuiOutlinedInput-notchedOutline': {
-                  borderColor: 'primary.light',
-                },
-                '&.Mui-focused .MuiOutlinedInput-notchedOutline': {
-                  borderColor: 'primary.main',
+            rows={5}
+            slotProps={{
+              input: {
+                style: {
+                  minHeight: '60px',
                 },
               },
+            }}
+            sx={{
+              '& .MuiOutlinedInput-root': {
+                height: 'auto',
+              },
               '& .MuiInputBase-inputMultiline': {
-                minHeight: '100px',
-                resize: 'vertical',
+                height: '60px !important',
+                resize: 'none',
               },
             }}
           />
         </Box>
 
-        <Divider sx={{ my: 1 }} />
+        <Divider sx={{ mb: 4 }} />
 
         {/* File Selection Section */}
-        <Box sx={{ flex: 1, minHeight: 0 }}>
-          <DialogContentText sx={{ color: 'text.secondary', mb: 2 }}>
-            Please select SQL files or folders from {project.path}/models
-            directory
-            {restrictedDirectory && (
-              <Typography
-                variant="caption"
-                display="block"
-                sx={{ mt: 1, color: 'warning.main' }}
-              >
-                Selection restricted to: {restrictedDirectory}
-              </Typography>
-            )}
-          </DialogContentText>
+        <Box sx={{ mb: 4 }}>
+          <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+            Select SQL files or folders from {project.path}/models directory
+          </Typography>
+
+          {restrictedDirectory && (
+            <Typography
+              variant="caption"
+              color="warning.main"
+              sx={{ display: 'block', mb: 2 }}
+            >
+              Selection restricted to: {restrictedDirectory}
+            </Typography>
+          )}
 
           <FormControlLabel
             control={
               <Checkbox
+                size="small"
                 checked={selectAll}
                 indeterminate={selectedFiles.size > 0 && !selectAll}
                 onChange={handleSelectAllChange}
                 disabled={selectedFolders.size > 0}
-                sx={{
-                  color: 'primary.main',
-                  '&.Mui-checked': {
-                    color: 'primary.main',
-                  },
-                }}
               />
             }
-            label={
-              <Typography variant="body2" sx={{ fontWeight: 500 }}>
-                Select All SQL Files (models directory only)
-              </Typography>
-            }
-            sx={{ mb: 2 }}
+            label="Select All SQL Files (models directory only)"
+            sx={{
+              mb: 2,
+              '& .MuiFormControlLabel-label': { fontSize: '0.875rem' },
+            }}
           />
 
-          <Paper
-            variant="outlined"
+          <Box
             sx={{
+              border: '1px solid',
+              borderColor: 'divider',
               height: 250,
               overflow: 'auto',
+              borderRadius: 1,
               p: 2,
               backgroundColor: 'background.paper',
-              borderRadius: 2,
-              border: 1,
-              borderColor: 'divider',
               '&:hover': {
                 borderColor: 'primary.light',
               },
@@ -631,19 +610,11 @@ export const BusinessModal: React.FC<Props> = ({
                 expandedItems={expandedItems}
                 onExpandedItemsChange={handleExpandedItemsChange}
                 sx={{
-                  flexGrow: 1,
-                  overflowY: 'auto',
                   '& .MuiTreeItem-content': {
                     padding: '4px 8px',
                     borderRadius: 1,
                     '&:hover': {
                       backgroundColor: 'action.hover',
-                    },
-                    '&.Mui-selected': {
-                      backgroundColor: 'primary.light',
-                      '&:hover': {
-                        backgroundColor: 'primary.light',
-                      },
                     },
                   },
                 }}
@@ -655,74 +626,49 @@ export const BusinessModal: React.FC<Props> = ({
             ) : (
               <Box
                 sx={{
+                  py: 4,
                   display: 'flex',
-                  justifyContent: 'center',
                   alignItems: 'center',
-                  height: '100%',
+                  justifyContent: 'center',
                   color: 'text.secondary',
                 }}
               >
                 <Typography>Loading files...</Typography>
               </Box>
             )}
-          </Paper>
+          </Box>
 
           <Typography
             variant="caption"
             color="text.secondary"
-            sx={{
-              mt: 2,
-              display: 'block',
-              fontWeight: 500,
-              fontSize: '0.75rem',
-            }}
+            sx={{ mt: 2, display: 'block' }}
           >
-            {selectedFiles.size} individual file(s) + {selectedFolders.size}{' '}
-            folder(s) selected ({allSelectedFiles.length} total SQL files)
+            {selectedFiles.size} files + {selectedFolders.size} folders selected
+            ({allSelectedFiles.length} total SQL files)
           </Typography>
         </Box>
 
-        <Divider sx={{ my: 1 }} />
+        <Divider sx={{ mb: 4 }} />
 
         {/* Output Path Section */}
         <Box>
-          <DialogContentText sx={{ mb: 2, color: 'text.secondary' }}>
-            Please select output path
-          </DialogContentText>
-
+          <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+            Output path
+          </Typography>
           <TextField
-            label="Output path"
-            variant="outlined"
             fullWidth
             value={updatedPath}
-            sx={{
-              '& .MuiOutlinedInput-root': {
-                borderRadius: 2,
-                height: 48,
-                '&:hover .MuiOutlinedInput-notchedOutline': {
-                  borderColor: 'primary.light',
-                },
-                '&.Mui-focused .MuiOutlinedInput-notchedOutline': {
-                  borderColor: 'primary.main',
-                },
-              },
-            }}
             slotProps={{
               input: {
                 endAdornment: (
                   <InputAdornment position="end">
                     <Button
-                      variant="contained"
-                      color="primary"
+                      variant="outlined"
                       size="small"
                       sx={{
                         borderRadius: 1.5,
                         textTransform: 'none',
                         fontWeight: 500,
-                        px: 2,
-                        '&:hover': {
-                          boxShadow: '0px 4px 8px rgba(0, 0, 0, 0.15)',
-                        },
                       }}
                       onClick={async () => {
                         const result = await projectsServices.chooseDir({
@@ -743,23 +689,35 @@ export const BusinessModal: React.FC<Props> = ({
                 ),
               },
             }}
+            sx={{
+              '& .MuiOutlinedInput-root': {
+                borderRadius: 2,
+                '&:hover .MuiOutlinedInput-notchedOutline': {
+                  borderColor: 'primary.light',
+                },
+              },
+            }}
           />
         </Box>
       </DialogContent>
 
-      <DialogActions sx={{ px: 3, pb: 3, pt: 2, gap: 2 }}>
+      <DialogActions
+        sx={{
+          px: 3,
+          pb: 3,
+          pt: 2,
+          gap: 2,
+          borderTop: 1,
+          borderColor: 'divider',
+        }}
+      >
         <Button
           onClick={onClose}
           color="inherit"
           sx={{
-            borderRadius: 1.5,
             textTransform: 'none',
             fontWeight: 500,
             px: 3,
-            color: 'text.secondary',
-            '&:hover': {
-              backgroundColor: 'action.hover',
-            },
           }}
         >
           Cancel
@@ -769,17 +727,10 @@ export const BusinessModal: React.FC<Props> = ({
           onClick={() => processCallback(updatedPath, query, allSelectedFiles)}
           disabled={totalSelectedItems === 0 || query.trim() === ''}
           sx={{
-            borderRadius: 1.5,
-            textTransform: 'none',
             fontWeight: 500,
+            textTransform: 'uppercase',
             px: 3,
-            '&:hover': {
-              boxShadow: '0px 4px 8px rgba(0, 0, 0, 0.15)',
-            },
-            '&:disabled': {
-              backgroundColor: 'action.disabledBackground',
-              color: 'action.disabled',
-            },
+            borderRadius: 1.5,
           }}
         >
           Generate Business Models

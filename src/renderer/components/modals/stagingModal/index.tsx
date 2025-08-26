@@ -15,11 +15,9 @@ import {
   IconButton,
   FormControlLabel,
   Box,
-  DialogContentText,
   Divider,
   InputAdornment,
   Typography,
-  Paper,
 } from '@mui/material';
 import React from 'react';
 import { TreeItem, SimpleTreeView as TreeView } from '@mui/x-tree-view';
@@ -58,10 +56,17 @@ export const StagingModal: React.FC<Props> = ({
 
   const updateProject = useUpdateProject();
 
-  // Helper function to get directory path from a file/folder path
-  const getDirectoryPath = (filePath: string): string => {
+  // Helper function to get the immediate subdirectory of models for a given path
+  const getModelsSubdirectory = (filePath: string): string | null => {
     const pathParts = filePath.split('/');
-    return pathParts.slice(0, -1).join('/');
+    const modelsIndex = pathParts.findIndex((part) => part === 'models');
+
+    if (modelsIndex !== -1 && modelsIndex < pathParts.length - 1) {
+      // Return path up to the first subdirectory after models
+      return pathParts.slice(0, modelsIndex + 2).join('/');
+    }
+
+    return null;
   };
 
   // Helper function to check if a folder directly contains YAML files (not in subfolders)
@@ -170,7 +175,7 @@ export const StagingModal: React.FC<Props> = ({
       setSelectedFolders(new Set());
       // Set restricted directory based on first file
       if (allYamlFilePaths.length > 0) {
-        setRestrictedDirectory(getDirectoryPath(allYamlFilePaths[0]));
+        setRestrictedDirectory(getModelsSubdirectory(allYamlFilePaths[0]));
       }
     } else {
       setSelectedFiles(new Set());
@@ -181,19 +186,19 @@ export const StagingModal: React.FC<Props> = ({
 
   const handleFileSelection = (filePath: string, isSelected: boolean) => {
     const newSelectedFiles = new Set(selectedFiles);
-    const fileDirectory = getDirectoryPath(filePath);
+    const fileModelsSubdir = getModelsSubdirectory(filePath);
 
     if (isSelected) {
       // Check if we can select this file based on directory restrictions
-      if (restrictedDirectory && restrictedDirectory !== fileDirectory) {
-        return; // Don't allow selection from different directory
+      if (restrictedDirectory && restrictedDirectory !== fileModelsSubdir) {
+        return; // Don't allow selection from different models subdirectory
       }
 
       newSelectedFiles.add(filePath);
 
       // Set restricted directory if this is the first selection
-      if (!restrictedDirectory) {
-        setRestrictedDirectory(fileDirectory);
+      if (!restrictedDirectory && fileModelsSubdir) {
+        setRestrictedDirectory(fileModelsSubdir);
       }
 
       // Clear any folder selections when selecting individual files
@@ -225,19 +230,19 @@ export const StagingModal: React.FC<Props> = ({
     isSelected: boolean,
   ) => {
     const newSelectedFolders = new Set(selectedFolders);
-    const folderDirectory = getDirectoryPath(folderPath);
+    const folderModelsSubdir = getModelsSubdirectory(folderPath);
 
     if (isSelected) {
       // Check if we can select this folder based on directory restrictions
-      if (restrictedDirectory && restrictedDirectory !== folderDirectory) {
-        return; // Don't allow selection from different directory
+      if (restrictedDirectory && restrictedDirectory !== folderModelsSubdir) {
+        return; // Don't allow selection from different models subdirectory
       }
 
       newSelectedFolders.add(folderPath);
 
       // Set restricted directory if this is the first selection
-      if (!restrictedDirectory) {
-        setRestrictedDirectory(folderDirectory);
+      if (!restrictedDirectory && folderModelsSubdir) {
+        setRestrictedDirectory(folderModelsSubdir);
       }
 
       // Clear any individual file selections when selecting folders
@@ -276,17 +281,22 @@ export const StagingModal: React.FC<Props> = ({
       isFile && (node.name.endsWith('.yaml') || node.name.endsWith('.yml'));
     const canSelectFile = isYamlFile && shouldEnableSelection;
 
-    // Check if folder can be selected (contains YAML files and is in models directory)
+    // Check if folder can be selected (contains YAML files, is in models directory, but not the models directory itself)
     const canSelectFolder =
-      !isFile && shouldEnableSelection && folderContainsYamlFiles(node);
+      !isFile &&
+      shouldEnableSelection &&
+      !isModelsDir && // Exclude the models directory itself
+      folderContainsYamlFiles(node);
 
     const isFileSelected = selectedFiles.has(node.path);
     const isFolderSelected = selectedFolders.has(node.path);
 
     // Check if selection is disabled due to directory restrictions
-    const nodeDirectory = getDirectoryPath(node.path);
+    const nodeModelsSubdir = getModelsSubdirectory(node.path);
     const isDisabledByRestriction =
-      restrictedDirectory && restrictedDirectory !== nodeDirectory;
+      restrictedDirectory &&
+      nodeModelsSubdir &&
+      restrictedDirectory !== nodeModelsSubdir;
 
     return (
       <TreeItem
@@ -484,6 +494,17 @@ export const StagingModal: React.FC<Props> = ({
   const totalSelectedItems = selectedFiles.size + selectedFolders.size;
   const allSelectedFiles = getAllSelectedFiles();
 
+  // Get the display name for restricted directory
+  const getRestrictedDirectoryDisplayName = (): string => {
+    if (!restrictedDirectory) return '';
+    const pathParts = restrictedDirectory.split('/');
+    const modelsIndex = pathParts.findIndex((part) => part === 'models');
+    if (modelsIndex !== -1 && modelsIndex < pathParts.length - 1) {
+      return `models/${pathParts[modelsIndex + 1]}`;
+    }
+    return restrictedDirectory;
+  };
+
   return (
     <Dialog
       open={isOpen}
@@ -492,48 +513,53 @@ export const StagingModal: React.FC<Props> = ({
       fullWidth
       slotProps={{
         paper: {
-          sx: { height: '80vh' },
+          sx: {
+            maxHeight: '90vh',
+            borderRadius: 2,
+            boxShadow: '0px 8px 32px rgba(0, 0, 0, 0.12)',
+          },
         },
       }}
     >
-      <DialogTitle>
-        Rosetta DBT Staging
-        <IconButton
-          aria-label="close"
-          onClick={onClose}
-          sx={(theme) => ({
-            position: 'absolute',
-            right: 8,
-            top: 8,
-            color: theme.palette.grey[500],
-          })}
+      <DialogTitle sx={{ pb: 2, borderBottom: 1, borderColor: 'divider' }}>
+        <Box
+          sx={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+          }}
         >
-          <CloseIcon />
-        </IconButton>
+          <Typography variant="h6" sx={{ fontWeight: 600 }}>
+            Rosetta DBT Staging
+          </Typography>
+          <IconButton onClick={onClose} size="small">
+            <CloseIcon />
+          </IconButton>
+        </Box>
       </DialogTitle>
 
-      <DialogContent
-        sx={{ display: 'flex', flexDirection: 'column', gap: 3, pt: 3 }}
-      >
-        <DialogContentText sx={{ color: 'text.secondary', mb: 1 }}>
-          Please select YAML files or folders from {project.path}/models
-          directory
+      <DialogContent sx={{ py: 3 }}>
+        {/* File Selection Section */}
+        <Box sx={{ mb: 4 }}>
+          <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+            Select YAML files or folders from {project.path}/models directory
+            (one subdirectory at a time)
+          </Typography>
+
           {restrictedDirectory && (
             <Typography
               variant="caption"
-              display="block"
-              sx={{ mt: 1, color: 'warning.main' }}
+              color="warning.main"
+              sx={{ display: 'block', mb: 2 }}
             >
-              Selection restricted to: {restrictedDirectory}
+              Selection restricted to: {getRestrictedDirectoryDisplayName()}
             </Typography>
           )}
-        </DialogContentText>
 
-        {/* File Selection Section */}
-        <Box sx={{ flex: 1, minHeight: 0 }}>
           <FormControlLabel
             control={
               <Checkbox
+                size="small"
                 checked={selectAll}
                 indeterminate={selectedFiles.size > 0 && !selectAll}
                 onChange={handleSelectAllChange}
@@ -546,20 +572,28 @@ export const StagingModal: React.FC<Props> = ({
                 }}
               />
             }
-            label={
-              <Typography variant="body2" sx={{ fontWeight: 500 }}>
-                Select All YAML Files (models directory only)
-              </Typography>
-            }
-            sx={{ mb: 2 }}
+            label="Select All YAML Files (models directory only)"
+            sx={{
+              mb: 2,
+              '& .MuiFormControlLabel-label': {
+                fontSize: '0.875rem',
+                fontWeight: 500,
+              },
+            }}
           />
 
-          <Paper
-            variant="outlined"
+          <Box
             sx={{
-              height: 300,
+              border: '1px solid',
+              borderColor: 'divider',
+              height: 250,
               overflow: 'auto',
-              p: 1,
+              borderRadius: 1,
+              p: 2,
+              backgroundColor: 'background.paper',
+              '&:hover': {
+                borderColor: 'primary.light',
+              },
             }}
           >
             {files ? (
@@ -567,112 +601,126 @@ export const StagingModal: React.FC<Props> = ({
                 expandedItems={expandedItems}
                 onExpandedItemsChange={handleExpandedItemsChange}
                 sx={{
-                  flexGrow: 1,
-                  overflowY: 'auto',
+                  '& .MuiTreeItem-content': {
+                    padding: '4px 8px',
+                    borderRadius: 1,
+                    '&:hover': {
+                      backgroundColor: 'action.hover',
+                    },
+                  },
                 }}
               >
                 {files.children
-                  ?.map((child) => renderFileTree(child, true))
+                  ?.map((child) => renderFileTree(child, true, false))
                   .filter(Boolean)}
               </TreeView>
             ) : (
               <Box
                 sx={{
+                  py: 4,
                   display: 'flex',
-                  justifyContent: 'center',
                   alignItems: 'center',
-                  height: '100%',
+                  justifyContent: 'center',
                   color: 'text.secondary',
                 }}
               >
                 <Typography>Loading files...</Typography>
               </Box>
             )}
-          </Paper>
+          </Box>
 
           <Typography
             variant="caption"
             color="text.secondary"
-            sx={{ mt: 1, display: 'block' }}
+            sx={{ mt: 2, display: 'block' }}
           >
-            {selectedFiles.size} individual file(s) + {selectedFolders.size}{' '}
-            folder(s) selected ({allSelectedFiles.length} total YAML files)
+            {selectedFiles.size} files + {selectedFolders.size} folders selected
+            ({allSelectedFiles.length} total YAML files)
           </Typography>
         </Box>
 
-        <Divider sx={{ my: 1 }} />
+        <Divider sx={{ mb: 4 }} />
 
         {/* Output Path Section */}
         <Box>
-          <DialogContentText sx={{ mb: 2, color: 'text.secondary' }}>
-            Please select output path
-          </DialogContentText>
-
+          <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+            Output path
+          </Typography>
           <TextField
-            label="Output path"
-            variant="outlined"
             fullWidth
             value={updatedPath}
+            InputProps={{
+              endAdornment: (
+                <InputAdornment position="end">
+                  <Button
+                    variant="outlined"
+                    size="small"
+                    sx={{
+                      borderRadius: 1.5,
+                      textTransform: 'none',
+                      fontWeight: 500,
+                    }}
+                    onClick={async () => {
+                      const result = await projectsServices.chooseDir({
+                        path: updatedPath,
+                      });
+                      if (result !== 'false') {
+                        await updateProject.mutateAsync({
+                          ...project,
+                          stagingDir: result,
+                        });
+                        setUpdatedPath(result);
+                      }
+                    }}
+                  >
+                    Browse
+                  </Button>
+                </InputAdornment>
+              ),
+            }}
             sx={{
               '& .MuiOutlinedInput-root': {
                 borderRadius: 2,
-                height: 48,
                 '&:hover .MuiOutlinedInput-notchedOutline': {
                   borderColor: 'primary.light',
                 },
-                '&.Mui-focused .MuiOutlinedInput-notchedOutline': {
-                  borderColor: 'primary.main',
-                },
-              },
-            }}
-            slotProps={{
-              input: {
-                endAdornment: (
-                  <InputAdornment position="end">
-                    <Button
-                      variant="contained"
-                      color="primary"
-                      size="small"
-                      sx={{
-                        borderRadius: 1.5,
-                        textTransform: 'none',
-                        fontWeight: 500,
-                        px: 2,
-                        '&:hover': {
-                          boxShadow: '0px 4px 8px rgba(0, 0, 0, 0.15)',
-                        },
-                      }}
-                      onClick={async () => {
-                        const result = await projectsServices.chooseDir({
-                          path: updatedPath,
-                        });
-                        if (result !== 'false') {
-                          await updateProject.mutateAsync({
-                            ...project,
-                            stagingDir: result,
-                          });
-                          setUpdatedPath(result);
-                        }
-                      }}
-                    >
-                      Browse
-                    </Button>
-                  </InputAdornment>
-                ),
               },
             }}
           />
         </Box>
       </DialogContent>
 
-      <DialogActions sx={{ px: 3, pb: 2 }}>
-        <Button onClick={onClose} color="inherit">
+      <DialogActions
+        sx={{
+          px: 3,
+          pb: 3,
+          pt: 2,
+          gap: 2,
+          borderTop: 1,
+          borderColor: 'divider',
+        }}
+      >
+        <Button
+          onClick={onClose}
+          color="inherit"
+          sx={{
+            textTransform: 'none',
+            fontWeight: 500,
+            px: 3,
+          }}
+        >
           Cancel
         </Button>
         <Button
           variant="contained"
           onClick={() => processCallback(updatedPath, allSelectedFiles)}
           disabled={totalSelectedItems === 0}
+          sx={{
+            textTransform: 'none',
+            fontWeight: 500,
+            px: 3,
+            borderRadius: 1.5,
+          }}
         >
           Generate Staging Models
         </Button>
