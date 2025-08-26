@@ -133,7 +133,11 @@ export const BusinessModal: React.FC<Props> = ({
     isDirectChild: boolean = false,
   ): boolean => {
     if (isDirectChild && node.type === 'folder') {
-      return node.name === 'rosetta' || node.name === '.git';
+      return (
+        node.name === 'rosetta' ||
+        node.name === '.git' ||
+        node.name === 'target'
+      );
     }
     return false;
   };
