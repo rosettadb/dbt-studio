@@ -1,3 +1,4 @@
+/* eslint-disable no-nested-ternary, no-restricted-syntax */
 import {
   Close as CloseIcon,
   Folder,
@@ -46,10 +47,59 @@ export const StagingModal: React.FC<Props> = ({
   const [selectedFiles, setSelectedFiles] = React.useState<Set<string>>(
     new Set(),
   );
+  const [selectedFolders, setSelectedFolders] = React.useState<Set<string>>(
+    new Set(),
+  );
   const [files, setFiles] = React.useState<FileNode>();
   const [expandedItems, setExpandedItems] = React.useState<string[]>([]);
+  const [restrictedDirectory, setRestrictedDirectory] = React.useState<
+    string | null
+  >(null);
 
   const updateProject = useUpdateProject();
+
+  // Helper function to get directory path from a file/folder path
+  const getDirectoryPath = (filePath: string): string => {
+    const pathParts = filePath.split('/');
+    return pathParts.slice(0, -1).join('/');
+  };
+
+  // Helper function to check if a folder directly contains YAML files (not in subfolders)
+  const folderContainsYamlFiles = (node: FileNode): boolean => {
+    if (node.type === 'file') {
+      return false; // This function is only for folders
+    }
+
+    if (node.children) {
+      // Check only direct children, not recursive
+      return node.children.some(
+        (child) =>
+          child.type === 'file' &&
+          (child.name.endsWith('.yaml') || child.name.endsWith('.yml')),
+      );
+    }
+
+    return false;
+  };
+
+  // Get all YAML files in a folder (only direct children, not subfolders)
+  const getYamlFilesInFolder = (node: FileNode): string[] => {
+    const yamlFiles: string[] = [];
+
+    // Only get direct children that are YAML files, don't recurse into subfolders
+    if (node.children) {
+      node.children.forEach((child) => {
+        if (
+          child.type === 'file' &&
+          (child.name.endsWith('.yaml') || child.name.endsWith('.yml'))
+        ) {
+          yamlFiles.push(child.path);
+        }
+      });
+    }
+
+    return yamlFiles;
+  };
 
   // Recursive function to get all YAML file paths from models directory only
   const getAllYamlFilePaths = (
@@ -116,18 +166,45 @@ export const StagingModal: React.FC<Props> = ({
     if (newSelectAll) {
       const allYamlFilePaths = getAllYamlFilePaths(files);
       setSelectedFiles(new Set(allYamlFilePaths));
+      // Clear folder selections when selecting all files
+      setSelectedFolders(new Set());
+      // Set restricted directory based on first file
+      if (allYamlFilePaths.length > 0) {
+        setRestrictedDirectory(getDirectoryPath(allYamlFilePaths[0]));
+      }
     } else {
       setSelectedFiles(new Set());
+      setSelectedFolders(new Set());
+      setRestrictedDirectory(null);
     }
   };
 
   const handleFileSelection = (filePath: string, isSelected: boolean) => {
     const newSelectedFiles = new Set(selectedFiles);
+    const fileDirectory = getDirectoryPath(filePath);
 
     if (isSelected) {
+      // Check if we can select this file based on directory restrictions
+      if (restrictedDirectory && restrictedDirectory !== fileDirectory) {
+        return; // Don't allow selection from different directory
+      }
+
       newSelectedFiles.add(filePath);
+
+      // Set restricted directory if this is the first selection
+      if (!restrictedDirectory) {
+        setRestrictedDirectory(fileDirectory);
+      }
+
+      // Clear any folder selections when selecting individual files
+      setSelectedFolders(new Set());
     } else {
       newSelectedFiles.delete(filePath);
+
+      // If no files are selected, clear directory restriction
+      if (newSelectedFiles.size === 0) {
+        setRestrictedDirectory(null);
+      }
     }
 
     setSelectedFiles(newSelectedFiles);
@@ -140,6 +217,42 @@ export const StagingModal: React.FC<Props> = ({
       );
       setSelectAll(allSelected);
     }
+  };
+
+  const handleFolderSelection = (
+    folderPath: string,
+    folderNode: FileNode,
+    isSelected: boolean,
+  ) => {
+    const newSelectedFolders = new Set(selectedFolders);
+    const folderDirectory = getDirectoryPath(folderPath);
+
+    if (isSelected) {
+      // Check if we can select this folder based on directory restrictions
+      if (restrictedDirectory && restrictedDirectory !== folderDirectory) {
+        return; // Don't allow selection from different directory
+      }
+
+      newSelectedFolders.add(folderPath);
+
+      // Set restricted directory if this is the first selection
+      if (!restrictedDirectory) {
+        setRestrictedDirectory(folderDirectory);
+      }
+
+      // Clear any individual file selections when selecting folders
+      setSelectedFiles(new Set());
+      setSelectAll(false);
+    } else {
+      newSelectedFolders.delete(folderPath);
+
+      // If no folders are selected, clear directory restriction
+      if (newSelectedFolders.size === 0) {
+        setRestrictedDirectory(null);
+      }
+    }
+
+    setSelectedFolders(newSelectedFolders);
   };
 
   const renderFileTree = (
@@ -161,8 +274,19 @@ export const StagingModal: React.FC<Props> = ({
 
     const isYamlFile =
       isFile && (node.name.endsWith('.yaml') || node.name.endsWith('.yml'));
-    const canSelect = isYamlFile && shouldEnableSelection;
-    const isSelected = selectedFiles.has(node.path);
+    const canSelectFile = isYamlFile && shouldEnableSelection;
+
+    // Check if folder can be selected (contains YAML files and is in models directory)
+    const canSelectFolder =
+      !isFile && shouldEnableSelection && folderContainsYamlFiles(node);
+
+    const isFileSelected = selectedFiles.has(node.path);
+    const isFolderSelected = selectedFolders.has(node.path);
+
+    // Check if selection is disabled due to directory restrictions
+    const nodeDirectory = getDirectoryPath(node.path);
+    const isDisabledByRestriction =
+      restrictedDirectory && restrictedDirectory !== nodeDirectory;
 
     return (
       <TreeItem
@@ -175,12 +299,12 @@ export const StagingModal: React.FC<Props> = ({
                 control={
                   <Checkbox
                     size="small"
-                    checked={isSelected}
+                    checked={isFileSelected}
                     onChange={(e) =>
                       handleFileSelection(node.path, e.target.checked)
                     }
                     onClick={(e) => e.stopPropagation()}
-                    disabled={!canSelect}
+                    disabled={!canSelectFile || !!isDisabledByRestriction}
                   />
                 }
                 label={
@@ -189,13 +313,19 @@ export const StagingModal: React.FC<Props> = ({
                       sx={{
                         mr: 1,
                         fontSize: 18,
-                        color: canSelect ? 'primary.main' : 'action.disabled',
+                        color:
+                          canSelectFile && !isDisabledByRestriction
+                            ? 'primary.main'
+                            : 'action.disabled',
                       }}
                     />
                     <Typography
                       variant="body2"
                       sx={{
-                        color: canSelect ? 'text.primary' : 'text.disabled',
+                        color:
+                          canSelectFile && !isDisabledByRestriction
+                            ? 'text.primary'
+                            : 'text.disabled',
                       }}
                     >
                       {node.name}
@@ -205,23 +335,70 @@ export const StagingModal: React.FC<Props> = ({
                 sx={{ m: 0 }}
               />
             ) : (
-              <Box sx={{ display: 'flex', alignItems: 'center', ml: 1 }}>
-                <Folder
+              <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                {canSelectFolder && (
+                  <Checkbox
+                    size="small"
+                    checked={isFolderSelected}
+                    onChange={(e) =>
+                      handleFolderSelection(node.path, node, e.target.checked)
+                    }
+                    onClick={(e) => e.stopPropagation()}
+                    disabled={!!isDisabledByRestriction}
+                    sx={{ mr: 1 }}
+                  />
+                )}
+                <Box
                   sx={{
-                    mr: 1.5,
-                    fontSize: 18,
-                    color: isModelsDir ? 'primary.main' : 'text.secondary',
-                  }}
-                />
-                <Typography
-                  variant="body2"
-                  sx={{
-                    fontWeight: isModelsDir ? 600 : 500,
-                    color: isModelsDir ? 'primary.main' : 'text.primary',
+                    display: 'flex',
+                    alignItems: 'center',
+                    ml: canSelectFolder ? 0 : 1,
                   }}
                 >
-                  {node.name}
-                </Typography>
+                  <Folder
+                    sx={{
+                      mr: 1.5,
+                      fontSize: 18,
+                      color: isModelsDir
+                        ? 'primary.main'
+                        : canSelectFolder && !isDisabledByRestriction
+                          ? 'secondary.main'
+                          : 'text.secondary',
+                    }}
+                  />
+                  <Typography
+                    variant="body2"
+                    sx={{
+                      fontWeight: isModelsDir ? 600 : 500,
+                      color: isModelsDir
+                        ? 'primary.main'
+                        : // eslint-disable-next-line no-nested-ternary
+                          canSelectFolder && !isDisabledByRestriction
+                          ? 'text.primary'
+                          : isDisabledByRestriction
+                            ? 'text.disabled'
+                            : 'text.primary',
+                    }}
+                  >
+                    {node.name}
+                    {canSelectFolder && (
+                      <Typography
+                        component="span"
+                        variant="caption"
+                        sx={{ ml: 1, color: 'text.secondary' }}
+                      >
+                        (contains{' '}
+                        {node.children?.filter(
+                          (child) =>
+                            child.type === 'file' &&
+                            (child.name.endsWith('.yaml') ||
+                              child.name.endsWith('.yml')),
+                        ).length || 0}{' '}
+                        YAML files)
+                      </Typography>
+                    )}
+                  </Typography>
+                </Box>
               </Box>
             )}
           </Box>
@@ -261,6 +438,8 @@ export const StagingModal: React.FC<Props> = ({
   // Reset selections when files change
   React.useEffect(() => {
     setSelectedFiles(new Set());
+    setSelectedFolders(new Set());
+    setRestrictedDirectory(null);
     setSelectAll(false);
   }, [files]);
 
@@ -271,14 +450,50 @@ export const StagingModal: React.FC<Props> = ({
     setExpandedItems(itemIds);
   };
 
+  // Get all selected items (files from individual selection or files from folder selection)
+  const getAllSelectedFiles = (): string[] => {
+    const allFiles: string[] = [];
+
+    // Add individually selected files
+    allFiles.push(...Array.from(selectedFiles));
+
+    // Add files from selected folders
+    if (files) {
+      selectedFolders.forEach((folderPath) => {
+        const findFolderNode = (node: FileNode): FileNode | null => {
+          if (node.path === folderPath) return node;
+          if (node.children) {
+            for (const child of node.children) {
+              const found = findFolderNode(child);
+              if (found) return found;
+            }
+          }
+          return null;
+        };
+
+        const folderNode = findFolderNode(files);
+        if (folderNode) {
+          allFiles.push(...getYamlFilesInFolder(folderNode));
+        }
+      });
+    }
+
+    return allFiles;
+  };
+
+  const totalSelectedItems = selectedFiles.size + selectedFolders.size;
+  const allSelectedFiles = getAllSelectedFiles();
+
   return (
     <Dialog
       open={isOpen}
       onClose={onClose}
       maxWidth="md"
       fullWidth
-      PaperProps={{
-        sx: { height: '80vh' },
+      slotProps={{
+        paper: {
+          sx: { height: '80vh' },
+        },
       }}
     >
       <DialogTitle>
@@ -301,7 +516,17 @@ export const StagingModal: React.FC<Props> = ({
         sx={{ display: 'flex', flexDirection: 'column', gap: 3, pt: 3 }}
       >
         <DialogContentText sx={{ color: 'text.secondary', mb: 1 }}>
-          Please select YAML files from {project.path}/models directory
+          Please select YAML files or folders from {project.path}/models
+          directory
+          {restrictedDirectory && (
+            <Typography
+              variant="caption"
+              display="block"
+              sx={{ mt: 1, color: 'warning.main' }}
+            >
+              Selection restricted to: {restrictedDirectory}
+            </Typography>
+          )}
         </DialogContentText>
 
         {/* File Selection Section */}
@@ -312,6 +537,7 @@ export const StagingModal: React.FC<Props> = ({
                 checked={selectAll}
                 indeterminate={selectedFiles.size > 0 && !selectAll}
                 onChange={handleSelectAllChange}
+                disabled={selectedFolders.size > 0}
                 sx={{
                   color: 'primary.main',
                   '&.Mui-checked': {
@@ -369,7 +595,8 @@ export const StagingModal: React.FC<Props> = ({
             color="text.secondary"
             sx={{ mt: 1, display: 'block' }}
           >
-            {selectedFiles.size} YAML file(s) selected
+            {selectedFiles.size} individual file(s) + {selectedFolders.size}{' '}
+            folder(s) selected ({allSelectedFiles.length} total YAML files)
           </Typography>
         </Box>
 
@@ -444,10 +671,8 @@ export const StagingModal: React.FC<Props> = ({
         </Button>
         <Button
           variant="contained"
-          onClick={() =>
-            processCallback(updatedPath, Array.from(selectedFiles))
-          }
-          disabled={selectedFiles.size === 0}
+          onClick={() => processCallback(updatedPath, allSelectedFiles)}
+          disabled={totalSelectedItems === 0}
         >
           Generate Staging Models
         </Button>
