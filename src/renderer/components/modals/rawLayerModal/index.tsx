@@ -65,6 +65,7 @@ export const RawLayerModal: React.FC<Props> = ({
           <TextField
             label="Output path"
             variant="outlined"
+            onChange={(event) => setUpdatedPath(event.target.value)}
             value={updatedPath}
             slotProps={{
               input: {

@@ -149,23 +149,6 @@ export const StagingModal: React.FC<Props> = ({
     return false;
   };
 
-  // Get all directory paths for initial expansion (excluding rosetta and .git)
-  const getAllDirectoryPaths = (
-    node: FileNode,
-    isDirectChild: boolean = false,
-  ): string[] => {
-    const paths: string[] = [];
-    if (node.type === 'folder' && !shouldExcludeNode(node, isDirectChild)) {
-      paths.push(node.path);
-      if (node.children) {
-        node.children.forEach((child) => {
-          paths.push(...getAllDirectoryPaths(child, false));
-        });
-      }
-    }
-    return paths;
-  };
-
   const handleSelectAllChange = () => {
     if (!files) return;
 
@@ -307,7 +290,7 @@ export const StagingModal: React.FC<Props> = ({
         key={nodeId}
         itemId={nodeId}
         label={
-          <Box sx={{ display: 'flex', alignItems: 'center', py: 0.5 }}>
+          <Box sx={{ display: 'flex', alignItems: 'center' }}>
             {isFile ? (
               <FormControlLabel
                 control={
@@ -431,17 +414,6 @@ export const StagingModal: React.FC<Props> = ({
         path: projectPath,
       });
       setFiles(data);
-
-      // Auto-expand all directories for better UX (excluding rosetta and .git)
-      if (data && data.children) {
-        const filteredChildren = data.children.filter(
-          (child) => !shouldExcludeNode(child, true),
-        );
-        const allDirPaths = filteredChildren.flatMap((child) =>
-          getAllDirectoryPaths(child, false),
-        );
-        setExpandedItems(allDirPaths);
-      }
     };
 
     if (project.path) {
@@ -653,34 +625,37 @@ export const StagingModal: React.FC<Props> = ({
           <TextField
             fullWidth
             value={updatedPath}
-            InputProps={{
-              endAdornment: (
-                <InputAdornment position="end">
-                  <Button
-                    variant="outlined"
-                    size="small"
-                    sx={{
-                      borderRadius: 1.5,
-                      textTransform: 'none',
-                      fontWeight: 500,
-                    }}
-                    onClick={async () => {
-                      const result = await projectsServices.chooseDir({
-                        path: updatedPath,
-                      });
-                      if (result !== 'false') {
-                        await updateProject.mutateAsync({
-                          ...project,
-                          stagingDir: result,
+            onChange={(event) => setUpdatedPath(event.target.value)}
+            slotProps={{
+              input: {
+                endAdornment: (
+                  <InputAdornment position="end">
+                    <Button
+                      variant="outlined"
+                      size="small"
+                      sx={{
+                        borderRadius: 1.5,
+                        textTransform: 'none',
+                        fontWeight: 500,
+                      }}
+                      onClick={async () => {
+                        const result = await projectsServices.chooseDir({
+                          path: updatedPath,
                         });
-                        setUpdatedPath(result);
-                      }
-                    }}
-                  >
-                    Browse
-                  </Button>
-                </InputAdornment>
-              ),
+                        if (result !== 'false') {
+                          await updateProject.mutateAsync({
+                            ...project,
+                            stagingDir: result,
+                          });
+                          setUpdatedPath(result);
+                        }
+                      }}
+                    >
+                      Browse
+                    </Button>
+                  </InputAdornment>
+                ),
+              },
             }}
             sx={{
               '& .MuiOutlinedInput-root': {
