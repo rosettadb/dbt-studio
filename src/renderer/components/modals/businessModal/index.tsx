@@ -462,7 +462,6 @@ export const BusinessModal: React.FC<Props> = ({
     return allFiles;
   };
 
-  const totalSelectedItems = selectedFiles.size + selectedFolders.size;
   const allSelectedFiles = getAllSelectedFiles();
 
   return (
@@ -702,7 +701,7 @@ export const BusinessModal: React.FC<Props> = ({
         <Button
           variant="contained"
           onClick={() => processCallback(updatedPath, query, allSelectedFiles)}
-          disabled={totalSelectedItems === 0 || query.trim() === ''}
+          disabled={query.trim() === ''}
           sx={{
             fontWeight: 500,
             textTransform: 'uppercase',
