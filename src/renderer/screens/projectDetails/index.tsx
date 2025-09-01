@@ -9,13 +9,14 @@ import {
 } from '@mui/icons-material';
 import {
   Box,
+  Button,
   IconButton,
   ListItemIcon,
   ListItemText,
   Menu,
   MenuItem,
-  Tooltip,
   Slide,
+  Tooltip,
 } from '@mui/material';
 import { toast } from 'react-toastify';
 import yaml from 'js-yaml';
@@ -25,11 +26,11 @@ import {
   FileTreeViewer,
   GenerateAiQueriesModal,
   Loader,
-  TerminalLayout,
-  SplitButton,
-  NoAiSetModal,
   ModelSplitButton,
+  NoAiSetModal,
   ProjectDbtSplitButton,
+  SplitButton,
+  TerminalLayout,
 } from '../../components';
 import {
   useGetConnectionById,
@@ -51,12 +52,13 @@ import {
   NoFileSelected,
   SelectedFile,
 } from './styles';
-import { useRosettaDBT, useDbt } from '../../hooks';
+import { useDbt, useRosettaDBT } from '../../hooks';
 import {
-  GenerateDashboardResponseType,
-  Project,
   Command,
   CommandType,
+  GenerateDashboardResponseType,
+  Project,
+  SupportedConnectionTypes,
 } from '../../../types/backend';
 import { AI_PROMPTS } from '../../config/constants';
 import { utils } from '../../helpers';
@@ -64,6 +66,7 @@ import { AppLayout } from '../../layouts';
 import { AppContext } from '../../context';
 import { BusinessModal } from '../../components/modals/businessModal';
 import ChatScreen from '../chat';
+import { AiPromptModal } from '../../components/modals/aiPromptModal';
 
 const ProjectDetails: React.FC = () => {
   const navigate = useNavigate();
@@ -80,10 +83,14 @@ const ProjectDetails: React.FC = () => {
   const [fileContent, setFileContent] = React.useState<string>();
   const [businessQueryModal, setBusinessQueryModal] = React.useState<string>();
   const [noAiSetModal, setNoAiSetModal] = React.useState(false);
+  const [aiTransformationPrompt, setAiTransformationPrompt] =
+    React.useState<string>();
   const [isAddConnectionModalOpen, setIsAddConnectionModalOpen] =
     React.useState(false);
   const [connectionMenuAnchor, setConnectionMenuAnchor] =
     React.useState<HTMLElement | null>(null);
+  const [aiTransformationResponse, setAitTransformationResponse] =
+    React.useState<string>();
 
   const {
     data: directories,
@@ -151,127 +158,75 @@ const ProjectDetails: React.FC = () => {
     fetchData();
   }, [project]);
 
-  const enhanceModel = async () => {
-    if (!isAiProviderSet) {
-      toast.error('Open AI API Key not provided');
+  const stagingTransformationPrompt = async (
+    filePath: string,
+    _project: Project,
+  ) => {
+    const fileName = utils.getFileName(filePath, false);
+    const tables = await projectsServices.extractSchemaFromModelYaml(_project);
+    const { schema, table } = utils.extractSchemaAndTable(fileName);
+
+    const tableStructure = tables.find(
+      (tmpTable) => tmpTable.name === table && tmpTable.schema === schema,
+    );
+
+    if (!tableStructure) {
+      toast.info(`Could not find table: ${schema}.${table}`);
       return;
     }
 
-    if (!selectedFilePath) {
-      toast.error('No file selected');
-      return;
-    }
+    const promptTable = yaml.dump({
+      name: tableStructure.name,
+      type: tableStructure.type,
+      schema: tableStructure.schema,
+      columns: tableStructure.columns.map((col) => ({
+        name: col.name,
+        typeName: col.typeName,
+      })),
+    });
 
-    setIsLoadingQuery(true);
+    const tableName = `${schema}.${table}`;
 
-    try {
-      const response = await projectsServices.enhanceModelQuery(
-        utils.format(
-          AI_PROMPTS.ENHANCE_ENHANCED_MODEL,
-          String(project?.dbtConnection?.type),
-          String(fileContent),
-        ),
-      );
-      await projectsServices.saveFileContent({
-        path: selectedFilePath,
-        content: response.content,
-      });
-      setFileContent(response.content);
-      toast.success('Model enhanced successfully');
-    } catch (error: any) {
-      if (
-        typeof error?.message === 'string' &&
-        (error.message.includes('429') || error.message.includes('quota'))
-      ) {
-        toast.error(
-          'OpenAI API quota exceeded. Please check your billing details.',
-        );
-      } else {
-        toast.error(
-          `Error enhancing model: ${error?.message || 'Unknown error'}`,
-        );
-      }
-    } finally {
-      setIsLoadingQuery(false);
+    const prompt = utils.format(
+      AI_PROMPTS.ENHANCE_STAGING_MODEL,
+      tableName,
+      promptTable,
+      fileName,
+      String(fileContent),
+      String(project?.dbtConnection?.type),
+    );
+    setAiTransformationPrompt(prompt);
+  };
+
+  const enhancedTransformationPrompt = (
+    content: string,
+    connectionType: SupportedConnectionTypes,
+  ) => {
+    const prompt = utils.format(
+      AI_PROMPTS.ENHANCE_ENHANCED_MODEL,
+      connectionType,
+      content,
+    );
+    setAiTransformationPrompt(prompt);
+  };
+
+  const generatePrompt = async (
+    filePath: string,
+    content: string,
+    _project: Project,
+  ) => {
+    if (filePath.includes(_project.stagingDir ?? '')) {
+      await stagingTransformationPrompt(filePath, _project);
+    } else {
+      enhancedTransformationPrompt(content, _project.connection!.type);
     }
   };
 
-  const enhanceStagingModel = async () => {
-    if (!isAiProviderSet) {
-      toast.error('Open AI API Key not provided');
-      return;
-    }
-
-    if (!selectedFilePath) {
-      toast.error('No file selected');
-      return;
-    }
-
-    if (!project) {
-      toast.error('Project not found');
-      return;
-    }
-
-    setIsLoadingQuery(true);
-
-    try {
-      const fileName = utils.getFileName(selectedFilePath, false);
-      const tables = await projectsServices.extractSchemaFromModelYaml(project);
-      const { schema, table } = utils.extractSchemaAndTable(fileName);
-
-      const tableStructure = tables.find(
-        (tmpTable) => tmpTable.name === table && tmpTable.schema === schema,
-      );
-
-      if (!tableStructure) {
-        toast.info(`Could not find table: ${schema}.${table}`);
-        return;
-      }
-
-      const promptTable = yaml.dump({
-        name: tableStructure.name,
-        type: tableStructure.type,
-        schema: tableStructure.schema,
-        columns: tableStructure.columns.map((col) => ({
-          name: col.name,
-          typeName: col.typeName,
-        })),
-      });
-
-      const tableName = `${schema}.${table}`;
-      const prompt = utils.format(
-        AI_PROMPTS.ENHANCE_STAGING_MODEL,
-        tableName,
-        promptTable,
-        fileName,
-        String(fileContent),
-        String(project?.dbtConnection?.type),
-      );
-
-      const response = await projectsServices.enhanceModelQuery(prompt);
-      await projectsServices.saveFileContent({
-        path: selectedFilePath,
-        content: response.content,
-      });
-
-      setFileContent(response.content);
-      toast.success('Staging model enhanced successfully');
-    } catch (error: any) {
-      if (
-        typeof error?.message === 'string' &&
-        (error.message.includes('429') || error.message.includes('quota'))
-      ) {
-        toast.error(
-          'OpenAI API quota exceeded. Please check your billing details.',
-        );
-      } else {
-        toast.error(
-          `Error enhancing staging model: ${error?.message || 'Unknown error'}`,
-        );
-      }
-    } finally {
-      setIsLoadingQuery(false);
-    }
+  const enhanceModel = async (prompt: string) => {
+    const response = await projectsServices.enhanceModelQuery(
+      `${prompt}\n\nMAKE SURE THE OUTPUT IS AGAIN A DBT MODEL`,
+    );
+    setAitTransformationResponse(response.content);
   };
 
   const generateDashboards = async () => {
@@ -421,44 +376,57 @@ const ProjectDetails: React.FC = () => {
                         rosettaDbt={rosettaDbt}
                         handleBusinessLayerClick={handleBusinessLayerClick}
                       />
-                      {selectedFilePath?.includes(
-                        `${project.path}/models/enhanced`,
-                      ) && (
-                        <SplitButton
-                          title="AI"
-                          isLoading={isLoadingQuery}
-                          leftIcon={<AutoAwesome />}
-                          menuItems={[
-                            {
-                              name: 'Auto-Fix Incremental & Unique Key Columns',
-                              onClick: isAiProviderSet
-                                ? enhanceModel
-                                : () => setNoAiSetModal(true),
-                              subTitle: '',
-                              leftIcon: <AutoFixHigh />,
-                            },
-                          ]}
-                        />
-                      )}
-                      {selectedFilePath?.includes(
-                        `${project.path}/models/staging`,
-                      ) && (
-                        <SplitButton
-                          title="AI"
-                          isLoading={isLoadingQuery}
-                          leftIcon={<AutoAwesome />}
-                          menuItems={[
-                            {
-                              name: 'Suggest Basic Transformations',
-                              onClick: isAiProviderSet
-                                ? enhanceStagingModel
-                                : () => setNoAiSetModal(true),
-                              subTitle: '',
-                              leftIcon: <AutoFixHigh />,
-                            },
-                          ]}
-                        />
-                      )}
+                      {selectedFilePath?.endsWith('.sql') &&
+                        selectedFilePath?.includes('/models/') &&
+                        fileContent && (
+                          // <SplitButton
+                          //   title="AI"
+                          //   isLoading={isLoadingQuery}
+                          //   leftIcon={<AutoAwesome />}
+                          //   menuItems={[
+                          //     {
+                          //       name: selectedFilePath?.includes(
+                          //         project?.stagingDir ?? '',
+                          //       )
+                          //         ? 'Suggest Basic Transformations'
+                          //         : 'Auto-Fix Incremental & Unique Key Columns',
+                          //       onClick: () => {
+                          //         if (isAiProviderSet) {
+                          //           generatePrompt(
+                          //             selectedFilePath,
+                          //             fileContent,
+                          //             project!,
+                          //           );
+                          //           return;
+                          //         }
+                          //         setNoAiSetModal(true);
+                          //       },
+                          //       subTitle: '',
+                          //       leftIcon: <AutoFixHigh />,
+                          //     },
+                          //   ]}
+                          // />
+                          <Button
+                            variant="outlined"
+                            sx={{ height: '28px', minHeight: '28px' }}
+                            size="small"
+                            startIcon={<AutoAwesome />}
+                            onClick={() => {
+                              setAitTransformationResponse(undefined);
+                              if (isAiProviderSet) {
+                                generatePrompt(
+                                  selectedFilePath,
+                                  fileContent,
+                                  project!,
+                                );
+                                return;
+                              }
+                              setNoAiSetModal(true);
+                            }}
+                          >
+                            AI Transform
+                          </Button>
+                        )}
                       {selectedFilePath?.includes(
                         `${project.path}/models/business`,
                       ) && (
@@ -602,6 +570,18 @@ const ProjectDetails: React.FC = () => {
                 isOpen={isQueryOpen}
                 onClose={() => setIsQueryOpen(false)}
                 data={queryData}
+              />
+            )}
+            {aiTransformationPrompt && (
+              <AiPromptModal
+                isOpen={!!aiTransformationPrompt}
+                onClose={() => setAiTransformationPrompt(undefined)}
+                prompt={aiTransformationPrompt}
+                onPromptChange={(value) => setAiTransformationPrompt(value)}
+                onSubmit={async () => {
+                  await enhanceModel(String(aiTransformationPrompt));
+                }}
+                response={aiTransformationResponse}
               />
             )}
             <AddConnectionModal
