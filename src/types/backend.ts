@@ -197,6 +197,7 @@ export type Project = {
   stagingDir?: string;
   incrementalDir?: string;
   businessDir?: string;
+  createTemplateFolders?: boolean;
 };
 
 export type SettingsType = {

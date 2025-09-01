@@ -104,7 +104,11 @@ export default class ProjectsService {
     await updateDatabase<'projects'>('projects', projects);
   }
 
-  static async addProject(projectPath: string, connectionId?: string) {
+  static async addProject(
+    projectPath: string,
+    connectionId?: string,
+    createTemplateFolders?: boolean,
+  ) {
     const projects = await this.loadProjects();
     const name = path.basename(projectPath);
 
@@ -115,6 +119,7 @@ export default class ProjectsService {
       path: projectPath,
       isExtracted: false,
       connectionId,
+      createTemplateFolders,
     };
 
     // Patch: If the project has a bigquery connection, store only the key name
@@ -128,6 +133,9 @@ export default class ProjectsService {
     }
     await this.copyDbtTemplateFiles(project.path, project.name);
     await this.copyRosettaMainConf(project.path);
+    if (createTemplateFolders) {
+      await this.createDbtTemplateFolderStructure(project.path);
+    }
     projects.push(project);
     await this.saveProjects(projects);
     return (await this.getProject(project.id)) ?? project;
@@ -669,6 +677,20 @@ export default class ProjectsService {
       projectName,
     );
     fs.writeFileSync(dbtProjectYmlPath, updatedContent, 'utf8');
+  }
+
+  static async createDbtTemplateFolderStructure(projectPath: string) {
+    const dbtFoldersToCreate = [
+      'analysis',
+      'seeds',
+      'macros',
+      'models',
+      'snapshots',
+      'tests',
+    ];
+    for (const folderName of dbtFoldersToCreate) {
+      await createNewFolder(projectPath, folderName);
+    }
   }
 
   static async copyRosettaMainConf(projectPath: string) {
