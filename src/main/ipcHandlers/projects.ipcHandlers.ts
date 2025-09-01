@@ -18,8 +18,19 @@ const registerProjectHandlers = () => {
 
   ipcMain.handle(
     'project:add',
-    async (_event, body: { name: string; connectionId?: string }) => {
-      return ProjectsService.addProject(body.name, body.connectionId);
+    async (
+      _event,
+      body: {
+        name: string;
+        connectionId?: string;
+        createTemplateFolders?: boolean;
+      },
+    ) => {
+      return ProjectsService.addProject(
+        body.name,
+        body.connectionId,
+        body.createTemplateFolders,
+      );
     },
   );
 
@@ -169,6 +180,13 @@ const registerProjectHandlers = () => {
   ipcMain.handle('project:zipDir', async (_event, path: string) => {
     return ProjectsService.zipDirectory(path);
   });
+
+  ipcMain.handle(
+    'project:chooseDir',
+    async (_event, { path }: { path: string }) => {
+      return ProjectsService.chooseDir(path);
+    },
+  );
 };
 
 export default registerProjectHandlers;

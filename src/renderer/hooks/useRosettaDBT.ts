@@ -108,7 +108,7 @@ const useRosettaDBT = (successCallback: () => Promise<void>) => {
       if (!project.isExtracted) {
         try {
           const compiledCommand = await compileCommand(project, settings, {
-            commandType: CommandType.DBTNext,
+            commandType: CommandType.Rosetta,
             command: 'extract',
             arguments: new Map<string, string | number>().set(
               '-s',

@@ -42,7 +42,8 @@ export type ProjectChannels =
   | 'project:zipDir'
   | 'project:addFromVCS'
   | 'project:updateQuery'
-  | 'project:getQuery';
+  | 'project:getQuery'
+  | 'project:chooseDir';
 
 export type ConnectorChannels =
   | 'connector:configure'

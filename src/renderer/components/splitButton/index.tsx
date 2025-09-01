@@ -156,7 +156,10 @@ export const SplitButton: React.FC<Props> = ({
                   }}
                 >
                   {menuItems.map((option, index) => (
-                    <span style={{ display: 'block' }}>
+                    <span
+                      style={{ display: 'block' }}
+                      key={`split-button-menu-${index}`}
+                    >
                       <MenuItem
                         onClick={() => handleMenuItemClick(index)}
                         sx={{

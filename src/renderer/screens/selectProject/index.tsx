@@ -71,6 +71,7 @@ import {
   TaglineContainer,
   TaglineText,
 } from './styles';
+import { pathJoin } from '../../services/settings.services';
 
 const SelectProject: React.FC = () => {
   const navigate = useNavigate();
@@ -86,6 +87,7 @@ const SelectProject: React.FC = () => {
   const [isAddingProject, setIsAddingProject] = React.useState(false);
   const [newProject, setNewProject] = React.useState({
     name: '',
+    createTemplateFolders: true,
   });
   const { mutate: getFiles } = useFilePicker();
 
@@ -235,14 +237,16 @@ const SelectProject: React.FC = () => {
     }
 
     try {
+      const path = await pathJoin(defaultProjectPath, newProject.name);
       const project = await projectsServices.addProject({
-        name: `${defaultProjectPath}/${newProject.name}`,
+        name: path,
         connectionId: selectedConnection || undefined,
+        createTemplateFolders: newProject.createTemplateFolders,
       });
       await projectsServices.selectProject({ projectId: project.id });
       toast.success(`Project ${project.name} created successfully!`);
       setIsAddingProject(false);
-      setNewProject({ name: '' });
+      setNewProject({ name: '', createTemplateFolders: true });
       setSelectedConnection('');
       navigate('/app/loading');
     } catch (error) {
@@ -578,7 +582,10 @@ const SelectProject: React.FC = () => {
                             projectId: project.id,
                           });
                           setIsAddingProject(false);
-                          setNewProject({ name: '' });
+                          setNewProject({
+                            name: '',
+                            createTemplateFolders: true,
+                          });
 
                           // Show different success messages based on whether it was extracted
                           if (project.isExtracted) {

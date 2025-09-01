@@ -26,9 +26,10 @@ export const getProjectById = async (body: {
 export const addProject = async (body: {
   name: string;
   connectionId?: string;
+  createTemplateFolders?: boolean;
 }): Promise<Project> => {
   const { data } = await client.post<
-    { name: string; connectionId?: string },
+    { name: string; connectionId?: string; createTemplateFolders?: boolean },
     Project
   >('project:add', body);
   return data;
@@ -257,4 +258,14 @@ export const enhanceModelQuery = async (
 
 export const zipDir = async (path: string): Promise<void> => {
   await client.post<string>('project:zipDir', path);
+};
+
+export const chooseDir = async (body: { path: string }): Promise<string> => {
+  const response = await client.post<
+    {
+      path: string;
+    },
+    string
+  >('project:chooseDir', body);
+  return response.data;
 };
