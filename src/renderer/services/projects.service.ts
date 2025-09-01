@@ -259,3 +259,16 @@ export const enhanceModelQuery = async (
 export const zipDir = async (path: string): Promise<void> => {
   await client.post<string>('project:zipDir', path);
 };
+
+export const downloadSeed = async (
+  objectUrl: string,
+  project: Project,
+): Promise<void> => {
+  await client.post<{
+    objectUrl: string;
+    project: Project;
+  }>('project:downloadSeed', {
+    objectUrl,
+    project,
+  });
+};

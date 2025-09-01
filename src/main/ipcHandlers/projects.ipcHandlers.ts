@@ -170,6 +170,18 @@ const registerProjectHandlers = () => {
   ipcMain.handle('project:zipDir', async (_event, path: string) => {
     return ProjectsService.zipDirectory(path);
   });
+  ipcMain.handle(
+    'project:downloadSeed',
+    async (
+      _event,
+      body: {
+        objectUrl: string;
+        project: Project;
+      },
+    ) => {
+      return ProjectsService.downloadSeed(body);
+    },
+  );
 };
 
 export default registerProjectHandlers;

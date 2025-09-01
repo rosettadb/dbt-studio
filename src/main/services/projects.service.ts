@@ -3,7 +3,7 @@ import path from 'path';
 import fs from 'fs';
 import os from 'os';
 import yaml from 'js-yaml';
-import { dialog } from 'electron';
+import { dialog, net, IncomingMessage } from 'electron';
 import AdmZip from 'adm-zip';
 import * as tar from 'tar';
 import {
@@ -1086,5 +1086,45 @@ export default class ProjectsService {
 
     await createZipArchive(sourcePath, zipFilePath);
     return { success: true, filePath: zipFilePath };
+  };
+
+  static downloadSeed = async ({
+    objectUrl,
+    project,
+  }: {
+    objectUrl: string;
+    project: Project;
+  }) => {
+    // create seeds folder if missing
+    const seedFolder = path.join(project.path, 'seeds');
+    if (!fs.existsSync(seedFolder)) {
+      createNewFolder(project.path, 'seeds');
+    }
+    const downloadRequest = net.request(objectUrl);
+    const response: IncomingMessage = await new Promise((resolve, reject) => {
+      downloadRequest.on('response', resolve);
+      downloadRequest.on('error', reject);
+      downloadRequest.end();
+    });
+    if (response.statusCode !== 200) {
+      throw new Error(`Download seed error ${response.statusCode}`);
+    }
+    const filename: string = path.basename(new URL(objectUrl).pathname);
+    const savePath = path.join(seedFolder, filename);
+    const fileStream = fs.createWriteStream(savePath);
+    // Pipe stream manually with async control
+    await new Promise<void>((resolve, reject) => {
+      response.on('data', (chunk) => fileStream.write(chunk));
+      response.on('end', () => {
+        fileStream.end();
+        resolve();
+      });
+      response.on('error', (err) => {
+        fileStream.destroy();
+        reject(err);
+      });
+      fileStream.on('error', reject);
+    });
+    return { success: true, filePath: savePath, filename };
   };
 }
