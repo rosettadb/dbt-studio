@@ -17,8 +17,19 @@ const registerProjectHandlers = () => {
 
   ipcMain.handle(
     'project:add',
-    async (_event, body: { name: string; connectionId?: string }) => {
-      return ProjectsService.addProject(body.name, body.connectionId);
+    async (
+      _event,
+      body: {
+        name: string;
+        connectionId?: string;
+        createTemplateFolders?: boolean;
+      },
+    ) => {
+      return ProjectsService.addProject(
+        body.name,
+        body.connectionId,
+        body.createTemplateFolders,
+      );
     },
   );
 

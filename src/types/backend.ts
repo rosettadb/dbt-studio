@@ -193,6 +193,7 @@ export type Project = {
   isExtracted?: boolean;
   queryEditor?: string;
   connection?: ConnectionInput;
+  createTemplateFolders?: boolean;
 };
 
 export type SettingsType = {

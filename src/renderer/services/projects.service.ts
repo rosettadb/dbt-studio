@@ -26,9 +26,10 @@ export const getProjectById = async (body: {
 export const addProject = async (body: {
   name: string;
   connectionId?: string;
+  createTemplateFolders?: boolean;
 }): Promise<Project> => {
   const { data } = await client.post<
-    { name: string; connectionId?: string },
+    { name: string; connectionId?: string; createTemplateFolders?: boolean },
     Project
   >('project:add', body);
   return data;
