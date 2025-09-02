@@ -24,11 +24,11 @@ import {
 import { Container, StyledForm, StyledSettingsNavLink, Title } from './styles';
 import {
   GeneralSettings,
-  AIProviderSettings,
   DbtSettings,
   RosettaSettings,
   AboutSettings,
   InstallationSettings,
+  AIProvidersSettings,
 } from '../../components';
 import { AppLayout } from '../../layouts';
 import { settingsSidebarElements } from './settingsElements';
@@ -120,7 +120,7 @@ const Settings: React.FC = () => {
           />
         );
       case 'ai-providers':
-        return <AIProviderSettings />;
+        return <AIProvidersSettings />;
       case 'dbt':
         return (
           <DbtSettings
@@ -274,7 +274,7 @@ const Settings: React.FC = () => {
               <Close />
             </IconButton>
           </div>
-          <div style={{ maxWidth: '800px' }}>{renderContent()}</div>
+          <div style={{ maxWidth: '100%' }}>{renderContent()}</div>
 
           {currentSection !== 'about' &&
             currentSection !== 'installation' &&

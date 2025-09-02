@@ -29,6 +29,18 @@ export const useGetSettings = (
   });
 };
 
+export const useGetSettingsWithDatabaseInfo = (
+  customOptions?: UseQueryOptions<SettingsType, CustomError, SettingsType>,
+) => {
+  return useQuery({
+    queryKey: [QUERY_KEYS.GET_SETTINGS, 'with-db-info'],
+    queryFn: async () => {
+      return settingsServices.getSettingsWithDatabaseInfo();
+    },
+    ...customOptions,
+  });
+};
+
 export const useCheckCliUpdates = (
   customOptions?: UseQueryOptions<
     Record<string, any>,

@@ -56,6 +56,29 @@ export default class SettingsService {
     return dataBase.settings;
   }
 
+  static async loadSettingsWithDatabaseInfo(): Promise<SettingsType> {
+    const settings = await this.loadSettings();
+
+    try {
+      // Import MainDatabaseService dynamically to avoid circular dependencies
+      const { default: MainDatabaseService } = await import(
+        './mainDatabase.service'
+      );
+      const dbInfo = await MainDatabaseService.getDatabaseInfo();
+
+      return {
+        ...settings,
+        mainDatabasePath: dbInfo.path,
+        mainDatabaseSize: dbInfo.size,
+        sqliteVersion: dbInfo.sqliteVersion,
+        mainDatabaseStatus: dbInfo.status,
+      };
+    } catch (error) {
+      // Failed to load database info, returning settings without DB info
+      return settings;
+    }
+  }
+
   static async saveSettings(settings: SettingsType) {
     await updateDatabase<'settings'>('settings', settings);
   }
@@ -72,6 +95,11 @@ export default class SettingsService {
 
   static async usePathJoin(pathChunks: string[]) {
     return path.join(...pathChunks);
+  }
+
+  static async getFileName(pathChunks: string[]) {
+    const p = path.join(...pathChunks);
+    return path.parse(p).name;
   }
 
   static async checkCliUpdates(): Promise<CliUpdateResponseType> {
@@ -368,13 +396,11 @@ export default class SettingsService {
             await SecureStorageService.deleteCredential(account);
           } catch (error) {
             // eslint-disable-next-line no-console
-            console.error(`Failed to delete credential ${account}:`, error);
           }
         }),
       );
     } catch (error) {
       // eslint-disable-next-line no-console
-      console.error('Failed to clear secure credentials:', error);
     }
   }
 
@@ -420,7 +446,6 @@ export default class SettingsService {
       };
     } catch (error) {
       // eslint-disable-next-line no-console
-      console.error('Failed to check Rosetta versions:', error);
       return {
         currentVersion,
         currentPath,

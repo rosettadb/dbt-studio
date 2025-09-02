@@ -59,13 +59,33 @@ export const QUERY_KEYS = {
   GIT_REMOTES: 'GIT_REMOTES',
   GIT_BRANCHES: 'GIT_BRANCHES',
   GIT_STATUSES: 'GIT_STATUSES',
+  // AI Provider Management
+  GET_AI_PROVIDERS: 'GET_AI_PROVIDERS',
+  GET_AI_PROVIDER_BY_ID: 'GET_AI_PROVIDER_BY_ID',
+  GET_ACTIVE_AI_PROVIDER: 'GET_ACTIVE_AI_PROVIDER',
+  GET_AI_PROVIDER_MODELS: 'GET_AI_PROVIDER_MODELS',
+  GET_ALL_AI_PROVIDER_MODELS: 'GET_ALL_AI_PROVIDER_MODELS',
+  AI_PROVIDER_HEALTH_CHECK: 'AI_PROVIDER_HEALTH_CHECK',
+  // Chat Management - Continue.dev features
+  GET_CHAT_SESSIONS: 'GET_CHAT_SESSIONS',
+  GET_CHAT_SESSION_BY_ID: 'GET_CHAT_SESSION_BY_ID',
+  GET_CHAT_MESSAGES: 'GET_CHAT_MESSAGES',
+  GET_CHAT_MESSAGE_WITH_CONTEXT: 'GET_CHAT_MESSAGE_WITH_CONTEXT',
+  GET_CONTEXT_ITEMS: 'GET_CONTEXT_ITEMS',
+  GET_TOOL_CALLS: 'GET_TOOL_CALLS',
+  GET_SESSION_METADATA: 'GET_SESSION_METADATA',
 };
 
 export const AI_PROMPTS = {
-  ENHANCE_STAGING_MODEL:
+  BASIC_TRANSFORM_PROMPT_WITH_TABLE:
     'I have a raw source table {} with the following schema:\n\n' +
     '{}\n\n' +
     'And the current {} dbt model looks like this:\n\n' +
+    '{}\n\n' +
+    'We are using {}\n\n' +
+    'Please recommend only basic transformations following the best practices. Respond with the full formatted dbt model SQL using those basic transformations and nothing else.',
+  BASIC_TRANSFORM_PROMPT_WITHOUT_TABLE:
+    'The current {} dbt model looks like this:\n\n' +
     '{}\n\n' +
     'We are using {}\n\n' +
     'Please recommend only basic transformations following the best practices. Respond with the full formatted dbt model SQL using those basic transformations and nothing else.',

@@ -40,20 +40,6 @@ export const format = (str: string, ...args: (string | number)[]) => {
   return str.replace(/{}/g, () => String(args[i++]));
 };
 
-export const getFileName = (
-  path: string,
-  withExtension: boolean = true,
-): string => {
-  const parts = path.split('/');
-  const name = parts.pop() || '';
-
-  if (!name || !name.includes('.')) {
-    throw new Error('The provided path is a folder, not a file.');
-  }
-
-  return withExtension ? name : name.split('.').slice(0, -1).join('.');
-};
-
 export const extractSchemaAndTable = (
   filename: string,
 ): { schema: string; table: string } => {

@@ -58,6 +58,7 @@ export const BusinessModal: React.FC<Props> = ({
     string | null
   >(null);
   const [query, setQuery] = React.useState('');
+  const [loading, setLoading] = React.useState(false);
 
   const updateProject = useUpdateProject();
 
@@ -424,6 +425,10 @@ export const BusinessModal: React.FC<Props> = ({
     setSelectAll(false);
   }, [files]);
 
+  React.useEffect(() => {
+    return () => setLoading(false);
+  }, []);
+
   const handleExpandedItemsChange = (
     event: React.SyntheticEvent,
     itemIds: string[],
@@ -651,10 +656,6 @@ export const BusinessModal: React.FC<Props> = ({
                           path: updatedPath,
                         });
                         if (result !== 'false') {
-                          await updateProject.mutateAsync({
-                            ...project,
-                            businessDir: result,
-                          });
                           setUpdatedPath(result);
                         }
                       }}
@@ -700,8 +701,15 @@ export const BusinessModal: React.FC<Props> = ({
         </Button>
         <Button
           variant="contained"
-          onClick={() => processCallback(updatedPath, query, allSelectedFiles)}
-          disabled={query.trim() === ''}
+          onClick={async () => {
+            setLoading(true);
+            await updateProject.mutateAsync({
+              ...project,
+              businessDir: updatedPath,
+            });
+            processCallback(updatedPath, query, allSelectedFiles);
+          }}
+          disabled={query.trim() === '' || loading}
           sx={{
             fontWeight: 500,
             textTransform: 'uppercase',

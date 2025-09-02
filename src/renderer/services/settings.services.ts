@@ -13,6 +13,11 @@ export const getSettings = async (): Promise<SettingsType> => {
   return data;
 };
 
+export const getSettingsWithDatabaseInfo = async (): Promise<SettingsType> => {
+  const { data } = await client.get<SettingsType>('settings:load-with-db-info');
+  return data;
+};
+
 export const updateSettings = async (settings: SettingsType): Promise<void> => {
   await client.post<SettingsType>('settings:save', settings);
 };
@@ -61,6 +66,14 @@ export const usePathJoin = async (...body: string[]): Promise<string> => {
 export const pathJoin = async (...body: string[]): Promise<string> => {
   const { data } = await client.post<string[], string>(
     'settings:usePathJoin',
+    body,
+  );
+  return data;
+};
+
+export const getFileName = async (...body: string[]): Promise<string> => {
+  const { data } = await client.post<string[], string>(
+    'settings:getFileName',
     body,
   );
   return data;

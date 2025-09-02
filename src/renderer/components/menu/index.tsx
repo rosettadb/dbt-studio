@@ -12,6 +12,7 @@ import {
   Settings,
   ArrowDownward,
   FormatListNumbered,
+  Psychology,
 } from '@mui/icons-material';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { toast } from 'react-toastify';
@@ -46,7 +47,8 @@ export const Menu: React.FC = () => {
   const location = useLocation();
   const { mutateAsync: selectProject } = useSelectProject();
   const theme = useTheme();
-  const { isSidebarOpen, setIsSidebarOpen } = useAppContext();
+  const { isSidebarOpen, setIsSidebarOpen, isChatOpen, setIsChatOpen } =
+    useAppContext();
   const [commitModal, setCommitModal] = React.useState(false);
   const [isModalOpen, setIsModalOpen] = React.useState(false);
   const [newBranchModal, setNewBranchModal] = React.useState(false);
@@ -105,6 +107,8 @@ export const Menu: React.FC = () => {
   const selectedBranch = React.useMemo(() => {
     return branches.find((branch) => branch.checkedOut)?.name ?? '';
   }, [branches]);
+
+  const isOnProjectDetails = location.pathname === '/app';
 
   const handleMenuOpen = (event: React.MouseEvent<HTMLButtonElement>) => {
     event.stopPropagation();
@@ -207,6 +211,16 @@ export const Menu: React.FC = () => {
           )}
         </IconsContainer>
         <IconsContainer>
+          {isProjectSelected && isOnProjectDetails && (
+            <Tooltip title="AI Assistant (beta)">
+              <IconButton
+                onClick={() => setIsChatOpen?.(!isChatOpen)}
+                color="primary"
+              >
+                <Psychology fontSize="small" />
+              </IconButton>
+            </Tooltip>
+          )}
           {isProjectSelected && (
             <Tooltip title="Git Integration">
               <IconButton onClick={handleMenuOpen}>

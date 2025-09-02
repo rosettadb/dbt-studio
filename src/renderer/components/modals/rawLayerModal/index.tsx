@@ -32,7 +32,13 @@ export const RawLayerModal: React.FC<Props> = ({
   project,
 }) => {
   const [updatedPath, setUpdatedPath] = React.useState<string>(path);
+  const [loading, setLoading] = React.useState(false);
+
   const updateProject = useUpdateProject();
+
+  React.useEffect(() => {
+    return () => setLoading(false);
+  }, []);
 
   return (
     <Dialog open={isOpen} onClose={onClose} title="Raw Layer">
@@ -80,10 +86,6 @@ export const RawLayerModal: React.FC<Props> = ({
                           path: updatedPath,
                         });
                         if (result !== 'false') {
-                          await updateProject.mutateAsync({
-                            ...project,
-                            rawLayerDir: result,
-                          });
                           setUpdatedPath(result);
                         }
                       }}
@@ -98,7 +100,17 @@ export const RawLayerModal: React.FC<Props> = ({
         </Box>
       </DialogContent>
       <DialogActions>
-        <Button onClick={() => processCallback(updatedPath)}>
+        <Button
+          disabled={loading}
+          onClick={async () => {
+            setLoading(true);
+            await updateProject.mutateAsync({
+              ...project,
+              rawLayerDir: updatedPath,
+            });
+            processCallback(updatedPath);
+          }}
+        >
           Rosetta DBT RawLayer
         </Button>
       </DialogActions>

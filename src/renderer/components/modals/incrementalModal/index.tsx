@@ -53,6 +53,7 @@ export const IncrementalModal: React.FC<Props> = ({
   const [restrictedDirectory, setRestrictedDirectory] = React.useState<
     string | null
   >(null);
+  const [loading, setLoading] = React.useState(false);
 
   const updateProject = useUpdateProject();
 
@@ -438,6 +439,10 @@ export const IncrementalModal: React.FC<Props> = ({
     setSelectAll(false);
   }, [files]);
 
+  React.useEffect(() => {
+    return () => setLoading(false);
+  }, []);
+
   const handleExpandedItemsChange = (
     event: React.SyntheticEvent,
     itemIds: string[],
@@ -652,10 +657,6 @@ export const IncrementalModal: React.FC<Props> = ({
                           path: updatedPath,
                         });
                         if (result !== 'false') {
-                          await updateProject.mutateAsync({
-                            ...project,
-                            incrementalDir: result,
-                          });
                           setUpdatedPath(result);
                         }
                       }}
@@ -701,8 +702,15 @@ export const IncrementalModal: React.FC<Props> = ({
         </Button>
         <Button
           variant="contained"
-          onClick={() => processCallback(updatedPath, allSelectedFiles)}
-          disabled={totalSelectedItems === 0}
+          onClick={async () => {
+            setLoading(true);
+            await updateProject.mutateAsync({
+              ...project,
+              incrementalDir: updatedPath,
+            });
+            processCallback(updatedPath, allSelectedFiles);
+          }}
+          disabled={totalSelectedItems === 0 || loading}
           sx={{
             textTransform: 'none',
             fontWeight: 500,
