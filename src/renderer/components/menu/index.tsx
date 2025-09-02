@@ -212,7 +212,7 @@ export const Menu: React.FC = () => {
         </IconsContainer>
         <IconsContainer>
           {isProjectSelected && isOnProjectDetails && (
-            <Tooltip title="AI Assistant">
+            <Tooltip title="AI Assistant (beta)">
               <IconButton
                 onClick={() => setIsChatOpen?.(!isChatOpen)}
                 color="primary"

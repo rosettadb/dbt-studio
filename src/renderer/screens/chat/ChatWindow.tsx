@@ -61,7 +61,7 @@ const ChatWindow: React.FC = () => {
           justifyContent: 'space-between',
         }}
       >
-        <Typography sx={{ mt: '2px' }}>AI Assistant (Beta)</Typography>
+        <Typography sx={{ mt: '2px' }}>AI Assistant (beta)</Typography>
         <Tooltip title="Close">
           <IconButton size="small" onClick={() => setIsChatOpen?.(false)}>
             <Close fontSize="small" />
