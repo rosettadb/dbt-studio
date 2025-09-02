@@ -572,7 +572,10 @@ const ProjectDetails: React.FC = () => {
             {aiTransformationPrompt && (
               <AiPromptModal
                 isOpen={!!aiTransformationPrompt}
-                onClose={() => setAiTransformationPrompt(undefined)}
+                onClose={() => {
+                  setAiTransformationPrompt(undefined);
+                  setAitTransformationResponse(undefined);
+                }}
                 prompt={aiTransformationPrompt}
                 onPromptChange={(value) => setAiTransformationPrompt(value)}
                 onSubmit={async () => {
