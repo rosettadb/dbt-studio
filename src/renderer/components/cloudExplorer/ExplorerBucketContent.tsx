@@ -47,6 +47,9 @@ import type { CloudProvider } from '../../../types/frontend';
 import { InlineDataPreview } from './InlineDataPreview';
 import useSecureStorage from '../../hooks/useSecureStorage';
 import { formatFileSize, isPreviewSupported } from '../../utils/fileUtils';
+import { DBTProjects } from '../sidebar/icons';
+import { useGetSelectedProject } from '../../controllers';
+import { projectsServices } from '../../services';
 
 interface ExplorerBucketContentProps {
   connectionId: string;
@@ -59,6 +62,7 @@ export const ExplorerBucketContent: React.FC<ExplorerBucketContentProps> = ({
 }) => {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
+  const { data: project } = useGetSelectedProject();
   const prefix = searchParams.get('prefix') || '';
   const [searchTerm, setSearchTerm] = useState('');
   const [downloadUrls, setDownloadUrls] = useState<Record<string, string>>({});
@@ -184,6 +188,40 @@ export const ExplorerBucketContent: React.FC<ExplorerBucketContentProps> = ({
           connectionName: connection.name,
           provider: connection.provider,
         });
+      }
+    } catch (error) {
+      // eslint-disable-next-line no-console
+      console.error('Error getting download URL:', error);
+    } finally {
+      setLoadingUrls((prev) => ({ ...prev, [objectName]: false }));
+    }
+  };
+
+  const handleDownloadAsSeed = async (objectName: string) => {
+    if (!project) {
+      // TODO - need to show some alert or something here
+      return;
+    }
+    if (downloadUrls[objectName]) {
+      // window.open(downloadUrls[objectName], '_blank');
+      await projectsServices.downloadSeed(downloadUrls[objectName], project);
+      return;
+    }
+
+    if (!connection || !secureConfig) return;
+
+    try {
+      setLoadingUrls((prev) => ({ ...prev, [objectName]: true }));
+
+      const url = await getDownloadUrl.mutateAsync({
+        provider: connection.provider,
+        config: secureConfig,
+        bucketName,
+        objectName,
+      });
+      if (url) {
+        setDownloadUrls((prev) => ({ ...prev, [objectName]: url }));
+        await projectsServices.downloadSeed(url, project);
       }
     } catch (error) {
       // eslint-disable-next-line no-console
@@ -498,6 +536,24 @@ export const ExplorerBucketContent: React.FC<ExplorerBucketContentProps> = ({
                                     )}
                                   </IconButton>
                                 </Tooltip>
+                                {project && (
+                                  <Tooltip title="Download as seed">
+                                    <IconButton
+                                      size="small"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        handleDownloadAsSeed(object.name);
+                                      }}
+                                      disabled={loadingUrls[object.name]}
+                                    >
+                                      {loadingUrls[object.name] ? (
+                                        <CircularProgress size={20} />
+                                      ) : (
+                                        <DBTProjects />
+                                      )}
+                                    </IconButton>
+                                  </Tooltip>
+                                )}
                               </Box>
                             )}
                           </TableCell>

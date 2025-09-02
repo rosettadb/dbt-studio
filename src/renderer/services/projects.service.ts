@@ -269,3 +269,16 @@ export const chooseDir = async (body: { path: string }): Promise<string> => {
   >('project:chooseDir', body);
   return response.data;
 };
+
+export const downloadSeed = async (
+  objectUrl: string,
+  project: Project,
+): Promise<void> => {
+  await client.post<{
+    objectUrl: string;
+    project: Project;
+  }>('project:downloadSeed', {
+    objectUrl,
+    project,
+  });
+};
