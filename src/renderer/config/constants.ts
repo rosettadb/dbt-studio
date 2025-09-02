@@ -77,10 +77,15 @@ export const QUERY_KEYS = {
 };
 
 export const AI_PROMPTS = {
-  ENHANCE_STAGING_MODEL:
+  BASIC_TRANSFORM_PROMPT_WITH_TABLE:
     'I have a raw source table {} with the following schema:\n\n' +
     '{}\n\n' +
     'And the current {} dbt model looks like this:\n\n' +
+    '{}\n\n' +
+    'We are using {}\n\n' +
+    'Please recommend only basic transformations following the best practices. Respond with the full formatted dbt model SQL using those basic transformations and nothing else.',
+  BASIC_TRANSFORM_PROMPT_WITHOUT_TABLE:
+    'The current {} dbt model looks like this:\n\n' +
     '{}\n\n' +
     'We are using {}\n\n' +
     'Please recommend only basic transformations following the best practices. Respond with the full formatted dbt model SQL using those basic transformations and nothing else.',

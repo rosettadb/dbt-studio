@@ -41,6 +41,7 @@ export const StagingModal: React.FC<Props> = ({
   project,
 }) => {
   const [updatedPath, setUpdatedPath] = React.useState<string>(path);
+  const [loading, setLoading] = React.useState(false);
   const [selectAll, setSelectAll] = React.useState(false);
   const [selectedFiles, setSelectedFiles] = React.useState<Set<string>>(
     new Set(),
@@ -429,6 +430,10 @@ export const StagingModal: React.FC<Props> = ({
     setSelectAll(false);
   }, [files]);
 
+  React.useEffect(() => {
+    return () => setLoading(false);
+  }, []);
+
   const handleExpandedItemsChange = (
     event: React.SyntheticEvent,
     itemIds: string[],
@@ -643,10 +648,6 @@ export const StagingModal: React.FC<Props> = ({
                           path: updatedPath,
                         });
                         if (result !== 'false') {
-                          await updateProject.mutateAsync({
-                            ...project,
-                            stagingDir: result,
-                          });
                           setUpdatedPath(result);
                         }
                       }}
@@ -692,8 +693,15 @@ export const StagingModal: React.FC<Props> = ({
         </Button>
         <Button
           variant="contained"
-          onClick={() => processCallback(updatedPath, allSelectedFiles)}
-          disabled={totalSelectedItems === 0}
+          onClick={async () => {
+            setLoading(true);
+            await updateProject.mutateAsync({
+              ...project,
+              stagingDir: updatedPath,
+            });
+            processCallback(updatedPath, allSelectedFiles);
+          }}
+          disabled={totalSelectedItems === 0 || loading}
           sx={{
             textTransform: 'none',
             fontWeight: 500,

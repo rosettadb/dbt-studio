@@ -15,7 +15,8 @@ export type SettingsChannels =
   | 'version:rosetta:install'
   | 'version:rosetta:uninstall'
   | 'settings:reset-factory'
-  | 'settings:restart';
+  | 'settings:restart'
+  | 'settings:getFileName';
 
 export type ProjectChannels =
   | 'project:get'

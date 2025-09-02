@@ -96,6 +96,10 @@ const registerSettingsHandlers = (mainWindow: BrowserWindow) => {
     app.relaunch();
     app.exit(0);
   });
+
+  ipcMain.handle('settings:getFileName', async (_event, body: string[]) => {
+    return SettingsService.getFileName(body);
+  });
 };
 
 export default registerSettingsHandlers;

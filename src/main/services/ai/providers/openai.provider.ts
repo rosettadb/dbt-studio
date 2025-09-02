@@ -286,7 +286,7 @@ export class OpenAIProvider extends BaseAIProvider {
       const response = await this.directOpenAIClient.chat.completions.create({
         model: request.model || 'gpt-4o',
         messages: [{ role: 'user', content: request.prompt }],
-        max_tokens: request.maxTokens || 100,
+        max_tokens: request.maxTokens || 4096,
         temperature: request.temperature || 0.7,
       });
 

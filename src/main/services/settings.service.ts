@@ -97,6 +97,11 @@ export default class SettingsService {
     return path.join(...pathChunks);
   }
 
+  static async getFileName(pathChunks: string[]) {
+    const p = path.join(...pathChunks);
+    return path.parse(p).name;
+  }
+
   static async checkCliUpdates(): Promise<CliUpdateResponseType> {
     const settings = await this.loadSettings();
     const results: CliUpdateResponseType = {

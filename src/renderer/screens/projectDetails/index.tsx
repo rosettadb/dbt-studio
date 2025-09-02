@@ -9,7 +9,6 @@ import {
 } from '@mui/icons-material';
 import {
   Box,
-  Button,
   IconButton,
   ListItemIcon,
   ListItemText,
@@ -67,6 +66,7 @@ import { AppContext } from '../../context';
 import { BusinessModal } from '../../components/modals/businessModal';
 import ChatScreen from '../chat';
 import { AiPromptModal } from '../../components/modals/aiPromptModal';
+import { getFileName } from '../../services/settings.services';
 
 const ProjectDetails: React.FC = () => {
   const navigate = useNavigate();
@@ -158,11 +158,11 @@ const ProjectDetails: React.FC = () => {
     fetchData();
   }, [project]);
 
-  const stagingTransformationPrompt = async (
+  const generateBasicTransformationPrompt = async (
     filePath: string,
     _project: Project,
   ) => {
-    const fileName = utils.getFileName(filePath, false);
+    const fileName = await getFileName(filePath);
     const tables = await projectsServices.extractSchemaFromModelYaml(_project);
     const { schema, table } = utils.extractSchemaAndTable(fileName);
 
@@ -171,7 +171,13 @@ const ProjectDetails: React.FC = () => {
     );
 
     if (!tableStructure) {
-      toast.info(`Could not find table: ${schema}.${table}`);
+      const prompt = utils.format(
+        AI_PROMPTS.BASIC_TRANSFORM_PROMPT_WITHOUT_TABLE,
+        fileName,
+        String(fileContent),
+        String(project?.dbtConnection?.type),
+      );
+      setAiTransformationPrompt(prompt);
       return;
     }
 
@@ -188,7 +194,7 @@ const ProjectDetails: React.FC = () => {
     const tableName = `${schema}.${table}`;
 
     const prompt = utils.format(
-      AI_PROMPTS.ENHANCE_STAGING_MODEL,
+      AI_PROMPTS.BASIC_TRANSFORM_PROMPT_WITH_TABLE,
       tableName,
       promptTable,
       fileName,
@@ -198,7 +204,7 @@ const ProjectDetails: React.FC = () => {
     setAiTransformationPrompt(prompt);
   };
 
-  const enhancedTransformationPrompt = (
+  const generateEnhancedTransformationPrompt = (
     content: string,
     connectionType: SupportedConnectionTypes,
   ) => {
@@ -208,18 +214,6 @@ const ProjectDetails: React.FC = () => {
       content,
     );
     setAiTransformationPrompt(prompt);
-  };
-
-  const generatePrompt = async (
-    filePath: string,
-    content: string,
-    _project: Project,
-  ) => {
-    if (filePath.includes(_project.stagingDir ?? '')) {
-      await stagingTransformationPrompt(filePath, _project);
-    } else {
-      enhancedTransformationPrompt(content, _project.connection!.type);
-    }
   };
 
   const enhanceModel = async (prompt: string) => {
@@ -241,11 +235,12 @@ const ProjectDetails: React.FC = () => {
     }
 
     setIsLoadingQuery(true);
+    const fileName = await getFileName(selectedFilePath);
 
     try {
       const prompt = utils.format(
         AI_PROMPTS.GENERATE_DASHBOARDS,
-        utils.getFileName(selectedFilePath, false),
+        fileName,
         String(project?.dbtConnection?.type),
         String(fileContent),
       );
@@ -270,6 +265,53 @@ const ProjectDetails: React.FC = () => {
       setIsLoadingQuery(false);
     }
   };
+
+  const menuItems = React.useMemo(() => {
+    if (
+      !project ||
+      !selectedFilePath ||
+      !fileContent ||
+      !selectedFilePath.endsWith('.sql')
+    ) {
+      return [];
+    }
+    const items = [
+      {
+        name: 'Suggest Basic Transformations',
+        onClick: () => {
+          if (isAiProviderSet) {
+            generateBasicTransformationPrompt(selectedFilePath, project!);
+            return;
+          }
+          setNoAiSetModal(true);
+        },
+        subTitle: '',
+        leftIcon: <AutoFixHigh />,
+      },
+    ];
+    if (
+      project.incrementalDir &&
+      project.connection?.type &&
+      selectedFilePath.includes(project?.incrementalDir)
+    ) {
+      items.push({
+        name: 'Auto-Fix Incremental & Unique Key Columns',
+        onClick: () => {
+          if (isAiProviderSet) {
+            generateEnhancedTransformationPrompt(
+              fileContent,
+              project?.connection?.type!,
+            );
+            return;
+          }
+          setNoAiSetModal(true);
+        },
+        subTitle: '',
+        leftIcon: <AutoFixHigh />,
+      });
+    }
+    return items;
+  }, [selectedFilePath]);
 
   if (isLoading) {
     return <Loader />;
@@ -352,9 +394,33 @@ const ProjectDetails: React.FC = () => {
                       </SelectedFile>
                     )}
                     <ButtonsContainer>
-                      {/* Single model command buttons - only for .sql files */}
+                      {menuItems.length > 0 && (
+                        <SplitButton
+                          title="AI"
+                          isLoading={isLoadingQuery}
+                          leftIcon={<AutoAwesome />}
+                          menuItems={menuItems}
+                        />
+                      )}
+                      {project.businessDir &&
+                        selectedFilePath?.includes(project.businessDir) && (
+                          <SplitButton
+                            title="AI"
+                            isLoading={isLoadingQuery}
+                            menuItems={[
+                              {
+                                name: 'Generate Analytics',
+                                onClick: isAiProviderSet
+                                  ? generateDashboards
+                                  : () => setNoAiSetModal(true),
+                                subTitle: '',
+                                leftIcon: <AutoFixHigh />,
+                              },
+                            ]}
+                          />
+                        )}
                       {selectedFilePath?.endsWith('.sql') &&
-                        selectedFilePath?.includes('/models/') &&
+                        selectedFilePath?.includes('models') &&
                         project && (
                           <ModelSplitButton
                             modelPath={selectedFilePath}
@@ -376,75 +442,6 @@ const ProjectDetails: React.FC = () => {
                         rosettaDbt={rosettaDbt}
                         handleBusinessLayerClick={handleBusinessLayerClick}
                       />
-                      {selectedFilePath?.endsWith('.sql') &&
-                        selectedFilePath?.includes('/models/') &&
-                        fileContent && (
-                          // <SplitButton
-                          //   title="AI"
-                          //   isLoading={isLoadingQuery}
-                          //   leftIcon={<AutoAwesome />}
-                          //   menuItems={[
-                          //     {
-                          //       name: selectedFilePath?.includes(
-                          //         project?.stagingDir ?? '',
-                          //       )
-                          //         ? 'Suggest Basic Transformations'
-                          //         : 'Auto-Fix Incremental & Unique Key Columns',
-                          //       onClick: () => {
-                          //         if (isAiProviderSet) {
-                          //           generatePrompt(
-                          //             selectedFilePath,
-                          //             fileContent,
-                          //             project!,
-                          //           );
-                          //           return;
-                          //         }
-                          //         setNoAiSetModal(true);
-                          //       },
-                          //       subTitle: '',
-                          //       leftIcon: <AutoFixHigh />,
-                          //     },
-                          //   ]}
-                          // />
-                          <Button
-                            variant="outlined"
-                            sx={{ height: '28px', minHeight: '28px' }}
-                            size="small"
-                            startIcon={<AutoAwesome />}
-                            onClick={() => {
-                              setAitTransformationResponse(undefined);
-                              if (isAiProviderSet) {
-                                generatePrompt(
-                                  selectedFilePath,
-                                  fileContent,
-                                  project!,
-                                );
-                                return;
-                              }
-                              setNoAiSetModal(true);
-                            }}
-                          >
-                            AI Transform
-                          </Button>
-                        )}
-                      {selectedFilePath?.includes(
-                        `${project.path}/models/business`,
-                      ) && (
-                        <SplitButton
-                          title="AI"
-                          isLoading={isLoadingQuery}
-                          menuItems={[
-                            {
-                              name: 'Generate Analytics',
-                              onClick: isAiProviderSet
-                                ? generateDashboards
-                                : () => setNoAiSetModal(true),
-                              subTitle: '',
-                              leftIcon: <AutoFixHigh />,
-                            },
-                          ]}
-                        />
-                      )}
                       {connection?.id ? (
                         <>
                           <Tooltip

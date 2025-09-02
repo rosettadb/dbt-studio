@@ -1,5 +1,5 @@
 import React from 'react';
-import { Box, Paper, IconButton, Tooltip } from '@mui/material';
+import { Box, Paper, IconButton, Tooltip, Typography } from '@mui/material';
 import { Close } from '@mui/icons-material';
 import { useAppContext } from '../../hooks';
 import { useGetSelectedProject } from '../../controllers';
@@ -57,9 +57,11 @@ const ChatWindow: React.FC = () => {
           borderBottom: '1px solid',
           borderColor: 'divider',
           display: 'flex',
-          justifyContent: 'flex-end',
+          alignItems: 'center',
+          justifyContent: 'space-between',
         }}
       >
+        <Typography sx={{ mt: '2px' }}>AI Assistant (Beta)</Typography>
         <Tooltip title="Close">
           <IconButton size="small" onClick={() => setIsChatOpen?.(false)}>
             <Close fontSize="small" />
