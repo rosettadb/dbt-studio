@@ -52,6 +52,16 @@ const filterTreeAndCollectExpanded = (
   };
 };
 
+const pathExistsInTree = (node: FileNode, targetPath: string): boolean => {
+  if (node.path === targetPath) return true;
+
+  if (node.type === 'folder' && node.children) {
+    return node.children.some((child) => pathExistsInTree(child, targetPath));
+  }
+
+  return false;
+};
+
 const FileTreeViewer: React.FC<Props> = ({
   node,
   onFileSelect,
@@ -73,10 +83,36 @@ const FileTreeViewer: React.FC<Props> = ({
   >({});
   const [copyPathData, setCopyPathData] = React.useState<string>('');
 
-  React.useEffect(() => {
-    if (node.path) setExpandedItems([node.path]);
-    setFilteredNode(node);
+  const prevExpandedRef = React.useRef<string[]>([]);
+  const prevNodeRef = React.useRef<FileNode>();
+
+  const preservedExpandedItems = React.useMemo(() => {
+    if (!node.path) return [];
+
+    const nodeChanged =
+      !prevNodeRef.current || prevNodeRef.current.path !== node.path;
+
+    if (prevExpandedRef.current.length === 0 || nodeChanged) {
+      return [node.path];
+    }
+    const validExpandedPaths = prevExpandedRef.current.filter((path) =>
+      pathExistsInTree(node, path),
+    );
+
+    return validExpandedPaths.includes(node.path)
+      ? validExpandedPaths
+      : [node.path, ...validExpandedPaths];
   }, [node]);
+
+  React.useEffect(() => {
+    setExpandedItems(preservedExpandedItems);
+    setFilteredNode(node);
+    prevNodeRef.current = node;
+  }, [node, preservedExpandedItems]);
+
+  React.useEffect(() => {
+    prevExpandedRef.current = expandedItems;
+  }, [expandedItems]);
 
   React.useEffect(() => {
     if (!project?.path) return;
@@ -90,7 +126,16 @@ const FileTreeViewer: React.FC<Props> = ({
   React.useEffect(() => {
     if (!searchKeyword) {
       setFilteredNode(node);
-      setExpandedItems([node.path]);
+      if (prevExpandedRef.current.length > 0) {
+        const validExpandedPaths = prevExpandedRef.current.filter((path) =>
+          pathExistsInTree(node, path),
+        );
+        setExpandedItems(
+          validExpandedPaths.length > 0 ? validExpandedPaths : [node.path],
+        );
+      } else {
+        setExpandedItems([node.path]);
+      }
       return;
     }
 
@@ -106,6 +151,13 @@ const FileTreeViewer: React.FC<Props> = ({
     // eslint-disable-next-line consistent-return
     return () => clearTimeout(timeout);
   }, [searchKeyword, node]);
+
+  const handleExpandedItemsChange = React.useCallback(
+    (newExpanded: string[]) => {
+      setExpandedItems(newExpanded);
+    },
+    [],
+  );
 
   return (
     <Container>
@@ -136,9 +188,7 @@ const FileTreeViewer: React.FC<Props> = ({
 
       <StyledTreeView
         expandedItems={expandedItems}
-        onExpandedItemsChange={(_, newExpanded) =>
-          setExpandedItems(newExpanded)
-        }
+        onExpandedItemsChange={(_, items) => handleExpandedItemsChange(items)}
       >
         {filteredNode && (
           <RenderTree

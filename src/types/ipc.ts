@@ -42,6 +42,7 @@ export type ProjectChannels =
   | 'project:addFromVCS'
   | 'project:updateQuery'
   | 'project:getQuery'
+  | 'project:chooseDir'
   | 'project:downloadSeed';
 
 export type ConnectorChannels =

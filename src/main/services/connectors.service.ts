@@ -405,6 +405,10 @@ export default class ConnectorsService {
     }
   }
 
+  static extractDbNameFromPath = (url: string) => {
+    return path.parse(url).name;
+  };
+
   static async generateRosettaYml(
     connection: ConnectionInput,
     projectName: string,
@@ -424,7 +428,7 @@ export default class ConnectorsService {
           name: projectName,
           databaseName:
             connection.type === 'duckdb'
-              ? connection.short_database_path.replace(/\.duckdb$/, '')
+              ? this.extractDbNameFromPath(connection.short_database_path)
               : connection.database,
           schemaName: connection.schema,
           dbType: connection.type,

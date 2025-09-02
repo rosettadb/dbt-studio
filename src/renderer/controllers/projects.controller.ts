@@ -151,7 +151,7 @@ export const useGetProjectFiles = (
   return useQuery({
     queryKey: [QUERY_KEYS.GET_FILE_STRUCTURE, project?.path || 'no-project'],
     queryFn: async () => {
-      return projectsServices.loadProjectDirectory(project);
+      return projectsServices.loadProjectDirectory({ path: project.path });
     },
     ...customOptions,
   });
