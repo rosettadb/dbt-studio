@@ -177,6 +177,18 @@ const registerProjectHandlers = () => {
       return ProjectsService.chooseDir(path);
     },
   );
+  ipcMain.handle(
+    'project:downloadSeed',
+    async (
+      _event,
+      body: {
+        objectUrl: string;
+        project: Project;
+      },
+    ) => {
+      return ProjectsService.downloadSeed(body);
+    },
+  );
 };
 
 export default registerProjectHandlers;
