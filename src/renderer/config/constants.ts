@@ -97,7 +97,7 @@ export const AI_PROMPTS = {
     'We are using {}\n\n' +
     "Return the updated SQL with correct replacements and do not explain the changes unless asked. Here's the SQL:\n\n{}",
   GENERATE_DASHBOARDS:
-    'Here is a business dbt model for the table {}. We are using {}. Make sure the SQL syntax matches the used DB.\n\nSuggest me some good SQL for Dashboards on. Generate 5-10 queries.\n\n{}',
+    'Here is a business dbt model for the table {}. Make sure you use the table name given in this prompt as reference. We are using {}. Make sure the SQL syntax matches the used DB.\n\nSuggest me some good SQL for Dashboards on. Generate 5-10 queries.\n\n{}',
 };
 
 export const MonacoCompletionItemKind = {
