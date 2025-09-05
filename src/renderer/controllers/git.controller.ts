@@ -61,7 +61,25 @@ export const useGetFileStatuses = (
   return useQuery({
     queryKey: [QUERY_KEYS.GIT_STATUSES, path],
     queryFn: async () => {
-      return gitServices.getFileStatus(path);
+      return gitServices.getFileStatusList(path);
+    },
+    ...customOptions,
+  });
+};
+
+export const useGetFileStatus = (
+  path: string,
+  filePath: string,
+  customOptions?: UseQueryOptions<
+    FileStatus | null,
+    CustomError,
+    FileStatus | null
+  >,
+) => {
+  return useQuery({
+    queryKey: [QUERY_KEYS.GIT_STATUS, filePath],
+    queryFn: async () => {
+      return gitServices.getFileStatus(path, filePath);
     },
     ...customOptions,
   });

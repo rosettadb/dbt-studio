@@ -112,10 +112,18 @@ export const getFileDiff = async (repoPath: string, filePath: string) => {
   return data;
 };
 
-export const getFileStatus = async (repoPath: string) => {
+export const getFileStatusList = async (repoPath: string) => {
   const { data } = await client.post<{ repoPath: string }, FileStatus[]>(
     'git:fileStatusList',
     { repoPath },
   );
+  return data;
+};
+
+export const getFileStatus = async (repoPath: string, filePath: string) => {
+  const { data } = await client.post<
+    { repoPath: string; filePath: string },
+    FileStatus | null
+  >('git:fileStatus', { repoPath, filePath });
   return data;
 };

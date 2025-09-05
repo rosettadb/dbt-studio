@@ -2,11 +2,10 @@ import React from 'react';
 import { OnChange, loader } from '@monaco-editor/react';
 import { useTheme, IconButton, Tooltip } from '@mui/material';
 import { VerticalSplit } from '@mui/icons-material';
-import { getVersionsFromDiff, isEditableFile } from '../../helpers/utils';
+import { isEditableFile } from '../../helpers/utils';
 import { gitServices, projectsServices } from '../../services';
-import { CompletionItem } from '../../../types/frontend';
 import {
-  useGetFileStatuses,
+  useGetFileStatus,
   useGetProjectFiles,
   useGetSelectedProject,
 } from '../../controllers';
@@ -14,38 +13,18 @@ import { Container } from './styles';
 import { DiffView } from './diffView';
 import { CodeEditor } from './codeEditor';
 import { Project } from '../../../types/backend';
-
-const getLanguageFromExtension = (filePath: string): string => {
-  const extension = filePath.split('.').pop()?.toLowerCase();
-  switch (extension) {
-    case 'yaml':
-    case 'yml':
-    case 'conf':
-      return 'yaml';
-    case 'sql':
-      return 'sql';
-    case 'js':
-    case 'jsx':
-      return 'javascript';
-    case 'json':
-      return 'json';
-    default:
-      return 'plaintext';
-  }
-};
+import { getLanguageFromExtension, getVersionsFromDiff } from './helpers';
 
 export const Editor = ({
   filePath,
   content,
   setContent,
-  completions = [],
-  enableDiff = true,
+  projectPath,
 }: {
-  filePath?: string;
+  filePath: string;
   content: string;
   setContent: (value: string) => void;
-  completions?: Omit<CompletionItem, 'range'>[];
-  enableDiff?: boolean;
+  projectPath: string;
 }) => {
   loader.config({
     paths: {
@@ -53,14 +32,19 @@ export const Editor = ({
     },
   });
   const { data: project } = useGetSelectedProject();
-  const { refetch: updateStatuses } = useGetFileStatuses(project?.path ?? '');
+  const { data: fileStatus, refetch: updateFileStatus } = useGetFileStatus(
+    projectPath,
+    filePath,
+    {
+      refetchInterval: 10000,
+    },
+  );
   const { refetch: updateDirectories } = useGetProjectFiles(project as Project);
   const theme = useTheme();
   const monacoTheme = theme.palette.mode === 'dark' ? 'vs-dark' : 'light';
   const language = getLanguageFromExtension(filePath ?? 'txt');
 
-  // Check if the file is editable
-  const isFileEditable = filePath ? isEditableFile(filePath) : true;
+  const isFileEditable = isEditableFile(filePath);
 
   const [originalContent, setOriginalContent] = React.useState<string | null>(
     null,
@@ -77,20 +61,21 @@ export const Editor = ({
   }, []);
 
   React.useEffect(() => {
-    if (!project?.path || !filePath || !enableDiff) return;
-    gitServices
-      .getFileDiff(project.path, filePath)
-      // eslint-disable-next-line promise/always-return
-      .then(({ diff }) => {
-        const { oldVersion } = getVersionsFromDiff(content, String(diff));
-        setOriginalContent(oldVersion);
-      })
-      .catch(() => {});
-  }, [filePath, project?.path, enableDiff]);
-
-  React.useEffect(() => {
     setShowDiffView(false);
-  }, [filePath]);
+    const fetchData = async () => {
+      if (fileStatus?.status === 'untracked') {
+        setOriginalContent(null);
+        return;
+      }
+      const fileDiff = await gitServices.getFileDiff(projectPath, filePath);
+      const { oldVersion } = getVersionsFromDiff(
+        content,
+        String(fileDiff?.diff),
+      );
+      setOriginalContent(oldVersion);
+    };
+    fetchData();
+  }, [filePath, projectPath, fileStatus]);
 
   const handleChange: OnChange = (value) => {
     if (value !== undefined) {
@@ -103,7 +88,7 @@ export const Editor = ({
             // eslint-disable-next-line promise/always-return
             .then(async () => {
               await updateDirectories();
-              await updateStatuses();
+              await updateFileStatus();
             })
             .catch(() => {});
         }
@@ -113,7 +98,7 @@ export const Editor = ({
 
   return (
     <Container>
-      {enableDiff && originalContent && (
+      {originalContent && (
         <Tooltip title="Compare Changes">
           <IconButton
             onClick={() => setShowDiffView((prev) => !prev)}
@@ -123,7 +108,7 @@ export const Editor = ({
           </IconButton>
         </Tooltip>
       )}
-      {enableDiff && showDiffView && originalContent ? (
+      {showDiffView && originalContent ? (
         <DiffView
           modified={content}
           original={originalContent}
@@ -137,7 +122,6 @@ export const Editor = ({
           language={language}
           theme={monacoTheme}
           onChange={handleChange}
-          completions={completions}
           readOnly={!isFileEditable}
         />
       )}

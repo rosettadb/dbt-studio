@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
-import type * as monaco from 'monaco-editor';
 import { DiffEditor } from '@monaco-editor/react';
+import { IMonaco, IStandaloneDiffEditor, ITextModel } from './types';
 
 type Props = {
   modified: string;
@@ -15,9 +15,9 @@ export const DiffView: React.FC<Props> = ({
   language,
   theme,
 }) => {
-  const editorRef = useRef<monaco.editor.IStandaloneDiffEditor | null>(null);
-  const originalModelRef = useRef<monaco.editor.ITextModel | null>(null);
-  const modifiedModelRef = useRef<monaco.editor.ITextModel | null>(null);
+  const editorRef = useRef<IStandaloneDiffEditor | null>(null);
+  const originalModelRef = useRef<ITextModel | null>(null);
+  const modifiedModelRef = useRef<ITextModel | null>(null);
 
   const [mounted, setMounted] = useState(false);
 
@@ -34,8 +34,8 @@ export const DiffView: React.FC<Props> = ({
   }, []);
 
   const handleEditorDidMount = (
-    editor: monaco.editor.IStandaloneDiffEditor,
-    monacoInstance: typeof monaco,
+    editor: IStandaloneDiffEditor,
+    monacoInstance: IMonaco,
   ) => {
     editorRef.current = editor;
 

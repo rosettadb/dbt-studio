@@ -333,10 +333,6 @@ const ProjectDetails: React.FC = () => {
     return <Navigate to="/app/select-project" />;
   }
 
-  // if (project?.id && !project?.connectionId) {
-  //   return <Navigate to={`/app/add-connection/${project.id}`} />;
-  // }
-
   const handleBusinessLayerClick = (path: string) => {
     if (isAiProviderSet) {
       setBusinessQueryModal(path);
@@ -512,12 +508,12 @@ const ProjectDetails: React.FC = () => {
                       Please select a file from the explorer on the left!
                     </NoFileSelected>
                   )}
-                  {selectedFilePath && (
+                  {selectedFilePath && fileContent && project.path && (
                     <Editor
+                      projectPath={project.path}
                       filePath={selectedFilePath}
-                      content={fileContent ?? ''}
+                      content={fileContent}
                       setContent={setFileContent}
-                      enableDiff
                     />
                   )}
                 </EditorContainer>

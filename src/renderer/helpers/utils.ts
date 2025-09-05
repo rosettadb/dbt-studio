@@ -1,6 +1,5 @@
 /* eslint-disable no-plusplus, consistent-return, no-case-declarations */
 import React from 'react';
-import { parsePatch, diffLines } from 'diff';
 import {
   BigQueryConnection,
   Command,
@@ -69,62 +68,6 @@ export const splitPath = (path: string, projectName: string): string => {
 
   return `${prefix}...${projectPart}`;
 };
-
-export const getVersionsFromDiff = (newContent: string, diffString: string) => {
-  const patch = parsePatch(diffString)[0];
-  const newLines = newContent.split('\n');
-
-  const oldLines = [...newLines];
-  let offset = 0;
-
-  patch.hunks.forEach((hunk) => {
-    let newIndex = hunk.newStart - 1 + offset;
-    let removedCount = 0;
-
-    hunk.lines.forEach((line) => {
-      const type = line[0];
-      const value = line.slice(1);
-
-      if (type === '+') {
-        oldLines.splice(newIndex, 1);
-        removedCount += 1;
-      } else if (type === '-') {
-        oldLines.splice(newIndex, 0, value);
-        newIndex++;
-      } else {
-        newIndex++;
-      }
-    });
-
-    offset -= removedCount;
-  });
-
-  return {
-    oldVersion: oldLines.join('\n'),
-    newVersion: newContent,
-  };
-};
-
-export function getChangedLineNumbers(oldStr: string, newStr: string) {
-  const changes = diffLines(oldStr, newStr);
-  let line = 1;
-  const added: number[] = [];
-  const removed: number[] = [];
-
-  changes.forEach((part) => {
-    const lines = part.value.split('\n').length - 1;
-    if (part.added) {
-      for (let i = 0; i < lines; i++) added.push(line + i);
-      line += lines;
-    } else if (part.removed) {
-      for (let i = 0; i < lines; i++) removed.push(line + i);
-    } else {
-      line += lines;
-    }
-  });
-
-  return { added, removed };
-}
 
 export const getInitials = (name: string): string => {
   const cleaned = name.trim().replace(/_/g, ' ');

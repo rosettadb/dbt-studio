@@ -1,9 +1,13 @@
 import MonacoEditor, { OnChange } from '@monaco-editor/react';
 import React, { useEffect, useRef } from 'react';
-import type * as monaco from 'monaco-editor';
-import { CompletionItem } from '../../../types/frontend';
-// import { getChangedLineNumbers } from '../../helpers/utils';
 import { Shimmer } from '../shimmer';
+import { getDecorations } from './helpers';
+import {
+  IDisposable,
+  IEditorDecorationsCollection,
+  IMonaco,
+  IStandaloneCodeEditor,
+} from './types';
 
 export const CodeEditor = ({
   content,
@@ -11,7 +15,6 @@ export const CodeEditor = ({
   language,
   theme,
   onChange,
-  completions = [],
   readOnly = false,
 }: {
   content: string;
@@ -19,93 +22,65 @@ export const CodeEditor = ({
   language: string;
   theme: string;
   onChange: OnChange;
-  completions?: Omit<CompletionItem, 'range'>[];
   readOnly?: boolean;
 }) => {
-  const editorRef = useRef<monaco.editor.IStandaloneCodeEditor | null>(null);
-  const monacoRef = useRef<typeof import('monaco-editor') | null>(null);
-  const decorationsRef =
-    useRef<monaco.editor.IEditorDecorationsCollection | null>(null);
-  const completionDisposableRef = useRef<monaco.IDisposable | null>(null);
+  const [isMounted, setIsMounted] = React.useState(false);
+  const editorRef = useRef<IStandaloneCodeEditor | null>(null);
+  const monacoRef = useRef<IMonaco | null>(null);
+  const decorationsRef = useRef<IEditorDecorationsCollection | null>(null);
+  const completionDisposableRef = useRef<IDisposable | null>(null);
 
-  // const applyHighlights = (current: string, original: string) => {
-  //   if (!editorRef.current || !monacoRef.current) return;
-  //   const { added, removed } = getChangedLineNumbers(original, current);
-  //   const monacoInstance = monacoRef.current;
-  //   const decorations = [
-  //     ...added.map((line) => ({
-  //       range: new monacoInstance.Range(line, 1, line, 1),
-  //       options: {
-  //         isWholeLine: true,
-  //         className: 'line-added',
-  //         glyphMarginClassName: 'line-added-glyph',
-  //       },
-  //     })),
-  //     ...removed.map((line) => ({
-  //       range: new monacoInstance.Range(line, 1, line, 1),
-  //       options: {
-  //         isWholeLine: true,
-  //         className: 'line-removed',
-  //         glyphMarginClassName: 'line-removed-glyph',
-  //       },
-  //     })),
-  //   ];
-  //   if (!decorationsRef.current) {
-  //     decorationsRef.current =
-  //       editorRef.current.createDecorationsCollection(decorations);
-  //   } else {
-  //     decorationsRef.current.set(decorations);
-  //   }
-  // };
+  const applyHighlights = (current: string, original: string | null) => {
+    if (!editorRef.current || !monacoRef.current) return;
 
-  const handleMount = async (
-    editor: monaco.editor.IStandaloneCodeEditor,
-    monacoInstance: typeof import('monaco-editor'),
-  ) => {
-    editorRef.current = editor;
-    monacoRef.current = monacoInstance;
-    decorationsRef.current?.clear();
-    decorationsRef.current = null;
-    // if (originalContent) {
-    //   applyHighlights(content, originalContent);
-    // }
-    if (completions.length > 0) {
-      completionDisposableRef.current?.dispose();
-      completionDisposableRef.current =
-        monacoInstance.languages.registerCompletionItemProvider(language, {
-          provideCompletionItems: (model, position) => {
-            const word = model.getWordUntilPosition(position);
-            const range = {
-              startLineNumber: position.lineNumber,
-              endLineNumber: position.lineNumber,
-              startColumn: word.startColumn,
-              endColumn: word.endColumn,
-            };
-            const suggestions = completions.map((item) => ({
-              ...item,
-              range,
-            }));
-            return { suggestions };
-          },
-        });
+    const monacoInstance = monacoRef.current;
+    const model = editorRef.current.getModel();
+    if (!model) return;
+
+    const range = (index: number) =>
+      new monacoInstance.Range(index, 1, index, 1);
+
+    const decorations = getDecorations(
+      original,
+      current,
+      model.getLineCount(),
+      range,
+    );
+
+    if (!decorationsRef.current) {
+      decorationsRef.current =
+        editorRef.current.createDecorationsCollection(decorations);
+    } else {
+      decorationsRef.current.set(decorations);
     }
   };
 
-  useEffect(() => {
-    // if (editorRef.current && monacoRef.current && originalContent) {
-    //   applyHighlights(content, originalContent);
-    // }
-  }, [content, originalContent]);
+  const handleMount = async (
+    editor: IStandaloneCodeEditor,
+    monacoInstance: IMonaco,
+  ) => {
+    editorRef.current = editor;
+    monacoRef.current = monacoInstance;
+
+    decorationsRef.current?.clear();
+    decorationsRef.current = null;
+
+    setTimeout(() => {
+      setIsMounted(true);
+    }, 50);
+  };
 
   useEffect(() => {
+    if (editorRef.current && monacoRef.current && isMounted) {
+      applyHighlights(content, originalContent);
+    }
     return () => {
       completionDisposableRef.current?.dispose();
     };
-  }, []);
+  }, [content, originalContent, isMounted]);
 
   return (
     <MonacoEditor
-      key="editor"
       height="100%"
       width="100%"
       theme={theme}
@@ -120,7 +95,6 @@ export const CodeEditor = ({
         lineNumbers: 'on',
         scrollBeyondLastLine: false,
         automaticLayout: true,
-        glyphMargin: true,
         readOnly,
       }}
     />
