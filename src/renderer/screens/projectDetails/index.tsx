@@ -288,6 +288,18 @@ const ProjectDetails: React.FC = () => {
         subTitle: '',
         leftIcon: <AutoFixHigh />,
       },
+      {
+        name: 'Generate Analytics',
+        onClick: () => {
+          if (isAiProviderSet) {
+            generateDashboards();
+            return;
+          }
+          setNoAiSetModal(true);
+        },
+        subTitle: '',
+        leftIcon: <AutoFixHigh />,
+      },
     ];
     if (
       project.incrementalDir &&
@@ -402,23 +414,6 @@ const ProjectDetails: React.FC = () => {
                           menuItems={menuItems}
                         />
                       )}
-                      {project.businessDir &&
-                        selectedFilePath?.includes(project.businessDir) && (
-                          <SplitButton
-                            title="AI"
-                            isLoading={isLoadingQuery}
-                            menuItems={[
-                              {
-                                name: 'Generate Analytics',
-                                onClick: isAiProviderSet
-                                  ? generateDashboards
-                                  : () => setNoAiSetModal(true),
-                                subTitle: '',
-                                leftIcon: <AutoFixHigh />,
-                              },
-                            ]}
-                          />
-                        )}
                       {selectedFilePath?.endsWith('.sql') &&
                         selectedFilePath?.includes('models') &&
                         project && (
