@@ -243,6 +243,7 @@ export const generateDashboardQuery = async (
     'project:generateDashboardsQuery',
     prompt,
   );
+
   return data;
 };
 

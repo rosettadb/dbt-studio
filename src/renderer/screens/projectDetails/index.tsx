@@ -172,7 +172,7 @@ const ProjectDetails: React.FC = () => {
 
     if (!tableStructure) {
       const prompt = utils.format(
-        AI_PROMPTS.BASIC_TRANSFORM_PROMPT_WITHOUT_TABLE,
+        AI_PROMPTS.BASIC_TRANSFORM_PROMPT_FOR_USER,
         fileName,
         String(fileContent),
         String(project?.dbtConnection?.type),
@@ -194,7 +194,7 @@ const ProjectDetails: React.FC = () => {
     const tableName = `${schema}.${table}`;
 
     const prompt = utils.format(
-      AI_PROMPTS.BASIC_TRANSFORM_PROMPT_WITH_TABLE,
+      AI_PROMPTS.BASIC_TRANSFORM_PROMPT_FOR_USER,
       tableName,
       promptTable,
       fileName,
@@ -281,6 +281,18 @@ const ProjectDetails: React.FC = () => {
         onClick: () => {
           if (isAiProviderSet) {
             generateBasicTransformationPrompt(selectedFilePath, project!);
+            return;
+          }
+          setNoAiSetModal(true);
+        },
+        subTitle: '',
+        leftIcon: <AutoFixHigh />,
+      },
+      {
+        name: 'Generate Analytics',
+        onClick: () => {
+          if (isAiProviderSet) {
+            generateDashboards();
             return;
           }
           setNoAiSetModal(true);
@@ -402,23 +414,6 @@ const ProjectDetails: React.FC = () => {
                           menuItems={menuItems}
                         />
                       )}
-                      {project.businessDir &&
-                        selectedFilePath?.includes(project.businessDir) && (
-                          <SplitButton
-                            title="AI"
-                            isLoading={isLoadingQuery}
-                            menuItems={[
-                              {
-                                name: 'Generate Analytics',
-                                onClick: isAiProviderSet
-                                  ? generateDashboards
-                                  : () => setNoAiSetModal(true),
-                                subTitle: '',
-                                leftIcon: <AutoFixHigh />,
-                              },
-                            ]}
-                          />
-                        )}
                       {selectedFilePath?.endsWith('.sql') &&
                         selectedFilePath?.includes('models') &&
                         project && (

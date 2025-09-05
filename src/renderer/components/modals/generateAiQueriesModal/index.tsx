@@ -34,7 +34,7 @@ export const GenerateAiQueriesModal: React.FC<Props> = ({
 
   const value = React.useMemo(() => {
     return data
-      .map((query) => `# ${query.description}\n${query.query}`)
+      .map((query) => `-- ${query.description}\n${query.query}`)
       .join('\n\n\n');
   }, [data]);
 
