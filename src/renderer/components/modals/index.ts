@@ -1,7 +1,6 @@
 export * from './addConnectionModal';
 export * from './newFileModal';
 export * from './confirmationModal';
-export * from './businessQueryModal';
 export * from './generateAiQueriesModal';
 export * from './addGitRemoteModal';
 export * from './gitCommitModal';
@@ -11,3 +10,7 @@ export * from './noAiSetModal';
 export * from './updateDialog';
 export * from './CompileModal';
 export * from './resetFactoryModal';
+export * from './stagingModal';
+export * from './incrementalModal';
+export * from './businessModal';
+export * from './aiPromptModal';

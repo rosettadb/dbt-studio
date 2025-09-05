@@ -1,5 +1,6 @@
 import React from 'react';
 import {
+  Box,
   Button,
   Dialog,
   DialogActions,
@@ -23,6 +24,7 @@ type Props = {
   onPromptChange: (value: string) => void;
   onSubmit: () => void;
   response?: string;
+  onApply: (value: string) => void;
 };
 
 export const AiPromptModal: React.FC<Props> = ({
@@ -32,6 +34,7 @@ export const AiPromptModal: React.FC<Props> = ({
   onPromptChange,
   onSubmit,
   response,
+  onApply,
 }) => {
   const theme = useTheme();
   const isDarkMode = theme.palette.mode === 'dark';
@@ -87,19 +90,31 @@ export const AiPromptModal: React.FC<Props> = ({
       </DialogContent>
       <DialogActions>
         {response ? (
-          <Button
-            onClick={async () => {
-              if (response) {
-                await navigator.clipboard.writeText(response);
-                toast.info('Copied to clipboard!');
-              }
-            }}
-            variant="outlined"
-            startIcon={<ContentCopy />}
-            className="mb-2"
-          >
-            Copy
-          </Button>
+          <Box sx={{ display: 'flex', gap: 2 }}>
+            <Button
+              onClick={() => {
+                onApply(response);
+              }}
+              variant="outlined"
+              startIcon={<ContentCopy />}
+              className="mb-2"
+            >
+              Apply
+            </Button>
+            <Button
+              onClick={async () => {
+                if (response) {
+                  await navigator.clipboard.writeText(response);
+                  toast.info('Copied to clipboard!');
+                }
+              }}
+              variant="outlined"
+              startIcon={<ContentCopy />}
+              className="mb-2"
+            >
+              Copy
+            </Button>
+          </Box>
         ) : (
           <Button
             onClick={() => {

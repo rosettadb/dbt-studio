@@ -30,6 +30,8 @@ import {
   ProjectDbtSplitButton,
   SplitButton,
   TerminalLayout,
+  BusinessModal,
+  AiPromptModal,
 } from '../../components';
 import {
   useGetConnectionById,
@@ -63,9 +65,7 @@ import { AI_PROMPTS } from '../../config/constants';
 import { utils } from '../../helpers';
 import { AppLayout } from '../../layouts';
 import { AppContext } from '../../context';
-import { BusinessModal } from '../../components/modals/businessModal';
 import ChatScreen from '../chat';
-import { AiPromptModal } from '../../components/modals/aiPromptModal';
 import { getFileName } from '../../services/settings.services';
 
 const ProjectDetails: React.FC = () => {
@@ -570,6 +570,14 @@ const ProjectDetails: React.FC = () => {
                 onClose={() => {
                   setAiTransformationPrompt(undefined);
                   setAitTransformationResponse(undefined);
+                }}
+                onApply={async (value) => {
+                  setFileContent(value);
+                  await projectsServices.saveFileContent({
+                    path: String(selectedFilePath),
+                    content: value,
+                  });
+                  toast.success('Content saved!');
                 }}
                 prompt={aiTransformationPrompt}
                 onPromptChange={(value) => setAiTransformationPrompt(value)}

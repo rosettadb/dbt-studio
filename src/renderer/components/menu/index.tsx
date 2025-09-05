@@ -217,7 +217,12 @@ export const Menu: React.FC = () => {
                 onClick={() => setIsChatOpen?.(!isChatOpen)}
                 color="primary"
               >
-                <Psychology fontSize="small" />
+                <Icon
+                  src={icons.bot}
+                  width={22}
+                  height={22}
+                  color={theme.palette.primary.main}
+                />
               </IconButton>
             </Tooltip>
           )}

@@ -2,7 +2,7 @@ import MonacoEditor, { OnChange } from '@monaco-editor/react';
 import React, { useEffect, useRef } from 'react';
 import type * as monaco from 'monaco-editor';
 import { CompletionItem } from '../../../types/frontend';
-import { getChangedLineNumbers } from '../../helpers/utils';
+// import { getChangedLineNumbers } from '../../helpers/utils';
 import { Shimmer } from '../shimmer';
 
 export const CodeEditor = ({
@@ -28,35 +28,35 @@ export const CodeEditor = ({
     useRef<monaco.editor.IEditorDecorationsCollection | null>(null);
   const completionDisposableRef = useRef<monaco.IDisposable | null>(null);
 
-  const applyHighlights = (current: string, original: string) => {
-    if (!editorRef.current || !monacoRef.current) return;
-    const { added, removed } = getChangedLineNumbers(original, current);
-    const monacoInstance = monacoRef.current;
-    const decorations = [
-      ...added.map((line) => ({
-        range: new monacoInstance.Range(line, 1, line, 1),
-        options: {
-          isWholeLine: true,
-          className: 'line-added',
-          glyphMarginClassName: 'line-added-glyph',
-        },
-      })),
-      ...removed.map((line) => ({
-        range: new monacoInstance.Range(line, 1, line, 1),
-        options: {
-          isWholeLine: true,
-          className: 'line-removed',
-          glyphMarginClassName: 'line-removed-glyph',
-        },
-      })),
-    ];
-    if (!decorationsRef.current) {
-      decorationsRef.current =
-        editorRef.current.createDecorationsCollection(decorations);
-    } else {
-      decorationsRef.current.set(decorations);
-    }
-  };
+  // const applyHighlights = (current: string, original: string) => {
+  //   if (!editorRef.current || !monacoRef.current) return;
+  //   const { added, removed } = getChangedLineNumbers(original, current);
+  //   const monacoInstance = monacoRef.current;
+  //   const decorations = [
+  //     ...added.map((line) => ({
+  //       range: new monacoInstance.Range(line, 1, line, 1),
+  //       options: {
+  //         isWholeLine: true,
+  //         className: 'line-added',
+  //         glyphMarginClassName: 'line-added-glyph',
+  //       },
+  //     })),
+  //     ...removed.map((line) => ({
+  //       range: new monacoInstance.Range(line, 1, line, 1),
+  //       options: {
+  //         isWholeLine: true,
+  //         className: 'line-removed',
+  //         glyphMarginClassName: 'line-removed-glyph',
+  //       },
+  //     })),
+  //   ];
+  //   if (!decorationsRef.current) {
+  //     decorationsRef.current =
+  //       editorRef.current.createDecorationsCollection(decorations);
+  //   } else {
+  //     decorationsRef.current.set(decorations);
+  //   }
+  // };
 
   const handleMount = async (
     editor: monaco.editor.IStandaloneCodeEditor,
@@ -66,9 +66,9 @@ export const CodeEditor = ({
     monacoRef.current = monacoInstance;
     decorationsRef.current?.clear();
     decorationsRef.current = null;
-    if (originalContent) {
-      applyHighlights(content, originalContent);
-    }
+    // if (originalContent) {
+    //   applyHighlights(content, originalContent);
+    // }
     if (completions.length > 0) {
       completionDisposableRef.current?.dispose();
       completionDisposableRef.current =
@@ -92,9 +92,9 @@ export const CodeEditor = ({
   };
 
   useEffect(() => {
-    if (editorRef.current && monacoRef.current && originalContent) {
-      applyHighlights(content, originalContent);
-    }
+    // if (editorRef.current && monacoRef.current && originalContent) {
+    //   applyHighlights(content, originalContent);
+    // }
   }, [content, originalContent]);
 
   useEffect(() => {

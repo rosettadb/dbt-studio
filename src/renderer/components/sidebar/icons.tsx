@@ -8,6 +8,7 @@ import {
 } from '@mui/icons-material';
 import { useTheme } from '@mui/material/styles';
 import { icons } from '../../../../assets';
+import { Icon } from '../icon';
 
 const style = {
   display: 'inline-block',
@@ -54,13 +55,17 @@ export const SQL: React.FC = () => <CodeSharp color="primary" />;
 
 export const CloudIcon: React.FC = () => <Cloud color="primary" />;
 
-export const DBTProjects: React.FC = () => (
-  <img
-    src={icons.dbtTm}
-    alt="dbt projects"
-    style={{ ...style, width: 24, height: 24, marginLeft: 2 }}
-  />
-);
+export const DBTProjects: React.FC = () => {
+  const theme = useTheme();
+
+  return (
+    <Icon
+      src={icons.dbtBlack}
+      style={{ ...style, width: 24, height: 24, marginLeft: 2 }}
+      color={theme.palette.primary.main}
+    />
+  );
+};
 
 export const ElectricalServices: React.FC = () => (
   <ElectricalServicesIcon color="primary" />

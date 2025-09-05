@@ -41,7 +41,21 @@ export const RawLayerModal: React.FC<Props> = ({
   }, []);
 
   return (
-    <Dialog open={isOpen} onClose={onClose} title="Raw Layer">
+    <Dialog
+      open={isOpen}
+      onClose={onClose}
+      title="Raw Layer"
+      fullWidth
+      slotProps={{
+        paper: {
+          sx: {
+            minWidth: '60vw',
+            borderRadius: 2,
+            boxShadow: '0px 8px 32px rgba(0, 0, 0, 0.12)',
+          },
+        },
+      }}
+    >
       <DialogTitle>Rosetta DBT RawLayer</DialogTitle>
       <IconButton
         aria-label="close"
@@ -63,7 +77,7 @@ export const RawLayerModal: React.FC<Props> = ({
             display: 'flex',
             flexDirection: 'column',
             m: 'auto',
-            width: 500,
+            width: '100%',
             gap: 2,
           }}
         >

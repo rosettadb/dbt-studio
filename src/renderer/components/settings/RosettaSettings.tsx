@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Button,
   Box,
@@ -24,6 +24,7 @@ import {
   Download,
   CheckCircle,
   Info,
+  Warning,
 } from '@mui/icons-material';
 import { toast } from 'react-toastify';
 import { SettingsType, RosettaVersionInfo } from '../../../types/backend';
@@ -38,6 +39,33 @@ import {
 interface RosettaSettingsProps {
   settings: SettingsType;
 }
+
+const MINIMUM_SUPPORTED_VERSION = '2.8.4';
+
+// Helper function to compare semantic versions
+const compareVersions = (a: string, b: string): number => {
+  const parseVersion = (version: string) => {
+    return version.replace(/^v/, '').split('.').map(Number);
+  };
+
+  const versionA = parseVersion(a);
+  const versionB = parseVersion(b);
+
+  // eslint-disable-next-line no-plusplus
+  for (let i = 0; i < Math.max(versionA.length, versionB.length); i++) {
+    const numA = versionA[i] || 0;
+    const numB = versionB[i] || 0;
+
+    if (numA > numB) return 1;
+    if (numA < numB) return -1;
+  }
+
+  return 0;
+};
+
+const isVersionSupported = (version: string): boolean => {
+  return compareVersions(version, MINIMUM_SUPPORTED_VERSION) >= 0;
+};
 
 export const RosettaSettings: React.FC<RosettaSettingsProps> = ({
   settings,
@@ -95,11 +123,23 @@ export const RosettaSettings: React.FC<RosettaSettingsProps> = ({
     },
   });
 
+  // Auto-load versions on component mount
+  useEffect(() => {
+    checkVersions.mutate();
+  }, []);
+
   const handleCheckVersions = () => {
     checkVersions.mutate();
   };
 
   const handleInstallVersion = (version: string) => {
+    if (!isVersionSupported(version)) {
+      toast.error(
+        `Version ${version} is not supported. Minimum version required: ${MINIMUM_SUPPORTED_VERSION}`,
+      );
+      return;
+    }
+
     setInstallingVersion(version);
     setIsBlocking(true);
     installVersion.mutate(version);
@@ -122,7 +162,8 @@ export const RosettaSettings: React.FC<RosettaSettingsProps> = ({
   const filteredVersions = (() => {
     const filtered =
       versionInfo?.availableVersions.filter(
-        (v) => showPrerelease || !v.isPrerelease,
+        (v) =>
+          (showPrerelease || !v.isPrerelease) && isVersionSupported(v.version),
       ) || [];
     return showAllVersions ? filtered : filtered.slice(0, 10);
   })();
@@ -134,6 +175,10 @@ export const RosettaSettings: React.FC<RosettaSettingsProps> = ({
     if (version.isOlder) return 'Downgrade';
     return 'Install';
   };
+
+  // Check if current version is unsupported
+  const isCurrentVersionUnsupported =
+    settings.rosettaVersion && !isVersionSupported(settings.rosettaVersion);
 
   return (
     <Box sx={{ maxWidth: 800 }}>
@@ -150,18 +195,29 @@ export const RosettaSettings: React.FC<RosettaSettingsProps> = ({
       </Typography>
 
       {settings.rosettaPath ? (
-        <Alert severity="success" sx={{ mb: 3 }}>
+        <Alert
+          severity={isCurrentVersionUnsupported ? 'warning' : 'success'}
+          sx={{ mb: 3 }}
+          icon={isCurrentVersionUnsupported ? <Warning /> : <CheckCircle />}
+        >
           <Typography variant="body1" sx={{ fontWeight: 500 }}>
             Rosetta is installed at: {settings.rosettaPath}
           </Typography>
           <Typography variant="body2" sx={{ mt: 1 }}>
             Version: {settings.rosettaVersion || 'Unknown'}
           </Typography>
+          {isCurrentVersionUnsupported && (
+            <Typography variant="body2" sx={{ mt: 1, fontWeight: 500 }}>
+              ⚠️ This version is not supported. Please upgrade to version{' '}
+              {MINIMUM_SUPPORTED_VERSION} or higher.
+            </Typography>
+          )}
         </Alert>
       ) : (
         <Alert severity="warning" sx={{ mb: 3 }}>
           <Typography variant="body1">
-            Rosetta is not installed. Please install a version below.
+            Rosetta is not installed. Please install a version below (minimum:{' '}
+            {MINIMUM_SUPPORTED_VERSION}).
           </Typography>
         </Alert>
       )}
@@ -181,7 +237,7 @@ export const RosettaSettings: React.FC<RosettaSettingsProps> = ({
           }
           sx={{ mb: 2 }}
         >
-          Check for Versions
+          {checkVersions.isLoading ? 'Loading Versions...' : 'Refresh Versions'}
         </Button>
 
         {versionInfo && (
@@ -198,11 +254,21 @@ export const RosettaSettings: React.FC<RosettaSettingsProps> = ({
         )}
       </Box>
 
+      {/* Loading state for initial version check */}
+      {checkVersions.isLoading && !versionInfo && (
+        <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}>
+          <CircularProgress />
+          <Typography variant="body2" sx={{ ml: 2, alignSelf: 'center' }}>
+            Loading available versions...
+          </Typography>
+        </Box>
+      )}
+
       {/* Available Versions List */}
       {versionInfo && filteredVersions.length > 0 && (
         <Box sx={{ mb: 3 }}>
           <Typography variant="h6" gutterBottom>
-            Available Versions
+            Available Versions (minimum: {MINIMUM_SUPPORTED_VERSION})
           </Typography>
           <List
             sx={{
@@ -309,7 +375,9 @@ export const RosettaSettings: React.FC<RosettaSettingsProps> = ({
           {/* Show All/Show Less Button */}
           {versionInfo &&
             versionInfo.availableVersions.filter(
-              (v) => showPrerelease || !v.isPrerelease,
+              (v) =>
+                (showPrerelease || !v.isPrerelease) &&
+                isVersionSupported(v.version),
             ).length > 10 && (
               <Box sx={{ mt: 2, textAlign: 'center' }}>
                 <Button
@@ -322,6 +390,18 @@ export const RosettaSettings: React.FC<RosettaSettingsProps> = ({
               </Box>
             )}
         </Box>
+      )}
+
+      {/* No supported versions message */}
+      {versionInfo && filteredVersions.length === 0 && (
+        <Alert severity="info" sx={{ mb: 3 }}>
+          <Typography variant="body2">
+            No supported versions found. Only versions{' '}
+            {MINIMUM_SUPPORTED_VERSION} and above are supported.
+            {!showPrerelease &&
+              ' Try enabling pre-release versions if available.'}
+          </Typography>
+        </Alert>
       )}
 
       {/* Documentation and Help */}
