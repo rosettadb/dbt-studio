@@ -172,7 +172,7 @@ const ProjectDetails: React.FC = () => {
 
     if (!tableStructure) {
       const prompt = utils.format(
-        AI_PROMPTS.BASIC_TRANSFORM_PROMPT_FOR_USER,
+        AI_PROMPTS.BASIC_TRANSFORM_PROMPT_WITHOUT_TABLE,
         fileName,
         String(fileContent),
         String(project?.dbtConnection?.type),
@@ -194,7 +194,7 @@ const ProjectDetails: React.FC = () => {
     const tableName = `${schema}.${table}`;
 
     const prompt = utils.format(
-      AI_PROMPTS.BASIC_TRANSFORM_PROMPT_FOR_USER,
+      AI_PROMPTS.BASIC_TRANSFORM_PROMPT_WITH_TABLE,
       tableName,
       promptTable,
       fileName,
