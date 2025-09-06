@@ -36,10 +36,12 @@ import {
 import {
   useGetConnectionById,
   useGetConnections,
+  useGetFileContent,
   useGetFileStatuses,
   useGetProjectFiles,
   useGetSelectedProject,
   useGetSettings,
+  useSaveFileContent,
   useUpdateProject,
 } from '../../controllers';
 import { projectsServices } from '../../services';
@@ -70,17 +72,20 @@ import { getFileName } from '../../services/settings.services';
 
 const ProjectDetails: React.FC = () => {
   const navigate = useNavigate();
+  const [selectedFilePath, setSelectedFilePath] = React.useState<string>();
+
   const { data: project, isLoading, refetch } = useGetSelectedProject();
   const { data: connection } = useGetConnectionById(project?.connectionId);
   const { data: settings } = useGetSettings();
+  const { mutate: updateFileContent } = useSaveFileContent();
+  const { data: fileContent } = useGetFileContent(selectedFilePath);
+
   const { isAiProviderSet, isChatOpen } = React.useContext(AppContext);
   const [queryData, setQueryData] = React.useState<
     GenerateDashboardResponseType[]
   >([]);
   const [isQueryOpen, setIsQueryOpen] = React.useState(false);
   const [isLoadingQuery, setIsLoadingQuery] = React.useState(false);
-  const [selectedFilePath, setSelectedFilePath] = React.useState<string>();
-  const [fileContent, setFileContent] = React.useState<string>();
   const [businessQueryModal, setBusinessQueryModal] = React.useState<string>();
   const [noAiSetModal, setNoAiSetModal] = React.useState(false);
   const [aiTransformationPrompt, setAiTransformationPrompt] =
@@ -323,7 +328,7 @@ const ProjectDetails: React.FC = () => {
       });
     }
     return items;
-  }, [selectedFilePath]);
+  }, [selectedFilePath, fileContent]);
 
   if (isLoading) {
     return <Loader />;
@@ -355,21 +360,11 @@ const ProjectDetails: React.FC = () => {
                 }
               }}
               onFileSelect={async (fileNode) => {
-                // Check if file is editable before trying to read its content
                 if (!utils.isEditableFile(fileNode.path)) {
                   setSelectedFilePath(fileNode.path);
-                  setFileContent(
-                    utils.getNonEditableFileMessage(fileNode.path),
-                  );
                   return;
                 }
-
-                // For editable files, load content normally
-                const content = await projectsServices.getFileContent({
-                  path: fileNode.path,
-                });
                 setSelectedFilePath(fileNode.path);
-                setFileContent(content);
               }}
               isLoadingFiles={isLoadingDirectories}
               refreshFiles={async () => {
@@ -513,7 +508,6 @@ const ProjectDetails: React.FC = () => {
                       projectPath={project.path}
                       filePath={selectedFilePath}
                       content={fileContent}
-                      setContent={setFileContent}
                     />
                   )}
                 </EditorContainer>
@@ -568,8 +562,7 @@ const ProjectDetails: React.FC = () => {
                   setAitTransformationResponse(undefined);
                 }}
                 onApply={async (value) => {
-                  setFileContent(value);
-                  await projectsServices.saveFileContent({
+                  updateFileContent({
                     path: String(selectedFilePath),
                     content: value,
                   });

@@ -7,7 +7,12 @@ import {
   UseQueryOptions,
 } from 'react-query';
 import { RemoteWithRefs } from 'simple-git';
-import { CustomError, FileStatus, GitBranch } from '../../types/backend';
+import {
+  CustomError,
+  DiffResponse,
+  FileStatus,
+  GitBranch,
+} from '../../types/backend';
 import { QUERY_KEYS } from '../config/constants';
 import { gitServices } from '../services';
 
@@ -80,6 +85,20 @@ export const useGetFileStatus = (
     queryKey: [QUERY_KEYS.GIT_STATUS, filePath],
     queryFn: async () => {
       return gitServices.getFileStatus(path, filePath);
+    },
+    ...customOptions,
+  });
+};
+
+export const useGetFileDiff = (
+  path: string,
+  filePath: string,
+  customOptions?: UseQueryOptions<DiffResponse, CustomError, DiffResponse>,
+) => {
+  return useQuery({
+    queryKey: [QUERY_KEYS.GIT_DIFF, filePath],
+    queryFn: async () => {
+      return gitServices.getFileDiff(path, filePath);
     },
     ...customOptions,
   });

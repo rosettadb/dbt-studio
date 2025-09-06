@@ -3,27 +3,23 @@ import { OnChange, loader } from '@monaco-editor/react';
 import { useTheme, IconButton, Tooltip } from '@mui/material';
 import { VerticalSplit } from '@mui/icons-material';
 import { isEditableFile } from '../../helpers/utils';
-import { gitServices, projectsServices } from '../../services';
 import {
+  useGetFileDiff,
   useGetFileStatus,
-  useGetProjectFiles,
-  useGetSelectedProject,
+  useSaveFileContent,
 } from '../../controllers';
 import { Container } from './styles';
 import { DiffView } from './diffView';
 import { CodeEditor } from './codeEditor';
-import { Project } from '../../../types/backend';
 import { getLanguageFromExtension, getVersionsFromDiff } from './helpers';
 
 export const Editor = ({
   filePath,
   content,
-  setContent,
   projectPath,
 }: {
   filePath: string;
   content: string;
-  setContent: (value: string) => void;
   projectPath: string;
 }) => {
   loader.config({
@@ -31,67 +27,45 @@ export const Editor = ({
       vs: 'app-asset://zui/node_modules/monaco-editor/min/vs',
     },
   });
-  const { data: project } = useGetSelectedProject();
-  const { data: fileStatus, refetch: updateFileStatus } = useGetFileStatus(
+  const { data: fileStatus, isLoading: isLoadingFileStatus } = useGetFileStatus(
     projectPath,
     filePath,
     {
       refetchInterval: 10000,
     },
   );
-  const { refetch: updateDirectories } = useGetProjectFiles(project as Project);
+  const { data: fileDiff } = useGetFileDiff(projectPath, filePath);
+  const { mutate: updateFileContent } = useSaveFileContent();
   const theme = useTheme();
   const monacoTheme = theme.palette.mode === 'dark' ? 'vs-dark' : 'light';
   const language = getLanguageFromExtension(filePath ?? 'txt');
 
   const isFileEditable = isEditableFile(filePath);
-
-  const [originalContent, setOriginalContent] = React.useState<string | null>(
-    null,
-  );
   const [showDiffView, setShowDiffView] = React.useState(false);
   const debounceTimer = React.useRef<ReturnType<typeof setTimeout> | null>(
     null,
   );
 
-  React.useEffect(() => {
-    return () => {
-      if (debounceTimer.current) clearTimeout(debounceTimer.current);
-    };
-  }, []);
+  const originalContent = React.useMemo(() => {
+    if (fileStatus?.status === 'untracked' || !fileStatus?.status) {
+      return null;
+    }
+    const { oldVersion } = getVersionsFromDiff(content, String(fileDiff?.diff));
+    return oldVersion;
+  }, [fileStatus, fileDiff]);
 
   React.useEffect(() => {
     setShowDiffView(false);
-    const fetchData = async () => {
-      if (fileStatus?.status === 'untracked') {
-        setOriginalContent(null);
-        return;
-      }
-      const fileDiff = await gitServices.getFileDiff(projectPath, filePath);
-      const { oldVersion } = getVersionsFromDiff(
-        content,
-        String(fileDiff?.diff),
-      );
-      setOriginalContent(oldVersion);
+    return () => {
+      if (debounceTimer.current) clearTimeout(debounceTimer.current);
     };
-    fetchData();
-  }, [filePath, projectPath, fileStatus]);
+  }, [filePath, projectPath, fileStatus, fileDiff]);
 
   const handleChange: OnChange = (value) => {
     if (value !== undefined) {
-      setContent(value);
       if (debounceTimer.current) clearTimeout(debounceTimer.current);
       debounceTimer.current = setTimeout(() => {
-        if (filePath) {
-          projectsServices
-            .saveFileContent({ path: filePath, content: value })
-            // eslint-disable-next-line promise/always-return
-            .then(async () => {
-              await updateDirectories();
-              await updateFileStatus();
-            })
-            .catch(() => {});
-        }
+        updateFileContent({ path: filePath, content: value });
       }, 500);
     }
   };
@@ -108,14 +82,15 @@ export const Editor = ({
           </IconButton>
         </Tooltip>
       )}
-      {showDiffView && originalContent ? (
+      {showDiffView && !isLoadingFileStatus && (
         <DiffView
           modified={content}
-          original={originalContent}
+          original={originalContent ?? ''}
           language={language}
           theme={monacoTheme}
         />
-      ) : (
+      )}
+      {!showDiffView && !isLoadingFileStatus && (
         <CodeEditor
           content={content}
           originalContent={originalContent}
