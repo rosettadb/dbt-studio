@@ -224,6 +224,7 @@ export const createNewFile = (
       throw new Error(err.message);
     }
   });
+  // eslint-disable-next-line consistent-return
   return filePath;
 };
 
