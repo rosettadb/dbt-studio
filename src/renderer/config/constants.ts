@@ -52,6 +52,7 @@ export const QUERY_KEYS = {
   GET_SELECTED_PROJECT: 'GET_SELECTED_PROJECT',
   GET_PROJECT_BY_ID: 'GET_PROJECT_BY_ID',
   GET_FILE_CONTENT: 'GET_FILE_CONTENT',
+  SAVE_FILE_CONTENT: 'SAVE_FILE_CONTENT',
   GET_FILE_STRUCTURE: 'GET_FILE_STRUCTURE',
   EXTRACT_SCHEMA: 'EXTRACT_SCHEMA',
   GIT_IS_INITIALIZED: 'GIT_IS_INITIALIZED',
@@ -59,13 +60,33 @@ export const QUERY_KEYS = {
   GIT_REMOTES: 'GIT_REMOTES',
   GIT_BRANCHES: 'GIT_BRANCHES',
   GIT_STATUSES: 'GIT_STATUSES',
+  GIT_STATUS: 'GIT_STATUS',
+  GIT_DIFF: 'GIT_DIFF',
+  GET_AI_PROVIDERS: 'GET_AI_PROVIDERS',
+  GET_AI_PROVIDER_BY_ID: 'GET_AI_PROVIDER_BY_ID',
+  GET_ACTIVE_AI_PROVIDER: 'GET_ACTIVE_AI_PROVIDER',
+  GET_AI_PROVIDER_MODELS: 'GET_AI_PROVIDER_MODELS',
+  GET_ALL_AI_PROVIDER_MODELS: 'GET_ALL_AI_PROVIDER_MODELS',
+  AI_PROVIDER_HEALTH_CHECK: 'AI_PROVIDER_HEALTH_CHECK',
+  GET_CHAT_SESSIONS: 'GET_CHAT_SESSIONS',
+  GET_CHAT_SESSION_BY_ID: 'GET_CHAT_SESSION_BY_ID',
+  GET_CHAT_MESSAGES: 'GET_CHAT_MESSAGES',
+  GET_CHAT_MESSAGE_WITH_CONTEXT: 'GET_CHAT_MESSAGE_WITH_CONTEXT',
+  GET_CONTEXT_ITEMS: 'GET_CONTEXT_ITEMS',
+  GET_TOOL_CALLS: 'GET_TOOL_CALLS',
+  GET_SESSION_METADATA: 'GET_SESSION_METADATA',
 };
 
 export const AI_PROMPTS = {
-  ENHANCE_STAGING_MODEL:
+  BASIC_TRANSFORM_PROMPT_WITH_TABLE:
     'I have a raw source table {} with the following schema:\n\n' +
     '{}\n\n' +
     'And the current {} dbt model looks like this:\n\n' +
+    '{}\n\n' +
+    'We are using {}\n\n' +
+    'Please recommend only basic transformations following the best practices. Respond with the full formatted dbt model SQL using those basic transformations and nothing else.',
+  BASIC_TRANSFORM_PROMPT_WITHOUT_TABLE:
+    'The current {} dbt model looks like this:\n\n' +
     '{}\n\n' +
     'We are using {}\n\n' +
     'Please recommend only basic transformations following the best practices. Respond with the full formatted dbt model SQL using those basic transformations and nothing else.',
@@ -77,7 +98,7 @@ export const AI_PROMPTS = {
     'We are using {}\n\n' +
     "Return the updated SQL with correct replacements and do not explain the changes unless asked. Here's the SQL:\n\n{}",
   GENERATE_DASHBOARDS:
-    'Here is a business dbt model for the table {}. We are using {}.\n\nSuggest me some good SQL for Dashboards on. Generate 5-10 queries.\n\n{}',
+    'Here is a business dbt model for the table {}. Make sure you use the table name given in this prompt as reference. We are using {}. Make sure the SQL syntax matches the used DB.\n\nSuggest me some good SQL for Dashboards on. Generate 5-10 queries.\n\n{}',
 };
 
 export const MonacoCompletionItemKind = {

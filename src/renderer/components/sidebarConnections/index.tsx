@@ -304,7 +304,17 @@ export const ConnectionsSidebar: React.FC = () => {
 
           {/* No Connections State */}
           {connections.length === 0 && cloudConnections.length === 0 && (
-            <Box sx={{ mt: 3, textAlign: 'center', px: 2 }}>
+            <Box
+              sx={{
+                mt: 3,
+                textAlign: 'center',
+                px: 1,
+                maxWidth: '250px',
+                mx: 'auto',
+                wordWrap: 'break-word',
+                overflow: 'hidden',
+              }}
+            >
               <DatabaseIcon
                 sx={{
                   fontSize: 48,
@@ -313,13 +323,29 @@ export const ConnectionsSidebar: React.FC = () => {
                   mb: 1,
                 }}
               />
-              <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
+              <Typography
+                variant="body2"
+                color="text.secondary"
+                sx={{
+                  mb: 1,
+                  wordWrap: 'break-word',
+                  hyphens: 'auto',
+                }}
+              >
                 No connections found
               </Typography>
               <Typography
                 variant="caption"
                 color="text.secondary"
-                sx={{ display: 'block', mb: 2 }}
+                sx={{
+                  display: 'block',
+                  mb: 2,
+                  lineHeight: 1.4,
+                  wordWrap: 'break-word',
+                  overflowWrap: 'break-word',
+                  whiteSpace: 'normal',
+                  textAlign: 'center',
+                }}
               >
                 Create your first database connection or cloud source to get
                 started

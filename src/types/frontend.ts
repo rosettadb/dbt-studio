@@ -13,7 +13,9 @@ export type AppContextType = {
   fetchSchema: () => Promise<void>;
   isLoadingSchema?: boolean;
   isAiProviderSet: boolean;
-  setIsAiProviderSet: (isSet: boolean) => void;
+  // Chat sidebar toggle
+  isChatOpen?: boolean;
+  setIsChatOpen?: (open: boolean) => void;
 };
 
 export type ItemProps = {

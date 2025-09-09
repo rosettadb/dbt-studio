@@ -8,7 +8,7 @@ import { utils } from '../../../helpers';
 type Props = {
   isOpen: boolean;
   onClose: () => void;
-  successCallback?: () => void;
+  successCallback?: (filePath?: string) => void;
   type: 'file' | 'folder';
   path: string;
 };
@@ -34,8 +34,11 @@ export const NewFileModal: React.FC<Props> = ({
             successCallback?.();
             return;
           }
-          await projectsServices.createFile({ filePath: path, name: fileName });
-          successCallback?.();
+          const filePath = await projectsServices.createFile({
+            filePath: path,
+            name: fileName,
+          });
+          successCallback?.(filePath);
         }}
       >
         <TextField

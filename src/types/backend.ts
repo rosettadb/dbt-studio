@@ -193,6 +193,11 @@ export type Project = {
   isExtracted?: boolean;
   queryEditor?: string;
   connection?: ConnectionInput;
+  rawLayerDir?: string;
+  stagingDir?: string;
+  incrementalDir?: string;
+  businessDir?: string;
+  createTemplateFolders?: boolean;
 };
 
 export type SettingsType = {
@@ -207,6 +212,11 @@ export type SettingsType = {
   pythonPath: string;
   pythonBinary: string;
   isSetup?: string;
+  // AI Database Information (read-only)
+  mainDatabasePath?: string;
+  mainDatabaseSize?: string;
+  sqliteVersion?: string;
+  mainDatabaseStatus?: 'connected' | 'disconnected' | 'error';
 };
 
 export type FileDialogProperties = 'openFile' | 'openDirectory';
@@ -219,6 +229,32 @@ export type DataBase = {
   connections: ConnectionModel[];
   sources: CloudConnection[];
   recentItems: RecentItem[];
+};
+
+// Rosetta Version Management Types
+export type RosettaVersionInfo = {
+  currentVersion: string | null;
+  currentPath: string | null;
+  availableVersions: {
+    version: string;
+    releaseDate: string;
+    isPrerelease: boolean;
+    downloadUrl: string;
+    isNewer: boolean;
+    isOlder: boolean;
+    releaseNotes?: string;
+  }[];
+  latestStable: string;
+  latestPrerelease?: string;
+};
+
+export type InstallResult = {
+  success: boolean;
+  version: string;
+  path: string;
+  error?: string;
+  warnings?: string[];
+  installLog?: string[];
 };
 
 export type FileNode = {
@@ -385,3 +421,236 @@ export type ExecuteStatementType = {
   query: string;
   projectName: string;
 };
+
+// AI Provider Types
+export type AIProviderType = 'openai' | 'ollama' | 'gemini' | 'anthropic';
+
+export interface BaseProviderConfig {
+  id?: number;
+  name: string;
+  type: AIProviderType;
+  isActive: boolean;
+  settings: any; // Will be refined after provider configs are defined
+  created_at?: string;
+  updated_at?: string;
+}
+// Provider-specific configurations
+export interface OpenAIConfig extends BaseProviderConfig {
+  type: 'openai';
+  settings: {
+    apiKey: string; // Stored in keytar like existing 'openai-api-key'
+    model: string; // 'gpt-4o', 'gpt-3.5-turbo', etc.
+    temperature: number;
+    maxTokens: number;
+    organization?: string;
+  };
+}
+
+export interface OllamaConfig extends BaseProviderConfig {
+  type: 'ollama';
+  settings: {
+    baseUrl: string; // Default: 'http://localhost:11434'
+    model: string; // 'llama2', 'codellama', etc.
+    temperature: number;
+    timeout: number;
+    keepAlive?: string; // '5m', '10m', etc.
+  };
+}
+
+export interface GeminiConfig extends BaseProviderConfig {
+  type: 'gemini';
+  settings: {
+    apiKey: string; // Stored in keytar as 'gemini-api-key'
+    model: string; // 'gemini-pro', 'gemini-pro-vision'
+    temperature: number;
+    maxTokens: number;
+    projectId?: string;
+    location?: string; // 'us-central1', etc.
+  };
+}
+
+export interface AnthropicConfig extends BaseProviderConfig {
+  type: 'anthropic';
+  settings: {
+    apiKey: string; // Stored in keytar as 'anthropic-api-key'
+    model: string; // 'claude-3-opus', 'claude-3-sonnet', etc.
+    temperature: number;
+    maxTokens: number;
+    systemPrompt?: string;
+  };
+}
+
+// Union type for all provider configurations
+export type AIProviderConfig =
+  | OpenAIConfig
+  | OllamaConfig
+  | GeminiConfig
+  | AnthropicConfig;
+
+// Union type for provider settings
+export type ProviderSettings =
+  | OpenAIConfig['settings']
+  | OllamaConfig['settings']
+  | GeminiConfig['settings']
+  | AnthropicConfig['settings'];
+
+// Chat-related types
+export interface ChatConversation {
+  id: number;
+  title: string;
+  projectId?: number; // Reference to existing project
+  providerId: number;
+  createdAt: string;
+  updatedAt: string;
+  messageCount?: number; // Computed field
+  lastMessageAt?: string; // Computed field
+}
+
+export interface ChatMessage {
+  id: number;
+  conversationId: number;
+  role: 'user' | 'assistant' | 'system';
+  content: string;
+  metadata?: {
+    model?: string;
+    tokens?: number;
+    cost?: number;
+    duration?: number;
+    error?: string;
+  };
+  createdAt: string;
+}
+
+export interface PromptTemplate {
+  id: number;
+  name: string;
+  description?: string;
+  template: string;
+  category:
+    | 'model_enhancement'
+    | 'dashboard'
+    | 'chat'
+    | 'custom'
+    | 'sql_optimization';
+  providerType?: AIProviderType; // null for universal templates
+  isSystem: boolean;
+  variables?: string[]; // Extracted template variables
+  createdAt: string;
+}
+
+export interface AIUsageLog {
+  id: number;
+  providerId: number;
+  conversationId?: number;
+  operationType:
+    | 'chat'
+    | 'enhance_model'
+    | 'generate_dashboard'
+    | 'sql_optimization';
+  tokensUsed?: number;
+  costEstimate?: number;
+  durationMs: number;
+  status: 'success' | 'error' | 'partial';
+  errorMessage?: string;
+  createdAt: string;
+}
+
+export interface UsageStats {
+  totalRequests: number;
+  totalTokens: number;
+  totalCost: number;
+  averageResponseTime: number;
+  successRate: number;
+  byProvider: {
+    [providerId: number]: {
+      requests: number;
+      tokens: number;
+      cost: number;
+      avgResponseTime: number;
+    };
+  };
+  byOperation: {
+    [operation: string]: {
+      requests: number;
+      tokens: number;
+      avgResponseTime: number;
+    };
+  };
+}
+
+// Main Database Information Types
+export interface MainDatabaseInfo {
+  path: string;
+  size: string;
+  sqliteVersion: string;
+  status: 'connected' | 'disconnected' | 'error';
+  tablesCount: number;
+  conversationsCount: number;
+  messagesCount: number;
+  providersCount: number;
+  templatesCount: number;
+  lastBackup?: string;
+  createdAt: string;
+  lastModified: string;
+}
+
+export type DbtCommandType =
+  | 'run'
+  | 'test'
+  | 'compile'
+  | 'build'
+  | 'list'
+  | 'debug'
+  | 'docs:generate'
+  | 'docs:serve'
+  | 'deps'
+  | 'clean'
+  | 'seed';
+
+enum RosettaCommands {
+  Config = 'config',
+  Init = 'init',
+  Extract = 'extract',
+  Validate = 'validate',
+  Compile = 'compile',
+  Apply = 'apply',
+  Diff = 'diff',
+  Test = 'test',
+  Generate = 'generate',
+  Query = 'query',
+  DBT = 'dbt',
+  DBT_NEXT = 'dbt_next',
+  Drivers = 'drivers',
+}
+
+export type DbtNextCommandType =
+  | 'extract'
+  | 'staging'
+  | 'incremental'
+  | 'business';
+
+export enum CommandType {
+  Rosetta = 'rosetta',
+  Dbt = 'dbt',
+  DBTNext = 'dbt-next',
+}
+
+export type Command =
+  | {
+      command: RosettaCommands;
+      commandType: CommandType.Rosetta;
+      arguments: Map<string, string | number>;
+      options?: Map<string, string | number>;
+    }
+  | {
+      command: DbtCommandType;
+      commandType: CommandType.Dbt;
+      arguments: Map<string, string | number>;
+      options?: Map<string, string | number>;
+    }
+  | {
+      command: DbtNextCommandType;
+      commandType: CommandType.DBTNext;
+      arguments: Map<string, string | number>;
+      options?: Map<string, string | number>;
+    };

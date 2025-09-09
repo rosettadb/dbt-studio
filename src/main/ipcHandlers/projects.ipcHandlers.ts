@@ -1,5 +1,6 @@
 import { ipcMain } from 'electron';
-import { OpenAIService, ProjectsService } from '../services';
+import { ProjectsService } from '../services';
+import { AIProviderManager } from '../services/ai/providerManager.service';
 import {
   EnhanceModelResponseType,
   GenerateDashboardResponseType,
@@ -17,8 +18,19 @@ const registerProjectHandlers = () => {
 
   ipcMain.handle(
     'project:add',
-    async (_event, body: { name: string; connectionId?: string }) => {
-      return ProjectsService.addProject(body.name, body.connectionId);
+    async (
+      _event,
+      body: {
+        name: string;
+        connectionId?: string;
+        createTemplateFolders?: boolean;
+      },
+    ) => {
+      return ProjectsService.addProject(
+        body.name,
+        body.connectionId,
+        body.createTemplateFolders,
+      );
     },
   );
 
@@ -121,6 +133,13 @@ const registerProjectHandlers = () => {
   );
 
   ipcMain.handle(
+    'project:copyPath',
+    async (_event, body: { source: string; target: string }) => {
+      return ProjectsService.copyPath(body);
+    },
+  );
+
+  ipcMain.handle(
     'project:deleteItem',
     async (_event, body: { filePath: string }) => {
       await ProjectsService.deleteItem(body);
@@ -137,21 +156,49 @@ const registerProjectHandlers = () => {
       _event,
       prompt: string,
     ): Promise<GenerateDashboardResponseType[]> => {
-      const openAIService = new OpenAIService();
-      return openAIService.generateDashboardsQuery(prompt);
+      const response = await AIProviderManager.generateCompletion({
+        prompt,
+        type: 'generate-dashboard',
+      });
+      // Return the data in the expected format for backward compatibility
+      return response.data || [];
     },
   );
 
   ipcMain.handle(
     'project:enhanceModelQuery',
     async (_event, prompt: string): Promise<EnhanceModelResponseType> => {
-      const openAIService = new OpenAIService();
-      return openAIService.enhanceModelQuery(prompt);
+      const response = await AIProviderManager.generateCompletion({
+        prompt,
+        type: 'enhance-model',
+      });
+      // Return the data in the expected format for backward compatibility
+      return response.data || { content: response.content };
     },
   );
+
   ipcMain.handle('project:zipDir', async (_event, path: string) => {
     return ProjectsService.zipDirectory(path);
   });
+
+  ipcMain.handle(
+    'project:chooseDir',
+    async (_event, { path }: { path: string }) => {
+      return ProjectsService.chooseDir(path);
+    },
+  );
+  ipcMain.handle(
+    'project:downloadSeed',
+    async (
+      _event,
+      body: {
+        objectUrl: string;
+        project: Project;
+      },
+    ) => {
+      return ProjectsService.downloadSeed(body);
+    },
+  );
 };
 
 export default registerProjectHandlers;

@@ -32,6 +32,7 @@ import {
   Analytics,
 } from '@mui/icons-material';
 import type { PreviewResult } from '../../../types/frontend';
+import { formatFileSize } from '../../utils/fileUtils';
 
 interface DataPreviewModalProps {
   open: boolean;
@@ -40,6 +41,7 @@ interface DataPreviewModalProps {
   previewResult: PreviewResult | null;
   loading: boolean;
   error?: string;
+  fileSize?: number; // Size in bytes
 }
 
 /**
@@ -71,6 +73,7 @@ export const DataPreviewModal: React.FC<DataPreviewModalProps> = ({
   previewResult,
   loading,
   error,
+  fileSize,
 }) => {
   const [currentTab, setCurrentTab] = useState(0);
   const [searchTerm, setSearchTerm] = useState('');
@@ -336,6 +339,12 @@ export const DataPreviewModal: React.FC<DataPreviewModalProps> = ({
             <Typography variant="h4">
               {previewResult?.previewType || '—'}
             </Typography>
+          </Paper>
+          <Paper sx={{ p: 2 }}>
+            <Typography variant="body2" color="text.secondary">
+              File Size
+            </Typography>
+            <Typography variant="h4">{formatFileSize(fileSize)}</Typography>
           </Paper>
         </Box>
       </Box>

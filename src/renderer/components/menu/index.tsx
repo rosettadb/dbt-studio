@@ -9,12 +9,11 @@ import {
   CircularProgress,
 } from '@mui/material';
 import {
-  Menu as MenuIcon,
   Settings,
   ArrowDownward,
   FormatListNumbered,
 } from '@mui/icons-material';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { toast } from 'react-toastify';
 import {
   BranchDropdownToggle,
@@ -40,12 +39,15 @@ import { SimpleDropdownMenu } from '../simpleDropdown';
 import { Icon } from '../icon';
 import { LetterAvatar } from '../letterAvatar';
 import { useAppContext } from '../../hooks';
+import { CollapseLeftIcon, ExpandRightIcon } from './collapse-icons';
 
 export const Menu: React.FC = () => {
   const navigate = useNavigate();
+  const location = useLocation();
   const { mutateAsync: selectProject } = useSelectProject();
   const theme = useTheme();
-  const { isSidebarOpen, setIsSidebarOpen } = useAppContext();
+  const { isSidebarOpen, setIsSidebarOpen, isChatOpen, setIsChatOpen } =
+    useAppContext();
   const [commitModal, setCommitModal] = React.useState(false);
   const [isModalOpen, setIsModalOpen] = React.useState(false);
   const [newBranchModal, setNewBranchModal] = React.useState(false);
@@ -60,6 +62,7 @@ export const Menu: React.FC = () => {
   );
 
   const isProjectSelected = Boolean(project?.id);
+  const isSettingsActive = location.pathname.includes('/settings');
 
   const { mutate: push } = useGitPush({
     onSuccess: (data) => {
@@ -104,6 +107,8 @@ export const Menu: React.FC = () => {
     return branches.find((branch) => branch.checkedOut)?.name ?? '';
   }, [branches]);
 
+  const isOnProjectDetails = location.pathname === '/app';
+
   const handleMenuOpen = (event: React.MouseEvent<HTMLButtonElement>) => {
     event.stopPropagation();
     setAnchorEl(event.currentTarget);
@@ -122,17 +127,12 @@ export const Menu: React.FC = () => {
       <StyledToolbar variant="dense">
         <IconsContainer>
           <IconButton
-            color="default"
+            color="primary"
             aria-label="open drawer"
             onClick={() => setIsSidebarOpen(!isSidebarOpen)}
             edge="start"
-            disabled={!isProjectSelected}
-            sx={{
-              opacity: isProjectSelected ? 1 : 0.5,
-              cursor: isProjectSelected ? 'pointer' : 'not-allowed',
-            }}
           >
-            <MenuIcon />
+            {isSidebarOpen ? <CollapseLeftIcon /> : <ExpandRightIcon />}
           </IconButton>
           <Logo src={logo} alt="Rosetta Logo" onClick={handleLogoClick} />
           {isProjectSelected && (
@@ -210,6 +210,21 @@ export const Menu: React.FC = () => {
           )}
         </IconsContainer>
         <IconsContainer>
+          {isProjectSelected && isOnProjectDetails && (
+            <Tooltip title="AI Assistant (beta)">
+              <IconButton
+                onClick={() => setIsChatOpen?.(!isChatOpen)}
+                color="primary"
+              >
+                <Icon
+                  src={icons.bot}
+                  width={22}
+                  height={22}
+                  color={theme.palette.primary.main}
+                />
+              </IconButton>
+            </Tooltip>
+          )}
           {isProjectSelected && (
             <Tooltip title="Git Integration">
               <IconButton onClick={handleMenuOpen}>
@@ -300,8 +315,17 @@ export const Menu: React.FC = () => {
               aria-haspopup="true"
               onClick={() => navigate('/app/settings')}
               color="primary"
+              sx={{
+                backgroundColor: isSettingsActive
+                  ? theme.palette.divider
+                  : 'transparent',
+                '&:hover': {
+                  backgroundColor: theme.palette.action.hover,
+                },
+                transition: 'background-color 0.2s ease',
+              }}
             >
-              <Settings fontSize="small" />
+              <Settings sx={{ fontSize: 22 }} />
             </IconButton>
           </Tooltip>
         </IconsContainer>

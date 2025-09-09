@@ -4,12 +4,19 @@ export type TestChannels = 'test:create' | 'test:getAll';
 
 export type SettingsChannels =
   | 'settings:load'
+  | 'settings:load-with-db-info'
   | 'settings:save'
   | 'settings:dialog'
   | 'settings:checkCliUpdates'
   | 'settings:updateCli'
   | 'settings:getDbtPath'
-  | 'settings:usePathJoin';
+  | 'settings:usePathJoin'
+  | 'version:rosetta:check'
+  | 'version:rosetta:install'
+  | 'version:rosetta:uninstall'
+  | 'settings:reset-factory'
+  | 'settings:restart'
+  | 'settings:getFileName';
 
 export type ProjectChannels =
   | 'project:get'
@@ -26,6 +33,7 @@ export type ProjectChannels =
   | 'project:createFile'
   | 'project:deleteItem'
   | 'project:createFolder'
+  | 'project:copyPath'
   | 'project:select'
   | 'project:selected'
   | 'project:extractSchema'
@@ -35,7 +43,9 @@ export type ProjectChannels =
   | 'project:zipDir'
   | 'project:addFromVCS'
   | 'project:updateQuery'
-  | 'project:getQuery';
+  | 'project:getQuery'
+  | 'project:chooseDir'
+  | 'project:downloadSeed';
 
 export type ConnectorChannels =
   | 'connector:configure'
@@ -53,14 +63,92 @@ export type ConnectorChannels =
   | 'connector:delete';
 
 export type SourcesChannels =
-  | 'source:create'
+  | 'sources:create'
+  | 'sources:update'
+  | 'sources:delete'
+  | 'sources:getAll'
+  | 'sources:test'
   | 'source:list'
-  | 'source:get'
+  | 'source:create'
   | 'source:delete'
+  | 'source:get'
   | 'source:recentItems'
   | 'source:addRecentItem'
-  | 'source:clearRecentItems'
-  | 'source:deleteRecentItem';
+  | 'source:deleteRecentItem'
+  | 'source:clearRecentItems';
+
+export type AIChannels =
+  // Modern provider management channels (standardized)
+  | 'ai:provider:list'
+  | 'ai:provider:get'
+  | 'ai:provider:save'
+  | 'ai:provider:update'
+  | 'ai:provider:delete'
+  | 'ai:provider:get-active'
+  | 'ai:provider:get-active-info'
+  | 'ai:provider:set-active'
+  | 'ai:provider:deactivate-all'
+  | 'ai:provider:test-connection'
+  | 'ai:provider:test-temp-connection'
+  | 'ai:provider:get-models'
+  | 'ai:provider:get-all-models'
+  | 'ai:provider:get-status'
+  | 'ai:provider:get-credential'
+  | 'ai:provider:cleanup-api-keys'
+
+  // Provider manager
+  | 'ai:provider-manager:initialize'
+
+  // AI completion
+  | 'ai:completion:generate'
+
+  // Modern chat functionality (standardized naming)
+  | 'chat:conversation:list'
+  | 'chat:conversation:get'
+  | 'chat:conversation:get-with-context'
+  | 'chat:conversation:create'
+  | 'chat:conversation:update'
+  | 'chat:conversation:delete'
+  | 'chat:message:list'
+  | 'chat:message:get-with-context'
+  | 'chat:message:send'
+  | 'chat:message:stream'
+  | 'chat:message:stream-chunk'
+  | 'chat:message:cancel'
+  | 'chat:message:update'
+  | 'chat:message:delete'
+  | 'chat:message:regenerate'
+  | 'chat:message:add-with-context'
+
+  // Continue.dev context management
+  | 'chat:context:add-items'
+  | 'chat:context:get-items'
+  | 'chat:context:resolve-file'
+  | 'chat:context:resolve-folder'
+  | 'chat:context:search-codebase'
+  | 'chat:context:resolve-url'
+
+  // Continue.dev tool calls
+  | 'chat:tool:add-calls'
+  | 'chat:tool:get-calls'
+  | 'chat:tool:update-call'
+  | 'chat:tool:execute'
+  | 'chat:tool:cancel'
+
+  // Continue.dev session metadata
+  | 'chat:session:set-metadata'
+  | 'chat:session:get-metadata'
+  | 'chat:session:delete-metadata'
+
+  // Modern template functionality (standardized naming)
+  | 'ai:template:list'
+  | 'ai:template:save'
+  | 'ai:template:update'
+  | 'ai:template:delete'
+
+  // Modern usage functionality (standardized naming)
+  | 'ai:usage:log'
+  | 'ai:usage:stats';
 
 export type CliChannels =
   | 'cli:run'
@@ -87,7 +175,8 @@ export type GitChannels =
   | 'git:commit'
   | 'git:checkout'
   | 'git:fileDiff'
-  | 'git:fileStatusList';
+  | 'git:fileStatusList'
+  | 'git:fileStatus';
 
 export type UtilChannels =
   | 'open:external'
@@ -136,7 +225,8 @@ export type Channels =
   | SecureStorageChannels
   | UpdateChannels
   | CloudExplorerChannels
-  | SourcesChannels;
+  | SourcesChannels
+  | AIChannels;
 
 export type ConfigureConnectionBody = {
   projectId?: string;

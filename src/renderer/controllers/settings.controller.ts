@@ -12,6 +12,8 @@ import {
   CustomError,
   FileDialogProperties,
   SettingsType,
+  RosettaVersionInfo,
+  InstallResult,
 } from '../../types/backend';
 import { QUERY_KEYS } from '../config/constants';
 
@@ -22,6 +24,18 @@ export const useGetSettings = (
     queryKey: [QUERY_KEYS.GET_SETTINGS],
     queryFn: async () => {
       return settingsServices.getSettings();
+    },
+    ...customOptions,
+  });
+};
+
+export const useGetSettingsWithDatabaseInfo = (
+  customOptions?: UseQueryOptions<SettingsType, CustomError, SettingsType>,
+) => {
+  return useQuery({
+    queryKey: [QUERY_KEYS.GET_SETTINGS, 'with-db-info'],
+    queryFn: async () => {
+      return settingsServices.getSettingsWithDatabaseInfo();
     },
     ...customOptions,
   });
@@ -106,6 +120,86 @@ export const useUpdateCli = (
     onSuccess: async (...args) => {
       await queryClient.invalidateQueries([QUERY_KEYS.GET_SETTINGS]);
       await queryClient.invalidateQueries([QUERY_KEYS.CHECK_CLI_UPDATES]);
+      onCustomSuccess?.(...args);
+    },
+    onError: (...args) => {
+      onCustomError?.(...args);
+    },
+  });
+};
+
+export const useResetFactorySettings = (
+  customOptions?: UseMutationOptions<void, CustomError, void>,
+): UseMutationResult<void, CustomError, void> => {
+  const { onSuccess: onCustomSuccess, onError: onCustomError } =
+    customOptions || {};
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async () => {
+      return settingsServices.resetFactorySettings();
+    },
+    onSuccess: async (...args) => {
+      // Invalidate all queries since we're resetting everything
+      await queryClient.invalidateQueries();
+      onCustomSuccess?.(...args);
+    },
+    onError: (...args) => {
+      onCustomError?.(...args);
+    },
+  });
+};
+
+// Rosetta version management controllers
+export const useCheckRosettaVersions = (
+  customOptions?: UseMutationOptions<RosettaVersionInfo, CustomError, void>,
+): UseMutationResult<RosettaVersionInfo, CustomError, void> => {
+  const { onSuccess: onCustomSuccess, onError: onCustomError } =
+    customOptions || {};
+  return useMutation({
+    mutationFn: async () => {
+      return settingsServices.checkRosettaVersions();
+    },
+    onSuccess: (...args) => {
+      onCustomSuccess?.(...args);
+    },
+    onError: (...args) => {
+      onCustomError?.(...args);
+    },
+  });
+};
+
+export const useInstallRosettaVersion = (
+  customOptions?: UseMutationOptions<InstallResult, CustomError, string>,
+): UseMutationResult<InstallResult, CustomError, string> => {
+  const { onSuccess: onCustomSuccess, onError: onCustomError } =
+    customOptions || {};
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (version: string) => {
+      return settingsServices.installRosettaVersion(version);
+    },
+    onSuccess: async (...args) => {
+      await queryClient.invalidateQueries([QUERY_KEYS.GET_SETTINGS]);
+      onCustomSuccess?.(...args);
+    },
+    onError: (...args) => {
+      onCustomError?.(...args);
+    },
+  });
+};
+
+export const useUninstallRosetta = (
+  customOptions?: UseMutationOptions<void, CustomError, void>,
+): UseMutationResult<void, CustomError, void> => {
+  const { onSuccess: onCustomSuccess, onError: onCustomError } =
+    customOptions || {};
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async () => {
+      return settingsServices.uninstallRosetta();
+    },
+    onSuccess: async (...args) => {
+      await queryClient.invalidateQueries([QUERY_KEYS.GET_SETTINGS]);
       onCustomSuccess?.(...args);
     },
     onError: (...args) => {

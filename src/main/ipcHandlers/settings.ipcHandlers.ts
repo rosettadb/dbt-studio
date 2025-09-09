@@ -1,14 +1,21 @@
-import { BrowserWindow, dialog, ipcMain } from 'electron';
+import { BrowserWindow, dialog, ipcMain, app } from 'electron';
 import { initializeDataStorage } from '../utils/setupHelpers';
 import { FileDialogProperties, SettingsType } from '../../types/backend';
 import { SettingsService } from '../services';
+import { SettingsChannels } from '../../types/ipc';
 
-const handlerChannels = [
+const handlerChannels: SettingsChannels[] = [
   'settings:load',
+  'settings:load-with-db-info',
   'settings:save',
   'settings:checkCliUpdates',
   'settings:updateCli',
   'settings:dialog',
+  'version:rosetta:check',
+  'version:rosetta:install',
+  'version:rosetta:uninstall',
+  'settings:reset-factory',
+  'settings:restart',
 ];
 
 const removeSettingsIpcHandlers = () => {
@@ -23,6 +30,10 @@ const registerSettingsHandlers = (mainWindow: BrowserWindow) => {
 
   ipcMain.handle('settings:load', async () => {
     return SettingsService.loadSettings();
+  });
+
+  ipcMain.handle('settings:load-with-db-info', async () => {
+    return SettingsService.loadSettingsWithDatabaseInfo();
   });
 
   ipcMain.handle('settings:save', async (_event, body: SettingsType) => {
@@ -63,6 +74,32 @@ const registerSettingsHandlers = (mainWindow: BrowserWindow) => {
       return result.filePaths;
     },
   );
+
+  // Rosetta version management handlers
+  ipcMain.handle('version:rosetta:check', async () => {
+    return SettingsService.checkRosettaVersions();
+  });
+
+  ipcMain.handle('version:rosetta:install', async (_event, version: string) => {
+    return SettingsService.installRosettaVersion(version);
+  });
+
+  ipcMain.handle('version:rosetta:uninstall', async () => {
+    return SettingsService.uninstallRosetta();
+  });
+
+  ipcMain.handle('settings:reset-factory', async () => {
+    return SettingsService.resetFactorySettings();
+  });
+
+  ipcMain.handle('settings:restart', async () => {
+    app.relaunch();
+    app.exit(0);
+  });
+
+  ipcMain.handle('settings:getFileName', async (_event, body: string[]) => {
+    return SettingsService.getFileName(body);
+  });
 };
 
 export default registerSettingsHandlers;

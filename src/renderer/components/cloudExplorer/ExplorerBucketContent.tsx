@@ -46,6 +46,10 @@ import {
 import type { CloudProvider } from '../../../types/frontend';
 import { InlineDataPreview } from './InlineDataPreview';
 import useSecureStorage from '../../hooks/useSecureStorage';
+import { formatFileSize, isPreviewSupported } from '../../utils/fileUtils';
+import { DBTProjects } from '../sidebar/icons';
+import { useGetSelectedProject } from '../../controllers';
+import { projectsServices } from '../../services';
 
 interface ExplorerBucketContentProps {
   connectionId: string;
@@ -58,6 +62,7 @@ export const ExplorerBucketContent: React.FC<ExplorerBucketContentProps> = ({
 }) => {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
+  const { data: project } = useGetSelectedProject();
   const prefix = searchParams.get('prefix') || '';
   const [searchTerm, setSearchTerm] = useState('');
   const [downloadUrls, setDownloadUrls] = useState<Record<string, string>>({});
@@ -65,6 +70,7 @@ export const ExplorerBucketContent: React.FC<ExplorerBucketContentProps> = ({
   const [previewFile, setPreviewFile] = useState<{
     fileName: string;
     objectName: string;
+    fileSize?: number;
   } | null>(null);
   const [secureConfig, setSecureConfig] = useState<any | null>(null);
 
@@ -191,6 +197,40 @@ export const ExplorerBucketContent: React.FC<ExplorerBucketContentProps> = ({
     }
   };
 
+  const handleDownloadAsSeed = async (objectName: string) => {
+    if (!project) {
+      // TODO - need to show some alert or something here
+      return;
+    }
+    if (downloadUrls[objectName]) {
+      // window.open(downloadUrls[objectName], '_blank');
+      await projectsServices.downloadSeed(downloadUrls[objectName], project);
+      return;
+    }
+
+    if (!connection || !secureConfig) return;
+
+    try {
+      setLoadingUrls((prev) => ({ ...prev, [objectName]: true }));
+
+      const url = await getDownloadUrl.mutateAsync({
+        provider: connection.provider,
+        config: secureConfig,
+        bucketName,
+        objectName,
+      });
+      if (url) {
+        setDownloadUrls((prev) => ({ ...prev, [objectName]: url }));
+        await projectsServices.downloadSeed(url, project);
+      }
+    } catch (error) {
+      // eslint-disable-next-line no-console
+      console.error('Error getting download URL:', error);
+    } finally {
+      setLoadingUrls((prev) => ({ ...prev, [objectName]: false }));
+    }
+  };
+
   const getFileIcon = (name: string, isDirectory: boolean) => {
     if (isDirectory) return <Folder color="action" />;
 
@@ -209,41 +249,16 @@ export const ExplorerBucketContent: React.FC<ExplorerBucketContentProps> = ({
     return <InsertDriveFile color="action" />;
   };
 
-  const formatFileSize = (bytes: number) => {
-    if (bytes === 0) return '0 Bytes';
-    const k = 1024;
-    const sizes = ['Bytes', 'KB', 'MB', 'GB'];
-    const i = Math.floor(Math.log(bytes) / Math.log(k));
-    return `${parseFloat((bytes / k ** i).toFixed(2))} ${sizes[i]}`;
-  };
-
-  // Check if file supports DuckDB preview
-  const isPreviewSupported = (fileName: string): boolean => {
-    const extension = fileName.split('.').pop()?.toLowerCase();
-    const supportedTypes = [
-      'parquet',
-      'csv',
-      'json',
-      'jsonl',
-      'xlsx',
-      'xls',
-      'sqlite',
-      'db',
-      'arrow',
-      'avro',
-      'delta',
-      'iceberg',
-    ];
-    return supportedTypes.includes(extension || '');
-  };
-
   const handlePreview = async (objectName: string) => {
     if (!connection || !secureConfig) return;
 
     const fileName = objectName.split('/').pop() || objectName;
+    const targetObject = objects.find((obj) => obj.name === objectName);
+
     setPreviewFile({
       fileName,
       objectName,
+      fileSize: targetObject?.size,
     });
 
     // Trigger the preview data fetch
@@ -299,6 +314,7 @@ export const ExplorerBucketContent: React.FC<ExplorerBucketContentProps> = ({
         loading={previewData.isLoading}
         error={previewData.error ? String(previewData.error) : undefined}
         onBack={handleBackToFiles}
+        fileSize={previewFile.fileSize}
       />
     );
   }
@@ -477,7 +493,9 @@ export const ExplorerBucketContent: React.FC<ExplorerBucketContentProps> = ({
                           <TableCell align="right">
                             {object.isDirectory
                               ? '-'
-                              : formatFileSize(object.size)}
+                              : formatFileSize(object.size, {
+                                  showZeroAsNA: false,
+                                })}
                           </TableCell>
                           <TableCell align="right">
                             {object.updated
@@ -518,6 +536,24 @@ export const ExplorerBucketContent: React.FC<ExplorerBucketContentProps> = ({
                                     )}
                                   </IconButton>
                                 </Tooltip>
+                                {project && (
+                                  <Tooltip title="Download as seed">
+                                    <IconButton
+                                      size="small"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        handleDownloadAsSeed(object.name);
+                                      }}
+                                      disabled={loadingUrls[object.name]}
+                                    >
+                                      {loadingUrls[object.name] ? (
+                                        <CircularProgress size={20} />
+                                      ) : (
+                                        <DBTProjects />
+                                      )}
+                                    </IconButton>
+                                  </Tooltip>
+                                )}
                               </Box>
                             )}
                           </TableCell>

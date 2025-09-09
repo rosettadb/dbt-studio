@@ -3,9 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import {
   Button,
   TextField,
-  Typography,
   Box,
-  styled,
   InputAdornment,
   IconButton,
   Menu,
@@ -39,8 +37,10 @@ import {
   useGetProjects,
   useGetSettings,
   useSelectProject,
+  useUpdateProject,
 } from '../../controllers';
 import {
+  AddConnectionModal,
   CloneRepoModal,
   Icon,
   GetStartedModal,
@@ -50,178 +50,28 @@ import { icons } from '../../../../assets';
 import connectionIcons from '../../../../assets/connectionIcons';
 import { AppLayout } from '../../layouts';
 import { Project, SupportedConnectionTypes } from '../../../types/backend';
-
-const ProjectSelectionContainer = styled(Box)`
-  padding: 0.5rem 2rem 2rem;
-  max-width: 1200px;
-  margin: 0 auto;
-  height: 100%;
-  display: flex;
-  flex-direction: column;
-`;
-
-const HeaderContainer = styled(Box)`
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 1.5rem;
-  gap: 1rem;
-`;
-
-const SearchContainer = styled(Box)`
-  flex-grow: 1;
-  max-width: 400px;
-`;
-
-const ProjectsContainer = styled(Box)`
-  display: flex;
-  flex-direction: column;
-  gap: 1px;
-  border-top: 1px solid ${({ theme }) => theme.palette.divider};
-  border-bottom: 1px solid ${({ theme }) => theme.palette.divider};
-  flex: 1;
-  overflow-y: auto;
-  min-height: 0; /* Critical for Firefox */
-`;
-
-const ProjectCard = styled(Box)`
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 12px 16px;
-  cursor: pointer;
-  transition: background-color 0.2s;
-  border-bottom: 1px solid ${({ theme }) => theme.palette.divider};
-
-  &:last-child {
-    border-bottom: none;
-  }
-
-  &:hover {
-    background-color: ${({ theme }) => theme.palette.action.hover};
-  }
-`;
-
-const ProjectInfo = styled(Box)`
-  flex-grow: 1;
-  overflow: hidden;
-`;
-
-const ProjectTitle = styled(Typography)`
-  font-weight: 500;
-  margin-bottom: 4px;
-`;
-
-const ProjectPath = styled(Typography)`
-  font-size: 12px;
-  color: ${({ theme }) => theme.palette.text.secondary};
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-`;
-
-const ConnectionName = styled(Typography)`
-  font-size: 11px;
-  color: ${({ theme }) => theme.palette.primary.main};
-  font-weight: 500;
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  margin-top: 2px;
-`;
-
-const ProjectActions = styled(Box)`
-  display: flex;
-  align-items: center;
-  gap: 8px;
-`;
-
-const EmptyStateContainer = styled(Box)`
-  text-align: center;
-  padding: 2rem;
-  margin-top: 2rem;
-  border-radius: 8px;
-  border: 0.5px solid ${({ theme }) => theme.palette.divider};
-  overflow-y: auto;
-  flex: 1;
-`;
-
-const EmptyStateIcon = styled(Box)`
-  margin-bottom: 1rem;
-  color: ${({ theme }) => theme.palette.text.secondary};
-  opacity: 0.7;
-
-  svg {
-    font-size: 3rem;
-  }
-`;
-
-const EmptyStateTitle = styled(Typography)`
-  font-weight: 500;
-  margin-bottom: 1rem;
-  font-size: 1.5rem;
-  color: ${({ theme }) => theme.palette.text.primary};
-`;
-
-const EmptyStateDescription = styled(Typography)`
-  color: ${({ theme }) => theme.palette.text.secondary};
-  margin: 0 auto 2rem;
-  line-height: 1.6;
-`;
-
-const TaglineContainer = styled(Box)`
-  text-align: center;
-  margin-bottom: 1.5rem;
-  margin-top: 0.5rem;
-  padding: 0.75rem;
-  border-radius: 8px;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 0.25rem;
-`;
-
-const TaglineText = styled(Typography)`
-  font-size: 1rem;
-  font-weight: 500;
-  color: ${({ theme }) => theme.palette.primary.main};
-`;
-
-const ProjectIcon = styled('img')`
-  width: 24px;
-  height: 24px;
-  margin-right: 12px;
-  flex-shrink: 0;
-  border-radius: 4px;
-  object-fit: contain;
-`;
-
-const ProjectMuiIcon = styled(Box)`
-  width: 24px;
-  height: 24px;
-  margin-right: 12px;
-  flex-shrink: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-`;
-
-const ProjectCardContent = styled(Box)`
-  display: flex;
-  align-items: center;
-  flex-grow: 1;
-  overflow: hidden;
-`;
-
-const ConnectionIcon = styled('img')`
-  width: 20px;
-  height: 20px;
-  margin-right: 6px;
-  flex-shrink: 0;
-  border-radius: 2px;
-  object-fit: contain;
-`;
+import {
+  ConnectionIcon,
+  EmptyStateContainer,
+  EmptyStateDescription,
+  EmptyStateIcon,
+  EmptyStateTitle,
+  HeaderContainer,
+  ProjectActions,
+  ProjectCard,
+  ProjectCardContent,
+  ProjectIcon,
+  ProjectInfo,
+  ProjectMuiIcon,
+  ProjectPath,
+  ProjectsContainer,
+  ProjectSelectionContainer,
+  ProjectTitle,
+  SearchContainer,
+  TaglineContainer,
+  TaglineText,
+} from './styles';
+import { pathJoin } from '../../services/settings.services';
 
 const SelectProject: React.FC = () => {
   const navigate = useNavigate();
@@ -237,6 +87,7 @@ const SelectProject: React.FC = () => {
   const [isAddingProject, setIsAddingProject] = React.useState(false);
   const [newProject, setNewProject] = React.useState({
     name: '',
+    createTemplateFolders: true,
   });
   const { mutate: getFiles } = useFilePicker();
 
@@ -256,12 +107,18 @@ const SelectProject: React.FC = () => {
   } | null>(null);
   const [isGetStartedModalOpen, setIsGetStartedModalOpen] =
     React.useState(false);
+  const [isAddConnectionModalOpen, setIsAddConnectionModalOpen] =
+    React.useState(false);
+  const [selectedProjectForConnection, setSelectedProjectForConnection] =
+    React.useState<Project | null>(null);
 
   const { mutate: deleteProject } = useDeleteProject({
     onSuccess: () => {
       toast.info(`Project ${projectToDelete?.name} successfully deleted!`);
     },
   });
+
+  const { mutate: updateProject } = useUpdateProject();
 
   const getConnectionIcon = (project: Project) => {
     const connectionType = project?.connection?.type;
@@ -379,20 +236,17 @@ const SelectProject: React.FC = () => {
       return;
     }
 
-    if (!selectedConnection) {
-      toast.error('Please select a database connection or create a new one.');
-      return;
-    }
-
     try {
+      const path = await pathJoin(defaultProjectPath, newProject.name);
       const project = await projectsServices.addProject({
-        name: `${defaultProjectPath}/${newProject.name}`,
+        name: path,
         connectionId: selectedConnection || undefined,
+        createTemplateFolders: newProject.createTemplateFolders,
       });
       await projectsServices.selectProject({ projectId: project.id });
       toast.success(`Project ${project.name} created successfully!`);
       setIsAddingProject(false);
-      setNewProject({ name: '' });
+      setNewProject({ name: '', createTemplateFolders: true });
       setSelectedConnection('');
       navigate('/app/loading');
     } catch (error) {
@@ -402,6 +256,26 @@ const SelectProject: React.FC = () => {
 
   const handleGetStarted = () => {
     setIsGetStartedModalOpen(true);
+  };
+
+  const handleAddConnection = (project: Project) => {
+    setSelectedProjectForConnection(project);
+    setIsAddConnectionModalOpen(true);
+  };
+
+  const handleConnectionModalClose = () => {
+    setIsAddConnectionModalOpen(false);
+    setSelectedProjectForConnection(null);
+  };
+
+  const handleRemoveConnection = (project: Project) => {
+    updateProject({
+      ...project,
+      connectionId: undefined,
+    });
+    toast.success(
+      `Connection removed from project ${project.name} successfully!`,
+    );
   };
 
   const filteredProjects = projects.filter((project) =>
@@ -515,10 +389,34 @@ const SelectProject: React.FC = () => {
                 />
               )}
               {!project.connection?.name && (
-                <ConnectionName sx={{ color: 'text.disabled', mr: 1 }}>
-                  <DatabaseIcon sx={{ fontSize: 12 }} />
-                  No connection configured
-                </ConnectionName>
+                <Chip
+                  label={
+                    <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                      <DatabaseIcon sx={{ fontSize: 12, mr: 0.5 }} />
+                      No connection
+                    </Box>
+                  }
+                  size="small"
+                  sx={{
+                    mr: 1,
+                    fontWeight: 500,
+                    fontSize: 12,
+                    textTransform: 'none',
+                    bgcolor: 'background.paper',
+                    color: 'text.disabled',
+                    border: '1px solid',
+                    borderColor: 'divider',
+                    cursor: 'pointer',
+                    '&:hover': {
+                      bgcolor: 'action.hover',
+                    },
+                  }}
+                  title="Click to add database connection"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleAddConnection(project);
+                  }}
+                />
               )}
               <IconButton
                 size="small"
@@ -543,6 +441,39 @@ const SelectProject: React.FC = () => {
             horizontal: 'right',
           }}
         >
+          {!projects.find((p) => p.id === activeProjectId)?.connection
+            ?.name && (
+            <MenuItem
+              onClick={() => {
+                const project = projects.find((p) => p.id === activeProjectId);
+                if (project) {
+                  handleAddConnection(project);
+                }
+                handleCloseMenu();
+              }}
+            >
+              <ListItemIcon>
+                <Cable fontSize="small" color="primary" />
+              </ListItemIcon>
+              <ListItemText>Add Connection</ListItemText>
+            </MenuItem>
+          )}
+          {projects.find((p) => p.id === activeProjectId)?.connection?.name && (
+            <MenuItem
+              onClick={() => {
+                const project = projects.find((p) => p.id === activeProjectId);
+                if (project) {
+                  handleRemoveConnection(project);
+                }
+                handleCloseMenu();
+              }}
+            >
+              <ListItemIcon>
+                <Cable fontSize="small" color="error" />
+              </ListItemIcon>
+              <ListItemText>Remove Connection</ListItemText>
+            </MenuItem>
+          )}
           <MenuItem onClick={handleDeleteProject}>
             <ListItemIcon>
               <DeleteIcon fontSize="small" color="error" />
@@ -581,9 +512,7 @@ const SelectProject: React.FC = () => {
           <>
             <TaglineContainer>
               {/* <TaglineLogo src={logo} alt="RosettaDB Logo" /> */}
-              <TaglineText variant="h6">
-                Turn Raw Data into Business Insights—Faster with RosettaDB
-              </TaglineText>
+              <TaglineText>Manage your dbt projects</TaglineText>
             </TaglineContainer>
 
             <HeaderContainer>
@@ -640,7 +569,7 @@ const SelectProject: React.FC = () => {
                     Clone
                   </Button>
                 </Tooltip>
-                <Tooltip title="Load files from folder...">
+                <Tooltip title="Import project from folder or compressed file...">
                   <Button
                     variant="contained"
                     color="primary"
@@ -653,18 +582,43 @@ const SelectProject: React.FC = () => {
                             projectId: project.id,
                           });
                           setIsAddingProject(false);
-                          setNewProject({ name: '' });
-                          toast.success(
-                            `Project ${project.name} loaded successfully!`,
-                          );
-                          navigate('/app');
+                          setNewProject({
+                            name: '',
+                            createTemplateFolders: true,
+                          });
+
+                          // Show different success messages based on whether it was extracted
+                          if (project.isExtracted) {
+                            toast.success(
+                              `Project ${project.name} imported from compressed file successfully!`,
+                            );
+                          } else {
+                            toast.success(
+                              `Project ${project.name} loaded successfully!`,
+                            );
+                          }
+
+                          navigate('/app/loading');
                         } else {
-                          toast.error('Failed to load project from folder.');
+                          toast.error('Failed to import project.');
                         }
-                      } catch (error) {
-                        toast.error(
-                          'Failed to load project from folder. Please try again.',
-                        );
+                      } catch (error: any) {
+                        // Show more specific error messages
+                        if (error.message.includes('compressed')) {
+                          toast.error(
+                            'Failed to extract compressed file. Please ensure it contains a valid dbt project.',
+                          );
+                        } else if (error.message.includes('validation')) {
+                          toast.error(
+                            'Invalid dbt project structure. Please ensure the folder contains a valid dbt_project.yml file.',
+                          );
+                        } else if (error.message.includes('already exists')) {
+                          toast.error(error.message);
+                        } else {
+                          toast.error(
+                            'Failed to import project. Please try again.',
+                          );
+                        }
                       }
                     }}
                   >
@@ -672,7 +626,7 @@ const SelectProject: React.FC = () => {
                       sx={{ marginRight: 1 }}
                       fontSize="small"
                     />
-                    Load
+                    Import
                   </Button>
                 </Tooltip>
                 <Tooltip title="Create a new project">
@@ -731,6 +685,16 @@ const SelectProject: React.FC = () => {
             onClose={() => setIsCloneModalOpen(false)}
           />
         )}
+        <AddConnectionModal
+          isOpen={isAddConnectionModalOpen}
+          onClose={handleConnectionModalClose}
+          project={selectedProjectForConnection}
+          connections={connections}
+          onSuccess={() => {
+            // Projects will be automatically refreshed via React Query
+          }}
+          onUpdateProject={updateProject}
+        />
       </ProjectSelectionContainer>
     </AppLayout>
   );

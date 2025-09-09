@@ -2,30 +2,47 @@ import React from 'react';
 import { Navigate, useNavigate } from 'react-router-dom';
 import {
   AutoAwesome,
+  AutoFixHigh,
   Cable,
-  PlayCircleOutline,
-  StopCircleOutlined,
+  Delete,
+  Edit,
 } from '@mui/icons-material';
-import { IconButton, Tooltip } from '@mui/material';
+import {
+  Box,
+  IconButton,
+  ListItemIcon,
+  ListItemText,
+  Menu,
+  MenuItem,
+  Slide,
+  Tooltip,
+} from '@mui/material';
 import { toast } from 'react-toastify';
 import yaml from 'js-yaml';
 import {
-  BusinessQueryModal,
+  AddConnectionModal,
   Editor,
   FileTreeViewer,
   GenerateAiQueriesModal,
   Loader,
-  TerminalLayout,
-  SplitButton,
-  Icon,
+  ModelSplitButton,
   NoAiSetModal,
+  ProjectDbtSplitButton,
+  SplitButton,
+  TerminalLayout,
+  BusinessModal,
+  AiPromptModal,
 } from '../../components';
 import {
   useGetConnectionById,
+  useGetConnections,
+  useGetFileContent,
   useGetFileStatuses,
   useGetProjectFiles,
   useGetSelectedProject,
   useGetSettings,
+  useSaveFileContent,
+  useUpdateProject,
 } from '../../controllers';
 import { projectsServices } from '../../services';
 import {
@@ -38,31 +55,47 @@ import {
   NoFileSelected,
   SelectedFile,
 } from './styles';
-import { useRosettaDBT, useDbt, useProcess } from '../../hooks';
-import { GenerateDashboardResponseType, Project } from '../../../types/backend';
+import { useDbt, useRosettaDBT } from '../../hooks';
+import {
+  Command,
+  CommandType,
+  GenerateDashboardResponseType,
+  Project,
+  SupportedConnectionTypes,
+} from '../../../types/backend';
 import { AI_PROMPTS } from '../../config/constants';
 import { utils } from '../../helpers';
 import { AppLayout } from '../../layouts';
-import { icons } from '../../../../assets';
-import { convertToSourcePath } from '../../helpers/utils';
 import { AppContext } from '../../context';
+import ChatScreen from '../chat';
+import { getFileName } from '../../services/settings.services';
 
 const ProjectDetails: React.FC = () => {
   const navigate = useNavigate();
+  const [selectedFilePath, setSelectedFilePath] = React.useState<string>();
+
   const { data: project, isLoading, refetch } = useGetSelectedProject();
   const { data: connection } = useGetConnectionById(project?.connectionId);
   const { data: settings } = useGetSettings();
-  const { isAiProviderSet } = React.useContext(AppContext);
+  const { mutate: updateFileContent } = useSaveFileContent();
+  const { data: fileContent } = useGetFileContent(selectedFilePath);
+
+  const { isAiProviderSet, isChatOpen } = React.useContext(AppContext);
   const [queryData, setQueryData] = React.useState<
     GenerateDashboardResponseType[]
   >([]);
   const [isQueryOpen, setIsQueryOpen] = React.useState(false);
   const [isLoadingQuery, setIsLoadingQuery] = React.useState(false);
-  const [selectedFilePath, setSelectedFilePath] = React.useState<string>();
-  const [fileContent, setFileContent] = React.useState<string>();
-  const [businessQueryModal, setBusinessQueryModal] = React.useState(false);
+  const [businessQueryModal, setBusinessQueryModal] = React.useState<string>();
   const [noAiSetModal, setNoAiSetModal] = React.useState(false);
-  const { start, stop, isRunning } = useProcess();
+  const [aiTransformationPrompt, setAiTransformationPrompt] =
+    React.useState<string>();
+  const [isAddConnectionModalOpen, setIsAddConnectionModalOpen] =
+    React.useState(false);
+  const [connectionMenuAnchor, setConnectionMenuAnchor] =
+    React.useState<HTMLElement | null>(null);
+  const [aiTransformationResponse, setAitTransformationResponse] =
+    React.useState<string>();
 
   const {
     data: directories,
@@ -76,21 +109,12 @@ const ProjectDetails: React.FC = () => {
         await new Promise((resolve) => {
           setTimeout(resolve, 2000);
         });
-        await projectsServices.postRosettaDBTCopy(project);
         await fetchDirectories();
-        refetch();
       }
     },
   );
 
-  const {
-    run: dbtRun,
-    test: dbtTest,
-    compile: dbtCompile,
-    debug: dbtDebug,
-    docsGenerate: dbtDocsGenerate,
-    isRunning: isRunningDbt,
-  } = useDbt(async () => {
+  const { isRunning: isRunningDbt } = useDbt(async () => {
     await fetchDirectories();
   });
 
@@ -98,6 +122,37 @@ const ProjectDetails: React.FC = () => {
     project?.path ?? '',
     { enabled: !!project?.path },
   );
+
+  const { data: connections = [] } = useGetConnections();
+  const { mutate: updateProject } = useUpdateProject();
+
+  const handleAddConnection = () => {
+    setIsAddConnectionModalOpen(true);
+  };
+
+  const handleConnectionModalClose = () => {
+    setIsAddConnectionModalOpen(false);
+  };
+
+  const handleRemoveConnection = () => {
+    if (project) {
+      updateProject({
+        ...project,
+        connectionId: undefined,
+      });
+      setSelectedFilePath(undefined);
+      toast.success('Connection removed from project successfully!');
+    }
+    setConnectionMenuAnchor(null);
+  };
+
+  const handleConnectionMenuOpen = (event: React.MouseEvent<HTMLElement>) => {
+    setConnectionMenuAnchor(event.currentTarget);
+  };
+
+  const handleConnectionMenuClose = () => {
+    setConnectionMenuAnchor(null);
+  };
 
   React.useEffect(() => {
     const fetchData = async () => {
@@ -108,131 +163,69 @@ const ProjectDetails: React.FC = () => {
     fetchData();
   }, [project]);
 
-  const isDbtConfigured = React.useMemo(() => {
-    return settings?.dbtPath && settings.dbtPath.trim() !== '';
-  }, [settings?.dbtPath]);
+  const generateBasicTransformationPrompt = async (
+    filePath: string,
+    _project: Project,
+  ) => {
+    const fileName = await getFileName(filePath);
+    const tables = await projectsServices.extractSchemaFromModelYaml(_project);
+    const { schema, table } = utils.extractSchemaAndTable(fileName);
 
-  const enhanceModel = async () => {
-    if (!isAiProviderSet) {
-      toast.error('Open AI API Key not provided');
-      return;
-    }
+    const tableStructure = tables.find(
+      (tmpTable) => tmpTable.name === table && tmpTable.schema === schema,
+    );
 
-    if (!selectedFilePath) {
-      toast.error('No file selected');
-      return;
-    }
-
-    setIsLoadingQuery(true);
-
-    try {
-      const response = await projectsServices.enhanceModelQuery(
-        utils.format(
-          AI_PROMPTS.ENHANCE_ENHANCED_MODEL,
-          String(project?.dbtConnection?.type),
-          String(fileContent),
-        ),
-      );
-      await projectsServices.saveFileContent({
-        path: selectedFilePath,
-        content: response.content,
-      });
-      setFileContent(response.content);
-      toast.success('Model enhanced successfully');
-    } catch (error: any) {
-      if (
-        typeof error?.message === 'string' &&
-        (error.message.includes('429') || error.message.includes('quota'))
-      ) {
-        toast.error(
-          'OpenAI API quota exceeded. Please check your billing details.',
-        );
-      } else {
-        toast.error(
-          `Error enhancing model: ${error?.message || 'Unknown error'}`,
-        );
-      }
-    } finally {
-      setIsLoadingQuery(false);
-    }
-  };
-
-  const enhanceStagingModel = async () => {
-    if (!isAiProviderSet) {
-      toast.error('Open AI API Key not provided');
-      return;
-    }
-
-    if (!selectedFilePath) {
-      toast.error('No file selected');
-      return;
-    }
-
-    if (!project) {
-      toast.error('Project not found');
-      return;
-    }
-
-    setIsLoadingQuery(true);
-
-    try {
-      const fileName = utils.getFileName(selectedFilePath, false);
-      const tables = await projectsServices.extractSchemaFromModelYaml(project);
-      const { schema, table } = utils.extractSchemaAndTable(fileName);
-
-      const tableStructure = tables.find(
-        (tmpTable) => tmpTable.name === table && tmpTable.schema === schema,
-      );
-
-      if (!tableStructure) {
-        toast.info(`Could not find table: ${schema}.${table}`);
-        return;
-      }
-
-      const promptTable = yaml.dump({
-        name: tableStructure.name,
-        type: tableStructure.type,
-        schema: tableStructure.schema,
-        columns: tableStructure.columns.map((col) => ({
-          name: col.name,
-          typeName: col.typeName,
-        })),
-      });
-
-      const tableName = `${schema}.${table}`;
+    if (!tableStructure) {
       const prompt = utils.format(
-        AI_PROMPTS.ENHANCE_STAGING_MODEL,
-        tableName,
-        promptTable,
+        AI_PROMPTS.BASIC_TRANSFORM_PROMPT_WITHOUT_TABLE,
         fileName,
         String(fileContent),
         String(project?.dbtConnection?.type),
       );
-
-      const response = await projectsServices.enhanceModelQuery(prompt);
-      await projectsServices.saveFileContent({
-        path: selectedFilePath,
-        content: response.content,
-      });
-
-      setFileContent(response.content);
-      toast.success('Staging model enhanced successfully');
-    } catch (error: any) {
-      if (
-        typeof error?.message === 'string' &&
-        (error.message.includes('429') || error.message.includes('quota'))
-      ) {
-        toast.error(
-          'OpenAI API quota exceeded. Please check your billing details.',
-        );
-      } else {
-        toast.error(
-          `Error enhancing staging model: ${error?.message || 'Unknown error'}`,
-        );
-      }
-    } finally {
-      setIsLoadingQuery(false);
+      setAiTransformationPrompt(prompt);
+      return;
     }
+
+    const promptTable = yaml.dump({
+      name: tableStructure.name,
+      type: tableStructure.type,
+      schema: tableStructure.schema,
+      columns: tableStructure.columns.map((col) => ({
+        name: col.name,
+        typeName: col.typeName,
+      })),
+    });
+
+    const tableName = `${schema}.${table}`;
+
+    const prompt = utils.format(
+      AI_PROMPTS.BASIC_TRANSFORM_PROMPT_WITH_TABLE,
+      tableName,
+      promptTable,
+      fileName,
+      String(fileContent),
+      String(project?.dbtConnection?.type),
+    );
+    setAiTransformationPrompt(prompt);
+  };
+
+  const generateEnhancedTransformationPrompt = (
+    content: string,
+    connectionType: SupportedConnectionTypes,
+  ) => {
+    const prompt = utils.format(
+      AI_PROMPTS.ENHANCE_ENHANCED_MODEL,
+      connectionType,
+      content,
+    );
+    setAiTransformationPrompt(prompt);
+  };
+
+  const enhanceModel = async (prompt: string) => {
+    const response = await projectsServices.enhanceModelQuery(
+      `${prompt}\n\nMAKE SURE THE OUTPUT IS AGAIN A DBT MODEL`,
+    );
+    setAitTransformationResponse(response.content);
   };
 
   const generateDashboards = async () => {
@@ -247,11 +240,12 @@ const ProjectDetails: React.FC = () => {
     }
 
     setIsLoadingQuery(true);
+    const fileName = await getFileName(selectedFilePath);
 
     try {
       const prompt = utils.format(
         AI_PROMPTS.GENERATE_DASHBOARDS,
-        utils.getFileName(selectedFilePath, false),
+        fileName,
         String(project?.dbtConnection?.type),
         String(fileContent),
       );
@@ -277,21 +271,76 @@ const ProjectDetails: React.FC = () => {
     }
   };
 
+  const menuItems = React.useMemo(() => {
+    if (
+      !project ||
+      !selectedFilePath ||
+      !fileContent ||
+      !selectedFilePath.endsWith('.sql')
+    ) {
+      return [];
+    }
+    const items = [
+      {
+        name: 'Suggest Basic Transformations',
+        onClick: () => {
+          if (isAiProviderSet) {
+            generateBasicTransformationPrompt(selectedFilePath, project!);
+            return;
+          }
+          setNoAiSetModal(true);
+        },
+        subTitle: '',
+        leftIcon: <AutoFixHigh />,
+      },
+      {
+        name: 'Generate Analytics',
+        onClick: () => {
+          if (isAiProviderSet) {
+            generateDashboards();
+            return;
+          }
+          setNoAiSetModal(true);
+        },
+        subTitle: '',
+        leftIcon: <AutoFixHigh />,
+      },
+    ];
+    if (
+      project.incrementalDir &&
+      project.connection?.type &&
+      selectedFilePath.includes(project?.incrementalDir)
+    ) {
+      items.push({
+        name: 'Auto-Fix Incremental & Unique Key Columns',
+        onClick: () => {
+          if (isAiProviderSet) {
+            generateEnhancedTransformationPrompt(
+              fileContent,
+              project?.connection?.type!,
+            );
+            return;
+          }
+          setNoAiSetModal(true);
+        },
+        subTitle: '',
+        leftIcon: <AutoFixHigh />,
+      });
+    }
+    return items;
+  }, [selectedFilePath, fileContent]);
+
   if (isLoading) {
     return <Loader />;
   }
 
   if (!project?.id) {
-    return <Navigate to="/app/connections" />;
+    return <Navigate to="/app/select-project" />;
   }
 
-  if (project?.id && !project?.connectionId) {
-    return <Navigate to={`/app/add-connection/${project.id}`} />;
-  }
-
-  const handleBusinessLayerClick = () => {
+  const handleBusinessLayerClick = (path: string) => {
     if (isAiProviderSet) {
-      setBusinessQueryModal(true);
+      setBusinessQueryModal(path);
     } else {
       setNoAiSetModal(true);
     }
@@ -311,365 +360,257 @@ const ProjectDetails: React.FC = () => {
                 }
               }}
               onFileSelect={async (fileNode) => {
-                const content = await projectsServices.getFileContent({
-                  path: fileNode.path,
-                });
+                if (!utils.isEditableFile(fileNode.path)) {
+                  setSelectedFilePath(fileNode.path);
+                  return;
+                }
                 setSelectedFilePath(fileNode.path);
-                setFileContent(content);
-              }}
-              onDbtRun={async (fileNode) => {
-                let filePath = fileNode.path;
-                const modelsPathIndex = filePath.indexOf(
-                  `${project?.name}/models/`,
-                );
-                if (modelsPathIndex !== -1) {
-                  filePath = filePath.slice(
-                    modelsPathIndex + `${project?.name}/models/`.length,
-                  );
-                }
-                if (filePath.endsWith('.sql')) {
-                  filePath = filePath.slice(0, -4);
-                }
-                const dbtPath = filePath.replace(/\//g, '.');
-                await dbtRun(project, dbtPath);
-              }}
-              onDbtTest={async (fileNode) => {
-                let filePath = fileNode.path;
-                const modelsPathIndex = filePath.indexOf(
-                  `${project?.name}/models/`,
-                );
-                if (modelsPathIndex !== -1) {
-                  filePath = filePath.slice(
-                    modelsPathIndex + `${project?.name}/models/`.length,
-                  );
-                }
-                if (filePath.endsWith('.yaml')) {
-                  filePath = filePath.slice(0, -5);
-                }
-                const dbtSelection = convertToSourcePath(filePath);
-                await dbtTest(project, dbtSelection);
               }}
               isLoadingFiles={isLoadingDirectories}
               refreshFiles={async () => {
                 await fetchDirectories();
                 await updateStatuses();
               }}
+              copyPath={async (source, target) => {
+                await projectsServices.copyPath({
+                  source,
+                  target,
+                });
+                await fetchDirectories();
+                await updateStatuses();
+              }}
+              onNewFileCallback={(filePath) => {
+                setSelectedFilePath(filePath);
+              }}
             />
           )}
         </FileTreeContainer>
       }
     >
-      <Container>
-        <TerminalLayout project={project}>
-          <Content>
-            <EditorContainer>
-              <Header>
-                {selectedFilePath && (
-                  <SelectedFile>
-                    {utils.splitPath(selectedFilePath ?? '', project.name)}
-                  </SelectedFile>
-                )}
-                <ButtonsContainer>
-                  <SplitButton
-                    title="Actions"
-                    tooltipTitle={
-                      isDbtConfigured
-                        ? ''
-                        : 'Please configure dbt path in settings'
-                    }
-                    disabled={isRunningDbt || isRunningRosettaDbt}
-                    isLoading={isRunningDbt || isRunningRosettaDbt}
-                    leftIcon={<PlayCircleOutline />}
-                    menuItems={[
-                      {
-                        name: 'Staging Layer',
-                        onClick: () => {
-                          if (!settings?.rosettaPath) {
-                            toast.info(
-                              'Please configure RosettaDB path in settings',
-                            );
-                            return;
-                          }
-                          rosettaDbt(project, '');
-                        },
-                        leftIcon: (
-                          <img
-                            src={icons.rosetta}
-                            alt="Rosetta"
-                            width={18}
-                            height={18}
-                            style={{
-                              display: 'inline-block',
-                              objectFit: 'contain',
-                            }}
+      <Box display="flex" flexDirection="row" width="100%" height="100%">
+        <Box flex={1}>
+          <Container>
+            <TerminalLayout project={project}>
+              <Content>
+                <EditorContainer>
+                  <Header>
+                    {selectedFilePath && (
+                      <SelectedFile>
+                        {utils.splitPath(selectedFilePath ?? '', project.name)}
+                      </SelectedFile>
+                    )}
+                    <ButtonsContainer>
+                      {menuItems.length > 0 && (
+                        <SplitButton
+                          title="AI"
+                          isLoading={isLoadingQuery}
+                          leftIcon={<AutoAwesome />}
+                          menuItems={menuItems}
+                        />
+                      )}
+                      {selectedFilePath?.endsWith('.sql') &&
+                        selectedFilePath?.includes('models') &&
+                        project && (
+                          <ModelSplitButton
+                            modelPath={selectedFilePath}
+                            project={project}
+                            isDbtConfigured={!!settings?.dbtPath}
+                            fileContent={fileContent}
+                            isRunningDbt={isRunningDbt}
+                            isRunningRosettaDbt={isRunningRosettaDbt}
                           />
-                        ),
-                        subTitle:
-                          'Generate dbt Staging Layer (runs extract first)',
-                      },
-                      {
-                        name: 'Incremental/Enhanced Layer',
-                        onClick: () => {
-                          if (!settings?.rosettaPath) {
-                            toast.info(
-                              'Please configure RosettaDB path in settings',
-                            );
-                            return;
-                          }
-                          rosettaDbt(project, '--incremental');
-                        },
-                        leftIcon: (
-                          <img
-                            src={icons.rosetta}
-                            alt="Rosetta"
-                            width={18}
-                            height={18}
-                            style={{
-                              display: 'inline-block',
-                              objectFit: 'contain',
+                        )}
+                      <ProjectDbtSplitButton
+                        rosettaPath={settings?.rosettaPath}
+                        dbtPath={settings?.dbtPath}
+                        project={project}
+                        isDbtConfigured={!!settings?.dbtPath}
+                        isRunningDbt={isRunningDbt}
+                        isRunningRosettaDbt={isRunningRosettaDbt}
+                        connection={connection}
+                        rosettaDbt={rosettaDbt}
+                        handleBusinessLayerClick={handleBusinessLayerClick}
+                      />
+                      {connection?.id ? (
+                        <>
+                          <Tooltip
+                            title="Database connection options"
+                            placement="bottom"
+                          >
+                            <IconButton onClick={handleConnectionMenuOpen}>
+                              <Cable color="primary" fontSize="small" />
+                            </IconButton>
+                          </Tooltip>
+                          <Menu
+                            anchorEl={connectionMenuAnchor}
+                            open={Boolean(connectionMenuAnchor)}
+                            onClose={handleConnectionMenuClose}
+                            anchorOrigin={{
+                              vertical: 'bottom',
+                              horizontal: 'right',
                             }}
-                          />
-                        ),
-                        subTitle: 'Generate dbt Incremental Layer',
-                      },
-                      {
-                        name: 'Business Layer',
-                        // onClick: handleBusinessLayerClick,
-                        onClick: () => {
-                          if (!settings?.rosettaPath) {
-                            toast.info(
-                              'Please configure RosettaDB path in settings',
-                            );
-                            return;
-                          }
-                          handleBusinessLayerClick();
-                        },
-                        leftIcon: (
-                          <img
-                            src={icons.rosetta}
-                            alt="Rosetta"
-                            width={18}
-                            height={18}
-                            style={{
-                              display: 'inline-block',
-                              objectFit: 'contain',
-                            }}
-                          />
-                        ),
-                        subTitle: 'Generate dbt Business Layer',
-                      },
-                      {
-                        name: 'Run',
-                        onClick: () => {
-                          if (!isDbtConfigured) {
-                            toast.info('Please configure dbt path in settings');
-                            return;
-                          }
-                          dbtRun(project);
-                        },
-                        leftIcon: (
-                          <Icon src={icons.dbtTm} width={16} height={16} />
-                        ),
-                        subTitle: 'Run the dbt project',
-                      },
-                      {
-                        name: 'Test',
-                        onClick: () => {
-                          if (!isDbtConfigured) {
-                            toast.info('Please configure dbt path in settings');
-                            return;
-                          }
-                          dbtTest(project);
-                        },
-                        leftIcon: (
-                          <Icon src={icons.dbtTm} width={16} height={16} />
-                        ),
-                        subTitle: 'Run the dbt test',
-                      },
-                      {
-                        name: 'Compile',
-                        onClick: () => {
-                          if (!isDbtConfigured) {
-                            toast.info('Please configure dbt path in settings');
-                            return;
-                          }
-                          dbtCompile(project);
-                        },
-                        leftIcon: (
-                          <Icon src={icons.dbtTm} width={16} height={16} />
-                        ),
-                        subTitle: 'Compile the dbt project',
-                      },
-                      {
-                        name: 'Debug',
-                        onClick: () => {
-                          if (!isDbtConfigured) {
-                            toast.info('Please configure dbt path in settings');
-                            return;
-                          }
-                          dbtDebug(project);
-                        },
-                        leftIcon: (
-                          <Icon src={icons.dbtTm} width={16} height={16} />
-                        ),
-                        subTitle: 'Debug dbt connections and project',
-                      },
-                      {
-                        name: 'Generate Docs',
-                        onClick: () => {
-                          if (!isDbtConfigured) {
-                            toast.info('Please configure dbt path in settings');
-                            return;
-                          }
-                          dbtDocsGenerate(project);
-                        },
-                        leftIcon: (
-                          <Icon src={icons.dbtTm} width={16} height={16} />
-                        ),
-                        subTitle: 'Generate documentation for the project',
-                      },
-                      {
-                        name: (
-                          <div
-                            style={{
-                              display: 'flex',
-                              alignItems: 'center',
-                              gap: 4,
+                            transformOrigin={{
+                              vertical: 'top',
+                              horizontal: 'right',
                             }}
                           >
-                            <span>Serve Docs</span>
-                            {isRunning ? (
-                              <StopCircleOutlined />
-                            ) : (
-                              <PlayCircleOutline />
-                            )}
-                          </div>
-                        ),
-                        onClick: () => {
-                          if (isRunning) {
-                            stop();
-                            return;
-                          }
-                          start(
-                            `cd "${project.path}" && "${settings?.dbtPath}" docs serve`,
-                            connection?.connection?.name ?? '',
-                          );
-                        },
-                        leftIcon: (
-                          <Icon src={icons.dbtTm} width={16} height={16} />
-                        ),
-                        subTitle: 'Serve the documentation website',
-                      },
-                    ]}
-                  />
-                  {selectedFilePath?.includes(
-                    `${project.path}/models/enhanced`,
-                  ) && (
-                    <SplitButton
-                      title="AI Assistant"
-                      isLoading={isLoadingQuery}
-                      leftIcon={<AutoAwesome />}
-                      menuItems={[
-                        {
-                          name: 'Auto-Fix Incremental & Unique Key Columns',
-                          onClick: isAiProviderSet
-                            ? enhanceModel
-                            : () => setNoAiSetModal(true),
-                          subTitle: '',
-                        },
-                      ]}
-                    />
+                            <MenuItem
+                              onClick={() => {
+                                navigate(
+                                  `/app/edit-connection/${connection.id}`,
+                                );
+                                handleConnectionMenuClose();
+                              }}
+                            >
+                              <ListItemIcon>
+                                <Edit fontSize="small" color="primary" />
+                              </ListItemIcon>
+                              <ListItemText>Edit</ListItemText>
+                            </MenuItem>
+                            <MenuItem onClick={handleRemoveConnection}>
+                              <ListItemIcon>
+                                <Delete fontSize="small" color="error" />
+                              </ListItemIcon>
+                              <ListItemText>Remove</ListItemText>
+                            </MenuItem>
+                          </Menu>
+                        </>
+                      ) : (
+                        <Tooltip
+                          title="Add database connection"
+                          placement="bottom"
+                        >
+                          <IconButton
+                            onClick={handleAddConnection}
+                            sx={{
+                              border: '1px solid',
+                              borderColor: 'divider',
+                              borderRadius: '16px',
+                              padding: '4px 12px',
+                              fontSize: '12px',
+                              color: 'text.secondary',
+                              '&:hover': {
+                                bgcolor: 'action.hover',
+                              },
+                            }}
+                          >
+                            <Cable fontSize="small" sx={{ mr: 0.5 }} />
+                            No connection
+                          </IconButton>
+                        </Tooltip>
+                      )}
+                    </ButtonsContainer>
+                  </Header>
+                  {!selectedFilePath && (
+                    <NoFileSelected>
+                      Please select a file from the explorer on the left!
+                    </NoFileSelected>
                   )}
-                  {selectedFilePath?.includes(
-                    `${project.path}/models/staging`,
-                  ) && (
-                    <SplitButton
-                      title="AI Assistant"
-                      isLoading={isLoadingQuery}
-                      leftIcon={<AutoAwesome />}
-                      menuItems={[
-                        {
-                          name: 'Suggest Basic Transformations',
-                          onClick: isAiProviderSet
-                            ? enhanceStagingModel
-                            : () => setNoAiSetModal(true),
-                          subTitle: '',
-                        },
-                      ]}
-                    />
-                  )}
-                  {selectedFilePath?.includes(
-                    `${project.path}/models/business`,
-                  ) && (
-                    <SplitButton
-                      title="AI Assistant"
-                      isLoading={isLoadingQuery}
-                      menuItems={[
-                        {
-                          name: 'Generate Analytics',
-                          onClick: isAiProviderSet
-                            ? generateDashboards
-                            : () => setNoAiSetModal(true),
-                          subTitle: '',
-                        },
-                      ]}
-                    />
-                  )}
-                  <Tooltip title="Edit database connection" placement="bottom">
-                    <IconButton
-                      onClick={() => {
-                        if (connection?.id) {
-                          navigate(`/app/edit-connection/${connection.id}`);
-                        } else {
-                          toast.error('No connection found to edit');
-                        }
-                      }}
-                    >
-                      <Cable color="primary" fontSize="small" />
-                    </IconButton>
-                  </Tooltip>
-                </ButtonsContainer>
-              </Header>
-              {!selectedFilePath && (
-                <NoFileSelected>
-                  Please select a file from the explorer on the left!
-                </NoFileSelected>
-              )}
-              {selectedFilePath && (
-                <Editor
-                  filePath={selectedFilePath}
-                  content={fileContent ?? ''}
-                  setContent={setFileContent}
-                  enableDiff
-                />
-              )}
-            </EditorContainer>
-          </Content>
-        </TerminalLayout>
+                  {selectedFilePath &&
+                    fileContent !== undefined &&
+                    project.path && (
+                      <Editor
+                        projectPath={project.path}
+                        filePath={selectedFilePath}
+                        content={fileContent}
+                      />
+                    )}
+                </EditorContainer>
+              </Content>
+            </TerminalLayout>
 
-        {businessQueryModal && (
-          <BusinessQueryModal
-            isOpen={businessQueryModal}
-            onClose={() => setBusinessQueryModal(false)}
-            onSubmit={(query) =>
-              rosettaDbt(project, `--business -q "${query}"`)
-            }
-          />
-        )}
-        {noAiSetModal && (
-          <NoAiSetModal
-            isOpen={noAiSetModal}
-            onClose={() => setNoAiSetModal(false)}
-          />
-        )}
-        {isQueryOpen && (
-          <GenerateAiQueriesModal
-            isOpen={isQueryOpen}
-            onClose={() => setIsQueryOpen(false)}
-            data={queryData}
-          />
-        )}
-      </Container>
+            {businessQueryModal && (
+              <BusinessModal
+                isOpen={!!businessQueryModal}
+                project={project}
+                path={businessQueryModal}
+                onClose={() => setBusinessQueryModal(undefined)}
+                processCallback={async (updatedPath, query, selectedFiles) => {
+                  const args = new Map([
+                    ['-o', updatedPath],
+                    ['-q', `"${query}"`],
+                  ]);
+                  if (selectedFiles.length > 0) {
+                    let command = '';
+                    selectedFiles.forEach((file) => {
+                      command += `-i "${file}" `;
+                    });
+                    args.set(' ', command);
+                  }
+                  await rosettaDbt(project, {
+                    command: 'business',
+                    commandType: CommandType.DBTNext,
+                    arguments: args,
+                  } as Command);
+                  setBusinessQueryModal(undefined);
+                }}
+              />
+            )}
+            {noAiSetModal && (
+              <NoAiSetModal
+                isOpen={noAiSetModal}
+                onClose={() => setNoAiSetModal(false)}
+              />
+            )}
+            {isQueryOpen && (
+              <GenerateAiQueriesModal
+                isOpen={isQueryOpen}
+                onClose={() => setIsQueryOpen(false)}
+                data={queryData}
+              />
+            )}
+            {aiTransformationPrompt && (
+              <AiPromptModal
+                isOpen={!!aiTransformationPrompt}
+                onClose={() => {
+                  setAiTransformationPrompt(undefined);
+                  setAitTransformationResponse(undefined);
+                }}
+                onApply={async (value) => {
+                  updateFileContent({
+                    path: String(selectedFilePath),
+                    content: value,
+                  });
+                  toast.success('Content saved!');
+                }}
+                prompt={aiTransformationPrompt}
+                onPromptChange={(value) => setAiTransformationPrompt(value)}
+                onSubmit={async () => {
+                  await enhanceModel(String(aiTransformationPrompt));
+                }}
+                response={aiTransformationResponse}
+              />
+            )}
+            <AddConnectionModal
+              isOpen={isAddConnectionModalOpen}
+              onClose={handleConnectionModalClose}
+              project={project || null}
+              connections={connections}
+              onSuccess={() => {
+                // Refresh the project data
+                setSelectedFilePath(undefined);
+                refetch();
+              }}
+              onUpdateProject={updateProject}
+            />
+          </Container>
+        </Box>
+        <Box
+          sx={{
+            width: isChatOpen ? '400px' : 0,
+            transition: 'width 200ms ease',
+            borderLeft: isChatOpen ? '1px solid' : 'none',
+            borderColor: 'divider',
+            overflow: 'hidden',
+          }}
+        >
+          <Slide in={isChatOpen} direction="left" mountOnEnter unmountOnExit>
+            <Box height="100%">
+              <ChatScreen />
+            </Box>
+          </Slide>
+        </Box>
+      </Box>
     </AppLayout>
   );
 };

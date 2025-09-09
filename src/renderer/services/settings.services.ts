@@ -2,12 +2,19 @@ import {
   CliUpdateResponseType,
   FileDialogProperties,
   SettingsType,
+  RosettaVersionInfo,
+  InstallResult,
 } from '../../types/backend';
 import { client } from '../config/client';
 import { SecureStorageAccount } from '../../types/frontend';
 
 export const getSettings = async (): Promise<SettingsType> => {
   const { data } = await client.get<SettingsType>('settings:load');
+  return data;
+};
+
+export const getSettingsWithDatabaseInfo = async (): Promise<SettingsType> => {
+  const { data } = await client.get<SettingsType>('settings:load-with-db-info');
   return data;
 };
 
@@ -56,6 +63,22 @@ export const usePathJoin = async (...body: string[]): Promise<string> => {
   return data;
 };
 
+export const pathJoin = async (...body: string[]): Promise<string> => {
+  const { data } = await client.post<string[], string>(
+    'settings:usePathJoin',
+    body,
+  );
+  return data;
+};
+
+export const getFileName = async (...body: string[]): Promise<string> => {
+  const { data } = await client.post<string[], string>(
+    'settings:getFileName',
+    body,
+  );
+  return data;
+};
+
 export const setOpenAIKey = async (apiKey: string): Promise<void> => {
   await client.post<{ account: SecureStorageAccount; password: string }, void>(
     'secure-storage:set',
@@ -76,4 +99,34 @@ export const deleteOpenAIKey = async (): Promise<void> => {
     'secure-storage:delete',
     { account: 'openai-api-key' },
   );
+};
+
+export const resetFactorySettings = async (): Promise<void> => {
+  await client.post<void, void>('settings:reset-factory', undefined);
+};
+
+export const restartApp = async (): Promise<void> => {
+  await client.post<void, void>('settings:restart', undefined);
+};
+
+// Rosetta version management services
+export const checkRosettaVersions = async (): Promise<RosettaVersionInfo> => {
+  const { data } = await client.get<RosettaVersionInfo>(
+    'version:rosetta:check',
+  );
+  return data;
+};
+
+export const installRosettaVersion = async (
+  version: string,
+): Promise<InstallResult> => {
+  const { data } = await client.post<string, InstallResult>(
+    'version:rosetta:install',
+    version,
+  );
+  return data;
+};
+
+export const uninstallRosetta = async (): Promise<void> => {
+  await client.get<void>('version:rosetta:uninstall');
 };

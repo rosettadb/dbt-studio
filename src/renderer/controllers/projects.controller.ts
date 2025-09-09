@@ -135,6 +135,7 @@ export const useUpdateProject = (
     },
     onSuccess: async (...args) => {
       await queryClient.invalidateQueries([QUERY_KEYS.GET_SELECTED_PROJECT]);
+      await queryClient.invalidateQueries([QUERY_KEYS.GET_PROJECTS]);
       onCustomSuccess?.(...args);
     },
     onError: (...args) => {
@@ -150,21 +151,52 @@ export const useGetProjectFiles = (
   return useQuery({
     queryKey: [QUERY_KEYS.GET_FILE_STRUCTURE, project?.path || 'no-project'],
     queryFn: async () => {
-      return projectsServices.loadProjectDirectory(project);
+      return projectsServices.loadProjectDirectory({ path: project.path });
     },
     ...customOptions,
   });
 };
 
 export const useGetFileContent = (
-  path: string,
+  path?: string,
   customOptions?: UseQueryOptions<string, CustomError, string>,
 ) => {
   return useQuery({
     queryKey: [QUERY_KEYS.GET_FILE_CONTENT, path],
+    enabled: !!path,
     queryFn: async () => {
-      return projectsServices.getFileContent({ path });
+      return projectsServices.getFileContent({ path: String(path) });
     },
     ...customOptions,
+  });
+};
+
+export const useSaveFileContent = (
+  customOptions?: UseMutationOptions<
+    boolean,
+    CustomError,
+    { path: string; content: string }
+  >,
+): UseMutationResult<
+  boolean,
+  CustomError,
+  { path: string; content: string }
+> => {
+  const { onSuccess: onCustomSuccess, onError: onCustomError } =
+    customOptions || {};
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (data) => {
+      return projectsServices.saveFileContent(data);
+    },
+    onSuccess: async (...args) => {
+      await queryClient.invalidateQueries([QUERY_KEYS.GET_FILE_STRUCTURE]);
+      await queryClient.invalidateQueries([QUERY_KEYS.GIT_STATUS]);
+      await queryClient.invalidateQueries([QUERY_KEYS.GET_FILE_CONTENT]);
+      onCustomSuccess?.(...args);
+    },
+    onError: (...args) => {
+      onCustomError?.(...args);
+    },
   });
 };

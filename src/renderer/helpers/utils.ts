@@ -1,12 +1,14 @@
 /* eslint-disable no-plusplus, consistent-return, no-case-declarations */
 import React from 'react';
-import { parsePatch, diffLines } from 'diff';
 import {
   BigQueryConnection,
+  Command,
+  CommandType,
   ConnectionModel,
   DatabricksConnection,
   DuckDBConnection,
   PostgresConnection,
+  Project,
   RedshiftConnection,
   SnowflakeConnection,
   Table,
@@ -16,6 +18,7 @@ import {
   MonacoAutocompleteSQLKeywords,
   MonacoCompletionItemKind,
 } from '../config/constants';
+import { settingsServices } from '../services';
 
 export const capitalizeFirstLetter = (str: string): string => {
   if (!str) return '';
@@ -34,20 +37,6 @@ export const format = (str: string, ...args: (string | number)[]) => {
   let i = 0;
   // eslint-disable-next-line no-return-assign,no-plusplus
   return str.replace(/{}/g, () => String(args[i++]));
-};
-
-export const getFileName = (
-  path: string,
-  withExtension: boolean = true,
-): string => {
-  const parts = path.split('/');
-  const name = parts.pop() || '';
-
-  if (!name || !name.includes('.')) {
-    throw new Error('The provided path is a folder, not a file.');
-  }
-
-  return withExtension ? name : name.split('.').slice(0, -1).join('.');
 };
 
 export const extractSchemaAndTable = (
@@ -79,62 +68,6 @@ export const splitPath = (path: string, projectName: string): string => {
 
   return `${prefix}...${projectPart}`;
 };
-
-export const getVersionsFromDiff = (newContent: string, diffString: string) => {
-  const patch = parsePatch(diffString)[0];
-  const newLines = newContent.split('\n');
-
-  const oldLines = [...newLines];
-  let offset = 0;
-
-  patch.hunks.forEach((hunk) => {
-    let newIndex = hunk.newStart - 1 + offset;
-    let removedCount = 0;
-
-    hunk.lines.forEach((line) => {
-      const type = line[0];
-      const value = line.slice(1);
-
-      if (type === '+') {
-        oldLines.splice(newIndex, 1);
-        removedCount += 1;
-      } else if (type === '-') {
-        oldLines.splice(newIndex, 0, value);
-        newIndex++;
-      } else {
-        newIndex++;
-      }
-    });
-
-    offset -= removedCount;
-  });
-
-  return {
-    oldVersion: oldLines.join('\n'),
-    newVersion: newContent,
-  };
-};
-
-export function getChangedLineNumbers(oldStr: string, newStr: string) {
-  const changes = diffLines(oldStr, newStr);
-  let line = 1;
-  const added: number[] = [];
-  const removed: number[] = [];
-
-  changes.forEach((part) => {
-    const lines = part.value.split('\n').length - 1;
-    if (part.added) {
-      for (let i = 0; i < lines; i++) added.push(line + i);
-      line += lines;
-    } else if (part.removed) {
-      for (let i = 0; i < lines; i++) removed.push(line + i);
-    } else {
-      line += lines;
-    }
-  });
-
-  return { added, removed };
-}
 
 export const getInitials = (name: string): string => {
   const cleaned = name.trim().replace(/_/g, ' ');
@@ -334,4 +267,146 @@ export const getConnectionInput = (conn: ConnectionModel) => {
     default:
       return undefined;
   }
+};
+
+export const extractModelNameFromPath = (filePath: string): string => {
+  // Extract model name from file path
+  // Example: /path/to/project/models/staging/my_model.sql -> staging.my_model
+  const pathParts = filePath.split('/');
+  const modelsIndex = pathParts.findIndex((part) => part === 'models');
+  if (modelsIndex === -1) return '';
+
+  // Get the path after 'models/' and before '.sql'
+  const modelPath = pathParts.slice(modelsIndex + 1).join('/');
+  const modelName = modelPath.replace('.sql', '');
+
+  // Convert path separators to dots for dbt selection
+  return modelName.replace(/\//g, '.');
+};
+
+/**
+ * List of file extensions that should not be edited as text
+ */
+const NON_EDITABLE_EXTENSIONS = ['.duckdb', '.db', '.sqlite', '.sqlite3'];
+
+/**
+ * Gets the file extension from a file path
+ * @param filePath - The path to the file
+ * @returns the file extension in lowercase (including the dot)
+ */
+export const getFileExtension = (filePath: string): string => {
+  const parts = filePath.toLowerCase().split('.');
+  if (parts.length < 2) return '';
+  return `.${parts[parts.length - 1]}`;
+};
+
+/**
+ * Checks if a file is editable based on its extension
+ * @param filePath - The path to the file
+ * @returns true if the file can be edited as text, false otherwise
+ */
+export const isEditableFile = (filePath: string): boolean => {
+  const extension = getFileExtension(filePath);
+  return !NON_EDITABLE_EXTENSIONS.includes(extension);
+};
+
+/**
+ * Gets an appropriate message for non-editable files
+ * @param filePath - The path to the file
+ * @returns a message explaining why the file cannot be edited
+ */
+export const getNonEditableFileMessage = (filePath: string): string => {
+  const extension = getFileExtension(filePath);
+  const fileName = filePath.split('/').pop() || 'Unknown file';
+
+  switch (extension) {
+    case '.duckdb':
+      return `# DuckDB Database File
+
+This file is a DuckDB database file and cannot be edited as text.
+
+**File:** ${fileName}
+
+DuckDB files contain binary data and should be accessed through:
+- Database queries and connections
+- DuckDB CLI tools
+- Database management applications
+
+**Note:** Attempting to edit this file as text could corrupt the database.`;
+
+    case '.db':
+    case '.sqlite':
+    case '.sqlite3':
+      return `# Database File
+
+This file is a database file and cannot be edited as text.
+
+**File:** ${fileName}
+
+Database files contain binary data and should be accessed through appropriate database tools and applications.
+
+**Note:** Attempting to edit this file as text could corrupt the database.`;
+
+    default:
+      return `# Non-Editable File
+
+This file type cannot be edited as text.
+
+**File:** ${fileName}
+
+Please use an appropriate application to view or edit this file type.`;
+  }
+};
+
+/**
+ * Compiles command with arguments
+ * TODO - settings is not enforced type - we should change settings to have a type and then update it here
+ * @param project
+ * @param settings
+ * @param command
+ */
+export const compileCommand = async (
+  project: Project,
+  settings: any,
+  command: Command,
+): Promise<string> => {
+  const projectPath = await settingsServices.usePathJoin(
+    project.path,
+    'rosetta',
+  );
+  // Set command missing defaults for rosetta
+  if (
+    !command.arguments.has('-s') &&
+    [CommandType.Rosetta, CommandType.DBTNext].indexOf(command.commandType) > -1
+  ) {
+    command.arguments.set('-s', `${project.rosettaConnection?.name}`);
+  }
+
+  // Prep command stack
+  const commandStack: string[] = [];
+  // Prep for specific command type
+  switch (command.commandType) {
+    case CommandType.Rosetta:
+      commandStack.push(`"${settings?.rosettaPath}"`);
+      break;
+    case CommandType.DBTNext:
+      commandStack.push(`"${settings?.rosettaPath}"`);
+      commandStack.push(`dbt-next`);
+      break;
+    default:
+      break;
+  }
+  commandStack.push(command.command);
+
+  // Include argument
+  if (command.arguments) {
+    command.arguments.forEach((tmpCommand, tmpKey) => {
+      commandStack.push(`${tmpKey} ${tmpCommand || ''}`);
+    });
+  }
+
+  const compiledCommand = [`cd "${projectPath}" && `]
+    .concat(commandStack)
+    .join(' ');
+  return compiledCommand;
 };

@@ -2,9 +2,9 @@ import React from 'react';
 import { AppContextType } from '../../types/frontend';
 import { Splash } from '../components';
 import { useGetProjects, useGetSelectedProject } from '../controllers';
+import { useGetActiveAIProvider } from '../controllers/aiProviders.controller';
 import { Project, Table } from '../../types/backend';
 import { projectsServices } from '../services';
-import { getOpenAIKey } from '../services/settings.services';
 
 type Props = {
   children: React.ReactNode;
@@ -20,46 +20,48 @@ export const AppContext = React.createContext<AppContextType>({
   fetchSchema: async () => {},
   schema: [],
   isAiProviderSet: false,
-  setIsAiProviderSet: () => {},
+  isChatOpen: false,
+  setIsChatOpen: () => {},
 });
 
 const AppProvider: React.FC<Props> = ({ children }) => {
   const { data: projects = [] } = useGetProjects();
   const { data: selectedProject, isLoading } = useGetSelectedProject();
+  const { data: activeAIProvider } = useGetActiveAIProvider();
 
   const [isSidebarOpen, setIsSidebarOpen] = React.useState(true);
+  const [isChatOpen, setIsChatOpen] = React.useState(false);
   const [isLoadingSchema, setIsLoadingSchema] = React.useState(false);
   const [schema, setSchema] = React.useState<Table[]>();
   const [sidebarContent, setSidebarContent] = React.useState<React.ReactNode>(
     <div />,
   );
-  const [isAiProviderSet, setIsAiProviderSet] = React.useState(false);
+
+  // Determine if AI provider is set based on active provider
+  const isAiProviderSet = !!activeAIProvider;
 
   const fetchSchema = async () => {
     if (selectedProject) {
       setIsLoadingSchema(true);
       try {
+        // Clear schema first to avoid showing stale data
+        setSchema([]);
+
         const schemaRes = await projectsServices.extractSchema(selectedProject);
         setSchema(schemaRes);
-      } catch (_) {
-        /* empty */
+      } catch (error) {
+        // Clear schema on error to ensure no stale data is shown
+        setSchema([]);
+        // eslint-disable-next-line no-console
+        console.error('Failed to fetch schema:', error);
       } finally {
         setIsLoadingSchema(false);
       }
+    } else {
+      // Clear schema when no project is selected
+      setSchema([]);
     }
   };
-
-  React.useEffect(() => {
-    const checkAiProvider = async () => {
-      try {
-        const apiKey = await getOpenAIKey();
-        setIsAiProviderSet(!!apiKey && apiKey.trim() !== '');
-      } catch (error) {
-        setIsAiProviderSet(false);
-      }
-    };
-    checkAiProvider();
-  }, []);
 
   React.useEffect(() => {
     fetchSchema();
@@ -79,7 +81,8 @@ const AppProvider: React.FC<Props> = ({ children }) => {
       setIsSidebarOpen,
       isLoadingSchema,
       isAiProviderSet,
-      setIsAiProviderSet,
+      isChatOpen,
+      setIsChatOpen,
     };
   }, [
     projects,
@@ -89,7 +92,7 @@ const AppProvider: React.FC<Props> = ({ children }) => {
     isSidebarOpen,
     selectedProject,
     isAiProviderSet,
-    setIsAiProviderSet,
+    isChatOpen,
   ]);
 
   if (isLoading) {

@@ -24,11 +24,11 @@ import {
 import { Container, StyledForm, StyledSettingsNavLink, Title } from './styles';
 import {
   GeneralSettings,
-  AIProviderSettings,
   DbtSettings,
   RosettaSettings,
   AboutSettings,
   InstallationSettings,
+  AIProvidersSettings,
 } from '../../components';
 import { AppLayout } from '../../layouts';
 import { settingsSidebarElements } from './settingsElements';
@@ -120,22 +120,16 @@ const Settings: React.FC = () => {
           />
         );
       case 'ai-providers':
-        return <AIProviderSettings />;
+        return <AIProvidersSettings />;
       case 'dbt':
         return (
           <DbtSettings
             settings={localSettings}
             onInstallDbtSave={handleChangeV2}
-            onSettingsChange={handleChange}
           />
         );
       case 'rosetta':
-        return (
-          <RosettaSettings
-            settings={localSettings}
-            onSettingsChange={handleChange}
-          />
-        );
+        return <RosettaSettings settings={localSettings} />;
       case 'installation':
         return <InstallationSettings />;
       case 'about':
@@ -280,11 +274,13 @@ const Settings: React.FC = () => {
               <Close />
             </IconButton>
           </div>
-          <div style={{ maxWidth: '600px' }}>{renderContent()}</div>
+          <div style={{ maxWidth: '100%' }}>{renderContent()}</div>
 
           {currentSection !== 'about' &&
             currentSection !== 'installation' &&
-            currentSection !== 'ai-providers' && (
+            currentSection !== 'ai-providers' &&
+            currentSection !== 'dbt' &&
+            currentSection !== 'rosetta' && (
               <Box sx={{ mt: 3 }}>
                 <Button
                   type="submit"

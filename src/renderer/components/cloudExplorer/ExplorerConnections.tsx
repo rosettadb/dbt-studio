@@ -20,7 +20,7 @@ import {
   CircularProgress,
 } from '@mui/material';
 import {
-  Add,
+  Cloud,
   Edit,
   Cable,
   Refresh,
@@ -34,18 +34,11 @@ import {
   useDeleteBucketConnection,
 } from '../../controllers';
 import { cloudStorageImages } from '../../../../assets/connectionIcons';
-import useSecureStorage from '../../hooks/useSecureStorage';
 
 export const ExplorerConnections: React.FC = () => {
   const navigate = useNavigate();
   const connectionsQuery = useGetCloudConnections();
   const deleteConnection = useDeleteBucketConnection();
-  const {
-    deleteCloudAwsSecret,
-    deleteCloudAzureKey,
-    deleteCloudGcsCredential,
-  } = useSecureStorage();
-
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [connectionToDelete, setConnectionToDelete] = useState<string | null>(
     null,
@@ -98,19 +91,7 @@ export const ExplorerConnections: React.FC = () => {
   const handleDeleteConnection = async () => {
     if (connectionToDelete) {
       try {
-        const connection = connectionsQuery.data?.find(
-          (c) => c.id === connectionToDelete,
-        );
         await deleteConnection.mutateAsync(connectionToDelete);
-        if (connection) {
-          if (connection.provider === 'aws') {
-            await deleteCloudAwsSecret(connection.name);
-          } else if (connection.provider === 'azure') {
-            await deleteCloudAzureKey(connection.name);
-          } else if (connection.provider === 'gcs') {
-            await deleteCloudGcsCredential(connection.name);
-          }
-        }
         setDeleteDialogOpen(false);
         setConnectionToDelete(null);
       } catch (error) {
@@ -198,7 +179,7 @@ export const ExplorerConnections: React.FC = () => {
       </Box>
 
       {connections.length === 0 ? (
-        <Card>
+        <Card sx={{ p: 2 }}>
           <CardHeader
             title="No connections found"
             subheader="Add a connection to get started with Cloud Explorer."
@@ -212,10 +193,11 @@ export const ExplorerConnections: React.FC = () => {
           <CardActions>
             <Button
               variant="contained"
-              startIcon={<Add />}
+              color="primary"
+              startIcon={<Cloud />}
               onClick={() => navigate('/app/cloud-explorer/new-connection')}
             >
-              Add Source
+              New Source
             </Button>
           </CardActions>
         </Card>

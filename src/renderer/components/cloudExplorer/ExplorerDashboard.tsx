@@ -15,7 +15,7 @@ import {
   Description,
   FolderOpen,
   Settings,
-  Add,
+  Cloud,
   Dashboard,
 } from '@mui/icons-material';
 import {
@@ -607,10 +607,11 @@ export const ExplorerDashboard = ({
               </Typography>
               <Button
                 variant="contained"
-                startIcon={<Add />}
-                onClick={() => navigate('/app/cloud-explorer/connections/new')}
+                color="primary"
+                startIcon={<Cloud />}
+                onClick={() => navigate('/app/cloud-explorer/new-connection')}
               >
-                Add Connection
+                New Source
               </Button>
             </CardContent>
           </Card>

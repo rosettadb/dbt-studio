@@ -150,20 +150,22 @@ export const SplitButton: React.FC<Props> = ({
                 <MenuList
                   id="split-button-menu"
                   autoFocusItem
-                  dense
                   sx={{
                     paddingTop: '2px',
                     paddingBottom: '2px',
                   }}
                 >
                   {menuItems.map((option, index) => (
-                    <span style={{ display: 'block' }}>
+                    <span
+                      style={{ display: 'block' }}
+                      key={`split-button-menu-${index}`}
+                    >
                       <MenuItem
                         onClick={() => handleMenuItemClick(index)}
                         sx={{
                           fontSize: '0.8rem',
                           minHeight: '24px',
-                          padding: '2px 10px',
+                          padding: '4px 10px',
                           color: theme.palette.primary.main,
                           fontWeight: 500,
                           textTransform: 'none',

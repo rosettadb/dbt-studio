@@ -1,6 +1,6 @@
 import path from 'path';
 import fs, { promises } from 'fs';
-import { app } from 'electron';
+import { app, dialog } from 'electron';
 import archiver from 'archiver';
 import os from 'os';
 import { DataBase, FileNode, SettingsType } from '../../types/backend';
@@ -128,11 +128,91 @@ export const createNewFolder = (parentPath: string, folderName: string) => {
   });
 };
 
+// helper functions for file copy
+const copyFile = async (source: string, target: string) => {
+  const targetFile = path.join(target, path.basename(source));
+  // if exists show replace dialog
+  if (fs.existsSync(targetFile)) {
+    const result = await dialog.showMessageBox({
+      type: 'question',
+      buttons: ['Cancel', 'Replace'],
+      defaultId: 1,
+      cancelId: 0,
+      message: `The file already exists:\n\n${targetFile}\n\nDo you want to replace it?`,
+    });
+    if (result.response === 0) return; // user cancelled
+  }
+  fs.copyFile(source, targetFile, (err) => {
+    if (err) throw new Error(err.message);
+  });
+};
+
+const checkFileConflicts = (srcDir: string, tgtDir: string) => {
+  const conflicts: string[] = [];
+  const items = fs.readdirSync(srcDir);
+
+  items.forEach((item) => {
+    const srcItem = path.join(srcDir, item);
+    const tgtItem = path.join(tgtDir, item);
+    const itemStat = fs.statSync(srcItem);
+
+    if (itemStat.isDirectory()) {
+      conflicts.push(...checkFileConflicts(srcItem, tgtItem));
+    } else if (fs.existsSync(tgtItem)) {
+      conflicts.push(tgtItem);
+    }
+  });
+
+  return conflicts;
+};
+
+const copyFolder = async (source: string, target: string) => {
+  const conflicts = checkFileConflicts(source, target);
+  if (conflicts.length > 0) {
+    const result = await dialog.showMessageBox({
+      type: 'question',
+      buttons: ['Cancel', 'Replace All'],
+      defaultId: 1,
+      cancelId: 0,
+      message: `The following files already exist:\n\n${conflicts.join(
+        '\n',
+      )}\n\nDo you want to replace them?`,
+    });
+    if (result.response === 0) return; // user cancelled
+  }
+  fs.cp(
+    source,
+    target,
+    { recursive: true, force: conflicts.length > 0 },
+    (err) => {
+      if (err) throw new Error(err.message);
+    },
+  );
+};
+
+export const copyPath = async (source: string, target: string) => {
+  if (!fs.existsSync(source)) {
+    throw new Error(`Source path does not exist: ${source}`);
+  }
+
+  if (!fs.existsSync(target)) {
+    throw new Error(`Target path does not exist: ${source}`);
+  }
+
+  const stats = fs.statSync(source);
+  if (stats.isFile()) {
+    copyFile(source, target);
+    return;
+  }
+
+  await copyFolder(source, target);
+};
+
 export const createNewFile = (
   parentPath: string,
   fileName: string,
   content: string = '',
-) => {
+): string | undefined => {
   const filePath = path.join(parentPath, fileName);
 
   if (fs.existsSync(filePath)) {
@@ -144,6 +224,8 @@ export const createNewFile = (
       throw new Error(err.message);
     }
   });
+  // eslint-disable-next-line consistent-return
+  return filePath;
 };
 
 export const deleteItem = async (targetPath: string) => {

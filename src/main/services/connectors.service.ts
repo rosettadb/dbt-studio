@@ -48,6 +48,19 @@ export default class ConnectorsService {
   }
 
   /**
+   * Find a connection by name (case-insensitive)
+   */
+  static async findConnectionByName(
+    name: string,
+  ): Promise<ConnectionModel | undefined> {
+    const connections = await this.loadConnections();
+    return connections.find(
+      (conn) =>
+        conn.connection.name.toLowerCase().trim() === name.toLowerCase().trim(),
+    );
+  }
+
+  /**
    * Save a new connection, allowing reserved names for Getting Started template
    */
   static async saveNewConnectionForTemplate(
@@ -182,10 +195,20 @@ export default class ConnectorsService {
       const isTemplateConnection =
         connection.name.toLowerCase().trim() === 'dbt connection';
       if (isTemplateConnection) {
-        connectionId = await this.saveNewConnectionForTemplate(
-          connection,
-          true,
+        // Check if a connection with the reserved name already exists
+        const existingConnection = await this.findConnectionByName(
+          connection.name,
         );
+        if (existingConnection) {
+          // Reuse existing connection for the starter project
+          connectionId = existingConnection.id;
+        } else {
+          // Create new connection if none exists
+          connectionId = await this.saveNewConnectionForTemplate(
+            connection,
+            true,
+          );
+        }
       } else {
         connectionId = await this.saveNewConnection(connection);
       }
@@ -200,6 +223,11 @@ export default class ConnectorsService {
 
       await this.loadConfigurations(currentProject.id);
     }
+
+    if (!connectionId) {
+      throw new Error('Failed to create or find connection');
+    }
+
     return connectionId;
   }
 
@@ -250,6 +278,8 @@ export default class ConnectorsService {
       throw new Error('Connection not found');
     }
 
+    const connectionToDelete = connections[connectionIndex];
+
     // Check if any projects are using this connection
     const projects = await ProjectsService.loadProjects();
     const projectsUsingConnection = projects.filter(
@@ -262,6 +292,19 @@ export default class ConnectorsService {
         .join(', ');
       throw new Error(
         `Cannot delete connection. It is currently being used by the following project(s): ${projectNames}. Please remove the connection from these projects first.`,
+      );
+    }
+
+    // Clean up connection-specific credentials from secure storage
+    try {
+      await SecureStorageService.cleanupConnectionCredentials(
+        connectionToDelete.connection.name,
+      );
+    } catch (error) {
+      // eslint-disable-next-line no-console
+      console.error(
+        `Failed to cleanup credentials for connection ${connectionToDelete.connection.name}:`,
+        error,
       );
     }
 
@@ -362,6 +405,10 @@ export default class ConnectorsService {
     }
   }
 
+  static extractDbNameFromPath = (url: string) => {
+    return path.parse(url).name;
+  };
+
   static async generateRosettaYml(
     connection: ConnectionInput,
     projectName: string,
@@ -381,7 +428,7 @@ export default class ConnectorsService {
           name: projectName,
           databaseName:
             connection.type === 'duckdb'
-              ? connection.short_database_path
+              ? this.extractDbNameFromPath(connection.short_database_path)
               : connection.database,
           schemaName: connection.schema,
           dbType: connection.type,
@@ -1083,6 +1130,22 @@ export default class ConnectorsService {
   static async deleteCloudConnection(id: string): Promise<void> {
     const db = await loadDatabaseFile();
     const sources = db.sources ?? [];
+
+    const connectionToDelete = sources.find((c) => c.id === id);
+    if (connectionToDelete) {
+      // Clean up cloud connection-specific credentials from secure storage
+      try {
+        await SecureStorageService.cleanupConnectionCredentials(
+          connectionToDelete.name,
+        );
+      } catch (error) {
+        // eslint-disable-next-line no-console
+        console.error(
+          `Failed to cleanup credentials for cloud connection ${connectionToDelete.name}:`,
+          error,
+        );
+      }
+    }
 
     const filteredSources = sources.filter((c) => c.id !== id);
 

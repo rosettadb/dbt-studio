@@ -26,9 +26,10 @@ export const getProjectById = async (body: {
 export const addProject = async (body: {
   name: string;
   connectionId?: string;
+  createTemplateFolders?: boolean;
 }): Promise<Project> => {
   const { data } = await client.post<
-    { name: string; connectionId?: string },
+    { name: string; connectionId?: string; createTemplateFolders?: boolean },
     Project
   >('project:add', body);
   return data;
@@ -164,12 +165,15 @@ export const createFile = async (body: {
   filePath: string;
   name: string;
   content?: string;
-}): Promise<void> => {
-  const { data } = await client.post<{
-    filePath: string;
-    name: string;
-    content?: string;
-  }>('project:createFile', body);
+}): Promise<string | undefined> => {
+  const { data } = await client.post<
+    {
+      filePath: string;
+      name: string;
+      content?: string;
+    },
+    string | undefined
+  >('project:createFile', body);
   return data;
 };
 
@@ -181,6 +185,17 @@ export const createFolder = async (body: {
     filePath: string;
     name: string;
   }>('project:createFolder', body);
+  return data;
+};
+
+export const copyPath = async (body: {
+  source: string;
+  target: string;
+}): Promise<void> => {
+  const { data } = await client.post<{
+    source: string;
+    target: string;
+  }>('project:copyPath', body);
   return data;
 };
 
@@ -231,6 +246,7 @@ export const generateDashboardQuery = async (
     'project:generateDashboardsQuery',
     prompt,
   );
+
   return data;
 };
 
@@ -246,4 +262,27 @@ export const enhanceModelQuery = async (
 
 export const zipDir = async (path: string): Promise<void> => {
   await client.post<string>('project:zipDir', path);
+};
+
+export const chooseDir = async (body: { path: string }): Promise<string> => {
+  const response = await client.post<
+    {
+      path: string;
+    },
+    string
+  >('project:chooseDir', body);
+  return response.data;
+};
+
+export const downloadSeed = async (
+  objectUrl: string,
+  project: Project,
+): Promise<void> => {
+  await client.post<{
+    objectUrl: string;
+    project: Project;
+  }>('project:downloadSeed', {
+    objectUrl,
+    project,
+  });
 };

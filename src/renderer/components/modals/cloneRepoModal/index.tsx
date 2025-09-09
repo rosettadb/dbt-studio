@@ -9,7 +9,7 @@ import { gitServices, projectsServices } from '../../../services';
 type Props = {
   isOpen: boolean;
   onClose: () => void;
-  successCallback?: () => void;
+  successCallback?: (project?: any) => void;
 };
 
 export const CloneRepoModal: React.FC<Props> = ({
@@ -54,8 +54,8 @@ export const CloneRepoModal: React.FC<Props> = ({
             await projectsServices.selectProject({ projectId: project.id });
             toast.success('Project cloned successfully!');
             onClose();
-            navigate('/app/edit-connection');
-            successCallback?.();
+            navigate('/app/loading');
+            successCallback?.(project);
           } catch (err: any) {
             toast.error(err.message);
           } finally {

@@ -10,6 +10,7 @@ import {
   registerSecureStorageHandlers,
   registerUpdateHandlers,
   registerCloudExplorerHandlers,
+  registerAIHandlers,
 } from './ipcHandlers';
 
 const registerHandlers = (mainWindow: BrowserWindow) => {
@@ -23,6 +24,7 @@ const registerHandlers = (mainWindow: BrowserWindow) => {
   registerSecureStorageHandlers();
   registerUpdateHandlers();
   registerCloudExplorerHandlers();
+  registerAIHandlers();
 };
 
 export default registerHandlers;

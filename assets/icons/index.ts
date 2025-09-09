@@ -8,6 +8,7 @@ import dbtTm from './dbt-bit_tm.svg';
 import dbtBlack from './dbt-black.svg';
 import rosetta from './rosetta.png';
 import rosettaLabs from './rosetta-labs.png';
+import bot from './bot.svg';
 
 export const icons = {
   settings,
@@ -20,4 +21,5 @@ export const icons = {
   dbtBlack,
   rosetta,
   rosettaLabs,
+  bot,
 };

@@ -1,10 +1,46 @@
 import React from 'react';
-import { Typography, Box, Link, Divider, Stack } from '@mui/material';
-import { OpenInNew } from '@mui/icons-material';
+import { Typography, Box, Link, Divider, Stack, Button } from '@mui/material';
+import { OpenInNew, RestoreFromTrash } from '@mui/icons-material';
+import { toast } from 'react-toastify';
 import { icons } from '../../../../assets';
 import { utils } from '../../helpers';
+import { ResetFactoryModal } from '../modals';
+import { useResetFactorySettings } from '../../controllers';
+import { restartApp } from '../../services/settings.services';
 
 export const AboutSettings: React.FC = () => {
+  const [isResetModalOpen, setIsResetModalOpen] = React.useState(false);
+
+  const { mutate: resetFactorySettings, isLoading: isResetting } =
+    useResetFactorySettings({
+      onSuccess: () => {
+        toast.success(
+          'Factory settings reset successfully. The app will restart automatically.',
+        );
+        setIsResetModalOpen(false);
+
+        // Restart the app after a short delay
+        setTimeout(() => {
+          restartApp();
+        }, 2000); // 2 second delay
+      },
+      onError: (error) => {
+        toast.error(`Failed to reset factory settings: ${error.message}`);
+      },
+    });
+
+  const handleResetClick = () => {
+    setIsResetModalOpen(true);
+  };
+
+  const handleResetConfirm = () => {
+    resetFactorySettings();
+  };
+
+  const handleResetCancel = () => {
+    setIsResetModalOpen(false);
+  };
+
   return (
     <Box>
       <Box sx={{ display: 'flex', alignItems: 'center', mb: 3, gap: 2 }}>
@@ -157,6 +193,34 @@ export const AboutSettings: React.FC = () => {
           Learn more about Rosetta dbt™ Studio
         </Link>
       </Typography>
+
+      <Divider sx={{ my: 3 }} />
+
+      <Box>
+        <Typography variant="h6" sx={{ mb: 2 }}>
+          Advanced Options
+        </Typography>
+        <Button
+          variant="outlined"
+          color="error"
+          startIcon={<RestoreFromTrash />}
+          onClick={handleResetClick}
+          sx={{ mb: 2 }}
+        >
+          Reset Factory Settings
+        </Button>
+        <Typography variant="body2" color="text.secondary">
+          This will permanently delete all your projects, connections, and
+          settings. Make sure to backup your data before proceeding.
+        </Typography>
+      </Box>
+
+      <ResetFactoryModal
+        isOpen={isResetModalOpen}
+        onClose={handleResetCancel}
+        onConfirm={handleResetConfirm}
+        isLoading={isResetting}
+      />
     </Box>
   );
 };

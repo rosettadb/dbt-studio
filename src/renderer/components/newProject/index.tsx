@@ -10,9 +10,12 @@ import {
   MenuItem,
   Button,
   Divider,
+  Switch,
+  FormControlLabel,
 } from '@mui/material';
 import AddIcon from '@mui/icons-material/Add';
 import { Close, FolderOpen, Save } from '@mui/icons-material';
+import DatabaseIcon from '@mui/icons-material/Storage';
 
 import { styled } from '@mui/material/styles';
 
@@ -51,8 +54,8 @@ type Connection = {
 type NewProjectProps = {
   defaultProjectPath: string;
   setDefaultProjectPath: (path: string) => void;
-  newProject: { name: string };
-  setNewProject: (p: { name: string }) => void;
+  newProject: { name: string; createTemplateFolders: boolean };
+  setNewProject: (p: { name: string; createTemplateFolders: boolean }) => void;
   selectedConnection: string;
   setSelectedConnection: (id: string) => void;
   isLoadingConnections: boolean;
@@ -160,9 +163,9 @@ export const NewProject: React.FC<NewProjectProps> = ({
             variant="outlined"
             id="rosettaPath"
             name="rosettaPath"
-            value={`${defaultProjectPath}/${newProject.name}`}
+            value={`${defaultProjectPath}${navigator.appVersion.indexOf('Win') === -1 ? '/' : '\\'}${newProject.name}`}
             onChange={(event) => setDefaultProjectPath(event.target.value)}
-            sx={{ mb: 2, background: '#f7f8fa' }}
+            sx={{ background: '#f7f8fa' }}
             InputProps={{
               endAdornment: (
                 <IconButton
@@ -186,6 +189,22 @@ export const NewProject: React.FC<NewProjectProps> = ({
               ),
             }}
           />
+          <FormControlLabel
+            control={
+              <Switch
+                defaultChecked
+                onChange={(event) =>
+                  setNewProject({
+                    ...newProject,
+                    createTemplateFolders: event.target.checked,
+                  })
+                }
+              />
+            }
+            label="Create template dbt directories"
+            labelPlacement="start"
+            value={newProject.createTemplateFolders}
+          />
           <TextField
             fullWidth
             label="Project Name"
@@ -198,14 +217,29 @@ export const NewProject: React.FC<NewProjectProps> = ({
             sx={{ mb: 2 }}
           />
           <FormControl fullWidth sx={{ mb: 2 }}>
-            <InputLabel id="connection-select-label">Connection</InputLabel>
+            <InputLabel id="connection-select-label">
+              Connection (Optional)
+            </InputLabel>
             <Select
               labelId="connection-select-label"
               value={selectedConnection}
-              label="Connection"
+              label="Connection (Optional)"
               onChange={(e) => setSelectedConnection(e.target.value)}
               disabled={isLoadingConnections}
             >
+              <MenuItem value="">
+                <Box
+                  sx={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    width: '100%',
+                    color: 'text.secondary',
+                  }}
+                >
+                  <DatabaseIcon sx={{ fontSize: 20, marginRight: 1 }} />
+                  <Typography>No connection (add later)</Typography>
+                </Box>
+              </MenuItem>
               <MenuItem onClick={() => navigate('/app/add-connection')}>
                 <Box
                   sx={{
