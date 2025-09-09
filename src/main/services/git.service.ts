@@ -380,33 +380,68 @@ export default class GitService {
   async getFileStatusList(repoPath: string): Promise<FileStatus[]> {
     const git = this.getGitInstance(repoPath);
     const status = await git.status();
-
     const results: FileStatus[] = [];
 
     status.not_added.forEach((file) =>
-      results.push({ path: `${repoPath}/${file}`, status: 'untracked' }),
+      results.push({ path: path.join(repoPath, file), status: 'untracked' }),
     );
 
     status.modified.forEach((file) =>
-      results.push({ path: `${repoPath}/${file}`, status: 'modified' }),
+      results.push({ path: path.join(repoPath, file), status: 'modified' }),
     );
 
     status.staged.forEach((file) =>
-      results.push({ path: `${repoPath}/${file}`, status: 'staged' }),
+      results.push({ path: path.join(repoPath, file), status: 'staged' }),
     );
 
     status.deleted.forEach((file) =>
-      results.push({ path: `${repoPath}/${file}`, status: 'deleted' }),
+      results.push({ path: path.join(repoPath, file), status: 'deleted' }),
     );
 
     status.renamed.forEach((entry) =>
-      results.push({ path: entry.to, status: 'renamed' }),
+      results.push({ path: path.join(repoPath, entry.to), status: 'renamed' }),
     );
 
     status.conflicted.forEach((file) =>
-      results.push({ path: `${repoPath}/${file}`, status: 'conflicted' }),
+      results.push({ path: path.join(repoPath, file), status: 'conflicted' }),
     );
 
     return results;
+  }
+
+  async getFileStatus(
+    repoPath: string,
+    filePath: string,
+  ): Promise<FileStatus | null> {
+    const git = this.getGitInstance(repoPath);
+
+    // Get relative path (how Git reports it)
+    const relativePath = path.relative(repoPath, filePath);
+
+    // Run status for this file
+    const status = await git.status([relativePath]);
+
+    const fullPath = path.join(repoPath, relativePath);
+
+    if (status.not_added.includes(relativePath)) {
+      return { path: fullPath, status: 'untracked' };
+    }
+    if (status.modified.includes(relativePath)) {
+      return { path: fullPath, status: 'modified' };
+    }
+    if (status.staged.includes(relativePath)) {
+      return { path: fullPath, status: 'staged' };
+    }
+    if (status.deleted.includes(relativePath)) {
+      return { path: fullPath, status: 'deleted' };
+    }
+    if (status.renamed.some((entry) => entry.to === relativePath)) {
+      return { path: fullPath, status: 'renamed' };
+    }
+    if (status.conflicted.includes(relativePath)) {
+      return { path: fullPath, status: 'conflicted' };
+    }
+
+    return null;
   }
 }

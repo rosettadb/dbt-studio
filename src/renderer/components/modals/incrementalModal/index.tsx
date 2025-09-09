@@ -1,29 +1,23 @@
 /* eslint-disable no-nested-ternary, no-restricted-syntax */
-import {
-  Close as CloseIcon,
-  Folder,
-  InsertDriveFile,
-} from '@mui/icons-material';
+import { Close as CloseIcon } from '@mui/icons-material';
 import {
   Button,
   Dialog,
   DialogActions,
   DialogContent,
   DialogTitle,
-  Checkbox,
   TextField,
   IconButton,
-  FormControlLabel,
   Box,
   Divider,
   InputAdornment,
   Typography,
 } from '@mui/material';
 import React from 'react';
-import { TreeItem, SimpleTreeView as TreeView } from '@mui/x-tree-view';
 import { projectsServices } from '../../../services';
 import { useUpdateProject } from '../../../controllers';
 import { FileNode, Project } from '../../../../types/backend';
+import { SelectableFileTree } from '../../selectableFileTree';
 
 type Props = {
   isOpen: boolean;
@@ -70,45 +64,47 @@ export const IncrementalModal: React.FC<Props> = ({
     return null;
   };
 
-  // Helper function to check if a folder directly contains SQL or YAML files (not in subfolders)
-  const folderContainsTargetFiles = (node: FileNode): boolean => {
-    if (node.type === 'file') {
-      return false; // This function is only for folders
-    }
+  // Get all selected items (files from individual selection or files from folder selection)
+  const getAllSelectedFiles = (): string[] => {
+    const allFiles: string[] = [];
 
-    if (node.children) {
-      // Check only direct children, not recursive
-      return node.children.some(
-        (child) =>
-          child.type === 'file' &&
-          (child.name.endsWith('.sql') ||
-            child.name.endsWith('.yaml') ||
-            child.name.endsWith('.yml')),
-      );
-    }
+    // Add individually selected files
+    allFiles.push(...Array.from(selectedFiles));
 
-    return false;
-  };
+    // Add files from selected folders
+    if (files) {
+      selectedFolders.forEach((folderPath) => {
+        const findFolderNode = (node: FileNode): FileNode | null => {
+          if (node.path === folderPath) return node;
+          if (node.children) {
+            for (const child of node.children) {
+              const found = findFolderNode(child);
+              if (found) return found;
+            }
+          }
+          return null;
+        };
 
-  // Get all SQL and YAML files in a folder (only direct children, not subfolders)
-  const getTargetFilesInFolder = (node: FileNode): string[] => {
-    const targetFiles: string[] = [];
-
-    // Only get direct children that are SQL or YAML files, don't recurse into subfolders
-    if (node.children) {
-      node.children.forEach((child) => {
-        if (
-          child.type === 'file' &&
-          (child.name.endsWith('.sql') ||
-            child.name.endsWith('.yaml') ||
-            child.name.endsWith('.yml'))
-        ) {
-          targetFiles.push(child.path);
+        const folderNode = findFolderNode(files);
+        if (folderNode) {
+          // Get all SQL and YAML files in folder (only direct children)
+          if (folderNode.children) {
+            folderNode.children.forEach((child) => {
+              if (
+                child.type === 'file' &&
+                (child.name.endsWith('.sql') ||
+                  child.name.endsWith('.yaml') ||
+                  child.name.endsWith('.yml'))
+              ) {
+                allFiles.push(child.path);
+              }
+            });
+          }
         }
       });
     }
 
-    return targetFiles;
+    return allFiles;
   };
 
   // Recursive function to get all SQL and YAML file paths from models directory only
@@ -139,21 +135,6 @@ export const IncrementalModal: React.FC<Props> = ({
     }
 
     return paths;
-  };
-
-  // Filter function to exclude rosetta and .git folders
-  const shouldExcludeNode = (
-    node: FileNode,
-    isDirectChild: boolean = false,
-  ): boolean => {
-    if (isDirectChild && node.type === 'folder') {
-      return (
-        node.name === 'rosetta' ||
-        node.name === '.git' ||
-        node.name === 'target'
-      );
-    }
-    return false;
   };
 
   const handleSelectAllChange = () => {
@@ -254,168 +235,26 @@ export const IncrementalModal: React.FC<Props> = ({
     setSelectedFolders(newSelectedFolders);
   };
 
-  const renderFileTree = (
-    node: FileNode,
-    isDirectChild: boolean = false,
-    isInModelsDir: boolean = false,
-  ): React.ReactNode => {
-    // Skip excluded folders
-    if (shouldExcludeNode(node, isDirectChild)) {
-      return null;
+  const handleExpandedItemsChange = (
+    event: React.SyntheticEvent,
+    itemIds: string[],
+  ) => {
+    setExpandedItems(itemIds);
+  };
+
+  const getDirectoryRestrictionKey = (filePath: string): string | null => {
+    return getModelsSubdirectory(filePath);
+  };
+
+  // Get the display name for restricted directory
+  const getRestrictedDirectoryDisplayName = (): string => {
+    if (!restrictedDirectory) return '';
+    const pathParts = restrictedDirectory.split('/');
+    const modelsIndex = pathParts.findIndex((part) => part === 'models');
+    if (modelsIndex !== -1 && modelsIndex < pathParts.length - 1) {
+      return `models/${pathParts[modelsIndex + 1]}`;
     }
-
-    const nodeId = node.path;
-    const isFile = node.type === 'file';
-
-    // Check if current node is the models directory
-    const isModelsDir = node.type === 'folder' && node.name === 'models';
-    const shouldEnableSelection = isInModelsDir || isModelsDir;
-
-    const isTargetFile =
-      isFile &&
-      (node.name.endsWith('.sql') ||
-        node.name.endsWith('.yaml') ||
-        node.name.endsWith('.yml'));
-    const canSelectFile = isTargetFile && shouldEnableSelection;
-
-    // Check if folder can be selected (contains target files, is in models directory, but not the models directory itself)
-    const canSelectFolder =
-      !isFile &&
-      shouldEnableSelection &&
-      !isModelsDir && // Exclude the models directory itself
-      folderContainsTargetFiles(node);
-
-    const isFileSelected = selectedFiles.has(node.path);
-    const isFolderSelected = selectedFolders.has(node.path);
-
-    // Check if selection is disabled due to directory restrictions
-    const nodeModelsSubdir = getModelsSubdirectory(node.path);
-    const isDisabledByRestriction =
-      restrictedDirectory &&
-      nodeModelsSubdir &&
-      restrictedDirectory !== nodeModelsSubdir;
-
-    return (
-      <TreeItem
-        key={nodeId}
-        itemId={nodeId}
-        label={
-          <Box sx={{ display: 'flex', alignItems: 'center' }}>
-            {isFile ? (
-              <FormControlLabel
-                control={
-                  <Checkbox
-                    size="small"
-                    checked={isFileSelected}
-                    onChange={(e) =>
-                      handleFileSelection(node.path, e.target.checked)
-                    }
-                    onClick={(e) => e.stopPropagation()}
-                    disabled={!canSelectFile || !!isDisabledByRestriction}
-                  />
-                }
-                label={
-                  <Box sx={{ display: 'flex', alignItems: 'center', ml: 1 }}>
-                    <InsertDriveFile
-                      sx={{
-                        mr: 1,
-                        fontSize: 18,
-                        color:
-                          canSelectFile && !isDisabledByRestriction
-                            ? 'primary.main'
-                            : 'action.disabled',
-                      }}
-                    />
-                    <Typography
-                      variant="body2"
-                      sx={{
-                        color:
-                          canSelectFile && !isDisabledByRestriction
-                            ? 'text.primary'
-                            : 'text.disabled',
-                      }}
-                    >
-                      {node.name}
-                    </Typography>
-                  </Box>
-                }
-                sx={{ m: 0 }}
-              />
-            ) : (
-              <Box sx={{ display: 'flex', alignItems: 'center' }}>
-                {canSelectFolder && (
-                  <Checkbox
-                    size="small"
-                    checked={isFolderSelected}
-                    onChange={(e) =>
-                      handleFolderSelection(node.path, node, e.target.checked)
-                    }
-                    onClick={(e) => e.stopPropagation()}
-                    disabled={!!isDisabledByRestriction}
-                    sx={{ mr: 1 }}
-                  />
-                )}
-                <Box
-                  sx={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    ml: canSelectFolder ? 0 : 1,
-                  }}
-                >
-                  <Folder
-                    sx={{
-                      mr: 1.5,
-                      fontSize: 18,
-                      color: isModelsDir
-                        ? 'primary.main'
-                        : canSelectFolder && !isDisabledByRestriction
-                          ? 'secondary.main'
-                          : 'text.secondary',
-                    }}
-                  />
-                  <Typography
-                    variant="body2"
-                    sx={{
-                      fontWeight: isModelsDir ? 600 : 500,
-                      color: isModelsDir
-                        ? 'primary.main'
-                        : canSelectFolder && !isDisabledByRestriction
-                          ? 'text.primary'
-                          : isDisabledByRestriction
-                            ? 'text.disabled'
-                            : 'text.primary',
-                    }}
-                  >
-                    {node.name}
-                    {canSelectFolder && (
-                      <Typography
-                        component="span"
-                        variant="caption"
-                        sx={{ ml: 1, color: 'text.secondary' }}
-                      >
-                        (contains{' '}
-                        {node.children?.filter(
-                          (child) =>
-                            child.type === 'file' &&
-                            (child.name.endsWith('.sql') ||
-                              child.name.endsWith('.yaml') ||
-                              child.name.endsWith('.yml')),
-                        ).length || 0}{' '}
-                        SQL/YAML files)
-                      </Typography>
-                    )}
-                  </Typography>
-                </Box>
-              </Box>
-            )}
-          </Box>
-        }
-      >
-        {node.children?.map((child) =>
-          renderFileTree(child, false, shouldEnableSelection),
-        )}
-      </TreeItem>
-    );
+    return restrictedDirectory;
   };
 
   React.useEffect(() => {
@@ -443,57 +282,8 @@ export const IncrementalModal: React.FC<Props> = ({
     return () => setLoading(false);
   }, []);
 
-  const handleExpandedItemsChange = (
-    event: React.SyntheticEvent,
-    itemIds: string[],
-  ) => {
-    setExpandedItems(itemIds);
-  };
-
-  // Get all selected items (files from individual selection or files from folder selection)
-  const getAllSelectedFiles = (): string[] => {
-    const allFiles: string[] = [];
-
-    // Add individually selected files
-    allFiles.push(...Array.from(selectedFiles));
-
-    // Add files from selected folders
-    if (files) {
-      selectedFolders.forEach((folderPath) => {
-        const findFolderNode = (node: FileNode): FileNode | null => {
-          if (node.path === folderPath) return node;
-          if (node.children) {
-            for (const child of node.children) {
-              const found = findFolderNode(child);
-              if (found) return found;
-            }
-          }
-          return null;
-        };
-
-        const folderNode = findFolderNode(files);
-        if (folderNode) {
-          allFiles.push(...getTargetFilesInFolder(folderNode));
-        }
-      });
-    }
-
-    return allFiles;
-  };
-
   const totalSelectedItems = selectedFiles.size + selectedFolders.size;
   const allSelectedFiles = getAllSelectedFiles();
-
-  // Get the display name for restricted directory
-  const getRestrictedDirectoryDisplayName = (): string => {
-    if (!restrictedDirectory) return '';
-    const pathParts = restrictedDirectory.split('/');
-    const modelsIndex = pathParts.findIndex((part) => part === 'models');
-    if (modelsIndex !== -1 && modelsIndex < pathParts.length - 1) {
-      return `models/${pathParts[modelsIndex + 1]}`;
-    }
-    return restrictedDirectory;
-  };
 
   return (
     <Dialog
@@ -530,104 +320,21 @@ export const IncrementalModal: React.FC<Props> = ({
 
       <DialogContent sx={{ py: 3 }}>
         {/* File Selection Section */}
-        <Box sx={{ mb: 4 }}>
-          <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-            Select SQL/YAML files or folders from {project.path}/models
-            directory (one subdirectory at a time)
-          </Typography>
-
-          {restrictedDirectory && (
-            <Typography
-              variant="caption"
-              color="warning.main"
-              sx={{ display: 'block', mb: 2 }}
-            >
-              Selection restricted to: {getRestrictedDirectoryDisplayName()}
-            </Typography>
-          )}
-
-          <FormControlLabel
-            control={
-              <Checkbox
-                size="small"
-                checked={selectAll}
-                indeterminate={selectedFiles.size > 0 && !selectAll}
-                onChange={handleSelectAllChange}
-                disabled={selectedFolders.size > 0}
-                sx={{
-                  color: 'primary.main',
-                  '&.Mui-checked': {
-                    color: 'primary.main',
-                  },
-                }}
-              />
-            }
-            label="Select All SQL/YAML Files (models directory only)"
-            sx={{
-              mb: 2,
-              '& .MuiFormControlLabel-label': {
-                fontSize: '0.875rem',
-                fontWeight: 500,
-              },
-            }}
-          />
-
-          <Box
-            sx={{
-              border: '1px solid',
-              borderColor: 'divider',
-              height: 250,
-              overflow: 'auto',
-              borderRadius: 1,
-              p: 2,
-              backgroundColor: 'background.paper',
-              '&:hover': {
-                borderColor: 'primary.light',
-              },
-            }}
-          >
-            {files ? (
-              <TreeView
-                expandedItems={expandedItems}
-                onExpandedItemsChange={handleExpandedItemsChange}
-                sx={{
-                  '& .MuiTreeItem-content': {
-                    padding: '4px 8px',
-                    borderRadius: 1,
-                    '&:hover': {
-                      backgroundColor: 'action.hover',
-                    },
-                  },
-                }}
-              >
-                {files.children
-                  ?.map((child) => renderFileTree(child, true, false))
-                  .filter(Boolean)}
-              </TreeView>
-            ) : (
-              <Box
-                sx={{
-                  py: 4,
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  color: 'text.secondary',
-                }}
-              >
-                <Typography>Loading files...</Typography>
-              </Box>
-            )}
-          </Box>
-
-          <Typography
-            variant="caption"
-            color="text.secondary"
-            sx={{ mt: 2, display: 'block' }}
-          >
-            {selectedFiles.size} files + {selectedFolders.size} folders selected
-            ({allSelectedFiles.length} total SQL/YAML files)
-          </Typography>
-        </Box>
+        <SelectableFileTree
+          files={files}
+          mode="incremental"
+          selectAll={selectAll}
+          selectedFiles={selectedFiles}
+          selectedFolders={selectedFolders}
+          expandedItems={expandedItems}
+          restrictedDirectory={restrictedDirectory}
+          onSelectAllChange={handleSelectAllChange}
+          onFileSelection={handleFileSelection}
+          onFolderSelection={handleFolderSelection}
+          onExpandedItemsChange={handleExpandedItemsChange}
+          getDirectoryRestrictionKey={getDirectoryRestrictionKey}
+          getRestrictedDirectoryDisplayName={getRestrictedDirectoryDisplayName}
+        />
 
         <Divider sx={{ mb: 4 }} />
 
@@ -715,7 +422,6 @@ export const IncrementalModal: React.FC<Props> = ({
             textTransform: 'none',
             fontWeight: 500,
             px: 3,
-            borderRadius: 1.5,
           }}
         >
           Generate Incremental Models

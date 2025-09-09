@@ -30,14 +30,18 @@ import {
   ProjectDbtSplitButton,
   SplitButton,
   TerminalLayout,
+  BusinessModal,
+  AiPromptModal,
 } from '../../components';
 import {
   useGetConnectionById,
   useGetConnections,
+  useGetFileContent,
   useGetFileStatuses,
   useGetProjectFiles,
   useGetSelectedProject,
   useGetSettings,
+  useSaveFileContent,
   useUpdateProject,
 } from '../../controllers';
 import { projectsServices } from '../../services';
@@ -63,24 +67,25 @@ import { AI_PROMPTS } from '../../config/constants';
 import { utils } from '../../helpers';
 import { AppLayout } from '../../layouts';
 import { AppContext } from '../../context';
-import { BusinessModal } from '../../components/modals/businessModal';
 import ChatScreen from '../chat';
-import { AiPromptModal } from '../../components/modals/aiPromptModal';
 import { getFileName } from '../../services/settings.services';
 
 const ProjectDetails: React.FC = () => {
   const navigate = useNavigate();
+  const [selectedFilePath, setSelectedFilePath] = React.useState<string>();
+
   const { data: project, isLoading, refetch } = useGetSelectedProject();
   const { data: connection } = useGetConnectionById(project?.connectionId);
   const { data: settings } = useGetSettings();
+  const { mutate: updateFileContent } = useSaveFileContent();
+  const { data: fileContent } = useGetFileContent(selectedFilePath);
+
   const { isAiProviderSet, isChatOpen } = React.useContext(AppContext);
   const [queryData, setQueryData] = React.useState<
     GenerateDashboardResponseType[]
   >([]);
   const [isQueryOpen, setIsQueryOpen] = React.useState(false);
   const [isLoadingQuery, setIsLoadingQuery] = React.useState(false);
-  const [selectedFilePath, setSelectedFilePath] = React.useState<string>();
-  const [fileContent, setFileContent] = React.useState<string>();
   const [businessQueryModal, setBusinessQueryModal] = React.useState<string>();
   const [noAiSetModal, setNoAiSetModal] = React.useState(false);
   const [aiTransformationPrompt, setAiTransformationPrompt] =
@@ -323,7 +328,7 @@ const ProjectDetails: React.FC = () => {
       });
     }
     return items;
-  }, [selectedFilePath]);
+  }, [selectedFilePath, fileContent]);
 
   if (isLoading) {
     return <Loader />;
@@ -332,10 +337,6 @@ const ProjectDetails: React.FC = () => {
   if (!project?.id) {
     return <Navigate to="/app/select-project" />;
   }
-
-  // if (project?.id && !project?.connectionId) {
-  //   return <Navigate to={`/app/add-connection/${project.id}`} />;
-  // }
 
   const handleBusinessLayerClick = (path: string) => {
     if (isAiProviderSet) {
@@ -359,21 +360,11 @@ const ProjectDetails: React.FC = () => {
                 }
               }}
               onFileSelect={async (fileNode) => {
-                // Check if file is editable before trying to read its content
                 if (!utils.isEditableFile(fileNode.path)) {
                   setSelectedFilePath(fileNode.path);
-                  setFileContent(
-                    utils.getNonEditableFileMessage(fileNode.path),
-                  );
                   return;
                 }
-
-                // For editable files, load content normally
-                const content = await projectsServices.getFileContent({
-                  path: fileNode.path,
-                });
                 setSelectedFilePath(fileNode.path);
-                setFileContent(content);
               }}
               isLoadingFiles={isLoadingDirectories}
               refreshFiles={async () => {
@@ -387,6 +378,9 @@ const ProjectDetails: React.FC = () => {
                 });
                 await fetchDirectories();
                 await updateStatuses();
+              }}
+              onNewFileCallback={(filePath) => {
+                setSelectedFilePath(filePath);
               }}
             />
           )}
@@ -512,14 +506,15 @@ const ProjectDetails: React.FC = () => {
                       Please select a file from the explorer on the left!
                     </NoFileSelected>
                   )}
-                  {selectedFilePath && (
-                    <Editor
-                      filePath={selectedFilePath}
-                      content={fileContent ?? ''}
-                      setContent={setFileContent}
-                      enableDiff
-                    />
-                  )}
+                  {selectedFilePath &&
+                    fileContent !== undefined &&
+                    project.path && (
+                      <Editor
+                        projectPath={project.path}
+                        filePath={selectedFilePath}
+                        content={fileContent}
+                      />
+                    )}
                 </EditorContainer>
               </Content>
             </TerminalLayout>
@@ -570,6 +565,13 @@ const ProjectDetails: React.FC = () => {
                 onClose={() => {
                   setAiTransformationPrompt(undefined);
                   setAitTransformationResponse(undefined);
+                }}
+                onApply={async (value) => {
+                  updateFileContent({
+                    path: String(selectedFilePath),
+                    content: value,
+                  });
+                  toast.success('Content saved!');
                 }}
                 prompt={aiTransformationPrompt}
                 onPromptChange={(value) => setAiTransformationPrompt(value)}

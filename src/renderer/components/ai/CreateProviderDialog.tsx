@@ -300,7 +300,7 @@ export const CreateProviderDialog: React.FC<CreateProviderDialogProps> = ({
                   label="Provider Type"
                 >
                   <MenuItem value="openai">OpenAI</MenuItem>
-                  <MenuItem value="anthropic">Anthropic Claude</MenuItem>
+                  <MenuItem value="anthropic">Anthropic Claude (beta)</MenuItem>
                   <MenuItem value="gemini">Google Gemini</MenuItem>
                   <MenuItem value="ollama">Ollama (Local)</MenuItem>
                 </Select>

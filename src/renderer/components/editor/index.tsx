@@ -2,118 +2,77 @@ import React from 'react';
 import { OnChange, loader } from '@monaco-editor/react';
 import { useTheme, IconButton, Tooltip } from '@mui/material';
 import { VerticalSplit } from '@mui/icons-material';
-import { getVersionsFromDiff, isEditableFile } from '../../helpers/utils';
-import { gitServices, projectsServices } from '../../services';
-import { CompletionItem } from '../../../types/frontend';
+import { isEditableFile } from '../../helpers/utils';
 import {
-  useGetFileStatuses,
-  useGetProjectFiles,
-  useGetSelectedProject,
+  useGetFileDiff,
+  useGetFileStatus,
+  useSaveFileContent,
 } from '../../controllers';
 import { Container } from './styles';
 import { DiffView } from './diffView';
 import { CodeEditor } from './codeEditor';
-import { Project } from '../../../types/backend';
-
-const getLanguageFromExtension = (filePath: string): string => {
-  const extension = filePath.split('.').pop()?.toLowerCase();
-  switch (extension) {
-    case 'yaml':
-    case 'yml':
-    case 'conf':
-      return 'yaml';
-    case 'sql':
-      return 'sql';
-    case 'js':
-    case 'jsx':
-      return 'javascript';
-    case 'json':
-      return 'json';
-    default:
-      return 'plaintext';
-  }
-};
+import { getLanguageFromExtension, getVersionsFromDiff } from './helpers';
 
 export const Editor = ({
   filePath,
   content,
-  setContent,
-  completions = [],
-  enableDiff = true,
+  projectPath,
 }: {
-  filePath?: string;
+  filePath: string;
   content: string;
-  setContent: (value: string) => void;
-  completions?: Omit<CompletionItem, 'range'>[];
-  enableDiff?: boolean;
+  projectPath: string;
 }) => {
   loader.config({
     paths: {
       vs: 'app-asset://zui/node_modules/monaco-editor/min/vs',
     },
   });
-  const { data: project } = useGetSelectedProject();
-  const { refetch: updateStatuses } = useGetFileStatuses(project?.path ?? '');
-  const { refetch: updateDirectories } = useGetProjectFiles(project as Project);
+  const { data: fileStatus, isLoading: isLoadingFileStatus } = useGetFileStatus(
+    projectPath,
+    filePath,
+    {
+      refetchInterval: 10000,
+    },
+  );
+  const { data: fileDiff } = useGetFileDiff(projectPath, filePath);
+  const { mutate: updateFileContent } = useSaveFileContent();
   const theme = useTheme();
   const monacoTheme = theme.palette.mode === 'dark' ? 'vs-dark' : 'light';
   const language = getLanguageFromExtension(filePath ?? 'txt');
 
-  // Check if the file is editable
-  const isFileEditable = filePath ? isEditableFile(filePath) : true;
-
-  const [originalContent, setOriginalContent] = React.useState<string | null>(
-    null,
-  );
+  const isFileEditable = isEditableFile(filePath);
   const [showDiffView, setShowDiffView] = React.useState(false);
   const debounceTimer = React.useRef<ReturnType<typeof setTimeout> | null>(
     null,
   );
 
-  React.useEffect(() => {
-    return () => {
-      if (debounceTimer.current) clearTimeout(debounceTimer.current);
-    };
-  }, []);
-
-  React.useEffect(() => {
-    if (!project?.path || !filePath || !enableDiff) return;
-    gitServices
-      .getFileDiff(project.path, filePath)
-      // eslint-disable-next-line promise/always-return
-      .then(({ diff }) => {
-        const { oldVersion } = getVersionsFromDiff(content, String(diff));
-        setOriginalContent(oldVersion);
-      })
-      .catch(() => {});
-  }, [filePath, project?.path, enableDiff]);
+  const originalContent = React.useMemo(() => {
+    if (fileStatus?.status === 'untracked' || !fileStatus?.status) {
+      return null;
+    }
+    const { oldVersion } = getVersionsFromDiff(content, String(fileDiff?.diff));
+    return oldVersion;
+  }, [fileStatus, fileDiff]);
 
   React.useEffect(() => {
     setShowDiffView(false);
-  }, [filePath]);
+    return () => {
+      if (debounceTimer.current) clearTimeout(debounceTimer.current);
+    };
+  }, [filePath, projectPath, fileStatus, fileDiff]);
 
   const handleChange: OnChange = (value) => {
     if (value !== undefined) {
-      setContent(value);
       if (debounceTimer.current) clearTimeout(debounceTimer.current);
       debounceTimer.current = setTimeout(() => {
-        if (filePath) {
-          projectsServices
-            .saveFileContent({ path: filePath, content: value })
-            // eslint-disable-next-line promise/always-return
-            .then(async () => {
-              await updateDirectories();
-              await updateStatuses();
-            })
-            .catch(() => {});
-        }
-      }, 500);
+        updateFileContent({ path: filePath, content: value });
+      }, 1000);
     }
   };
 
   return (
     <Container>
-      {enableDiff && originalContent && (
+      {originalContent && (
         <Tooltip title="Compare Changes">
           <IconButton
             onClick={() => setShowDiffView((prev) => !prev)}
@@ -123,21 +82,21 @@ export const Editor = ({
           </IconButton>
         </Tooltip>
       )}
-      {enableDiff && showDiffView && originalContent ? (
+      {showDiffView && !isLoadingFileStatus && (
         <DiffView
           modified={content}
-          original={originalContent}
+          original={originalContent ?? ''}
           language={language}
           theme={monacoTheme}
         />
-      ) : (
+      )}
+      {!showDiffView && !isLoadingFileStatus && (
         <CodeEditor
           content={content}
           originalContent={originalContent}
           language={language}
           theme={monacoTheme}
           onChange={handleChange}
-          completions={completions}
           readOnly={!isFileEditable}
         />
       )}

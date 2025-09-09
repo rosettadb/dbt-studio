@@ -27,17 +27,52 @@ a:hover {
   text-decoration: none;
 }
 
+.monaco-editor .line-added-new-file {
+  background-color: rgba(100, 181, 246, 0.15); /* soft blue */
+}
 .monaco-editor .line-added {
-  background-color: rgba(0, 255, 0, 0.1);
+  background-color: rgba(129, 199, 132, 0.15); /* soft green */
 }
 .monaco-editor .line-removed {
-  background-color: rgba(255, 0, 0, 0.1);
+  background-color: rgba(239, 154, 154, 0.15); /* soft red */
 }
+
+/* Gutter indicators for added lines */
 .monaco-editor .line-added-glyph {
-  background: rgba(0, 128, 0, 0.28);
+  background: rgba(76, 175, 80, 0.9) !important; /* strong green */
+  width: 3px !important;
+  margin-left: 3px !important;
 }
+
+.monaco-editor .line-added-decoration {
+  background: rgba(76, 175, 80, 0.5) !important; /* softer fill */
+  width: 3px !important;
+  left: 3px !important;
+}
+
+.monaco-editor .line-added-glyph-new-file {
+  background: rgba(33, 150, 243, 0.8) !important; /* strong blue */
+  width: 3px !important;
+  margin-left: 3px !important;
+}
+
+.monaco-editor .line-added-decoration-new-file {
+  background: rgba(33, 150, 243, 0.5) !important;
+  width: 3px !important;
+  left: 3px !important;
+}
+
+/* Gutter indicators for removed lines */
 .monaco-editor .line-removed-glyph {
-  background: rgba(255, 0, 0, 0.2);
+  background: rgba(244, 67, 54, 0.9) !important; /* strong red */
+  width: 3px !important;
+  margin-left: 3px !important;
+}
+
+.monaco-editor .line-removed-decoration {
+  background: rgba(244, 67, 54, 0.5) !important; /* softer red */
+  width: 3px !important;
+  left: 3px !important;
 }
 
 .run-query-glyph {

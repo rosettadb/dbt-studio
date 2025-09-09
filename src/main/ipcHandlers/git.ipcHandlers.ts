@@ -179,6 +179,16 @@ const registerGitHandlers = () => {
       return gitService.getFileStatusList(repoPath);
     },
   );
+
+  ipcMain.handle(
+    'git:fileStatus',
+    async (
+      _event,
+      { repoPath, filePath }: { repoPath: string; filePath: string },
+    ): Promise<FileStatus | null> => {
+      return gitService.getFileStatus(repoPath, filePath);
+    },
+  );
 };
 
 export default registerGitHandlers;

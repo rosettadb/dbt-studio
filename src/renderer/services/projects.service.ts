@@ -165,12 +165,15 @@ export const createFile = async (body: {
   filePath: string;
   name: string;
   content?: string;
-}): Promise<void> => {
-  const { data } = await client.post<{
-    filePath: string;
-    name: string;
-    content?: string;
-  }>('project:createFile', body);
+}): Promise<string | undefined> => {
+  const { data } = await client.post<
+    {
+      filePath: string;
+      name: string;
+      content?: string;
+    },
+    string | undefined
+  >('project:createFile', body);
   return data;
 };
 

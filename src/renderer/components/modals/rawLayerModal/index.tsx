@@ -41,8 +41,22 @@ export const RawLayerModal: React.FC<Props> = ({
   }, []);
 
   return (
-    <Dialog open={isOpen} onClose={onClose} title="Raw Layer">
-      <DialogTitle>Rosetta DBT RawLayer</DialogTitle>
+    <Dialog
+      open={isOpen}
+      onClose={onClose}
+      title="Raw Layer"
+      fullWidth
+      slotProps={{
+        paper: {
+          sx: {
+            minWidth: '60vw',
+            borderRadius: 2,
+            boxShadow: '0px 8px 32px rgba(0, 0, 0, 0.12)',
+          },
+        },
+      }}
+    >
+      <DialogTitle>Generate Raw Layer</DialogTitle>
       <IconButton
         aria-label="close"
         onClick={onClose}
@@ -63,7 +77,7 @@ export const RawLayerModal: React.FC<Props> = ({
             display: 'flex',
             flexDirection: 'column',
             m: 'auto',
-            width: 500,
+            width: '100%',
             gap: 2,
           }}
         >
@@ -99,9 +113,29 @@ export const RawLayerModal: React.FC<Props> = ({
           />
         </Box>
       </DialogContent>
-      <DialogActions>
+      <DialogActions
+        sx={{
+          px: 3,
+          pb: 3,
+          pt: 2,
+          gap: 2,
+          borderTop: 1,
+          borderColor: 'divider',
+        }}
+      >
         <Button
-          disabled={loading}
+          onClick={onClose}
+          color="inherit"
+          sx={{
+            textTransform: 'none',
+            fontWeight: 500,
+            px: 3,
+          }}
+        >
+          Cancel
+        </Button>
+        <Button
+          variant="contained"
           onClick={async () => {
             setLoading(true);
             await updateProject.mutateAsync({
@@ -110,8 +144,14 @@ export const RawLayerModal: React.FC<Props> = ({
             });
             processCallback(updatedPath);
           }}
+          disabled={loading}
+          sx={{
+            textTransform: 'none',
+            fontWeight: 500,
+            px: 3,
+          }}
         >
-          Rosetta DBT RawLayer
+          Generate Raw Layer
         </Button>
       </DialogActions>
     </Dialog>
