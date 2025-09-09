@@ -438,7 +438,6 @@ export const BusinessModal: React.FC<Props> = ({
             fontWeight: 500,
             textTransform: 'uppercase',
             px: 3,
-            borderRadius: 1.5,
           }}
         >
           Generate Business Models

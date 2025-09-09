@@ -422,7 +422,6 @@ export const IncrementalModal: React.FC<Props> = ({
             textTransform: 'none',
             fontWeight: 500,
             px: 3,
-            borderRadius: 1.5,
           }}
         >
           Generate Incremental Models

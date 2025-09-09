@@ -56,7 +56,7 @@ export const RawLayerModal: React.FC<Props> = ({
         },
       }}
     >
-      <DialogTitle>Rosetta DBT RawLayer</DialogTitle>
+      <DialogTitle>Generate Raw Layer</DialogTitle>
       <IconButton
         aria-label="close"
         onClick={onClose}
@@ -113,9 +113,29 @@ export const RawLayerModal: React.FC<Props> = ({
           />
         </Box>
       </DialogContent>
-      <DialogActions>
+      <DialogActions
+        sx={{
+          px: 3,
+          pb: 3,
+          pt: 2,
+          gap: 2,
+          borderTop: 1,
+          borderColor: 'divider',
+        }}
+      >
         <Button
-          disabled={loading}
+          onClick={onClose}
+          color="inherit"
+          sx={{
+            textTransform: 'none',
+            fontWeight: 500,
+            px: 3,
+          }}
+        >
+          Cancel
+        </Button>
+        <Button
+          variant="contained"
           onClick={async () => {
             setLoading(true);
             await updateProject.mutateAsync({
@@ -124,8 +144,14 @@ export const RawLayerModal: React.FC<Props> = ({
             });
             processCallback(updatedPath);
           }}
+          disabled={loading}
+          sx={{
+            textTransform: 'none',
+            fontWeight: 500,
+            px: 3,
+          }}
         >
-          Rosetta DBT RawLayer
+          Generate Raw Layer
         </Button>
       </DialogActions>
     </Dialog>
