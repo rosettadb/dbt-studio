@@ -503,13 +503,15 @@ const ProjectDetails: React.FC = () => {
                       Please select a file from the explorer on the left!
                     </NoFileSelected>
                   )}
-                  {selectedFilePath && fileContent && project.path && (
-                    <Editor
-                      projectPath={project.path}
-                      filePath={selectedFilePath}
-                      content={fileContent}
-                    />
-                  )}
+                  {selectedFilePath &&
+                    fileContent !== undefined &&
+                    project.path && (
+                      <Editor
+                        projectPath={project.path}
+                        filePath={selectedFilePath}
+                        content={fileContent}
+                      />
+                    )}
                 </EditorContainer>
               </Content>
             </TerminalLayout>
