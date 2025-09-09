@@ -212,7 +212,7 @@ export const createNewFile = (
   parentPath: string,
   fileName: string,
   content: string = '',
-) => {
+): string | undefined => {
   const filePath = path.join(parentPath, fileName);
 
   if (fs.existsSync(filePath)) {
@@ -224,6 +224,7 @@ export const createNewFile = (
       throw new Error(err.message);
     }
   });
+  return filePath;
 };
 
 export const deleteItem = async (targetPath: string) => {

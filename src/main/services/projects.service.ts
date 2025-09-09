@@ -843,8 +843,8 @@ export default class ProjectsService {
     filePath: string;
     name: string;
     content?: string;
-  }) {
-    createNewFile(filePath, name, content);
+  }): string | undefined {
+    return createNewFile(filePath, name, content);
   }
 
   static async selectProject({ projectId }: { projectId: string }) {

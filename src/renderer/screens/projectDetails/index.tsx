@@ -379,6 +379,9 @@ const ProjectDetails: React.FC = () => {
                 await fetchDirectories();
                 await updateStatuses();
               }}
+              onNewFileCallback={(filePath) => {
+                setSelectedFilePath(filePath);
+              }}
             />
           )}
         </FileTreeContainer>

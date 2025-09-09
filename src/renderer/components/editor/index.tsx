@@ -66,7 +66,7 @@ export const Editor = ({
       if (debounceTimer.current) clearTimeout(debounceTimer.current);
       debounceTimer.current = setTimeout(() => {
         updateFileContent({ path: filePath, content: value });
-      }, 500);
+      }, 1000);
     }
   };
 

@@ -14,6 +14,7 @@ type Props = {
   isLoadingFiles: boolean;
   refreshFiles: () => void;
   onDeleteFileCallback: (filePath: string) => void;
+  onNewFileCallback: (filePath?: string) => void;
   statuses: FileStatus[];
   copyPath: (source: string, target: string) => Promise<void>;
 };
@@ -68,6 +69,7 @@ const FileTreeViewer: React.FC<Props> = ({
   isLoadingFiles,
   refreshFiles,
   onDeleteFileCallback,
+  onNewFileCallback,
   statuses,
   copyPath,
 }) => {
@@ -215,9 +217,10 @@ const FileTreeViewer: React.FC<Props> = ({
           }
           type={fileModal ? 'file' : 'folder'}
           path={String(fileModal ?? folderModal)}
-          successCallback={() => {
+          successCallback={(filePath) => {
             setFileModal(undefined);
             setFolderModal(undefined);
+            onNewFileCallback(filePath);
             refreshFiles();
           }}
         />
