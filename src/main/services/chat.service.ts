@@ -125,9 +125,9 @@ class ChatService {
         );
 
       // Adaptive strategy: Token budget + conversation phase + message importance
-      const CONTEXT_TOKEN_BUDGET = 6000; // Adjust based on model context window
+      const CONTEXT_TOKEN_BUDGET = 60000; // Adjust based on model context window
       const MIN_RECENT_MESSAGES = 4; // Always include at least recent 4
-      const MAX_RECENT_MESSAGES = 20; // Upper bound for performance
+      const MAX_RECENT_MESSAGES = 100; // Upper bound for performance
 
       // 1. Detect conversation phase and adjust strategy
       const conversationPhase = this.detectConversationPhase(userMessages);
