@@ -164,6 +164,7 @@ class ChatService {
         .filter((item) => !item.isRecent)
         .sort((a, b) => b.score - a.score); // Sort by importance descending
 
+      // eslint-disable-next-line no-restricted-syntax
       for (const item of remainingMessages) {
         const messageTokens = this.estimateTokenCount(item.message.content);
 
@@ -367,7 +368,7 @@ class ChatService {
           content.includes('choose') ||
           content.includes('prefer')
         ) {
-          decisions.push(message.content.substring(0, 100) + '...');
+          decisions.push(`${message.content.substring(0, 100)}...`);
         }
 
         // Detect code/technical elements

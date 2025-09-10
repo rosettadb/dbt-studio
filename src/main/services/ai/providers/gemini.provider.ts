@@ -171,6 +171,7 @@ export class GeminiProvider extends BaseAIProvider {
         const result = await model.generateContentStream(request.prompt);
 
         // Process the stream directly without collecting all chunks first
+        // eslint-disable-next-line no-restricted-syntax
         for await (const chunk of result.stream) {
           const chunkText = chunk.text();
           if (chunkText) {
