@@ -165,39 +165,30 @@ export class GeminiProvider extends BaseAIProvider {
         },
       });
 
-      // Promise-based approach that collects all chunks first
-      const allChunks: CompletionChunk[] = [];
       let accumulatedText = '';
 
       try {
         const result = await model.generateContentStream(request.prompt);
-        const chunks = result.stream;
 
-        // Process chunks using Promise.all to avoid async iteration issues
-        const streamChunks: any[] = [];
-
-        // Collect all chunks first
+        // Process the stream directly without collecting all chunks first
         // eslint-disable-next-line no-restricted-syntax
-        for await (const chunk of chunks) {
-          streamChunks.push(chunk);
+        for await (const chunk of result.stream) {
+          const chunkText = chunk.text();
+          if (chunkText) {
+            accumulatedText += chunkText;
+
+            yield {
+              content: chunkText,
+              done: false,
+              metadata: {
+                accumulated: accumulatedText,
+              },
+            };
+          }
         }
 
-        // Process collected chunks synchronously
-        streamChunks.forEach((chunk) => {
-          const chunkText = chunk.text();
-          accumulatedText += chunkText;
-
-          allChunks.push({
-            content: chunkText,
-            done: false,
-            metadata: {
-              accumulated: accumulatedText,
-            },
-          });
-        });
-
-        // Add final chunk
-        allChunks.push({
+        // Yield final chunk to indicate completion
+        yield {
           content: '',
           done: true,
           usage: {
@@ -208,15 +199,7 @@ export class GeminiProvider extends BaseAIProvider {
           metadata: {
             finalText: accumulatedText,
           },
-        });
-
-        // Yield all chunks
-        const yieldChunks = allChunks.values();
-        let nextChunk = yieldChunks.next();
-        while (!nextChunk.done) {
-          yield nextChunk.value;
-          nextChunk = yieldChunks.next();
-        }
+        };
       } catch (streamError) {
         throw streamError instanceof Error
           ? streamError

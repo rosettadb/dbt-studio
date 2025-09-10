@@ -1,5 +1,5 @@
 import React from 'react';
-import ChatWindow from './ChatWindow';
+import { ChatWindow } from '../../components/chat/ChatWindow';
 
 const ChatScreen: React.FC = () => {
   return <ChatWindow />;

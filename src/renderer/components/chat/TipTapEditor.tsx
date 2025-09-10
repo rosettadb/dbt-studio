@@ -34,7 +34,7 @@ interface TipTapEditorProps {
   onSubmit?: () => void; // Enter to send (Shift+Enter for newline)
 }
 
-const TipTapEditor: React.FC<TipTapEditorProps> = ({
+export const TipTapEditor: React.FC<TipTapEditorProps> = ({
   value,
   onChange,
   placeholder,
@@ -124,5 +124,3 @@ const TipTapEditor: React.FC<TipTapEditorProps> = ({
     </EditorContainer>
   );
 };
-
-export default TipTapEditor;

@@ -8,7 +8,9 @@ interface ChatMessageListProps {
   sessionId?: number;
 }
 
-const ChatMessageList: React.FC<ChatMessageListProps> = ({ sessionId }) => {
+export const ChatMessageList: React.FC<ChatMessageListProps> = ({
+  sessionId,
+}) => {
   const { data: messages = [], isLoading } = useGetChatMessages(sessionId);
   const containerRef = React.useRef<HTMLDivElement | null>(null);
   const bottomRef = React.useRef<HTMLDivElement | null>(null);
@@ -62,6 +64,7 @@ const ChatMessageList: React.FC<ChatMessageListProps> = ({ sessionId }) => {
           alignItems: 'center',
           justifyContent: 'center',
           p: 2,
+          backgroundColor: 'background.paper',
         }}
       >
         <Stack alignItems="center" spacing={1.25}>
@@ -96,6 +99,7 @@ const ChatMessageList: React.FC<ChatMessageListProps> = ({ sessionId }) => {
         pb: 1.5,
         overflowY: 'auto',
         gap: 0.75,
+        backgroundColor: 'background.paper',
       }}
     >
       {isLoading && (
@@ -117,5 +121,3 @@ const ChatMessageList: React.FC<ChatMessageListProps> = ({ sessionId }) => {
     </Box>
   );
 };
-
-export default ChatMessageList;
