@@ -36,10 +36,11 @@ export const FileTreeContainer = styled('div')(({ theme }) => ({
 }));
 
 export const EditorContainer = styled('div')(({ theme }) => ({
-  display: 'flex',
-  flexDirection: 'column',
   background: theme.palette.background.paper,
   height: '100%',
+  width: '100%',
+  display: 'flex',
+  flexDirection: 'column',
   flex: 1,
 }));
 
