@@ -37,6 +37,7 @@ import {
   useGetConnectionById,
   useGetConnections,
   useGetFileContent,
+  useGetFileContentList,
   useGetFileStatuses,
   useGetProjectFiles,
   useGetSelectedProject,
@@ -57,8 +58,6 @@ import {
 } from './styles';
 import { useDbt, useRosettaDBT } from '../../hooks';
 import {
-  Command,
-  CommandType,
   GenerateDashboardResponseType,
   Project,
   SupportedConnectionTypes,
@@ -69,6 +68,8 @@ import { AppLayout } from '../../layouts';
 import { AppContext } from '../../context';
 import ChatScreen from '../chat';
 import { getFileName } from '../../services/settings.services';
+import { generateModelsPrompt } from '../../helpers/businessModelGenerator';
+import { generateFilename } from '../../helpers/utils';
 
 const ProjectDetails: React.FC = () => {
   const navigate = useNavigate();
@@ -79,6 +80,7 @@ const ProjectDetails: React.FC = () => {
   const { data: settings } = useGetSettings();
   const { mutate: updateFileContent } = useSaveFileContent();
   const { data: fileContent } = useGetFileContent(selectedFilePath);
+  const { mutateAsync: getFileContentList } = useGetFileContentList();
 
   const { isAiProviderSet, isChatOpen } = React.useContext(AppContext);
   const [queryData, setQueryData] = React.useState<
@@ -526,23 +528,30 @@ const ProjectDetails: React.FC = () => {
                 path={businessQueryModal}
                 onClose={() => setBusinessQueryModal(undefined)}
                 processCallback={async (updatedPath, query, selectedFiles) => {
-                  const args = new Map([
-                    ['-o', updatedPath],
-                    ['-q', `"${query}"`],
-                  ]);
                   if (selectedFiles.length > 0) {
-                    let command = '';
-                    selectedFiles.forEach((file) => {
-                      command += `-i "${file}" `;
-                    });
-                    args.set(' ', command);
+                    const files = await getFileContentList(selectedFiles);
+                    try {
+                      const fileName = generateFilename('model', 'sql');
+                      const response = await projectsServices.enhanceModelQuery(
+                        generateModelsPrompt(files),
+                      );
+                      if (response.content) {
+                        const filePath = await projectsServices.createFile({
+                          filePath: updatedPath,
+                          name: fileName,
+                          content: response.content,
+                        });
+                        await fetchDirectories();
+                        await updateStatuses();
+                        setSelectedFilePath(filePath);
+                        setBusinessQueryModal(undefined);
+                        return;
+                      }
+                      throw new Error('Something went wrong');
+                    } catch {
+                      toast.error('Something went wrong');
+                    }
                   }
-                  await rosettaDbt(project, {
-                    command: 'business',
-                    commandType: CommandType.DBTNext,
-                    arguments: args,
-                  } as Command);
-                  setBusinessQueryModal(undefined);
                 }}
               />
             )}

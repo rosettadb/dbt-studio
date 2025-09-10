@@ -10,12 +10,12 @@ export type FileTreeMode = 'business' | 'staging' | 'incremental';
 type Props = {
   files: FileNode | undefined;
   mode: FileTreeMode;
-  selectAll: boolean;
+  selectAll?: boolean;
   selectedFiles: Set<string>;
   selectedFolders: Set<string>;
   expandedItems: string[];
   restrictedDirectory: string | null;
-  onSelectAllChange: () => void;
+  onSelectAllChange?: () => void;
   onFileSelection: (filePath: string, isSelected: boolean) => void;
   onFolderSelection: (
     folderPath: string,
@@ -407,31 +407,33 @@ export const SelectableFileTree: React.FC<Props> = ({
         </Typography>
       )}
 
-      <FormControlLabel
-        control={
-          <Checkbox
-            size="small"
-            checked={selectAll}
-            indeterminate={selectedFiles.size > 0 && !selectAll}
-            onChange={onSelectAllChange}
-            disabled={selectedFolders.size > 0}
-            sx={{
-              color: 'primary.main',
-              '&.Mui-checked': {
+      {onSelectAllChange && (
+        <FormControlLabel
+          control={
+            <Checkbox
+              size="small"
+              checked={selectAll}
+              indeterminate={selectedFiles.size > 0 && !selectAll}
+              onChange={onSelectAllChange}
+              disabled={selectedFolders.size > 0}
+              sx={{
                 color: 'primary.main',
-              },
-            }}
-          />
-        }
-        label={modeConfig.selectAllLabel}
-        sx={{
-          mb: 2,
-          '& .MuiFormControlLabel-label': {
-            fontSize: '0.875rem',
-            fontWeight: 500,
-          },
-        }}
-      />
+                '&.Mui-checked': {
+                  color: 'primary.main',
+                },
+              }}
+            />
+          }
+          label={modeConfig.selectAllLabel}
+          sx={{
+            mb: 2,
+            '& .MuiFormControlLabel-label': {
+              fontSize: '0.875rem',
+              fontWeight: 500,
+            },
+          }}
+        />
+      )}
 
       <Box
         sx={{
