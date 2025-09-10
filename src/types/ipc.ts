@@ -181,7 +181,8 @@ export type GitChannels =
 export type UtilChannels =
   | 'open:external'
   | 'windows:openSelector'
-  | 'windows:closeSetup';
+  | 'windows:closeSetup'
+  | 'utils:getFileContentList';
 
 export type ProcessChannels =
   | 'process:start'

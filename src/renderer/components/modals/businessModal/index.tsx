@@ -39,7 +39,6 @@ export const BusinessModal: React.FC<Props> = ({
   project,
 }) => {
   const [updatedPath, setUpdatedPath] = React.useState<string>(path);
-  const [selectAll, setSelectAll] = React.useState(false);
   const [selectedFiles, setSelectedFiles] = React.useState<Set<string>>(
     new Set(),
   );
@@ -51,25 +50,23 @@ export const BusinessModal: React.FC<Props> = ({
   const [restrictedDirectory, setRestrictedDirectory] = React.useState<
     string | null
   >(null);
+  const [activeDirFamily, setActiveDirFamily] = React.useState<
+    'incremental' | 'raw' | null
+  >(null);
   const [query, setQuery] = React.useState('');
   const [loading, setLoading] = React.useState(false);
 
   const updateProject = useUpdateProject();
 
-  // Helper function to get directory path from a file/folder path
   const getDirectoryPath = (filePath: string): string => {
     const pathParts = filePath.split('/');
     return pathParts.slice(0, -1).join('/');
   };
 
-  // Get all selected items (files from individual selection or files from folder selection)
   const getAllSelectedFiles = (): string[] => {
     const allFiles: string[] = [];
-
-    // Add individually selected files
     allFiles.push(...Array.from(selectedFiles));
 
-    // Add files from selected folders
     if (files) {
       selectedFolders.forEach((folderPath) => {
         const findFolderNode = (node: FileNode): FileNode | null => {
@@ -85,10 +82,12 @@ export const BusinessModal: React.FC<Props> = ({
 
         const folderNode = findFolderNode(files);
         if (folderNode) {
-          // Get all SQL files in folder (only direct children)
           if (folderNode.children) {
             folderNode.children.forEach((child) => {
-              if (child.type === 'file' && child.name.endsWith('.sql')) {
+              if (
+                child.type === 'file' &&
+                (child.name.endsWith('.sql') || child.name.endsWith('.yaml'))
+              ) {
                 allFiles.push(child.path);
               }
             });
@@ -100,94 +99,53 @@ export const BusinessModal: React.FC<Props> = ({
     return allFiles;
   };
 
-  // Recursive function to get all SQL file paths from models directory only
-  const getAllSqlFilePaths = (
-    node: FileNode,
-    isInModelsDir: boolean = false,
-  ): string[] => {
-    const paths: string[] = [];
-
-    // Check if current node is the models directory
-    const isModelsDir = node.type === 'folder' && node.name === 'models';
-    const shouldIncludeFiles = isInModelsDir || isModelsDir;
-
-    if (
-      node.type === 'file' &&
-      shouldIncludeFiles &&
-      node.name.endsWith('.sql')
-    ) {
-      paths.push(node.path);
+  // Helper: check if a path belongs to incrementalDir or rawLayerDir
+  const getDirFamily = (filePath: string): 'incremental' | 'raw' | null => {
+    if (project.incrementalDir && filePath.startsWith(project.incrementalDir)) {
+      return 'incremental';
     }
-
-    if (node.children) {
-      node.children.forEach((child) => {
-        paths.push(...getAllSqlFilePaths(child, shouldIncludeFiles));
-      });
+    if (project.rawLayerDir && filePath.startsWith(project.rawLayerDir)) {
+      return 'raw';
     }
-
-    return paths;
-  };
-
-  const handleSelectAllChange = () => {
-    if (!files) return;
-
-    const newSelectAll = !selectAll;
-    setSelectAll(newSelectAll);
-
-    if (newSelectAll) {
-      const allSqlFilePaths = getAllSqlFilePaths(files);
-      setSelectedFiles(new Set(allSqlFilePaths));
-      // Clear folder selections when selecting all files
-      setSelectedFolders(new Set());
-      // Set restricted directory based on first file
-      if (allSqlFilePaths.length > 0) {
-        setRestrictedDirectory(getDirectoryPath(allSqlFilePaths[0]));
-      }
-    } else {
-      setSelectedFiles(new Set());
-      setSelectedFolders(new Set());
-      setRestrictedDirectory(null);
-    }
+    return null;
   };
 
   const handleFileSelection = (filePath: string, isSelected: boolean) => {
     const newSelectedFiles = new Set(selectedFiles);
     const fileDirectory = getDirectoryPath(filePath);
+    const fileFamily = getDirFamily(filePath);
+
+    if (!fileFamily) {
+      return;
+    }
 
     if (isSelected) {
-      // Check if we can select this file based on directory restrictions
+      if (activeDirFamily && activeDirFamily !== fileFamily) {
+        return;
+      }
+
       if (restrictedDirectory && restrictedDirectory !== fileDirectory) {
-        return; // Don't allow selection from different directory
+        return;
       }
 
       newSelectedFiles.add(filePath);
 
-      // Set restricted directory if this is the first selection
       if (!restrictedDirectory) {
         setRestrictedDirectory(fileDirectory);
+        setActiveDirFamily(fileFamily);
       }
 
-      // Clear any folder selections when selecting individual files
       setSelectedFolders(new Set());
     } else {
       newSelectedFiles.delete(filePath);
 
-      // If no files are selected, clear directory restriction
       if (newSelectedFiles.size === 0) {
         setRestrictedDirectory(null);
+        setActiveDirFamily(null);
       }
     }
 
     setSelectedFiles(newSelectedFiles);
-
-    // Update selectAll state based on whether all SQL files are selected
-    if (files) {
-      const allSqlFilePaths = getAllSqlFilePaths(files);
-      const allSelected = allSqlFilePaths.every((_path) =>
-        newSelectedFiles.has(_path),
-      );
-      setSelectAll(allSelected);
-    }
   };
 
   const handleFolderSelection = (
@@ -197,29 +155,34 @@ export const BusinessModal: React.FC<Props> = ({
   ) => {
     const newSelectedFolders = new Set(selectedFolders);
     const folderDirectory = getDirectoryPath(folderPath);
+    const folderFamily = getDirFamily(folderPath);
+
+    if (!folderFamily) {
+      return;
+    }
 
     if (isSelected) {
-      // Check if we can select this folder based on directory restrictions
+      if (activeDirFamily && activeDirFamily !== folderFamily) {
+        return;
+      }
       if (restrictedDirectory && restrictedDirectory !== folderDirectory) {
-        return; // Don't allow selection from different directory
+        return;
       }
 
       newSelectedFolders.add(folderPath);
 
-      // Set restricted directory if this is the first selection
       if (!restrictedDirectory) {
         setRestrictedDirectory(folderDirectory);
+        setActiveDirFamily(folderFamily);
       }
 
-      // Clear any individual file selections when selecting folders
-      setSelectedFiles(new Set());
-      setSelectAll(false);
+      setSelectedFiles(new Set()); // clear individual files
     } else {
       newSelectedFolders.delete(folderPath);
 
-      // If no folders are selected, clear directory restriction
       if (newSelectedFolders.size === 0) {
         setRestrictedDirectory(null);
+        setActiveDirFamily(null);
       }
     }
 
@@ -259,7 +222,7 @@ export const BusinessModal: React.FC<Props> = ({
     setSelectedFiles(new Set());
     setSelectedFolders(new Set());
     setRestrictedDirectory(null);
-    setSelectAll(false);
+    setActiveDirFamily(null);
   }, [files]);
 
   React.useEffect(() => {
@@ -339,12 +302,10 @@ export const BusinessModal: React.FC<Props> = ({
         <SelectableFileTree
           files={files}
           mode="business"
-          selectAll={selectAll}
           selectedFiles={selectedFiles}
           selectedFolders={selectedFolders}
           expandedItems={expandedItems}
           restrictedDirectory={restrictedDirectory}
-          onSelectAllChange={handleSelectAllChange}
           onFileSelection={handleFileSelection}
           onFolderSelection={handleFolderSelection}
           onExpandedItemsChange={handleExpandedItemsChange}
@@ -433,7 +394,7 @@ export const BusinessModal: React.FC<Props> = ({
             });
             processCallback(updatedPath, query, allSelectedFiles);
           }}
-          disabled={query.trim() === '' || loading}
+          disabled={loading || allSelectedFiles.length === 0}
           sx={{
             fontWeight: 500,
             textTransform: 'uppercase',

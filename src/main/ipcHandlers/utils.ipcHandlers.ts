@@ -1,4 +1,5 @@
 import { ipcMain, shell } from 'electron';
+import { UtilsService } from '../services';
 
 const handlerChannels = ['open:external'];
 
@@ -19,6 +20,13 @@ const registerUtilsHandlers = () => {
     }
     return false;
   });
+
+  ipcMain.handle(
+    'utils:getFileContentList',
+    async (_event, files: string[]) => {
+      return UtilsService.getFilesWithContent(files);
+    },
+  );
 };
 
 export default registerUtilsHandlers;

@@ -264,6 +264,8 @@ export type FileNode = {
   children?: FileNode[];
 };
 
+export type FileNodeWithContent = FileNode & { content: string };
+
 export type CustomError = {
   message?: string;
 };

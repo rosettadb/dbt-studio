@@ -410,3 +410,16 @@ export const compileCommand = async (
     .join(' ');
   return compiledCommand;
 };
+
+export const generateFilename = (prefix = 'file', extension = 'txt') => {
+  const now = new Date();
+  const timestamp = `${
+    now.getFullYear().toString() +
+    String(now.getMonth() + 1).padStart(2, '0') +
+    String(now.getDate()).padStart(2, '0')
+  }_${String(now.getHours()).padStart(2, '0')}${String(
+    now.getMinutes(),
+  ).padStart(2, '0')}${String(now.getSeconds()).padStart(2, '0')}`;
+
+  return `${prefix}_${timestamp}.${extension}`;
+};
