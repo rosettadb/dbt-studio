@@ -6,6 +6,8 @@ import { useGetSelectedProject } from '../../controllers';
 import {
   useCreateChatSession,
   useGetChatSessions,
+  useUpdateChatSession,
+  useDeleteChatSession,
 } from '../../controllers/chat.controller';
 import { NewChatButton } from './NewChatButton';
 import { SessionHistoryButton } from './SessionHistoryButton';
@@ -26,6 +28,23 @@ export const ChatWindow: React.FC = () => {
         setSelectedSessionId(session.id as unknown as number),
     },
   );
+
+  const { mutate: updateSession } = useUpdateChatSession();
+  const { mutate: deleteSession } = useDeleteChatSession({
+    onSuccess: (_, deletedSessionId) => {
+      // If the deleted session was selected, switch to another session
+      if (selectedSessionId === deletedSessionId) {
+        const remainingSessions = sessions.filter(
+          (s) => s.id !== deletedSessionId,
+        );
+        if (remainingSessions.length > 0) {
+          setSelectedSessionId(remainingSessions[0].id as unknown as number);
+        } else {
+          setSelectedSessionId(undefined);
+        }
+      }
+    },
+  });
 
   React.useEffect(() => {
     if (isLoading) return;
@@ -51,6 +70,17 @@ export const ChatWindow: React.FC = () => {
 
   const handleSessionSelect = (sessionId: number) => {
     setSelectedSessionId(sessionId);
+  };
+
+  const handleSessionDelete = (sessionId: number) => {
+    deleteSession(sessionId);
+  };
+
+  const handleSessionRename = (sessionId: number, newTitle: string) => {
+    updateSession({
+      sessionId,
+      updates: { title: newTitle },
+    });
   };
 
   return (
@@ -112,6 +142,8 @@ export const ChatWindow: React.FC = () => {
             sessions={sessions}
             selectedId={selectedSessionId}
             onSelect={handleSessionSelect}
+            onDelete={handleSessionDelete}
+            onRename={handleSessionRename}
             disabled={isLoading}
           />
 

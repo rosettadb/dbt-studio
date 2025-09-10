@@ -75,17 +75,32 @@ const MarkdownCodeBlock = ({
       // ignore
     }
   }, []);
+
   return !inline ? (
     <Box
       component="pre"
       sx={{
-        background: '#222',
-        color: '#fff',
-        p: 0.75,
-        fontSize: '12px',
+        background: (theme) =>
+          theme.palette.mode === 'dark'
+            ? 'linear-gradient(135deg, #1a1a1a 0%, #2d2d2d 100%)'
+            : 'linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%)',
+        color: (theme) => (theme.palette.mode === 'dark' ? '#d4d4d4' : '#333'),
+        p: 1.5,
+        fontSize: '13px',
         borderRadius: 1,
-        overflowX: 'auto',
+        overflow: 'auto',
         position: 'relative',
+        border: (theme) => `1px solid ${theme.palette.divider}`,
+        boxShadow: (theme) =>
+          theme.palette.mode === 'dark'
+            ? 'inset 0 1px 3px rgba(0,0,0,0.3)'
+            : 'inset 0 1px 3px rgba(0,0,0,0.1)',
+        '& code': {
+          background: 'transparent !important',
+          color: 'inherit !important',
+          padding: '0 !important',
+          borderRadius: '0 !important',
+        },
       }}
     >
       <Tooltip title={copied ? 'Copied!' : 'Copy code'} placement="left">
@@ -96,12 +111,26 @@ const MarkdownCodeBlock = ({
             position: 'absolute',
             top: 4,
             right: 4,
-            bgcolor: 'rgba(255,255,255,0.08)',
-            color: 'white',
-            '&:hover': { bgcolor: 'rgba(255,255,255,0.16)' },
+            width: 20,
+            height: 20,
+            minWidth: 'unset',
+            bgcolor: (theme) =>
+              theme.palette.mode === 'dark'
+                ? 'rgba(255,255,255,0.08)'
+                : 'rgba(0,0,0,0.06)',
+            backdropFilter: 'blur(4px)',
+            color: (theme) =>
+              theme.palette.mode === 'dark' ? '#d4d4d4' : '#666',
+            '&:hover': {
+              bgcolor: (theme) =>
+                theme.palette.mode === 'dark'
+                  ? 'rgba(255,255,255,0.15)'
+                  : 'rgba(0,0,0,0.12)',
+            },
+            zIndex: 1,
           }}
         >
-          <ContentCopyIcon fontSize="inherit" />
+          <ContentCopyIcon sx={{ fontSize: 10 }} />
         </IconButton>
       </Tooltip>
       <code ref={codeRef} className={className}>
@@ -113,10 +142,12 @@ const MarkdownCodeBlock = ({
       ref={codeRef}
       className={className}
       style={{
-        background: '#eee',
-        borderRadius: 4,
-        padding: '0 4px',
+        background: 'linear-gradient(135deg, #f1f3f4 0%, #e8eaed 100%)',
+        borderRadius: 3,
+        padding: '2px 6px',
         fontSize: '12px',
+        border: '1px solid #dadce0',
+        boxShadow: 'inset 0 1px 2px rgba(0,0,0,0.05)',
       }}
     >
       {children}
