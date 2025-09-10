@@ -15,19 +15,12 @@ interface MessageRendererProps {
 }
 
 const MessageContainer = styled(Box)(({ theme }) => ({
-  backgroundColor:
-    theme.palette.mode === 'dark'
-      ? theme.palette.background.paper
-      : theme.palette.background.paper,
-  borderRadius: 12,
+  backgroundColor: theme.palette.background.paper,
+  borderRadius: 6,
   padding: theme.spacing(0.75),
   marginBottom: theme.spacing(0.5),
   maxWidth: 'min(75%, 720px)',
   wordBreak: 'break-word',
-  boxShadow:
-    theme.palette.mode === 'dark'
-      ? '0 1px 2px rgba(0,0,0,0.4)'
-      : '0 1px 2px rgba(0,0,0,0.08)',
   fontSize: '13px',
   lineHeight: 1.55,
 }));
@@ -43,10 +36,7 @@ const UserMessage = styled(MessageContainer)(({ theme }) => ({
 
 const AssistantMessage = styled(MessageContainer)(({ theme }) => ({
   alignSelf: 'flex-start',
-  backgroundColor:
-    theme.palette.mode === 'dark'
-      ? theme.palette.background.paper
-      : theme.palette.grey[50],
+  backgroundColor: theme.palette.background.paper,
   color: theme.palette.text.primary,
   // Make assistant messages use the full available width of the list
   width: '100%',
@@ -170,5 +160,3 @@ export const MessageRenderer: React.FC<MessageRendererProps> = ({
     </Container>
   );
 };
-
-export default MessageRenderer;

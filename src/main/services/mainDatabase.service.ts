@@ -110,8 +110,8 @@ export default class MainDatabaseService {
         type TEXT NOT NULL,
         config TEXT NOT NULL,
         is_active INTEGER DEFAULT 0,
-        created_at TEXT DEFAULT CURRENT_TIMESTAMP,
-        updated_at TEXT DEFAULT CURRENT_TIMESTAMP
+        created_at TEXT DEFAULT (datetime('now')),
+        updated_at TEXT DEFAULT (datetime('now'))
       );
 
       -- Chat Conversations table
@@ -120,8 +120,8 @@ export default class MainDatabaseService {
         title TEXT NOT NULL,
         project_id INTEGER,
         provider_id INTEGER,
-        created_at TEXT DEFAULT CURRENT_TIMESTAMP,
-        updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
+        created_at TEXT DEFAULT (datetime('now')),
+        updated_at TEXT DEFAULT (datetime('now')),
         FOREIGN KEY (provider_id) REFERENCES ai_providers(id) ON DELETE SET NULL
       );
 
@@ -138,8 +138,8 @@ export default class MainDatabaseService {
         signature TEXT,
         is_streaming INTEGER DEFAULT 0,
         parent_message_id INTEGER,
-        created_at TEXT DEFAULT CURRENT_TIMESTAMP,
-        updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
+        created_at TEXT DEFAULT (datetime('now')),
+        updated_at TEXT DEFAULT (datetime('now')),
         FOREIGN KEY (conversation_id) REFERENCES chat_conversations(id) ON DELETE CASCADE,
         FOREIGN KEY (parent_message_id) REFERENCES chat_messages(id) ON DELETE SET NULL
       );
@@ -153,7 +153,7 @@ export default class MainDatabaseService {
         description TEXT,
         content TEXT NOT NULL,
         metadata TEXT,
-        created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+        created_at TEXT DEFAULT (datetime('now')),
         FOREIGN KEY (message_id) REFERENCES chat_messages(id) ON DELETE CASCADE
       );
 
@@ -163,8 +163,8 @@ export default class MainDatabaseService {
         conversation_id INTEGER NOT NULL,
         key TEXT NOT NULL,
         value TEXT NOT NULL,
-        created_at TEXT DEFAULT CURRENT_TIMESTAMP,
-        updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
+        created_at TEXT DEFAULT (datetime('now')),
+        updated_at TEXT DEFAULT (datetime('now')),
         FOREIGN KEY (conversation_id) REFERENCES chat_conversations(id) ON DELETE CASCADE
       );
 
@@ -176,7 +176,7 @@ export default class MainDatabaseService {
         tool_input TEXT NOT NULL,
         tool_output TEXT,
         status TEXT NOT NULL DEFAULT 'pending',
-        started_at TEXT DEFAULT CURRENT_TIMESTAMP,
+        started_at TEXT DEFAULT (datetime('now')),
         completed_at TEXT,
         error_message TEXT,
         FOREIGN KEY (message_id) REFERENCES chat_messages(id) ON DELETE CASCADE
@@ -192,7 +192,7 @@ export default class MainDatabaseService {
         provider_type TEXT,
         is_system INTEGER DEFAULT 0,
         variables TEXT,
-        created_at TEXT DEFAULT CURRENT_TIMESTAMP
+        created_at TEXT DEFAULT (datetime('now'))
       );
 
       -- AI Usage Logs table
@@ -206,7 +206,7 @@ export default class MainDatabaseService {
         duration_ms INTEGER NOT NULL,
         status TEXT NOT NULL,
         error_message TEXT,
-        created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+        created_at TEXT DEFAULT (datetime('now')),
         FOREIGN KEY (provider_id) REFERENCES ai_providers(id) ON DELETE SET NULL,
         FOREIGN KEY (conversation_id) REFERENCES chat_conversations(id) ON DELETE SET NULL
       );
@@ -326,7 +326,7 @@ export default class MainDatabaseService {
             tool_input TEXT NOT NULL,
             tool_output TEXT,
             status TEXT NOT NULL DEFAULT 'pending',
-            started_at TEXT DEFAULT CURRENT_TIMESTAMP,
+            started_at TEXT DEFAULT (datetime('now')),
             completed_at TEXT,
             error_message TEXT,
             FOREIGN KEY (message_id) REFERENCES chat_messages(id) ON DELETE CASCADE

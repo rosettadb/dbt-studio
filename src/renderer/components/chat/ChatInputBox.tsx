@@ -19,13 +19,15 @@ import {
   aiProviderImages,
   defaultIcon,
 } from '../../../../assets/connectionIcons';
-import TipTapEditor from './TipTapEditor';
+import { TipTapEditor } from './TipTapEditor';
+import { useAutoRenameSession } from '../../hooks/useAutoRenameSession';
+import { htmlToPlainText } from '../../utils/chatHelpers';
 
 interface ChatInputBoxProps {
   sessionId?: number;
 }
 
-const ChatInputBox: React.FC<ChatInputBoxProps> = ({ sessionId }) => {
+export const ChatInputBox: React.FC<ChatInputBoxProps> = ({ sessionId }) => {
   const theme = useTheme();
   const [input, setInput] = React.useState('');
 
@@ -41,18 +43,11 @@ const ChatInputBox: React.FC<ChatInputBoxProps> = ({ sessionId }) => {
   const { mutate: setActiveProvider, isLoading: switching } =
     useSetActiveAIProvider();
 
-  const htmlToPlainText = React.useCallback((html: string) => {
-    const div = document.createElement('div');
-    div.innerHTML = html || '';
-    // Normalize line breaks
-    const text = div.textContent || div.innerText || '';
-    return text.replace(/\u00A0/g, ' ').replace(/\s+$/g, '');
-  }, []);
+  // Auto-rename session hook
+  const { autoRename } = useAutoRenameSession(sessionId);
 
-  const plainText = React.useMemo(
-    () => htmlToPlainText(input),
-    [input, htmlToPlainText],
-  );
+  // Use the utility function instead of inline implementation
+  const plainText = React.useMemo(() => htmlToPlainText(input), [input]);
 
   const selectedProvider = React.useMemo(() => {
     const id = activeProvider?.id?.toString();
@@ -158,6 +153,11 @@ const ChatInputBox: React.FC<ChatInputBoxProps> = ({ sessionId }) => {
           onSuccess: async () => {
             // Replace temp with persisted messages (use exact same key signature)
             await queryClient.invalidateQueries(msgKey);
+
+            // Auto-rename session after successful LLM response
+            // Use the user's message content to generate a descriptive title
+            autoRename(content);
+
             assistantTempIdRef.current = null;
             userTempIdRef.current = null;
           },
@@ -383,5 +383,3 @@ const ChatInputBox: React.FC<ChatInputBoxProps> = ({ sessionId }) => {
     </Box>
   );
 };
-
-export default ChatInputBox;
