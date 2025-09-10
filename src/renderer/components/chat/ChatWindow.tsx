@@ -1,6 +1,7 @@
 import React from 'react';
 import { Box, Paper, IconButton, Tooltip, Typography } from '@mui/material';
 import { Close } from '@mui/icons-material';
+import { toast } from 'react-toastify';
 import { useAppContext } from '../../hooks';
 import { useGetSelectedProject } from '../../controllers';
 import {
@@ -26,10 +27,17 @@ export const ChatWindow: React.FC = () => {
     {
       onSuccess: (session) =>
         setSelectedSessionId(session.id as unknown as number),
+      onError: (error) => {
+        toast.error(`Failed to create session: ${error.message}`);
+      },
     },
   );
 
-  const { mutate: updateSession } = useUpdateChatSession();
+  const { mutate: updateSession } = useUpdateChatSession({
+    onError: (error) => {
+      toast.error(`Failed to update session: ${error.message}`);
+    },
+  });
   const { mutate: deleteSession } = useDeleteChatSession({
     onSuccess: (_, deletedSessionId) => {
       // If the deleted session was selected, switch to another session
@@ -43,6 +51,9 @@ export const ChatWindow: React.FC = () => {
           setSelectedSessionId(undefined);
         }
       }
+    },
+    onError: (error) => {
+      toast.error(`Failed to delete session: ${error.message}`);
     },
   });
 

@@ -37,7 +37,7 @@ export const SmartModelSelector: React.FC<SmartModelSelectorProps> = ({
   } = useGetProviderModels(providerId, {
     enabled: !!providerId,
     onError: (err) => {
-      toast.error(`Failed to load models: ${err.message}`);
+      toast.error(`Failed to load models: ${err?.message}`);
     },
   });
 
