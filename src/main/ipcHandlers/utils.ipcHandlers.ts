@@ -1,5 +1,4 @@
 import { ipcMain, shell } from 'electron';
-import { FileNode } from '../../types/backend';
 import { UtilsService } from '../services';
 
 const handlerChannels = ['open:external'];
