@@ -1,7 +1,8 @@
 import React from 'react';
-import { Button, TextField } from '@mui/material';
+import { Button, TextField, Box } from '@mui/material';
 import { toast } from 'react-toastify';
 import { useNavigate } from 'react-router-dom';
+import GitIcon from '@mui/icons-material/Source';
 import { Modal } from '../modal';
 import { StyledForm } from './styles';
 import { gitServices, projectsServices } from '../../../services';
@@ -63,20 +64,27 @@ export const CloneRepoModal: React.FC<Props> = ({
           }
         }}
       >
-        <TextField
-          variant="outlined"
-          label="Clone Repo"
-          onChange={(event) => setUrl(event.target.value)}
-          value={url}
-          fullWidth
-        />
-        <Button
-          type="submit"
-          variant="outlined"
-          disabled={url === '' || loading}
-        >
-          {loading ? 'Cloning...' : 'Clone'}
-        </Button>
+        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+          <TextField
+            variant="outlined"
+            placeholder="Enter repository URL (e.g., https://github.com/user/repo.git)"
+            onChange={(event) => setUrl(event.target.value)}
+            value={url}
+            fullWidth
+            autoFocus
+            disabled={loading}
+          />
+          <Box sx={{ display: 'flex', justifyContent: 'flex-end' }}>
+            <Button
+              type="submit"
+              variant="outlined"
+              disabled={url === '' || loading}
+              startIcon={<GitIcon />}
+            >
+              {loading ? 'Cloning...' : 'Clone'}
+            </Button>
+          </Box>
+        </Box>
       </StyledForm>
     </Modal>
   );
