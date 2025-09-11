@@ -165,7 +165,6 @@ export const NewProject: React.FC<NewProjectProps> = ({
             name="rosettaPath"
             value={`${defaultProjectPath}${navigator.appVersion.indexOf('Win') === -1 ? '/' : '\\'}${newProject.name}`}
             onChange={(event) => setDefaultProjectPath(event.target.value)}
-            sx={{ background: '#f7f8fa' }}
             InputProps={{
               endAdornment: (
                 <IconButton
@@ -177,7 +176,11 @@ export const NewProject: React.FC<NewProjectProps> = ({
                       },
                       {
                         onSuccess: (data) => {
-                          setDefaultProjectPath(data[0]);
+                          if (data.length > 0) {
+                            setDefaultProjectPath(data[0]);
+                          } else {
+                            setDefaultProjectPath(defaultProjectPath);
+                          }
                         },
                       },
                     );
