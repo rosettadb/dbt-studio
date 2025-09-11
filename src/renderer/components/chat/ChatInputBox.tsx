@@ -4,6 +4,7 @@ import { useTheme } from '@mui/material/styles';
 import ArrowUpwardIcon from '@mui/icons-material/ArrowUpward';
 import StopIcon from '@mui/icons-material/Stop';
 import { useQueryClient } from 'react-query';
+import { toast } from 'react-toastify';
 import {
   useStreamChatMessage,
   useCancelChatStream,
@@ -174,6 +175,7 @@ export const ChatInputBox: React.FC<ChatInputBoxProps> = ({ sessionId }) => {
               await queryClient.invalidateQueries(msgKey);
               // Clear user temp ref after refresh
               userTempIdRef.current = null;
+              // No toast for user cancellation
             } else {
               // Real error: remove both temp assistant and temp user
               const uId = userTempIdRef.current;
@@ -183,6 +185,32 @@ export const ChatInputBox: React.FC<ChatInputBoxProps> = ({ sessionId }) => {
               );
               assistantTempIdRef.current = null;
               userTempIdRef.current = null;
+
+              // Show appropriate error message
+              if (
+                error?.message?.includes('401') ||
+                error?.message?.includes('unauthorized')
+              ) {
+                toast.error(
+                  'Authentication failed. Please check your AI provider credentials.',
+                );
+              } else if (
+                error?.message?.includes('429') ||
+                error?.message?.includes('quota')
+              ) {
+                toast.error('Rate limit exceeded. Please try again later.');
+              } else if (
+                error?.message?.includes('network') ||
+                error?.message?.includes('fetch')
+              ) {
+                toast.error(
+                  'Network error. Please check your connection and try again.',
+                );
+              } else {
+                toast.error(
+                  `Failed to send message: ${error?.message || 'Unknown error'}`,
+                );
+              }
             }
           },
         },

@@ -81,20 +81,11 @@ class AIProvidersService {
   static async testProviderConnection(
     providerId: string,
   ): Promise<ProviderTestResult> {
-    try {
-      const { data } = await client.post<string, ProviderTestResult>(
-        'ai:provider:test-connection',
-        providerId,
-      );
-      return data;
-    } catch (error) {
-      // eslint-disable-next-line no-console
-      console.error(
-        '[RENDERER SERVICE] testProviderConnection - Error occurred:',
-        error,
-      );
-      throw error;
-    }
+    const { data } = await client.post<string, ProviderTestResult>(
+      'ai:provider:test-connection',
+      providerId,
+    );
+    return data;
   }
 
   // Test temporary provider configuration (before saving)

@@ -265,38 +265,20 @@ class ChatService {
 
   // Resolve file context
   static async resolveFileContext(filePath: string): Promise<ContextItem> {
-    try {
-      const { data } = await client.post<string, ContextItem>(
-        'chat:context:resolve-file',
-        filePath,
-      );
-      return data;
-    } catch (error) {
-      // eslint-disable-next-line no-console
-      console.error(
-        '[RENDERER SERVICE] resolveFileContext - Error occurred:',
-        error,
-      );
-      throw error;
-    }
+    const { data } = await client.post<string, ContextItem>(
+      'chat:context:resolve-file',
+      filePath,
+    );
+    return data;
   }
 
   // Resolve folder context
   static async resolveFolderContext(folderPath: string): Promise<ContextItem> {
-    try {
-      const { data } = await client.post<string, ContextItem>(
-        'chat:context:resolve-folder',
-        folderPath,
-      );
-      return data;
-    } catch (error) {
-      // eslint-disable-next-line no-console
-      console.error(
-        '[RENDERER SERVICE] resolveFolderContext - Error occurred:',
-        error,
-      );
-      throw error;
-    }
+    const { data } = await client.post<string, ContextItem>(
+      'chat:context:resolve-folder',
+      folderPath,
+    );
+    return data;
   }
 
   // Search codebase
