@@ -7,6 +7,7 @@ import {
   DialogContent,
   DialogTitle,
   useTheme,
+  CircularProgress,
 } from '@mui/material';
 import { Close, AutoAwesome, ContentCopy } from '@mui/icons-material';
 import AceEditor from 'react-ace';
@@ -25,6 +26,7 @@ type Props = {
   onSubmit: () => void;
   response?: string;
   onApply: (value: string) => void;
+  isLoading?: boolean;
 };
 
 export const AiPromptModal: React.FC<Props> = ({
@@ -35,11 +37,18 @@ export const AiPromptModal: React.FC<Props> = ({
   onSubmit,
   response,
   onApply,
+  isLoading = false,
 }) => {
   const theme = useTheme();
   const isDarkMode = theme.palette.mode === 'dark';
 
   const [isDisabled, setIsDisabled] = React.useState(false);
+
+  React.useEffect(() => {
+    if (!isLoading) {
+      setIsDisabled(false);
+    }
+  }, [isLoading, isOpen]);
 
   return (
     <Dialog
@@ -71,7 +80,12 @@ export const AiPromptModal: React.FC<Props> = ({
         }}
       >
         <Container
-          style={{ display: 'flex', flexDirection: 'column', height: '100%' }}
+          style={{
+            display: 'flex',
+            flexDirection: 'column',
+            height: '100%',
+            position: 'relative',
+          }}
         >
           <AceEditor
             style={{
@@ -82,10 +96,25 @@ export const AiPromptModal: React.FC<Props> = ({
             fontSize={18}
             height="100%"
             value={response ?? prompt}
-            readOnly={!!response}
+            readOnly={!!response || isLoading}
             onChange={onPromptChange}
             theme={isDarkMode ? 'dracula' : 'tomorrow'}
           />
+          {isLoading && !response && (
+            <Box
+              sx={{
+                position: 'absolute',
+                inset: 0,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                bgcolor: 'rgba(0,0,0,0.25)',
+                zIndex: 1,
+              }}
+            >
+              <CircularProgress />
+            </Box>
+          )}
         </Container>
       </DialogContent>
       <DialogActions>
@@ -121,12 +150,14 @@ export const AiPromptModal: React.FC<Props> = ({
               setIsDisabled(true);
               onSubmit();
             }}
-            disabled={isDisabled}
+            disabled={isDisabled || isLoading}
             variant="outlined"
-            startIcon={<AutoAwesome />}
+            startIcon={
+              isLoading ? <CircularProgress size={16} /> : <AutoAwesome />
+            }
             className="mb-2"
           >
-            Generate
+            {isLoading ? 'Generating...' : 'Generate'}
           </Button>
         )}
 
@@ -135,6 +166,7 @@ export const AiPromptModal: React.FC<Props> = ({
           variant="outlined"
           startIcon={<Close />}
           className="mb-2"
+          disabled={isLoading}
         >
           Close
         </Button>

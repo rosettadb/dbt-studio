@@ -44,6 +44,8 @@ import {
   useGetSettings,
   useSaveFileContent,
   useUpdateProject,
+  useEnhanceModelQuery,
+  useGenerateDashboardQuery,
 } from '../../controllers';
 import { projectsServices } from '../../services';
 import {
@@ -87,7 +89,6 @@ const ProjectDetails: React.FC = () => {
     GenerateDashboardResponseType[]
   >([]);
   const [isQueryOpen, setIsQueryOpen] = React.useState(false);
-  const [isLoadingQuery, setIsLoadingQuery] = React.useState(false);
   const [businessQueryModal, setBusinessQueryModal] = React.useState<string>();
   const [noAiSetModal, setNoAiSetModal] = React.useState(false);
   const [aiTransformationPrompt, setAiTransformationPrompt] =
@@ -223,16 +224,51 @@ const ProjectDetails: React.FC = () => {
     setAiTransformationPrompt(prompt);
   };
 
+  // Initialize the React Query hook for generating dashboard queries
+  const { mutate: generateDashboardMutation, isLoading: isLoadingQuery } =
+    useGenerateDashboardQuery({
+      onSuccess: (response) => {
+        setQueryData(response);
+        setIsQueryOpen(true);
+        toast.success('Dashboard queries generated successfully!');
+      },
+      onError: (error) => {
+        if (
+          typeof error?.message === 'string' &&
+          (error.message.includes('429') || error.message.includes('quota'))
+        ) {
+          toast.error(
+            'AI API quota exceeded. Please check your billing details.',
+          );
+        } else {
+          toast.error(
+            `Error generating dashboards: ${error?.message || 'Unknown error'}`,
+          );
+        }
+      },
+    });
+
+  // Initialize the React Query hook for enhancing models
+  const { mutate: enhanceModelMutation, isLoading: isEnhancingModel } =
+    useEnhanceModelQuery({
+      onSuccess: (response) => {
+        setAitTransformationResponse(response.content);
+        toast.success('Model enhanced successfully!');
+      },
+      onError: (error) => {
+        toast.error(
+          `Error enhancing model: ${error.message || 'Unknown error'}`,
+        );
+      },
+    });
+
   const enhanceModel = async (prompt: string) => {
-    const response = await projectsServices.enhanceModelQuery(
-      `${prompt}\n\nMAKE SURE THE OUTPUT IS AGAIN A DBT MODEL`,
-    );
-    setAitTransformationResponse(response.content);
+    enhanceModelMutation(prompt);
   };
 
   const generateDashboards = async () => {
     if (!isAiProviderSet) {
-      toast.error('Open AI API Key not provided');
+      toast.error('No AI provider set');
       return;
     }
 
@@ -241,36 +277,15 @@ const ProjectDetails: React.FC = () => {
       return;
     }
 
-    setIsLoadingQuery(true);
     const fileName = await getFileName(selectedFilePath);
+    const prompt = utils.format(
+      AI_PROMPTS.GENERATE_DASHBOARDS,
+      fileName,
+      String(project?.dbtConnection?.type),
+      String(fileContent),
+    );
 
-    try {
-      const prompt = utils.format(
-        AI_PROMPTS.GENERATE_DASHBOARDS,
-        fileName,
-        String(project?.dbtConnection?.type),
-        String(fileContent),
-      );
-
-      const response = await projectsServices.generateDashboardQuery(prompt);
-      setQueryData(response);
-      setIsQueryOpen(true);
-    } catch (error: any) {
-      if (
-        typeof error?.message === 'string' &&
-        (error.message.includes('429') || error.message.includes('quota'))
-      ) {
-        toast.error(
-          'OpenAI API quota exceeded. Please check your billing details.',
-        );
-      } else {
-        toast.error(
-          `Error generating dashboards: ${error?.message || 'Unknown error'}`,
-        );
-      }
-    } finally {
-      setIsLoadingQuery(false);
-    }
+    generateDashboardMutation(prompt);
   };
 
   const menuItems = React.useMemo(() => {
@@ -547,7 +562,7 @@ const ProjectDetails: React.FC = () => {
                         setBusinessQueryModal(undefined);
                         return;
                       }
-                      throw new Error('Something went wrong');
+                      toast.error('Something went wrong');
                     } catch {
                       toast.error('Something went wrong');
                     }
@@ -588,6 +603,7 @@ const ProjectDetails: React.FC = () => {
                   await enhanceModel(String(aiTransformationPrompt));
                 }}
                 response={aiTransformationResponse}
+                isLoading={isEnhancingModel || isLoadingQuery}
               />
             )}
             <AddConnectionModal

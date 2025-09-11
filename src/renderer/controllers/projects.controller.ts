@@ -6,7 +6,13 @@ import {
   useQueryClient,
   UseQueryOptions,
 } from 'react-query';
-import { CustomError, FileNode, Project } from '../../types/backend';
+import {
+  CustomError,
+  EnhanceModelResponseType,
+  FileNode,
+  Project,
+  GenerateDashboardResponseType,
+} from '../../types/backend';
 import { QUERY_KEYS } from '../config/constants';
 import { projectsServices } from '../services';
 
@@ -193,6 +199,54 @@ export const useSaveFileContent = (
       await queryClient.invalidateQueries([QUERY_KEYS.GET_FILE_STRUCTURE]);
       await queryClient.invalidateQueries([QUERY_KEYS.GIT_STATUS]);
       await queryClient.invalidateQueries([QUERY_KEYS.GET_FILE_CONTENT]);
+      onCustomSuccess?.(...args);
+    },
+    onError: (...args) => {
+      onCustomError?.(...args);
+    },
+  });
+};
+
+export const useEnhanceModelQuery = (
+  customOptions?: UseMutationOptions<
+    EnhanceModelResponseType,
+    CustomError,
+    string
+  >,
+): UseMutationResult<EnhanceModelResponseType, CustomError, string> => {
+  const { onSuccess: onCustomSuccess, onError: onCustomError } =
+    customOptions || {};
+
+  return useMutation({
+    mutationFn: async (prompt: string) => {
+      return projectsServices.enhanceModelQuery(
+        `${prompt}\n\nMAKE SURE THE OUTPUT IS AGAIN A DBT MODEL`,
+      );
+    },
+    onSuccess: (...args) => {
+      onCustomSuccess?.(...args);
+    },
+    onError: (...args) => {
+      onCustomError?.(...args);
+    },
+  });
+};
+
+export const useGenerateDashboardQuery = (
+  customOptions?: UseMutationOptions<
+    GenerateDashboardResponseType[],
+    CustomError,
+    string
+  >,
+): UseMutationResult<GenerateDashboardResponseType[], CustomError, string> => {
+  const { onSuccess: onCustomSuccess, onError: onCustomError } =
+    customOptions || {};
+
+  return useMutation({
+    mutationFn: async (prompt: string) => {
+      return projectsServices.generateDashboardQuery(prompt);
+    },
+    onSuccess: (...args) => {
       onCustomSuccess?.(...args);
     },
     onError: (...args) => {
