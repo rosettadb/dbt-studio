@@ -224,15 +224,21 @@ const ProjectDetails: React.FC = () => {
   };
 
   const enhanceModel = async (prompt: string) => {
-    const response = await projectsServices.enhanceModelQuery(
-      `${prompt}\n\nMAKE SURE THE OUTPUT IS AGAIN A DBT MODEL`,
-    );
-    setAitTransformationResponse(response.content);
+    try {
+      const response = await projectsServices.enhanceModelQuery(
+        `${prompt}\n\nMAKE SURE THE OUTPUT IS AGAIN A DBT MODEL`,
+      );
+      setAitTransformationResponse(response.content);
+    } catch (error: any) {
+      toast.error(
+        `Something went wrong ${error?.message ? error.message : ''}`,
+      );
+    }
   };
 
   const generateDashboards = async () => {
     if (!isAiProviderSet) {
-      toast.error('Open AI API Key not provided');
+      toast.error('AI API Key not provided');
       return;
     }
 
@@ -547,7 +553,7 @@ const ProjectDetails: React.FC = () => {
                         setBusinessQueryModal(undefined);
                         return;
                       }
-                      throw new Error('Something went wrong');
+                      toast.error('Something went wrong');
                     } catch {
                       toast.error('Something went wrong');
                     }
