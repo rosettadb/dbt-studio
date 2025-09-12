@@ -1,6 +1,7 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { formatDistanceToNow } from 'date-fns';
+import { toast } from 'react-toastify';
 import {
   Box,
   Typography,
@@ -55,6 +56,12 @@ interface ExplorerBucketContentProps {
   connectionId: string;
   bucketName: string;
 }
+
+// Utility function to check if file is CSV format for dbt seed compatibility
+const isCSVFile = (fileName: string): boolean => {
+  const extension = fileName.split('.').pop()?.toLowerCase();
+  return extension === 'csv';
+};
 
 export const ExplorerBucketContent: React.FC<ExplorerBucketContentProps> = ({
   connectionId,
@@ -160,6 +167,7 @@ export const ExplorerBucketContent: React.FC<ExplorerBucketContentProps> = ({
   const handleDownload = async (objectName: string) => {
     if (downloadUrls[objectName]) {
       window.open(downloadUrls[objectName], '_blank');
+      toast.success('File download started successfully');
       return;
     }
 
@@ -177,6 +185,7 @@ export const ExplorerBucketContent: React.FC<ExplorerBucketContentProps> = ({
       if (url) {
         setDownloadUrls((prev) => ({ ...prev, [objectName]: url }));
         window.open(url, '_blank');
+        toast.success('File download started successfully');
 
         // Add to recent items
         const fileName = objectName.split('/').pop() || objectName;
@@ -192,6 +201,7 @@ export const ExplorerBucketContent: React.FC<ExplorerBucketContentProps> = ({
     } catch (error) {
       // eslint-disable-next-line no-console
       console.error('Error getting download URL:', error);
+      toast.error('Failed to download file. Please try again.');
     } finally {
       setLoadingUrls((prev) => ({ ...prev, [objectName]: false }));
     }
@@ -199,13 +209,27 @@ export const ExplorerBucketContent: React.FC<ExplorerBucketContentProps> = ({
 
   const handleDownloadAsSeed = async (objectName: string) => {
     if (!project) {
-      // TODO - need to show some alert or something here
+      toast.error('No project selected. Please select a project first.');
       return;
     }
-    if (downloadUrls[objectName]) {
-      // window.open(downloadUrls[objectName], '_blank');
-      await projectsServices.downloadSeed(downloadUrls[objectName], project);
+
+    const fileName = objectName.split('/').pop() || objectName;
+    if (!isCSVFile(fileName)) {
+      toast.error('Only CSV files can be downloaded as dbt seeds.');
       return;
+    }
+
+    if (downloadUrls[objectName]) {
+      try {
+        await projectsServices.downloadSeed(downloadUrls[objectName], project);
+        toast.success(`CSV file "${fileName}" downloaded as seed successfully`);
+        return;
+      } catch (error) {
+        // eslint-disable-next-line no-console
+        console.error('Error downloading seed:', error);
+        toast.error('Failed to download file as seed. Please try again.');
+        return;
+      }
     }
 
     if (!connection || !secureConfig) return;
@@ -222,10 +246,12 @@ export const ExplorerBucketContent: React.FC<ExplorerBucketContentProps> = ({
       if (url) {
         setDownloadUrls((prev) => ({ ...prev, [objectName]: url }));
         await projectsServices.downloadSeed(url, project);
+        toast.success(`CSV file "${fileName}" downloaded as seed successfully`);
       }
     } catch (error) {
       // eslint-disable-next-line no-console
       console.error('Error getting download URL:', error);
+      toast.error('Failed to download file as seed. Please try again.');
     } finally {
       setLoadingUrls((prev) => ({ ...prev, [objectName]: false }));
     }
@@ -536,24 +562,27 @@ export const ExplorerBucketContent: React.FC<ExplorerBucketContentProps> = ({
                                     )}
                                   </IconButton>
                                 </Tooltip>
-                                {project && (
-                                  <Tooltip title="Download as seed">
-                                    <IconButton
-                                      size="small"
-                                      onClick={(e) => {
-                                        e.stopPropagation();
-                                        handleDownloadAsSeed(object.name);
-                                      }}
-                                      disabled={loadingUrls[object.name]}
-                                    >
-                                      {loadingUrls[object.name] ? (
-                                        <CircularProgress size={20} />
-                                      ) : (
-                                        <DBTProjects />
-                                      )}
-                                    </IconButton>
-                                  </Tooltip>
-                                )}
+                                {project &&
+                                  isCSVFile(
+                                    object.name.split('/').pop() || object.name,
+                                  ) && (
+                                    <Tooltip title="Download as seed (CSV only)">
+                                      <IconButton
+                                        size="small"
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          handleDownloadAsSeed(object.name);
+                                        }}
+                                        disabled={loadingUrls[object.name]}
+                                      >
+                                        {loadingUrls[object.name] ? (
+                                          <CircularProgress size={20} />
+                                        ) : (
+                                          <DBTProjects />
+                                        )}
+                                      </IconButton>
+                                    </Tooltip>
+                                  )}
                               </Box>
                             )}
                           </TableCell>
