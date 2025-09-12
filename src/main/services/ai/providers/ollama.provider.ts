@@ -45,27 +45,6 @@ interface OllamaResponse {
   eval_duration?: number;
 }
 
-interface OllamaGenerateRequest {
-  model: string;
-  prompt: string;
-  stream: boolean;
-  options: {
-    temperature: number;
-    num_predict: number;
-    top_k?: number;
-    top_p?: number;
-    repeat_penalty?: number;
-    stop?: string[];
-  };
-  format?: string;
-}
-
-interface StructuredPromptConfig {
-  instruction: string;
-  format: string;
-  constraint: string;
-}
-
 /**
  * Ollama provider implementation for local AI models
  * Provides access to locally running Ollama server
@@ -85,28 +64,18 @@ export class OllamaProvider extends BaseAIProvider {
     contextWindow: 8192,
   };
 
-  private static readonly DEFAULT_BASE_URL = 'http://localhost:11434';
-
-  private static readonly DEFAULT_MODEL = 'llama2';
-
-  private static readonly REQUEST_TIMEOUT = 60000;
-
-  private static readonly CONNECTION_TIMEOUT = 5000;
-
-  private static readonly MAX_RETRIES = 2;
-
-  private static readonly RETRY_DELAY = 1000;
-
-  private baseUrl: string = OllamaProvider.DEFAULT_BASE_URL;
+  private baseUrl: string = 'http://localhost:11434';
 
   private availableModels: OllamaModel[] = [];
 
-  private defaultModel: string = OllamaProvider.DEFAULT_MODEL;
+  private defaultModel: string = 'llama2';
 
   async initialize(config: AIProviderConfig): Promise<void> {
     try {
-      this.baseUrl = config.baseUrl || OllamaProvider.DEFAULT_BASE_URL;
-      this.defaultModel = config.model || OllamaProvider.DEFAULT_MODEL;
+      this.baseUrl = config.baseUrl || 'http://localhost:11434';
+      this.defaultModel = config.model || 'llama2';
+
+      // Discover available models
       await this.discoverModels();
     } catch (error) {
       throw this.handleProviderError(error, 'initialization');
@@ -117,10 +86,14 @@ export class OllamaProvider extends BaseAIProvider {
     const startTime = Date.now();
 
     try {
-      const response = await this.makeRequest('/api/tags', {
+      const response = await fetch(`${this.baseUrl}/api/tags`, {
         method: 'GET',
-        timeout: OllamaProvider.CONNECTION_TIMEOUT,
+        signal: AbortSignal.timeout(5000), // 5 second timeout
       });
+
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+      }
 
       const data = await response.json();
       const models = data.models || [];
@@ -146,18 +119,53 @@ export class OllamaProvider extends BaseAIProvider {
     try {
       (this.constructor as typeof BaseAIProvider).validateRequest(request);
 
-      const model = this.getValidatedModel(request.model);
-      const ollamaRequest = this.buildGenerateRequest(model, request, false);
+      const model = request.model || this.defaultModel;
 
-      const response = await this.makeRequest('/api/generate', {
+      if (!this.isModelAvailable(model)) {
+        throw new Error(
+          `Model "${model}" is not available. Available models: ${this.supportedModels.join(', ')}`,
+        );
+      }
+
+      const response = await fetch(`${this.baseUrl}/api/generate`, {
         method: 'POST',
-        body: JSON.stringify(ollamaRequest),
-        timeout: OllamaProvider.REQUEST_TIMEOUT,
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          model,
+          prompt: request.prompt,
+          stream: false,
+          options: {
+            temperature: request.temperature || 0.7,
+            num_predict: request.maxTokens || 1000,
+          },
+        }),
+        signal: AbortSignal.timeout(60000), // 60 second timeout
       });
+
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+      }
 
       const data: OllamaResponse = await response.json();
 
-      return this.buildCompletionResponse(data, model);
+      return {
+        content: data.response,
+        usage: {
+          promptTokens: data.prompt_eval_count || 0,
+          completionTokens: data.eval_count || 0,
+          totalTokens: (data.prompt_eval_count || 0) + (data.eval_count || 0),
+        },
+        model,
+        providerId: this.type,
+        metadata: {
+          totalDuration: data.total_duration,
+          loadDuration: data.load_duration,
+          promptEvalDuration: data.prompt_eval_duration,
+          evalDuration: data.eval_duration,
+        },
+      };
     } catch (error) {
       throw this.handleProviderError(error, 'completion generation');
     }
@@ -169,15 +177,90 @@ export class OllamaProvider extends BaseAIProvider {
     try {
       (this.constructor as typeof BaseAIProvider).validateRequest(request);
 
-      const model = this.getValidatedModel(request.model);
-      const ollamaRequest = this.buildGenerateRequest(model, request, true);
+      const model = request.model || this.defaultModel;
 
-      const response = await this.makeRequest('/api/generate', {
+      if (!this.isModelAvailable(model)) {
+        throw new Error(`Model "${model}" is not available`);
+      }
+
+      const response = await fetch(`${this.baseUrl}/api/generate`, {
         method: 'POST',
-        body: JSON.stringify(ollamaRequest),
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          model,
+          prompt: request.prompt,
+          stream: true,
+          options: {
+            temperature: request.temperature || 0.7,
+            num_predict: request.maxTokens || 1000,
+          },
+        }),
       });
 
-      yield* this.processStreamingResponse(response);
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+      }
+
+      const reader = response.body?.getReader();
+      if (!reader) {
+        throw new Error('Failed to get response stream');
+      }
+
+      let totalPromptTokens = 0;
+      let totalCompletionTokens = 0;
+
+      try {
+        // eslint-disable-next-line no-await-in-loop
+        while (true) {
+          // eslint-disable-next-line no-await-in-loop
+          const { done, value } = await reader.read();
+          if (done) break;
+
+          const chunk = new TextDecoder().decode(value);
+          const lines = chunk.split('\n').filter((line) => line.trim());
+
+          // eslint-disable-next-line no-restricted-syntax
+          for (const line of lines) {
+            try {
+              const data: OllamaResponse = JSON.parse(line);
+
+              if (data.prompt_eval_count) {
+                totalPromptTokens = data.prompt_eval_count;
+              }
+              if (data.eval_count) {
+                totalCompletionTokens = data.eval_count;
+              }
+
+              yield {
+                content: data.response || '',
+                done: data.done,
+                usage: data.done
+                  ? {
+                      promptTokens: totalPromptTokens,
+                      completionTokens: totalCompletionTokens,
+                      totalTokens: totalPromptTokens + totalCompletionTokens,
+                    }
+                  : undefined,
+                metadata: {
+                  model: data.model,
+                  totalDuration: data.total_duration,
+                  evalDuration: data.eval_duration,
+                },
+              };
+
+              if (data.done) {
+                break;
+              }
+            } catch (parseError) {
+              // Skip malformed JSON lines - no console logging
+            }
+          }
+        }
+      } finally {
+        reader.releaseLock();
+      }
     } catch (error) {
       throw this.handleProviderError(error, 'streaming completion');
     }
@@ -185,9 +268,17 @@ export class OllamaProvider extends BaseAIProvider {
 
   async getAvailableModels(): Promise<AIModel[]> {
     await this.discoverModels();
-    return this.availableModels.map(this.mapToAIModel.bind(this));
+
+    return this.availableModels.map((model) => ({
+      id: model.name,
+      name: this.formatModelName(model.name),
+      description: `${model.details?.family || 'Unknown'} model (${this.formatSize(model.size)})`,
+      maxTokens: 4096, // Default, Ollama doesn't provide this info
+      // Ollama models are free (running locally)
+    }));
   }
 
+  // eslint-disable-next-line class-methods-use-this
   async estimateCost(request: CompletionRequest): Promise<CostEstimate> {
     // Ollama is free (local models)
     return {
@@ -199,6 +290,7 @@ export class OllamaProvider extends BaseAIProvider {
 
   async healthCheck(): Promise<HealthStatus> {
     const testResult = await this.testConnection();
+
     return {
       status: testResult.success ? 'healthy' : 'unhealthy',
       lastCheck: new Date(),
@@ -207,235 +299,46 @@ export class OllamaProvider extends BaseAIProvider {
     };
   }
 
-  async generateDashboardsQuery(
-    prompt: string,
-  ): Promise<GenerateDashboardResponseType[]> {
-    const config: StructuredPromptConfig = {
-      instruction:
-        'You are a JSON response generator for dashboard suggestions.',
-      format: JSON.stringify(
-        [
-          {
-            description: 'Dashboard showing sales performance metrics',
-            query:
-              'SELECT date, SUM(revenue) as total_revenue FROM sales GROUP BY date ORDER BY date',
-          },
-        ],
-        null,
-        2,
-      ),
-      constraint:
-        'Generate 1-5 dashboard suggestions. Each must have "description" and "query" fields.',
-    };
-
-    return this.generateStructuredResponse<GenerateDashboardResponseType[]>(
-      prompt,
-      config,
-      this.validateDashboardResponse.bind(this),
-      'dashboard generation',
-    );
-  }
-
-  async enhanceModelQuery(prompt: string): Promise<EnhanceModelResponseType> {
-    const config: StructuredPromptConfig = {
-      instruction: 'You are a SQL enhancement assistant.',
-      format: JSON.stringify(
-        {
-          content: 'The updated SQL with placeholders replaced appropriately',
-        },
-        null,
-        2,
-      ),
-      constraint:
-        'Return only a JSON object with a "content" field containing the enhanced SQL.',
-    };
-
-    return this.generateStructuredResponse<EnhanceModelResponseType>(
-      prompt,
-      config,
-      this.validateEnhanceResponse.bind(this),
-      'model enhancement',
-    );
-  }
-
   // Private helper methods
-
-  private async makeRequest(
-    endpoint: string,
-    options: {
-      method: string;
-      body?: string;
-      timeout?: number;
-      headers?: any;
-    },
-  ): Promise<Response> {
-    const { timeout = OllamaProvider.REQUEST_TIMEOUT, ...fetchOptions } =
-      options;
-
-    const response = await fetch(`${this.baseUrl}${endpoint}`, {
-      ...fetchOptions,
-      headers: {
-        'Content-Type': 'application/json',
-        ...fetchOptions.headers,
-      },
-      signal: AbortSignal.timeout(timeout),
-    });
-
-    if (!response.ok) {
-      throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-    }
-
-    return response;
-  }
 
   private async discoverModels(): Promise<void> {
     try {
-      const response = await this.makeRequest('/api/tags', {
-        method: 'GET',
-        timeout: OllamaProvider.CONNECTION_TIMEOUT,
+      const response = await fetch(`${this.baseUrl}/api/tags`, {
+        signal: AbortSignal.timeout(5000),
       });
+
+      if (!response.ok) {
+        throw new Error(`Failed to fetch models: HTTP ${response.status}`);
+      }
 
       const data = await response.json();
       this.availableModels = data.models || [];
-      this.updateSupportedModels();
+
+      // Update supported models list
+      (this.supportedModels as string[]).length = 0;
+      this.supportedModels.push(...this.availableModels.map((m) => m.name));
+
+      // Set default model if none available
+      if (
+        this.supportedModels.length > 0 &&
+        !this.supportedModels.includes(this.defaultModel)
+      ) {
+        const [firstModel] = this.supportedModels;
+        this.defaultModel = firstModel;
+      }
     } catch (error) {
-      // Silent fail - continue without models
+      // Failed to discover models - continue without logging
       this.availableModels = [];
     }
-  }
-
-  private updateSupportedModels(): void {
-    (this.supportedModels as string[]).length = 0;
-    this.supportedModels.push(...this.availableModels.map((m) => m.name));
-
-    // Update default model if current one is not available
-    if (
-      this.supportedModels.length > 0 &&
-      !this.supportedModels.includes(this.defaultModel)
-    ) {
-      [this.defaultModel] = this.supportedModels;
-    }
-  }
-
-  private getValidatedModel(requestedModel?: string): string {
-    const model = requestedModel || this.defaultModel;
-
-    if (!this.isModelAvailable(model)) {
-      throw new Error(
-        `Model "${model}" is not available. Available models: ${this.supportedModels.join(', ')}`,
-      );
-    }
-
-    return model;
   }
 
   private isModelAvailable(modelName: string): boolean {
     return this.supportedModels.includes(modelName);
   }
 
-  private buildGenerateRequest(
-    model: string,
-    request: CompletionRequest,
-    stream: boolean,
-  ): OllamaGenerateRequest {
-    return {
-      model,
-      prompt: request.prompt,
-      stream,
-      options: {
-        temperature: request.temperature || 0.7,
-        num_predict: request.maxTokens || 1000,
-      },
-    };
-  }
-
-  private buildCompletionResponse(
-    data: OllamaResponse,
-    model: string,
-  ): CompletionResponse {
-    return {
-      content: data.response,
-      usage: {
-        promptTokens: data.prompt_eval_count || 0,
-        completionTokens: data.eval_count || 0,
-        totalTokens: (data.prompt_eval_count || 0) + (data.eval_count || 0),
-      },
-      model,
-      providerId: this.type,
-      metadata: {
-        totalDuration: data.total_duration,
-        loadDuration: data.load_duration,
-        promptEvalDuration: data.prompt_eval_duration,
-        evalDuration: data.eval_duration,
-      },
-    };
-  }
-
-  private async *processStreamingResponse(
-    response: Response,
-  ): AsyncGenerator<CompletionChunk> {
-    const reader = response.body?.getReader();
-    if (!reader) {
-      throw new Error('Failed to get response stream');
-    }
-
-    let totalPromptTokens = 0;
-    let totalCompletionTokens = 0;
-
-    try {
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-
-        const chunk = new TextDecoder().decode(value);
-        const lines = chunk.split('\n').filter((line) => line.trim());
-
-        for (const line of lines) {
-          try {
-            const data: OllamaResponse = JSON.parse(line);
-
-            if (data.prompt_eval_count)
-              totalPromptTokens = data.prompt_eval_count;
-            if (data.eval_count) totalCompletionTokens = data.eval_count;
-
-            yield {
-              content: data.response || '',
-              done: data.done,
-              usage: data.done
-                ? {
-                    promptTokens: totalPromptTokens,
-                    completionTokens: totalCompletionTokens,
-                    totalTokens: totalPromptTokens + totalCompletionTokens,
-                  }
-                : undefined,
-              metadata: {
-                model: data.model,
-                totalDuration: data.total_duration,
-                evalDuration: data.eval_duration,
-              },
-            };
-
-            if (data.done) break;
-          } catch {
-            // Skip malformed JSON lines
-          }
-        }
-      }
-    } finally {
-      reader.releaseLock();
-    }
-  }
-
-  private mapToAIModel(model: OllamaModel): AIModel {
-    return {
-      id: model.name,
-      name: this.formatModelName(model.name),
-      description: `${model.details?.family || 'Unknown'} model (${this.formatSize(model.size)})`,
-      maxTokens: 4096, // Default, Ollama doesn't provide this info
-    };
-  }
-
+  // eslint-disable-next-line class-methods-use-this
   private formatModelName(name: string): string {
+    // Convert "llama2:7b" to "Llama 2 (7B)"
     const parts = name.split(':');
     const [basePart] = parts;
     const baseName = basePart.charAt(0).toUpperCase() + basePart.slice(1);
@@ -443,6 +346,7 @@ export class OllamaProvider extends BaseAIProvider {
     return baseName + variant;
   }
 
+  // eslint-disable-next-line class-methods-use-this
   private formatSize(bytes: number): string {
     const sizes = ['B', 'KB', 'MB', 'GB', 'TB'];
     if (bytes === 0) return '0 B';
@@ -451,191 +355,185 @@ export class OllamaProvider extends BaseAIProvider {
     return `${Math.round((bytes / 1024 ** i) * 100) / 100} ${sizes[i]}`;
   }
 
-  // Structured response generation with robust parsing
-
-  private async generateStructuredResponse<T>(
+  async generateDashboardsQuery(
     prompt: string,
-    config: StructuredPromptConfig,
-    validator: (data: any) => T,
-    operationType: string,
-    maxRetries: number = OllamaProvider.MAX_RETRIES,
-  ): Promise<T> {
-    if (!this.baseUrl) {
-      throw new Error('Ollama provider not configured with base URL');
-    }
-
-    let lastError: Error | null = null;
-
-    for (let attempt = 0; attempt <= maxRetries; attempt++) {
-      try {
-        const structuredPrompt = this.buildStructuredPrompt(prompt, config);
-        const response = await this.makeRequest('/api/generate', {
-          method: 'POST',
-          body: JSON.stringify({
-            model: this.defaultModel,
-            prompt: structuredPrompt,
-            stream: false,
-            options: {
-              temperature: 0.0,
-              num_predict: 2048,
-              top_k: 1,
-              top_p: 0.1,
-              repeat_penalty: 1.0,
-              stop: ['\n\n', '```', 'Explanation:', 'Note:'],
-            },
-          }),
-        });
-
-        const data = await response.json();
-        const text = data.response?.trim();
-
-        if (!text) {
-          throw new Error('No response text from Ollama');
-        }
-
-        return this.parseAndValidateStructuredResponse(text, validator);
-      } catch (error) {
-        lastError = error as Error;
-        console.error(
-          `[OLLAMA PROVIDER] ${operationType} attempt ${attempt + 1} failed:`,
-          error,
-        );
-
-        if (attempt < maxRetries) {
-          await this.delay(OllamaProvider.RETRY_DELAY * (attempt + 1)); // Exponential backoff
-        }
-      }
-    }
-
-    throw this.handleProviderError(lastError!, operationType);
-  }
-
-  private buildStructuredPrompt(
-    prompt: string,
-    config: StructuredPromptConfig,
-  ): string {
-    return `${config.instruction}
-
-User request: ${prompt}
-
-CRITICAL INSTRUCTIONS:
-- Respond ONLY with valid JSON
-- No explanatory text before or after
-- No markdown code blocks
-- No comments in the JSON
-
-Expected format:
-${config.format}
-
-${config.constraint}
-
-Respond with valid JSON only:`;
-  }
-
-  private parseAndValidateStructuredResponse<T>(
-    text: string,
-    validator: (data: any) => T,
-  ): T {
-    console.log('Original response:', text);
-
+  ): Promise<GenerateDashboardResponseType[]> {
     try {
-      const cleanedText = this.cleanJsonResponse(text);
-      console.log('Cleaned response:', cleanedText);
+      if (!this.baseUrl) {
+        throw new Error('Ollama provider not configured with base URL');
+      }
 
-      const parsed = JSON.parse(cleanedText);
-      return validator(parsed);
-    } catch (parseError) {
-      console.error('JSON parse failed, attempting recovery:', parseError);
+      // Use structured prompt for consistent response
+      const structuredPrompt = `${prompt}
+
+Please respond with a JSON array of dashboard suggestions in this exact format:
+[
+  {
+    "description": "A human-readable dashboard description",
+    "query": "A useful SQL query or dbt select statement"
+  }
+]
+
+Only return the JSON array, no other text or explanation.`;
+
+      const response = await fetch(`${this.baseUrl}/api/generate`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          model: this.defaultModel,
+          prompt: structuredPrompt,
+          stream: false,
+          options: {
+            temperature: 0.0,
+            num_predict: 2048,
+          },
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error(
+          `Ollama API error: ${response.status} ${response.statusText}`,
+        );
+      }
+
+      const data = await response.json();
+      const text = data.response;
+
+      if (!text) {
+        throw new Error('No response text from Ollama');
+      }
 
       try {
-        const recoveredText = this.recoverJsonFromText(text);
-        const parsed = JSON.parse(recoveredText);
-        return validator(parsed);
-      } catch (recoveryError) {
-        console.error('Recovery failed:', recoveryError);
-        console.error('Raw response that failed:', text);
-        throw new Error('Failed to parse structured response from Ollama');
-      }
-    }
-  }
+        // Clean the response - remove any markdown formatting and extra text
+        let cleanedText = text
+          .replace(/```json\n?/g, '')
+          .replace(/```\n?/g, '')
+          .trim();
 
-  private cleanJsonResponse(text: string): string {
-    return (
-      text
-        // Remove markdown code blocks
-        .replace(/```(?:json)?\s*/g, '')
-        .replace(/```\s*$/g, '')
-        // Remove common prefixes
-        .replace(/^(?:Here's?|Response:|JSON:)?\s*/i, '')
-        // Remove trailing explanations
-        .replace(/(\]|\})\s*\n\s*[A-Z].*$/s, '$1')
-        // Clean whitespace
-        .trim()
-    );
-  }
+        // Try to extract JSON array from the response
+        const jsonMatch = cleanedText.match(/\[[\s\S]*\]/);
+        if (jsonMatch) {
+          const [firstMatch] = jsonMatch;
+          cleanedText = firstMatch;
+        }
 
-  private recoverJsonFromText(text: string): string {
-    // Try to extract JSON structures using regex
-    const arrayMatch = text.match(/\[[\s\S]*?\]/);
-    const objectMatch = text.match(/\{[\s\S]*?\}/);
+        const parsed = JSON.parse(cleanedText);
 
-    if (arrayMatch) return arrayMatch[0];
-    if (objectMatch) return objectMatch[0];
+        // Validate the response structure
+        if (Array.isArray(parsed)) {
+          return parsed.filter(
+            (item) =>
+              item &&
+              typeof item.description === 'string' &&
+              typeof item.query === 'string',
+          );
+        }
 
-    // Try to extract multiple objects and wrap in array
-    const objectMatches = text.match(/\{[\s\S]*?\}/g);
-    if (objectMatches && objectMatches.length > 0) {
-      return `[${objectMatches.join(',')}]`;
-    }
-
-    throw new Error('No JSON structure found in response');
-  }
-
-  // Response validators
-
-  private validateDashboardResponse(
-    parsed: any,
-  ): GenerateDashboardResponseType[] {
-    if (!Array.isArray(parsed)) {
-      throw new Error('Dashboard response must be an array');
-    }
-
-    const validItems = parsed
-      .filter((item): item is GenerateDashboardResponseType => {
-        return (
-          item &&
-          typeof item === 'object' &&
-          typeof item.description === 'string' &&
-          typeof item.query === 'string' &&
-          item.description.trim().length > 0 &&
-          item.query.trim().length > 0
+        throw new Error('Response is not an array');
+      } catch (parseError) {
+        // eslint-disable-next-line no-console
+        console.error(
+          '[OLLAMA PROVIDER] Failed to parse JSON response:',
+          parseError,
         );
-      })
-      .map((item) => ({
-        description: item.description.trim(),
-        query: item.query.trim(),
-      }));
-
-    if (validItems.length === 0) {
-      throw new Error('No valid dashboard items found in response');
+        // eslint-disable-next-line no-console
+        console.error('[OLLAMA PROVIDER] Raw response:', text);
+        throw new Error(
+          'Failed to parse dashboard suggestions from Ollama response',
+        );
+      }
+    } catch (error) {
+      // eslint-disable-next-line no-console
+      console.error('[OLLAMA PROVIDER] generateDashboardsQuery failed:', error);
+      throw this.handleProviderError(error, 'dashboard generation');
     }
-
-    return validItems;
   }
 
-  private validateEnhanceResponse(parsed: any): EnhanceModelResponseType {
-    if (
-      !parsed ||
-      typeof parsed !== 'object' ||
-      typeof parsed.content !== 'string'
-    ) {
-      throw new Error('Enhancement response must have a valid content field');
+  async enhanceModelQuery(prompt: string): Promise<EnhanceModelResponseType> {
+    try {
+      if (!this.baseUrl) {
+        throw new Error('Ollama provider not configured with base URL');
+      }
+
+      // Use structured prompt for consistent response
+      const structuredPrompt = `${prompt}
+
+Please respond with a JSON object in this exact format:
+{
+  "content": "The updated SQL with placeholders replaced appropriately"
+}
+
+Only return the JSON object, no other text or explanation.`;
+
+      const response = await fetch(`${this.baseUrl}/api/generate`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          model: this.defaultModel,
+          prompt: structuredPrompt,
+          stream: false,
+          options: {
+            temperature: 0.0,
+            num_predict: 2048,
+          },
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error(
+          `Ollama API error: ${response.status} ${response.statusText}`,
+        );
+      }
+
+      const data = await response.json();
+      const text = data.response;
+
+      if (!text) {
+        throw new Error('No response text from Ollama');
+      }
+
+      try {
+        // Clean the response - remove any markdown formatting and extra text
+        let cleanedText = text
+          .replace(/```json\n?/g, '')
+          .replace(/```\n?/g, '')
+          .trim();
+
+        // Try to extract JSON object from the response
+        const jsonMatch = cleanedText.match(/\{[\s\S]*\}/);
+        if (jsonMatch) {
+          const [firstMatch] = jsonMatch;
+          cleanedText = firstMatch;
+        }
+
+        const parsed = JSON.parse(cleanedText);
+
+        // Validate the response structure
+        if (parsed && typeof parsed.content === 'string') {
+          return { content: parsed.content };
+        }
+
+        throw new Error('Response does not have valid content field');
+      } catch (parseError) {
+        // eslint-disable-next-line no-console
+        console.error(
+          '[OLLAMA PROVIDER] Failed to parse JSON response:',
+          parseError,
+        );
+        // eslint-disable-next-line no-console
+        console.error('[OLLAMA PROVIDER] Raw response:', text);
+        throw new Error(
+          'Failed to parse model enhancement from Ollama response',
+        );
+      }
+    } catch (error) {
+      // eslint-disable-next-line no-console
+      console.error('[OLLAMA PROVIDER] enhanceModelQuery failed:', error);
+      throw this.handleProviderError(error, 'model enhancement');
     }
-
-    return { content: parsed.content.trim() };
-  }
-
-  private delay(ms: number): Promise<void> {
-    return new Promise((resolve) => setTimeout(resolve, ms));
   }
 }
