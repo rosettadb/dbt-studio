@@ -1,3 +1,4 @@
+/* eslint-disable class-methods-use-this, no-restricted-syntax, no-await-in-loop, no-plusplus */
 import { BaseAIProvider } from './base.provider';
 import {
   AIProviderType,

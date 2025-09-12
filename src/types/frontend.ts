@@ -16,6 +16,9 @@ export type AppContextType = {
   // Chat sidebar toggle
   isChatOpen?: boolean;
   setIsChatOpen?: (open: boolean) => void;
+  pendingMessage: string | null;
+  setPendingMessage: (message: string | null) => void;
+  openChatWithMessage: (message: string) => void;
 };
 
 export type ItemProps = {

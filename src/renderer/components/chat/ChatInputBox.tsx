@@ -23,6 +23,7 @@ import {
 import { TipTapEditor } from './TipTapEditor';
 import { useAutoRenameSession } from '../../hooks/useAutoRenameSession';
 import { htmlToPlainText } from '../../utils/chatHelpers';
+import { useAppContext } from '../../hooks';
 
 interface ChatInputBoxProps {
   sessionId?: number;
@@ -31,6 +32,8 @@ interface ChatInputBoxProps {
 export const ChatInputBox: React.FC<ChatInputBoxProps> = ({ sessionId }) => {
   const theme = useTheme();
   const [input, setInput] = React.useState('');
+
+  const { pendingMessage, setPendingMessage } = useAppContext();
 
   const queryClient = useQueryClient();
   const assistantTempIdRef = React.useRef<number | null>(null);
@@ -61,9 +64,9 @@ export const ChatInputBox: React.FC<ChatInputBoxProps> = ({ sessionId }) => {
     return aiProviderImages[typeKey] || defaultIcon;
   }, [selectedProvider]);
 
-  const handleSend = () => {
-    const content = plainText.trim();
-    if (sessionId && content && activeProvider) {
+  const handleSendMessage = (content?: string) => {
+    const messageContent = content || plainText.trim();
+    if (sessionId && messageContent && activeProvider) {
       // 1) Optimistically add the user message locally (no server call here)
       // Must match the key used by useGetChatMessages(sessionId) which is
       // [QUERY_KEYS.GET_CHAT_MESSAGES, sessionId, undefined, undefined]
@@ -91,7 +94,7 @@ export const ChatInputBox: React.FC<ChatInputBoxProps> = ({ sessionId }) => {
         id: tempUserId,
         conversationId: sessionId,
         role: 'user',
-        content,
+        content: messageContent,
         metadata: { temp: true },
         toolCalls: null as any,
         contextItems: null as any,
@@ -125,14 +128,16 @@ export const ChatInputBox: React.FC<ChatInputBoxProps> = ({ sessionId }) => {
       // Push both temp user and temp assistant
       queryClient.setQueryData(msgKey, [...prev, tempUser, tempAssistant]);
 
-      // Clear input immediately
-      setInput('');
+      // Clear input immediately ONLY if not sending a pending message
+      if (!content) {
+        setInput('');
+      }
 
       // 3) Start streaming; update the temp assistant content on each chunk
       streamMessage(
         {
           sessionId,
-          content,
+          content: messageContent,
           onChunk: (chunk: string) => {
             const current = queryClient.getQueryData<typeof prev>(msgKey) || [];
             queryClient.setQueryData(
@@ -157,7 +162,7 @@ export const ChatInputBox: React.FC<ChatInputBoxProps> = ({ sessionId }) => {
 
             // Auto-rename session after successful LLM response
             // Use the user's message content to generate a descriptive title
-            autoRename(content);
+            autoRename(messageContent);
 
             assistantTempIdRef.current = null;
             userTempIdRef.current = null;
@@ -218,6 +223,10 @@ export const ChatInputBox: React.FC<ChatInputBoxProps> = ({ sessionId }) => {
     }
   };
 
+  const handleSend = () => {
+    handleSendMessage();
+  };
+
   const handleCancel = () => {
     if (!sessionId) return;
     const msgKey = [
@@ -231,7 +240,6 @@ export const ChatInputBox: React.FC<ChatInputBoxProps> = ({ sessionId }) => {
       { sessionId },
       {
         onSettled: async () => {
-          // Remove only the temp streaming assistant; keep user and refresh to persist
           const current =
             queryClient.getQueryData<
               Array<{
@@ -253,7 +261,13 @@ export const ChatInputBox: React.FC<ChatInputBoxProps> = ({ sessionId }) => {
     );
   };
 
-  // Note: Enter-to-send is implemented in TipTapEditor via onSubmit (Enter) and Shift+Enter for newline.
+  React.useEffect(() => {
+    if (pendingMessage && sessionId && activeProvider && !isStreaming) {
+      handleSendMessage(pendingMessage);
+      setPendingMessage(null);
+      setTimeout(() => setInput(''), 0);
+    }
+  }, [pendingMessage, sessionId, activeProvider, isStreaming]);
 
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column' }}>

@@ -18,8 +18,8 @@ const FolderTreeItem: React.FC<ItemProps> = ({ label }) => {
       <Folder
         sx={{
           color: HIDDEN_FOLDERS.indexOf(label) === -1 ? '#5f89f4' : '#aabdefff',
-          width: 18,
-          height: 18,
+          width: 14,
+          height: 14,
         }}
       />
       <StyledLabel variant="caption">
@@ -34,7 +34,7 @@ const FileTreeItem: React.FC<ItemProps> = ({ label, color }) => {
     <StyledTreeItem>
       <FileIcon fileName={label} />
       <StyledLabel variant="caption">
-        <OverflowTip style={{ color }}>{label}</OverflowTip>
+        <OverflowTip style={{ color, minWidth: 180 }}>{label}</OverflowTip>
       </StyledLabel>
     </StyledTreeItem>
   );
