@@ -19,7 +19,6 @@ import {
 } from '../../controllers/aiProviders.controller';
 import type { AIProvider } from '../../controllers/aiProviders.controller';
 import { CreateProviderDialog, ProviderCard } from '../ai';
-import { SettingsType } from '../../../types/backend';
 import { useGetSettingsWithDatabaseInfo } from '../../controllers';
 
 export const AIProvidersSettings: React.FC = () => {
@@ -171,16 +170,16 @@ export const AIProvidersSettings: React.FC = () => {
       <Paper elevation={1} sx={{ p: 2, mb: 3, bgcolor: 'primary.50' }}>
         <Box sx={{ mb: 2 }}>
           <Box
-            display={'flex'}
-            justifyContent={'start'}
-            alignItems={'center'}
+            display="flex"
+            justifyContent="start"
+            alignItems="center"
             gap={4}
             mb={2}
           >
             <Box
-              display={'flex'}
-              justifyContent={'start'}
-              alignItems={'center'}
+              display="flex"
+              justifyContent="start"
+              alignItems="center"
               gap={1}
             >
               <Storage />

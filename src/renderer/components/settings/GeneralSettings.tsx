@@ -1,8 +1,7 @@
 import React from 'react';
-import { TextField, IconButton, Typography, Box, Chip } from '@mui/material';
-import { FolderOpen, Storage, Info } from '@mui/icons-material';
+import { TextField, IconButton, Box } from '@mui/material';
+import { FolderOpen } from '@mui/icons-material';
 import { SettingsType } from '../../../types/backend';
-import { useGetSettingsWithDatabaseInfo } from '../../controllers';
 import { InstallationSettings } from './InstallationSettings';
 
 interface GeneralSettingsProps {
@@ -20,8 +19,6 @@ export const GeneralSettings: React.FC<GeneralSettingsProps> = ({
   onSettingsChange,
   onFilePicker,
 }) => {
-  const { data: settingsWithDbInfo } = useGetSettingsWithDatabaseInfo();
-
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     onSettingsChange(e);
   };
