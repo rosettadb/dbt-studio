@@ -409,9 +409,6 @@ const InstallationSettings: React.FC = () => {
               Restart Now
             </Button>
           )}
-          <Typography variant="body2" color="textSecondary" className="mt-2">
-            Rosetta dbt Studio - Turn Raw Data into Business Insights
-          </Typography>
         </CardContent>
       </Card>
       {/* Update Check Section */}
