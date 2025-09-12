@@ -1,9 +1,9 @@
-import React, { useEffect, useState } from 'react';
+import React, { useState } from 'react';
 import SplitPane from 'split-pane-react';
 import { Box, useTheme } from '@mui/material';
 import { useGetConnectionById, useGetSelectedProject } from '../../controllers';
 import { useAppContext, useLocalStorage } from '../../hooks';
-import { CompletionItem, QueryHistoryType } from '../../../types/frontend';
+import { QueryHistoryType } from '../../../types/frontend';
 import { AppLayout } from '../../layouts';
 import { utils } from '../../helpers';
 import { SchemaViewContainer, SchemaViewGrid } from './styles';
@@ -34,9 +34,6 @@ const Sql = () => {
     QUERY_HISTORY_KEY,
     JSON.stringify([]),
   );
-  const [completions, setCompletions] = useState<
-    Omit<CompletionItem, 'range'>[]
-  >([]);
   const [sizes, setSizes] = useState<[number, number]>([
     window.innerHeight - 250,
     250,
@@ -46,10 +43,8 @@ const Sql = () => {
     return connection ? getConnectionInput(connection) : undefined;
   }, [connection]);
 
-  useEffect(() => {
-    if (schema) {
-      setCompletions(utils.generateMonacoCompletions(schema));
-    }
+  const completions = React.useMemo(() => {
+    return schema ? utils.generateMonacoCompletions(schema) : [];
   }, [schema]);
 
   const renderSash = () => (

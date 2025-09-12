@@ -36,6 +36,9 @@ const AppProvider: React.FC<Props> = ({ children }) => {
   const [isChatOpen, setIsChatOpen] = React.useState(false);
   const [isLoadingSchema, setIsLoadingSchema] = React.useState(false);
   const [schema, setSchema] = React.useState<Table[]>();
+  const [lastFetchedProjectId, setLastFetchedProjectId] = React.useState<
+    string | null
+  >(null);
   const [sidebarContent, setSidebarContent] = React.useState<React.ReactNode>(
     <div />,
   );
@@ -51,32 +54,63 @@ const AppProvider: React.FC<Props> = ({ children }) => {
     setIsChatOpen(true);
   }, []);
 
-  const fetchSchema = async () => {
-    if (selectedProject) {
-      setIsLoadingSchema(true);
-      try {
-        // Clear schema first to avoid showing stale data
-        setSchema([]);
+  const fetchSchema = React.useCallback(
+    async (forceRefresh = false) => {
+      if (selectedProject) {
+        // Skip fetch if we already have schema for this project and it's not a forced refresh
+        if (
+          !forceRefresh &&
+          lastFetchedProjectId === selectedProject.id &&
+          schema &&
+          schema.length > 0
+        ) {
+          return;
+        }
 
-        const schemaRes = await projectsServices.extractSchema(selectedProject);
-        setSchema(schemaRes);
-      } catch (error) {
-        // Clear schema on error to ensure no stale data is shown
+        setIsLoadingSchema(true);
+        try {
+          // Only clear schema on forced refresh to avoid flickering
+          if (forceRefresh) {
+            setSchema([]);
+          }
+
+          const schemaRes =
+            await projectsServices.extractSchema(selectedProject);
+          setSchema(schemaRes);
+          setLastFetchedProjectId(selectedProject.id);
+        } catch (error) {
+          // Clear schema on error to ensure no stale data is shown
+          setSchema([]);
+          setLastFetchedProjectId(null);
+          // eslint-disable-next-line no-console
+          console.error('Failed to fetch schema:', error);
+        } finally {
+          setIsLoadingSchema(false);
+        }
+      } else {
+        // Clear schema when no project is selected
         setSchema([]);
-        // eslint-disable-next-line no-console
-        console.error('Failed to fetch schema:', error);
-      } finally {
-        setIsLoadingSchema(false);
+        setLastFetchedProjectId(null);
       }
-    } else {
-      // Clear schema when no project is selected
-      setSchema([]);
-    }
-  };
+    },
+    [selectedProject, lastFetchedProjectId, schema],
+  );
 
   React.useEffect(() => {
-    fetchSchema();
-  }, [selectedProject]);
+    // Only fetch if we don't have schema for the current project
+    if (
+      selectedProject &&
+      (!schema || lastFetchedProjectId !== selectedProject.id)
+    ) {
+      fetchSchema();
+    }
+  }, [selectedProject?.id, fetchSchema]);
+
+  // Memoize the fetchSchema function that forces refresh for manual calls
+  const manualFetchSchema = React.useCallback(
+    () => fetchSchema(true),
+    [fetchSchema],
+  );
 
   const value: AppContextType = React.useMemo(() => {
     return {
@@ -87,7 +121,7 @@ const AppProvider: React.FC<Props> = ({ children }) => {
       sidebarContent,
       setSidebarContent,
       schema,
-      fetchSchema,
+      fetchSchema: manualFetchSchema,
       isSidebarOpen,
       setIsSidebarOpen,
       isLoadingSchema,
@@ -108,6 +142,7 @@ const AppProvider: React.FC<Props> = ({ children }) => {
     selectedProject,
     isAiProviderSet,
     isChatOpen,
+    manualFetchSchema,
     pendingMessage,
     openChatWithMessage,
   ]);
