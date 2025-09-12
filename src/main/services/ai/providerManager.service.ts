@@ -799,7 +799,7 @@ export class AIProviderManager {
       } catch (completionError) {
         // eslint-disable-next-line no-console
         console.error(
-          '[PROVIDER MANAGER] generateCompletion - Failed to generate completion:',
+          'Line 802: [PROVIDER MANAGER] generateCompletion - Failed to generate completion:',
           completionError,
         );
 

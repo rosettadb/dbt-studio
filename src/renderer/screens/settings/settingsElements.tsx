@@ -40,7 +40,7 @@ export const settingsSidebarElements: SettingsSidebarElement[] = [
   },
   {
     icon: FolderIcon,
-    text: 'Rosetta',
+    text: 'Rosetta CLI',
     path: '/app/settings/rosetta',
   },
   {

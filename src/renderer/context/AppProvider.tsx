@@ -22,6 +22,9 @@ export const AppContext = React.createContext<AppContextType>({
   isAiProviderSet: false,
   isChatOpen: false,
   setIsChatOpen: () => {},
+  pendingMessage: null,
+  setPendingMessage: () => {},
+  openChatWithMessage: () => {},
 });
 
 const AppProvider: React.FC<Props> = ({ children }) => {
@@ -37,8 +40,16 @@ const AppProvider: React.FC<Props> = ({ children }) => {
     <div />,
   );
 
-  // Determine if AI provider is set based on active provider
+  const [pendingMessage, setPendingMessage] = React.useState<string | null>(
+    null,
+  );
+
   const isAiProviderSet = !!activeAIProvider;
+
+  const openChatWithMessage = React.useCallback((message: string) => {
+    setPendingMessage(message);
+    setIsChatOpen(true);
+  }, []);
 
   const fetchSchema = async () => {
     if (selectedProject) {
@@ -83,6 +94,10 @@ const AppProvider: React.FC<Props> = ({ children }) => {
       isAiProviderSet,
       isChatOpen,
       setIsChatOpen,
+      // Add new properties
+      pendingMessage,
+      setPendingMessage,
+      openChatWithMessage,
     };
   }, [
     projects,
@@ -93,6 +108,8 @@ const AppProvider: React.FC<Props> = ({ children }) => {
     selectedProject,
     isAiProviderSet,
     isChatOpen,
+    pendingMessage,
+    openChatWithMessage,
   ]);
 
   if (isLoading) {

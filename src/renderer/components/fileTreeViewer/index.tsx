@@ -2,7 +2,7 @@ import React from 'react';
 import { CircularProgress, Tooltip, TextField, Box } from '@mui/material';
 import { Cached } from '@mui/icons-material';
 import { RenderTree } from './RenderTree';
-import { Container, Header, StyledTreeView } from './styles';
+import { Container, StyledTreeView } from './styles';
 import { FileNode, FileStatus } from '../../../types/backend';
 import { ConfirmationModal, NewFileModal } from '../modals';
 import { projectsServices } from '../../services';
@@ -163,51 +163,49 @@ const FileTreeViewer: React.FC<Props> = ({
 
   return (
     <Container>
-      <Box padding={1}>
-        <Header>
-          <div>File Explorer</div>
-          <Tooltip title="Refresh directories">
-            {isLoadingFiles ? (
-              <CircularProgress size={20} />
-            ) : (
-              <Cached
-                sx={{ color: 'primary.main', cursor: 'pointer' }}
-                onClick={() => refreshFiles()}
-              />
-            )}
-          </Tooltip>
-        </Header>
-
+      <Box
+        padding={1}
+        display="flex"
+        sx={{ alignItems: 'center', mb: 1, gap: 1 }}
+      >
         <TextField
           fullWidth
           size="small"
           placeholder="Search files or folders..."
           onChange={(e) => setSearchKeyword(e.target.value)}
           value={searchKeyword}
-          sx={{ mb: 1 }}
+          sx={{ height: '40px' }}
         />
+        <Tooltip title="Refresh directories">
+          {isLoadingFiles ? (
+            <CircularProgress size={20} />
+          ) : (
+            <Cached
+              sx={{ color: 'primary.main', cursor: 'pointer' }}
+              onClick={() => refreshFiles()}
+            />
+          )}
+        </Tooltip>
       </Box>
 
       <StyledTreeView
         expandedItems={expandedItems}
         onExpandedItemsChange={(_, items) => handleExpandedItemsChange(items)}
       >
-        {filteredNode && (
-          <RenderTree
-            node={filteredNode}
-            fileStatuses={fileStatuses}
-            onFileSelect={onFileSelect}
-            onDelete={(path) => setDeleteModal(path)}
-            onNewFile={(path) => setFileModal(path)}
-            onNewFolder={(path) => setFolderModal(path)}
-            projectName={project!.name}
-            projectPath={project!.path}
-            onRefresh={() => refreshFiles()}
-            onCopyPath={(path) => setCopyPathData(path)}
-            onPastePath={(source, target) => copyPath(source, target)}
-            copyPathData={copyPathData}
-          />
-        )}
+        <RenderTree
+          node={filteredNode}
+          fileStatuses={fileStatuses}
+          onFileSelect={onFileSelect}
+          onDelete={(path) => setDeleteModal(path)}
+          onNewFile={(path) => setFileModal(path)}
+          onNewFolder={(path) => setFolderModal(path)}
+          projectName={project!.name}
+          projectPath={project!.path}
+          onRefresh={() => refreshFiles()}
+          onCopyPath={(path) => setCopyPathData(path)}
+          onPastePath={(source, target) => copyPath(source, target)}
+          copyPathData={copyPathData}
+        />
       </StyledTreeView>
       {(fileModal || folderModal) && (
         <NewFileModal

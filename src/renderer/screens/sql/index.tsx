@@ -85,7 +85,7 @@ const Sql = () => {
         {selectedProject && !connectionInput && (
           <NoConnectionMessage projectName={selectedProject.name} />
         )}
-        {selectedProject && connectionInput && queryResults && (
+        {selectedProject && connectionInput && (
           <SplitPane
             split="horizontal"
             sizes={sizes}

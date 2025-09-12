@@ -425,7 +425,7 @@ export const RosettaSettings: React.FC<RosettaSettingsProps> = ({
           }
           sx={{ textTransform: 'none' }}
         >
-          View RosettaDB documentation
+          View RosettaDB CLI documentation
         </Button>
       </Box>
 
@@ -456,7 +456,7 @@ export const RosettaSettings: React.FC<RosettaSettingsProps> = ({
           >
             {uninstallRosetta.isLoading
               ? 'Uninstalling...'
-              : 'Uninstall Rosetta'}
+              : 'Uninstall Rosetta CLI'}
           </Button>
         </Box>
       )}
@@ -465,8 +465,8 @@ export const RosettaSettings: React.FC<RosettaSettingsProps> = ({
         isOpen={showUninstallConfirmation}
         onClose={cancelUninstall}
         onConfirm={confirmUninstall}
-        title="Uninstall Rosetta"
-        question="Are you sure you want to uninstall Rosetta? This will remove all Rosetta files and you will need to reinstall it to use Rosetta features."
+        title="Uninstall Rosetta CLI"
+        question="Are you sure you want to uninstall Rosetta CLI? This will remove all Rosetta CLI files and you will need to reinstall it to use Rosetta CLI features."
       />
     </Box>
   );

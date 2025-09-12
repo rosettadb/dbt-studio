@@ -551,7 +551,12 @@ const ProjectDetails: React.FC = () => {
                     } catch {
                       toast.error('Something went wrong');
                     }
+                    return;
+                    // openChatWithMessage(generateModelsPrompt(files));
+                    // setBusinessQueryModal(undefined);
+                    // return;
                   }
+                  toast.info('No files selected!');
                 }}
               />
             )}

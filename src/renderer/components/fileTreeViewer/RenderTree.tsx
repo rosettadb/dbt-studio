@@ -2,16 +2,24 @@ import React from 'react';
 import { TreeItem } from '@mui/x-tree-view';
 import {
   IconButton,
+  ListItemIcon,
+  ListItemText,
   Menu,
   MenuItem,
   PopoverPosition,
   Tooltip,
 } from '@mui/material';
 import {
-  MoreVert,
   NoteAddOutlined,
   CreateNewFolderOutlined,
   RefreshOutlined,
+  Delete,
+  ContentCopy,
+  FileCopy,
+  ContentPaste,
+  CreateNewFolder,
+  NoteAdd,
+  Archive,
 } from '@mui/icons-material';
 import { TreeItems } from './TreeItems';
 import { FileNode } from '../../../types/backend';
@@ -122,39 +130,34 @@ const RenderTree: React.FC<Props> = ({
               </IconButton>
             )}
             {node.type === 'folder' && (
-              <IconButton
-                size="small"
-                edge="end"
-                onClick={(event) => {
-                  event.stopPropagation();
-                  onNewFile(node.path);
-                  handleMenuClose();
-                }}
-              >
-                <Tooltip title="Create new file">
-                  <NoteAddOutlined fontSize="small" />
-                </Tooltip>
-              </IconButton>
-            )}
-            {node.type === 'folder' && (
-              <IconButton
-                size="small"
-                edge="end"
-                onClick={(event) => {
-                  event.stopPropagation();
-                  onNewFolder(node.path);
-                  handleMenuClose();
-                }}
-              >
-                <Tooltip title="Create new folder">
-                  <CreateNewFolderOutlined fontSize="small" />
-                </Tooltip>
-              </IconButton>
-            )}
-            {node.path !== projectPath && (
-              <IconButton size="small" onClick={handleMenuOpen}>
-                <MoreVert fontSize="small" />
-              </IconButton>
+              <>
+                <IconButton
+                  size="small"
+                  edge="end"
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    onNewFile(node.path);
+                    handleMenuClose();
+                  }}
+                >
+                  <Tooltip title="Create new file">
+                    <NoteAddOutlined fontSize="small" />
+                  </Tooltip>
+                </IconButton>
+                <IconButton
+                  size="small"
+                  edge="end"
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    onNewFolder(node.path);
+                    handleMenuClose();
+                  }}
+                >
+                  <Tooltip title="Create new folder">
+                    <CreateNewFolderOutlined fontSize="small" />
+                  </Tooltip>
+                </IconButton>
+              </>
             )}
           </ActionsContainer>
           <Menu
@@ -174,8 +177,12 @@ const RenderTree: React.FC<Props> = ({
                 handleMenuClose();
               }}
             >
-              Delete
+              <ListItemIcon>
+                <Delete fontSize="small" />
+              </ListItemIcon>
+              <ListItemText>Delete</ListItemText>
             </MenuItem>
+
             <MenuItem
               onClick={(event) => {
                 event.stopPropagation();
@@ -183,8 +190,12 @@ const RenderTree: React.FC<Props> = ({
                 handleMenuClose();
               }}
             >
-              Copy Path
+              <ListItemIcon>
+                <ContentCopy fontSize="small" />
+              </ListItemIcon>
+              <ListItemText>Copy Path</ListItemText>
             </MenuItem>
+
             <MenuItem
               onClick={(event) => {
                 event.stopPropagation();
@@ -192,8 +203,12 @@ const RenderTree: React.FC<Props> = ({
                 handleMenuClose();
               }}
             >
-              Copy
+              <ListItemIcon>
+                <FileCopy fontSize="small" />
+              </ListItemIcon>
+              <ListItemText>Copy</ListItemText>
             </MenuItem>
+
             {node.type === 'folder' && (
               <>
                 {copyPathData !== '' && (
@@ -204,9 +219,15 @@ const RenderTree: React.FC<Props> = ({
                       handleMenuClose();
                     }}
                   >
-                    Paste
+                    <ListItemIcon sx={{ minWidth: 32 }}>
+                      <ContentPaste sx={{ fontSize: 16 }} />
+                    </ListItemIcon>
+                    <ListItemText primaryTypographyProps={{ fontSize: 14 }}>
+                      Paste
+                    </ListItemText>
                   </MenuItem>
                 )}
+
                 <MenuItem
                   onClick={(event) => {
                     event.stopPropagation();
@@ -214,8 +235,12 @@ const RenderTree: React.FC<Props> = ({
                     handleMenuClose();
                   }}
                 >
-                  New Folder
+                  <ListItemIcon>
+                    <CreateNewFolder fontSize="small" />
+                  </ListItemIcon>
+                  <ListItemText>New Folder</ListItemText>
                 </MenuItem>
+
                 <MenuItem
                   onClick={(event) => {
                     event.stopPropagation();
@@ -223,8 +248,12 @@ const RenderTree: React.FC<Props> = ({
                     handleMenuClose();
                   }}
                 >
-                  New File
+                  <ListItemIcon>
+                    <NoteAdd fontSize="small" />
+                  </ListItemIcon>
+                  <ListItemText>New File</ListItemText>
                 </MenuItem>
+
                 <MenuItem
                   onClick={(event) => {
                     event.stopPropagation();
@@ -232,7 +261,10 @@ const RenderTree: React.FC<Props> = ({
                     handleMenuClose();
                   }}
                 >
-                  Zip Dir
+                  <ListItemIcon>
+                    <Archive fontSize="small" />
+                  </ListItemIcon>
+                  <ListItemText>Zip Dir</ListItemText>
                 </MenuItem>
               </>
             )}

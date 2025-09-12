@@ -11,7 +11,7 @@ export const FileIcon: React.FC<FileIconProps> = ({ fileName }) => {
   return (
     <span
       className={`icon ${iconClass}`}
-      style={{ fontSize: '18px', marginLeft: 2 }}
+      style={{ fontSize: '14px', marginLeft: 2 }}
     />
   );
 };
