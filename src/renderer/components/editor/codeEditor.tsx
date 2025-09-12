@@ -16,6 +16,7 @@ export const CodeEditor = ({
   theme,
   onChange,
   readOnly = false,
+  onMount,
 }: {
   content: string;
   originalContent: string | null;
@@ -23,6 +24,7 @@ export const CodeEditor = ({
   theme: string;
   onChange: OnChange;
   readOnly?: boolean;
+  onMount?: (editor: IStandaloneCodeEditor) => void;
 }) => {
   const [isMounted, setIsMounted] = React.useState(false);
   const editorRef = useRef<IStandaloneCodeEditor | null>(null);
@@ -64,6 +66,9 @@ export const CodeEditor = ({
 
     decorationsRef.current?.clear();
     decorationsRef.current = null;
+
+    // Call the onMount callback if provided
+    onMount?.(editor);
 
     setTimeout(() => {
       setIsMounted(true);
