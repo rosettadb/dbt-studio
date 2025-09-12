@@ -27,7 +27,6 @@ import {
   DbtSettings,
   RosettaSettings,
   AboutSettings,
-  InstallationSettings,
   AIProvidersSettings,
 } from '../../components';
 import { AppLayout } from '../../layouts';
@@ -130,8 +129,6 @@ const Settings: React.FC = () => {
         );
       case 'rosetta':
         return <RosettaSettings settings={localSettings} />;
-      case 'installation':
-        return <InstallationSettings />;
       case 'about':
         return <AboutSettings />;
       default:
