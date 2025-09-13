@@ -11,7 +11,7 @@ import {
   ListItemIcon,
   ListItemText,
 } from '@mui/material';
-import { Close, Save, DarkMode, LightMode } from '@mui/icons-material';
+import { Close, DarkMode, LightMode } from '@mui/icons-material';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useColorScheme } from '@mui/material/styles';
 import AppsIcon from '@mui/icons-material/Apps';
