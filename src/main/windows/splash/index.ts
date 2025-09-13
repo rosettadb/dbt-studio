@@ -91,8 +91,8 @@ export const createSplashWindow = (): BrowserWindow => {
       <body>
         <div class="container">
           <img src="${logoSrc}" class="image" alt="Logo" />
-          <div class="loading-spinner"></div>
           <div class="tagline"></div>
+          <div class="loading-spinner"></div>
           <div id="loaderMessage" class="loaderMessage">Loading...</div>
           <div class="version">v${version}</div>
         </div>
