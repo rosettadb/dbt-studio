@@ -6,9 +6,57 @@ import type {
 import { AIProviderManager } from './ai/providerManager.service';
 import type { CompletionRequest } from './ai/types/completion.types';
 
+// Token management interfaces
+interface TokenBudget {
+  maxTotal: number;
+  recentMessages: number;
+  summary: number;
+  relevantContext: number;
+  buffer: number;
+}
+
+interface ConversationPhase {
+  phase: 'exploration' | 'implementation' | 'debugging' | 'review';
+  recommendedLimit: number;
+}
+
+interface ScoredMessage {
+  message: ChatMessage;
+  index: number;
+  score: number;
+  isRecent: boolean;
+  tokenCount: number;
+}
+
+interface ConversationContext {
+  recentMessages: ChatMessage[];
+  summary: string | null;
+  relevantContext: string[];
+  totalMessages: number;
+  strategy?: {
+    phase: string;
+    tokensUsed: number;
+    tokenBudget: number;
+    messagesSelected: number;
+    messagesAvailable: number;
+  };
+}
+
 class ChatService {
   // Track active streaming requests by conversationId
   private static activeStreams: Map<number, { aborted: boolean }> = new Map();
+
+  // Token budget configuration
+  private static readonly DEFAULT_BUDGET: TokenBudget = {
+    maxTotal: 6000, // Conservative limit for 8k models
+    recentMessages: 3500, // 60% for recent messages
+    summary: 1000, // 15% for summary
+    relevantContext: 800, // 13% for context
+    buffer: 700, // 12% buffer for safety
+  };
+
+  // Token counting cache for performance
+  private static tokenCache = new Map<string, number>();
 
   static cancelAssistantStream(conversationId: number) {
     const entry = ChatService.activeStreams.get(conversationId);
@@ -18,12 +66,13 @@ class ChatService {
     }
   }
 
-  // Enhanced method that uses hybrid approach for chat history
+  // Enhanced method that uses hybrid approach for chat history with token management
   static async streamAssistantReply(
     conversationId: number,
     content: string,
     contextItems: Omit<NewContextItem, 'messageId'>[] | undefined,
     onChunk: (chunk: string, done: boolean) => void,
+    customBudget?: Partial<TokenBudget>,
   ) {
     // 1) Persist USER message
     await MainDatabaseService.addMessageWithContext(
@@ -32,9 +81,12 @@ class ChatService {
       contextItems,
     );
 
-    // 2) Get conversation context using hybrid approach
-    const conversationContext =
-      await this.buildConversationContext(conversationId);
+    // 2) Get conversation context using hybrid approach with token management
+    const budget = { ...this.DEFAULT_BUDGET, ...customBudget };
+    const conversationContext = await this.buildConversationContext(
+      conversationId,
+      budget,
+    );
 
     // 3) Initialize active provider and model
     const { providerInstance, selectedModel } =
@@ -44,9 +96,36 @@ class ChatService {
     const enhancedPrompt = this.formatOptimizedConversationPrompt(
       conversationContext,
       content,
+      budget,
     );
 
-    // 5) Stream from provider with enhanced context
+    // 5) Validate token count before sending
+    const totalTokens = this.countTokens(enhancedPrompt);
+    if (totalTokens > budget.maxTotal) {
+      console.warn(
+        `Prompt exceeds token budget: ${totalTokens}/${budget.maxTotal}. Attempting fallback.`,
+      );
+
+      // Fallback: reduce context and try again
+      const fallbackContext = await this.buildFallbackContext(
+        conversationId,
+        budget,
+      );
+      const fallbackPrompt = this.formatOptimizedConversationPrompt(
+        fallbackContext,
+        content,
+        budget,
+      );
+
+      const fallbackTokens = this.countTokens(fallbackPrompt);
+      if (fallbackTokens > budget.maxTotal) {
+        throw new Error(
+          `Unable to fit conversation within token limit. Required: ${fallbackTokens}, Available: ${budget.maxTotal}`,
+        );
+      }
+    }
+
+    // 6) Stream from provider with enhanced context
     let fullContent = '';
     try {
       const request: CompletionRequest = {
@@ -56,6 +135,8 @@ class ChatService {
         type: 'chat',
         context: {
           conversationId,
+          tokenCount: totalTokens,
+          budget,
           // Include conversation metadata for future context providers
           files:
             contextItems
@@ -96,7 +177,7 @@ class ChatService {
       ChatService.activeStreams.delete(conversationId);
     }
 
-    // 6) Persist ASSISTANT message
+    // 7) Persist ASSISTANT message
     const assistantMessage = await MainDatabaseService.addMessageWithContext(
       conversationId,
       { role: 'assistant', content: fullContent },
@@ -106,14 +187,22 @@ class ChatService {
     return assistantMessage;
   }
 
-  // New method: Hybrid context building with adaptive strategy
-  private static async buildConversationContext(conversationId: number) {
+  // Enhanced method: Token-aware conversation context building
+  private static async buildConversationContext(
+    conversationId: number,
+    budget: TokenBudget,
+  ): Promise<ConversationContext> {
     try {
       // Get all messages for analysis
       const allMessages = await MainDatabaseService.getMessages(conversationId);
 
       if (allMessages.length === 0) {
-        return { recentMessages: [], summary: null, relevantContext: [] };
+        return {
+          recentMessages: [],
+          summary: null,
+          relevantContext: [],
+          totalMessages: 0,
+        };
       }
 
       // Filter out system messages and sort chronologically
@@ -124,83 +213,65 @@ class ChatService {
             new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime(),
         );
 
-      // Adaptive strategy: Token budget + conversation phase + message importance
-      const CONTEXT_TOKEN_BUDGET = 60000; // Adjust based on model context window
-      const MIN_RECENT_MESSAGES = 4; // Always include at least recent 4
-      const MAX_RECENT_MESSAGES = 100; // Upper bound for performance
-
       // 1. Detect conversation phase and adjust strategy
       const conversationPhase = this.detectConversationPhase(userMessages);
-      const targetMessageCount = Math.min(
+      const MIN_RECENT_MESSAGES = 4;
+      const MAX_RECENT_MESSAGES = Math.min(
+        100,
         conversationPhase.recommendedLimit,
+      );
+
+      // 2. Score all messages by importance and calculate token counts
+      const scoredMessages: ScoredMessage[] = userMessages.map(
+        (message, index) => ({
+          message,
+          index,
+          score: this.scoreMessageImportance(message),
+          isRecent: index >= userMessages.length - MIN_RECENT_MESSAGES,
+          tokenCount: this.countTokens(message.content),
+        }),
+      );
+
+      // 3. Select messages using token-aware hybrid approach
+      const selectedMessages = this.selectMessagesWithinBudget(
+        scoredMessages,
+        budget.recentMessages,
+        MIN_RECENT_MESSAGES,
         MAX_RECENT_MESSAGES,
       );
 
-      // 2. Score all messages by importance
-      const scoredMessages = userMessages.map((message, index) => ({
-        message,
-        index,
-        score: this.scoreMessageImportance(message),
-        isRecent: index >= userMessages.length - MIN_RECENT_MESSAGES,
-      }));
-
-      // 3. Select messages using hybrid approach
-      let selectedMessages: ChatMessage[] = [];
-      let currentTokens = 0;
-
-      // Always include most recent messages (up to MIN_RECENT_MESSAGES)
-      const guaranteedRecent = scoredMessages
-        .filter((item) => item.isRecent)
-        .map((item) => item.message);
-
-      selectedMessages = [...guaranteedRecent];
-      currentTokens = selectedMessages.reduce(
-        (sum, msg) => sum + this.estimateTokenCount(msg.content),
-        0,
-      );
-
-      // Add additional important messages if token budget allows
-      const remainingMessages = scoredMessages
-        .filter((item) => !item.isRecent)
-        .sort((a, b) => b.score - a.score); // Sort by importance descending
-
-      // eslint-disable-next-line no-restricted-syntax
-      for (const item of remainingMessages) {
-        const messageTokens = this.estimateTokenCount(item.message.content);
-
-        if (
-          currentTokens + messageTokens <= CONTEXT_TOKEN_BUDGET &&
-          selectedMessages.length < targetMessageCount
-        ) {
-          selectedMessages.push(item.message);
-          currentTokens += messageTokens;
-        }
-      }
-
       // Re-sort selected messages chronologically
-      const recentMessages = selectedMessages.sort(
-        (a, b) =>
-          new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime(),
-      );
+      const recentMessages = selectedMessages
+        .map((sm) => sm.message)
+        .sort(
+          (a, b) =>
+            new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime(),
+        );
 
       // 4. Handle older messages for summary and relevant context
-      const selectedIds = new Set(selectedMessages.map((m) => m.id));
+      const selectedIds = new Set(selectedMessages.map((sm) => sm.message.id));
       const olderMessages = userMessages.filter((m) => !selectedIds.has(m.id));
 
-      // Summarize older messages if they exist
+      // Create summary within token budget
       const summary =
         olderMessages.length > 0
-          ? await this.summarizeConversationHistory(olderMessages)
+          ? await this.createBudgetedSummary(olderMessages, budget.summary)
           : null;
 
-      // Extract relevant context from older messages based on current topic
+      // Extract relevant context within token budget
       const relevantContext =
         olderMessages.length > 0
-          ? await this.extractRelevantContext(
+          ? await this.extractBudgetedRelevantContext(
               olderMessages,
               userMessages[userMessages.length - 1]?.content,
+              budget.relevantContext,
             )
           : [];
+
+      const totalTokensUsed =
+        selectedMessages.reduce((sum, sm) => sum + sm.tokenCount, 0) +
+        this.countTokens(summary || '') +
+        relevantContext.reduce((sum, ctx) => sum + this.countTokens(ctx), 0);
 
       return {
         recentMessages,
@@ -209,34 +280,371 @@ class ChatService {
         totalMessages: userMessages.length,
         strategy: {
           phase: conversationPhase.phase,
-          tokensUsed: currentTokens,
-          tokenBudget: CONTEXT_TOKEN_BUDGET,
+          tokensUsed: totalTokensUsed,
+          tokenBudget: budget.maxTotal,
           messagesSelected: selectedMessages.length,
           messagesAvailable: userMessages.length,
         },
       };
     } catch (error) {
-      // eslint-disable-next-line no-console
       console.error('Failed to build conversation context:', error);
+      return this.buildFallbackContext(conversationId, budget);
+    }
+  }
 
-      // Fallback to simple recent messages
-      const messages = await MainDatabaseService.getMessages(
-        conversationId,
-        10,
-      );
+  // New method: Build minimal fallback context when token limits are exceeded
+  private static async buildFallbackContext(
+    conversationId: number,
+    budget: TokenBudget,
+  ): Promise<ConversationContext> {
+    try {
+      // Get minimal recent messages
+      const messages = await MainDatabaseService.getMessages(conversationId, 3);
+      const recentMessages = messages
+        .filter((message) => message.role !== 'system')
+        .slice(0, 2); // Only keep last 2 messages
+
       return {
-        recentMessages: messages.filter((message) => message.role !== 'system'),
+        recentMessages,
         summary: null,
         relevantContext: [],
+        totalMessages: messages.length,
+        strategy: {
+          phase: 'fallback',
+          tokensUsed: recentMessages.reduce(
+            (sum, msg) => sum + this.countTokens(msg.content),
+            0,
+          ),
+          tokenBudget: budget.maxTotal,
+          messagesSelected: recentMessages.length,
+          messagesAvailable: messages.length,
+        },
+      };
+    } catch (error) {
+      return {
+        recentMessages: [],
+        summary: null,
+        relevantContext: [],
+        totalMessages: 0,
       };
     }
   }
 
+  // Enhanced method: Select messages within token budget
+  private static selectMessagesWithinBudget(
+    scoredMessages: ScoredMessage[],
+    tokenBudget: number,
+    minMessages: number,
+    maxMessages: number,
+  ): ScoredMessage[] {
+    const selected: ScoredMessage[] = [];
+    let usedTokens = 0;
+
+    // 1. Always include most recent messages (up to minMessages)
+    const guaranteedRecent = scoredMessages
+      .filter((item) => item.isRecent)
+      .slice(-minMessages);
+
+    // eslint-disable-next-line no-restricted-syntax
+    for (const item of guaranteedRecent) {
+      if (usedTokens + item.tokenCount <= tokenBudget) {
+        selected.push(item);
+        usedTokens += item.tokenCount;
+      } else if (selected.length === 0) {
+        // If we can't fit even one message, truncate it
+        const truncated = this.truncateMessage(item, tokenBudget);
+        selected.push(truncated);
+        usedTokens = tokenBudget;
+        break;
+      }
+    }
+
+    // 2. Add additional important messages if token budget allows
+    const remainingMessages = scoredMessages
+      .filter((item) => !item.isRecent)
+      .sort((a, b) => b.score - a.score); // Sort by importance descending
+
+    // eslint-disable-next-line no-restricted-syntax
+    for (const item of remainingMessages) {
+      if (
+        usedTokens + item.tokenCount <= tokenBudget &&
+        selected.length < maxMessages
+      ) {
+        selected.push(item);
+        usedTokens += item.tokenCount;
+      }
+    }
+
+    return selected;
+  }
+
+  // New method: Truncate message to fit within token limit
+  private static truncateMessage(
+    scoredMessage: ScoredMessage,
+    maxTokens: number,
+  ): ScoredMessage {
+    const originalContent = scoredMessage.message.content;
+    const truncatedContent = this.truncateText(originalContent, maxTokens - 20); // Reserve tokens for truncation indicator
+
+    return {
+      ...scoredMessage,
+      message: {
+        ...scoredMessage.message,
+        content: `${truncatedContent}... [truncated]`,
+      },
+      tokenCount: maxTokens,
+    };
+  }
+
+  // New method: Truncate text to specific token count
+  private static truncateText(text: string, maxTokens: number): string {
+    if (this.countTokens(text) <= maxTokens) {
+      return text;
+    }
+
+    // Binary search for optimal truncation point
+    let left = 0;
+    let right = text.length;
+    let bestLength = 0;
+
+    while (left <= right) {
+      const mid = Math.floor((left + right) / 2);
+      const substring = text.substring(0, mid);
+      const tokenCount = this.countTokens(substring);
+
+      if (tokenCount <= maxTokens) {
+        bestLength = mid;
+        left = mid + 1;
+      } else {
+        right = mid - 1;
+      }
+    }
+
+    return text.substring(0, bestLength);
+  }
+
+  // New method: Create summary within token budget
+  private static async createBudgetedSummary(
+    olderMessages: ChatMessage[],
+    tokenBudget: number,
+  ): Promise<string | null> {
+    if (olderMessages.length === 0 || tokenBudget <= 0) return null;
+
+    try {
+      const summary = await this.summarizeConversationHistory(olderMessages);
+      if (!summary) return null;
+
+      // Truncate summary if it exceeds budget
+      if (this.countTokens(summary) > tokenBudget) {
+        return this.truncateText(summary, tokenBudget);
+      }
+
+      return summary;
+    } catch (error) {
+      return `Earlier conversation with ${olderMessages.length} messages`;
+    }
+  }
+
+  // New method: Extract relevant context within token budget
+  private static async extractBudgetedRelevantContext(
+    olderMessages: ChatMessage[],
+    currentContent: string,
+    tokenBudget: number,
+  ): Promise<string[]> {
+    if (!currentContent || olderMessages.length === 0 || tokenBudget <= 0) {
+      return [];
+    }
+
+    try {
+      const allRelevantContext = await this.extractRelevantContext(
+        olderMessages,
+        currentContent,
+      );
+      const budgetedContext: string[] = [];
+      let usedTokens = 0;
+
+      // eslint-disable-next-line no-restricted-syntax
+      for (const context of allRelevantContext) {
+        const contextTokens = this.countTokens(context);
+        if (usedTokens + contextTokens <= tokenBudget) {
+          budgetedContext.push(context);
+          usedTokens += contextTokens;
+        } else {
+          // Try to fit a truncated version
+          const remainingBudget = tokenBudget - usedTokens;
+          if (remainingBudget > 50) {
+            // Only if meaningful space remains
+            const truncated = this.truncateText(context, remainingBudget);
+            budgetedContext.push(`${truncated}... [truncated]`);
+          }
+          break;
+        }
+      }
+
+      return budgetedContext;
+    } catch (error) {
+      return [];
+    }
+  }
+
+  // Enhanced method: Count tokens with caching
+  private static countTokens(text: string): number {
+    if (!text) return 0;
+
+    // Check cache first
+    if (this.tokenCache.has(text)) {
+      return this.tokenCache.get(text)!;
+    }
+
+    // Rough approximation: ~4 characters per token for English text
+    // For production, consider using tiktoken or similar
+    const tokenCount = Math.ceil(text.length / 4);
+
+    // Cache the result (with size limit)
+    if (this.tokenCache.size > 1000) {
+      // Clear cache when it gets too large
+      this.tokenCache.clear();
+    }
+    this.tokenCache.set(text, tokenCount);
+
+    return tokenCount;
+  }
+
+  // Enhanced method: Format optimized conversation prompt with token validation
+  private static formatOptimizedConversationPrompt(
+    conversationContext: ConversationContext,
+    currentMessage: string,
+    budget: TokenBudget,
+  ): string {
+    const { recentMessages, summary, relevantContext, totalMessages } =
+      conversationContext;
+    const contextLines: string[] = [];
+
+    // Calculate current message tokens
+    const currentMsgTokens = this.countTokens(currentMessage);
+    const structureTokens = 100; // Estimate for formatting
+    const availableTokens =
+      budget.maxTotal - currentMsgTokens - structureTokens;
+
+    if (availableTokens <= 0) {
+      // Minimal prompt if no room for context
+      return `Human: ${currentMessage}\n\nPlease provide a helpful response:`;
+    }
+
+    // Add conversation overview if there's history
+    if (totalMessages > 0) {
+      contextLines.push('=== CONVERSATION CONTEXT ===');
+
+      // Track tokens used in context
+      let contextTokensUsed = 0;
+
+      // Add summary if it fits
+      if (summary) {
+        const summaryTokens = this.countTokens(summary);
+        if (contextTokensUsed + summaryTokens <= availableTokens) {
+          contextLines.push('');
+          contextLines.push('📋 Previous conversation summary:');
+          contextLines.push(summary);
+          contextTokensUsed += summaryTokens;
+        }
+      }
+
+      // Add relevant context if it fits
+      if (relevantContext.length > 0) {
+        const contextText = relevantContext.map((ctx) => `• ${ctx}`).join('\n');
+        const contextTokens = this.countTokens(contextText);
+
+        if (contextTokensUsed + contextTokens <= availableTokens) {
+          contextLines.push('');
+          contextLines.push('🔗 Relevant earlier context:');
+          relevantContext.forEach((context: string) => {
+            contextLines.push(`• ${context}`);
+          });
+          contextTokensUsed += contextTokens;
+        }
+      }
+
+      // Add recent messages (prioritize these)
+      if (recentMessages.length > 0) {
+        const remainingTokens = availableTokens - contextTokensUsed;
+        const fittingMessages = this.fitMessagesInTokenBudget(
+          recentMessages,
+          remainingTokens,
+        );
+
+        if (fittingMessages.length > 0) {
+          contextLines.push('');
+          contextLines.push('💬 Recent conversation:');
+          fittingMessages.forEach((message: ChatMessage, index: number) => {
+            const roleLabel = message.role === 'user' ? 'Human' : 'Assistant';
+            const messageContent = message.content.trim();
+
+            contextLines.push(`${roleLabel}: ${messageContent}`);
+
+            // Add separator between messages for clarity
+            if (index < fittingMessages.length - 1) {
+              contextLines.push('---');
+            }
+          });
+        }
+      }
+
+      contextLines.push('');
+      contextLines.push('=== CURRENT MESSAGE ===');
+    }
+
+    // Add current message
+    contextLines.push(`Human: ${currentMessage}`);
+    contextLines.push('');
+    contextLines.push(
+      'Please provide a helpful response based on the conversation context above:',
+    );
+
+    return contextLines.join('\n');
+  }
+
+  // New method: Fit messages within token budget
+  private static fitMessagesInTokenBudget(
+    messages: ChatMessage[],
+    tokenBudget: number,
+  ): ChatMessage[] {
+    const fitting: ChatMessage[] = [];
+    let usedTokens = 0;
+
+    // Start from most recent and work backwards
+    // eslint-disable-next-line no-plusplus
+    for (let i = messages.length - 1; i >= 0; i--) {
+      const message = messages[i];
+      const messageTokens = this.countTokens(message.content);
+
+      if (usedTokens + messageTokens <= tokenBudget) {
+        fitting.unshift(message);
+        usedTokens += messageTokens;
+      } else {
+        // Try to fit a truncated version of this message
+        const remainingTokens = tokenBudget - usedTokens;
+        if (remainingTokens > 100) {
+          // Only if meaningful space remains
+          const truncatedContent = this.truncateText(
+            message.content,
+            remainingTokens - 20,
+          );
+          fitting.unshift({
+            ...message,
+            content: `${truncatedContent}... [truncated]`,
+          });
+        }
+        break;
+      }
+    }
+
+    return fitting;
+  }
+
   // Helper: Detect conversation phase for adaptive context
-  private static detectConversationPhase(messages: ChatMessage[]): {
-    phase: 'exploration' | 'implementation' | 'debugging' | 'review';
-    recommendedLimit: number;
-  } {
+  private static detectConversationPhase(
+    messages: ChatMessage[],
+  ): ConversationPhase {
     const lastFewMessages = messages.slice(-5);
     const content = lastFewMessages
       .map((m) => m.content.toLowerCase())
@@ -327,16 +735,9 @@ class ChatService {
     return score;
   }
 
-  // Helper: Estimate token count for messages
-  private static estimateTokenCount(text: string): number {
-    // Rough approximation: ~4 characters per token for English text
-    // This is a simplified estimate - for production, consider using tiktoken or similar
-    return Math.ceil(text.length / 4);
-  }
-
   // New method: Create conversation summary from older messages
   private static async summarizeConversationHistory(
-    olderMessages: any[],
+    olderMessages: ChatMessage[],
   ): Promise<string | null> {
     if (olderMessages.length === 0) return null;
 
@@ -402,7 +803,6 @@ class ChatService {
 
       return keyPoints.length > 0 ? keyPoints.join('. ') : null;
     } catch (error) {
-      // eslint-disable-next-line no-console
       console.error('Failed to summarize conversation history:', error);
       return `Earlier conversation with ${olderMessages.length} messages`;
     }
@@ -410,7 +810,7 @@ class ChatService {
 
   // New method: Extract relevant context from older messages
   private static async extractRelevantContext(
-    olderMessages: any[],
+    olderMessages: ChatMessage[],
     currentContent: string,
   ): Promise<string[]> {
     if (!currentContent || olderMessages.length === 0) return [];
@@ -444,7 +844,6 @@ class ChatService {
 
       return relevantSnippets.slice(0, 3); // Limit to top 3 relevant snippets
     } catch (error) {
-      // eslint-disable-next-line no-console
       console.error('Failed to extract relevant context:', error);
       return [];
     }
@@ -495,65 +894,30 @@ class ChatService {
     return topics;
   }
 
-  // Enhanced method: Format optimized conversation prompt
-  private static formatOptimizedConversationPrompt(
-    conversationContext: any,
-    currentMessage: string,
-  ): string {
-    const { recentMessages, summary, relevantContext, totalMessages } =
-      conversationContext;
+  // Static method to configure token budget
+  static setTokenBudget(budget: Partial<TokenBudget>): void {
+    Object.assign(this.DEFAULT_BUDGET, budget);
+  }
 
-    const contextLines = [];
+  // Static method to clear token cache
+  static clearTokenCache(): void {
+    this.tokenCache.clear();
+  }
 
-    // Add conversation overview if there's history
-    if (totalMessages > 0) {
-      contextLines.push('=== CONVERSATION CONTEXT ===');
-
-      // Add summary of older messages if available
-      if (summary) {
-        contextLines.push('');
-        contextLines.push('📋 Previous conversation summary:');
-        contextLines.push(summary);
-      }
-
-      // Add relevant context from older messages
-      if (relevantContext.length > 0) {
-        contextLines.push('');
-        contextLines.push('🔗 Relevant earlier context:');
-        relevantContext.forEach((context: string) => {
-          contextLines.push(`• ${context}`);
-        });
-      }
-
-      // Add recent conversation history
-      if (recentMessages.length > 0) {
-        contextLines.push('');
-        contextLines.push('💬 Recent conversation:');
-        recentMessages.forEach((message: ChatMessage, index: number) => {
-          const roleLabel = message.role === 'user' ? 'Human' : 'Assistant';
-          const messageContent = message.content.trim();
-
-          contextLines.push(`${roleLabel}: ${messageContent}`);
-
-          // Add separator between messages for clarity
-          if (index < recentMessages.length - 1) {
-            contextLines.push('---');
-          }
-        });
-      }
-
-      contextLines.push('');
-      contextLines.push('=== CURRENT MESSAGE ===');
-    }
-
-    // Add current message
-    contextLines.push(`Human: ${currentMessage}`);
-    contextLines.push('');
-    contextLines.push(
-      'Please provide a helpful response based on the conversation context above:',
-    );
-
-    return contextLines.join('\n');
+  // Static method to get token statistics
+  static getTokenStats(): Promise<{
+    totalMessages: number;
+    totalTokens: number;
+    averageTokensPerMessage: number;
+    cacheSize: number;
+  }> {
+    // Implementation would calculate token statistics for the conversation
+    return Promise.resolve({
+      totalMessages: 0,
+      totalTokens: 0,
+      averageTokensPerMessage: 0,
+      cacheSize: this.tokenCache.size,
+    });
   }
 
   // Resolve a file path into a context item
@@ -573,6 +937,7 @@ class ChatService {
           path: filePath,
           size: stats.size,
           language: filePath.split('.').pop() || 'text',
+          tokenCount: this.countTokens(content),
         },
       };
     } catch (error) {
@@ -589,19 +954,21 @@ class ChatService {
     try {
       const files = await fs.readdir(folderPath);
       const stats = await fs.stat(folderPath);
+      const content = `Folder contains ${files.length} items: ${files
+        .slice(0, 10)
+        .join(', ')}${files.length > 10 ? '...' : ''}`;
 
       return {
         id: `folder:${folderPath}`,
         type: 'folder' as const,
         name: folderPath.split('/').pop() || folderPath,
         description: `Folder: ${folderPath}`,
-        content: `Folder contains ${files.length} items: ${files
-          .slice(0, 10)
-          .join(', ')}${files.length > 10 ? '...' : ''}`,
+        content,
         metadata: {
           path: folderPath,
           fileCount: files.length,
           totalSize: stats.size,
+          tokenCount: this.countTokens(content),
         },
       };
     } catch (error) {
@@ -614,33 +981,37 @@ class ChatService {
 
   // Resolve a URL into a context item (placeholder)
   static async resolveUrl(url: string) {
+    const content = 'URL content fetching - implementation pending';
     return {
       id: `url:${url}`,
       type: 'url' as const,
       name: url,
       description: `URL: ${url}`,
-      content: 'URL content fetching - implementation pending',
+      content,
       metadata: {
         url,
         contentType: 'text/html',
         fetchedAt: new Date().toISOString(),
+        tokenCount: this.countTokens(content),
       },
     };
   }
 
-  // Search the codebase (placeholder)
+  // Search the codebase (placeholder)`
   static async searchCodebase(query: string) {
+    const content = `Search results for "${query}" - implementation pending`;
     return [
       {
         id: `search:${query}`,
         type: 'search' as const,
         name: `Search: ${query}`,
         description: `Codebase search for "${query}"`,
-        content: `Search results for "${query}" - implementation pending`,
+        content,
         metadata: {
           query,
           resultCount: 0,
           searchType: 'content' as const,
+          tokenCount: this.countTokens(content),
         },
       },
     ];
