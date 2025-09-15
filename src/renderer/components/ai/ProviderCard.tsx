@@ -169,7 +169,7 @@ export const ProviderCard: React.FC<ProviderCardProps> = ({
       case 'openai':
         return 'OpenAI';
       case 'ollama':
-        return 'Ollama';
+        return 'Ollama (beta)';
       case 'gemini':
         return 'Google Gemini';
       case 'anthropic':
