@@ -57,7 +57,7 @@ export const DuckDB: React.FC<Props> = ({
     name: existingConnection?.name || 'DuckDB Connection',
     database_path: existingConnection?.database_path || '',
     database: existingConnection?.database || 'main',
-    schema: 'main',
+    schema: existingConnection?.schema || 'main',
     short_database_path: existingConnection?.database_path
       ? shortDuckdbPath(existingConnection.database_path)
       : '',
@@ -306,8 +306,8 @@ export const DuckDB: React.FC<Props> = ({
           value={formState.schema}
           onChange={handleChange}
           fullWidth
-          helperText="DuckDB schema (default: main)"
-          disabled
+          helperText="DuckDB schema name (default: main). Schema must exist in the database."
+          placeholder="main"
         />
 
         <Box

@@ -464,6 +464,7 @@ export async function testDuckDBConnection(
     connection = await instance.connect();
 
     try {
+      // First test basic connection
       const result = await connection.run('SELECT 1 as connection_test');
       const rows = await result.getRows();
 
@@ -478,8 +479,54 @@ export async function testDuckDBConnection(
         }
       }
 
+      if (!success) {
+        return false;
+      }
+
+      // If schema is specified and not 'main', validate it exists
+      if (config.schema && config.schema !== 'main') {
+        try {
+          const schemaQuery = `SELECT schema_name FROM information_schema.schemata WHERE schema_name = '${config.schema}'`;
+          const schemaResult = await connection.run(schemaQuery);
+          const schemaRows = await schemaResult.getRows();
+
+          if (schemaRows.length === 0) {
+            throw new Error(
+              `Schema '${config.schema}' does not exist in the DuckDB database. Available schemas can be viewed with: SHOW SCHEMAS;`,
+            );
+          }
+        } catch (schemaError: any) {
+          // If information_schema doesn't work, try alternative approach
+          if (schemaError.message?.includes('does not exist')) {
+            throw schemaError;
+          }
+
+          try {
+            // Try to use the schema directly
+            await connection.run(`USE ${config.schema}`);
+          } catch (useError: any) {
+            if (
+              useError.message?.includes('does not exist') ||
+              useError.message?.includes('not found')
+            ) {
+              throw new Error(
+                `Schema '${config.schema}' does not exist in the DuckDB database. Available schemas can be viewed with: SHOW SCHEMAS;`,
+              );
+            }
+            // If it's some other error, continue - the schema might exist but have other issues
+          }
+        }
+      }
+
       return success;
-    } catch (queryError) {
+    } catch (queryError: any) {
+      // Re-throw schema validation errors
+      if (
+        queryError.message?.includes('Schema') &&
+        queryError.message?.includes('does not exist')
+      ) {
+        throw queryError;
+      }
       return false;
     }
   } catch (error: any) {
@@ -542,6 +589,24 @@ export const executeDuckDBQuery = async (
   try {
     instance = await DuckDBInstance.create(config.database_path);
     connection = await instance.connect();
+
+    // Set schema context if specified and not 'main'
+    if (config.schema && config.schema !== 'main') {
+      try {
+        await connection.run(`USE ${config.schema}`);
+      } catch (schemaError: any) {
+        if (
+          schemaError.message?.includes('does not exist') ||
+          schemaError.message?.includes('not found')
+        ) {
+          return {
+            success: false,
+            error: `Schema '${config.schema}' does not exist in the DuckDB database. Available schemas can be viewed with: SHOW SCHEMAS;`,
+          };
+        }
+        // If it's some other error, continue - might be a permission issue but schema exists
+      }
+    }
 
     const result = await connection.run(query);
     const rows = await result.getRows();
