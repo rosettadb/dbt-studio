@@ -60,15 +60,19 @@ import { Project, SupportedConnectionTypes } from '../../../types/backend';
 import { AI_PROMPTS } from '../../config/constants';
 import { utils } from '../../helpers';
 import { AppLayout } from '../../layouts';
-import { AppContext } from '../../context';
 import ChatScreen from '../chat';
 import { getFileName } from '../../services/settings.services';
 import { generateModelsPrompt } from '../../helpers/businessModelGenerator';
 
 const ProjectDetails: React.FC = () => {
   const navigate = useNavigate();
-  const [selectedFilePath, setSelectedFilePath] = React.useState<string>();
-  const { openChatWithMessage } = useAppContext();
+  const {
+    isAiProviderSet,
+    isChatOpen,
+    setEditingFilePath: setSelectedFilePath,
+    editingFilePath: selectedFilePath,
+    openChatWithMessage,
+  } = useAppContext();
 
   const { data: project, isLoading, refetch } = useGetSelectedProject();
   const { data: connection } = useGetConnectionById(project?.connectionId);
@@ -77,7 +81,6 @@ const ProjectDetails: React.FC = () => {
   const { data: fileContent } = useGetFileContent(selectedFilePath);
   const { mutateAsync: getFileContentList } = useGetFileContentList();
 
-  const { isAiProviderSet, isChatOpen } = React.useContext(AppContext);
   const [isLoadingQuery, setIsLoadingQuery] = React.useState(false);
   const [businessQueryModal, setBusinessQueryModal] = React.useState<string>();
   const [noAiSetModal, setNoAiSetModal] = React.useState(false);

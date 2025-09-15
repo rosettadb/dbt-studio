@@ -19,6 +19,8 @@ export type AppContextType = {
   pendingMessage: string | null;
   setPendingMessage: (message: string | null) => void;
   openChatWithMessage: (message: string) => void;
+  editingFilePath?: string;
+  setEditingFilePath: (filePath: string | undefined) => void;
 };
 
 export type ItemProps = {

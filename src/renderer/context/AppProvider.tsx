@@ -25,6 +25,7 @@ export const AppContext = React.createContext<AppContextType>({
   pendingMessage: null,
   setPendingMessage: () => {},
   openChatWithMessage: () => {},
+  setEditingFilePath: () => {},
 });
 
 const AppProvider: React.FC<Props> = ({ children }) => {
@@ -36,6 +37,7 @@ const AppProvider: React.FC<Props> = ({ children }) => {
   const [isChatOpen, setIsChatOpen] = React.useState(false);
   const [isLoadingSchema, setIsLoadingSchema] = React.useState(false);
   const [schema, setSchema] = React.useState<Table[]>();
+  const [editingFilePath, setEditingFilePath] = React.useState<string>();
   const [lastFetchedProjectId, setLastFetchedProjectId] = React.useState<
     string | null
   >(null);
@@ -132,6 +134,8 @@ const AppProvider: React.FC<Props> = ({ children }) => {
       pendingMessage,
       setPendingMessage,
       openChatWithMessage,
+      editingFilePath,
+      setEditingFilePath,
     };
   }, [
     projects,
@@ -145,6 +149,7 @@ const AppProvider: React.FC<Props> = ({ children }) => {
     manualFetchSchema,
     pendingMessage,
     openChatWithMessage,
+    editingFilePath,
   ]);
 
   if (isLoading) {

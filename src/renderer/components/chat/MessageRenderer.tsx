@@ -7,7 +7,9 @@ import Markdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import rehypeHighlight from 'rehype-highlight';
 import 'highlight.js/styles/github-dark.css';
-import ContentCopyIcon from '@mui/icons-material/ContentCopy';
+import { ContentCopy, UploadFile } from '@mui/icons-material';
+import { useAppContext } from '../../hooks';
+import { useSaveFileContent } from '../../controllers';
 
 interface MessageRendererProps {
   content: string;
@@ -53,7 +55,11 @@ const MarkdownCodeBlock = ({
   className,
   children,
 }: MarkdownCodeBlockProps) => {
+  const { mutate: updateFileContent } = useSaveFileContent();
+  const { editingFilePath } = useAppContext();
   const [copied, setCopied] = React.useState(false);
+  const [applied, setApplied] = React.useState(false);
+
   const codeRef = React.useRef<HTMLElement | null>(null);
   const copy = React.useCallback(async () => {
     const text =
@@ -74,6 +80,17 @@ const MarkdownCodeBlock = ({
     } catch (_) {
       // ignore
     }
+  }, []);
+
+  const apply = React.useCallback(async () => {
+    const text =
+      codeRef.current?.innerText || codeRef.current?.textContent || '';
+    updateFileContent({
+      path: editingFilePath ?? '',
+      content: text,
+    });
+    setApplied(true);
+    setTimeout(() => setApplied(false), 1000);
   }, []);
 
   return !inline ? (
@@ -130,9 +147,44 @@ const MarkdownCodeBlock = ({
             zIndex: 1,
           }}
         >
-          <ContentCopyIcon sx={{ fontSize: 10 }} />
+          <ContentCopy sx={{ fontSize: 10 }} />
         </IconButton>
       </Tooltip>
+      {editingFilePath && (
+        <Tooltip
+          title={applied ? 'Applied!' : 'Apply Changes To Current File'}
+          placement="left"
+        >
+          <IconButton
+            size="small"
+            onClick={apply}
+            sx={{
+              position: 'absolute',
+              top: 4,
+              right: 28,
+              width: 20,
+              height: 20,
+              minWidth: 'unset',
+              bgcolor: (theme) =>
+                theme.palette.mode === 'dark'
+                  ? 'rgba(255,255,255,0.08)'
+                  : 'rgba(0,0,0,0.06)',
+              backdropFilter: 'blur(4px)',
+              color: (theme) =>
+                theme.palette.mode === 'dark' ? '#d4d4d4' : '#666',
+              '&:hover': {
+                bgcolor: (theme) =>
+                  theme.palette.mode === 'dark'
+                    ? 'rgba(255,255,255,0.15)'
+                    : 'rgba(0,0,0,0.12)',
+              },
+              zIndex: 1,
+            }}
+          >
+            <UploadFile sx={{ fontSize: 10 }} />
+          </IconButton>
+        </Tooltip>
+      )}
       <code ref={codeRef} className={className}>
         {children}
       </code>
