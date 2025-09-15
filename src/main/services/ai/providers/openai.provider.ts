@@ -78,20 +78,111 @@ export class OpenAIProvider extends BaseAIProvider {
         throw new Error('Provider not initialized. Call initialize() first.');
       }
 
-      // Force refresh the models to ensure we're using the latest filtering
-      await this.discoverModels();
+      // Actually test the API connection by making a real API call
+      // Use the models endpoint which is lightweight and validates the API key
+      try {
+        const modelsResponse = await this.directOpenAIClient.models.list();
 
-      // Get available models with fresh discovery
-      const models = await this.getAvailableModels();
+        // Filter for chat/completion models
+        const chatModels = modelsResponse.data
+          .filter((model) => {
+            const id = model.id.toLowerCase();
+            return (
+              id.includes('gpt') &&
+              !id.includes('instruct') &&
+              !id.includes('embedding') &&
+              !id.includes('whisper') &&
+              !id.includes('tts') &&
+              !id.includes('dall-e') &&
+              !id.includes('moderation') &&
+              !id.includes('babbage') &&
+              !id.includes('davinci') &&
+              !id.includes('curie') &&
+              !id.includes('ada') &&
+              !id.includes('text-') &&
+              !id.includes('code-') &&
+              !id.includes('edit-') &&
+              !id.includes('if-') &&
+              !id.includes('search-') &&
+              !id.includes('similarity-') &&
+              !id.includes('audio-') &&
+              !id.includes('vision-') &&
+              (id.startsWith('gpt-5') ||
+                id.startsWith('gpt-4') ||
+                id.startsWith('gpt-3.5') ||
+                id === 'gpt-4o' ||
+                id === 'gpt-4o-mini' ||
+                id === 'gpt-5' ||
+                id.includes('gpt-5')) &&
+              !id.includes(':') &&
+              !id.includes('ft-')
+            );
+          })
+          .map((model) => ({
+            id: model.id,
+            name: OpenAIProvider.getModelDisplayName(model.id),
+            maxTokens: OpenAIProvider.getModelMaxTokens(model.id),
+            costPer1kTokens: OpenAIProvider.getModelCosts(model.id),
+          }))
+          .sort((a, b) => a.id.localeCompare(b.id));
 
-      const latencyMs = Date.now() - startTime;
-      return {
-        success: true,
-        latencyMs,
-        modelsAvailable: models.length,
-        models,
-        message: 'Connection ready (API validation skipped to preserve quota)',
-      };
+        // If no chat models found, use fallback models
+        const models =
+          chatModels.length > 0 ? chatModels : await this.getAvailableModels();
+
+        const latencyMs = Date.now() - startTime;
+        return {
+          success: true,
+          latencyMs,
+          modelsAvailable: models.length,
+          models,
+          message: `Connection successful - ${models.length} models available`,
+        };
+      } catch (apiError) {
+        // If the API call fails, this is a real connection failure
+        const latencyMs = Date.now() - startTime;
+
+        // Handle specific OpenAI API errors
+        if (apiError instanceof Error) {
+          if (
+            apiError.message.includes('401') ||
+            apiError.message.includes('Incorrect API key')
+          ) {
+            return {
+              success: false,
+              error:
+                'Invalid API key. Please check your OpenAI API key in settings.',
+              latencyMs,
+            };
+          } else if (
+            apiError.message.includes('429') ||
+            apiError.message.includes('quota')
+          ) {
+            return {
+              success: false,
+              error:
+                'API quota exceeded. Please check your OpenAI billing or try again later.',
+              latencyMs,
+            };
+          } else if (apiError.message.includes('timeout')) {
+            return {
+              success: false,
+              error:
+                'Connection timeout. Please check your internet connection and try again.',
+              latencyMs,
+            };
+          }
+        }
+
+        return {
+          success: false,
+          error:
+            apiError instanceof Error
+              ? apiError.message
+              : 'API connection failed',
+          latencyMs,
+        };
+      }
     } catch (error) {
       const latencyMs = Date.now() - startTime;
       // eslint-disable-next-line no-console
@@ -251,12 +342,26 @@ export class OpenAIProvider extends BaseAIProvider {
       (this.supportedModels as string[]).length = 0;
       (this.supportedModels as string[]).push(...chatModels);
     } catch (error) {
+      // Check if this is an authentication error - if so, don't use fallback models
+      if (
+        error instanceof Error &&
+        (error.message.includes('401') ||
+          error.message.includes('Incorrect API key'))
+      ) {
+        // eslint-disable-next-line no-console
+        console.error(
+          '[OPENAI PROVIDER] Authentication failed during model discovery:',
+          error,
+        );
+        throw error; // Re-throw authentication errors
+      }
+
       // eslint-disable-next-line no-console
       console.warn(
         '[OPENAI PROVIDER] Dynamic model discovery failed, using fallback models:',
         error,
       );
-      // Fallback to known working models including newest ones
+      // Fallback to known working models including newest ones for non-auth errors
       const fallbackModels = [
         'gpt-5', // Latest GPT-5 model
         'gpt-4o',
