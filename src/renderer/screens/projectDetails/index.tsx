@@ -63,6 +63,7 @@ import { AppLayout } from '../../layouts';
 import ChatScreen from '../chat';
 import { getFileName } from '../../services/settings.services';
 import { generateModelsPrompt } from '../../helpers/businessModelGenerator';
+import { generateFilename } from '../../helpers/utils';
 
 const ProjectDetails: React.FC = () => {
   const navigate = useNavigate();
@@ -514,11 +515,28 @@ const ProjectDetails: React.FC = () => {
                 processCallback={async (updatedPath, query, selectedFiles) => {
                   if (selectedFiles.length > 0) {
                     const files = await getFileContentList(selectedFiles);
-                    openChatWithMessage(generateModelsPrompt(files));
-                    setBusinessQueryModal(undefined);
-                    return;
+                    try {
+                      const fileName = generateFilename('model', 'sql');
+                      const response = await projectsServices.enhanceModelQuery(
+                        generateModelsPrompt(files),
+                      );
+                      if (response.content) {
+                        const filePath = await projectsServices.createFile({
+                          filePath: updatedPath,
+                          name: fileName,
+                          content: response.content,
+                        });
+                        await fetchDirectories();
+                        await updateStatuses();
+                        setSelectedFilePath(filePath);
+                        setBusinessQueryModal(undefined);
+                        return;
+                      }
+                      toast.error('Something went wrong');
+                    } catch {
+                      toast.error('Something went wrong');
+                    }
                   }
-                  toast.info('No files selected!');
                 }}
               />
             )}
