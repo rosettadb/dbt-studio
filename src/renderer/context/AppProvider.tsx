@@ -95,7 +95,7 @@ const AppProvider: React.FC<Props> = ({ children }) => {
         setLastFetchedProjectId(null);
       }
     },
-    [selectedProject, lastFetchedProjectId, schema],
+    [selectedProject, lastFetchedProjectId],
   );
 
   React.useEffect(() => {
@@ -106,7 +106,7 @@ const AppProvider: React.FC<Props> = ({ children }) => {
     ) {
       fetchSchema();
     }
-  }, [selectedProject?.id, fetchSchema]);
+  }, [selectedProject?.id]);
 
   // Memoize the fetchSchema function that forces refresh for manual calls
   const manualFetchSchema = React.useCallback(
