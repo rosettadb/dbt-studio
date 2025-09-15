@@ -154,7 +154,8 @@ export class OpenAIProvider extends BaseAIProvider {
                 'Invalid API key. Please check your OpenAI API key in settings.',
               latencyMs,
             };
-          } else if (
+          }
+          if (
             apiError.message.includes('429') ||
             apiError.message.includes('quota')
           ) {
@@ -164,7 +165,8 @@ export class OpenAIProvider extends BaseAIProvider {
                 'API quota exceeded. Please check your OpenAI billing or try again later.',
               latencyMs,
             };
-          } else if (apiError.message.includes('timeout')) {
+          }
+          if (apiError.message.includes('timeout')) {
             return {
               success: false,
               error:
