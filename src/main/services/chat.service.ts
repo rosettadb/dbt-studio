@@ -102,10 +102,6 @@ class ChatService {
     // 5) Validate token count before sending
     const totalTokens = this.countTokens(enhancedPrompt);
     if (totalTokens > budget.maxTotal) {
-      console.warn(
-        `Prompt exceeds token budget: ${totalTokens}/${budget.maxTotal}. Attempting fallback.`,
-      );
-
       // Fallback: reduce context and try again
       const fallbackContext = await this.buildFallbackContext(
         conversationId,
@@ -287,7 +283,6 @@ class ChatService {
         },
       };
     } catch (error) {
-      console.error('Failed to build conversation context:', error);
       return this.buildFallbackContext(conversationId, budget);
     }
   }
@@ -803,7 +798,6 @@ class ChatService {
 
       return keyPoints.length > 0 ? keyPoints.join('. ') : null;
     } catch (error) {
-      console.error('Failed to summarize conversation history:', error);
       return `Earlier conversation with ${olderMessages.length} messages`;
     }
   }
@@ -844,7 +838,6 @@ class ChatService {
 
       return relevantSnippets.slice(0, 3); // Limit to top 3 relevant snippets
     } catch (error) {
-      console.error('Failed to extract relevant context:', error);
       return [];
     }
   }
