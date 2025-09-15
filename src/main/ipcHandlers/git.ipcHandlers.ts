@@ -78,6 +78,7 @@ const registerGitHandlers = () => {
       return gitService.addRemote(repoPath, remoteUrl);
     },
   );
+  ``;
 
   ipcMain.handle('git:isInitialized', async (_event, repoPath: string) => {
     return gitService.isRepoInitialized(repoPath);

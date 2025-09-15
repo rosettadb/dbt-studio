@@ -65,10 +65,6 @@ export function isAuthError(error: any): boolean {
 
 export default class GitService {
   getGitInstance(repoPath: string): SimpleGit {
-    const gitDir = path.join(repoPath, '.git');
-    if (!fs.existsSync(gitDir) || !fs.lstatSync(gitDir).isDirectory()) {
-      throw new Error(`No .git directory found in: ${repoPath}`);
-    }
     return simpleGit(repoPath);
   }
 
@@ -198,10 +194,6 @@ export default class GitService {
   }
 
   async isRepoInitialized(repoPath: string) {
-    const gitDir = path.join(repoPath, '.git');
-    const exists = fs.existsSync(gitDir);
-    if (!exists) return false;
-
     try {
       const git = this.getGitInstance(repoPath);
       await git.status();
