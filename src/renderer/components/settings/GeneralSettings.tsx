@@ -1,6 +1,6 @@
 import React from 'react';
-import { TextField, IconButton, Box } from '@mui/material';
-import { FolderOpen } from '@mui/icons-material';
+import { TextField, IconButton, Box, Button } from '@mui/material';
+import { FolderOpen, Save } from '@mui/icons-material';
 import { SettingsType } from '../../../types/backend';
 import { InstallationSettings } from './InstallationSettings';
 
@@ -24,36 +24,58 @@ export const GeneralSettings: React.FC<GeneralSettingsProps> = ({
   };
 
   return (
-    <Box>
+    <Box mt={3}>
+      <Box
+        mb={4}
+        maxWidth={800}
+        display="flex"
+        alignItems="center"
+        justifyItems="center"
+        gap={2}
+      >
+        <TextField
+          fullWidth
+          label="Projects Directory"
+          variant="outlined"
+          id="projectsDirectory"
+          name="projectsDirectory"
+          value={settings.projectsDirectory}
+          onChange={handleChange}
+          slotProps={{
+            input: {
+              endAdornment: (
+                <IconButton
+                  onClick={() =>
+                    onFilePicker(
+                      'projectsDirectory',
+                      true,
+                      settings.projectsDirectory,
+                    )
+                  }
+                  edge="end"
+                >
+                  <FolderOpen />
+                </IconButton>
+              ),
+            },
+          }}
+        />
+        <Box>
+          <Button
+            type="submit"
+            color="primary"
+            variant="contained"
+            startIcon={<Save />}
+            sx={{
+              padding: '8px 24px',
+              fontWeight: '500',
+            }}
+          >
+            Save
+          </Button>
+        </Box>
+      </Box>
       <InstallationSettings />
-      <TextField
-        fullWidth
-        label="Projects Directory"
-        variant="outlined"
-        id="projectsDirectory"
-        name="projectsDirectory"
-        value={settings.projectsDirectory}
-        onChange={handleChange}
-        sx={{ mt: 6, maxWidth: '600px' }}
-        slotProps={{
-          input: {
-            endAdornment: (
-              <IconButton
-                onClick={() =>
-                  onFilePicker(
-                    'projectsDirectory',
-                    true,
-                    settings.projectsDirectory,
-                  )
-                }
-                edge="end"
-              >
-                <FolderOpen />
-              </IconButton>
-            ),
-          },
-        }}
-      />
     </Box>
   );
 };
