@@ -45,6 +45,7 @@ export const ProjectDbtSplitButton: React.FC<ProjectDbtSplitButtonProps> = ({
     clean: dbtClean,
     debug: dbtDebug,
     docsGenerate: dbtDocsGenerate,
+    deps: dbtDeps,
     seed: dbtSeed,
   } = useDbt();
   const { start, stop, isRunning } = useProcess();
@@ -295,6 +296,18 @@ export const ProjectDbtSplitButton: React.FC<ProjectDbtSplitButtonProps> = ({
                 return;
               }
               dbtClean(project);
+            },
+            leftIcon: <Icon src={icons.dbtTm} width={16} height={16} />,
+            subTitle: 'Clean the dbt project',
+          },
+          {
+            name: 'Deps',
+            onClick: () => {
+              if (!isDbtConfigured) {
+                toast.info('Please configure dbt path in settings');
+                return;
+              }
+              dbtDeps(project);
             },
             leftIcon: <Icon src={icons.dbtTm} width={16} height={16} />,
             subTitle: 'Clean the dbt project',
