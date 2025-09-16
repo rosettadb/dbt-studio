@@ -173,7 +173,7 @@ export const ProviderCard: React.FC<ProviderCardProps> = ({
       case 'gemini':
         return 'Google Gemini';
       case 'anthropic':
-        return 'Anthropic Claude';
+        return 'Anthropic Claude (beta)';
       default:
         return type.charAt(0).toUpperCase() + type.slice(1);
     }
