@@ -53,7 +53,9 @@ export const BusinessModal: React.FC<Props> = ({
   const [activeDirFamily, setActiveDirFamily] = React.useState<
     'incremental' | 'raw' | null
   >(null);
-  const [query, setQuery] = React.useState('');
+  const [query, setQuery] = React.useState(
+    'Generate exactly one business model from these incremental models.',
+  );
   const [loading, setLoading] = React.useState(false);
 
   const updateProject = useUpdateProject();

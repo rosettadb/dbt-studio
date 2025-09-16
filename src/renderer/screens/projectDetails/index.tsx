@@ -164,6 +164,12 @@ const ProjectDetails: React.FC = () => {
     fetchData();
   }, [project]);
 
+  React.useEffect(() => {
+    if (project?.path) {
+      setSelectedFilePath(undefined);
+    }
+  }, [project?.path]);
+
   const generateBasicTransformationPrompt = async (
     filePath: string,
     _project: Project,
@@ -520,7 +526,7 @@ const ProjectDetails: React.FC = () => {
                   if (selectedFiles.length > 0) {
                     const files = await getFileContentList(selectedFiles);
                     try {
-                      const prompt = generateModelsPrompt(files);
+                      const prompt = generateModelsPrompt(files, query);
                       const response =
                         await aiProvidersService.generateCompletion<BusinessModelGenerationSchemaType>(
                           prompt,
