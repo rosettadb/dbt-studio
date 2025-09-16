@@ -13,7 +13,15 @@ import {
   NewPromptTemplate,
   NewAIUsageLog,
 } from '../schemas/mainDatabase.schema';
-import ProviderManager from '../services/ai/providerManager.service';
+import ProviderManager, {
+  AIProviderManager,
+} from '../services/ai/providerManager.service';
+import {
+  CompletionRequest,
+  CompletionResponse,
+  JSONSchema,
+  TypedCompletionRequest,
+} from '../services/ai/types/completion.types';
 
 // Remove previously registered handlers to avoid duplicates during hot reloads
 const aiHandlerChannels: string[] = [
@@ -414,11 +422,13 @@ const registerAIHandlers = () => {
     },
   );
 
-  // Generate completion using provider manager
   ipcMain.handle(
     'ai:completion:generate',
-    async (_, request: any): Promise<any> => {
-      return ProviderManager.generateCompletion(request);
+    async <T>(
+      _: any,
+      request: TypedCompletionRequest<T>,
+    ): Promise<CompletionResponse<T>> => {
+      return ProviderManager.generateTypedCompletion<T>(request);
     },
   );
 
@@ -696,7 +706,6 @@ const registerAIHandlers = () => {
       return MainDatabaseService.deleteSessionMetadata(conversationId, key);
     },
   );
-
   aiHandlersRegistered = true;
 };
 

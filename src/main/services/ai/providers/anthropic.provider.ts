@@ -13,8 +13,7 @@ import {
   CompletionRequest,
   CompletionResponse,
   CompletionChunk,
-  EnhanceModelResponseType,
-  GenerateDashboardResponseType,
+  JSONSchema,
 } from '../types/completion.types';
 
 /**
@@ -105,9 +104,9 @@ export class AnthropicProvider extends BaseAIProvider {
     }
   }
 
-  async generateCompletion(
-    request: CompletionRequest,
-  ): Promise<CompletionResponse> {
+  async generateCompletion<T = any>(
+    request: CompletionRequest<T>,
+  ): Promise<CompletionResponse<T>> {
     try {
       AnthropicProvider.validateRequest(request);
 
@@ -115,72 +114,198 @@ export class AnthropicProvider extends BaseAIProvider {
         throw new Error('Anthropic provider not initialized');
       }
 
-      const message = await this.anthropic.messages.create({
-        model: request.model || 'claude-4-sonnet',
-        max_tokens: request.maxTokens || 4096,
-        temperature: request.temperature || 0.7,
-        messages: [{ role: 'user', content: request.prompt }],
-      });
-
-      if (!message.content?.[0] || message.content[0].type !== 'text') {
-        throw new Error('Invalid response format from Claude');
+      if (request.schemaConfig) {
+        return this.generateSchemaCompletion<T>(request);
       }
 
-      return {
-        content: message.content[0].text,
-        usage: {
-          promptTokens: message.usage.input_tokens,
-          completionTokens: message.usage.output_tokens,
-          totalTokens: message.usage.input_tokens + message.usage.output_tokens,
-        },
-        model: request.model || 'claude-4-sonnet',
-        providerId: this.type,
-        finishReason: AnthropicProvider.mapStopReason(message.stop_reason),
-        metadata: {
-          stopSequence: message.stop_sequence,
-          model: message.model,
-          role: message.role,
-        },
-      };
+      return this.generateGenericCompletion<T>(request);
     } catch (error) {
       throw this.handleProviderError(error, 'completion generation');
     }
   }
 
-  async generateGenericCompletion(
-    prompt: string,
-    model?: string,
-  ): Promise<string> {
-    try {
-      // Generating generic completion
+  private convertJSONSchemaToAnthropicSchema(schema: JSONSchema): any {
+    // Anthropic's input_schema format is essentially standard JSON Schema
+    // Just pass it through with minimal transformation
+    const converted: any = {
+      type: schema.type,
+    };
 
-      if (!this.anthropic) {
-        throw new Error('Anthropic provider not initialized');
+    if (schema.properties) {
+      converted.properties = {};
+      // eslint-disable-next-line no-restricted-syntax
+      for (const [key, propSchema] of Object.entries(schema.properties)) {
+        converted.properties[key] =
+          this.convertJSONSchemaToAnthropicSchema(propSchema);
       }
+    }
 
-      const message = await this.anthropic.messages.create({
-        model: model || 'claude-3-haiku-20240307', // Use fastest model for generic completions
-        max_tokens: 1000,
-        temperature: 0.7,
-        messages: [{ role: 'user', content: prompt }],
+    if (schema.items) {
+      converted.items = this.convertJSONSchemaToAnthropicSchema(schema.items);
+    }
+
+    if (schema.required) {
+      converted.required = schema.required;
+    }
+
+    if (schema.description) {
+      converted.description = schema.description;
+    }
+
+    if (schema.enum) {
+      converted.enum = schema.enum;
+    }
+
+    if (schema.additionalProperties !== undefined) {
+      converted.additionalProperties = schema.additionalProperties;
+    }
+
+    if (schema.minimum !== undefined) converted.minimum = schema.minimum;
+    if (schema.maximum !== undefined) converted.maximum = schema.maximum;
+    if (schema.pattern) converted.pattern = schema.pattern;
+    if (schema.minItems !== undefined) converted.minItems = schema.minItems;
+    if (schema.maxItems !== undefined) converted.maxItems = schema.maxItems;
+
+    return converted;
+  }
+
+  private async generateSchemaCompletion<T>(
+    request: CompletionRequest<T>,
+  ): Promise<CompletionResponse<T>> {
+    if (!request.schemaConfig) {
+      throw new Error('Schema config is required for schema completion');
+    }
+
+    const { schema, name = 'extract_data', description } = request.schemaConfig;
+
+    try {
+      const response = await this.anthropic!.messages.create({
+        model: request.model || 'claude-3-5-sonnet-20241022',
+        max_tokens: request.maxTokens || 4096,
+        temperature: request.temperature || 0.1,
+        messages: [
+          {
+            role: 'user',
+            content: `${description ? `Task: ${description}\n\n` : ''}${request.prompt}`,
+          },
+        ],
+        tools: [
+          {
+            name,
+            description:
+              description || 'Extract structured data according to schema',
+            input_schema: this.convertJSONSchemaToAnthropicSchema(schema),
+          },
+        ],
+        tool_choice: { type: 'tool', name },
       });
 
-      if (!message.content?.[0] || message.content[0].type !== 'text') {
-        throw new Error('Invalid response format from Claude API');
+      const toolUse = response.content.find(
+        (content) => content.type === 'tool_use',
+      );
+
+      const textContent = response.content.find(
+        (content) => content.type === 'text',
+      );
+
+      let parsedData: T | undefined;
+      let schemaValidation: CompletionResponse<T>['schemaValidation'];
+      let content = '';
+
+      if (toolUse && toolUse.type === 'tool_use') {
+        try {
+          const toolInput = toolUse.input;
+          const validation = this.validateDataAgainstSchema(toolInput, schema);
+
+          schemaValidation = {
+            isValid: validation.isValid,
+            errors: validation.errors,
+            originalResponse: JSON.stringify(toolInput),
+          };
+
+          if (validation.isValid) {
+            parsedData = toolInput as T;
+            content = JSON.stringify(parsedData, null, 2);
+          } else {
+            content =
+              textContent?.type === 'text'
+                ? textContent.text
+                : JSON.stringify(toolInput);
+          }
+        } catch (parseError) {
+          schemaValidation = {
+            isValid: false,
+            errors: [
+              `Failed to process tool input: ${parseError instanceof Error ? parseError.message : 'Unknown error'}`,
+            ],
+            originalResponse: JSON.stringify(toolUse.input),
+          };
+          content = textContent?.type === 'text' ? textContent.text : '';
+        }
+      } else {
+        content = textContent?.type === 'text' ? textContent.text : '';
+        schemaValidation = {
+          isValid: false,
+          errors: ['No tool use result received from Anthropic'],
+          originalResponse: content,
+        };
       }
 
-      const completion = message.content[0].text;
-      // Generic completion generated
-
-      return completion;
+      return {
+        content,
+        usage: {
+          promptTokens: response.usage.input_tokens,
+          completionTokens: response.usage.output_tokens,
+          totalTokens:
+            response.usage.input_tokens + response.usage.output_tokens,
+        },
+        model: request.model || 'claude-3-5-sonnet-20241022',
+        providerId: this.type,
+        finishReason: AnthropicProvider.mapStopReason(response.stop_reason),
+        parsedData,
+        schemaValidation,
+        metadata: {
+          stopSequence: response.stop_sequence,
+          toolName: name,
+          contentBlocks: response.content.length,
+        },
+      };
     } catch (error) {
-      // eslint-disable-next-line no-console
-      console.error(
-        '[ANTHROPIC PROVIDER] Error generating generic completion:',
-        error,
-      );
-      throw this.handleProviderError(error, 'generic completion generation');
+      console.error('[ANTHROPIC PROVIDER] Schema completion failed:', error);
+      throw this.handleProviderError(error, 'schema completion');
     }
+  }
+
+  private async generateGenericCompletion<T>(
+    request: CompletionRequest<T>,
+  ): Promise<CompletionResponse<T>> {
+    const message = await this.anthropic!.messages.create({
+      model: request.model || 'claude-3-5-sonnet-20241022',
+      max_tokens: request.maxTokens || 4096,
+      temperature: request.temperature || 0.7,
+      messages: [{ role: 'user', content: request.prompt }],
+    });
+
+    if (!message.content?.[0] || message.content[0].type !== 'text') {
+      throw new Error('Invalid response format from Claude');
+    }
+
+    return {
+      content: message.content[0].text,
+      usage: {
+        promptTokens: message.usage.input_tokens,
+        completionTokens: message.usage.output_tokens,
+        totalTokens: message.usage.input_tokens + message.usage.output_tokens,
+      },
+      model: request.model || 'claude-3-5-sonnet-20241022',
+      providerId: this.type,
+      finishReason: AnthropicProvider.mapStopReason(message.stop_reason),
+      metadata: {
+        stopSequence: message.stop_sequence,
+        model: message.model,
+        role: message.role,
+      },
+    };
   }
 
   streamCompletion(
@@ -647,122 +772,6 @@ export class AnthropicProvider extends BaseAIProvider {
         return 'stop';
       default:
         return 'stop';
-    }
-  }
-
-  async generateDashboardsQuery(
-    prompt: string,
-  ): Promise<GenerateDashboardResponseType[]> {
-    try {
-      if (!this.anthropic) {
-        throw new Error('Anthropic provider not initialized');
-      }
-
-      const response = await this.anthropic.messages.create({
-        model: 'claude-3-5-sonnet-20241022',
-        max_tokens: 4096,
-        temperature: 0.0,
-        messages: [{ role: 'user', content: prompt }],
-        tools: [
-          {
-            name: 'suggestDashboard',
-            description:
-              'Suggests multiple dashboards based on a dbt model and provides a related SQL query for each.',
-            input_schema: {
-              type: 'object',
-              properties: {
-                dashboards: {
-                  type: 'array',
-                  description: 'List of suggested dashboards',
-                  items: {
-                    type: 'object',
-                    properties: {
-                      description: {
-                        type: 'string',
-                        description:
-                          'A human-readable dashboard description based on the dbt model',
-                      },
-                      query: {
-                        type: 'string',
-                        description:
-                          'A useful SQL query or dbt select statement for that dashboard',
-                      },
-                    },
-                    required: ['description', 'query'],
-                  },
-                },
-              },
-              required: ['dashboards'],
-            },
-          },
-        ],
-        tool_choice: { type: 'tool', name: 'suggestDashboard' },
-      });
-
-      const toolUse = response.content.find(
-        (content) => content.type === 'tool_use',
-      );
-      if (toolUse && toolUse.type === 'tool_use') {
-        const parsed = toolUse.input as any;
-        return parsed.dashboards || [];
-      }
-
-      throw new Error('No valid tool response received from Anthropic');
-    } catch (error) {
-      // eslint-disable-next-line no-console
-      console.error(
-        '[ANTHROPIC PROVIDER] generateDashboardsQuery failed:',
-        error,
-      );
-      throw this.handleProviderError(error, 'dashboard generation');
-    }
-  }
-
-  async enhanceModelQuery(prompt: string): Promise<EnhanceModelResponseType> {
-    try {
-      if (!this.anthropic) {
-        throw new Error('Anthropic provider not initialized');
-      }
-
-      const response = await this.anthropic.messages.create({
-        model: 'claude-3-5-sonnet-20241022',
-        max_tokens: 4096,
-        temperature: 0.0,
-        messages: [{ role: 'user', content: prompt }],
-        tools: [
-          {
-            name: 'enhanceSqlModel',
-            description:
-              'Replaces placeholders in a dbt model with real column names.',
-            input_schema: {
-              type: 'object',
-              properties: {
-                content: {
-                  type: 'string',
-                  description:
-                    'The updated SQL with placeholders replaced appropriately',
-                },
-              },
-              required: ['content'],
-            },
-          },
-        ],
-        tool_choice: { type: 'tool', name: 'enhanceSqlModel' },
-      });
-
-      const toolUse = response.content.find(
-        (content) => content.type === 'tool_use',
-      );
-      if (toolUse && toolUse.type === 'tool_use') {
-        const parsed = toolUse.input as any;
-        return { content: parsed.content };
-      }
-
-      throw new Error('No valid tool response received from Anthropic');
-    } catch (error) {
-      // eslint-disable-next-line no-console
-      console.error('[ANTHROPIC PROVIDER] enhanceModelQuery failed:', error);
-      throw this.handleProviderError(error, 'model enhancement');
     }
   }
 }

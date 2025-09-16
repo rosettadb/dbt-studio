@@ -6,6 +6,10 @@ import {
   GenerateDashboardResponseType,
   Project,
 } from '../../types/backend';
+import {
+  CompletionResponse,
+  JSONSchema,
+} from '../services/ai/types/completion.types';
 
 const registerProjectHandlers = () => {
   ipcMain.handle('project:list', async () => {
@@ -167,13 +171,23 @@ const registerProjectHandlers = () => {
 
   ipcMain.handle(
     'project:enhanceModelQuery',
-    async (_event, prompt: string): Promise<EnhanceModelResponseType> => {
-      const response = await AIProviderManager.generateCompletion({
+    async (_event, prompt: string): Promise<CompletionResponse<JSONSchema>> => {
+      const jsonSchema: JSONSchema = {
+        type: 'object',
+        properties: {
+          fileName: { type: 'string' },
+          content: { type: 'string' },
+        },
+        required: ['fileName', 'content'],
+      };
+      return AIProviderManager.generateTypedCompletion<JSONSchema>({
         prompt,
-        type: 'enhance-model',
+        schemaConfig: {
+          schema: jsonSchema,
+          name: 'dbtBusinessModelGenerator',
+          description: 'Extract Business Model Information',
+        },
       });
-      // Return the data in the expected format for backward compatibility
-      return response.data || { content: response.content };
     },
   );
 

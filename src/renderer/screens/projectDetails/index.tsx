@@ -62,8 +62,12 @@ import { utils } from '../../helpers';
 import { AppLayout } from '../../layouts';
 import ChatScreen from '../chat';
 import { getFileName } from '../../services/settings.services';
-import { generateModelsPrompt } from '../../helpers/businessModelGenerator';
-import { generateFilename } from '../../helpers/utils';
+import {
+  BusinessModelGenerationSchema,
+  BusinessModelGenerationSchemaType,
+  generateModelsPrompt,
+} from '../../helpers/businessModelGenerator';
+import { aiProvidersService } from '../../services/aiProviders.service';
 
 const ProjectDetails: React.FC = () => {
   const navigate = useNavigate();
@@ -516,15 +520,20 @@ const ProjectDetails: React.FC = () => {
                   if (selectedFiles.length > 0) {
                     const files = await getFileContentList(selectedFiles);
                     try {
-                      const fileName = generateFilename('model', 'sql');
-                      const response = await projectsServices.enhanceModelQuery(
-                        generateModelsPrompt(files),
-                      );
-                      if (response.content) {
+                      const prompt = generateModelsPrompt(files);
+                      const response =
+                        await aiProvidersService.generateCompletion<BusinessModelGenerationSchemaType>(
+                          prompt,
+                          BusinessModelGenerationSchema,
+                        );
+                      if (
+                        response.parsedData?.fileName &&
+                        response.parsedData?.content
+                      ) {
                         const filePath = await projectsServices.createFile({
                           filePath: updatedPath,
-                          name: fileName,
-                          content: response.content,
+                          name: response.parsedData.fileName,
+                          content: response.parsedData.content,
                         });
                         await fetchDirectories();
                         await updateStatuses();
