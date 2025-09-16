@@ -16,7 +16,7 @@ export interface JSONSchema {
   pattern?: string;
 }
 
-// Schema configuration for providers
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 export interface SchemaConfig<T = any> {
   schema: JSONSchema;
   name?: string;
@@ -118,10 +118,12 @@ export interface GenerateDashboardResponseType {
 export type StringSchema = JSONSchema & { type: 'string' };
 export type NumberSchema = JSONSchema & { type: 'number' };
 export type BooleanSchema = JSONSchema & { type: 'boolean' };
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 export type ArraySchema<T = any> = JSONSchema & {
   type: 'array';
   items: JSONSchema;
 };
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 export type ObjectSchema<T = any> = JSONSchema & {
   type: 'object';
   properties: Record<string, JSONSchema>;

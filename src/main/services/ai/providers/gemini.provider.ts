@@ -118,21 +118,6 @@ export class GeminiProvider extends BaseAIProvider {
         return this.generateSchemaCompletion<T>(request);
       }
 
-      // Handle legacy request types for backward compatibility
-      if (request.type === 'generate-dashboard') {
-        const dashboards = await this.generateDashboardsQuery(request.prompt);
-        return this.createLegacyResponse(
-          dashboards,
-          request,
-          'generate-dashboard',
-        );
-      }
-
-      if (request.type === 'enhance-model') {
-        const enhancement = await this.enhanceModelQuery(request.prompt);
-        return this.createLegacyResponse(enhancement, request, 'enhance-model');
-      }
-
       // Default generic completion
       return this.generateGenericCompletion<T>(request);
     } catch (error) {

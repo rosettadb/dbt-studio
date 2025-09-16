@@ -652,9 +652,6 @@ export class AIProviderManager {
       // Get the active provider
       const activeProvider = await MainDatabaseService.getActiveProvider();
       if (!activeProvider) {
-        console.error(
-          '[PROVIDER MANAGER] generateCompletion - No active provider found',
-        );
         throw new Error(
           'No active AI provider configured. Please configure and activate a provider in settings.',
         );
@@ -671,9 +668,6 @@ export class AIProviderManager {
         );
 
         if (!apiKey) {
-          console.error(
-            '[PROVIDER MANAGER] generateCompletion - No API key found for provider',
-          );
           throw new Error(
             `No API key configured for ${activeProvider.type} provider. Please configure credentials in settings.`,
           );
@@ -688,10 +682,6 @@ export class AIProviderManager {
             ? JSON.parse(activeProvider.config)
             : activeProvider.config || {};
       } catch (configError) {
-        console.error(
-          '[PROVIDER MANAGER] generateCompletion - Failed to parse provider config:',
-          configError,
-        );
         throw new Error(
           'Invalid provider configuration. Please reconfigure the provider in settings.',
         );
@@ -732,10 +722,6 @@ export class AIProviderManager {
       try {
         await providerInstance.initialize(providerConfig);
       } catch (initError) {
-        console.error(
-          '[PROVIDER MANAGER] generateCompletion - Failed to initialize provider:',
-          initError,
-        );
         throw new Error(
           `Failed to initialize ${activeProvider.type} provider: ${initError instanceof Error ? initError.message : 'Unknown error'}`,
         );
@@ -747,40 +733,9 @@ export class AIProviderManager {
         model: selectedModel,
       };
 
-      // Generate completion - Pure delegation to provider
       try {
-        if (request.schemaConfig) {
-          console.log(
-            '[PROVIDER MANAGER] Using schema configuration:',
-            request.schemaConfig.name || 'unnamed',
-          );
-        } else {
-          console.log('[PROVIDER MANAGER] Using generic completion');
-        }
-
-        const response =
-          await providerInstance.generateCompletion<T>(updatedRequest);
-
-        // Log schema validation results if present
-        if (response.schemaValidation) {
-          if (response.schemaValidation.isValid) {
-            console.log('[PROVIDER MANAGER] Schema validation passed');
-          } else {
-            console.warn(
-              '[PROVIDER MANAGER] Schema validation failed:',
-              response.schemaValidation.errors,
-            );
-          }
-        }
-
-        return response;
+        return await providerInstance.generateCompletion<T>(updatedRequest);
       } catch (completionError) {
-        console.error(
-          '[PROVIDER MANAGER] generateCompletion - Failed to generate completion:',
-          completionError,
-        );
-
-        // Provide user-friendly error messages
         if (completionError instanceof Error) {
           if (
             completionError.message.includes('401') ||
@@ -808,10 +763,6 @@ export class AIProviderManager {
         );
       }
     } catch (error) {
-      console.error(
-        '[PROVIDER MANAGER] generateCompletion - Unexpected error:',
-        error,
-      );
       throw error;
     }
   }
@@ -884,20 +835,7 @@ export class AIProviderManager {
       ollama: 'llama2', // Default fallback for Ollama
     };
 
-    const defaultModel = defaultModels[providerType] || 'gpt-4o';
-
-    // Log when we're using fallback (either invalid config model or no model configured)
-    if (
-      config.model &&
-      !this.isModelValidForProvider(config.model, providerType)
-    ) {
-      // eslint-disable-next-line no-console
-      console.log(
-        `[PROVIDER MANAGER] Invalid model "${config.model}" for ${providerType}, falling back to default: ${defaultModel}`,
-      );
-    }
-
-    return defaultModel;
+    return defaultModels[providerType] || 'gpt-4o';
   }
 
   static async getProviderStatus(providerId: string): Promise<HealthStatus> {

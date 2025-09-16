@@ -4,22 +4,18 @@ import ChatService from '../services/chat.service';
 import SecureStorageService from '../services/secureStorage.service';
 import {
   AIProvider,
-  NewAIProvider,
   ChatConversation,
-  NewChatConversation,
   ChatMessage,
-  NewChatMessage,
-  PromptTemplate,
-  NewPromptTemplate,
+  NewAIProvider,
   NewAIUsageLog,
+  NewChatConversation,
+  NewChatMessage,
+  NewPromptTemplate,
+  PromptTemplate,
 } from '../schemas/mainDatabase.schema';
-import ProviderManager, {
-  AIProviderManager,
-} from '../services/ai/providerManager.service';
+import ProviderManager from '../services/ai/providerManager.service';
 import {
-  CompletionRequest,
   CompletionResponse,
-  JSONSchema,
   TypedCompletionRequest,
 } from '../services/ai/types/completion.types';
 
@@ -542,8 +538,7 @@ const registerAIHandlers = () => {
         >[];
       },
     ) => {
-      // Delegate to service. Handler only routes params and forwards chunks.
-      const result = await ChatService.streamAssistantReply(
+      return ChatService.streamAssistantReply(
         conversationId,
         content,
         contextItems,
@@ -555,7 +550,6 @@ const registerAIHandlers = () => {
           });
         },
       );
-      return result;
     },
   );
 

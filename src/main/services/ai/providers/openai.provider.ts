@@ -332,7 +332,6 @@ export class OpenAIProvider extends BaseAIProvider {
         },
       };
     } catch (error) {
-      console.error('[OPENAI PROVIDER] Schema completion failed:', error);
       throw this.handleProviderError(error, 'schema completion');
     }
   }

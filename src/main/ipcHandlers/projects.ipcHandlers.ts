@@ -1,11 +1,7 @@
 import { ipcMain } from 'electron';
 import { ProjectsService } from '../services';
 import { AIProviderManager } from '../services/ai/providerManager.service';
-import {
-  EnhanceModelResponseType,
-  GenerateDashboardResponseType,
-  Project,
-} from '../../types/backend';
+import { GenerateDashboardResponseType, Project } from '../../types/backend';
 import {
   CompletionResponse,
   JSONSchema,
@@ -153,21 +149,6 @@ const registerProjectHandlers = () => {
   ipcMain.handle('project:selected', async () => {
     return ProjectsService.getSelectedProject();
   });
-
-  ipcMain.handle(
-    'project:generateDashboardsQuery',
-    async (
-      _event,
-      prompt: string,
-    ): Promise<GenerateDashboardResponseType[]> => {
-      const response = await AIProviderManager.generateCompletion({
-        prompt,
-        type: 'generate-dashboard',
-      });
-      // Return the data in the expected format for backward compatibility
-      return response.data || [];
-    },
-  );
 
   ipcMain.handle(
     'project:enhanceModelQuery',

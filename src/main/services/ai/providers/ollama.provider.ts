@@ -257,7 +257,6 @@ export class OllamaProvider extends BaseAIProvider {
         },
       };
     } catch (error) {
-      console.error('[OLLAMA PROVIDER] Schema completion failed:', error);
       throw this.handleProviderError(error, 'schema completion');
     }
   }
@@ -534,7 +533,7 @@ Response (JSON only):`;
   private extractJsonFromText(text: string): string | null {
     const strategies = [
       /(\{(?:[^{}]|{[^{}]*})*\})/g,
-      /(\[(?:[^\[\]]|\[[^\[\]]*\])*\])/g,
+      /(\[(?:[^[\]]|\[[^[\]]*\])*\])/g,
       /\{[\s\S]*\}/,
       /\[[\s\S]*\]/,
       /```(?:json)?\s*([\s\S]*?)\s*```/i,
@@ -550,7 +549,7 @@ Response (JSON only):`;
             let cleaned = match
               .replace(/```json|```|Response:|JSON:|Output:|Result:/gi, '')
               .trim();
-            cleaned = cleaned.replace(/^[^{\[]*/, '').replace(/[^}\]]*$/, '');
+            cleaned = cleaned.replace(/^[^{[]*/, '').replace(/[^}\]]*$/, '');
             JSON.parse(cleaned);
             return cleaned;
           } catch {

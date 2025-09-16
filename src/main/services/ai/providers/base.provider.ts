@@ -13,8 +13,6 @@ import {
   CompletionRequest,
   CompletionResponse,
   CompletionChunk,
-  EnhanceModelResponseType,
-  GenerateDashboardResponseType,
   JSONSchema,
   SchemaConfig,
   TypedCompletionRequest,

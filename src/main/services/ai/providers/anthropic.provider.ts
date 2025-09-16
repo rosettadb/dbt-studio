@@ -271,7 +271,6 @@ export class AnthropicProvider extends BaseAIProvider {
         },
       };
     } catch (error) {
-      console.error('[ANTHROPIC PROVIDER] Schema completion failed:', error);
       throw this.handleProviderError(error, 'schema completion');
     }
   }
