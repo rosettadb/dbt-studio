@@ -10,6 +10,8 @@ export interface CompletionRequest {
     conversationId?: number;
     files?: string[];
     schema?: any[];
+    tokenCount?: number;
+    budget?: any;
   };
   options?: Record<string, any>;
 }

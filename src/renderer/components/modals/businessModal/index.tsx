@@ -115,16 +115,8 @@ export const BusinessModal: React.FC<Props> = ({
     const fileDirectory = getDirectoryPath(filePath);
     const fileFamily = getDirFamily(filePath);
 
-    if (!fileFamily) {
-      return;
-    }
-
     if (isSelected) {
       if (activeDirFamily && activeDirFamily !== fileFamily) {
-        return;
-      }
-
-      if (restrictedDirectory && restrictedDirectory !== fileDirectory) {
         return;
       }
 
@@ -157,18 +149,7 @@ export const BusinessModal: React.FC<Props> = ({
     const folderDirectory = getDirectoryPath(folderPath);
     const folderFamily = getDirFamily(folderPath);
 
-    if (!folderFamily) {
-      return;
-    }
-
     if (isSelected) {
-      if (activeDirFamily && activeDirFamily !== folderFamily) {
-        return;
-      }
-      if (restrictedDirectory && restrictedDirectory !== folderDirectory) {
-        return;
-      }
-
       newSelectedFolders.add(folderPath);
 
       if (!restrictedDirectory) {

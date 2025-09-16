@@ -75,7 +75,6 @@ export const Terminal: React.FC<Props> = ({ project }) => {
     if (command.trim()) {
       let newCommand = command.trim();
 
-      // Validate allowed commands
       const allowedCommands = ['rosetta', 'dbt', 'git', 'python'];
       const isAllowed = allowedCommands.some((cmd) =>
         newCommand.startsWith(cmd),
@@ -86,7 +85,6 @@ export const Terminal: React.FC<Props> = ({ project }) => {
         return;
       }
 
-      // Transform commands based on type
       if (newCommand.startsWith('git')) {
         const navigateCommand = `cd "${project.path}"`;
         newCommand = `${navigateCommand} && ${newCommand}`;
@@ -111,7 +109,6 @@ export const Terminal: React.FC<Props> = ({ project }) => {
         newCommand = `${navigateCommand} && ${tmpCommand}`;
       }
 
-      // Use runCommandAsync for terminal - fire and forget
       runCommandAsync(newCommand);
       setCommand('');
     }

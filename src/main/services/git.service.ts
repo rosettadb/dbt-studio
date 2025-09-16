@@ -65,10 +65,6 @@ export function isAuthError(error: any): boolean {
 
 export default class GitService {
   getGitInstance(repoPath: string): SimpleGit {
-    const gitDir = path.join(repoPath, '.git');
-    if (!fs.existsSync(gitDir) || !fs.lstatSync(gitDir).isDirectory()) {
-      throw new Error(`No .git directory found in: ${repoPath}`);
-    }
     return simpleGit(repoPath);
   }
 
@@ -198,10 +194,6 @@ export default class GitService {
   }
 
   async isRepoInitialized(repoPath: string) {
-    const gitDir = path.join(repoPath, '.git');
-    const exists = fs.existsSync(gitDir);
-    if (!exists) return false;
-
     try {
       const git = this.getGitInstance(repoPath);
       await git.status();
@@ -341,8 +333,11 @@ export default class GitService {
 
       await git.clone(urlToUse, destinationPath);
 
+      const dbtProjectPath = await this.findDbtProjectPath(destinationPath);
+      const projectPath = dbtProjectPath || destinationPath;
+
       const connections =
-        await ConnectorsService.parseProjectConnectionFiles(destinationPath);
+        await ConnectorsService.parseProjectConnectionFiles(projectPath);
 
       let connectionId: string | undefined;
 
@@ -354,7 +349,7 @@ export default class GitService {
       }
 
       return {
-        path: destinationPath,
+        path: projectPath, // Use the dbt project path instead of destination path
         name: repoName,
         dbtConnection: connections.dbtConnection,
         rosettaConnection: connections.rosettaConnection,
@@ -364,6 +359,46 @@ export default class GitService {
       if (isAuthError(err)) throw new AuthError();
       throw new Error(`Clone failed: ${err.message}`);
     }
+  }
+
+  // Helper function to recursively find dbt_project.yml
+  async findDbtProjectPath(rootPath: string): Promise<string | null> {
+    async function searchRecursively(
+      currentPath: string,
+    ): Promise<string | null> {
+      try {
+        const entries = fs.readdirSync(currentPath, { withFileTypes: true });
+
+        // Check if dbt_project.yml exists in current directory
+        const hasDbtProject = entries.some(
+          (entry) => entry.isFile() && entry.name === 'dbt_project.yml',
+        );
+
+        if (hasDbtProject) {
+          return currentPath;
+        }
+
+        // Search in subdirectories
+        // eslint-disable-next-line no-restricted-syntax
+        for (const entry of entries) {
+          if (entry.isDirectory() && !entry.name.startsWith('.')) {
+            const subdirPath = path.join(currentPath, entry.name);
+            // eslint-disable-next-line no-await-in-loop
+            const result = await searchRecursively(subdirPath);
+            if (result) {
+              return result;
+            }
+          }
+        }
+
+        return null;
+      } catch (error) {
+        // Handle permission errors or other issues
+        return null;
+      }
+    }
+
+    return searchRecursively(rootPath);
   }
 
   async getDiffForFile(repoPath: string, filePath: string) {

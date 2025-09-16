@@ -263,9 +263,11 @@ export const ChatInputBox: React.FC<ChatInputBoxProps> = ({ sessionId }) => {
 
   React.useEffect(() => {
     if (pendingMessage && sessionId && activeProvider && !isStreaming) {
-      handleSendMessage(pendingMessage);
-      setPendingMessage(null);
-      setTimeout(() => setInput(''), 0);
+      setTimeout(() => {
+        handleSendMessage(pendingMessage);
+        setPendingMessage(null);
+        setInput('');
+      }, 500);
     }
   }, [pendingMessage, sessionId, activeProvider, isStreaming]);
 
