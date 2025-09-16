@@ -41,6 +41,7 @@ import {
   useGetProjectFiles,
   useGetSelectedProject,
   useGetSettings,
+  useGitIsInitialized,
   useSaveFileContent,
   useUpdateProject,
 } from '../../controllers';
@@ -119,9 +120,13 @@ const ProjectDetails: React.FC = () => {
     await fetchDirectories();
   });
 
+  const { data: isInitialized } = useGitIsInitialized(project?.path, {
+    enabled: !!project?.path,
+  });
+
   const { data: statuses = [], refetch: updateStatuses } = useGetFileStatuses(
-    project?.path ?? '',
-    { enabled: !!project?.path },
+    project?.path,
+    { enabled: !!project?.path && !!isInitialized },
   );
 
   const { data: connections = [] } = useGetConnections();

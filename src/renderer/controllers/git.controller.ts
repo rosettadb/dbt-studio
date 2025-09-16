@@ -17,7 +17,7 @@ import { QUERY_KEYS } from '../config/constants';
 import { gitServices } from '../services';
 
 export const useGitIsInitialized = (
-  path: string,
+  path?: string,
   customOptions?: UseQueryOptions<boolean, CustomError, boolean>,
 ) => {
   return useQuery({
@@ -60,7 +60,7 @@ export const useGetBranches = (
 };
 
 export const useGetFileStatuses = (
-  path: string,
+  path?: string,
   customOptions?: UseQueryOptions<FileStatus[], CustomError, FileStatus[]>,
 ) => {
   return useQuery({
