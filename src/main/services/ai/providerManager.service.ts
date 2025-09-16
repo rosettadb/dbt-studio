@@ -648,6 +648,7 @@ export class AIProviderManager {
   static async generateCompletion<T = any>(
     request: CompletionRequest<T>,
   ): Promise<CompletionResponse<T>> {
+    // eslint-disable-next-line no-useless-catch
     try {
       // Get the active provider
       const activeProvider = await MainDatabaseService.getActiveProvider();
@@ -707,9 +708,6 @@ export class AIProviderManager {
         config,
       );
       if (!providerInstance) {
-        console.error(
-          '[PROVIDER MANAGER] generateCompletion - Failed to create provider instance',
-        );
         throw new Error(`Unsupported provider type: ${activeProvider.type}`);
       }
 

@@ -1,7 +1,7 @@
 import { ipcMain } from 'electron';
 import { ProjectsService } from '../services';
 import { AIProviderManager } from '../services/ai/providerManager.service';
-import { GenerateDashboardResponseType, Project } from '../../types/backend';
+import { Project } from '../../types/backend';
 import {
   CompletionResponse,
   JSONSchema,
