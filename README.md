@@ -1,8 +1,9 @@
-# Rosetta dbt™ Studio
+# Rosetta DBT Studio
+<img width="1080" height="1080" alt="image" src="https://github.com/user-attachments/assets/538a957e-157d-4c91-a7da-6327f3580440" />
 
-**Rosetta dbt™ Studio** is an open-source desktop application that simplifies your data transformation journey with [dbt™](https://www.getdbt.com/) and brings the power of AI into your analytics engineering workflow.
+**Rosetta DataBase Transformation Studio** is an open-source desktop application that simplifies your data transformation journey with [dbt Core™](https://www.getdbt.com/) and brings the power of AI into your analytics engineering workflow.
 
-Whether you're just getting started with dbt™ or looking to streamline your transformation logic with AI assistance, Rosetta dbt™ Studio offers an intuitive interface to help you build, explore, and maintain your data models efficiently.
+Whether you're just getting started with dbt Core™ or looking to streamline your transformation logic with AI assistance, DBT Studio offers an intuitive interface to help you build, explore, and maintain your data models efficiently.
 
 ---
 
@@ -10,7 +11,7 @@ Whether you're just getting started with dbt™ or looking to streamline your tr
 
 #### Easy Database Connectivity
 
-- Connect to your data warehouse assuming your **RAW layer** is already in place.
+- Connect to your data warehouse, assuming your **RAW layer** is already in place.
 
 #### Layered Data Modeling
 
@@ -41,14 +42,14 @@ Leverage AI to:
 
 #### Built-in Python Environment
 
-Rosetta dbt™ Studio includes an integrated Python environment to:
+DBT Studio includes an integrated Python environment to:
 
 - Install and manage dbt™ without external setup.
 - Seamlessly configure and run dbt™ from within the application.
 
 #### Rosetta Integration
 
-Rosetta dbt™ Studio embeds the open-source [Rosetta CLI tool](https://github.com/adaptivescale/rosetta) to support metadata-driven dbt™ development:
+DBT Studio embeds the open-source [Rosetta CLI tool](https://github.com/adaptivescale/rosetta) to support metadata-driven dbt™ development:
 
 - Model generation aligned with your naming conventions and standards.
 - Reusable templates and YAML documentation support.
