@@ -243,7 +243,7 @@ const SelectProject: React.FC = () => {
         connectionId: selectedConnection || undefined,
         createTemplateFolders: newProject.createTemplateFolders,
       });
-      await projectsServices.selectProject({ projectId: project.id });
+      await selectProject({ projectId: project.id });
       toast.success(`Project ${project.name} created successfully!`);
       setIsAddingProject(false);
       setNewProject({ name: '', createTemplateFolders: true });
@@ -351,10 +351,8 @@ const SelectProject: React.FC = () => {
           <ProjectCard
             key={project.id}
             onClick={async () => {
-              await projectsServices.selectProject({
-                projectId: project.id,
-              });
-              navigate('/app/loading');
+              await selectProject({ projectId: project.id });
+              navigate('/app');
             }}
           >
             <ProjectCardContent>
