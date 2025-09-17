@@ -23,10 +23,10 @@ export const createSplashWindow = (): BrowserWindow => {
     },
   });
 
-  const logoPath = path.join(RESOURCES_PATH, 'logo_new.png');
-  const logoData = fs.readFileSync(logoPath);
-  const encodedLogo = logoData.toString('base64');
-  const logoSrc = `data:image/png;base64,${encodedLogo}`;
+  const logoPath = path.join(RESOURCES_PATH, 'logo_new.svg');
+  const logoData = fs.readFileSync(logoPath, 'utf8');
+  const encodedLogo = encodeURIComponent(logoData);
+  const logoSrc = `data:image/svg+xml;utf8,${encodedLogo}`;
 
   const splashHtml = `
     <!DOCTYPE html>
@@ -49,7 +49,7 @@ export const createSplashWindow = (): BrowserWindow => {
             pointer-events: none;
           }
           .image {
-            height: 120px;
+            height: 180px;
           }
           .tagline {
             font-size: 14px;
