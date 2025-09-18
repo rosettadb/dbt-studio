@@ -25,7 +25,6 @@ const dbtBusinessLayerPrompt = (
     `\n\n${userPrompt}\n` +
     `Model Contents:\n${modelContents}\n\n` +
     `IMPORTANT: Make sure you use as reference the models from the enhanced layer.\n` +
-    `IMPORTANT: Do not use the enh_ prefix in any references.\n` +
     `IMPORTANT: Start your response directly with the markdown code block: \`\`\`sql`
   );
 };

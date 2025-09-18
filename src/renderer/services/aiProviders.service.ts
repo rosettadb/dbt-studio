@@ -135,6 +135,7 @@ class AIProvidersService {
       prompt,
       schemaConfig,
     };
+    schemaConfig.description = prompt;
     const { data } = await client.post<
       TypedCompletionRequest<T>,
       CompletionResponse<T>
