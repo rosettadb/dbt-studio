@@ -148,7 +148,8 @@ export type AIChannels =
 
   // Modern usage functionality (standardized naming)
   | 'ai:usage:log'
-  | 'ai:usage:stats';
+  | 'ai:usage:stats'
+  | 'ai:generateCompletion';
 
 export type CliChannels =
   | 'cli:run'

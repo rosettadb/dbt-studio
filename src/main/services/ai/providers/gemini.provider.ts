@@ -15,6 +15,7 @@ import {
   CompletionChunk,
   EnhanceModelResponseType,
   GenerateDashboardResponseType,
+  JSONSchema,
 } from '../types/completion.types';
 
 /**
@@ -102,9 +103,9 @@ export class GeminiProvider extends BaseAIProvider {
     }
   }
 
-  async generateCompletion(
-    request: CompletionRequest,
-  ): Promise<CompletionResponse> {
+  async generateCompletion<T = any>(
+    request: CompletionRequest<T>,
+  ): Promise<CompletionResponse<T>> {
     try {
       (this.constructor as typeof BaseAIProvider).validateRequest(request);
 
@@ -112,23 +113,131 @@ export class GeminiProvider extends BaseAIProvider {
         throw new Error('Gemini provider not initialized');
       }
 
-      const model = this.genAI.getGenerativeModel({
+      // Handle schema-based requests
+      if (request.schemaConfig) {
+        return this.generateSchemaCompletion<T>(request);
+      }
+
+      // Default generic completion
+      return this.generateGenericCompletion<T>(request);
+    } catch (error) {
+      throw this.handleProviderError(error, 'completion generation');
+    }
+  }
+
+  private async generateSchemaCompletion<T>(
+    request: CompletionRequest<T>,
+  ): Promise<CompletionResponse<T>> {
+    if (!request.schemaConfig) {
+      throw new Error('Schema config is required for schema completion');
+    }
+
+    const { schema, description } = request.schemaConfig;
+
+    try {
+      // Gemini doesn't have function calling like OpenAI/Anthropic, so we use structured prompts
+      const structuredPrompt = this.createSchemaPrompt(
+        request.prompt,
+        schema,
+        description,
+      );
+
+      const model = this.genAI!.getGenerativeModel({
         model: request.model || 'gemini-1.5-pro',
         generationConfig: {
           maxOutputTokens: request.maxTokens || 2048,
-          temperature: request.temperature || 0.7,
+          temperature: request.temperature || 0.1, // Lower temperature for structured output
         },
       });
 
-      const result = await model.generateContent(request.prompt);
+      const result = await model.generateContent(structuredPrompt);
       const { response } = result;
+      const text = response.text();
 
-      if (!response.text()) {
-        throw new Error('Empty response from Gemini');
+      if (!text) {
+        throw new Error('No response text from Gemini');
+      }
+
+      // Try to parse and validate the JSON response
+      let parsedData: T | undefined;
+      let schemaValidation: CompletionResponse<T>['schemaValidation'];
+      let cleanedContent = text;
+
+      try {
+        // Clean the response - remove any markdown formatting
+        const jsonMatch =
+          text.match(/```json\s*([\s\S]*?)\s*```/) ||
+          text.match(/```\s*([\s\S]*?)\s*```/) ||
+          text.match(/(\{[\s\S]*\})/) ||
+          text.match(/(\[[\s\S]*\])/);
+
+        if (jsonMatch) {
+          // eslint-disable-next-line prefer-destructuring
+          cleanedContent = jsonMatch[1];
+        } else {
+          // Try to find JSON in the response
+          const lines = text.split('\n');
+          const jsonLines = lines.filter(
+            (line) =>
+              line.trim().startsWith('{') ||
+              line.trim().startsWith('[') ||
+              line.includes(':') ||
+              line.trim().endsWith('}') ||
+              line.trim().endsWith(']'),
+          );
+          if (jsonLines.length > 0) {
+            cleanedContent = jsonLines.join('\n');
+          }
+        }
+
+        const parsed = JSON.parse(cleanedContent);
+
+        // Validate the parsed result against schema
+        const validation = this.validateDataAgainstSchema(parsed, schema);
+
+        schemaValidation = {
+          isValid: validation.isValid,
+          errors: validation.errors,
+          originalResponse: text,
+        };
+
+        if (validation.isValid) {
+          parsedData = parsed as T;
+        }
+      } catch (parseError) {
+        // Try to extract any valid JSON from the response
+        try {
+          // More aggressive JSON extraction
+          const potentialJson = this.extractJsonFromText(text);
+          if (potentialJson) {
+            const parsed = JSON.parse(potentialJson);
+            const validation = this.validateDataAgainstSchema(parsed, schema);
+
+            schemaValidation = {
+              isValid: validation.isValid,
+              errors: validation.errors,
+              originalResponse: text,
+            };
+
+            if (validation.isValid) {
+              parsedData = parsed as T;
+            }
+          } else {
+            throw parseError;
+          }
+        } catch {
+          schemaValidation = {
+            isValid: false,
+            errors: [
+              `Failed to parse JSON response: ${parseError instanceof Error ? parseError.message : 'Unknown error'}`,
+            ],
+            originalResponse: text,
+          };
+        }
       }
 
       return {
-        content: response.text(),
+        content: parsedData ? JSON.stringify(parsedData, null, 2) : text,
         usage: {
           promptTokens: 0, // Gemini doesn't provide detailed token counts
           completionTokens: 0,
@@ -137,14 +246,142 @@ export class GeminiProvider extends BaseAIProvider {
         model: request.model || 'gemini-1.5-pro',
         providerId: this.type,
         finishReason: GeminiProvider.mapFinishReason(response),
+        parsedData,
+        schemaValidation,
         metadata: {
           candidates: response.candidates?.length || 1,
           safetyRatings: response.candidates?.[0]?.safetyRatings,
+          schemaUsed: true,
         },
       };
     } catch (error) {
-      throw this.handleProviderError(error, 'completion generation');
+      throw this.handleProviderError(error, 'schema completion');
     }
+  }
+
+  // Create a structured prompt for schema-based requests
+  // eslint-disable-next-line class-methods-use-this
+  private createSchemaPrompt(
+    prompt: string,
+    schema: JSONSchema,
+    description?: string,
+  ): string {
+    const schemaString = JSON.stringify(schema, null, 2);
+
+    return `${description ? `Task: ${description}\n\n` : ''}${prompt}
+
+Please respond with a valid JSON object that strictly follows this schema:
+
+${schemaString}
+
+Requirements:
+- Your response must be valid JSON
+- Follow the exact schema structure provided
+- Include all required fields
+- Use the correct data types for each field
+- Do not include any additional text before or after the JSON
+- You may wrap the JSON in \`\`\`json code blocks if helpful
+
+JSON Response:`;
+  }
+
+  // Extract JSON from potentially messy text response
+  // eslint-disable-next-line class-methods-use-this
+  private extractJsonFromText(text: string): string | null {
+    // Try multiple extraction strategies
+    const strategies = [
+      // Strategy 1: Look for complete JSON objects/arrays
+      /(\{(?:[^{}]|{[^{}]*})*\})/g,
+      /(\[(?:[^[\]]|\[[^[\]]*\])*\])/g,
+
+      // Strategy 2: Look for content between braces/brackets (more permissive)
+      /\{[\s\S]*\}/,
+      /\[[\s\S]*\]/,
+
+      // Strategy 3: Extract from code blocks
+      /```(?:json)?\s*([\s\S]*?)\s*```/i,
+    ];
+
+    // eslint-disable-next-line no-restricted-syntax
+    for (const regex of strategies) {
+      const matches = text.match(regex);
+      if (matches) {
+        // eslint-disable-next-line no-restricted-syntax
+        for (const match of matches) {
+          try {
+            // Clean the match
+            const cleaned = match.replace(/```json|```/g, '').trim();
+
+            // Try to parse it
+            JSON.parse(cleaned);
+            return cleaned;
+          } catch {
+            // Continue to next match
+          }
+        }
+      }
+    }
+
+    return null;
+  }
+
+  // Helper for backward compatibility
+  private createLegacyResponse<T>(
+    data: any,
+    request: CompletionRequest<T>,
+    type: string,
+  ): CompletionResponse<T> {
+    const content =
+      typeof data === 'string' ? data : JSON.stringify(data, null, 2);
+    return {
+      content,
+      usage: {
+        promptTokens: 0, // Gemini doesn't provide detailed token counts
+        completionTokens: 0,
+        totalTokens: 0,
+      },
+      model: request.model || 'gemini-1.5-pro',
+      providerId: this.type,
+      finishReason: 'stop',
+      data, // Backward compatibility
+      parsedData: data as T,
+      metadata: { legacyType: type },
+    };
+  }
+
+  private async generateGenericCompletion<T>(
+    request: CompletionRequest<T>,
+  ): Promise<CompletionResponse<T>> {
+    const model = this.genAI!.getGenerativeModel({
+      model: request.model || 'gemini-1.5-pro',
+      generationConfig: {
+        maxOutputTokens: request.maxTokens || 2048,
+        temperature: request.temperature || 0.7,
+      },
+    });
+
+    const result = await model.generateContent(request.prompt);
+    const { response } = result;
+
+    if (!response.text()) {
+      throw new Error('Empty response from Gemini');
+    }
+
+    return {
+      content: response.text(),
+      usage: {
+        promptTokens: 0, // Gemini doesn't provide detailed token counts
+        completionTokens: 0,
+        totalTokens: 0,
+      },
+      model: request.model || 'gemini-1.5-pro',
+      providerId: this.type,
+      finishReason: GeminiProvider.mapFinishReason(response),
+      metadata: {
+        candidates: response.candidates?.length || 1,
+        safetyRatings: response.candidates?.[0]?.safetyRatings,
+      },
+    };
   }
 
   async *streamCompletion(

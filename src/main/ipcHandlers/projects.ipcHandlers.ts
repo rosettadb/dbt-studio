@@ -1,11 +1,11 @@
 import { ipcMain } from 'electron';
 import { ProjectsService } from '../services';
 import { AIProviderManager } from '../services/ai/providerManager.service';
+import { Project } from '../../types/backend';
 import {
-  EnhanceModelResponseType,
-  GenerateDashboardResponseType,
-  Project,
-} from '../../types/backend';
+  CompletionResponse,
+  JSONSchema,
+} from '../services/ai/types/completion.types';
 
 const registerProjectHandlers = () => {
   ipcMain.handle('project:list', async () => {
@@ -151,29 +151,24 @@ const registerProjectHandlers = () => {
   });
 
   ipcMain.handle(
-    'project:generateDashboardsQuery',
-    async (
-      _event,
-      prompt: string,
-    ): Promise<GenerateDashboardResponseType[]> => {
-      const response = await AIProviderManager.generateCompletion({
-        prompt,
-        type: 'generate-dashboard',
-      });
-      // Return the data in the expected format for backward compatibility
-      return response.data || [];
-    },
-  );
-
-  ipcMain.handle(
     'project:enhanceModelQuery',
-    async (_event, prompt: string): Promise<EnhanceModelResponseType> => {
-      const response = await AIProviderManager.generateCompletion({
+    async (_event, prompt: string): Promise<CompletionResponse<JSONSchema>> => {
+      const jsonSchema: JSONSchema = {
+        type: 'object',
+        properties: {
+          fileName: { type: 'string' },
+          content: { type: 'string' },
+        },
+        required: ['fileName', 'content'],
+      };
+      return AIProviderManager.generateTypedCompletion<JSONSchema>({
         prompt,
-        type: 'enhance-model',
+        schemaConfig: {
+          schema: jsonSchema,
+          name: 'dbtBusinessModelGenerator',
+          description: 'Extract Business Model Information',
+        },
       });
-      // Return the data in the expected format for backward compatibility
-      return response.data || { content: response.content };
     },
   );
 

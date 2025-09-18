@@ -1,4 +1,5 @@
 import { FileNodeWithContent } from '../../types/backend';
+import { SchemaConfig } from '../../main/services/ai/types/completion.types';
 
 const dbtBusinessLayerPrompt = (
   files: FileNodeWithContent[],
@@ -24,7 +25,6 @@ const dbtBusinessLayerPrompt = (
     `\n\n${userPrompt}\n` +
     `Model Contents:\n${modelContents}\n\n` +
     `IMPORTANT: Make sure you use as reference the models from the enhanced layer.\n` +
-    `IMPORTANT: Do not use the enh_ prefix in any references.\n` +
     `IMPORTANT: Start your response directly with the markdown code block: \`\`\`sql`
   );
 };
@@ -68,3 +68,23 @@ export const generateModelsPrompt = (
     ? dbtBusinessLayerPrompt(files, prompt)
     : dbtBusinessLayerFromRawPrompt(files, prompt);
 };
+
+export type BusinessModelGenerationSchemaType = {
+  fileName: string;
+  content: string;
+};
+
+export const BusinessModelGenerationSchema: SchemaConfig<BusinessModelGenerationSchemaType> =
+  {
+    name: 'businessModelGenerationSchema',
+    description:
+      'Based on existing enhanced or raw dbt models generate a business model',
+    schema: {
+      type: 'object',
+      properties: {
+        fileName: { type: 'string' },
+        content: { type: 'string' },
+      },
+      required: ['fileName', 'content'],
+    },
+  };

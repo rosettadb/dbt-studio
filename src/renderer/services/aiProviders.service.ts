@@ -5,6 +5,11 @@ import type {
   ProviderTestResult,
   AIModel,
 } from '../controllers/aiProviders.controller';
+import {
+  CompletionResponse,
+  SchemaConfig,
+  TypedCompletionRequest,
+} from '../../main/services/ai/types/completion.types';
 
 class AIProvidersService {
   // Get all AI providers
@@ -121,6 +126,22 @@ class AIProvidersService {
   static async initializeProviderManager(): Promise<void> {
     await client.get('ai:provider-manager:initialize');
   }
+
+  static async generateCompletion<T>(
+    prompt: string,
+    schemaConfig: SchemaConfig<T>,
+  ): Promise<CompletionResponse<T>> {
+    const request: TypedCompletionRequest<T> = {
+      prompt,
+      schemaConfig,
+    };
+    schemaConfig.description = prompt;
+    const { data } = await client.post<
+      TypedCompletionRequest<T>,
+      CompletionResponse<T>
+    >('ai:completion:generate', request);
+    return data;
+  }
 }
 
 export const aiProvidersService = {
@@ -138,4 +159,5 @@ export const aiProvidersService = {
   getAllProviderModels: AIProvidersService.getAllProviderModels,
   getProviderCredential: AIProvidersService.getProviderCredential,
   initializeProviderManager: AIProvidersService.initializeProviderManager,
+  generateCompletion: AIProvidersService.generateCompletion,
 };
