@@ -11,7 +11,7 @@ import {
   ListItemIcon,
   ListItemText,
 } from '@mui/material';
-import { Close, Save, DarkMode, LightMode } from '@mui/icons-material';
+import { Close, DarkMode, LightMode } from '@mui/icons-material';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useColorScheme } from '@mui/material/styles';
 import AppsIcon from '@mui/icons-material/Apps';
@@ -27,7 +27,6 @@ import {
   DbtSettings,
   RosettaSettings,
   AboutSettings,
-  InstallationSettings,
   AIProvidersSettings,
 } from '../../components';
 import { AppLayout } from '../../layouts';
@@ -130,8 +129,6 @@ const Settings: React.FC = () => {
         );
       case 'rosetta':
         return <RosettaSettings settings={localSettings} />;
-      case 'installation':
-        return <InstallationSettings />;
       case 'about':
         return <AboutSettings />;
       default:
@@ -275,27 +272,6 @@ const Settings: React.FC = () => {
             </IconButton>
           </div>
           <div style={{ maxWidth: '100%' }}>{renderContent()}</div>
-
-          {currentSection !== 'about' &&
-            currentSection !== 'installation' &&
-            currentSection !== 'ai-providers' &&
-            currentSection !== 'dbt' &&
-            currentSection !== 'rosetta' && (
-              <Box sx={{ mt: 3 }}>
-                <Button
-                  type="submit"
-                  color="primary"
-                  variant="contained"
-                  startIcon={<Save />}
-                  sx={{
-                    padding: '8px 24px',
-                    fontWeight: '500',
-                  }}
-                >
-                  Save
-                </Button>
-              </Box>
-            )}
         </StyledForm>
       </Container>
     </AppLayout>

@@ -58,7 +58,7 @@ export const GenerateAiQueriesModal: React.FC<Props> = ({
         },
       }}
     >
-      <DialogTitle>Generated Analitics</DialogTitle>
+      <DialogTitle>Generated Analytics</DialogTitle>
       <DialogContent
         sx={{
           display: 'flex',

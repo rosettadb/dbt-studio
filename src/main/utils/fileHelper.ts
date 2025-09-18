@@ -215,15 +215,15 @@ export const createNewFile = (
 ): string | undefined => {
   const filePath = path.join(parentPath, fileName);
 
+  if (!fs.existsSync(parentPath)) {
+    fs.mkdirSync(parentPath, { recursive: true });
+  }
+
   if (fs.existsSync(filePath)) {
     return;
   }
 
-  fs.writeFile(filePath, content, (err) => {
-    if (err) {
-      throw new Error(err.message);
-    }
-  });
+  fs.writeFileSync(filePath, content);
   // eslint-disable-next-line consistent-return
   return filePath;
 };

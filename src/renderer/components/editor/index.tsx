@@ -6,6 +6,7 @@ import { isEditableFile } from '../../helpers/utils';
 import {
   useGetFileDiff,
   useGetFileStatus,
+  useGitIsInitialized,
   useSaveFileContent,
 } from '../../controllers';
 import { Container } from './styles';
@@ -27,11 +28,14 @@ export const Editor = ({
       vs: 'app-asset://zui/node_modules/monaco-editor/min/vs',
     },
   });
+  const { data: isInitialized } = useGitIsInitialized(projectPath);
+
   const { data: fileStatus, isLoading: isLoadingFileStatus } = useGetFileStatus(
     projectPath,
     filePath,
     {
-      refetchInterval: 10000,
+      refetchInterval: 20000,
+      enabled: !!isInitialized,
     },
   );
   const { data: fileDiff } = useGetFileDiff(projectPath, filePath);

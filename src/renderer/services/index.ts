@@ -4,6 +4,7 @@ import * as connectorsServices from './connectors.service';
 import * as gitServices from './git.service';
 import * as updateServices from './update.service';
 import * as secureStorageService from './secureStorage.service';
+import * as utilsService from './utils.service';
 import cloudExplorerService from './cloudExplorer.service';
 import { connectionStorage } from './connectionStorage.service';
 
@@ -16,4 +17,5 @@ export {
   secureStorageService,
   cloudExplorerService,
   connectionStorage,
+  utilsService,
 };

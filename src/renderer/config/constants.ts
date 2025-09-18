@@ -84,21 +84,21 @@ export const AI_PROMPTS = {
     'And the current {} dbt model looks like this:\n\n' +
     '{}\n\n' +
     'We are using {}\n\n' +
-    'Please recommend only basic transformations following the best practices. Respond with the full formatted dbt model SQL using those basic transformations and nothing else.',
+    'Please recommend only basic transformations following the best practices. Respond with the full formatted dbt model SQL using those basic transformations and nothing else, and make sure response is a proper markdown.',
   BASIC_TRANSFORM_PROMPT_WITHOUT_TABLE:
     'The current {} dbt model looks like this:\n\n' +
     '{}\n\n' +
     'We are using {}\n\n' +
-    'Please recommend only basic transformations following the best practices. Respond with the full formatted dbt model SQL using those basic transformations and nothing else.',
+    'Please recommend only basic transformations following the best practices. Respond with the full formatted dbt model SQL using those basic transformations and nothing else, and make sure response is a proper markdown.',
   ENHANCE_ENHANCED_MODEL:
     'Given the following dbt model SQL, identify and replace:\n' +
     "\t•\t'UNIQUE_KEY_COLUMNS' with a list of column(s) that uniquely identify each row.\n" +
     "\t•\t'INCREMENTAL_COLUMN' with the best column to use for incremental loading—typically a timestamp or increasing numeric ID.\n" +
     '\n' +
     'We are using {}\n\n' +
-    "Return the updated SQL with correct replacements and do not explain the changes unless asked. Here's the SQL:\n\n{}",
+    "Return the updated SQL with correct replacements and do not explain the changes unless asked. Here's the SQL:\n\n{}\n\n Make sure response is a proper markdown.",
   GENERATE_DASHBOARDS:
-    'Here is a business dbt model for the table {}. Make sure you use the table name given in this prompt as reference. We are using {}. Make sure the SQL syntax matches the used DB.\n\nSuggest me some good SQL for Dashboards on. Generate 5-10 queries.\n\n{}',
+    'Here is a business dbt model for the table {}. Make sure you use the table name given in this prompt as reference. We are using {}. Make sure the SQL syntax matches the used DB.\n\nSuggest me some good SQL for Dashboards on. Generate 5-10 queries.\n\n{}\n\nMake sure response is a proper markdown.',
 };
 
 export const MonacoCompletionItemKind = {

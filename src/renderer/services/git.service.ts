@@ -32,8 +32,8 @@ export const gitClone = async (url: string, credentials?: GitCredentials) => {
   return data;
 };
 
-export const isInitialized = async (path: string) => {
-  const { data } = await client.post<string, boolean>(
+export const isInitialized = async (path?: string) => {
+  const { data } = await client.post<string | undefined, boolean>(
     'git:isInitialized',
     path,
   );
@@ -112,8 +112,8 @@ export const getFileDiff = async (repoPath: string, filePath: string) => {
   return data;
 };
 
-export const getFileStatusList = async (repoPath: string) => {
-  const { data } = await client.post<{ repoPath: string }, FileStatus[]>(
+export const getFileStatusList = async (repoPath?: string) => {
+  const { data } = await client.post<{ repoPath?: string }, FileStatus[]>(
     'git:fileStatusList',
     { repoPath },
   );

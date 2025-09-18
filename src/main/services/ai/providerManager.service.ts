@@ -8,8 +8,10 @@ import { AnthropicProvider } from './providers/anthropic.provider';
 import { BaseAIProvider } from './providers/base.provider';
 import { AIProviderConfig, HealthStatus } from './types/provider.types';
 import {
-  EnhanceModelResponseType,
-  GenerateDashboardResponseType,
+  CompletionChunk,
+  CompletionRequest,
+  CompletionResponse,
+  TypedCompletionRequest,
 } from './types/completion.types';
 
 export interface ProviderTestResult {
@@ -643,15 +645,14 @@ export class AIProviderManager {
     }
   }
 
-  static async generateCompletion(request: any): Promise<any> {
+  static async generateCompletion<T = any>(
+    request: CompletionRequest<T>,
+  ): Promise<CompletionResponse<T>> {
+    // eslint-disable-next-line no-useless-catch
     try {
       // Get the active provider
       const activeProvider = await MainDatabaseService.getActiveProvider();
       if (!activeProvider) {
-        // eslint-disable-next-line no-console
-        console.error(
-          '[PROVIDER MANAGER] generateCompletion - No active provider found',
-        );
         throw new Error(
           'No active AI provider configured. Please configure and activate a provider in settings.',
         );
@@ -668,10 +669,6 @@ export class AIProviderManager {
         );
 
         if (!apiKey) {
-          // eslint-disable-next-line no-console
-          console.error(
-            '[PROVIDER MANAGER] generateCompletion - No API key found for provider',
-          );
           throw new Error(
             `No API key configured for ${activeProvider.type} provider. Please configure credentials in settings.`,
           );
@@ -686,11 +683,6 @@ export class AIProviderManager {
             ? JSON.parse(activeProvider.config)
             : activeProvider.config || {};
       } catch (configError) {
-        // eslint-disable-next-line no-console
-        console.error(
-          '[PROVIDER MANAGER] generateCompletion - Failed to parse provider config:',
-          configError,
-        );
         throw new Error(
           'Invalid provider configuration. Please reconfigure the provider in settings.',
         );
@@ -716,10 +708,6 @@ export class AIProviderManager {
         config,
       );
       if (!providerInstance) {
-        // eslint-disable-next-line no-console
-        console.error(
-          '[PROVIDER MANAGER] generateCompletion - Failed to create provider instance',
-        );
         throw new Error(`Unsupported provider type: ${activeProvider.type}`);
       }
 
@@ -732,78 +720,20 @@ export class AIProviderManager {
       try {
         await providerInstance.initialize(providerConfig);
       } catch (initError) {
-        // eslint-disable-next-line no-console
-        console.error(
-          '[PROVIDER MANAGER] generateCompletion - Failed to initialize provider:',
-          initError,
-        );
         throw new Error(
           `Failed to initialize ${activeProvider.type} provider: ${initError instanceof Error ? initError.message : 'Unknown error'}`,
         );
       }
 
       // Update request with correct model
-      const updatedRequest = {
+      const updatedRequest: CompletionRequest<T> = {
         ...request,
         model: selectedModel,
       };
 
-      // Generate completion
       try {
-        let response: any;
-
-        // Route to specific methods for backward compatibility
-        if (request.type === 'generate-dashboard') {
-          const dashboards = await providerInstance.generateDashboardsQuery(
-            request.prompt,
-          );
-          response = {
-            content: JSON.stringify(dashboards, null, 2),
-            data: dashboards,
-            usage: {
-              promptTokens: Math.ceil(request.prompt.length / 4),
-              completionTokens: Math.ceil(
-                JSON.stringify(dashboards).length / 4,
-              ),
-              totalTokens:
-                Math.ceil(request.prompt.length / 4) +
-                Math.ceil(JSON.stringify(dashboards).length / 4),
-            },
-            model: selectedModel,
-            providerId: activeProvider.type,
-            finishReason: 'stop' as const,
-          };
-        } else if (request.type === 'enhance-model') {
-          const enhancement = await providerInstance.enhanceModelQuery(
-            request.prompt,
-          );
-          response = {
-            content: enhancement.content,
-            data: enhancement,
-            usage: {
-              promptTokens: Math.ceil(request.prompt.length / 4),
-              completionTokens: Math.ceil(enhancement.content.length / 4),
-              totalTokens:
-                Math.ceil(request.prompt.length / 4) +
-                Math.ceil(enhancement.content.length / 4),
-            },
-            model: selectedModel,
-            providerId: activeProvider.type,
-            finishReason: 'stop' as const,
-          };
-        } else {
-          // Default to generic completion for other request types
-          response = await providerInstance.generateCompletion(updatedRequest);
-        }
-        return response;
+        return await providerInstance.generateCompletion<T>(updatedRequest);
       } catch (completionError) {
-        // eslint-disable-next-line no-console
-        console.error(
-          '[PROVIDER MANAGER] generateCompletion - Failed to generate completion:',
-          completionError,
-        );
-
-        // Provide user-friendly error messages
         if (completionError instanceof Error) {
           if (
             completionError.message.includes('401') ||
@@ -831,13 +761,29 @@ export class AIProviderManager {
         );
       }
     } catch (error) {
-      // eslint-disable-next-line no-console
-      console.error(
-        '[PROVIDER MANAGER] generateCompletion - Unexpected error:',
-        error,
-      );
       throw error;
     }
+  }
+
+  /**
+   * Strongly typed completion method with schema validation
+   */
+  static async generateTypedCompletion<T>(
+    request: TypedCompletionRequest<T>,
+  ): Promise<CompletionResponse<T>> {
+    return this.generateCompletion<T>(request);
+  }
+
+  /**
+   * Enhanced streaming with generic support
+   */
+  static async *streamCompletion<T = any>(
+    request: CompletionRequest<T>,
+  ): AsyncGenerator<CompletionChunk<T>> {
+    const { providerInstance } =
+      await this.getInitializedActiveProviderAndModel(request.model);
+
+    yield* providerInstance.streamCompletion<T>(request);
   }
 
   // Helper method to check if a model is valid for a provider
@@ -887,20 +833,7 @@ export class AIProviderManager {
       ollama: 'llama2', // Default fallback for Ollama
     };
 
-    const defaultModel = defaultModels[providerType] || 'gpt-4o';
-
-    // Log when we're using fallback (either invalid config model or no model configured)
-    if (
-      config.model &&
-      !this.isModelValidForProvider(config.model, providerType)
-    ) {
-      // eslint-disable-next-line no-console
-      console.log(
-        `[PROVIDER MANAGER] Invalid model "${config.model}" for ${providerType}, falling back to default: ${defaultModel}`,
-      );
-    }
-
-    return defaultModel;
+    return defaultModels[providerType] || 'gpt-4o';
   }
 
   static async getProviderStatus(providerId: string): Promise<HealthStatus> {
@@ -1055,26 +988,6 @@ export class AIProviderManager {
       capabilities: activeProvider.capabilities,
       supportedModels: activeProvider.supportedModels,
     };
-  }
-
-  static enhanceModelQuery(prompt: string): Promise<EnhanceModelResponseType> {
-    const activeProvider = this.getActiveProvider();
-    if (!activeProvider) {
-      return Promise.reject(new Error('No active AI provider found.'));
-    }
-
-    return activeProvider.enhanceModelQuery(prompt);
-  }
-
-  static generateDashboardsQuery(
-    prompt: string,
-  ): Promise<GenerateDashboardResponseType[]> {
-    const activeProvider = this.getActiveProvider();
-    if (!activeProvider) {
-      return Promise.reject(new Error('No active AI provider found.'));
-    }
-
-    return activeProvider.generateDashboardsQuery(prompt);
   }
 }
 

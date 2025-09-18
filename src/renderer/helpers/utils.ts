@@ -63,10 +63,9 @@ export const splitPath = (path: string, projectName: string): string => {
     return path;
   }
 
-  const prefix = path.slice(0, 10);
   const projectPart = path.slice(startIndex);
 
-  return `${prefix}...${projectPart}`;
+  return projectPart.replace(projectName, '');
 };
 
 export const getInitials = (name: string): string => {
@@ -405,8 +404,18 @@ export const compileCommand = async (
     });
   }
 
-  const compiledCommand = [`cd "${projectPath}" && `]
-    .concat(commandStack)
-    .join(' ');
-  return compiledCommand;
+  return [`cd "${projectPath}" && `].concat(commandStack).join(' ');
+};
+
+export const generateFilename = (prefix = 'file', extension = 'txt') => {
+  const now = new Date();
+  const timestamp = `${
+    now.getFullYear().toString() +
+    String(now.getMonth() + 1).padStart(2, '0') +
+    String(now.getDate()).padStart(2, '0')
+  }_${String(now.getHours()).padStart(2, '0')}${String(
+    now.getMinutes(),
+  ).padStart(2, '0')}${String(now.getSeconds()).padStart(2, '0')}`;
+
+  return `${prefix}_${timestamp}.${extension}`;
 };

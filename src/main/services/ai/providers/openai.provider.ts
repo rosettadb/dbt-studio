@@ -14,6 +14,7 @@ import {
   CompletionChunk,
   EnhanceModelResponseType,
   GenerateDashboardResponseType,
+  JSONSchema,
 } from '../types/completion.types';
 
 /**
@@ -78,20 +79,113 @@ export class OpenAIProvider extends BaseAIProvider {
         throw new Error('Provider not initialized. Call initialize() first.');
       }
 
-      // Force refresh the models to ensure we're using the latest filtering
-      await this.discoverModels();
+      // Actually test the API connection by making a real API call
+      // Use the models endpoint which is lightweight and validates the API key
+      try {
+        const modelsResponse = await this.directOpenAIClient.models.list();
 
-      // Get available models with fresh discovery
-      const models = await this.getAvailableModels();
+        // Filter for chat/completion models
+        const chatModels = modelsResponse.data
+          .filter((model) => {
+            const id = model.id.toLowerCase();
+            return (
+              id.includes('gpt') &&
+              !id.includes('instruct') &&
+              !id.includes('embedding') &&
+              !id.includes('whisper') &&
+              !id.includes('tts') &&
+              !id.includes('dall-e') &&
+              !id.includes('moderation') &&
+              !id.includes('babbage') &&
+              !id.includes('davinci') &&
+              !id.includes('curie') &&
+              !id.includes('ada') &&
+              !id.includes('text-') &&
+              !id.includes('code-') &&
+              !id.includes('edit-') &&
+              !id.includes('if-') &&
+              !id.includes('search-') &&
+              !id.includes('similarity-') &&
+              !id.includes('audio-') &&
+              !id.includes('vision-') &&
+              (id.startsWith('gpt-5') ||
+                id.startsWith('gpt-4') ||
+                id.startsWith('gpt-3.5') ||
+                id === 'gpt-4o' ||
+                id === 'gpt-4o-mini' ||
+                id === 'gpt-5' ||
+                id.includes('gpt-5')) &&
+              !id.includes(':') &&
+              !id.includes('ft-')
+            );
+          })
+          .map((model) => ({
+            id: model.id,
+            name: OpenAIProvider.getModelDisplayName(model.id),
+            maxTokens: OpenAIProvider.getModelMaxTokens(model.id),
+            costPer1kTokens: OpenAIProvider.getModelCosts(model.id),
+          }))
+          .sort((a, b) => a.id.localeCompare(b.id));
 
-      const latencyMs = Date.now() - startTime;
-      return {
-        success: true,
-        latencyMs,
-        modelsAvailable: models.length,
-        models,
-        message: 'Connection ready (API validation skipped to preserve quota)',
-      };
+        // If no chat models found, use fallback models
+        const models =
+          chatModels.length > 0 ? chatModels : await this.getAvailableModels();
+
+        const latencyMs = Date.now() - startTime;
+        return {
+          success: true,
+          latencyMs,
+          modelsAvailable: models.length,
+          models,
+          message: `Connection successful - ${models.length} models available`,
+        };
+      } catch (apiError) {
+        // If the API call fails, this is a real connection failure
+        const latencyMs = Date.now() - startTime;
+
+        // Handle specific OpenAI API errors
+        if (apiError instanceof Error) {
+          if (
+            apiError.message.includes('401') ||
+            apiError.message.includes('Incorrect API key')
+          ) {
+            return {
+              success: false,
+              error:
+                'Invalid API key. Please check your OpenAI API key in settings.',
+              latencyMs,
+            };
+          }
+          if (
+            apiError.message.includes('429') ||
+            apiError.message.includes('quota')
+          ) {
+            return {
+              success: false,
+              error:
+                'API quota exceeded. Please check your OpenAI billing or try again later.',
+              latencyMs,
+            };
+          }
+          if (apiError.message.includes('timeout')) {
+            return {
+              success: false,
+              error:
+                'Connection timeout. Please check your internet connection and try again.',
+              latencyMs,
+            };
+          }
+        }
+
+        return {
+          success: false,
+          error:
+            apiError instanceof Error
+              ? apiError.message
+              : 'API connection failed',
+          latencyMs,
+        };
+      }
     } catch (error) {
       const latencyMs = Date.now() - startTime;
       // eslint-disable-next-line no-console
@@ -109,16 +203,136 @@ export class OpenAIProvider extends BaseAIProvider {
     }
   }
 
-  async generateCompletion(
-    request: CompletionRequest,
-  ): Promise<CompletionResponse> {
+  async generateCompletion<T = any>(
+    request: CompletionRequest<T>,
+  ): Promise<CompletionResponse<T>> {
     try {
       OpenAIProvider.validateRequest(request);
 
-      // For generic completions or chat, use direct OpenAI client
-      return this.generateGenericCompletion(request);
+      if (!this.directOpenAIClient) {
+        throw new Error('OpenAI provider not initialized');
+      }
+
+      // Handle schema-based requests
+      if (request.schemaConfig) {
+        return this.generateSchemaCompletion<T>(request);
+      }
+
+      // Default generic completion
+      return this.generateGenericCompletion<T>(request);
     } catch (error) {
       throw this.handleProviderError(error, 'completion generation');
+    }
+  }
+
+  private async generateSchemaCompletion<T>(
+    request: CompletionRequest<T>,
+  ): Promise<CompletionResponse<T>> {
+    if (!request.schemaConfig) {
+      throw new Error('Schema config is required for schema completion');
+    }
+
+    const {
+      schema,
+      name = 'extract_data',
+      description,
+      strict = false,
+    } = request.schemaConfig;
+
+    try {
+      // Use OpenAI's function calling for structured output
+      const response = await this.directOpenAIClient!.chat.completions.create({
+        model: request.model || 'gpt-4o',
+        messages: [
+          {
+            role: 'system',
+            content:
+              description ||
+              'Extract structured data from the user input according to the provided schema.',
+          },
+          { role: 'user', content: request.prompt },
+        ],
+        max_tokens: request.maxTokens || 4096,
+        temperature: request.temperature || 0.1, // Lower temperature for structured output
+        tools: [
+          {
+            type: 'function',
+            function: {
+              name,
+              description: description || 'Extract structured data',
+              parameters: this.convertJSONSchemaToOpenAISchema(schema),
+              ...(strict && { strict: true }), // OpenAI strict mode if supported
+            },
+          },
+        ],
+        tool_choice: {
+          type: 'function',
+          function: { name },
+        },
+      });
+
+      const toolCall = response.choices[0].message.tool_calls?.[0];
+      const content = response.choices[0].message.content || '';
+      const { usage } = response;
+
+      let parsedData: T | undefined;
+      let schemaValidation: CompletionResponse<T>['schemaValidation'];
+
+      if (toolCall?.function?.arguments) {
+        try {
+          const functionResult = JSON.parse(toolCall.function.arguments);
+
+          // Validate the parsed result against schema
+          const validation = this.validateDataAgainstSchema(
+            functionResult,
+            schema,
+          );
+
+          schemaValidation = {
+            isValid: validation.isValid,
+            errors: validation.errors,
+            originalResponse: toolCall.function.arguments,
+          };
+
+          if (validation.isValid) {
+            parsedData = functionResult as T;
+          }
+        } catch (parseError) {
+          schemaValidation = {
+            isValid: false,
+            errors: [
+              `Failed to parse function call result: ${parseError instanceof Error ? parseError.message : 'Unknown error'}`,
+            ],
+            originalResponse: toolCall.function.arguments,
+          };
+        }
+      } else {
+        schemaValidation = {
+          isValid: false,
+          errors: ['No function call result received from OpenAI'],
+          originalResponse: content,
+        };
+      }
+
+      return {
+        content: parsedData ? JSON.stringify(parsedData, null, 2) : content,
+        usage: {
+          promptTokens: usage?.prompt_tokens || 0,
+          completionTokens: usage?.completion_tokens || 0,
+          totalTokens: usage?.total_tokens || 0,
+        },
+        model: request.model || 'gpt-4o',
+        providerId: this.type,
+        finishReason: this.mapFinishReason(response.choices[0].finish_reason),
+        parsedData,
+        schemaValidation,
+        metadata: {
+          toolCalls: response.choices[0].message.tool_calls?.length || 0,
+          functionName: name,
+        },
+      };
+    } catch (error) {
+      throw this.handleProviderError(error, 'schema completion');
     }
   }
 
@@ -148,6 +362,125 @@ export class OpenAIProvider extends BaseAIProvider {
     } catch (error) {
       throw this.handleProviderError(error, 'streaming completion');
     }
+  }
+
+  // Helper method to convert JSON Schema to OpenAI function schema format
+  private convertJSONSchemaToOpenAISchema(schema: JSONSchema): any {
+    // OpenAI uses a slightly different format, but it's mostly compatible
+    const converted: any = {
+      type: schema.type,
+    };
+
+    if (schema.properties) {
+      converted.properties = {};
+      // eslint-disable-next-line no-restricted-syntax
+      for (const [key, propSchema] of Object.entries(schema.properties)) {
+        converted.properties[key] =
+          this.convertJSONSchemaToOpenAISchema(propSchema);
+      }
+    }
+
+    if (schema.items) {
+      converted.items = this.convertJSONSchemaToOpenAISchema(schema.items);
+    }
+
+    if (schema.required) {
+      converted.required = schema.required;
+    }
+
+    if (schema.description) {
+      converted.description = schema.description;
+    }
+
+    if (schema.enum) {
+      converted.enum = schema.enum;
+    }
+
+    // OpenAI-specific properties
+    if (schema.additionalProperties !== undefined) {
+      converted.additionalProperties = schema.additionalProperties;
+    }
+
+    // Number constraints
+    if (schema.minimum !== undefined) converted.minimum = schema.minimum;
+    if (schema.maximum !== undefined) converted.maximum = schema.maximum;
+
+    // String constraints
+    if (schema.pattern) converted.pattern = schema.pattern;
+
+    // Array constraints
+    if (schema.minItems !== undefined) converted.minItems = schema.minItems;
+    if (schema.maxItems !== undefined) converted.maxItems = schema.maxItems;
+
+    return converted;
+  }
+
+  // eslint-disable-next-line class-methods-use-this
+  private mapFinishReason(
+    reason: string | null,
+  ): CompletionResponse['finishReason'] {
+    switch (reason) {
+      case 'stop':
+        return 'stop';
+      case 'length':
+        return 'length';
+      case 'content_filter':
+        return 'content_filter';
+      case 'tool_calls':
+        return 'tool_calls';
+      default:
+        return 'stop';
+    }
+  }
+
+  // Helper for backward compatibility
+  private createLegacyResponse<T>(
+    data: any,
+    request: CompletionRequest<T>,
+    type: string,
+  ): CompletionResponse<T> {
+    const content =
+      typeof data === 'string' ? data : JSON.stringify(data, null, 2);
+    return {
+      content,
+      usage: {
+        promptTokens: Math.ceil(request.prompt.length / 4),
+        completionTokens: Math.ceil(content.length / 4),
+        totalTokens: Math.ceil((request.prompt.length + content.length) / 4),
+      },
+      model: request.model || 'gpt-4o',
+      providerId: this.type,
+      finishReason: 'stop',
+      data, // Backward compatibility
+      parsedData: data as T,
+      metadata: { legacyType: type },
+    };
+  }
+
+  private async generateGenericCompletion<T>(
+    request: CompletionRequest<T>,
+  ): Promise<CompletionResponse<T>> {
+    const response = await this.directOpenAIClient!.chat.completions.create({
+      model: request.model || 'gpt-4o',
+      messages: [{ role: 'user', content: request.prompt }],
+      max_tokens: request.maxTokens || 4096,
+      temperature: request.temperature || 0.7,
+    });
+
+    const content = response.choices[0]?.message?.content || '';
+    const { usage } = response;
+
+    return {
+      content,
+      usage: {
+        promptTokens: usage?.prompt_tokens || 0,
+        completionTokens: usage?.completion_tokens || 0,
+        totalTokens: usage?.total_tokens || 0,
+      },
+      model: request.model || 'gpt-4o',
+      providerId: this.type,
+      finishReason: this.mapFinishReason(response.choices[0].finish_reason),
+    };
   }
 
   async getAvailableModels(): Promise<AIModel[]> {
@@ -251,12 +584,26 @@ export class OpenAIProvider extends BaseAIProvider {
       (this.supportedModels as string[]).length = 0;
       (this.supportedModels as string[]).push(...chatModels);
     } catch (error) {
+      // Check if this is an authentication error - if so, don't use fallback models
+      if (
+        error instanceof Error &&
+        (error.message.includes('401') ||
+          error.message.includes('Incorrect API key'))
+      ) {
+        // eslint-disable-next-line no-console
+        console.error(
+          '[OPENAI PROVIDER] Authentication failed during model discovery:',
+          error,
+        );
+        throw error; // Re-throw authentication errors
+      }
+
       // eslint-disable-next-line no-console
       console.warn(
         '[OPENAI PROVIDER] Dynamic model discovery failed, using fallback models:',
         error,
       );
-      // Fallback to known working models including newest ones
+      // Fallback to known working models including newest ones for non-auth errors
       const fallbackModels = [
         'gpt-5', // Latest GPT-5 model
         'gpt-4o',
@@ -267,51 +614,6 @@ export class OpenAIProvider extends BaseAIProvider {
       ];
       (this.supportedModels as string[]).length = 0;
       (this.supportedModels as string[]).push(...fallbackModels);
-    }
-  }
-
-  private async generateGenericCompletion(
-    request: CompletionRequest,
-  ): Promise<CompletionResponse> {
-    try {
-      if (!this.directOpenAIClient) {
-        // eslint-disable-next-line no-console
-        console.error(
-          '[OPENAI PROVIDER] generateGenericCompletion - directOpenAIClient is not available',
-        );
-        throw new Error('OpenAI client not properly initialized');
-      }
-
-      // Make a direct completion request using our own OpenAI client
-      const response = await this.directOpenAIClient.chat.completions.create({
-        model: request.model || 'gpt-4o',
-        messages: [{ role: 'user', content: request.prompt }],
-        max_tokens: request.maxTokens || 4096,
-        temperature: request.temperature || 0.7,
-      });
-
-      const content = response.choices[0]?.message?.content || '';
-      const { usage } = response;
-
-      return {
-        content,
-        usage: {
-          promptTokens: usage?.prompt_tokens || 0,
-          completionTokens: usage?.completion_tokens || 0,
-          totalTokens: usage?.total_tokens || 0,
-        },
-        model: request.model || 'gpt-4o',
-        providerId: this.type,
-      };
-    } catch (error) {
-      // eslint-disable-next-line no-console
-      console.error(
-        '[OPENAI PROVIDER] generateGenericCompletion - Error:',
-        error,
-      );
-      throw new Error(
-        `Failed to generate completion: ${error instanceof Error ? error.message : 'Unknown error'}`,
-      );
     }
   }
 
@@ -415,117 +717,5 @@ export class OpenAIProvider extends BaseAIProvider {
     }
 
     return costs[modelId];
-  }
-
-  // Backward compatibility methods - implement natively using direct OpenAI client
-  async generateDashboardsQuery(
-    prompt: string,
-  ): Promise<GenerateDashboardResponseType[]> {
-    try {
-      if (!this.directOpenAIClient) {
-        throw new Error('OpenAI provider not initialized');
-      }
-
-      const response = await this.directOpenAIClient.chat.completions.create({
-        model: 'gpt-4o',
-        messages: [{ role: 'user', content: prompt }],
-        temperature: 0.0,
-        tools: [
-          {
-            type: 'function',
-            function: {
-              name: 'suggestDashboard',
-              description:
-                'Suggests multiple dashboards based on a dbt model and provides a related SQL query for each.',
-              parameters: {
-                type: 'object',
-                properties: {
-                  dashboards: {
-                    type: 'array',
-                    description: 'List of suggested dashboards',
-                    items: {
-                      type: 'object',
-                      properties: {
-                        description: {
-                          type: 'string',
-                          description:
-                            'A human-readable dashboard description based on the dbt model',
-                        },
-                        query: {
-                          type: 'string',
-                          description:
-                            'A useful SQL query or dbt select statement for that dashboard',
-                        },
-                      },
-                      required: ['description', 'query'],
-                    },
-                  },
-                },
-                required: ['dashboards'],
-              },
-            },
-          },
-        ],
-        tool_choice: {
-          type: 'function',
-          function: { name: 'suggestDashboard' },
-        },
-      });
-
-      const toolCall = response.choices[0].message.tool_calls?.[0];
-      const parsed = JSON.parse(toolCall?.function.arguments || '{}');
-      return parsed.dashboards || [];
-    } catch (error) {
-      // eslint-disable-next-line no-console
-      console.error('[OPENAI PROVIDER] generateDashboardsQuery failed:', error);
-      throw this.handleProviderError(error, 'dashboard generation');
-    }
-  }
-
-  async enhanceModelQuery(prompt: string): Promise<EnhanceModelResponseType> {
-    try {
-      if (!this.directOpenAIClient) {
-        throw new Error('OpenAI provider not initialized');
-      }
-
-      const response = await this.directOpenAIClient.chat.completions.create({
-        model: 'gpt-4o',
-        messages: [{ role: 'user', content: prompt }],
-        temperature: 0.0,
-        tools: [
-          {
-            type: 'function',
-            function: {
-              name: 'enhanceSqlModel',
-              description:
-                'Replaces placeholders in a dbt model with real column names.',
-              parameters: {
-                type: 'object',
-                properties: {
-                  content: {
-                    type: 'string',
-                    description:
-                      'The updated SQL with placeholders replaced appropriately',
-                  },
-                },
-                required: ['content'],
-              },
-            },
-          },
-        ],
-        tool_choice: {
-          type: 'function',
-          function: { name: 'enhanceSqlModel' },
-        },
-      });
-
-      const toolCall = response.choices[0].message.tool_calls?.[0];
-      const parsed = JSON.parse(toolCall?.function.arguments || '{}');
-      return { content: parsed.content };
-    } catch (error) {
-      // eslint-disable-next-line no-console
-      console.error('[OPENAI PROVIDER] enhanceModelQuery failed:', error);
-      throw this.handleProviderError(error, 'model enhancement');
-    }
   }
 }

@@ -44,6 +44,11 @@ export const AboutSettings: React.FC = () => {
   return (
     <Box>
       <Box sx={{ display: 'flex', alignItems: 'center', mb: 3, gap: 2 }}>
+        <Typography variant="h5" fontWeight="500">
+          Rosetta Labs
+        </Typography>
+      </Box>
+      <Box sx={{ display: 'flex', alignItems: 'center', mb: 3, gap: 2 }}>
         <img
           src={icons.rosettaLabs}
           width={32}
@@ -87,7 +92,7 @@ export const AboutSettings: React.FC = () => {
           }}
         >
           <Typography variant="body1">
-            Get help with Rosetta dbt™ Studio
+            Get help with Rosetta DBT Studio
           </Typography>
           <OpenInNew fontSize="small" />
         </Link>
@@ -118,11 +123,11 @@ export const AboutSettings: React.FC = () => {
 
       <Box sx={{ mb: 3 }}>
         <Typography variant="body2" color="text.secondary" component="p">
-          Rosetta dbt™ Studio is an Open Source visual development environment
-          (IDE) that combines the strengths of RosettaDB and dbt™ Core for data
-          engineering, transformation and migration. It empowers you to develop,
-          run, and manage dbt™ projects with ease through a powerful graphical
-          interface.
+          Rosetta DBT Studio is an Open Source visual development environment
+          (IDE) that combines the strengths of RosettaDB, dbt™ Core and DuckDB
+          for data engineering, transformation and migration. It empowers you to
+          develop, run, and manage dbt™ projects with ease through a powerful
+          graphical interface.
         </Typography>
 
         <Typography variant="body2" color="text.secondary" component="p">
@@ -136,16 +141,17 @@ export const AboutSettings: React.FC = () => {
 
       <Box sx={{ mb: 2 }}>
         <Typography variant="body2" color="text.secondary">
-          Rosetta dbt™ Studio
+          Rosetta DBT Studio
         </Typography>
         <Typography variant="body2" color="text.secondary">
-          Copyright {new Date().getFullYear()} Rosettadb. All rights reserved.
+          Copyright {new Date().getFullYear()} Rosetta Labs. All rights
+          reserved.
         </Typography>
       </Box>
 
       <Box sx={{ mb: 2 }}>
         <Typography variant="body2" color="text.secondary">
-          dbt™ Studio is made possible by many open source projects including{' '}
+          DBT Studio is made possible by many open source projects including{' '}
           <Link
             href="https://www.getdbt.com/"
             target="_blank"
@@ -190,7 +196,7 @@ export const AboutSettings: React.FC = () => {
           rel="noopener noreferrer"
           onClick={(e) => utils.handleExternalLink(e, 'https://rosettadb.io/')}
         >
-          Learn more about Rosetta dbt™ Studio
+          Learn more about Rosetta DBT Studio
         </Link>
       </Typography>
 

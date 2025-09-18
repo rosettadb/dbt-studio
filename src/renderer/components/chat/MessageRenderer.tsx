@@ -7,7 +7,9 @@ import Markdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import rehypeHighlight from 'rehype-highlight';
 import 'highlight.js/styles/github-dark.css';
-import ContentCopyIcon from '@mui/icons-material/ContentCopy';
+import { ContentCopy, UploadFile } from '@mui/icons-material';
+import { useAppContext } from '../../hooks';
+import { useSaveFileContent } from '../../controllers';
 
 interface MessageRendererProps {
   content: string;
@@ -15,19 +17,12 @@ interface MessageRendererProps {
 }
 
 const MessageContainer = styled(Box)(({ theme }) => ({
-  backgroundColor:
-    theme.palette.mode === 'dark'
-      ? theme.palette.background.paper
-      : theme.palette.background.paper,
-  borderRadius: 12,
+  backgroundColor: theme.palette.background.paper,
+  borderRadius: 6,
   padding: theme.spacing(0.75),
   marginBottom: theme.spacing(0.5),
   maxWidth: 'min(75%, 720px)',
   wordBreak: 'break-word',
-  boxShadow:
-    theme.palette.mode === 'dark'
-      ? '0 1px 2px rgba(0,0,0,0.4)'
-      : '0 1px 2px rgba(0,0,0,0.08)',
   fontSize: '13px',
   lineHeight: 1.55,
 }));
@@ -43,10 +38,7 @@ const UserMessage = styled(MessageContainer)(({ theme }) => ({
 
 const AssistantMessage = styled(MessageContainer)(({ theme }) => ({
   alignSelf: 'flex-start',
-  backgroundColor:
-    theme.palette.mode === 'dark'
-      ? theme.palette.background.paper
-      : theme.palette.grey[50],
+  backgroundColor: theme.palette.background.paper,
   color: theme.palette.text.primary,
   // Make assistant messages use the full available width of the list
   width: '100%',
@@ -63,7 +55,11 @@ const MarkdownCodeBlock = ({
   className,
   children,
 }: MarkdownCodeBlockProps) => {
+  const { mutate: updateFileContent } = useSaveFileContent();
+  const { editingFilePath } = useAppContext();
   const [copied, setCopied] = React.useState(false);
+  const [applied, setApplied] = React.useState(false);
+
   const codeRef = React.useRef<HTMLElement | null>(null);
   const copy = React.useCallback(async () => {
     const text =
@@ -85,17 +81,43 @@ const MarkdownCodeBlock = ({
       // ignore
     }
   }, []);
+
+  const apply = React.useCallback(async () => {
+    const text =
+      codeRef.current?.innerText || codeRef.current?.textContent || '';
+    updateFileContent({
+      path: editingFilePath ?? '',
+      content: text,
+    });
+    setApplied(true);
+    setTimeout(() => setApplied(false), 1000);
+  }, []);
+
   return !inline ? (
     <Box
       component="pre"
       sx={{
-        background: '#222',
-        color: '#fff',
-        p: 0.75,
-        fontSize: '12px',
+        background: (theme) =>
+          theme.palette.mode === 'dark'
+            ? 'linear-gradient(135deg, #1a1a1a 0%, #2d2d2d 100%)'
+            : 'linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%)',
+        color: (theme) => (theme.palette.mode === 'dark' ? '#d4d4d4' : '#333'),
+        p: 1.5,
+        fontSize: '13px',
         borderRadius: 1,
-        overflowX: 'auto',
+        overflow: 'auto',
         position: 'relative',
+        border: (theme) => `1px solid ${theme.palette.divider}`,
+        boxShadow: (theme) =>
+          theme.palette.mode === 'dark'
+            ? 'inset 0 1px 3px rgba(0,0,0,0.3)'
+            : 'inset 0 1px 3px rgba(0,0,0,0.1)',
+        '& code': {
+          background: 'transparent !important',
+          color: 'inherit !important',
+          padding: '0 !important',
+          borderRadius: '0 !important',
+        },
       }}
     >
       <Tooltip title={copied ? 'Copied!' : 'Copy code'} placement="left">
@@ -106,14 +128,63 @@ const MarkdownCodeBlock = ({
             position: 'absolute',
             top: 4,
             right: 4,
-            bgcolor: 'rgba(255,255,255,0.08)',
-            color: 'white',
-            '&:hover': { bgcolor: 'rgba(255,255,255,0.16)' },
+            width: 20,
+            height: 20,
+            minWidth: 'unset',
+            bgcolor: (theme) =>
+              theme.palette.mode === 'dark'
+                ? 'rgba(255,255,255,0.08)'
+                : 'rgba(0,0,0,0.06)',
+            backdropFilter: 'blur(4px)',
+            color: (theme) =>
+              theme.palette.mode === 'dark' ? '#d4d4d4' : '#666',
+            '&:hover': {
+              bgcolor: (theme) =>
+                theme.palette.mode === 'dark'
+                  ? 'rgba(255,255,255,0.15)'
+                  : 'rgba(0,0,0,0.12)',
+            },
+            zIndex: 1,
           }}
         >
-          <ContentCopyIcon fontSize="inherit" />
+          <ContentCopy sx={{ fontSize: 10 }} />
         </IconButton>
       </Tooltip>
+      {editingFilePath && (
+        <Tooltip
+          title={applied ? 'Applied!' : 'Apply Changes To Current File'}
+          placement="left"
+        >
+          <IconButton
+            size="small"
+            onClick={apply}
+            sx={{
+              position: 'absolute',
+              top: 4,
+              right: 28,
+              width: 20,
+              height: 20,
+              minWidth: 'unset',
+              bgcolor: (theme) =>
+                theme.palette.mode === 'dark'
+                  ? 'rgba(255,255,255,0.08)'
+                  : 'rgba(0,0,0,0.06)',
+              backdropFilter: 'blur(4px)',
+              color: (theme) =>
+                theme.palette.mode === 'dark' ? '#d4d4d4' : '#666',
+              '&:hover': {
+                bgcolor: (theme) =>
+                  theme.palette.mode === 'dark'
+                    ? 'rgba(255,255,255,0.15)'
+                    : 'rgba(0,0,0,0.12)',
+              },
+              zIndex: 1,
+            }}
+          >
+            <UploadFile sx={{ fontSize: 10 }} />
+          </IconButton>
+        </Tooltip>
+      )}
       <code ref={codeRef} className={className}>
         {children}
       </code>
@@ -123,10 +194,12 @@ const MarkdownCodeBlock = ({
       ref={codeRef}
       className={className}
       style={{
-        background: '#eee',
-        borderRadius: 4,
-        padding: '0 4px',
+        background: 'linear-gradient(135deg, #f1f3f4 0%, #e8eaed 100%)',
+        borderRadius: 3,
+        padding: '2px 6px',
         fontSize: '12px',
+        border: '1px solid #dadce0',
+        boxShadow: 'inset 0 1px 2px rgba(0,0,0,0.05)',
       }}
     >
       {children}
@@ -170,5 +243,3 @@ export const MessageRenderer: React.FC<MessageRendererProps> = ({
     </Container>
   );
 };
-
-export default MessageRenderer;

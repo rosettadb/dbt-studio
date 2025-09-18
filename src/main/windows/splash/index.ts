@@ -7,6 +7,9 @@ export const createSplashWindow = (): BrowserWindow => {
     ? path.join(process.resourcesPath, 'assets')
     : path.join(__dirname, '../../assets');
 
+  // Get version using Electron's built-in method
+  const version = app.getVersion();
+
   const splashWindow = new BrowserWindow({
     width: 400,
     height: 400,
@@ -20,7 +23,7 @@ export const createSplashWindow = (): BrowserWindow => {
     },
   });
 
-  const logoPath = path.join(RESOURCES_PATH, 'logo.svg');
+  const logoPath = path.join(RESOURCES_PATH, 'logo_new.svg');
   const logoData = fs.readFileSync(logoPath, 'utf8');
   const encodedLogo = encodeURIComponent(logoData);
   const logoSrc = `data:image/svg+xml;utf8,${encodedLogo}`;
@@ -46,7 +49,7 @@ export const createSplashWindow = (): BrowserWindow => {
             pointer-events: none;
           }
           .image {
-            height: 120px;
+            height: 180px;
           }
           .tagline {
             font-size: 14px;
@@ -73,6 +76,13 @@ export const createSplashWindow = (): BrowserWindow => {
             font-weight: 400;
             color: #700c9c;
           }
+          .version {
+            position: absolute;
+            bottom: 20px;
+            font-size: 12px;
+            font-weight: 500;
+            color: #999999;
+          }
           @keyframes spin {
             to { transform: rotate(360deg); }
           }
@@ -81,9 +91,10 @@ export const createSplashWindow = (): BrowserWindow => {
       <body>
         <div class="container">
           <img src="${logoSrc}" class="image" alt="Logo" />
-          <div class="tagline">Turn Raw Data into Business Insights—Faster with RosettaDB</div>
+          <div class="tagline"></div>
           <div class="loading-spinner"></div>
           <div id="loaderMessage" class="loaderMessage">Loading...</div>
+          <div class="version">v${version}</div>
         </div>
         <script>
           window.updateLoaderMessage = (message) => {

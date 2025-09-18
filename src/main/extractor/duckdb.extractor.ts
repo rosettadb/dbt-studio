@@ -5,8 +5,11 @@ import { Column, Table } from '../../types/backend';
 export default class DuckDBSchemaExtractor {
   private database_path: string;
 
-  constructor(config: { database_path: string }) {
+  private schema: string;
+
+  constructor(config: { database_path: string; schema?: string }) {
     this.database_path = config.database_path;
+    this.schema = config.schema || 'main';
   }
 
   private async executeQuery(query: string): Promise<any[]> {
@@ -16,6 +19,23 @@ export default class DuckDBSchemaExtractor {
     try {
       instance = await DuckDBInstance.create(this.database_path);
       connection = await instance.connect();
+
+      // Set schema context if not 'main'
+      if (this.schema && this.schema !== 'main') {
+        try {
+          await connection.run(`USE ${this.schema}`);
+        } catch (schemaError: any) {
+          // If schema doesn't exist, throw a clear error
+          if (
+            schemaError.message?.includes('does not exist') ||
+            schemaError.message?.includes('not found')
+          ) {
+            throw new Error(
+              `Schema '${this.schema}' does not exist in the DuckDB database.`,
+            );
+          }
+        }
+      }
 
       const result = await connection.run(query);
       return await result.getRows();
@@ -53,7 +73,7 @@ export default class DuckDBSchemaExtractor {
       const rows = await this.executeQuery(`
         SELECT table_name
         FROM information_schema.tables
-        WHERE table_schema = 'main'
+        WHERE table_schema = '${this.schema}'
           AND table_type = 'BASE TABLE'
       `);
       return rows
@@ -86,7 +106,7 @@ export default class DuckDBSchemaExtractor {
       const rows = await this.executeQuery(`
         SELECT table_name
         FROM information_schema.tables
-        WHERE table_schema = 'main'
+        WHERE table_schema = '${this.schema}'
           AND table_type = 'VIEW'
       `);
       return rows
@@ -113,7 +133,7 @@ export default class DuckDBSchemaExtractor {
           column_default
         FROM information_schema.columns
         WHERE table_name = '${tableName}'
-          AND table_schema = 'main'
+          AND table_schema = '${this.schema}'
         ORDER BY ordinal_position
       `);
 
@@ -201,7 +221,7 @@ export default class DuckDBSchemaExtractor {
         allTables.push({
           name: tableName,
           type: 'TABLE',
-          schema: 'main',
+          schema: this.schema,
           columns,
         });
       } catch {
@@ -215,7 +235,7 @@ export default class DuckDBSchemaExtractor {
         allTables.push({
           name: viewName,
           type: 'VIEW',
-          schema: 'main',
+          schema: this.schema,
           columns,
         });
       } catch {

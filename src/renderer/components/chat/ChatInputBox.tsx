@@ -4,6 +4,7 @@ import { useTheme } from '@mui/material/styles';
 import ArrowUpwardIcon from '@mui/icons-material/ArrowUpward';
 import StopIcon from '@mui/icons-material/Stop';
 import { useQueryClient } from 'react-query';
+import { toast } from 'react-toastify';
 import {
   useStreamChatMessage,
   useCancelChatStream,
@@ -19,15 +20,20 @@ import {
   aiProviderImages,
   defaultIcon,
 } from '../../../../assets/connectionIcons';
-import TipTapEditor from './TipTapEditor';
+import { TipTapEditor } from './TipTapEditor';
+import { useAutoRenameSession } from '../../hooks/useAutoRenameSession';
+import { htmlToPlainText } from '../../utils/chatHelpers';
+import { useAppContext } from '../../hooks';
 
 interface ChatInputBoxProps {
   sessionId?: number;
 }
 
-const ChatInputBox: React.FC<ChatInputBoxProps> = ({ sessionId }) => {
+export const ChatInputBox: React.FC<ChatInputBoxProps> = ({ sessionId }) => {
   const theme = useTheme();
   const [input, setInput] = React.useState('');
+
+  const { pendingMessage, setPendingMessage } = useAppContext();
 
   const queryClient = useQueryClient();
   const assistantTempIdRef = React.useRef<number | null>(null);
@@ -41,18 +47,11 @@ const ChatInputBox: React.FC<ChatInputBoxProps> = ({ sessionId }) => {
   const { mutate: setActiveProvider, isLoading: switching } =
     useSetActiveAIProvider();
 
-  const htmlToPlainText = React.useCallback((html: string) => {
-    const div = document.createElement('div');
-    div.innerHTML = html || '';
-    // Normalize line breaks
-    const text = div.textContent || div.innerText || '';
-    return text.replace(/\u00A0/g, ' ').replace(/\s+$/g, '');
-  }, []);
+  // Auto-rename session hook
+  const { autoRename } = useAutoRenameSession(sessionId);
 
-  const plainText = React.useMemo(
-    () => htmlToPlainText(input),
-    [input, htmlToPlainText],
-  );
+  // Use the utility function instead of inline implementation
+  const plainText = React.useMemo(() => htmlToPlainText(input), [input]);
 
   const selectedProvider = React.useMemo(() => {
     const id = activeProvider?.id?.toString();
@@ -65,9 +64,9 @@ const ChatInputBox: React.FC<ChatInputBoxProps> = ({ sessionId }) => {
     return aiProviderImages[typeKey] || defaultIcon;
   }, [selectedProvider]);
 
-  const handleSend = () => {
-    const content = plainText.trim();
-    if (sessionId && content && activeProvider) {
+  const handleSendMessage = (content?: string) => {
+    const messageContent = content || plainText.trim();
+    if (sessionId && messageContent && activeProvider) {
       // 1) Optimistically add the user message locally (no server call here)
       // Must match the key used by useGetChatMessages(sessionId) which is
       // [QUERY_KEYS.GET_CHAT_MESSAGES, sessionId, undefined, undefined]
@@ -95,7 +94,7 @@ const ChatInputBox: React.FC<ChatInputBoxProps> = ({ sessionId }) => {
         id: tempUserId,
         conversationId: sessionId,
         role: 'user',
-        content,
+        content: messageContent,
         metadata: { temp: true },
         toolCalls: null as any,
         contextItems: null as any,
@@ -129,14 +128,16 @@ const ChatInputBox: React.FC<ChatInputBoxProps> = ({ sessionId }) => {
       // Push both temp user and temp assistant
       queryClient.setQueryData(msgKey, [...prev, tempUser, tempAssistant]);
 
-      // Clear input immediately
-      setInput('');
+      // Clear input immediately ONLY if not sending a pending message
+      if (!content) {
+        setInput('');
+      }
 
       // 3) Start streaming; update the temp assistant content on each chunk
       streamMessage(
         {
           sessionId,
-          content,
+          content: messageContent,
           onChunk: (chunk: string) => {
             const current = queryClient.getQueryData<typeof prev>(msgKey) || [];
             queryClient.setQueryData(
@@ -158,6 +159,11 @@ const ChatInputBox: React.FC<ChatInputBoxProps> = ({ sessionId }) => {
           onSuccess: async () => {
             // Replace temp with persisted messages (use exact same key signature)
             await queryClient.invalidateQueries(msgKey);
+
+            // Auto-rename session after successful LLM response
+            // Use the user's message content to generate a descriptive title
+            autoRename(messageContent);
+
             assistantTempIdRef.current = null;
             userTempIdRef.current = null;
           },
@@ -174,6 +180,7 @@ const ChatInputBox: React.FC<ChatInputBoxProps> = ({ sessionId }) => {
               await queryClient.invalidateQueries(msgKey);
               // Clear user temp ref after refresh
               userTempIdRef.current = null;
+              // No toast for user cancellation
             } else {
               // Real error: remove both temp assistant and temp user
               const uId = userTempIdRef.current;
@@ -183,11 +190,41 @@ const ChatInputBox: React.FC<ChatInputBoxProps> = ({ sessionId }) => {
               );
               assistantTempIdRef.current = null;
               userTempIdRef.current = null;
+
+              // Show appropriate error message
+              if (
+                error?.message?.includes('401') ||
+                error?.message?.includes('unauthorized')
+              ) {
+                toast.error(
+                  'Authentication failed. Please check your AI provider credentials.',
+                );
+              } else if (
+                error?.message?.includes('429') ||
+                error?.message?.includes('quota')
+              ) {
+                toast.error('Rate limit exceeded. Please try again later.');
+              } else if (
+                error?.message?.includes('network') ||
+                error?.message?.includes('fetch')
+              ) {
+                toast.error(
+                  'Network error. Please check your connection and try again.',
+                );
+              } else {
+                toast.error(
+                  `Failed to send message: ${error?.message || 'Unknown error'}`,
+                );
+              }
             }
           },
         },
       );
     }
+  };
+
+  const handleSend = () => {
+    handleSendMessage();
   };
 
   const handleCancel = () => {
@@ -203,7 +240,6 @@ const ChatInputBox: React.FC<ChatInputBoxProps> = ({ sessionId }) => {
       { sessionId },
       {
         onSettled: async () => {
-          // Remove only the temp streaming assistant; keep user and refresh to persist
           const current =
             queryClient.getQueryData<
               Array<{
@@ -225,7 +261,15 @@ const ChatInputBox: React.FC<ChatInputBoxProps> = ({ sessionId }) => {
     );
   };
 
-  // Note: Enter-to-send is implemented in TipTapEditor via onSubmit (Enter) and Shift+Enter for newline.
+  React.useEffect(() => {
+    if (pendingMessage && sessionId && activeProvider && !isStreaming) {
+      setTimeout(() => {
+        handleSendMessage(pendingMessage);
+        setPendingMessage(null);
+        setInput('');
+      }, 500);
+    }
+  }, [pendingMessage, sessionId, activeProvider, isStreaming]);
 
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column' }}>
@@ -383,5 +427,3 @@ const ChatInputBox: React.FC<ChatInputBoxProps> = ({ sessionId }) => {
     </Box>
   );
 };
-
-export default ChatInputBox;

@@ -940,6 +940,7 @@ export default class ProjectsService {
   static async extractDuckDBSchema(connection: DuckDBConnection) {
     const extractor = new DuckDBExtractor({
       database_path: connection.database_path,
+      schema: connection.schema,
     });
 
     const schema = await extractor.extractSchema();

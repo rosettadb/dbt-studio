@@ -2,7 +2,6 @@ import FolderIcon from '@mui/icons-material/Folder';
 import PsychologyIcon from '@mui/icons-material/Psychology';
 import ManageAccountsIcon from '@mui/icons-material/ManageAccounts';
 import InfoIcon from '@mui/icons-material/Info';
-import SystemUpdateAltIcon from '@mui/icons-material/SystemUpdateAlt';
 import { SvgIconComponent } from '@mui/icons-material';
 import React from 'react';
 import { Icon } from '../../components/icon';
@@ -40,18 +39,13 @@ export const settingsSidebarElements: SettingsSidebarElement[] = [
   },
   {
     icon: FolderIcon,
-    text: 'Rosetta',
+    text: 'Rosetta CLI',
     path: '/app/settings/rosetta',
   },
   {
     icon: PsychologyIcon,
     text: 'AI Providers',
     path: '/app/settings/ai-providers',
-  },
-  {
-    icon: SystemUpdateAltIcon,
-    text: 'Installation Information',
-    path: '/app/settings/installation',
   },
   {
     icon: InfoIcon,

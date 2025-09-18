@@ -9,7 +9,7 @@ import {
   real,
   index,
 } from 'drizzle-orm/sqlite-core';
-import { relations } from 'drizzle-orm';
+import { sql, relations } from 'drizzle-orm';
 
 // AI Providers Configuration Table
 export const aiProviders = sqliteTable(
@@ -20,8 +20,8 @@ export const aiProviders = sqliteTable(
     type: text('type').notNull(), // 'openai', 'ollama', 'gemini', 'anthropic'
     config: text('config', { mode: 'json' }).notNull(), // Provider-specific configuration
     isActive: integer('is_active', { mode: 'boolean' }).default(false),
-    createdAt: text('created_at').default('CURRENT_TIMESTAMP'),
-    updatedAt: text('updated_at').default('CURRENT_TIMESTAMP'),
+    createdAt: text('created_at').default(sql`CURRENT_TIMESTAMP`),
+    updatedAt: text('updated_at').default(sql`CURRENT_TIMESTAMP`),
   },
   (table: any) => ({
     nameIdx: index('ai_providers_name_idx').on(table.name),
@@ -40,8 +40,8 @@ export const chatConversations = sqliteTable(
     providerId: integer('provider_id').references(() => aiProviders.id, {
       onDelete: 'set null',
     }),
-    createdAt: text('created_at').default('CURRENT_TIMESTAMP'),
-    updatedAt: text('updated_at').default('CURRENT_TIMESTAMP'),
+    createdAt: text('created_at').default(sql`CURRENT_TIMESTAMP`),
+    updatedAt: text('updated_at').default(sql`CURRENT_TIMESTAMP`),
   },
   (table: any) => ({
     projectIdx: index('chat_conversations_project_idx').on(table.projectId),
@@ -75,8 +75,8 @@ export const chatMessages: any = sqliteTable(
       () => chatMessages.id as any,
       { onDelete: 'set null' },
     ), // For message editing/regeneration
-    createdAt: text('created_at').default('CURRENT_TIMESTAMP'),
-    updatedAt: text('updated_at').default('CURRENT_TIMESTAMP'),
+    createdAt: text('created_at').default(sql`CURRENT_TIMESTAMP`),
+    updatedAt: text('updated_at').default(sql`CURRENT_TIMESTAMP`),
   },
   (table: any) => ({
     conversationIdx: index('chat_messages_conversation_idx').on(
@@ -101,7 +101,7 @@ export const promptTemplates = sqliteTable(
     providerType: text('provider_type'), // null for universal templates
     isSystem: integer('is_system', { mode: 'boolean' }).default(false),
     variables: text('variables', { mode: 'json' }), // Array of template variables
-    createdAt: text('created_at').default('CURRENT_TIMESTAMP'),
+    createdAt: text('created_at').default(sql`CURRENT_TIMESTAMP`),
   },
   (table: any) => ({
     categoryIdx: index('prompt_templates_category_idx').on(table.category),
@@ -125,7 +125,7 @@ export const contextItems = sqliteTable(
     description: text('description'),
     content: text('content').notNull(),
     metadata: text('metadata', { mode: 'json' }), // Type-specific metadata (file path, line numbers, etc.)
-    createdAt: text('created_at').default('CURRENT_TIMESTAMP'),
+    createdAt: text('created_at').default(sql`CURRENT_TIMESTAMP`),
   },
   (table: any) => ({
     messageIdx: index('context_items_message_idx').on(table.messageId),
@@ -144,8 +144,8 @@ export const sessionMetadata = sqliteTable(
       .references(() => chatConversations.id, { onDelete: 'cascade' }),
     key: text('key').notNull(),
     value: text('value').notNull(),
-    createdAt: text('created_at').default('CURRENT_TIMESTAMP'),
-    updatedAt: text('updated_at').default('CURRENT_TIMESTAMP'),
+    createdAt: text('created_at').default(sql`CURRENT_TIMESTAMP`),
+    updatedAt: text('updated_at').default(sql`CURRENT_TIMESTAMP`),
   },
   (table: any) => ({
     conversationIdx: index('session_metadata_conversation_idx').on(
@@ -171,7 +171,7 @@ export const toolCalls = sqliteTable(
     toolInput: text('tool_input', { mode: 'json' }).notNull(),
     toolOutput: text('tool_output', { mode: 'json' }),
     status: text('status').notNull().default('pending'), // 'pending', 'running', 'completed', 'failed', 'cancelled'
-    startedAt: text('started_at').default('CURRENT_TIMESTAMP'),
+    startedAt: text('started_at').default(sql`CURRENT_TIMESTAMP`),
     completedAt: text('completed_at'),
     errorMessage: text('error_message'),
   },
@@ -201,7 +201,7 @@ export const aiUsageLogs = sqliteTable(
     durationMs: integer('duration_ms').notNull(),
     status: text('status').notNull(), // 'success', 'error', 'partial'
     errorMessage: text('error_message'),
-    createdAt: text('created_at').default('CURRENT_TIMESTAMP'),
+    createdAt: text('created_at').default(sql`CURRENT_TIMESTAMP`),
   },
   (table: any) => ({
     providerIdx: index('ai_usage_logs_provider_idx').on(table.providerId),

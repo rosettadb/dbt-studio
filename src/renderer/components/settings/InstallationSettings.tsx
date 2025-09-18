@@ -323,7 +323,7 @@ const InstallationSettings: React.FC = () => {
     compareVersions(latestVersion, currentVersion) === 1;
 
   return (
-    <Box sx={{ maxWidth: 600, width: '100%' }}>
+    <Box sx={{ maxWidth: 800, width: '100%' }}>
       <Backdrop
         open={isBlocking}
         sx={{ zIndex: (theme) => theme.zIndex.drawer + 1, color: '#fff' }}
@@ -409,9 +409,6 @@ const InstallationSettings: React.FC = () => {
               Restart Now
             </Button>
           )}
-          <Typography variant="body2" color="textSecondary" className="mt-2">
-            Rosetta dbt Studio - Turn Raw Data into Business Insights
-          </Typography>
         </CardContent>
       </Card>
       {/* Update Check Section */}

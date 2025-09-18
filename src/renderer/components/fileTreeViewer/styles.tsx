@@ -18,9 +18,9 @@ export const Header = styled('div')(() => ({
 }));
 
 export const StyledTreeItem = styled('div')(() => ({
-  padding: 1,
   display: 'flex',
   alignItems: 'center',
+  height: 18,
 }));
 
 export const StyledLabel = styled(Typography)(({ theme }) => ({
@@ -31,7 +31,7 @@ export const StyledLabel = styled(Typography)(({ theme }) => ({
 }));
 
 export const StyledTreeView = styled(SimpleTreeView)(() => ({
-  height: 'calc(100% - 90px)',
+  height: 'calc(100% - 60px)',
   overflowY: 'auto',
   paddingBottom: 10,
 }));
