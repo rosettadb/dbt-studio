@@ -414,13 +414,13 @@ export const RosettaSettings: React.FC<RosettaSettingsProps> = ({
           color="primary"
           size="small"
           component="a"
-          href="https://github.com/rosettadb/rosetta_cli?tab=readme-ov-file#getting-started"
+          href="https://github.com/rosettadb/rosetta?tab=readme-ov-file#getting-started"
           target="_blank"
           rel="noopener noreferrer"
           onClick={(e) =>
             utils.handleExternalLink(
               e,
-              'https://github.com/rosettadb/rosetta_cli?tab=readme-ov-file#getting-started',
+              'https://github.com/rosettadb/rosetta?tab=readme-ov-file#getting-started',
             )
           }
           sx={{ textTransform: 'none' }}
