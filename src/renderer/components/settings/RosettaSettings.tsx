@@ -336,7 +336,7 @@ export const RosettaSettings: React.FC<RosettaSettingsProps> = ({
                             size="small"
                             onClick={() =>
                               window.open(
-                                `https://github.com/adaptivescale/rosetta/releases/tag/v${version.version}`,
+                                `https://github.com/rosettadb/rosetta/releases/tag/v${version.version}`,
                                 '_blank',
                               )
                             }
