@@ -49,7 +49,7 @@ DBT Studio includes an integrated Python environment to:
 
 #### Rosetta Integration
 
-DBT Studio embeds the open-source [Rosetta CLI tool](https://github.com/adaptivescale/rosetta) to support metadata-driven dbt™ development:
+DBT Studio embeds the open-source [Rosetta CLI tool](https://github.com/rosettadb/rosetta) to support metadata-driven dbt™ development:
 
 - Model generation aligned with your naming conventions and standards.
 - Reusable templates and YAML documentation support.

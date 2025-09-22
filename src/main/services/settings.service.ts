@@ -167,12 +167,12 @@ export default class SettingsService {
     }
 
     const latestRelease = await axios.get(
-      'https://api.github.com/repos/adaptivescale/rosetta/releases/latest',
+      'https://api.github.com/repos/rosettadb/rosetta/releases/latest',
     );
     const version = latestRelease.data.tag_name.replace(/^v/, '');
 
     const zipName = `rosetta-${version}-${osName}_${archName}-with-drivers.zip`;
-    const downloadUrl = `https://github.com/adaptivescale/rosetta/releases/download/v${version}/${zipName}`;
+    const downloadUrl = `https://github.com/rosettadb/rosetta/releases/download/v${version}/${zipName}`;
 
     let rosettaBasePath: string;
     switch (platform) {
@@ -413,7 +413,7 @@ export default class SettingsService {
     try {
       // Get all available versions from GitHub releases
       const response = await axios.get(
-        'https://api.github.com/repos/adaptivescale/rosetta/releases',
+        'https://api.github.com/repos/rosettadb/rosetta/releases',
       );
       const releases = response.data;
 
@@ -480,7 +480,7 @@ export default class SettingsService {
       }
 
       const zipName = `rosetta-${version}-${osName}_${archName}-with-drivers.zip`;
-      const downloadUrl = `https://github.com/adaptivescale/rosetta/releases/download/v${version}/${zipName}`;
+      const downloadUrl = `https://github.com/rosettadb/rosetta/releases/download/v${version}/${zipName}`;
 
       let rosettaBasePath: string;
       switch (platform) {
@@ -591,7 +591,7 @@ export default class SettingsService {
       return '';
     }
 
-    return `https://github.com/adaptivescale/rosetta/releases/download/v${version}/rosetta-${version}-${osName}_${archName}-with-drivers.zip`;
+    return `https://github.com/rosettadb/rosetta/releases/download/v${version}/rosetta-${version}-${osName}_${archName}-with-drivers.zip`;
   }
 
   private static compareVersions(version1: string, version2: string): number {
