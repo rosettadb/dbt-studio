@@ -56,6 +56,19 @@ DBT Studio embeds the open-source [Rosetta CLI tool](https://github.com/rosettad
 
 ---
 
+## 🎥 Demo Videos
+
+Get a quick overview of Rosetta DBT Studio in action:
+
+- [Overview & Features](https://www.youtube.com/watch?v=Y0qI1B7xgD4)  
+- [Getting Started](https://www.youtube.com/watch?v=y3OpQ_OXCbY)  
+- [AI-Powered Analytics](https://www.youtube.com/watch?v=kFi2KS5qxw8)
+- [The Secret Behind DBT Studio](https://www.youtube.com/watch?v=ei9Ay0rFRPQ)
+
+> 💡 More tutorials and walkthroughs are available on our [YouTube Channel](https://www.youtube.com/@rosettadb).
+
+---
+
 ## Installation
 
 Download the latest release for your OS from the [Releases Page](https://github.com/rosettadb/dbt-studio/releases) and follow the instructions to get started.
