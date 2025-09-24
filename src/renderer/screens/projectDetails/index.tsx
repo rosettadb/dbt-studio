@@ -181,6 +181,15 @@ const ProjectDetails: React.FC = () => {
   ) => {
     const fileName = await getFileName(filePath);
     const tables = await projectsServices.extractSchemaFromModelYaml(_project);
+    // If Rosetta model.yaml is missing or empty, notify the user gracefully
+    if (!tables || tables.length === 0) {
+      const modelName = fileName.replace(/\.sql$/i, '');
+      const { schema, table } = utils.extractSchemaAndTable(fileName);
+      const expectedModel = schema && table ? `${schema}.${table}` : modelName;
+      toast.info(
+        `AI context incomplete: database schema missing. Run Rosetta → Raw layer to generate rosetta/${_project.name}/model.yaml (should include "${expectedModel}"). Then try again.`,
+      );
+    }
     const { schema, table } = utils.extractSchemaAndTable(fileName);
 
     const tableStructure = tables.find(
