@@ -32,6 +32,7 @@ import {
   BusinessModal,
   AiPromptModal,
 } from '../../components';
+import { TabManager } from '../../components/editor/tabManager';
 import {
   useGetConnectionById,
   useGetConnections,
@@ -53,7 +54,6 @@ import {
   FileTreeContainer,
   Header,
   NoFileSelected,
-  SelectedFile,
 } from './styles';
 import {
   useAppContext,
@@ -103,6 +103,7 @@ const ProjectDetails: React.FC = () => {
     markTabSavedByPath,
     setTabError,
     setTabErrorByPath,
+    reorderTabs,
     reset,
   } = useTabManager(project?.id);
   const fileContent = activeTab?.content;
@@ -441,11 +442,15 @@ const ProjectDetails: React.FC = () => {
               <Content>
                 <EditorContainer>
                   <Header>
-                    {selectedFilePath && (
-                      <SelectedFile>
-                        {utils.splitPath(selectedFilePath ?? '', project.name)}
-                      </SelectedFile>
-                    )}
+                    <Box display="flex" flex={1} minWidth={0}>
+                      <TabManager
+                        tabs={tabs}
+                        activeTabId={activeTabId}
+                        onSelect={switchTab}
+                        onClose={closeTab}
+                        onReorder={reorderTabs}
+                      />
+                    </Box>
                     <ButtonsContainer>
                       {menuItems.length > 0 && (
                         <SplitButton
@@ -558,13 +563,6 @@ const ProjectDetails: React.FC = () => {
                       projectPath={project.path}
                       tabs={tabs}
                       activeTabId={activeTabId}
-                      onSelectTab={switchTab}
-                      onCloseTab={closeTab}
-                      onCreateTab={() => {
-                        if (selectedFilePath) {
-                          openTab(selectedFilePath);
-                        }
-                      }}
                       onTabContentChange={(tabId, newContent) => {
                         updateTabContent(tabId, newContent, {
                           markModified: true,

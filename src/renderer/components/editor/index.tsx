@@ -11,7 +11,6 @@ import {
 import { DiffView } from './diffView';
 import { CodeEditor } from './codeEditor';
 import { getLanguageFromExtension, getVersionsFromDiff } from './helpers';
-import { TabManager } from './tabManager';
 import { Container, EditorViewport } from './styles';
 import type { EditorTabId, EditorTabState } from './types';
 
@@ -19,9 +18,6 @@ type EditorProps = {
   projectPath: string;
   tabs: EditorTabState[];
   activeTabId: EditorTabId | null;
-  onSelectTab: (tabId: EditorTabId) => void;
-  onCloseTab: (tabId: EditorTabId) => void;
-  onCreateTab?: () => void;
   onTabContentChange: (tabId: EditorTabId, content: string) => void;
   onTabSaved?: (tabId: EditorTabId) => void;
   onTabError?: (tabId: EditorTabId, error?: string) => void;
@@ -31,9 +27,6 @@ export const Editor: React.FC<EditorProps> = ({
   projectPath,
   tabs,
   activeTabId,
-  onSelectTab,
-  onCloseTab,
-  onCreateTab,
   onTabContentChange,
   onTabSaved,
   onTabError,
@@ -123,30 +116,20 @@ export const Editor: React.FC<EditorProps> = ({
     }, 1000);
   };
 
-  if (!activeTab) {
+  if (tabs.length === 0) {
     return (
       <Container>
-        <TabManager
-          tabs={tabs}
-          activeTabId={activeTabId}
-          onSelect={onSelectTab}
-          onClose={onCloseTab}
-          onCreateNew={onCreateTab}
-        />
         <EditorViewport />
       </Container>
     );
   }
 
+  if (!activeTab) {
+    return null;
+  }
+
   return (
     <Container>
-      <TabManager
-        tabs={tabs}
-        activeTabId={activeTabId}
-        onSelect={onSelectTab}
-        onClose={onCloseTab}
-        onCreateNew={onCreateTab}
-      />
       <EditorViewport>
         {originalContent && (
           <Tooltip title="Compare Changes">

@@ -30,23 +30,34 @@ export const TabBar = styled(Box)(({ theme }) => ({
   display: 'flex',
   alignItems: 'center',
   gap: theme.spacing(0.5),
-  height: 40,
   backgroundColor: theme.palette.background.paper,
-  borderBottom: `1px solid ${theme.palette.divider}`,
   padding: theme.spacing(0, 1),
+  flex: 1,
+  minWidth: 0,
+}));
+
+export const TabsContainer = styled(Box)(() => ({
+  display: 'flex',
+  alignItems: 'center',
+  gap: 0,
+  flex: 1,
+  minWidth: 0,
   overflowX: 'auto',
   overflowY: 'hidden',
-  scrollbarWidth: 'thin',
+  scrollbarWidth: 'none',
+  msOverflowStyle: 'none' as const,
   '&::-webkit-scrollbar': {
-    height: 6,
+    display: 'none',
   },
-  '&::-webkit-scrollbar-thumb': {
-    borderRadius: 999,
-    backgroundColor:
-      theme.palette.mode === 'dark'
-        ? 'rgba(255,255,255,0.15)'
-        : 'rgba(0,0,0,0.15)',
-  },
+}));
+
+export const DropIndicator = styled('div')(({ theme }) => ({
+  width: 3,
+  height: 22,
+  borderRadius: 999,
+  backgroundColor: theme.palette.primary.main,
+  boxShadow: `0 0 0 1px ${theme.palette.background.paper}`,
+  transition: 'opacity 120ms ease',
 }));
 
 export const TabButton = styled(ButtonBase)<{ active: boolean }>(
@@ -55,16 +66,35 @@ export const TabButton = styled(ButtonBase)<{ active: boolean }>(
     alignItems: 'center',
     gap: theme.spacing(0.75),
     padding: theme.spacing(0.5, 1.25),
-    borderRadius: theme.shape.borderRadius,
+    minHeight: 32,
+    borderRadius: 0,
     cursor: 'pointer',
     backgroundColor: getBaseBackgroundColor(theme, active),
-    color: theme.palette.text.primary,
-    border: active
-      ? `1px solid ${theme.palette.primary.main}`
-      : '1px solid transparent',
-    transition: 'background-color 120ms ease, border-color 120ms ease',
+    color: active ? theme.palette.text.primary : theme.palette.text.secondary,
+    borderTop: active
+      ? `2px solid ${theme.palette.primary.main}`
+      : `1px solid ${theme.palette.divider}`,
+    borderBottom: active
+      ? '1px solid transparent'
+      : `1px solid ${theme.palette.divider}`,
+    borderLeft: `1px solid ${theme.palette.divider}`,
+    borderRight: `1px solid ${theme.palette.divider}`,
+    boxShadow: 'none',
+    transition:
+      'background-color 120ms ease, border-color 120ms ease, box-shadow 120ms ease',
     '&:hover': {
       backgroundColor: getHoverBackgroundColor(theme, active),
+      color: theme.palette.text.primary,
+    },
+    '&:not(:first-of-type)': {
+      marginLeft: -1,
+    },
+    '&:first-of-type': {
+      borderLeft: `1px solid ${theme.palette.divider}`,
+      marginLeft: 0,
+    },
+    '&:last-of-type': {
+      borderRight: `1px solid ${theme.palette.divider}`,
     },
   }),
 );
