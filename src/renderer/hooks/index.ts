@@ -9,6 +9,7 @@ import useDbt from './useDbt';
 import useConnectionInput from './useConnectionInput';
 import useProcess from './useProcessContext';
 import useSecureStorage from './useSecureStorage';
+import useTabManager from './useTabManager';
 
 export {
   useIpcPromise,
@@ -22,4 +23,5 @@ export {
   useConnectionInput,
   useProcess,
   useSecureStorage,
+  useTabManager,
 };

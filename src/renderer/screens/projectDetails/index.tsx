@@ -35,7 +35,6 @@ import {
 import {
   useGetConnectionById,
   useGetConnections,
-  useGetFileContent,
   useGetFileContentList,
   useGetFileStatuses,
   useGetProjectFiles,
@@ -56,7 +55,12 @@ import {
   NoFileSelected,
   SelectedFile,
 } from './styles';
-import { useAppContext, useDbt, useRosettaDBT } from '../../hooks';
+import {
+  useAppContext,
+  useDbt,
+  useRosettaDBT,
+  useTabManager,
+} from '../../hooks';
 import { Project, SupportedConnectionTypes } from '../../../types/backend';
 import { AI_PROMPTS } from '../../config/constants';
 import { utils } from '../../helpers';
@@ -84,8 +88,24 @@ const ProjectDetails: React.FC = () => {
   const { data: connection } = useGetConnectionById(project?.connectionId);
   const { data: settings } = useGetSettings();
   const { mutate: updateFileContent } = useSaveFileContent();
-  const { data: fileContent } = useGetFileContent(selectedFilePath);
   const { mutateAsync: getFileContentList } = useGetFileContentList();
+  const {
+    tabs,
+    activeTab,
+    activeTabId,
+    openTab,
+    switchTab,
+    closeTab,
+    closeTabByPath,
+    updateTabContent,
+    updateTabContentByPath,
+    markTabSaved,
+    markTabSavedByPath,
+    setTabError,
+    setTabErrorByPath,
+    reset,
+  } = useTabManager(project?.id);
+  const fileContent = activeTab?.content;
 
   const [isLoadingQuery, setIsLoadingQuery] = React.useState(false);
   const [businessQueryModal, setBusinessQueryModal] = React.useState<string>();
@@ -171,9 +191,27 @@ const ProjectDetails: React.FC = () => {
 
   React.useEffect(() => {
     if (project?.path) {
+      reset();
       setSelectedFilePath(undefined);
     }
-  }, [project?.path]);
+  }, [project?.path, reset, setSelectedFilePath]);
+
+  React.useEffect(() => {
+    if (!selectedFilePath) {
+      return;
+    }
+    openTab(selectedFilePath);
+  }, [selectedFilePath, openTab]);
+
+  React.useEffect(() => {
+    if (activeTab?.path && activeTab.path !== selectedFilePath) {
+      setSelectedFilePath(activeTab.path);
+      return;
+    }
+    if (!activeTab?.path && selectedFilePath) {
+      setSelectedFilePath(undefined);
+    }
+  }, [activeTab?.path, selectedFilePath, setSelectedFilePath]);
 
   const generateBasicTransformationPrompt = async (
     filePath: string,
@@ -239,7 +277,7 @@ const ProjectDetails: React.FC = () => {
       return;
     }
 
-    if (!selectedFilePath) {
+    if (!selectedFilePath || !fileContent) {
       toast.error('No file selected');
       return;
     }
@@ -357,6 +395,7 @@ const ProjectDetails: React.FC = () => {
               statuses={statuses}
               node={directories}
               onDeleteFileCallback={(deletedFile: string) => {
+                closeTabByPath(deletedFile);
                 if (selectedFilePath?.includes(deletedFile)) {
                   setSelectedFilePath(undefined);
                 }
@@ -364,9 +403,11 @@ const ProjectDetails: React.FC = () => {
               onFileSelect={async (fileNode) => {
                 if (!utils.isEditableFile(fileNode.path)) {
                   setSelectedFilePath(fileNode.path);
+                  openTab(fileNode.path, { isReadOnly: true });
                   return;
                 }
                 setSelectedFilePath(fileNode.path);
+                openTab(fileNode.path);
               }}
               isLoadingFiles={isLoadingDirectories}
               refreshFiles={async () => {
@@ -382,7 +423,11 @@ const ProjectDetails: React.FC = () => {
                 await updateStatuses();
               }}
               onNewFileCallback={(filePath) => {
+                if (!filePath) {
+                  return;
+                }
                 setSelectedFilePath(filePath);
+                openTab(filePath);
               }}
             />
           )}
@@ -508,15 +553,31 @@ const ProjectDetails: React.FC = () => {
                       Please select a file from the explorer on the left!
                     </NoFileSelected>
                   )}
-                  {selectedFilePath &&
-                    fileContent !== undefined &&
-                    project.path && (
-                      <Editor
-                        projectPath={project.path}
-                        filePath={selectedFilePath}
-                        content={fileContent}
-                      />
-                    )}
+                  {project.path && (
+                    <Editor
+                      projectPath={project.path}
+                      tabs={tabs}
+                      activeTabId={activeTabId}
+                      onSelectTab={switchTab}
+                      onCloseTab={closeTab}
+                      onCreateTab={() => {
+                        if (selectedFilePath) {
+                          openTab(selectedFilePath);
+                        }
+                      }}
+                      onTabContentChange={(tabId, newContent) => {
+                        updateTabContent(tabId, newContent, {
+                          markModified: true,
+                        });
+                      }}
+                      onTabSaved={(tabId) => {
+                        markTabSaved(tabId);
+                      }}
+                      onTabError={(tabId, errorMessage) => {
+                        setTabError(tabId, errorMessage);
+                      }}
+                    />
+                  )}
                 </EditorContainer>
               </Content>
             </TerminalLayout>
@@ -574,6 +635,13 @@ const ProjectDetails: React.FC = () => {
                   setAitTransformationResponse(undefined);
                 }}
                 onApply={async (value) => {
+                  if (selectedFilePath) {
+                    updateTabContentByPath(selectedFilePath, value, {
+                      markModified: false,
+                    });
+                    markTabSavedByPath(selectedFilePath);
+                    setTabErrorByPath(selectedFilePath, undefined);
+                  }
                   updateFileContent({
                     path: String(selectedFilePath),
                     content: value,
