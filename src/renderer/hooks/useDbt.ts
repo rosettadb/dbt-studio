@@ -110,7 +110,8 @@ const useDbt = (successCallback?: () => void): UseDbtReturn => {
   const buildCommand = useCallback(
     (command: DbtCommandType, project: Project, args: string = '') => {
       if (!settings?.dbtPath) {
-        toast.info('DBT path not configured in settings');
+        // maybe this should be dbt (trademark) core path
+        toast.info('dbt Core™ path not configured in settings');
         return '';
       }
 
