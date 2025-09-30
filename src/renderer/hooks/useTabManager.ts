@@ -8,6 +8,96 @@ import type {
   TabContentUpdateOptions,
 } from '../components/editor/types';
 
+const STORAGE_KEY_PREFIX = 'dbt-studio:tabs:';
+
+type PersistedTabsState = {
+  tabs: EditorTabState[];
+  activeTabId: EditorTabId | null;
+};
+
+const getStorageKey = (projectId?: string) =>
+  projectId ? `${STORAGE_KEY_PREFIX}${projectId}` : null;
+
+const readPersistedState = (projectId?: string): PersistedTabsState | null => {
+  if (typeof window === 'undefined') {
+    return null;
+  }
+
+  const key = getStorageKey(projectId);
+  if (!key) {
+    return null;
+  }
+
+  try {
+    const raw = window.localStorage.getItem(key);
+    if (!raw) {
+      return null;
+    }
+
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed?.tabs)) {
+      return null;
+    }
+
+    return {
+      tabs: parsed.tabs as EditorTabState[],
+      activeTabId:
+        typeof parsed.activeTabId === 'string' || parsed.activeTabId === null
+          ? parsed.activeTabId
+          : null,
+    };
+  } catch (error) {
+    // eslint-disable-next-line no-console
+    console.warn('Failed to read persisted tabs state', error);
+    return null;
+  }
+};
+
+const persistState = (
+  projectId: string,
+  tabs: EditorTabState[],
+  activeTabId: EditorTabId | null,
+) => {
+  if (typeof window === 'undefined') {
+    return;
+  }
+
+  const key = getStorageKey(projectId);
+  if (!key) {
+    return;
+  }
+
+  if (tabs.length === 0) {
+    window.localStorage.removeItem(key);
+    return;
+  }
+
+  const payload: PersistedTabsState = {
+    tabs,
+    activeTabId,
+  };
+
+  try {
+    window.localStorage.setItem(key, JSON.stringify(payload));
+  } catch (error) {
+    // eslint-disable-next-line no-console
+    console.warn('Failed to persist tabs state', error);
+  }
+};
+
+const clearPersistedState = (projectId: string) => {
+  if (typeof window === 'undefined') {
+    return;
+  }
+
+  const key = getStorageKey(projectId);
+  if (!key) {
+    return;
+  }
+
+  window.localStorage.removeItem(key);
+};
+
 const deriveTitleFromPath = (path: string): string => {
   const parts = path.split(/[\\/]/).filter(Boolean);
   if (parts.length === 0) {
@@ -52,6 +142,7 @@ export interface UseTabManagerReturn {
   tabs: EditorTabState[];
   activeTabId: EditorTabId | null;
   activeTab: EditorTabState | undefined;
+  isHydrated: boolean;
   openTab: (
     path: string,
     options?: OpenTabOptions,
@@ -82,20 +173,51 @@ const useTabManager = (projectId?: string): UseTabManagerReturn => {
   const [activeTabId, setActiveTabId] = React.useState<EditorTabId | null>(
     null,
   );
+  const [isHydrated, setIsHydrated] = React.useState(false);
   const tabsRef = React.useRef<EditorTabState[]>(tabs);
-  const previousProjectIdRef = React.useRef<string | undefined>(projectId);
 
   React.useEffect(() => {
     tabsRef.current = tabs;
   }, [tabs]);
 
   React.useEffect(() => {
-    if (previousProjectIdRef.current !== projectId) {
-      previousProjectIdRef.current = projectId;
+    setIsHydrated(false);
+
+    if (!projectId) {
       setTabs([]);
       setActiveTabId(null);
+      setIsHydrated(true);
+      return;
     }
+
+    const persisted = readPersistedState(projectId);
+
+    if (persisted) {
+      setTabs(persisted.tabs);
+      const hasValidActiveTab = persisted.tabs.some(
+        (tab) => tab.id === persisted.activeTabId,
+      );
+      setActiveTabId(
+        hasValidActiveTab
+          ? persisted.activeTabId
+          : (persisted.tabs[0]?.id ?? null),
+      );
+      setIsHydrated(true);
+      return;
+    }
+
+    setTabs([]);
+    setActiveTabId(null);
+    setIsHydrated(true);
   }, [projectId]);
+
+  React.useEffect(() => {
+    if (!projectId || !isHydrated) {
+      return;
+    }
+
+    persistState(projectId, tabs, activeTabId);
+  }, [projectId, tabs, activeTabId, isHydrated]);
 
   const switchTab = React.useCallback((tabId: EditorTabId) => {
     setActiveTabId(tabId);
@@ -240,7 +362,10 @@ const useTabManager = (projectId?: string): UseTabManagerReturn => {
   const reset = React.useCallback(() => {
     setTabs([]);
     setActiveTabId(null);
-  }, []);
+    if (projectId) {
+      clearPersistedState(projectId);
+    }
+  }, [projectId]);
 
   const openTab = React.useCallback(
     async (
@@ -251,42 +376,58 @@ const useTabManager = (projectId?: string): UseTabManagerReturn => {
         return null;
       }
 
-      const existing = tabsRef.current.find((tab) => tab.path === path);
-      if (existing) {
-        setActiveTabId(existing.id);
-        return existing.id;
+      let targetId: EditorTabId | null = null;
+      let shouldLoadContent = false;
+      let isEditable = false;
+
+      setTabs((current) => {
+        const existingTab = current.find((tab) => tab.path === path);
+        if (existingTab) {
+          targetId = existingTab.id;
+          return current;
+        }
+
+        isEditable = isEditableFile(path);
+        const id = ensureUniqueId(path, current);
+        const initialContent =
+          options?.content ??
+          (isEditable ? '' : getNonEditableFileMessage(path));
+
+        const newTab: EditorTabState = {
+          id,
+          path,
+          title: options?.title ?? deriveTitleFromPath(path),
+          content: initialContent,
+          isModified: false,
+          language: getLanguageFromExtension(path),
+          isLoading: isEditable,
+          error: undefined,
+          viewState: null,
+          isReadOnly: options?.isReadOnly ?? !isEditable,
+        };
+
+        targetId = id;
+        shouldLoadContent = isEditable;
+        const updated = [...current, newTab];
+        tabsRef.current = updated;
+        return updated;
+      });
+
+      if (!targetId) {
+        return null;
       }
 
-      const id = ensureUniqueId(path, tabsRef.current);
-      const isEditable = isEditableFile(path);
-      const initialContent =
-        options?.content ?? (isEditable ? '' : getNonEditableFileMessage(path));
+      setActiveTabId(targetId);
 
-      const newTab: EditorTabState = {
-        id,
-        path,
-        title: options?.title ?? deriveTitleFromPath(path),
-        content: initialContent,
-        isModified: false,
-        language: getLanguageFromExtension(path),
-        isLoading: isEditable,
-        error: undefined,
-        viewState: null,
-        isReadOnly: options?.isReadOnly ?? !isEditable,
-      };
-
-      setTabs((current) => [...current, newTab]);
-      setActiveTabId(id);
-
-      if (!isEditable) {
-        return id;
+      if (!shouldLoadContent || !isEditable) {
+        return targetId;
       }
 
       try {
         const data = await projectsServices.getFileContent({ path });
         setTabs((current) =>
           current.map((tab) =>
-            tab.id === id
+            tab.id === targetId
               ? {
                   ...tab,
                   content: data,
@@ -302,7 +443,7 @@ const useTabManager = (projectId?: string): UseTabManagerReturn => {
           error?.message || 'Unable to load file contents. Please try again.';
         setTabs((current) =>
           current.map((tab) =>
-            tab.id === id
+            tab.id === targetId
               ? {
                   ...tab,
                   isLoading: false,
@@ -313,7 +454,7 @@ const useTabManager = (projectId?: string): UseTabManagerReturn => {
         );
       }
 
-      return id;
+      return targetId;
     },
     [],
   );
@@ -327,6 +468,7 @@ const useTabManager = (projectId?: string): UseTabManagerReturn => {
     tabs,
     activeTabId,
     activeTab,
+    isHydrated,
     openTab,
     switchTab,
     closeTab,

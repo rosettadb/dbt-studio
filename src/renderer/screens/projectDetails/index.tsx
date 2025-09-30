@@ -93,6 +93,7 @@ const ProjectDetails: React.FC = () => {
     tabs,
     activeTab,
     activeTabId,
+    isHydrated,
     openTab,
     switchTab,
     closeTab,
@@ -107,6 +108,8 @@ const ProjectDetails: React.FC = () => {
     reset,
   } = useTabManager(project?.id);
   const fileContent = activeTab?.content;
+
+  const previousProjectPathRef = React.useRef<string | undefined>();
 
   const [isLoadingQuery, setIsLoadingQuery] = React.useState(false);
   const [businessQueryModal, setBusinessQueryModal] = React.useState<string>();
@@ -191,18 +194,27 @@ const ProjectDetails: React.FC = () => {
   }, [project]);
 
   React.useEffect(() => {
-    if (project?.path) {
+    const currentPath = project?.path;
+    const previousPath = previousProjectPathRef.current;
+
+    if (currentPath && previousPath && currentPath !== previousPath) {
       reset();
       setSelectedFilePath(undefined);
     }
+
+    previousProjectPathRef.current = currentPath;
   }, [project?.path, reset, setSelectedFilePath]);
 
   React.useEffect(() => {
     if (!selectedFilePath) {
       return;
     }
+    if (!isHydrated) {
+      return;
+    }
+
     openTab(selectedFilePath);
-  }, [selectedFilePath, openTab]);
+  }, [selectedFilePath, openTab, isHydrated]);
 
   React.useEffect(() => {
     if (activeTab?.path && activeTab.path !== selectedFilePath) {
