@@ -1059,11 +1059,22 @@ export default class ProjectsService {
       project.name,
       'model.yaml',
     );
-    const res = await fs.promises.readFile(rosettaModelYamlPath, 'utf8');
-    const data = yaml.load(res) as { tables: Table[]; views: Table[] };
-    const tables = data?.tables ?? [];
-    const views = data?.views ?? [];
-    return [...tables, ...views];
+
+    try {
+      // If the file does not exist, return an empty list instead of throwing
+      if (!fs.existsSync(rosettaModelYamlPath)) {
+        return [];
+      }
+
+      const res = await fs.promises.readFile(rosettaModelYamlPath, 'utf8');
+      const data = yaml.load(res) as { tables: Table[]; views: Table[] };
+      const tables = data?.tables ?? [];
+      const views = data?.views ?? [];
+      return [...tables, ...views];
+    } catch {
+      // On any error (e.g. parse, permissions), fail gracefully
+      return [];
+    }
   }
 
   static zipDirectory = async (sourcePath: string) => {
