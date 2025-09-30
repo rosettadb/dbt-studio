@@ -3,7 +3,7 @@ import IconButton from '@mui/material/IconButton';
 import Tooltip from '@mui/material/Tooltip';
 import CloseIcon from '@mui/icons-material/Close';
 import ErrorOutlineIcon from '@mui/icons-material/ErrorOutline';
-import { EditorTabState } from '../types';
+import { EditorTabState } from '../../../../types/editor';
 import { LoadingDot, ModifiedDot, TabButton, TabTitle } from './styles';
 
 interface EditorTabProps {

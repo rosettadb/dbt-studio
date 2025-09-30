@@ -1,6 +1,6 @@
 import React from 'react';
 import Box from '@mui/material/Box';
-import { EditorTabState, EditorTabId } from '../types';
+import { EditorTabId, EditorTabState } from '../../../../types/editor';
 import {
   TabBar,
   EmptyTabsPlaceholder,
