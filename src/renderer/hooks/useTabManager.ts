@@ -6,7 +6,7 @@ import type {
   EditorTabId,
   EditorTabState,
   TabContentUpdateOptions,
-} from '../components/editor/types';
+} from '../../types/editor';
 
 const STORAGE_KEY_PREFIX = 'dbt-studio:tabs:';
 

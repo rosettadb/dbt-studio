@@ -12,7 +12,7 @@ import { DiffView } from './diffView';
 import { CodeEditor } from './codeEditor';
 import { getLanguageFromExtension, getVersionsFromDiff } from './helpers';
 import { Container, EditorViewport } from './styles';
-import type { EditorTabId, EditorTabState } from './types';
+import type { EditorTabId, EditorTabState } from '../../../types/editor';
 
 type EditorProps = {
   projectPath: string;
