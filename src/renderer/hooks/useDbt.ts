@@ -94,7 +94,7 @@ const useDbt = (successCallback?: () => void): UseDbtReturn => {
 
         await Promise.all(envPromises);
       } catch (error) {
-        throw new Error(`Failed to setup environment variables: ${error}`);
+        toast.info(`Failed to setup environment variables: ${error}`);
       }
     },
     [
@@ -110,7 +110,9 @@ const useDbt = (successCallback?: () => void): UseDbtReturn => {
   const buildCommand = useCallback(
     (command: DbtCommandType, project: Project, args: string = '') => {
       if (!settings?.dbtPath) {
-        throw new Error('DBT path not configured in settings');
+        // maybe this should be dbt (trademark) core path
+        toast.info('dbt Core™ path not configured in settings');
+        return '';
       }
 
       switch (command) {
@@ -171,23 +173,39 @@ const useDbt = (successCallback?: () => void): UseDbtReturn => {
 
         // Build command string
         const cmdString = buildCommand(command, project, args);
+        if (!cmdString) {
+          // buildCommand already toasted; nothing to execute
+          return;
+        }
 
         // Execute command
         const result = await runCommand(cmdString);
 
-        // Handle success
-        if (result.error.length === 0) {
+        // Helper: detect non-zero exit code forwarded in output and extract meaningful error
+        const hasNonZeroExit = result.output.some(
+          (line) =>
+            /Process exited with code\s+(\d+)/.test(line) &&
+            !/Process exited with code\s+0/.test(line),
+        );
+        const outputErrorHints = result.output.filter((line) =>
+          /(Error importing adapter|Encountered an error|Runtime Error|Traceback|\berror\b)/i.test(
+            line.replace(/\[[0-9;]*m/g, ''),
+          ),
+        );
+        const aggregatedError = [
+          ...result.error,
+          ...(hasNonZeroExit ? ['Process exited with non-zero code'] : []),
+          ...outputErrorHints,
+        ];
+
+        // Handle success vs failure
+        if (aggregatedError.length === 0) {
           if (options.showToast) {
             toast.success(`dbt ${command} completed successfully`);
           }
           successCallback?.();
-        } else {
-          if (options.showToast) {
-            toast.error(`dbt ${command} failed`);
-          }
-          throw new Error(
-            `Command failed with errors: ${result.error.join('\n')}`,
-          );
+        } else if (options.showToast) {
+          toast.error(`Command failed: ${aggregatedError.join('\n')}`);
         }
       } catch (error) {
         if (options.showToast) {
@@ -243,7 +261,8 @@ const useDbt = (successCallback?: () => void): UseDbtReturn => {
             (c) => c.id === project.connectionId,
           );
           if (!connection) {
-            throw new Error('Connection not found');
+            toast.info('Connection not found');
+            return '';
           }
 
           setActiveCommand('compile');
@@ -257,11 +276,20 @@ const useDbt = (successCallback?: () => void): UseDbtReturn => {
             project,
             path ? `--select ${path}` : '',
           );
+          if (!cmdString) {
+            return '';
+          }
 
           // Execute command and capture output
           const result = await runCommand(cmdString);
 
-          if (result.error.length === 0) {
+          // Detect failure via stderr forwarded to stdout or non-zero exit code indicator
+          const hasNonZeroExit = result.output.some(
+            (line) =>
+              /Process exited with code\s+(\d+)/.test(line) &&
+              !/Process exited with code\s+0/.test(line),
+          );
+          if (result.error.length === 0 && !hasNonZeroExit) {
             // Extract the compiled SQL from the output
             let compiledSql = '';
 
@@ -307,12 +335,22 @@ const useDbt = (successCallback?: () => void): UseDbtReturn => {
             const finalResult = compiledSql.trim();
 
             if (!finalResult) {
-              throw new Error('Failed to extract compiled SQL from dbt output');
+              toast.info('Failed to extract compiled SQL from dbt output');
+              return '';
             }
 
             return finalResult;
           }
-          throw new Error(`dbt compile failed: ${result.error.join('\n')}`);
+          // Try to include helpful error hints from output
+          const outputErrorHints = result.output.filter((line) =>
+            /(Encountered an error|Runtime Error|Traceback|\berror\b)/i.test(
+              line.replace(/\[[0-9;]*m/g, ''),
+            ),
+          );
+          toast.info(
+            `dbt compile failed: ${[...result.error, ...outputErrorHints].join('\n')}`,
+          );
+          return '';
         } catch (error) {
           const errorMessage =
             error instanceof Error ? error.message : 'Unknown error';
@@ -344,23 +382,40 @@ const useDbt = (successCallback?: () => void): UseDbtReturn => {
             (c) => c.id === project.connectionId,
           );
           if (!connection) {
-            throw new Error('Connection not found');
+            toast.info('Connection not found');
+            return '';
           }
 
           setActiveCommand('list');
           await setupConnectionEnv(connection.connection.name);
           const cmdString = buildCommand('list', project, '');
+          if (!cmdString) {
+            return '';
+          }
           const result = await runCommand(cmdString);
 
-          if (result.error.length === 0) {
+          const hasNonZeroExit = result.output.some(
+            (line) =>
+              /Process exited with code\s+(\d+)/.test(line) &&
+              !/Process exited with code\s+0/.test(line),
+          );
+          if (result.error.length === 0 && !hasNonZeroExit) {
             return result.output.join('\n');
           }
-          throw new Error(`dbt list failed: ${result.error.join('\n')}`);
+          const outputErrorHints = result.output.filter((line) =>
+            /(Encountered an error|Runtime Error|Traceback|\berror\b)/i.test(
+              line.replace(/\[[0-9;]*m/g, ''),
+            ),
+          );
+          toast.info(
+            `dbt list failed: ${[...result.error, ...outputErrorHints].join('\n')}`,
+          );
+          return '';
         } catch (error) {
           const errorMessage =
             error instanceof Error ? error.message : 'Unknown error';
-          toast.error(`dbt list failed: ${errorMessage}`);
-          throw error;
+          toast.info(`dbt list failed: ${errorMessage}`);
+          return '';
         } finally {
           setActiveCommand(null);
         }
