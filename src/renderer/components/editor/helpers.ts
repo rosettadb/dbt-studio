@@ -1,6 +1,6 @@
 /* eslint-disable no-plusplus */
 import { diffLines, parsePatch } from 'diff';
-import { Range } from './types';
+import { Range } from '../../../types/editor';
 
 const getChangedLineNumbers = (oldStr: string, newStr: string) => {
   const changes = diffLines(oldStr, newStr);
