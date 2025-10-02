@@ -83,6 +83,7 @@ const ProjectDetails: React.FC = () => {
     setEditingFilePath: setSelectedFilePath,
     editingFilePath: selectedFilePath,
     openChatWithMessage,
+    registerSyncEditorContent,
   } = useAppContext();
 
   const { data: project, isLoading, refetch } = useGetSelectedProject();
@@ -227,6 +228,31 @@ const ProjectDetails: React.FC = () => {
       setSelectedFilePath(undefined);
     }
   }, [activeTab?.path, selectedFilePath, setSelectedFilePath]);
+
+  React.useEffect(() => {
+    const handler = (path: string, content: string) => {
+      const targetTab = getTabByPath(path);
+      if (!targetTab) {
+        return;
+      }
+
+      updateTabContentByPath(path, content, {
+        markModified: false,
+      });
+      setTabErrorByPath(path, undefined);
+    };
+
+    registerSyncEditorContent?.(handler);
+
+    return () => {
+      registerSyncEditorContent?.(undefined);
+    };
+  }, [
+    updateTabContentByPath,
+    setTabErrorByPath,
+    getTabByPath,
+    registerSyncEditorContent,
+  ]);
 
   const generateBasicTransformationPrompt = async (
     filePath: string,

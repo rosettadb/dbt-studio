@@ -56,7 +56,7 @@ const MarkdownCodeBlock = ({
   children,
 }: MarkdownCodeBlockProps) => {
   const { mutate: updateFileContent } = useSaveFileContent();
-  const { editingFilePath } = useAppContext();
+  const { editingFilePath, syncEditorContent } = useAppContext();
   const [copied, setCopied] = React.useState(false);
   const [applied, setApplied] = React.useState(false);
 
@@ -83,15 +83,21 @@ const MarkdownCodeBlock = ({
   }, []);
 
   const apply = React.useCallback(async () => {
+    if (!editingFilePath) {
+      return;
+    }
+
     const text =
       codeRef.current?.innerText || codeRef.current?.textContent || '';
+
     updateFileContent({
-      path: editingFilePath ?? '',
+      path: editingFilePath,
       content: text,
     });
+    syncEditorContent?.(editingFilePath, text);
     setApplied(true);
     setTimeout(() => setApplied(false), 1000);
-  }, []);
+  }, [editingFilePath, updateFileContent, syncEditorContent]);
 
   return !inline ? (
     <Box
