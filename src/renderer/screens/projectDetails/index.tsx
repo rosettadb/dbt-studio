@@ -67,6 +67,7 @@ import { utils } from '../../helpers';
 import { AppLayout } from '../../layouts';
 import ChatScreen from '../chat';
 import { getFileName } from '../../services/settings.services';
+import type { EditorTabId } from '../../../types/editor';
 import {
   BusinessModelGenerationSchema,
   BusinessModelGenerationSchemaType,
@@ -106,6 +107,7 @@ const ProjectDetails: React.FC = () => {
     setTabErrorByPath,
     reorderTabs,
     reset,
+    getTabByPath,
   } = useTabManager(project?.id);
   const fileContent = activeTab?.content;
 
@@ -608,34 +610,117 @@ const ProjectDetails: React.FC = () => {
                 path={businessQueryModal}
                 onClose={() => setBusinessQueryModal(undefined)}
                 processCallback={async (updatedPath, query, selectedFiles) => {
-                  if (selectedFiles.length > 0) {
-                    const files = await getFileContentList(selectedFiles);
-                    try {
-                      const prompt = generateModelsPrompt(files, query);
-                      const response =
-                        await aiProvidersService.generateCompletion<BusinessModelGenerationSchemaType>(
-                          prompt,
-                          BusinessModelGenerationSchema,
+                  if (selectedFiles.length === 0) {
+                    return;
+                  }
+
+                  const files = await getFileContentList(selectedFiles);
+                  try {
+                    const prompt = generateModelsPrompt(files, query);
+                    const response =
+                      await aiProvidersService.generateCompletion<BusinessModelGenerationSchemaType>(
+                        prompt,
+                        BusinessModelGenerationSchema,
+                      );
+                    if (
+                      response.parsedData?.fileName &&
+                      response.parsedData?.content
+                    ) {
+                      const buildFilePath = (
+                        basePath: string,
+                        fileName: string,
+                      ) => {
+                        const trimmedBase = basePath.replace(/[\\/]+$/, '');
+                        const separator = basePath.includes('\\') ? '\\' : '/';
+                        return `${trimmedBase}${separator}${fileName}`;
+                      };
+
+                      let filePath = await projectsServices.createFile({
+                        filePath: updatedPath,
+                        name: response.parsedData.fileName,
+                        content: response.parsedData.content,
+                      });
+
+                      const fileAlreadyExisted = !filePath;
+                      if (!filePath) {
+                        filePath = buildFilePath(
+                          updatedPath,
+                          response.parsedData.fileName,
                         );
-                      if (
-                        response.parsedData?.fileName &&
-                        response.parsedData?.content
-                      ) {
-                        const filePath = await projectsServices.createFile({
-                          filePath: updatedPath,
-                          name: response.parsedData.fileName,
-                          content: response.parsedData.content,
-                        });
-                        await fetchDirectories();
-                        await updateStatuses();
-                        setSelectedFilePath(filePath);
-                        setBusinessQueryModal(undefined);
-                        return;
                       }
-                      toast.error('Something went wrong');
-                    } catch {
-                      toast.error('Something went wrong');
+
+                      let tabId: EditorTabId | null = await openTab(filePath, {
+                        content: response.parsedData.content,
+                      });
+
+                      if (!tabId) {
+                        const existingTab = getTabByPath(filePath);
+                        if (existingTab) {
+                          tabId = existingTab.id;
+                        }
+                      }
+
+                      setSelectedFilePath(filePath);
+
+                      await fetchDirectories();
+                      await updateStatuses();
+
+                      if (!tabId) {
+                        const refreshedTab = getTabByPath(filePath);
+                        if (refreshedTab) {
+                          tabId = refreshedTab.id;
+                        }
+                      }
+
+                      if (tabId) {
+                        updateTabContent(tabId, response.parsedData.content, {
+                          markModified: fileAlreadyExisted,
+                        });
+                        if (!fileAlreadyExisted) {
+                          markTabSaved(tabId);
+                        }
+                        setTabError(tabId, undefined);
+                        switchTab(tabId);
+                      } else {
+                        // eslint-disable-next-line no-console
+                        console.warn(
+                          'Generated file created but tab could not be opened',
+                          { filePath },
+                        );
+                        toast.error(
+                          'Generated file created, but the editor tab could not be opened automatically.',
+                        );
+                      }
+
+                      setBusinessQueryModal(undefined);
+                      return;
                     }
+
+                    const schemaErrors =
+                      response.schemaValidation?.errors?.filter(Boolean) || [];
+                    const originalResponse =
+                      response.schemaValidation?.originalResponse ||
+                      response.content;
+                    let detailedMessage: string;
+                    if (schemaErrors.length) {
+                      detailedMessage = schemaErrors.join('\n');
+                    } else if (originalResponse) {
+                      detailedMessage = originalResponse;
+                    } else {
+                      detailedMessage = 'Provider returned an empty response.';
+                    }
+                    toast.error(detailedMessage);
+                    // eslint-disable-next-line no-console
+                    console.error('Business model generation failed', {
+                      schemaErrors,
+                      originalResponse,
+                    });
+                  } catch (error) {
+                    const message =
+                      error instanceof Error && error.message
+                        ? error.message
+                        : 'Failed to generate business model';
+                    toast.error(message);
                   }
                 }}
               />
@@ -660,6 +745,8 @@ const ProjectDetails: React.FC = () => {
                     });
                     markTabSavedByPath(selectedFilePath);
                     setTabErrorByPath(selectedFilePath, undefined);
+                  } else {
+                    toast.error('No file selected');
                   }
                   updateFileContent({
                     path: String(selectedFilePath),

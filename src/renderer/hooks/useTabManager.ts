@@ -166,6 +166,7 @@ export interface UseTabManagerReturn {
   setTabErrorByPath: (path: string, error?: string) => void;
   reorderTabs: (fromIndex: number, toIndex: number) => void;
   reset: () => void;
+  getTabByPath: (path: string) => EditorTabState | undefined;
 }
 
 const useTabManager = (projectId?: string): UseTabManagerReturn => {
@@ -367,6 +368,11 @@ const useTabManager = (projectId?: string): UseTabManagerReturn => {
     }
   }, [projectId]);
 
+  const getTabByPath = React.useCallback(
+    (path: string) => tabsRef.current.find((tab) => tab.path === path),
+    [],
+  );
+
   const openTab = React.useCallback(
     async (
       path: string,
@@ -379,6 +385,7 @@ const useTabManager = (projectId?: string): UseTabManagerReturn => {
       let targetId: EditorTabId | null = null;
       let shouldLoadContent = false;
       let isEditable = false;
+      let hasInitialContent = false;
 
       setTabs((current) => {
         const existingTab = current.find((tab) => tab.path === path);
@@ -388,6 +395,7 @@ const useTabManager = (projectId?: string): UseTabManagerReturn => {
         }
 
         isEditable = isEditableFile(path);
+        hasInitialContent = typeof options?.content === 'string';
         const id = ensureUniqueId(path, current);
         const initialContent =
           options?.content ??
@@ -400,14 +408,14 @@ const useTabManager = (projectId?: string): UseTabManagerReturn => {
           content: initialContent,
           isModified: false,
           language: getLanguageFromExtension(path),
-          isLoading: isEditable,
+          isLoading: isEditable && !hasInitialContent,
           error: undefined,
           viewState: null,
           isReadOnly: options?.isReadOnly ?? !isEditable,
         };
 
         targetId = id;
-        shouldLoadContent = isEditable;
+        shouldLoadContent = isEditable && !hasInitialContent;
         const updated = [...current, newTab];
         tabsRef.current = updated;
         return updated;
@@ -481,6 +489,7 @@ const useTabManager = (projectId?: string): UseTabManagerReturn => {
     setTabErrorByPath,
     reorderTabs,
     reset,
+    getTabByPath,
   };
 };
 

@@ -141,22 +141,21 @@ export const Editor: React.FC<EditorProps> = ({
             </IconButton>
           </Tooltip>
         )}
-        {showDiffView && !isLoadingFileStatus && (
+        {showDiffView && !isLoadingFileStatus ? (
           <DiffView
             modified={activeContent}
             original={originalContent ?? ''}
             language={language}
             theme={monacoTheme}
           />
-        )}
-        {!showDiffView && !isLoadingFileStatus && (
+        ) : (
           <CodeEditor
             content={activeContent}
             originalContent={originalContent}
             language={language}
             theme={monacoTheme}
             onChange={handleChange}
-            readOnly={!isFileEditable}
+            readOnly={!isFileEditable || showDiffView}
           />
         )}
       </EditorViewport>
