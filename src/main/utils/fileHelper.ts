@@ -240,6 +240,20 @@ export const deleteItem = async (targetPath: string) => {
   }
 };
 
+export const renamePath = async (source: string, newName: string) => {
+  if (!fs.existsSync(source)) {
+    throw new Error(`Source path does not exist: ${source}`);
+  }
+  const dir = path.dirname(source);
+  const target = path.join(dir, newName);
+  // If target exists, throw to avoid accidental overwrite
+  if (fs.existsSync(target)) {
+    throw new Error(`Target already exists: ${target}`);
+  }
+  await promises.rename(source, target);
+  return target;
+};
+
 export const createZipArchive = async (
   sourceDir: string,
   zipFilePath: string,

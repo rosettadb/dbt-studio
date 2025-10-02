@@ -847,6 +847,17 @@ export default class ProjectsService {
     return createNewFile(filePath, name, content);
   }
 
+  static async renamePath({
+    path: source,
+    newName,
+  }: {
+    path: string;
+    newName: string;
+  }): Promise<string> {
+    const { renamePath } = await import('../utils/fileHelper');
+    return renamePath(source, newName);
+  }
+
   static async selectProject({ projectId }: { projectId: string }) {
     const project = await this.getProject(projectId);
     await updateDatabase<'selectedProject'>('selectedProject', project);
