@@ -1,6 +1,15 @@
 import React from 'react';
-import { Box, Paper, IconButton, Tooltip, Typography } from '@mui/material';
+import {
+  Box,
+  Paper,
+  IconButton,
+  Tooltip,
+  Typography,
+  Button,
+  CircularProgress,
+} from '@mui/material';
 import { Close } from '@mui/icons-material';
+import { useNavigate } from 'react-router-dom';
 import { toast } from 'react-toastify';
 import { useAppContext } from '../../hooks';
 import { useGetSelectedProject } from '../../controllers';
@@ -10,6 +19,7 @@ import {
   useUpdateChatSession,
   useDeleteChatSession,
 } from '../../controllers/chat.controller';
+import { useGetAIProviders } from '../../controllers/aiProviders.controller';
 import { NewChatButton } from './NewChatButton';
 import { SessionHistoryButton } from './SessionHistoryButton';
 import { ChatMessageList } from './ChatMessageList';
@@ -19,10 +29,13 @@ export const ChatWindow: React.FC = () => {
   const { setIsChatOpen } = useAppContext();
   const { data: project } = useGetSelectedProject();
   const projectId = project?.id as number | undefined;
+  const navigate = useNavigate();
 
   const [selectedSessionId, setSelectedSessionId] = React.useState<number>();
 
   const { data: sessions = [], isLoading } = useGetChatSessions(projectId);
+  const { data: providers = [], isLoading: isLoadingProviders } =
+    useGetAIProviders();
   const { mutate: createSession, isLoading: isCreating } = useCreateChatSession(
     {
       onSuccess: (session) =>
@@ -92,6 +105,60 @@ export const ChatWindow: React.FC = () => {
       sessionId,
       updates: { title: newTitle },
     });
+  };
+
+  const renderMessages = () => {
+    if (isLoadingProviders) {
+      return (
+        <Box
+          sx={{
+            flex: 1,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: 1.5,
+          }}
+        >
+          <CircularProgress size={18} />
+          <Typography variant="body2" color="text.secondary">
+            Loading AI providers...
+          </Typography>
+        </Box>
+      );
+    }
+
+    if (providers.length === 0) {
+      return (
+        <Box
+          sx={{
+            flex: 1,
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: 1.5,
+            textAlign: 'center',
+            px: 3,
+          }}
+        >
+          <Typography variant="subtitle1" fontWeight={600}>
+            No AI providers configured
+          </Typography>
+          <Typography variant="body2" color="text.secondary">
+            Add an AI provider in settings to start chatting with the assistant.
+          </Typography>
+          <Button
+            variant="contained"
+            size="small"
+            onClick={() => navigate('/app/settings/ai-providers')}
+          >
+            Open AI Provider Settings
+          </Button>
+        </Box>
+      );
+    }
+
+    return <ChatMessageList sessionId={selectedSessionId} />;
   };
 
   return (
@@ -176,7 +243,7 @@ export const ChatWindow: React.FC = () => {
 
       {/* Messages Area */}
       <Box sx={{ flex: 1, minHeight: 0, display: 'flex' }}>
-        <ChatMessageList sessionId={selectedSessionId} />
+        {renderMessages()}
       </Box>
 
       {/* Input Area */}
