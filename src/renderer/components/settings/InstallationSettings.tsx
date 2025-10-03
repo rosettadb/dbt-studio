@@ -206,39 +206,67 @@ const InstallationSettings: React.FC = () => {
       }
 
       const normalizedUA = userAgent.toLowerCase();
+      const appInfo = window.electron?.app;
 
-      // Detect OS from user agent
-      let os = 'Unknown';
-      if (normalizedUA.includes('mac os x')) os = 'macOS';
-      else if (normalizedUA.includes('windows')) os = 'Windows';
-      else if (normalizedUA.includes('linux')) os = 'Linux';
+      const detectOS = () => {
+        const osFromMain = appInfo?.os?.toLowerCase();
+        if (osFromMain === 'darwin') return 'macOS';
+        if (osFromMain === 'win32') return 'Windows';
+        if (osFromMain === 'linux') return 'Linux';
 
-      // Detect architecture from user agent
-      let arch = 'Unknown';
-      if (
-        normalizedUA.includes('arm64') ||
-        normalizedUA.includes('aarch64') ||
-        normalizedUA.includes('apple silicon')
-      ) {
-        arch = 'ARM64';
-      } else if (
-        normalizedUA.includes('x86_64') ||
-        normalizedUA.includes('x64')
-      ) {
-        arch = 'x64';
-      } else if (
-        normalizedUA.includes('i386') ||
-        normalizedUA.includes('x86')
-      ) {
-        arch = 'x86';
-      } else if (normalizedUA.includes('intel')) {
-        arch = 'Intel';
-      }
+        if (normalizedUA.includes('mac os x')) return 'macOS';
+        if (normalizedUA.includes('windows')) return 'Windows';
+        if (normalizedUA.includes('linux')) return 'Linux';
+
+        return 'Unknown';
+      };
+
+      const os = detectOS();
+
+      const detectArch = () => {
+        const archFromMain = appInfo?.arch?.toLowerCase();
+        if (archFromMain) {
+          if (archFromMain === 'arm64' || archFromMain === 'aarch64') {
+            return 'ARM64';
+          }
+          if (archFromMain === 'x64' || archFromMain === 'x86_64') {
+            return os === 'macOS' ? 'Intel' : 'x64';
+          }
+          if (archFromMain === 'ia32' || archFromMain === 'x86') {
+            return 'x86';
+          }
+          if (archFromMain === 'universal') {
+            return 'Universal';
+          }
+          return appInfo.arch;
+        }
+
+        if (
+          normalizedUA.includes('arm64') ||
+          normalizedUA.includes('aarch64') ||
+          normalizedUA.includes('apple silicon')
+        ) {
+          return 'ARM64';
+        }
+        if (normalizedUA.includes('x86_64') || normalizedUA.includes('x64')) {
+          if (os === 'macOS') {
+            return 'Intel';
+          }
+          return 'x64';
+        }
+        if (normalizedUA.includes('i386') || normalizedUA.includes('x86')) {
+          return 'x86';
+        }
+        if (normalizedUA.includes('intel')) {
+          return 'Intel';
+        }
+        return 'Unknown';
+      };
+      const arch = detectArch();
 
       // Extract versions from user agent
       const chromeMatch = userAgent.match(/Chrome\/([0-9.]+)/);
       const electronMatch = userAgent.match(/Electron\/([0-9.]+)/);
-
       setSystemInfo({
         platform: os,
         arch,
