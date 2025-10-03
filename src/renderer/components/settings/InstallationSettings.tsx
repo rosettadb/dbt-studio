@@ -205,21 +205,35 @@ const InstallationSettings: React.FC = () => {
         throw new Error('Unable to detect system information');
       }
 
-      // Detect OS
+      const normalizedUA = userAgent.toLowerCase();
+
+      // Detect OS from user agent
       let os = 'Unknown';
-      if (userAgent.includes('Mac')) os = 'macOS';
-      else if (userAgent.includes('Win')) os = 'Windows';
-      else if (userAgent.includes('Linux')) os = 'Linux';
+      if (normalizedUA.includes('mac os x')) os = 'macOS';
+      else if (normalizedUA.includes('windows')) os = 'Windows';
+      else if (normalizedUA.includes('linux')) os = 'Linux';
 
       // Detect architecture from user agent
       let arch = 'Unknown';
-      if (userAgent.includes('Intel')) arch = 'Intel';
-      else if (userAgent.includes('arm64') || userAgent.includes('ARM64'))
+      if (
+        normalizedUA.includes('arm64') ||
+        normalizedUA.includes('aarch64') ||
+        normalizedUA.includes('apple silicon')
+      ) {
         arch = 'ARM64';
-      else if (userAgent.includes('x86_64') || userAgent.includes('x64'))
+      } else if (
+        normalizedUA.includes('x86_64') ||
+        normalizedUA.includes('x64')
+      ) {
         arch = 'x64';
-      else if (userAgent.includes('i386') || userAgent.includes('x86'))
+      } else if (
+        normalizedUA.includes('i386') ||
+        normalizedUA.includes('x86')
+      ) {
         arch = 'x86';
+      } else if (normalizedUA.includes('intel')) {
+        arch = 'Intel';
+      }
 
       // Extract versions from user agent
       const chromeMatch = userAgent.match(/Chrome\/([0-9.]+)/);
