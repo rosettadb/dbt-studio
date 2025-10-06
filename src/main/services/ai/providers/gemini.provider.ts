@@ -533,12 +533,23 @@ JSON Response:`;
 
   private applyDiscoveredModels(modelIds: string[]): AIModel[] {
     const checkedAt = new Date().toISOString();
-    const uniqueIds = Array.from(new Set(modelIds));
-    const normalizedIds = uniqueIds
+    const fallbackModelIds = GeminiProvider.getFallbackModelIds();
+    const combinedIds = Array.from(new Set([...modelIds, ...fallbackModelIds]));
+    const normalizedIds = combinedIds
       .map((id) => GeminiProvider.normalizeModelId(id))
       .filter((id) => GeminiProvider.isSupportedModelId(id));
 
-    const fallbackPriorities = GeminiProvider.getFallbackModelIds().reduce(
+    const preferredOrder = [
+      'gemini-2.5-pro',
+      'gemini-2.5-flash',
+      'gemini-2.0-pro',
+      'gemini-2.0-flash',
+      'gemini-1.5-pro',
+      'gemini-1.5-flash',
+      'gemini-1.0-pro',
+    ];
+
+    const fallbackPriorities = [...preferredOrder].reduce(
       (acc, fallbackId, index) => {
         const normalizedFallback = GeminiProvider.normalizeModelId(fallbackId);
         if (!(normalizedFallback in acc)) {
@@ -561,10 +572,15 @@ JSON Response:`;
           const baseId = id.replace(/-latest$/, '');
           const existing = map.get(baseId);
 
-          if (
-            !existing ||
-            (!existing.endsWith('-latest') && id.endsWith('-latest'))
-          ) {
+          if (!existing) {
+            map.set(baseId, id);
+            return map;
+          }
+
+          const existingIsLatest = existing.endsWith('-latest');
+          const incomingIsLatest = id.endsWith('-latest');
+
+          if (existingIsLatest && !incomingIsLatest) {
             map.set(baseId, id);
           }
 
@@ -587,6 +603,16 @@ JSON Response:`;
 
         if (priorityA !== priorityB) {
           return priorityA - priorityB;
+        }
+
+        const rank = (id: string) => {
+          if (id.includes('preview') || id.includes('-lite')) return 1;
+          return 0;
+        };
+
+        const rankDiff = rank(a.id) - rank(b.id);
+        if (rankDiff !== 0) {
+          return rankDiff;
         }
 
         return a.name.localeCompare(b.name);
@@ -619,21 +645,19 @@ JSON Response:`;
       ? modelId.replace(/^models\//, '')
       : modelId;
 
-    const legacyToLatestMap: Record<string, string> = {
-      'gemini-1.5-pro': 'gemini-1.5-pro-latest',
-      'gemini-1.5-flash': 'gemini-1.5-flash-latest',
-      'gemini-1.0-pro': 'gemini-1.0-pro-latest',
-    };
+    const legacyToLatestMap: Record<string, string> = {};
 
     return legacyToLatestMap[cleanId] || cleanId;
   }
 
   private static getFallbackModelIds(): string[] {
     return [
+      'gemini-2.5-flash',
+      'gemini-2.5-pro',
+      'gemini-2.0-flash',
+      'gemini-2.0-pro',
       'gemini-1.5-flash',
-      'gemini-1.5-flash-latest',
       'gemini-1.5-pro',
-      'gemini-1.5-pro-latest',
       'gemini-1.0-pro',
     ];
   }
@@ -641,7 +665,7 @@ JSON Response:`;
   private static isSupportedModelId(modelId: string): boolean {
     const normalizedId = modelId.toLowerCase();
 
-    if (!normalizedId.startsWith('gemini')) {
+    if (!normalizedId.startsWith('gemini-')) {
       return false;
     }
 
@@ -651,9 +675,33 @@ JSON Response:`;
       'distil',
       'moderation',
       'aqa',
+      'preview',
+      'lite',
+      'vision',
+      'robotics',
+      'image',
+      'audio',
+      'studio',
+      'exp',
+      'beta',
+      'sandbox',
     ];
 
-    return !excludedKeywords.some((keyword) => normalizedId.includes(keyword));
+    if (excludedKeywords.some((keyword) => normalizedId.includes(keyword))) {
+      return false;
+    }
+
+    if (/-(?:latest|\d{3,}|tts)$/.test(normalizedId)) {
+      return false;
+    }
+
+    if (normalizedId === 'gemini-1.0-pro') {
+      return true;
+    }
+
+    const productionPattern = /^gemini-\d+(?:\.\d+)?-(flash|pro)$/;
+
+    return productionPattern.test(normalizedId);
   }
 
   private static isStreamingCapable(modelId: string): boolean {
