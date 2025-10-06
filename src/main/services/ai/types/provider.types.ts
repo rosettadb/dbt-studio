@@ -17,6 +17,9 @@ export interface AIModel {
     input: number;
     output: number;
   };
+  supportsStreaming: boolean;
+  supportsStructuredOutput?: boolean;
+  lastCheckedAt?: string;
 }
 
 export interface ProviderTestResult {

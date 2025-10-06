@@ -40,6 +40,8 @@ export class OpenAIProvider extends BaseAIProvider {
 
   private directOpenAIClient?: OpenAI;
 
+  private cachedModels: AIModel[] = [];
+
   async initialize(config: AIProviderConfig): Promise<void> {
     try {
       this.config = config;
@@ -58,7 +60,7 @@ export class OpenAIProvider extends BaseAIProvider {
       });
 
       // Discover available models dynamically
-      await this.discoverModels();
+      this.cachedModels = await this.discoverModels();
 
       // Note: OpenAI service will be created lazily when needed for backward compatibility
     } catch (error) {
@@ -84,50 +86,14 @@ export class OpenAIProvider extends BaseAIProvider {
       try {
         const modelsResponse = await this.directOpenAIClient.models.list();
 
-        // Filter for chat/completion models
+        const checkedAt = new Date().toISOString();
+
         const chatModels = modelsResponse.data
-          .filter((model) => {
-            const id = model.id.toLowerCase();
-            return (
-              id.includes('gpt') &&
-              !id.includes('instruct') &&
-              !id.includes('embedding') &&
-              !id.includes('whisper') &&
-              !id.includes('tts') &&
-              !id.includes('dall-e') &&
-              !id.includes('moderation') &&
-              !id.includes('babbage') &&
-              !id.includes('davinci') &&
-              !id.includes('curie') &&
-              !id.includes('ada') &&
-              !id.includes('text-') &&
-              !id.includes('code-') &&
-              !id.includes('edit-') &&
-              !id.includes('if-') &&
-              !id.includes('search-') &&
-              !id.includes('similarity-') &&
-              !id.includes('audio-') &&
-              !id.includes('vision-') &&
-              (id.startsWith('gpt-5') ||
-                id.startsWith('gpt-4') ||
-                id.startsWith('gpt-3.5') ||
-                id === 'gpt-4o' ||
-                id === 'gpt-4o-mini' ||
-                id === 'gpt-5' ||
-                id.includes('gpt-5')) &&
-              !id.includes(':') &&
-              !id.includes('ft-')
-            );
-          })
-          .map((model) => ({
-            id: model.id,
-            name: OpenAIProvider.getModelDisplayName(model.id),
-            maxTokens: OpenAIProvider.getModelMaxTokens(model.id),
-            costPer1kTokens: OpenAIProvider.getModelCosts(model.id),
-          }))
+          .map((model) => model.id)
+          .filter((id) => OpenAIProvider.isSupportedModelId(id))
+          .map((id) => OpenAIProvider.buildModelMetadata(id, checkedAt))
           .sort((a, b) => a.id.localeCompare(b.id));
 
-        // If no chat models found, use fallback models
         const models =
           chatModels.length > 0 ? chatModels : await this.getAvailableModels();
 
@@ -252,8 +218,12 @@ export class OpenAIProvider extends BaseAIProvider {
           },
           { role: 'user', content: request.prompt },
         ],
-        max_tokens: request.maxTokens || 4096,
-        temperature: request.temperature || 0.1, // Lower temperature for structured output
+        ...OpenAIProvider.getMaxTokenParam(request.model, request.maxTokens),
+        ...OpenAIProvider.getTemperatureParam(
+          request.model,
+          request.temperature,
+          0.1,
+        ),
         tools: [
           {
             type: 'function',
@@ -463,8 +433,12 @@ export class OpenAIProvider extends BaseAIProvider {
     const response = await this.directOpenAIClient!.chat.completions.create({
       model: request.model || 'gpt-4o',
       messages: [{ role: 'user', content: request.prompt }],
-      max_tokens: request.maxTokens || 4096,
-      temperature: request.temperature || 0.7,
+      ...OpenAIProvider.getMaxTokenParam(request.model, request.maxTokens),
+      ...OpenAIProvider.getTemperatureParam(
+        request.model,
+        request.temperature,
+        0.7,
+      ),
     });
 
     const content = response.choices[0]?.message?.content || '';
@@ -484,17 +458,11 @@ export class OpenAIProvider extends BaseAIProvider {
   }
 
   async getAvailableModels(): Promise<AIModel[]> {
-    // Ensure models are discovered if not already done
-    if (this.supportedModels.length === 0) {
-      await this.discoverModels();
+    if (this.cachedModels.length === 0) {
+      this.cachedModels = await this.discoverModels();
     }
 
-    return this.supportedModels.map((modelId) => ({
-      id: modelId,
-      name: OpenAIProvider.getModelDisplayName(modelId),
-      maxTokens: OpenAIProvider.getModelMaxTokens(modelId),
-      costPer1kTokens: OpenAIProvider.getModelCosts(modelId),
-    }));
+    return [...this.cachedModels];
   }
 
   // eslint-disable-next-line class-methods-use-this
@@ -517,72 +485,23 @@ export class OpenAIProvider extends BaseAIProvider {
 
   // Private helper methods
 
-  private async discoverModels(): Promise<void> {
+  private async discoverModels(): Promise<AIModel[]> {
     try {
-      // Clear existing models first to ensure fresh discovery
-      (this.supportedModels as string[]).length = 0;
-
       if (!this.directOpenAIClient) {
-        // Fallback to known working models including newest ones
-        (this.supportedModels as string[]).push(
-          'gpt-5', // Latest GPT-5 model
-          'gpt-4o',
-          'gpt-4o-mini',
-          'gpt-4-turbo',
-          'gpt-4',
-          'gpt-3.5-turbo',
-        );
-        return;
+        return this.applyDiscoveredModels(OpenAIProvider.getFallbackModelIds());
       }
 
       const models = await this.directOpenAIClient.models.list();
 
-      // Filter for chat/completion models (exclude embedding, moderation, etc.)
-      // Use more restrictive filtering to get only main chat models
-      const chatModels = models.data
-        .filter((model) => {
-          const id = model.id.toLowerCase();
-          return (
-            // Include only GPT models
-            id.includes('gpt') &&
-            // Exclude non-chat models
-            !id.includes('instruct') && // Exclude instruct models
-            !id.includes('embedding') && // Exclude embedding models
-            !id.includes('whisper') && // Exclude audio models
-            !id.includes('tts') && // Exclude text-to-speech models
-            !id.includes('dall-e') && // Exclude image generation models
-            !id.includes('moderation') && // Exclude moderation models
-            !id.includes('babbage') && // Exclude legacy models
-            !id.includes('davinci') && // Exclude legacy models
-            !id.includes('curie') && // Exclude legacy models
-            !id.includes('ada') && // Exclude legacy models
-            !id.includes('text-') && // Exclude text completion models
-            !id.includes('code-') && // Exclude code models
-            !id.includes('edit-') && // Exclude edit models
-            !id.includes('if-') && // Exclude instruction following models
-            !id.includes('search-') && // Exclude search models
-            !id.includes('similarity-') && // Exclude similarity models
-            !id.includes('audio-') && // Exclude audio models
-            !id.includes('vision-') && // Exclude vision models
-            // More restrictive: only include main GPT chat model families
-            (id.startsWith('gpt-5') || // Include GPT-5 models
-              id.startsWith('gpt-4') ||
-              id.startsWith('gpt-3.5') ||
-              id === 'gpt-4o' ||
-              id === 'gpt-4o-mini' ||
-              id === 'gpt-5' ||
-              id.includes('gpt-5')) && // Include any GPT-5 variants
-            // Exclude fine-tuned personal models (they usually have additional suffixes)
-            !id.includes(':') && // Exclude fine-tuned models with org:model format
-            !id.includes('ft-') // Exclude explicitly fine-tuned models
-          );
-        })
+      const discoveredIds = models.data
         .map((model) => model.id)
-        .sort(); // Sort alphabetically
+        .filter((id) => OpenAIProvider.isSupportedModelId(id));
 
-      // Clear existing models and add filtered chat models
-      (this.supportedModels as string[]).length = 0;
-      (this.supportedModels as string[]).push(...chatModels);
+      if (discoveredIds.length === 0) {
+        return this.applyDiscoveredModels(OpenAIProvider.getFallbackModelIds());
+      }
+
+      return this.applyDiscoveredModels(discoveredIds);
     } catch (error) {
       // Check if this is an authentication error - if so, don't use fallback models
       if (
@@ -604,17 +523,54 @@ export class OpenAIProvider extends BaseAIProvider {
         error,
       );
       // Fallback to known working models including newest ones for non-auth errors
-      const fallbackModels = [
-        'gpt-5', // Latest GPT-5 model
-        'gpt-4o',
-        'gpt-4o-mini',
-        'gpt-4-turbo',
-        'gpt-4',
-        'gpt-3.5-turbo',
-      ];
-      (this.supportedModels as string[]).length = 0;
-      (this.supportedModels as string[]).push(...fallbackModels);
+      return this.applyDiscoveredModels(OpenAIProvider.getFallbackModelIds());
     }
+  }
+
+  private applyDiscoveredModels(modelIds: string[]): AIModel[] {
+    const checkedAt = new Date().toISOString();
+    const uniqueIds = Array.from(new Set(modelIds));
+    const prioritized = (OpenAIProvider.getFallbackModelIds?.() ?? []).reduce<
+      Record<string, number>
+    >((acc, modelId, index) => {
+      acc[modelId] = index;
+      return acc;
+    }, {});
+
+    const models = uniqueIds
+      .filter((id) => OpenAIProvider.isStreamingCapable(id))
+      .map((id) => OpenAIProvider.buildModelMetadata(id, checkedAt))
+      .sort((a, b) => {
+        const priorityA = prioritized[a.id] ?? Number.MAX_SAFE_INTEGER;
+        const priorityB = prioritized[b.id] ?? Number.MAX_SAFE_INTEGER;
+
+        if (priorityA !== priorityB) {
+          return priorityA - priorityB;
+        }
+
+        return a.name.localeCompare(b.name);
+      });
+
+    (this.supportedModels as string[]).length = 0;
+    (this.supportedModels as string[]).push(...models.map((model) => model.id));
+
+    return models;
+  }
+
+  private static buildModelMetadata(
+    modelId: string,
+    checkedAt: string,
+  ): AIModel {
+    return {
+      id: modelId,
+      name: OpenAIProvider.getModelDisplayName(modelId),
+      description: OpenAIProvider.getModelDescription(modelId),
+      maxTokens: OpenAIProvider.getModelMaxTokens(modelId),
+      costPer1kTokens: OpenAIProvider.getModelCosts(modelId),
+      supportsStreaming: OpenAIProvider.isStreamingCapable(modelId),
+      supportsStructuredOutput: true,
+      lastCheckedAt: checkedAt,
+    };
   }
 
   private adaptEnhanceModelResponse(
@@ -651,15 +607,115 @@ export class OpenAIProvider extends BaseAIProvider {
     };
   }
 
+  private static getFallbackModelIds(): string[] {
+    return [
+      'gpt-5',
+      'gpt-5-turbo',
+      'gpt-4.1',
+      'gpt-4.1-mini',
+      'gpt-4.1-nano',
+      'gpt-4o',
+      'gpt-4o-mini',
+      'gpt-4-turbo',
+      'gpt-4',
+      'gpt-3.5-turbo',
+      'o4-mini',
+      'o4-mini-high',
+      'o3',
+      'o3-mini',
+      'o3-mini-high',
+    ];
+  }
+
+  private static isSupportedModelId(modelId: string): boolean {
+    const id = modelId.toLowerCase();
+    if (id.includes(':') || id.includes('ft-')) {
+      return false;
+    }
+
+    if (id.startsWith('gpt-') || id.startsWith('o3') || id.startsWith('o4')) {
+      const excludedSubstrings = [
+        'embedding',
+        'instruct',
+        'whisper',
+        'tts',
+        'dall-e',
+        'moderation',
+        'babbage',
+        'davinci',
+        'curie',
+        'ada',
+        'text-',
+        'code-',
+        'edit-',
+        'if-',
+        'search-',
+        'similarity-',
+        'audio-',
+        'vision-',
+      ];
+
+      return !excludedSubstrings.some((keyword) => id.includes(keyword));
+    }
+
+    return false;
+  }
+
+  private static isStreamingCapable(modelId: string): boolean {
+    const id = modelId.toLowerCase();
+    if (
+      id.startsWith('gpt-5') ||
+      id.startsWith('gpt-4') ||
+      id.startsWith('gpt-3.5')
+    ) {
+      return true;
+    }
+    if (id.startsWith('o3') || id.startsWith('o4')) {
+      return true;
+    }
+    return ['gpt-4o', 'gpt-4o-mini'].includes(id);
+  }
+
+  private static getModelDescription(modelId: string): string {
+    const descriptions: Record<string, string> = {
+      'gpt-5': 'Flagship reasoning model (2025).',
+      'gpt-5-turbo': 'Faster GPT-5 variant with strong multimodal performance.',
+      'gpt-4.1': 'Advanced GPT-4 generation with improved reasoning.',
+      'gpt-4.1-mini': 'Cost-optimized GPT-4.1 variant.',
+      'gpt-4.1-nano': 'Lightweight GPT-4.1 for low-latency use cases.',
+      'gpt-4o': 'Multimodal GPT-4 Omni model.',
+      'gpt-4o-mini': 'Smaller GPT-4 Omni for efficiency.',
+      'gpt-4-turbo': 'High throughput GPT-4 generation.',
+      'gpt-4': 'Classic GPT-4 completion model.',
+      'gpt-3.5-turbo': 'Affordable GPT-3.5 chat model.',
+      'o4-mini':
+        'OpenAI o-series reasoning model optimized for multimodal tasks.',
+      'o4-mini-high': 'High capability variant of o4-mini.',
+      o3: 'OpenAI o-series reasoning specialist.',
+      'o3-mini': 'Smaller o-series reasoning model.',
+      'o3-mini-high': 'High capability variant of o3-mini.',
+    };
+
+    return descriptions[modelId] || 'OpenAI chat/completion model';
+  }
+
   private static getModelDisplayName(modelId: string): string {
     const displayNames: Record<string, string> = {
       'gpt-5': 'GPT-5',
       'gpt-5-turbo': 'GPT-5 Turbo',
+      'gpt-4.1': 'GPT-4.1',
+      'gpt-4.1-mini': 'GPT-4.1 Mini',
+      'gpt-4.1-nano': 'GPT-4.1 Nano',
       'gpt-4o': 'GPT-4o',
       'gpt-4o-mini': 'GPT-4o Mini',
       'gpt-4-turbo': 'GPT-4 Turbo',
       'gpt-4': 'GPT-4',
       'gpt-3.5-turbo': 'GPT-3.5 Turbo',
+      'o4-mini': 'o4 Mini',
+      'o4-mini-high': 'o4 Mini High',
+      o3: 'o3',
+      'o3-mini': 'o3 Mini',
+      'o3-mini-high': 'o3 Mini High',
     };
 
     // For unknown models, create a display name from the model ID
@@ -676,11 +732,20 @@ export class OpenAIProvider extends BaseAIProvider {
   private static getModelMaxTokens(modelId: string): number {
     const maxTokens: Record<string, number> = {
       'gpt-5': 8192,
+      'gpt-5-turbo': 8192,
+      'gpt-4.1': 8192,
+      'gpt-4.1-mini': 16384,
+      'gpt-4.1-nano': 32768,
       'gpt-4o': 4096,
       'gpt-4o-mini': 16384,
       'gpt-4-turbo': 4096,
       'gpt-4': 8192,
       'gpt-3.5-turbo': 4096,
+      'o4-mini': 16384,
+      'o4-mini-high': 16384,
+      o3: 8192,
+      'o3-mini': 8192,
+      'o3-mini-high': 8192,
     };
 
     // For unknown models, try to infer from model name or use safe default
@@ -699,11 +764,20 @@ export class OpenAIProvider extends BaseAIProvider {
   private static getModelCosts(modelId: string) {
     const costs: Record<string, { input: number; output: number }> = {
       'gpt-5': { input: 0.05, output: 0.15 }, // Estimated costs for GPT-5
+      'gpt-5-turbo': { input: 0.03, output: 0.09 },
+      'gpt-4.1': { input: 0.015, output: 0.045 },
+      'gpt-4.1-mini': { input: 0.006, output: 0.018 },
+      'gpt-4.1-nano': { input: 0.002, output: 0.006 },
       'gpt-4o': { input: 0.005, output: 0.015 },
       'gpt-4o-mini': { input: 0.00015, output: 0.0006 },
       'gpt-4-turbo': { input: 0.01, output: 0.03 },
       'gpt-4': { input: 0.03, output: 0.06 },
       'gpt-3.5-turbo': { input: 0.0015, output: 0.002 },
+      'o4-mini': { input: 0.003, output: 0.009 },
+      'o4-mini-high': { input: 0.006, output: 0.018 },
+      o3: { input: 0.015, output: 0.045 },
+      'o3-mini': { input: 0.004, output: 0.012 },
+      'o3-mini-high': { input: 0.008, output: 0.024 },
     };
 
     // For unknown models, try to infer costs from model family or return undefined
@@ -717,5 +791,51 @@ export class OpenAIProvider extends BaseAIProvider {
     }
 
     return costs[modelId];
+  }
+
+  private static getMaxTokenParam(
+    model: string | undefined,
+    maxTokens?: number,
+  ): Record<string, number> {
+    const limit = maxTokens && maxTokens > 0 ? maxTokens : 4096;
+    if (!model) {
+      return { max_tokens: limit };
+    }
+
+    const id = model.toLowerCase();
+    const modernPrefixes = ['gpt-5', 'gpt-4.1', 'o4', 'o3'];
+
+    if (modernPrefixes.some((prefix) => id.startsWith(prefix))) {
+      return { max_completion_tokens: limit };
+    }
+
+    return { max_tokens: limit };
+  }
+
+  private static getTemperatureParam(
+    model: string | undefined,
+    temperature: number | undefined,
+    fallback: number,
+  ): Record<string, number> {
+    const desired =
+      typeof temperature === 'number' && !Number.isNaN(temperature)
+        ? temperature
+        : fallback;
+
+    if (!model) {
+      return { temperature: desired };
+    }
+
+    const id = model.toLowerCase();
+    const modernPrefixes = ['gpt-5', 'gpt-4.1', 'o4', 'o3'];
+
+    if (modernPrefixes.some((prefix) => id.startsWith(prefix))) {
+      if (Math.abs(desired - 1) < 1e-6) {
+        return {};
+      }
+      return { temperature: 1 };
+    }
+
+    return { temperature: desired };
   }
 }

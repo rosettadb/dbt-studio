@@ -11,7 +11,7 @@ import { toast } from 'react-toastify';
 import { useGetProviderModels } from '../../controllers/aiProviders.controller';
 import type { AIModel } from '../../controllers/aiProviders.controller';
 
-interface SmartModelSelectorProps {
+export interface SmartModelSelectorProps {
   providerId?: string; // For saved providers
   discoveredModels?: AIModel[]; // Models discovered from testing
   value?: string;
@@ -52,16 +52,23 @@ export const SmartModelSelector: React.FC<SmartModelSelectorProps> = ({
     models = dynamicModels;
   }
 
-  // Always include the current value as an option if it's not in the list
-  const modelOptions = [...models];
+  const streamingModels = models.filter(
+    (model) => model.supportsStreaming !== false,
+  );
+
+  const modelOptions: AIModel[] = [...streamingModels];
+
   if (value && !models.find((m) => m.id === value)) {
     modelOptions.unshift({
       id: value,
       name: value,
       description: 'Current selected model',
-      maxTokens: 0, // Unknown max tokens for current selected model
+      maxTokens: 0,
+      supportsStreaming: true,
     });
   }
+
+  const hiddenModelCount = models.length - streamingModels.length;
 
   return (
     <Box>
@@ -77,12 +84,17 @@ export const SmartModelSelector: React.FC<SmartModelSelectorProps> = ({
           {modelOptions.map((model) => (
             <MenuItem key={model.id} value={model.id}>
               <Box>
-                <Typography variant="body2">
+                <Typography variant="body2" fontWeight="medium">
                   {model.name || model.id}
                 </Typography>
                 {model.description && (
                   <Typography variant="caption" color="text.secondary">
                     {model.description}
+                  </Typography>
+                )}
+                {model.maxTokens > 0 && (
+                  <Typography variant="caption" color="text.secondary">
+                    Max tokens: {model.maxTokens.toLocaleString()}
                   </Typography>
                 )}
               </Box>
@@ -91,7 +103,8 @@ export const SmartModelSelector: React.FC<SmartModelSelectorProps> = ({
           {modelOptions.length === 0 && (
             <MenuItem disabled>
               <Typography variant="body2" color="text.secondary">
-                No models available. Test connection to discover models.
+                No streaming-capable models available. Test connection to
+                refresh.
               </Typography>
             </MenuItem>
           )}
@@ -106,6 +119,17 @@ export const SmartModelSelector: React.FC<SmartModelSelectorProps> = ({
           sx={{ mt: 1, display: 'block' }}
         >
           {models.length} model{models.length === 1 ? '' : 's'} available
+        </Typography>
+      )}
+
+      {hiddenModelCount > 0 && (
+        <Typography
+          variant="caption"
+          color="text.secondary"
+          sx={{ display: 'block' }}
+        >
+          {hiddenModelCount} model{hiddenModelCount === 1 ? '' : 's'} omitted
+          because streaming is not supported.
         </Typography>
       )}
 
