@@ -2,7 +2,7 @@ import React from 'react';
 import { Typography, useColorScheme, useTheme } from '@mui/material';
 import { toast } from 'react-toastify';
 import AnsiToHtml from 'ansi-to-html';
-import { useCli } from '../../hooks';
+import { useCli, useCommandHistory } from '../../hooks';
 import { OutputBox, StyledInput, TerminalContainer, InputLine } from './styles';
 import { useGetSettings } from '../../controllers';
 import { Project } from '../../../types/backend';
@@ -17,7 +17,9 @@ export const Terminal: React.FC<Props> = ({ project }) => {
   const { output, error, runCommandAsync, isRunning, clearOutput } = useCli();
   const [command, setCommand] = React.useState('');
   const outputRef = React.useRef<HTMLDivElement>(null);
+  const inputRef = React.useRef<HTMLInputElement | null>(null);
   const { data: settings } = useGetSettings();
+  const { record, getPrev, getNext, resetPointer } = useCommandHistory();
 
   // Theme-based terminal colors using Material UI theme
   const getTerminalColors = (themeMode: string | undefined) => {
@@ -71,9 +73,25 @@ export const Terminal: React.FC<Props> = ({ project }) => {
     }
   }, [output, error]);
 
+  const moveCaretToEnd = React.useCallback((value: string) => {
+    if (typeof window === 'undefined') {
+      return;
+    }
+
+    window.setTimeout(() => {
+      if (!inputRef.current) {
+        return;
+      }
+      const { length } = value;
+      inputRef.current.focus();
+      inputRef.current.setSelectionRange(length, length);
+    }, 0);
+  }, []);
+
   const handleSendCommand = () => {
-    if (command.trim()) {
-      let newCommand = command.trim();
+    const originalCommand = command.trim();
+    if (originalCommand) {
+      let newCommand = originalCommand;
 
       const allowedCommands = ['rosetta', 'dbt', 'git', 'python'];
       const isAllowed = allowedCommands.some((cmd) =>
@@ -82,6 +100,14 @@ export const Terminal: React.FC<Props> = ({ project }) => {
 
       if (!isAllowed) {
         toast.error('Only rosetta, dbt, git, and python commands are allowed!');
+        return;
+      }
+
+      const [baseCommand, ...rest] = originalCommand.split(/\s+/);
+      if (baseCommand === 'python' && rest.length === 0) {
+        toast.error(
+          'Interactive Python sessions are not supported. Please provide a script or arguments.',
+        );
         return;
       }
 
@@ -109,15 +135,45 @@ export const Terminal: React.FC<Props> = ({ project }) => {
         newCommand = `${navigateCommand} && ${tmpCommand}`;
       }
 
+      record(originalCommand);
       runCommandAsync(newCommand);
       setCommand('');
+      resetPointer();
     }
   };
 
-  const handleKeyPress = (event: React.KeyboardEvent) => {
+  const handleKeyDown = (event: React.KeyboardEvent<HTMLInputElement>) => {
     if (event.key === 'Enter' && !event.shiftKey) {
       event.preventDefault();
       handleSendCommand();
+      return;
+    }
+
+    if (isRunning) {
+      return;
+    }
+
+    if (event.key === 'ArrowUp') {
+      event.preventDefault();
+      const previousCommand = getPrev(command);
+      setCommand(previousCommand);
+      moveCaretToEnd(previousCommand);
+      return;
+    }
+
+    if (event.key === 'ArrowDown') {
+      event.preventDefault();
+      const nextCommand = getNext(command);
+      setCommand(nextCommand);
+      moveCaretToEnd(nextCommand);
+      return;
+    }
+
+    if (event.key === 'Escape') {
+      event.preventDefault();
+      setCommand('');
+      resetPointer();
+      moveCaretToEnd('');
     }
   };
 
@@ -193,8 +249,9 @@ export const Terminal: React.FC<Props> = ({ project }) => {
           placeholder="Type a rosetta or dbt command..."
           value={command}
           onChange={(e) => setCommand(e.target.value)}
-          onKeyPress={handleKeyPress}
+          onKeyDown={handleKeyDown}
           disabled={isRunning}
+          inputRef={inputRef}
           sx={{
             '& .MuiInputBase-input': {
               color: terminalColors.fg,
