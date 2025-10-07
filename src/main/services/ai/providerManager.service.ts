@@ -99,16 +99,10 @@ export class AIProviderManager {
     }
 
     // Select model
-    let selectedModel = requestedModel;
-    if (
-      !selectedModel ||
-      !this.isModelValidForProvider(selectedModel, activeProvider.type)
-    ) {
-      selectedModel = this.getDefaultModelForProvider(
-        activeProvider.type,
-        config,
-      );
-    }
+    const selectedModel =
+      requestedModel && requestedModel.trim().length > 0
+        ? requestedModel
+        : this.getDefaultModelForProvider(activeProvider.type, config);
 
     // Create and initialize instance
     const providerInstance = this.createProviderInstance(
@@ -692,10 +686,7 @@ export class AIProviderManager {
       let selectedModel = request.model;
 
       // If no model specified or if the model doesn't match the provider, use provider's default
-      if (
-        !selectedModel ||
-        !this.isModelValidForProvider(selectedModel, activeProvider.type)
-      ) {
+      if (!selectedModel || selectedModel.trim().length === 0) {
         selectedModel = this.getDefaultModelForProvider(
           activeProvider.type,
           config,
@@ -786,50 +777,21 @@ export class AIProviderManager {
     yield* providerInstance.streamCompletion<T>(request);
   }
 
-  // Helper method to check if a model is valid for a provider
-  private static isModelValidForProvider(
-    model: string,
-    providerType: string,
-  ): boolean {
-    const providerModels: Record<string, string[]> = {
-      openai: ['gpt-4o', 'gpt-4', 'gpt-3.5-turbo', 'gpt-4-turbo'],
-      anthropic: [
-        'claude-3-5-sonnet-20241022',
-        'claude-3-haiku-20240307',
-        'claude-3-sonnet-20240229',
-      ],
-      // Only include models that actually work with the APIs
-      gemini: ['gemini-1.5-pro', 'gemini-1.5-flash'],
-      ollama: [], // Ollama can use any model that's locally available
-    };
-
-    // For Ollama, we can't validate ahead of time, so assume it's valid
-    if (providerType === 'ollama') {
-      return true;
-    }
-
-    const validModels = providerModels[providerType] || [];
-    return validModels.includes(model);
-  }
-
   // Helper method to get default model for a provider
   private static getDefaultModelForProvider(
     providerType: string,
     config: any,
   ): string {
     // First priority: Use the model from provider config if it's valid
-    if (
-      config.model &&
-      this.isModelValidForProvider(config.model, providerType)
-    ) {
+    if (typeof config.model === 'string' && config.model.trim().length > 0) {
       return config.model;
     }
 
     // Second priority: Use system default models only as fallback
     const defaultModels: Record<string, string> = {
-      openai: 'gpt-4o',
-      anthropic: 'claude-3-5-sonnet-20241022',
-      gemini: 'gemini-1.5-flash', // Use Flash model - has higher free tier limits
+      openai: 'gpt-4.1',
+      anthropic: 'claude-4.1-sonnet-20250815',
+      gemini: 'gemini-1.5-flash',
       ollama: 'llama2', // Default fallback for Ollama
     };
 

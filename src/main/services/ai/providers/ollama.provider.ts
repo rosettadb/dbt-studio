@@ -425,7 +425,13 @@ export class OllamaProvider extends BaseAIProvider {
       name: this.formatModelName(model.name),
       description: `${model.details?.family || 'Unknown'} model (${this.formatSize(model.size)})`,
       maxTokens: 4096, // Default, Ollama doesn't provide this info
-      // Ollama models are free (running locally)
+      costPer1kTokens: {
+        input: 0,
+        output: 0,
+      },
+      supportsStreaming: true,
+      supportsStructuredOutput: false,
+      lastCheckedAt: new Date().toISOString(),
     }));
   }
 

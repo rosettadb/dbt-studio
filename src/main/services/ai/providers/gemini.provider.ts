@@ -41,6 +41,8 @@ export class GeminiProvider extends BaseAIProvider {
 
   private config?: AIProviderConfig;
 
+  private cachedModels: AIModel[] = [];
+
   async initialize(config: AIProviderConfig): Promise<void> {
     try {
       this.config = config;
@@ -59,7 +61,7 @@ export class GeminiProvider extends BaseAIProvider {
       this.genAI = new GoogleGenerativeAI(apiKey);
 
       // Discover available models dynamically
-      await this.discoverModels();
+      this.cachedModels = await this.discoverModels();
     } catch (error) {
       throw this.handleProviderError(error, 'initialization');
     }
@@ -74,24 +76,25 @@ export class GeminiProvider extends BaseAIProvider {
       }
 
       // Test with a simple request using the best available model
+      const availableModels = await this.getAvailableModels();
       const testModel =
-        this.supportedModels.length > 0
-          ? this.supportedModels[0]
-          : 'gemini-1.5-flash'; // Fallback
+        availableModels.length > 0 ? availableModels[0].id : 'gemini-1.5-flash';
 
-      const model = this.genAI!.getGenerativeModel({
+      const testResult = this.genAI!.getGenerativeModel({
         model: testModel,
       });
-      const result = await model.generateContent('Hello');
+      const result = await testResult.generateContent('Hello');
 
       if (!result.response.text()) {
         throw new Error('Empty response from Gemini API');
       }
+      const duration = Date.now() - startTime;
 
       return {
         success: true,
-        latencyMs: Date.now() - startTime,
-        modelsAvailable: this.supportedModels.length,
+        latencyMs: duration,
+        modelsAvailable: availableModels.length,
+        models: availableModels,
       };
     } catch (error) {
       return {
@@ -142,8 +145,12 @@ export class GeminiProvider extends BaseAIProvider {
         description,
       );
 
+      const modelId = GeminiProvider.normalizeModelId(
+        request.model || 'gemini-1.5-flash',
+      );
+
       const model = this.genAI!.getGenerativeModel({
-        model: request.model || 'gemini-1.5-pro',
+        model: modelId,
         generationConfig: {
           maxOutputTokens: request.maxTokens || 2048,
           temperature: request.temperature || 0.1, // Lower temperature for structured output
@@ -243,7 +250,7 @@ export class GeminiProvider extends BaseAIProvider {
           completionTokens: 0,
           totalTokens: 0,
         },
-        model: request.model || 'gemini-1.5-pro',
+        model: modelId,
         providerId: this.type,
         finishReason: GeminiProvider.mapFinishReason(response),
         parsedData,
@@ -340,7 +347,7 @@ JSON Response:`;
         completionTokens: 0,
         totalTokens: 0,
       },
-      model: request.model || 'gemini-1.5-pro',
+      model: GeminiProvider.normalizeModelId(request.model || 'gemini-1.5-pro'),
       providerId: this.type,
       finishReason: 'stop',
       data, // Backward compatibility
@@ -352,8 +359,12 @@ JSON Response:`;
   private async generateGenericCompletion<T>(
     request: CompletionRequest<T>,
   ): Promise<CompletionResponse<T>> {
+    const modelId = GeminiProvider.normalizeModelId(
+      request.model || 'gemini-1.5-flash',
+    );
+
     const model = this.genAI!.getGenerativeModel({
-      model: request.model || 'gemini-1.5-pro',
+      model: modelId,
       generationConfig: {
         maxOutputTokens: request.maxTokens || 2048,
         temperature: request.temperature || 0.7,
@@ -370,11 +381,11 @@ JSON Response:`;
     return {
       content: response.text(),
       usage: {
-        promptTokens: 0, // Gemini doesn't provide detailed token counts
+        promptTokens: 0,
         completionTokens: 0,
         totalTokens: 0,
       },
-      model: request.model || 'gemini-1.5-pro',
+      model: modelId,
       providerId: this.type,
       finishReason: GeminiProvider.mapFinishReason(response),
       metadata: {
@@ -394,8 +405,12 @@ JSON Response:`;
         throw new Error('Gemini provider not initialized');
       }
 
+      const requestedModel = GeminiProvider.normalizeModelId(
+        request.model || 'gemini-1.5-flash',
+      );
+
       const model = this.genAI.getGenerativeModel({
-        model: request.model || 'gemini-1.5-pro',
+        model: requestedModel,
         generationConfig: {
           maxOutputTokens: request.maxTokens || 2048,
           temperature: request.temperature || 0.7,
@@ -449,23 +464,19 @@ JSON Response:`;
 
   async getAvailableModels(): Promise<AIModel[]> {
     // Ensure models are discovered if not already done
-    if (this.supportedModels.length === 0) {
-      await this.discoverModels();
+    if (this.cachedModels.length === 0) {
+      this.cachedModels = await this.discoverModels();
     }
 
-    return this.supportedModels.map((modelId) => ({
-      id: modelId,
-      name: GeminiProvider.getModelDisplayName(modelId),
-      description: GeminiProvider.getModelDescription(modelId),
-      maxTokens: GeminiProvider.getModelMaxTokens(modelId),
-      costPer1kTokens: GeminiProvider.getModelCosts(modelId),
-    }));
+    return [...this.cachedModels];
   }
 
   // eslint-disable-next-line class-methods-use-this
   async estimateCost(request: CompletionRequest): Promise<CostEstimate> {
     const estimatedTokens = Math.ceil(request.prompt.length / 4);
-    const model = request.model || 'gemini-1.5-pro';
+    const model = GeminiProvider.normalizeModelId(
+      request.model || 'gemini-1.5-flash',
+    );
     const costs = GeminiProvider.getModelCosts(model);
 
     const estimatedCost = costs
@@ -493,77 +504,21 @@ JSON Response:`;
 
   // Private helper methods
 
-  private async discoverModels(): Promise<void> {
+  private async discoverModels(): Promise<AIModel[]> {
     try {
       if (!this.genAI) {
-        // Cannot discover models - client not initialized, using fallback models
-        // Fallback to known working models
-        (this.supportedModels as string[]).push(
-          'gemini-1.5-pro',
-          'gemini-1.5-flash',
-          'gemini-1.0-pro',
-        );
-        return;
+        return this.applyDiscoveredModels(GeminiProvider.getFallbackModelIds());
       }
 
-      // Google's Generative AI SDK uses a different approach
-      // We'll use known model families and try to detect available versions
-      const knownModelFamilies = [
-        // Gemini 2.5 models (newest)
-        'gemini-2.5-pro',
-        'gemini-2.5-flash',
-        'gemini-2.5-pro-latest',
-        'gemini-2.5-flash-latest',
-        'gemini-2.5-pro-experimental',
-        'gemini-2.5-flash-experimental',
-        // Gemini 2.0 models
-        'gemini-2.0-pro',
-        'gemini-2.0-flash',
-        'gemini-2.0-pro-latest',
-        'gemini-2.0-flash-latest',
-        'gemini-2.0-pro-experimental',
-        'gemini-2.0-flash-experimental',
-        // Gemini 1.5 models
-        'gemini-1.5-pro',
-        'gemini-1.5-flash',
-        'gemini-1.5-pro-latest',
-        'gemini-1.5-flash-latest',
-        'gemini-1.5-pro-002',
-        'gemini-1.5-flash-002',
-        'gemini-1.5-pro-001',
-        'gemini-1.5-flash-001',
-        'gemini-1.5-pro-experimental',
-        'gemini-1.5-flash-experimental',
-        // Gemini 1.0 models
-        'gemini-1.0-pro',
-        'gemini-1.0-pro-latest',
-        'gemini-1.0-pro-001',
-        // Legacy models
-        'gemini-pro', // Legacy name
-        'gemini-pro-vision', // Vision model
-        'gemini-flash', // Short name
-      ];
+      const apiModels = await this.fetchAvailableModelIds();
 
-      const availableModels: string[] = [];
+      if (apiModels.length > 0) {
+        return this.applyDiscoveredModels(apiModels);
+      }
 
-      // Test each model to see if it's available
-      await Promise.allSettled(
-        knownModelFamilies.map(async (modelId) => {
-          try {
-            if (this.genAI) {
-              this.genAI.getGenerativeModel({ model: modelId });
-              // If we can create the model instance, it's likely available
-              availableModels.push(modelId);
-            }
-          } catch (error) {
-            // Model not available, skip it
-          }
-        }),
-      );
-
-      // Clear existing models and add discovered available models
-      (this.supportedModels as string[]).length = 0;
-      (this.supportedModels as string[]).push(...availableModels);
+      // Google's Generative AI SDK doesn't validate model IDs on instantiation.
+      // Fall back to curated list if API discovery fails.
+      return this.applyDiscoveredModels(GeminiProvider.getFallbackModelIds());
     } catch (error) {
       // eslint-disable-next-line no-console
       console.error(
@@ -572,18 +527,255 @@ JSON Response:`;
       );
 
       // Fallback to known working models (including latest)
-      const fallbackModels = [
-        'gemini-2.5-pro',
-        'gemini-2.5-flash',
-        'gemini-2.0-pro',
-        'gemini-2.0-flash',
-        'gemini-1.5-pro',
-        'gemini-1.5-flash',
-        'gemini-1.0-pro',
-      ];
+      return this.applyDiscoveredModels(GeminiProvider.getFallbackModelIds());
+    }
+  }
 
-      (this.supportedModels as string[]).length = 0;
-      (this.supportedModels as string[]).push(...fallbackModels);
+  private applyDiscoveredModels(modelIds: string[]): AIModel[] {
+    const checkedAt = new Date().toISOString();
+    const fallbackModelIds = GeminiProvider.getFallbackModelIds();
+    const combinedIds = Array.from(new Set([...modelIds, ...fallbackModelIds]));
+    const normalizedIds = combinedIds
+      .map((id) => GeminiProvider.normalizeModelId(id))
+      .filter((id) => GeminiProvider.isSupportedModelId(id));
+
+    const preferredOrder = [
+      'gemini-2.5-pro',
+      'gemini-2.5-flash',
+      'gemini-2.0-pro',
+      'gemini-2.0-flash',
+      'gemini-1.5-pro',
+      'gemini-1.5-flash',
+      'gemini-1.0-pro',
+    ];
+
+    const fallbackPriorities = [...preferredOrder].reduce(
+      (acc, fallbackId, index) => {
+        const normalizedFallback = GeminiProvider.normalizeModelId(fallbackId);
+        if (!(normalizedFallback in acc)) {
+          acc[normalizedFallback] = index;
+        }
+
+        const baseFallback = normalizedFallback.replace(/-latest$/, '');
+        if (!(baseFallback in acc)) {
+          acc[baseFallback] = index;
+        }
+
+        return acc;
+      },
+      {} as Record<string, number>,
+    );
+
+    const dedupedIds = Array.from(
+      normalizedIds
+        .reduce((map, id) => {
+          const baseId = id.replace(/-latest$/, '');
+          const existing = map.get(baseId);
+
+          if (!existing) {
+            map.set(baseId, id);
+            return map;
+          }
+
+          const existingIsLatest = existing.endsWith('-latest');
+          const incomingIsLatest = id.endsWith('-latest');
+
+          if (existingIsLatest && !incomingIsLatest) {
+            map.set(baseId, id);
+          }
+
+          return map;
+        }, new Map<string, string>())
+        .values(),
+    );
+
+    const models = dedupedIds
+      .map((id) => GeminiProvider.buildModelMetadata(id, checkedAt))
+      .sort((a, b) => {
+        const priorityA =
+          fallbackPriorities[a.id] ??
+          fallbackPriorities[a.id.replace(/-latest$/, '')] ??
+          Number.MAX_SAFE_INTEGER;
+        const priorityB =
+          fallbackPriorities[b.id] ??
+          fallbackPriorities[b.id.replace(/-latest$/, '')] ??
+          Number.MAX_SAFE_INTEGER;
+
+        if (priorityA !== priorityB) {
+          return priorityA - priorityB;
+        }
+
+        const rank = (id: string) => {
+          if (id.includes('preview') || id.includes('-lite')) return 1;
+          return 0;
+        };
+
+        const rankDiff = rank(a.id) - rank(b.id);
+        if (rankDiff !== 0) {
+          return rankDiff;
+        }
+
+        return a.name.localeCompare(b.name);
+      });
+
+    (this.supportedModels as string[]).length = 0;
+    (this.supportedModels as string[]).push(...models.map((model) => model.id));
+
+    return models;
+  }
+
+  private static buildModelMetadata(
+    modelId: string,
+    checkedAt: string,
+  ): AIModel {
+    return {
+      id: modelId,
+      name: GeminiProvider.getModelDisplayName(modelId),
+      description: GeminiProvider.getModelDescription(modelId),
+      maxTokens: GeminiProvider.getModelMaxTokens(modelId),
+      costPer1kTokens: GeminiProvider.getModelCosts(modelId),
+      supportsStreaming: GeminiProvider.isStreamingCapable(modelId),
+      supportsStructuredOutput: true,
+      lastCheckedAt: checkedAt,
+    };
+  }
+
+  private static normalizeModelId(modelId: string): string {
+    const cleanId = modelId.startsWith('models/')
+      ? modelId.replace(/^models\//, '')
+      : modelId;
+
+    const legacyToLatestMap: Record<string, string> = {};
+
+    return legacyToLatestMap[cleanId] || cleanId;
+  }
+
+  private static getFallbackModelIds(): string[] {
+    return [
+      'gemini-2.5-flash',
+      'gemini-2.5-pro',
+      'gemini-2.0-flash',
+      'gemini-2.0-pro',
+      'gemini-1.5-flash',
+      'gemini-1.5-pro',
+      'gemini-1.0-pro',
+    ];
+  }
+
+  private static isSupportedModelId(modelId: string): boolean {
+    const normalizedId = modelId.toLowerCase();
+
+    if (!normalizedId.startsWith('gemini-')) {
+      return false;
+    }
+
+    const excludedKeywords = [
+      'embedding',
+      'embed',
+      'distil',
+      'moderation',
+      'aqa',
+      'preview',
+      'lite',
+      'vision',
+      'robotics',
+      'image',
+      'audio',
+      'studio',
+      'exp',
+      'beta',
+      'sandbox',
+    ];
+
+    if (excludedKeywords.some((keyword) => normalizedId.includes(keyword))) {
+      return false;
+    }
+
+    if (/-(?:latest|\d{3,}|tts)$/.test(normalizedId)) {
+      return false;
+    }
+
+    if (normalizedId === 'gemini-1.0-pro') {
+      return true;
+    }
+
+    const productionPattern = /^gemini-\d+(?:\.\d+)?-(flash|pro)$/;
+
+    return productionPattern.test(normalizedId);
+  }
+
+  private static isStreamingCapable(modelId: string): boolean {
+    // All supported conversational Gemini models provide streaming capabilities via the SDK.
+    return GeminiProvider.isSupportedModelId(modelId);
+  }
+
+  private async fetchAvailableModelIds(): Promise<string[]> {
+    if (!this.config?.apiKey) {
+      return [];
+    }
+
+    try {
+      const baseUrl =
+        this.config.baseUrl?.replace(/\/$/, '') ??
+        'https://generativelanguage.googleapis.com';
+      const url = new URL('/v1beta/models', baseUrl);
+      url.searchParams.set('key', this.config.apiKey);
+      url.searchParams.set('pageSize', '200');
+
+      const response = await fetch(url.toString());
+
+      if (!response.ok) {
+        // eslint-disable-next-line no-console
+        console.warn(
+          '[GEMINI PROVIDER] Failed to fetch models list:',
+          response.status,
+          response.statusText,
+        );
+        return [];
+      }
+
+      const data = (await response.json()) as {
+        models?: Array<{
+          name?: string;
+          supportedGenerationMethods?: string[];
+          supportedMethods?: string[];
+        }>;
+      };
+
+      if (!data.models) {
+        return [];
+      }
+
+      return data.models
+        .filter((model) => {
+          const generationMethods = Array.isArray(
+            model.supportedGenerationMethods,
+          )
+            ? model.supportedGenerationMethods
+            : [];
+
+          if (
+            generationMethods.length === 0 &&
+            Array.isArray(model.supportedMethods)
+          ) {
+            generationMethods.push(...model.supportedMethods);
+          }
+
+          if (generationMethods.length === 0) {
+            // Some API responses omit methods; assume generateContent is supported
+            return true;
+          }
+
+          return generationMethods.includes('generateContent');
+        })
+        .map((model) => model.name || '')
+        .map((name) => name.replace(/^models\//, ''))
+        .map((name) => GeminiProvider.normalizeModelId(name))
+        .filter((name) => name.length > 0);
+    } catch (error) {
+      // eslint-disable-next-line no-console
+      console.warn('[GEMINI PROVIDER] Model list request failed:', error);
+      return [];
     }
   }
 
@@ -921,8 +1113,10 @@ JSON Response:`;
         throw new Error('Gemini provider not initialized');
       }
 
+      const modelId = GeminiProvider.normalizeModelId('gemini-1.5-pro');
+
       const model = this.genAI.getGenerativeModel({
-        model: 'gemini-1.5-pro',
+        model: modelId,
         generationConfig: {
           maxOutputTokens: 8192,
           temperature: 0.0,
