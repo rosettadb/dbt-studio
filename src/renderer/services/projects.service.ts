@@ -206,6 +206,20 @@ export const deleteItem = async (body: { filePath: string }): Promise<void> => {
   return data;
 };
 
+export const renamePath = async (body: {
+  path: string;
+  newName: string;
+}): Promise<string> => {
+  const { data } = await client.post<
+    {
+      path: string;
+      newName: string;
+    },
+    string
+  >('project:renamePath', body);
+  return data;
+};
+
 export const selectProject = async (body: {
   projectId: string;
 }): Promise<void> => {

@@ -39,6 +39,8 @@ export class AnthropicProvider extends BaseAIProvider {
 
   private config?: AIProviderConfig;
 
+  private cachedModels: AIModel[] = [];
+
   async initialize(config: AIProviderConfig): Promise<void> {
     try {
       this.config = config;
@@ -58,7 +60,7 @@ export class AnthropicProvider extends BaseAIProvider {
       });
 
       // Discover available models dynamically
-      await this.discoverModels();
+      this.cachedModels = await this.discoverModels();
     } catch (error) {
       throw this.handleProviderError(error, 'initialization');
     }
@@ -72,21 +74,7 @@ export class AnthropicProvider extends BaseAIProvider {
         throw new Error('Provider not initialized. Call initialize() first.');
       }
 
-      // Skip actual API call to preserve credits and avoid quota issues
-      // Return discovered models based on our supported models list
-      const discoveredModels: AIModel[] = this.supportedModels.map(
-        (modelId) => ({
-          id: modelId,
-          name: AnthropicProvider.getModelDisplayName(modelId),
-          description: AnthropicProvider.getModelDescription(modelId),
-          provider: 'anthropic',
-          contextWindow: this.capabilities.contextWindow,
-          maxTokens: AnthropicProvider.getModelMaxTokens(modelId),
-          costPer1kTokens: AnthropicProvider.getModelCosts(modelId),
-        }),
-      );
-
-      // Test successful - returning discovered models
+      const discoveredModels = await this.getAvailableModels();
 
       return {
         success: true,
@@ -180,7 +168,7 @@ export class AnthropicProvider extends BaseAIProvider {
 
     try {
       const response = await this.anthropic!.messages.create({
-        model: request.model || 'claude-3-5-sonnet-20241022',
+        model: request.model || 'claude-4.1-sonnet-20250815',
         max_tokens: request.maxTokens || 4096,
         temperature: request.temperature || 0.1,
         messages: [
@@ -259,7 +247,7 @@ export class AnthropicProvider extends BaseAIProvider {
           totalTokens:
             response.usage.input_tokens + response.usage.output_tokens,
         },
-        model: request.model || 'claude-3-5-sonnet-20241022',
+        model: request.model || 'claude-4.1-sonnet-20250815',
         providerId: this.type,
         finishReason: AnthropicProvider.mapStopReason(response.stop_reason),
         parsedData,
@@ -279,7 +267,7 @@ export class AnthropicProvider extends BaseAIProvider {
     request: CompletionRequest<T>,
   ): Promise<CompletionResponse<T>> {
     const message = await this.anthropic!.messages.create({
-      model: request.model || 'claude-3-5-sonnet-20241022',
+      model: request.model || 'claude-4.1-sonnet-20250815',
       max_tokens: request.maxTokens || 4096,
       temperature: request.temperature || 0.7,
       messages: [{ role: 'user', content: request.prompt }],
@@ -296,7 +284,7 @@ export class AnthropicProvider extends BaseAIProvider {
         completionTokens: message.usage.output_tokens,
         totalTokens: message.usage.input_tokens + message.usage.output_tokens,
       },
-      model: request.model || 'claude-3-5-sonnet-20241022',
+      model: request.model || 'claude-4.1-sonnet-20250815',
       providerId: this.type,
       finishReason: AnthropicProvider.mapStopReason(message.stop_reason),
       metadata: {
@@ -322,7 +310,7 @@ export class AnthropicProvider extends BaseAIProvider {
     (async () => {
       try {
         const stream = await this.anthropic!.messages.create({
-          model: request.model || 'claude-4-sonnet',
+          model: request.model || 'claude-4.1-sonnet-20250815',
           max_tokens: request.maxTokens || 4096,
           temperature: request.temperature || 0.7,
           messages: [{ role: 'user', content: request.prompt }],
@@ -429,24 +417,17 @@ export class AnthropicProvider extends BaseAIProvider {
   }
 
   async getAvailableModels(): Promise<AIModel[]> {
-    // Ensure models are discovered if not already done
-    if (this.supportedModels.length === 0) {
-      await this.discoverModels();
+    if (this.cachedModels.length === 0) {
+      this.cachedModels = await this.discoverModels();
     }
 
-    return this.supportedModels.map((modelId) => ({
-      id: modelId,
-      name: AnthropicProvider.getModelDisplayName(modelId),
-      description: AnthropicProvider.getModelDescription(modelId),
-      maxTokens: AnthropicProvider.getModelMaxTokens(modelId),
-      costPer1kTokens: AnthropicProvider.getModelCosts(modelId),
-    }));
+    return [...this.cachedModels];
   }
 
   // eslint-disable-next-line class-methods-use-this
   async estimateCost(request: CompletionRequest): Promise<CostEstimate> {
     const estimatedTokens = Math.ceil(request.prompt.length / 4);
-    const model = request.model || 'claude-4-sonnet';
+    const model = request.model || 'claude-4.1-sonnet-20250815';
     const costs = AnthropicProvider.getModelCosts(model);
 
     const estimatedCost = costs
@@ -474,7 +455,7 @@ export class AnthropicProvider extends BaseAIProvider {
 
   // Private helper methods
 
-  private async discoverModels(): Promise<void> {
+  private async discoverModels(): Promise<AIModel[]> {
     try {
       // Attempt to discover models dynamically - Anthropic might have added a models API
       // Attempting dynamic model discovery
@@ -487,36 +468,33 @@ export class AnthropicProvider extends BaseAIProvider {
       // Since Anthropic doesn't have a public models endpoint, we'll use known models
       // but attempt to validate them by trying a minimal completion call
       const knownModels = [
-        // Claude 4 models (newest)
+        // Claude 4.1 models (Aug 2025 refresh)
+        'claude-4.1-opus-20250815',
+        'claude-4.1-sonnet-20250815',
+        'claude-4.1-haiku-20250815',
+        'claude-4.1-opus',
+        'claude-4.1-sonnet',
+        'claude-4.1-haiku',
+        // Claude 4 models (2024/2025 generation)
         'claude-4-opus-20250815',
         'claude-4-sonnet-20250815',
         'claude-4-haiku-20250815',
         'claude-4-opus',
         'claude-4-sonnet',
         'claude-4-haiku',
-        // Claude 3.5 models (current latest)
+        // Legacy Claude 3.5 models (kept for backward compatibility)
         'claude-3-5-sonnet-20241022',
-        'claude-3-5-sonnet-20240620', // Earlier version
-        'claude-3-5-haiku-20241022', // Newer Haiku if available
-        'claude-3-5-opus-20241022', // Potential 3.5 Opus
-        // Claude 3 models (stable)
+        'claude-3-5-haiku-20241022',
+        'claude-3-5-opus-20241022',
+        'claude-3-5-sonnet-20240620',
+        // Claude 3 models (legacy)
         'claude-3-opus-20240229',
         'claude-3-sonnet-20240229',
         'claude-3-haiku-20240307',
-        'claude-3-haiku-20241022', // Potential newer version
+        'claude-3-haiku-20241022',
       ];
 
-      const availableModels: string[] = [];
-
-      // For now, use all known models since Anthropic doesn't provide a models API
-      // In the future, this could be enhanced to test each model
-      availableModels.push(...knownModels);
-
-      // Clear existing models and add discovered ones
-      (this.supportedModels as string[]).length = 0;
-      (this.supportedModels as string[]).push(...availableModels);
-
-      // Using known models; Anthropic does not provide a public models API endpoint
+      return this.applyDiscoveredModels(knownModels);
     } catch (error) {
       // eslint-disable-next-line no-console
       console.error(
@@ -525,24 +503,80 @@ export class AnthropicProvider extends BaseAIProvider {
       );
 
       // Fallback to core known working models (including latest)
-      const fallbackModels = [
-        'claude-4-opus',
-        'claude-4-sonnet',
-        'claude-4-haiku',
-        'claude-3-5-sonnet-20241022',
-        'claude-3-opus-20240229',
-        'claude-3-sonnet-20240229',
-        'claude-3-haiku-20240307',
-      ];
-
-      (this.supportedModels as string[]).length = 0;
-      (this.supportedModels as string[]).push(...fallbackModels);
+      return this.applyDiscoveredModels(
+        AnthropicProvider.getFallbackModelIds(),
+      );
     }
+  }
+
+  private applyDiscoveredModels(modelIds: string[]): AIModel[] {
+    const checkedAt = new Date().toISOString();
+    const uniqueIds = Array.from(new Set(modelIds));
+    const models = uniqueIds.map((id) =>
+      AnthropicProvider.buildModelMetadata(id, checkedAt),
+    );
+
+    (this.supportedModels as string[]).length = 0;
+    (this.supportedModels as string[]).push(...models.map((model) => model.id));
+
+    return models;
+  }
+
+  private static buildModelMetadata(
+    modelId: string,
+    checkedAt: string,
+  ): AIModel {
+    return {
+      id: modelId,
+      name: AnthropicProvider.getModelDisplayName(modelId),
+      description: AnthropicProvider.getModelDescription(modelId),
+      maxTokens: AnthropicProvider.getModelMaxTokens(modelId),
+      costPer1kTokens: AnthropicProvider.getModelCosts(modelId),
+      supportsStreaming: AnthropicProvider.isStreamingCapable(modelId),
+      supportsStructuredOutput: true,
+      lastCheckedAt: checkedAt,
+    };
+  }
+
+  private static getFallbackModelIds(): string[] {
+    return [
+      'claude-4.1-opus-20250815',
+      'claude-4.1-sonnet-20250815',
+      'claude-4.1-haiku-20250815',
+      'claude-4.1-opus',
+      'claude-4.1-sonnet',
+      'claude-4.1-haiku',
+      'claude-4-opus-20250815',
+      'claude-4-sonnet-20250815',
+      'claude-4-haiku-20250815',
+      'claude-4-opus',
+      'claude-4-sonnet',
+      'claude-4-haiku',
+      // Legacy options retained for compatibility
+      'claude-3-5-sonnet-20241022',
+      'claude-3-5-haiku-20241022',
+      'claude-3-5-opus-20241022',
+      'claude-3-opus-20240229',
+      'claude-3-sonnet-20240229',
+      'claude-3-haiku-20240307',
+    ];
+  }
+
+  private static isStreamingCapable(modelId: string): boolean {
+    // All Claude-branded chat models support streaming.
+    return modelId.toLowerCase().startsWith('claude');
   }
 
   private static getModelDisplayName(modelId: string): string {
     const displayNames: Record<string, string> = {
-      // Claude 4 models (newest)
+      // Claude 4.1 models (newest)
+      'claude-4.1-opus-20250815': 'Claude 4.1 Opus (Aug 2025)',
+      'claude-4.1-sonnet-20250815': 'Claude 4.1 Sonnet (Aug 2025)',
+      'claude-4.1-haiku-20250815': 'Claude 4.1 Haiku (Aug 2025)',
+      'claude-4.1-opus': 'Claude 4.1 Opus',
+      'claude-4.1-sonnet': 'Claude 4.1 Sonnet',
+      'claude-4.1-haiku': 'Claude 4.1 Haiku',
+      // Claude 4 models (2024 refresh)
       'claude-4-opus-20250815': 'Claude 4 Opus (Aug 2025)',
       'claude-4-sonnet-20250815': 'Claude 4 Sonnet (Aug 2025)',
       'claude-4-haiku-20250815': 'Claude 4 Haiku (Aug 2025)',
@@ -563,6 +597,18 @@ export class AnthropicProvider extends BaseAIProvider {
 
     // For unknown models, try to parse and create a display name
     if (!displayNames[modelId]) {
+      if (modelId.includes('claude-4.1-opus')) {
+        return `Claude 4.1 Opus (${modelId.split('-').pop()})`;
+      }
+      if (modelId.includes('claude-4.1-sonnet')) {
+        return `Claude 4.1 Sonnet (${modelId.split('-').pop()})`;
+      }
+      if (modelId.includes('claude-4.1-haiku')) {
+        return `Claude 4.1 Haiku (${modelId.split('-').pop()})`;
+      }
+      if (modelId.includes('claude-4.1')) {
+        return `Claude 4.1 (${modelId.split('-').pop()})`;
+      }
       if (modelId.includes('claude-4-opus')) {
         return `Claude 4 Opus (${modelId.split('-').pop()})`;
       }
@@ -607,7 +653,20 @@ export class AnthropicProvider extends BaseAIProvider {
 
   private static getModelDescription(modelId: string): string {
     const descriptions: Record<string, string> = {
-      // Claude 4 models (newest)
+      // Claude 4.1 models (Aug 2025)
+      'claude-4.1-opus-20250815':
+        'Latest Claude 4.1 Opus with top-tier reasoning and multimodal support (Aug 2025)',
+      'claude-4.1-sonnet-20250815':
+        'Balanced Claude 4.1 Sonnet model with fast, high-quality responses (Aug 2025)',
+      'claude-4.1-haiku-20250815':
+        'Low-latency Claude 4.1 Haiku optimized for rapid iterations (Aug 2025)',
+      'claude-4.1-opus':
+        'Latest-generation Claude 4.1 Opus for complex reasoning tasks',
+      'claude-4.1-sonnet':
+        'Latest-generation Claude 4.1 Sonnet with balanced performance and cost',
+      'claude-4.1-haiku':
+        'Latest-generation Claude 4.1 Haiku for ultra-fast responses',
+      // Claude 4 models (2024 refresh)
       'claude-4-opus-20250815':
         'Most advanced Claude model with superior reasoning capabilities (Aug 2025)',
       'claude-4-sonnet-20250815':
@@ -637,6 +696,18 @@ export class AnthropicProvider extends BaseAIProvider {
 
     // Generate descriptions for unknown models using pattern matching
     if (!descriptions[modelId]) {
+      if (modelId.includes('claude-4.1-opus')) {
+        return 'Latest Claude 4.1 Opus model with superior reasoning capabilities';
+      }
+      if (modelId.includes('claude-4.1-sonnet')) {
+        return 'Latest Claude 4.1 Sonnet model with balanced speed and quality';
+      }
+      if (modelId.includes('claude-4.1-haiku')) {
+        return 'Latest Claude 4.1 Haiku model optimized for speed';
+      }
+      if (modelId.includes('claude-4.1')) {
+        return 'Latest Claude 4.1 model with upgraded intelligence and efficiency';
+      }
       if (modelId.includes('claude-4-opus')) {
         return 'Most advanced Claude 4 model with superior reasoning capabilities';
       }
@@ -681,6 +752,13 @@ export class AnthropicProvider extends BaseAIProvider {
 
   private static getModelMaxTokens(modelId: string): number {
     const maxTokens: Record<string, number> = {
+      // Claude 4.1 models (expanded windows)
+      'claude-4.1-opus-20250815': 16384,
+      'claude-4.1-sonnet-20250815': 16384,
+      'claude-4.1-haiku-20250815': 16384,
+      'claude-4.1-opus': 16384,
+      'claude-4.1-sonnet': 16384,
+      'claude-4.1-haiku': 16384,
       // Claude 4 models (estimated higher token limits)
       'claude-4-opus-20250815': 8192,
       'claude-4-sonnet-20250815': 8192,
@@ -693,6 +771,10 @@ export class AnthropicProvider extends BaseAIProvider {
     };
 
     // For Claude 4 models, use higher token limits
+    if (modelId.includes('claude-4.1')) {
+      return maxTokens[modelId] || 16384;
+    }
+
     if (modelId.includes('claude-4')) {
       return maxTokens[modelId] || 8192;
     }
@@ -704,6 +786,13 @@ export class AnthropicProvider extends BaseAIProvider {
   private static getModelCosts(modelId: string) {
     // Claude pricing (as of 2024/2025)
     const costs: Record<string, { input: number; output: number }> = {
+      // Claude 4.1 models (estimated pricing)
+      'claude-4.1-opus-20250815': { input: 0.03, output: 0.12 },
+      'claude-4.1-sonnet-20250815': { input: 0.006, output: 0.024 },
+      'claude-4.1-haiku-20250815': { input: 0.0006, output: 0.0024 },
+      'claude-4.1-opus': { input: 0.03, output: 0.12 },
+      'claude-4.1-sonnet': { input: 0.006, output: 0.024 },
+      'claude-4.1-haiku': { input: 0.0006, output: 0.0024 },
       // Claude 4 models (estimated pricing)
       'claude-4-opus-20250815': { input: 0.025, output: 0.125 },
       'claude-4-sonnet-20250815': { input: 0.005, output: 0.025 },
@@ -725,6 +814,18 @@ export class AnthropicProvider extends BaseAIProvider {
 
     // For unknown models, try to infer pricing based on model family
     if (!costs[modelId]) {
+      if (modelId.includes('claude-4.1-opus')) {
+        return { input: 0.03, output: 0.12 }; // Estimated Claude 4.1 Opus pricing
+      }
+      if (modelId.includes('claude-4.1-sonnet')) {
+        return { input: 0.006, output: 0.024 }; // Estimated Claude 4.1 Sonnet pricing
+      }
+      if (modelId.includes('claude-4.1-haiku')) {
+        return { input: 0.0006, output: 0.0024 }; // Estimated Claude 4.1 Haiku pricing
+      }
+      if (modelId.includes('claude-4.1')) {
+        return { input: 0.006, output: 0.024 }; // Default Claude 4.1 pricing
+      }
       if (modelId.includes('claude-4-opus')) {
         return { input: 0.025, output: 0.125 }; // Estimated Claude 4 Opus pricing
       }

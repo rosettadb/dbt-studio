@@ -20,11 +20,21 @@ import {
   CreateNewFolder,
   NoteAdd,
   Archive,
+  DriveFileRenameOutline,
+  Folder,
 } from '@mui/icons-material';
+import { toast } from 'react-toastify';
+
 import { TreeItems } from './TreeItems';
 import { FileNode } from '../../../types/backend';
-import { ActionsContainer, LabelContainer } from './styles';
+import {
+  ActionsContainer,
+  LabelContainer,
+  RenameInput,
+  StyledTreeItem,
+} from './styles';
 import { projectsServices } from '../../services';
+import { FileIcon } from '../fileIcon';
 
 type Props = {
   node: FileNode;
@@ -77,6 +87,40 @@ const RenderTree: React.FC<Props> = ({
   const [menuPosition, setMenuPosition] =
     React.useState<null | PopoverPosition>(null);
 
+  const [renameOpen, setRenameOpen] = React.useState(false);
+  const [renameValue, setRenameValue] = React.useState<string>('');
+  const renameInputRef = React.useRef<HTMLInputElement>(null);
+
+  // Ensure input receives focus and selects current text when renaming starts
+  React.useEffect(() => {
+    if (renameOpen && renameInputRef.current) {
+      // Focus and select the whole filename for quick overwrite
+      renameInputRef.current.focus();
+      renameInputRef.current.select();
+    }
+  }, [renameOpen]);
+
+  const saveRename = React.useCallback(async () => {
+    const newName = renameValue.trim();
+    if (!newName || newName === node.name) {
+      setRenameOpen(false);
+      return;
+    }
+    try {
+      await projectsServices.renamePath({
+        path: node.path,
+        newName,
+      });
+      if (typeof onRefresh === 'function') {
+        onRefresh();
+      }
+    } catch (e: any) {
+      toast.error(`Rename failed: ${e?.message || 'Unknown error'}`);
+    } finally {
+      setRenameOpen(false);
+    }
+  }, [renameValue, node.path, node.name, onRefresh]);
+
   const fileStatus = fileStatuses[node.path];
   const labelColor = getColorByStatus(fileStatus);
 
@@ -110,56 +154,109 @@ const RenderTree: React.FC<Props> = ({
       onContextMenu={handleMenuOpen}
       label={
         <LabelContainer>
-          {label}
-          <ActionsContainer className="actions-container">
-            {node.path === projectPath && (
-              <IconButton
-                size="small"
-                edge="end"
-                onClick={(event) => {
-                  event.stopPropagation();
-                  if (typeof onRefresh === 'function') {
-                    onRefresh();
+          {renameOpen ? (
+            <StyledTreeItem
+              onMouseDown={(e) => {
+                // Keep focus on input when clicking outside the input,
+                // but allow normal selection/caret behavior when clicking the input itself.
+                const target = e.target as HTMLElement;
+                const isInput =
+                  target.tagName === 'INPUT' || !!target.closest('input');
+                if (!isInput) {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  renameInputRef.current?.focus();
+                }
+              }}
+            >
+              {node.type === 'folder' ? (
+                <Folder
+                  sx={{
+                    color: node.name === '.git' ? '#aabdefff' : '#5f89f4',
+                    width: 14,
+                    height: 14,
+                    pointerEvents: 'none',
+                  }}
+                />
+              ) : (
+                <span style={{ pointerEvents: 'none', display: 'inline-flex' }}>
+                  <FileIcon fileName={node.name} />
+                </span>
+              )}
+              <RenameInput
+                ref={renameInputRef}
+                value={renameValue}
+                onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
+                  setRenameValue(e.target.value)
+                }
+                onKeyDown={(e: React.KeyboardEvent<HTMLInputElement>) => {
+                  e.stopPropagation();
+                  if (e.key === 'Enter') {
+                    e.preventDefault();
+                    saveRename();
+                  } else if (e.key === 'Escape') {
+                    e.preventDefault();
+                    setRenameOpen(false);
                   }
-                  handleMenuClose();
                 }}
-              >
-                <Tooltip title="Refresh">
-                  <RefreshOutlined fontSize="small" />
-                </Tooltip>
-              </IconButton>
-            )}
-            {node.type === 'folder' && (
-              <>
+                onBlur={() => setRenameOpen(false)}
+                style={{ flex: 1 }}
+              />
+            </StyledTreeItem>
+          ) : (
+            label
+          )}
+          {!renameOpen && (
+            <ActionsContainer className="actions-container">
+              {node.path === projectPath && (
                 <IconButton
                   size="small"
                   edge="end"
                   onClick={(event) => {
                     event.stopPropagation();
-                    onNewFile(node.path);
+                    if (typeof onRefresh === 'function') {
+                      onRefresh();
+                    }
                     handleMenuClose();
                   }}
                 >
-                  <Tooltip title="Create new file">
-                    <NoteAddOutlined fontSize="small" />
+                  <Tooltip title="Refresh">
+                    <RefreshOutlined fontSize="small" />
                   </Tooltip>
                 </IconButton>
-                <IconButton
-                  size="small"
-                  edge="end"
-                  onClick={(event) => {
-                    event.stopPropagation();
-                    onNewFolder(node.path);
-                    handleMenuClose();
-                  }}
-                >
-                  <Tooltip title="Create new folder">
-                    <CreateNewFolderOutlined fontSize="small" />
-                  </Tooltip>
-                </IconButton>
-              </>
-            )}
-          </ActionsContainer>
+              )}
+              {node.type === 'folder' && (
+                <>
+                  <IconButton
+                    size="small"
+                    edge="end"
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      onNewFile(node.path);
+                      handleMenuClose();
+                    }}
+                  >
+                    <Tooltip title="Create new file">
+                      <NoteAddOutlined fontSize="small" />
+                    </Tooltip>
+                  </IconButton>
+                  <IconButton
+                    size="small"
+                    edge="end"
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      onNewFolder(node.path);
+                      handleMenuClose();
+                    }}
+                  >
+                    <Tooltip title="Create new folder">
+                      <CreateNewFolderOutlined fontSize="small" />
+                    </Tooltip>
+                  </IconButton>
+                </>
+              )}
+            </ActionsContainer>
+          )}
           <Menu
             anchorReference="anchorPosition"
             open={Boolean(menuPosition)}
@@ -170,6 +267,20 @@ const RenderTree: React.FC<Props> = ({
             }
             onClose={handleMenuClose}
           >
+            <MenuItem
+              onClick={(event) => {
+                event.stopPropagation();
+                setRenameValue(node.name);
+                setRenameOpen(true);
+                handleMenuClose();
+              }}
+            >
+              <ListItemIcon>
+                <DriveFileRenameOutline fontSize="small" />
+              </ListItemIcon>
+              <ListItemText>Rename</ListItemText>
+            </MenuItem>
+
             <MenuItem
               onClick={(event) => {
                 event.stopPropagation();
@@ -288,6 +399,7 @@ const RenderTree: React.FC<Props> = ({
           onNewFile={onNewFile}
           projectName={projectName}
           projectPath={projectPath}
+          onRefresh={onRefresh}
           onCopyPath={onCopyPath}
           onPastePath={onPastePath}
           copyPathData={copyPathData}

@@ -1,6 +1,13 @@
 import React from 'react';
-import { CircularProgress, Tooltip, TextField, Box } from '@mui/material';
-import { Cached } from '@mui/icons-material';
+import {
+  CircularProgress,
+  Tooltip,
+  TextField,
+  Box,
+  IconButton,
+  InputAdornment,
+} from '@mui/material';
+import { Cached, Clear } from '@mui/icons-material';
 import { RenderTree } from './RenderTree';
 import { Container, StyledTreeView } from './styles';
 import { FileNode, FileStatus } from '../../../types/backend';
@@ -175,6 +182,22 @@ const FileTreeViewer: React.FC<Props> = ({
           onChange={(e) => setSearchKeyword(e.target.value)}
           value={searchKeyword}
           sx={{ height: '40px' }}
+          InputProps={{
+            endAdornment: searchKeyword ? (
+              <InputAdornment position="end">
+                <Tooltip title="Clear search">
+                  <IconButton
+                    size="small"
+                    aria-label="Clear search"
+                    onClick={() => setSearchKeyword('')}
+                    edge="end"
+                  >
+                    <Clear fontSize="small" />
+                  </IconButton>
+                </Tooltip>
+              </InputAdornment>
+            ) : null,
+          }}
         />
         <Tooltip title="Refresh directories">
           {isLoadingFiles ? (

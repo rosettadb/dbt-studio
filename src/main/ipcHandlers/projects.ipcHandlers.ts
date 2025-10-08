@@ -146,6 +146,19 @@ const registerProjectHandlers = () => {
     },
   );
 
+  ipcMain.handle(
+    'project:renamePath',
+    async (
+      _event,
+      body: {
+        path: string;
+        newName: string;
+      },
+    ) => {
+      return ProjectsService.renamePath(body);
+    },
+  );
+
   ipcMain.handle('project:selected', async () => {
     return ProjectsService.getSelectedProject();
   });
