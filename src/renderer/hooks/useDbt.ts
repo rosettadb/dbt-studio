@@ -286,7 +286,7 @@ const useDbt = (successCallback?: () => void): UseDbtReturn => {
     test: useCallback(
       (project: Project, path?: string) =>
         executeCommand('test', project, path ? `--select ${path}` : '', {
-          showToast: false,
+          showToast: true,
         }),
       [executeCommand],
     ),
