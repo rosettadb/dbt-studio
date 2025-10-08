@@ -37,7 +37,10 @@ const ERROR_HINT_IGNORE_REGEX = /ERROR=0\b/i;
 const sanitizeCliLine = (line: string): string =>
   line.replace(ANSI_ESCAPE_REGEX, '').trimEnd();
 
-const extractCliErrorDetails = (output: string[], errors: string[]): string[] => {
+const extractCliErrorDetails = (
+  output: string[],
+  errors: string[],
+): string[] => {
   const details = new Set<string>();
 
   errors.forEach((err) => {
@@ -228,7 +231,10 @@ const useDbt = (successCallback?: () => void): UseDbtReturn => {
 
         // Execute command
         const result = await runCommand(cmdString);
-        const aggregatedError = extractCliErrorDetails(result.output, result.error);
+        const aggregatedError = extractCliErrorDetails(
+          result.output,
+          result.error,
+        );
 
         // Handle success vs failure
         if (aggregatedError.length === 0) {
