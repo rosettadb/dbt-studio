@@ -27,6 +27,54 @@ interface UseDbtReturn {
   activeCommand: DbtCommandType | null;
 }
 
+const ANSI_ESCAPE_REGEX = /\[[0-9;]*m/g;
+const ERROR_SUMMARY_REGEX = /ERROR=(\d+)/i;
+const NON_ZERO_EXIT_REGEX = /Process exited with code\s+(\d+)/i;
+const ERROR_HINT_REGEX =
+  /(Error importing adapter|Encountered an error|Runtime Error|Traceback|Database Error|Compilation Error|^ERROR:?\b|\bERROR\b)/i;
+const ERROR_HINT_IGNORE_REGEX = /ERROR=0\b/i;
+
+const sanitizeCliLine = (line: string): string =>
+  line.replace(ANSI_ESCAPE_REGEX, '').trimEnd();
+
+const extractCliErrorDetails = (output: string[], errors: string[]): string[] => {
+  const details = new Set<string>();
+
+  errors.forEach((err) => {
+    const sanitizedError = sanitizeCliLine(err);
+    if (sanitizedError) {
+      details.add(sanitizedError);
+    }
+  });
+
+  const cleanedOutput = output.map(sanitizeCliLine);
+
+  cleanedOutput.forEach((line) => {
+    const match = line.match(ERROR_SUMMARY_REGEX);
+    if (match && Number(match[1]) > 0) {
+      details.add(line);
+    }
+  });
+
+  cleanedOutput.forEach((line) => {
+    const match = line.match(NON_ZERO_EXIT_REGEX);
+    if (match && Number(match[1]) !== 0) {
+      details.add(line);
+    }
+  });
+
+  cleanedOutput.forEach((line) => {
+    if (ERROR_HINT_IGNORE_REGEX.test(line)) {
+      return;
+    }
+    if (ERROR_HINT_REGEX.test(line)) {
+      details.add(line);
+    }
+  });
+
+  return Array.from(details);
+};
+
 const useDbt = (successCallback?: () => void): UseDbtReturn => {
   const { data: settings } = useGetSettings();
   const { runCommand, stopCommand, isRunning } = useCli();
@@ -180,23 +228,7 @@ const useDbt = (successCallback?: () => void): UseDbtReturn => {
 
         // Execute command
         const result = await runCommand(cmdString);
-
-        // Helper: detect non-zero exit code forwarded in output and extract meaningful error
-        const hasNonZeroExit = result.output.some(
-          (line) =>
-            /Process exited with code\s+(\d+)/.test(line) &&
-            !/Process exited with code\s+0/.test(line),
-        );
-        const outputErrorHints = result.output.filter((line) =>
-          /(Error importing adapter|Encountered an error|Runtime Error|Traceback|\berror\b)/i.test(
-            line.replace(/\[[0-9;]*m/g, ''),
-          ),
-        );
-        const aggregatedError = [
-          ...result.error,
-          ...(hasNonZeroExit ? ['Process exited with non-zero code'] : []),
-          ...outputErrorHints,
-        ];
+        const aggregatedError = extractCliErrorDetails(result.output, result.error);
 
         // Handle success vs failure
         if (aggregatedError.length === 0) {
@@ -284,12 +316,11 @@ const useDbt = (successCallback?: () => void): UseDbtReturn => {
           const result = await runCommand(cmdString);
 
           // Detect failure via stderr forwarded to stdout or non-zero exit code indicator
-          const hasNonZeroExit = result.output.some(
-            (line) =>
-              /Process exited with code\s+(\d+)/.test(line) &&
-              !/Process exited with code\s+0/.test(line),
+          const aggregatedError = extractCliErrorDetails(
+            result.output,
+            result.error,
           );
-          if (result.error.length === 0 && !hasNonZeroExit) {
+          if (aggregatedError.length === 0) {
             // Extract the compiled SQL from the output
             let compiledSql = '';
 
@@ -341,15 +372,7 @@ const useDbt = (successCallback?: () => void): UseDbtReturn => {
 
             return finalResult;
           }
-          // Try to include helpful error hints from output
-          const outputErrorHints = result.output.filter((line) =>
-            /(Encountered an error|Runtime Error|Traceback|\berror\b)/i.test(
-              line.replace(/\[[0-9;]*m/g, ''),
-            ),
-          );
-          toast.info(
-            `dbt compile failed: ${[...result.error, ...outputErrorHints].join('\n')}`,
-          );
+          toast.info(`dbt compile failed: ${aggregatedError.join('\n')}`);
           return '';
         } catch (error) {
           const errorMessage =
@@ -394,22 +417,14 @@ const useDbt = (successCallback?: () => void): UseDbtReturn => {
           }
           const result = await runCommand(cmdString);
 
-          const hasNonZeroExit = result.output.some(
-            (line) =>
-              /Process exited with code\s+(\d+)/.test(line) &&
-              !/Process exited with code\s+0/.test(line),
+          const aggregatedError = extractCliErrorDetails(
+            result.output,
+            result.error,
           );
-          if (result.error.length === 0 && !hasNonZeroExit) {
+          if (aggregatedError.length === 0) {
             return result.output.join('\n');
           }
-          const outputErrorHints = result.output.filter((line) =>
-            /(Encountered an error|Runtime Error|Traceback|\berror\b)/i.test(
-              line.replace(/\[[0-9;]*m/g, ''),
-            ),
-          );
-          toast.info(
-            `dbt list failed: ${[...result.error, ...outputErrorHints].join('\n')}`,
-          );
+          toast.info(`dbt list failed: ${aggregatedError.join('\n')}`);
           return '';
         } catch (error) {
           const errorMessage =

@@ -88,7 +88,6 @@ export const ModelSplitButton: React.FC<ModelSplitButtonProps> = ({
 
       setCompiledSql(realCompiledSql);
       setShowCompileModal(true);
-      toast.success('Model compiled successfully');
     } catch (error) {
       const errorMessage =
         error instanceof Error ? error.message : 'Unknown error';
@@ -190,7 +189,6 @@ export const ModelSplitButton: React.FC<ModelSplitButtonProps> = ({
 
       setPreviewResult(modelPreviewResult);
       setShowPreviewModal(true);
-      toast.success('Model preview loaded successfully');
     } catch (error) {
       const errorMessage =
         error instanceof Error ? error.message : 'Unknown error';
