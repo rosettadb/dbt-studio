@@ -159,6 +159,210 @@ const ProjectDetails: React.FC = () => {
   const { data: connections = [] } = useGetConnections();
   const { mutate: updateProject } = useUpdateProject();
 
+  const buildBusinessFilePath = React.useCallback(
+    (basePath: string, fileName: string) => {
+      const trimmedBase = basePath.replace(/[\\/]+$/, '');
+      const separator = basePath.includes('\\') ? '\\' : '/';
+      return `${trimmedBase}${separator}${fileName}`;
+    },
+    [],
+  );
+
+  const createOrUpdateBusinessFile = React.useCallback(
+    async (basePath: string, fileName: string, content: string) => {
+      let filePath = await projectsServices.createFile({
+        filePath: basePath,
+        name: fileName,
+        content,
+      });
+
+      const fileAlreadyExisted = !filePath;
+      if (!filePath) {
+        filePath = buildBusinessFilePath(basePath, fileName);
+      }
+
+      let tabId: EditorTabId | null = await openTab(filePath, {
+        content,
+      });
+
+      if (!tabId) {
+        const existingTab = getTabByPath(filePath);
+        if (existingTab) {
+          tabId = existingTab.id;
+        }
+      }
+
+      setSelectedFilePath(filePath);
+
+      await fetchDirectories();
+      await updateStatuses();
+
+      if (!tabId) {
+        const refreshedTab = getTabByPath(filePath);
+        if (refreshedTab) {
+          tabId = refreshedTab.id;
+        }
+      }
+
+      if (tabId) {
+        updateTabContent(tabId, content, {
+          markModified: fileAlreadyExisted,
+        });
+        if (!fileAlreadyExisted) {
+          markTabSaved(tabId);
+        }
+        setTabError(tabId, undefined);
+        switchTab(tabId);
+        return true;
+      }
+
+      // eslint-disable-next-line no-console
+      console.warn('Generated file created but tab could not be opened', {
+        filePath,
+      });
+      toast.error(
+        'Generated file created, but the editor tab could not be opened automatically.',
+      );
+      return false;
+    },
+    [
+      buildBusinessFilePath,
+      openTab,
+      getTabByPath,
+      setSelectedFilePath,
+      fetchDirectories,
+      updateStatuses,
+      updateTabContent,
+      markTabSaved,
+      setTabError,
+      switchTab,
+    ],
+  );
+
+  const recoverFromFallbackResponse = React.useCallback(
+    async (rawResponse: string, basePath: string) => {
+      const fenceMatch = rawResponse.match(/```[a-zA-Z]*\n([\s\S]*?)\n```/);
+      const rawBody = fenceMatch ? fenceMatch[1] : rawResponse;
+
+      const filenameMatch = rawBody.match(/--\s*filename:\s*([^\n\r]+)\s*/i);
+      const inferredFileName = filenameMatch
+        ? filenameMatch[1].trim()
+        : 'business_model.sql';
+
+      const cleanedSql = filenameMatch
+        ? rawBody.replace(filenameMatch[0], '').trim()
+        : rawBody.trim();
+
+      if (
+        cleanedSql.toLowerCase().includes('select') ||
+        cleanedSql.includes('{{')
+      ) {
+        return createOrUpdateBusinessFile(
+          basePath,
+          inferredFileName,
+          cleanedSql,
+        );
+      }
+
+      return false;
+    },
+    [createOrUpdateBusinessFile],
+  );
+
+  const processBusinessModelResponse = React.useCallback(
+    async (
+      response: {
+        parsedData?: BusinessModelGenerationSchemaType | null;
+        schemaValidation?: {
+          errors?: string[] | null;
+          originalResponse?: unknown;
+        } | null;
+        content: unknown;
+      },
+      basePath: string,
+    ) => {
+      if (response.parsedData?.fileName && response.parsedData?.content) {
+        return createOrUpdateBusinessFile(
+          basePath,
+          response.parsedData.fileName,
+          response.parsedData.content,
+        );
+      }
+
+      const originalResponse =
+        response.schemaValidation?.originalResponse || response.content;
+
+      if (
+        typeof originalResponse === 'string' &&
+        originalResponse.trim().length > 0
+      ) {
+        const handled = await recoverFromFallbackResponse(
+          originalResponse,
+          basePath,
+        );
+        if (handled) {
+          return true;
+        }
+      }
+
+      const schemaErrors =
+        response.schemaValidation?.errors?.filter(Boolean) || [];
+
+      let detailedMessage: string;
+      if (schemaErrors.length) {
+        detailedMessage = schemaErrors.join('\n');
+      } else if (originalResponse) {
+        detailedMessage = String(originalResponse);
+      } else {
+        detailedMessage = 'Provider returned an empty response.';
+      }
+
+      toast.error(detailedMessage);
+      // eslint-disable-next-line no-console
+      console.error('Business model generation failed', {
+        schemaErrors,
+        originalResponse,
+      });
+
+      return false;
+    },
+    [createOrUpdateBusinessFile, recoverFromFallbackResponse],
+  );
+
+  const handleBusinessModalProcess = React.useCallback(
+    async (updatedPath: string, query: string, selectedFiles: string[]) => {
+      if (selectedFiles.length === 0) {
+        return;
+      }
+
+      try {
+        const files = await getFileContentList(selectedFiles);
+        const prompt = generateModelsPrompt(files, query);
+        const response =
+          await aiProvidersService.generateCompletion<BusinessModelGenerationSchemaType>(
+            prompt,
+            BusinessModelGenerationSchema,
+          );
+
+        const handled = await processBusinessModelResponse(
+          response,
+          updatedPath,
+        );
+
+        if (handled) {
+          setBusinessQueryModal(undefined);
+        }
+      } catch (error) {
+        const message =
+          error instanceof Error && error.message
+            ? error.message
+            : 'Failed to generate business model';
+        toast.error(message);
+      }
+    },
+    [getFileContentList, processBusinessModelResponse, setBusinessQueryModal],
+  );
+
   const handleAddConnection = () => {
     setIsAddConnectionModalOpen(true);
   };
@@ -635,120 +839,7 @@ const ProjectDetails: React.FC = () => {
                 project={project}
                 path={businessQueryModal}
                 onClose={() => setBusinessQueryModal(undefined)}
-                processCallback={async (updatedPath, query, selectedFiles) => {
-                  if (selectedFiles.length === 0) {
-                    return;
-                  }
-
-                  const files = await getFileContentList(selectedFiles);
-                  try {
-                    const prompt = generateModelsPrompt(files, query);
-                    const response =
-                      await aiProvidersService.generateCompletion<BusinessModelGenerationSchemaType>(
-                        prompt,
-                        BusinessModelGenerationSchema,
-                      );
-                    if (
-                      response.parsedData?.fileName &&
-                      response.parsedData?.content
-                    ) {
-                      const buildFilePath = (
-                        basePath: string,
-                        fileName: string,
-                      ) => {
-                        const trimmedBase = basePath.replace(/[\\/]+$/, '');
-                        const separator = basePath.includes('\\') ? '\\' : '/';
-                        return `${trimmedBase}${separator}${fileName}`;
-                      };
-
-                      let filePath = await projectsServices.createFile({
-                        filePath: updatedPath,
-                        name: response.parsedData.fileName,
-                        content: response.parsedData.content,
-                      });
-
-                      const fileAlreadyExisted = !filePath;
-                      if (!filePath) {
-                        filePath = buildFilePath(
-                          updatedPath,
-                          response.parsedData.fileName,
-                        );
-                      }
-
-                      let tabId: EditorTabId | null = await openTab(filePath, {
-                        content: response.parsedData.content,
-                      });
-
-                      if (!tabId) {
-                        const existingTab = getTabByPath(filePath);
-                        if (existingTab) {
-                          tabId = existingTab.id;
-                        }
-                      }
-
-                      setSelectedFilePath(filePath);
-
-                      await fetchDirectories();
-                      await updateStatuses();
-
-                      if (!tabId) {
-                        const refreshedTab = getTabByPath(filePath);
-                        if (refreshedTab) {
-                          tabId = refreshedTab.id;
-                        }
-                      }
-
-                      if (tabId) {
-                        updateTabContent(tabId, response.parsedData.content, {
-                          markModified: fileAlreadyExisted,
-                        });
-                        if (!fileAlreadyExisted) {
-                          markTabSaved(tabId);
-                        }
-                        setTabError(tabId, undefined);
-                        switchTab(tabId);
-                      } else {
-                        // eslint-disable-next-line no-console
-                        console.warn(
-                          'Generated file created but tab could not be opened',
-                          { filePath },
-                        );
-                        toast.error(
-                          'Generated file created, but the editor tab could not be opened automatically.',
-                        );
-                      }
-
-                      setBusinessQueryModal(undefined);
-                      return;
-                    }
-
-                    const schemaErrors =
-                      response.schemaValidation?.errors?.filter(Boolean) || [];
-                    const originalResponse =
-                      response.schemaValidation?.originalResponse ||
-                      response.content;
-                    let detailedMessage: string;
-                    if (schemaErrors.length) {
-                      detailedMessage = schemaErrors.join('\n');
-                    } else if (originalResponse) {
-                      detailedMessage = originalResponse;
-                    } else {
-                      detailedMessage = 'Provider returned an empty response.';
-                    }
-                    toast.error(detailedMessage);
-                    // eslint-disable-next-line no-console
-                    console.error('Business model generation failed', {
-                      schemaErrors,
-                      originalResponse,
-                    });
-                  } catch (error) {
-                    const message =
-                      error instanceof Error && error.message
-                        ? error.message
-                        : 'Failed to generate business model';
-                    toast.error(message);
-                  }
-                }}
+                processCallback={handleBusinessModalProcess}
               />
             )}
             {noAiSetModal && (
