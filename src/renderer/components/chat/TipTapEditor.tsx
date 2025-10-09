@@ -10,7 +10,7 @@ const EditorContainer = styled('div')(({ theme }) => ({
   borderRadius: theme.shape.borderRadius * 1.25,
   padding: theme.spacing(1, 1.25),
   minHeight: 64,
-  maxHeight: 200,
+  maxHeight: '100%',
   overflowY: 'auto',
   backgroundColor: theme.palette.background.paper,
   '& .ProseMirror': {
@@ -42,6 +42,7 @@ export const TipTapEditor: React.FC<TipTapEditorProps> = ({
   onSubmit,
 }) => {
   const [focused, setFocused] = React.useState(false);
+  const containerRef = React.useRef<HTMLDivElement>(null);
   const tiptapEditor = useEditor({
     extensions: [StarterKit],
     content: value || '',
@@ -87,7 +88,18 @@ export const TipTapEditor: React.FC<TipTapEditorProps> = ({
       const text = e.clipboardData.getData('text/plain');
       if (text) {
         e.preventDefault();
-        tiptapEditor?.chain().focus().insertContent(text).run();
+        tiptapEditor?.chain().focus('end').insertContent(text).run();
+        tiptapEditor?.commands.setTextSelection(
+          tiptapEditor.state.doc.content.size,
+        );
+        requestAnimationFrame(() => {
+          containerRef.current?.scrollTo({
+            top: containerRef.current.scrollHeight,
+            behavior: 'auto',
+          });
+          tiptapEditor?.commands.focus('end');
+          tiptapEditor?.commands.scrollIntoView();
+        });
       }
     },
     [tiptapEditor],
@@ -100,7 +112,7 @@ export const TipTapEditor: React.FC<TipTapEditorProps> = ({
     }
   }, [tiptapEditor, disabled]);
   return (
-    <EditorContainer>
+    <EditorContainer ref={containerRef}>
       <EditorContent
         editor={tiptapEditor}
         onKeyDown={handleKeyDown}
@@ -116,6 +128,7 @@ export const TipTapEditor: React.FC<TipTapEditorProps> = ({
             left: theme.spacing(1.25), // match container horizontal padding
             color: 'text.disabled',
             pointerEvents: 'none',
+            backgroundColor: 'green',
           })}
         >
           {placeholder}
