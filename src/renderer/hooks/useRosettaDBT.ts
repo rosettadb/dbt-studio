@@ -26,24 +26,46 @@ const useRosettaDBT = (successCallback: () => Promise<void>) => {
   const { data: connections = [] } = useGetConnections();
 
   React.useEffect(() => {
-    if (!isRunning) return;
+    let isCancelled = false;
+
+    const resetState = () => {
+      setIsRunning(false);
+      setIsSuccess(false);
+    };
+
+    if (!isRunning) {
+      return () => {
+        isCancelled = true;
+      };
+    }
+
     if (error.length > 0) {
       toast.error('Rosetta dbt command failed');
-      setIsRunning(false);
-      return;
+      resetState();
+      return () => {
+        isCancelled = true;
+      };
     }
-    const handleSuccess = async () => {
-      await successCallback();
-      toast.success('Rosetta dbt completed successfully');
-      setIsRunning(false);
-    };
+
     if (isSuccess) {
+      const handleSuccess = async () => {
+        await successCallback();
+        if (!isCancelled) {
+          toast.success('Rosetta dbt completed successfully');
+          resetState();
+        }
+      };
       handleSuccess();
     }
-  }, [isSuccess, error]);
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [isSuccess, error, isRunning, successCallback]);
 
   return {
     fn: async (project: Project, command: Command) => {
+      setIsSuccess(false);
       setIsRunning(true);
       const connection = connections.find((c) => c.id === project.connectionId);
       if (!connection) {
