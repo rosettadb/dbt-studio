@@ -1,5 +1,6 @@
 import React from 'react';
 import styled from '@mui/material/styles/styled';
+import { useTheme } from '@mui/material/styles';
 import Box from '@mui/material/Box';
 import IconButton from '@mui/material/IconButton';
 import Tooltip from '@mui/material/Tooltip';
@@ -55,6 +56,7 @@ const MarkdownCodeBlock = ({
   className,
   children,
 }: MarkdownCodeBlockProps) => {
+  const muiTheme = useTheme();
   const { mutate: updateFileContent } = useSaveFileContent();
   const { editingFilePath } = useAppContext();
   const [copied, setCopied] = React.useState(false);
@@ -93,7 +95,30 @@ const MarkdownCodeBlock = ({
     setTimeout(() => setApplied(false), 1000);
   }, []);
 
-  return !inline ? (
+  const childText = React.useMemo(() => {
+    return React.Children.toArray(children)
+      .map((child) => {
+        if (typeof child === 'string') {
+          return child;
+        }
+        if (
+          React.isValidElement(child) &&
+          typeof child.props.children === 'string'
+        ) {
+          return child.props.children;
+        }
+        return '';
+      })
+      .join('');
+  }, [children]);
+
+  const shouldRenderInline = React.useMemo(() => {
+    if (inline) return true;
+    const normalized = childText.replace(/\s+$/g, '');
+    return !normalized.includes('\n');
+  }, [childText, inline]);
+
+  return !shouldRenderInline ? (
     <Box
       component="pre"
       sx={{
@@ -106,6 +131,8 @@ const MarkdownCodeBlock = ({
         fontSize: '13px',
         borderRadius: 1,
         overflow: 'auto',
+        whiteSpace: 'pre-wrap',
+        wordBreak: 'break-word',
         position: 'relative',
         border: (theme) => `1px solid ${theme.palette.divider}`,
         boxShadow: (theme) =>
@@ -192,14 +219,15 @@ const MarkdownCodeBlock = ({
   ) : (
     <code
       ref={codeRef}
-      className={className}
+      className={`${className || ''} inline-code`}
       style={{
-        background: 'linear-gradient(135deg, #f1f3f4 0%, #e8eaed 100%)',
-        borderRadius: 3,
-        padding: '2px 6px',
-        fontSize: '12px',
-        border: '1px solid #dadce0',
-        boxShadow: 'inset 0 1px 2px rgba(0,0,0,0.05)',
+        color:
+          muiTheme.palette.mode === 'dark'
+            ? muiTheme.palette.primary.light
+            : muiTheme.palette.primary.main,
+        fontWeight: 900,
+        fontSize: '0.9em',
+        fontStyle: 'italic',
       }}
     >
       {children}
