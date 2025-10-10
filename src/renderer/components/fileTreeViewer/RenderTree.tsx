@@ -49,6 +49,7 @@ type Props = {
   onCopyPath: (path: string) => void;
   copyPathData: string;
   onPastePath: (source: string, target: string) => void;
+  selectedPath?: string;
 };
 
 const getColorByStatus = (status?: string) => {
@@ -83,6 +84,7 @@ const RenderTree: React.FC<Props> = ({
   onCopyPath,
   onPastePath,
   copyPathData,
+  selectedPath,
 }) => {
   const [menuPosition, setMenuPosition] =
     React.useState<null | PopoverPosition>(null);
@@ -132,9 +134,13 @@ const RenderTree: React.FC<Props> = ({
       return <TreeItems.Folder label={node.name} />;
     }
     return (
-      <TreeItems.File label={node.name} color={getColorByStatus(fileStatus)} />
+      <TreeItems.File
+        label={node.name}
+        color={labelColor}
+        isSelected={selectedPath === node.path}
+      />
     );
-  }, [node, labelColor]);
+  }, [node, labelColor, selectedPath, projectPath]);
 
   const handleMenuOpen = (event: React.MouseEvent<HTMLElement>) => {
     event.stopPropagation();
@@ -152,6 +158,12 @@ const RenderTree: React.FC<Props> = ({
     <TreeItem
       itemId={node.path}
       onContextMenu={handleMenuOpen}
+      classes={{
+        content:
+          node.path === selectedPath
+            ? 'Mui-selected file-tree-item-selected'
+            : undefined,
+      }}
       label={
         <LabelContainer>
           {renameOpen ? (
@@ -403,6 +415,7 @@ const RenderTree: React.FC<Props> = ({
           onCopyPath={onCopyPath}
           onPastePath={onPastePath}
           copyPathData={copyPathData}
+          selectedPath={selectedPath}
         />
       ))}
     </TreeItem>

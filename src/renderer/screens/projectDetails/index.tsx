@@ -683,6 +683,7 @@ const ProjectDetails: React.FC = () => {
                 setSelectedFilePath(filePath);
                 openTab(filePath);
               }}
+              selectedPath={selectedFilePath}
             />
           )}
         </FileTreeContainer>
