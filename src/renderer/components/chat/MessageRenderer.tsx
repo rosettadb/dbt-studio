@@ -130,15 +130,15 @@ const MarkdownCodeBlock = ({
         p: 1.5,
         fontSize: '13px',
         borderRadius: 1,
-        overflow: 'auto',
-        whiteSpace: 'pre-wrap',
-        wordBreak: 'break-word',
         position: 'relative',
         border: (theme) => `1px solid ${theme.palette.divider}`,
         boxShadow: (theme) =>
           theme.palette.mode === 'dark'
             ? 'inset 0 1px 3px rgba(0,0,0,0.3)'
             : 'inset 0 1px 3px rgba(0,0,0,0.1)',
+        width: '100%',
+        maxWidth: '100%',
+        overflow: 'hidden',
         '& code': {
           background: 'transparent !important',
           color: 'inherit !important',
@@ -147,6 +147,20 @@ const MarkdownCodeBlock = ({
         },
       }}
     >
+      <Box
+        sx={{
+          overflowX: 'auto',
+          overflowY: 'hidden',
+          whiteSpace: 'pre',
+          wordBreak: 'normal',
+          width: '100%',
+          pr: editingFilePath ? 6 : 4,
+        }}
+      >
+        <code ref={codeRef} className={className}>
+          {children}
+        </code>
+      </Box>
       <Tooltip title={copied ? 'Copied!' : 'Copy code'} placement="left">
         <IconButton
           size="small"
@@ -212,9 +226,6 @@ const MarkdownCodeBlock = ({
           </IconButton>
         </Tooltip>
       )}
-      <code ref={codeRef} className={className}>
-        {children}
-      </code>
     </Box>
   ) : (
     <code
@@ -228,6 +239,9 @@ const MarkdownCodeBlock = ({
         fontWeight: 900,
         fontSize: '0.9em',
         fontStyle: 'italic',
+        wordBreak: 'break-word',
+        overflowWrap: 'anywhere',
+        whiteSpace: 'pre-wrap',
       }}
     >
       {children}

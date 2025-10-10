@@ -128,7 +128,7 @@ export const TipTapEditor: React.FC<TipTapEditorProps> = ({
             left: theme.spacing(1.25), // match container horizontal padding
             color: 'text.disabled',
             pointerEvents: 'none',
-            backgroundColor: 'green',
+            backgroundColor: theme.palette.background.paper,
           })}
         >
           {placeholder}
