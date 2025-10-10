@@ -45,6 +45,7 @@ export type ProjectChannels =
   | 'project:updateQuery'
   | 'project:getQuery'
   | 'project:chooseDir'
+  | 'project:renamePath'
   | 'project:downloadSeed';
 
 export type ConnectorChannels =

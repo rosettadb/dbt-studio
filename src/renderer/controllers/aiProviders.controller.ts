@@ -30,15 +30,6 @@ export interface NewAIProvider {
   isActive?: boolean;
 }
 
-export interface ProviderTestResult {
-  success: boolean;
-  error?: string;
-  latencyMs?: number;
-  modelsAvailable?: number;
-  models?: any[];
-  message?: string;
-}
-
 export interface AIModel {
   id: string;
   name: string;
@@ -48,6 +39,18 @@ export interface AIModel {
     input: number;
     output: number;
   };
+  supportsStreaming: boolean;
+  supportsStructuredOutput?: boolean;
+  lastCheckedAt?: string;
+}
+
+export interface ProviderTestResult {
+  success: boolean;
+  error?: string;
+  latencyMs?: number;
+  modelsAvailable?: number;
+  models?: AIModel[];
+  message?: string;
 }
 
 // Get all AI providers

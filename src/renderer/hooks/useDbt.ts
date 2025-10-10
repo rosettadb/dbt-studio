@@ -27,6 +27,57 @@ interface UseDbtReturn {
   activeCommand: DbtCommandType | null;
 }
 
+const ANSI_ESCAPE_REGEX = /\[[0-9;]*m/g;
+const ERROR_SUMMARY_REGEX = /ERROR=(\d+)/i;
+const NON_ZERO_EXIT_REGEX = /Process exited with code\s+(\d+)/i;
+const ERROR_HINT_REGEX =
+  /(Error importing adapter|Encountered an error|Runtime Error|Traceback|Database Error|Compilation Error|^ERROR:?\b|\bERROR\b)/i;
+const ERROR_HINT_IGNORE_REGEX = /ERROR=0\b/i;
+
+const sanitizeCliLine = (line: string): string =>
+  line.replace(ANSI_ESCAPE_REGEX, '').trimEnd();
+
+const extractCliErrorDetails = (
+  output: string[],
+  errors: string[],
+): string[] => {
+  const details = new Set<string>();
+
+  errors.forEach((err) => {
+    const sanitizedError = sanitizeCliLine(err);
+    if (sanitizedError) {
+      details.add(sanitizedError);
+    }
+  });
+
+  const cleanedOutput = output.map(sanitizeCliLine);
+
+  cleanedOutput.forEach((line) => {
+    const match = line.match(ERROR_SUMMARY_REGEX);
+    if (match && Number(match[1]) > 0) {
+      details.add(line);
+    }
+  });
+
+  cleanedOutput.forEach((line) => {
+    const match = line.match(NON_ZERO_EXIT_REGEX);
+    if (match && Number(match[1]) !== 0) {
+      details.add(line);
+    }
+  });
+
+  cleanedOutput.forEach((line) => {
+    if (ERROR_HINT_IGNORE_REGEX.test(line)) {
+      return;
+    }
+    if (ERROR_HINT_REGEX.test(line)) {
+      details.add(line);
+    }
+  });
+
+  return Array.from(details);
+};
+
 const useDbt = (successCallback?: () => void): UseDbtReturn => {
   const { data: settings } = useGetSettings();
   const { runCommand, stopCommand, isRunning } = useCli();
@@ -94,7 +145,7 @@ const useDbt = (successCallback?: () => void): UseDbtReturn => {
 
         await Promise.all(envPromises);
       } catch (error) {
-        throw new Error(`Failed to setup environment variables: ${error}`);
+        toast.info(`Failed to setup environment variables: ${error}`);
       }
     },
     [
@@ -110,7 +161,9 @@ const useDbt = (successCallback?: () => void): UseDbtReturn => {
   const buildCommand = useCallback(
     (command: DbtCommandType, project: Project, args: string = '') => {
       if (!settings?.dbtPath) {
-        throw new Error('DBT path not configured in settings');
+        // maybe this should be dbt (trademark) core path
+        toast.info('dbt Core™ path not configured in settings');
+        return '';
       }
 
       switch (command) {
@@ -171,23 +224,26 @@ const useDbt = (successCallback?: () => void): UseDbtReturn => {
 
         // Build command string
         const cmdString = buildCommand(command, project, args);
+        if (!cmdString) {
+          // buildCommand already toasted; nothing to execute
+          return;
+        }
 
         // Execute command
         const result = await runCommand(cmdString);
+        const aggregatedError = extractCliErrorDetails(
+          result.output,
+          result.error,
+        );
 
-        // Handle success
-        if (result.error.length === 0) {
+        // Handle success vs failure
+        if (aggregatedError.length === 0) {
           if (options.showToast) {
             toast.success(`dbt ${command} completed successfully`);
           }
           successCallback?.();
-        } else {
-          if (options.showToast) {
-            toast.error(`dbt ${command} failed`);
-          }
-          throw new Error(
-            `Command failed with errors: ${result.error.join('\n')}`,
-          );
+        } else if (options.showToast) {
+          toast.error(`Command failed: ${aggregatedError.join('\n')}`);
         }
       } catch (error) {
         if (options.showToast) {
@@ -230,7 +286,7 @@ const useDbt = (successCallback?: () => void): UseDbtReturn => {
     test: useCallback(
       (project: Project, path?: string) =>
         executeCommand('test', project, path ? `--select ${path}` : '', {
-          showToast: false,
+          showToast: true,
         }),
       [executeCommand],
     ),
@@ -243,7 +299,8 @@ const useDbt = (successCallback?: () => void): UseDbtReturn => {
             (c) => c.id === project.connectionId,
           );
           if (!connection) {
-            throw new Error('Connection not found');
+            toast.info('Connection not found');
+            return '';
           }
 
           setActiveCommand('compile');
@@ -257,11 +314,19 @@ const useDbt = (successCallback?: () => void): UseDbtReturn => {
             project,
             path ? `--select ${path}` : '',
           );
+          if (!cmdString) {
+            return '';
+          }
 
           // Execute command and capture output
           const result = await runCommand(cmdString);
 
-          if (result.error.length === 0) {
+          // Detect failure via stderr forwarded to stdout or non-zero exit code indicator
+          const aggregatedError = extractCliErrorDetails(
+            result.output,
+            result.error,
+          );
+          if (aggregatedError.length === 0) {
             // Extract the compiled SQL from the output
             let compiledSql = '';
 
@@ -307,12 +372,14 @@ const useDbt = (successCallback?: () => void): UseDbtReturn => {
             const finalResult = compiledSql.trim();
 
             if (!finalResult) {
-              throw new Error('Failed to extract compiled SQL from dbt output');
+              toast.info('Failed to extract compiled SQL from dbt output');
+              return '';
             }
 
             return finalResult;
           }
-          throw new Error(`dbt compile failed: ${result.error.join('\n')}`);
+          toast.info(`dbt compile failed: ${aggregatedError.join('\n')}`);
+          return '';
         } catch (error) {
           const errorMessage =
             error instanceof Error ? error.message : 'Unknown error';
@@ -344,23 +411,32 @@ const useDbt = (successCallback?: () => void): UseDbtReturn => {
             (c) => c.id === project.connectionId,
           );
           if (!connection) {
-            throw new Error('Connection not found');
+            toast.info('Connection not found');
+            return '';
           }
 
           setActiveCommand('list');
           await setupConnectionEnv(connection.connection.name);
           const cmdString = buildCommand('list', project, '');
+          if (!cmdString) {
+            return '';
+          }
           const result = await runCommand(cmdString);
 
-          if (result.error.length === 0) {
+          const aggregatedError = extractCliErrorDetails(
+            result.output,
+            result.error,
+          );
+          if (aggregatedError.length === 0) {
             return result.output.join('\n');
           }
-          throw new Error(`dbt list failed: ${result.error.join('\n')}`);
+          toast.info(`dbt list failed: ${aggregatedError.join('\n')}`);
+          return '';
         } catch (error) {
           const errorMessage =
             error instanceof Error ? error.message : 'Unknown error';
-          toast.error(`dbt list failed: ${errorMessage}`);
-          throw error;
+          toast.info(`dbt list failed: ${errorMessage}`);
+          return '';
         } finally {
           setActiveCommand(null);
         }

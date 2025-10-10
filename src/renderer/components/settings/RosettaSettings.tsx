@@ -336,7 +336,7 @@ export const RosettaSettings: React.FC<RosettaSettingsProps> = ({
                             size="small"
                             onClick={() =>
                               window.open(
-                                `https://github.com/adaptivescale/rosetta/releases/tag/v${version.version}`,
+                                `https://github.com/rosettadb/rosetta/releases/tag/v${version.version}`,
                                 '_blank',
                               )
                             }
@@ -414,13 +414,13 @@ export const RosettaSettings: React.FC<RosettaSettingsProps> = ({
           color="primary"
           size="small"
           component="a"
-          href="https://github.com/rosettadb/rosetta_cli?tab=readme-ov-file#getting-started"
+          href="https://github.com/rosettadb/rosetta?tab=readme-ov-file#getting-started"
           target="_blank"
           rel="noopener noreferrer"
           onClick={(e) =>
             utils.handleExternalLink(
               e,
-              'https://github.com/rosettadb/rosetta_cli?tab=readme-ov-file#getting-started',
+              'https://github.com/rosettadb/rosetta?tab=readme-ov-file#getting-started',
             )
           }
           sx={{ textTransform: 'none' }}

@@ -88,7 +88,6 @@ export const ModelSplitButton: React.FC<ModelSplitButtonProps> = ({
 
       setCompiledSql(realCompiledSql);
       setShowCompileModal(true);
-      toast.success('Model compiled successfully');
     } catch (error) {
       const errorMessage =
         error instanceof Error ? error.message : 'Unknown error';
@@ -190,7 +189,6 @@ export const ModelSplitButton: React.FC<ModelSplitButtonProps> = ({
 
       setPreviewResult(modelPreviewResult);
       setShowPreviewModal(true);
-      toast.success('Model preview loaded successfully');
     } catch (error) {
       const errorMessage =
         error instanceof Error ? error.message : 'Unknown error';
@@ -217,7 +215,6 @@ export const ModelSplitButton: React.FC<ModelSplitButtonProps> = ({
 
       // Run the single model using dbt run --select
       await dbtRunModel(project, modelName);
-      toast.success(`Model '${modelName}' executed successfully`);
     } catch (error) {
       const errorMessage =
         error instanceof Error ? error.message : 'Unknown error';
@@ -241,7 +238,6 @@ export const ModelSplitButton: React.FC<ModelSplitButtonProps> = ({
 
       // Run tests on the single model using dbt test --select
       await dbtTestModel(project, modelName);
-      toast.success(`Model '${modelName}' tests completed successfully`);
     } catch (error) {
       const errorMessage =
         error instanceof Error ? error.message : 'Unknown error';
@@ -266,9 +262,6 @@ export const ModelSplitButton: React.FC<ModelSplitButtonProps> = ({
       // Run the model and all its downstream dependencies using dbt run --select model_name+
       // The + suffix tells dbt to include all downstream models
       await dbtRunModel(project, `${modelName}+`);
-      toast.success(
-        `Model '${modelName}' and downstream models executed successfully`,
-      );
     } catch (error) {
       const errorMessage =
         error instanceof Error ? error.message : 'Unknown error';
@@ -293,9 +286,6 @@ export const ModelSplitButton: React.FC<ModelSplitButtonProps> = ({
       // Run the model and all its upstream dependencies using dbt run --select +model_name
       // The + prefix tells dbt to include all upstream models (parents)
       await dbtRunModel(project, `+${modelName}`);
-      toast.success(
-        `Model '${modelName}' and upstream models executed successfully`,
-      );
     } catch (error) {
       const errorMessage =
         error instanceof Error ? error.message : 'Unknown error';
@@ -320,9 +310,6 @@ export const ModelSplitButton: React.FC<ModelSplitButtonProps> = ({
       // Run the model and all its upstream and downstream dependencies using dbt run --select +model_name+
       // The + prefix and suffix tells dbt to include both upstream and downstream models
       await dbtRunModel(project, `+${modelName}+`);
-      toast.success(
-        `Model '${modelName}' and all related models (upstream + downstream) executed successfully`,
-      );
     } catch (error) {
       const errorMessage =
         error instanceof Error ? error.message : 'Unknown error';
@@ -347,9 +334,6 @@ export const ModelSplitButton: React.FC<ModelSplitButtonProps> = ({
       // Run tests on the model and all its downstream dependencies using dbt test --select model_name+
       // The + suffix tells dbt to include all downstream models
       await dbtTestModel(project, `${modelName}+`);
-      toast.success(
-        `Model '${modelName}' and downstream models tests completed successfully`,
-      );
     } catch (error) {
       const errorMessage =
         error instanceof Error ? error.message : 'Unknown error';
@@ -374,9 +358,6 @@ export const ModelSplitButton: React.FC<ModelSplitButtonProps> = ({
       // Run tests on the model and all its upstream dependencies using dbt test --select +model_name
       // The + prefix tells dbt to include all upstream models (parents)
       await dbtTestModel(project, `+${modelName}`);
-      toast.success(
-        `Model '${modelName}' and upstream models tests completed successfully`,
-      );
     } catch (error) {
       const errorMessage =
         error instanceof Error ? error.message : 'Unknown error';
@@ -401,9 +382,6 @@ export const ModelSplitButton: React.FC<ModelSplitButtonProps> = ({
       // Run tests on the model and all its upstream and downstream dependencies using dbt test --select +model_name+
       // The + prefix and suffix tells dbt to include both upstream and downstream models
       await dbtTestModel(project, `+${modelName}+`);
-      toast.success(
-        `Model '${modelName}' and all related models (upstream + downstream) tests completed successfully`,
-      );
     } catch (error) {
       const errorMessage =
         error instanceof Error ? error.message : 'Unknown error';
@@ -428,7 +406,6 @@ export const ModelSplitButton: React.FC<ModelSplitButtonProps> = ({
       // Build the single model using dbt build --select
       // This will run the model + tests + seeds + snapshots
       await dbtBuildModel(project, modelName);
-      toast.success(`Model '${modelName}' built successfully with tests`);
     } catch (error) {
       const errorMessage =
         error instanceof Error ? error.message : 'Unknown error';
@@ -480,9 +457,6 @@ export const ModelSplitButton: React.FC<ModelSplitButtonProps> = ({
       // Build the model and all its upstream dependencies using dbt build --select +model_name
       // The + prefix tells dbt to include all upstream models (parents)
       await dbtBuildModel(project, `+${modelName}`);
-      toast.success(
-        `Model '${modelName}' and upstream models built successfully`,
-      );
     } catch (error) {
       const errorMessage =
         error instanceof Error ? error.message : 'Unknown error';
@@ -507,9 +481,6 @@ export const ModelSplitButton: React.FC<ModelSplitButtonProps> = ({
       // Build the model and all its upstream and downstream dependencies using dbt build --select +model_name+
       // The + prefix and suffix tells dbt to include both upstream and downstream models
       await dbtBuildModel(project, `+${modelName}+`);
-      toast.success(
-        `Model '${modelName}' and all related models (upstream + downstream) built successfully`,
-      );
     } catch (error) {
       const errorMessage =
         error instanceof Error ? error.message : 'Unknown error';

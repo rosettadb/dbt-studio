@@ -29,6 +29,7 @@ const electronHandler = {
   app: {
     version,
     os: process.platform,
+    arch: process.arch,
     isDebug:
       process.env.NODE_ENV === 'development' ||
       process.env.DEBUG_PROD === 'true',

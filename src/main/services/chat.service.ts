@@ -148,12 +148,16 @@ class ChatService {
       for await (const {
         content: chunk,
         done,
+        metadata,
       } of providerInstance.streamCompletion(request)) {
         const state = ChatService.activeStreams.get(conversationId);
         if (state?.aborted) {
           // emit final done and stop streaming
           onChunk('', true);
           throw new Error('aborted');
+        }
+        if (metadata && typeof metadata.error === 'string') {
+          throw new Error(metadata.error);
         }
         if (chunk) {
           fullContent += chunk;
