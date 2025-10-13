@@ -13,6 +13,18 @@ export default class UpdateService {
     const result = await autoUpdater.checkForUpdates();
     if (!result) return null;
 
+    const { updateInfo } = result;
+    const isDraftRelease =
+      updateInfo &&
+      typeof updateInfo === 'object' &&
+      'draft' in updateInfo &&
+      (updateInfo as { draft?: boolean }).draft === true;
+
+    if (isDraftRelease) {
+      log.info('Skipping draft release update');
+      return null;
+    }
+
     const currentVersion = app.getVersion();
     const newVersion = result.updateInfo.version;
     const rejectedVersion = this.store.get('rejectedVersion');
