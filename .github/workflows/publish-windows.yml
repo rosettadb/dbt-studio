@@ -52,37 +52,71 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Install Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: 18
-          cache: npm
-
-      - name: Install dependencies
-        run: |
-          npm install
-          npm run postinstall
-
-      - name: Build project
-        run: npm run build
+#      - name: Install Node.js
+#        uses: actions/setup-node@v4
+#        with:
+#          node-version: 18
+#          cache: npm
+#
+#      - name: Install dependencies
+#        run: |
+#          npm install
+#          npm run postinstall
+#
+#      - name: Build project
+#        run: npm run build
 
       - name: Setup Azure Trusted Signing
         shell: pwsh
         run: |
-          # Install Azure Trusted Signing CLI (newer tool)
           Write-Host "Installing Azure Trusted Signing CLI..."
           dotnet tool install --global Microsoft.Trusted.Signing.Client --version 1.0.60
+
+          # Add .NET global tools to PATH for this session
+          $env:PATH += ";$env:USERPROFILE\.dotnet\tools"
+          Write-Host "PATH updated: $env:PATH"
 
           # Verify installation
           trusted-signing --version
 
-          # Create credentials file from secret
+          # Create credentials and metadata files
           Write-Host "Creating credentials file..."
           '${{ secrets.AZURE_SIGNING_CREDS }}' | Out-File -FilePath sp-creds.json -Encoding UTF8
 
-          # Create metadata file from secret
           Write-Host "Creating metadata file..."
           '${{ secrets.AZURE_SIGNING_METADATA }}' | Out-File -FilePath metadata.json -Encoding UTF8
+
+      - name: Test Azure Trusted Signing on small file
+        shell: pwsh
+        run: |
+          Write-Host "Creating a small test file to sign..."
+          New-Item -Path "test.exe" -ItemType File -Value "dummy content" | Out-Null
+
+          Write-Host "Loading Azure signing configuration..."
+          $metadata = Get-Content -Raw -Path "metadata.json" | ConvertFrom-Json
+
+          Write-Host "Testing sign command..."
+          trusted-signing sign `
+            -e $metadata.Endpoint `
+            -a $metadata.CodeSigningAccountName `
+            -c $metadata.CertificateProfileName `
+            -cj "sp-creds.json" `
+            -fd SHA256 `
+            -tr "http://timestamp.acs.microsoft.com" `
+            -td SHA256 `
+            -v Debug `
+            "test.exe"
+
+          if ($LASTEXITCODE -eq 0) {
+            Write-Host "✅ Test signing succeeded!"
+          } else {
+            Write-Error "❌ Test signing failed with exit code $LASTEXITCODE"
+            exit $LASTEXITCODE
+          }
+
+          Write-Host "Verifying signed file..."
+          dir test.exe
+
 
       - name: Build for Windows (no publish yet)
         run: |
