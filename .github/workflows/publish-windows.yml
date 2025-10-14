@@ -118,105 +118,105 @@ jobs:
           dir test.exe
 
 
-      - name: Build for Windows (no publish yet)
-        run: |
-          npm exec electron-builder -- --publish never --win
-
-      - name: Sign Windows artifacts with Trusted Signing CLI
-        shell: pwsh
-        run: |
-          $BUILD_DIR = "release/build"
-
-          if (-not (Test-Path $BUILD_DIR)) {
-            Write-Error "Build directory $BUILD_DIR not found"
-            exit 1
-          }
-
-          # Load metadata to get signing parameters
-          Write-Host "Loading Azure signing configuration..."
-          $metadata = Get-Content -Raw -Path "metadata.json" | ConvertFrom-Json
-
-          Write-Host "Endpoint: $($metadata.Endpoint)"
-          Write-Host "Account: $($metadata.CodeSigningAccountName)"
-          Write-Host "Profile: $($metadata.CertificateProfileName)"
-
-          cd $BUILD_DIR
-
-          # Sign all .exe and .msi files using the modern trusted-signing CLI
-          Get-ChildItem -Path . -Include *.exe,*.msi -Recurse | ForEach-Object {
-            Write-Host "`nSigning file: $($_.Name)" -ForegroundColor Cyan
-
-            trusted-signing sign `
-              -e $metadata.Endpoint `
-              -a $metadata.CodeSigningAccountName `
-              -c $metadata.CertificateProfileName `
-              -cj "../../sp-creds.json" `
-              -fd SHA256 `
-              -tr "http://timestamp.acs.microsoft.com" `
-              -td SHA256 `
-              -v Debug `
-              $_.FullName
-
-            if ($LASTEXITCODE -eq 0) {
-              Write-Host "✓ Successfully signed: $($_.Name)" -ForegroundColor Green
-            } else {
-              Write-Error "✗ Failed to sign $($_.Name) with exit code: $LASTEXITCODE"
-              exit $LASTEXITCODE
-            }
-          }
-
-          Write-Host "`nAll files signed successfully!" -ForegroundColor Green
-
-      - name: Upload Windows artifacts to GitHub Releases
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          RELEASE_TAG: ${{ needs.extract-version.outputs.release_tag }}
-        shell: bash
-        run: |
-          BUILD_DIR="release/build"
-
-          if [ ! -d "$BUILD_DIR" ]; then
-            echo "Error: Build directory $BUILD_DIR not found"
-            echo "Current directory contents:"
-            ls -la
-            echo "Searching for build artifacts..."
-            find . -name "*.exe" -o -name "*.msi" | head -10
-            exit 1
-          fi
-
-          cd "$BUILD_DIR"
-          echo "Build directory contents:"
-          ls -la
-          echo "Using release tag: $RELEASE_TAG"
-
-          # Check if draft release exists, create if not
-          if ! gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
-            echo "Draft release $RELEASE_TAG does not exist, creating it..."
-            gh release create "$RELEASE_TAG" --title "$RELEASE_TAG" --notes "Release $RELEASE_TAG" --draft
-          else
-            echo "Found existing release: $RELEASE_TAG"
-          fi
-
-          # Upload Windows files to the draft release
-          uploaded=false
-          for file in *.exe *.msi *.blockmap latest.yml; do
-            if [[ -f "$file" ]]; then
-              echo "Uploading Windows file: $file to release $RELEASE_TAG"
-              gh release upload "$RELEASE_TAG" "$file" --clobber
-              uploaded=true
-            fi
-          done
-
-          if [ "$uploaded" = false ]; then
-            echo "Warning: No Windows files found to upload"
-            ls -la
-          else
-            echo "Upload completed. Checking release:"
-            gh release view "$RELEASE_TAG"
-          fi
-
-      - name: Cleanup sensitive files
-        if: always()
-        run: |
-          Remove-Item -Path sp-creds.json -ErrorAction SilentlyContinue
-          Remove-Item -Path metadata.json -ErrorAction SilentlyContinue
+#      - name: Build for Windows (no publish yet)
+#        run: |
+#          npm exec electron-builder -- --publish never --win
+#
+#      - name: Sign Windows artifacts with Trusted Signing CLI
+#        shell: pwsh
+#        run: |
+#          $BUILD_DIR = "release/build"
+#
+#          if (-not (Test-Path $BUILD_DIR)) {
+#            Write-Error "Build directory $BUILD_DIR not found"
+#            exit 1
+#          }
+#
+#          # Load metadata to get signing parameters
+#          Write-Host "Loading Azure signing configuration..."
+#          $metadata = Get-Content -Raw -Path "metadata.json" | ConvertFrom-Json
+#
+#          Write-Host "Endpoint: $($metadata.Endpoint)"
+#          Write-Host "Account: $($metadata.CodeSigningAccountName)"
+#          Write-Host "Profile: $($metadata.CertificateProfileName)"
+#
+#          cd $BUILD_DIR
+#
+#          # Sign all .exe and .msi files using the modern trusted-signing CLI
+#          Get-ChildItem -Path . -Include *.exe,*.msi -Recurse | ForEach-Object {
+#            Write-Host "`nSigning file: $($_.Name)" -ForegroundColor Cyan
+#
+#            trusted-signing sign `
+#              -e $metadata.Endpoint `
+#              -a $metadata.CodeSigningAccountName `
+#              -c $metadata.CertificateProfileName `
+#              -cj "../../sp-creds.json" `
+#              -fd SHA256 `
+#              -tr "http://timestamp.acs.microsoft.com" `
+#              -td SHA256 `
+#              -v Debug `
+#              $_.FullName
+#
+#            if ($LASTEXITCODE -eq 0) {
+#              Write-Host "✓ Successfully signed: $($_.Name)" -ForegroundColor Green
+#            } else {
+#              Write-Error "✗ Failed to sign $($_.Name) with exit code: $LASTEXITCODE"
+#              exit $LASTEXITCODE
+#            }
+#          }
+#
+#          Write-Host "`nAll files signed successfully!" -ForegroundColor Green
+#
+#      - name: Upload Windows artifacts to GitHub Releases
+#        env:
+#          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+#          RELEASE_TAG: ${{ needs.extract-version.outputs.release_tag }}
+#        shell: bash
+#        run: |
+#          BUILD_DIR="release/build"
+#
+#          if [ ! -d "$BUILD_DIR" ]; then
+#            echo "Error: Build directory $BUILD_DIR not found"
+#            echo "Current directory contents:"
+#            ls -la
+#            echo "Searching for build artifacts..."
+#            find . -name "*.exe" -o -name "*.msi" | head -10
+#            exit 1
+#          fi
+#
+#          cd "$BUILD_DIR"
+#          echo "Build directory contents:"
+#          ls -la
+#          echo "Using release tag: $RELEASE_TAG"
+#
+#          # Check if draft release exists, create if not
+#          if ! gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
+#            echo "Draft release $RELEASE_TAG does not exist, creating it..."
+#            gh release create "$RELEASE_TAG" --title "$RELEASE_TAG" --notes "Release $RELEASE_TAG" --draft
+#          else
+#            echo "Found existing release: $RELEASE_TAG"
+#          fi
+#
+#          # Upload Windows files to the draft release
+#          uploaded=false
+#          for file in *.exe *.msi *.blockmap latest.yml; do
+#            if [[ -f "$file" ]]; then
+#              echo "Uploading Windows file: $file to release $RELEASE_TAG"
+#              gh release upload "$RELEASE_TAG" "$file" --clobber
+#              uploaded=true
+#            fi
+#          done
+#
+#          if [ "$uploaded" = false ]; then
+#            echo "Warning: No Windows files found to upload"
+#            ls -la
+#          else
+#            echo "Upload completed. Checking release:"
+#            gh release view "$RELEASE_TAG"
+#          fi
+#
+#      - name: Cleanup sensitive files
+#        if: always()
+#        run: |
+#          Remove-Item -Path sp-creds.json -ErrorAction SilentlyContinue
+#          Remove-Item -Path metadata.json -ErrorAction SilentlyContinue
