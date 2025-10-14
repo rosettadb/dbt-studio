@@ -1,45 +1,77 @@
-name: Test Azure Code Signing
+name: Publish Windows
 
 on:
-  workflow_dispatch:  # Manual trigger only
   push:
     branches:
-      - test-signing  # Only runs on test-signing branch
+      - main
+      - release/dev
 
 jobs:
-  test-signing:
-    runs-on: windows-latest
+  extract-version:
+    runs-on: ubuntu-latest
+    outputs:
+      release_tag: ${{ steps.version.outputs.release_tag }}
+      version: ${{ steps.version.outputs.version }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Create dummy executable for testing
-        shell: pwsh
+      - name: Extract version from package.json
+        id: version
         run: |
-          Write-Host "Creating test directory..."
-          New-Item -ItemType Directory -Force -Path "test-build"
+          # Extract version from package.json
+          VERSION=$(node -p "require('./package.json').version")
+          echo "Extracted version: $VERSION"
 
-          # Create a dummy .exe file (just copy cmd.exe as a test file)
-          Write-Host "Creating dummy executable..."
-          Copy-Item "C:\Windows\System32\cmd.exe" -Destination "test-build\DummyApp.exe"
+          # Check if this is a pre-release version (contains alpha, beta, rc, etc.)
+          SUFFIX=""
+          if echo "$VERSION" | grep -q -E "(alpha|beta|rc)"; then
+            # Extract the pre-release suffix
+            if echo "$VERSION" | grep -q "alpha"; then
+              SUFFIX="-alpha"
+            elif echo "$VERSION" | grep -q "beta"; then
+              SUFFIX="-beta"
+            elif echo "$VERSION" | grep -q "rc"; then
+              SUFFIX="-rc"
+            fi
+            # Remove the suffix from version for cleaner tag
+            CLEAN_VERSION=$(echo "$VERSION" | sed -E 's/-(alpha|beta|rc).*//')
+          else
+            CLEAN_VERSION="$VERSION"
+          fi
 
-          if (Test-Path "test-build\DummyApp.exe") {
-            Write-Host "✓ Dummy executable created successfully!" -ForegroundColor Green
-            Write-Host "File size: $((Get-Item 'test-build\DummyApp.exe').Length) bytes"
-          } else {
-            Write-Error "Failed to create dummy executable"
-            exit 1
-          }
+          RELEASE_TAG="${CLEAN_VERSION}${SUFFIX}"
+          echo "Release tag: $RELEASE_TAG"
 
-      - name: Verify unsigned executable
-        shell: pwsh
+          echo "release_tag=$RELEASE_TAG" >> $GITHUB_OUTPUT
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+
+  publish-windows:
+    runs-on: windows-latest
+    needs: extract-version
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 18
+          cache: npm
+
+      - name: Install dependencies
         run: |
-          Write-Host "Checking signature status of dummy file..."
-          $signature = Get-AuthenticodeSignature -FilePath "test-build\DummyApp.exe"
-          Write-Host "Status: $($signature.Status)"
-          Write-Host "Status Message: $($signature.StatusMessage)"
+          npm install
+          npm run postinstall
 
-      - name: Sign test executable with Azure Trusted Signing
+      - name: Build project
+        run: npm run build
+
+      - name: Build for Windows (no publish yet)
+        run: |
+          npm exec electron-builder -- --publish never --win
+
+      - name: Sign Windows artifacts with Azure Trusted Signing
         uses: azure/trusted-signing-action@v0.5.0
         with:
           azure-tenant-id: ${{ secrets.AZURE_TENANT_ID }}
@@ -48,63 +80,90 @@ jobs:
           endpoint: ${{ secrets.AZURE_ENDPOINT }}
           trusted-signing-account-name: ${{ secrets.AZURE_ACCOUNT_NAME }}
           certificate-profile-name: ${{ secrets.AZURE_CERT_PROFILE }}
-          files-folder: test-build
-          files-folder-filter: exe
+          files-folder: release/build
+          files-folder-filter: exe,msi
           file-digest: SHA256
           timestamp-rfc3161: http://timestamp.acs.microsoft.com
           timestamp-digest: SHA256
 
-      - name: Verify signed executable
+      - name: Verify signed artifacts
         shell: pwsh
         run: |
           Write-Host "`n========================================" -ForegroundColor Cyan
-          Write-Host "SIGNATURE VERIFICATION" -ForegroundColor Cyan
+          Write-Host "VERIFYING SIGNED ARTIFACTS" -ForegroundColor Cyan
           Write-Host "========================================`n" -ForegroundColor Cyan
 
-          $signature = Get-AuthenticodeSignature -FilePath "test-build\DummyApp.exe"
+          $BUILD_DIR = "release/build"
+          $allValid = $true
 
-          Write-Host "Status: $($signature.Status)" -ForegroundColor $(if ($signature.Status -eq "Valid") { "Green" } else { "Red" })
-          Write-Host "Status Message: $($signature.StatusMessage)"
-          Write-Host "Signer Certificate:"
-          Write-Host "  Subject: $($signature.SignerCertificate.Subject)"
-          Write-Host "  Issuer: $($signature.SignerCertificate.Issuer)"
-          Write-Host "  Thumbprint: $($signature.SignerCertificate.Thumbprint)"
-          Write-Host "  Valid From: $($signature.SignerCertificate.NotBefore)"
-          Write-Host "  Valid Until: $($signature.SignerCertificate.NotAfter)"
+          Get-ChildItem -Path $BUILD_DIR -Include *.exe,*.msi -Recurse | ForEach-Object {
+            Write-Host "`nChecking: $($_.Name)" -ForegroundColor Yellow
+            $signature = Get-AuthenticodeSignature -FilePath $_.FullName
 
-          if ($signature.TimeStamperCertificate) {
-            Write-Host "`nTimestamp Certificate:"
-            Write-Host "  Subject: $($signature.TimeStamperCertificate.Subject)"
-            Write-Host "  Thumbprint: $($signature.TimeStamperCertificate.Thumbprint)"
+            Write-Host "  Status: $($signature.Status)" -ForegroundColor $(if ($signature.Status -eq "Valid") { "Green" } else { "Red" })
+
+            if ($signature.Status -eq "Valid") {
+              Write-Host "  Signer: $($signature.SignerCertificate.Subject)"
+              Write-Host "  ✓ Valid signature" -ForegroundColor Green
+            } else {
+              Write-Host "  ✗ Invalid or missing signature" -ForegroundColor Red
+              $allValid = $false
+            }
           }
 
           Write-Host "`n========================================`n" -ForegroundColor Cyan
 
-          if ($signature.Status -eq "Valid") {
-            Write-Host "✓ SUCCESS: Executable is properly signed!" -ForegroundColor Green
-          } else {
-            Write-Error "✗ FAILED: Signature is not valid!"
+          if (-not $allValid) {
+            Write-Error "Some files are not properly signed!"
             exit 1
           }
 
-      - name: Upload signed test executable as artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: signed-test-executable
-          path: test-build/DummyApp.exe
-          retention-days: 7
+          Write-Host "✓ All files are properly signed!" -ForegroundColor Green
 
-      - name: Test Summary
-        shell: pwsh
+      - name: Upload Windows artifacts to GitHub Releases
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASE_TAG: ${{ needs.extract-version.outputs.release_tag }}
+        shell: bash
         run: |
-          Write-Host "`n" -NoNewline
-          Write-Host "╔══════════════════════════════════════════════════╗" -ForegroundColor Green
-          Write-Host "║                                                  ║" -ForegroundColor Green
-          Write-Host "║  ✓ Azure Code Signing Test PASSED!              ║" -ForegroundColor Green
-          Write-Host "║                                                  ║" -ForegroundColor Green
-          Write-Host "║  The signed executable has been uploaded as      ║" -ForegroundColor Green
-          Write-Host "║  an artifact. You can download it to verify     ║" -ForegroundColor Green
-          Write-Host "║  the signature on your local machine.           ║" -ForegroundColor Green
-          Write-Host "║                                                  ║" -ForegroundColor Green
-          Write-Host "╚══════════════════════════════════════════════════╝" -ForegroundColor Green
-          Write-Host "`n"
+          BUILD_DIR="release/build"
+
+          if [ ! -d "$BUILD_DIR" ]; then
+            echo "Error: Build directory $BUILD_DIR not found"
+            echo "Current directory contents:"
+            ls -la
+            echo "Searching for build artifacts..."
+            find . -name "*.exe" -o -name "*.msi" | head -10
+            exit 1
+          fi
+
+          cd "$BUILD_DIR"
+          echo "Build directory contents:"
+          ls -la
+          echo "Using release tag: $RELEASE_TAG"
+
+          # Check if draft release exists, create if not
+          if ! gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
+            echo "Draft release $RELEASE_TAG does not exist, creating it..."
+            gh release create "$RELEASE_TAG" --title "$RELEASE_TAG" --notes "Release $RELEASE_TAG" --draft
+          else
+            echo "Found existing release: $RELEASE_TAG"
+          fi
+
+          # Upload Windows files to the draft release
+          uploaded=false
+          for file in *.exe *.msi *.blockmap latest.yml; do
+            if [[ -f "$file" ]]; then
+              echo "Uploading Windows file: $file to release $RELEASE_TAG"
+              gh release upload "$RELEASE_TAG" "$file" --clobber
+              uploaded=true
+            fi
+          done
+
+          if [ "$uploaded" = false ]; then
+            echo "Warning: No Windows files found to upload"
+            ls -la
+          else
+            echo "Upload completed. Checking release:"
+            gh release view "$RELEASE_TAG"
+          fi
