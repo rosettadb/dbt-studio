@@ -4,7 +4,6 @@ on:
   push:
     branches:
       - main
-      - release/dev
 
 env:
   # This will be set by the first job and used by all others
@@ -108,6 +107,103 @@ jobs:
           # Store the build directory for next step
           echo "BUILD_DIR=$BUILD_DIR" >> $GITHUB_ENV
 
+      - name: Recalculate hashes for latest-mac.yml
+        run: |
+          cd "$BUILD_DIR"
+
+          if [ ! -f "latest-mac.yml" ]; then
+            echo "No latest-mac.yml found, skipping hash update"
+            exit 0
+          fi
+
+          echo "Recalculating hashes for macOS ARM64 artifacts..."
+
+          # Install js-yaml for YAML manipulation
+          npm install -g js-yaml
+
+          # Create a Node.js script inline to update the YAML
+          cat > update-manifest.js << 'EOF'
+          const fs = require('fs');
+          const crypto = require('crypto');
+          const yaml = require('js-yaml');
+          const path = require('path');
+
+          function calculateSHA512(filePath) {
+            const fileBuffer = fs.readFileSync(filePath);
+            const hashSum = crypto.createHash('sha512');
+            hashSum.update(fileBuffer);
+            return hashSum.digest('base64');
+          }
+
+          const manifestPath = 'latest-mac.yml';
+
+          if (!fs.existsSync(manifestPath)) {
+            console.log('Manifest not found');
+            process.exit(0);
+          }
+
+          const manifest = yaml.load(fs.readFileSync(manifestPath, 'utf8'));
+
+          console.log('Updating manifest...');
+
+          // Filter and update only files that actually exist
+          if (manifest.files) {
+            manifest.files = manifest.files
+              .filter(file => {
+                const exists = fs.existsSync(file.url);
+                if (!exists) {
+                  console.log(`  Removing ${file.url} (file not found)`);
+                }
+                return exists;
+              })
+              .map(file => {
+                const filePath = file.url;
+                const newHash = calculateSHA512(filePath);
+                const newSize = fs.statSync(filePath).size;
+                console.log(`  Updated ${file.url}: size=${newSize}`);
+                return {
+                  ...file,
+                  sha512: newHash,
+                  size: newSize
+                };
+              });
+          }
+
+          // Update top-level path/sha512 if present
+          if (manifest.path) {
+            if (fs.existsSync(manifest.path)) {
+              manifest.sha512 = calculateSHA512(manifest.path);
+              console.log(`  Updated main path: ${manifest.path}`);
+            } else {
+              // If the main path doesn't exist, find the first available file
+              if (manifest.files && manifest.files.length > 0) {
+                manifest.path = manifest.files[0].url;
+                manifest.sha512 = manifest.files[0].sha512;
+                console.log(`  Updated main path to: ${manifest.path}`);
+              }
+            }
+          }
+
+          fs.writeFileSync(manifestPath, yaml.dump(manifest), 'utf8');
+          console.log('✓ Manifest updated successfully');
+          EOF
+
+          # Run the update script
+          node update-manifest.js
+
+          # Clean up
+          rm update-manifest.js
+
+          echo "Hash recalculation completed"
+
+      - name: Rename manifest to architecture-specific name
+        run: |
+          cd "$BUILD_DIR"
+          if [ -f "latest-mac.yml" ]; then
+            mv latest-mac.yml latest-mac-arm64.yml
+            echo "Renamed latest-mac.yml to latest-mac-arm64.yml"
+          fi
+
       - name: Upload ARM64 artifacts to GitHub Releases
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -125,9 +221,9 @@ jobs:
             echo "Found existing release: $RELEASE_TAG"
           fi
 
-          # Upload ARM64 files and latest-mac.yml to the draft release
+          # Upload ARM64 files and architecture-specific manifest
           uploaded=false
-          for file in *arm64* latest-mac.yml; do
+          for file in *arm64*; do
             if [[ -f "$file" ]]; then
               echo "Uploading file: $file to release $RELEASE_TAG"
               gh release upload "$RELEASE_TAG" "$file" --clobber
@@ -136,7 +232,7 @@ jobs:
           done
 
           if [ "$uploaded" = false ]; then
-            echo "Warning: No ARM64 files or latest-mac.yml found to upload"
+            echo "Warning: No ARM64 files found to upload"
             ls -la
           else
             echo "Upload completed. Checking release:"
@@ -202,6 +298,103 @@ jobs:
           # Store the build directory for next step
           echo "BUILD_DIR=$BUILD_DIR" >> $GITHUB_ENV
 
+      - name: Recalculate hashes for latest-mac.yml
+        run: |
+          cd "$BUILD_DIR"
+
+          if [ ! -f "latest-mac.yml" ]; then
+            echo "No latest-mac.yml found, skipping hash update"
+            exit 0
+          fi
+
+          echo "Recalculating hashes for macOS x64 artifacts..."
+
+          # Install js-yaml for YAML manipulation
+          npm install -g js-yaml
+
+          # Create a Node.js script inline to update the YAML
+          cat > update-manifest.js << 'EOF'
+          const fs = require('fs');
+          const crypto = require('crypto');
+          const yaml = require('js-yaml');
+          const path = require('path');
+
+          function calculateSHA512(filePath) {
+            const fileBuffer = fs.readFileSync(filePath);
+            const hashSum = crypto.createHash('sha512');
+            hashSum.update(fileBuffer);
+            return hashSum.digest('base64');
+          }
+
+          const manifestPath = 'latest-mac.yml';
+
+          if (!fs.existsSync(manifestPath)) {
+            console.log('Manifest not found');
+            process.exit(0);
+          }
+
+          const manifest = yaml.load(fs.readFileSync(manifestPath, 'utf8'));
+
+          console.log('Updating manifest...');
+
+          // Filter and update only files that actually exist
+          if (manifest.files) {
+            manifest.files = manifest.files
+              .filter(file => {
+                const exists = fs.existsSync(file.url);
+                if (!exists) {
+                  console.log(`  Removing ${file.url} (file not found)`);
+                }
+                return exists;
+              })
+              .map(file => {
+                const filePath = file.url;
+                const newHash = calculateSHA512(filePath);
+                const newSize = fs.statSync(filePath).size;
+                console.log(`  Updated ${file.url}: size=${newSize}`);
+                return {
+                  ...file,
+                  sha512: newHash,
+                  size: newSize
+                };
+              });
+          }
+
+          // Update top-level path/sha512 if present
+          if (manifest.path) {
+            if (fs.existsSync(manifest.path)) {
+              manifest.sha512 = calculateSHA512(manifest.path);
+              console.log(`  Updated main path: ${manifest.path}`);
+            } else {
+              // If the main path doesn't exist, find the first available file
+              if (manifest.files && manifest.files.length > 0) {
+                manifest.path = manifest.files[0].url;
+                manifest.sha512 = manifest.files[0].sha512;
+                console.log(`  Updated main path to: ${manifest.path}`);
+              }
+            }
+          }
+
+          fs.writeFileSync(manifestPath, yaml.dump(manifest), 'utf8');
+          console.log('✓ Manifest updated successfully');
+          EOF
+
+          # Run the update script
+          node update-manifest.js
+
+          # Clean up
+          rm update-manifest.js
+
+          echo "Hash recalculation completed"
+
+      - name: Rename manifest to architecture-specific name
+        run: |
+          cd "$BUILD_DIR"
+          if [ -f "latest-mac.yml" ]; then
+            mv latest-mac.yml latest-mac-x64.yml
+            echo "Renamed latest-mac.yml to latest-mac-x64.yml"
+          fi
+
       - name: Upload x64 artifacts to GitHub Releases
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -219,9 +412,9 @@ jobs:
             echo "Found existing release: $RELEASE_TAG"
           fi
 
-          # Upload x64 files and latest-mac.yml to the draft release
+          # Upload x64 files and architecture-specific manifest
           uploaded=false
-          for file in *x64* latest-mac.yml; do
+          for file in *x64*; do
             if [[ -f "$file" ]]; then
               echo "Uploading file: $file to release $RELEASE_TAG"
               gh release upload "$RELEASE_TAG" "$file" --clobber
@@ -230,7 +423,7 @@ jobs:
           done
 
           if [ "$uploaded" = false ]; then
-            echo "Warning: No x64 files or latest-mac.yml found to upload"
+            echo "Warning: No x64 files found to upload"
             ls -la
           else
             echo "Upload completed. Checking release:"
@@ -261,6 +454,98 @@ jobs:
       - name: Build for Windows (no publish yet)
         run: |
           npm exec electron-builder -- --publish never --win
+
+      - name: Sign Windows artifacts with Azure Trusted Signing
+        uses: azure/trusted-signing-action@v0.5.0
+        with:
+          azure-tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          azure-client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          azure-client-secret: ${{ secrets.AZURE_CLIENT_SECRET }}
+          endpoint: ${{ secrets.AZURE_ENDPOINT }}
+          trusted-signing-account-name: ${{ secrets.AZURE_ACCOUNT_NAME }}
+          certificate-profile-name: ${{ secrets.AZURE_CERT_PROFILE }}
+          files-folder: release/build
+          files-folder-filter: exe,msi
+          file-digest: SHA256
+          timestamp-rfc3161: http://timestamp.acs.microsoft.com
+          timestamp-digest: SHA256
+
+      - name: Recalculate hashes for latest.yml after signing
+        shell: bash
+        run: |
+          BUILD_DIR="release/build"
+          cd "$BUILD_DIR"
+
+          if [ ! -f "latest.yml" ]; then
+            echo "No latest.yml found, skipping hash update"
+            exit 0
+          fi
+
+          echo "Recalculating hashes for Windows artifacts after signing..."
+
+          # Install js-yaml for YAML manipulation
+          npm install -g js-yaml
+
+          # Create a Node.js script inline to update the YAML
+          cat > update-manifest.js << 'EOF'
+          const fs = require('fs');
+          const crypto = require('crypto');
+          const yaml = require('js-yaml');
+          const path = require('path');
+
+          function calculateSHA512(filePath) {
+            const fileBuffer = fs.readFileSync(filePath);
+            const hashSum = crypto.createHash('sha512');
+            hashSum.update(fileBuffer);
+            return hashSum.digest('base64');
+          }
+
+          const manifestPath = 'latest.yml';
+
+          if (!fs.existsSync(manifestPath)) {
+            console.log('Manifest not found');
+            process.exit(0);
+          }
+
+          const manifest = yaml.load(fs.readFileSync(manifestPath, 'utf8'));
+
+          console.log('Updating manifest...');
+
+          // Update files array
+          if (manifest.files) {
+            manifest.files = manifest.files.map(file => {
+              const filePath = file.url;
+              if (fs.existsSync(filePath)) {
+                const newHash = calculateSHA512(filePath);
+                const newSize = fs.statSync(filePath).size;
+                console.log(`  Updated ${file.url}: size=${newSize}`);
+                return {
+                  ...file,
+                  sha512: newHash,
+                  size: newSize
+                };
+              }
+              return file;
+            });
+          }
+
+          // Update top-level path/sha512 if present
+          if (manifest.path && fs.existsSync(manifest.path)) {
+            manifest.sha512 = calculateSHA512(manifest.path);
+            console.log(`  Updated main path: ${manifest.path}`);
+          }
+
+          fs.writeFileSync(manifestPath, yaml.dump(manifest), 'utf8');
+          console.log('✓ Manifest updated successfully');
+          EOF
+
+          # Run the update script
+          node update-manifest.js
+
+          # Clean up
+          rm update-manifest.js
+
+          echo "Hash recalculation completed"
 
       - name: Upload Windows artifacts to GitHub Releases
         env:
@@ -335,6 +620,82 @@ jobs:
         run: |
           npm exec electron-builder -- --publish never --linux deb rpm
 
+      - name: Recalculate hashes for latest-linux.yml
+        run: |
+          BUILD_DIR="release/build"
+          cd "$BUILD_DIR"
+
+          if [ ! -f "latest-linux.yml" ]; then
+            echo "No latest-linux.yml found, skipping hash update"
+            exit 0
+          fi
+
+          echo "Recalculating hashes for Linux artifacts..."
+
+          # Install js-yaml for YAML manipulation
+          npm install -g js-yaml
+
+          # Create a Node.js script inline to update the YAML
+          cat > update-manifest.js << 'EOF'
+          const fs = require('fs');
+          const crypto = require('crypto');
+          const yaml = require('js-yaml');
+          const path = require('path');
+
+          function calculateSHA512(filePath) {
+            const fileBuffer = fs.readFileSync(filePath);
+            const hashSum = crypto.createHash('sha512');
+            hashSum.update(fileBuffer);
+            return hashSum.digest('base64');
+          }
+
+          const manifestPath = 'latest-linux.yml';
+
+          if (!fs.existsSync(manifestPath)) {
+            console.log('Manifest not found');
+            process.exit(0);
+          }
+
+          const manifest = yaml.load(fs.readFileSync(manifestPath, 'utf8'));
+
+          console.log('Updating manifest...');
+
+          // Update files array
+          if (manifest.files) {
+            manifest.files = manifest.files.map(file => {
+              const filePath = file.url;
+              if (fs.existsSync(filePath)) {
+                const newHash = calculateSHA512(filePath);
+                const newSize = fs.statSync(filePath).size;
+                console.log(`  Updated ${file.url}: size=${newSize}`);
+                return {
+                  ...file,
+                  sha512: newHash,
+                  size: newSize
+                };
+              }
+              return file;
+            });
+          }
+
+          // Update top-level path/sha512 if present
+          if (manifest.path && fs.existsSync(manifest.path)) {
+            manifest.sha512 = calculateSHA512(manifest.path);
+            console.log(`  Updated main path: ${manifest.path}`);
+          }
+
+          fs.writeFileSync(manifestPath, yaml.dump(manifest), 'utf8');
+          console.log('✓ Manifest updated successfully');
+          EOF
+
+          # Run the update script
+          node update-manifest.js
+
+          # Clean up
+          rm update-manifest.js
+
+          echo "Hash recalculation completed"
+
       - name: Upload Linux artifacts to GitHub Releases
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -381,3 +742,121 @@ jobs:
             echo "Upload completed. Checking release:"
             gh release view "$RELEASE_TAG"
           fi
+
+  merge-mac-manifests:
+    runs-on: ubuntu-latest
+    needs: [extract-version, publish-mac-arm64, publish-mac-x64]
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 18
+
+      - name: Download architecture-specific manifests
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASE_TAG: ${{ needs.extract-version.outputs.release_tag }}
+        run: |
+          mkdir -p temp-manifests
+          cd temp-manifests
+
+          echo "Downloading manifests from release $RELEASE_TAG..."
+
+          # Download both architecture-specific manifests
+          gh release download "$RELEASE_TAG" -p "latest-mac-arm64.yml" || echo "ARM64 manifest not found"
+          gh release download "$RELEASE_TAG" -p "latest-mac-x64.yml" || echo "x64 manifest not found"
+
+          ls -la
+
+      - name: Merge manifests into final latest-mac.yml
+        run: |
+          cd temp-manifests
+
+          # Install js-yaml locally
+          npm init -y
+          npm install js-yaml
+
+          # Create merge script
+          cat > merge-manifests.js << 'EOF'
+          const fs = require('fs');
+          const yaml = require('js-yaml');
+
+          const arm64Path = 'latest-mac-arm64.yml';
+          const x64Path = 'latest-mac-x64.yml';
+
+          let mergedManifest = null;
+          let allFiles = [];
+
+          // Read ARM64 manifest
+          if (fs.existsSync(arm64Path)) {
+            const arm64Manifest = yaml.load(fs.readFileSync(arm64Path, 'utf8'));
+            mergedManifest = { ...arm64Manifest };
+            if (arm64Manifest.files) {
+              allFiles.push(...arm64Manifest.files);
+              console.log(`Added ${arm64Manifest.files.length} ARM64 files`);
+            }
+          } else {
+            console.log('ARM64 manifest not found');
+          }
+
+          // Read x64 manifest
+          if (fs.existsSync(x64Path)) {
+            const x64Manifest = yaml.load(fs.readFileSync(x64Path, 'utf8'));
+            if (!mergedManifest) {
+              mergedManifest = { ...x64Manifest };
+            }
+            if (x64Manifest.files) {
+              allFiles.push(...x64Manifest.files);
+              console.log(`Added ${x64Manifest.files.length} x64 files`);
+            }
+          } else {
+            console.log('x64 manifest not found');
+          }
+
+          if (!mergedManifest) {
+            console.error('No manifests found to merge!');
+            process.exit(1);
+          }
+
+          // Set merged files
+          mergedManifest.files = allFiles;
+
+          // Set the main path to the first file (preferably ARM64 for Apple Silicon)
+          if (allFiles.length > 0) {
+            const arm64File = allFiles.find(f => f.url.includes('arm64'));
+            if (arm64File) {
+              mergedManifest.path = arm64File.url;
+              mergedManifest.sha512 = arm64File.sha512;
+            } else {
+              mergedManifest.path = allFiles[0].url;
+              mergedManifest.sha512 = allFiles[0].sha512;
+            }
+          }
+
+          // Write merged manifest
+          fs.writeFileSync('latest-mac.yml', yaml.dump(mergedManifest), 'utf8');
+          console.log('✓ Merged manifest created with', allFiles.length, 'files');
+          console.log('Main path:', mergedManifest.path);
+          EOF
+
+          # Run merge script
+          node merge-manifests.js
+
+          echo "Merged manifest contents:"
+          cat latest-mac.yml
+
+      - name: Upload merged latest-mac.yml
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASE_TAG: ${{ needs.extract-version.outputs.release_tag }}
+        run: |
+          cd temp-manifests
+
+          echo "Uploading merged latest-mac.yml to release $RELEASE_TAG..."
+          gh release upload "$RELEASE_TAG" latest-mac.yml --clobber
+
+          echo "✓ Upload completed"
+          gh release view "$RELEASE_TAG"
