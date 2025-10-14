@@ -9,11 +9,11 @@ export const Container = styled('div')(() => ({
 
 export const Header = styled('div')(({ theme }) => ({
   display: 'flex',
-  justifyContent: 'space-between',
   alignItems: 'center',
+  gap: 12,
   color: theme.palette.text.primary,
   background: theme.palette.background.paper,
-  padding: '0 16px',
+  paddingRight: theme.spacing(1),
   borderBottom: `1px solid ${theme.palette.divider}`,
 }));
 
@@ -48,8 +48,7 @@ export const ButtonsContainer = styled('div')(() => ({
   display: 'flex',
   alignItems: 'center',
   gap: 8,
-  padding: '8px',
-  marginLeft: 'auto',
+  padding: '0px 0px',
 }));
 
 export const NoFileSelected = styled('div')(({ theme }) => ({
@@ -59,11 +58,4 @@ export const NoFileSelected = styled('div')(({ theme }) => ({
   height: '100%',
   width: '100%',
   color: theme.palette.text.secondary,
-}));
-
-export const SelectedFile = styled('div')(({ theme }) => ({
-  display: 'flex',
-  color: theme.palette.primary.main,
-  fontSize: 12,
-  cursor: 'copy',
 }));

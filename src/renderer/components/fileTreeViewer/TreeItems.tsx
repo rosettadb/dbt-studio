@@ -4,15 +4,21 @@ import { StyledLabel, StyledTreeItem } from './styles';
 import { FileIcon } from '../fileIcon';
 import { OverflowTip } from '../overflowTip';
 
-type ItemProps = {
+type BaseItemProps = {
   label: string;
-  // eslint-disable-next-line react/no-unused-prop-types
+};
+
+type RootItemProps = BaseItemProps & {
   color?: string;
+};
+
+type FileItemProps = RootItemProps & {
+  isSelected?: boolean;
 };
 
 const HIDDEN_FOLDERS = ['.git'];
 
-const FolderTreeItem: React.FC<ItemProps> = ({ label }) => {
+const FolderTreeItem: React.FC<BaseItemProps> = ({ label }) => {
   return (
     <StyledTreeItem>
       <Folder
@@ -29,18 +35,29 @@ const FolderTreeItem: React.FC<ItemProps> = ({ label }) => {
   );
 };
 
-const FileTreeItem: React.FC<ItemProps> = ({ label, color }) => {
+const FileTreeItem: React.FC<FileItemProps> = ({
+  label,
+  color,
+  isSelected,
+}) => {
   return (
     <StyledTreeItem>
       <FileIcon fileName={label} />
       <StyledLabel variant="caption">
-        <OverflowTip style={{ color, minWidth: 180 }}>{label}</OverflowTip>
+        <OverflowTip
+          style={{
+            color: isSelected ? undefined : color,
+            minWidth: 180,
+          }}
+        >
+          {label}
+        </OverflowTip>
       </StyledLabel>
     </StyledTreeItem>
   );
 };
 
-const RootTreeItem: React.FC<ItemProps> = ({ label, color }) => {
+const RootTreeItem: React.FC<RootItemProps> = ({ label, color }) => {
   return (
     <StyledTreeItem>
       <StyledLabel

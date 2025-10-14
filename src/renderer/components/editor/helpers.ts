@@ -1,6 +1,6 @@
 /* eslint-disable no-plusplus */
 import { diffLines, parsePatch } from 'diff';
-import { Range } from './types';
+import { Range } from '../../../types/editor';
 
 const getChangedLineNumbers = (oldStr: string, newStr: string) => {
   const changes = diffLines(oldStr, newStr);
@@ -77,13 +77,35 @@ export const getLanguageFromExtension = (filePath: string): string => {
 };
 
 export const getVersionsFromDiff = (newContent: string, diffString: string) => {
-  const patch = parsePatch(diffString)[0];
+  if (!diffString || diffString.trim() === '' || diffString === 'undefined') {
+    return {
+      oldVersion: newContent,
+      newVersion: newContent,
+    };
+  }
+
+  let patch;
+  try {
+    [patch] = parsePatch(diffString);
+  } catch (error) {
+    return {
+      oldVersion: newContent,
+      newVersion: newContent,
+    };
+  }
+
+  if (!patch) {
+    return {
+      oldVersion: newContent,
+      newVersion: newContent,
+    };
+  }
   const newLines = newContent.split('\n');
 
   const oldLines = [...newLines];
   let offset = 0;
 
-  patch.hunks.forEach((hunk) => {
+  patch.hunks?.forEach((hunk) => {
     let newIndex = hunk.newStart - 1 + offset;
     let removedCount = 0;
 

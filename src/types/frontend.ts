@@ -21,6 +21,10 @@ export type AppContextType = {
   openChatWithMessage: (message: string) => void;
   editingFilePath?: string;
   setEditingFilePath: (filePath: string | undefined) => void;
+  syncEditorContent?: (path: string, content: string) => void;
+  registerSyncEditorContent?: (
+    handler?: (path: string, content: string) => void,
+  ) => void;
 };
 
 export type ItemProps = {
