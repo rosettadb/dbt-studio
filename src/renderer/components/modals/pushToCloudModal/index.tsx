@@ -296,15 +296,6 @@ export const PushToCloudModal: React.FC<PushToCloudModalProps> = ({
               ),
             }}
           />
-
-          <TextField
-            label="Project ID"
-            value={project?.id ?? 'No project selected'}
-            helperText="Project identifier used for secure key lookup."
-            fullWidth
-            InputProps={{ readOnly: true }}
-          />
-
           <Box display="flex" justifyContent="flex-end" gap={2}>
             <Button
               variant="contained"
