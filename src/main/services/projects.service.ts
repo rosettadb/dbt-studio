@@ -91,77 +91,79 @@ export default class ProjectsService {
     }
   }
 
-  static async pushProjectToCloud(
-    payload: CloudDeploymentPayload,
-  ): Promise<void> {
-    const endpoint = `${ROSETTA_CLOUD_BASE_URL.replace(/\/$/, '')}/api/projects`;
+  static async pushProjectToCloud(body: CloudDeploymentPayload): Promise<void> {
+    const baseUrl = ROSETTA_CLOUD_BASE_URL.replace(/\/$/, '');
+    const createEndpoint = `${baseUrl}/api/projects`;
 
-    if (!payload.apiKey) {
+    if (!body.apiKey) {
       throw new Error('Cloud API key is required to deploy.');
     }
 
     const requestBody = {
-      title: payload.title,
-      git_url: payload.gitUrl,
-      git_branch: payload.gitBranch,
+      title: body.title,
+      git_url: body.gitUrl,
+      git_branch: body.gitBranch,
     };
 
-    await new Promise<void>((resolve, reject) => {
-      const request = net.request({
-        method: 'POST',
-        url: endpoint,
-        headers: {
-          'Content-Type': 'application/json',
-          Accept: 'application/json',
-          Authorization: `Bearer ${payload.apiKey}`,
-        },
-      });
+    const postJson = (url: string, data?: object): Promise<any> => {
+      return new Promise((resolve, reject) => {
+        const request = net.request({
+          method: 'POST',
+          url,
+          headers: {
+            'Content-Type': 'application/json',
+            Accept: 'application/json',
+            Authorization: `Bearer ${body.apiKey}`,
+          },
+        });
 
-      request.on('response', (response: IncomingMessage) => {
         const chunks: Buffer[] = [];
 
-        response.on('data', (chunk) => {
-          chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
-        });
+        request.on('response', (response: IncomingMessage) => {
+          response.on('data', (chunk) => {
+            chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+          });
 
-        response.on('end', () => {
-          const body = Buffer.concat(chunks).toString('utf8');
-
-          if (
-            response.statusCode &&
-            response.statusCode >= 200 &&
-            response.statusCode < 300
-          ) {
-            resolve();
-            return;
-          }
-
-          let message = body;
-          try {
-            const parsed = body ? JSON.parse(body) : undefined;
-            if (parsed?.message) {
-              message = parsed.message;
+          response.on('end', () => {
+            const raw = Buffer.concat(chunks).toString('utf8');
+            let parsed: any;
+            try {
+              parsed = raw ? JSON.parse(raw) : {};
+            } catch {
+              parsed = { message: raw };
             }
-          } catch (error) {
-            // ignore JSON parse errors, fall back to raw body
-          }
 
-          reject(
-            new Error(
-              message ||
-                `Rosetta Cloud responded with status ${response.statusCode ?? 'unknown'}.`,
-            ),
-          );
+            if (
+              response.statusCode &&
+              response.statusCode >= 200 &&
+              response.statusCode < 300
+            ) {
+              resolve(parsed);
+            } else {
+              reject(
+                new Error(
+                  parsed?.message ||
+                    `Rosetta Cloud responded with status ${response.statusCode ?? 'unknown'}.`,
+                ),
+              );
+            }
+          });
         });
-      });
 
-      request.on('error', (error) => {
-        reject(error);
-      });
+        request.on('error', (err) => reject(err));
 
-      request.write(JSON.stringify(requestBody));
-      request.end();
-    });
+        if (data) {
+          request.write(JSON.stringify(data));
+        }
+
+        request.end();
+      });
+    };
+
+    const projectData = await postJson(createEndpoint, requestBody);
+
+    const runEndpoint = `${baseUrl}/api/projects/${projectData.id}/run`;
+    await postJson(runEndpoint);
   }
 
   static async saveProjects(projects: Project[]) {
