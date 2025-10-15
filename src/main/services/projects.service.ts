@@ -8,6 +8,7 @@ import AdmZip from 'adm-zip';
 import * as tar from 'tar';
 import {
   BigQueryConnection,
+  CloudDeploymentPayload,
   DatabricksConnection,
   DuckDBConnection,
   PostgresConnection,
@@ -29,6 +30,7 @@ import {
   saveFileContent,
   updateDatabase,
 } from '../utils/fileHelper';
+import { ROSETTA_CLOUD_BASE_URL } from '../utils/constants';
 import SettingsService from './settings.service';
 import {
   BigQueryExtractor,
@@ -87,6 +89,79 @@ export default class ProjectsService {
       await updateDatabase<'selectedProject'>('selectedProject', undefined);
       return undefined;
     }
+  }
+
+  static async pushProjectToCloud(
+    payload: CloudDeploymentPayload,
+  ): Promise<void> {
+    const endpoint = `${ROSETTA_CLOUD_BASE_URL.replace(/\/$/, '')}/api/projects`;
+
+    if (!payload.apiKey) {
+      throw new Error('Cloud API key is required to deploy.');
+    }
+
+    const requestBody = {
+      title: payload.title,
+      git_url: payload.gitUrl,
+      git_branch: payload.gitBranch,
+    };
+
+    await new Promise<void>((resolve, reject) => {
+      const request = net.request({
+        method: 'POST',
+        url: endpoint,
+        headers: {
+          'Content-Type': 'application/json',
+          Accept: 'application/json',
+          Authorization: `Bearer ${payload.apiKey}`,
+        },
+      });
+
+      request.on('response', (response: IncomingMessage) => {
+        const chunks: Buffer[] = [];
+
+        response.on('data', (chunk) => {
+          chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+        });
+
+        response.on('end', () => {
+          const body = Buffer.concat(chunks).toString('utf8');
+
+          if (
+            response.statusCode &&
+            response.statusCode >= 200 &&
+            response.statusCode < 300
+          ) {
+            resolve();
+            return;
+          }
+
+          let message = body;
+          try {
+            const parsed = body ? JSON.parse(body) : undefined;
+            if (parsed?.message) {
+              message = parsed.message;
+            }
+          } catch (error) {
+            // ignore JSON parse errors, fall back to raw body
+          }
+
+          reject(
+            new Error(
+              message ||
+                `Rosetta Cloud responded with status ${response.statusCode ?? 'unknown'}.`,
+            ),
+          );
+        });
+      });
+
+      request.on('error', (error) => {
+        reject(error);
+      });
+
+      request.write(JSON.stringify(requestBody));
+      request.end();
+    });
   }
 
   static async saveProjects(projects: Project[]) {

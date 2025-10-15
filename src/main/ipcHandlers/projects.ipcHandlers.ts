@@ -207,6 +207,23 @@ const registerProjectHandlers = () => {
       return ProjectsService.downloadSeed(body);
     },
   );
+
+  ipcMain.handle(
+    'project:pushToCloud',
+    async (
+      _event,
+      body: {
+        title: string;
+        gitUrl: string;
+        gitBranch: string;
+        apiKey: string;
+        githubUsername?: string;
+        githubPassword?: string;
+      },
+    ) => {
+      return ProjectsService.pushProjectToCloud(body);
+    },
+  );
 };
 
 export default registerProjectHandlers;

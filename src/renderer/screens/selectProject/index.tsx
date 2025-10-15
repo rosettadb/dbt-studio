@@ -27,6 +27,7 @@ import HelpOutlineIcon from '@mui/icons-material/HelpOutline';
 import DriveFolderUploadIcon from '@mui/icons-material/DriveFolderUpload';
 import DatabaseIcon from '@mui/icons-material/Storage';
 import RocketLaunchIcon from '@mui/icons-material/RocketLaunch';
+import CloudUploadOutlinedIcon from '@mui/icons-material/CloudUploadOutlined';
 import { toast } from 'react-toastify';
 import { Cable } from '@mui/icons-material';
 import { projectsServices } from '../../services';
@@ -46,6 +47,7 @@ import {
   GetStartedModal,
   NewProject,
 } from '../../components';
+import { PushToCloudModal } from '../../components/modals/pushToCloudModal';
 import { icons } from '../../../../assets';
 import connectionIcons from '../../../../assets/connectionIcons';
 import { AppLayout } from '../../layouts';
@@ -111,6 +113,10 @@ const SelectProject: React.FC = () => {
     React.useState(false);
   const [selectedProjectForConnection, setSelectedProjectForConnection] =
     React.useState<Project | null>(null);
+  const [isPushModalOpen, setIsPushModalOpen] = React.useState(false);
+  const [projectToPush, setProjectToPush] = React.useState<Project | null>(
+    null,
+  );
 
   const { mutate: deleteProject } = useDeleteProject({
     onSuccess: () => {
@@ -119,6 +125,16 @@ const SelectProject: React.FC = () => {
   });
 
   const { mutate: updateProject } = useUpdateProject();
+
+  const handleOpenPushModal = (project: Project) => {
+    setProjectToPush(project);
+    setIsPushModalOpen(true);
+  };
+
+  const handleClosePushModal = () => {
+    setProjectToPush(null);
+    setIsPushModalOpen(false);
+  };
 
   const getConnectionIcon = (project: Project) => {
     const connectionType = project?.connection?.type;
@@ -416,6 +432,20 @@ const SelectProject: React.FC = () => {
                   }}
                 />
               )}
+              <Tooltip title="Push this project to Rosetta Cloud">
+                <span>
+                  <IconButton
+                    size="small"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleOpenPushModal(project);
+                    }}
+                    data-testid={`push-cloud-${project.id}`}
+                  >
+                    <CloudUploadOutlinedIcon />
+                  </IconButton>
+                </span>
+              </Tooltip>
               <IconButton
                 size="small"
                 onClick={(e) => handleOpenMenu(e, project.id)}
@@ -692,6 +722,11 @@ const SelectProject: React.FC = () => {
             // Projects will be automatically refreshed via React Query
           }}
           onUpdateProject={updateProject}
+        />
+        <PushToCloudModal
+          isOpen={isPushModalOpen}
+          onClose={handleClosePushModal}
+          project={projectToPush}
         />
       </ProjectSelectionContainer>
     </AppLayout>
