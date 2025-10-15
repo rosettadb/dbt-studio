@@ -92,7 +92,10 @@ export default class ProjectsService {
   }
 
   static async pushProjectToCloud(body: CloudDeploymentPayload): Promise<void> {
-    const baseUrl = ROSETTA_CLOUD_BASE_URL.replace(/\/$/, '');
+    const settings = await SettingsService.loadSettings();
+    const rosettaCloudUrl =
+      settings.cloudWorkspaceUrl ?? ROSETTA_CLOUD_BASE_URL;
+    const baseUrl = rosettaCloudUrl.replace(/\/$/, '');
     const createEndpoint = `${baseUrl}/api/projects`;
 
     if (!body.apiKey) {

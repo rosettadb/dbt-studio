@@ -54,7 +54,7 @@ export const GeneralSettings: React.FC<GeneralSettingsProps> = ({
   const { mutateAsync: updateSettings } = useUpdateSettings();
 
   const [workspaceUrl, setWorkspaceUrl] = React.useState(
-    settings.cloudWorkspaceUrl || ROSETTA_CLOUD_BASE_URL,
+    settings.cloudWorkspaceUrl,
   );
   const [lastSyncedAt, setLastSyncedAt] = React.useState(
     settings.cloudWorkspaceLastSyncedAt ?? '',
@@ -70,7 +70,7 @@ export const GeneralSettings: React.FC<GeneralSettingsProps> = ({
   const hasStoredApiKey = storedApiKey.length > 0;
 
   React.useEffect(() => {
-    setWorkspaceUrl(settings.cloudWorkspaceUrl || ROSETTA_CLOUD_BASE_URL);
+    setWorkspaceUrl(settings.cloudWorkspaceUrl);
     setLastSyncedAt(settings.cloudWorkspaceLastSyncedAt ?? '');
     setMetadataDirty(false);
   }, [settings.cloudWorkspaceUrl, settings.cloudWorkspaceLastSyncedAt]);
@@ -270,14 +270,13 @@ export const GeneralSettings: React.FC<GeneralSettingsProps> = ({
             </Typography>
           </Box>
           <Typography variant="body2" color="text.secondary" mb={3}>
-            Paste the Rosetta Cloud API key generated at{' '}
-            {` ${ROSETTA_CLOUD_BASE_URL} `}
+            Paste the Rosetta Cloud API key generated at {` ${workspaceUrl} `}
             to link this project. Keys are stored securely using your operating
             system keychain.
           </Typography>
           <Box display="flex" flexDirection="column" gap={2}>
             <TextField
-              label="Workspace URL"
+              label="Rosetta Cloud URL"
               name="cloudWorkspaceUrl"
               value={workspaceUrl}
               onChange={(event: React.ChangeEvent<HTMLInputElement>) => {
@@ -285,8 +284,6 @@ export const GeneralSettings: React.FC<GeneralSettingsProps> = ({
                 setMetadataDirty(true);
                 onSettingsChange(event);
               }}
-              helperText="Read-only cloud endpoint."
-              InputProps={{ readOnly: true }}
             />
             <TextField
               label={hasStoredApiKey ? 'Replace API key' : 'API key'}
