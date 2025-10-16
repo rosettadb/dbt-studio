@@ -70,8 +70,12 @@ export const GeneralSettings: React.FC<GeneralSettingsProps> = ({
   const hasStoredApiKey = storedApiKey.length > 0;
 
   React.useEffect(() => {
-    setWorkspaceUrl(settings.cloudWorkspaceUrl);
-    setLastSyncedAt(settings.cloudWorkspaceLastSyncedAt ?? '');
+    if (settings.cloudWorkspaceUrl && settings.cloudWorkspaceUrl !== '') {
+      setWorkspaceUrl(settings.cloudWorkspaceUrl);
+      setLastSyncedAt(settings.cloudWorkspaceLastSyncedAt ?? '');
+    } else {
+      setWorkspaceUrl(ROSETTA_CLOUD_BASE_URL);
+    }
     setMetadataDirty(false);
   }, [settings.cloudWorkspaceUrl, settings.cloudWorkspaceLastSyncedAt]);
 

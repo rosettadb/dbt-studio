@@ -5,6 +5,7 @@ import archiver from 'archiver';
 import os from 'os';
 import { DataBase, FileNode, SettingsType } from '../../types/backend';
 import { DATA_DIR, DB_FILE } from './setupHelpers';
+import { ROSETTA_CLOUD_BASE_URL } from './constants';
 
 export const getDirectoryStructure = (dirPath: string): FileNode => {
   const result: FileNode = {
@@ -70,7 +71,7 @@ export const loadDefaultSettings = (): SettingsType => {
     pythonPath: '',
     pythonBinary: '',
     isSetup: 'false',
-    cloudWorkspaceUrl: '',
+    cloudWorkspaceUrl: ROSETTA_CLOUD_BASE_URL,
     cloudWorkspaceLastSyncedAt: '',
   };
 };
