@@ -20,8 +20,19 @@ export default class UpdateService {
       'draft' in updateInfo &&
       (updateInfo as { draft?: boolean }).draft === true;
 
+    const isPrereleaseUpdate =
+      updateInfo &&
+      typeof updateInfo === 'object' &&
+      'prerelease' in updateInfo &&
+      (updateInfo as { prerelease?: boolean }).prerelease === true;
+
     if (isDraftRelease) {
       log.info('Skipping draft release update');
+      return null;
+    }
+
+    if (isPrereleaseUpdate) {
+      log.info('Skipping prerelease update');
       return null;
     }
 
