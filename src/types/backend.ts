@@ -200,6 +200,15 @@ export type Project = {
   createTemplateFolders?: boolean;
 };
 
+export type CloudDeploymentPayload = {
+  title: string;
+  gitUrl: string;
+  gitBranch: string;
+  apiKey: string;
+  githubUsername?: string;
+  githubPassword?: string;
+};
+
 export type SettingsType = {
   rosettaPath: string;
   rosettaVersion: string;
@@ -217,6 +226,8 @@ export type SettingsType = {
   mainDatabaseSize?: string;
   sqliteVersion?: string;
   mainDatabaseStatus?: 'connected' | 'disconnected' | 'error';
+  cloudWorkspaceUrl?: string;
+  cloudWorkspaceLastSyncedAt?: string;
 };
 
 export type FileDialogProperties = 'openFile' | 'openDirectory';

@@ -1,14 +1,16 @@
 import React from 'react';
-import { PlayCircleOutline, StopCircleOutlined } from '@mui/icons-material';
+import {
+  CloudUploadOutlined,
+  PlayCircleOutline,
+  StopCircleOutlined,
+} from '@mui/icons-material';
 import { toast } from 'react-toastify';
 import { SplitButton } from '../splitButton';
 import { icons } from '../../../../assets';
 import { Icon } from '../icon';
 import { Command, CommandType, Project } from '../../../types/backend';
 import { useDbt, useProcess } from '../../hooks';
-import { StagingModal } from '../modals/stagingModal';
-import { IncrementalModal } from '../modals/incrementalModal';
-import { RawLayerModal } from '../modals/rawLayerModal';
+import { StagingModal, IncrementalModal, RawLayerModal } from '../modals';
 import { pathJoin } from '../../services/settings.services';
 
 interface ProjectDbtSplitButtonProps {
@@ -22,6 +24,7 @@ interface ProjectDbtSplitButtonProps {
   // Function handlers that are used elsewhere in ProjectDetails
   rosettaDbt: (project: Project, command: Command) => Promise<void>;
   handleBusinessLayerClick: (path: string) => void;
+  onRunOnCloudClick: () => void;
 }
 
 export const ProjectDbtSplitButton: React.FC<ProjectDbtSplitButtonProps> = ({
@@ -34,6 +37,7 @@ export const ProjectDbtSplitButton: React.FC<ProjectDbtSplitButtonProps> = ({
   connection,
   rosettaDbt,
   handleBusinessLayerClick,
+  onRunOnCloudClick,
 }) => {
   // Functions that are only used in this component - moved inside
 
@@ -201,6 +205,14 @@ export const ProjectDbtSplitButton: React.FC<ProjectDbtSplitButtonProps> = ({
             },
             leftIcon: <Icon src={icons.dbtTm} width={16} height={16} />,
             subTitle: 'Run the dbt project',
+          },
+          {
+            name: 'Run on cloud',
+            onClick: () => {
+              onRunOnCloudClick();
+            },
+            leftIcon: <CloudUploadOutlined />,
+            subTitle: 'Run on cloud',
           },
           {
             name: 'Test',

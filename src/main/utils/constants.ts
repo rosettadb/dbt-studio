@@ -22,3 +22,5 @@ export const SNOWFLAKE_TYPE_MAP: Record<string, number> = {
 
 export const AppUpdateTrackURL =
   'https://dbt-studio-tracker.adaptivescale.workers.dev/api/track';
+
+export const ROSETTA_CLOUD_BASE_URL = 'http://localhost:3000/';
