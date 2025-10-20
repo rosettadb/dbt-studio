@@ -570,6 +570,76 @@ export const useResolveFileContext = (
   });
 };
 
+// Resolve selected file context with DBT enhancements
+export const useResolveSelectedFileContext = (
+  customOptions?: UseMutationOptions<
+    ContextItem,
+    CustomError,
+    { filePath: string; projectPath?: string }
+  >,
+): UseMutationResult<
+  ContextItem,
+  CustomError,
+  { filePath: string; projectPath?: string }
+> => {
+  const { onSuccess: onCustomSuccess, onError: onCustomError } =
+    customOptions || {};
+
+  return useMutation({
+    mutationFn: async ({ filePath, projectPath }) => {
+      return chatService.resolveSelectedFileContext(filePath, projectPath);
+    },
+    onSuccess: (item, variables, ...args) => {
+      onCustomSuccess?.(item, variables, ...args);
+    },
+    onError: (...args) => {
+      onCustomError?.(...args);
+    },
+  });
+};
+
+// Get file metadata
+export const useGetFileMetadata = (
+  customOptions?: UseMutationOptions<
+    {
+      path: string;
+      name: string;
+      size: number;
+      lastModified: string;
+      language: string;
+      fileType: string;
+    },
+    CustomError,
+    string
+  >,
+): UseMutationResult<
+  {
+    path: string;
+    name: string;
+    size: number;
+    lastModified: string;
+    language: string;
+    fileType: string;
+  },
+  CustomError,
+  string
+> => {
+  const { onSuccess: onCustomSuccess, onError: onCustomError } =
+    customOptions || {};
+
+  return useMutation({
+    mutationFn: async (filePath: string) => {
+      return chatService.getFileMetadata(filePath);
+    },
+    onSuccess: (metadata, filePath, ...args) => {
+      onCustomSuccess?.(metadata, filePath, ...args);
+    },
+    onError: (...args) => {
+      onCustomError?.(...args);
+    },
+  });
+};
+
 // Resolve folder context
 export const useResolveFolderContext = (
   customOptions?: UseMutationOptions<ContextItem, CustomError, string>,

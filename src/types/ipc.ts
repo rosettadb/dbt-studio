@@ -125,6 +125,8 @@ export type AIChannels =
   | 'chat:context:add-items'
   | 'chat:context:get-items'
   | 'chat:context:resolve-file'
+  | 'chat:context:resolve-selected-file'
+  | 'chat:context:get-file-metadata'
   | 'chat:context:resolve-folder'
   | 'chat:context:search-codebase'
   | 'chat:context:resolve-url'

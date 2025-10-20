@@ -64,6 +64,8 @@ const aiHandlerChannels: string[] = [
   'chat:context:add-items',
   'chat:context:get-items',
   'chat:context:resolve-file',
+  'chat:context:resolve-selected-file',
+  'chat:context:get-file-metadata',
   'chat:context:resolve-folder',
   'chat:context:search-codebase',
   'chat:context:resolve-url',
@@ -577,10 +579,49 @@ const registerAIHandlers = () => {
     return MainDatabaseService.getContextItems(messageId);
   });
 
-  // Context Resolution Handlers (placeholders for now)
+  // Context Resolution Handlers
   ipcMain.handle('chat:context:resolve-file', async (_, filePath: string) => {
     return ChatService.resolveFileContext(filePath);
   });
+
+  // Enhanced selected file context with DBT awareness
+  ipcMain.handle(
+    'chat:context:resolve-selected-file',
+    async (
+      _,
+      { filePath, projectPath }: { filePath: string; projectPath?: string },
+    ) => {
+      return ChatService.resolveSelectedFileContext(filePath, projectPath);
+    },
+  );
+
+  // Get file metadata without full content
+  ipcMain.handle(
+    'chat:context:get-file-metadata',
+    async (_, filePath: string) => {
+      const fs = await import('fs-extra');
+      const path = await import('path');
+      try {
+        const stats = await fs.stat(filePath);
+        const { SelectedFileContextProvider } = await import(
+          '../services/context/selectedFileContextProvider.service'
+        );
+
+        return {
+          path: filePath,
+          name: path.basename(filePath),
+          size: stats.size,
+          lastModified: stats.mtime.toISOString(),
+          language: path.extname(filePath).toLowerCase().slice(1) || 'text',
+          fileType: SelectedFileContextProvider.detectDBTFileType(filePath),
+        };
+      } catch (error) {
+        const errorMessage =
+          error instanceof Error ? error.message : String(error);
+        throw new Error(`Failed to get file metadata: ${errorMessage}`);
+      }
+    },
+  );
 
   ipcMain.handle(
     'chat:context:resolve-folder',

@@ -21,19 +21,29 @@ import {
   defaultIcon,
 } from '../../../../assets/connectionIcons';
 import { TipTapEditor } from './TipTapEditor';
+import { ContextTabs } from './ContextTabs';
 import { useAutoRenameSession } from '../../hooks/useAutoRenameSession';
 import { htmlToPlainText } from '../../utils/chatHelpers';
 import { useAppContext } from '../../hooks';
+import { useContextManager } from '../../hooks/useContextManager';
 
 interface ChatInputBoxProps {
   sessionId?: number;
+  contextManager?: ReturnType<typeof useContextManager>;
 }
 
-export const ChatInputBox: React.FC<ChatInputBoxProps> = ({ sessionId }) => {
+export const ChatInputBox: React.FC<ChatInputBoxProps> = ({
+  sessionId,
+  contextManager,
+}) => {
   const theme = useTheme();
   const [input, setInput] = React.useState('');
 
   const { pendingMessage, setPendingMessage } = useAppContext();
+
+  // Use provided context manager or create a fallback
+  const fallbackContextManager = useContextManager();
+  const activeContextManager = contextManager || fallbackContextManager;
 
   const queryClient = useQueryClient();
   const assistantTempIdRef = React.useRef<number | null>(null);
@@ -64,7 +74,7 @@ export const ChatInputBox: React.FC<ChatInputBoxProps> = ({ sessionId }) => {
     return aiProviderImages[typeKey] || defaultIcon;
   }, [selectedProvider]);
 
-  const handleSendMessage = (content?: string) => {
+  const handleSendMessage = async (content?: string) => {
     const messageContent = content || plainText.trim();
     if (sessionId && messageContent && activeProvider) {
       // 1) Optimistically add the user message locally (no server call here)
@@ -133,11 +143,16 @@ export const ChatInputBox: React.FC<ChatInputBoxProps> = ({ sessionId }) => {
         setInput('');
       }
 
-      // 3) Start streaming; update the temp assistant content on each chunk
+      // 3) Prepare context items using context manager
+      const contextItems =
+        await activeContextManager.getContextItemsWithAdditionalFiles();
+
+      // 4) Start streaming with automatic context; update the temp assistant content on each chunk
       streamMessage(
         {
           sessionId,
           content: messageContent,
+          contextItems: contextItems.length > 0 ? contextItems : undefined,
           onChunk: (chunk: string) => {
             const current = queryClient.getQueryData<typeof prev>(msgKey) || [];
             queryClient.setQueryData(
@@ -223,8 +238,8 @@ export const ChatInputBox: React.FC<ChatInputBoxProps> = ({ sessionId }) => {
     }
   };
 
-  const handleSend = () => {
-    handleSendMessage();
+  const handleSend = async () => {
+    await handleSendMessage();
   };
 
   const handleCancel = () => {
@@ -273,9 +288,18 @@ export const ChatInputBox: React.FC<ChatInputBoxProps> = ({ sessionId }) => {
 
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column' }}>
+      {/* Context tabs - GitHub Copilot style */}
+      <ContextTabs
+        contextManager={activeContextManager}
+        onAddSelectedFile={() => {
+          // Optional callback for when selected file is added to context
+        }}
+      />
+
       <Box
         sx={{
-          p: 1,
+          px: 1,
+          py: 0.25,
           display: 'flex',
           alignItems: 'center',
           gap: 1,
@@ -288,7 +312,7 @@ export const ChatInputBox: React.FC<ChatInputBoxProps> = ({ sessionId }) => {
             minHeight: 36,
             maxHeight: '40vh',
             overflow: 'auto',
-            borderRadius: theme.spacing(1.5),
+            borderRadius: theme.spacing(0.75),
           }}
         >
           <TipTapEditor
@@ -335,6 +359,7 @@ export const ChatInputBox: React.FC<ChatInputBoxProps> = ({ sessionId }) => {
             </option>
           ))}
         </select>
+
         <Box sx={{ flex: 1 }} />
         {isStreaming && (
           <span style={{ fontSize: 11, color: theme.palette.text.disabled }}>
@@ -380,12 +405,20 @@ export const ChatInputBox: React.FC<ChatInputBoxProps> = ({ sessionId }) => {
           }
 
           const sendDisabled =
-            !sessionId || !plainText.trim() || !activeProvider;
+            !sessionId ||
+            !plainText.trim() ||
+            !activeProvider ||
+            activeContextManager.isResolvingContext;
           let tooltipTitle = 'Send message (Enter)';
           if (!activeProvider) tooltipTitle = 'Select an AI provider to send';
           else if (!sessionId) tooltipTitle = 'Open or create a chat session';
           else if (!plainText.trim())
             tooltipTitle = 'Type a message to enable send';
+          else if (activeContextManager.isResolvingContext)
+            tooltipTitle = 'Resolving context files...';
+          else if (activeContextManager.hasContext) {
+            tooltipTitle = `Send with ${activeContextManager.totalContextFiles} file${activeContextManager.totalContextFiles !== 1 ? 's' : ''} context (Enter)`;
+          }
 
           return (
             <Tooltip

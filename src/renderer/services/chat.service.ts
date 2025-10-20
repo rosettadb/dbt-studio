@@ -272,6 +272,41 @@ class ChatService {
     return data;
   }
 
+  // Resolve selected file context with DBT enhancements
+  static async resolveSelectedFileContext(
+    filePath: string,
+    projectPath?: string,
+  ): Promise<any> {
+    const { data } = await client.post<
+      { filePath: string; projectPath?: string },
+      any
+    >('chat:context:resolve-selected-file', { filePath, projectPath });
+    return data;
+  }
+
+  // Get file metadata without full content
+  static async getFileMetadata(filePath: string): Promise<{
+    path: string;
+    name: string;
+    size: number;
+    lastModified: string;
+    language: string;
+    fileType: string;
+  }> {
+    const { data } = await client.post<
+      string,
+      {
+        path: string;
+        name: string;
+        size: number;
+        lastModified: string;
+        language: string;
+        fileType: string;
+      }
+    >('chat:context:get-file-metadata', filePath);
+    return data;
+  }
+
   // Resolve folder context
   static async resolveFolderContext(folderPath: string): Promise<ContextItem> {
     const { data } = await client.post<string, ContextItem>(
@@ -433,6 +468,8 @@ export const chatService = {
   addContextItems: ChatService.addContextItems,
   getContextItems: ChatService.getContextItems,
   resolveFileContext: ChatService.resolveFileContext,
+  resolveSelectedFileContext: ChatService.resolveSelectedFileContext,
+  getFileMetadata: ChatService.getFileMetadata,
   resolveFolderContext: ChatService.resolveFolderContext,
   searchCodebase: ChatService.searchCodebase,
   resolveUrlContext: ChatService.resolveUrlContext,

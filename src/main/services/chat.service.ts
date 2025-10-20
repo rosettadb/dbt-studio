@@ -945,6 +945,43 @@ class ChatService {
     }
   }
 
+  // Resolve selected file context with DBT enhancements
+  static async resolveSelectedFileContext(
+    filePath: string,
+    projectPath?: string,
+  ) {
+    const { SelectedFileContextProvider } = await import(
+      './context/selectedFileContextProvider.service'
+    );
+
+    try {
+      if (projectPath) {
+        const resolvedContext =
+          await SelectedFileContextProvider.resolveSelectedFileContext(
+            filePath,
+            projectPath,
+          );
+        // Convert to the expected format
+        return {
+          id: resolvedContext.id,
+          type: resolvedContext.type as any,
+          name: resolvedContext.name,
+          description: resolvedContext.description || `File: ${filePath}`,
+          content: resolvedContext.content,
+          metadata: resolvedContext.metadata,
+        };
+      }
+      // Fallback to basic file context if no project path
+      return await this.resolveFileContext(filePath);
+    } catch (error) {
+      const errorMessage =
+        error instanceof Error ? error.message : String(error);
+      throw new Error(
+        `Failed to resolve selected file context: ${errorMessage}`,
+      );
+    }
+  }
+
   // Resolve a folder path into a context item
   static async resolveFolderContext(folderPath: string) {
     const fs = await import('fs-extra');
