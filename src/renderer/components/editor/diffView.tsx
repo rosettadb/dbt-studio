@@ -1,6 +1,10 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { DiffEditor } from '@monaco-editor/react';
-import { IMonaco, IStandaloneDiffEditor, ITextModel } from './types';
+import {
+  IMonaco,
+  IStandaloneDiffEditor,
+  ITextModel,
+} from '../../../types/editor';
 
 type Props = {
   modified: string;

@@ -21,6 +21,10 @@ export type AppContextType = {
   openChatWithMessage: (message: string) => void;
   editingFilePath?: string;
   setEditingFilePath: (filePath: string | undefined) => void;
+  syncEditorContent?: (path: string, content: string) => void;
+  registerSyncEditorContent?: (
+    handler?: (path: string, content: string) => void,
+  ) => void;
 };
 
 export type ItemProps = {
@@ -50,7 +54,8 @@ export type SecureStorageAccount =
   | `cloud-gcs-${string}`
   | `cloud-aws-${string}`
   | `cloud-azure-${string}`
-  | `db-bigquery-${string}`;
+  | `db-bigquery-${string}`
+  | 'cloud-api-key';
 
 // Cloud Explorer Types
 export interface Bucket {

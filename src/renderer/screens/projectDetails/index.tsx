@@ -31,11 +31,12 @@ import {
   TerminalLayout,
   BusinessModal,
   AiPromptModal,
+  PushToCloudModal,
 } from '../../components';
+import { TabManager } from '../../components/editor/tabManager';
 import {
   useGetConnectionById,
   useGetConnections,
-  useGetFileContent,
   useGetFileContentList,
   useGetFileStatuses,
   useGetProjectFiles,
@@ -54,15 +55,20 @@ import {
   FileTreeContainer,
   Header,
   NoFileSelected,
-  SelectedFile,
 } from './styles';
-import { useAppContext, useDbt, useRosettaDBT } from '../../hooks';
+import {
+  useAppContext,
+  useDbt,
+  useRosettaDBT,
+  useTabManager,
+} from '../../hooks';
 import { Project, SupportedConnectionTypes } from '../../../types/backend';
 import { AI_PROMPTS } from '../../config/constants';
 import { utils } from '../../helpers';
 import { AppLayout } from '../../layouts';
 import ChatScreen from '../chat';
 import { getFileName } from '../../services/settings.services';
+import type { EditorTabId } from '../../../types/editor';
 import {
   BusinessModelGenerationSchema,
   BusinessModelGenerationSchemaType,
@@ -78,14 +84,36 @@ const ProjectDetails: React.FC = () => {
     setEditingFilePath: setSelectedFilePath,
     editingFilePath: selectedFilePath,
     openChatWithMessage,
+    registerSyncEditorContent,
   } = useAppContext();
 
   const { data: project, isLoading, refetch } = useGetSelectedProject();
   const { data: connection } = useGetConnectionById(project?.connectionId);
   const { data: settings } = useGetSettings();
   const { mutate: updateFileContent } = useSaveFileContent();
-  const { data: fileContent } = useGetFileContent(selectedFilePath);
   const { mutateAsync: getFileContentList } = useGetFileContentList();
+  const {
+    tabs,
+    activeTab,
+    activeTabId,
+    isHydrated,
+    openTab,
+    switchTab,
+    closeTab,
+    closeTabByPath,
+    updateTabContent,
+    updateTabContentByPath,
+    markTabSaved,
+    markTabSavedByPath,
+    setTabError,
+    setTabErrorByPath,
+    reorderTabs,
+    reset,
+    getTabByPath,
+  } = useTabManager(project?.id);
+  const fileContent = activeTab?.content;
+
+  const previousProjectPathRef = React.useRef<string | undefined>();
 
   const [isLoadingQuery, setIsLoadingQuery] = React.useState(false);
   const [businessQueryModal, setBusinessQueryModal] = React.useState<string>();
@@ -98,6 +126,7 @@ const ProjectDetails: React.FC = () => {
     React.useState<HTMLElement | null>(null);
   const [aiTransformationResponse, setAitTransformationResponse] =
     React.useState<string>();
+  const [isPushModalOpen, setIsPushModalOpen] = React.useState(false);
 
   const {
     data: directories,
@@ -131,6 +160,210 @@ const ProjectDetails: React.FC = () => {
 
   const { data: connections = [] } = useGetConnections();
   const { mutate: updateProject } = useUpdateProject();
+
+  const buildBusinessFilePath = React.useCallback(
+    (basePath: string, fileName: string) => {
+      const trimmedBase = basePath.replace(/[\\/]+$/, '');
+      const separator = basePath.includes('\\') ? '\\' : '/';
+      return `${trimmedBase}${separator}${fileName}`;
+    },
+    [],
+  );
+
+  const createOrUpdateBusinessFile = React.useCallback(
+    async (basePath: string, fileName: string, content: string) => {
+      let filePath = await projectsServices.createFile({
+        filePath: basePath,
+        name: fileName,
+        content,
+      });
+
+      const fileAlreadyExisted = !filePath;
+      if (!filePath) {
+        filePath = buildBusinessFilePath(basePath, fileName);
+      }
+
+      let tabId: EditorTabId | null = await openTab(filePath, {
+        content,
+      });
+
+      if (!tabId) {
+        const existingTab = getTabByPath(filePath);
+        if (existingTab) {
+          tabId = existingTab.id;
+        }
+      }
+
+      setSelectedFilePath(filePath);
+
+      await fetchDirectories();
+      await updateStatuses();
+
+      if (!tabId) {
+        const refreshedTab = getTabByPath(filePath);
+        if (refreshedTab) {
+          tabId = refreshedTab.id;
+        }
+      }
+
+      if (tabId) {
+        updateTabContent(tabId, content, {
+          markModified: fileAlreadyExisted,
+        });
+        if (!fileAlreadyExisted) {
+          markTabSaved(tabId);
+        }
+        setTabError(tabId, undefined);
+        switchTab(tabId);
+        return true;
+      }
+
+      // eslint-disable-next-line no-console
+      console.warn('Generated file created but tab could not be opened', {
+        filePath,
+      });
+      toast.error(
+        'Generated file created, but the editor tab could not be opened automatically.',
+      );
+      return false;
+    },
+    [
+      buildBusinessFilePath,
+      openTab,
+      getTabByPath,
+      setSelectedFilePath,
+      fetchDirectories,
+      updateStatuses,
+      updateTabContent,
+      markTabSaved,
+      setTabError,
+      switchTab,
+    ],
+  );
+
+  const recoverFromFallbackResponse = React.useCallback(
+    async (rawResponse: string, basePath: string) => {
+      const fenceMatch = rawResponse.match(/```[a-zA-Z]*\n([\s\S]*?)\n```/);
+      const rawBody = fenceMatch ? fenceMatch[1] : rawResponse;
+
+      const filenameMatch = rawBody.match(/--\s*filename:\s*([^\n\r]+)\s*/i);
+      const inferredFileName = filenameMatch
+        ? filenameMatch[1].trim()
+        : 'business_model.sql';
+
+      const cleanedSql = filenameMatch
+        ? rawBody.replace(filenameMatch[0], '').trim()
+        : rawBody.trim();
+
+      if (
+        cleanedSql.toLowerCase().includes('select') ||
+        cleanedSql.includes('{{')
+      ) {
+        return createOrUpdateBusinessFile(
+          basePath,
+          inferredFileName,
+          cleanedSql,
+        );
+      }
+
+      return false;
+    },
+    [createOrUpdateBusinessFile],
+  );
+
+  const processBusinessModelResponse = React.useCallback(
+    async (
+      response: {
+        parsedData?: BusinessModelGenerationSchemaType | null;
+        schemaValidation?: {
+          errors?: string[] | null;
+          originalResponse?: unknown;
+        } | null;
+        content: unknown;
+      },
+      basePath: string,
+    ) => {
+      if (response.parsedData?.fileName && response.parsedData?.content) {
+        return createOrUpdateBusinessFile(
+          basePath,
+          response.parsedData.fileName,
+          response.parsedData.content,
+        );
+      }
+
+      const originalResponse =
+        response.schemaValidation?.originalResponse || response.content;
+
+      if (
+        typeof originalResponse === 'string' &&
+        originalResponse.trim().length > 0
+      ) {
+        const handled = await recoverFromFallbackResponse(
+          originalResponse,
+          basePath,
+        );
+        if (handled) {
+          return true;
+        }
+      }
+
+      const schemaErrors =
+        response.schemaValidation?.errors?.filter(Boolean) || [];
+
+      let detailedMessage: string;
+      if (schemaErrors.length) {
+        detailedMessage = schemaErrors.join('\n');
+      } else if (originalResponse) {
+        detailedMessage = String(originalResponse);
+      } else {
+        detailedMessage = 'Provider returned an empty response.';
+      }
+
+      toast.error(detailedMessage);
+      // eslint-disable-next-line no-console
+      console.error('Business model generation failed', {
+        schemaErrors,
+        originalResponse,
+      });
+
+      return false;
+    },
+    [createOrUpdateBusinessFile, recoverFromFallbackResponse],
+  );
+
+  const handleBusinessModalProcess = React.useCallback(
+    async (updatedPath: string, query: string, selectedFiles: string[]) => {
+      if (selectedFiles.length === 0) {
+        return;
+      }
+
+      try {
+        const files = await getFileContentList(selectedFiles);
+        const prompt = generateModelsPrompt(files, query);
+        const response =
+          await aiProvidersService.generateCompletion<BusinessModelGenerationSchemaType>(
+            prompt,
+            BusinessModelGenerationSchema,
+          );
+
+        const handled = await processBusinessModelResponse(
+          response,
+          updatedPath,
+        );
+
+        if (handled) {
+          setBusinessQueryModal(undefined);
+        }
+      } catch (error) {
+        const message =
+          error instanceof Error && error.message
+            ? error.message
+            : 'Failed to generate business model';
+        toast.error(message);
+      }
+    },
+    [getFileContentList, processBusinessModelResponse, setBusinessQueryModal],
+  );
 
   const handleAddConnection = () => {
     setIsAddConnectionModalOpen(true);
@@ -170,10 +403,62 @@ const ProjectDetails: React.FC = () => {
   }, [project]);
 
   React.useEffect(() => {
-    if (project?.path) {
+    const currentPath = project?.path;
+    const previousPath = previousProjectPathRef.current;
+
+    if (currentPath && previousPath && currentPath !== previousPath) {
+      reset();
       setSelectedFilePath(undefined);
     }
-  }, [project?.path]);
+
+    previousProjectPathRef.current = currentPath;
+  }, [project?.path, reset, setSelectedFilePath]);
+
+  React.useEffect(() => {
+    if (!selectedFilePath) {
+      return;
+    }
+    if (!isHydrated) {
+      return;
+    }
+
+    openTab(selectedFilePath);
+  }, [selectedFilePath, openTab, isHydrated]);
+
+  React.useEffect(() => {
+    if (activeTab?.path && activeTab.path !== selectedFilePath) {
+      setSelectedFilePath(activeTab.path);
+      return;
+    }
+    if (!activeTab?.path && selectedFilePath) {
+      setSelectedFilePath(undefined);
+    }
+  }, [activeTab?.path, selectedFilePath, setSelectedFilePath]);
+
+  React.useEffect(() => {
+    const handler = (path: string, content: string) => {
+      const targetTab = getTabByPath(path);
+      if (!targetTab) {
+        return;
+      }
+
+      updateTabContentByPath(path, content, {
+        markModified: false,
+      });
+      setTabErrorByPath(path, undefined);
+    };
+
+    registerSyncEditorContent?.(handler);
+
+    return () => {
+      registerSyncEditorContent?.(undefined);
+    };
+  }, [
+    updateTabContentByPath,
+    setTabErrorByPath,
+    getTabByPath,
+    registerSyncEditorContent,
+  ]);
 
   const generateBasicTransformationPrompt = async (
     filePath: string,
@@ -248,7 +533,7 @@ const ProjectDetails: React.FC = () => {
       return;
     }
 
-    if (!selectedFilePath) {
+    if (!selectedFilePath || !fileContent) {
       toast.error('No file selected');
       return;
     }
@@ -366,6 +651,7 @@ const ProjectDetails: React.FC = () => {
               statuses={statuses}
               node={directories}
               onDeleteFileCallback={(deletedFile: string) => {
+                closeTabByPath(deletedFile);
                 if (selectedFilePath?.includes(deletedFile)) {
                   setSelectedFilePath(undefined);
                 }
@@ -373,9 +659,11 @@ const ProjectDetails: React.FC = () => {
               onFileSelect={async (fileNode) => {
                 if (!utils.isEditableFile(fileNode.path)) {
                   setSelectedFilePath(fileNode.path);
+                  openTab(fileNode.path, { isReadOnly: true });
                   return;
                 }
                 setSelectedFilePath(fileNode.path);
+                openTab(fileNode.path);
               }}
               isLoadingFiles={isLoadingDirectories}
               refreshFiles={async () => {
@@ -391,8 +679,13 @@ const ProjectDetails: React.FC = () => {
                 await updateStatuses();
               }}
               onNewFileCallback={(filePath) => {
+                if (!filePath) {
+                  return;
+                }
                 setSelectedFilePath(filePath);
+                openTab(filePath);
               }}
+              selectedPath={selectedFilePath}
             />
           )}
         </FileTreeContainer>
@@ -405,11 +698,15 @@ const ProjectDetails: React.FC = () => {
               <Content>
                 <EditorContainer>
                   <Header>
-                    {selectedFilePath && (
-                      <SelectedFile>
-                        {utils.splitPath(selectedFilePath ?? '', project.name)}
-                      </SelectedFile>
-                    )}
+                    <Box display="flex" flex={1} minWidth={0}>
+                      <TabManager
+                        tabs={tabs}
+                        activeTabId={activeTabId}
+                        onSelect={switchTab}
+                        onClose={closeTab}
+                        onReorder={reorderTabs}
+                      />
+                    </Box>
                     <ButtonsContainer>
                       {menuItems.length > 0 && (
                         <SplitButton
@@ -441,6 +738,7 @@ const ProjectDetails: React.FC = () => {
                         connection={connection}
                         rosettaDbt={rosettaDbt}
                         handleBusinessLayerClick={handleBusinessLayerClick}
+                        onRunOnCloudClick={() => setIsPushModalOpen(true)}
                       />
                       {connection?.id ? (
                         <>
@@ -517,15 +815,24 @@ const ProjectDetails: React.FC = () => {
                       Please select a file from the explorer on the left!
                     </NoFileSelected>
                   )}
-                  {selectedFilePath &&
-                    fileContent !== undefined &&
-                    project.path && (
-                      <Editor
-                        projectPath={project.path}
-                        filePath={selectedFilePath}
-                        content={fileContent}
-                      />
-                    )}
+                  {project.path && (
+                    <Editor
+                      projectPath={project.path}
+                      tabs={tabs}
+                      activeTabId={activeTabId}
+                      onTabContentChange={(tabId, newContent) => {
+                        updateTabContent(tabId, newContent, {
+                          markModified: true,
+                        });
+                      }}
+                      onTabSaved={(tabId) => {
+                        markTabSaved(tabId);
+                      }}
+                      onTabError={(tabId, errorMessage) => {
+                        setTabError(tabId, errorMessage);
+                      }}
+                    />
+                  )}
                 </EditorContainer>
               </Content>
             </TerminalLayout>
@@ -536,37 +843,7 @@ const ProjectDetails: React.FC = () => {
                 project={project}
                 path={businessQueryModal}
                 onClose={() => setBusinessQueryModal(undefined)}
-                processCallback={async (updatedPath, query, selectedFiles) => {
-                  if (selectedFiles.length > 0) {
-                    const files = await getFileContentList(selectedFiles);
-                    try {
-                      const prompt = generateModelsPrompt(files, query);
-                      const response =
-                        await aiProvidersService.generateCompletion<BusinessModelGenerationSchemaType>(
-                          prompt,
-                          BusinessModelGenerationSchema,
-                        );
-                      if (
-                        response.parsedData?.fileName &&
-                        response.parsedData?.content
-                      ) {
-                        const filePath = await projectsServices.createFile({
-                          filePath: updatedPath,
-                          name: response.parsedData.fileName,
-                          content: response.parsedData.content,
-                        });
-                        await fetchDirectories();
-                        await updateStatuses();
-                        setSelectedFilePath(filePath);
-                        setBusinessQueryModal(undefined);
-                        return;
-                      }
-                      toast.error('Something went wrong');
-                    } catch {
-                      toast.error('Something went wrong');
-                    }
-                  }
-                }}
+                processCallback={handleBusinessModalProcess}
               />
             )}
             {noAiSetModal && (
@@ -575,6 +852,13 @@ const ProjectDetails: React.FC = () => {
                 onClose={() => setNoAiSetModal(false)}
               />
             )}
+            <PushToCloudModal
+              isOpen={isPushModalOpen}
+              onClose={() => {
+                setIsPushModalOpen(false);
+              }}
+              project={project}
+            />
             {aiTransformationPrompt && (
               <AiPromptModal
                 isOpen={!!aiTransformationPrompt}
@@ -583,6 +867,15 @@ const ProjectDetails: React.FC = () => {
                   setAitTransformationResponse(undefined);
                 }}
                 onApply={async (value) => {
+                  if (selectedFilePath) {
+                    updateTabContentByPath(selectedFilePath, value, {
+                      markModified: false,
+                    });
+                    markTabSavedByPath(selectedFilePath);
+                    setTabErrorByPath(selectedFilePath, undefined);
+                  } else {
+                    toast.error('No file selected');
+                  }
                   updateFileContent({
                     path: String(selectedFilePath),
                     content: value,

@@ -24,6 +24,7 @@ type Props = {
   onNewFileCallback: (filePath?: string) => void;
   statuses: FileStatus[];
   copyPath: (source: string, target: string) => Promise<void>;
+  selectedPath?: string;
 };
 
 const filterTreeAndCollectExpanded = (
@@ -70,6 +71,31 @@ const pathExistsInTree = (node: FileNode, targetPath: string): boolean => {
   return false;
 };
 
+const findPathToNode = (
+  node: FileNode,
+  targetPath: string,
+): string[] | null => {
+  if (node.path === targetPath) {
+    return [node.path];
+  }
+
+  if (node.type === 'folder' && node.children?.length) {
+    const childPath = node.children.reduce<string[] | null>((found, child) => {
+      if (found) {
+        return found;
+      }
+      const candidate = findPathToNode(child, targetPath);
+      return candidate ?? null;
+    }, null);
+
+    if (childPath) {
+      return [node.path, ...childPath];
+    }
+  }
+
+  return null;
+};
+
 const FileTreeViewer: React.FC<Props> = ({
   node,
   onFileSelect,
@@ -79,6 +105,7 @@ const FileTreeViewer: React.FC<Props> = ({
   onNewFileCallback,
   statuses,
   copyPath,
+  selectedPath,
 }) => {
   const { data: project } = useGetSelectedProject();
   const [expandedItems, setExpandedItems] = React.useState<string[]>([]);
@@ -122,6 +149,35 @@ const FileTreeViewer: React.FC<Props> = ({
   React.useEffect(() => {
     prevExpandedRef.current = expandedItems;
   }, [expandedItems]);
+
+  React.useEffect(() => {
+    if (!selectedPath) {
+      return;
+    }
+
+    const pathToNode = findPathToNode(node, selectedPath);
+    if (!pathToNode) {
+      return;
+    }
+
+    const ancestorFolders = pathToNode.slice(0, -1);
+    if (ancestorFolders.length === 0) {
+      return;
+    }
+
+    setExpandedItems((prev) => {
+      const next = new Set(prev);
+      let changed = false;
+      ancestorFolders.forEach((folderPath) => {
+        if (!next.has(folderPath)) {
+          next.add(folderPath);
+          changed = true;
+        }
+      });
+
+      return changed ? Array.from(next) : prev;
+    });
+  }, [node, selectedPath]);
 
   React.useEffect(() => {
     if (!project?.path) return;
@@ -168,6 +224,14 @@ const FileTreeViewer: React.FC<Props> = ({
     [],
   );
 
+  const selectedItems = React.useMemo(() => {
+    if (!selectedPath) {
+      return [];
+    }
+
+    return pathExistsInTree(filteredNode, selectedPath) ? [selectedPath] : [];
+  }, [filteredNode, selectedPath]);
+
   return (
     <Container>
       <Box
@@ -213,6 +277,7 @@ const FileTreeViewer: React.FC<Props> = ({
 
       <StyledTreeView
         expandedItems={expandedItems}
+        selectedItems={selectedItems}
         onExpandedItemsChange={(_, items) => handleExpandedItemsChange(items)}
       >
         <RenderTree
@@ -228,6 +293,7 @@ const FileTreeViewer: React.FC<Props> = ({
           onCopyPath={(path) => setCopyPathData(path)}
           onPastePath={(source, target) => copyPath(source, target)}
           copyPathData={copyPathData}
+          selectedPath={selectedPath}
         />
       </StyledTreeView>
       {(fileModal || folderModal) && (

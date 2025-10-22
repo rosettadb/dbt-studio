@@ -7,7 +7,7 @@ import {
   IEditorDecorationsCollection,
   IMonaco,
   IStandaloneCodeEditor,
-} from './types';
+} from '../../../types/editor';
 
 export const CodeEditor = ({
   content,

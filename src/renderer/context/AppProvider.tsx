@@ -10,6 +10,8 @@ type Props = {
   children: React.ReactNode;
 };
 
+type SyncEditorContentHandler = (path: string, content: string) => void;
+
 export const AppContext = React.createContext<AppContextType>({
   projects: [],
   selectedProject: {} as Project,
@@ -26,6 +28,8 @@ export const AppContext = React.createContext<AppContextType>({
   setPendingMessage: () => {},
   openChatWithMessage: () => {},
   setEditingFilePath: () => {},
+  syncEditorContent: () => {},
+  registerSyncEditorContent: () => {},
 });
 
 const AppProvider: React.FC<Props> = ({ children }) => {
@@ -49,12 +53,28 @@ const AppProvider: React.FC<Props> = ({ children }) => {
     null,
   );
 
+  const syncEditorContentHandlerRef = React.useRef<SyncEditorContentHandler>();
+
   const isAiProviderSet = !!activeAIProvider;
 
   const openChatWithMessage = React.useCallback((message: string) => {
     setPendingMessage(message);
     setIsChatOpen(true);
   }, []);
+
+  const registerSyncEditorContent = React.useCallback(
+    (handler?: SyncEditorContentHandler) => {
+      syncEditorContentHandlerRef.current = handler;
+    },
+    [],
+  );
+
+  const syncEditorContent = React.useCallback(
+    (path: string, content: string) => {
+      syncEditorContentHandlerRef.current?.(path, content);
+    },
+    [],
+  );
 
   const fetchSchema = React.useCallback(
     async (forceRefresh = false) => {
@@ -136,6 +156,8 @@ const AppProvider: React.FC<Props> = ({ children }) => {
       openChatWithMessage,
       editingFilePath,
       setEditingFilePath,
+      syncEditorContent,
+      registerSyncEditorContent,
     };
   }, [
     projects,
@@ -150,6 +172,8 @@ const AppProvider: React.FC<Props> = ({ children }) => {
     pendingMessage,
     openChatWithMessage,
     editingFilePath,
+    syncEditorContent,
+    registerSyncEditorContent,
   ]);
 
   if (isLoading) {

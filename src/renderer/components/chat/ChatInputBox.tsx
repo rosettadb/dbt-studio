@@ -286,8 +286,9 @@ export const ChatInputBox: React.FC<ChatInputBoxProps> = ({ sessionId }) => {
             flex: 1,
             minWidth: 0,
             minHeight: 36,
-            maxHeight: 120,
+            maxHeight: '40vh',
             overflow: 'auto',
+            borderRadius: theme.spacing(1.5),
           }}
         >
           <TipTapEditor

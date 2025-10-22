@@ -31,13 +31,22 @@ export const StyledLabel = styled(Typography)(({ theme }) => ({
   width: 140,
 }));
 
-export const StyledTreeView = styled(SimpleTreeView)(() => ({
+export const StyledTreeView = styled(SimpleTreeView)(({ theme }) => ({
   height: 'calc(100% - 60px)',
   overflowY: 'auto',
   paddingBottom: 10,
   // Hide the icon area while renaming to avoid leading glyph before the input
   '& .renaming .MuiTreeItem-iconContainer': {
     display: 'none',
+  },
+  '& .MuiTreeItem-content.Mui-selected': {
+    backgroundColor: alpha(theme.palette.primary.main, 0.12),
+    '&:hover': {
+      backgroundColor: alpha(theme.palette.primary.main, 0.2),
+    },
+  },
+  '& .MuiTreeItem-content.Mui-selected .MuiTreeItem-label': {
+    color: theme.palette.primary.main,
   },
 }));
 
