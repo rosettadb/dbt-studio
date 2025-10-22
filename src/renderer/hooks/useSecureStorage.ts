@@ -6,8 +6,7 @@ const useSecureStorage = () => {
   };
 
   const getOpenAIKey = async (): Promise<string | null> => {
-    const data = await secureStorageService.get('openai-api-key');
-    return data;
+    return secureStorageService.get('openai-api-key');
   };
 
   const deleteOpenAIKey = async (): Promise<void> => {
@@ -24,8 +23,7 @@ const useSecureStorage = () => {
   const getDatabaseUsername = async (
     projectName: string,
   ): Promise<string | null> => {
-    const data = await secureStorageService.get(`db-user-${projectName}`);
-    return data;
+    return secureStorageService.get(`db-user-${projectName}`);
   };
 
   const deleteDatabaseUsername = async (projectName: string): Promise<void> => {
@@ -147,6 +145,18 @@ const useSecureStorage = () => {
     await secureStorageService.delete(`db-bigquery-${connectionName}`);
   };
 
+  const setCloudApiKey = async (apiKey: string): Promise<void> => {
+    await secureStorageService.set('cloud-api-key', apiKey);
+  };
+
+  const getCloudApiKey = async (): Promise<string | null> => {
+    return secureStorageService.get('cloud-api-key');
+  };
+
+  const deleteCloudApiKey = async (): Promise<void> => {
+    await secureStorageService.delete('cloud-api-key');
+  };
+
   return {
     setOpenAIKey,
     getOpenAIKey,
@@ -172,6 +182,9 @@ const useSecureStorage = () => {
     setBigQueryServiceAccountKey,
     getBigQueryServiceAccountKey,
     deleteBigQueryServiceAccountKey,
+    setCloudApiKey,
+    getCloudApiKey,
+    deleteCloudApiKey,
   };
 };
 
