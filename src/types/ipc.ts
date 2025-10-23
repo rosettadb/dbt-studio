@@ -216,6 +216,15 @@ export type CloudExplorerChannels =
   | 'cloudExplorer:testConnection'
   | 'cloudExplorer:previewData';
 
+export type AuthChannels =
+  | 'auth:login'
+  | 'auth:getToken'
+  | 'auth:logout'
+  | 'auth:storeToken'
+  | 'auth:success'
+  | 'auth:error'
+  | 'auth:token-updated';
+
 export type Channels =
   | TestChannels
   | CliChannels
@@ -229,7 +238,8 @@ export type Channels =
   | UpdateChannels
   | CloudExplorerChannels
   | SourcesChannels
-  | AIChannels;
+  | AIChannels
+  | AuthChannels;
 
 export type ConfigureConnectionBody = {
   projectId?: string;

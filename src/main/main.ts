@@ -26,13 +26,75 @@ protocol.registerSchemesAsPrivileged([
       bypassCSP: true,
     },
   },
+  {
+    scheme: 'rosetta',
+    privileges: {
+      standard: true,
+      secure: true,
+    },
+  },
 ]);
 
 setupApplicationIcon();
 
+let windowManager: WindowManager | null = null;
+// Handle deep link authentication
+async function handleDeepLink(url: string) {
+  console.log('1.Received deep link:', url);
+  try {
+    const parsedUrl = new URL(url);
+    console.log('2.Parsed URL:', parsedUrl);
+
+    if (
+      parsedUrl.protocol === 'rosetta:' &&
+      (parsedUrl.pathname === '//auth' || parsedUrl.host === 'auth')
+    ) {
+      const token = parsedUrl.searchParams.get('token');
+      console.log('3.Token:', token);
+
+      if (token) {
+        const { AuthService } = await import('./services');
+        console.log('4.AuthService:', AuthService);
+
+        await AuthService.storeToken(token);
+        console.log('5.AuthService.storeToken(token);');
+
+        // Notify renderer that token has been updated
+        windowManager?.getMainWindow()?.webContents.send('auth:token-updated');
+
+        windowManager?.getMainWindow()?.webContents.send('auth:success', {
+          token,
+        });
+        return;
+      }
+
+      windowManager?.getMainWindow()?.webContents.send('auth:error', {
+        error: 'Missing token in deep link response.',
+      });
+    }
+  } catch (error) {
+    windowManager?.getMainWindow()?.webContents.send('auth:error', {
+      error:
+        error instanceof Error
+          ? `Failed to process deep link: ${error.message}`
+          : 'Failed to process deep link.',
+    });
+  }
+}
+
 // Ensure single instance of the app
 const gotTheLock = app.requestSingleInstanceLock();
-let windowManager: WindowManager | null = null;
+
+// Register custom protocol for deep linking
+if (process.defaultApp) {
+  if (process.argv.length >= 2) {
+    app.setAsDefaultProtocolClient('rosetta', process.execPath, [
+      process.argv[1],
+    ]);
+  }
+} else {
+  app.setAsDefaultProtocolClient('rosetta');
+}
 
 if (!gotTheLock) {
   console.log('Another instance is already running. Quitting...');
@@ -145,8 +207,14 @@ if (!gotTheLock) {
     })
     .catch(console.log);
 
-  app.on('second-instance', () => {
+  app.on('second-instance', (event, commandLine) => {
     if (!windowManager) return;
+
+    // Handle deep link from second instance
+    const url = commandLine.find((arg) => arg.startsWith('rosetta://'));
+    if (url) {
+      handleDeepLink(url);
+    }
 
     const activeWindow = windowManager.getMainWindow();
 
@@ -156,6 +224,21 @@ if (!gotTheLock) {
       activeWindow.focus();
     } else {
       windowManager.startApplication();
+    }
+  });
+
+  // Handle deep links on macOS
+  app.on('open-url', (event, url) => {
+    event.preventDefault();
+    handleDeepLink(url);
+  });
+
+  // Handle deep links on Windows/Linux
+  app.on('ready', () => {
+    // Check if app was opened with a deep link
+    const url = process.argv.find((arg) => arg.startsWith('rosetta://'));
+    if (url) {
+      handleDeepLink(url);
     }
   });
 }

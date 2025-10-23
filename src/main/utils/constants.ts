@@ -22,3 +22,7 @@ export const SNOWFLAKE_TYPE_MAP: Record<string, number> = {
 
 export const AppUpdateTrackURL =
   'https://dbt-studio-tracker.adaptivescale.workers.dev/api/track';
+
+export const CloudDashboardUrl = 'http://localhost:3000';
+
+export const CloudDashboardTokenKey = 'cloud-dashboard-auth-token';

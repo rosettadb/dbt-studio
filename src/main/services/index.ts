@@ -8,6 +8,7 @@ import UpdateService from './update.service';
 import CloudExplorerService from './cloudExplorer.service';
 import CloudPreviewService from './cloudPreview.service';
 import UtilsService from './utilsService';
+import AuthService from './auth.service';
 
 export {
   ProjectsService,
@@ -20,4 +21,5 @@ export {
   CloudExplorerService,
   CloudPreviewService,
   UtilsService,
+  AuthService,
 };

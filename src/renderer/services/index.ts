@@ -7,6 +7,7 @@ import * as secureStorageService from './secureStorage.service';
 import * as utilsService from './utils.service';
 import cloudExplorerService from './cloudExplorer.service';
 import { connectionStorage } from './connectionStorage.service';
+import authServiceInstance from './auth.service';
 
 export {
   settingsServices,
@@ -18,4 +19,5 @@ export {
   cloudExplorerService,
   connectionStorage,
   utilsService,
+  authServiceInstance as authService,
 };

@@ -12,6 +12,9 @@ import {
   Settings,
   ArrowDownward,
   FormatListNumbered,
+  AccountCircle,
+  Person,
+  Logout,
 } from '@mui/icons-material';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { toast } from 'react-toastify';
@@ -34,6 +37,12 @@ import {
   useGitPush,
   useSelectProject,
 } from '../../controllers';
+import {
+  useAuthToken,
+  useAuthLogin,
+  useAuthLogout,
+  useAuthSubscription,
+} from '../../controllers/auth.controller';
 import { AddGitRemoteModal, GitCommitModal, NewBranchModal } from '../modals';
 import { SimpleDropdownMenu } from '../simpleDropdown';
 import { Icon } from '../icon';
@@ -52,6 +61,54 @@ export const Menu: React.FC = () => {
   const [isModalOpen, setIsModalOpen] = React.useState(false);
   const [newBranchModal, setNewBranchModal] = React.useState(false);
   const [anchorEl, setAnchorEl] = React.useState<null | HTMLElement>(null);
+
+  // Auth hooks
+  const { data: authToken, isLoading: tokenLoading } = useAuthToken();
+  const { mutate: login, isLoading: loginLoading } = useAuthLogin({
+    onSuccess: () => {
+      toast.success(
+        'Login initiated! Please complete authentication in your browser.',
+      );
+    },
+    onError: (error) => {
+      toast.error(`Login failed: ${error.message || 'Unknown error'}`);
+    },
+  });
+  const { mutate: logout, isLoading: logoutLoading } = useAuthLogout({
+    onSuccess: () => {
+      toast.success('Logged out successfully');
+    },
+    onError: (error) => {
+      toast.error(`Logout failed: ${error.message || 'Unknown error'}`);
+    },
+  });
+
+  // Subscribe to auth success events
+  useAuthSubscription();
+
+  const isAuthLoading = tokenLoading || loginLoading || logoutLoading;
+  const [authMenuAnchor, setAuthMenuAnchor] =
+    React.useState<null | HTMLElement>(null);
+
+  const handleAuthMenuOpen = (event: React.MouseEvent<HTMLButtonElement>) => {
+    event.stopPropagation();
+    setAuthMenuAnchor(event.currentTarget);
+  };
+
+  const handleAuthMenuClose = () => {
+    setAuthMenuAnchor(null);
+  };
+
+  const handleAuthButtonClick = (
+    event: React.MouseEvent<HTMLButtonElement>,
+  ) => {
+    if (authToken) {
+      handleAuthMenuOpen(event);
+      return;
+    }
+
+    login();
+  };
 
   const { data: project } = useGetSelectedProject();
   const { data: projects = [] } = useGetProjects();
@@ -308,6 +365,68 @@ export const Menu: React.FC = () => {
               )}
             </DD>
           )}
+          {/* Authentication Menu */}
+          <Tooltip
+            title={
+              authToken ? 'View profile options' : 'Login to Cloud Dashboard'
+            }
+          >
+            <IconButton
+              onClick={handleAuthButtonClick}
+              disabled={isAuthLoading}
+              color="primary"
+              sx={{
+                backgroundColor: authToken
+                  ? `${theme.palette.success.light}20`
+                  : 'transparent',
+                '&:hover': {
+                  backgroundColor: authToken
+                    ? `${theme.palette.success.light}40`
+                    : theme.palette.action.hover,
+                },
+                transition: 'background-color 0.2s ease',
+              }}
+            >
+              {(() => {
+                if (isAuthLoading) {
+                  return <CircularProgress size={20} />;
+                }
+                if (authToken) {
+                  return (
+                    <Person
+                      sx={{ fontSize: 22, color: theme.palette.success.main }}
+                    />
+                  );
+                }
+                return <AccountCircle sx={{ fontSize: 22 }} />;
+              })()}
+            </IconButton>
+          </Tooltip>
+          {authToken ? (
+            <DD
+              anchorEl={authMenuAnchor}
+              open={Boolean(authMenuAnchor)}
+              onClose={handleAuthMenuClose}
+            >
+              <MenuItem
+                onClick={() => {
+                  handleAuthMenuClose();
+                  navigate('/app/profile');
+                }}
+              >
+                Profile
+              </MenuItem>
+              <MenuItem
+                onClick={() => {
+                  handleAuthMenuClose();
+                  logout();
+                }}
+              >
+                <Logout fontSize="small" sx={{ mr: 1 }} /> Logout
+              </MenuItem>
+            </DD>
+          ) : null}
+
           <Tooltip title="Settings">
             <IconButton
               aria-label="account of current user"

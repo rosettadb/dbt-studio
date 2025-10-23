@@ -69,7 +69,19 @@ When implementing ANY new feature or command in this Electron application, you M
 
 - IPC handler functions must be thin wrappers that just call a single service method with routed params.
 - Do not add logic, branching, or side-effects in handlers. Keep handlers idempotent and declarative.
-- Example from `src/main/ipcHandlers/ai.ipcHandlers.ts` (pattern):
+- **NO try-catch blocks** - error handling is done in service layer
+- **NO business logic** - pure delegation to services
+- **NO console.log or console.error** - logging is done in services
+- Example from `src/main/ipcHandlers/secureStorage.ipcHandlers.ts` (correct pattern):
+  ```ts
+  ipcMain.handle('secure-storage:set', async (_event, { account, password }) => {
+    await SecureStorageService.setCredential(account, password);
+  });
+  ipcMain.handle('secure-storage:get', async (_event, { account }) => {
+    return SecureStorageService.getCredential(account);
+  });
+  ```
+- More examples:
   - `ipcMain.handle('ai:provider:list', async () => ProviderManager.listProviders())`
   - `ipcMain.handle('chat:conversation:list', async (_e, projectId) => ChatService.getSessions(projectId))`
 
