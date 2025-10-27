@@ -34,4 +34,3 @@ bin/rosetta/*
 # Ai Context
 .github/copilot-instructions.md
 docs/ai-context/*
-
