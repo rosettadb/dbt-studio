@@ -7,6 +7,7 @@ import {
   Menu as DD,
   useTheme,
   CircularProgress,
+  Avatar,
 } from '@mui/material';
 import {
   Settings,
@@ -43,6 +44,10 @@ import {
   useAuthLogout,
   useAuthSubscription,
 } from '../../controllers/auth.controller';
+import {
+  useProfile,
+  useProfileSubscription,
+} from '../../controllers/profile.controller';
 import { AddGitRemoteModal, GitCommitModal, NewBranchModal } from '../modals';
 import { SimpleDropdownMenu } from '../simpleDropdown';
 import { Icon } from '../icon';
@@ -85,6 +90,12 @@ export const Menu: React.FC = () => {
 
   // Subscribe to auth success events
   useAuthSubscription();
+
+  // Subscribe to profile events
+  useProfileSubscription();
+
+  // Get profile data
+  const { data: profile } = useProfile();
 
   const isAuthLoading = tokenLoading || loginLoading || logoutLoading;
   const [authMenuAnchor, setAuthMenuAnchor] =
@@ -392,6 +403,35 @@ export const Menu: React.FC = () => {
                   return <CircularProgress size={20} />;
                 }
                 if (authToken) {
+                  // Show user initials if profile data is available
+                  if (profile?.name || profile?.email) {
+                    const getInitials = (
+                      name: string | null,
+                      email: string,
+                    ) => {
+                      if (name) {
+                        return name
+                          .split(' ')
+                          .map((n) => n[0])
+                          .join('')
+                          .toUpperCase();
+                      }
+                      return email[0].toUpperCase();
+                    };
+
+                    return (
+                      <Avatar
+                        sx={{
+                          width: 22,
+                          height: 22,
+                          fontSize: '0.75rem',
+                        }}
+                      >
+                        {getInitials(profile.name, profile.email)}
+                      </Avatar>
+                    );
+                  }
+                  // Fallback to Person icon if no profile data
                   return (
                     <Person
                       sx={{ fontSize: 22, color: theme.palette.success.main }}
@@ -409,12 +449,28 @@ export const Menu: React.FC = () => {
               onClose={handleAuthMenuClose}
             >
               <MenuItem
+                disabled
+                sx={{ flexDirection: 'column', alignItems: 'flex-start' }}
+              >
+                <div style={{ fontWeight: 'bold', fontSize: '0.875rem' }}>
+                  {profile?.name || 'User'}
+                </div>
+                <div
+                  style={{
+                    fontSize: '0.75rem',
+                    color: theme.palette.text.secondary,
+                  }}
+                >
+                  {profile?.email}
+                </div>
+              </MenuItem>
+              <MenuItem
                 onClick={() => {
                   handleAuthMenuClose();
-                  navigate('/app/profile');
+                  navigate('/app/settings/profile');
                 }}
               >
-                Profile
+                <Person fontSize="small" sx={{ mr: 1 }} /> Profile
               </MenuItem>
               <MenuItem
                 onClick={() => {

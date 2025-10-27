@@ -1,6 +1,7 @@
 import FolderIcon from '@mui/icons-material/Folder';
 import PsychologyIcon from '@mui/icons-material/Psychology';
 import ManageAccountsIcon from '@mui/icons-material/ManageAccounts';
+import PersonIcon from '@mui/icons-material/Person';
 import InfoIcon from '@mui/icons-material/Info';
 import { SvgIconComponent } from '@mui/icons-material';
 import React from 'react';
@@ -32,6 +33,7 @@ export const settingsSidebarElements: SettingsSidebarElement[] = [
     text: 'General',
     path: '/app/settings/general',
   },
+
   {
     icon: DbtBlackIcon as any,
     text: 'dbt™ Core',
@@ -46,6 +48,11 @@ export const settingsSidebarElements: SettingsSidebarElement[] = [
     icon: PsychologyIcon,
     text: 'AI Providers',
     path: '/app/settings/ai-providers',
+  },
+  {
+    icon: PersonIcon,
+    text: 'Profile',
+    path: '/app/settings/profile',
   },
   {
     icon: InfoIcon,

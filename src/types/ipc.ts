@@ -225,6 +225,11 @@ export type AuthChannels =
   | 'auth:error'
   | 'auth:token-updated';
 
+export type ProfileChannels =
+  | 'profile:get'
+  | 'profile:refresh'
+  | 'profile:getCached';
+
 export type Channels =
   | TestChannels
   | CliChannels
@@ -239,7 +244,8 @@ export type Channels =
   | CloudExplorerChannels
   | SourcesChannels
   | AIChannels
-  | AuthChannels;
+  | AuthChannels
+  | ProfileChannels;
 
 export type ConfigureConnectionBody = {
   projectId?: string;

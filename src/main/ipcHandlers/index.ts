@@ -10,6 +10,7 @@ import registerUpdateHandlers from './updates.ipcHandlers';
 import registerCloudExplorerHandlers from './cloudExplorer.ipcHandlers';
 import registerAIHandlers from './ai.ipcHandlers';
 import registerAuthHandlers from './auth.ipcHandlers';
+import { registerProfileHandlers } from './profile.ipcHandlers';
 
 export {
   registerCliHandlers,
@@ -24,4 +25,5 @@ export {
   registerCloudExplorerHandlers,
   registerAIHandlers,
   registerAuthHandlers,
+  registerProfileHandlers,
 };

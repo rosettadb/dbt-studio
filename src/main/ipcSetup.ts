@@ -12,6 +12,7 @@ import {
   registerCloudExplorerHandlers,
   registerAIHandlers,
   registerAuthHandlers,
+  registerProfileHandlers,
 } from './ipcHandlers';
 
 const registerHandlers = (mainWindow: BrowserWindow) => {
@@ -27,6 +28,7 @@ const registerHandlers = (mainWindow: BrowserWindow) => {
   registerCloudExplorerHandlers();
   registerAIHandlers();
   registerAuthHandlers();
+  registerProfileHandlers();
 };
 
 export default registerHandlers;

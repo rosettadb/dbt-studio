@@ -24,6 +24,7 @@ import {
 import { Container, StyledForm, StyledSettingsNavLink, Title } from './styles';
 import {
   GeneralSettings,
+  ProfileSettings,
   DbtSettings,
   RosettaSettings,
   AboutSettings,
@@ -118,6 +119,8 @@ const Settings: React.FC = () => {
             onFilePicker={handleFilePicker}
           />
         );
+      case 'profile':
+        return <ProfileSettings />;
       case 'ai-providers':
         return <AIProvidersSettings />;
       case 'dbt':
