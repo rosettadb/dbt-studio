@@ -8,7 +8,7 @@ import {
   CircularProgress,
   Alert,
 } from '@mui/material';
-import { Login, Refresh, Logout } from '@mui/icons-material';
+import { Login, Refresh, Logout, CloudOff } from '@mui/icons-material';
 import { toast } from 'react-toastify';
 import {
   useAuthToken,
@@ -79,8 +79,8 @@ export const ProfileSettings: React.FC = () => {
           profile information.
         </Typography>
         <Card>
-          <CardContent sx={{ textAlign: 'center', py: 4 }}>
-            <Login sx={{ fontSize: 48, color: 'text.secondary', mb: 2 }} />
+          <CardContent sx={{ textAlign: 'center', py: 3 }}>
+            <CloudOff sx={{ fontSize: 40, color: 'text.secondary', mb: 2 }} />
             <Typography variant="h6" gutterBottom>
               Not Connected
             </Typography>
