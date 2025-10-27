@@ -40,6 +40,7 @@ import { Icon } from '../icon';
 import { LetterAvatar } from '../letterAvatar';
 import { useAppContext } from '../../hooks';
 import { CollapseLeftIcon, ExpandRightIcon } from './collapse-icons';
+import { AuthDropdown } from '../authDropdown';
 
 export const Menu: React.FC = () => {
   const navigate = useNavigate();
@@ -308,6 +309,7 @@ export const Menu: React.FC = () => {
               )}
             </DD>
           )}
+          <AuthDropdown />
           <Tooltip title="Settings">
             <IconButton
               aria-label="account of current user"

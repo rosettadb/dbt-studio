@@ -1,6 +1,7 @@
 import { ReactNode } from 'react';
 import type * as Monaco from 'monaco-editor';
 import { Project, QueryResponseType, Table } from './backend';
+import { User } from '../renderer/services/auth.service';
 
 export type AppContextType = {
   projects: Project[];
@@ -25,6 +26,9 @@ export type AppContextType = {
   registerSyncEditorContent?: (
     handler?: (path: string, content: string) => void,
   ) => void;
+  isCloudAuthenticated?: boolean;
+  cloudUser: User | null;
+  checkCloudAuth: () => Promise<void>;
 };
 
 export type ItemProps = {

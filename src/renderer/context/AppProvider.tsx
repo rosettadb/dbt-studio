@@ -5,6 +5,7 @@ import { useGetProjects, useGetSelectedProject } from '../controllers';
 import { useGetActiveAIProvider } from '../controllers/aiProviders.controller';
 import { Project, Table } from '../../types/backend';
 import { projectsServices } from '../services';
+import AuthService, { User } from '../services/auth.service';
 
 type Props = {
   children: React.ReactNode;
@@ -30,6 +31,9 @@ export const AppContext = React.createContext<AppContextType>({
   setEditingFilePath: () => {},
   syncEditorContent: () => {},
   registerSyncEditorContent: () => {},
+  isCloudAuthenticated: false,
+  cloudUser: null,
+  checkCloudAuth: async () => {},
 });
 
 const AppProvider: React.FC<Props> = ({ children }) => {
@@ -53,9 +57,32 @@ const AppProvider: React.FC<Props> = ({ children }) => {
     null,
   );
 
+  const [isCloudAuthenticated, setIsCloudAuthenticated] = React.useState(false);
+  const [cloudUser, setCloudUser] = React.useState<User | null>(null);
+
   const syncEditorContentHandlerRef = React.useRef<SyncEditorContentHandler>();
 
   const isAiProviderSet = !!activeAIProvider;
+
+  const checkCloudAuth = React.useCallback(async () => {
+    try {
+      const authenticated = await AuthService.isAuthenticated();
+      setIsCloudAuthenticated(authenticated);
+      if (authenticated) {
+        const user = await AuthService.getUser();
+        setCloudUser(user);
+      } else {
+        setCloudUser(null);
+      }
+    } catch (error) {
+      setIsCloudAuthenticated(false);
+      setCloudUser(null);
+    }
+  }, []);
+
+  React.useEffect(() => {
+    checkCloudAuth();
+  }, [checkCloudAuth]);
 
   const openChatWithMessage = React.useCallback((message: string) => {
     setPendingMessage(message);
@@ -79,7 +106,6 @@ const AppProvider: React.FC<Props> = ({ children }) => {
   const fetchSchema = React.useCallback(
     async (forceRefresh = false) => {
       if (selectedProject) {
-        // Skip fetch if we already have schema for this project and it's not a forced refresh
         if (
           !forceRefresh &&
           lastFetchedProjectId === selectedProject.id &&
@@ -91,7 +117,6 @@ const AppProvider: React.FC<Props> = ({ children }) => {
 
         setIsLoadingSchema(true);
         try {
-          // Only clear schema on forced refresh to avoid flickering
           if (forceRefresh) {
             setSchema([]);
           }
@@ -101,16 +126,12 @@ const AppProvider: React.FC<Props> = ({ children }) => {
           setSchema(schemaRes);
           setLastFetchedProjectId(selectedProject.id);
         } catch (error) {
-          // Clear schema on error to ensure no stale data is shown
           setSchema([]);
           setLastFetchedProjectId(null);
-          // eslint-disable-next-line no-console
-          console.error('Failed to fetch schema:', error);
         } finally {
           setIsLoadingSchema(false);
         }
       } else {
-        // Clear schema when no project is selected
         setSchema([]);
         setLastFetchedProjectId(null);
       }
@@ -119,7 +140,6 @@ const AppProvider: React.FC<Props> = ({ children }) => {
   );
 
   React.useEffect(() => {
-    // Only fetch if we don't have schema for the current project
     if (
       selectedProject &&
       (!schema || lastFetchedProjectId !== selectedProject.id)
@@ -128,7 +148,6 @@ const AppProvider: React.FC<Props> = ({ children }) => {
     }
   }, [selectedProject?.id]);
 
-  // Memoize the fetchSchema function that forces refresh for manual calls
   const manualFetchSchema = React.useCallback(
     () => fetchSchema(true),
     [fetchSchema],
@@ -150,7 +169,6 @@ const AppProvider: React.FC<Props> = ({ children }) => {
       isAiProviderSet,
       isChatOpen,
       setIsChatOpen,
-      // Add new properties
       pendingMessage,
       setPendingMessage,
       openChatWithMessage,
@@ -158,6 +176,9 @@ const AppProvider: React.FC<Props> = ({ children }) => {
       setEditingFilePath,
       syncEditorContent,
       registerSyncEditorContent,
+      isCloudAuthenticated,
+      cloudUser,
+      checkCloudAuth,
     };
   }, [
     projects,
@@ -174,6 +195,9 @@ const AppProvider: React.FC<Props> = ({ children }) => {
     editingFilePath,
     syncEditorContent,
     registerSyncEditorContent,
+    isCloudAuthenticated,
+    cloudUser,
+    checkCloudAuth,
   ]);
 
   if (isLoading) {
