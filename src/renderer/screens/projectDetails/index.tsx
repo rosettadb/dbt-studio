@@ -31,6 +31,7 @@ import {
   TerminalLayout,
   BusinessModal,
   AiPromptModal,
+  PushToCloudModal,
 } from '../../components';
 import { TabManager } from '../../components/editor/tabManager';
 import {
@@ -125,6 +126,7 @@ const ProjectDetails: React.FC = () => {
     React.useState<HTMLElement | null>(null);
   const [aiTransformationResponse, setAitTransformationResponse] =
     React.useState<string>();
+  const [isPushModalOpen, setIsPushModalOpen] = React.useState(false);
 
   const {
     data: directories,
@@ -736,6 +738,7 @@ const ProjectDetails: React.FC = () => {
                         connection={connection}
                         rosettaDbt={rosettaDbt}
                         handleBusinessLayerClick={handleBusinessLayerClick}
+                        onRunOnCloudClick={() => setIsPushModalOpen(true)}
                       />
                       {connection?.id ? (
                         <>
@@ -849,6 +852,13 @@ const ProjectDetails: React.FC = () => {
                 onClose={() => setNoAiSetModal(false)}
               />
             )}
+            <PushToCloudModal
+              isOpen={isPushModalOpen}
+              onClose={() => {
+                setIsPushModalOpen(false);
+              }}
+              project={project}
+            />
             {aiTransformationPrompt && (
               <AiPromptModal
                 isOpen={!!aiTransformationPrompt}

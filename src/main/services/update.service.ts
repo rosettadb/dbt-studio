@@ -13,6 +13,29 @@ export default class UpdateService {
     const result = await autoUpdater.checkForUpdates();
     if (!result) return null;
 
+    const { updateInfo } = result;
+    const isDraftRelease =
+      updateInfo &&
+      typeof updateInfo === 'object' &&
+      'draft' in updateInfo &&
+      (updateInfo as { draft?: boolean }).draft === true;
+
+    const isPrereleaseUpdate =
+      updateInfo &&
+      typeof updateInfo === 'object' &&
+      'prerelease' in updateInfo &&
+      (updateInfo as { prerelease?: boolean }).prerelease === true;
+
+    if (isDraftRelease) {
+      log.info('Skipping draft release update');
+      return null;
+    }
+
+    if (isPrereleaseUpdate) {
+      log.info('Skipping prerelease update');
+      return null;
+    }
+
     const currentVersion = app.getVersion();
     const newVersion = result.updateInfo.version;
     const rejectedVersion = this.store.get('rejectedVersion');

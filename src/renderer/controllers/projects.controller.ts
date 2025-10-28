@@ -22,6 +22,46 @@ export const useGetProjects = (
   });
 };
 
+export const usePushProjectToCloud = (
+  customOptions?: UseMutationOptions<
+    unknown,
+    CustomError,
+    {
+      title: string;
+      gitUrl: string;
+      gitBranch: string;
+      apiKey: string;
+      githubUsername?: string;
+      githubPassword?: string;
+    }
+  >,
+): UseMutationResult<
+  unknown,
+  CustomError,
+  {
+    title: string;
+    gitUrl: string;
+    gitBranch: string;
+    apiKey: string;
+    githubUsername?: string;
+    githubPassword?: string;
+  }
+> => {
+  const { onSuccess: onCustomSuccess, onError: onCustomError } =
+    customOptions || {};
+  return useMutation({
+    mutationFn: async (data) => {
+      return projectsServices.pushProjectToCloud(data);
+    },
+    onSuccess: (...args) => {
+      onCustomSuccess?.(...args);
+    },
+    onError: (...args) => {
+      onCustomError?.(...args);
+    },
+  });
+};
+
 export const useGetSelectedProject = (
   customOptions?: UseQueryOptions<
     Project | undefined,
