@@ -1,12 +1,15 @@
 import { shell } from 'electron';
 import { v4 as uuidv4 } from 'uuid';
 import SecureStorageService from './secureStorage.service';
-import { CloudDashboardUrl, CloudDashboardTokenKey } from '../utils/constants';
+import {
+  ROSETTA_CLOUD_BASE_URL,
+  CLOUD_DASHBOARD_TOKEN_KEY,
+} from '../utils/constants';
 import { ProfileService } from './profile.service';
 
 const openLogin = async (): Promise<string> => {
   const uuid = uuidv4();
-  const authUrl = `${CloudDashboardUrl}/api/device-auth/start?uuid=${uuid}`;
+  const authUrl = `${ROSETTA_CLOUD_BASE_URL}/api/device-auth/start?uuid=${uuid}`;
 
   await shell.openExternal(authUrl);
 
@@ -14,14 +17,14 @@ const openLogin = async (): Promise<string> => {
 };
 
 const storeToken = async (token: string): Promise<void> => {
-  await SecureStorageService.setCredential(CloudDashboardTokenKey, token);
+  await SecureStorageService.setCredential(CLOUD_DASHBOARD_TOKEN_KEY, token);
 };
 
 const getToken = async (): Promise<string | null> =>
-  SecureStorageService.getCredential(CloudDashboardTokenKey);
+  SecureStorageService.getCredential(CLOUD_DASHBOARD_TOKEN_KEY);
 
 const clearToken = async (): Promise<void> => {
-  await SecureStorageService.deleteCredential(CloudDashboardTokenKey);
+  await SecureStorageService.deleteCredential(CLOUD_DASHBOARD_TOKEN_KEY);
 
   // Clear profile cache when auth is cleared
   ProfileService.clearProfile();

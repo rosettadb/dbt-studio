@@ -1,5 +1,5 @@
 import AuthService from './auth.service';
-import { CloudDashboardUrl } from '../utils/constants';
+import { ROSETTA_CLOUD_BASE_URL } from '../utils/constants';
 import { UserProfile } from '../../types/profile';
 
 export class ProfileService {
@@ -16,7 +16,7 @@ export class ProfileService {
       }
 
       const response = await fetch(
-        `${CloudDashboardUrl}/api/electron/profile`,
+        `${ROSETTA_CLOUD_BASE_URL}/api/electron/profile`,
         {
           method: 'GET',
           headers: {
