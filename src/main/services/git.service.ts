@@ -3,7 +3,7 @@ import simpleGit, { SimpleGit } from 'simple-git';
 import path from 'path';
 import fs from 'fs';
 import { AuthError } from '../errors';
-import { FileStatus, GitCredentials } from '../../types/backend';
+import { FileStatus, GitChangesRes, GitCredentials } from '../../types/backend';
 import SettingsService from './settings.service';
 import ConnectorsService from './connectors.service';
 
@@ -581,14 +581,7 @@ export default class GitService {
   /**
    * Get detailed information about local changes
    */
-  async getLocalChangesStatus(repoPath: string): Promise<{
-    hasUntracked: boolean;
-    hasUncommitted: boolean;
-    hasUnpushed: boolean;
-    untrackedCount: number;
-    uncommittedCount: number;
-    unpushedCount: number;
-  }> {
+  async getLocalChangesStatus(repoPath: string): Promise<GitChangesRes | null> {
     try {
       const git = this.getGitInstance(repoPath);
       const status = await git.status();
@@ -651,7 +644,7 @@ export default class GitService {
         unpushedCount,
       };
     } catch (err: any) {
-      throw new Error(`Failed to get local changes status: ${err.message}`);
+      return null;
     }
   }
 }

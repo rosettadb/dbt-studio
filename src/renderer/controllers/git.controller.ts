@@ -12,6 +12,7 @@ import {
   DiffResponse,
   FileStatus,
   GitBranch,
+  GitChangesRes,
 } from '../../types/backend';
 import { QUERY_KEYS } from '../config/constants';
 import { gitServices } from '../services';
@@ -99,6 +100,23 @@ export const useGetFileDiff = (
     queryKey: [QUERY_KEYS.GIT_DIFF, filePath],
     queryFn: async () => {
       return gitServices.getFileDiff(path, filePath);
+    },
+    ...customOptions,
+  });
+};
+
+export const useGetLocalChanges = (
+  path: string,
+  customOptions?: UseQueryOptions<
+    GitChangesRes | null,
+    CustomError,
+    GitChangesRes | null
+  >,
+) => {
+  return useQuery({
+    queryKey: [QUERY_KEYS.GIT_LOCAL_CHANGES],
+    queryFn: async () => {
+      return gitServices.getLocalChanges(path);
     },
     ...customOptions,
   });

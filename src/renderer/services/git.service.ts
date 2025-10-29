@@ -5,6 +5,7 @@ import {
   DiffResponse,
   FileStatus,
   GitBranch,
+  GitChangesRes,
   GitCredentials,
   RosettaConnection,
 } from '../../types/backend';
@@ -125,5 +126,13 @@ export const getFileStatus = async (repoPath: string, filePath: string) => {
     { repoPath: string; filePath: string },
     FileStatus | null
   >('git:fileStatus', { repoPath, filePath });
+  return data;
+};
+
+export const getLocalChanges = async (repoPath: string) => {
+  const { data } = await client.post<
+    { repoPath: string },
+    GitChangesRes | null
+  >('git:getLocalChanges', { repoPath });
   return data;
 };

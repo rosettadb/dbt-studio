@@ -25,7 +25,10 @@ import {
 } from '@mui/icons-material';
 import { toast } from 'react-toastify';
 import { Modal } from '../modal';
-import { usePushProjectToCloud } from '../../../controllers';
+import {
+  useGetLocalChanges,
+  usePushProjectToCloud,
+} from '../../../controllers';
 import { Project } from '../../../../types/backend';
 import useSecureStorage from '../../../hooks/useSecureStorage';
 
@@ -38,7 +41,7 @@ interface EnvironmentVariable {
 interface PushToCloudModalProps {
   isOpen: boolean;
   onClose: () => void;
-  project: Project | null;
+  project: Project;
 }
 
 export const PushToCloudModal: React.FC<PushToCloudModalProps> = ({
@@ -47,6 +50,7 @@ export const PushToCloudModal: React.FC<PushToCloudModalProps> = ({
   project,
 }) => {
   const { getCloudApiKey } = useSecureStorage();
+  const { data: localChanges } = useGetLocalChanges(project.path);
   const {
     mutateAsync: pushProject,
     isLoading: isPushing,
@@ -78,6 +82,14 @@ export const PushToCloudModal: React.FC<PushToCloudModalProps> = ({
 
   // Project status
   const [hasExternalId, setHasExternalId] = React.useState(false);
+
+  const hasLocalChanges = React.useMemo(() => {
+    return (
+      !!localChanges?.hasUntracked ||
+      !!localChanges?.hasUncommitted ||
+      !!localChanges?.hasUntracked
+    );
+  }, [localChanges]);
 
   const handleGitUrlChange = React.useCallback(
     ({ target: { value } }: React.ChangeEvent<HTMLInputElement>) => {
@@ -342,20 +354,40 @@ export const PushToCloudModal: React.FC<PushToCloudModalProps> = ({
             variables.
           </Typography>
 
-          {isLoadingKey && (
-            <Alert severity="info">Loading secure credentials…</Alert>
-          )}
-
-          {!isLoadingKey && !apiKey && (
-            <Alert severity="warning">
-              No cloud API key found. Add one in Settings → General → Cloud
-              Workspace first.
+          {hasLocalChanges && (
+            <Alert
+              severity="warning"
+              sx={{ display: 'flex', alignItems: 'center' }}
+            >
+              <Box>
+                <Typography variant="body2" fontWeight="bold" gutterBottom>
+                  Uncommitted Local Changes Detected
+                </Typography>
+                <Typography variant="body2">
+                  Your project has{' '}
+                  {localChanges?.untrackedCount
+                    ? `${localChanges.untrackedCount} untracked, `
+                    : ''}
+                  {localChanges?.uncommittedCount
+                    ? `${localChanges.uncommittedCount} uncommitted, `
+                    : ''}
+                  {localChanges?.hasUnpushed
+                    ? `${localChanges.unpushedCount} unpushed `
+                    : ''}
+                  change(s). The cloud deployment will pull from the remote Git
+                  repository and
+                  <strong> will not include these local changes</strong>.
+                </Typography>
+                <Typography variant="body2" sx={{ mt: 1 }}>
+                  Please commit and push your changes before deploying to ensure
+                  the cloud version matches your local environment.
+                </Typography>
+              </Box>
             </Alert>
           )}
 
           {formError && <Alert severity="error">{formError}</Alert>}
 
-          {/* Deploy Mode Fields */}
           {!isRunMode && (
             <>
               <TextField
@@ -452,160 +484,158 @@ export const PushToCloudModal: React.FC<PushToCloudModalProps> = ({
               />
             </>
           )}
-
-          {/* Environment Variables Section (for both modes) */}
-          <Accordion
-            defaultExpanded={isRunMode}
-            sx={{
-              borderRadius: 2,
-              '&:before': {
-                display: 'none',
-              },
-              boxShadow: 1,
-            }}
-          >
-            <AccordionSummary
-              expandIcon={<ExpandMore />}
+          {!isRunMode && (
+            <Accordion
+              defaultExpanded={isRunMode}
               sx={{
                 borderRadius: 2,
-                '&.Mui-expanded': {
-                  borderBottomLeftRadius: 0,
-                  borderBottomRightRadius: 0,
+                '&:before': {
+                  display: 'none',
                 },
+                boxShadow: 1,
               }}
             >
-              <Typography variant="h6">
-                Environment Variables{' '}
-                {environmentVariables.length > 0 &&
-                  `(${environmentVariables.length})`}
-              </Typography>
-            </AccordionSummary>
-            <AccordionDetails
-              sx={{
-                borderBottomLeftRadius: 2,
-                borderBottomRightRadius: 2,
-              }}
-            >
-              <Box display="flex" flexDirection="column" gap={2}>
-                <Typography variant="body2" color="text.secondary">
-                  Add environment variables that will be available during
-                  project execution.
+              <AccordionSummary
+                expandIcon={<ExpandMore />}
+                sx={{
+                  borderRadius: 2,
+                  '&.Mui-expanded': {
+                    borderBottomLeftRadius: 0,
+                    borderBottomRightRadius: 0,
+                  },
+                }}
+              >
+                <Typography variant="h6">
+                  Environment Variables{' '}
+                  {environmentVariables.length > 0 &&
+                    `(${environmentVariables.length})`}
                 </Typography>
+              </AccordionSummary>
+              <AccordionDetails
+                sx={{
+                  borderBottomLeftRadius: 2,
+                  borderBottomRightRadius: 2,
+                }}
+              >
+                <Box display="flex" flexDirection="column" gap={2}>
+                  <Typography variant="body2" color="text.secondary">
+                    Add environment variables that will be available during
+                    project execution.
+                  </Typography>
 
-                {/* Add new environment variable */}
-                <Box display="flex" gap={1} alignItems="center">
-                  <TextField
-                    label="Key"
-                    value={newEnvKey}
-                    onChange={(e) => setNewEnvKey(e.target.value)}
-                    size="small"
-                    placeholder="e.g., DBT_PROFILES_DIR"
-                    sx={{
-                      flex: 1,
-                      '& .MuiInputBase-input': {
-                        textAlign: 'left',
-                      },
-                    }}
-                  />
-                  <TextField
-                    label="Value"
-                    value={newEnvValue}
-                    onChange={(e) => setNewEnvValue(e.target.value)}
-                    size="small"
-                    placeholder="e.g., /app/profiles"
-                    sx={{
-                      flex: 2,
-                      '& .MuiInputBase-input': {
-                        textAlign: 'left',
-                      },
-                    }}
-                  />
-                  <Button
-                    variant="outlined"
-                    size="small"
-                    onClick={addEnvironmentVariable}
-                    startIcon={<Add />}
-                    disabled={!newEnvKey.trim() || !newEnvValue.trim()}
-                    sx={{ minWidth: 'auto', px: 2 }}
-                  >
-                    Add
-                  </Button>
-                </Box>
+                  <Box display="flex" gap={1} alignItems="center">
+                    <TextField
+                      label="Key"
+                      value={newEnvKey}
+                      onChange={(e) => setNewEnvKey(e.target.value)}
+                      size="small"
+                      placeholder="e.g., DBT_PROFILES_DIR"
+                      sx={{
+                        flex: 1,
+                        '& .MuiInputBase-input': {
+                          textAlign: 'left',
+                        },
+                      }}
+                    />
+                    <TextField
+                      label="Value"
+                      value={newEnvValue}
+                      onChange={(e) => setNewEnvValue(e.target.value)}
+                      size="small"
+                      placeholder="e.g., /app/profiles"
+                      sx={{
+                        flex: 2,
+                        '& .MuiInputBase-input': {
+                          textAlign: 'left',
+                        },
+                      }}
+                    />
+                    <Button
+                      variant="outlined"
+                      size="small"
+                      onClick={addEnvironmentVariable}
+                      startIcon={<Add />}
+                      disabled={!newEnvKey.trim() || !newEnvValue.trim()}
+                      sx={{ minWidth: 'auto', px: 2 }}
+                    >
+                      Add
+                    </Button>
+                  </Box>
 
-                {/* Environment variables list */}
-                {environmentVariables.length > 0 && (
-                  <Box display="flex" flexDirection="column" gap={1}>
-                    <Divider sx={{ my: 1 }} />
-                    {environmentVariables.map((env) => (
-                      <Box
-                        key={env.id}
-                        display="flex"
-                        gap={1}
-                        alignItems="center"
-                        sx={{
-                          p: 1,
-                          borderRadius: 1,
-                          bgcolor: 'action.hover',
-                        }}
-                      >
-                        <TextField
-                          value={env.key}
-                          onChange={(e) =>
-                            updateEnvironmentVariable(
-                              env.id,
-                              e.target.value,
-                              env.value,
-                            )
-                          }
-                          size="small"
-                          variant="outlined"
+                  {/* Environment variables list */}
+                  {environmentVariables.length > 0 && (
+                    <Box display="flex" flexDirection="column" gap={1}>
+                      <Divider sx={{ my: 1 }} />
+                      {environmentVariables.map((env) => (
+                        <Box
+                          key={env.id}
+                          display="flex"
+                          gap={1}
+                          alignItems="center"
                           sx={{
-                            flex: 1,
-                            '& .MuiInputBase-input': {
-                              textAlign: 'left',
-                            },
-                          }}
-                        />
-                        <TextField
-                          value={env.value}
-                          onChange={(e) =>
-                            updateEnvironmentVariable(
-                              env.id,
-                              env.key,
-                              e.target.value,
-                            )
-                          }
-                          size="small"
-                          variant="outlined"
-                          sx={{
-                            flex: 2,
-                            '& .MuiInputBase-input': {
-                              textAlign: 'left',
-                            },
-                          }}
-                        />
-                        <IconButton
-                          size="small"
-                          onClick={() => removeEnvironmentVariable(env.id)}
-                          color="error"
-                          sx={{
-                            minWidth: 'auto',
-                            '&:hover': {
-                              bgcolor: 'error.light',
-                              color: 'error.contrastText',
-                            },
+                            p: 1,
+                            borderRadius: 1,
+                            bgcolor: 'action.hover',
                           }}
                         >
-                          <Delete />
-                        </IconButton>
-                      </Box>
-                    ))}
-                  </Box>
-                )}
-              </Box>
-            </AccordionDetails>
-          </Accordion>
-
+                          <TextField
+                            value={env.key}
+                            onChange={(e) =>
+                              updateEnvironmentVariable(
+                                env.id,
+                                e.target.value,
+                                env.value,
+                              )
+                            }
+                            size="small"
+                            variant="outlined"
+                            sx={{
+                              flex: 1,
+                              '& .MuiInputBase-input': {
+                                textAlign: 'left',
+                              },
+                            }}
+                          />
+                          <TextField
+                            value={env.value}
+                            onChange={(e) =>
+                              updateEnvironmentVariable(
+                                env.id,
+                                env.key,
+                                e.target.value,
+                              )
+                            }
+                            size="small"
+                            variant="outlined"
+                            sx={{
+                              flex: 2,
+                              '& .MuiInputBase-input': {
+                                textAlign: 'left',
+                              },
+                            }}
+                          />
+                          <IconButton
+                            size="small"
+                            onClick={() => removeEnvironmentVariable(env.id)}
+                            color="error"
+                            sx={{
+                              minWidth: 'auto',
+                              '&:hover': {
+                                bgcolor: 'error.light',
+                                color: 'error.contrastText',
+                              },
+                            }}
+                          >
+                            <Delete />
+                          </IconButton>
+                        </Box>
+                      ))}
+                    </Box>
+                  )}
+                </Box>
+              </AccordionDetails>
+            </Accordion>
+          )}
           <Box display="flex" justifyContent="flex-end" gap={2}>
             <Button
               variant="outlined"

@@ -671,3 +671,12 @@ export type Command =
       arguments: Map<string, string | number>;
       options?: Map<string, string | number>;
     };
+
+export type GitChangesRes = {
+  hasUntracked: boolean;
+  hasUncommitted: boolean;
+  hasUnpushed: boolean;
+  untrackedCount: number;
+  uncommittedCount: number;
+  unpushedCount: number;
+};
