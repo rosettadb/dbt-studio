@@ -173,6 +173,7 @@ export const PushToCloudModal: React.FC<PushToCloudModalProps> = ({
 
     try {
       await pushProject({
+        id: project.id,
         title: title.trim(),
         gitUrl: gitUrl.trim(),
         gitBranch: gitBranch.trim() || 'main',

@@ -1,5 +1,5 @@
 import { ipcMain } from 'electron';
-import { ProjectsService } from '../services';
+import { ProjectsService, RosettaCloudService } from '../services';
 import { AIProviderManager } from '../services/ai/providerManager.service';
 import { Project } from '../../types/backend';
 import {
@@ -205,23 +205,6 @@ const registerProjectHandlers = () => {
       },
     ) => {
       return ProjectsService.downloadSeed(body);
-    },
-  );
-
-  ipcMain.handle(
-    'project:pushToCloud',
-    async (
-      _event,
-      body: {
-        title: string;
-        gitUrl: string;
-        gitBranch: string;
-        apiKey: string;
-        githubUsername?: string;
-        githubPassword?: string;
-      },
-    ) => {
-      return ProjectsService.pushProjectToCloud(body);
     },
   );
 };

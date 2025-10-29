@@ -198,9 +198,12 @@ export type Project = {
   incrementalDir?: string;
   businessDir?: string;
   createTemplateFolders?: boolean;
+  externalId?: string;
+  lastRun?: string;
 };
 
 export type CloudDeploymentPayload = {
+  id: string;
   title: string;
   gitUrl: string;
   gitBranch: string;

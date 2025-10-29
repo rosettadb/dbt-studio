@@ -79,22 +79,34 @@ export const useProfileSubscription = () => {
     };
 
     // Subscribe to auth events
-    window.electron.ipcRenderer.on('auth:success', handleAuthSuccess);
-    window.electron.ipcRenderer.on('auth:error', handleAuthError);
-    window.electron.ipcRenderer.on('auth:token-updated', handleTokenUpdate);
-    window.electron.ipcRenderer.on('auth:logout', handleLogout);
+    window.electron.ipcRenderer.on(
+      'rosettaCloud:authSuccess',
+      handleAuthSuccess,
+    );
+    window.electron.ipcRenderer.on('rosettaCloud:authError', handleAuthError);
+    window.electron.ipcRenderer.on(
+      'rosettaCloud:authTokenUpdated',
+      handleTokenUpdate,
+    );
+    window.electron.ipcRenderer.on('rosettaCloud:logout', handleLogout);
 
     return () => {
       window.electron.ipcRenderer.removeListener(
-        'auth:success',
+        'rosettaCloud:authSuccess',
         handleAuthSuccess,
       );
-      window.electron.ipcRenderer.removeListener('auth:error', handleAuthError);
       window.electron.ipcRenderer.removeListener(
-        'auth:token-updated',
+        'rosettaCloud:authError',
+        handleAuthError,
+      );
+      window.electron.ipcRenderer.removeListener(
+        'rosettaCloud:authTokenUpdated',
         handleTokenUpdate,
       );
-      window.electron.ipcRenderer.removeListener('auth:logout', handleLogout);
+      window.electron.ipcRenderer.removeListener(
+        'rosettaCloud:logout',
+        handleLogout,
+      );
     };
   }, [queryClient]);
 };

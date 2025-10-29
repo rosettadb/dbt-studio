@@ -6,7 +6,12 @@ import { loadEnvironment } from './utils/setupHelpers';
 import { AssetUrl } from './utils/assetUrl';
 import { AssetServer } from './utils/assetServer';
 import { setupApplicationIcon } from './utils/iconUtils';
-import { SettingsService, AnalyticsService, UpdateService } from './services';
+import {
+  SettingsService,
+  AnalyticsService,
+  UpdateService,
+  RosettaCloudService,
+} from './services';
 import { copyAssetsToUserData } from './utils/fileHelper';
 
 const isProd = process.env.NODE_ENV === 'production';
@@ -38,42 +43,37 @@ protocol.registerSchemesAsPrivileged([
 setupApplicationIcon();
 
 let windowManager: WindowManager | null = null;
-// Handle deep link authentication
 async function handleDeepLink(url: string) {
-  console.log('1.Received deep link:', url);
   try {
     const parsedUrl = new URL(url);
-    console.log('2.Parsed URL:', parsedUrl);
-
     if (
       parsedUrl.protocol === 'rosetta:' &&
       (parsedUrl.pathname === '//auth' || parsedUrl.host === 'auth')
     ) {
       const token = parsedUrl.searchParams.get('token');
-      console.log('3.Token:', token);
-
       if (token) {
-        const { AuthService } = await import('./services');
-        console.log('4.AuthService:', AuthService);
+        await RosettaCloudService.storeToken(token);
 
-        await AuthService.storeToken(token);
-        console.log('5.AuthService.storeToken(token);');
+        windowManager
+          ?.getMainWindow()
+          ?.webContents.send('rosettaCloud:authTokenUpdated');
 
-        // Notify renderer that token has been updated
-        windowManager?.getMainWindow()?.webContents.send('auth:token-updated');
-
-        windowManager?.getMainWindow()?.webContents.send('auth:success', {
-          token,
-        });
+        windowManager
+          ?.getMainWindow()
+          ?.webContents.send('rosettaCloud:authSuccess', {
+            token,
+          });
         return;
       }
 
-      windowManager?.getMainWindow()?.webContents.send('auth:error', {
-        error: 'Missing token in deep link response.',
-      });
+      windowManager
+        ?.getMainWindow()
+        ?.webContents.send('rosettaCloud:authError', {
+          error: 'Missing token in deep link response.',
+        });
     }
   } catch (error) {
-    windowManager?.getMainWindow()?.webContents.send('auth:error', {
+    windowManager?.getMainWindow()?.webContents.send('rosettaCloud:authError', {
       error:
         error instanceof Error
           ? `Failed to process deep link: ${error.message}`

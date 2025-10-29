@@ -46,8 +46,21 @@ export type ProjectChannels =
   | 'project:getQuery'
   | 'project:chooseDir'
   | 'project:renamePath'
-  | 'project:downloadSeed'
-  | 'project:pushToCloud';
+  | 'project:downloadSeed';
+
+export type RosettaCloudChannels =
+  | 'rosettaCloud:push'
+  | 'rosettaCloud:getProfile'
+  | 'rosettaCloud:refreshProfile'
+  | 'rosettaCloud:getCachedProfile'
+  | 'rosettaCloud:login'
+  | 'rosettaCloud:logout'
+  | 'rosettaCloud:getToken'
+  | 'rosettaCloud:storeToken'
+  | 'rosettaCloud:authSuccess'
+  | 'rosettaCloud:authError'
+  | 'rosettaCloud:authTokenUpdated';
+
 export type ConnectorChannels =
   | 'connector:configure'
   | 'connector:remove'
@@ -216,20 +229,6 @@ export type CloudExplorerChannels =
   | 'cloudExplorer:testConnection'
   | 'cloudExplorer:previewData';
 
-export type AuthChannels =
-  | 'auth:login'
-  | 'auth:getToken'
-  | 'auth:logout'
-  | 'auth:storeToken'
-  | 'auth:success'
-  | 'auth:error'
-  | 'auth:token-updated';
-
-export type ProfileChannels =
-  | 'profile:get'
-  | 'profile:refresh'
-  | 'profile:getCached';
-
 export type Channels =
   | TestChannels
   | CliChannels
@@ -244,8 +243,7 @@ export type Channels =
   | CloudExplorerChannels
   | SourcesChannels
   | AIChannels
-  | AuthChannels
-  | ProfileChannels;
+  | RosettaCloudChannels;
 
 export type ConfigureConnectionBody = {
   projectId?: string;

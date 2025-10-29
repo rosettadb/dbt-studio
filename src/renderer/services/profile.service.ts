@@ -2,17 +2,23 @@ import { client } from '../config/client';
 import { UserProfile } from '../../types/profile';
 
 const getProfile = async (): Promise<UserProfile | null> => {
-  const { data } = await client.get<UserProfile | null>('profile:get');
+  const { data } = await client.get<UserProfile | null>(
+    'rosettaCloud:getProfile',
+  );
   return data;
 };
 
 const refreshProfile = async (): Promise<UserProfile | null> => {
-  const { data } = await client.get<UserProfile | null>('profile:refresh');
+  const { data } = await client.get<UserProfile | null>(
+    'rosettaCloud:refreshProfile',
+  );
   return data;
 };
 
 const getCachedProfile = async (): Promise<UserProfile | null> => {
-  const { data } = await client.get<UserProfile | null>('profile:getCached');
+  const { data } = await client.get<UserProfile | null>(
+    'rosettaCloud:getCachedProfile',
+  );
   return data;
 };
 

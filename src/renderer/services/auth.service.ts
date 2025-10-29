@@ -6,23 +6,23 @@ export type AuthSuccessPayload = {
 
 const openLogin = async (): Promise<string> => {
   const { data } = await client.post<undefined, string>(
-    'auth:login',
+    'rosettaCloud:login',
     undefined,
   );
   return data;
 };
 
 const getToken = async (): Promise<string | null> => {
-  const { data } = await client.get<string | null>('auth:getToken');
+  const { data } = await client.get<string | null>('rosettaCloud:getToken');
   return data;
 };
 
 const logout = async (): Promise<void> => {
-  await client.post<undefined, void>('auth:logout', undefined);
+  await client.post<undefined, void>('rosettaCloud:logout', undefined);
 };
 
 const storeToken = async (token: string): Promise<void> => {
-  await client.post<string, void>('auth:storeToken', token);
+  await client.post<string, void>('rosettaCloud:storeToken', token);
 };
 
 const subscribeToAuthSuccess = (
@@ -36,10 +36,13 @@ const subscribeToAuthSuccess = (
     callback({ token: data.token });
   };
 
-  window.electron.ipcRenderer.on('auth:success', listener);
+  window.electron.ipcRenderer.on('rosettaCloud:authSuccess', listener);
 
   return () => {
-    window.electron.ipcRenderer.removeListener('auth:success', listener);
+    window.electron.ipcRenderer.removeListener(
+      'rosettaCloud:authSuccess',
+      listener,
+    );
   };
 };
 
@@ -49,10 +52,13 @@ const subscribeToAuthError = (callback: (message: string) => void) => {
     callback(error ?? 'Authentication failed.');
   };
 
-  window.electron.ipcRenderer.on('auth:error', listener);
+  window.electron.ipcRenderer.on('rosettaCloud:authError', listener);
 
   return () => {
-    window.electron.ipcRenderer.removeListener('auth:error', listener);
+    window.electron.ipcRenderer.removeListener(
+      'rosettaCloud:authError',
+      listener,
+    );
   };
 };
 
@@ -61,10 +67,13 @@ const subscribeToTokenUpdate = (callback: () => void) => {
     callback();
   };
 
-  window.electron.ipcRenderer.on('auth:token-updated', listener);
+  window.electron.ipcRenderer.on('rosettaCloud:authTokenUpdated', listener);
 
   return () => {
-    window.electron.ipcRenderer.removeListener('auth:token-updated', listener);
+    window.electron.ipcRenderer.removeListener(
+      'rosettaCloud:authTokenUpdated',
+      listener,
+    );
   };
 };
 
