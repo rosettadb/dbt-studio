@@ -27,17 +27,6 @@ export default class RosettaCloudService {
     const rosettaCloudUrl =
       settings.cloudWorkspaceUrl ?? ROSETTA_CLOUD_BASE_URL;
     const baseUrl = rosettaCloudUrl.replace(/\/$/, '');
-    const createEndpoint = `${baseUrl}/api/projects`;
-
-    if (!body.apiKey) {
-      throw new Error('Cloud API key is required to deploy.');
-    }
-
-    const requestBody = {
-      title: body.title,
-      git_url: body.gitUrl,
-      git_branch: body.gitBranch,
-    };
 
     const postJson = async (url: string, data?: object): Promise<any> => {
       const response = await fetch(url, {
@@ -50,15 +39,29 @@ export default class RosettaCloudService {
         body: data ? JSON.stringify(data) : undefined,
       });
 
-      const parsed = await response.json();
+      return response.json();
+    };
 
-      if (response.ok) {
-        return parsed;
-      }
-      throw new Error(
-        parsed?.message ||
-          `Rosetta Cloud responded with status ${response.status}.`,
-      );
+    if (project.externalId) {
+      const runEndpoint = `${baseUrl}/api/projects/${project.externalId}/run`;
+      await postJson(runEndpoint);
+      await ProjectsService.updateProject({
+        ...project,
+        lastRun: new Date().toISOString(),
+      });
+      return;
+    }
+
+    const createEndpoint = `${baseUrl}/api/projects`;
+
+    if (!body.apiKey) {
+      throw new Error('Cloud API key is required to deploy.');
+    }
+
+    const requestBody = {
+      title: body.title,
+      git_url: body.gitUrl,
+      git_branch: body.gitBranch,
     };
 
     const projectData = await postJson(createEndpoint, requestBody);
