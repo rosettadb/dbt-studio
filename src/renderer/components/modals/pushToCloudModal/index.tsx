@@ -10,8 +10,6 @@ import {
   InputAdornment,
   Chip,
   Divider,
-  FormControlLabel,
-  Switch,
   Accordion,
   AccordionSummary,
   AccordionDetails,
@@ -23,7 +21,6 @@ import {
   Add,
   Delete,
   ExpandMore,
-  PlayArrow,
   CloudUpload,
 } from '@mui/icons-material';
 import { toast } from 'react-toastify';
@@ -56,10 +53,6 @@ export const PushToCloudModal: React.FC<PushToCloudModalProps> = ({
     reset: resetMutation,
   } = usePushProjectToCloud();
 
-  // Form mode state
-  const [isRunMode, setIsRunMode] = React.useState(false);
-
-  // Existing project deployment fields
   const [title, setTitle] = React.useState('');
   const [gitUrl, setGitUrl] = React.useState('');
   const [gitBranch, setGitBranch] = React.useState('main');
@@ -71,6 +64,10 @@ export const PushToCloudModal: React.FC<PushToCloudModalProps> = ({
   const [githubUsername, setGithubUsername] = React.useState('');
   const [githubPassword, setGithubPassword] = React.useState('');
   const [showGithubPassword, setShowGithubPassword] = React.useState(false);
+
+  const isRunMode = React.useMemo(() => {
+    return !!project?.externalId;
+  }, [project]);
 
   // Environment variables state
   const [environmentVariables, setEnvironmentVariables] = React.useState<
@@ -145,7 +142,6 @@ export const PushToCloudModal: React.FC<PushToCloudModalProps> = ({
     setEnvironmentVariables([]);
     setNewEnvKey('');
     setNewEnvValue('');
-    setIsRunMode(!!project?.externalId);
     setHasExternalId(!!project?.externalId);
   }, [project?.name, project?.externalId]);
 
@@ -195,19 +191,6 @@ export const PushToCloudModal: React.FC<PushToCloudModalProps> = ({
 
   const validateForm = () => {
     let isValid = true;
-
-    if (isRunMode) {
-      // For run mode, we only need the project to have an external ID
-      if (!hasExternalId) {
-        setFormError(
-          'Project must be deployed to cloud before running. Switch to Deploy mode first.',
-        );
-        isValid = false;
-      }
-      return isValid;
-    }
-
-    // For deploy mode, validate all deployment fields
     const trimmedTitle = title.trim();
     const trimmedUrl = gitUrl.trim();
     const trimmedBranch = gitBranch.trim();
@@ -260,53 +243,34 @@ export const PushToCloudModal: React.FC<PushToCloudModalProps> = ({
     }
 
     try {
-      if (isRunMode) {
-        // Handle run on cloud with environment variables
-        const envVars = environmentVariables.reduce(
-          (acc, env) => {
-            acc[env.key] = env.value;
-            return acc;
-          },
-          {} as Record<string, string>,
-        );
-
-        // TODO: Implement run project on cloud API call
-        // await runProjectOnCloud({
-        //   projectId: project.externalId,
-        //   environmentVariables: envVars,
-        //   apiKey,
-        // });
-
-        toast.success('Project run initiated on cloud.');
-        // eslint-disable-next-line no-console
-        console.log('Run project with env vars:', envVars);
-      } else {
-        // Handle deploy to cloud
-        await pushProject({
-          id: project.id,
-          title: title.trim(),
-          gitUrl: gitUrl.trim(),
-          gitBranch: gitBranch.trim() || 'main',
-          githubUsername: githubUsername.trim() || undefined,
-          githubPassword: githubPassword || undefined,
-          secrets: {},
-        });
-        toast.success('Project deployed to cloud.');
-      }
+      const secrets = environmentVariables.reduce(
+        (acc, env) => {
+          acc[env.key] = env.value;
+          return acc;
+        },
+        {} as Record<string, string>,
+      );
+      secrets.ROSETTA_GIT_USER = githubUsername.trim();
+      secrets.ROSETTA_GIT_PASSWORD = githubPassword;
+      await pushProject({
+        id: project.id,
+        title: title.trim(),
+        gitUrl: gitUrl.trim(),
+        gitBranch: gitBranch.trim() || 'main',
+        githubUsername: githubUsername.trim() || undefined,
+        githubPassword: githubPassword || undefined,
+        secrets,
+      });
+      await toast.success('Project deployed to cloud.');
       onClose();
     } catch (error) {
       const message =
         error instanceof Error
           ? error.message
-          : `Failed to ${isRunMode ? 'run' : 'deploy'} project to Rosetta Cloud.`;
+          : `Failed to run project to Rosetta Cloud.`;
       setFormError(message);
-      // eslint-disable-next-line no-console
-      console.error(
-        `Failed to ${isRunMode ? 'run' : 'deploy'} project to cloud:`,
-        error,
-      );
       toast.error(
-        `Unable to ${isRunMode ? 'run' : 'deploy'} project. Please review the form and try again.`,
+        `Unable to run project. Please review the form and try again.`,
       );
     }
   };
@@ -316,17 +280,12 @@ export const PushToCloudModal: React.FC<PushToCloudModalProps> = ({
       return true;
     }
 
-    if (isRunMode) {
-      return !hasExternalId;
-    }
-
     return !title.trim() || !gitUrl.trim() || !!urlError || !!titleError;
   }, [
     project?.id,
     isLoadingKey,
     isPushing,
     apiKey,
-    isRunMode,
     hasExternalId,
     title,
     gitUrl,
@@ -336,16 +295,15 @@ export const PushToCloudModal: React.FC<PushToCloudModalProps> = ({
 
   const buttonIcon = React.useMemo(() => {
     if (isPushing) return <CircularProgress size={18} />;
-    if (isRunMode) return <PlayArrow />;
     return <CloudUpload />;
-  }, [isPushing, isRunMode]);
+  }, [isPushing]);
 
   const buttonText = React.useMemo(() => {
     if (isPushing) {
-      return isRunMode ? 'Running…' : 'Deploying…';
+      return 'Running…';
     }
-    return isRunMode ? 'Run on Cloud' : 'Deploy to Cloud';
-  }, [isPushing, isRunMode]);
+    return 'Run on Cloud';
+  }, [isPushing]);
 
   return (
     <Modal
@@ -355,24 +313,12 @@ export const PushToCloudModal: React.FC<PushToCloudModalProps> = ({
           onClose();
         }
       }}
-      title={
-        isRunMode ? 'Run Project on Cloud' : 'Deploy Project to Rosetta Cloud'
-      }
+      title="Run Project on Cloud"
     >
       <form onSubmit={handleSubmit}>
         <Box display="flex" flexDirection="column" gap={2}>
           {/* Mode Toggle */}
           <Box display="flex" alignItems="center" gap={2}>
-            <FormControlLabel
-              control={
-                <Switch
-                  checked={isRunMode}
-                  onChange={(e) => setIsRunMode(e.target.checked)}
-                  disabled={!hasExternalId}
-                />
-              }
-              label={isRunMode ? 'Run Mode' : 'Deploy Mode'}
-            />
             {hasExternalId && (
               <Chip
                 label="Already deployed"
@@ -392,9 +338,8 @@ export const PushToCloudModal: React.FC<PushToCloudModalProps> = ({
           </Box>
 
           <Typography variant="body2" color="text.secondary">
-            {isRunMode
-              ? 'Run your deployed project on the cloud with custom environment variables.'
-              : 'Deploy your project to Rosetta Cloud. Ensure a Cloud API key is configured in Settings.'}
+            Run your deployed project on the cloud with custom environment
+            variables.
           </Typography>
 
           {isLoadingKey && (
@@ -409,13 +354,6 @@ export const PushToCloudModal: React.FC<PushToCloudModalProps> = ({
           )}
 
           {formError && <Alert severity="error">{formError}</Alert>}
-
-          {!hasExternalId && !isRunMode && (
-            <Alert severity="info">
-              This project hasn&apos;t been deployed to cloud yet. Use Deploy
-              mode to upload it first.
-            </Alert>
-          )}
 
           {/* Deploy Mode Fields */}
           {!isRunMode && (

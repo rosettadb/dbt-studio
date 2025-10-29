@@ -21,11 +21,13 @@ export const usePushProjectToCloud = (
 ): UseMutationResult<unknown, CustomError, CloudDeploymentPayload> => {
   const { onSuccess: onCustomSuccess, onError: onCustomError } =
     customOptions || {};
+  const queryClient = useQueryClient();
   return useMutation({
     mutationFn: async (data) => {
       return rosettaCloudServices.pushProjectToCloud(data);
     },
-    onSuccess: (...args) => {
+    onSuccess: async (...args) => {
+      await queryClient.invalidateQueries([QUERY_KEYS.GET_SELECTED_PROJECT]);
       onCustomSuccess?.(...args);
     },
     onError: (...args) => {
