@@ -207,9 +207,9 @@ export type CloudDeploymentPayload = {
   title: string;
   gitUrl: string;
   gitBranch: string;
-  apiKey: string;
   githubUsername?: string;
   githubPassword?: string;
+  secrets: Record<string, string>;
 };
 
 export type SettingsType = {
