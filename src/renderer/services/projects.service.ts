@@ -6,7 +6,6 @@ import {
   Project,
   Table,
   EnhanceModelResponseType,
-  CloudDeploymentPayload,
 } from '../../types/backend';
 
 export const getProjects = async (): Promise<Project[]> => {
