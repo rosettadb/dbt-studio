@@ -479,4 +479,179 @@ export default class GitService {
 
     return null;
   }
+
+  /**
+   * Check if there are any untracked files in the repository
+   */
+  async hasUntrackedChanges(repoPath: string): Promise<boolean> {
+    try {
+      const git = this.getGitInstance(repoPath);
+      const status = await git.status();
+      return status.not_added.length > 0;
+    } catch (err: any) {
+      throw new Error(`Failed to check untracked changes: ${err.message}`);
+    }
+  }
+
+  /**
+   * Check if there are any uncommitted changes (modified, deleted, or staged files)
+   */
+  async hasUncommittedChanges(repoPath: string): Promise<boolean> {
+    try {
+      const git = this.getGitInstance(repoPath);
+      const status = await git.status();
+
+      return (
+        status.modified.length > 0 ||
+        status.deleted.length > 0 ||
+        status.staged.length > 0 ||
+        status.renamed.length > 0 ||
+        status.conflicted.length > 0
+      );
+    } catch (err: any) {
+      throw new Error(`Failed to check uncommitted changes: ${err.message}`);
+    }
+  }
+
+  /**
+   * Check if there are any unpushed commits on the current branch
+   */
+  async hasUnpushedChanges(repoPath: string): Promise<boolean> {
+    try {
+      const git = this.getGitInstance(repoPath);
+
+      // Get current branch
+      const branchSummary = await git.branch();
+      const currentBranch = branchSummary.current;
+
+      if (!currentBranch) {
+        return false;
+      }
+
+      // Fetch to get latest remote info (without merging)
+      try {
+        await git.fetch();
+      } catch (err) {
+        return false;
+      }
+
+      // Check if remote branch exists
+      const remoteBranches = await git.branch(['-r']);
+      const hasRemoteBranch = remoteBranches.all.includes(
+        `origin/${currentBranch}`,
+      );
+
+      if (!hasRemoteBranch) {
+        // If there's no remote branch, check if there are any commits
+        const log = await git.log();
+        return log.total > 0;
+      }
+
+      // Compare local and remote
+      const result = await git.raw([
+        'rev-list',
+        '--count',
+        `origin/${currentBranch}..HEAD`,
+      ]);
+
+      const unpushedCount = parseInt(result.trim(), 10);
+      return unpushedCount > 0;
+    } catch (err: any) {
+      throw new Error(`Failed to check unpushed changes: ${err.message}`);
+    }
+  }
+
+  /**
+   * Check if there are any local changes (untracked, uncommitted, or unpushed)
+   */
+  async hasLocalChanges(repoPath: string): Promise<boolean> {
+    try {
+      const [hasUntracked, hasUncommitted, hasUnpushed] = await Promise.all([
+        this.hasUntrackedChanges(repoPath),
+        this.hasUncommittedChanges(repoPath),
+        this.hasUnpushedChanges(repoPath),
+      ]);
+
+      return hasUntracked || hasUncommitted || hasUnpushed;
+    } catch (err: any) {
+      throw new Error(`Failed to check local changes: ${err.message}`);
+    }
+  }
+
+  /**
+   * Get detailed information about local changes
+   */
+  async getLocalChangesStatus(repoPath: string): Promise<{
+    hasUntracked: boolean;
+    hasUncommitted: boolean;
+    hasUnpushed: boolean;
+    untrackedCount: number;
+    uncommittedCount: number;
+    unpushedCount: number;
+  }> {
+    try {
+      const git = this.getGitInstance(repoPath);
+      const status = await git.status();
+
+      const hasUntracked = status.not_added.length > 0;
+      const hasUncommitted =
+        status.modified.length > 0 ||
+        status.deleted.length > 0 ||
+        status.staged.length > 0 ||
+        status.renamed.length > 0 ||
+        status.conflicted.length > 0;
+
+      const uncommittedCount =
+        status.modified.length +
+        status.deleted.length +
+        status.staged.length +
+        status.renamed.length +
+        status.conflicted.length;
+
+      let hasUnpushed = false;
+      let unpushedCount = 0;
+
+      try {
+        const branchSummary = await git.branch();
+        const currentBranch = branchSummary.current;
+
+        if (currentBranch) {
+          await git.fetch();
+          const remoteBranches = await git.branch(['-r']);
+          const hasRemoteBranch = remoteBranches.all.includes(
+            `origin/${currentBranch}`,
+          );
+
+          if (hasRemoteBranch) {
+            const result = await git.raw([
+              'rev-list',
+              '--count',
+              `origin/${currentBranch}..HEAD`,
+            ]);
+            unpushedCount = parseInt(result.trim(), 10);
+            hasUnpushed = unpushedCount > 0;
+          } else {
+            const log = await git.log();
+            unpushedCount = log.total;
+            hasUnpushed = log.total > 0;
+          }
+        }
+      } catch (err) {
+        // If we can't determine unpushed status, just return false
+        hasUnpushed = false;
+        unpushedCount = 0;
+      }
+
+      return {
+        hasUntracked,
+        hasUncommitted,
+        hasUnpushed,
+        untrackedCount: status.not_added.length,
+        uncommittedCount,
+        unpushedCount,
+      };
+    } catch (err: any) {
+      throw new Error(`Failed to get local changes status: ${err.message}`);
+    }
+  }
 }

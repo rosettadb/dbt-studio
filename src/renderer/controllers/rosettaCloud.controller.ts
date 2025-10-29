@@ -8,7 +8,7 @@ import {
 } from 'react-query';
 import React from 'react';
 import { toast } from 'react-toastify';
-import { CustomError } from '../../types/backend';
+import { CloudDeploymentPayload, CustomError } from '../../types/backend';
 import { rosettaCloudServices } from '../services';
 import { QUERY_KEYS } from '../config/constants';
 
@@ -16,28 +16,9 @@ export const usePushProjectToCloud = (
   customOptions?: UseMutationOptions<
     unknown,
     CustomError,
-    {
-      title: string;
-      gitUrl: string;
-      gitBranch: string;
-      apiKey: string;
-      githubUsername?: string;
-      githubPassword?: string;
-    }
+    CloudDeploymentPayload
   >,
-): UseMutationResult<
-  unknown,
-  CustomError,
-  {
-    id: string;
-    title: string;
-    gitUrl: string;
-    gitBranch: string;
-    apiKey: string;
-    githubUsername?: string;
-    githubPassword?: string;
-  }
-> => {
+): UseMutationResult<unknown, CustomError, CloudDeploymentPayload> => {
   const { onSuccess: onCustomSuccess, onError: onCustomError } =
     customOptions || {};
   return useMutation({

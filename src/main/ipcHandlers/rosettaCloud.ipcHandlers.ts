@@ -1,21 +1,11 @@
 import { ipcMain } from 'electron';
 import { RosettaCloudService } from '../services';
+import { CloudDeploymentPayload } from '../../types/backend';
 
 const registerRosettaCloudIpcHandlers = () => {
   ipcMain.handle(
     'rosettaCloud:push',
-    async (
-      _event,
-      body: {
-        id: string;
-        title: string;
-        gitUrl: string;
-        gitBranch: string;
-        apiKey: string;
-        githubUsername?: string;
-        githubPassword?: string;
-      },
-    ) => {
+    async (_event, body: CloudDeploymentPayload) => {
       return RosettaCloudService.pushProjectToCloud(body);
     },
   );

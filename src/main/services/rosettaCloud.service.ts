@@ -16,8 +16,9 @@ export default class RosettaCloudService {
   private static cachedProfile: UserProfile | null = null;
 
   static async pushProjectToCloud(body: CloudDeploymentPayload): Promise<void> {
-    const { id } = body;
+    const { id, secrets } = body;
     const project = await ProjectsService.getProject(id);
+    const hasSecrets = Object.keys(secrets ?? {}).length > 0;
 
     if (!project) {
       throw new Error('Project not found');
@@ -29,17 +30,32 @@ export default class RosettaCloudService {
     const baseUrl = rosettaCloudUrl.replace(/\/$/, '');
 
     const postJson = async (url: string, data?: object): Promise<any> => {
+      const token = await this.getToken();
       const response = await fetch(url, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           Accept: 'application/json',
-          Authorization: `Bearer ${body.apiKey}`,
+          Authorization: `Bearer ${token}`,
         },
         body: data ? JSON.stringify(data) : undefined,
       });
 
       return response.json();
+    };
+
+    const addSecrets = async (
+      projectId: string,
+      secretsArg: Record<string, string>,
+    ) => {
+      const addSecretsEndpoint = `${baseUrl}/api/projects/${projectId}/secrets`;
+      const addSecretsBody = Object.entries(secretsArg).map(([name, value]) => {
+        return {
+          name,
+          value,
+        };
+      });
+      await postJson(addSecretsEndpoint, addSecretsBody);
     };
 
     if (project.externalId) {
@@ -54,10 +70,6 @@ export default class RosettaCloudService {
 
     const createEndpoint = `${baseUrl}/api/projects`;
 
-    if (!body.apiKey) {
-      throw new Error('Cloud API key is required to deploy.');
-    }
-
     const requestBody = {
       title: body.title,
       git_url: body.gitUrl,
@@ -70,6 +82,8 @@ export default class RosettaCloudService {
       externalId: projectData.id,
       lastRun: new Date().toISOString(),
     });
+
+    if (hasSecrets) await addSecrets(projectData.id, secrets);
 
     const runEndpoint = `${baseUrl}/api/projects/${projectData.id}/run`;
     await postJson(runEndpoint);

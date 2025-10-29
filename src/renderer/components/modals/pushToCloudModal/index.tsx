@@ -177,9 +177,9 @@ export const PushToCloudModal: React.FC<PushToCloudModalProps> = ({
         title: title.trim(),
         gitUrl: gitUrl.trim(),
         gitBranch: gitBranch.trim() || 'main',
-        apiKey,
         githubUsername: githubUsername.trim() || undefined,
         githubPassword: githubPassword || undefined,
+        secrets: {},
       });
       toast.success('Project deployed to cloud.');
       onClose();
