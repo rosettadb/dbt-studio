@@ -13,15 +13,21 @@ import {
   Accordion,
   AccordionSummary,
   AccordionDetails,
+  Paper,
+  Stack,
+  useTheme,
+  alpha,
 } from '@mui/material';
 import {
   Visibility,
   VisibilityOff,
   Close,
-  Add,
   Delete,
   ExpandMore,
   CloudUpload,
+  Lock,
+  Key,
+  AddOutlined,
 } from '@mui/icons-material';
 import { toast } from 'react-toastify';
 import { Modal } from '../modal';
@@ -44,11 +50,14 @@ interface PushToCloudModalProps {
   project: Project;
 }
 
+const RESERVED_KEYS = ['ROSETTA_GIT_USER', 'ROSETTA_GIT_PASSWORD'];
+
 export const PushToCloudModal: React.FC<PushToCloudModalProps> = ({
   isOpen,
   onClose,
   project,
 }) => {
+  const theme = useTheme();
   const { getCloudApiKey } = useSecureStorage();
   const { data: localChanges } = useGetLocalChanges(project.path);
   const {
@@ -87,7 +96,7 @@ export const PushToCloudModal: React.FC<PushToCloudModalProps> = ({
     return (
       !!localChanges?.hasUntracked ||
       !!localChanges?.hasUncommitted ||
-      !!localChanges?.hasUntracked
+      !!localChanges?.hasUnpushed
     );
   }, [localChanges]);
 
@@ -103,14 +112,23 @@ export const PushToCloudModal: React.FC<PushToCloudModalProps> = ({
 
   // Environment variables helpers
   const addEnvironmentVariable = React.useCallback(() => {
-    if (!newEnvKey.trim() || !newEnvValue.trim()) {
+    const trimmedKey = newEnvKey.trim().toUpperCase();
+    const trimmedValue = newEnvValue.trim();
+
+    if (!trimmedKey || !trimmedValue) {
       toast.error('Both key and value are required for environment variables');
       return;
     }
 
-    const exists = environmentVariables.some(
-      (env) => env.key === newEnvKey.trim(),
-    );
+    // Check if it's a reserved key
+    if (RESERVED_KEYS.includes(trimmedKey)) {
+      toast.error(
+        `${trimmedKey} is a reserved key. Please use the dedicated fields above.`,
+      );
+      return;
+    }
+
+    const exists = environmentVariables.some((env) => env.key === trimmedKey);
     if (exists) {
       toast.error('Environment variable key already exists');
       return;
@@ -118,8 +136,8 @@ export const PushToCloudModal: React.FC<PushToCloudModalProps> = ({
 
     const newEnv: EnvironmentVariable = {
       id: Date.now().toString(),
-      key: newEnvKey.trim(),
-      value: newEnvValue.trim(),
+      key: trimmedKey,
+      value: trimmedValue,
     };
 
     setEnvironmentVariables((prev) => [...prev, newEnv]);
@@ -133,11 +151,32 @@ export const PushToCloudModal: React.FC<PushToCloudModalProps> = ({
 
   const updateEnvironmentVariable = React.useCallback(
     (id: string, key: string, value: string) => {
+      const uppercaseKey = key.toUpperCase();
+
+      // Prevent updating to reserved keys
+      if (RESERVED_KEYS.includes(uppercaseKey)) {
+        toast.error(
+          `${uppercaseKey} is a reserved key. Please use the dedicated fields.`,
+        );
+        return;
+      }
+
+      // Check for duplicates (excluding current item)
+      const exists = environmentVariables.some(
+        (env) => env.key === uppercaseKey && env.id !== id,
+      );
+      if (exists) {
+        toast.error('Environment variable key already exists');
+        return;
+      }
+
       setEnvironmentVariables((prev) =>
-        prev.map((env) => (env.id === id ? { ...env, key, value } : env)),
+        prev.map((env) =>
+          env.id === id ? { ...env, key: uppercaseKey, value } : env,
+        ),
       );
     },
-    [],
+    [environmentVariables],
   );
 
   const resetForm = React.useCallback(() => {
@@ -298,7 +337,6 @@ export const PushToCloudModal: React.FC<PushToCloudModalProps> = ({
     isLoadingKey,
     isPushing,
     apiKey,
-    hasExternalId,
     title,
     gitUrl,
     urlError,
@@ -328,23 +366,34 @@ export const PushToCloudModal: React.FC<PushToCloudModalProps> = ({
       title="Run Project on Cloud"
     >
       <form onSubmit={handleSubmit}>
-        <Box display="flex" flexDirection="column" gap={2}>
-          {/* Mode Toggle */}
-          <Box display="flex" alignItems="center" gap={2}>
-            {hasExternalId && (
+        <Stack spacing={3}>
+          {/* Status Badge */}
+          <Box display="flex" alignItems="center" gap={1.5}>
+            {hasExternalId ? (
               <Chip
-                label="Already deployed"
+                icon={<CloudUpload sx={{ fontSize: 16 }} />}
+                label="Already Deployed"
                 color="success"
-                size="small"
-                variant="outlined"
+                sx={{
+                  fontWeight: 600,
+                  px: 0.5,
+                  bgcolor: alpha(theme.palette.success.main, 0.1),
+                  color: 'success.main',
+                  border: `1px solid ${alpha(theme.palette.success.main, 0.3)}`,
+                }}
               />
-            )}
-            {!hasExternalId && (
+            ) : (
               <Chip
-                label="Not deployed"
+                icon={<CloudUpload sx={{ fontSize: 16 }} />}
+                label="Not Deployed"
                 color="warning"
-                size="small"
-                variant="outlined"
+                sx={{
+                  fontWeight: 600,
+                  px: 0.5,
+                  bgcolor: alpha(theme.palette.warning.main, 0.1),
+                  color: 'warning.main',
+                  border: `1px solid ${alpha(theme.palette.warning.main, 0.3)}`,
+                }}
               />
             )}
           </Box>
@@ -357,39 +406,57 @@ export const PushToCloudModal: React.FC<PushToCloudModalProps> = ({
           {hasLocalChanges && (
             <Alert
               severity="warning"
-              sx={{ display: 'flex', alignItems: 'center' }}
+              sx={{
+                borderRadius: 2,
+                bgcolor: alpha(theme.palette.warning.main, 0.05),
+                border: `1px solid ${alpha(theme.palette.warning.main, 0.2)}`,
+                '& .MuiAlert-icon': {
+                  color: 'warning.main',
+                },
+              }}
             >
-              <Box>
-                <Typography variant="body2" fontWeight="bold" gutterBottom>
-                  Uncommitted Local Changes Detected
-                </Typography>
-                <Typography variant="body2">
-                  Your project has{' '}
-                  {localChanges?.untrackedCount
-                    ? `${localChanges.untrackedCount} untracked, `
-                    : ''}
-                  {localChanges?.uncommittedCount
-                    ? `${localChanges.uncommittedCount} uncommitted, `
-                    : ''}
-                  {localChanges?.hasUnpushed
-                    ? `${localChanges.unpushedCount} unpushed `
-                    : ''}
-                  change(s). The cloud deployment will pull from the remote Git
-                  repository and
-                  <strong> will not include these local changes</strong>.
-                </Typography>
-                <Typography variant="body2" sx={{ mt: 1 }}>
-                  Please commit and push your changes before deploying to ensure
-                  the cloud version matches your local environment.
-                </Typography>
-              </Box>
+              <Typography variant="body2" fontWeight="600" gutterBottom>
+                Uncommitted Local Changes Detected
+              </Typography>
+              <Typography variant="body2">
+                Your project has{' '}
+                {localChanges?.untrackedCount
+                  ? `${localChanges.untrackedCount} untracked, `
+                  : ''}
+                {localChanges?.uncommittedCount
+                  ? `${localChanges.uncommittedCount} uncommitted, `
+                  : ''}
+                {localChanges?.hasUnpushed
+                  ? `${localChanges.unpushedCount} unpushed `
+                  : ''}
+                change(s). The cloud deployment will pull from the remote Git
+                repository and
+                <strong> will not include these local changes</strong>.
+              </Typography>
+              <Typography variant="body2" sx={{ mt: 1 }}>
+                Please commit and push your changes before deploying to ensure
+                the cloud version matches your local environment.
+              </Typography>
             </Alert>
           )}
 
-          {formError && <Alert severity="error">{formError}</Alert>}
+          {/* Form Error */}
+          {formError && (
+            <Alert
+              severity="error"
+              sx={{
+                borderRadius: 2,
+                bgcolor: alpha(theme.palette.error.main, 0.05),
+                border: `1px solid ${alpha(theme.palette.error.main, 0.2)}`,
+              }}
+            >
+              {formError}
+            </Alert>
+          )}
 
+          {/* Deployment Fields */}
           {!isRunMode && (
-            <>
+            <Stack spacing={2.5}>
               <TextField
                 label="Project name"
                 value={title}
@@ -401,8 +468,11 @@ export const PushToCloudModal: React.FC<PushToCloudModalProps> = ({
                 fullWidth
                 required
                 sx={{
-                  '& .MuiInputBase-input': {
-                    textAlign: 'left',
+                  '& .MuiOutlinedInput-root': {
+                    bgcolor: alpha(
+                      theme.palette.background.default,
+                      theme.palette.mode === 'dark' ? 0.4 : 0.5,
+                    ),
                   },
                 }}
               />
@@ -419,8 +489,11 @@ export const PushToCloudModal: React.FC<PushToCloudModalProps> = ({
                 fullWidth
                 required
                 sx={{
-                  '& .MuiInputBase-input': {
-                    textAlign: 'left',
+                  '& .MuiOutlinedInput-root': {
+                    bgcolor: alpha(
+                      theme.palette.background.default,
+                      theme.palette.mode === 'dark' ? 0.4 : 0.5,
+                    ),
                   },
                 }}
               />
@@ -431,217 +504,328 @@ export const PushToCloudModal: React.FC<PushToCloudModalProps> = ({
                 onChange={(event) => setGitBranch(event.target.value)}
                 helperText="Branch to deploy. Defaults to main."
                 fullWidth
-                InputProps={{ readOnly: true }}
                 sx={{
-                  '& .MuiInputBase-input': {
-                    textAlign: 'left',
+                  '& .MuiOutlinedInput-root': {
+                    bgcolor: alpha(
+                      theme.palette.background.default,
+                      theme.palette.mode === 'dark' ? 0.4 : 0.5,
+                    ),
                   },
                 }}
               />
-
-              <TextField
-                label="GitHub username"
-                value={githubUsername}
-                onChange={(event) => setGithubUsername(event.target.value)}
-                helperText="Optional. Leave blank to use repository defaults."
-                fullWidth
+              <Paper
+                elevation={0}
                 sx={{
-                  '& .MuiInputBase-input': {
-                    textAlign: 'left',
-                  },
-                }}
-              />
-
-              <TextField
-                label="GitHub password or token"
-                type={showGithubPassword ? 'text' : 'password'}
-                value={githubPassword}
-                onChange={(event) => setGithubPassword(event.target.value)}
-                helperText="Optional. Stored only for this submission."
-                fullWidth
-                sx={{
-                  '& .MuiInputBase-input': {
-                    textAlign: 'left',
-                  },
-                }}
-                InputProps={{
-                  endAdornment: (
-                    <InputAdornment position="end">
-                      <IconButton
-                        onClick={() => setShowGithubPassword((prev) => !prev)}
-                        edge="end"
-                        aria-label="Toggle GitHub credential visibility"
-                      >
-                        {showGithubPassword ? (
-                          <VisibilityOff />
-                        ) : (
-                          <Visibility />
-                        )}
-                      </IconButton>
-                    </InputAdornment>
+                  p: 2.5,
+                  borderRadius: 2,
+                  bgcolor: alpha(
+                    theme.palette.primary.main,
+                    theme.palette.mode === 'dark' ? 0.08 : 0.04,
                   ),
+                  border: `1px solid ${alpha(theme.palette.primary.main, 0.15)}`,
                 }}
-              />
-            </>
+              >
+                <Stack spacing={2}>
+                  <Box display="flex" alignItems="center" gap={1}>
+                    <Lock
+                      sx={{
+                        fontSize: 18,
+                        color: 'primary.main',
+                      }}
+                    />
+                    <Typography variant="subtitle2" fontWeight="600">
+                      Git Credentials (Reserved)
+                    </Typography>
+                  </Box>
+                  <Typography variant="caption" color="text.secondary">
+                    These credentials are stored as ROSETTA_GIT_USER and
+                    ROSETTA_GIT_PASSWORD environment variables.
+                  </Typography>
+
+                  <TextField
+                    label="GitHub username"
+                    value={githubUsername}
+                    onChange={(event) => setGithubUsername(event.target.value)}
+                    helperText="Optional. Leave blank to use repository defaults."
+                    fullWidth
+                    sx={{
+                      '& .MuiOutlinedInput-root': {
+                        bgcolor: theme.palette.background.paper,
+                      },
+                    }}
+                  />
+
+                  <TextField
+                    label="GitHub password or token"
+                    type={showGithubPassword ? 'text' : 'password'}
+                    value={githubPassword}
+                    onChange={(event) => setGithubPassword(event.target.value)}
+                    helperText="Optional. Stored only for this submission."
+                    fullWidth
+                    sx={{
+                      '& .MuiOutlinedInput-root': {
+                        bgcolor: theme.palette.background.paper,
+                      },
+                    }}
+                    slotProps={{
+                      input: {
+                        endAdornment: (
+                          <InputAdornment position="end">
+                            <IconButton
+                              onClick={() =>
+                                setShowGithubPassword((prev) => !prev)
+                              }
+                              edge="end"
+                              aria-label="Toggle GitHub credential visibility"
+                            >
+                              {showGithubPassword ? (
+                                <VisibilityOff />
+                              ) : (
+                                <Visibility />
+                              )}
+                            </IconButton>
+                          </InputAdornment>
+                        ),
+                      },
+                    }}
+                  />
+                </Stack>
+              </Paper>
+            </Stack>
           )}
           {!isRunMode && (
             <Accordion
               defaultExpanded={isRunMode}
               sx={{
                 borderRadius: 2,
+                border: `1px solid ${theme.palette.divider}`,
+                bgcolor: alpha(
+                  theme.palette.background.default,
+                  theme.palette.mode === 'dark' ? 0.3 : 0.5,
+                ),
                 '&:before': {
                   display: 'none',
                 },
-                boxShadow: 1,
+                boxShadow: 'none',
               }}
             >
               <AccordionSummary
                 expandIcon={<ExpandMore />}
                 sx={{
                   borderRadius: 2,
+                  minHeight: 56,
                   '&.Mui-expanded': {
+                    minHeight: 56,
                     borderBottomLeftRadius: 0,
                     borderBottomRightRadius: 0,
+                    borderBottom: `1px solid ${theme.palette.divider}`,
+                  },
+                  '& .MuiAccordionSummary-content': {
+                    alignItems: 'center',
+                    gap: 1,
                   },
                 }}
               >
-                <Typography variant="h6">
-                  Environment Variables{' '}
-                  {environmentVariables.length > 0 &&
-                    `(${environmentVariables.length})`}
+                <Key sx={{ fontSize: 20, color: 'text.secondary' }} />
+                <Typography variant="subtitle1" fontWeight="600">
+                  Environment Variables
                 </Typography>
+                {environmentVariables.length > 0 && (
+                  <Chip
+                    label={environmentVariables.length}
+                    sx={{
+                      height: 22,
+                      fontSize: '0.75rem',
+                      bgcolor: alpha(theme.palette.primary.main, 0.1),
+                      color: 'primary.main',
+                      fontWeight: 600,
+                    }}
+                  />
+                )}
               </AccordionSummary>
               <AccordionDetails
                 sx={{
+                  pt: 2.5,
+                  pb: 2,
                   borderBottomLeftRadius: 2,
                   borderBottomRightRadius: 2,
                 }}
               >
-                <Box display="flex" flexDirection="column" gap={2}>
+                <Stack spacing={2.5}>
                   <Typography variant="body2" color="text.secondary">
-                    Add environment variables that will be available during
-                    project execution.
+                    Add custom environment variables for your project.
                   </Typography>
 
-                  <Box display="flex" gap={1} alignItems="center">
-                    <TextField
-                      label="Key"
-                      value={newEnvKey}
-                      onChange={(e) => setNewEnvKey(e.target.value)}
-                      size="small"
-                      placeholder="e.g., DBT_PROFILES_DIR"
-                      sx={{
-                        flex: 1,
-                        '& .MuiInputBase-input': {
-                          textAlign: 'left',
-                        },
-                      }}
-                    />
-                    <TextField
-                      label="Value"
-                      value={newEnvValue}
-                      onChange={(e) => setNewEnvValue(e.target.value)}
-                      size="small"
-                      placeholder="e.g., /app/profiles"
-                      sx={{
-                        flex: 2,
-                        '& .MuiInputBase-input': {
-                          textAlign: 'left',
-                        },
-                      }}
-                    />
-                    <Button
-                      variant="outlined"
-                      size="small"
-                      onClick={addEnvironmentVariable}
-                      startIcon={<Add />}
-                      disabled={!newEnvKey.trim() || !newEnvValue.trim()}
-                      sx={{ minWidth: 'auto', px: 2 }}
-                    >
-                      Add
-                    </Button>
-                  </Box>
-
-                  {/* Environment variables list */}
-                  {environmentVariables.length > 0 && (
-                    <Box display="flex" flexDirection="column" gap={1}>
-                      <Divider sx={{ my: 1 }} />
-                      {environmentVariables.map((env) => (
-                        <Box
-                          key={env.id}
-                          display="flex"
-                          gap={1}
-                          alignItems="center"
+                  {/* Add New Variable */}
+                  <Paper
+                    elevation={0}
+                    sx={{
+                      p: 2,
+                      borderRadius: 1.5,
+                      bgcolor: theme.palette.background.paper,
+                      border: `1px dashed ${alpha(theme.palette.primary.main, 0.3)}`,
+                    }}
+                  >
+                    <Stack spacing={1.5}>
+                      <Box display="flex" gap={1} alignItems="flex-start">
+                        <TextField
+                          label="Key"
+                          value={newEnvKey}
+                          onChange={(e) => setNewEnvKey(e.target.value)}
+                          placeholder="e.g., DBT_PROFILES_DIR"
+                          sx={{ flex: 2 }}
+                        />
+                        <TextField
+                          label="Value"
+                          value={newEnvValue}
+                          onChange={(e) => setNewEnvValue(e.target.value)}
+                          placeholder="e.g., /app/profiles"
+                          sx={{ flex: 3 }}
+                        />
+                        <IconButton
+                          onClick={addEnvironmentVariable}
+                          disabled={!newEnvKey.trim() || !newEnvValue.trim()}
                           sx={{
-                            p: 1,
-                            borderRadius: 1,
-                            bgcolor: 'action.hover',
+                            height: 40,
+                            mt: 0.25,
                           }}
                         >
-                          <TextField
-                            value={env.key}
-                            onChange={(e) =>
-                              updateEnvironmentVariable(
-                                env.id,
-                                e.target.value,
-                                env.value,
-                              )
-                            }
-                            size="small"
-                            variant="outlined"
+                          <AddOutlined />
+                        </IconButton>
+                      </Box>
+                      <Typography
+                        variant="caption"
+                        color="text.secondary"
+                        sx={{ pl: 0.5 }}
+                      >
+                        Note: ROSETTA_GIT_USER and ROSETTA_GIT_PASSWORD are
+                        reserved keys.
+                      </Typography>
+                    </Stack>
+                  </Paper>
+
+                  {/* Environment Variables List */}
+                  {environmentVariables.length > 0 && (
+                    <>
+                      <Divider sx={{ mt: 1 }} />
+                      <Stack spacing={1}>
+                        <Typography
+                          variant="caption"
+                          color="text.secondary"
+                          fontWeight="600"
+                          textTransform="uppercase"
+                          sx={{ px: 0.5 }}
+                        >
+                          Added Variables
+                        </Typography>
+                        {environmentVariables.map((env) => (
+                          <Paper
+                            key={env.id}
+                            elevation={0}
                             sx={{
-                              flex: 1,
-                              '& .MuiInputBase-input': {
-                                textAlign: 'left',
-                              },
-                            }}
-                          />
-                          <TextField
-                            value={env.value}
-                            onChange={(e) =>
-                              updateEnvironmentVariable(
-                                env.id,
-                                env.key,
-                                e.target.value,
-                              )
-                            }
-                            size="small"
-                            variant="outlined"
-                            sx={{
-                              flex: 2,
-                              '& .MuiInputBase-input': {
-                                textAlign: 'left',
-                              },
-                            }}
-                          />
-                          <IconButton
-                            size="small"
-                            onClick={() => removeEnvironmentVariable(env.id)}
-                            color="error"
-                            sx={{
-                              minWidth: 'auto',
+                              p: 1.5,
+                              borderRadius: 1.5,
+                              bgcolor: alpha(
+                                theme.palette.background.default,
+                                theme.palette.mode === 'dark' ? 0.5 : 1,
+                              ),
+                              border: `1px solid ${theme.palette.divider}`,
+                              transition: 'all 0.2s',
                               '&:hover': {
-                                bgcolor: 'error.light',
-                                color: 'error.contrastText',
+                                borderColor: alpha(
+                                  theme.palette.primary.main,
+                                  0.3,
+                                ),
+                                boxShadow: `0 0 0 1px ${alpha(theme.palette.primary.main, 0.1)}`,
                               },
                             }}
                           >
-                            <Delete />
-                          </IconButton>
-                        </Box>
-                      ))}
-                    </Box>
+                            <Box display="flex" gap={1} alignItems="center">
+                              <TextField
+                                value={env.key}
+                                onChange={(e) =>
+                                  updateEnvironmentVariable(
+                                    env.id,
+                                    e.target.value,
+                                    env.value,
+                                  )
+                                }
+                                variant="outlined"
+                                sx={{
+                                  flex: 1,
+                                  '& .MuiInputBase-input': {
+                                    fontFamily: 'monospace',
+                                    fontSize: '0.875rem',
+                                    fontWeight: 600,
+                                  },
+                                }}
+                              />
+                              <TextField
+                                value={env.value}
+                                onChange={(e) =>
+                                  updateEnvironmentVariable(
+                                    env.id,
+                                    env.key,
+                                    e.target.value,
+                                  )
+                                }
+                                variant="outlined"
+                                sx={{
+                                  flex: 2,
+                                  '& .MuiInputBase-input': {
+                                    fontFamily: 'monospace',
+                                    fontSize: '0.875rem',
+                                  },
+                                }}
+                              />
+                              <IconButton
+                                onClick={() =>
+                                  removeEnvironmentVariable(env.id)
+                                }
+                                sx={{
+                                  color: 'error.main',
+                                  bgcolor: alpha(
+                                    theme.palette.error.main,
+                                    0.08,
+                                  ),
+                                  '&:hover': {
+                                    bgcolor: alpha(
+                                      theme.palette.error.main,
+                                      0.15,
+                                    ),
+                                  },
+                                }}
+                              >
+                                <Delete />
+                              </IconButton>
+                            </Box>
+                          </Paper>
+                        ))}
+                      </Stack>
+                    </>
                   )}
-                </Box>
+                </Stack>
               </AccordionDetails>
             </Accordion>
           )}
-          <Box display="flex" justifyContent="flex-end" gap={2}>
+
+          {/* Action Buttons */}
+          <Box
+            display="flex"
+            justifyContent="flex-end"
+            gap={1.5}
+            pt={1}
+            borderTop={`1px solid ${theme.palette.divider}`}
+          >
             <Button
               variant="outlined"
               onClick={onClose}
               disabled={isPushing}
               startIcon={<Close />}
+              sx={{
+                minWidth: 100,
+                borderColor: alpha(theme.palette.divider, 0.5),
+              }}
             >
               Cancel
             </Button>
@@ -651,11 +835,15 @@ export const PushToCloudModal: React.FC<PushToCloudModalProps> = ({
               color="primary"
               disabled={disableSubmit}
               startIcon={buttonIcon}
+              sx={{
+                minWidth: 140,
+                fontWeight: 600,
+              }}
             >
               {buttonText}
             </Button>
           </Box>
-        </Box>
+        </Stack>
       </form>
     </Modal>
   );
