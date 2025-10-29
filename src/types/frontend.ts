@@ -1,6 +1,7 @@
 import { ReactNode } from 'react';
 import type * as Monaco from 'monaco-editor';
 import { Project, QueryResponseType, Table } from './backend';
+import { UserProfile } from './profile';
 
 export type AppContextType = {
   projects: Project[];
@@ -25,6 +26,8 @@ export type AppContextType = {
   registerSyncEditorContent?: (
     handler?: (path: string, content: string) => void,
   ) => void;
+  authenticatedUser?: UserProfile | null;
+  env: 'local' | 'cloud';
 };
 
 export type ItemProps = {

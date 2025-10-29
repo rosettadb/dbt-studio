@@ -1,10 +1,11 @@
 import { client } from '../config/client';
+import { CloudDeploymentPayload } from '../../types/backend';
 
 export type AuthSuccessPayload = {
   token: string;
 };
 
-const openLogin = async (): Promise<string> => {
+export const openLogin = async (): Promise<string> => {
   const { data } = await client.post<undefined, string>(
     'rosettaCloud:login',
     undefined,
@@ -12,20 +13,20 @@ const openLogin = async (): Promise<string> => {
   return data;
 };
 
-const getToken = async (): Promise<string | null> => {
+export const getToken = async (): Promise<string | null> => {
   const { data } = await client.get<string | null>('rosettaCloud:getToken');
   return data;
 };
 
-const logout = async (): Promise<void> => {
+export const logout = async (): Promise<void> => {
   await client.post<undefined, void>('rosettaCloud:logout', undefined);
 };
 
-const storeToken = async (token: string): Promise<void> => {
+export const storeToken = async (token: string): Promise<void> => {
   await client.post<string, void>('rosettaCloud:storeToken', token);
 };
 
-const subscribeToAuthSuccess = (
+export const subscribeToAuthSuccess = (
   callback: (payload: AuthSuccessPayload) => void,
 ) => {
   const listener: (...args: unknown[]) => void = (_event, payload) => {
@@ -46,7 +47,7 @@ const subscribeToAuthSuccess = (
   };
 };
 
-const subscribeToAuthError = (callback: (message: string) => void) => {
+export const subscribeToAuthError = (callback: (message: string) => void) => {
   const listener: (...args: unknown[]) => void = (_event, payload) => {
     const { error } = (payload ?? {}) as { error?: string };
     callback(error ?? 'Authentication failed.');
@@ -62,7 +63,7 @@ const subscribeToAuthError = (callback: (message: string) => void) => {
   };
 };
 
-const subscribeToTokenUpdate = (callback: () => void) => {
+export const subscribeToTokenUpdate = (callback: () => void) => {
   const listener: (...args: unknown[]) => void = () => {
     callback();
   };
@@ -77,14 +78,8 @@ const subscribeToTokenUpdate = (callback: () => void) => {
   };
 };
 
-export const authService = {
-  openLogin,
-  getToken,
-  logout,
-  storeToken,
-  subscribeToAuthSuccess,
-  subscribeToAuthError,
-  subscribeToTokenUpdate,
+export const pushProjectToCloud = async (
+  body: CloudDeploymentPayload,
+): Promise<void> => {
+  await client.post<CloudDeploymentPayload, void>('rosettaCloud:push', body);
 };
-
-export default authService;

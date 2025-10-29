@@ -14,13 +14,11 @@ import {
   useAuthToken,
   useAuthLogin,
   useAuthLogout,
-} from '../../controllers/auth.controller';
-import {
   useProfile,
   useRefreshProfile,
   useProfileSubscription,
-} from '../../controllers/profile.controller';
-import { ProfileCard } from '../profile/ProfileCard';
+} from '../../controllers';
+import { ProfileCard } from '../profile';
 
 export const ProfileSettings: React.FC = () => {
   const { data: authToken, isLoading: tokenLoading } = useAuthToken();

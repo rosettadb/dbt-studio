@@ -5,5 +5,5 @@ export * from './git.controller';
 export * from './update.controller';
 export * from './cloudExplorer.controller';
 export * from './utils.controller';
-export * from './auth.controller';
 export * from './profile.controller';
+export * from './rosettaCloud.controller';

@@ -16,6 +16,8 @@ import {
   AccountCircle,
   Person,
   Logout,
+  Cloud,
+  Computer,
 } from '@mui/icons-material';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { toast } from 'react-toastify';
@@ -37,17 +39,15 @@ import {
   useGitPull,
   useGitPush,
   useSelectProject,
-} from '../../controllers';
-import {
+  useProfile,
+  useProfileSubscription,
   useAuthToken,
   useAuthLogin,
   useAuthLogout,
   useAuthSubscription,
-} from '../../controllers/auth.controller';
-import {
-  useProfile,
-  useProfileSubscription,
-} from '../../controllers/profile.controller';
+  useUpdateSettings,
+  useGetSettings,
+} from '../../controllers';
 import { AddGitRemoteModal, GitCommitModal, NewBranchModal } from '../modals';
 import { SimpleDropdownMenu } from '../simpleDropdown';
 import { Icon } from '../icon';
@@ -59,6 +59,8 @@ export const Menu: React.FC = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const { mutateAsync: selectProject } = useSelectProject();
+  const { data: settings } = useGetSettings();
+  const { mutate: updateSettings } = useUpdateSettings();
   const theme = useTheme();
   const { isSidebarOpen, setIsSidebarOpen, isChatOpen, setIsChatOpen } =
     useAppContext();
@@ -482,6 +484,55 @@ export const Menu: React.FC = () => {
               </MenuItem>
             </DD>
           ) : null}
+
+          {profile && (
+            <Tooltip
+              title={`Switch to ${settings?.env === 'cloud' ? 'Local' : 'Cloud'} Environment`}
+            >
+              <IconButton
+                onClick={() => {
+                  const newEnv = settings?.env === 'cloud' ? 'local' : 'cloud';
+                  updateSettings({
+                    ...settings!,
+                    env: newEnv,
+                  });
+                  toast.info(
+                    `Switched to ${newEnv === 'cloud' ? 'Cloud' : 'Local'} environment`,
+                  );
+                }}
+                color="primary"
+                sx={{
+                  backgroundColor:
+                    settings?.env === 'cloud'
+                      ? `${theme.palette.info.light}20`
+                      : `${theme.palette.warning.light}20`,
+                  '&:hover': {
+                    backgroundColor:
+                      settings?.env === 'cloud'
+                        ? `${theme.palette.info.light}40`
+                        : `${theme.palette.warning.light}40`,
+                  },
+                  transition: 'background-color 0.2s ease',
+                }}
+              >
+                {settings?.env === 'cloud' ? (
+                  <Cloud
+                    sx={{
+                      fontSize: 22,
+                      color: theme.palette.info.main,
+                    }}
+                  />
+                ) : (
+                  <Computer
+                    sx={{
+                      fontSize: 22,
+                      color: theme.palette.warning.main,
+                    }}
+                  />
+                )}
+              </IconButton>
+            </Tooltip>
+          )}
 
           <Tooltip title="Settings">
             <IconButton

@@ -231,6 +231,7 @@ export type SettingsType = {
   mainDatabaseStatus?: 'connected' | 'disconnected' | 'error';
   cloudWorkspaceUrl?: string;
   cloudWorkspaceLastSyncedAt?: string;
+  env?: 'local' | 'cloud';
 };
 
 export type FileDialogProperties = 'openFile' | 'openDirectory';

@@ -301,9 +301,3 @@ export const downloadSeed = async (
     project,
   });
 };
-
-export const pushProjectToCloud = async (
-  body: CloudDeploymentPayload,
-): Promise<void> => {
-  await client.post<CloudDeploymentPayload, void>('rosettaCloud:push', body);
-};

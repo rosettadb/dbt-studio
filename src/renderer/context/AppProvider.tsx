@@ -1,7 +1,12 @@
 import React from 'react';
 import { AppContextType } from '../../types/frontend';
 import { Splash } from '../components';
-import { useGetProjects, useGetSelectedProject } from '../controllers';
+import {
+  useGetProjects,
+  useGetSelectedProject,
+  useGetSettings,
+  useProfile,
+} from '../controllers';
 import { useGetActiveAIProvider } from '../controllers/aiProviders.controller';
 import { Project, Table } from '../../types/backend';
 import { projectsServices } from '../services';
@@ -30,12 +35,15 @@ export const AppContext = React.createContext<AppContextType>({
   setEditingFilePath: () => {},
   syncEditorContent: () => {},
   registerSyncEditorContent: () => {},
+  env: 'local',
 });
 
 const AppProvider: React.FC<Props> = ({ children }) => {
   const { data: projects = [] } = useGetProjects();
+  const { data: settings } = useGetSettings();
   const { data: selectedProject, isLoading } = useGetSelectedProject();
   const { data: activeAIProvider } = useGetActiveAIProvider();
+  const { data: profile } = useProfile();
 
   const [isSidebarOpen, setIsSidebarOpen] = React.useState(true);
   const [isChatOpen, setIsChatOpen] = React.useState(false);
@@ -158,6 +166,8 @@ const AppProvider: React.FC<Props> = ({ children }) => {
       setEditingFilePath,
       syncEditorContent,
       registerSyncEditorContent,
+      authenticatedUser: profile,
+      env: profile ? (settings?.env ?? 'local') : 'local',
     };
   }, [
     projects,
@@ -174,6 +184,7 @@ const AppProvider: React.FC<Props> = ({ children }) => {
     editingFilePath,
     syncEditorContent,
     registerSyncEditorContent,
+    profile,
   ]);
 
   if (isLoading) {
