@@ -1,5 +1,5 @@
 import { ipcMain } from 'electron';
-import { ProjectsService, RosettaCloudService } from '../services';
+import { ProjectsService } from '../services';
 import { AIProviderManager } from '../services/ai/providerManager.service';
 import { Project } from '../../types/backend';
 import {
