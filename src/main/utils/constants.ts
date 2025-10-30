@@ -25,4 +25,4 @@ export const AppUpdateTrackURL =
 
 export const CLOUD_DASHBOARD_TOKEN_KEY = 'cloud-dashboard-auth-token';
 
-export const ROSETTA_CLOUD_BASE_URL = 'http://localhost:3000';
+export const ROSETTA_CLOUD_BASE_URL = 'https://dashboard.tolstudios.net';
