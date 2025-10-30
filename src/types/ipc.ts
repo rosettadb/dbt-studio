@@ -59,7 +59,9 @@ export type RosettaCloudChannels =
   | 'rosettaCloud:storeToken'
   | 'rosettaCloud:authSuccess'
   | 'rosettaCloud:authError'
-  | 'rosettaCloud:authTokenUpdated';
+  | 'rosettaCloud:authTokenUpdated'
+  | 'rosettaCloud:getSecrets'
+  | 'rosettaCloud:deleteSecret';
 
 export type ConnectorChannels =
   | 'connector:configure'

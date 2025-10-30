@@ -1,7 +1,7 @@
 /* eslint-disable no-restricted-syntax, no-await-in-loop */
 import { shell } from 'electron';
 import { v4 as uuidv4 } from 'uuid';
-import { CloudDeploymentPayload } from '../../types/backend';
+import { CloudDeploymentPayload, Secret } from '../../types/backend';
 import { UserProfile } from '../../types/profile';
 
 import {
@@ -87,6 +87,76 @@ export default class RosettaCloudService {
 
     const runEndpoint = `${baseUrl}/api/projects/${projectData.id}/run`;
     await postJson(runEndpoint);
+  }
+
+  static async getSecrets(projectId: string): Promise<Secret[]> {
+    const project = await ProjectsService.getProject(projectId);
+    if (!project) {
+      throw new Error('Project not found');
+    }
+
+    if (!project.externalId) {
+      throw new Error('Project has not been deployed to cloud');
+    }
+
+    const settings = await SettingsService.loadSettings();
+    const rosettaCloudUrl =
+      settings.cloudWorkspaceUrl ?? ROSETTA_CLOUD_BASE_URL;
+    const baseUrl = rosettaCloudUrl.replace(/\/$/, '');
+
+    const token = await this.getToken();
+    const secretsEndpoint = `${baseUrl}/api/projects/${project.externalId}/secrets`;
+
+    const response = await fetch(secretsEndpoint, {
+      method: 'GET',
+      headers: {
+        'Content-Type': 'application/json',
+        Accept: 'application/json',
+        Authorization: `Bearer ${token}`,
+      },
+    });
+
+    if (!response.ok) {
+      throw new Error(`Failed to fetch secrets: ${response.status}`);
+    }
+
+    return response.json();
+  }
+
+  static async deleteSecret(
+    projectId: string,
+    secretId: string,
+  ): Promise<void> {
+    const project = await ProjectsService.getProject(projectId);
+
+    if (!project) {
+      throw new Error('Project not found');
+    }
+
+    if (!project.externalId) {
+      throw new Error('Project has not been deployed to cloud');
+    }
+
+    const settings = await SettingsService.loadSettings();
+    const rosettaCloudUrl =
+      settings.cloudWorkspaceUrl ?? ROSETTA_CLOUD_BASE_URL;
+    const baseUrl = rosettaCloudUrl.replace(/\/$/, '');
+
+    const token = await this.getToken();
+    const deleteEndpoint = `${baseUrl}/api/projects/${project.externalId}/secrets?secretId=${secretId}`;
+
+    const response = await fetch(deleteEndpoint, {
+      method: 'DELETE',
+      headers: {
+        'Content-Type': 'application/json',
+        Accept: 'application/json',
+        Authorization: `Bearer ${token}`,
+      },
+    });
+
+    if (!response.ok) {
+      throw new Error(`Failed to delete secret: ${response.status}`);
+    }
   }
 
   static async getProfile(): Promise<UserProfile | null> {

@@ -1,5 +1,5 @@
 import { client } from '../config/client';
-import { CloudDeploymentPayload } from '../../types/backend';
+import { CloudDeploymentPayload, Secret } from '../../types/backend';
 
 export type AuthSuccessPayload = {
   token: string;
@@ -82,4 +82,22 @@ export const pushProjectToCloud = async (
   body: CloudDeploymentPayload,
 ): Promise<void> => {
   await client.post<CloudDeploymentPayload, void>('rosettaCloud:push', body);
+};
+
+export const getSecrets = async (projectId: string): Promise<Secret[]> => {
+  const { data } = await client.post<string, Secret[]>(
+    'rosettaCloud:getSecrets',
+    projectId,
+  );
+  return data;
+};
+
+export const deleteSecret = async (
+  projectId: string,
+  secretId: string,
+): Promise<void> => {
+  await client.post<{ projectId: string; secretId: string }, void>(
+    'rosettaCloud:deleteSecret',
+    { projectId, secretId },
+  );
 };

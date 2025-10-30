@@ -37,6 +37,20 @@ const registerRosettaCloudIpcHandlers = () => {
   ipcMain.handle('rosettaCloud:storeToken', async (_event, token: string) => {
     await RosettaCloudService.storeToken(token);
   });
+
+  ipcMain.handle(
+    'rosettaCloud:getSecrets',
+    async (_event, projectId: string) => {
+      return RosettaCloudService.getSecrets(projectId);
+    },
+  );
+
+  ipcMain.handle(
+    'rosettaCloud:deleteSecret',
+    async (_event, projectId: string, secretId: string) => {
+      return RosettaCloudService.deleteSecret(projectId, secretId);
+    },
+  );
 };
 
 export default registerRosettaCloudIpcHandlers;

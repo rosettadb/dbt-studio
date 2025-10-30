@@ -8,7 +8,11 @@ import {
 } from 'react-query';
 import React from 'react';
 import { toast } from 'react-toastify';
-import { CloudDeploymentPayload, CustomError } from '../../types/backend';
+import {
+  CloudDeploymentPayload,
+  CustomError,
+  Secret,
+} from '../../types/backend';
 import { rosettaCloudServices } from '../services';
 import { QUERY_KEYS } from '../config/constants';
 
@@ -42,6 +46,17 @@ export const useAuthToken = (
   return useQuery({
     queryKey: [QUERY_KEYS.AUTH_TOKEN],
     queryFn: () => rosettaCloudServices.getToken(),
+    ...options,
+  });
+};
+
+export const useGetSecrets = (
+  projectId?: string,
+  options?: UseQueryOptions<Secret[], CustomError, Secret[]>,
+) => {
+  return useQuery({
+    queryKey: [QUERY_KEYS.CLOUD_SECRETS],
+    queryFn: () => rosettaCloudServices.getSecrets(projectId ?? ''),
     ...options,
   });
 };

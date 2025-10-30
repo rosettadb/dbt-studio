@@ -687,3 +687,9 @@ export type RepoInfoRes = {
   currentBranch: string;
   branchExistsOnRemote: boolean;
 };
+
+export type Secret = {
+  id: string;
+  name: string;
+  value: string;
+};
