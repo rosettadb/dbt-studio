@@ -85,7 +85,6 @@ export const PushToCloudModal: React.FC<PushToCloudModalProps> = ({
   const [environmentVariables, setEnvironmentVariables] = React.useState<
     EnvironmentVariable[]
   >([]);
-  console.log('envd', environmentVariables);
   const [newEnvKey, setNewEnvKey] = React.useState('');
   const [newEnvValue, setNewEnvValue] = React.useState('');
 
