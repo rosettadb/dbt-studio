@@ -23,9 +23,12 @@ import { useNavigate, useLocation } from 'react-router-dom';
 import { toast } from 'react-toastify';
 import {
   BranchDropdownToggle,
+  EnvironmentSwitch,
+  EnvironmentSwitchContainer,
   IconsContainer,
   Logo,
   StyledToolbar,
+  SwitchIcon,
 } from './styles';
 import { icons, logo } from '../../../../assets';
 import {
@@ -378,6 +381,52 @@ export const Menu: React.FC = () => {
               )}
             </DD>
           )}
+
+          {/* Environment Switch */}
+          {profile && (
+            <Tooltip
+              title={`Switch to ${settings?.env === 'cloud' ? 'Local' : 'Cloud'} Environment`}
+            >
+              <EnvironmentSwitchContainer>
+                <EnvironmentSwitch
+                  checked={settings?.env === 'cloud'}
+                  onChange={(event) => {
+                    const newEnv = event.target.checked ? 'cloud' : 'local';
+                    updateSettings({
+                      ...settings!,
+                      env: newEnv,
+                    });
+                    toast.info(
+                      `Switched to ${newEnv === 'cloud' ? 'Cloud' : 'Local'} environment`,
+                    );
+                  }}
+                  inputProps={{ 'aria-label': 'Environment switcher' }}
+                />
+                <SwitchIcon
+                  className={
+                    settings?.env === 'cloud' ? 'checked' : 'unchecked'
+                  }
+                >
+                  {settings?.env === 'cloud' ? (
+                    <Cloud
+                      sx={{
+                        fontSize: 14,
+                        color: theme.palette.primary.contrastText,
+                      }}
+                    />
+                  ) : (
+                    <Computer
+                      sx={{
+                        fontSize: 14,
+                        color: theme.palette.primary.contrastText,
+                      }}
+                    />
+                  )}
+                </SwitchIcon>
+              </EnvironmentSwitchContainer>
+            </Tooltip>
+          )}
+
           {/* Authentication Menu */}
           <Tooltip
             title={
@@ -484,55 +533,6 @@ export const Menu: React.FC = () => {
               </MenuItem>
             </DD>
           ) : null}
-
-          {profile && (
-            <Tooltip
-              title={`Switch to ${settings?.env === 'cloud' ? 'Local' : 'Cloud'} Environment`}
-            >
-              <IconButton
-                onClick={() => {
-                  const newEnv = settings?.env === 'cloud' ? 'local' : 'cloud';
-                  updateSettings({
-                    ...settings!,
-                    env: newEnv,
-                  });
-                  toast.info(
-                    `Switched to ${newEnv === 'cloud' ? 'Cloud' : 'Local'} environment`,
-                  );
-                }}
-                color="primary"
-                sx={{
-                  backgroundColor:
-                    settings?.env === 'cloud'
-                      ? `${theme.palette.info.light}20`
-                      : `${theme.palette.warning.light}20`,
-                  '&:hover': {
-                    backgroundColor:
-                      settings?.env === 'cloud'
-                        ? `${theme.palette.info.light}40`
-                        : `${theme.palette.warning.light}40`,
-                  },
-                  transition: 'background-color 0.2s ease',
-                }}
-              >
-                {settings?.env === 'cloud' ? (
-                  <Cloud
-                    sx={{
-                      fontSize: 22,
-                      color: theme.palette.info.main,
-                    }}
-                  />
-                ) : (
-                  <Computer
-                    sx={{
-                      fontSize: 22,
-                      color: theme.palette.warning.main,
-                    }}
-                  />
-                )}
-              </IconButton>
-            </Tooltip>
-          )}
 
           <Tooltip title="Settings">
             <IconButton
