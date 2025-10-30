@@ -13,6 +13,7 @@ import {
   FileStatus,
   GitBranch,
   GitChangesRes,
+  RepoInfoRes,
 } from '../../types/backend';
 import { QUERY_KEYS } from '../config/constants';
 import { gitServices } from '../services';
@@ -117,6 +118,23 @@ export const useGetLocalChanges = (
     queryKey: [QUERY_KEYS.GIT_LOCAL_CHANGES],
     queryFn: async () => {
       return gitServices.getLocalChanges(path);
+    },
+    ...customOptions,
+  });
+};
+
+export const useGetRepoInfo = (
+  path: string,
+  customOptions?: UseQueryOptions<
+    RepoInfoRes | null,
+    CustomError,
+    RepoInfoRes | null
+  >,
+) => {
+  return useQuery({
+    queryKey: [QUERY_KEYS.GIT_REPO_INFO],
+    queryFn: async () => {
+      return gitServices.getRepoInfo(path);
     },
     ...customOptions,
   });

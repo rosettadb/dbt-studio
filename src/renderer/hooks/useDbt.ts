@@ -8,6 +8,7 @@ import {
   useSetConnectionEnvVariable,
 } from '../controllers';
 import { Project, DbtCommandType } from '../../types/backend';
+import { useAppContext } from './index';
 
 interface UseDbtReturn {
   run: (project: Project, path?: string) => Promise<void>;
@@ -78,8 +79,12 @@ const extractCliErrorDetails = (
   return Array.from(details);
 };
 
-const useDbt = (successCallback?: () => void): UseDbtReturn => {
+const useDbt = (
+  successCallback?: () => void,
+  cloudRunCb?: (command: DbtCommandType) => void,
+): UseDbtReturn => {
   const { data: settings } = useGetSettings();
+  const { env } = useAppContext();
   const { runCommand, stopCommand, isRunning } = useCli();
   const { data: connections = [] } = useGetConnections();
   const {
@@ -218,6 +223,11 @@ const useDbt = (successCallback?: () => void): UseDbtReturn => {
         }
 
         setActiveCommand(command);
+
+        if (env === 'cloud') {
+          cloudRunCb?.(command);
+          return;
+        }
 
         // Setup environment variables
         await setupConnectionEnv(connection.connection.name);

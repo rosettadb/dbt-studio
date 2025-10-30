@@ -7,6 +7,7 @@ import {
   GitBranch,
   GitChangesRes,
   GitCredentials,
+  RepoInfoRes,
   RosettaConnection,
 } from '../../types/backend';
 
@@ -134,5 +135,13 @@ export const getLocalChanges = async (repoPath: string) => {
     { repoPath: string },
     GitChangesRes | null
   >('git:getLocalChanges', { repoPath });
+  return data;
+};
+
+export const getRepoInfo = async (repoPath: string) => {
+  const { data } = await client.post<{ repoPath: string }, RepoInfoRes | null>(
+    'git:repoInfo',
+    { repoPath },
+  );
   return data;
 };

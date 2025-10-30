@@ -1,16 +1,22 @@
 import React from 'react';
-import {
-  CloudUploadOutlined,
-  PlayCircleOutline,
-  StopCircleOutlined,
-} from '@mui/icons-material';
+import { PlayCircleOutline, StopCircleOutlined } from '@mui/icons-material';
 import { toast } from 'react-toastify';
 import { SplitButton } from '../splitButton';
 import { icons } from '../../../../assets';
 import { Icon } from '../icon';
-import { Command, CommandType, Project } from '../../../types/backend';
+import {
+  Command,
+  CommandType,
+  DbtCommandType,
+  Project,
+} from '../../../types/backend';
 import { useDbt, useProcess } from '../../hooks';
-import { StagingModal, IncrementalModal, RawLayerModal } from '../modals';
+import {
+  StagingModal,
+  IncrementalModal,
+  RawLayerModal,
+  PushToCloudModal,
+} from '../modals';
 import { pathJoin } from '../../services/settings.services';
 
 interface ProjectDbtSplitButtonProps {
@@ -24,7 +30,6 @@ interface ProjectDbtSplitButtonProps {
   // Function handlers that are used elsewhere in ProjectDetails
   rosettaDbt: (project: Project, command: Command) => Promise<void>;
   handleBusinessLayerClick: (path: string) => void;
-  onRunOnCloudClick: () => void;
 }
 
 export const ProjectDbtSplitButton: React.FC<ProjectDbtSplitButtonProps> = ({
@@ -37,9 +42,10 @@ export const ProjectDbtSplitButton: React.FC<ProjectDbtSplitButtonProps> = ({
   connection,
   rosettaDbt,
   handleBusinessLayerClick,
-  onRunOnCloudClick,
 }) => {
   // Functions that are only used in this component - moved inside
+  const [runInCloudModal, setRunInCloudModal] =
+    React.useState<DbtCommandType>();
 
   const {
     run: dbtRun,
@@ -51,7 +57,9 @@ export const ProjectDbtSplitButton: React.FC<ProjectDbtSplitButtonProps> = ({
     docsGenerate: dbtDocsGenerate,
     deps: dbtDeps,
     seed: dbtSeed,
-  } = useDbt();
+  } = useDbt(undefined, (command) => {
+    setRunInCloudModal(command);
+  });
   const { start, stop, isRunning } = useProcess();
   const [stagingPath, setStagingPath] = React.useState('');
   const [businessPath, setBusinessPath] = React.useState('');
@@ -205,14 +213,6 @@ export const ProjectDbtSplitButton: React.FC<ProjectDbtSplitButtonProps> = ({
             },
             leftIcon: <Icon src={icons.dbtTm} width={16} height={16} />,
             subTitle: 'Run the dbt project',
-          },
-          {
-            name: 'Run on cloud',
-            onClick: () => {
-              onRunOnCloudClick();
-            },
-            leftIcon: <CloudUploadOutlined />,
-            subTitle: 'Run on cloud',
           },
           {
             name: 'Test',
@@ -400,6 +400,14 @@ export const ProjectDbtSplitButton: React.FC<ProjectDbtSplitButtonProps> = ({
             } as Command);
             setIncrementalModal(false);
           }}
+        />
+      )}
+      {runInCloudModal && (
+        <PushToCloudModal
+          isOpen={!!runInCloudModal}
+          onClose={() => setRunInCloudModal(undefined)}
+          project={project}
+          command={runInCloudModal}
         />
       )}
     </>

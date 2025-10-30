@@ -192,7 +192,8 @@ export type GitChannels =
   | 'git:fileDiff'
   | 'git:fileStatusList'
   | 'git:fileStatus'
-  | 'git:getLocalChanges';
+  | 'git:getLocalChanges'
+  | 'git:repoInfo';
 
 export type UtilChannels =
   | 'open:external'

@@ -210,6 +210,7 @@ export type CloudDeploymentPayload = {
   githubUsername?: string;
   githubPassword?: string;
   secrets: Record<string, string>;
+  command?: string;
 };
 
 export type SettingsType = {
@@ -679,4 +680,10 @@ export type GitChangesRes = {
   untrackedCount: number;
   uncommittedCount: number;
   unpushedCount: number;
+};
+
+export type RepoInfoRes = {
+  remoteUrl: string | null;
+  currentBranch: string;
+  branchExistsOnRemote: boolean;
 };

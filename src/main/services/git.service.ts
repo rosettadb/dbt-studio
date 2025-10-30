@@ -3,7 +3,12 @@ import simpleGit, { SimpleGit } from 'simple-git';
 import path from 'path';
 import fs from 'fs';
 import { AuthError } from '../errors';
-import { FileStatus, GitChangesRes, GitCredentials } from '../../types/backend';
+import {
+  FileStatus,
+  GitChangesRes,
+  GitCredentials,
+  RepoInfoRes,
+} from '../../types/backend';
 import SettingsService from './settings.service';
 import ConnectorsService from './connectors.service';
 
@@ -642,6 +647,44 @@ export default class GitService {
         untrackedCount: status.not_added.length,
         uncommittedCount,
         unpushedCount,
+      };
+    } catch (err: any) {
+      return null;
+    }
+  }
+
+  async getRepoInfo(repoPath: string): Promise<RepoInfoRes | null> {
+    const git = this.getGitInstance(repoPath);
+
+    try {
+      const remotes = await git.getRemotes(true);
+      const origin = remotes.find((r) => r.name === 'origin');
+      let remoteUrl = origin?.refs?.fetch || null;
+
+      if (remoteUrl && !remoteUrl.endsWith('.git')) {
+        remoteUrl = `${remoteUrl}.git`;
+      }
+
+      const branchSummary = await git.branch();
+      const currentBranch = branchSummary.current;
+
+      let branchExistsOnRemote = false;
+      if (currentBranch) {
+        try {
+          await git.fetch();
+          const remoteBranches = await git.branch(['-r']);
+          branchExistsOnRemote = remoteBranches.all.includes(
+            `origin/${currentBranch}`,
+          );
+        } catch (err) {
+          branchExistsOnRemote = false;
+        }
+      }
+
+      return {
+        remoteUrl,
+        currentBranch,
+        branchExistsOnRemote,
       };
     } catch (err: any) {
       return null;
