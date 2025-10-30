@@ -185,6 +185,7 @@ const AppProvider: React.FC<Props> = ({ children }) => {
     syncEditorContent,
     registerSyncEditorContent,
     profile,
+    settings,
   ]);
 
   if (isLoading) {
