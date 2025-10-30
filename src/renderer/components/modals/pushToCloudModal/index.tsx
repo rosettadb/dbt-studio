@@ -36,7 +36,6 @@ import {
   usePushProjectToCloud,
 } from '../../../controllers';
 import { Project } from '../../../../types/backend';
-import useSecureStorage from '../../../hooks/useSecureStorage';
 
 interface EnvironmentVariable {
   key: string;
@@ -58,7 +57,6 @@ export const PushToCloudModal: React.FC<PushToCloudModalProps> = ({
   project,
 }) => {
   const theme = useTheme();
-  const { getCloudApiKey } = useSecureStorage();
   const { data: localChanges } = useGetLocalChanges(project.path);
   const {
     mutateAsync: pushProject,
@@ -69,8 +67,6 @@ export const PushToCloudModal: React.FC<PushToCloudModalProps> = ({
   const [title, setTitle] = React.useState('');
   const [gitUrl, setGitUrl] = React.useState('');
   const [gitBranch, setGitBranch] = React.useState('main');
-  const [apiKey, setApiKey] = React.useState<string | null>(null);
-  const [isLoadingKey, setIsLoadingKey] = React.useState(false);
   const [urlError, setUrlError] = React.useState('');
   const [titleError, setTitleError] = React.useState('');
   const [formError, setFormError] = React.useState('');
@@ -186,7 +182,6 @@ export const PushToCloudModal: React.FC<PushToCloudModalProps> = ({
     setUrlError('');
     setTitleError('');
     setFormError('');
-    setApiKey(null);
     setGithubUsername('');
     setGithubPassword('');
     setShowGithubPassword(false);
@@ -197,47 +192,14 @@ export const PushToCloudModal: React.FC<PushToCloudModalProps> = ({
   }, [project?.name, project?.externalId]);
 
   React.useEffect(() => {
-    let isCancelled = false;
-
-    const loadApiKey = async () => {
-      setIsLoadingKey(true);
-      try {
-        const key = await getCloudApiKey();
-        if (!isCancelled) {
-          setApiKey(key);
-        }
-      } catch (error) {
-        // eslint-disable-next-line no-console
-        console.error('Failed to load cloud API key:', error);
-        toast.error('Unable to load the cloud API key.');
-        if (!isCancelled) {
-          setApiKey(null);
-        }
-      } finally {
-        if (!isCancelled) {
-          setIsLoadingKey(false);
-        }
-      }
-    };
-
     if (isOpen) {
       resetForm();
-      loadApiKey().catch((error) => {
-        // eslint-disable-next-line no-console
-        console.error('Unexpected error loading cloud API key:', error);
-      });
     } else {
       resetMutation();
-      setApiKey(null);
       setFormError('');
       setUrlError('');
       setTitleError('');
     }
-
-    return () => {
-      isCancelled = true;
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isOpen, resetForm, resetMutation]);
 
   const validateForm = () => {
@@ -281,13 +243,6 @@ export const PushToCloudModal: React.FC<PushToCloudModalProps> = ({
       return;
     }
 
-    if (!apiKey) {
-      setFormError(
-        'Cloud API key is required. Configure it in Settings > General > Cloud Workspace.',
-      );
-      return;
-    }
-
     if (!project?.id) {
       setFormError('Select a project to deploy.');
       return;
@@ -327,21 +282,12 @@ export const PushToCloudModal: React.FC<PushToCloudModalProps> = ({
   };
 
   const disableSubmit = React.useMemo(() => {
-    if (!project?.id || isLoadingKey || isPushing || !apiKey) {
+    if (!project?.id || isPushing) {
       return true;
     }
 
     return !title.trim() || !gitUrl.trim() || !!urlError || !!titleError;
-  }, [
-    project?.id,
-    isLoadingKey,
-    isPushing,
-    apiKey,
-    title,
-    gitUrl,
-    urlError,
-    titleError,
-  ]);
+  }, [project?.id, isPushing, title, gitUrl, urlError, titleError]);
 
   const buttonIcon = React.useMemo(() => {
     if (isPushing) return <CircularProgress size={18} />;
