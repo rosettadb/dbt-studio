@@ -132,20 +132,6 @@ export const PushToCloudModal: React.FC<PushToCloudModalProps> = ({
     }
   }, [secrets]);
 
-  const resetForm = React.useCallback(() => {
-    setTitle(project?.name ?? '');
-    setGitUrl(repoInfo?.remoteUrl ?? '');
-    setGitBranch(repoInfo?.currentBranch ?? 'main');
-    setUrlError('');
-    setTitleError('');
-    setFormError('');
-    setGithubUsername('');
-    setGithubPassword('');
-    setShowGithubPassword(false);
-    setNewEnvKey('');
-    setNewEnvValue('');
-  }, [project?.name, repoInfo?.remoteUrl, repoInfo?.currentBranch]);
-
   const blockingError = React.useMemo(() => {
     if (isLoading) return null;
 
