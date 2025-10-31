@@ -53,9 +53,6 @@ export const GeneralSettings: React.FC<GeneralSettingsProps> = ({
     useSecureStorage();
   const { mutateAsync: updateSettings } = useUpdateSettings();
 
-  const [workspaceUrl, setWorkspaceUrl] = React.useState(
-    settings.cloudWorkspaceUrl,
-  );
   const [lastSyncedAt, setLastSyncedAt] = React.useState(
     settings.cloudWorkspaceLastSyncedAt ?? '',
   );
@@ -70,10 +67,9 @@ export const GeneralSettings: React.FC<GeneralSettingsProps> = ({
   const hasStoredApiKey = storedApiKey.length > 0;
 
   React.useEffect(() => {
-    setWorkspaceUrl(settings.cloudWorkspaceUrl);
     setLastSyncedAt(settings.cloudWorkspaceLastSyncedAt ?? '');
     setMetadataDirty(false);
-  }, [settings.cloudWorkspaceUrl, settings.cloudWorkspaceLastSyncedAt]);
+  }, [settings.cloudWorkspaceLastSyncedAt]);
 
   React.useEffect(() => {
     const loadKey = async () => {
@@ -101,7 +97,7 @@ export const GeneralSettings: React.FC<GeneralSettingsProps> = ({
     if (!lastSyncedAt) return '';
     try {
       return new Date(lastSyncedAt).toLocaleString();
-    } catch (error) {
+    } catch {
       return lastSyncedAt;
     }
   }, [lastSyncedAt]);
@@ -126,7 +122,7 @@ export const GeneralSettings: React.FC<GeneralSettingsProps> = ({
     validateApiKey(event.target.value);
   };
 
-  const effectiveWorkspaceUrl = workspaceUrl || ROSETTA_CLOUD_BASE_URL;
+  const effectiveWorkspaceUrl = ROSETTA_CLOUD_BASE_URL;
 
   const handleSaveCloud = async () => {
     if ((apiKeyDirty || !hasStoredApiKey) && !validateApiKey(apiKeyInput)) {
@@ -270,7 +266,8 @@ export const GeneralSettings: React.FC<GeneralSettingsProps> = ({
             </Typography>
           </Box>
           <Typography variant="body2" color="text.secondary" mb={3}>
-            Paste the Rosetta Cloud API key generated at {` ${workspaceUrl} `}
+            Paste the Rosetta Cloud API key generated at{' '}
+            {` ${ROSETTA_CLOUD_BASE_URL} `}
             to link this project. Keys are stored securely using your operating
             system keychain.
           </Typography>
@@ -278,12 +275,9 @@ export const GeneralSettings: React.FC<GeneralSettingsProps> = ({
             <TextField
               label="Rosetta Cloud URL"
               name="cloudWorkspaceUrl"
-              value={workspaceUrl}
-              onChange={(event: React.ChangeEvent<HTMLInputElement>) => {
-                setWorkspaceUrl(event.target.value);
-                setMetadataDirty(true);
-                onSettingsChange(event);
-              }}
+              value={ROSETTA_CLOUD_BASE_URL}
+              InputProps={{ readOnly: true }}
+              helperText="This URL is configured by the application and cannot be changed."
             />
             <TextField
               label={hasStoredApiKey ? 'Replace API key' : 'API key'}
