@@ -100,6 +100,19 @@ class ChatService {
     return data;
   }
 
+  // Get messages with full context
+  static async getMessagesWithContext(
+    sessionId: number,
+    limit?: number,
+    offset?: number,
+  ): Promise<ChatMessageWithContext[]> {
+    const { data } = await client.post<
+      { sessionId: number; limit?: number; offset?: number },
+      ChatMessageWithContext[]
+    >('chat:message:list-with-context', { sessionId, limit, offset });
+    return data;
+  }
+
   // Send a regular message
   static async sendMessage(
     sessionId: number,
@@ -457,6 +470,7 @@ export const chatService = {
 
   // Message management
   getMessages: ChatService.getMessages,
+  getMessagesWithContext: ChatService.getMessagesWithContext,
   getMessageWithContext: ChatService.getMessageWithContext,
   sendMessage: ChatService.sendMessage,
   sendMessageWithContext: ChatService.sendMessageWithContext,

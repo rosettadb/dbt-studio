@@ -111,6 +111,7 @@ export type AIChannels =
   | 'chat:conversation:update'
   | 'chat:conversation:delete'
   | 'chat:message:list'
+  | 'chat:message:list-with-context'
   | 'chat:message:get-with-context'
   | 'chat:message:send'
   | 'chat:message:stream'

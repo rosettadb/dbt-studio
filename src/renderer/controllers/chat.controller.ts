@@ -214,6 +214,32 @@ export const useGetChatMessages = (
   });
 };
 
+// Get messages with full context
+export const useGetChatMessagesWithContext = (
+  sessionId?: number,
+  limit?: number,
+  offset?: number,
+  customOptions?: UseQueryOptions<
+    ChatMessageWithContext[],
+    CustomError,
+    ChatMessageWithContext[]
+  >,
+) => {
+  return useQuery({
+    queryKey: [
+      QUERY_KEYS.GET_CHAT_MESSAGES_WITH_CONTEXT,
+      sessionId,
+      limit,
+      offset,
+    ],
+    queryFn: async () => {
+      return chatService.getMessagesWithContext(sessionId!, limit, offset);
+    },
+    enabled: !!sessionId,
+    ...customOptions,
+  });
+};
+
 // Get message with full context
 export const useGetChatMessageWithContext = (
   messageId?: number,

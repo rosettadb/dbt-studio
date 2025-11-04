@@ -25,12 +25,27 @@ export const useContextManager = () => {
   const { selectedFileContext, hasSelectedFile } = useSelectedFileContext();
   const { data: project } = useGetSelectedProject();
 
+  // Check if a file is already in context
+  const isFileInContext = useCallback(
+    (filePath: string) => {
+      if (!filePath) return false;
+
+      // Check if it's in additional files
+      return additionalFiles.some((file) => file.path === filePath);
+    },
+    [additionalFiles],
+  );
+
   // Get all context items for message sending
   const contextItemsForMessage = useMemo(() => {
     const items: ContextItem[] = [];
 
-    // Always include selected file context first if available
-    if (hasSelectedFile && selectedFileContext) {
+    // Include selected file context ONLY if it's been explicitly added to context
+    if (
+      hasSelectedFile &&
+      selectedFileContext &&
+      isFileInContext(selectedFileContext.metadata?.path)
+    ) {
       items.push({
         type: selectedFileContext.type,
         name: selectedFileContext.name,
@@ -44,7 +59,7 @@ export const useContextManager = () => {
     // For now, we'll just track the files and resolve them when sending
 
     return items;
-  }, [selectedFileContext, hasSelectedFile, additionalFiles]);
+  }, [selectedFileContext, hasSelectedFile, additionalFiles, isFileInContext]);
 
   // Get context items including additional files with real content resolution
   const getContextItemsWithAdditionalFiles = useCallback(async () => {
@@ -53,8 +68,12 @@ export const useContextManager = () => {
     try {
       const items: ContextItem[] = [];
 
-      // Include selected file context first if available
-      if (hasSelectedFile && selectedFileContext) {
+      // Include selected file context ONLY if it's been explicitly added to context
+      if (
+        hasSelectedFile &&
+        selectedFileContext &&
+        isFileInContext(selectedFileContext.metadata?.path)
+      ) {
         items.push({
           type: selectedFileContext.type,
           name: selectedFileContext.name,
@@ -66,80 +85,82 @@ export const useContextManager = () => {
 
       // Resolve additional files to context items using the actual context service
       if (additionalFiles.length > 0 && project?.path) {
-        // eslint-disable-next-line no-console
-        console.log(
-          `Resolving context for ${additionalFiles.length} additional files...`,
+        // Filter out the selected file from additional files to avoid duplication
+        const filesToResolve = additionalFiles.filter(
+          (file) => file.path !== selectedFileContext?.metadata?.path,
         );
 
-        const resolvePromises = additionalFiles.map(async (file) => {
-          try {
-            // eslint-disable-next-line no-console
-            console.log(`Resolving context for file: ${file.path}`);
+        if (filesToResolve.length > 0) {
+          const resolvePromises = filesToResolve.map(async (file) => {
+            try {
+              // Use the actual context resolution service
+              const resolvedContext =
+                await chatService.resolveSelectedFileContext(
+                  file.path,
+                  project.path,
+                );
 
-            // Use the actual context resolution service
-            const resolvedContext =
-              await chatService.resolveSelectedFileContext(
-                file.path,
-                project.path,
+              return {
+                type: resolvedContext.type,
+                name: resolvedContext.name,
+                description:
+                  resolvedContext.description ||
+                  `Additional file: ${file.relativePath}`,
+                content: resolvedContext.content,
+                metadata: {
+                  ...resolvedContext.metadata,
+                  isAdditional: true,
+                  originalFileType: file.fileType,
+                },
+              };
+            } catch (error) {
+              // eslint-disable-next-line no-console
+              console.error(
+                `Failed to resolve context for file: ${file.path}`,
+                error,
               );
 
-            // eslint-disable-next-line no-console
-            console.log(`Successfully resolved context for: ${file.name}`);
+              // Fallback: create a basic context item with error indication
+              return {
+                type: 'file',
+                name: file.name,
+                description: `Additional file: ${file.relativePath} (content unavailable)`,
+                content: `File: ${file.relativePath}\n\n[Error loading content: ${error instanceof Error ? error.message : 'Unknown error'}]`,
+                metadata: {
+                  path: file.path,
+                  relativePath: file.relativePath,
+                  fileType: file.fileType,
+                  isAdditional: true,
+                  hasError: true,
+                  errorMessage:
+                    error instanceof Error ? error.message : 'Unknown error',
+                },
+              };
+            }
+          });
 
-            return {
-              type: resolvedContext.type,
-              name: resolvedContext.name,
-              description:
-                resolvedContext.description ||
-                `Additional file: ${file.relativePath}`,
-              content: resolvedContext.content,
-              metadata: {
-                ...resolvedContext.metadata,
-                isAdditional: true,
-                originalFileType: file.fileType,
-              },
-            };
-          } catch (error) {
-            // eslint-disable-next-line no-console
-            console.error(
-              `Failed to resolve context for file: ${file.path}`,
-              error,
-            );
+          // Wait for all additional files to be resolved
+          const resolvedAdditionalItems = await Promise.all(resolvePromises);
+          items.push(...resolvedAdditionalItems);
 
-            // Fallback: create a basic context item with error indication
-            return {
-              type: 'file',
-              name: file.name,
-              description: `Additional file: ${file.relativePath} (content unavailable)`,
-              content: `File: ${file.relativePath}\n\n[Error loading content: ${error instanceof Error ? error.message : 'Unknown error'}]`,
-              metadata: {
-                path: file.path,
-                relativePath: file.relativePath,
-                fileType: file.fileType,
-                isAdditional: true,
-                hasError: true,
-                errorMessage:
-                  error instanceof Error ? error.message : 'Unknown error',
-              },
-            };
-          }
-        });
-
-        // Wait for all additional files to be resolved
-        const resolvedAdditionalItems = await Promise.all(resolvePromises);
-        items.push(...resolvedAdditionalItems);
-
-        // eslint-disable-next-line no-console
-        console.log(
-          `Context resolution complete. Total items: ${items.length}`,
-        );
+          // eslint-disable-next-line no-console
+          console.log(
+            `Context resolution complete. Total items: ${items.length}`,
+          );
+        }
       }
 
       return items;
     } finally {
       setIsResolvingContext(false);
     }
-  }, [selectedFileContext, hasSelectedFile, additionalFiles, project?.path]);
+  }, [
+    selectedFileContext,
+    hasSelectedFile,
+    additionalFiles,
+    project?.path,
+    isFileInContext,
+  ]);
 
   const addFiles = useCallback((files: ContextFile[]) => {
     setAdditionalFiles((prev) => {
@@ -160,18 +181,7 @@ export const useContextManager = () => {
     setAdditionalFiles([]);
   }, []);
 
-  const totalContextFiles = (hasSelectedFile ? 1 : 0) + additionalFiles.length;
-
-  // Check if a file is already in context
-  const isFileInContext = useCallback(
-    (filePath: string) => {
-      if (!filePath) return false;
-
-      // Check if it's in additional files
-      return additionalFiles.some((file) => file.path === filePath);
-    },
-    [additionalFiles],
-  );
+  const totalContextFiles = additionalFiles.length;
 
   return {
     // State

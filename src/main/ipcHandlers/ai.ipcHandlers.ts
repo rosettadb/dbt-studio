@@ -6,6 +6,7 @@ import {
   AIProvider,
   ChatConversation,
   ChatMessage,
+  ChatMessageWithContext,
   NewAIProvider,
   NewAIUsageLog,
   NewChatConversation,
@@ -466,6 +467,41 @@ const registerAIHandlers = () => {
     'chat:message:get-with-context',
     async (_, messageId: number) => {
       return MainDatabaseService.getMessageWithContext(messageId);
+    },
+  );
+
+  // New handler: Get messages with context items
+  ipcMain.handle(
+    'chat:message:list-with-context',
+    async (
+      _,
+      payload:
+        | {
+            conversationId?: number;
+            sessionId?: number;
+            limit?: number;
+            offset?: number;
+          }
+        | number,
+      maybeLimit?: number,
+      maybeOffset?: number,
+    ): Promise<ChatMessageWithContext[]> => {
+      // Support both old positional signature and new object payload
+      if (typeof payload === 'number') {
+        return MainDatabaseService.getMessagesWithContext(
+          payload,
+          maybeLimit,
+          maybeOffset,
+        );
+      }
+      const { conversationId, sessionId, limit, offset } = payload || {};
+      const id = conversationId ?? sessionId;
+      if (typeof id !== 'number') {
+        throw new Error(
+          "chat:message:list-with-context requires 'conversationId' or 'sessionId' in payload",
+        );
+      }
+      return MainDatabaseService.getMessagesWithContext(id, limit, offset);
     },
   );
 

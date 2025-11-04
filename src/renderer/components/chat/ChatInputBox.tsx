@@ -78,10 +78,10 @@ export const ChatInputBox: React.FC<ChatInputBoxProps> = ({
     const messageContent = content || plainText.trim();
     if (sessionId && messageContent && activeProvider) {
       // 1) Optimistically add the user message locally (no server call here)
-      // Must match the key used by useGetChatMessages(sessionId) which is
-      // [QUERY_KEYS.GET_CHAT_MESSAGES, sessionId, undefined, undefined]
+      // Must match the key used by useGetChatMessagesWithContext(sessionId) which is
+      // [QUERY_KEYS.GET_CHAT_MESSAGES_WITH_CONTEXT, sessionId, undefined, undefined]
       const msgKey = [
-        QUERY_KEYS.GET_CHAT_MESSAGES,
+        QUERY_KEYS.GET_CHAT_MESSAGES_WITH_CONTEXT,
         sessionId,
         undefined,
         undefined,
@@ -179,6 +179,9 @@ export const ChatInputBox: React.FC<ChatInputBoxProps> = ({
             // Use the user's message content to generate a descriptive title
             autoRename(messageContent);
 
+            // Clear context after successful send
+            activeContextManager.clearAdditionalFiles();
+
             assistantTempIdRef.current = null;
             userTempIdRef.current = null;
           },
@@ -245,7 +248,7 @@ export const ChatInputBox: React.FC<ChatInputBoxProps> = ({
   const handleCancel = () => {
     if (!sessionId) return;
     const msgKey = [
-      QUERY_KEYS.GET_CHAT_MESSAGES,
+      QUERY_KEYS.GET_CHAT_MESSAGES_WITH_CONTEXT,
       sessionId,
       undefined,
       undefined,

@@ -33,6 +33,7 @@ interface ConversationContext {
   summary: string | null;
   relevantContext: string[];
   totalMessages: number;
+  contextItems?: Omit<NewContextItem, 'messageId'>[]; // Add context items
   strategy?: {
     phase: string;
     tokensUsed: number;
@@ -86,6 +87,7 @@ class ChatService {
     const conversationContext = await this.buildConversationContext(
       conversationId,
       budget,
+      contextItems, // Pass context items to conversation context
     );
 
     // 3) Initialize active provider and model
@@ -106,6 +108,7 @@ class ChatService {
       const fallbackContext = await this.buildFallbackContext(
         conversationId,
         budget,
+        contextItems, // Pass context items to fallback
       );
       const fallbackPrompt = this.formatOptimizedConversationPrompt(
         fallbackContext,
@@ -191,6 +194,7 @@ class ChatService {
   private static async buildConversationContext(
     conversationId: number,
     budget: TokenBudget,
+    contextItems?: Omit<NewContextItem, 'messageId'>[], // Add context items parameter
   ): Promise<ConversationContext> {
     try {
       // Get all messages for analysis
@@ -202,6 +206,7 @@ class ChatService {
           summary: null,
           relevantContext: [],
           totalMessages: 0,
+          contextItems: contextItems || [], // Include context items
         };
       }
 
@@ -278,6 +283,7 @@ class ChatService {
         summary,
         relevantContext,
         totalMessages: userMessages.length,
+        contextItems: contextItems || [], // Include context items
         strategy: {
           phase: conversationPhase.phase,
           tokensUsed: totalTokensUsed,
@@ -287,7 +293,7 @@ class ChatService {
         },
       };
     } catch (error) {
-      return this.buildFallbackContext(conversationId, budget);
+      return this.buildFallbackContext(conversationId, budget, contextItems);
     }
   }
 
@@ -295,6 +301,7 @@ class ChatService {
   private static async buildFallbackContext(
     conversationId: number,
     budget: TokenBudget,
+    contextItems?: Omit<NewContextItem, 'messageId'>[], // Add context items parameter
   ): Promise<ConversationContext> {
     try {
       // Get minimal recent messages
@@ -308,6 +315,7 @@ class ChatService {
         summary: null,
         relevantContext: [],
         totalMessages: messages.length,
+        contextItems: contextItems || [], // Include context items
         strategy: {
           phase: 'fallback',
           tokensUsed: recentMessages.reduce(
@@ -325,6 +333,7 @@ class ChatService {
         summary: null,
         relevantContext: [],
         totalMessages: 0,
+        contextItems: contextItems || [], // Include context items
       };
     }
   }
@@ -509,14 +518,73 @@ class ChatService {
     return tokenCount;
   }
 
+  // New method: Format context items for AI consumption
+  private static formatContextItemsForAI(
+    contextItems: Omit<NewContextItem, 'messageId'>[],
+    tokenBudget: number,
+  ): string {
+    if (!contextItems || contextItems.length === 0) return '';
+
+    const contextLines: string[] = [];
+    let usedTokens = 0;
+
+    contextLines.push('=== CONTEXT FILES ===');
+
+    // eslint-disable-next-line no-restricted-syntax
+    for (const item of contextItems) {
+      const itemHeader = `📄 ${item.name}${item.description ? ` - ${item.description}` : ''}:`;
+      const itemContent = `${itemHeader}\n${item.content}`;
+      const itemTokens = this.countTokens(itemContent);
+
+      if (usedTokens + itemTokens <= tokenBudget) {
+        contextLines.push('');
+        contextLines.push(itemHeader);
+        contextLines.push(item.content);
+        usedTokens += itemTokens;
+      } else {
+        // Try to fit a truncated version
+        const remainingTokens = tokenBudget - usedTokens;
+        if (remainingTokens > 100) {
+          // Reserve tokens for header and truncation indicator
+          const availableForContent =
+            remainingTokens - this.countTokens(itemHeader) - 20;
+          if (availableForContent > 50) {
+            const truncated = this.truncateText(
+              item.content,
+              availableForContent,
+            );
+            contextLines.push('');
+            contextLines.push(`${itemHeader} [truncated]`);
+            contextLines.push(truncated);
+            usedTokens = tokenBudget; // Use up remaining budget
+          }
+        }
+        break; // Stop processing more items
+      }
+    }
+
+    if (contextLines.length > 1) {
+      contextLines.push('');
+      contextLines.push('=== END CONTEXT FILES ===');
+      return contextLines.join('\n');
+    }
+
+    return '';
+  }
+
   // Enhanced method: Format optimized conversation prompt with token validation
   private static formatOptimizedConversationPrompt(
     conversationContext: ConversationContext,
     currentMessage: string,
     budget: TokenBudget,
   ): string {
-    const { recentMessages, summary, relevantContext, totalMessages } =
-      conversationContext;
+    const {
+      recentMessages,
+      summary,
+      relevantContext,
+      totalMessages,
+      contextItems,
+    } = conversationContext;
     const contextLines: string[] = [];
 
     // Calculate current message tokens
@@ -563,6 +631,24 @@ class ChatService {
         }
       }
 
+      // Add context items (files/folders) if provided
+      if (contextItems && contextItems.length > 0) {
+        const remainingTokensForContext = availableTokens - contextTokensUsed;
+        const formattedContextItems = this.formatContextItemsForAI(
+          contextItems,
+          remainingTokensForContext,
+        );
+
+        if (formattedContextItems) {
+          const contextItemsTokens = this.countTokens(formattedContextItems);
+          if (contextTokensUsed + contextItemsTokens <= availableTokens) {
+            contextLines.push('');
+            contextLines.push(formattedContextItems);
+            contextTokensUsed += contextItemsTokens;
+          }
+        }
+      }
+
       // Add recent messages (prioritize these)
       if (recentMessages.length > 0) {
         const remainingTokens = availableTokens - contextTokensUsed;
@@ -590,6 +676,18 @@ class ChatService {
 
       contextLines.push('');
       contextLines.push('=== CURRENT MESSAGE ===');
+    } else if (contextItems && contextItems.length > 0) {
+      // Handle context items when there's no conversation history
+      const formattedContextItems = this.formatContextItemsForAI(
+        contextItems,
+        availableTokens,
+      );
+
+      if (formattedContextItems) {
+        contextLines.push(formattedContextItems);
+        contextLines.push('');
+        contextLines.push('=== CURRENT MESSAGE ===');
+      }
     }
 
     // Add current message
