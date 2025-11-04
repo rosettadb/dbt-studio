@@ -154,7 +154,18 @@ export const ChatInputBox: React.FC<ChatInputBoxProps> = ({
           content: messageContent,
           contextItems: contextItems.length > 0 ? contextItems : undefined,
           onChunk: (chunk: string) => {
-            const current = queryClient.getQueryData<typeof prev>(msgKey) || [];
+            const current =
+              queryClient.getQueryData<
+                Array<{
+                  id: number;
+                  role: string;
+                  conversationId: number;
+                  content: string;
+                  createdAt: string;
+                  updatedAt: string;
+                  [k: string]: any;
+                }>
+              >(msgKey) || [];
             queryClient.setQueryData(
               msgKey,
               current.map((m) =>

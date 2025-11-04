@@ -499,7 +499,7 @@ export const useStreamChatMessage = (
     },
     onSuccess: async (message, variables, ...args) => {
       await queryClient.invalidateQueries([
-        QUERY_KEYS.GET_CHAT_MESSAGES,
+        QUERY_KEYS.GET_CHAT_MESSAGES_WITH_CONTEXT,
         variables.sessionId,
       ]);
       await queryClient.invalidateQueries([
