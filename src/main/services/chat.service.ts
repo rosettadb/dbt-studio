@@ -4,6 +4,7 @@ import type {
   ChatMessage,
 } from '../schemas/mainDatabase.schema';
 import { AIProviderManager } from './ai/providerManager.service';
+import SelectedFileContextProvider from './selectedFileContextProvider.service';
 import type { CompletionRequest } from './ai/types/completion.types';
 
 // Token management interfaces
@@ -1048,10 +1049,6 @@ class ChatService {
     filePath: string,
     projectPath?: string,
   ) {
-    const { SelectedFileContextProvider } = await import(
-      './context/selectedFileContextProvider.service'
-    );
-
     try {
       if (projectPath) {
         const resolvedContext =
@@ -1219,9 +1216,6 @@ class ChatService {
 
     try {
       const stats = await fs.stat(filePath);
-      const { SelectedFileContextProvider } = await import(
-        './context/selectedFileContextProvider.service'
-      );
 
       return {
         path: filePath,

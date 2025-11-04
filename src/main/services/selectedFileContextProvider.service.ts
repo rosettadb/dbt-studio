@@ -30,7 +30,7 @@ export interface DBTContextEnhancement {
   metadata: Record<string, any>;
 }
 
-export class SelectedFileContextProvider {
+export default class SelectedFileContextProvider {
   // Token counting cache for performance
   private static tokenCache = new Map<string, number>();
 
