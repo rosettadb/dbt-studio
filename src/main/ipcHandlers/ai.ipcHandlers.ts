@@ -6,7 +6,6 @@ import {
   AIProvider,
   ChatConversation,
   ChatMessage,
-  ChatMessageWithContext,
   NewAIProvider,
   NewAIUsageLog,
   NewChatConversation,
@@ -470,7 +469,7 @@ const registerAIHandlers = () => {
     },
   );
 
-  // New handler: Get messages with context items
+  // Get messages with context items
   ipcMain.handle(
     'chat:message:list-with-context',
     async (
@@ -485,23 +484,12 @@ const registerAIHandlers = () => {
         | number,
       maybeLimit?: number,
       maybeOffset?: number,
-    ): Promise<ChatMessageWithContext[]> => {
-      // Support both old positional signature and new object payload
-      if (typeof payload === 'number') {
-        return MainDatabaseService.getMessagesWithContext(
-          payload,
-          maybeLimit,
-          maybeOffset,
-        );
-      }
-      const { conversationId, sessionId, limit, offset } = payload || {};
-      const id = conversationId ?? sessionId;
-      if (typeof id !== 'number') {
-        throw new Error(
-          "chat:message:list-with-context requires 'conversationId' or 'sessionId' in payload",
-        );
-      }
-      return MainDatabaseService.getMessagesWithContext(id, limit, offset);
+    ) => {
+      return ChatService.getMessagesWithContext(
+        payload,
+        maybeLimit,
+        maybeOffset,
+      );
     },
   );
 
@@ -635,27 +623,7 @@ const registerAIHandlers = () => {
   ipcMain.handle(
     'chat:context:get-file-metadata',
     async (_, filePath: string) => {
-      const fs = await import('fs-extra');
-      const path = await import('path');
-      try {
-        const stats = await fs.stat(filePath);
-        const { SelectedFileContextProvider } = await import(
-          '../services/context/selectedFileContextProvider.service'
-        );
-
-        return {
-          path: filePath,
-          name: path.basename(filePath),
-          size: stats.size,
-          lastModified: stats.mtime.toISOString(),
-          language: path.extname(filePath).toLowerCase().slice(1) || 'text',
-          fileType: SelectedFileContextProvider.detectDBTFileType(filePath),
-        };
-      } catch (error) {
-        const errorMessage =
-          error instanceof Error ? error.message : String(error);
-        throw new Error(`Failed to get file metadata: ${errorMessage}`);
-      }
+      return ChatService.getFileMetadata(filePath);
     },
   );
 

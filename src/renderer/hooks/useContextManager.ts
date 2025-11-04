@@ -142,11 +142,6 @@ export const useContextManager = () => {
           // Wait for all additional files to be resolved
           const resolvedAdditionalItems = await Promise.all(resolvePromises);
           items.push(...resolvedAdditionalItems);
-
-          // eslint-disable-next-line no-console
-          console.log(
-            `Context resolution complete. Total items: ${items.length}`,
-          );
         }
       }
 

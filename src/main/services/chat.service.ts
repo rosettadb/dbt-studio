@@ -1171,6 +1171,74 @@ class ChatService {
 
     return { success: true, message: 'Tool execution cancelled' };
   }
+
+  // Get messages with context - handles both old and new payload formats
+  static async getMessagesWithContext(
+    payload:
+      | {
+          conversationId?: number;
+          sessionId?: number;
+          limit?: number;
+          offset?: number;
+        }
+      | number,
+    maybeLimit?: number,
+    maybeOffset?: number,
+  ) {
+    try {
+      // Support both old positional signature and new object payload
+      if (typeof payload === 'number') {
+        return MainDatabaseService.getMessagesWithContext(
+          payload,
+          maybeLimit,
+          maybeOffset,
+        );
+      }
+
+      const { conversationId, sessionId, limit, offset } = payload || {};
+      const id = conversationId ?? sessionId;
+
+      if (typeof id !== 'number') {
+        throw new Error(
+          "chat:message:list-with-context requires 'conversationId' or 'sessionId' in payload",
+        );
+      }
+
+      return MainDatabaseService.getMessagesWithContext(id, limit, offset);
+    } catch (error) {
+      // eslint-disable-next-line no-console
+      console.error(error);
+      throw error;
+    }
+  }
+
+  // Get file metadata without full content
+  static async getFileMetadata(filePath: string) {
+    const fs = await import('fs-extra');
+    const path = await import('path');
+
+    try {
+      const stats = await fs.stat(filePath);
+      const { SelectedFileContextProvider } = await import(
+        './context/selectedFileContextProvider.service'
+      );
+
+      return {
+        path: filePath,
+        name: path.basename(filePath),
+        size: stats.size,
+        lastModified: stats.mtime.toISOString(),
+        language: path.extname(filePath).toLowerCase().slice(1) || 'text',
+        fileType: SelectedFileContextProvider.detectDBTFileType(filePath),
+      };
+    } catch (error) {
+      // eslint-disable-next-line no-console
+      console.error(error);
+      const errorMessage =
+        error instanceof Error ? error.message : String(error);
+      throw new Error(`Failed to get file metadata: ${errorMessage}`);
+    }
+  }
 }
 
 export default ChatService;
