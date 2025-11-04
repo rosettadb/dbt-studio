@@ -339,6 +339,7 @@ export class OpenAIProvider extends BaseAIProvider {
       let totalUsage: any = null;
 
       // Process the stream
+      /* eslint-disable no-restricted-syntax */
       for await (const chunk of stream) {
         const delta = chunk.choices[0]?.delta;
         const finishReason = chunk.choices[0]?.finish_reason;
@@ -380,6 +381,7 @@ export class OpenAIProvider extends BaseAIProvider {
           break;
         }
       }
+      /* eslint-enable no-restricted-syntax */
     } catch (error) {
       throw this.handleProviderError(error, 'streaming completion');
     }
