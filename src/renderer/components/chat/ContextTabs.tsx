@@ -169,16 +169,26 @@ export const ContextTabs: React.FC<ContextTabsProps> = ({
               selectedFileContext.metadata?.path,
             )
               ? `1px solid ${theme.palette.divider}`
-              : '1px dotted',
-            borderColor: theme.palette.divider,
+              : `1px dashed ${theme.palette.action.disabled}`,
+            borderColor: contextManager.isFileInContext(
+              selectedFileContext.metadata?.path,
+            )
+              ? theme.palette.divider
+              : theme.palette.action.disabled,
             fontSize: '0.65rem',
             color: contextManager.isFileInContext(
               selectedFileContext.metadata?.path,
             )
               ? 'text.primary'
-              : 'text.secondary',
+              : 'text.disabled',
+            opacity: contextManager.isFileInContext(
+              selectedFileContext.metadata?.path,
+            )
+              ? 1
+              : 0.7,
             '&:hover': {
               backgroundColor: theme.palette.action.hover,
+              opacity: 1,
             },
           }}
         >

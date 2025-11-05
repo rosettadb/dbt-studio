@@ -6,46 +6,22 @@ import {
   DialogActions,
   Button,
   TextField,
-  List,
-  ListItem,
-  ListItemButton,
-  ListItemIcon,
-  ListItemText,
-  Checkbox,
   Box,
   Typography,
   Chip,
   InputAdornment,
-  Accordion,
-  AccordionSummary,
-  AccordionDetails,
+  Tabs,
+  Tab,
 } from '@mui/material';
 import {
   Search as SearchIcon,
-  ExpandMore as ExpandMoreIcon,
-  Description as FileIcon,
-  Code as CodeIcon,
-  DataObject as DataIcon,
-  Settings as ConfigIcon,
-  BugReport as TestIcon,
-  Storage as SeedIcon,
-  Camera as SnapshotIcon,
-  Functions as MacroIcon,
   Close as CloseIcon,
+  ViewList as ViewListIcon,
+  AccountTree as AccountTreeIcon,
 } from '@mui/icons-material';
 import { useGetProjectFiles, useGetSelectedProject } from '../../controllers';
-
-// DBT file type icons
-const DBT_FILE_TYPE_ICONS = {
-  model: CodeIcon,
-  macro: MacroIcon,
-  test: TestIcon,
-  schema: DataIcon,
-  seed: SeedIcon,
-  snapshot: SnapshotIcon,
-  project_config: ConfigIcon,
-  other: FileIcon,
-} as const;
+import { FilePickerTreeView } from './FilePickerTreeView';
+import { FilePickerListView } from './FilePickerListView';
 
 interface FileItem {
   path: string;
@@ -63,6 +39,50 @@ interface FilePickerModalProps {
   excludeFiles?: string[]; // Files to exclude from selection (already in context)
 }
 
+// Selected Files Summary Component
+interface SelectedFilesSummaryProps {
+  selectedFiles: string[];
+  onRemove: (filePath: string) => void;
+}
+
+const SelectedFilesSummary: React.FC<SelectedFilesSummaryProps> = ({
+  selectedFiles,
+  onRemove,
+}) => {
+  const totalSelected = selectedFiles.length;
+
+  if (totalSelected === 0) return null;
+
+  return (
+    <Box sx={{ mb: 2, p: 1, bgcolor: 'action.hover', borderRadius: 1 }}>
+      <Typography variant="caption" color="text.secondary">
+        Selected files ({totalSelected}):
+      </Typography>
+      <Box display="flex" flexWrap="wrap" gap={0.5} mt={0.5}>
+        {selectedFiles.slice(0, 5).map((filePath) => {
+          const fileName = filePath.split('/').pop() || filePath;
+          return (
+            <Chip
+              key={filePath}
+              label={fileName}
+              size="small"
+              onDelete={() => onRemove(filePath)}
+              deleteIcon={<CloseIcon />}
+            />
+          );
+        })}
+        {totalSelected > 5 && (
+          <Chip
+            label={`+${totalSelected - 5} more`}
+            size="small"
+            variant="outlined"
+          />
+        )}
+      </Box>
+    </Box>
+  );
+};
+
 export const FilePickerModal: React.FC<FilePickerModalProps> = ({
   open,
   onClose,
@@ -70,6 +90,7 @@ export const FilePickerModal: React.FC<FilePickerModalProps> = ({
   selectedFiles,
   excludeFiles = [],
 }) => {
+  const [activeTab, setActiveTab] = useState<'list' | 'tree'>('list');
   const [searchQuery, setSearchQuery] = useState('');
   const [localSelectedFiles, setLocalSelectedFiles] =
     useState<string[]>(selectedFiles);
@@ -169,9 +190,46 @@ export const FilePickerModal: React.FC<FilePickerModalProps> = ({
   };
 
   const handleConfirm = () => {
-    const selectedFileItems = Object.values(filteredAndGroupedFiles)
-      .flat()
-      .filter((file) => localSelectedFiles.includes(file.path));
+    // Create FileItem objects from selected file paths
+    const selectedFileItems: FileItem[] = [];
+
+    // Helper function to find file info from project files
+    const findFileInfo = (filePath: string): FileItem | null => {
+      const processNode = (node: any, parentPath = ''): FileItem | null => {
+        if (node.type === 'file' && node.path === filePath) {
+          const relativePath = parentPath
+            ? `${parentPath}/${node.name}`
+            : node.name;
+          return {
+            path: node.path,
+            name: node.name,
+            relativePath,
+            type: 'file',
+            fileType: detectFileType(node.path),
+          };
+        }
+        if (node.children) {
+          const currentPath = parentPath
+            ? `${parentPath}/${node.name}`
+            : node.name;
+          const found = node.children
+            .map((child: any) => processNode(child, currentPath))
+            .find((result: any) => result !== null);
+          if (found) return found;
+        }
+        return null;
+      };
+
+      return processNode(projectFiles);
+    };
+
+    // Convert selected file paths to FileItem objects
+    localSelectedFiles.forEach((filePath) => {
+      const fileInfo = findFileInfo(filePath);
+      if (fileInfo) {
+        selectedFileItems.push(fileInfo);
+      }
+    });
 
     onSelect(selectedFileItems);
     onClose();
@@ -181,10 +239,9 @@ export const FilePickerModal: React.FC<FilePickerModalProps> = ({
     // Reset to the original selected files state
     setLocalSelectedFiles(selectedFiles);
     setSearchQuery('');
+    setActiveTab('list');
     onClose();
   };
-
-  const totalSelected = localSelectedFiles.length;
 
   return (
     <Dialog
@@ -192,8 +249,10 @@ export const FilePickerModal: React.FC<FilePickerModalProps> = ({
       onClose={handleCancel}
       maxWidth="md"
       fullWidth
-      PaperProps={{
-        sx: { height: '80vh' },
+      slotProps={{
+        paper: {
+          sx: { height: '80vh' },
+        },
       }}
     >
       <DialogTitle>
@@ -210,133 +269,72 @@ export const FilePickerModal: React.FC<FilePickerModalProps> = ({
       </DialogTitle>
 
       <DialogContent>
-        {/* Search */}
+        {/* Search - shared across tabs */}
         <TextField
           fullWidth
           placeholder="Search files..."
           value={searchQuery}
           onChange={(e) => setSearchQuery(e.target.value)}
           sx={{ mb: 2 }}
-          InputProps={{
-            startAdornment: (
-              <InputAdornment position="start">
-                <SearchIcon />
-              </InputAdornment>
-            ),
+          slotProps={{
+            input: {
+              startAdornment: (
+                <InputAdornment position="start">
+                  <SearchIcon />
+                </InputAdornment>
+              ),
+            },
           }}
         />
 
-        {/* Selected files summary */}
-        {totalSelected > 0 && (
-          <Box sx={{ mb: 2, p: 1, bgcolor: 'action.hover', borderRadius: 1 }}>
-            <Typography variant="caption" color="text.secondary">
-              Selected files ({totalSelected}):
-            </Typography>
-            <Box display="flex" flexWrap="wrap" gap={0.5} mt={0.5}>
-              {localSelectedFiles.slice(0, 5).map((filePath) => {
-                const fileName = filePath.split('/').pop() || filePath;
-                return (
-                  <Chip
-                    key={filePath}
-                    label={fileName}
-                    size="small"
-                    onDelete={() => handleFileToggle(filePath)}
-                    deleteIcon={<CloseIcon />}
-                  />
-                );
-              })}
-              {totalSelected > 5 && (
-                <Chip
-                  label={`+${totalSelected - 5} more`}
-                  size="small"
-                  variant="outlined"
-                />
-              )}
-            </Box>
-          </Box>
-        )}
+        {/* Selected files summary - shared */}
+        <SelectedFilesSummary
+          selectedFiles={localSelectedFiles}
+          onRemove={handleFileToggle}
+        />
 
-        {/* File groups */}
-        <Box sx={{ maxHeight: '50vh', overflow: 'auto' }}>
-          {(() => {
-            if (isLoading) {
-              return <Typography>Loading files...</Typography>;
-            }
+        {/* Tab Navigation */}
+        <Tabs
+          value={activeTab}
+          onChange={(_, newValue) => setActiveTab(newValue)}
+          sx={{ borderBottom: 1, borderColor: 'divider', mb: 2 }}
+        >
+          <Tab
+            label="List View"
+            value="list"
+            icon={<ViewListIcon />}
+            iconPosition="start"
+            sx={{ textTransform: 'none' }}
+          />
+          <Tab
+            label="Tree View"
+            value="tree"
+            icon={<AccountTreeIcon />}
+            iconPosition="start"
+            sx={{ textTransform: 'none' }}
+          />
+        </Tabs>
 
-            if (Object.keys(filteredAndGroupedFiles).length === 0) {
-              const message = searchQuery
-                ? 'No files match your search.'
-                : 'No files found in project.';
-              return <Typography color="text.secondary">{message}</Typography>;
-            }
-
-            return Object.entries(filteredAndGroupedFiles).map(
-              ([fileType, files]) => {
-                const IconComponent =
-                  DBT_FILE_TYPE_ICONS[
-                    fileType as keyof typeof DBT_FILE_TYPE_ICONS
-                  ] || FileIcon;
-
-                return (
-                  <Accordion key={fileType} defaultExpanded={false}>
-                    <AccordionSummary expandIcon={<ExpandMoreIcon />}>
-                      <Box display="flex" alignItems="center" gap={1}>
-                        <IconComponent fontSize="small" />
-                        <Typography variant="subtitle2">
-                          {fileType.toUpperCase()} ({files.length})
-                        </Typography>
-                      </Box>
-                    </AccordionSummary>
-                    <AccordionDetails sx={{ pt: 0 }}>
-                      <List dense>
-                        {files.map((file) => (
-                          <ListItem key={file.path} disablePadding>
-                            <ListItemButton
-                              onClick={() => handleFileToggle(file.path)}
-                              selected={localSelectedFiles.includes(file.path)}
-                              disabled={excludeFiles.includes(file.path)}
-                            >
-                              <ListItemIcon>
-                                <Checkbox
-                                  checked={localSelectedFiles.includes(
-                                    file.path,
-                                  )}
-                                  disabled={excludeFiles.includes(file.path)}
-                                  tabIndex={-1}
-                                  disableRipple
-                                  size="small"
-                                />
-                              </ListItemIcon>
-                              <ListItemText
-                                primary={file.name}
-                                secondary={
-                                  excludeFiles.includes(file.path)
-                                    ? `${file.relativePath} (already in context)`
-                                    : file.relativePath
-                                }
-                                primaryTypographyProps={{
-                                  variant: 'body2',
-                                  color: excludeFiles.includes(file.path)
-                                    ? 'text.disabled'
-                                    : 'text.primary',
-                                }}
-                                secondaryTypographyProps={{
-                                  variant: 'caption',
-                                  color: excludeFiles.includes(file.path)
-                                    ? 'text.disabled'
-                                    : 'text.secondary',
-                                }}
-                              />
-                            </ListItemButton>
-                          </ListItem>
-                        ))}
-                      </List>
-                    </AccordionDetails>
-                  </Accordion>
-                );
-              },
-            );
-          })()}
+        {/* Tab Content */}
+        <Box sx={{ minHeight: '400px' }}>
+          {activeTab === 'list' && (
+            <FilePickerListView
+              isLoading={isLoading}
+              searchQuery={searchQuery}
+              filteredAndGroupedFiles={filteredAndGroupedFiles}
+              selectedFiles={localSelectedFiles}
+              excludeFiles={excludeFiles}
+              onFileToggle={handleFileToggle}
+            />
+          )}
+          {activeTab === 'tree' && (
+            <FilePickerTreeView
+              searchQuery={searchQuery}
+              selectedFiles={localSelectedFiles}
+              excludeFiles={excludeFiles}
+              onFileToggle={handleFileToggle}
+            />
+          )}
         </Box>
       </DialogContent>
 
