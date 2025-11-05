@@ -52,6 +52,7 @@ async function handleDeepLink(url: string) {
     ) {
       const token = parsedUrl.searchParams.get('token');
       if (token) {
+        console.log(parsedUrl, token, 'token');
         await RosettaCloudService.storeToken(token);
 
         windowManager
@@ -73,6 +74,7 @@ async function handleDeepLink(url: string) {
         });
     }
   } catch (error) {
+    console.error(error);
     windowManager?.getMainWindow()?.webContents.send('rosettaCloud:authError', {
       error:
         error instanceof Error

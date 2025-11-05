@@ -5,12 +5,13 @@ import { CloudDeploymentPayload, Secret } from '../../types/backend';
 import { UserProfile } from '../../types/profile';
 
 import {
-  CLOUD_DASHBOARD_TOKEN_KEY,
+  CLOUD_DASHBOARD_API_KEY,
   ROSETTA_CLOUD_BASE_URL,
 } from '../utils/constants';
 import SettingsService from './settings.service';
 import SecureStorageService from './secureStorage.service';
 import ProjectsService from './projects.service';
+import { secureStorageService } from '../../renderer/services/secureStorage.service';
 
 export default class RosettaCloudService {
   private static cachedProfile: UserProfile | null = null;
@@ -223,15 +224,15 @@ export default class RosettaCloudService {
   }
 
   static async storeToken(token: string): Promise<void> {
-    await SecureStorageService.setCredential(CLOUD_DASHBOARD_TOKEN_KEY, token);
+    await secureStorageService.set(CLOUD_DASHBOARD_API_KEY, token);
   }
 
   static async getToken(): Promise<string | null> {
-    return SecureStorageService.getCredential(CLOUD_DASHBOARD_TOKEN_KEY);
+    return SecureStorageService.getCredential(CLOUD_DASHBOARD_API_KEY);
   }
 
   static async clearToken(): Promise<void> {
-    await SecureStorageService.deleteCredential(CLOUD_DASHBOARD_TOKEN_KEY);
+    await SecureStorageService.deleteCredential(CLOUD_DASHBOARD_API_KEY);
     this.clearProfile();
   }
 
