@@ -13,6 +13,12 @@ import {
   CustomError,
   Secret,
 } from '../../types/backend';
+import {
+  ApiKeyState,
+  UseApiKeyResult,
+  UseAuthLoginResult,
+  UseAuthLogoutResult,
+} from '../../types/apiKey';
 import { rosettaCloudServices } from '../services';
 import { QUERY_KEYS } from '../config/constants';
 
@@ -40,15 +46,32 @@ export const usePushProjectToCloud = (
   });
 };
 
-export const useAuthToken = (
-  options?: UseQueryOptions<string | null, CustomError, string | null>,
-) => {
-  return useQuery({
-    queryKey: [QUERY_KEYS.AUTH_TOKEN],
-    queryFn: () => rosettaCloudServices.getToken(),
+export const useApiKey = (
+  options?: UseQueryOptions<ApiKeyState, CustomError, ApiKeyState>,
+): UseApiKeyResult => {
+  const result = useQuery({
+    queryKey: [QUERY_KEYS.API_KEY],
+    queryFn: () => rosettaCloudServices.getApiKey(),
     ...options,
   });
+
+  return {
+    data: result.data ?? null,
+    isLoading: result.isLoading,
+    error: result.error,
+    refetch: result.refetch,
+  };
 };
+
+export const useValidateApiKey = () => {
+  return useMutation({
+    mutationFn: (apiKey: string) => rosettaCloudServices.validateApiKey(apiKey),
+    retry: false, // Don't retry validation failures
+  });
+};
+
+// Legacy hook removed as part of JWT token to API key migration
+// Use useApiKey() instead
 
 export const useGetSecrets = (
   projectId?: string,
@@ -63,29 +86,48 @@ export const useGetSecrets = (
 
 export const useAuthLogin = (
   options?: UseMutationOptions<string, CustomError, void>,
-): UseMutationResult<string, CustomError, void> => {
-  return useMutation({
+): UseAuthLoginResult => {
+  const mutation = useMutation({
     mutationFn: () => rosettaCloudServices.openLogin(),
     ...options,
   });
+
+  return {
+    mutate: mutation.mutate,
+    isLoading: mutation.isLoading,
+    error: mutation.error,
+  };
 };
 
 export const useAuthLogout = (
   options?: UseMutationOptions<void, CustomError, void>,
-): UseMutationResult<void, CustomError, void> => {
+): UseAuthLogoutResult => {
   const { onSuccess: onCustomSuccess, onError: onCustomError } = options || {};
   const queryClient = useQueryClient();
 
-  return useMutation({
+  const mutation = useMutation({
     mutationFn: () => rosettaCloudServices.logout(),
     onSuccess: async (...args) => {
-      await queryClient.invalidateQueries([QUERY_KEYS.AUTH_TOKEN]);
+      // Invalidate both API key and profile queries
+      await queryClient.invalidateQueries([QUERY_KEYS.API_KEY]);
+      await queryClient.invalidateQueries([QUERY_KEYS.USER_PROFILE]);
+
+      toast.success('Logged out successfully');
       onCustomSuccess?.(...args);
     },
-    onError: (...args) => {
-      onCustomError?.(...args);
+    onError: (error, ...args) => {
+      // eslint-disable-next-line no-console
+      console.error('Logout error:', error);
+      toast.error('Failed to logout');
+      onCustomError?.(error as CustomError, ...args);
     },
   });
+
+  return {
+    mutate: mutation.mutate,
+    isLoading: mutation.isLoading,
+    error: mutation.error,
+  };
 };
 
 export const useAuthSubscription = () => {
@@ -93,30 +135,39 @@ export const useAuthSubscription = () => {
 
   React.useEffect(() => {
     const unsubscribeSuccess = rosettaCloudServices.subscribeToAuthSuccess(
-      () => {
-        // Don't store token here - it's already stored in main process
-        // Just show success message
+      (payload) => {
+        // eslint-disable-next-line no-console
+        console.log('Auth success received:', payload);
         toast.success('Cloud Dashboard login completed.');
+
+        // Invalidate queries to refresh data
+        queryClient.invalidateQueries([QUERY_KEYS.API_KEY]);
+        queryClient.invalidateQueries([QUERY_KEYS.USER_PROFILE]);
       },
     );
 
     const unsubscribeError = rosettaCloudServices.subscribeToAuthError(
-      (message) => {
-        toast.error(message);
+      (payload) => {
+        // eslint-disable-next-line no-console
+        console.error('Auth error received:', payload);
+        toast.error(payload.error || 'Authentication failed');
       },
     );
 
-    const unsubscribeTokenUpdate = rosettaCloudServices.subscribeToTokenUpdate(
-      () => {
-        // Invalidate the auth token query to force a refetch
-        queryClient.invalidateQueries([QUERY_KEYS.AUTH_TOKEN]);
-      },
-    );
+    const unsubscribeApiKeyUpdate =
+      rosettaCloudServices.subscribeToApiKeyUpdate(() => {
+        // eslint-disable-next-line no-console
+        console.log('API key updated');
+
+        // Invalidate queries when API key is updated
+        queryClient.invalidateQueries([QUERY_KEYS.API_KEY]);
+        queryClient.invalidateQueries([QUERY_KEYS.USER_PROFILE]);
+      });
 
     return () => {
       unsubscribeSuccess();
       unsubscribeError();
-      unsubscribeTokenUpdate();
+      unsubscribeApiKeyUpdate();
     };
   }, [queryClient]);
 };

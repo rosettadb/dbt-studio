@@ -230,8 +230,7 @@ export type SettingsType = {
   mainDatabaseSize?: string;
   sqliteVersion?: string;
   mainDatabaseStatus?: 'connected' | 'disconnected' | 'error';
-  cloudWorkspaceUrl?: string;
-  cloudWorkspaceLastSyncedAt?: string;
+
   env?: 'local' | 'cloud';
 };
 

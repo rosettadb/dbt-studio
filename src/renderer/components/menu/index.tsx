@@ -44,7 +44,7 @@ import {
   useSelectProject,
   useProfile,
   useProfileSubscription,
-  useAuthToken,
+  useApiKey,
   useAuthLogin,
   useAuthLogout,
   useAuthSubscription,
@@ -72,8 +72,8 @@ export const Menu: React.FC = () => {
   const [newBranchModal, setNewBranchModal] = React.useState(false);
   const [anchorEl, setAnchorEl] = React.useState<null | HTMLElement>(null);
 
-  // Auth hooks
-  const { data: authToken, isLoading: tokenLoading } = useAuthToken();
+  // Auth hooks - Updated to use API key
+  const { data: apiKey, isLoading: apiKeyLoading } = useApiKey();
   const { mutate: login, isLoading: loginLoading } = useAuthLogin({
     onSuccess: () => {
       toast.success(
@@ -84,14 +84,7 @@ export const Menu: React.FC = () => {
       toast.error(`Login failed: ${error.message || 'Unknown error'}`);
     },
   });
-  const { mutate: logout, isLoading: logoutLoading } = useAuthLogout({
-    onSuccess: () => {
-      toast.success('Logged out successfully');
-    },
-    onError: (error) => {
-      toast.error(`Logout failed: ${error.message || 'Unknown error'}`);
-    },
-  });
+  const { mutate: logout, isLoading: logoutLoading } = useAuthLogout();
 
   // Subscribe to auth success events
   useAuthSubscription();
@@ -102,7 +95,7 @@ export const Menu: React.FC = () => {
   // Get profile data
   const { data: profile } = useProfile();
 
-  const isAuthLoading = tokenLoading || loginLoading || logoutLoading;
+  const isAuthLoading = apiKeyLoading || loginLoading || logoutLoading;
   const [authMenuAnchor, setAuthMenuAnchor] =
     React.useState<null | HTMLElement>(null);
 
@@ -118,7 +111,7 @@ export const Menu: React.FC = () => {
   const handleAuthButtonClick = (
     event: React.MouseEvent<HTMLButtonElement>,
   ) => {
-    if (authToken) {
+    if (apiKey) {
       handleAuthMenuOpen(event);
       return;
     }
@@ -429,20 +422,18 @@ export const Menu: React.FC = () => {
 
           {/* Authentication Menu */}
           <Tooltip
-            title={
-              authToken ? 'View profile options' : 'Login to Cloud Dashboard'
-            }
+            title={apiKey ? 'View profile options' : 'Login to Cloud Dashboard'}
           >
             <IconButton
               onClick={handleAuthButtonClick}
               disabled={isAuthLoading}
               color="primary"
               sx={{
-                backgroundColor: authToken
+                backgroundColor: apiKey
                   ? `${theme.palette.success.light}20`
                   : 'transparent',
                 '&:hover': {
-                  backgroundColor: authToken
+                  backgroundColor: apiKey
                     ? `${theme.palette.success.light}40`
                     : theme.palette.action.hover,
                 },
@@ -453,7 +444,7 @@ export const Menu: React.FC = () => {
                 if (isAuthLoading) {
                   return <CircularProgress size={20} />;
                 }
-                if (authToken) {
+                if (apiKey) {
                   // Show user initials if profile data is available
                   if (profile?.name || profile?.email) {
                     const getInitials = (
@@ -493,7 +484,7 @@ export const Menu: React.FC = () => {
               })()}
             </IconButton>
           </Tooltip>
-          {authToken ? (
+          {apiKey ? (
             <DD
               anchorEl={authMenuAnchor}
               open={Boolean(authMenuAnchor)}

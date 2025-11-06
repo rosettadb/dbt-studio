@@ -1,9 +1,6 @@
 import { client } from '../config/client';
 import { CloudDeploymentPayload, Secret } from '../../types/backend';
-
-export type AuthSuccessPayload = {
-  token: string;
-};
+import { AuthSuccessPayload, AuthErrorPayload } from '../../types/apiKey';
 
 export const openLogin = async (): Promise<string> => {
   const { data } = await client.post<undefined, string>(
@@ -13,8 +10,8 @@ export const openLogin = async (): Promise<string> => {
   return data;
 };
 
-export const getToken = async (): Promise<string | null> => {
-  const { data } = await client.get<string | null>('rosettaCloud:getToken');
+export const getApiKey = async (): Promise<string | null> => {
+  const { data } = await client.get<string | null>('rosettaCloud:getApiKey');
   return data;
 };
 
@@ -22,8 +19,18 @@ export const logout = async (): Promise<void> => {
   await client.post<undefined, void>('rosettaCloud:logout', undefined);
 };
 
-export const storeToken = async (token: string): Promise<void> => {
-  await client.post<string, void>('rosettaCloud:storeToken', token);
+export const storeApiKey = async (apiKey: string): Promise<void> => {
+  await client.post<string, void>('rosettaCloud:storeApiKey', apiKey);
+};
+
+export const validateApiKey = async (
+  apiKey: string,
+): Promise<{ valid: boolean; error?: string }> => {
+  const { data } = await client.post<
+    string,
+    { valid: boolean; error?: string }
+  >('rosettaCloud:validateApiKey', apiKey);
+  return data;
 };
 
 export const subscribeToAuthSuccess = (
@@ -31,10 +38,10 @@ export const subscribeToAuthSuccess = (
 ) => {
   const listener: (...args: unknown[]) => void = (_event, payload) => {
     const data = (payload ?? {}) as Partial<AuthSuccessPayload>;
-    if (!data.token) {
+    if (!data.apiKey) {
       return;
     }
-    callback({ token: data.token });
+    callback({ apiKey: data.apiKey });
   };
 
   window.electron.ipcRenderer.on('rosettaCloud:authSuccess', listener);
@@ -47,10 +54,12 @@ export const subscribeToAuthSuccess = (
   };
 };
 
-export const subscribeToAuthError = (callback: (message: string) => void) => {
+export const subscribeToAuthError = (
+  callback: (payload: AuthErrorPayload) => void,
+) => {
   const listener: (...args: unknown[]) => void = (_event, payload) => {
-    const { error } = (payload ?? {}) as { error?: string };
-    callback(error ?? 'Authentication failed.');
+    const data = (payload ?? {}) as Partial<AuthErrorPayload>;
+    callback({ error: data.error ?? 'Authentication failed.' });
   };
 
   window.electron.ipcRenderer.on('rosettaCloud:authError', listener);
@@ -63,16 +72,16 @@ export const subscribeToAuthError = (callback: (message: string) => void) => {
   };
 };
 
-export const subscribeToTokenUpdate = (callback: () => void) => {
+export const subscribeToApiKeyUpdate = (callback: () => void) => {
   const listener: (...args: unknown[]) => void = () => {
     callback();
   };
 
-  window.electron.ipcRenderer.on('rosettaCloud:authTokenUpdated', listener);
+  window.electron.ipcRenderer.on('rosettaCloud:apiKeyUpdated', listener);
 
   return () => {
     window.electron.ipcRenderer.removeListener(
-      'rosettaCloud:authTokenUpdated',
+      'rosettaCloud:apiKeyUpdated',
       listener,
     );
   };

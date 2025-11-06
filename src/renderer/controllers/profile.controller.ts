@@ -69,8 +69,8 @@ export const useProfileSubscription = () => {
       queryClient.setQueryData([PROFILE_QUERY_KEY], null);
     };
 
-    const handleTokenUpdate = () => {
-      // Refresh profile when token updates
+    const handleApiKeyUpdate = () => {
+      // Refresh profile when API key updates
       queryClient.invalidateQueries({ queryKey: [PROFILE_QUERY_KEY] });
     };
 
@@ -85,8 +85,8 @@ export const useProfileSubscription = () => {
     );
     window.electron.ipcRenderer.on('rosettaCloud:authError', handleAuthError);
     window.electron.ipcRenderer.on(
-      'rosettaCloud:authTokenUpdated',
-      handleTokenUpdate,
+      'rosettaCloud:apiKeyUpdated',
+      handleApiKeyUpdate,
     );
     window.electron.ipcRenderer.on('rosettaCloud:logout', handleLogout);
 
@@ -100,8 +100,8 @@ export const useProfileSubscription = () => {
         handleAuthError,
       );
       window.electron.ipcRenderer.removeListener(
-        'rosettaCloud:authTokenUpdated',
-        handleTokenUpdate,
+        'rosettaCloud:apiKeyUpdated',
+        handleApiKeyUpdate,
       );
       window.electron.ipcRenderer.removeListener(
         'rosettaCloud:logout',

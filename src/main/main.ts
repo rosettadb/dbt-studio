@@ -50,29 +50,44 @@ async function handleDeepLink(url: string) {
       parsedUrl.protocol === 'rosetta:' &&
       (parsedUrl.pathname === '//auth' || parsedUrl.host === 'auth')
     ) {
-      const token = parsedUrl.searchParams.get('token');
-      if (token) {
-        await RosettaCloudService.storeToken(token);
+      const apiKey = parsedUrl.searchParams.get('token'); // Still called 'token' in URL for compatibility
+      if (apiKey) {
+        try {
+          await RosettaCloudService.storeApiKey(apiKey);
 
-        windowManager
-          ?.getMainWindow()
-          ?.webContents.send('rosettaCloud:authTokenUpdated');
+          windowManager
+            ?.getMainWindow()
+            ?.webContents.send('rosettaCloud:apiKeyUpdated');
 
-        windowManager
-          ?.getMainWindow()
-          ?.webContents.send('rosettaCloud:authSuccess', {
-            token,
-          });
-        return;
+          windowManager
+            ?.getMainWindow()
+            ?.webContents.send('rosettaCloud:authSuccess', {
+              apiKey,
+            });
+
+          return;
+        } catch (storageError) {
+          console.error(
+            'Failed to store API key from deep link:',
+            storageError,
+          );
+          windowManager
+            ?.getMainWindow()
+            ?.webContents.send('rosettaCloud:authError', {
+              error: 'Failed to store API key. Please try again.',
+            });
+          return;
+        }
       }
 
       windowManager
         ?.getMainWindow()
         ?.webContents.send('rosettaCloud:authError', {
-          error: 'Missing token in deep link response.',
+          error: 'Missing API key in deep link response.',
         });
     }
   } catch (error) {
+    console.error('Deep link processing error:', error);
     windowManager?.getMainWindow()?.webContents.send('rosettaCloud:authError', {
       error:
         error instanceof Error

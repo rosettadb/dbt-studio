@@ -26,17 +26,24 @@ const registerRosettaCloudIpcHandlers = () => {
     return RosettaCloudService.openLogin();
   });
 
-  ipcMain.handle('rosettaCloud:getToken', async () => {
-    return RosettaCloudService.getToken();
+  ipcMain.handle('rosettaCloud:getApiKey', async () => {
+    return RosettaCloudService.getApiKey();
   });
 
   ipcMain.handle('rosettaCloud:logout', async () => {
-    await RosettaCloudService.clearToken();
+    await RosettaCloudService.clearApiKey();
   });
 
-  ipcMain.handle('rosettaCloud:storeToken', async (_event, token: string) => {
-    await RosettaCloudService.storeToken(token);
+  ipcMain.handle('rosettaCloud:storeApiKey', async (_event, apiKey: string) => {
+    await RosettaCloudService.storeApiKey(apiKey);
   });
+
+  ipcMain.handle(
+    'rosettaCloud:validateApiKey',
+    async (_event, apiKey: string) => {
+      return RosettaCloudService.validateApiKey(apiKey);
+    },
+  );
 
   ipcMain.handle(
     'rosettaCloud:getSecrets',

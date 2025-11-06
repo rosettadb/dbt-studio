@@ -55,11 +55,12 @@ export type RosettaCloudChannels =
   | 'rosettaCloud:getCachedProfile'
   | 'rosettaCloud:login'
   | 'rosettaCloud:logout'
-  | 'rosettaCloud:getToken'
-  | 'rosettaCloud:storeToken'
+  | 'rosettaCloud:getApiKey'
+  | 'rosettaCloud:storeApiKey'
+  | 'rosettaCloud:validateApiKey'
   | 'rosettaCloud:authSuccess'
   | 'rosettaCloud:authError'
-  | 'rosettaCloud:authTokenUpdated'
+  | 'rosettaCloud:apiKeyUpdated'
   | 'rosettaCloud:getSecrets'
   | 'rosettaCloud:deleteSecret';
 

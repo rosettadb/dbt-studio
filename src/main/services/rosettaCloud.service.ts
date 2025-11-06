@@ -4,16 +4,14 @@ import { v4 as uuidv4 } from 'uuid';
 import { CloudDeploymentPayload, Secret } from '../../types/backend';
 import { UserProfile } from '../../types/profile';
 
-import {
-  CLOUD_DASHBOARD_TOKEN_KEY,
-  ROSETTA_CLOUD_BASE_URL,
-} from '../utils/constants';
-import SettingsService from './settings.service';
+import { ROSETTA_CLOUD_BASE_URL } from '../utils/constants';
 import SecureStorageService from './secureStorage.service';
 import ProjectsService from './projects.service';
 
 export default class RosettaCloudService {
   private static cachedProfile: UserProfile | null = null;
+
+  private static readonly API_KEY_STORAGE_KEY = 'cloud-api-key';
 
   static async pushProjectToCloud(body: CloudDeploymentPayload): Promise<void> {
     const { id, secrets } = body;
@@ -24,19 +22,17 @@ export default class RosettaCloudService {
       throw new Error('Project not found');
     }
 
-    const settings = await SettingsService.loadSettings();
-    const rosettaCloudUrl =
-      settings.cloudWorkspaceUrl ?? ROSETTA_CLOUD_BASE_URL;
+    const rosettaCloudUrl = ROSETTA_CLOUD_BASE_URL;
     const baseUrl = rosettaCloudUrl.replace(/\/$/, '');
 
     const postJson = async (url: string, data?: object): Promise<any> => {
-      const token = await this.getToken();
+      const apiKey = await this.getApiKey();
       const response = await fetch(url, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           Accept: 'application/json',
-          Authorization: `Bearer ${token}`,
+          Authorization: `Bearer ${apiKey}`,
         },
         body: data ? JSON.stringify(data) : undefined,
       });
@@ -99,12 +95,10 @@ export default class RosettaCloudService {
       throw new Error('Project has not been deployed to cloud');
     }
 
-    const settings = await SettingsService.loadSettings();
-    const rosettaCloudUrl =
-      settings.cloudWorkspaceUrl ?? ROSETTA_CLOUD_BASE_URL;
+    const rosettaCloudUrl = ROSETTA_CLOUD_BASE_URL;
     const baseUrl = rosettaCloudUrl.replace(/\/$/, '');
 
-    const token = await this.getToken();
+    const apiKey = await this.getApiKey();
     const secretsEndpoint = `${baseUrl}/api/projects/${project.externalId}/secrets`;
 
     const response = await fetch(secretsEndpoint, {
@@ -112,7 +106,7 @@ export default class RosettaCloudService {
       headers: {
         'Content-Type': 'application/json',
         Accept: 'application/json',
-        Authorization: `Bearer ${token}`,
+        Authorization: `Bearer ${apiKey}`,
       },
     });
 
@@ -137,12 +131,10 @@ export default class RosettaCloudService {
       throw new Error('Project has not been deployed to cloud');
     }
 
-    const settings = await SettingsService.loadSettings();
-    const rosettaCloudUrl =
-      settings.cloudWorkspaceUrl ?? ROSETTA_CLOUD_BASE_URL;
+    const rosettaCloudUrl = ROSETTA_CLOUD_BASE_URL;
     const baseUrl = rosettaCloudUrl.replace(/\/$/, '');
 
-    const token = await this.getToken();
+    const apiKey = await this.getApiKey();
     const deleteEndpoint = `${baseUrl}/api/projects/${project.externalId}/secrets?secretId=${secretId}`;
 
     const response = await fetch(deleteEndpoint, {
@@ -150,7 +142,7 @@ export default class RosettaCloudService {
       headers: {
         'Content-Type': 'application/json',
         Accept: 'application/json',
-        Authorization: `Bearer ${token}`,
+        Authorization: `Bearer ${apiKey}`,
       },
     });
 
@@ -161,11 +153,11 @@ export default class RosettaCloudService {
 
   static async getProfile(): Promise<UserProfile | null> {
     try {
-      const token = await this.getToken();
+      const apiKey = await this.getApiKey();
 
-      if (!token) {
+      if (!apiKey) {
         // eslint-disable-next-line no-console
-        console.log('No auth token available for profile fetch');
+        console.log('No API key available for profile fetch');
         return null;
       }
 
@@ -174,7 +166,7 @@ export default class RosettaCloudService {
         {
           method: 'GET',
           headers: {
-            Authorization: `Bearer ${token}`,
+            Authorization: `Bearer ${apiKey}`,
             'Content-Type': 'application/json',
           },
         },
@@ -182,8 +174,8 @@ export default class RosettaCloudService {
 
       if (!response.ok) {
         if (response.status === 401) {
-          // Token expired, clear it
-          await this.clearToken();
+          // API key invalid, clear it
+          await this.clearApiKey();
           this.cachedProfile = null;
           return null;
         }
@@ -222,21 +214,87 @@ export default class RosettaCloudService {
     return uuid;
   }
 
-  static async storeToken(token: string): Promise<void> {
-    await SecureStorageService.setCredential(CLOUD_DASHBOARD_TOKEN_KEY, token);
+  static async storeApiKey(apiKey: string): Promise<void> {
+    try {
+      await SecureStorageService.setCredential(
+        this.API_KEY_STORAGE_KEY,
+        apiKey,
+      );
+
+      // eslint-disable-next-line no-console
+      console.log('API key stored successfully');
+    } catch (error) {
+      // eslint-disable-next-line no-console
+      console.error('Failed to store API key:', error);
+      throw error;
+    }
   }
 
-  static async getToken(): Promise<string | null> {
-    return SecureStorageService.getCredential(CLOUD_DASHBOARD_TOKEN_KEY);
+  static async getApiKey(): Promise<string | null> {
+    try {
+      return await SecureStorageService.getCredential(this.API_KEY_STORAGE_KEY);
+    } catch (error) {
+      // eslint-disable-next-line no-console
+      console.error('Failed to retrieve API key:', error);
+      return null;
+    }
   }
 
-  static async clearToken(): Promise<void> {
-    await SecureStorageService.deleteCredential(CLOUD_DASHBOARD_TOKEN_KEY);
-    this.clearProfile();
+  static async clearApiKey(): Promise<void> {
+    try {
+      await SecureStorageService.deleteCredential(this.API_KEY_STORAGE_KEY);
+
+      this.clearProfile();
+
+      // eslint-disable-next-line no-console
+      console.log('API key cleared successfully');
+    } catch (error) {
+      // eslint-disable-next-line no-console
+      console.error('Failed to clear API key:', error);
+      throw error;
+    }
   }
 
   static async isAuthenticated(): Promise<boolean> {
-    const token = await this.getToken();
-    return token !== null;
+    const apiKey = await this.getApiKey();
+    return !!apiKey;
+  }
+
+  static async validateApiKey(
+    apiKey: string,
+  ): Promise<{ valid: boolean; error?: string }> {
+    try {
+      const response = await fetch(
+        `${ROSETTA_CLOUD_BASE_URL}/api/electron/profile`,
+        {
+          method: 'GET',
+          headers: {
+            Authorization: `Bearer ${apiKey}`,
+            'Content-Type': 'application/json',
+          },
+        },
+      );
+
+      if (response.ok) {
+        return { valid: true };
+      }
+
+      if (response.status === 401) {
+        return { valid: false, error: 'Invalid API key' };
+      }
+
+      if (response.status === 404) {
+        return {
+          valid: false,
+          error: 'API key not found or user does not exist',
+        };
+      }
+
+      return { valid: false, error: `Validation failed: ${response.status}` };
+    } catch (error) {
+      // eslint-disable-next-line no-console
+      console.error('API key validation error:', error);
+      return { valid: false, error: 'Unable to connect to Rosetta Cloud' };
+    }
   }
 }
