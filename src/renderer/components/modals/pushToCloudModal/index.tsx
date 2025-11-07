@@ -97,6 +97,7 @@ export const PushToCloudModal: React.FC<PushToCloudModalProps> = ({
   >([]);
   const [newEnvKey, setNewEnvKey] = React.useState('');
   const [newEnvValue, setNewEnvValue] = React.useState('');
+  const [dbtArguments, setDbtArguments] = React.useState('');
 
   const isRunMode = React.useMemo(
     () => !!project?.externalId,
@@ -285,6 +286,10 @@ export const PushToCloudModal: React.FC<PushToCloudModalProps> = ({
         reducedSecrets.ROSETTA_GIT_PASSWORD = githubPassword;
       }
 
+      const fullCommand = dbtArguments.trim()
+        ? `${command} ${dbtArguments.trim()}`
+        : command;
+
       await pushProject({
         id: project.id,
         title: title.trim(),
@@ -292,7 +297,7 @@ export const PushToCloudModal: React.FC<PushToCloudModalProps> = ({
         gitBranch: gitBranch.trim() || 'main',
         githubUsername: isRunMode ? undefined : githubUsername.trim(),
         githubPassword: isRunMode ? undefined : githubPassword,
-        CUSTOM_DBT_COMMANDS: command,
+        CUSTOM_DBT_COMMANDS: `dbt ${fullCommand}`,
         secrets: reducedSecrets,
       });
 
@@ -580,7 +585,51 @@ export const PushToCloudModal: React.FC<PushToCloudModalProps> = ({
           }}
         />
 
-        {/* Git Credentials Section */}
+        <Divider sx={{ my: 1 }} />
+
+        <TextField
+          label="dbt Command"
+          value={`dbt ${command}`}
+          fullWidth
+          disabled
+          sx={{
+            '& .MuiOutlinedInput-root': {
+              bgcolor: alpha(
+                theme.palette.background.default,
+                theme.palette.mode === 'dark' ? 0.4 : 0.5,
+              ),
+            },
+            '& .MuiInputBase-input': {
+              fontFamily: 'monospace',
+              fontSize: '0.875rem',
+              fontWeight: 600,
+            },
+          }}
+          helperText="The dbt command that will be executed on the cloud."
+        />
+
+        <TextField
+          label="Additional dbt Arguments"
+          value={dbtArguments}
+          onChange={(event) => setDbtArguments(event.target.value)}
+          placeholder="e.g., --select my_model --full-refresh"
+          fullWidth
+          multiline
+          sx={{
+            '& .MuiOutlinedInput-root': {
+              bgcolor: alpha(
+                theme.palette.background.default,
+                theme.palette.mode === 'dark' ? 0.4 : 0.5,
+              ),
+            },
+            '& .MuiInputBase-input': {
+              fontFamily: 'monospace',
+              fontSize: '0.875rem',
+            },
+          }}
+          helperText="Optional: Add dbt arguments like --select, --exclude, --full-refresh, --vars, etc."
+        />
+
         <Paper
           elevation={0}
           sx={{
