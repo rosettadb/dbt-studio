@@ -292,7 +292,7 @@ export const PushToCloudModal: React.FC<PushToCloudModalProps> = ({
         gitBranch: gitBranch.trim() || 'main',
         githubUsername: isRunMode ? undefined : githubUsername.trim(),
         githubPassword: isRunMode ? undefined : githubPassword,
-        CUSTOM_DBT_COMMAND: command,
+        CUSTOM_DBT_COMMANDS: command,
         secrets: reducedSecrets,
       });
 

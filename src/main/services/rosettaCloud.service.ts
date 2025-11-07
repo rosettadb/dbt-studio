@@ -84,7 +84,7 @@ export default class RosettaCloudService {
 
     const runEndpoint = `${baseUrl}/api/projects/${projectData.id}/run`;
     await postJson(runEndpoint, {
-      CUSTOM_DBT_COMMAND: body.CUSTOM_DBT_COMMAND,
+      CUSTOM_DBT_COMMANDS: body.CUSTOM_DBT_COMMANDS,
     });
   }
 
