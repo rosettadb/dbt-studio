@@ -210,7 +210,7 @@ export type CloudDeploymentPayload = {
   githubUsername?: string;
   githubPassword?: string;
   secrets: Record<string, string>;
-  command?: string;
+  CUSTOM_DBT_COMMAND?: string;
 };
 
 export type SettingsType = {

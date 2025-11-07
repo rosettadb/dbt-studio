@@ -44,6 +44,8 @@ interface EnvironmentVariable {
   key: string;
   value: string;
   id: string;
+  isEdited?: boolean;
+  originalValue?: string; // Store original encrypted value
 }
 
 interface PushToCloudModalProps {
@@ -80,7 +82,15 @@ export const PushToCloudModal: React.FC<PushToCloudModalProps> = ({
 
   const [githubUsername, setGithubUsername] = React.useState('');
   const [githubPassword, setGithubPassword] = React.useState('');
+  const [originalGithubUsername, setOriginalGithubUsername] =
+    React.useState('');
+  const [originalGithubPassword, setOriginalGithubPassword] =
+    React.useState('');
   const [showGithubPassword, setShowGithubPassword] = React.useState(false);
+  const [isGithubUsernameEdited, setIsGithubUsernameEdited] =
+    React.useState(false);
+  const [isGithubPasswordEdited, setIsGithubPasswordEdited] =
+    React.useState(false);
 
   const [environmentVariables, setEnvironmentVariables] = React.useState<
     EnvironmentVariable[]
@@ -107,7 +117,7 @@ export const PushToCloudModal: React.FC<PushToCloudModalProps> = ({
     if (repoInfo) {
       if (repoInfo.remoteUrl) {
         setGitUrl(repoInfo.remoteUrl);
-        setUrlError(''); // Clear any previous errors
+        setUrlError('');
       }
       if (repoInfo.currentBranch) {
         setGitBranch(repoInfo.currentBranch);
@@ -127,8 +137,25 @@ export const PushToCloudModal: React.FC<PushToCloudModalProps> = ({
           id: secret.id,
           key: secret.name,
           value: secret.value,
+          originalValue: secret.value, // Store original encrypted value
+          isEdited: false,
         }));
       setEnvironmentVariables(loadedSecrets);
+
+      // Load git credentials
+      const gitUser = secrets.find((s) => s.name === 'ROSETTA_GIT_USER');
+      const gitPassword = secrets.find(
+        (s) => s.name === 'ROSETTA_GIT_PASSWORD',
+      );
+
+      if (gitUser) {
+        setGithubUsername(gitUser.value);
+        setOriginalGithubUsername(gitUser.value);
+      }
+      if (gitPassword) {
+        setGithubPassword(gitPassword.value);
+        setOriginalGithubPassword(gitPassword.value);
+      }
     }
   }, [secrets]);
 
@@ -239,16 +266,24 @@ export const PushToCloudModal: React.FC<PushToCloudModalProps> = ({
     }
 
     try {
-      const reducedSecrets = environmentVariables.reduce(
-        (acc, env) => {
-          acc[env.key] = env.value;
-          return acc;
-        },
-        {} as Record<string, string>,
-      );
+      // Only include edited environment variables
+      const reducedSecrets = environmentVariables
+        .filter((env) => env.isEdited)
+        .reduce(
+          (acc, env) => {
+            acc[env.key] = env.value;
+            return acc;
+          },
+          {} as Record<string, string>,
+        );
 
-      reducedSecrets.ROSETTA_GIT_USER = githubUsername.trim();
-      reducedSecrets.ROSETTA_GIT_PASSWORD = githubPassword;
+      // Only add git credentials if they were edited
+      if (isGithubUsernameEdited) {
+        reducedSecrets.ROSETTA_GIT_USER = githubUsername.trim();
+      }
+      if (isGithubPasswordEdited) {
+        reducedSecrets.ROSETTA_GIT_PASSWORD = githubPassword;
+      }
 
       await pushProject({
         id: project.id,
@@ -257,7 +292,7 @@ export const PushToCloudModal: React.FC<PushToCloudModalProps> = ({
         gitBranch: gitBranch.trim() || 'main',
         githubUsername: isRunMode ? undefined : githubUsername.trim(),
         githubPassword: isRunMode ? undefined : githubPassword,
-        command,
+        CUSTOM_DBT_COMMAND: command,
         secrets: reducedSecrets,
       });
 
@@ -301,6 +336,8 @@ export const PushToCloudModal: React.FC<PushToCloudModalProps> = ({
       id: Date.now().toString(),
       key: trimmedKey,
       value: trimmedValue,
+      originalValue: trimmedValue,
+      isEdited: true,
     };
 
     setEnvironmentVariables((prev) => [...prev, newEnv]);
@@ -333,12 +370,75 @@ export const PushToCloudModal: React.FC<PushToCloudModalProps> = ({
 
       setEnvironmentVariables((prev) =>
         prev.map((env) =>
-          env.id === id ? { ...env, key: uppercaseKey, value } : env,
+          env.id === id
+            ? { ...env, key: uppercaseKey, value, isEdited: true }
+            : env,
         ),
       );
     },
     [environmentVariables],
   );
+
+  const handleEnvFocus = React.useCallback((id: string) => {
+    setEnvironmentVariables((prev) =>
+      prev.map((env) =>
+        env.id === id
+          ? { ...env, value: env.isEdited ? env.value : '', isEdited: true }
+          : env,
+      ),
+    );
+  }, []);
+
+  // Handler for reverting environment variable on blur if unchanged
+  const handleEnvBlur = React.useCallback((id: string) => {
+    setEnvironmentVariables((prev) =>
+      prev.map((env) => {
+        if (env.id === id) {
+          // If value is empty or unchanged, revert to original
+          if (!env.value.trim() || env.value === env.originalValue) {
+            return {
+              ...env,
+              value: env.originalValue || '',
+              isEdited: false,
+            };
+          }
+        }
+        return env;
+      }),
+    );
+  }, []);
+
+  // Handler for GitHub username focus
+  const handleGithubUsernameFocus = React.useCallback(() => {
+    if (!isGithubUsernameEdited) {
+      setGithubUsername('');
+      setIsGithubUsernameEdited(true);
+    }
+  }, [isGithubUsernameEdited]);
+
+  // Handler for GitHub username blur
+  const handleGithubUsernameBlur = React.useCallback(() => {
+    if (!githubUsername.trim()) {
+      setGithubUsername(originalGithubUsername);
+      setIsGithubUsernameEdited(false);
+    }
+  }, [githubUsername, originalGithubUsername]);
+
+  // Handler for GitHub password focus
+  const handleGithubPasswordFocus = React.useCallback(() => {
+    if (!isGithubPasswordEdited) {
+      setGithubPassword('');
+      setIsGithubPasswordEdited(true);
+    }
+  }, [isGithubPasswordEdited]);
+
+  // Handler for GitHub password blur
+  const handleGithubPasswordBlur = React.useCallback(() => {
+    if (!githubPassword.trim()) {
+      setGithubPassword(originalGithubPassword);
+      setIsGithubPasswordEdited(false);
+    }
+  }, [githubPassword, originalGithubPassword]);
 
   const buttonIcon = React.useMemo(() => {
     if (isPushing) return <CircularProgress size={18} />;
@@ -430,7 +530,6 @@ export const PushToCloudModal: React.FC<PushToCloudModalProps> = ({
           onChange={(event) => setTitle(event.target.value)}
           error={!!titleError}
           helperText={titleError || 'Displayed on Rosetta Cloud dashboards.'}
-          disabled
           fullWidth
           required
           sx={{
@@ -508,11 +607,20 @@ export const PushToCloudModal: React.FC<PushToCloudModalProps> = ({
             </Box>
             <TextField
               label="GitHub username"
-              value={isRunMode ? 'ROSETTA_GIT_USER' : githubUsername}
-              slotProps={{
-                input: { readOnly: isRunMode },
-              }}
+              type={
+                !isGithubUsernameEdited && originalGithubUsername
+                  ? 'password'
+                  : 'text'
+              }
+              value={githubUsername}
               onChange={(event) => setGithubUsername(event.target.value)}
+              onFocus={handleGithubUsernameFocus}
+              onBlur={handleGithubUsernameBlur}
+              placeholder={
+                !isGithubUsernameEdited && originalGithubUsername
+                  ? '••••••••'
+                  : ''
+              }
               fullWidth
               sx={{
                 '& .MuiOutlinedInput-root': {
@@ -524,8 +632,15 @@ export const PushToCloudModal: React.FC<PushToCloudModalProps> = ({
             <TextField
               label="GitHub password or token"
               type={showGithubPassword ? 'text' : 'password'}
-              value={isRunMode ? 'ROSETTA_GIT_PASSWORD' : githubPassword}
+              value={githubPassword}
               onChange={(event) => setGithubPassword(event.target.value)}
+              onFocus={handleGithubPasswordFocus}
+              onBlur={handleGithubPasswordBlur}
+              placeholder={
+                !isGithubPasswordEdited && originalGithubPassword
+                  ? '••••••••'
+                  : ''
+              }
               fullWidth
               sx={{
                 '& .MuiOutlinedInput-root': {
@@ -534,7 +649,6 @@ export const PushToCloudModal: React.FC<PushToCloudModalProps> = ({
               }}
               slotProps={{
                 input: {
-                  readOnly: isRunMode,
                   endAdornment: (
                     <InputAdornment position="end">
                       <IconButton
@@ -623,59 +737,55 @@ export const PushToCloudModal: React.FC<PushToCloudModalProps> = ({
           <Stack spacing={2.5}>
             <Typography variant="body2" color="text.secondary">
               {isRunMode
-                ? 'View existing environment variables for your deployed project.'
+                ? 'View existing environment variables for your deployed project. Click on a value to edit it.'
                 : 'Add custom environment variables for your project.'}
             </Typography>
-
-            {/* Add New Variable - Only in non-run mode */}
-            {!isRunMode && (
-              <Paper
-                elevation={0}
-                sx={{
-                  p: 2,
-                  borderRadius: 1.5,
-                  bgcolor: theme.palette.background.paper,
-                  border: `1px dashed ${alpha(theme.palette.primary.main, 0.3)}`,
-                }}
-              >
-                <Stack spacing={1.5}>
-                  <Box display="flex" gap={1} alignItems="flex-start">
-                    <TextField
-                      label="Key"
-                      value={newEnvKey}
-                      onChange={(e) => setNewEnvKey(e.target.value)}
-                      placeholder="e.g., DBT_PROFILES_DIR"
-                      sx={{ flex: 2 }}
-                    />
-                    <TextField
-                      label="Value"
-                      value={newEnvValue}
-                      onChange={(e) => setNewEnvValue(e.target.value)}
-                      placeholder="e.g., /app/profiles"
-                      sx={{ flex: 3 }}
-                    />
-                    <IconButton
-                      onClick={addEnvironmentVariable}
-                      disabled={!newEnvKey.trim() || !newEnvValue.trim()}
-                      sx={{
-                        height: 40,
-                        mt: 0.25,
-                      }}
-                    >
-                      <AddOutlined />
-                    </IconButton>
-                  </Box>
-                  <Typography
-                    variant="caption"
-                    color="text.secondary"
-                    sx={{ pl: 0.5 }}
+            <Paper
+              elevation={0}
+              sx={{
+                p: 2,
+                borderRadius: 1.5,
+                bgcolor: theme.palette.background.paper,
+                border: `1px dashed ${alpha(theme.palette.primary.main, 0.3)}`,
+              }}
+            >
+              <Stack spacing={1.5}>
+                <Box display="flex" gap={1} alignItems="flex-start">
+                  <TextField
+                    label="Key"
+                    value={newEnvKey}
+                    onChange={(e) => setNewEnvKey(e.target.value)}
+                    placeholder="e.g., DBT_PROFILES_DIR"
+                    sx={{ flex: 2 }}
+                  />
+                  <TextField
+                    label="Value"
+                    value={newEnvValue}
+                    onChange={(e) => setNewEnvValue(e.target.value)}
+                    placeholder="e.g., /app/profiles"
+                    sx={{ flex: 3 }}
+                  />
+                  <IconButton
+                    onClick={addEnvironmentVariable}
+                    disabled={!newEnvKey.trim() || !newEnvValue.trim()}
+                    sx={{
+                      height: 40,
+                      mt: 0.25,
+                    }}
                   >
-                    Note: ROSETTA_GIT_USER and ROSETTA_GIT_PASSWORD are reserved
-                    keys.
-                  </Typography>
-                </Stack>
-              </Paper>
-            )}
+                    <AddOutlined />
+                  </IconButton>
+                </Box>
+                <Typography
+                  variant="caption"
+                  color="text.secondary"
+                  sx={{ pl: 0.5 }}
+                >
+                  Note: ROSETTA_GIT_USER and ROSETTA_GIT_PASSWORD are reserved
+                  keys.
+                </Typography>
+              </Stack>
+            </Paper>
 
             {environmentVariables.length > 0 && (
               <>
@@ -703,7 +813,7 @@ export const PushToCloudModal: React.FC<PushToCloudModalProps> = ({
                           theme.palette.background.default,
                           theme.palette.mode === 'dark' ? 0.5 : 1,
                         ),
-                        border: `1px solid ${theme.palette.divider}`,
+                        border: `1px solid ${env.isEdited ? alpha(theme.palette.success.main, 0.3) : theme.palette.divider}`,
                         transition: 'all 0.2s',
                         ...(!isRunMode && {
                           '&:hover': {
@@ -723,6 +833,8 @@ export const PushToCloudModal: React.FC<PushToCloudModalProps> = ({
                               env.value,
                             )
                           }
+                          onFocus={() => handleEnvFocus(env.id)}
+                          onBlur={() => handleEnvBlur(env.id)}
                           variant="outlined"
                           slotProps={{
                             input: {
@@ -739,7 +851,9 @@ export const PushToCloudModal: React.FC<PushToCloudModalProps> = ({
                           }}
                         />
                         <TextField
-                          type={isRunMode ? 'password' : 'text'}
+                          type={
+                            isRunMode && !env.isEdited ? 'password' : 'text'
+                          }
                           value={env.value}
                           onChange={(e) =>
                             updateEnvironmentVariable(
@@ -748,12 +862,12 @@ export const PushToCloudModal: React.FC<PushToCloudModalProps> = ({
                               e.target.value,
                             )
                           }
+                          onFocus={() => handleEnvFocus(env.id)}
+                          onBlur={() => handleEnvBlur(env.id)}
                           variant="outlined"
-                          slotProps={{
-                            input: {
-                              readOnly: isRunMode,
-                            },
-                          }}
+                          placeholder={
+                            isRunMode && !env.isEdited ? '••••••••' : ''
+                          }
                           sx={{
                             flex: 2,
                             '& .MuiInputBase-input': {
@@ -775,6 +889,18 @@ export const PushToCloudModal: React.FC<PushToCloudModalProps> = ({
                           >
                             <Delete />
                           </IconButton>
+                        )}
+                        {env.isEdited && (
+                          <Chip
+                            label="Modified"
+                            size="small"
+                            sx={{
+                              height: 20,
+                              fontSize: '0.7rem',
+                              bgcolor: alpha(theme.palette.success.main, 0.1),
+                              color: 'success.main',
+                            }}
+                          />
                         )}
                       </Box>
                     </Paper>

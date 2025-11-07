@@ -55,8 +55,9 @@ export default class RosettaCloudService {
     };
 
     if (project.externalId) {
+      if (hasSecrets) await addSecrets(project.externalId, secrets);
       const runEndpoint = `${baseUrl}/api/projects/${project.externalId}/run`;
-      await postJson(runEndpoint);
+      await postJson(runEndpoint, body);
       await ProjectsService.updateProject({
         ...project,
         lastRun: new Date().toISOString(),
@@ -82,7 +83,9 @@ export default class RosettaCloudService {
     if (hasSecrets) await addSecrets(projectData.id, secrets);
 
     const runEndpoint = `${baseUrl}/api/projects/${projectData.id}/run`;
-    await postJson(runEndpoint);
+    await postJson(runEndpoint, {
+      CUSTOM_DBT_COMMAND: body.CUSTOM_DBT_COMMAND,
+    });
   }
 
   static async getSecrets(projectId: string): Promise<Secret[]> {
