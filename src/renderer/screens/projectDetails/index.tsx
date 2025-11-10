@@ -724,6 +724,7 @@ const ProjectDetails: React.FC = () => {
                             fileContent={fileContent}
                             isRunningDbt={isRunningDbt}
                             isRunningRosettaDbt={isRunningRosettaDbt}
+                            environment={settings?.env}
                           />
                         )}
                       <ProjectDbtSplitButton
@@ -734,6 +735,7 @@ const ProjectDetails: React.FC = () => {
                         isRunningDbt={isRunningDbt}
                         isRunningRosettaDbt={isRunningRosettaDbt}
                         connection={connection}
+                        environment={settings?.env}
                         rosettaDbt={rosettaDbt}
                         handleBusinessLayerClick={handleBusinessLayerClick}
                       />

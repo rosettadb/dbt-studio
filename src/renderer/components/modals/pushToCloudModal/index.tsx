@@ -53,6 +53,7 @@ interface PushToCloudModalProps {
   onClose: () => void;
   project: Project;
   command: DbtCommandType;
+  initialDbtArguments?: string;
 }
 
 const RESERVED_KEYS = ['ROSETTA_GIT_USER', 'ROSETTA_GIT_PASSWORD'];
@@ -62,6 +63,7 @@ export const PushToCloudModal: React.FC<PushToCloudModalProps> = ({
   onClose,
   project,
   command,
+  initialDbtArguments = '',
 }) => {
   const theme = useTheme();
   const { data: localChanges, isLoading: isLoadingChanges } =
@@ -97,7 +99,12 @@ export const PushToCloudModal: React.FC<PushToCloudModalProps> = ({
   >([]);
   const [newEnvKey, setNewEnvKey] = React.useState('');
   const [newEnvValue, setNewEnvValue] = React.useState('');
-  const [dbtArguments, setDbtArguments] = React.useState('');
+  const [dbtArguments, setDbtArguments] = React.useState(initialDbtArguments);
+
+  // Update dbt arguments when the prop changes
+  React.useEffect(() => {
+    setDbtArguments(initialDbtArguments);
+  }, [initialDbtArguments]);
 
   const isRunMode = React.useMemo(
     () => !!project?.externalId,
