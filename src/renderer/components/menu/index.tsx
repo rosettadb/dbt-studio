@@ -7,15 +7,12 @@ import {
   Menu as DD,
   useTheme,
   CircularProgress,
-  Avatar,
+  Button,
 } from '@mui/material';
 import {
   Settings,
   ArrowDownward,
   FormatListNumbered,
-  AccountCircle,
-  Person,
-  Logout,
   Cloud,
   Computer,
 } from '@mui/icons-material';
@@ -29,8 +26,11 @@ import {
   Logo,
   StyledToolbar,
   SwitchIcon,
+  AuthButtonContent,
+  AuthIcon,
+  AuthLabel,
 } from './styles';
-import { icons, logo } from '../../../../assets';
+import { icons, logo, rosettaIcon } from '../../../../assets';
 import {
   useGetBranches,
   useGetProjects,
@@ -84,7 +84,7 @@ export const Menu: React.FC = () => {
       toast.error(`Login failed: ${error.message || 'Unknown error'}`);
     },
   });
-  const { mutate: logout, isLoading: logoutLoading } = useAuthLogout();
+  const { isLoading: logoutLoading } = useAuthLogout();
 
   // Subscribe to auth success events
   useAuthSubscription();
@@ -96,26 +96,8 @@ export const Menu: React.FC = () => {
   const { data: profile } = useProfile();
 
   const isAuthLoading = apiKeyLoading || loginLoading || logoutLoading;
-  const [authMenuAnchor, setAuthMenuAnchor] =
-    React.useState<null | HTMLElement>(null);
 
-  const handleAuthMenuOpen = (event: React.MouseEvent<HTMLButtonElement>) => {
-    event.stopPropagation();
-    setAuthMenuAnchor(event.currentTarget);
-  };
-
-  const handleAuthMenuClose = () => {
-    setAuthMenuAnchor(null);
-  };
-
-  const handleAuthButtonClick = (
-    event: React.MouseEvent<HTMLButtonElement>,
-  ) => {
-    if (apiKey) {
-      handleAuthMenuOpen(event);
-      return;
-    }
-
+  const handleAuthButtonClick = () => {
     login();
   };
 
@@ -275,7 +257,88 @@ export const Menu: React.FC = () => {
             />
           )}
         </IconsContainer>
-        <IconsContainer>
+        <IconsContainer sx={{ gap: 1 }}>
+          {/* Authentication - Only show when not logged in */}
+          {!apiKey && (
+            <Tooltip
+              title="Run your DBT Studio pipelines on Google Cloud Run, AWS, or Azure with ease."
+              enterDelay={800}
+              enterNextDelay={800}
+            >
+              <Button
+                onClick={handleAuthButtonClick}
+                disabled={isAuthLoading}
+                variant="outlined"
+                size="small"
+                sx={{
+                  borderRadius: '4px',
+                  padding: '4px 8px',
+                  minWidth: 'auto',
+                  textTransform: 'none',
+                  height: '28px',
+                  '&:hover': {
+                    borderColor: theme.palette.primary.main,
+                  },
+                  transition: 'all 0.2s ease',
+                }}
+              >
+                {isAuthLoading ? (
+                  <CircularProgress size={14} />
+                ) : (
+                  <AuthButtonContent>
+                    <AuthIcon src={rosettaIcon} alt="Rosetta" />
+                    <AuthLabel>Sign in to Rosetta Cloud</AuthLabel>
+                  </AuthButtonContent>
+                )}
+              </Button>
+            </Tooltip>
+          )}
+
+          {/* Environment Switch */}
+          {profile && (
+            <Tooltip
+              title={`Switch to ${settings?.env === 'cloud' ? 'Local' : 'Cloud'} Environment`}
+            >
+              <EnvironmentSwitchContainer>
+                <EnvironmentSwitch
+                  checked={settings?.env === 'cloud'}
+                  onChange={(event) => {
+                    const newEnv = event.target.checked ? 'cloud' : 'local';
+                    updateSettings({
+                      ...settings!,
+                      env: newEnv,
+                    });
+                    toast.info(
+                      `Switched to ${newEnv === 'cloud' ? 'Cloud' : 'Local'} environment`,
+                    );
+                  }}
+                  inputProps={{ 'aria-label': 'Environment switcher' }}
+                />
+                <SwitchIcon
+                  className={
+                    settings?.env === 'cloud' ? 'checked' : 'unchecked'
+                  }
+                >
+                  {settings?.env === 'cloud' ? (
+                    <Cloud
+                      sx={{
+                        fontSize: 14,
+                        color: theme.palette.primary.contrastText,
+                      }}
+                    />
+                  ) : (
+                    <Computer
+                      sx={{
+                        fontSize: 14,
+                        color: theme.palette.primary.contrastText,
+                      }}
+                    />
+                  )}
+                </SwitchIcon>
+              </EnvironmentSwitchContainer>
+            </Tooltip>
+          )}
+
           {isProjectSelected && isOnProjectDetails && (
             <Tooltip title="AI Assistant (beta)">
               <IconButton
@@ -374,156 +437,6 @@ export const Menu: React.FC = () => {
               )}
             </DD>
           )}
-
-          {/* Environment Switch */}
-          {profile && (
-            <Tooltip
-              title={`Switch to ${settings?.env === 'cloud' ? 'Local' : 'Cloud'} Environment`}
-            >
-              <EnvironmentSwitchContainer>
-                <EnvironmentSwitch
-                  checked={settings?.env === 'cloud'}
-                  onChange={(event) => {
-                    const newEnv = event.target.checked ? 'cloud' : 'local';
-                    updateSettings({
-                      ...settings!,
-                      env: newEnv,
-                    });
-                    toast.info(
-                      `Switched to ${newEnv === 'cloud' ? 'Cloud' : 'Local'} environment`,
-                    );
-                  }}
-                  inputProps={{ 'aria-label': 'Environment switcher' }}
-                />
-                <SwitchIcon
-                  className={
-                    settings?.env === 'cloud' ? 'checked' : 'unchecked'
-                  }
-                >
-                  {settings?.env === 'cloud' ? (
-                    <Cloud
-                      sx={{
-                        fontSize: 14,
-                        color: theme.palette.primary.contrastText,
-                      }}
-                    />
-                  ) : (
-                    <Computer
-                      sx={{
-                        fontSize: 14,
-                        color: theme.palette.primary.contrastText,
-                      }}
-                    />
-                  )}
-                </SwitchIcon>
-              </EnvironmentSwitchContainer>
-            </Tooltip>
-          )}
-
-          {/* Authentication Menu */}
-          <Tooltip
-            title={apiKey ? 'View profile options' : 'Login to Cloud Dashboard'}
-          >
-            <IconButton
-              onClick={handleAuthButtonClick}
-              disabled={isAuthLoading}
-              color="primary"
-              sx={{
-                backgroundColor: apiKey
-                  ? `${theme.palette.success.light}20`
-                  : 'transparent',
-                '&:hover': {
-                  backgroundColor: apiKey
-                    ? `${theme.palette.success.light}40`
-                    : theme.palette.action.hover,
-                },
-                transition: 'background-color 0.2s ease',
-              }}
-            >
-              {(() => {
-                if (isAuthLoading) {
-                  return <CircularProgress size={20} />;
-                }
-                if (apiKey) {
-                  // Show user initials if profile data is available
-                  if (profile?.name || profile?.email) {
-                    const getInitials = (
-                      name: string | null,
-                      email: string,
-                    ) => {
-                      if (name) {
-                        return name
-                          .split(' ')
-                          .map((n) => n[0])
-                          .join('')
-                          .toUpperCase();
-                      }
-                      return email[0].toUpperCase();
-                    };
-
-                    return (
-                      <Avatar
-                        sx={{
-                          width: 22,
-                          height: 22,
-                          fontSize: '0.75rem',
-                        }}
-                      >
-                        {getInitials(profile.name, profile.email)}
-                      </Avatar>
-                    );
-                  }
-                  // Fallback to Person icon if no profile data
-                  return (
-                    <Person
-                      sx={{ fontSize: 22, color: theme.palette.success.main }}
-                    />
-                  );
-                }
-                return <AccountCircle sx={{ fontSize: 22 }} />;
-              })()}
-            </IconButton>
-          </Tooltip>
-          {apiKey ? (
-            <DD
-              anchorEl={authMenuAnchor}
-              open={Boolean(authMenuAnchor)}
-              onClose={handleAuthMenuClose}
-            >
-              <MenuItem
-                disabled
-                sx={{ flexDirection: 'column', alignItems: 'flex-start' }}
-              >
-                <div style={{ fontWeight: 'bold', fontSize: '0.875rem' }}>
-                  {profile?.name || 'User'}
-                </div>
-                <div
-                  style={{
-                    fontSize: '0.75rem',
-                    color: theme.palette.text.secondary,
-                  }}
-                >
-                  {profile?.email}
-                </div>
-              </MenuItem>
-              <MenuItem
-                onClick={() => {
-                  handleAuthMenuClose();
-                  navigate('/app/settings/profile');
-                }}
-              >
-                <Person fontSize="small" sx={{ mr: 1 }} /> Profile
-              </MenuItem>
-              <MenuItem
-                onClick={() => {
-                  handleAuthMenuClose();
-                  logout();
-                }}
-              >
-                <Logout fontSize="small" sx={{ mr: 1 }} /> Logout
-              </MenuItem>
-            </DD>
-          ) : null}
 
           <Tooltip title="Settings">
             <IconButton
