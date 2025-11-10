@@ -287,7 +287,7 @@ export const Menu: React.FC = () => {
                 ) : (
                   <AuthButtonContent>
                     <AuthIcon src={rosettaIcon} alt="Rosetta" />
-                    <AuthLabel>Sign in to Rosetta Cloud</AuthLabel>
+                    <AuthLabel>Connect to Rosetta Cloud</AuthLabel>
                   </AuthButtonContent>
                 )}
               </Button>
