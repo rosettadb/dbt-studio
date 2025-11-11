@@ -64,6 +64,8 @@ const aiHandlerChannels: string[] = [
   'chat:context:add-items',
   'chat:context:get-items',
   'chat:context:resolve-file',
+  'chat:context:resolve-selected-file',
+  'chat:context:get-file-metadata',
   'chat:context:resolve-folder',
   'chat:context:search-codebase',
   'chat:context:resolve-url',
@@ -467,6 +469,30 @@ const registerAIHandlers = () => {
     },
   );
 
+  // Get messages with context items
+  ipcMain.handle(
+    'chat:message:list-with-context',
+    async (
+      _,
+      payload:
+        | {
+            conversationId?: number;
+            sessionId?: number;
+            limit?: number;
+            offset?: number;
+          }
+        | number,
+      maybeLimit?: number,
+      maybeOffset?: number,
+    ) => {
+      return ChatService.getMessagesWithContext(
+        payload,
+        maybeLimit,
+        maybeOffset,
+      );
+    },
+  );
+
   ipcMain.handle(
     'chat:message:add-with-context',
     async (
@@ -577,10 +603,29 @@ const registerAIHandlers = () => {
     return MainDatabaseService.getContextItems(messageId);
   });
 
-  // Context Resolution Handlers (placeholders for now)
+  // Context Resolution Handlers
   ipcMain.handle('chat:context:resolve-file', async (_, filePath: string) => {
     return ChatService.resolveFileContext(filePath);
   });
+
+  // Enhanced selected file context with DBT awareness
+  ipcMain.handle(
+    'chat:context:resolve-selected-file',
+    async (
+      _,
+      { filePath, projectPath }: { filePath: string; projectPath?: string },
+    ) => {
+      return ChatService.resolveSelectedFileContext(filePath, projectPath);
+    },
+  );
+
+  // Get file metadata without full content
+  ipcMain.handle(
+    'chat:context:get-file-metadata',
+    async (_, filePath: string) => {
+      return ChatService.getFileMetadata(filePath);
+    },
+  );
 
   ipcMain.handle(
     'chat:context:resolve-folder',

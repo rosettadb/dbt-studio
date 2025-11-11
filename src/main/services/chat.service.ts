@@ -4,6 +4,7 @@ import type {
   ChatMessage,
 } from '../schemas/mainDatabase.schema';
 import { AIProviderManager } from './ai/providerManager.service';
+import SelectedFileContextProvider from './selectedFileContextProvider.service';
 import type { CompletionRequest } from './ai/types/completion.types';
 
 // Token management interfaces
@@ -33,6 +34,7 @@ interface ConversationContext {
   summary: string | null;
   relevantContext: string[];
   totalMessages: number;
+  contextItems?: Omit<NewContextItem, 'messageId'>[]; // Add context items
   strategy?: {
     phase: string;
     tokensUsed: number;
@@ -86,6 +88,7 @@ class ChatService {
     const conversationContext = await this.buildConversationContext(
       conversationId,
       budget,
+      contextItems, // Pass context items to conversation context
     );
 
     // 3) Initialize active provider and model
@@ -106,6 +109,7 @@ class ChatService {
       const fallbackContext = await this.buildFallbackContext(
         conversationId,
         budget,
+        contextItems, // Pass context items to fallback
       );
       const fallbackPrompt = this.formatOptimizedConversationPrompt(
         fallbackContext,
@@ -191,6 +195,7 @@ class ChatService {
   private static async buildConversationContext(
     conversationId: number,
     budget: TokenBudget,
+    contextItems?: Omit<NewContextItem, 'messageId'>[], // Add context items parameter
   ): Promise<ConversationContext> {
     try {
       // Get all messages for analysis
@@ -202,6 +207,7 @@ class ChatService {
           summary: null,
           relevantContext: [],
           totalMessages: 0,
+          contextItems: contextItems || [], // Include context items
         };
       }
 
@@ -278,6 +284,7 @@ class ChatService {
         summary,
         relevantContext,
         totalMessages: userMessages.length,
+        contextItems: contextItems || [], // Include context items
         strategy: {
           phase: conversationPhase.phase,
           tokensUsed: totalTokensUsed,
@@ -287,7 +294,7 @@ class ChatService {
         },
       };
     } catch (error) {
-      return this.buildFallbackContext(conversationId, budget);
+      return this.buildFallbackContext(conversationId, budget, contextItems);
     }
   }
 
@@ -295,6 +302,7 @@ class ChatService {
   private static async buildFallbackContext(
     conversationId: number,
     budget: TokenBudget,
+    contextItems?: Omit<NewContextItem, 'messageId'>[], // Add context items parameter
   ): Promise<ConversationContext> {
     try {
       // Get minimal recent messages
@@ -308,6 +316,7 @@ class ChatService {
         summary: null,
         relevantContext: [],
         totalMessages: messages.length,
+        contextItems: contextItems || [], // Include context items
         strategy: {
           phase: 'fallback',
           tokensUsed: recentMessages.reduce(
@@ -325,6 +334,7 @@ class ChatService {
         summary: null,
         relevantContext: [],
         totalMessages: 0,
+        contextItems: contextItems || [], // Include context items
       };
     }
   }
@@ -509,14 +519,73 @@ class ChatService {
     return tokenCount;
   }
 
+  // New method: Format context items for AI consumption
+  private static formatContextItemsForAI(
+    contextItems: Omit<NewContextItem, 'messageId'>[],
+    tokenBudget: number,
+  ): string {
+    if (!contextItems || contextItems.length === 0) return '';
+
+    const contextLines: string[] = [];
+    let usedTokens = 0;
+
+    contextLines.push('=== CONTEXT FILES ===');
+
+    // eslint-disable-next-line no-restricted-syntax
+    for (const item of contextItems) {
+      const itemHeader = `📄 ${item.name}${item.description ? ` - ${item.description}` : ''}:`;
+      const itemContent = `${itemHeader}\n${item.content}`;
+      const itemTokens = this.countTokens(itemContent);
+
+      if (usedTokens + itemTokens <= tokenBudget) {
+        contextLines.push('');
+        contextLines.push(itemHeader);
+        contextLines.push(item.content);
+        usedTokens += itemTokens;
+      } else {
+        // Try to fit a truncated version
+        const remainingTokens = tokenBudget - usedTokens;
+        if (remainingTokens > 100) {
+          // Reserve tokens for header and truncation indicator
+          const availableForContent =
+            remainingTokens - this.countTokens(itemHeader) - 20;
+          if (availableForContent > 50) {
+            const truncated = this.truncateText(
+              item.content,
+              availableForContent,
+            );
+            contextLines.push('');
+            contextLines.push(`${itemHeader} [truncated]`);
+            contextLines.push(truncated);
+            usedTokens = tokenBudget; // Use up remaining budget
+          }
+        }
+        break; // Stop processing more items
+      }
+    }
+
+    if (contextLines.length > 1) {
+      contextLines.push('');
+      contextLines.push('=== END CONTEXT FILES ===');
+      return contextLines.join('\n');
+    }
+
+    return '';
+  }
+
   // Enhanced method: Format optimized conversation prompt with token validation
   private static formatOptimizedConversationPrompt(
     conversationContext: ConversationContext,
     currentMessage: string,
     budget: TokenBudget,
   ): string {
-    const { recentMessages, summary, relevantContext, totalMessages } =
-      conversationContext;
+    const {
+      recentMessages,
+      summary,
+      relevantContext,
+      totalMessages,
+      contextItems,
+    } = conversationContext;
     const contextLines: string[] = [];
 
     // Calculate current message tokens
@@ -563,6 +632,24 @@ class ChatService {
         }
       }
 
+      // Add context items (files/folders) if provided
+      if (contextItems && contextItems.length > 0) {
+        const remainingTokensForContext = availableTokens - contextTokensUsed;
+        const formattedContextItems = this.formatContextItemsForAI(
+          contextItems,
+          remainingTokensForContext,
+        );
+
+        if (formattedContextItems) {
+          const contextItemsTokens = this.countTokens(formattedContextItems);
+          if (contextTokensUsed + contextItemsTokens <= availableTokens) {
+            contextLines.push('');
+            contextLines.push(formattedContextItems);
+            contextTokensUsed += contextItemsTokens;
+          }
+        }
+      }
+
       // Add recent messages (prioritize these)
       if (recentMessages.length > 0) {
         const remainingTokens = availableTokens - contextTokensUsed;
@@ -590,6 +677,18 @@ class ChatService {
 
       contextLines.push('');
       contextLines.push('=== CURRENT MESSAGE ===');
+    } else if (contextItems && contextItems.length > 0) {
+      // Handle context items when there's no conversation history
+      const formattedContextItems = this.formatContextItemsForAI(
+        contextItems,
+        availableTokens,
+      );
+
+      if (formattedContextItems) {
+        contextLines.push(formattedContextItems);
+        contextLines.push('');
+        contextLines.push('=== CURRENT MESSAGE ===');
+      }
     }
 
     // Add current message
@@ -945,6 +1044,39 @@ class ChatService {
     }
   }
 
+  // Resolve selected file context with DBT enhancements
+  static async resolveSelectedFileContext(
+    filePath: string,
+    projectPath?: string,
+  ) {
+    try {
+      if (projectPath) {
+        const resolvedContext =
+          await SelectedFileContextProvider.resolveSelectedFileContext(
+            filePath,
+            projectPath,
+          );
+        // Convert to the expected format
+        return {
+          id: resolvedContext.id,
+          type: resolvedContext.type as any,
+          name: resolvedContext.name,
+          description: resolvedContext.description || `File: ${filePath}`,
+          content: resolvedContext.content,
+          metadata: resolvedContext.metadata,
+        };
+      }
+      // Fallback to basic file context if no project path
+      return await this.resolveFileContext(filePath);
+    } catch (error) {
+      const errorMessage =
+        error instanceof Error ? error.message : String(error);
+      throw new Error(
+        `Failed to resolve selected file context: ${errorMessage}`,
+      );
+    }
+  }
+
   // Resolve a folder path into a context item
   static async resolveFolderContext(folderPath: string) {
     const fs = await import('fs-extra');
@@ -1035,6 +1167,71 @@ class ChatService {
     });
 
     return { success: true, message: 'Tool execution cancelled' };
+  }
+
+  // Get messages with context - handles both old and new payload formats
+  static async getMessagesWithContext(
+    payload:
+      | {
+          conversationId?: number;
+          sessionId?: number;
+          limit?: number;
+          offset?: number;
+        }
+      | number,
+    maybeLimit?: number,
+    maybeOffset?: number,
+  ) {
+    try {
+      // Support both old positional signature and new object payload
+      if (typeof payload === 'number') {
+        return MainDatabaseService.getMessagesWithContext(
+          payload,
+          maybeLimit,
+          maybeOffset,
+        );
+      }
+
+      const { conversationId, sessionId, limit, offset } = payload || {};
+      const id = conversationId ?? sessionId;
+
+      if (typeof id !== 'number') {
+        throw new Error(
+          "chat:message:list-with-context requires 'conversationId' or 'sessionId' in payload",
+        );
+      }
+
+      return MainDatabaseService.getMessagesWithContext(id, limit, offset);
+    } catch (error) {
+      // eslint-disable-next-line no-console
+      console.error(error);
+      throw error;
+    }
+  }
+
+  // Get file metadata without full content
+  static async getFileMetadata(filePath: string) {
+    const fs = await import('fs-extra');
+    const path = await import('path');
+
+    try {
+      const stats = await fs.stat(filePath);
+
+      return {
+        path: filePath,
+        name: path.basename(filePath),
+        size: stats.size,
+        lastModified: stats.mtime.toISOString(),
+        language: path.extname(filePath).toLowerCase().slice(1) || 'text',
+        fileType: SelectedFileContextProvider.detectDBTFileType(filePath),
+      };
+    } catch (error) {
+      // eslint-disable-next-line no-console
+      console.error(error);
+      const errorMessage =
+        error instanceof Error ? error.message : String(error);
+      throw new Error(`Failed to get file metadata: ${errorMessage}`);
+    }
   }
 }
 
