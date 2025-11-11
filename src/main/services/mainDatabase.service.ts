@@ -7,7 +7,7 @@ import { app } from 'electron';
 import path from 'path';
 import Database from 'better-sqlite3';
 import { drizzle, BetterSQLite3Database } from 'drizzle-orm/better-sqlite3';
-import { eq, desc, and, count } from 'drizzle-orm';
+import { eq, desc, and, count, inArray } from 'drizzle-orm';
 import * as schema from '../schemas/mainDatabase.schema';
 import { MainDatabaseInfo, UsageStats } from '../../types/backend';
 import {
@@ -602,6 +602,31 @@ export default class MainDatabaseService {
     const db = await this.getDatabase();
 
     try {
+      // First, get all messages in this conversation
+      const messages = await db
+        .select({ id: schema.chatMessages.id })
+        .from(schema.chatMessages)
+        .where(eq(schema.chatMessages.conversationId, id));
+
+      // Delete all context items for messages in this conversation
+      if (messages.length > 0) {
+        const messageIds = messages.map((m) => m.id);
+        await db
+          .delete(schema.contextItems)
+          .where(inArray(schema.contextItems.messageId, messageIds));
+
+        // Also delete tool calls for messages in this conversation
+        await db
+          .delete(schema.toolCalls)
+          .where(inArray(schema.toolCalls.messageId, messageIds));
+      }
+
+      // Delete all messages in this conversation
+      await db
+        .delete(schema.chatMessages)
+        .where(eq(schema.chatMessages.conversationId, id));
+
+      // Finally, delete the conversation itself
       await db
         .delete(schema.chatConversations)
         .where(eq(schema.chatConversations.id, id));
@@ -703,6 +728,17 @@ export default class MainDatabaseService {
     const db = await this.getDatabase();
 
     try {
+      // Delete context items for this message
+      await db
+        .delete(schema.contextItems)
+        .where(eq(schema.contextItems.messageId, id));
+
+      // Delete tool calls for this message
+      await db
+        .delete(schema.toolCalls)
+        .where(eq(schema.toolCalls.messageId, id));
+
+      // Delete the message itself
       await db
         .delete(schema.chatMessages)
         .where(eq(schema.chatMessages.id, id));
@@ -1128,6 +1164,38 @@ export default class MainDatabaseService {
         contextItems,
         toolCalls,
       };
+    } catch (error) {
+      throw error;
+    }
+  }
+
+  // New method: Get messages with context items
+  static async getMessagesWithContext(
+    conversationId: number,
+    limit?: number,
+    offset?: number,
+  ): Promise<ChatMessageWithContext[]> {
+    try {
+      // First get the messages using the existing method
+      const messages = await this.getMessages(conversationId, limit, offset);
+
+      // Then get context items and tool calls for each message
+      const messagesWithContext = await Promise.all(
+        messages.map(async (message) => {
+          const [contextItems, toolCalls] = await Promise.all([
+            this.getContextItems(message.id),
+            this.getToolCalls(message.id),
+          ]);
+
+          return {
+            ...message,
+            contextItems,
+            toolCalls,
+          };
+        }),
+      );
+
+      return messagesWithContext;
     } catch (error) {
       throw error;
     }

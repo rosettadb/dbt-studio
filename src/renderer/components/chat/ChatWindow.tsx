@@ -25,6 +25,8 @@ import { SessionHistoryButton } from './SessionHistoryButton';
 import { ChatMessageList } from './ChatMessageList';
 import { ChatInputBox } from './ChatInputBox';
 
+import { useContextManager } from '../../hooks/useContextManager';
+
 export const ChatWindow: React.FC = () => {
   const { setIsChatOpen } = useAppContext();
   const { data: project } = useGetSelectedProject();
@@ -32,6 +34,9 @@ export const ChatWindow: React.FC = () => {
   const navigate = useNavigate();
 
   const [selectedSessionId, setSelectedSessionId] = React.useState<number>();
+
+  // Context management
+  const contextManager = useContextManager();
 
   const { data: sessions = [], isLoading } = useGetChatSessions(projectId);
   const { data: providers = [], isLoading: isLoadingProviders } =
@@ -179,7 +184,7 @@ export const ChatWindow: React.FC = () => {
       <Box
         sx={{
           px: 1,
-          py: 0.5,
+          pyb: 0.5,
           boxShadow: '0 4px 12px rgba(0, 0, 0, 0.15)',
           display: 'flex',
           alignItems: 'center',
@@ -248,7 +253,10 @@ export const ChatWindow: React.FC = () => {
 
       {/* Input Area */}
       <Box sx={{ borderTop: '1px solid', borderColor: 'divider' }}>
-        <ChatInputBox sessionId={selectedSessionId} />
+        <ChatInputBox
+          sessionId={selectedSessionId}
+          contextManager={contextManager}
+        />
       </Box>
     </Paper>
   );
