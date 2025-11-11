@@ -70,6 +70,8 @@ export const loadDefaultSettings = (): SettingsType => {
     pythonPath: '',
     pythonBinary: '',
     isSetup: 'false',
+    cloudWorkspaceUrl: '',
+    cloudWorkspaceLastSyncedAt: '',
   };
 };
 

@@ -59,7 +59,9 @@ const Settings: React.FC = () => {
     pythonBinary: '',
   });
 
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleChange = (
+    e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>,
+  ) => {
     const { name, value } = e.target;
     setLocalSettings((prevSettings) => ({
       ...prevSettings,
