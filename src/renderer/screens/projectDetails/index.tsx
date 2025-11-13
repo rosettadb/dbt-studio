@@ -22,7 +22,6 @@ import yaml from 'js-yaml';
 import {
   AddConnectionModal,
   Editor,
-  FileTreeViewer,
   Loader,
   ModelSplitButton,
   NoAiSetModal,
@@ -33,6 +32,8 @@ import {
   AiPromptModal,
   PushToCloudModal,
 } from '../../components';
+// import { ProjectSidebar } from '../../components/sidebar/project-sidebar';
+import { ProjectSidebar } from '../../components/sidebar/project-sidebar';
 import { TabManager } from '../../components/editor/tabManager';
 import {
   useGetConnectionById,
@@ -52,7 +53,6 @@ import {
   Container,
   Content,
   EditorContainer,
-  FileTreeContainer,
   Header,
   NoFileSelected,
 } from './styles';
@@ -645,50 +645,47 @@ const ProjectDetails: React.FC = () => {
   return (
     <AppLayout
       sidebarContent={
-        <FileTreeContainer>
-          {directories && (
-            <FileTreeViewer
-              statuses={statuses}
-              node={directories}
-              onDeleteFileCallback={(deletedFile: string) => {
-                closeTabByPath(deletedFile);
-                if (selectedFilePath?.includes(deletedFile)) {
-                  setSelectedFilePath(undefined);
-                }
-              }}
-              onFileSelect={async (fileNode) => {
-                if (!utils.isEditableFile(fileNode.path)) {
-                  setSelectedFilePath(fileNode.path);
-                  openTab(fileNode.path, { isReadOnly: true });
-                  return;
-                }
-                setSelectedFilePath(fileNode.path);
-                openTab(fileNode.path);
-              }}
-              isLoadingFiles={isLoadingDirectories}
-              refreshFiles={async () => {
-                await fetchDirectories();
-                await updateStatuses();
-              }}
-              copyPath={async (source, target) => {
-                await projectsServices.copyPath({
-                  source,
-                  target,
-                });
-                await fetchDirectories();
-                await updateStatuses();
-              }}
-              onNewFileCallback={(filePath) => {
-                if (!filePath) {
-                  return;
-                }
-                setSelectedFilePath(filePath);
-                openTab(filePath);
-              }}
-              selectedPath={selectedFilePath}
-            />
-          )}
-        </FileTreeContainer>
+        <ProjectSidebar
+          directories={directories}
+          statuses={statuses}
+          isLoadingDirectories={isLoadingDirectories}
+          selectedFilePath={selectedFilePath}
+          project={project}
+          onDeleteFile={(deletedFile: string) => {
+            closeTabByPath(deletedFile);
+            if (selectedFilePath?.includes(deletedFile)) {
+              setSelectedFilePath(undefined);
+            }
+          }}
+          onFileSelect={async (fileNode) => {
+            if (!utils.isEditableFile(fileNode.path)) {
+              setSelectedFilePath(fileNode.path);
+              openTab(fileNode.path, { isReadOnly: true });
+              return;
+            }
+            setSelectedFilePath(fileNode.path);
+            openTab(fileNode.path);
+          }}
+          onRefreshFiles={async () => {
+            await fetchDirectories();
+            await updateStatuses();
+          }}
+          onCopyPath={async (source, target) => {
+            await projectsServices.copyPath({
+              source,
+              target,
+            });
+            await fetchDirectories();
+            await updateStatuses();
+          }}
+          onNewFile={(filePath) => {
+            if (!filePath) {
+              return;
+            }
+            setSelectedFilePath(filePath);
+            openTab(filePath);
+          }}
+        />
       }
     >
       <Box display="flex" flexDirection="row" width="100%" height="100%">
