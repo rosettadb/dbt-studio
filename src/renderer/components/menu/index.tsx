@@ -15,6 +15,7 @@ import {
   FormatListNumbered,
   Cloud,
   Computer,
+  Dashboard,
 } from '@mui/icons-material';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { toast } from 'react-toastify';
@@ -31,6 +32,8 @@ import {
   AuthLabel,
 } from './styles';
 import { icons, logo, rosettaIcon } from '../../../../assets';
+import { utils } from '../../helpers';
+import { ROSETTA_CLOUD_BASE_URL } from '../../../main/utils/constants';
 import {
   useGetBranches,
   useGetProjects,
@@ -294,49 +297,99 @@ export const Menu: React.FC = () => {
             </Tooltip>
           )}
 
+          {/* Link to Rosetta Cloud Dashboard - Only show when logged in */}
+          {apiKey && (
+            <Tooltip
+              title="Open Rosetta Cloud Dashboard in your browser"
+              enterDelay={800}
+              enterNextDelay={800}
+            >
+              <Button
+                onClick={(e) => {
+                  utils.handleExternalLink(
+                    e as any,
+                    `${ROSETTA_CLOUD_BASE_URL}/dashboard`,
+                  );
+                }}
+                variant="outlined"
+                size="small"
+                sx={{
+                  borderRadius: '4px',
+                  padding: '4px 8px',
+                  minWidth: 'auto',
+                  textTransform: 'none',
+                  height: '28px',
+                  '&:hover': {
+                    borderColor: theme.palette.primary.main,
+                  },
+                  transition: 'all 0.2s ease',
+                }}
+              >
+                <AuthButtonContent>
+                  <Dashboard sx={{ fontSize: 16 }} />
+                  <AuthLabel>Dashboard</AuthLabel>
+                </AuthButtonContent>
+              </Button>
+            </Tooltip>
+          )}
+
           {/* Environment Switch */}
           {profile && (
-            <Tooltip
-              title={`Switch to ${settings?.env === 'cloud' ? 'Local' : 'Cloud'} Environment`}
-            >
-              <EnvironmentSwitchContainer>
-                <EnvironmentSwitch
-                  checked={settings?.env === 'cloud'}
-                  onChange={(event) => {
-                    const newEnv = event.target.checked ? 'cloud' : 'local';
-                    updateSettings({
-                      ...settings!,
-                      env: newEnv,
-                    });
-                    toast.info(
-                      `Switched to ${newEnv === 'cloud' ? 'Cloud' : 'Local'} environment`,
-                    );
-                  }}
-                  inputProps={{ 'aria-label': 'Environment switcher' }}
-                />
-                <SwitchIcon
-                  className={
-                    settings?.env === 'cloud' ? 'checked' : 'unchecked'
-                  }
-                >
-                  {settings?.env === 'cloud' ? (
-                    <Cloud
-                      sx={{
-                        fontSize: 14,
-                        color: theme.palette.primary.contrastText,
-                      }}
-                    />
-                  ) : (
-                    <Computer
-                      sx={{
-                        fontSize: 14,
-                        color: theme.palette.primary.contrastText,
-                      }}
-                    />
-                  )}
-                </SwitchIcon>
-              </EnvironmentSwitchContainer>
-            </Tooltip>
+            <>
+              <Tooltip
+                title={`Switch to ${settings?.env === 'cloud' ? 'Local' : 'Cloud'} Environment`}
+              >
+                <EnvironmentSwitchContainer>
+                  <EnvironmentSwitch
+                    checked={settings?.env === 'cloud'}
+                    onChange={(event) => {
+                      const newEnv = event.target.checked ? 'cloud' : 'local';
+                      updateSettings({
+                        ...settings!,
+                        env: newEnv,
+                      });
+                      toast.info(
+                        `Switched to ${newEnv === 'cloud' ? 'Cloud' : 'Local'} environment`,
+                      );
+                    }}
+                    inputProps={{ 'aria-label': 'Environment switcher' }}
+                  />
+                  <SwitchIcon
+                    className={
+                      settings?.env === 'cloud' ? 'checked' : 'unchecked'
+                    }
+                  >
+                    {settings?.env === 'cloud' ? (
+                      <Cloud
+                        sx={{
+                          fontSize: 14,
+                          color: theme.palette.primary.contrastText,
+                        }}
+                      />
+                    ) : (
+                      <Computer
+                        sx={{
+                          fontSize: 14,
+                          color: theme.palette.primary.contrastText,
+                        }}
+                      />
+                    )}
+                  </SwitchIcon>
+                </EnvironmentSwitchContainer>
+              </Tooltip>
+              <span
+                style={{
+                  fontSize: '12px',
+                  color: theme.palette.text.secondary,
+                  fontWeight: 500,
+                  display: 'flex',
+                  alignItems: 'center',
+                  height: '100%',
+                }}
+              >
+                {settings?.env === 'cloud' ? 'Cloud' : 'Local'}
+              </span>
+            </>
           )}
 
           {isProjectSelected && isOnProjectDetails && (
