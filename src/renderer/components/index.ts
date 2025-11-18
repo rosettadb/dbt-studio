@@ -26,4 +26,5 @@ export * from './GetStartedModal';
 export * from './sidebarConnections';
 export * from './newProject';
 export * from './dbtModelButtons';
+export * from './sourceControl';
 export { ScrollbarStyles } from './scrollbarStyles';

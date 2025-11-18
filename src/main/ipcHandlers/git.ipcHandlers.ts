@@ -14,11 +14,16 @@ const handlerChannels = [
   'git:isInitialized',
   'git:getRemotes',
   'git:add',
+  'git:unstage',
+  'git:stageAll',
+  'git:unstageAll',
+  'git:discardChanges',
   'git:commit',
   'git:pull',
   'git:push',
   'git:fileDiff',
   'git:fileStatusList',
+  'git:aheadBehind',
 ];
 
 const removeGitIpcHandlers = () => {
@@ -187,6 +192,47 @@ const registerGitHandlers = () => {
       { repoPath, filePath }: { repoPath: string; filePath: string },
     ): Promise<FileStatus | null> => {
       return gitService.getFileStatus(repoPath, filePath);
+    },
+  );
+
+  ipcMain.handle(
+    'git:unstage',
+    async (
+      _event,
+      { repoPath, files }: { repoPath: string; files: string[] },
+    ) => {
+      return gitService.unstage(repoPath, files);
+    },
+  );
+
+  ipcMain.handle(
+    'git:stageAll',
+    async (_event, { repoPath }: { repoPath: string }) => {
+      return gitService.stageAll(repoPath);
+    },
+  );
+
+  ipcMain.handle(
+    'git:unstageAll',
+    async (_event, { repoPath }: { repoPath: string }) => {
+      return gitService.unstageAll(repoPath);
+    },
+  );
+
+  ipcMain.handle(
+    'git:discardChanges',
+    async (
+      _event,
+      { repoPath, files }: { repoPath: string; files: string[] },
+    ) => {
+      return gitService.discardChanges(repoPath, files);
+    },
+  );
+
+  ipcMain.handle(
+    'git:aheadBehind',
+    async (_event, { repoPath }: { repoPath: string }) => {
+      return gitService.getAheadBehindCount(repoPath);
     },
   );
 };

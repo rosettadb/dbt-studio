@@ -65,7 +65,7 @@ export const RepositoryHeader: React.FC<RepositoryHeaderProps> = ({
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'space-between',
-        px: 1.5,
+        px: 1,
         pt: 0.5,
         pb: 0.25,
         backgroundColor: 'background.paper',

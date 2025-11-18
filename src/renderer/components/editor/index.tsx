@@ -56,7 +56,7 @@ export const Editor: React.FC<EditorProps> = ({
     },
   );
   const { data: fileDiff } = useGetFileDiff(projectPath, activeFilePath, {
-    enabled: Boolean(activeFilePath),
+    enabled: Boolean(activeFilePath && isInitialized && projectPath),
   });
   const { mutate: updateFileContent } = useSaveFileContent();
   const theme = useTheme();
@@ -76,19 +76,19 @@ export const Editor: React.FC<EditorProps> = ({
     if (fileStatus?.status === 'untracked' || !fileStatus?.status) {
       return null;
     }
+
     const { oldVersion } = getVersionsFromDiff(
       activeContent,
       String(fileDiff?.diff),
     );
     return oldVersion;
-  }, [fileStatus, fileDiff, activeContent, activeTab]);
+  }, [fileStatus, fileDiff, activeContent, activeTab, activeFilePath]);
 
   React.useEffect(() => {
     setShowDiffView(false);
   }, [activeTabId]);
 
   React.useEffect(() => {
-    setShowDiffView(false);
     return () => {
       if (debounceTimer.current) clearTimeout(debounceTimer.current);
     };

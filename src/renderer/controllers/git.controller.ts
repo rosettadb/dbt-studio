@@ -201,14 +201,15 @@ export const useGitCommit = (
       return gitServices.commit(data.path, data.message, data.files);
     },
     onSuccess: async (...args) => {
-      await queryClient.invalidateQueries([
-        QUERY_KEYS.GIT_REMOTES,
-        args[1].path,
-      ]);
-      await queryClient.invalidateQueries([
-        QUERY_KEYS.GIT_STATUSES,
-        args[1].path,
-      ]);
+      // Invalidate all git-related queries for this project
+      await queryClient.invalidateQueries([QUERY_KEYS.GIT_REMOTES]);
+      await queryClient.invalidateQueries([QUERY_KEYS.GIT_STATUSES]);
+      await queryClient.invalidateQueries([QUERY_KEYS.GIT_BRANCHES]);
+      await queryClient.invalidateQueries([QUERY_KEYS.GIT_AHEAD_BEHIND]);
+
+      // Also try to refetch immediately
+      await queryClient.refetchQueries([QUERY_KEYS.GIT_STATUSES, args[1].path]);
+
       onCustomSuccess?.(...args);
     },
     onError: (...args) => {
@@ -266,5 +267,169 @@ export const useGitPull = (
     onError: (...args) => {
       onCustomError?.(...args);
     },
+  });
+};
+
+export const useGitStage = (
+  customOptions?: UseMutationOptions<
+    { success: boolean },
+    CustomError,
+    { path: string; files: string[] }
+  >,
+): UseMutationResult<
+  { success: boolean },
+  CustomError,
+  { path: string; files: string[] }
+> => {
+  const { onSuccess: onCustomSuccess, onError: onCustomError } =
+    customOptions || {};
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (data: { path: string; files: string[] }) => {
+      return gitServices.add(data.path, data.files);
+    },
+    onSuccess: async (...args) => {
+      // Aggressive cache invalidation and refetch
+      await queryClient.invalidateQueries([QUERY_KEYS.GIT_STATUSES]);
+      await queryClient.refetchQueries([QUERY_KEYS.GIT_STATUSES, args[1].path]);
+      onCustomSuccess?.(...args);
+    },
+    onError: (...args) => {
+      onCustomError?.(...args);
+    },
+  });
+};
+
+export const useGitUnstage = (
+  customOptions?: UseMutationOptions<
+    { success: boolean },
+    CustomError,
+    { path: string; files: string[] }
+  >,
+): UseMutationResult<
+  { success: boolean },
+  CustomError,
+  { path: string; files: string[] }
+> => {
+  const { onSuccess: onCustomSuccess, onError: onCustomError } =
+    customOptions || {};
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (data) => {
+      return gitServices.unstage(data.path, data.files);
+    },
+    onSuccess: async (...args) => {
+      await queryClient.invalidateQueries([
+        QUERY_KEYS.GIT_STATUSES,
+        args[1].path,
+      ]);
+      onCustomSuccess?.(...args);
+    },
+    onError: (...args) => {
+      onCustomError?.(...args);
+    },
+  });
+};
+
+export const useGitStageAll = (
+  customOptions?: UseMutationOptions<
+    { success: boolean },
+    CustomError,
+    { path: string }
+  >,
+): UseMutationResult<{ success: boolean }, CustomError, { path: string }> => {
+  const { onSuccess: onCustomSuccess, onError: onCustomError } =
+    customOptions || {};
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (data) => {
+      return gitServices.stageAll(data.path);
+    },
+    onSuccess: async (...args) => {
+      await queryClient.invalidateQueries([
+        QUERY_KEYS.GIT_STATUSES,
+        args[1].path,
+      ]);
+      onCustomSuccess?.(...args);
+    },
+    onError: (...args) => {
+      onCustomError?.(...args);
+    },
+  });
+};
+
+export const useGitUnstageAll = (
+  customOptions?: UseMutationOptions<
+    { success: boolean },
+    CustomError,
+    { path: string }
+  >,
+): UseMutationResult<{ success: boolean }, CustomError, { path: string }> => {
+  const { onSuccess: onCustomSuccess, onError: onCustomError } =
+    customOptions || {};
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (data) => {
+      return gitServices.unstageAll(data.path);
+    },
+    onSuccess: async (...args) => {
+      await queryClient.invalidateQueries([
+        QUERY_KEYS.GIT_STATUSES,
+        args[1].path,
+      ]);
+      onCustomSuccess?.(...args);
+    },
+    onError: (...args) => {
+      onCustomError?.(...args);
+    },
+  });
+};
+
+export const useGitDiscardChanges = (
+  customOptions?: UseMutationOptions<
+    { success: boolean },
+    CustomError,
+    { path: string; files: string[] }
+  >,
+): UseMutationResult<
+  { success: boolean },
+  CustomError,
+  { path: string; files: string[] }
+> => {
+  const { onSuccess: onCustomSuccess, onError: onCustomError } =
+    customOptions || {};
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (data) => {
+      return gitServices.discardChanges(data.path, data.files);
+    },
+    onSuccess: async (...args) => {
+      await queryClient.invalidateQueries([
+        QUERY_KEYS.GIT_STATUSES,
+        args[1].path,
+      ]);
+      onCustomSuccess?.(...args);
+    },
+    onError: (...args) => {
+      onCustomError?.(...args);
+    },
+  });
+};
+
+export const useGetAheadBehindCount = (
+  path?: string,
+  customOptions?: UseQueryOptions<
+    { ahead: number; behind: number } | null,
+    CustomError,
+    { ahead: number; behind: number } | null
+  >,
+) => {
+  return useQuery({
+    queryKey: [QUERY_KEYS.GIT_AHEAD_BEHIND, path],
+    queryFn: async () => {
+      if (!path) return null;
+      return gitServices.getAheadBehindCount(path);
+    },
+    ...customOptions,
   });
 };

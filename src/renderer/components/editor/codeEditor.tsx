@@ -25,33 +25,44 @@ export const CodeEditor = ({
   readOnly?: boolean;
 }) => {
   const [isMounted, setIsMounted] = React.useState(false);
+  const [isDisposed, setIsDisposed] = React.useState(false);
   const editorRef = useRef<IStandaloneCodeEditor | null>(null);
   const monacoRef = useRef<IMonaco | null>(null);
   const decorationsRef = useRef<IEditorDecorationsCollection | null>(null);
   const completionDisposableRef = useRef<IDisposable | null>(null);
 
   const applyHighlights = (current: string, original: string | null) => {
-    if (!editorRef.current || !monacoRef.current) return;
+    if (!editorRef.current || !monacoRef.current || !isMounted || isDisposed)
+      return;
 
-    const monacoInstance = monacoRef.current;
-    const model = editorRef.current.getModel();
-    if (!model) return;
+    try {
+      const monacoInstance = monacoRef.current;
+      const editor = editorRef.current;
 
-    const range = (index: number) =>
-      new monacoInstance.Range(index, 1, index, 1);
+      // Check if editor is still valid
+      if (!editor.getModel) return;
 
-    const decorations = getDecorations(
-      original,
-      current,
-      model.getLineCount(),
-      range,
-    );
+      const model = editor.getModel();
+      if (!model) return;
 
-    if (!decorationsRef.current) {
-      decorationsRef.current =
-        editorRef.current.createDecorationsCollection(decorations);
-    } else {
-      decorationsRef.current.set(decorations);
+      const range = (index: number) =>
+        new monacoInstance.Range(index, 1, index, 1);
+
+      const decorations = getDecorations(
+        original,
+        current,
+        model.getLineCount(),
+        range,
+      );
+
+      if (!decorationsRef.current) {
+        decorationsRef.current =
+          editor.createDecorationsCollection(decorations);
+      } else {
+        decorationsRef.current.set(decorations);
+      }
+    } catch (error) {
+      // Ignore decoration errors during rapid editor changes
     }
   };
 
@@ -59,14 +70,28 @@ export const CodeEditor = ({
     editor: IStandaloneCodeEditor,
     monacoInstance: IMonaco,
   ) => {
+    // Clean up previous resources if they exist
+    try {
+      if (decorationsRef.current && !decorationsRef.current.clear) {
+        decorationsRef.current = null;
+      } else {
+        decorationsRef.current?.clear();
+        decorationsRef.current = null;
+      }
+      completionDisposableRef.current?.dispose();
+      completionDisposableRef.current = null;
+    } catch (error) {
+      // Ignore cleanup errors during rapid remounting
+    }
+
     editorRef.current = editor;
     monacoRef.current = monacoInstance;
-
-    decorationsRef.current?.clear();
-    decorationsRef.current = null;
+    setIsDisposed(false);
 
     setTimeout(() => {
-      setIsMounted(true);
+      if (!isDisposed) {
+        setIsMounted(true);
+      }
     }, 50);
   };
 
@@ -78,6 +103,35 @@ export const CodeEditor = ({
       completionDisposableRef.current?.dispose();
     };
   }, [content, originalContent, isMounted]);
+
+  // Cleanup effect for component unmount
+  useEffect(() => {
+    return () => {
+      // Mark as disposed to prevent further operations
+      setIsDisposed(true);
+      setIsMounted(false);
+
+      // Clean up Monaco resources on unmount
+      try {
+        completionDisposableRef.current?.dispose();
+        completionDisposableRef.current = null;
+
+        if (decorationsRef.current) {
+          try {
+            decorationsRef.current.clear();
+          } catch (e) {
+            // Ignore clear errors
+          }
+          decorationsRef.current = null;
+        }
+
+        editorRef.current = null;
+        monacoRef.current = null;
+      } catch (error) {
+        // Ignore disposal errors - they're expected during rapid unmounting
+      }
+    };
+  }, []);
 
   return (
     <MonacoEditor

@@ -56,10 +56,14 @@ export const addRemote = async (path: string, url: string) => {
 };
 
 export const add = async (path: string, files: string[]) => {
-  await client.post<{ repoPath: string; files: string[] }>('git:add', {
+  const { data } = await client.post<
+    { repoPath: string; files: string[] },
+    { success: boolean }
+  >('git:add', {
     repoPath: path,
     files,
   });
+  return data;
 };
 
 export const commit = async (
@@ -125,5 +129,45 @@ export const getFileStatus = async (repoPath: string, filePath: string) => {
     { repoPath: string; filePath: string },
     FileStatus | null
   >('git:fileStatus', { repoPath, filePath });
+  return data;
+};
+
+export const unstage = async (repoPath: string, files: string[]) => {
+  const { data } = await client.post<
+    { repoPath: string; files: string[] },
+    { success: boolean }
+  >('git:unstage', { repoPath, files });
+  return data;
+};
+
+export const stageAll = async (repoPath: string) => {
+  const { data } = await client.post<
+    { repoPath: string },
+    { success: boolean }
+  >('git:stageAll', { repoPath });
+  return data;
+};
+
+export const unstageAll = async (repoPath: string) => {
+  const { data } = await client.post<
+    { repoPath: string },
+    { success: boolean }
+  >('git:unstageAll', { repoPath });
+  return data;
+};
+
+export const discardChanges = async (repoPath: string, files: string[]) => {
+  const { data } = await client.post<
+    { repoPath: string; files: string[] },
+    { success: boolean }
+  >('git:discardChanges', { repoPath, files });
+  return data;
+};
+
+export const getAheadBehindCount = async (repoPath: string) => {
+  const { data } = await client.post<
+    { repoPath: string },
+    { ahead: number; behind: number } | null
+  >('git:aheadBehind', { repoPath });
   return data;
 };

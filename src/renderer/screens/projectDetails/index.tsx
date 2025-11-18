@@ -110,6 +110,7 @@ const ProjectDetails: React.FC = () => {
     reorderTabs,
     reset,
     getTabByPath,
+    refreshTabContentByPath,
   } = useTabManager(project?.id);
   const fileContent = activeTab?.content;
 
@@ -685,6 +686,15 @@ const ProjectDetails: React.FC = () => {
             setSelectedFilePath(filePath);
             openTab(filePath);
           }}
+          // Source Control Monaco Editor Integration
+          onSourceControlOpenFile={(filePath: string) => {
+            setSelectedFilePath(filePath);
+            openTab(filePath);
+          }}
+          onSourceControlFileSelect={(filePath: string) => {
+            setSelectedFilePath(filePath);
+          }}
+          onSourceControlRefreshFileContent={refreshTabContentByPath}
         />
       }
     >

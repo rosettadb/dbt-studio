@@ -167,6 +167,7 @@ export interface UseTabManagerReturn {
   reorderTabs: (fromIndex: number, toIndex: number) => void;
   reset: () => void;
   getTabByPath: (path: string) => EditorTabState | undefined;
+  refreshTabContentByPath: (path: string) => Promise<void>;
 }
 
 const useTabManager = (projectId?: string): UseTabManagerReturn => {
@@ -391,7 +392,15 @@ const useTabManager = (projectId?: string): UseTabManagerReturn => {
         const existingTab = current.find((tab) => tab.path === path);
         if (existingTab) {
           targetId = existingTab.id;
-          return current;
+          // Update existing tab with new options
+          return current.map((tab) =>
+            tab.path === path
+              ? {
+                  ...tab,
+                  isReadOnly: options?.isReadOnly ?? tab.isReadOnly,
+                }
+              : tab,
+          );
         }
 
         isEditable = isEditableFile(path);
@@ -467,6 +476,54 @@ const useTabManager = (projectId?: string): UseTabManagerReturn => {
     [],
   );
 
+  const refreshTabContentByPath = React.useCallback(
+    async (path: string): Promise<void> => {
+      const targetTab = tabsRef.current.find((tab) => tab.path === path);
+      if (!targetTab || !isEditableFile(path)) {
+        return;
+      }
+
+      // Set loading state
+      setTabs((current) =>
+        current.map((tab) =>
+          tab.path === path
+            ? { ...tab, isLoading: true, error: undefined }
+            : tab,
+        ),
+      );
+
+      try {
+        // Reload file content from disk
+        const data = await projectsServices.getFileContent({ path });
+        setTabs((current) =>
+          current.map((tab) =>
+            tab.path === path
+              ? {
+                  ...tab,
+                  content: data,
+                  isModified: false,
+                  isLoading: false,
+                  error: undefined,
+                }
+              : tab,
+          ),
+        );
+      } catch (error: any) {
+        const message =
+          error?.message ||
+          'Unable to refresh file contents. Please try again.';
+        setTabs((current) =>
+          current.map((tab) =>
+            tab.path === path
+              ? { ...tab, isLoading: false, error: message }
+              : tab,
+          ),
+        );
+      }
+    },
+    [],
+  );
+
   const activeTab = React.useMemo(
     () => tabs.find((tab) => tab.id === activeTabId),
     [tabs, activeTabId],
@@ -490,6 +547,7 @@ const useTabManager = (projectId?: string): UseTabManagerReturn => {
     reorderTabs,
     reset,
     getTabByPath,
+    refreshTabContentByPath,
   };
 };
 

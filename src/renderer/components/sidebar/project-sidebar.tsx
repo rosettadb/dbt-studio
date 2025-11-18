@@ -52,13 +52,28 @@ const ExplorerTab: React.FC<ExplorerTabProps> = ({
   );
 };
 
-// Source Control Tab Component - Placeholder for now
+// Source Control Tab Component - Monaco Editor Integration
 interface SourceControlTabProps {
   projectPath?: string;
+  onOpenFile?: (filePath: string) => void;
+  onFileSelect?: (filePath: string) => void;
+  onRefreshFileContent?: (filePath: string) => void;
 }
 
-const SourceControlTab: React.FC<SourceControlTabProps> = ({ projectPath }) => {
-  return <SourceControlView projectPath={projectPath} />;
+const SourceControlTab: React.FC<SourceControlTabProps> = ({
+  projectPath,
+  onOpenFile,
+  onFileSelect,
+  onRefreshFileContent,
+}) => {
+  return (
+    <SourceControlView
+      projectPath={projectPath}
+      onOpenFile={onOpenFile}
+      onFileSelect={onFileSelect}
+      onRefreshFileContent={onRefreshFileContent}
+    />
+  );
 };
 
 interface ProjectSidebarProps {
@@ -75,6 +90,11 @@ interface ProjectSidebarProps {
   onRefreshFiles: () => Promise<void>;
   onCopyPath: (source: string, target: string) => Promise<void>;
   onNewFile: (filePath?: string) => void;
+
+  // Source Control tab integration with Monaco editor
+  onSourceControlOpenFile?: (filePath: string) => void;
+  onSourceControlFileSelect?: (filePath: string) => void;
+  onSourceControlRefreshFileContent?: (filePath: string) => void;
 }
 
 export const ProjectSidebar: React.FC<ProjectSidebarProps> = ({
@@ -88,6 +108,9 @@ export const ProjectSidebar: React.FC<ProjectSidebarProps> = ({
   onRefreshFiles,
   onCopyPath,
   onNewFile,
+  onSourceControlOpenFile,
+  onSourceControlFileSelect,
+  onSourceControlRefreshFileContent,
 }) => {
   const [activeTab, setActiveTab] = useState<SidebarTab>('explorer');
   const theme = useTheme();
@@ -213,7 +236,12 @@ export const ProjectSidebar: React.FC<ProjectSidebarProps> = ({
 
         {/* Source Control Tab - New Git Interface */}
         {activeTab === 'scm' && (
-          <SourceControlTab projectPath={project?.path} />
+          <SourceControlTab
+            projectPath={project?.path}
+            onOpenFile={onSourceControlOpenFile}
+            onFileSelect={onSourceControlFileSelect}
+            onRefreshFileContent={onSourceControlRefreshFileContent}
+          />
         )}
       </Box>
     </Box>

@@ -88,14 +88,8 @@ export default class GitService {
     const git = simpleGit(repoPath);
     await git.init(['--initial-branch=main']);
 
-    const readmePath = path.join(repoPath, 'README.md');
-    await fs.promises.writeFile(
-      readmePath,
-      `# ${repoPath.split('/').slice(-1)[0]}\n`,
-    );
-
-    await git.add('README.md');
-    await git.commit('Initial commit');
+    // Only initialize git repository, don't automatically commit files
+    // Let the user decide what to stage and commit
   }
 
   async listBranches(repoPath: string) {
@@ -246,10 +240,97 @@ export default class GitService {
     const git = this.getGitInstance(repoPath);
 
     try {
-      await git.add(files);
+      // Convert absolute paths to relative paths for git
+      const relativePaths = files.map((file) => {
+        // If it's already a relative path or '.', use it as is
+        if (file === '.' || !path.isAbsolute(file)) {
+          return file;
+        }
+        // Convert absolute path to relative path
+        return path.relative(repoPath, file);
+      });
+
+      // eslint-disable-next-line no-console
+      console.log('=== GIT ADD DEBUG ===');
+      // eslint-disable-next-line no-console
+      console.log('Repo path:', repoPath);
+      // eslint-disable-next-line no-console
+      console.log('Original files:', files);
+      // eslint-disable-next-line no-console
+      console.log('Relative paths:', relativePaths);
+
+      await git.add(relativePaths);
+
+      // eslint-disable-next-line no-console
+      console.log('Git add successful');
+      // eslint-disable-next-line no-console
+      console.log('=== END GIT ADD DEBUG ===');
+
       return { success: true };
     } catch (err: any) {
+      // eslint-disable-next-line no-console
+      console.error('Git add failed:', err);
       throw new Error(`Add failed: ${err.message}`);
+    }
+  }
+
+  async unstage(repoPath: string, files: string[]) {
+    const git = this.getGitInstance(repoPath);
+
+    try {
+      // Convert absolute paths to relative paths for git
+      const relativePaths = files.map((file) => {
+        if (!path.isAbsolute(file)) {
+          return file;
+        }
+        return path.relative(repoPath, file);
+      });
+
+      await git.reset(['HEAD', ...relativePaths]);
+      return { success: true };
+    } catch (err: any) {
+      throw new Error(`Unstage failed: ${err.message}`);
+    }
+  }
+
+  async stageAll(repoPath: string) {
+    const git = this.getGitInstance(repoPath);
+
+    try {
+      await git.add('.');
+      return { success: true };
+    } catch (err: any) {
+      throw new Error(`Stage all failed: ${err.message}`);
+    }
+  }
+
+  async unstageAll(repoPath: string) {
+    const git = this.getGitInstance(repoPath);
+
+    try {
+      await git.reset(['HEAD']);
+      return { success: true };
+    } catch (err: any) {
+      throw new Error(`Unstage all failed: ${err.message}`);
+    }
+  }
+
+  async discardChanges(repoPath: string, files: string[]) {
+    const git = this.getGitInstance(repoPath);
+
+    try {
+      // Convert absolute paths to relative paths for git
+      const relativePaths = files.map((file) => {
+        if (!path.isAbsolute(file)) {
+          return file;
+        }
+        return path.relative(repoPath, file);
+      });
+
+      await git.checkout(['--', ...relativePaths]);
+      return { success: true };
+    } catch (err: any) {
+      throw new Error(`Discard changes failed: ${err.message}`);
     }
   }
 
@@ -405,43 +486,243 @@ export default class GitService {
     const git = this.getGitInstance(repoPath);
 
     try {
-      const diff = await git.diff([filePath]);
+      // Convert absolute path to relative path for git
+      const relativePath = path.relative(repoPath, filePath);
+
+      // Get diff for the file (working directory vs HEAD)
+      const diff = await git.diff(['HEAD', '--', relativePath]);
+
       return { filePath, diff };
     } catch (err: any) {
+      // eslint-disable-next-line no-console
+      console.error('Git diff error:', err);
       throw new Error(`Failed to get diff: ${err.message}`);
     }
   }
 
   async getFileStatusList(repoPath: string): Promise<FileStatus[]> {
     const git = this.getGitInstance(repoPath);
-    const status = await git.status();
     const results: FileStatus[] = [];
+    const processedFiles = new Set<string>();
 
-    status.not_added.forEach((file) =>
-      results.push({ path: path.join(repoPath, file), status: 'untracked' }),
+    // eslint-disable-next-line no-console
+    console.log('=== GIT STATUS DETAILED DEBUG ===');
+    // eslint-disable-next-line no-console
+    console.log('Repo path:', repoPath);
+
+    try {
+      // Check if we're in a git repository
+      const isRepo = await git.checkIsRepo();
+      // eslint-disable-next-line no-console
+      console.log('Is git repo:', isRepo);
+
+      // Get current working directory
+      const cwd = await git.raw(['rev-parse', '--show-toplevel']);
+      // eslint-disable-next-line no-console
+      console.log('Git root directory:', cwd.trim());
+
+      // Force refresh git index to detect file changes
+      try {
+        await git.raw(['update-index', '--refresh']);
+      } catch (refreshError) {
+        // Git index refresh can fail normally, ignore errors
+      }
+
+      // Try regular git status first
+      const regularStatus = await git.status();
+      // eslint-disable-next-line no-console
+      console.log('Regular git status after refresh:', {
+        staged: regularStatus.staged,
+        modified: regularStatus.modified,
+        not_added: regularStatus.not_added,
+        deleted: regularStatus.deleted,
+        renamed: regularStatus.renamed,
+        conflicted: regularStatus.conflicted,
+      });
+    } catch (error) {
+      // eslint-disable-next-line no-console
+      console.error('Git status check failed:', error);
+    }
+
+    // Step 1: Get git status for tracked/modified files
+    const rawStatus = await git.raw(['status', '--porcelain']);
+
+    // eslint-disable-next-line no-console
+    console.log('Raw porcelain status length:', rawStatus.length);
+    // eslint-disable-next-line no-console
+    console.log(
+      'Raw porcelain status (first 200 chars):',
+      JSON.stringify(rawStatus.substring(0, 200)),
     );
 
-    status.modified.forEach((file) =>
-      results.push({ path: path.join(repoPath, file), status: 'modified' }),
+    // Don't trim the whole string - preserve leading spaces on each line
+    const lines = rawStatus.split('\n').filter((line) => line.length > 0);
+
+    // eslint-disable-next-line no-console
+    console.log('Filtered lines count:', lines.length);
+    // eslint-disable-next-line no-console
+    console.log(
+      'Raw status lines:',
+      lines.map((l) => JSON.stringify(l)),
     );
 
-    status.staged.forEach((file) =>
-      results.push({ path: path.join(repoPath, file), status: 'staged' }),
-    );
+    lines.forEach((line) => {
+      if (line.length < 3) return;
 
-    status.deleted.forEach((file) =>
-      results.push({ path: path.join(repoPath, file), status: 'deleted' }),
-    );
+      // Git porcelain format: XY filename
+      // X = index status (position 0)
+      // Y = work tree status (position 1)
+      // Space at position 2
+      // Filename starts at position 3
+      const indexStatus = line[0]; // Staged status (position 0)
+      const workTreeStatus = line[1]; // Working tree status (position 1)
+      const filePath = line.substring(3); // File path (skip 'XY ' - 2 status chars + 1 space)
+      const fullPath = path.join(repoPath, filePath);
 
-    status.renamed.forEach((entry) =>
-      results.push({ path: path.join(repoPath, entry.to), status: 'renamed' }),
-    );
+      // eslint-disable-next-line no-console
+      console.log('Parsing line:', JSON.stringify(line));
+      // eslint-disable-next-line no-console
+      console.log('  Line length:', line.length);
+      // eslint-disable-next-line no-console
+      console.log(
+        '  Char 0 (index):',
+        JSON.stringify(line[0]),
+        'code:',
+        line.charCodeAt(0),
+      );
+      // eslint-disable-next-line no-console
+      console.log(
+        '  Char 1 (work tree):',
+        JSON.stringify(line[1]),
+        'code:',
+        line.charCodeAt(1),
+      );
+      // eslint-disable-next-line no-console
+      console.log(
+        '  Char 2 (space):',
+        JSON.stringify(line[2]),
+        'code:',
+        line.charCodeAt(2),
+      );
+      // eslint-disable-next-line no-console
+      console.log('  File path:', JSON.stringify(filePath));
+      // eslint-disable-next-line no-console
+      console.log('  Full path:', fullPath);
 
-    status.conflicted.forEach((file) =>
-      results.push({ path: path.join(repoPath, file), status: 'conflicted' }),
+      // Skip directories
+      if (filePath.endsWith('/')) {
+        return;
+      }
+
+      processedFiles.add(fullPath);
+
+      // Handle staged changes (index status)
+      if (indexStatus !== ' ' && indexStatus !== '?') {
+        let status: 'staged' | 'deleted' | 'renamed';
+        switch (indexStatus) {
+          case 'A':
+            status = 'staged';
+            break;
+          case 'M':
+            status = 'staged';
+            break;
+          case 'D':
+            status = 'deleted';
+            break;
+          case 'R':
+            status = 'renamed';
+            break;
+          case 'C':
+            status = 'staged';
+            break;
+          default:
+            status = 'staged';
+            break;
+        }
+        results.push({ path: fullPath, status });
+      }
+
+      // Handle working tree changes (work tree status)
+      if (workTreeStatus !== ' ') {
+        let status: 'modified' | 'deleted' | 'untracked';
+        switch (workTreeStatus) {
+          case 'M':
+            status = 'modified';
+            break;
+          case 'D':
+            status = 'deleted';
+            break;
+          case '?':
+            status = 'untracked';
+            break;
+          default:
+            status = 'modified';
+            break;
+        }
+        results.push({ path: fullPath, status });
+      }
+    });
+
+    // Step 2: Scan file tree for untracked files that git doesn't know about
+    const untrackedFiles = await this.scanForUntrackedFiles(
+      repoPath,
+      processedFiles,
     );
+    results.push(...untrackedFiles);
+
+    // eslint-disable-next-line no-console
+    console.log('=== GIT STATUS DEBUG ===');
+    // eslint-disable-next-line no-console
+    console.log('Raw git status:', rawStatus);
+    // eslint-disable-next-line no-console
+    console.log('Git status files:', processedFiles.size);
+    // eslint-disable-next-line no-console
+    console.log(
+      'File tree scan found:',
+      untrackedFiles.length,
+      'additional files',
+    );
+    // eslint-disable-next-line no-console
+    console.log('Total file statuses:', results.length);
+    // eslint-disable-next-line no-console
+    console.log(
+      'Results:',
+      results.map((r) => ({
+        path: r.path.replace(repoPath, ''),
+        status: r.status,
+      })),
+    );
+    // eslint-disable-next-line no-console
+    console.log('=== END DEBUG ===');
 
     return results;
+  }
+
+  private async scanForUntrackedFiles(
+    repoPath: string,
+    processedFiles: Set<string>,
+  ): Promise<FileStatus[]> {
+    const git = this.getGitInstance(repoPath);
+
+    try {
+      const lsOutput = await git.raw([
+        'ls-files',
+        '--others',
+        '--exclude-standard',
+      ]);
+
+      return lsOutput
+        .split('\n')
+        .map((line) => line.trim())
+        .filter((line): line is string => Boolean(line))
+        .map((relativePath) => path.join(repoPath, relativePath))
+        .filter((fullPath) => !processedFiles.has(fullPath))
+        .map((fullPath) => ({ path: fullPath, status: 'untracked' as const }));
+    } catch (error) {
+      // eslint-disable-next-line no-console
+      console.warn('Could not list untracked files:', error);
+      return [];
+    }
   }
 
   async getFileStatus(
@@ -478,5 +759,33 @@ export default class GitService {
     }
 
     return null;
+  }
+
+  async getAheadBehindCount(
+    repoPath: string,
+  ): Promise<{ ahead: number; behind: number } | null> {
+    const git = this.getGitInstance(repoPath);
+
+    try {
+      // Check if there's a remote tracking branch
+      const isTracking = await this.isTrackingSet(repoPath);
+      if (!isTracking) {
+        return null;
+      }
+
+      // Get ahead/behind count
+      const result = await git.raw([
+        'rev-list',
+        '--left-right',
+        '--count',
+        'HEAD...@{upstream}',
+      ]);
+      const [ahead, behind] = result.trim().split('\t').map(Number);
+
+      return { ahead, behind };
+    } catch (error) {
+      // No remote tracking branch or other error
+      return null;
+    }
   }
 }
