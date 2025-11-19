@@ -9,6 +9,7 @@ import registerSecureStorageHandlers from './secureStorage.ipcHandlers';
 import registerUpdateHandlers from './updates.ipcHandlers';
 import registerCloudExplorerHandlers from './cloudExplorer.ipcHandlers';
 import registerAIHandlers from './ai.ipcHandlers';
+import registerDuckLakeHandlers from './duckLake.ipcHandlers';
 
 export {
   registerCliHandlers,
@@ -22,4 +23,5 @@ export {
   registerUpdateHandlers,
   registerCloudExplorerHandlers,
   registerAIHandlers,
+  registerDuckLakeHandlers,
 };

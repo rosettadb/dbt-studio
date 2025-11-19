@@ -70,3 +70,13 @@ export const DBTProjects: React.FC = () => {
 export const ElectricalServices: React.FC = () => (
   <ElectricalServicesIcon color="primary" />
 );
+
+export const DataLake: React.FC = () => {
+  return (
+    <img
+      src={icons.duckLake}
+      alt="data lake"
+      style={{ ...style, width: 24, height: 24, marginLeft: 2 }}
+    />
+  );
+};

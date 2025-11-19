@@ -21,6 +21,7 @@ import {
   Setup,
   CloudExplorer,
   Connections,
+  DuckLake,
 } from './screens';
 import { SelectProjectLayout } from './layouts';
 import { AppProvider, ProcessProvider } from './context';
@@ -88,6 +89,24 @@ const App: React.FC = () => {
             path="cloud-explorer/bucket/:connectionId/:bucketName"
             element={<CloudExplorer />}
           />
+          <Route
+            path="duck-lake"
+            element={<Navigate to="/app/duck-lake/dashboard" />}
+          />
+          <Route path="duck-lake/dashboard" element={<DuckLake />} />
+          <Route path="duck-lake/instances" element={<DuckLake />} />
+          <Route
+            path="duck-lake/instances/:instanceId"
+            element={<DuckLake />}
+          />
+          <Route
+            path="duck-lake/instances/:instanceId/edit"
+            element={<DuckLake />}
+          />
+          <Route path="duck-lake/tables" element={<DuckLake />} />
+          <Route path="duck-lake/history" element={<DuckLake />} />
+          <Route path="duck-lake/new-instance" element={<DuckLake />} />
+          <Route path="duck-lake/table/:tableId" element={<DuckLake />} />
           <Route path="loading" element={<Loading />} />
           <Route path="*" element={<Navigate to="/app" />} />
         </Route>

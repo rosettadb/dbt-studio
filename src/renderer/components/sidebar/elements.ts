@@ -34,6 +34,11 @@ const baseSidebarElements: SideBarElementType[] = [
     text: 'Cloud Object Explorer',
     icon: Icons.CloudIcon,
   },
+  {
+    path: '/app/duck-lake',
+    text: 'DuckLake',
+    icon: Icons.DataLake,
+  },
 ];
 
 export const getSidebarElements = (
