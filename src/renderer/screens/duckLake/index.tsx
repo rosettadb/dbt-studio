@@ -6,14 +6,13 @@ import {
   DuckLakeDashboard,
   DuckLakeSidebar,
   DuckLakeInstances,
-  DuckLakeTables,
+  DuckLakeTablesView,
   DuckLakeConnectionWizard,
   DuckLakeInstanceDetails,
   DuckLakeInstanceEditForm,
 } from '../../components/duckLake';
 import {
   useDuckLakeInstances,
-  useDuckLakeTables,
   useCreateDuckLakeInstance,
   useDuckLakeInstance,
   useConnectDuckLakeInstance,
@@ -87,6 +86,10 @@ const DuckLake: React.FC = () => {
     if (pathSegments.includes('edit')) {
       return 'edit-instance';
     }
+    // Check for tables route pattern: /app/duck-lake/instances/:id/tables
+    if (pathSegments.includes('instances') && pathSegments.includes('tables')) {
+      return 'instance-tables';
+    }
     if (pathSegments.includes('instances') && pathSegments.length > 4) {
       return 'instance-detail';
     }
@@ -129,9 +132,7 @@ const DuckLake: React.FC = () => {
   );
   const currentInstance = instanceQuery.data;
 
-  // Get tables for current instance
-  const tablesQuery = useDuckLakeTables(instanceId || '');
-  const tables = tablesQuery.data || [];
+  // Tables are now handled by DuckLakeTablesView component
 
   // Render content based on current section
   const renderContent = () => {
@@ -148,13 +149,41 @@ const DuckLake: React.FC = () => {
       case 'instances':
         return <DuckLakeInstances />;
 
-      case 'tables':
+      case 'instance-tables':
+        // Show tables for a specific instance from route: /instances/:id/tables
         return (
-          <DuckLakeTables
-            tables={tables as any}
+          <DuckLakeTablesView
+            instanceId={instanceId || ''}
             onPreview={handleTablePreview}
             onQuery={handleTableQuery}
           />
+        );
+
+      case 'tables':
+        // Show tables for a specific instance if instanceId is in URL
+        if (instanceId) {
+          return (
+            <DuckLakeTablesView
+              instanceId={instanceId}
+              onPreview={handleTablePreview}
+              onQuery={handleTableQuery}
+            />
+          );
+        }
+        // Otherwise show message to select an instance
+        return (
+          <Box sx={{ p: 2 }}>
+            <Typography
+              variant="h4"
+              component="h1"
+              sx={{ fontWeight: 'bold', mb: 3 }}
+            >
+              Tables
+            </Typography>
+            <Typography variant="body1" color="text.secondary">
+              Please select an instance from the sidebar to view its tables.
+            </Typography>
+          </Box>
         );
 
       case 'history':

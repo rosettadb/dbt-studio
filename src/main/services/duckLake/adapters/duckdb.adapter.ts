@@ -20,6 +20,7 @@ import {
   DuckLakeQueryRequest,
 } from '../../../../types/duckLake';
 import { DuckLakeError } from '../../../../types/duckLakeErrors';
+import { normalizeNumericValue } from '../../../../renderer/utils/fileUtils';
 
 export class DuckDBCatalogAdapter extends CatalogAdapter {
   async connect(
@@ -63,6 +64,7 @@ export class DuckDBCatalogAdapter extends CatalogAdapter {
         instance: duckdbInstance,
         connection,
         catalogType: 'duckdb',
+        instanceName: instance.name,
         connectedAt: new Date(),
       };
 
@@ -222,35 +224,98 @@ export class DuckDBCatalogAdapter extends CatalogAdapter {
         throw new Error('No active connection');
       }
 
-      // Query DuckLake system tables for table list
+      // First, find the DuckLake metadata database (attached database)
+      const databasesQuery = `
+        SELECT database_name
+        FROM duckdb_databases()
+        WHERE database_name LIKE '__ducklake_metadata_%'
+        LIMIT 1
+      `;
+
+      const databasesResult =
+        await this.connectionInfo.connection.run(databasesQuery);
+      const databaseRows = await databasesResult.getRows();
+
+      if (databaseRows.length === 0) {
+        const allDatabasesResult = await this.connectionInfo.connection.run(
+          'SELECT database_name FROM duckdb_databases()',
+        );
+        await allDatabasesResult.getRows();
+        return [];
+      }
+
+      const metadataDatabase = Array.isArray(databaseRows[0])
+        ? databaseRows[0][0]
+        : (databaseRows[0] as any).database_name;
+
       const query = `
-        SELECT 
-          table_name,
-          schema_name,
-          created_at,
-          updated_at
-        FROM ducklake_table 
-        ORDER BY table_name
+        WITH current_snapshot AS (
+          SELECT COALESCE(max(snapshot_id), 0) as snapshot_id
+          FROM ${metadataDatabase}.main.ducklake_snapshot
+        )
+        SELECT
+          t.table_id,
+          t.table_name,
+          s.schema_name,
+          t.table_uuid,
+          cs.snapshot_id as current_snapshot,
+          ts.record_count,
+          ts.file_size_bytes
+        FROM ${metadataDatabase}.main.ducklake_table t
+        JOIN ${metadataDatabase}.main.ducklake_schema s ON t.schema_id = s.schema_id
+        LEFT JOIN ${metadataDatabase}.main.ducklake_table_stats ts ON ts.table_id = t.table_id
+        CROSS JOIN current_snapshot cs
+        WHERE cs.snapshot_id >= t.begin_snapshot
+          AND (cs.snapshot_id < t.end_snapshot OR t.end_snapshot IS NULL)
+          AND cs.snapshot_id >= s.begin_snapshot
+          AND (cs.snapshot_id < s.end_snapshot OR s.end_snapshot IS NULL)
+        ORDER BY s.schema_name, t.table_name
       `;
 
       const result = await this.connectionInfo.connection.run(query);
       const rows = await result.getRows();
 
-      // Convert to DuckLakeTableInfo format
-      const tables: DuckLakeTableInfo[] = rows.map((row: any) => ({
-        name: row.table_name,
-        schema: row.schema_name || 'main',
-        instanceId: '', // Will be set by calling service
-        columns: [], // Will be populated by separate call
-        snapshots: [], // Will be populated by separate call
-        createdAt: new Date(row.created_at),
-        updatedAt: new Date(row.updated_at),
-      }));
+      const tables: DuckLakeTableInfo[] = rows.map((row: any) => {
+        if (Array.isArray(row)) {
+          const [, tableName, schemaName, , , recordCount, fileSizeBytes] = row;
+          return {
+            name: tableName,
+            schema: schemaName || 'main',
+            instanceId: '',
+            columns: [],
+            snapshots: [],
+            createdAt: new Date(),
+            updatedAt: new Date(),
+            rowCount: normalizeNumericValue(recordCount),
+            sizeBytes: normalizeNumericValue(fileSizeBytes),
+          };
+        }
+
+        return {
+          name: row.table_name,
+          schema: row.schema_name || 'main',
+          instanceId: '',
+          columns: [],
+          snapshots: [],
+          createdAt: new Date(),
+          updatedAt: new Date(),
+          rowCount: normalizeNumericValue(row.record_count),
+          sizeBytes: normalizeNumericValue(row.file_size_bytes),
+        };
+      });
 
       return tables;
-    } catch (error) {
-      // eslint-disable-next-line no-console
-      console.error('Failed to list DuckDB tables:', error);
+    } catch (error: any) {
+      const errorMessage = error.message || '';
+
+      if (
+        errorMessage.includes('ducklake_snapshot does not exist') ||
+        errorMessage.includes('ducklake_table does not exist') ||
+        errorMessage.includes('Catalog Error')
+      ) {
+        return [];
+      }
+
       throw error;
     }
   }
@@ -261,15 +326,34 @@ export class DuckDBCatalogAdapter extends CatalogAdapter {
         throw new Error('No active connection');
       }
 
-      // Get table metadata
+      const databasesQuery = `
+        SELECT database_name
+        FROM duckdb_databases()
+        WHERE database_name LIKE '__ducklake_metadata_%'
+        LIMIT 1
+      `;
+
+      const databasesResult =
+        await this.connectionInfo.connection.run(databasesQuery);
+      const databaseRows = await databasesResult.getRows();
+
+      if (databaseRows.length === 0) {
+        throw new Error('DuckLake metadata database not found');
+      }
+
+      const metadataDatabase = Array.isArray(databaseRows[0])
+        ? databaseRows[0][0]
+        : (databaseRows[0] as any).database_name;
+
       const tableQuery = `
-        SELECT 
-          table_name,
-          schema_name,
-          created_at,
-          updated_at
-        FROM ducklake_table 
-        WHERE table_name = ?
+        SELECT
+          t.table_name,
+          s.schema_name,
+          t.created_at,
+          t.updated_at
+        FROM ${metadataDatabase}.main.ducklake_table t
+        JOIN ${metadataDatabase}.main.ducklake_schema s ON t.schema_id = s.schema_id
+        WHERE t.table_name = ?
       `;
 
       const tableResult = await this.connectionInfo.connection.run(
@@ -282,18 +366,25 @@ export class DuckDBCatalogAdapter extends CatalogAdapter {
         throw new Error(`Table not found: ${tableName}`);
       }
 
-      const tableRow = tableRows[0];
+      const tableRow = Array.isArray(tableRows[0])
+        ? {
+            table_name: tableRows[0][0],
+            schema_name: tableRows[0][1],
+            created_at: tableRows[0][2],
+            updated_at: tableRows[0][3],
+          }
+        : tableRows[0];
 
-      // Get column information
       const columnsQuery = `
-        SELECT 
-          column_name,
-          data_type,
-          is_nullable,
-          comment
-        FROM ducklake_column 
-        WHERE table_name = ?
-        ORDER BY ordinal_position
+        SELECT
+          c.column_name,
+          c.data_type,
+          c.is_nullable,
+          c.comment
+        FROM ${metadataDatabase}.main.ducklake_column c
+        JOIN ${metadataDatabase}.main.ducklake_table t ON c.table_id = t.table_id
+        WHERE t.table_name = ?
+        ORDER BY c.ordinal_position
       `;
 
       const columnsResult = await this.connectionInfo.connection.run(
@@ -302,19 +393,30 @@ export class DuckDBCatalogAdapter extends CatalogAdapter {
       );
       const columnRows = await columnsResult.getRows();
 
-      const columns = columnRows.map((col: any) => ({
-        name: col.column_name,
-        type: col.data_type,
-        nullable: col.is_nullable,
-        comment: col.comment,
-      }));
+      const columns = columnRows.map((col: any) => {
+        if (Array.isArray(col)) {
+          return {
+            name: col[0],
+            type: col[1],
+            nullable: col[2],
+            comment: col[3],
+          };
+        }
+
+        return {
+          name: col.column_name,
+          type: col.data_type,
+          nullable: col.is_nullable,
+          comment: col.comment,
+        };
+      });
 
       return {
         name: tableRow.table_name,
         schema: tableRow.schema_name || 'main',
-        instanceId: '', // Will be set by calling service
+        instanceId: '',
         columns,
-        snapshots: [], // Will be populated by separate call
+        snapshots: [],
         createdAt: new Date(tableRow.created_at),
         updatedAt: new Date(tableRow.updated_at),
       };
@@ -352,10 +454,14 @@ export class DuckDBCatalogAdapter extends CatalogAdapter {
 
       const result = await this.connectionInfo.connection.run(query);
       const rows = await result.getRows();
-      const columns = result.schema.map((col: any) => ({
-        name: col.name,
-        type: col.type,
-      }));
+
+      // Handle DDL statements (CREATE, DROP, etc.) that don't return a schema
+      const columns = result.schema
+        ? result.schema.map((col: any) => ({
+            name: col.name,
+            type: col.type,
+          }))
+        : [];
 
       const executionTime = Date.now() - startTime;
 
@@ -379,14 +485,14 @@ export class DuckDBCatalogAdapter extends CatalogAdapter {
       }
 
       const query = `
-        SELECT 
+        SELECT
           snapshot_id,
           table_id,
           timestamp_ms,
           operation,
           summary,
           parent_snapshot_id
-        FROM ducklake_snapshot 
+        FROM ducklake_snapshot
         WHERE table_id = (
           SELECT table_id FROM ducklake_table WHERE table_name = ?
         )

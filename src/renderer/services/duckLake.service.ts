@@ -14,7 +14,6 @@ import {
   DuckLakeQueryResult,
   DuckLakeMaintenanceTask,
   DuckLakeCatalogConfig,
-  DuckLakeColumnInfo,
 } from '../../types/duckLake';
 
 export namespace DuckLakeService {
@@ -92,10 +91,18 @@ export namespace DuckLakeService {
   export async function listTables(
     instanceId: string,
   ): Promise<DuckLakeTableInfo[]> {
-    return window.electron.ipcRenderer.invoke(
+    // eslint-disable-next-line no-console
+    console.log(
+      '[DuckLakeService.listTables] Calling IPC for instanceId:',
+      instanceId,
+    );
+    const result = await window.electron.ipcRenderer.invoke(
       'ducklake:table:list',
       instanceId,
     );
+    // eslint-disable-next-line no-console
+    console.log('[DuckLakeService.listTables] IPC result:', result);
+    return result;
   }
 
   export async function getTable(
@@ -109,16 +116,16 @@ export namespace DuckLakeService {
     );
   }
 
-  export async function createTable(
+  export async function importTable(
     instanceId: string,
     tableName: string,
-    schema: DuckLakeColumnInfo[],
+    sourceQuery: string,
   ): Promise<void> {
     return window.electron.ipcRenderer.invoke(
-      'ducklake:table:create',
+      'ducklake:table:import',
       instanceId,
       tableName,
-      schema,
+      sourceQuery,
     );
   }
 

@@ -18,6 +18,7 @@ import {
   DuckLakeQueryRequest,
 } from '../../../../types/duckLake';
 import { DuckLakeError } from '../../../../types/duckLakeErrors';
+import { normalizeNumericValue } from '../../../../renderer/utils/fileUtils';
 
 export class PostgreSQLCatalogAdapter extends CatalogAdapter {
   async connect(
@@ -61,6 +62,7 @@ export class PostgreSQLCatalogAdapter extends CatalogAdapter {
         instance: duckdbInstance,
         connection,
         catalogType: 'postgresql',
+        instanceName: instance.name,
         connectedAt: new Date(),
       };
 
@@ -237,33 +239,99 @@ export class PostgreSQLCatalogAdapter extends CatalogAdapter {
         throw new Error('No active connection');
       }
 
-      // Query DuckLake system tables for table list
+      const databasesQuery = `
+        SELECT database_name
+        FROM duckdb_databases()
+        WHERE database_name LIKE '__ducklake_metadata_%'
+        LIMIT 1
+      `;
+
+      const databasesResult =
+        await this.connectionInfo.connection.run(databasesQuery);
+      const databaseRows = await databasesResult.getRows();
+
+      if (databaseRows.length === 0) {
+        const allDatabasesResult = await this.connectionInfo.connection.run(
+          'SELECT database_name FROM duckdb_databases()',
+        );
+        await allDatabasesResult.getRows();
+        return [];
+      }
+
+      const metadataDatabase = Array.isArray(databaseRows[0])
+        ? databaseRows[0][0]
+        : (databaseRows[0] as any).database_name;
+
+      const quotedMetadataDatabase = `"${metadataDatabase}"`;
+
       const query = `
-        SELECT 
-          table_name,
-          schema_name,
-          created_at,
-          updated_at
-        FROM ducklake_table 
-        ORDER BY table_name
+        WITH current_snapshot AS (
+          SELECT COALESCE(max(snapshot_id), 0) as snapshot_id
+          FROM ${quotedMetadataDatabase}.ducklake_snapshot
+        )
+        SELECT
+          t.table_id,
+          t.table_name,
+          s.schema_name,
+          t.table_uuid,
+          cs.snapshot_id as current_snapshot,
+          ts.record_count,
+          ts.file_size_bytes
+        FROM ${quotedMetadataDatabase}.ducklake_table t
+        JOIN ${quotedMetadataDatabase}.ducklake_schema s ON t.schema_id = s.schema_id
+        LEFT JOIN ${quotedMetadataDatabase}.ducklake_table_stats ts ON ts.table_id = t.table_id
+        CROSS JOIN current_snapshot cs
+        WHERE cs.snapshot_id >= t.begin_snapshot
+          AND (cs.snapshot_id < t.end_snapshot OR t.end_snapshot IS NULL)
+          AND cs.snapshot_id >= s.begin_snapshot
+          AND (cs.snapshot_id < s.end_snapshot OR s.end_snapshot IS NULL)
+        ORDER BY s.schema_name, t.table_name
       `;
 
       const result = await this.connectionInfo.connection.run(query);
       const rows = await result.getRows();
 
-      // Convert to DuckLakeTableInfo format
-      const tables: DuckLakeTableInfo[] = rows.map((row: any) => ({
-        name: row.table_name,
-        schema: row.schema_name || 'public',
-        instanceId: '', // Will be set by calling service
-        columns: [], // Will be populated by separate call
-        snapshots: [], // Will be populated by separate call
-        createdAt: new Date(row.created_at),
-        updatedAt: new Date(row.updated_at),
-      }));
+      const tables: DuckLakeTableInfo[] = rows.map((row: any) => {
+        if (Array.isArray(row)) {
+          const [, tableName, schemaName, , , recordCount, fileSizeBytes] = row;
+          return {
+            name: tableName,
+            schema: schemaName || 'public',
+            instanceId: '',
+            columns: [],
+            snapshots: [],
+            createdAt: new Date(),
+            updatedAt: new Date(),
+            rowCount: normalizeNumericValue(recordCount),
+            sizeBytes: normalizeNumericValue(fileSizeBytes),
+          };
+        }
+
+        return {
+          name: row.table_name,
+          schema: row.schema_name || 'public',
+          instanceId: '',
+          columns: [],
+          snapshots: [],
+          createdAt: new Date(),
+          updatedAt: new Date(),
+          rowCount: normalizeNumericValue(row.record_count),
+          sizeBytes: normalizeNumericValue(row.file_size_bytes),
+        };
+      });
 
       return tables;
-    } catch (error) {
+    } catch (error: any) {
+      const errorMessage = error.message || '';
+
+      if (
+        errorMessage.includes('ducklake_snapshot does not exist') ||
+        errorMessage.includes('ducklake_table does not exist') ||
+        errorMessage.includes('Catalog Error')
+      ) {
+        return [];
+      }
+
       // eslint-disable-next-line no-console
       console.error('Failed to list PostgreSQL tables:', error);
       throw error;
@@ -278,12 +346,12 @@ export class PostgreSQLCatalogAdapter extends CatalogAdapter {
 
       // Get table metadata
       const tableQuery = `
-        SELECT 
+        SELECT
           table_name,
           schema_name,
           created_at,
           updated_at
-        FROM ducklake_table 
+        FROM ducklake_table
         WHERE table_name = ?
       `;
 
@@ -301,12 +369,12 @@ export class PostgreSQLCatalogAdapter extends CatalogAdapter {
 
       // Get column information
       const columnsQuery = `
-        SELECT 
+        SELECT
           column_name,
           data_type,
           is_nullable,
           comment
-        FROM ducklake_column 
+        FROM ducklake_column
         WHERE table_name = ?
         ORDER BY ordinal_position
       `;
@@ -367,10 +435,14 @@ export class PostgreSQLCatalogAdapter extends CatalogAdapter {
 
       const result = await this.connectionInfo.connection.run(query);
       const rows = await result.getRows();
-      const columns = result.schema.map((col: any) => ({
-        name: col.name,
-        type: col.type,
-      }));
+
+      // Handle DDL statements (CREATE, DROP, etc.) that don't return a schema
+      const columns = result.schema
+        ? result.schema.map((col: any) => ({
+            name: col.name,
+            type: col.type,
+          }))
+        : [];
 
       const executionTime = Date.now() - startTime;
 
@@ -394,14 +466,14 @@ export class PostgreSQLCatalogAdapter extends CatalogAdapter {
       }
 
       const query = `
-        SELECT 
+        SELECT
           snapshot_id,
           table_id,
           timestamp_ms,
           operation,
           summary,
           parent_snapshot_id
-        FROM ducklake_snapshot 
+        FROM ducklake_snapshot
         WHERE table_id = (
           SELECT table_id FROM ducklake_table WHERE table_name = ?
         )

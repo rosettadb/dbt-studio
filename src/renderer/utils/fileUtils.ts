@@ -130,3 +130,15 @@ export const getFileTypeDescription = (fileName: string): string => {
 
   return typeMap[extension] || `${extension.toUpperCase()} File`;
 };
+
+export const normalizeNumericValue = (
+  value: number | bigint | null | undefined,
+): number | undefined => {
+  if (value == null) {
+    return undefined;
+  }
+  if (typeof value === 'bigint') {
+    return Number(value);
+  }
+  return value;
+};

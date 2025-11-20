@@ -11,7 +11,6 @@ import {
   DuckLakeInstanceUpdateRequest,
   DuckLakeCatalogConfig,
   DuckLakeQueryRequest,
-  DuckLakeColumnInfo,
 } from '../../types/duckLake';
 
 const registerDuckLakeHandlers = () => {
@@ -84,14 +83,14 @@ const registerDuckLakeHandlers = () => {
   );
 
   ipcMain.handle(
-    'ducklake:table:create',
+    'ducklake:table:import',
     async (
       _event,
       instanceId: string,
       tableName: string,
-      schema: DuckLakeColumnInfo[],
+      sourceQuery: string,
     ) => {
-      return DuckLakeService.createTable(instanceId, tableName, schema);
+      return DuckLakeService.importTable(instanceId, tableName, sourceQuery);
     },
   );
 

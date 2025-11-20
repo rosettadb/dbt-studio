@@ -20,7 +20,6 @@ import {
   DuckLakeQueryResult,
   DuckLakeMaintenanceTask,
   DuckLakeCatalogConfig,
-  DuckLakeColumnInfo,
   DuckLakeMaintenanceType,
 } from '../../types/duckLake';
 import { DuckLakeError } from '../../types/duckLakeErrors';
@@ -346,19 +345,42 @@ export default class DuckLakeService {
   // Table Management
   static async listTables(instanceId: string): Promise<DuckLakeTableInfo[]> {
     try {
+      // eslint-disable-next-line no-console
+      console.log(
+        '[DuckLakeService.listTables] Starting for instanceId:',
+        instanceId,
+      );
+
       await this.ensureConnected(instanceId);
+      // eslint-disable-next-line no-console
+      console.log('[DuckLakeService.listTables] Connection ensured');
+
       const adapter = await this.getAdapter(instanceId);
+      // eslint-disable-next-line no-console
+      console.log(
+        '[DuckLakeService.listTables] Adapter obtained:',
+        adapter.constructor.name,
+      );
 
       const tables = await adapter.listTables();
+      // eslint-disable-next-line no-console
+      console.log(
+        '[DuckLakeService.listTables] Raw tables from adapter:',
+        tables,
+      );
 
       // Set instanceId for each table
-      return tables.map((table) => ({
+      const result = tables.map((table) => ({
         ...table,
         instanceId,
       }));
+
+      // eslint-disable-next-line no-console
+      console.log('[DuckLakeService.listTables] Final result:', result);
+      return result;
     } catch (error) {
       // eslint-disable-next-line no-console
-      console.error(error);
+      console.error('[DuckLakeService.listTables] Error:', error);
       throw error;
     }
   }
@@ -384,20 +406,51 @@ export default class DuckLakeService {
     }
   }
 
-  static async createTable(
+  static async importTable(
     instanceId: string,
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
     tableName: string,
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    schema: DuckLakeColumnInfo[],
+    sourceQuery: string,
   ): Promise<void> {
     try {
-      await this.ensureConnected(instanceId);
+      // eslint-disable-next-line no-console
+      console.log('DuckLakeService.importTable called with:', {
+        instanceId,
+        tableName,
+        sourceQuery,
+      });
 
-      // TODO: Implement table creation for tableName with schema
+      await this.ensureConnected(instanceId);
+      const adapter = await this.getAdapter(instanceId);
+
+      // Validate inputs
+      if (!tableName || tableName.trim() === '') {
+        throw DuckLakeError.validation('Table name is required');
+      }
+
+      if (!sourceQuery || sourceQuery.trim() === '') {
+        throw DuckLakeError.validation('Source query is required');
+      }
+
+      // Execute the import query
+      // This follows the DuckLake pattern: CREATE TABLE name AS FROM 'source'
+      // DuckLake will:
+      // 1. Read the source data
+      // 2. Infer the schema automatically
+      // 3. Create metadata in the catalog
+      // 4. Write data as Parquet files in DATA_PATH
+      // 5. Create initial snapshot
+      await adapter.executeQuery({
+        instanceId,
+        sql: sourceQuery,
+      });
+
+      // eslint-disable-next-line no-console
+      console.log(
+        `Table ${tableName} imported successfully in instance ${instanceId}`,
+      );
     } catch (error) {
       // eslint-disable-next-line no-console
-      console.error(error);
+      console.error(`Failed to import table ${tableName}:`, error);
       throw error;
     }
   }

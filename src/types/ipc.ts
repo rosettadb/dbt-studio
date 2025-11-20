@@ -232,7 +232,11 @@ export type DuckLakeChannels =
   | 'ducklake:instance:delete'
   | 'ducklake:instance:health'
 
-  // Catalog Management
+  // Instance Attachment (new terminology matching DuckLake SQL)
+  | 'ducklake:instance:attach'
+  | 'ducklake:instance:detach'
+
+  // Catalog Management (legacy, kept for backward compatibility)
   | 'ducklake:catalog:connect'
   | 'ducklake:catalog:disconnect'
   | 'ducklake:catalog:test'
@@ -240,7 +244,7 @@ export type DuckLakeChannels =
   // Table Management
   | 'ducklake:table:list'
   | 'ducklake:table:get'
-  | 'ducklake:table:create'
+  | 'ducklake:table:import'
   | 'ducklake:table:delete'
 
   // Snapshot Management

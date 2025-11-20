@@ -30,6 +30,7 @@ export interface ConnectionInfo {
   instance: any; // DuckDBInstance
   connection: any; // DuckDBConnection
   catalogType: string;
+  instanceName: string; // DuckLake instance name for DETACH
   connectedAt: Date;
 }
 
@@ -209,13 +210,52 @@ export abstract class CatalogAdapter {
   }
 
   /**
+   * Execute DETACH command for DuckLake catalog
+   * This properly frees memory by detaching the DuckLake instance
+   */
+  // eslint-disable-next-line class-methods-use-this
+  protected async detachDuckLakeCatalog(
+    connection: any,
+    instanceName: string,
+  ): Promise<void> {
+    try {
+      const escapedInstanceName = instanceName.replace(/"/g, '""');
+
+      // Switch to memory database first (can't detach current database)
+      await connection.run('USE memory');
+
+      // Execute DETACH to properly free memory
+      const detachQuery = `DETACH "${escapedInstanceName}"`;
+      await connection.run(detachQuery);
+
+      // eslint-disable-next-line no-console
+      console.log(`Successfully detached DuckLake instance: ${instanceName}`);
+    } catch (error) {
+      // eslint-disable-next-line no-console
+      console.error('Failed to detach DuckLake catalog:', error);
+      // Don't throw - we still want to clean up even if detach fails
+    }
+  }
+
+  /**
    * Common cleanup for connections
+   * Now properly executes DETACH before cleanup to free memory
    */
   protected async cleanup(): Promise<void> {
     if (this.connectionInfo) {
       try {
-        // DuckDB Node.js API handles cleanup automatically
-        // No explicit close methods are needed
+        // Execute DETACH command to properly free memory
+        if (
+          this.connectionInfo.instanceName &&
+          this.connectionInfo.connection
+        ) {
+          await this.detachDuckLakeCatalog(
+            this.connectionInfo.connection,
+            this.connectionInfo.instanceName,
+          );
+        }
+
+        // DuckDB Node.js API handles connection cleanup automatically
         this.connectionInfo = null;
       } catch (error) {
         // eslint-disable-next-line no-console

@@ -44,6 +44,7 @@ import {
 } from '@mui/icons-material';
 import { useNavigate } from 'react-router-dom';
 import moment from 'moment';
+import { DuckLakeTablesView } from './DuckLakeTablesView';
 
 interface DuckLakeInstance {
   id: string;
@@ -671,22 +672,7 @@ export const DuckLakeInstanceDetails: React.FC<
         <CardContent>
           {currentTab === 0 && renderOverviewTab()}
           {currentTab === 1 && renderConfigurationTab()}
-          {currentTab === 2 && (
-            <Box sx={{ mt: 2 }}>
-              <Typography variant="body1" color="text.secondary">
-                Table management coming soon...
-              </Typography>
-              <Button
-                variant="outlined"
-                sx={{ mt: 2 }}
-                onClick={() =>
-                  navigate(`/app/duck-lake/instances/${instance.id}/tables`)
-                }
-              >
-                View Tables
-              </Button>
-            </Box>
-          )}
+          {currentTab === 2 && <DuckLakeTablesView instanceId={instance.id} />}
           {currentTab === 3 && (
             <Box sx={{ mt: 2 }}>
               <Typography variant="body1" color="text.secondary">

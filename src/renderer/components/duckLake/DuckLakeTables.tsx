@@ -143,7 +143,6 @@ export const DuckLakeTables: React.FC<DuckLakeTablesProps> = ({
             <TableHead>
               <TableRow>
                 <TableCell>Table Name</TableCell>
-                <TableCell>Instance</TableCell>
                 <TableCell>Schema</TableCell>
                 <TableCell>Rows</TableCell>
                 <TableCell>Size</TableCell>
@@ -173,11 +172,6 @@ export const DuckLakeTables: React.FC<DuckLakeTablesProps> = ({
                         {table.name}
                       </Typography>
                     </Box>
-                  </TableCell>
-                  <TableCell>
-                    <Typography variant="body2" color="text.secondary">
-                      {table.instanceName}
-                    </Typography>
                   </TableCell>
                   <TableCell>
                     <Typography variant="body2">
