@@ -23,7 +23,6 @@ import {
   Tab,
 } from '@mui/material';
 import {
-  Storage,
   Dataset as Database,
   Settings,
   Edit,
@@ -45,6 +44,10 @@ import {
 import { useNavigate } from 'react-router-dom';
 import moment from 'moment';
 import { DuckLakeTablesView } from './DuckLakeTablesView';
+import {
+  databaseIcons,
+  cloudStorageImages,
+} from '../../../../assets/connectionIcons';
 
 interface DuckLakeInstance {
   id: string;
@@ -181,143 +184,186 @@ export const DuckLakeInstanceDetails: React.FC<
     }
   };
 
+  const getStorageType = (dataPath: string) => {
+    if (dataPath.startsWith('s3://')) {
+      return 'Amazon S3';
+    }
+    if (dataPath.startsWith('gs://')) {
+      return 'Google Cloud Storage';
+    }
+    if (dataPath.startsWith('abfss://')) {
+      return 'Azure Blob Storage';
+    }
+    return 'Local Filesystem';
+  };
+
+  const getStorageIcon = (dataPath: string) => {
+    if (dataPath.startsWith('s3://')) {
+      return (
+        <Box
+          component="img"
+          src={cloudStorageImages.aws}
+          alt="AWS S3"
+          sx={{ width: 24, height: 24 }}
+        />
+      );
+    }
+    if (dataPath.startsWith('gs://')) {
+      return (
+        <Box
+          component="img"
+          src={cloudStorageImages.gcs}
+          alt="Google Cloud Storage"
+          sx={{ width: 24, height: 24 }}
+        />
+      );
+    }
+    if (dataPath.startsWith('abfss://')) {
+      return (
+        <Box
+          component="img"
+          src={cloudStorageImages.azure}
+          alt="Azure Blob Storage"
+          sx={{ width: 24, height: 24 }}
+        />
+      );
+    }
+    return <Folder color="action" />;
+  };
+
   const renderOverviewTab = () => (
     <Box sx={{ mt: 2 }}>
       <Grid container spacing={3}>
         {/* Status Card */}
         <Grid item xs={12} md={6}>
-          <Paper sx={{ p: 2 }}>
-            <Typography
-              variant="h6"
-              gutterBottom
-              sx={{ display: 'flex', alignItems: 'center', gap: 1 }}
-            >
-              {getStatusIcon(instance.status)}
-              Instance Status
-            </Typography>
-            <List dense>
+          <Typography
+            variant="h6"
+            gutterBottom
+            sx={{ display: 'flex', alignItems: 'center', gap: 1 }}
+          >
+            {getStatusIcon(instance.status)}
+            Instance Status
+          </Typography>
+          <List dense>
+            <ListItem>
+              <ListItemText
+                primary="Status"
+                secondary={
+                  <Chip
+                    label={instance.status}
+                    size="small"
+                    color={getStatusColor(instance.status) as any}
+                  />
+                }
+              />
+            </ListItem>
+            <ListItem>
+              <ListItemText
+                primary="Created"
+                secondary={moment(instance.createdAt).format(
+                  'MMM DD, YYYY HH:mm',
+                )}
+              />
+            </ListItem>
+            <ListItem>
+              <ListItemText
+                primary="Last Updated"
+                secondary={moment(instance.updatedAt).fromNow()}
+              />
+            </ListItem>
+            {instance.description && (
               <ListItem>
                 <ListItemText
-                  primary="Status"
+                  primary="Description"
+                  secondary={instance.description}
+                />
+              </ListItem>
+            )}
+          </List>
+        </Grid>
+
+        {/* Health Status */}
+        <Grid item xs={12} md={6}>
+          <Typography
+            variant="h6"
+            gutterBottom
+            sx={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 1,
+              justifyContent: 'space-between',
+            }}
+          >
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+              <Info color="primary" />
+              Health Status
+            </Box>
+            <IconButton
+              size="small"
+              onClick={handleRefreshHealth}
+              disabled={isLoading}
+            >
+              <Refresh />
+            </IconButton>
+          </Typography>
+          {instance.health ? (
+            <List dense>
+              <ListItem>
+                <ListItemIcon sx={{ minWidth: 32 }}>
+                  {getHealthIcon(instance.health.catalogConnected)}
+                </ListItemIcon>
+                <ListItemText
+                  primary="Catalog Connection"
                   secondary={
-                    <Chip
-                      label={instance.status}
-                      size="small"
-                      color={getStatusColor(instance.status) as any}
-                    />
+                    instance.health.catalogConnected
+                      ? 'Connected'
+                      : 'Disconnected'
+                  }
+                />
+              </ListItem>
+              <ListItem>
+                <ListItemIcon sx={{ minWidth: 32 }}>
+                  {getHealthIcon(instance.health.dataPathAccessible)}
+                </ListItemIcon>
+                <ListItemText
+                  primary="Data Path"
+                  secondary={
+                    instance.health.dataPathAccessible
+                      ? 'Accessible'
+                      : 'Not accessible'
+                  }
+                />
+              </ListItem>
+              <ListItem>
+                <ListItemIcon sx={{ minWidth: 32 }}>
+                  {getHealthIcon(instance.health.extensionLoaded)}
+                </ListItemIcon>
+                <ListItemText
+                  primary="DuckLake Extension"
+                  secondary={
+                    instance.health.extensionLoaded ? 'Loaded' : 'Not loaded'
                   }
                 />
               </ListItem>
               <ListItem>
                 <ListItemText
-                  primary="Created"
-                  secondary={moment(instance.createdAt).format(
-                    'MMM DD, YYYY HH:mm',
-                  )}
+                  primary="Last Checked"
+                  secondary={moment(instance.health.lastChecked).fromNow()}
                 />
               </ListItem>
-              <ListItem>
-                <ListItemText
-                  primary="Last Updated"
-                  secondary={moment(instance.updatedAt).fromNow()}
-                />
-              </ListItem>
-              {instance.description && (
+              {instance.health.error && (
                 <ListItem>
-                  <ListItemText
-                    primary="Description"
-                    secondary={instance.description}
-                  />
+                  <Alert severity="error" sx={{ width: '100%' }}>
+                    {instance.health.error}
+                  </Alert>
                 </ListItem>
               )}
             </List>
-          </Paper>
-        </Grid>
-
-        {/* Health Status */}
-        <Grid item xs={12} md={6}>
-          <Paper sx={{ p: 2 }}>
-            <Typography
-              variant="h6"
-              gutterBottom
-              sx={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: 1,
-                justifyContent: 'space-between',
-              }}
-            >
-              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                <Info color="primary" />
-                Health Status
-              </Box>
-              <IconButton
-                size="small"
-                onClick={handleRefreshHealth}
-                disabled={isLoading}
-              >
-                <Refresh />
-              </IconButton>
+          ) : (
+            <Typography variant="body2" color="text.secondary">
+              Health check not available
             </Typography>
-            {instance.health ? (
-              <List dense>
-                <ListItem>
-                  <ListItemIcon sx={{ minWidth: 32 }}>
-                    {getHealthIcon(instance.health.catalogConnected)}
-                  </ListItemIcon>
-                  <ListItemText
-                    primary="Catalog Connection"
-                    secondary={
-                      instance.health.catalogConnected
-                        ? 'Connected'
-                        : 'Disconnected'
-                    }
-                  />
-                </ListItem>
-                <ListItem>
-                  <ListItemIcon sx={{ minWidth: 32 }}>
-                    {getHealthIcon(instance.health.dataPathAccessible)}
-                  </ListItemIcon>
-                  <ListItemText
-                    primary="Data Path"
-                    secondary={
-                      instance.health.dataPathAccessible
-                        ? 'Accessible'
-                        : 'Not accessible'
-                    }
-                  />
-                </ListItem>
-                <ListItem>
-                  <ListItemIcon sx={{ minWidth: 32 }}>
-                    {getHealthIcon(instance.health.extensionLoaded)}
-                  </ListItemIcon>
-                  <ListItemText
-                    primary="DuckLake Extension"
-                    secondary={
-                      instance.health.extensionLoaded ? 'Loaded' : 'Not loaded'
-                    }
-                  />
-                </ListItem>
-                <ListItem>
-                  <ListItemText
-                    primary="Last Checked"
-                    secondary={moment(instance.health.lastChecked).fromNow()}
-                  />
-                </ListItem>
-                {instance.health.error && (
-                  <ListItem>
-                    <Alert severity="error" sx={{ width: '100%' }}>
-                      {instance.health.error}
-                    </Alert>
-                  </ListItem>
-                )}
-              </List>
-            ) : (
-              <Typography variant="body2" color="text.secondary">
-                Health check not available
-              </Typography>
-            )}
-          </Paper>
+          )}
         </Grid>
 
         {/* Statistics */}
@@ -384,124 +430,134 @@ export const DuckLakeInstanceDetails: React.FC<
             </Paper>
           </Grid>
         )}
-      </Grid>
-    </Box>
-  );
 
-  const renderConfigurationTab = () => (
-    <Box sx={{ mt: 2 }}>
-      <Grid container spacing={3}>
-        {/* Data Configuration */}
+        {/* Storage Configuration */}
         <Grid item xs={12} md={6}>
-          <Paper sx={{ p: 2 }}>
-            <Typography
-              variant="h6"
-              gutterBottom
-              sx={{ display: 'flex', alignItems: 'center', gap: 1 }}
-            >
-              <Folder color="primary" />
-              Data Configuration
-            </Typography>
-            <List dense>
+          <Typography
+            variant="h6"
+            gutterBottom
+            sx={{ display: 'flex', alignItems: 'center', gap: 1 }}
+          >
+            <Folder color="primary" />
+            Storage Configuration
+          </Typography>
+          <List dense>
+            <ListItem>
+              <ListItemIcon sx={{ minWidth: 40 }}>
+                {getStorageIcon(instance.dataPath)}
+              </ListItemIcon>
+              <ListItemText
+                primary="Data Path"
+                secondary={instance.dataPath}
+                secondaryTypographyProps={{
+                  sx: { fontFamily: 'monospace', fontSize: '0.875rem' },
+                }}
+              />
+            </ListItem>
+            <ListItem>
+              <ListItemText
+                primary="Storage Type"
+                secondary={getStorageType(instance.dataPath)}
+              />
+            </ListItem>
+          </List>
+        </Grid>
+
+        {/* Catalog Configuration */}
+        <Grid item xs={12} md={6}>
+          <Typography
+            variant="h6"
+            gutterBottom
+            sx={{ display: 'flex', alignItems: 'center', gap: 1 }}
+          >
+            {databaseIcons[
+              instance.catalog.type as keyof typeof databaseIcons
+            ] ? (
+              <Box
+                component="img"
+                src={
+                  databaseIcons[
+                    instance.catalog.type as keyof typeof databaseIcons
+                  ]
+                }
+                alt={instance.catalog.type}
+                sx={{ width: 24, height: 24 }}
+              />
+            ) : (
+              <Database color="primary" />
+            )}
+            Catalog Configuration
+          </Typography>
+          <List dense>
+            <ListItem>
+              <ListItemText
+                primary=""
+                secondary={
+                  <Chip
+                    label={instance.catalog.type.toUpperCase()}
+                    size="small"
+                    color="primary"
+                  />
+                }
+              />
+            </ListItem>
+            {instance.catalog.type === 'duckdb' && instance.catalog.duckdb && (
               <ListItem>
                 <ListItemText
-                  primary="Data Path"
-                  secondary={instance.dataPath}
+                  primary="Metadata Path"
+                  secondary={instance.catalog.duckdb.metadataPath}
                   secondaryTypographyProps={{
                     sx: { fontFamily: 'monospace', fontSize: '0.875rem' },
                   }}
                 />
               </ListItem>
-            </List>
-          </Paper>
-        </Grid>
-
-        {/* Catalog Configuration */}
-        <Grid item xs={12} md={6}>
-          <Paper sx={{ p: 2 }}>
-            <Typography
-              variant="h6"
-              gutterBottom
-              sx={{ display: 'flex', alignItems: 'center', gap: 1 }}
-            >
-              <Database color="primary" />
-              Catalog Configuration
-            </Typography>
-            <List dense>
+            )}
+            {instance.catalog.type === 'sqlite' && instance.catalog.sqlite && (
               <ListItem>
                 <ListItemText
-                  primary="Type"
-                  secondary={
-                    <Chip
-                      label={instance.catalog.type.toUpperCase()}
-                      size="small"
-                      color="primary"
-                    />
-                  }
+                  primary="Metadata Path"
+                  secondary={instance.catalog.sqlite.metadataPath}
+                  secondaryTypographyProps={{
+                    sx: { fontFamily: 'monospace', fontSize: '0.875rem' },
+                  }}
                 />
               </ListItem>
-              {instance.catalog.type === 'duckdb' &&
-                instance.catalog.duckdb && (
+            )}
+            {instance.catalog.type === 'postgresql' &&
+              instance.catalog.postgresql && (
+                <>
                   <ListItem>
                     <ListItemText
-                      primary="Metadata Path"
-                      secondary={instance.catalog.duckdb.metadataPath}
-                      secondaryTypographyProps={{
-                        sx: { fontFamily: 'monospace', fontSize: '0.875rem' },
-                      }}
+                      primary="Host"
+                      secondary={`${instance.catalog.postgresql.host}:${instance.catalog.postgresql.port}`}
                     />
                   </ListItem>
-                )}
-              {instance.catalog.type === 'sqlite' &&
-                instance.catalog.sqlite && (
                   <ListItem>
                     <ListItemText
-                      primary="Metadata Path"
-                      secondary={instance.catalog.sqlite.metadataPath}
-                      secondaryTypographyProps={{
-                        sx: { fontFamily: 'monospace', fontSize: '0.875rem' },
-                      }}
+                      primary="Database"
+                      secondary={instance.catalog.postgresql.database}
                     />
                   </ListItem>
-                )}
-              {instance.catalog.type === 'postgresql' &&
-                instance.catalog.postgresql && (
-                  <>
-                    <ListItem>
-                      <ListItemText
-                        primary="Host"
-                        secondary={`${instance.catalog.postgresql.host}:${instance.catalog.postgresql.port}`}
-                      />
-                    </ListItem>
-                    <ListItem>
-                      <ListItemText
-                        primary="Database"
-                        secondary={instance.catalog.postgresql.database}
-                      />
-                    </ListItem>
-                    <ListItem>
-                      <ListItemText
-                        primary="Username"
-                        secondary={instance.catalog.postgresql.username}
-                      />
-                    </ListItem>
-                    <ListItem>
-                      <ListItemIcon sx={{ minWidth: 32 }}>
-                        <Security fontSize="small" />
-                      </ListItemIcon>
-                      <ListItemText
-                        primary="SSL"
-                        secondary={
-                          instance.catalog.postgresql.ssl
-                            ? 'Enabled'
-                            : 'Disabled'
-                        }
-                      />
-                    </ListItem>
-                  </>
-                )}
-            </List>
-          </Paper>
+                  <ListItem>
+                    <ListItemText
+                      primary="Username"
+                      secondary={instance.catalog.postgresql.username}
+                    />
+                  </ListItem>
+                  <ListItem>
+                    <ListItemIcon sx={{ minWidth: 32 }}>
+                      <Security fontSize="small" />
+                    </ListItemIcon>
+                    <ListItemText
+                      primary="SSL"
+                      secondary={
+                        instance.catalog.postgresql.ssl ? 'Enabled' : 'Disabled'
+                      }
+                    />
+                  </ListItem>
+                </>
+              )}
+          </List>
         </Grid>
 
         {/* Runtime Configuration */}
@@ -604,7 +660,7 @@ export const DuckLakeInstanceDetails: React.FC<
               gap: 1,
             }}
           >
-            <Storage color="primary" />
+            {getStorageIcon(instance.dataPath)}
             {instance.name}
           </Typography>
           <Typography variant="body2" color="text.secondary">
@@ -664,16 +720,14 @@ export const DuckLakeInstanceDetails: React.FC<
             onChange={(_, newValue) => setCurrentTab(newValue)}
           >
             <Tab label="Overview" />
-            <Tab label="Configuration" />
             <Tab label="Tables" />
             <Tab label="Activity" />
           </Tabs>
         </Box>
         <CardContent>
           {currentTab === 0 && renderOverviewTab()}
-          {currentTab === 1 && renderConfigurationTab()}
-          {currentTab === 2 && <DuckLakeTablesView instanceId={instance.id} />}
-          {currentTab === 3 && (
+          {currentTab === 1 && <DuckLakeTablesView instanceId={instance.id} />}
+          {currentTab === 2 && (
             <Box sx={{ mt: 2 }}>
               <Typography variant="body1" color="text.secondary">
                 Activity history coming soon...

@@ -14,6 +14,7 @@ import {
   DuckLakeQueryResult,
   DuckLakeMaintenanceTask,
   DuckLakeCatalogConfig,
+  DuckLakeStorageConfig,
 } from '../../types/duckLake';
 
 export namespace DuckLakeService {
@@ -223,5 +224,14 @@ export namespace DuckLakeService {
     lastModified: Date;
   }> {
     return window.electron.ipcRenderer.invoke('ducklake:storage:stats');
+  }
+
+  export async function validateStorageConnection(
+    storageConfig: DuckLakeStorageConfig,
+  ): Promise<{ success: boolean; error?: string }> {
+    return window.electron.ipcRenderer.invoke(
+      'ducklake:storage:validate',
+      storageConfig,
+    );
   }
 }

@@ -9,6 +9,7 @@ import {
   DuckLakeInstanceCreateRequest,
   DuckLakeInstanceUpdateRequest,
   DuckLakeCatalogConfig,
+  DuckLakeStorageConfig,
 } from '../../../types/duckLake';
 import { DuckLakeError } from '../../../types/duckLakeErrors';
 
@@ -42,9 +43,14 @@ export class DuckLakeValidationService {
     }
 
     // Validate data path format
-    if (!path.isAbsolute(request.dataPath)) {
+    if (
+      !path.isAbsolute(request.dataPath) &&
+      !request.dataPath.startsWith('s3://') &&
+      !request.dataPath.startsWith('abfss://') &&
+      !request.dataPath.startsWith('gs://')
+    ) {
       throw DuckLakeError.validation(
-        'Data path must be an absolute path',
+        'Data path must be an absolute path or a valid cloud URI',
         'dataPath',
       );
     }
@@ -85,6 +91,12 @@ export class DuckLakeValidationService {
     // Validate catalog configuration
     this.validateCatalogConfig(request.catalog);
 
+    // Validate storage configuration
+    if (request.storage) {
+      this.validateStorageConfig(request.storage);
+      this.validateStorageAndDataPath(request.storage, request.dataPath);
+    }
+
     // Validate runtime options
     if (request.runtimeOptions) {
       this.validateRuntimeOptions(request.runtimeOptions);
@@ -121,9 +133,14 @@ export class DuckLakeValidationService {
         throw DuckLakeError.validation('Data path cannot be empty', 'dataPath');
       }
 
-      if (!path.isAbsolute(request.dataPath)) {
+      if (
+        !path.isAbsolute(request.dataPath) &&
+        !request.dataPath.startsWith('s3://') &&
+        !request.dataPath.startsWith('abfss://') &&
+        !request.dataPath.startsWith('gs://')
+      ) {
         throw DuckLakeError.validation(
-          'Data path must be an absolute path',
+          'Data path must be an absolute path or a valid cloud URI',
           'dataPath',
         );
       }
@@ -162,6 +179,14 @@ export class DuckLakeValidationService {
 
     if (request.catalog !== undefined) {
       this.validateCatalogConfig(request.catalog);
+    }
+
+    if (request.storage !== undefined) {
+      this.validateStorageConfig(request.storage);
+      // If dataPath is also provided, validate consistency
+      if (request.dataPath) {
+        this.validateStorageAndDataPath(request.storage, request.dataPath);
+      }
     }
 
     if (request.runtimeOptions !== undefined) {
@@ -406,6 +431,16 @@ export class DuckLakeValidationService {
    * Validate data path accessibility
    */
   static async validateDataPathAccess(dataPath: string): Promise<void> {
+    // Skip validation for cloud paths (s3://, abfss://, gs://)
+    // These will be validated by connection tests
+    if (
+      dataPath.startsWith('s3://') ||
+      dataPath.startsWith('abfss://') ||
+      dataPath.startsWith('gs://')
+    ) {
+      return;
+    }
+
     try {
       // Check if path exists
       if (!fs.existsSync(dataPath)) {
@@ -512,6 +547,166 @@ export class DuckLakeValidationService {
         `${catalogType} metadata directory is not writable: ${(error as Error).message}`,
         'catalog',
       );
+    }
+  }
+
+  /**
+   * Validate storage configuration
+   */
+  static validateStorageConfig(storage: DuckLakeStorageConfig): void {
+    if (!storage.type) {
+      throw DuckLakeError.validation(
+        'Storage type is required',
+        'storage.type',
+      );
+    }
+
+    switch (storage.type) {
+      case 'local':
+        if (!storage.local?.path) {
+          throw DuckLakeError.validation(
+            'Local storage path is required',
+            'storage.local.path',
+          );
+        }
+        if (!path.isAbsolute(storage.local.path)) {
+          throw DuckLakeError.validation(
+            'Local storage path must be absolute',
+            'storage.local.path',
+          );
+        }
+        break;
+
+      case 's3':
+        if (!storage.s3) {
+          throw DuckLakeError.validation(
+            'S3 configuration is required',
+            'storage.s3',
+          );
+        }
+        if (!storage.s3.bucket) {
+          throw DuckLakeError.validation(
+            'S3 bucket is required',
+            'storage.s3.bucket',
+          );
+        }
+        if (!storage.s3.region) {
+          throw DuckLakeError.validation(
+            'S3 region is required',
+            'storage.s3.region',
+          );
+        }
+        if (!storage.s3.accessKeyId) {
+          throw DuckLakeError.validation(
+            'S3 access key ID is required',
+            'storage.s3.accessKeyId',
+          );
+        }
+        break;
+
+      case 'azure':
+        if (!storage.azure) {
+          throw DuckLakeError.validation(
+            'Azure configuration is required',
+            'storage.azure',
+          );
+        }
+        if (!storage.azure.container) {
+          throw DuckLakeError.validation(
+            'Azure container is required',
+            'storage.azure.container',
+          );
+        }
+        if (
+          !storage.azure.connectionString &&
+          (!storage.azure.accountName || !storage.azure.accountKey)
+        ) {
+          throw DuckLakeError.validation(
+            'Azure connection string or account name/key is required',
+            'storage.azure',
+          );
+        }
+        break;
+
+      case 'gcs':
+        if (!storage.gcs) {
+          throw DuckLakeError.validation(
+            'GCS configuration is required',
+            'storage.gcs',
+          );
+        }
+        if (!storage.gcs.bucket) {
+          throw DuckLakeError.validation(
+            'GCS bucket is required',
+            'storage.gcs.bucket',
+          );
+        }
+        if (!storage.gcs.projectId) {
+          throw DuckLakeError.validation(
+            'GCS project ID is required',
+            'storage.gcs.projectId',
+          );
+        }
+        break;
+
+      default:
+        throw DuckLakeError.validation(
+          `Unsupported storage type: ${storage.type}`,
+          'storage.type',
+        );
+    }
+  }
+
+  /**
+   * Validate consistency between storage config and data path
+   */
+  static validateStorageAndDataPath(
+    storage: DuckLakeStorageConfig,
+    dataPath: string,
+  ): void {
+    switch (storage.type) {
+      case 'local':
+        if (dataPath !== storage.local?.path) {
+          if (!path.isAbsolute(dataPath)) {
+            throw DuckLakeError.validation(
+              'Data path must be absolute for local storage',
+              'dataPath',
+            );
+          }
+        }
+        break;
+      case 's3':
+        if (!dataPath.startsWith('s3://')) {
+          throw DuckLakeError.validation(
+            'Data path must start with s3:// for S3 storage',
+            'dataPath',
+          );
+        }
+        break;
+      case 'azure':
+        if (
+          !dataPath.startsWith('abfss://') &&
+          !dataPath.startsWith('azure://')
+        ) {
+          throw DuckLakeError.validation(
+            'Data path must start with abfss:// for Azure storage',
+            'dataPath',
+          );
+        }
+        break;
+      case 'gcs':
+        if (!dataPath.startsWith('gs://')) {
+          throw DuckLakeError.validation(
+            'Data path must start with gs:// for GCS storage',
+            'dataPath',
+          );
+        }
+        break;
+      default:
+        throw DuckLakeError.validation(
+          `Unsupported storage type: ${storage.type}`,
+          'storage.type',
+        );
     }
   }
 }

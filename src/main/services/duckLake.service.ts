@@ -8,6 +8,7 @@ import { DuckLakeInstanceStore } from './duckLake/instanceStore.service';
 import { DuckLakeValidationService } from './duckLake/validation.service';
 import { CatalogAdapterFactory, CatalogAdapter } from './duckLake/adapters';
 import { DuckLakeConnectionManager } from './duckLake/connectionManager.service';
+import CloudExplorerService from './cloudExplorer.service';
 import { DuckLakeExtensionManager } from './duckLake/extensionManager.service';
 import {
   DuckLakeInstance,
@@ -21,6 +22,7 @@ import {
   DuckLakeMaintenanceTask,
   DuckLakeCatalogConfig,
   DuckLakeMaintenanceType,
+  DuckLakeStorageConfig,
 } from '../../types/duckLake';
 import { DuckLakeError } from '../../types/duckLakeErrors';
 
@@ -272,18 +274,34 @@ export default class DuckLakeService {
         return; // Already connected
       }
 
-      // Retrieve catalog credentials
-      const catalogWithCredentials =
-        await DuckLakeInstanceStore.retrieveCatalogCredentials(
+      // Retrieve credentials (catalog and storage)
+      const {
+        catalog: catalogWithCredentials,
+        storage: storageWithCredentials,
+      } = await DuckLakeInstanceStore.retrieveCredentials(
+        instanceId,
+        instance.catalog as any,
+        instance.storage as any,
+      );
+
+      // eslint-disable-next-line no-console
+      console.debug(
+        '[DuckLakeService.connectToCatalog] Resolved instance config',
+        {
           instanceId,
-          instance.catalog as any,
-        );
+          name: instance.name,
+          dataPath: instance.dataPath,
+          storageType: storageWithCredentials?.type,
+          s3: storageWithCredentials?.s3,
+        },
+      );
 
       // Use connection manager to get connection
       await DuckLakeConnectionManager.getConnection(
         instanceId,
         instance,
         catalogWithCredentials,
+        storageWithCredentials,
       );
 
       // Update instance status
@@ -575,16 +593,18 @@ export default class DuckLakeService {
 
   private static async getAdapter(instanceId: string): Promise<CatalogAdapter> {
     const instance = await this.getInstance(instanceId);
-    const catalogWithCredentials =
-      await DuckLakeInstanceStore.retrieveCatalogCredentials(
+    const { catalog: catalogWithCredentials, storage: storageWithCredentials } =
+      await DuckLakeInstanceStore.retrieveCredentials(
         instanceId,
         instance.catalog as any,
+        instance.storage as any,
       );
 
     return DuckLakeConnectionManager.getConnection(
       instanceId,
       instance,
       catalogWithCredentials,
+      storageWithCredentials,
     );
   }
 
@@ -594,6 +614,66 @@ export default class DuckLakeService {
 
   private static generateTaskId(): string {
     return `task_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+  }
+
+  /**
+   * Validate storage connection
+   */
+  static async validateStorageConnection(
+    storageConfig: DuckLakeStorageConfig,
+  ): Promise<{ success: boolean; error?: string }> {
+    try {
+      DuckLakeValidationService.validateStorageConfig(storageConfig);
+
+      let success = false;
+      switch (storageConfig.type) {
+        case 'local':
+          // For local, we just check if path exists or can be created
+          if (storageConfig.local?.path) {
+            await DuckLakeValidationService.validateDataPathAccess(
+              storageConfig.local.path,
+            );
+            success = true;
+          }
+          break;
+        case 's3':
+          if (storageConfig.s3) {
+            success = await CloudExplorerService.testConnection('aws', {
+              region: storageConfig.s3.region,
+              accessKeyId: storageConfig.s3.accessKeyId,
+              secretAccessKey: storageConfig.s3.secretAccessKey,
+            });
+          }
+          break;
+        case 'azure':
+          if (storageConfig.azure) {
+            success = await CloudExplorerService.testConnection('azure', {
+              accountName: storageConfig.azure.accountName,
+              accountKey: storageConfig.azure.accountKey,
+              connectionString: storageConfig.azure.connectionString,
+            });
+          }
+          break;
+        case 'gcs':
+          if (storageConfig.gcs) {
+            success = await CloudExplorerService.testConnection('gcs', {
+              projectId: storageConfig.gcs.projectId,
+              credentials: storageConfig.gcs.credentials,
+            });
+          }
+          break;
+        default:
+          throw new Error(`Unsupported storage type: ${storageConfig.type}`);
+      }
+
+      if (!success) {
+        return { success: false, error: 'Connection failed' };
+      }
+
+      return { success: true };
+    } catch (error) {
+      return { success: false, error: (error as Error).message };
+    }
   }
 
   // Storage Management

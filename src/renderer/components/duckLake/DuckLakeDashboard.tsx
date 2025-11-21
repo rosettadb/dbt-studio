@@ -16,9 +16,10 @@ import {
   QueryStats,
   Settings,
   Dashboard,
-  Circle,
   Add,
+  Folder,
 } from '@mui/icons-material';
+import { cloudStorageImages } from '../../../../assets/connectionIcons';
 
 interface DuckLakeInstance {
   id: string;
@@ -31,6 +32,40 @@ interface DuckLakeInstance {
   createdAt: string;
   updatedAt: string;
 }
+
+const getStorageIconForInstance = (dataPath: string) => {
+  if (dataPath.startsWith('s3://')) {
+    return (
+      <Box
+        component="img"
+        src={cloudStorageImages.s3}
+        alt="AWS S3"
+        sx={{ width: 20, height: 20 }}
+      />
+    );
+  }
+  if (dataPath.startsWith('gs://')) {
+    return (
+      <Box
+        component="img"
+        src={cloudStorageImages.gcs}
+        alt="Google Cloud Storage"
+        sx={{ width: 20, height: 20 }}
+      />
+    );
+  }
+  if (dataPath.startsWith('abfss://')) {
+    return (
+      <Box
+        component="img"
+        src={cloudStorageImages.azure}
+        alt="Azure Blob Storage"
+        sx={{ width: 20, height: 20 }}
+      />
+    );
+  }
+  return <Folder fontSize="small" />;
+};
 
 interface DuckLakeDashboardProps {
   instances?: DuckLakeInstance[];
@@ -93,19 +128,9 @@ export const DuckLakeDashboard: React.FC<DuckLakeDashboardProps> = ({
     }
   };
 
-  const getStatusIcon = (status: string) => {
-    let color = 'grey.500';
-    if (status === 'active') {
-      color = 'success.main';
-    } else if (status === 'error') {
-      color = 'error.main';
-    }
-    return <Circle sx={{ fontSize: 12, color }} />;
-  };
-
   return (
     <Box sx={{ p: 2 }}>
-      {/* Header with title and manage instances button */}
+      {/* Header with title and manage ducklakes button */}
       <Box
         sx={{
           display: 'flex',
@@ -131,7 +156,7 @@ export const DuckLakeDashboard: React.FC<DuckLakeDashboardProps> = ({
           startIcon={<Settings />}
           onClick={() => navigate('/app/duck-lake/instances')}
         >
-          Manage Instances
+          Manage ducklakes
         </Button>
       </Box>
 
@@ -163,7 +188,7 @@ export const DuckLakeDashboard: React.FC<DuckLakeDashboardProps> = ({
                 }}
               >
                 <Typography variant="subtitle2" color="text.secondary">
-                  Total Instances
+                  Total ducklakes
                 </Typography>
                 <Storage sx={{ color: 'text.secondary', fontSize: 20 }} />
               </Box>
@@ -330,7 +355,7 @@ export const DuckLakeDashboard: React.FC<DuckLakeDashboardProps> = ({
           mt: 3,
         }}
       >
-        {/* Recent Instances */}
+        {/* Recent ducklakes */}
         <Card
           sx={{
             display: 'flex',
@@ -354,10 +379,10 @@ export const DuckLakeDashboard: React.FC<DuckLakeDashboardProps> = ({
               >
                 <Box>
                   <Typography variant="h6" component="h2">
-                    Recent Instances
+                    Recent ducklakes
                   </Typography>
                   <Typography variant="body2" color="text.secondary">
-                    Recently updated instances
+                    Recently updated ducklakes
                   </Typography>
                 </Box>
                 <Storage sx={{ color: 'text.secondary', fontSize: 24 }} />
@@ -370,7 +395,7 @@ export const DuckLakeDashboard: React.FC<DuckLakeDashboardProps> = ({
             <Box sx={{ flex: 1, mb: 2 }}>
               {instances.length === 0 ? (
                 <Typography variant="body2" color="text.secondary">
-                  No instances created yet
+                  No ducklakes created yet
                 </Typography>
               ) : (
                 <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
@@ -395,7 +420,7 @@ export const DuckLakeDashboard: React.FC<DuckLakeDashboardProps> = ({
                       <Box
                         sx={{ display: 'flex', alignItems: 'center', gap: 1 }}
                       >
-                        {getStatusIcon(instance.status)}
+                        {getStorageIconForInstance(instance.dataPath)}
                         <Box>
                           <Typography variant="body2" sx={{ fontWeight: 500 }}>
                             {instance.name}
@@ -429,7 +454,7 @@ export const DuckLakeDashboard: React.FC<DuckLakeDashboardProps> = ({
               onClick={() => navigate('/app/duck-lake/instances')}
               fullWidth
             >
-              View All Instances
+              View all ducklakes
             </Button>
           </CardContent>
         </Card>
@@ -557,13 +582,13 @@ export const DuckLakeDashboard: React.FC<DuckLakeDashboardProps> = ({
                   Welcome to DuckLake
                 </Typography>
               }
-              subheader="Get started by creating your first DuckLake instance"
+              subheader="Get started by creating your first DuckLake ducklakes"
             />
             <CardContent>
               <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
-                DuckLake allows you to create and manage DuckDB instances with
+                DuckLake allows you to create and manage DuckDB ducklakes with
                 various catalog backends including DuckDB, SQLite, and
-                PostgreSQL. Start by creating your first instance.
+                PostgreSQL. Start by creating your first ducklakes.
               </Typography>
               <Button
                 variant="contained"
@@ -571,7 +596,7 @@ export const DuckLakeDashboard: React.FC<DuckLakeDashboardProps> = ({
                 startIcon={<Add />}
                 onClick={() => navigate('/app/duck-lake/new-instance')}
               >
-                Create Instance
+                Create ducklakes
               </Button>
             </CardContent>
           </Card>

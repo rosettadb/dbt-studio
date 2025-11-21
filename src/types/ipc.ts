@@ -261,7 +261,8 @@ export type DuckLakeChannels =
   | 'ducklake:maintenance:status'
 
   // Storage Management
-  | 'ducklake:storage:stats';
+  | 'ducklake:storage:stats'
+  | 'ducklake:storage:validate';
 
 export type Channels =
   | TestChannels

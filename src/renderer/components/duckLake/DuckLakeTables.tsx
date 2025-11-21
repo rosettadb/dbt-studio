@@ -104,7 +104,7 @@ export const DuckLakeTables: React.FC<DuckLakeTablesProps> = ({
         </Box>
         {selectedInstanceId && (
           <Chip
-            label={`Instance: ${tables.find((t) => t.instanceId === selectedInstanceId)?.instanceName || selectedInstanceId}`}
+            label={`ducklakes: ${tables.find((t) => t.instanceId === selectedInstanceId)?.instanceName || selectedInstanceId}`}
             variant="outlined"
             color="primary"
           />
@@ -126,8 +126,8 @@ export const DuckLakeTables: React.FC<DuckLakeTablesProps> = ({
             </Typography>
             <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
               {selectedInstanceId
-                ? 'No tables found in the selected instance. Create some tables or connect to a different instance.'
-                : 'No tables found across all instances. Create some tables to get started.'}
+                ? 'No tables found in the selected ducklakes. Create some tables or connect to a different ducklakes.'
+                : 'No tables found across all ducklakes. Create some tables to get started.'}
             </Typography>
           </CardContent>
         </Card>

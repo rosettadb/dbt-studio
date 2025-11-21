@@ -16,6 +16,7 @@ import {
   DuckLakeSnapshotInfo,
   DuckLakeQueryResult,
   DuckLakeQueryRequest,
+  DuckLakeStorageConfig,
 } from '../../../../types/duckLake';
 import { DuckLakeError } from '../../../../types/duckLakeErrors';
 import { normalizeNumericValue } from '../../../../renderer/utils/fileUtils';
@@ -24,6 +25,7 @@ export class PostgreSQLCatalogAdapter extends CatalogAdapter {
   async connect(
     config: DuckLakeCatalogConfig,
     instance: DuckLakeInstance,
+    storageConfig?: DuckLakeStorageConfig,
   ): Promise<ConnectionInfo> {
     try {
       if (config.type !== 'postgresql') {
@@ -46,11 +48,19 @@ export class PostgreSQLCatalogAdapter extends CatalogAdapter {
       await this.loadDuckLakeExtension(connection);
       await this.loadCatalogExtensions(connection, ['postgres']);
 
+      // Create secrets for cloud storage (httpfs, azure, etc.)
+      // This will also handle S3 httpfs secrets when storageConfig.type === 's3'.
+      await this.createSecrets(connection, storageConfig);
+
       // Build PostgreSQL connection string
       const connectionString = this.buildPostgreSQLConnectionString(pgConfig);
 
       // Attach DuckLake catalog with PostgreSQL backend
       const attachString = `ducklake:postgres:${connectionString}`;
+
+      // For S3 storage we expect instance.dataPath to be an s3:// URI such as
+      // s3://adaptivescale/ducklake_nuri/ and rely on httpfs + secret created
+      // via createSecrets above. We just pass through instance.dataPath here.
       await this.attachDuckLakeCatalog(
         connection,
         attachString,

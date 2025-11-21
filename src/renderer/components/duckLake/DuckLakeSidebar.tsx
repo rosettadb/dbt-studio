@@ -16,10 +16,11 @@ import {
   TableChart,
   History,
   Add,
-  Circle,
+  Folder,
 } from '@mui/icons-material';
 import { NavLink, useLocation, useNavigate } from 'react-router-dom';
 import { SettingsSidebarElement } from '../../screens/settings/settingsElements';
+import { cloudStorageImages } from '../../../../assets/connectionIcons';
 
 export const StyledDuckLakeNavLink = styled(NavLink)(({ theme }) => ({
   textDecoration: 'none',
@@ -47,7 +48,7 @@ export const duckLakeSidebarElements: SettingsSidebarElement[] = [
   },
   {
     icon: Storage,
-    text: 'Instances',
+    text: 'DuckLakes',
     path: '/app/duck-lake/instances',
   },
   {
@@ -67,6 +68,7 @@ interface DuckLakeSidebarProps {
     id: string;
     name: string;
     status: 'active' | 'inactive' | 'error';
+    storageType?: 'local' | 's3' | 'azure' | 'gcs';
   }>;
 }
 
@@ -87,14 +89,39 @@ export const DuckLakeSidebar: React.FC<DuckLakeSidebarProps> = ({
     (instance) => instance.id === instanceId,
   );
 
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case 'active':
-        return theme.palette.success.main;
-      case 'error':
-        return theme.palette.error.main;
+  const getStorageIconElement = (storageType?: string) => {
+    switch (storageType) {
+      case 'local':
+        return <Folder fontSize="small" />;
+      case 's3':
+        return cloudStorageImages.s3 ? (
+          <Box
+            component="img"
+            src={cloudStorageImages.s3}
+            alt="S3"
+            sx={{ width: 20, height: 20 }}
+          />
+        ) : null;
+      case 'azure':
+        return cloudStorageImages.azure ? (
+          <Box
+            component="img"
+            src={cloudStorageImages.azure}
+            alt="Azure"
+            sx={{ width: 20, height: 20 }}
+          />
+        ) : null;
+      case 'gcs':
+        return cloudStorageImages.gcs ? (
+          <Box
+            component="img"
+            src={cloudStorageImages.gcs}
+            alt="GCS"
+            sx={{ width: 20, height: 20 }}
+          />
+        ) : null;
       default:
-        return theme.palette.grey[500];
+        return null;
     }
   };
 
@@ -171,54 +198,6 @@ export const DuckLakeSidebar: React.FC<DuckLakeSidebarProps> = ({
             ))}
           </List>
 
-          {/* Current Instance */}
-          {selectedInstance && (
-            <Box sx={{ mt: 3 }}>
-              <Typography
-                variant="caption"
-                sx={{
-                  display: 'block',
-                  px: 2,
-                  pb: 1,
-                  fontWeight: 600,
-                  color: theme.palette.text.secondary,
-                  textTransform: 'uppercase',
-                  letterSpacing: '0.5px',
-                }}
-              >
-                Current Instance
-              </Typography>
-              <ListItem
-                sx={{
-                  borderRadius: 1,
-                  backgroundColor: theme.palette.divider,
-                  mb: 0,
-                  width: '270px',
-                  py: 0.25,
-                  px: 1,
-                  minHeight: '32px',
-                }}
-              >
-                <ListItemIcon sx={{ minWidth: 32 }}>
-                  <Circle
-                    fontSize="small"
-                    sx={{ color: getStatusColor(selectedInstance.status) }}
-                  />
-                </ListItemIcon>
-                <ListItemText
-                  primary={selectedInstance.name}
-                  primaryTypographyProps={{
-                    variant: 'body2',
-                    sx: {
-                      fontSize: '0.875rem',
-                      color: theme.palette.primary.main,
-                    },
-                  }}
-                />
-              </ListItem>
-            </Box>
-          )}
-
           {/* Instances List */}
           {instances.length > 0 && (
             <Box sx={{ mt: 3 }}>
@@ -234,7 +213,7 @@ export const DuckLakeSidebar: React.FC<DuckLakeSidebarProps> = ({
                   letterSpacing: '0.5px',
                 }}
               >
-                Instances
+                DuckLakes
               </Typography>
               <List
                 sx={{
@@ -266,10 +245,9 @@ export const DuckLakeSidebar: React.FC<DuckLakeSidebarProps> = ({
                       }}
                     >
                       <ListItemIcon sx={{ minWidth: 32 }}>
-                        <Circle
-                          fontSize="small"
-                          sx={{ color: getStatusColor(instance.status) }}
-                        />
+                        {getStorageIconElement(instance.storageType) || (
+                          <Folder fontSize="small" />
+                        )}
                       </ListItemIcon>
                       <ListItemText
                         primary={instance.name}
@@ -301,7 +279,7 @@ export const DuckLakeSidebar: React.FC<DuckLakeSidebarProps> = ({
           startIcon={<Add />}
           onClick={() => navigate('/app/duck-lake/new-instance')}
         >
-          New Instance
+          New DuckLake
         </Button>
       </Box>
     </Box>

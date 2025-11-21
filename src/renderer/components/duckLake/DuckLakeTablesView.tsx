@@ -13,6 +13,7 @@ import {
   useDuckLakeTables,
   useImportDuckLakeTable,
   useInvalidateDuckLakeCache,
+  useDuckLakeInstance,
 } from '../../controllers/duckLake.controller';
 
 interface DuckLakeTablesViewProps {
@@ -32,6 +33,7 @@ export const DuckLakeTablesView: React.FC<DuckLakeTablesViewProps> = ({
   const tablesQuery = useDuckLakeTables(instanceId);
   const importTableMutation = useImportDuckLakeTable();
   const { invalidateTables } = useInvalidateDuckLakeCache();
+  const instanceQuery = useDuckLakeInstance(instanceId);
 
   // Debug logging
   // eslint-disable-next-line no-console
@@ -87,7 +89,7 @@ export const DuckLakeTablesView: React.FC<DuckLakeTablesViewProps> = ({
       errorMessage.includes('closed');
 
     return (
-      <Box sx={{ p: 3 }}>
+      <Box sx={{ p: 2 }}>
         <Alert severity="error" sx={{ mb: 2 }}>
           <Typography variant="body1" sx={{ fontWeight: 'bold', mb: 1 }}>
             Failed to load tables
@@ -134,7 +136,7 @@ export const DuckLakeTablesView: React.FC<DuckLakeTablesViewProps> = ({
 
   return (
     <Box>
-      <Box sx={{ p: 3, pb: 0, display: 'flex', justifyContent: 'flex-end' }}>
+      <Box sx={{ p: 2, pb: 0, display: 'flex', justifyContent: 'flex-end' }}>
         <Button
           variant="contained"
           startIcon={<Add />}
@@ -156,6 +158,7 @@ export const DuckLakeTablesView: React.FC<DuckLakeTablesViewProps> = ({
         onClose={() => setImportWizardOpen(false)}
         onImport={handleImportTable}
         isLoading={importTableMutation.isLoading}
+        dataPath={instanceQuery.data?.dataPath}
       />
     </Box>
   );

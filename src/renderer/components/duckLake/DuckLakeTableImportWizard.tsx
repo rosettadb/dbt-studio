@@ -17,10 +17,10 @@ import {
   CardActionArea,
 } from '@mui/material';
 import {
-  CloudUpload,
   Link as LinkIcon,
   ArrowBack,
   ArrowForward,
+  Folder,
 } from '@mui/icons-material';
 
 interface DuckLakeTableImportWizardProps {
@@ -28,6 +28,7 @@ interface DuckLakeTableImportWizardProps {
   onClose: () => void;
   onImport: (tableName: string, sourceQuery: string) => void;
   isLoading?: boolean;
+  dataPath?: string;
 }
 
 type SourceType = 'url' | 'file';
@@ -36,7 +37,7 @@ const steps = ['Select Source', 'Configure Import', 'Review'];
 
 export const DuckLakeTableImportWizard: React.FC<
   DuckLakeTableImportWizardProps
-> = ({ open, onClose, onImport, isLoading = false }) => {
+> = ({ open, onClose, onImport, isLoading = false, dataPath }) => {
   const [activeStep, setActiveStep] = useState(0);
   const [sourceType, setSourceType] = useState<SourceType>('url');
   const [tableName, setTableName] = useState('');
@@ -152,7 +153,7 @@ export const DuckLakeTableImportWizard: React.FC<
           <CardActionArea onClick={() => setSourceType('file')}>
             <CardContent>
               <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
-                <CloudUpload color="primary" sx={{ mr: 1 }} />
+                <Folder sx={{ width: 24, height: 24, mr: 1 }} />
                 <Typography variant="h6">Local File</Typography>
               </Box>
               <Typography variant="body2" color="text.secondary">
@@ -278,6 +279,24 @@ export const DuckLakeTableImportWizard: React.FC<
           </Typography>
         </Box>
 
+        <Box sx={{ mb: 3 }}>
+          <Typography variant="body2" color="text.secondary">
+            DuckLake Data Path
+          </Typography>
+          <Typography
+            variant="body1"
+            sx={{
+              fontWeight: 'bold',
+              mb: 2,
+              wordBreak: 'break-all',
+              fontFamily: 'monospace',
+              fontSize: '0.9rem',
+            }}
+          >
+            {dataPath || 'Unavailable'}
+          </Typography>
+        </Box>
+
         <Alert severity="info" sx={{ mb: 2 }}>
           <Typography variant="body2" sx={{ fontWeight: 'bold', mb: 0.5 }}>
             What will happen:
@@ -287,7 +306,8 @@ export const DuckLakeTableImportWizard: React.FC<
             <br />
             2. Schema will be automatically inferred
             <br />
-            3. Table will be created with metadata in catalog
+            3. Table metadata will be created in catalog for
+            {dataPath ? ` ${dataPath}` : ' your configured data path'}
             <br />
             4. Data will be stored as Parquet files in DATA_PATH
             <br />
@@ -297,7 +317,8 @@ export const DuckLakeTableImportWizard: React.FC<
 
         <Alert severity="warning">
           <Typography variant="body2">
-            This operation may take some time depending on the data size.
+            This operation may take some time depending on the data size. For
+            large uploads to cloud storage, waits of several minutes are normal.
           </Typography>
         </Alert>
       </Box>

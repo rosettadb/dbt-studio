@@ -36,8 +36,11 @@ import { useNavigate } from 'react-router-dom';
 import { useForm, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
-import connectionIcons from '../../../../assets/connectionIcons';
+import connectionIcons, {
+  cloudStorageImages,
+} from '../../../../assets/connectionIcons';
 import sqliteIcon from '../../../../assets/connectionIcons/sqlite.png';
+import { DuckLakeService } from '../../services/duckLake.service';
 
 // Database icons mapping - import from assets
 const getDatabaseIcon = (type: string) => {
@@ -56,9 +59,71 @@ const getDatabaseIcon = (type: string) => {
 // Validation schemas
 const instanceBasicsSchema = z.object({
   name: z.string().min(1, 'Instance name is required').max(50, 'Name too long'),
-  dataPath: z.string().min(1, 'Data path is required'),
   description: z.string().optional(),
+  dataPath: z.string().optional(), // Computed from storage config
 });
+
+const storageConfigSchema = z
+  .object({
+    type: z.enum(['local', 's3', 'azure', 'gcs']),
+    local: z
+      .object({
+        path: z.string().min(1, 'Local path is required'),
+      })
+      .optional(),
+    s3: z
+      .object({
+        bucket: z.string().min(1, 'Bucket is required'),
+        region: z.string().min(1, 'Region is required'),
+        accessKeyId: z.string().min(1, 'Access Key ID is required'),
+        secretAccessKey: z.string().min(1, 'Secret Access Key is required'),
+        endpoint: z.string().optional(),
+        prefix: z.string().optional(),
+      })
+      .optional(),
+    azure: z
+      .object({
+        container: z.string().min(1, 'Container is required'),
+        accountName: z.string().min(1, 'Account Name is required'),
+        accountKey: z.string().min(1, 'Account Key is required'),
+        connectionString: z.string().optional(),
+        prefix: z.string().optional(),
+      })
+      .optional(),
+    gcs: z
+      .object({
+        bucket: z.string().min(1, 'Bucket is required'),
+        projectId: z.string().min(1, 'Project ID is required'),
+        credentials: z.string().optional(),
+        prefix: z.string().optional(),
+      })
+      .optional(),
+  })
+  .refine(
+    (data) => {
+      if (data.type === 'local') return !!data.local?.path;
+      if (data.type === 's3')
+        return (
+          !!data.s3?.bucket &&
+          !!data.s3?.region &&
+          !!data.s3?.accessKeyId &&
+          !!data.s3?.secretAccessKey
+        );
+      if (data.type === 'azure')
+        return (
+          !!data.azure?.container &&
+          !!data.azure?.accountName &&
+          !!data.azure?.accountKey
+        );
+      if (data.type === 'gcs')
+        return !!data.gcs?.bucket && !!data.gcs?.projectId;
+      return false;
+    },
+    {
+      message: 'Please fill in all required storage configuration fields',
+      path: ['type'],
+    },
+  );
 
 const catalogConfigSchema = z
   .object({
@@ -141,17 +206,20 @@ const getNextButtonLabel = (loading: boolean, finalStep: boolean) => {
 };
 
 type InstanceBasics = z.infer<typeof instanceBasicsSchema>;
+type StorageConfig = z.infer<typeof storageConfigSchema>;
 type CatalogConfig = z.infer<typeof catalogConfigSchema>;
 type RuntimeOptions = z.infer<typeof runtimeOptionsSchema>;
 
 interface WizardData {
   basics: InstanceBasics;
+  storage: StorageConfig;
   catalog: CatalogConfig;
   runtime: RuntimeOptions;
 }
 
 const steps = [
   'Instance Details',
+  'Storage Configuration',
   'Catalog Configuration',
   'Runtime Options',
   'Review & Create',
@@ -198,8 +266,13 @@ export const DuckLakeConnectionWizard: React.FC<
   const navigate = useNavigate();
   const [activeStep, setActiveStep] = useState(0);
   const [wizardData, setWizardData] = useState<Partial<WizardData>>({});
+  const [validating, setValidating] = useState(false);
+  const [validationError, setValidationError] = useState<string | null>(null);
   const isFinalStep = activeStep === steps.length - 1;
-  const nextButtonLabel = getNextButtonLabel(isLoading, isFinalStep);
+  const nextButtonLabel = getNextButtonLabel(
+    isLoading || validating,
+    isFinalStep,
+  );
 
   // Form for current step
   const basicsForm = useForm<InstanceBasics>({
@@ -207,8 +280,15 @@ export const DuckLakeConnectionWizard: React.FC<
     mode: 'onChange', // Validate on change
     defaultValues: wizardData.basics || {
       name: '',
-      dataPath: '',
       description: '',
+    },
+  });
+
+  const storageForm = useForm<StorageConfig>({
+    resolver: zodResolver(storageConfigSchema),
+    mode: 'onChange',
+    defaultValues: wizardData.storage || {
+      type: 'local',
     },
   });
 
@@ -234,11 +314,52 @@ export const DuckLakeConnectionWizard: React.FC<
   // Reset form errors when step changes
   useEffect(() => {
     basicsForm.clearErrors();
+    storageForm.clearErrors();
     catalogForm.clearErrors();
     runtimeForm.clearErrors();
-  }, [activeStep, basicsForm, catalogForm, runtimeForm]);
+    setValidationError(null);
+  }, [activeStep, basicsForm, storageForm, catalogForm, runtimeForm]);
 
+  const selectedStorageType = storageForm.watch('type');
   const selectedCatalogType = catalogForm.watch('type');
+
+  // Clear other storage type fields when storage type changes
+  useEffect(() => {
+    if (!selectedStorageType) {
+      return;
+    }
+
+    const clearStorageFields = (
+      fields: ('local' | 's3' | 'azure' | 'gcs')[],
+    ) => {
+      fields.forEach((field) => {
+        storageForm.setValue(field, undefined, {
+          shouldValidate: false,
+          shouldDirty: false,
+        });
+      });
+      storageForm.clearErrors(fields);
+    };
+
+    if (selectedStorageType === 'local') {
+      clearStorageFields(['s3', 'azure', 'gcs']);
+      return;
+    }
+
+    if (selectedStorageType === 's3') {
+      clearStorageFields(['local', 'azure', 'gcs']);
+      return;
+    }
+
+    if (selectedStorageType === 'azure') {
+      clearStorageFields(['local', 's3', 'gcs']);
+      return;
+    }
+
+    if (selectedStorageType === 'gcs') {
+      clearStorageFields(['local', 's3', 'azure']);
+    }
+  }, [storageForm, selectedStorageType]);
 
   useEffect(() => {
     if (!selectedCatalogType) {
@@ -281,30 +402,61 @@ export const DuckLakeConnectionWizard: React.FC<
         if (isValid) {
           const data = basicsForm.getValues();
           setWizardData((prev) => ({ ...prev, basics: data }));
+        } else {
+          setValidationError('Please fix the errors in the form');
         }
         break;
       }
       case 1: {
-        isValid = await catalogForm.trigger();
+        isValid = await storageForm.trigger();
         if (isValid) {
-          const data = catalogForm.getValues();
-          setWizardData((prev) => ({ ...prev, catalog: data }));
+          const data = storageForm.getValues();
+          setValidating(true);
+          setValidationError(null);
+          try {
+            const result =
+              await DuckLakeService.validateStorageConnection(data);
+            if (result.success) {
+              setWizardData((prev) => ({ ...prev, storage: data }));
+            } else {
+              isValid = false;
+              setValidationError(result.error || 'Connection failed');
+            }
+          } catch (error) {
+            isValid = false;
+            setValidationError((error as Error).message);
+          } finally {
+            setValidating(false);
+          }
         }
         break;
       }
       case 2: {
-        isValid = await runtimeForm.trigger();
+        isValid = await catalogForm.trigger();
         if (isValid) {
-          const data = runtimeForm.getValues();
-          setWizardData((prev) => ({ ...prev, runtime: data }));
+          const data = catalogForm.getValues();
+          setWizardData((prev) => ({ ...prev, catalog: data }));
+        } else {
+          setValidationError('Please fix the errors in the form');
         }
         break;
       }
       case 3: {
+        isValid = await runtimeForm.trigger();
+        if (isValid) {
+          const data = runtimeForm.getValues();
+          setWizardData((prev) => ({ ...prev, runtime: data }));
+        } else {
+          setValidationError('Please fix the errors in the form');
+        }
+        break;
+      }
+      case 4: {
         // Final step - create instance
         if (
           onComplete &&
           wizardData.basics &&
+          wizardData.storage &&
           wizardData.catalog &&
           wizardData.runtime
         ) {
@@ -315,11 +467,41 @@ export const DuckLakeConnectionWizard: React.FC<
             tempDirectory: wizardData.runtime.tempDirectory || undefined,
           };
 
+          // Construct dataPath from storage config for DuckLake ATTACH command
+          let dataPath = '';
+          if (wizardData.storage.type === 'local' && wizardData.storage.local) {
+            dataPath = wizardData.storage.local.path;
+          } else if (
+            wizardData.storage.type === 's3' &&
+            wizardData.storage.s3
+          ) {
+            const { bucket, prefix } = wizardData.storage.s3;
+            dataPath = `s3://${bucket}${prefix ? `/${prefix}` : ''}`;
+          } else if (
+            wizardData.storage.type === 'azure' &&
+            wizardData.storage.azure
+          ) {
+            const { container, prefix } = wizardData.storage.azure;
+            dataPath = `abfss://${container}${prefix ? `/${prefix}` : ''}`;
+          } else if (
+            wizardData.storage.type === 'gcs' &&
+            wizardData.storage.gcs
+          ) {
+            const { bucket, prefix } = wizardData.storage.gcs;
+            dataPath = `gs://${bucket}${prefix ? `/${prefix}` : ''}`;
+          }
+
           onComplete({
-            basics: wizardData.basics,
+            basics: {
+              ...wizardData.basics,
+              dataPath, // Include computed dataPath for DuckLake ATTACH
+            },
+            storage: wizardData.storage,
             catalog: wizardData.catalog,
             runtime: cleanedRuntime,
           });
+        } else {
+          setValidationError('Please fix the errors in the form');
         }
         return;
       }
@@ -342,6 +524,48 @@ export const DuckLakeConnectionWizard: React.FC<
     } else {
       navigate('/app/duck-lake/instances');
     }
+  };
+
+  const getStorageLocation = () => {
+    if (!wizardData.storage) return '';
+
+    const { type } = wizardData.storage;
+
+    if (type === 'local') {
+      return wizardData.storage.local?.path || '';
+    }
+    if (type === 's3') {
+      return `s3://${wizardData.storage.s3?.bucket || ''}`;
+    }
+    if (type === 'azure') {
+      return `abfss://${wizardData.storage.azure?.container || ''}`;
+    }
+    if (type === 'gcs') {
+      return `gs://${wizardData.storage.gcs?.bucket || ''}`;
+    }
+
+    return '';
+  };
+
+  const getStorageTypeLabel = () => {
+    if (!wizardData.storage) return '';
+
+    const { type } = wizardData.storage;
+
+    if (type === 'gcs') {
+      return 'Google Cloud Storage';
+    }
+    if (type === 's3') {
+      return 'Amazon S3';
+    }
+    if (type === 'azure') {
+      return 'Azure Blob Storage';
+    }
+    if (type === 'local') {
+      return 'Local Filesystem';
+    }
+
+    return '';
   };
 
   const renderStepContent = () => {
@@ -382,34 +606,6 @@ export const DuckLakeConnectionWizard: React.FC<
 
               <Grid item xs={12}>
                 <Controller
-                  name="dataPath"
-                  control={basicsForm.control}
-                  render={({ field, fieldState }) => (
-                    <TextField
-                      name={field.name}
-                      value={field.value || ''}
-                      onChange={field.onChange}
-                      onBlur={field.onBlur}
-                      label="Data Path"
-                      fullWidth
-                      error={!!fieldState.error}
-                      helperText={
-                        fieldState.error?.message ||
-                        'Directory where DuckLake will store data files'
-                      }
-                      placeholder="/path/to/data"
-                      InputProps={{
-                        startAdornment: (
-                          <Folder sx={{ mr: 1, color: 'text.secondary' }} />
-                        ),
-                      }}
-                    />
-                  )}
-                />
-              </Grid>
-
-              <Grid item xs={12}>
-                <Controller
                   name="description"
                   control={basicsForm.control}
                   render={({ field }) => (
@@ -432,6 +628,391 @@ export const DuckLakeConnectionWizard: React.FC<
         );
 
       case 1:
+        return (
+          <Box sx={{ mt: 2 }}>
+            <Typography variant="h6" gutterBottom>
+              Storage Configuration
+            </Typography>
+            <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
+              Choose where DuckLake will store your data files (Parquet).
+            </Typography>
+
+            {validationError && (
+              <Alert severity="error" sx={{ mb: 2 }}>
+                {validationError}
+              </Alert>
+            )}
+
+            <Controller
+              name="type"
+              control={storageForm.control}
+              render={({ field }) => (
+                <FormControl component="fieldset" fullWidth>
+                  <FormLabel component="legend">Storage Type</FormLabel>
+                  <Grid container spacing={2} sx={{ mt: 1 }}>
+                    {['local', 's3', 'azure', 'gcs'].map((type) => (
+                      <Grid item xs={6} sm={3} key={type}>
+                        <Card
+                          variant={
+                            field.value === type ? 'elevation' : 'outlined'
+                          }
+                          sx={{
+                            cursor: 'pointer',
+                            border:
+                              field.value === type ? '2px solid' : '1px solid',
+                            borderColor:
+                              field.value === type ? 'primary.main' : 'divider',
+                            height: '100px',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                          }}
+                          onClick={() => field.onChange(type)}
+                        >
+                          <Box
+                            sx={{
+                              display: 'flex',
+                              flexDirection: 'column',
+                              alignItems: 'center',
+                              gap: 1,
+                            }}
+                          >
+                            {type === 'local' ? (
+                              <Folder fontSize="large" color="action" />
+                            ) : (
+                              <Box
+                                component="img"
+                                src={
+                                  cloudStorageImages[
+                                    type as keyof typeof cloudStorageImages
+                                  ]
+                                }
+                                sx={{
+                                  width: 40,
+                                  height: 40,
+                                  objectFit: 'contain',
+                                }}
+                              />
+                            )}
+                            <Typography
+                              variant="body2"
+                              sx={{ textTransform: 'capitalize' }}
+                            >
+                              {type === 'gcs' ? 'Google Cloud' : type}
+                            </Typography>
+                          </Box>
+                        </Card>
+                      </Grid>
+                    ))}
+                  </Grid>
+                </FormControl>
+              )}
+            />
+
+            <Box sx={{ mt: 3 }}>
+              {storageForm.watch('type') === 'local' && (
+                <Controller
+                  name="local.path"
+                  control={storageForm.control}
+                  render={({ field, fieldState }) => (
+                    <TextField
+                      name={field.name}
+                      value={field.value || ''}
+                      onChange={field.onChange}
+                      onBlur={field.onBlur}
+                      label="Local Data Path"
+                      fullWidth
+                      error={!!fieldState.error}
+                      helperText={
+                        fieldState.error?.message ||
+                        'Absolute path to local directory'
+                      }
+                      placeholder="/path/to/data"
+                      InputProps={{
+                        startAdornment: (
+                          <Folder sx={{ mr: 1, color: 'text.secondary' }} />
+                        ),
+                      }}
+                    />
+                  )}
+                />
+              )}
+
+              {storageForm.watch('type') === 's3' && (
+                <>
+                  <Controller
+                    name="s3.bucket"
+                    control={storageForm.control}
+                    render={({ field, fieldState }) => (
+                      <TextField
+                        label="Bucket Name"
+                        fullWidth
+                        margin="normal"
+                        value={field.value || ''}
+                        onChange={field.onChange}
+                        error={!!fieldState.error}
+                        helperText={fieldState.error?.message}
+                        required
+                      />
+                    )}
+                  />
+                  <Controller
+                    name="s3.prefix"
+                    control={storageForm.control}
+                    render={({ field }) => (
+                      <TextField
+                        label="Prefix (Optional)"
+                        fullWidth
+                        margin="normal"
+                        value={field.value || ''}
+                        onChange={field.onChange}
+                        placeholder="data/warehouse"
+                      />
+                    )}
+                  />
+                  <Controller
+                    name="s3.region"
+                    control={storageForm.control}
+                    render={({ field, fieldState }) => (
+                      <TextField
+                        label="Region"
+                        placeholder="us-east-1"
+                        fullWidth
+                        margin="normal"
+                        value={field.value || ''}
+                        onChange={field.onChange}
+                        error={!!fieldState.error}
+                        helperText={
+                          fieldState.error?.message ||
+                          'Your AWS region (e.g., us-east-1)'
+                        }
+                        required
+                      />
+                    )}
+                  />
+                  <Controller
+                    name="s3.accessKeyId"
+                    control={storageForm.control}
+                    render={({ field, fieldState }) => (
+                      <TextField
+                        label="Access Key ID"
+                        placeholder="AKIAIOSFODNN7EXAMPLE"
+                        fullWidth
+                        margin="normal"
+                        value={field.value || ''}
+                        onChange={field.onChange}
+                        error={!!fieldState.error}
+                        helperText={
+                          fieldState.error?.message || 'Your AWS Access Key ID'
+                        }
+                        required
+                      />
+                    )}
+                  />
+                  <Controller
+                    name="s3.secretAccessKey"
+                    control={storageForm.control}
+                    render={({ field, fieldState }) => (
+                      <TextField
+                        label="Secret Access Key"
+                        placeholder="wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY"
+                        type="password"
+                        fullWidth
+                        margin="normal"
+                        value={field.value || ''}
+                        onChange={field.onChange}
+                        error={!!fieldState.error}
+                        helperText={
+                          fieldState.error?.message ||
+                          'Your AWS Secret Access Key'
+                        }
+                        required
+                      />
+                    )}
+                  />
+                </>
+              )}
+
+              {storageForm.watch('type') === 'azure' && (
+                <>
+                  <Controller
+                    name="azure.container"
+                    control={storageForm.control}
+                    render={({ field, fieldState }) => (
+                      <TextField
+                        label="Container Name"
+                        fullWidth
+                        margin="normal"
+                        value={field.value || ''}
+                        onChange={field.onChange}
+                        error={!!fieldState.error}
+                        helperText={fieldState.error?.message}
+                        required
+                      />
+                    )}
+                  />
+                  <Controller
+                    name="azure.prefix"
+                    control={storageForm.control}
+                    render={({ field }) => (
+                      <TextField
+                        label="Prefix (Optional)"
+                        fullWidth
+                        margin="normal"
+                        value={field.value || ''}
+                        onChange={field.onChange}
+                        placeholder="data/warehouse"
+                      />
+                    )}
+                  />
+                  <Controller
+                    name="azure.accountName"
+                    control={storageForm.control}
+                    render={({ field, fieldState }) => (
+                      <TextField
+                        label="Account Name"
+                        fullWidth
+                        margin="normal"
+                        value={field.value || ''}
+                        onChange={field.onChange}
+                        error={!!fieldState.error}
+                        helperText={
+                          fieldState.error?.message ||
+                          'Your Azure Storage account name'
+                        }
+                        required
+                      />
+                    )}
+                  />
+                  <Controller
+                    name="azure.accountKey"
+                    control={storageForm.control}
+                    render={({ field, fieldState }) => (
+                      <TextField
+                        label="Account Key"
+                        type="password"
+                        fullWidth
+                        margin="normal"
+                        value={field.value || ''}
+                        onChange={field.onChange}
+                        error={!!fieldState.error}
+                        helperText={
+                          fieldState.error?.message ||
+                          'Your Azure Storage account key'
+                        }
+                        required
+                      />
+                    )}
+                  />
+                  <Controller
+                    name="azure.connectionString"
+                    control={storageForm.control}
+                    render={({ field }) => (
+                      <TextField
+                        label="Connection String (Optional)"
+                        fullWidth
+                        margin="normal"
+                        value={field.value || ''}
+                        onChange={field.onChange}
+                        helperText="Alternative to account name/key"
+                      />
+                    )}
+                  />
+                </>
+              )}
+
+              {storageForm.watch('type') === 'gcs' && (
+                <>
+                  <Controller
+                    name="gcs.bucket"
+                    control={storageForm.control}
+                    render={({ field, fieldState }) => (
+                      <TextField
+                        label="Bucket Name"
+                        fullWidth
+                        margin="normal"
+                        value={field.value || ''}
+                        onChange={field.onChange}
+                        error={!!fieldState.error}
+                        helperText={fieldState.error?.message}
+                        required
+                      />
+                    )}
+                  />
+                  <Controller
+                    name="gcs.prefix"
+                    control={storageForm.control}
+                    render={({ field }) => (
+                      <TextField
+                        label="Prefix (Optional)"
+                        fullWidth
+                        margin="normal"
+                        value={field.value || ''}
+                        onChange={field.onChange}
+                        placeholder="data/warehouse"
+                      />
+                    )}
+                  />
+                  <Controller
+                    name="gcs.projectId"
+                    control={storageForm.control}
+                    render={({ field, fieldState }) => (
+                      <TextField
+                        label="Project ID"
+                        fullWidth
+                        margin="normal"
+                        value={field.value || ''}
+                        onChange={field.onChange}
+                        error={!!fieldState.error}
+                        helperText={
+                          fieldState.error?.message || 'Your GCP project ID'
+                        }
+                        required
+                      />
+                    )}
+                  />
+                  <Controller
+                    name="gcs.credentials"
+                    control={storageForm.control}
+                    render={({ field }) => (
+                      <TextField
+                        label="Service Account Credentials (JSON)"
+                        placeholder='{"type": "service_account", "project_id": "your-project-id", ...}'
+                        fullWidth
+                        multiline
+                        rows={10}
+                        margin="normal"
+                        value={field.value || ''}
+                        onChange={field.onChange}
+                        helperText="Paste your service account JSON credentials here (optional for local development)"
+                        variant="outlined"
+                        InputProps={{
+                          style: {
+                            minHeight: '120px',
+                            fontFamily:
+                              'Consolas, Monaco, "Lucida Console", "Liberation Mono", "DejaVu Sans Mono", "Bitstream Vera Sans Mono", "Courier New", monospace',
+                            fontSize: '13px',
+                          },
+                        }}
+                        sx={{
+                          '& .MuiOutlinedInput-root': {
+                            height: 'auto',
+                          },
+                          '& .MuiInputBase-inputMultiline': {
+                            height: 'auto !important',
+                            resize: 'vertical',
+                          },
+                        }}
+                      />
+                    )}
+                  />
+                </>
+              )}
+            </Box>
+          </Box>
+        );
+
+      case 2:
         return (
           <Box sx={{ mt: 2 }}>
             <Typography variant="h6" gutterBottom>
@@ -779,7 +1360,7 @@ export const DuckLakeConnectionWizard: React.FC<
           </Box>
         );
 
-      case 2:
+      case 3:
         return (
           <Box sx={{ mt: 2 }}>
             <Typography variant="h6" gutterBottom>
@@ -881,7 +1462,7 @@ export const DuckLakeConnectionWizard: React.FC<
           </Box>
         );
 
-      case 3:
+      case 4:
         return (
           <Box sx={{ mt: 2 }}>
             <Typography variant="h6" gutterBottom>
@@ -911,8 +1492,14 @@ export const DuckLakeConnectionWizard: React.FC<
                     </ListItem>
                     <ListItem>
                       <ListItemText
-                        primary="Data Path"
-                        secondary={wizardData.basics?.dataPath}
+                        primary="Storage Type"
+                        secondary={getStorageTypeLabel()}
+                      />
+                    </ListItem>
+                    <ListItem>
+                      <ListItemText
+                        primary="Location"
+                        secondary={getStorageLocation()}
                       />
                     </ListItem>
                     {wizardData.basics?.description && (

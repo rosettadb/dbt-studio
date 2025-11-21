@@ -11,6 +11,7 @@ import {
   DuckLakeInstanceUpdateRequest,
   DuckLakeCatalogConfig,
   DuckLakeQueryRequest,
+  DuckLakeStorageConfig,
 } from '../../types/duckLake';
 
 const registerDuckLakeHandlers = () => {
@@ -179,6 +180,13 @@ const registerDuckLakeHandlers = () => {
   ipcMain.handle('ducklake:storage:stats', async () => {
     return DuckLakeService.getStorageStats();
   });
+
+  ipcMain.handle(
+    'ducklake:storage:validate',
+    async (_event, storageConfig: DuckLakeStorageConfig) => {
+      return DuckLakeService.validateStorageConnection(storageConfig);
+    },
+  );
 };
 
 export default registerDuckLakeHandlers;

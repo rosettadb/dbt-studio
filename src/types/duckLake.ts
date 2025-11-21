@@ -24,6 +24,37 @@ export interface DuckLakeCatalogConfig {
   };
 }
 
+// Storage Configuration Types
+export type DuckLakeStorageType = 'local' | 's3' | 'azure' | 'gcs';
+
+export interface DuckLakeStorageConfig {
+  type: DuckLakeStorageType;
+  local?: {
+    path: string;
+  };
+  s3?: {
+    bucket: string;
+    region: string;
+    accessKeyId: string;
+    secretAccessKey: string;
+    endpoint?: string;
+    prefix?: string;
+  };
+  azure?: {
+    container: string;
+    accountName: string;
+    accountKey: string;
+    connectionString?: string;
+    prefix?: string;
+  };
+  gcs?: {
+    bucket: string;
+    projectId: string;
+    credentials?: string;
+    prefix?: string;
+  };
+}
+
 // Instance Configuration Types
 export type DuckLakeInstanceStatus =
   | 'active'
@@ -43,6 +74,7 @@ export interface DuckLakeInstance {
   name: string;
   description?: string;
   dataPath: string;
+  storage?: DuckLakeStorageConfig;
   catalog: DuckLakeCatalogConfig;
   createdAt: Date;
   updatedAt: Date;
@@ -210,7 +242,13 @@ export type DuckLakeInstanceCreateRequest = Omit<
 export type DuckLakeInstanceUpdateRequest = Partial<
   Pick<
     DuckLakeInstance,
-    'name' | 'description' | 'dataPath' | 'catalog' | 'tags' | 'runtimeOptions'
+    | 'name'
+    | 'description'
+    | 'dataPath'
+    | 'catalog'
+    | 'storage'
+    | 'tags'
+    | 'runtimeOptions'
   >
 >;
 
@@ -290,4 +328,7 @@ export interface DuckLakeIpcChannels {
     storageSize: number;
     lastModified: Date;
   }>;
+  'ducklake:storage:validate': (
+    storageConfig: DuckLakeStorageConfig,
+  ) => Promise<{ success: boolean; error?: string }>;
 }

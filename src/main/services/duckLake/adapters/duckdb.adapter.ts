@@ -18,6 +18,7 @@ import {
   DuckLakeSnapshotInfo,
   DuckLakeQueryResult,
   DuckLakeQueryRequest,
+  DuckLakeStorageConfig,
 } from '../../../../types/duckLake';
 import { DuckLakeError } from '../../../../types/duckLakeErrors';
 import { normalizeNumericValue } from '../../../../renderer/utils/fileUtils';
@@ -26,6 +27,7 @@ export class DuckDBCatalogAdapter extends CatalogAdapter {
   async connect(
     config: DuckLakeCatalogConfig,
     instance: DuckLakeInstance,
+    storageConfig?: DuckLakeStorageConfig,
   ): Promise<ConnectionInfo> {
     try {
       if (config.type !== 'duckdb') {
@@ -44,6 +46,9 @@ export class DuckDBCatalogAdapter extends CatalogAdapter {
 
       // Load DuckLake extension
       await this.loadDuckLakeExtension(connection);
+
+      // Create secrets for cloud storage
+      await this.createSecrets(connection, storageConfig);
 
       // Ensure metadata directory exists
       const metadataDir = path.dirname(config.duckdb.metadataPath);

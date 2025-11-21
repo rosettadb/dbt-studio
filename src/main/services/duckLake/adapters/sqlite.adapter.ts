@@ -18,6 +18,7 @@ import {
   DuckLakeSnapshotInfo,
   DuckLakeQueryResult,
   DuckLakeQueryRequest,
+  DuckLakeStorageConfig,
 } from '../../../../types/duckLake';
 import { DuckLakeError } from '../../../../types/duckLakeErrors';
 import { normalizeNumericValue } from '../../../../renderer/utils/fileUtils';
@@ -26,6 +27,7 @@ export class SQLiteCatalogAdapter extends CatalogAdapter {
   async connect(
     config: DuckLakeCatalogConfig,
     instance: DuckLakeInstance,
+    storageConfig?: DuckLakeStorageConfig,
   ): Promise<ConnectionInfo> {
     try {
       if (config.type !== 'sqlite') {
@@ -45,6 +47,9 @@ export class SQLiteCatalogAdapter extends CatalogAdapter {
       // Load DuckLake and SQLite extensions
       await this.loadDuckLakeExtension(connection);
       await this.loadCatalogExtensions(connection, ['sqlite']);
+
+      // Create secrets for cloud storage
+      await this.createSecrets(connection, storageConfig);
 
       // Ensure metadata directory exists
       const metadataDir = path.dirname(config.sqlite.metadataPath);

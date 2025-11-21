@@ -4,6 +4,7 @@ import postgres from './postgresql.png';
 import redshift from './redshift.png';
 import databricks from './databricks.png';
 import duckdb from './duckdb.png';
+import sqlite from './sqlite.png';
 import mysql from './mysql.png';
 import oracle from './oracle.png';
 import db2 from './db2.png';
@@ -25,6 +26,7 @@ type Image = Record<SupportedConnectionTypes, string>;
 export const cloudStorageImages = {
   gcs: googlecloud,
   aws: s3Bucket,
+  s3: s3Bucket,
   azure: azureBlob,
 };
 
@@ -38,6 +40,13 @@ export const aiProviderImages = {
 
 // Default fallback icon
 export const defaultIcon = file;
+
+// Database icons for DuckLake catalogs
+export const databaseIcons = {
+  duckdb,
+  sqlite,
+  postgresql: postgres,
+};
 
 const obj: { images: Image } = {
   images: {

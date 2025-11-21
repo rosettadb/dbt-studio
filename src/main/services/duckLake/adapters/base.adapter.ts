@@ -11,7 +11,9 @@ import {
   DuckLakeSnapshotInfo,
   DuckLakeQueryResult,
   DuckLakeQueryRequest,
+  DuckLakeStorageConfig,
 } from '../../../../types/duckLake';
+import { generateGCSBearerToken } from '../../../helpers/cloudAuth.helper';
 
 export interface ValidationResult {
   valid: boolean;
@@ -47,6 +49,7 @@ export abstract class CatalogAdapter {
   abstract connect(
     config: DuckLakeCatalogConfig,
     instance: DuckLakeInstance,
+    storageConfig?: DuckLakeStorageConfig,
   ): Promise<ConnectionInfo>;
 
   /**
@@ -261,6 +264,153 @@ export abstract class CatalogAdapter {
         // eslint-disable-next-line no-console
         console.error('Error during connection cleanup:', error);
       }
+    }
+  }
+
+  /**
+   * Create DuckDB secrets for cloud storage access
+   */
+  // eslint-disable-next-line class-methods-use-this
+  protected async createSecrets(
+    connection: any,
+    storageConfig?: DuckLakeStorageConfig,
+  ): Promise<void> {
+    if (!storageConfig) {
+      return;
+    }
+
+    try {
+      // eslint-disable-next-line no-console
+      console.debug('[DuckLake][createSecrets] Received storage config', {
+        type: storageConfig.type,
+        hasS3: Boolean(storageConfig.s3),
+        hasAzure: Boolean(storageConfig.azure),
+        hasGcsCredentials: Boolean(storageConfig.gcs?.credentials),
+        bucket: storageConfig.gcs?.bucket,
+        projectId: storageConfig.gcs?.projectId,
+      });
+
+      if (storageConfig.type === 's3' && storageConfig.s3) {
+        // eslint-disable-next-line no-console
+        console.debug(
+          '[DuckLake][createSecrets] Creating S3 secret for httpfs',
+          {
+            region: storageConfig.s3.region,
+            endpoint: storageConfig.s3.endpoint,
+          },
+        );
+        const { region, accessKeyId, secretAccessKey, endpoint } =
+          storageConfig.s3;
+        const secretName = `s3_secret_${Date.now()}`;
+
+        let secretQuery = `CREATE OR REPLACE SECRET ${secretName} (
+  TYPE s3,
+  PROVIDER config,
+  KEY_ID '${accessKeyId}',
+  SECRET '${secretAccessKey}',
+  REGION '${region}'`;
+
+        if (endpoint) {
+          secretQuery += `,
+  ENDPOINT '${endpoint}'`;
+        }
+
+        secretQuery += `
+);`;
+        await connection.run(secretQuery);
+        // eslint-disable-next-line no-console
+        console.debug('[DuckLake][createSecrets] S3 secret created');
+      } else if (storageConfig.type === 'azure' && storageConfig.azure) {
+        // eslint-disable-next-line no-console
+        console.debug('[DuckLake][createSecrets] Creating Azure secret');
+        const { connectionString, accountName, accountKey } =
+          storageConfig.azure;
+        const secretName = `azure_secret_${Date.now()}`;
+
+        if (connectionString) {
+          await connection.run(`
+            CREATE OR REPLACE SECRET ${secretName} (
+              TYPE AZURE,
+              CONNECTION_STRING '${connectionString}'
+            );
+          `);
+        } else if (accountName && accountKey) {
+          const builtConnectionString = `DefaultEndpointsProtocol=https;AccountName=${accountName};AccountKey=${accountKey};EndpointSuffix=core.windows.net`;
+          await connection.run(`
+            CREATE OR REPLACE SECRET ${secretName} (
+              TYPE AZURE,
+              CONNECTION_STRING '${builtConnectionString}'
+            );
+          `);
+        } else if (accountName) {
+          await connection.run(`
+            CREATE OR REPLACE SECRET ${secretName} (
+              TYPE AZURE,
+              PROVIDER config,
+              ACCOUNT_NAME '${accountName}'
+            );
+          `);
+        } else {
+          // eslint-disable-next-line no-console
+          console.warn(
+            '[DuckLake][createSecrets] Azure credentials missing, secret not created',
+          );
+        }
+        // eslint-disable-next-line no-console
+        console.debug('[DuckLake][createSecrets] Azure secret created');
+      } else if (storageConfig.type === 'gcs' && storageConfig.gcs) {
+        // eslint-disable-next-line no-console
+        console.debug('[DuckLake][createSecrets] Creating GCS secret');
+        const { credentials } = storageConfig.gcs;
+        const secretName = `gcs_secret_${Date.now()}`;
+
+        if (credentials) {
+          try {
+            // Generate short-lived bearer token from service account JSON
+            const token = await generateGCSBearerToken(credentials);
+            const escapedToken = token.replace(/'/g, "''");
+
+            await connection.run(`
+CREATE OR REPLACE SECRET ${secretName} (
+  TYPE http,
+  EXTRA_HTTP_HEADERS MAP {'Authorization': 'Bearer ${escapedToken}'}
+);`);
+            // eslint-disable-next-line no-console
+            console.debug(
+              '[DuckLake][createSecrets] GCS secret created with bearer token',
+              {
+                hasCredentials: true,
+                credentialLength: credentials.length,
+              },
+            );
+          } catch (tokenError) {
+            // eslint-disable-next-line no-console
+            console.error(
+              '[DuckLake][createSecrets] Failed to generate GCS bearer token',
+              tokenError,
+            );
+            throw tokenError;
+          }
+        } else {
+          // eslint-disable-next-line no-console
+          console.warn(
+            '[DuckLake][createSecrets] GCS credentials missing, secret not created',
+          );
+        }
+      }
+    } catch (error) {
+      // eslint-disable-next-line no-console
+      console.error(
+        '[DuckLake][createSecrets] Failed to create cloud storage secrets',
+        {
+          type: storageConfig.type,
+          hasS3: Boolean(storageConfig.s3),
+          hasAzure: Boolean(storageConfig.azure),
+          hasGcsCredentials: Boolean(storageConfig.gcs?.credentials),
+        },
+        error,
+      );
+      throw error;
     }
   }
 }

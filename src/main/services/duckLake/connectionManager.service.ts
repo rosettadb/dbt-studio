@@ -8,6 +8,7 @@ import {
   DuckLakeInstance,
   DuckLakeCatalogConfig,
   DuckLakeInstanceHealth,
+  DuckLakeStorageConfig,
 } from '../../../types/duckLake';
 
 interface ConnectionEntry {
@@ -45,6 +46,7 @@ export class DuckLakeConnectionManager {
     instanceId: string,
     instance: DuckLakeInstance,
     catalogConfig: DuckLakeCatalogConfig,
+    storageConfig?: DuckLakeStorageConfig,
   ): Promise<CatalogAdapter> {
     const existing = this.connections.get(instanceId);
 
@@ -57,7 +59,7 @@ export class DuckLakeConnectionManager {
 
     // Create new connection
     const adapter = CatalogAdapterFactory.createAdapter(catalogConfig.type);
-    await adapter.connect(catalogConfig, instance);
+    await adapter.connect(catalogConfig, instance, storageConfig);
 
     const entry: ConnectionEntry = {
       adapter,

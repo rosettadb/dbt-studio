@@ -206,11 +206,19 @@ const DuckLake: React.FC = () => {
         return (
           <DuckLakeConnectionWizard
             onComplete={async (wizardData) => {
+              // Ensure dataPath is defined (it should always be computed by the wizard)
+              if (!wizardData.basics.dataPath) {
+                throw new Error(
+                  'Data path is required but was not provided by the wizard',
+                );
+              }
+
               const createRequest = {
                 name: wizardData.basics.name,
                 dataPath: wizardData.basics.dataPath,
                 description: wizardData.basics.description,
                 catalog: wizardData.catalog,
+                storage: wizardData.storage,
                 runtimeOptions: wizardData.runtime,
               };
               const newInstance =
@@ -315,9 +323,25 @@ const DuckLake: React.FC = () => {
 
   return (
     <AppLayout
-      sidebarContent={<DuckLakeSidebar instances={instances as any} />}
+      sidebarContent={
+        <DuckLakeSidebar
+          instances={instances.map((i) => ({
+            id: i.id,
+            name: i.name,
+            status: i.status,
+            storageType: i.storage?.type as
+              | 'local'
+              | 's3'
+              | 'azure'
+              | 'gcs'
+              | undefined,
+          }))}
+        />
+      }
     >
-      <Box sx={{ height: '100%', overflow: 'auto' }}>{renderContent()}</Box>
+      <Box sx={{ p: 2 }}>
+        <Box>{renderContent()}</Box>
+      </Box>
     </AppLayout>
   );
 };

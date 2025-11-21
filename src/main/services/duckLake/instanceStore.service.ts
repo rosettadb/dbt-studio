@@ -10,6 +10,7 @@ import SecureStorageService from '../secureStorage.service';
 import {
   DuckLakeInstance,
   DuckLakeCatalogConfig,
+  DuckLakeStorageConfig,
 } from '../../../types/duckLake';
 import { DuckLakeError } from '../../../types/duckLakeErrors';
 
@@ -31,11 +32,39 @@ interface DuckLakeCatalogConfigPersisted {
   };
 }
 
+interface DuckLakeStorageConfigPersisted {
+  type: 'local' | 's3' | 'azure' | 'gcs';
+  local?: {
+    path: string;
+  };
+  s3?: {
+    bucket: string;
+    region: string;
+    accessKeyId: string;
+    endpoint?: string;
+    prefix?: string;
+    // secretAccessKey stored separately
+  };
+  azure?: {
+    container: string;
+    accountName: string;
+    // accountKey/connectionString stored separately
+    prefix?: string;
+  };
+  gcs?: {
+    bucket: string;
+    projectId: string;
+    prefix?: string;
+    // credentials stored separately
+  };
+}
+
 interface DuckLakeInstanceMetadata {
   id: string;
   name: string;
   description?: string;
   dataPath: string;
+  storage?: DuckLakeStorageConfigPersisted;
   catalog: DuckLakeCatalogConfigPersisted;
   createdAt: string; // ISO string for JSON serialization
   updatedAt: string;
@@ -158,7 +187,11 @@ export class DuckLakeInstanceStore {
       const instance = data.instances[instanceIndex];
 
       // Clean up credentials before removing instance
-      await this.cleanupInstanceCredentials(instanceId, instance.catalog);
+      await this.cleanupInstanceCredentials(
+        instanceId,
+        instance.catalog,
+        instance.storage,
+      );
 
       // Remove instance from array
       data.instances.splice(instanceIndex, 1);
@@ -193,13 +226,15 @@ export class DuckLakeInstanceStore {
   }
 
   /**
-   * Store catalog credentials securely
+   * Store credentials securely (catalog and storage)
    */
-  static async storeCatalogCredentials(
+  static async storeCredentials(
     instanceId: string,
     catalog: DuckLakeCatalogConfig,
+    storage?: DuckLakeStorageConfig,
   ): Promise<void> {
     try {
+      // Store Catalog Credentials
       if (catalog.type === 'postgresql' && catalog.postgresql?.password) {
         const credentialKey = `ducklake-${instanceId}-postgresql-password`;
         await SecureStorageService.setCredential(
@@ -207,21 +242,58 @@ export class DuckLakeInstanceStore {
           catalog.postgresql.password,
         );
       }
+
+      // Store Storage Credentials
+      if (storage) {
+        if (storage.type === 's3' && storage.s3?.secretAccessKey) {
+          const key = `ducklake-${instanceId}-s3-secret`;
+          await SecureStorageService.setCredential(
+            key,
+            storage.s3.secretAccessKey,
+          );
+        } else if (storage.type === 'azure') {
+          if (storage.azure?.accountKey) {
+            const key = `ducklake-${instanceId}-azure-key`;
+            await SecureStorageService.setCredential(
+              key,
+              storage.azure.accountKey,
+            );
+          }
+          if (storage.azure?.connectionString) {
+            const key = `ducklake-${instanceId}-azure-conn-string`;
+            await SecureStorageService.setCredential(
+              key,
+              storage.azure.connectionString,
+            );
+          }
+        } else if (storage.type === 'gcs' && storage.gcs?.credentials) {
+          const key = `ducklake-${instanceId}-gcs-credentials`;
+          await SecureStorageService.setCredential(
+            key,
+            storage.gcs.credentials,
+          );
+        }
+      }
     } catch (error) {
       // eslint-disable-next-line no-console
-      console.error('Failed to store catalog credentials:', error);
+      console.error('Failed to store credentials:', error);
       throw error;
     }
   }
 
   /**
-   * Retrieve catalog credentials securely
+   * Retrieve credentials securely (catalog and storage)
    */
-  static async retrieveCatalogCredentials(
+  static async retrieveCredentials(
     instanceId: string,
     catalog: DuckLakeCatalogConfigPersisted,
-  ): Promise<DuckLakeCatalogConfig> {
+    storage?: DuckLakeStorageConfigPersisted,
+  ): Promise<{
+    catalog: DuckLakeCatalogConfig;
+    storage?: DuckLakeStorageConfig;
+  }> {
     try {
+      // Retrieve Catalog Credentials
       const fullCatalog: DuckLakeCatalogConfig = { ...catalog };
 
       if (catalog.type === 'postgresql' && catalog.postgresql) {
@@ -234,11 +306,47 @@ export class DuckLakeInstanceStore {
         };
       }
 
-      return fullCatalog;
+      // Retrieve Storage Credentials
+      let fullStorage: DuckLakeStorageConfig | undefined;
+      if (storage) {
+        fullStorage = { ...storage } as DuckLakeStorageConfig;
+
+        if (storage.type === 's3' && storage.s3) {
+          const key = `ducklake-${instanceId}-s3-secret`;
+          const secret = await SecureStorageService.getCredential(key);
+          if (secret) {
+            fullStorage.s3 = { ...storage.s3, secretAccessKey: secret };
+          }
+        } else if (storage.type === 'azure' && storage.azure) {
+          const keyKey = `ducklake-${instanceId}-azure-key`;
+          const connKey = `ducklake-${instanceId}-azure-conn-string`;
+          const [accountKey, connectionString] = await Promise.all([
+            SecureStorageService.getCredential(keyKey),
+            SecureStorageService.getCredential(connKey),
+          ]);
+
+          fullStorage.azure = { ...storage.azure } as any;
+          if (accountKey && fullStorage.azure)
+            fullStorage.azure.accountKey = accountKey;
+          if (connectionString && fullStorage.azure)
+            fullStorage.azure.connectionString = connectionString;
+        } else if (storage.type === 'gcs' && storage.gcs) {
+          const key = `ducklake-${instanceId}-gcs-credentials`;
+          const credentials = await SecureStorageService.getCredential(key);
+          if (credentials) {
+            fullStorage.gcs = { ...storage.gcs, credentials };
+          }
+        }
+      }
+
+      return { catalog: fullCatalog, storage: fullStorage };
     } catch (error) {
       // eslint-disable-next-line no-console
-      console.error('Failed to retrieve catalog credentials:', error);
-      return catalog;
+      console.error('Failed to retrieve credentials:', error);
+      return {
+        catalog: catalog as DuckLakeCatalogConfig,
+        storage: storage as DuckLakeStorageConfig,
+      };
     }
   }
 
@@ -248,13 +356,26 @@ export class DuckLakeInstanceStore {
   private static async cleanupInstanceCredentials(
     instanceId: string,
     catalog: DuckLakeCatalogConfigPersisted,
+    storage?: DuckLakeStorageConfigPersisted,
   ): Promise<void> {
     try {
       const credentialKeys: string[] = [];
 
-      // Only clean up credentials for the specific catalog type
+      // Catalog Credentials
       if (catalog.type === 'postgresql') {
         credentialKeys.push(`ducklake-${instanceId}-postgresql-password`);
+      }
+
+      // Storage Credentials
+      if (storage) {
+        if (storage.type === 's3') {
+          credentialKeys.push(`ducklake-${instanceId}-s3-secret`);
+        } else if (storage.type === 'azure') {
+          credentialKeys.push(`ducklake-${instanceId}-azure-key`);
+          credentialKeys.push(`ducklake-${instanceId}-azure-conn-string`);
+        } else if (storage.type === 'gcs') {
+          credentialKeys.push(`ducklake-${instanceId}-gcs-credentials`);
+        }
       }
 
       await Promise.all(
@@ -279,7 +400,11 @@ export class DuckLakeInstanceStore {
     instance: DuckLakeInstance,
   ): Promise<DuckLakeInstanceMetadata> {
     // Store credentials securely
-    await this.storeCatalogCredentials(instance.id, instance.catalog);
+    await this.storeCredentials(
+      instance.id,
+      instance.catalog,
+      instance.storage,
+    );
 
     // Create metadata without passwords
     const catalogPersisted: DuckLakeCatalogConfigPersisted = {
@@ -289,11 +414,28 @@ export class DuckLakeInstanceStore {
       delete (catalogPersisted.postgresql as any).password;
     }
 
+    // Persist storage config without secrets
+    let storagePersisted: DuckLakeStorageConfigPersisted | undefined;
+    if (instance.storage) {
+      storagePersisted = { ...instance.storage } as any;
+      if (storagePersisted?.s3) {
+        delete (storagePersisted.s3 as any).secretAccessKey;
+      }
+      if (storagePersisted?.azure) {
+        delete (storagePersisted.azure as any).accountKey;
+        delete (storagePersisted.azure as any).connectionString;
+      }
+      if (storagePersisted?.gcs) {
+        delete (storagePersisted.gcs as any).credentials;
+      }
+    }
+
     return {
       id: instance.id,
       name: instance.name,
       description: instance.description,
       dataPath: instance.dataPath,
+      storage: storagePersisted,
       catalog: catalogPersisted,
       createdAt: instance.createdAt.toISOString(),
       updatedAt: instance.updatedAt.toISOString(),
@@ -309,12 +451,21 @@ export class DuckLakeInstanceStore {
   private static metadataToInstance(
     metadata: DuckLakeInstanceMetadata,
   ): DuckLakeInstance {
+    // We return the instance without credentials initially.
+    // Credentials should be retrieved on demand using retrieveCredentials
+    // However, to maintain compatibility with existing code that might expect credentials
+    // in the object (though it shouldn't rely on it for sensitive ops without retrieval),
+    // we return the structure.
+    // Actually, the previous implementation didn't retrieve credentials here either.
+    // See: catalog: metadata.catalog, // Credentials will be loaded on-demand
+
     return {
       id: metadata.id,
       name: metadata.name,
       description: metadata.description,
       dataPath: metadata.dataPath,
-      catalog: metadata.catalog, // Credentials will be loaded on-demand
+      storage: metadata.storage as DuckLakeStorageConfig,
+      catalog: metadata.catalog as DuckLakeCatalogConfig,
       createdAt: new Date(metadata.createdAt),
       updatedAt: new Date(metadata.updatedAt),
       status: metadata.status,

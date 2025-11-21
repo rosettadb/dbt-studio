@@ -47,6 +47,7 @@ export const DuckLakeInstanceManager: React.FC<
         dataPath: wizardData.basics.dataPath,
         description: wizardData.basics.description,
         catalog: wizardData.catalog,
+        storage: wizardData.storage,
         runtimeOptions: wizardData.runtime,
       };
 
