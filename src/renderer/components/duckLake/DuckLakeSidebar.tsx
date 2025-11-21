@@ -21,6 +21,7 @@ import {
 import { NavLink, useLocation, useNavigate } from 'react-router-dom';
 import { SettingsSidebarElement } from '../../screens/settings/settingsElements';
 import { cloudStorageImages } from '../../../../assets/connectionIcons';
+import type { DuckLakeInstanceStatus } from '../../../types/duckLake';
 
 export const StyledDuckLakeNavLink = styled(NavLink)(({ theme }) => ({
   textDecoration: 'none',
@@ -67,7 +68,7 @@ interface DuckLakeSidebarProps {
   instances?: Array<{
     id: string;
     name: string;
-    status: 'active' | 'inactive' | 'error';
+    status: DuckLakeInstanceStatus;
     storageType?: 'local' | 's3' | 'azure' | 'gcs';
   }>;
 }
