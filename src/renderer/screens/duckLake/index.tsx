@@ -10,6 +10,7 @@ import {
   DuckLakeConnectionWizard,
   DuckLakeInstanceDetails,
   DuckLakeInstanceEditForm,
+  DuckLakeTableDetails, // Phase 8b
 } from '../../components/duckLake';
 import {
   useDuckLakeInstances,
@@ -85,6 +86,14 @@ const DuckLake: React.FC = () => {
     // Check for edit route pattern: /app/duck-lake/instances/:id/edit
     if (pathSegments.includes('edit')) {
       return 'edit-instance';
+    }
+    // Check for table detail route pattern: /app/duck-lake/instances/:id/tables/:tableName
+    if (
+      pathSegments.includes('instances') &&
+      pathSegments.includes('tables') &&
+      pathSegments.length > 6
+    ) {
+      return 'table-detail';
     }
     // Check for tables route pattern: /app/duck-lake/instances/:id/tables
     if (pathSegments.includes('instances') && pathSegments.includes('tables')) {
@@ -288,20 +297,8 @@ const DuckLake: React.FC = () => {
         );
 
       case 'table-detail':
-        return (
-          <Box sx={{ p: 2 }}>
-            <Typography
-              variant="h4"
-              component="h1"
-              sx={{ fontWeight: 'bold', mb: 3 }}
-            >
-              Table Details
-            </Typography>
-            <Typography variant="body1" color="text.secondary">
-              Table detail view coming soon...
-            </Typography>
-          </Box>
-        );
+        // Phase 8b: Render comprehensive table detail view
+        return <DuckLakeTableDetails />;
 
       default:
         return (

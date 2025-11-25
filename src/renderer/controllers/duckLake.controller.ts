@@ -13,6 +13,8 @@ export const duckLakeKeys = {
     [...duckLakeKeys.instance(instanceId), 'tables'] as const,
   table: (instanceId: string, tableName: string) =>
     [...duckLakeKeys.tables(instanceId), tableName] as const,
+  tableDetails: (instanceId: string, tableName: string) =>
+    [...duckLakeKeys.table(instanceId, tableName), 'details'] as const, // Phase 8b
   snapshots: (instanceId: string, tableName: string) =>
     [...duckLakeKeys.table(instanceId, tableName), 'snapshots'] as const,
   maintenanceTasks: (instanceId: string) =>
@@ -225,6 +227,40 @@ export function useDuckLakeSnapshots(instanceId: string, tableName: string) {
     queryFn: () => DuckLakeService.listSnapshots(instanceId, tableName),
     enabled: !!instanceId && !!tableName,
     staleTime: 30000,
+  });
+}
+
+/**
+ * Get comprehensive table details from DuckLake metadata catalog (Phase 8b)
+ * Fetches complete table information including schema, statistics, data files, partitions, snapshots, and tags
+ */
+export function useDuckLakeTableDetails(
+  instanceId: string,
+  tableName: string,
+  enabled = true,
+) {
+  return useQuery({
+    queryKey: duckLakeKeys.tableDetails(instanceId, tableName),
+    queryFn: async () => {
+      // eslint-disable-next-line no-console
+      console.log('[useDuckLakeTableDetails] Fetching details for:', {
+        instanceId,
+        tableName,
+      });
+      const result = await DuckLakeService.getTableDetails(
+        instanceId,
+        tableName,
+      );
+      // eslint-disable-next-line no-console
+      console.log('[useDuckLakeTableDetails] Received result:', result);
+      return result;
+    },
+    enabled: enabled && !!instanceId && !!tableName,
+    staleTime: 60000, // 1 minute
+    onError: (error: Error) => {
+      // eslint-disable-next-line no-console
+      console.error('[useDuckLakeTableDetails] Error:', error);
+    },
   });
 }
 

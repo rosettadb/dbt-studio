@@ -107,6 +107,10 @@ const App: React.FC = () => {
             path="duck-lake/instances/:instanceId/edit"
             element={<DuckLake />}
           />
+          <Route
+            path="duck-lake/instances/:instanceId/tables/:tableName"
+            element={<DuckLake />}
+          />
           <Route path="duck-lake/tables" element={<DuckLake />} />
           <Route path="duck-lake/history" element={<DuckLake />} />
           <Route path="duck-lake/new-instance" element={<DuckLake />} />

@@ -141,6 +141,28 @@ export namespace DuckLakeService {
     );
   }
 
+  /**
+   * Get comprehensive table details from DuckLake metadata catalog (Phase 8b)
+   */
+  export async function getTableDetails(
+    instanceId: string,
+    tableName: string,
+  ): Promise<any> {
+    // eslint-disable-next-line no-console
+    console.log('[DuckLakeService.getTableDetails] Calling IPC for:', {
+      instanceId,
+      tableName,
+    });
+    const result = await window.electron.ipcRenderer.invoke(
+      'ducklake:table:getDetails',
+      instanceId,
+      tableName,
+    );
+    // eslint-disable-next-line no-console
+    console.log('[DuckLakeService.getTableDetails] IPC result:', result);
+    return result;
+  }
+
   // Snapshot Management
   export async function listSnapshots(
     instanceId: string,

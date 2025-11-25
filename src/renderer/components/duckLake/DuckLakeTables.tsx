@@ -161,7 +161,11 @@ export const DuckLakeTables: React.FC<DuckLakeTablesProps> = ({
                       cursor: 'pointer',
                     },
                   }}
-                  onClick={() => navigate(`/app/duck-lake/table/${table.id}`)}
+                  onClick={() =>
+                    navigate(
+                      `/app/duck-lake/instances/${table.instanceId}/tables/${table.name}`,
+                    )
+                  }
                 >
                   <TableCell>
                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>

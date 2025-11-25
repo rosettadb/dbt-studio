@@ -350,6 +350,9 @@ export class DuckDBCatalogAdapter extends CatalogAdapter {
         ? databaseRows[0][0]
         : (databaseRows[0] as any).database_name;
 
+      // Escape single quotes in table name for SQL safety
+      const escapedTableName = tableName.replace(/'/g, "''");
+
       const tableQuery = `
         SELECT
           t.table_name,
@@ -358,13 +361,10 @@ export class DuckDBCatalogAdapter extends CatalogAdapter {
           t.updated_at
         FROM ${metadataDatabase}.main.ducklake_table t
         JOIN ${metadataDatabase}.main.ducklake_schema s ON t.schema_id = s.schema_id
-        WHERE t.table_name = ?
+        WHERE t.table_name = '${escapedTableName}'
       `;
 
-      const tableResult = await this.connectionInfo.connection.run(
-        tableQuery,
-        tableName,
-      );
+      const tableResult = await this.connectionInfo.connection.run(tableQuery);
       const tableRows = await tableResult.getRows();
 
       if (tableRows.length === 0) {
@@ -388,14 +388,12 @@ export class DuckDBCatalogAdapter extends CatalogAdapter {
           c.comment
         FROM ${metadataDatabase}.main.ducklake_column c
         JOIN ${metadataDatabase}.main.ducklake_table t ON c.table_id = t.table_id
-        WHERE t.table_name = ?
+        WHERE t.table_name = '${escapedTableName}'
         ORDER BY c.ordinal_position
       `;
 
-      const columnsResult = await this.connectionInfo.connection.run(
-        columnsQuery,
-        tableName,
-      );
+      const columnsResult =
+        await this.connectionInfo.connection.run(columnsQuery);
       const columnRows = await columnsResult.getRows();
 
       const columns = columnRows.map((col: any) => {
@@ -489,6 +487,9 @@ export class DuckDBCatalogAdapter extends CatalogAdapter {
         throw new Error('No active connection');
       }
 
+      // Escape single quotes in table name for SQL safety
+      const escapedTableName = tableName.replace(/'/g, "''");
+
       const query = `
         SELECT
           snapshot_id,
@@ -499,12 +500,12 @@ export class DuckDBCatalogAdapter extends CatalogAdapter {
           parent_snapshot_id
         FROM ducklake_snapshot
         WHERE table_id = (
-          SELECT table_id FROM ducklake_table WHERE table_name = ?
+          SELECT table_id FROM ducklake_table WHERE table_name = '${escapedTableName}'
         )
         ORDER BY timestamp_ms DESC
       `;
 
-      const result = await this.connectionInfo.connection.run(query, tableName);
+      const result = await this.connectionInfo.connection.run(query);
       const rows = await result.getRows();
 
       return rows.map((row: any) => ({
@@ -518,6 +519,585 @@ export class DuckDBCatalogAdapter extends CatalogAdapter {
     } catch (error) {
       // eslint-disable-next-line no-console
       console.error(`Failed to list snapshots for table ${tableName}:`, error);
+      throw error;
+    }
+  }
+
+  /**
+   * Get comprehensive table details from DuckLake metadata catalog (Phase 8b)
+   * Queries multiple metadata tables to provide complete table information
+   */
+  async getTableDetails(tableName: string): Promise<any> {
+    try {
+      if (!this.connectionInfo) {
+        throw new Error('No active connection');
+      }
+
+      // Find the DuckLake metadata database
+      const databasesQuery = `
+        SELECT database_name
+        FROM duckdb_databases()
+        WHERE database_name LIKE '__ducklake_metadata_%'
+        LIMIT 1
+      `;
+
+      const databasesResult =
+        await this.connectionInfo.connection.run(databasesQuery);
+      const databaseRows = await databasesResult.getRows();
+
+      if (databaseRows.length === 0) {
+        throw new Error('DuckLake metadata database not found');
+      }
+
+      const metadataDatabase = Array.isArray(databaseRows[0])
+        ? databaseRows[0][0]
+        : (databaseRows[0] as any).database_name;
+
+      // Get current snapshot
+      const currentSnapshotQuery = `
+        SELECT COALESCE(MAX(snapshot_id), 0) as current_snapshot
+        FROM ${metadataDatabase}.main.ducklake_snapshot
+      `;
+      const snapshotResult =
+        await this.connectionInfo.connection.run(currentSnapshotQuery);
+      const currentSnapshotRows = await snapshotResult.getRows();
+      const currentSnapshot = Array.isArray(currentSnapshotRows[0])
+        ? currentSnapshotRows[0][0]
+        : currentSnapshotRows[0].current_snapshot;
+
+      // Escape single quotes in table name for SQL safety
+      const escapedTableName = tableName.replace(/'/g, "''");
+
+      // 1. Get basic table info
+      const tableQuery = `
+        SELECT
+          t.table_id,
+          t.table_uuid,
+          t.table_name,
+          t.schema_id,
+          s.schema_name,
+          t.begin_snapshot,
+          t.end_snapshot
+        FROM ${metadataDatabase}.main.ducklake_table t
+        JOIN ${metadataDatabase}.main.ducklake_schema s ON t.schema_id = s.schema_id
+        WHERE t.table_name = '${escapedTableName}'
+          AND ${currentSnapshot} >= t.begin_snapshot
+          AND (${currentSnapshot} < t.end_snapshot OR t.end_snapshot IS NULL)
+      `;
+
+      const tableResult = await this.connectionInfo.connection.run(tableQuery);
+      const tableRows = await tableResult.getRows();
+
+      if (tableRows.length === 0) {
+        throw new Error(`Table not found: ${tableName}`);
+      }
+
+      const tableRow = Array.isArray(tableRows[0])
+        ? {
+            table_id: tableRows[0][0],
+            table_uuid: tableRows[0][1],
+            table_name: tableRows[0][2],
+            schema_id: tableRows[0][3],
+            schema_name: tableRows[0][4],
+            begin_snapshot: tableRows[0][5],
+            end_snapshot: tableRows[0][6],
+          }
+        : tableRows[0];
+
+      const tableId = tableRow.table_id;
+
+      // 2. Get columns
+      const columnsQuery = `
+        SELECT
+          column_id,
+          column_name,
+          column_type,
+          column_order,
+          nulls_allowed,
+          default_value,
+          initial_default,
+          parent_column,
+          begin_snapshot,
+          end_snapshot
+        FROM ${metadataDatabase}.main.ducklake_column
+        WHERE table_id = ${tableId}
+          AND ${currentSnapshot} >= begin_snapshot
+          AND (${currentSnapshot} < end_snapshot OR end_snapshot IS NULL)
+        ORDER BY column_order
+      `;
+
+      const columnsResult =
+        await this.connectionInfo.connection.run(columnsQuery);
+      const columnRows = await columnsResult.getRows();
+
+      const columns = columnRows.map((col: any) => {
+        if (Array.isArray(col)) {
+          return {
+            columnId: col[0],
+            columnName: col[1],
+            columnType: col[2],
+            columnOrder: col[3],
+            nullsAllowed: col[4],
+            defaultValue: col[5],
+            initialDefault: col[6],
+            parentColumn: col[7],
+            beginSnapshot: col[8],
+            endSnapshot: col[9],
+          };
+        }
+        return {
+          columnId: col.column_id,
+          columnName: col.column_name,
+          columnType: col.column_type,
+          columnOrder: col.column_order,
+          nullsAllowed: col.nulls_allowed,
+          defaultValue: col.default_value,
+          initialDefault: col.initial_default,
+          parentColumn: col.parent_column,
+          beginSnapshot: col.begin_snapshot,
+          endSnapshot: col.end_snapshot,
+        };
+      });
+
+      // 3. Get table statistics
+      const statsQuery = `
+        SELECT
+          record_count,
+          next_row_id,
+          file_size_bytes
+        FROM ${metadataDatabase}.main.ducklake_table_stats
+        WHERE table_id = ${tableId}
+      `;
+
+      const statsResult = await this.connectionInfo.connection.run(statsQuery);
+      const statsRows = await statsResult.getRows();
+
+      let stats;
+      if (statsRows.length > 0) {
+        if (Array.isArray(statsRows[0])) {
+          stats = {
+            tableId,
+            recordCount: normalizeNumericValue(statsRows[0][0]) || 0,
+            nextRowId: normalizeNumericValue(statsRows[0][1]) || 0,
+            fileSizeBytes: normalizeNumericValue(statsRows[0][2]) || 0,
+          };
+        } else {
+          stats = {
+            tableId,
+            recordCount: normalizeNumericValue(statsRows[0].record_count) || 0,
+            nextRowId: normalizeNumericValue(statsRows[0].next_row_id) || 0,
+            fileSizeBytes:
+              normalizeNumericValue(statsRows[0].file_size_bytes) || 0,
+          };
+        }
+      } else {
+        stats = {
+          tableId,
+          recordCount: 0,
+          nextRowId: 0,
+          fileSizeBytes: 0,
+        };
+      }
+
+      // 4. Get column statistics
+      const columnStatsQuery = `
+        SELECT
+          cs.column_id,
+          c.column_name,
+          cs.contains_null,
+          cs.contains_nan,
+          cs.min_value,
+          cs.max_value
+        FROM ${metadataDatabase}.main.ducklake_table_column_stats cs
+        JOIN ${metadataDatabase}.main.ducklake_column c 
+          ON cs.column_id = c.column_id 
+          AND cs.table_id = c.table_id
+          AND ${currentSnapshot} >= c.begin_snapshot
+          AND (${currentSnapshot} < c.end_snapshot OR c.end_snapshot IS NULL)
+        WHERE cs.table_id = ${tableId}
+      `;
+
+      const columnStatsResult =
+        await this.connectionInfo.connection.run(columnStatsQuery);
+      const columnStatsRows = await columnStatsResult.getRows();
+
+      const columnStats = columnStatsRows.map((row: any) => {
+        if (Array.isArray(row)) {
+          return {
+            tableId,
+            columnId: row[0],
+            columnName: row[1],
+            containsNull: row[2],
+            containsNan: row[3],
+            minValue: row[4],
+            maxValue: row[5],
+          };
+        }
+        return {
+          tableId,
+          columnId: row.column_id,
+          columnName: row.column_name,
+          containsNull: row.contains_null,
+          containsNan: row.contains_nan,
+          minValue: row.min_value,
+          maxValue: row.max_value,
+        };
+      });
+
+      // 5. Get data files
+      const dataFilesQuery = `
+        SELECT
+          data_file_id,
+          path,
+          path_is_relative,
+          file_format,
+          record_count,
+          file_size_bytes,
+          footer_size,
+          row_id_start,
+          file_order,
+          begin_snapshot,
+          end_snapshot,
+          partition_id
+        FROM ${metadataDatabase}.main.ducklake_data_file
+        WHERE table_id = ${tableId}
+          AND ${currentSnapshot} >= begin_snapshot
+          AND (${currentSnapshot} < end_snapshot OR end_snapshot IS NULL)
+        ORDER BY file_order
+      `;
+
+      const dataFilesResult =
+        await this.connectionInfo.connection.run(dataFilesQuery);
+      const dataFileRows = await dataFilesResult.getRows();
+
+      const dataFiles = dataFileRows.map((row: any) => {
+        if (Array.isArray(row)) {
+          return {
+            dataFileId: row[0],
+            tableId,
+            path: row[1],
+            pathIsRelative: row[2],
+            fileFormat: row[3],
+            recordCount: normalizeNumericValue(row[4]) || 0,
+            fileSizeBytes: normalizeNumericValue(row[5]) || 0,
+            footerSize: normalizeNumericValue(row[6]) || 0,
+            rowIdStart: normalizeNumericValue(row[7]) || 0,
+            fileOrder: normalizeNumericValue(row[8]) || 0,
+            beginSnapshot: row[9],
+            endSnapshot: row[10],
+            partitionId: row[11],
+          };
+        }
+        return {
+          dataFileId: row.data_file_id,
+          tableId,
+          path: row.path,
+          pathIsRelative: row.path_is_relative,
+          fileFormat: row.file_format,
+          recordCount: normalizeNumericValue(row.record_count) || 0,
+          fileSizeBytes: normalizeNumericValue(row.file_size_bytes) || 0,
+          footerSize: normalizeNumericValue(row.footer_size) || 0,
+          rowIdStart: normalizeNumericValue(row.row_id_start) || 0,
+          fileOrder: normalizeNumericValue(row.file_order) || 0,
+          beginSnapshot: row.begin_snapshot,
+          endSnapshot: row.end_snapshot,
+          partitionId: row.partition_id,
+        };
+      });
+
+      // 6. Get partition info (if exists)
+      let partitionInfo;
+      try {
+        const partitionQuery = `
+          SELECT
+            partition_id,
+            begin_snapshot,
+            end_snapshot
+          FROM ${metadataDatabase}.main.ducklake_partition_info
+          WHERE table_id = ${tableId}
+            AND ${currentSnapshot} >= begin_snapshot
+            AND (${currentSnapshot} < end_snapshot OR end_snapshot IS NULL)
+        `;
+
+        const partitionResult =
+          await this.connectionInfo.connection.run(partitionQuery);
+        const partitionRows = await partitionResult.getRows();
+
+        if (partitionRows.length > 0) {
+          const partitionRow = Array.isArray(partitionRows[0])
+            ? {
+                partition_id: partitionRows[0][0],
+                begin_snapshot: partitionRows[0][1],
+                end_snapshot: partitionRows[0][2],
+              }
+            : partitionRows[0];
+
+          const partitionId = partitionRow.partition_id;
+
+          // Get partition columns
+          const partitionColumnsQuery = `
+            SELECT
+              pc.partition_key_index,
+              pc.column_id,
+              c.column_name,
+              pc.transform
+            FROM ${metadataDatabase}.main.ducklake_partition_column pc
+            JOIN ${metadataDatabase}.main.ducklake_column c 
+              ON pc.column_id = c.column_id
+              AND pc.table_id = c.table_id
+              AND ${currentSnapshot} >= c.begin_snapshot
+              AND (${currentSnapshot} < c.end_snapshot OR c.end_snapshot IS NULL)
+            WHERE pc.partition_id = ${partitionId} AND pc.table_id = ${tableId}
+            ORDER BY pc.partition_key_index
+          `;
+
+          const partitionColumnsResult =
+            await this.connectionInfo.connection.run(partitionColumnsQuery);
+          const partitionColumnRows = await partitionColumnsResult.getRows();
+
+          const partitionColumns = partitionColumnRows.map((row: any) => {
+            if (Array.isArray(row)) {
+              return {
+                partitionId,
+                tableId,
+                partitionKeyIndex: row[0],
+                columnId: row[1],
+                columnName: row[2],
+                transform: row[3],
+              };
+            }
+            return {
+              partitionId,
+              tableId,
+              partitionKeyIndex: row.partition_key_index,
+              columnId: row.column_id,
+              columnName: row.column_name,
+              transform: row.transform,
+            };
+          });
+
+          // Get file partition values
+          const filePartitionValuesQuery = `
+            SELECT
+              data_file_id,
+              partition_key_index,
+              partition_value
+            FROM ${metadataDatabase}.main.ducklake_file_partition_value
+            WHERE table_id = ${tableId}
+            ORDER BY data_file_id, partition_key_index
+          `;
+
+          const filePartitionValuesResult =
+            await this.connectionInfo.connection.run(filePartitionValuesQuery);
+          const filePartitionValueRows =
+            await filePartitionValuesResult.getRows();
+
+          const filePartitionValues = filePartitionValueRows.map((row: any) => {
+            if (Array.isArray(row)) {
+              return {
+                dataFileId: row[0],
+                tableId,
+                partitionKeyIndex: row[1],
+                partitionValue: row[2],
+              };
+            }
+            return {
+              dataFileId: row.data_file_id,
+              tableId,
+              partitionKeyIndex: row.partition_key_index,
+              partitionValue: row.partition_value,
+            };
+          });
+
+          partitionInfo = {
+            partitionId,
+            tableId,
+            beginSnapshot: partitionRow.begin_snapshot,
+            endSnapshot: partitionRow.end_snapshot,
+            columns: partitionColumns,
+            filePartitionValues,
+          };
+        }
+      } catch (error) {
+        // Partition info is optional
+        // eslint-disable-next-line no-console
+        console.debug('No partition info found for table:', tableName);
+      }
+
+      // 7. Get snapshots
+      const snapshotsQuery = `
+        SELECT
+          s.snapshot_id,
+          s.snapshot_time,
+          s.schema_version,
+          s.next_catalog_id,
+          s.next_file_id,
+          sc.changes_made
+        FROM ${metadataDatabase}.main.ducklake_snapshot s
+        LEFT JOIN ${metadataDatabase}.main.ducklake_snapshot_changes sc
+          ON s.snapshot_id = sc.snapshot_id
+        ORDER BY s.snapshot_id DESC
+        LIMIT 50
+      `;
+
+      const snapshotsResult =
+        await this.connectionInfo.connection.run(snapshotsQuery);
+      const snapshotRows = await snapshotsResult.getRows();
+
+      const snapshots = snapshotRows.map((row: any) => {
+        if (Array.isArray(row)) {
+          return {
+            snapshotId: row[0],
+            snapshotTime: new Date(row[1]),
+            schemaVersion: row[2],
+            nextCatalogId: row[3],
+            nextFileId: row[4],
+            changesMade: row[5],
+          };
+        }
+        return {
+          snapshotId: row.snapshot_id,
+          snapshotTime: new Date(row.snapshot_time),
+          schemaVersion: row.schema_version,
+          nextCatalogId: row.next_catalog_id,
+          nextFileId: row.next_file_id,
+          changesMade: row.changes_made,
+        };
+      });
+
+      // 8. Get table tags
+      const tagsQuery = `
+        SELECT
+          key,
+          value,
+          begin_snapshot,
+          end_snapshot
+        FROM ${metadataDatabase}.main.ducklake_tag
+        WHERE object_id = ${tableId}
+          AND ${currentSnapshot} >= begin_snapshot
+          AND (${currentSnapshot} < end_snapshot OR end_snapshot IS NULL)
+      `;
+
+      const tagsResult = await this.connectionInfo.connection.run(tagsQuery);
+      const tagRows = await tagsResult.getRows();
+
+      const tags = tagRows.map((row: any) => {
+        if (Array.isArray(row)) {
+          return {
+            objectId: tableId,
+            key: row[0],
+            value: row[1],
+            beginSnapshot: row[2],
+            endSnapshot: row[3],
+          };
+        }
+        return {
+          objectId: tableId,
+          key: row.key,
+          value: row.value,
+          beginSnapshot: row.begin_snapshot,
+          endSnapshot: row.end_snapshot,
+        };
+      });
+
+      // 9. Get column tags
+      const columnTagsQuery = `
+        SELECT
+          ct.column_id,
+          c.column_name,
+          ct.key,
+          ct.value,
+          ct.begin_snapshot,
+          ct.end_snapshot
+        FROM ${metadataDatabase}.main.ducklake_column_tag ct
+        JOIN ${metadataDatabase}.main.ducklake_column c 
+          ON ct.column_id = c.column_id
+          AND ct.table_id = c.table_id
+          AND ${currentSnapshot} >= c.begin_snapshot
+          AND (${currentSnapshot} < c.end_snapshot OR c.end_snapshot IS NULL)
+        WHERE ct.table_id = ${tableId}
+          AND ${currentSnapshot} >= ct.begin_snapshot
+          AND (${currentSnapshot} < ct.end_snapshot OR ct.end_snapshot IS NULL)
+      `;
+
+      const columnTagsResult =
+        await this.connectionInfo.connection.run(columnTagsQuery);
+      const columnTagRows = await columnTagsResult.getRows();
+
+      const columnTags = columnTagRows.map((row: any) => {
+        if (Array.isArray(row)) {
+          return {
+            tableId,
+            columnId: row[0],
+            columnName: row[1],
+            key: row[2],
+            value: row[3],
+            beginSnapshot: row[4],
+            endSnapshot: row[5],
+          };
+        }
+        return {
+          tableId,
+          columnId: row.column_id,
+          columnName: row.column_name,
+          key: row.key,
+          value: row.value,
+          beginSnapshot: row.begin_snapshot,
+          endSnapshot: row.end_snapshot,
+        };
+      });
+
+      // Helper function to recursively convert all hugeint objects to numbers
+      const convertHugeInts = (obj: any): any => {
+        if (obj === null || obj === undefined) {
+          return obj;
+        }
+
+        // Handle hugeint objects
+        if (typeof obj === 'object' && obj.hugeint !== undefined) {
+          return Number(String(obj.hugeint));
+        }
+
+        // Handle arrays
+        if (Array.isArray(obj)) {
+          return obj.map(convertHugeInts);
+        }
+
+        // Handle objects
+        if (typeof obj === 'object') {
+          const converted: any = {};
+          Object.keys(obj).forEach((key) => {
+            converted[key] = convertHugeInts(obj[key]);
+          });
+          return converted;
+        }
+
+        return obj;
+      };
+
+      // Assemble complete table details and convert all hugeints
+      const result = {
+        tableId,
+        tableUuid: tableRow.table_uuid,
+        tableName: tableRow.table_name,
+        schemaId: tableRow.schema_id,
+        schemaName: tableRow.schema_name,
+        beginSnapshot: tableRow.begin_snapshot,
+        endSnapshot: tableRow.end_snapshot,
+        columns,
+        stats,
+        columnStats,
+        dataFiles,
+        partitionInfo,
+        snapshots,
+        tags,
+        columnTags,
+      };
+
+      return convertHugeInts(result);
+    } catch (error) {
+      // eslint-disable-next-line no-console
+      console.error(`Failed to get table details for ${tableName}:`, error);
       throw error;
     }
   }

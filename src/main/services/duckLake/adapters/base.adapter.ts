@@ -97,6 +97,12 @@ export abstract class CatalogAdapter {
   abstract listSnapshots(tableName: string): Promise<DuckLakeSnapshotInfo[]>;
 
   /**
+   * Get comprehensive table details from DuckLake metadata catalog (Phase 8b)
+   * Queries multiple metadata tables to provide complete table information
+   */
+  abstract getTableDetails(tableName: string): Promise<any>; // Returns DuckLakeTableDetails
+
+  /**
    * Get current connection info
    */
   getConnectionInfo(): ConnectionInfo | null {

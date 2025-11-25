@@ -489,6 +489,47 @@ export default class DuckLakeService {
     }
   }
 
+  /**
+   * Get comprehensive table details from DuckLake metadata catalog (Phase 8b)
+   */
+  static async getTableDetails(
+    instanceId: string,
+    tableName: string,
+  ): Promise<any> {
+    try {
+      // eslint-disable-next-line no-console
+      console.log('[DuckLakeService.getTableDetails] Starting for:', {
+        instanceId,
+        tableName,
+      });
+
+      await this.ensureConnected(instanceId);
+      const adapter = await this.getAdapter(instanceId);
+
+      // eslint-disable-next-line no-console
+      console.log(
+        '[DuckLakeService.getTableDetails] Adapter obtained:',
+        adapter.constructor.name,
+      );
+
+      const details = await adapter.getTableDetails(tableName);
+
+      // eslint-disable-next-line no-console
+      console.log('[DuckLakeService.getTableDetails] Details retrieved:', {
+        tableName: details.tableName,
+        columnsCount: details.columns?.length,
+        dataFilesCount: details.dataFiles?.length,
+        snapshotsCount: details.snapshots?.length,
+      });
+
+      return details;
+    } catch (error) {
+      // eslint-disable-next-line no-console
+      console.error('[DuckLakeService.getTableDetails] Error:', error);
+      throw error;
+    }
+  }
+
   // Snapshot Management
   static async listSnapshots(
     instanceId: string,

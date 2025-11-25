@@ -102,6 +102,14 @@ const registerDuckLakeHandlers = () => {
     },
   );
 
+  // Phase 8b: Table Details Handler
+  ipcMain.handle(
+    'ducklake:table:getDetails',
+    async (_event, instanceId: string, tableName: string) => {
+      return DuckLakeService.getTableDetails(instanceId, tableName);
+    },
+  );
+
   // Snapshot Management Handlers
   ipcMain.handle(
     'ducklake:snapshot:list',
