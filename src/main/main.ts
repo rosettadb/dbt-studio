@@ -6,7 +6,12 @@ import { loadEnvironment } from './utils/setupHelpers';
 import { AssetUrl } from './utils/assetUrl';
 import { AssetServer } from './utils/assetServer';
 import { setupApplicationIcon } from './utils/iconUtils';
-import { SettingsService, AnalyticsService, UpdateService } from './services';
+import {
+  SettingsService,
+  AnalyticsService,
+  UpdateService,
+  DuckDBBootstrap,
+} from './services';
 import { copyAssetsToUserData } from './utils/fileHelper';
 
 const isProd = process.env.NODE_ENV === 'production';
@@ -84,6 +89,20 @@ if (!gotTheLock) {
             await SettingsService.updatePython();
           } catch (e) {
             console.error('Failed to install Python:', e);
+          }
+
+          // Initialize DuckDB persistent database
+          await updateMessage('Initializing duckdb database...');
+          try {
+            await DuckDBBootstrap.initialize();
+            const dbMeta = DuckDBBootstrap.getMetadata();
+            console.log('[App] DuckDB initialized:', dbMeta);
+          } catch (e) {
+            console.error('Failed to initialize DuckDB:', e);
+            // Non-fatal error - app can continue with in-memory fallback
+            await updateMessage(
+              'Database initialization failed - using fallback mode',
+            );
           }
 
           const fakeStages = [
@@ -168,4 +187,24 @@ ipcMain.handle('windows:closeSetup', () => {
 
 app.on('window-all-closed', () => {
   // Don't quit - WindowManager will handle the actual quitting
+});
+
+// Graceful shutdown - cleanup DuckDB before quitting
+app.on('before-quit', async (event) => {
+  console.log('[App] Shutting down...');
+
+  try {
+    // Prevent immediate quit to allow cleanup
+    event.preventDefault();
+
+    // Shutdown DuckDB
+    await DuckDBBootstrap.shutdown();
+
+    // Now allow quit
+    app.exit(0);
+  } catch (error) {
+    console.error('[App] Error during shutdown:', error);
+    // Force quit even if cleanup fails
+    app.exit(1);
+  }
 });

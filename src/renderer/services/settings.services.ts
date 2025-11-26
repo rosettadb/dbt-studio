@@ -4,6 +4,8 @@ import {
   SettingsType,
   RosettaVersionInfo,
   InstallResult,
+  DuckDBMetadataPayload,
+  DuckDBDiagnostics,
 } from '../../types/backend';
 import { client } from '../config/client';
 import { SecureStorageAccount } from '../../types/frontend';
@@ -129,4 +131,37 @@ export const installRosettaVersion = async (
 
 export const uninstallRosetta = async (): Promise<void> => {
   await client.get<void>('version:rosetta:uninstall');
+};
+
+// DuckDB management services
+export const getDuckDbMetadata = async (): Promise<DuckDBMetadataPayload> => {
+  const { data } = await client.get<DuckDBMetadataPayload>(
+    'settings:duckdb:metadata',
+  );
+  return data;
+};
+
+export const refreshDuckDbMetadata =
+  async (): Promise<DuckDBMetadataPayload> => {
+    const { data } = await client.get<DuckDBMetadataPayload>(
+      'settings:duckdb:refresh',
+    );
+    return data;
+  };
+
+export const reinitializeDuckDb = async (
+  options: { dropExisting?: boolean } = {},
+): Promise<DuckDBMetadataPayload> => {
+  const { data } = await client.post<
+    { dropExisting?: boolean },
+    DuckDBMetadataPayload
+  >('settings:duckdb:reinitialize', options);
+  return data;
+};
+
+export const diagnoseDuckDb = async (): Promise<DuckDBDiagnostics> => {
+  const { data } = await client.get<DuckDBDiagnostics>(
+    'settings:duckdb:diagnose',
+  );
+  return data;
 };

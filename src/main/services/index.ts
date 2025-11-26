@@ -12,6 +12,7 @@ import SelectedFileContextProvider from './selectedFileContextProvider.service';
 import DuckLakeService from './duckLake.service';
 import { DuckLakeInstanceStore } from './duckLake/instanceStore.service';
 import { DuckLakeValidationService } from './duckLake/validation.service';
+import { DuckDBBootstrap } from './duckdb.bootstrap';
 
 export {
   ProjectsService,
@@ -28,4 +29,5 @@ export {
   DuckLakeService,
   DuckLakeInstanceStore,
   DuckLakeValidationService,
+  DuckDBBootstrap,
 };

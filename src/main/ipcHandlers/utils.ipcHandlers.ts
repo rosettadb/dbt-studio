@@ -1,7 +1,7 @@
 import { ipcMain, shell } from 'electron';
 import { UtilsService } from '../services';
 
-const handlerChannels = ['open:external'];
+const handlerChannels = ['open:external', 'utils:openPath'];
 
 const removeUtilsIpcHandlers = () => {
   handlerChannels.forEach((channel) => {
@@ -27,6 +27,16 @@ const registerUtilsHandlers = () => {
       return UtilsService.getFilesWithContent(files);
     },
   );
+
+  // Handler for opening file paths in system file manager
+  ipcMain.handle('utils:openPath', async (_event, filePath: string) => {
+    if (typeof filePath === 'string') {
+      const result = await shell.openPath(filePath);
+      // openPath returns empty string on success, error message on failure
+      return { success: result === '', error: result };
+    }
+    return { success: false, error: 'Invalid file path' };
+  });
 };
 
 export default registerUtilsHandlers;

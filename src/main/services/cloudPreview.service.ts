@@ -14,10 +14,15 @@ import {
   extractColumns,
   setupExtensions,
 } from '../helpers/extensionSetup.helper';
+import { DuckDBBootstrap } from './duckdb.bootstrap';
+
+// Environment flag to force in-memory mode (for troubleshooting)
+const FORCE_IN_MEMORY = process.env.DUCKDB_FORCE_IN_MEMORY === 'true';
 
 class CloudPreviewService {
   /**
-   * Preview cloud data using DuckDB in-memory database
+   * Preview cloud data using persistent DuckDB database
+   * Falls back to in-memory database if persistent DB is unavailable
    */
   static async previewCloudData({
     provider,
@@ -26,15 +31,49 @@ class CloudPreviewService {
     previewType = 'sample',
     limit = 100,
   }: PreviewOptions): Promise<PreviewResult> {
-    let instance: any = null;
     let connection: any = null;
-    try {
-      // Create in-memory DuckDB instance
-      instance = await DuckDBInstance.create(':memory:');
-      connection = await instance.connect();
+    let instance: any = null;
+    let usingPersistentDB = false;
 
-      // Install and load required extensions
-      await setupExtensions(connection, provider, objectPath);
+    try {
+      // Try to use persistent database first
+      if (!FORCE_IN_MEMORY) {
+        try {
+          const dbMeta = DuckDBBootstrap.getMetadata();
+          if (dbMeta.initialized) {
+            connection = await DuckDBBootstrap.getConnection('CloudPreview');
+            usingPersistentDB = true;
+          } else {
+            // eslint-disable-next-line no-console
+            console.warn(
+              '[CloudPreview] Persistent DB not initialized, falling back to in-memory',
+            );
+          }
+        } catch (error) {
+          // eslint-disable-next-line no-console
+          console.warn(
+            '[CloudPreview] Failed to get persistent connection, falling back to in-memory:',
+            error,
+          );
+        }
+      } else {
+        // eslint-disable-next-line no-console
+        console.warn(
+          '[CloudPreview] DUCKDB_FORCE_IN_MEMORY is set, using in-memory database',
+        );
+      }
+
+      // Fallback to in-memory if persistent DB unavailable
+      if (!connection) {
+        instance = await DuckDBInstance.create(':memory:');
+        connection = await instance.connect();
+        usingPersistentDB = false;
+      }
+
+      // Install and load required extensions (only needed for in-memory)
+      if (!usingPersistentDB) {
+        await setupExtensions(connection, provider, objectPath);
+      }
 
       // Configure cloud access secrets
       const secretQuery = await buildCloudSecretQuery(provider, cloudConfig);
@@ -96,7 +135,14 @@ class CloudPreviewService {
         previewType,
       );
     } finally {
-      await cleanup(connection, instance);
+      // Cleanup based on which mode was used
+      if (usingPersistentDB && connection) {
+        // Release connection back to pool
+        DuckDBBootstrap.releaseConnection(connection, 'CloudPreview');
+      } else if (instance) {
+        // Cleanup in-memory instance
+        await cleanup(connection, instance);
+      }
     }
   }
 
