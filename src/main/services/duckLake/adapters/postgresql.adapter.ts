@@ -38,21 +38,13 @@ export class PostgreSQLCatalogAdapter extends CatalogAdapter {
 
       const pgConfig = config.postgresql;
 
-      // Phase 2 Change: Validate shared DuckDB is initialized
-      await this.initializeDuckDB(instance.runtimeOptions);
-
-      // Phase 2 Change: Get connection from shared pool instead of creating new instance
-      const { DuckDBBootstrap } = await import('../../duckdb.bootstrap');
-      const connection = await DuckDBBootstrap.getConnection(
-        `DuckLake:${instance.name}`,
+      // Initialize DuckDB instance
+      const duckdbInstance = await this.initializeDuckDB(
+        instance.runtimeOptions,
       );
+      const connection = await duckdbInstance.connect();
 
-      // eslint-disable-next-line no-console
-      console.log(
-        `[DuckLake][PostgreSQL] Acquired connection from pool for instance: ${instance.name}`,
-      );
-
-      // Load DuckLake and PostgreSQL extensions (idempotent - safe to call multiple times)
+      // Load DuckLake and PostgreSQL extensions
       await this.loadDuckLakeExtension(connection);
       await this.loadCatalogExtensions(connection, ['postgres']);
 
@@ -77,7 +69,7 @@ export class PostgreSQLCatalogAdapter extends CatalogAdapter {
       );
 
       this.connectionInfo = {
-        instance: null, // Phase 2 Change: No longer managing instance
+        instance: duckdbInstance,
         connection,
         catalogType: 'postgresql',
         instanceName: instance.name,
@@ -87,7 +79,7 @@ export class PostgreSQLCatalogAdapter extends CatalogAdapter {
       return this.connectionInfo;
     } catch (error) {
       // eslint-disable-next-line no-console
-      console.error('[DuckLake][PostgreSQL] Catalog connection failed:', error);
+      console.error('PostgreSQL catalog connection failed:', error);
       throw DuckLakeError.catalogConnection(instance.id, error as Error);
     }
   }
@@ -177,11 +169,11 @@ export class PostgreSQLCatalogAdapter extends CatalogAdapter {
         };
       }
 
-      // Phase 2 Change: Test using shared DuckDB connection
-      const { DuckDBBootstrap } = await import('../../duckdb.bootstrap');
+      // Test DuckDB connection with PostgreSQL extension
+      const testInstance = await this.initializeDuckDB();
+      const testConnection = await testInstance.connect();
 
-      // Use withConnection for automatic cleanup
-      await DuckDBBootstrap.withConnection(async (testConnection) => {
+      try {
         // Test DuckLake and PostgreSQL extension loading
         await this.loadDuckLakeExtension(testConnection);
         await this.loadCatalogExtensions(testConnection, ['postgres']);
@@ -193,18 +185,21 @@ export class PostgreSQLCatalogAdapter extends CatalogAdapter {
         // Test basic PostgreSQL connection
         const testQuery = `SELECT 1 FROM postgres_query('${connectionString}', 'SELECT 1 as test')`;
         await testConnection.run(testQuery);
-      }, 'DuckLake:testConnection');
 
-      const responseTime = Date.now() - startTime;
+        const responseTime = Date.now() - startTime;
 
-      return {
-        connected: true,
-        lastChecked: new Date(),
-        responseTime,
-      };
+        return {
+          connected: true,
+          lastChecked: new Date(),
+          responseTime,
+        };
+      } finally {
+        // DuckDB Node.js API handles cleanup automatically
+        // No explicit cleanup needed
+      }
     } catch (error) {
       // eslint-disable-next-line no-console
-      console.error('[DuckLake][PostgreSQL] Connection test failed:', error);
+      console.error('PostgreSQL connection test failed:', error);
       return {
         connected: false,
         lastChecked: new Date(),
@@ -254,13 +249,10 @@ export class PostgreSQLCatalogAdapter extends CatalogAdapter {
         throw new Error('No active connection');
       }
 
-      // Discover the DuckLake metadata database for THIS instance
-      const expectedDbName = `__ducklake_metadata_${this.connectionInfo.instanceName}`;
-
       const databasesQuery = `
         SELECT database_name
         FROM duckdb_databases()
-        WHERE database_name = '${expectedDbName}'
+        WHERE database_name LIKE '__ducklake_metadata_%'
         LIMIT 1
       `;
 
@@ -534,13 +526,10 @@ export class PostgreSQLCatalogAdapter extends CatalogAdapter {
       }
 
       // Find the DuckLake metadata database
-      // Find the DuckLake metadata database for THIS instance
-      const expectedDbName = `__ducklake_metadata_${this.connectionInfo.instanceName}`;
-
       const databasesQuery = `
         SELECT database_name
         FROM duckdb_databases()
-        WHERE database_name = '${expectedDbName}'
+        WHERE database_name LIKE '__ducklake_metadata_%'
         LIMIT 1
       `;
 

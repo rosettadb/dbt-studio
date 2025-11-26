@@ -11,10 +11,6 @@ export type SettingsChannels =
   | 'settings:updateCli'
   | 'settings:getDbtPath'
   | 'settings:usePathJoin'
-  | 'settings:duckdb:metadata'
-  | 'settings:duckdb:refresh'
-  | 'settings:duckdb:reinitialize'
-  | 'settings:duckdb:diagnose'
   | 'version:rosetta:check'
   | 'version:rosetta:install'
   | 'version:rosetta:uninstall'
@@ -191,8 +187,7 @@ export type UtilChannels =
   | 'open:external'
   | 'windows:openSelector'
   | 'windows:closeSetup'
-  | 'utils:getFileContentList'
-  | 'utils:openPath';
+  | 'utils:getFileContentList';
 
 export type ProcessChannels =
   | 'process:start'

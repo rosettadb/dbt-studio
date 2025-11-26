@@ -20,21 +20,6 @@ const DbtBlackIcon: React.FC<{ fontSize?: string; color?: string }> = ({
   />
 );
 
-// DuckDB icon wrapper
-const DuckDBIcon: React.FC<{ fontSize?: string }> = ({
-  fontSize = 'small',
-}) => (
-  <img
-    src={icons.duckdb}
-    alt="DuckDB"
-    style={{
-      width: fontSize === 'small' ? 24 : 28,
-      height: fontSize === 'small' ? 24 : 28,
-      objectFit: 'contain',
-    }}
-  />
-);
-
 export interface SettingsSidebarElement {
   icon: SvgIconComponent;
   text: string;
@@ -61,11 +46,6 @@ export const settingsSidebarElements: SettingsSidebarElement[] = [
     icon: PsychologyIcon,
     text: 'AI Providers',
     path: '/app/settings/ai-providers',
-  },
-  {
-    icon: DuckDBIcon as any,
-    text: 'DuckDB',
-    path: '/app/settings/duckdb',
   },
   {
     icon: InfoIcon,

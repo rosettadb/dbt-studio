@@ -3,6 +3,7 @@
  * Defines the contract for all catalog-specific implementations
  */
 
+import { DuckDBInstance } from '@duckdb/node-api';
 import {
   DuckLakeCatalogConfig,
   DuckLakeInstance,
@@ -122,53 +123,32 @@ export abstract class CatalogAdapter {
 
   /**
    * Initialize DuckDB instance with common settings
-   * Now uses shared persistent DuckDB from DuckDBBootstrap instead of creating new instances
-   *
-   * Phase 2 Change: DuckLake adapters now use the shared persistent main.duckdb
-   * Multiple DuckLake catalogs can be attached to the same DuckDB engine
    */
   // eslint-disable-next-line class-methods-use-this
   protected async initializeDuckDB(
     runtimeOptions?: DuckLakeInstance['runtimeOptions'],
   ): Promise<any> {
     try {
-      // Import DuckDBBootstrap dynamically to avoid circular dependency
-      const { DuckDBBootstrap } = await import('../../duckdb.bootstrap');
+      // Create DuckDB instance with runtime options
+      const config: Record<string, string> = {};
 
-      // Verify shared DuckDB is initialized
-      const dbMeta = DuckDBBootstrap.getMetadata();
-      if (!dbMeta.initialized) {
-        throw new Error(
-          '[DuckLake] Shared DuckDB not initialized. Call DuckDBBootstrap.initialize() first.',
-        );
+      if (runtimeOptions?.maxMemory) {
+        config.memory_limit = runtimeOptions.maxMemory;
       }
 
-      // Log runtime options if provided (for future use)
-      if (runtimeOptions) {
-        // eslint-disable-next-line no-console
-        console.log(
-          '[DuckLake] Runtime options provided (currently ignored for shared DB):',
-          {
-            maxMemory: runtimeOptions.maxMemory,
-            threads: runtimeOptions.threads,
-            tempDirectory: runtimeOptions.tempDirectory,
-          },
-        );
-        // Note: Runtime options are set at bootstrap level, not per-adapter
-        // Future enhancement: Could validate that bootstrap settings meet requirements
+      if (runtimeOptions?.threads) {
+        config.threads = runtimeOptions.threads.toString();
       }
 
-      // eslint-disable-next-line no-console
-      console.log('[DuckLake] Using shared persistent DuckDB instance');
+      if (runtimeOptions?.tempDirectory) {
+        config.temp_directory = runtimeOptions.tempDirectory;
+      }
 
-      // Return null - adapters will get connections from pool instead
-      return null;
+      const instance = await DuckDBInstance.create(':memory:', config);
+      return instance;
     } catch (error) {
       // eslint-disable-next-line no-console
-      console.error(
-        '[DuckLake] Failed to access shared DuckDB instance:',
-        error,
-      );
+      console.error('Failed to initialize DuckDB instance:', error);
       throw error;
     }
   }
@@ -226,23 +206,8 @@ export abstract class CatalogAdapter {
   ): Promise<void> {
     try {
       const escapedInstanceName = instanceName.replace(/"/g, '""');
-
-      // Check if already attached to avoid "database already exists" errors
-      // This happens because we use a persistent DuckDB instance
-      const safeInstanceName = instanceName.replace(/'/g, "''");
-      const checkQuery = `SELECT database_name FROM duckdb_databases() WHERE database_name = '${safeInstanceName}'`;
-      const checkResult = await connection.run(checkQuery);
-      const existing = await checkResult.getRows();
-
-      if (existing.length === 0) {
-        const attachQuery = `ATTACH '${attachString}' AS "${escapedInstanceName}" (DATA_PATH '${dataPath.replace(/'/g, "''")}')`;
-        await connection.run(attachQuery);
-      } else {
-        // eslint-disable-next-line no-console
-        console.log(
-          `[DuckLake] Catalog '${instanceName}' already attached, skipping ATTACH.`,
-        );
-      }
+      const attachQuery = `ATTACH '${attachString}' AS "${escapedInstanceName}" (DATA_PATH '${dataPath.replace(/'/g, "''")}')`;
+      await connection.run(attachQuery);
 
       // Switch to the attached DuckLake catalog
       await connection.run(`USE "${escapedInstanceName}"`);
@@ -265,58 +230,15 @@ export abstract class CatalogAdapter {
     try {
       const escapedInstanceName = instanceName.replace(/"/g, '""');
 
-      // 1. Find a safe database to switch to (anything other than the one we're detaching)
-      const dbsResult = await connection.run(
-        'SELECT database_name FROM duckdb_databases()',
-      );
-      const allDbs = await dbsResult.getRows();
-      const dbNames = allDbs.map((r: any) =>
-        Array.isArray(r) ? r[0] : r.database_name,
-      );
+      // Switch to memory database first (can't detach current database)
+      await connection.run('USE memory');
 
-      const safeDb = dbNames.find(
-        (name: string) => name !== instanceName && name !== escapedInstanceName,
-      );
+      // Execute DETACH to properly free memory
+      const detachQuery = `DETACH "${escapedInstanceName}"`;
+      await connection.run(detachQuery);
 
-      if (safeDb) {
-        try {
-          // Quote the database name if needed
-          const safeDbQuoted = `"${safeDb.replace(/"/g, '""')}"`;
-          await connection.run(`USE ${safeDbQuoted}`);
-          // console.log(`[DuckLake] Switched to safe database: ${safeDb}`);
-        } catch (switchError) {
-          // eslint-disable-next-line no-console
-          console.warn(
-            `[DuckLake] Failed to switch to safe database ${safeDb}:`,
-            switchError,
-          );
-        }
-      } else {
-        // eslint-disable-next-line no-console
-        console.warn(
-          '[DuckLake] No safe database found to switch to before detaching!',
-        );
-      }
-
-      // 2. Check if catalog exists before detaching
-      const safeInstanceName = instanceName.replace(/'/g, "''");
-      const checkQuery = `SELECT database_name FROM duckdb_databases() WHERE database_name = '${safeInstanceName}'`;
-      const checkResult = await connection.run(checkQuery);
-      const existing = await checkResult.getRows();
-
-      if (existing.length > 0) {
-        const detachQuery = `DETACH "${escapedInstanceName}"`;
-        await connection.run(detachQuery);
-        // eslint-disable-next-line no-console
-        console.log(
-          `[DuckLake] Successfully detached catalog: ${instanceName}`,
-        );
-      } else {
-        // eslint-disable-next-line no-console
-        console.log(
-          `[DuckLake] Catalog '${instanceName}' not attached, skipping DETACH.`,
-        );
-      }
+      // eslint-disable-next-line no-console
+      console.log(`Successfully detached DuckLake instance: ${instanceName}`);
     } catch (error) {
       // eslint-disable-next-line no-console
       console.error('Failed to detach DuckLake catalog:', error);
@@ -327,8 +249,6 @@ export abstract class CatalogAdapter {
   /**
    * Common cleanup for connections
    * Now properly executes DETACH before cleanup to free memory
-   *
-   * Phase 2 Change: Releases connection back to pool instead of destroying instance
    */
   protected async cleanup(): Promise<void> {
     if (this.connectionInfo) {
@@ -344,23 +264,11 @@ export abstract class CatalogAdapter {
           );
         }
 
-        // Release connection back to pool instead of destroying instance
-        if (this.connectionInfo.connection) {
-          const { DuckDBBootstrap } = await import('../../duckdb.bootstrap');
-          DuckDBBootstrap.releaseConnection(
-            this.connectionInfo.connection,
-            `DuckLake:${this.connectionInfo.instanceName || 'unknown'}`,
-          );
-          // eslint-disable-next-line no-console
-          console.log(
-            `[DuckLake] Connection released to pool for instance: ${this.connectionInfo.instanceName}`,
-          );
-        }
-
+        // DuckDB Node.js API handles connection cleanup automatically
         this.connectionInfo = null;
       } catch (error) {
         // eslint-disable-next-line no-console
-        console.error('[DuckLake] Error during connection cleanup:', error);
+        console.error('Error during connection cleanup:', error);
       }
     }
   }

@@ -38,21 +38,13 @@ export class SQLiteCatalogAdapter extends CatalogAdapter {
         throw DuckLakeError.validation('SQLite metadata path is required');
       }
 
-      // Phase 2 Change: Validate shared DuckDB is initialized
-      await this.initializeDuckDB(instance.runtimeOptions);
-
-      // Phase 2 Change: Get connection from shared pool instead of creating new instance
-      const { DuckDBBootstrap } = await import('../../duckdb.bootstrap');
-      const connection = await DuckDBBootstrap.getConnection(
-        `DuckLake:${instance.name}`,
+      // Initialize DuckDB instance
+      const duckdbInstance = await this.initializeDuckDB(
+        instance.runtimeOptions,
       );
+      const connection = await duckdbInstance.connect();
 
-      // eslint-disable-next-line no-console
-      console.log(
-        `[DuckLake][SQLite] Acquired connection from pool for instance: ${instance.name}`,
-      );
-
-      // Load DuckLake and SQLite extensions (idempotent - safe to call multiple times)
+      // Load DuckLake and SQLite extensions
       await this.loadDuckLakeExtension(connection);
       await this.loadCatalogExtensions(connection, ['sqlite']);
 
@@ -75,7 +67,7 @@ export class SQLiteCatalogAdapter extends CatalogAdapter {
       );
 
       this.connectionInfo = {
-        instance: null, // Phase 2 Change: No longer managing instance
+        instance: duckdbInstance,
         connection,
         catalogType: 'sqlite',
         instanceName: instance.name,
@@ -85,7 +77,7 @@ export class SQLiteCatalogAdapter extends CatalogAdapter {
       return this.connectionInfo;
     } catch (error) {
       // eslint-disable-next-line no-console
-      console.error('[DuckLake][SQLite] Catalog connection failed:', error);
+      console.error('SQLite catalog connection failed:', error);
       throw DuckLakeError.catalogConnection(instance.id, error as Error);
     }
   }
@@ -177,26 +169,29 @@ export class SQLiteCatalogAdapter extends CatalogAdapter {
         };
       }
 
-      // Phase 2 Change: Test using shared DuckDB connection
-      const { DuckDBBootstrap } = await import('../../duckdb.bootstrap');
+      // Test DuckDB connection with SQLite extension
+      const testInstance = await this.initializeDuckDB();
+      const testConnection = await testInstance.connect();
 
-      // Use withConnection for automatic cleanup
-      await DuckDBBootstrap.withConnection(async (testConnection) => {
+      try {
         // Test DuckLake and SQLite extension loading
         await this.loadDuckLakeExtension(testConnection);
         await this.loadCatalogExtensions(testConnection, ['sqlite']);
-      }, 'DuckLake:testConnection');
 
-      const responseTime = Date.now() - startTime;
+        const responseTime = Date.now() - startTime;
 
-      return {
-        connected: true,
-        lastChecked: new Date(),
-        responseTime,
-      };
+        return {
+          connected: true,
+          lastChecked: new Date(),
+          responseTime,
+        };
+      } finally {
+        // DuckDB Node.js API handles cleanup automatically
+        // No explicit cleanup needed
+      }
     } catch (error) {
       // eslint-disable-next-line no-console
-      console.error('[DuckLake][SQLite] Connection test failed:', error);
+      console.error('SQLite connection test failed:', error);
       return {
         connected: false,
         lastChecked: new Date(),
@@ -246,15 +241,11 @@ export class SQLiteCatalogAdapter extends CatalogAdapter {
         throw new Error('No active connection');
       }
 
-      // Discover the DuckLake metadata database for THIS instance
-      // Important: With shared DuckDB, multiple catalogs may be attached
-      // We need to find the one matching this instance name
-      const expectedDbName = `__ducklake_metadata_${this.connectionInfo.instanceName}`;
-
+      // Discover the DuckLake metadata database (attached DuckDB database)
       const databasesQuery = `
         SELECT database_name
         FROM duckdb_databases()
-        WHERE database_name = '${expectedDbName}'
+        WHERE database_name LIKE '__ducklake_metadata_%'
         LIMIT 1
       `;
 
@@ -263,16 +254,10 @@ export class SQLiteCatalogAdapter extends CatalogAdapter {
       const databaseRows = await databasesResult.getRows();
 
       if (databaseRows.length === 0) {
-        // Log all available databases for debugging
         const allDatabasesResult = await this.connectionInfo.connection.run(
           'SELECT database_name FROM duckdb_databases()',
         );
-        const allDbs = await allDatabasesResult.getRows();
-        // eslint-disable-next-line no-console
-        console.warn(
-          `[SQLiteAdapter.listTables] Available databases:`,
-          allDbs.map((r: any) => (Array.isArray(r) ? r[0] : r.database_name)),
-        );
+        await allDatabasesResult.getRows();
         return [];
       }
 
@@ -527,14 +512,11 @@ export class SQLiteCatalogAdapter extends CatalogAdapter {
         throw new Error('No active connection');
       }
 
-      // Find the DuckLake metadata database for THIS instance
-      // Important: With shared DuckDB, multiple catalogs may be attached
-      const expectedDbName = `__ducklake_metadata_${this.connectionInfo.instanceName}`;
-
+      // Find the DuckLake metadata database
       const databasesQuery = `
         SELECT database_name
         FROM duckdb_databases()
-        WHERE database_name = '${expectedDbName}'
+        WHERE database_name LIKE '__ducklake_metadata_%'
         LIMIT 1
       `;
 
@@ -543,9 +525,7 @@ export class SQLiteCatalogAdapter extends CatalogAdapter {
       const databaseRows = await databasesResult.getRows();
 
       if (databaseRows.length === 0) {
-        throw new Error(
-          `DuckLake metadata database '${expectedDbName}' not found`,
-        );
+        throw new Error('DuckLake metadata database not found');
       }
 
       const metadataDatabase = Array.isArray(databaseRows[0])

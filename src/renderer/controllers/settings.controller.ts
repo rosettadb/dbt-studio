@@ -14,8 +14,6 @@ import {
   SettingsType,
   RosettaVersionInfo,
   InstallResult,
-  DuckDBMetadataPayload,
-  DuckDBDiagnostics,
 } from '../../types/backend';
 import { QUERY_KEYS } from '../config/constants';
 
@@ -202,97 +200,6 @@ export const useUninstallRosetta = (
     },
     onSuccess: async (...args) => {
       await queryClient.invalidateQueries([QUERY_KEYS.GET_SETTINGS]);
-      onCustomSuccess?.(...args);
-    },
-    onError: (...args) => {
-      onCustomError?.(...args);
-    },
-  });
-};
-
-// DuckDB management controllers
-export const useGetDuckDbMetadata = (
-  customOptions?: UseQueryOptions<
-    DuckDBMetadataPayload,
-    CustomError,
-    DuckDBMetadataPayload
-  >,
-) => {
-  return useQuery({
-    queryKey: [QUERY_KEYS.GET_SETTINGS, 'duckdb-metadata'],
-    queryFn: async () => {
-      return settingsServices.getDuckDbMetadata();
-    },
-    ...customOptions,
-  });
-};
-
-export const useRefreshDuckDbMetadata = (
-  customOptions?: UseMutationOptions<DuckDBMetadataPayload, CustomError, void>,
-): UseMutationResult<DuckDBMetadataPayload, CustomError, void> => {
-  const { onSuccess: onCustomSuccess, onError: onCustomError } =
-    customOptions || {};
-  const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: async () => {
-      return settingsServices.refreshDuckDbMetadata();
-    },
-    onSuccess: async (...args) => {
-      await queryClient.invalidateQueries([QUERY_KEYS.GET_SETTINGS]);
-      await queryClient.invalidateQueries([
-        QUERY_KEYS.GET_SETTINGS,
-        'duckdb-metadata',
-      ]);
-      onCustomSuccess?.(...args);
-    },
-    onError: (...args) => {
-      onCustomError?.(...args);
-    },
-  });
-};
-
-export const useReinitializeDuckDb = (
-  customOptions?: UseMutationOptions<
-    DuckDBMetadataPayload,
-    CustomError,
-    { dropExisting?: boolean }
-  >,
-): UseMutationResult<
-  DuckDBMetadataPayload,
-  CustomError,
-  { dropExisting?: boolean }
-> => {
-  const { onSuccess: onCustomSuccess, onError: onCustomError } =
-    customOptions || {};
-  const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: async (options: { dropExisting?: boolean }) => {
-      return settingsServices.reinitializeDuckDb(options);
-    },
-    onSuccess: async (...args) => {
-      await queryClient.invalidateQueries([QUERY_KEYS.GET_SETTINGS]);
-      await queryClient.invalidateQueries([
-        QUERY_KEYS.GET_SETTINGS,
-        'duckdb-metadata',
-      ]);
-      onCustomSuccess?.(...args);
-    },
-    onError: (...args) => {
-      onCustomError?.(...args);
-    },
-  });
-};
-
-export const useDiagnoseDuckDb = (
-  customOptions?: UseMutationOptions<DuckDBDiagnostics, CustomError, void>,
-): UseMutationResult<DuckDBDiagnostics, CustomError, void> => {
-  const { onSuccess: onCustomSuccess, onError: onCustomError } =
-    customOptions || {};
-  return useMutation({
-    mutationFn: async () => {
-      return settingsServices.diagnoseDuckDb();
-    },
-    onSuccess: (...args) => {
       onCustomSuccess?.(...args);
     },
     onError: (...args) => {
