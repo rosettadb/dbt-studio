@@ -31,6 +31,8 @@ interface ProjectDbtSplitButtonProps {
   // Function handlers that are used elsewhere in ProjectDetails
   rosettaDbt: (project: Project, command: Command) => Promise<void>;
   handleBusinessLayerClick: (path: string) => void;
+  // eslint-disable-next-line react/no-unused-prop-types
+  onRunOnCloudClick: () => void;
 }
 
 export const ProjectDbtSplitButton: React.FC<ProjectDbtSplitButtonProps> = ({
