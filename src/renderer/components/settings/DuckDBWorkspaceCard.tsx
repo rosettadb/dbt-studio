@@ -191,7 +191,7 @@ export const DuckDBWorkspaceCard: React.FC = () => {
   return (
     <Card
       variant="outlined"
-      sx={{ maxWidth: 800, borderRadius: 2, borderColor: 'divider', mb: 4 }}
+      sx={{ maxWidth: 800, borderColor: 'divider', mb: 4 }}
     >
       <CardContent>
         <Box

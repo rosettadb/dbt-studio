@@ -33,7 +33,6 @@ import { CliProvider } from './hooks/useCli';
 const App: React.FC = () => {
   return (
     <Router>
-      <CssBaseline />
       <ScrollbarStyles />
       <Routes>
         <Route path="/" element={<SelectProjectLayout />}>
@@ -106,6 +105,7 @@ const AppWithProjectProvider: React.FC = () => {
       <AppProvider>
         <CliProvider>
           <ProcessProvider>
+            <CssBaseline />
             <CssVarsProvider
               theme={theme}
               defaultMode={initialMode}

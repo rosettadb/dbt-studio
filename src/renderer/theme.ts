@@ -93,7 +93,7 @@ const theme = createTheme({
     MuiCard: {
       styleOverrides: {
         root: {
-          borderRadius: '8px',
+          borderRadius: '6px',
           boxShadow: '0px 2px 4px rgba(0,0,0,0.05)',
         },
       },
@@ -152,7 +152,7 @@ const theme = createTheme({
     },
   },
   shape: {
-    borderRadius: 8,
+    borderRadius: 6,
   },
 });
 
