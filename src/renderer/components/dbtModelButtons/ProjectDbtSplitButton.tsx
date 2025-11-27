@@ -1,9 +1,5 @@
 import React from 'react';
-import {
-  CloudUploadOutlined,
-  PlayCircleOutline,
-  StopCircleOutlined,
-} from '@mui/icons-material';
+import { PlayCircleOutline, StopCircleOutlined } from '@mui/icons-material';
 import { toast } from 'react-toastify';
 import { SplitButton } from '../splitButton';
 import { icons } from '../../../../assets';
@@ -24,6 +20,7 @@ interface ProjectDbtSplitButtonProps {
   // Function handlers that are used elsewhere in ProjectDetails
   rosettaDbt: (project: Project, command: Command) => Promise<void>;
   handleBusinessLayerClick: (path: string) => void;
+  // eslint-disable-next-line react/no-unused-prop-types
   onRunOnCloudClick: () => void;
 }
 
@@ -37,7 +34,6 @@ export const ProjectDbtSplitButton: React.FC<ProjectDbtSplitButtonProps> = ({
   connection,
   rosettaDbt,
   handleBusinessLayerClick,
-  onRunOnCloudClick,
 }) => {
   // Functions that are only used in this component - moved inside
 
@@ -206,14 +202,14 @@ export const ProjectDbtSplitButton: React.FC<ProjectDbtSplitButtonProps> = ({
             leftIcon: <Icon src={icons.dbtTm} width={16} height={16} />,
             subTitle: 'Run the dbt project',
           },
-          {
-            name: 'Run on cloud',
-            onClick: () => {
-              onRunOnCloudClick();
-            },
-            leftIcon: <CloudUploadOutlined />,
-            subTitle: 'Run on cloud',
-          },
+          // {
+          //   name: 'Run on cloud',
+          //   onClick: () => {
+          //     onRunOnCloudClick();
+          //   },
+          //   leftIcon: <CloudUploadOutlined />,
+          //   subTitle: 'Run on cloud',
+          // },
           {
             name: 'Test',
             onClick: () => {
