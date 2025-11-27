@@ -24,6 +24,7 @@ import { InstallationSettings } from './InstallationSettings';
 import { useGetSelectedProject, useUpdateSettings } from '../../controllers';
 import useSecureStorage from '../../hooks/useSecureStorage';
 import { ROSETTA_CLOUD_BASE_URL } from '../../../main/utils/constants';
+import { DuckDBWorkspaceCard } from './DuckDBWorkspaceCard';
 
 interface GeneralSettingsProps {
   settings: SettingsType;
@@ -343,6 +344,7 @@ export const GeneralSettings: React.FC<GeneralSettingsProps> = ({
           </Box>
         </CardActions>
       </Card>
+      <DuckDBWorkspaceCard />
       <InstallationSettings />
     </Box>
   );

@@ -16,7 +16,11 @@ export type SettingsChannels =
   | 'version:rosetta:uninstall'
   | 'settings:reset-factory'
   | 'settings:restart'
-  | 'settings:getFileName';
+  | 'settings:getFileName'
+  | 'settings:duckdb:metadata'
+  | 'settings:duckdb:refresh'
+  | 'settings:duckdb:reinitialize'
+  | 'settings:duckdb:diagnose';
 
 export type ProjectChannels =
   | 'project:get'
@@ -187,7 +191,8 @@ export type UtilChannels =
   | 'open:external'
   | 'windows:openSelector'
   | 'windows:closeSetup'
-  | 'utils:getFileContentList';
+  | 'utils:getFileContentList'
+  | 'utils:openPath';
 
 export type ProcessChannels =
   | 'process:start'

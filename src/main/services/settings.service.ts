@@ -17,10 +17,12 @@ import {
   SettingsType,
   RosettaVersionInfo,
   InstallResult,
+  DuckDBMetadataPayload,
+  DuckDBDiagnostics,
 } from '../../types/backend';
 import { CliAdapter } from '../adapters';
 import { DB_FILE, initializeDataStorage } from '../utils/setupHelpers';
-import SecureStorageService from './secureStorage.service';
+import { DuckDBBootstrap, SecureStorageService } from '.';
 
 const cliConfig: Record<
   keyof CliUpdateResponseType,
@@ -58,6 +60,7 @@ export default class SettingsService {
 
   static async loadSettingsWithDatabaseInfo(): Promise<SettingsType> {
     const settings = await this.loadSettings();
+    let enrichedSettings = { ...settings };
 
     try {
       // Import MainDatabaseService dynamically to avoid circular dependencies
@@ -66,8 +69,8 @@ export default class SettingsService {
       );
       const dbInfo = await MainDatabaseService.getDatabaseInfo();
 
-      return {
-        ...settings,
+      enrichedSettings = {
+        ...enrichedSettings,
         mainDatabasePath: dbInfo.path,
         mainDatabaseSize: dbInfo.size,
         sqliteVersion: dbInfo.sqliteVersion,
@@ -75,8 +78,44 @@ export default class SettingsService {
       };
     } catch (error) {
       // Failed to load database info, returning settings without DB info
-      return settings;
     }
+
+    try {
+      const metadata = await this.getDuckDbMetadata();
+      enrichedSettings = {
+        ...enrichedSettings,
+        duckdbPath: metadata.path,
+        duckdbSize: metadata.sizeHumanReadable,
+        duckdbStatus: metadata.status,
+        duckdbLockStatus: metadata.lockStatus,
+        duckdbLastCheckedAt: metadata.lastCheckedAt,
+        duckdbActiveConnections: metadata.activeConnections,
+        duckdbPoolSize: metadata.poolSize,
+        duckdbMaxConnections: metadata.maxConnections,
+      };
+    } catch (error) {
+      // Failed to load DuckDB metadata, continue without it
+    }
+
+    return enrichedSettings;
+  }
+
+  static async getDuckDbMetadata(): Promise<DuckDBMetadataPayload> {
+    return DuckDBBootstrap.getMetadata();
+  }
+
+  static async refreshDuckDbMetadata(): Promise<DuckDBMetadataPayload> {
+    return DuckDBBootstrap.refreshMetadata();
+  }
+
+  static async reinitializeDuckDb(options?: {
+    dropExisting?: boolean;
+  }): Promise<DuckDBMetadataPayload> {
+    return DuckDBBootstrap.reinitialize(options);
+  }
+
+  static async diagnoseDuckDb(): Promise<DuckDBDiagnostics> {
+    return DuckDBBootstrap.diagnose();
   }
 
   static async saveSettings(settings: SettingsType) {
@@ -121,7 +160,7 @@ export default class SettingsService {
 
     for (const [key, cli] of Object.entries(cliConfig)) {
       try {
-        const currentVersion = settings[cli.settingsKey] ?? '0.0.0';
+        const currentVersion = String(settings[cli.settingsKey] ?? '0.0.0');
         const latestRelease = await axios.get(
           `https://api.github.com/repos/cli/cli/releases/latest`,
         );
