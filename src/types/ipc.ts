@@ -191,8 +191,7 @@ export type UtilChannels =
   | 'open:external'
   | 'windows:openSelector'
   | 'windows:closeSetup'
-  | 'utils:getFileContentList'
-  | 'utils:openPath';
+  | 'utils:getFileContentList';
 
 export type ProcessChannels =
   | 'process:start'
