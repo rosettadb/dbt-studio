@@ -1,7 +1,7 @@
 import React from 'react';
 import { Box, Typography, Stack } from '@mui/material';
 import ChatIcon from '@mui/icons-material/Chat';
-import { useGetChatMessages } from '../../controllers/chat.controller';
+import { useGetChatMessagesWithContext } from '../../controllers/chat.controller';
 import { MessageRenderer } from './MessageRenderer';
 
 interface ChatMessageListProps {
@@ -11,7 +11,8 @@ interface ChatMessageListProps {
 export const ChatMessageList: React.FC<ChatMessageListProps> = ({
   sessionId,
 }) => {
-  const { data: messages = [], isLoading } = useGetChatMessages(sessionId);
+  const { data: messages = [], isLoading } =
+    useGetChatMessagesWithContext(sessionId);
   const containerRef = React.useRef<HTMLDivElement | null>(null);
   const bottomRef = React.useRef<HTMLDivElement | null>(null);
 
@@ -114,7 +115,12 @@ export const ChatMessageList: React.FC<ChatMessageListProps> = ({
       )}
       <Stack spacing={0.75}>
         {messages.map((m) => (
-          <MessageRenderer key={m.id} content={m.content || ''} role={m.role} />
+          <MessageRenderer
+            key={m.id}
+            content={m.content || ''}
+            role={m.role}
+            contextItems={m.contextItems}
+          />
         ))}
         <div ref={bottomRef} />
       </Stack>

@@ -8,6 +8,7 @@ import UpdateService from './update.service';
 import CloudExplorerService from './cloudExplorer.service';
 import CloudPreviewService from './cloudPreview.service';
 import UtilsService from './utilsService';
+import SelectedFileContextProvider from './selectedFileContextProvider.service';
 import RosettaCloudService from './rosettaCloud.service';
 
 export {
@@ -21,5 +22,6 @@ export {
   CloudExplorerService,
   CloudPreviewService,
   UtilsService,
+  SelectedFileContextProvider,
   RosettaCloudService,
 };

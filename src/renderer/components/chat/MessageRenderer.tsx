@@ -4,17 +4,26 @@ import { useTheme } from '@mui/material/styles';
 import Box from '@mui/material/Box';
 import IconButton from '@mui/material/IconButton';
 import Tooltip from '@mui/material/Tooltip';
+import Chip from '@mui/material/Chip';
 import Markdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import rehypeHighlight from 'rehype-highlight';
 import 'highlight.js/styles/github-dark.css';
-import { ContentCopy, UploadFile } from '@mui/icons-material';
+import { ContentCopy, UploadFile, Description } from '@mui/icons-material';
 import { useAppContext } from '../../hooks';
 import { useSaveFileContent } from '../../controllers';
 
 interface MessageRendererProps {
   content: string;
   role: 'user' | 'assistant' | string;
+  contextItems?: Array<{
+    id: number;
+    name: string;
+    description?: string;
+    type: string;
+    content: string;
+    metadata?: any;
+  }>;
 }
 
 const MessageContainer = styled(Box)(({ theme }) => ({
@@ -25,7 +34,7 @@ const MessageContainer = styled(Box)(({ theme }) => ({
   maxWidth: 'min(75%, 720px)',
   wordBreak: 'break-word',
   fontSize: '13px',
-  lineHeight: 1.55,
+  lineHeight: 1.35,
 }));
 
 const UserMessage = styled(MessageContainer)(({ theme }) => ({
@@ -264,6 +273,7 @@ const MarkdownParagraph: React.FC<React.PropsWithChildren> = ({ children }) => (
 export const MessageRenderer: React.FC<MessageRendererProps> = ({
   content,
   role,
+  contextItems,
 }) => {
   const Container = role === 'user' ? UserMessage : AssistantMessage;
   // Fallback: if content looks like HTML (legacy TipTap), strip tags for display
@@ -278,6 +288,31 @@ export const MessageRenderer: React.FC<MessageRendererProps> = ({
   }, [content]);
   return (
     <Container>
+      {/* Show context items for user messages */}
+      {role === 'user' && contextItems && contextItems.length > 0 && (
+        <Box sx={{ mb: 1 }}>
+          <Box display="flex" flexWrap="wrap" gap={0.5}>
+            {contextItems.map((item) => (
+              <Chip
+                key={item.id}
+                label={item.name}
+                size="small"
+                icon={<Description />}
+                sx={{
+                  fontSize: '0.7rem',
+                  height: 20,
+                  borderRadius: 0.5,
+                  '& .MuiChip-icon': {
+                    fontSize: '0.8rem',
+                  },
+                }}
+              />
+            ))}
+          </Box>
+        </Box>
+      )}
+
+      {/* Message content */}
       <Markdown
         remarkPlugins={[remarkGfm]}
         rehypePlugins={[rehypeHighlight]}

@@ -214,6 +214,32 @@ export const useGetChatMessages = (
   });
 };
 
+// Get messages with full context
+export const useGetChatMessagesWithContext = (
+  sessionId?: number,
+  limit?: number,
+  offset?: number,
+  customOptions?: UseQueryOptions<
+    ChatMessageWithContext[],
+    CustomError,
+    ChatMessageWithContext[]
+  >,
+) => {
+  return useQuery({
+    queryKey: [
+      QUERY_KEYS.GET_CHAT_MESSAGES_WITH_CONTEXT,
+      sessionId,
+      limit,
+      offset,
+    ],
+    queryFn: async () => {
+      return chatService.getMessagesWithContext(sessionId!, limit, offset);
+    },
+    enabled: !!sessionId,
+    ...customOptions,
+  });
+};
+
 // Get message with full context
 export const useGetChatMessageWithContext = (
   messageId?: number,
@@ -473,7 +499,7 @@ export const useStreamChatMessage = (
     },
     onSuccess: async (message, variables, ...args) => {
       await queryClient.invalidateQueries([
-        QUERY_KEYS.GET_CHAT_MESSAGES,
+        QUERY_KEYS.GET_CHAT_MESSAGES_WITH_CONTEXT,
         variables.sessionId,
       ]);
       await queryClient.invalidateQueries([
@@ -563,6 +589,76 @@ export const useResolveFileContext = (
     },
     onSuccess: (item, filePath, ...args) => {
       onCustomSuccess?.(item, filePath, ...args);
+    },
+    onError: (...args) => {
+      onCustomError?.(...args);
+    },
+  });
+};
+
+// Resolve selected file context with DBT enhancements
+export const useResolveSelectedFileContext = (
+  customOptions?: UseMutationOptions<
+    ContextItem,
+    CustomError,
+    { filePath: string; projectPath?: string }
+  >,
+): UseMutationResult<
+  ContextItem,
+  CustomError,
+  { filePath: string; projectPath?: string }
+> => {
+  const { onSuccess: onCustomSuccess, onError: onCustomError } =
+    customOptions || {};
+
+  return useMutation({
+    mutationFn: async ({ filePath, projectPath }) => {
+      return chatService.resolveSelectedFileContext(filePath, projectPath);
+    },
+    onSuccess: (item, variables, ...args) => {
+      onCustomSuccess?.(item, variables, ...args);
+    },
+    onError: (...args) => {
+      onCustomError?.(...args);
+    },
+  });
+};
+
+// Get file metadata
+export const useGetFileMetadata = (
+  customOptions?: UseMutationOptions<
+    {
+      path: string;
+      name: string;
+      size: number;
+      lastModified: string;
+      language: string;
+      fileType: string;
+    },
+    CustomError,
+    string
+  >,
+): UseMutationResult<
+  {
+    path: string;
+    name: string;
+    size: number;
+    lastModified: string;
+    language: string;
+    fileType: string;
+  },
+  CustomError,
+  string
+> => {
+  const { onSuccess: onCustomSuccess, onError: onCustomError } =
+    customOptions || {};
+
+  return useMutation({
+    mutationFn: async (filePath: string) => {
+      return chatService.getFileMetadata(filePath);
+    },
+    onSuccess: (metadata, filePath, ...args) => {
+      onCustomSuccess?.(metadata, filePath, ...args);
     },
     onError: (...args) => {
       onCustomError?.(...args);

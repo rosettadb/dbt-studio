@@ -316,19 +316,72 @@ export class OpenAIProvider extends BaseAIProvider {
         throw new Error('OpenAI provider not initialized');
       }
 
-      // For now, we'll implement streaming as a single chunk
-      // This can be enhanced later with actual streaming support
-      const response = await this.generateCompletion({
-        ...request,
-        stream: false,
-      });
+      // Create the streaming request using the same format as generateGenericCompletion
+      const openAIRequest: OpenAI.Chat.Completions.ChatCompletionCreateParamsStreaming =
+        {
+          model: request.model || 'gpt-4o',
+          messages: [{ role: 'user' as const, content: request.prompt }],
+          stream: true,
+          ...OpenAIProvider.getMaxTokenParam(request.model, request.maxTokens),
+          ...OpenAIProvider.getTemperatureParam(
+            request.model,
+            request.temperature,
+            0.7,
+          ),
+        };
 
-      yield {
-        content: response.content,
-        done: true,
-        usage: response.usage,
-        metadata: response.metadata,
-      };
+      // Tools/functions support can be added later if needed
+
+      // Create the streaming completion
+      const stream =
+        await this.directOpenAIClient.chat.completions.create(openAIRequest);
+
+      let totalUsage: any = null;
+
+      // Process the stream
+      /* eslint-disable no-restricted-syntax */
+      for await (const chunk of stream) {
+        const delta = chunk.choices[0]?.delta;
+        const finishReason = chunk.choices[0]?.finish_reason;
+
+        // Handle content chunks
+        if (delta?.content) {
+          yield {
+            content: delta.content,
+            done: false,
+            metadata: {
+              model: chunk.model,
+              finishReason: finishReason || undefined,
+            },
+          };
+        }
+
+        // Tool calls handling can be added later if needed
+
+        // Handle usage information (usually in the last chunk)
+        if (chunk.usage) {
+          totalUsage = {
+            promptTokens: chunk.usage.prompt_tokens,
+            completionTokens: chunk.usage.completion_tokens,
+            totalTokens: chunk.usage.total_tokens,
+          };
+        }
+
+        // Check if this is the final chunk
+        if (finishReason) {
+          yield {
+            content: '',
+            done: true,
+            usage: totalUsage,
+            metadata: {
+              model: chunk.model,
+              finishReason,
+            },
+          };
+          break;
+        }
+      }
+      /* eslint-enable no-restricted-syntax */
     } catch (error) {
       throw this.handleProviderError(error, 'streaming completion');
     }
