@@ -264,7 +264,37 @@ export abstract class CatalogAdapter {
           );
         }
 
-        // DuckDB Node.js API handles connection cleanup automatically
+        // Explicitly close the connection to release memory
+        if (this.connectionInfo.connection) {
+          try {
+            this.connectionInfo.connection.closeSync();
+            // eslint-disable-next-line no-console
+            console.log(
+              `[DuckDB] Closed connection for instance: ${this.connectionInfo.instanceName}`,
+            );
+          } catch (error) {
+            // eslint-disable-next-line no-console
+            console.error('Error closing connection:', error);
+          }
+        }
+
+        // Close the DuckDB instance if it has a close method
+        if (
+          this.connectionInfo.instance &&
+          typeof this.connectionInfo.instance.close === 'function'
+        ) {
+          try {
+            await this.connectionInfo.instance.close();
+            // eslint-disable-next-line no-console
+            console.log(
+              `[DuckDB] Closed instance: ${this.connectionInfo.instanceName}`,
+            );
+          } catch (error) {
+            // eslint-disable-next-line no-console
+            console.error('Error closing instance:', error);
+          }
+        }
+
         this.connectionInfo = null;
       } catch (error) {
         // eslint-disable-next-line no-console

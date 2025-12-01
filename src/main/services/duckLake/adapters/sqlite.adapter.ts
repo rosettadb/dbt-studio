@@ -157,6 +157,8 @@ export class SQLiteCatalogAdapter extends CatalogAdapter {
 
   async testConnection(config: DuckLakeCatalogConfig): Promise<HealthStatus> {
     const startTime = Date.now();
+    let testInstance = null;
+    let testConnection = null;
 
     try {
       // Validate config first
@@ -170,25 +172,20 @@ export class SQLiteCatalogAdapter extends CatalogAdapter {
       }
 
       // Test DuckDB connection with SQLite extension
-      const testInstance = await this.initializeDuckDB();
-      const testConnection = await testInstance.connect();
+      testInstance = await this.initializeDuckDB();
+      testConnection = await testInstance.connect();
 
-      try {
-        // Test DuckLake and SQLite extension loading
-        await this.loadDuckLakeExtension(testConnection);
-        await this.loadCatalogExtensions(testConnection, ['sqlite']);
+      // Test DuckLake and SQLite extension loading
+      await this.loadDuckLakeExtension(testConnection);
+      await this.loadCatalogExtensions(testConnection, ['sqlite']);
 
-        const responseTime = Date.now() - startTime;
+      const responseTime = Date.now() - startTime;
 
-        return {
-          connected: true,
-          lastChecked: new Date(),
-          responseTime,
-        };
-      } finally {
-        // DuckDB Node.js API handles cleanup automatically
-        // No explicit cleanup needed
-      }
+      return {
+        connected: true,
+        lastChecked: new Date(),
+        responseTime,
+      };
     } catch (error) {
       // eslint-disable-next-line no-console
       console.error('SQLite connection test failed:', error);
@@ -198,6 +195,28 @@ export class SQLiteCatalogAdapter extends CatalogAdapter {
         responseTime: Date.now() - startTime,
         error: (error as Error).message,
       };
+    } finally {
+      // Explicitly clean up test resources
+      if (testConnection) {
+        try {
+          testConnection.closeSync();
+          // eslint-disable-next-line no-console
+          console.log('[SQLite] Closed test connection');
+        } catch (error) {
+          // eslint-disable-next-line no-console
+          console.error('Error closing test connection:', error);
+        }
+      }
+      if (testInstance && typeof testInstance.close === 'function') {
+        try {
+          await testInstance.close();
+          // eslint-disable-next-line no-console
+          console.log('[SQLite] Closed test instance');
+        } catch (error) {
+          // eslint-disable-next-line no-console
+          console.error('Error closing test instance:', error);
+        }
+      }
     }
   }
 
@@ -292,14 +311,8 @@ export class SQLiteCatalogAdapter extends CatalogAdapter {
         ORDER BY s.schema_name, t.table_name
       `;
 
-      // eslint-disable-next-line no-console
-      console.log('[SQLiteAdapter.listTables] Executing query:', query);
-
       const result = await this.connectionInfo.connection.run(query);
       const rows = await result.getRows();
-
-      // eslint-disable-next-line no-console
-      console.log('[SQLiteAdapter.listTables] Query returned rows:', rows);
 
       const tables: DuckLakeTableInfo[] = rows.map((row: any) => {
         if (Array.isArray(row)) {
@@ -329,9 +342,6 @@ export class SQLiteCatalogAdapter extends CatalogAdapter {
           sizeBytes: normalizeNumericValue(row.file_size_bytes),
         };
       });
-
-      // eslint-disable-next-line no-console
-      console.log('[SQLiteAdapter.listTables] Mapped tables:', tables);
 
       return tables;
     } catch (error: any) {

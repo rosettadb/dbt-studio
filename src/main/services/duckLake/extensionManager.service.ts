@@ -60,25 +60,23 @@ export class DuckLakeExtensionManager {
       return false;
     }
 
+    let testInstance: any = null;
+    let testConnection: any = null;
+
     try {
       // Create a temporary DuckDB instance to test extension loading
-      const testInstance = await DuckDBInstance.create(':memory:');
-      const testConnection = await testInstance.connect();
+      testInstance = await DuckDBInstance.create(':memory:');
+      testConnection = await testInstance.connect();
 
-      try {
-        // Try to install and load the DuckLake extension
-        await testConnection.run('INSTALL ducklake');
-        await testConnection.run('LOAD ducklake');
+      // Try to install and load the DuckLake extension
+      await testConnection.run('INSTALL ducklake');
+      await testConnection.run('LOAD ducklake');
 
-        // Test basic DuckLake functionality
-        await testConnection.run('SELECT ducklake_version()');
+      // Test basic DuckLake functionality
+      await testConnection.run('SELECT ducklake_version()');
 
-        this.extensionInfo.verified = true;
-        return true;
-      } finally {
-        // DuckDB Node.js API handles cleanup automatically
-        // No explicit cleanup needed
-      }
+      this.extensionInfo.verified = true;
+      return true;
     } catch (error) {
       // eslint-disable-next-line no-console
       console.error('DuckLake extension verification failed:', error);
@@ -86,6 +84,22 @@ export class DuckLakeExtensionManager {
         this.extensionInfo.verified = false;
       }
       return false;
+    } finally {
+      // Explicitly clean up test resources
+      if (testConnection) {
+        try {
+          testConnection.closeSync();
+        } catch (error) {
+          // Ignore cleanup errors
+        }
+      }
+      if (testInstance && typeof testInstance.close === 'function') {
+        try {
+          await testInstance.close();
+        } catch (error) {
+          // Ignore cleanup errors
+        }
+      }
     }
   }
 
@@ -114,33 +128,47 @@ export class DuckLakeExtensionManager {
       return null;
     }
 
+    let testInstance: any = null;
+    let testConnection: any = null;
+
     try {
-      const testInstance = await DuckDBInstance.create(':memory:');
-      const testConnection = await testInstance.connect();
+      testInstance = await DuckDBInstance.create(':memory:');
+      testConnection = await testInstance.connect();
 
-      try {
-        await testConnection.run('INSTALL ducklake');
-        await testConnection.run('LOAD ducklake');
+      await testConnection.run('INSTALL ducklake');
+      await testConnection.run('LOAD ducklake');
 
-        const result = await testConnection.run(
-          'SELECT ducklake_version() as version',
-        );
-        const rows = await result.getRows();
+      const result = await testConnection.run(
+        'SELECT ducklake_version() as version',
+      );
+      const rows = await result.getRows();
 
-        if (rows.length > 0) {
-          // rows[0] is an array, get the first column value
-          return (rows[0] as any)[0] || null;
-        }
-
-        return null;
-      } finally {
-        // DuckDB Node.js API handles cleanup automatically
-        // No explicit cleanup needed
+      if (rows.length > 0) {
+        // rows[0] is an array, get the first column value
+        return (rows[0] as any)[0] || null;
       }
+
+      return null;
     } catch (error) {
       // eslint-disable-next-line no-console
       console.error('Failed to get DuckLake extension version:', error);
       return null;
+    } finally {
+      // Explicitly clean up test resources
+      if (testConnection) {
+        try {
+          testConnection.closeSync();
+        } catch (error) {
+          // Ignore cleanup errors
+        }
+      }
+      if (testInstance && typeof testInstance.close === 'function') {
+        try {
+          await testInstance.close();
+        } catch (error) {
+          // Ignore cleanup errors
+        }
+      }
     }
   }
 
@@ -156,34 +184,42 @@ export class DuckLakeExtensionManager {
     const missing: string[] = [];
     const errors: string[] = [];
 
+    let testInstance: any = null;
+    let testConnection: any = null;
+
     try {
-      const testInstance = await DuckDBInstance.create(':memory:');
-      const testConnection = await testInstance.connect();
+      testInstance = await DuckDBInstance.create(':memory:');
+      testConnection = await testInstance.connect();
 
-      try {
-        const results = await Promise.allSettled(
-          requiredExtensions.map(async (extension) => {
-            await testConnection.run(`INSTALL ${extension}`);
-            await testConnection.run(`LOAD ${extension}`);
-            return extension;
-          }),
-        );
+      const results = await Promise.allSettled(
+        requiredExtensions.map(async (extension) => {
+          await testConnection.run(`INSTALL ${extension}`);
+          await testConnection.run(`LOAD ${extension}`);
+          return extension;
+        }),
+      );
 
-        results.forEach((result, index) => {
-          if (result.status === 'rejected') {
-            const extension = requiredExtensions[index];
-            missing.push(extension);
-            errors.push(
-              `Failed to load ${extension}: ${result.reason?.message || 'Unknown error'}`,
-            );
-          }
-        });
-      } finally {
-        // DuckDB Node.js API handles cleanup automatically
-        // No explicit cleanup needed
-      }
+      results.forEach((result, index) => {
+        if (result.status === 'rejected') {
+          const extension = requiredExtensions[index];
+          missing.push(extension);
+          errors.push(
+            `Failed to load ${extension}: ${result.reason?.message || 'Unknown error'}`,
+          );
+        }
+      });
     } catch (error) {
       errors.push(`Failed to test extensions: ${(error as Error).message}`);
+    } finally {
+      // Explicitly clean up test resources
+      if (testConnection) {
+        try {
+          testConnection.closeSync();
+        } catch (error) {
+          // Ignore cleanup errors
+        }
+      }
+      // DuckDB instances are auto-cleaned when connections close
     }
 
     return {
@@ -259,33 +295,41 @@ export class DuckLakeExtensionManager {
     }
 
     // If no extension found, try to use DuckDB's built-in extension system
+    let testInstance: any = null;
+    let testConnection: any = null;
+
     try {
-      const testInstance = await DuckDBInstance.create(':memory:');
-      const testConnection = await testInstance.connect();
+      testInstance = await DuckDBInstance.create(':memory:');
+      testConnection = await testInstance.connect();
 
-      try {
-        await testConnection.run('INSTALL ducklake');
-        await testConnection.run('LOAD ducklake');
+      await testConnection.run('INSTALL ducklake');
+      await testConnection.run('LOAD ducklake');
 
-        this.extensionInfo = {
-          path: 'built-in',
-          source: 'system',
-          verified: true,
-        };
+      this.extensionInfo = {
+        path: 'built-in',
+        source: 'system',
+        verified: true,
+      };
 
-        // eslint-disable-next-line no-console
-        console.log('Using DuckDB built-in extension system for DuckLake');
-        return;
-      } finally {
-        // DuckDB Node.js API handles cleanup automatically
-        // No explicit cleanup needed
-      }
+      // eslint-disable-next-line no-console
+      console.log('Using DuckDB built-in extension system for DuckLake');
+      return;
     } catch (error) {
       // eslint-disable-next-line no-console
       console.warn(
         'DuckLake extension not available via built-in system:',
         error,
       );
+    } finally {
+      // Explicitly clean up test resources
+      if (testConnection) {
+        try {
+          testConnection.closeSync();
+        } catch (error) {
+          // Ignore cleanup errors
+        }
+      }
+      // DuckDB instances are auto-cleaned when connections close
     }
 
     throw new Error('DuckLake extension not found in any location');

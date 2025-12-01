@@ -166,6 +166,41 @@ ipcMain.handle('windows:closeSetup', () => {
   }
 });
 
+// Cleanup DuckLake connections before app quits
+app.on('before-quit', async (event) => {
+  event.preventDefault();
+
+  console.log('[App] Shutting down, cleaning up DuckLake connections...');
+
+  try {
+    // Dynamically import to avoid circular dependencies
+    const { DuckLakeConnectionManager } = await import(
+      './services/duckLake/connectionManager.service'
+    );
+
+    // Get memory stats before cleanup
+    const memBefore = DuckLakeConnectionManager.getMemoryStats();
+    console.log('[App] Memory before cleanup:', memBefore);
+
+    // Disconnect all connections
+    await DuckLakeConnectionManager.disconnectAll();
+
+    // Shutdown the connection manager
+    DuckLakeConnectionManager.shutdown();
+
+    // Get memory stats after cleanup
+    const memAfter = DuckLakeConnectionManager.getMemoryStats();
+    console.log('[App] Memory after cleanup:', memAfter);
+
+    console.log('[App] DuckLake cleanup complete');
+  } catch (error) {
+    console.error('[App] Error during DuckLake cleanup:', error);
+  } finally {
+    // Allow the app to quit
+    app.exit(0);
+  }
+});
+
 app.on('window-all-closed', () => {
   // Don't quit - WindowManager will handle the actual quitting
 });

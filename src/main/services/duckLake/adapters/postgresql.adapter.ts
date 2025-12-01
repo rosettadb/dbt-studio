@@ -157,6 +157,8 @@ export class PostgreSQLCatalogAdapter extends CatalogAdapter {
 
   async testConnection(config: DuckLakeCatalogConfig): Promise<HealthStatus> {
     const startTime = Date.now();
+    let testInstance = null;
+    let testConnection = null;
 
     try {
       // Validate config first
@@ -170,33 +172,28 @@ export class PostgreSQLCatalogAdapter extends CatalogAdapter {
       }
 
       // Test DuckDB connection with PostgreSQL extension
-      const testInstance = await this.initializeDuckDB();
-      const testConnection = await testInstance.connect();
+      testInstance = await this.initializeDuckDB();
+      testConnection = await testInstance.connect();
 
-      try {
-        // Test DuckLake and PostgreSQL extension loading
-        await this.loadDuckLakeExtension(testConnection);
-        await this.loadCatalogExtensions(testConnection, ['postgres']);
+      // Test DuckLake and PostgreSQL extension loading
+      await this.loadDuckLakeExtension(testConnection);
+      await this.loadCatalogExtensions(testConnection, ['postgres']);
 
-        // Test PostgreSQL connection
-        const pgConfig = config.postgresql!;
-        const connectionString = this.buildPostgreSQLConnectionString(pgConfig);
+      // Test PostgreSQL connection
+      const pgConfig = config.postgresql!;
+      const connectionString = this.buildPostgreSQLConnectionString(pgConfig);
 
-        // Test basic PostgreSQL connection
-        const testQuery = `SELECT 1 FROM postgres_query('${connectionString}', 'SELECT 1 as test')`;
-        await testConnection.run(testQuery);
+      // Test basic PostgreSQL connection
+      const testQuery = `SELECT 1 FROM postgres_query('${connectionString}', 'SELECT 1 as test')`;
+      await testConnection.run(testQuery);
 
-        const responseTime = Date.now() - startTime;
+      const responseTime = Date.now() - startTime;
 
-        return {
-          connected: true,
-          lastChecked: new Date(),
-          responseTime,
-        };
-      } finally {
-        // DuckDB Node.js API handles cleanup automatically
-        // No explicit cleanup needed
-      }
+      return {
+        connected: true,
+        lastChecked: new Date(),
+        responseTime,
+      };
     } catch (error) {
       // eslint-disable-next-line no-console
       console.error('PostgreSQL connection test failed:', error);
@@ -206,6 +203,28 @@ export class PostgreSQLCatalogAdapter extends CatalogAdapter {
         responseTime: Date.now() - startTime,
         error: (error as Error).message,
       };
+    } finally {
+      // Explicitly clean up test resources
+      if (testConnection) {
+        try {
+          testConnection.closeSync();
+          // eslint-disable-next-line no-console
+          console.log('[PostgreSQL] Closed test connection');
+        } catch (error) {
+          // eslint-disable-next-line no-console
+          console.error('Error closing test connection:', error);
+        }
+      }
+      if (testInstance && typeof testInstance.close === 'function') {
+        try {
+          await testInstance.close();
+          // eslint-disable-next-line no-console
+          console.log('[PostgreSQL] Closed test instance');
+        } catch (error) {
+          // eslint-disable-next-line no-console
+          console.error('Error closing test instance:', error);
+        }
+      }
     }
   }
 

@@ -16,10 +16,7 @@ import {
   useDuckLakeInstances,
   useCreateDuckLakeInstance,
   useDuckLakeInstance,
-  useConnectDuckLakeInstance,
-  useDisconnectDuckLakeInstance,
   useDeleteDuckLakeInstance,
-  useRefreshDuckLakeInstanceHealth,
 } from '../../controllers/duckLake.controller';
 
 const DuckLake: React.FC = () => {
@@ -33,10 +30,7 @@ const DuckLake: React.FC = () => {
   const createInstanceMutation = useCreateDuckLakeInstance();
 
   // Mutations for instance actions
-  const connectMutation = useConnectDuckLakeInstance();
-  const disconnectMutation = useDisconnectDuckLakeInstance();
   const deleteMutation = useDeleteDuckLakeInstance();
-  const refreshHealthMutation = useRefreshDuckLakeInstanceHealth();
 
   // Parse the current section from the pathname
   const pathSegments = location.pathname.split('/');
@@ -233,21 +227,13 @@ const DuckLake: React.FC = () => {
         return (
           <DuckLakeInstanceDetails
             instance={currentInstance as any}
-            // onConnect={(id) => connectMutation.mutate(id)}
-            // onDisconnect={(id) => disconnectMutation.mutate(id)}
             onEdit={(id) => navigate(`/app/duck-lake/instances/${id}/edit`)}
             onDelete={(id) => {
               deleteMutation.mutate(id, {
                 onSuccess: () => navigate('/app/duck-lake/instances'),
               });
             }}
-            onRefreshHealth={(id) => refreshHealthMutation.mutate(id)}
-            isLoading={
-              connectMutation.isLoading ||
-              disconnectMutation.isLoading ||
-              deleteMutation.isLoading ||
-              refreshHealthMutation.isLoading
-            }
+            isLoading={deleteMutation.isLoading}
           />
         );
 

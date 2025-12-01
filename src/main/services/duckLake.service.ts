@@ -229,24 +229,28 @@ export default class DuckLakeService {
       } catch (error) {
         errors.push(`Catalog path not accessible: ${(error as Error).message}`);
       }
-
-      // No experimental features to check currently
-
       // Check extension status
       const extensionLoaded = DuckLakeExtensionManager.isExtensionAvailable();
       if (!extensionLoaded) {
         warnings.push('DuckLake extension is not loaded');
       }
 
-      // Check connection status
-      const connectionStatus =
-        DuckLakeConnectionManager.getConnectionStatus(id);
+      // Test catalog connectivity by attempting to establish a connection
+      let catalogConnected = false;
+      try {
+        // ensureConnected will test if we can connect to the catalog
+        await this.ensureConnected(id);
+        catalogConnected = true;
+      } catch (error) {
+        catalogConnected = false;
+        errors.push(`Catalog connection failed: ${(error as Error).message}`);
+      }
 
       const health: DuckLakeInstanceHealth = {
         instanceId: id,
         status: instance.status,
         lastChecked: new Date(),
-        catalogConnected: connectionStatus.connected,
+        catalogConnected,
         extensionLoaded,
         dataPathAccessible,
         errors,
@@ -261,8 +265,12 @@ export default class DuckLakeService {
     }
   }
 
-  // Catalog Management
-  static async connectToCatalog(instanceId: string): Promise<void> {
+  /**
+   * Internal helper: Establishes connection to catalog (lazy connection pattern)
+   * Called automatically by ensureConnected() when queries need a connection
+   * Note: Does NOT update instance status - status represents configuration state, not connection state
+   */
+  private static async connectToCatalog(instanceId: string): Promise<void> {
     try {
       await this.initialize();
       const instance = await this.getInstance(instanceId);
@@ -286,13 +294,11 @@ export default class DuckLakeService {
 
       // eslint-disable-next-line no-console
       console.debug(
-        '[DuckLakeService.connectToCatalog] Resolved instance config',
+        '[DuckLakeService.connectToCatalog] Establishing lazy connection',
         {
           instanceId,
           name: instance.name,
           dataPath: instance.dataPath,
-          storageType: storageWithCredentials?.type,
-          s3: storageWithCredentials?.s3,
         },
       );
 
@@ -303,41 +309,32 @@ export default class DuckLakeService {
         catalogWithCredentials,
         storageWithCredentials,
       );
-
-      // Update instance status
-      const updatedInstance = {
-        ...instance,
-        status: 'active' as const,
-        updatedAt: new Date(),
-      };
-      await DuckLakeInstanceStore.saveInstance(updatedInstance);
     } catch (error) {
       // eslint-disable-next-line no-console
-      console.error(error);
+      console.error('[DuckLakeService.connectToCatalog] Error:', error);
       throw DuckLakeError.catalogConnection(instanceId, error as Error);
     }
   }
 
-  static async disconnectFromCatalog(instanceId: string): Promise<void> {
+  /**
+   * Internal helper: Disconnects from catalog
+   * Called by connection manager during idle cleanup
+   * Note: Does NOT update instance status - status represents configuration state, not connection state
+   */
+  private static async disconnectFromCatalog(
+    instanceId: string,
+  ): Promise<void> {
     try {
       // Use connection manager to disconnect
       await DuckLakeConnectionManager.disconnect(instanceId);
 
-      // Update instance status if it exists
-      try {
-        const instance = await DuckLakeInstanceStore.getInstance(instanceId);
-        const updatedInstance = {
-          ...instance,
-          status: 'inactive' as const,
-          updatedAt: new Date(),
-        };
-        await DuckLakeInstanceStore.saveInstance(updatedInstance);
-      } catch (error) {
-        // Instance might not exist anymore, ignore error
-      }
+      // eslint-disable-next-line no-console
+      console.debug('[DuckLakeService.disconnectFromCatalog] Disconnected', {
+        instanceId,
+      });
     } catch (error) {
       // eslint-disable-next-line no-console
-      console.error(error);
+      console.error('[DuckLakeService.disconnectFromCatalog] Error:', error);
       throw error;
     }
   }
@@ -363,29 +360,11 @@ export default class DuckLakeService {
   // Table Management
   static async listTables(instanceId: string): Promise<DuckLakeTableInfo[]> {
     try {
-      // eslint-disable-next-line no-console
-      console.log(
-        '[DuckLakeService.listTables] Starting for instanceId:',
-        instanceId,
-      );
-
       await this.ensureConnected(instanceId);
-      // eslint-disable-next-line no-console
-      console.log('[DuckLakeService.listTables] Connection ensured');
 
       const adapter = await this.getAdapter(instanceId);
-      // eslint-disable-next-line no-console
-      console.log(
-        '[DuckLakeService.listTables] Adapter obtained:',
-        adapter.constructor.name,
-      );
 
       const tables = await adapter.listTables();
-      // eslint-disable-next-line no-console
-      console.log(
-        '[DuckLakeService.listTables] Raw tables from adapter:',
-        tables,
-      );
 
       // Set instanceId for each table
       const result = tables.map((table) => ({
@@ -393,8 +372,6 @@ export default class DuckLakeService {
         instanceId,
       }));
 
-      // eslint-disable-next-line no-console
-      console.log('[DuckLakeService.listTables] Final result:', result);
       return result;
     } catch (error) {
       // eslint-disable-next-line no-console

@@ -24,9 +24,9 @@ export class DuckLakeConnectionManager {
   private static healthCheckInterval: ReturnType<typeof setInterval> | null =
     null;
 
-  private static readonly HEALTH_CHECK_INTERVAL_MS = 30000; // 30 seconds
+  private static readonly HEALTH_CHECK_INTERVAL_MS = 15000; // 15 seconds (reduced from 30s for more aggressive cleanup)
 
-  private static readonly MAX_IDLE_TIME_MS = 300000; // 5 minutes
+  private static readonly MAX_IDLE_TIME_MS = 60000; // 1 minute (reduced from 5 minutes to prevent memory buildup)
 
   private static readonly MAX_CONNECTIONS_PER_INSTANCE = 1; // DuckLake is single-connection per instance
 
@@ -232,6 +232,9 @@ export class DuckLakeConnectionManager {
     const now = new Date();
     const toDisconnect: string[] = [];
 
+    // Get memory stats before cleanup
+    const memBefore = this.getMemoryStats();
+
     Array.from(this.connections.entries()).forEach(([instanceId, entry]) => {
       const idleTime = now.getTime() - entry.lastUsed.getTime();
 
@@ -248,10 +251,36 @@ export class DuckLakeConnectionManager {
     }, Promise.resolve());
 
     if (toDisconnect.length > 0) {
+      // Get memory stats after cleanup
+      const memAfter = this.getMemoryStats();
+
       // eslint-disable-next-line no-console
       console.log(
-        `Cleaned up ${toDisconnect.length} idle DuckLake connections`,
+        `[DuckLake] Cleaned up ${toDisconnect.length} idle connections`,
+        {
+          before: {
+            connections: memBefore.totalConnections,
+            heapMB: memBefore.heapUsedMB,
+            rssMB: memBefore.rss,
+          },
+          after: {
+            connections: memAfter.totalConnections,
+            heapMB: memAfter.heapUsedMB,
+            rssMB: memAfter.rss,
+          },
+          freed: {
+            heapMB: memBefore.heapUsedMB - memAfter.heapUsedMB,
+            rssMB: memBefore.rss - memAfter.rss,
+          },
+        },
       );
+
+      // Suggest garbage collection if available
+      if (global.gc) {
+        global.gc();
+        // eslint-disable-next-line no-console
+        console.log('[DuckLake] Triggered garbage collection');
+      }
     }
   }
 
@@ -349,6 +378,30 @@ export class DuckLakeConnectionManager {
         lastUsedTimes.length > 0
           ? new Date(Math.max(...lastUsedTimes.map((d) => d.getTime())))
           : undefined,
+    };
+  }
+
+  /**
+   * Get memory statistics to monitor for leaks
+   */
+  static getMemoryStats(): {
+    totalConnections: number;
+    activeConnections: number;
+    heapUsedMB: number;
+    heapTotalMB: number;
+    externalMB: number;
+    rss: number;
+  } {
+    const stats = this.getStatistics();
+    const memUsage = process.memoryUsage();
+
+    return {
+      totalConnections: stats.totalConnections,
+      activeConnections: stats.activeConnections,
+      heapUsedMB: Math.round(memUsage.heapUsed / 1024 / 1024), // MB
+      heapTotalMB: Math.round(memUsage.heapTotal / 1024 / 1024), // MB
+      externalMB: Math.round(memUsage.external / 1024 / 1024), // MB
+      rss: Math.round(memUsage.rss / 1024 / 1024), // MB (Resident Set Size)
     };
   }
 }

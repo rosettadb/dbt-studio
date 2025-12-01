@@ -17,21 +17,11 @@ import {
   CircularProgress,
   Alert,
 } from '@mui/material';
-import {
-  Edit,
-  Delete,
-  // PlayArrow,
-  // Stop,
-  Circle,
-  Storage,
-  Refresh,
-} from '@mui/icons-material';
+import { Edit, Delete, Circle, Storage, Refresh } from '@mui/icons-material';
 import { useNavigate } from 'react-router-dom';
 import moment from 'moment';
 import {
   useDuckLakeInstances,
-  // useConnectDuckLakeInstance,
-  // useDisconnectDuckLakeInstance,
   useDeleteDuckLakeInstance,
 } from '../../controllers/duckLake.controller';
 import { ConfirmationModal } from '../modals/confirmationModal';
@@ -61,8 +51,6 @@ export const DuckLakeInstances: React.FC<DuckLakeInstancesProps> = ({
     error,
     refetch,
   } = useDuckLakeInstances();
-  // const connectMutation = useConnectDuckLakeInstance();
-  // const disconnectMutation = useDisconnectDuckLakeInstance();
   const deleteMutation = useDeleteDuckLakeInstance();
 
   const getStatusColor = (status: string) => {
@@ -85,14 +73,6 @@ export const DuckLakeInstances: React.FC<DuckLakeInstancesProps> = ({
     }
     return <Circle sx={{ fontSize: 12, color }} />;
   };
-
-  // const handleConnect = (instanceId: string) => {
-  //   connectMutation.mutate(instanceId);
-  // };
-
-  // const handleDisconnect = (instanceId: string) => {
-  //   disconnectMutation.mutate(instanceId);
-  // };
 
   const handleDelete = (instanceId: string) => {
     const instance = instances.find((inst) => inst.id === instanceId);
@@ -282,25 +262,6 @@ export const DuckLakeInstances: React.FC<DuckLakeInstancesProps> = ({
                   </TableCell>
                   <TableCell align="right" onClick={(e) => e.stopPropagation()}>
                     <Box sx={{ display: 'flex', gap: 0.5 }}>
-                      {/* {instance.status === 'active' ? (
-                        <IconButton
-                          size="small"
-                          onClick={() => handleDisconnect(instance.id)}
-                          disabled={disconnectMutation.isLoading}
-                          title="Disconnect"
-                        >
-                          <Stop />
-                        </IconButton>
-                      ) : (
-                        <IconButton
-                          size="small"
-                          onClick={() => handleConnect(instance.id)}
-                          disabled={connectMutation.isLoading}
-                          title="Connect"
-                        >
-                          <PlayArrow />
-                        </IconButton>
-                      )} */}
                       <IconButton
                         size="small"
                         onClick={() => handleEdit(instance.id)}

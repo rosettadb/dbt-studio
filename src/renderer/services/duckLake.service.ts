@@ -66,22 +66,6 @@ export namespace DuckLakeService {
   }
 
   // Catalog Management
-  export async function connectToCatalog(instanceId: string): Promise<void> {
-    return window.electron.ipcRenderer.invoke(
-      'ducklake:catalog:connect',
-      instanceId,
-    );
-  }
-
-  export async function disconnectFromCatalog(
-    instanceId: string,
-  ): Promise<void> {
-    return window.electron.ipcRenderer.invoke(
-      'ducklake:catalog:disconnect',
-      instanceId,
-    );
-  }
-
   export async function testCatalogConnection(
     config: DuckLakeCatalogConfig,
   ): Promise<{ success: boolean; error?: string }> {
@@ -92,17 +76,10 @@ export namespace DuckLakeService {
   export async function listTables(
     instanceId: string,
   ): Promise<DuckLakeTableInfo[]> {
-    // eslint-disable-next-line no-console
-    console.log(
-      '[DuckLakeService.listTables] Calling IPC for instanceId:',
-      instanceId,
-    );
     const result = await window.electron.ipcRenderer.invoke(
       'ducklake:table:list',
       instanceId,
     );
-    // eslint-disable-next-line no-console
-    console.log('[DuckLakeService.listTables] IPC result:', result);
     return result;
   }
 

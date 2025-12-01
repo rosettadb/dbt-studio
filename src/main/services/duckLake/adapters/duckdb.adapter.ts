@@ -146,6 +146,8 @@ export class DuckDBCatalogAdapter extends CatalogAdapter {
 
   async testConnection(config: DuckLakeCatalogConfig): Promise<HealthStatus> {
     const startTime = Date.now();
+    let testInstance = null;
+    let testConnection = null;
 
     try {
       // Validate config first
@@ -159,24 +161,19 @@ export class DuckDBCatalogAdapter extends CatalogAdapter {
       }
 
       // Test DuckDB connection
-      const testInstance = await this.initializeDuckDB();
-      const testConnection = await testInstance.connect();
+      testInstance = await this.initializeDuckDB();
+      testConnection = await testInstance.connect();
 
-      try {
-        // Test DuckLake extension loading
-        await this.loadDuckLakeExtension(testConnection);
+      // Test DuckLake extension loading
+      await this.loadDuckLakeExtension(testConnection);
 
-        const responseTime = Date.now() - startTime;
+      const responseTime = Date.now() - startTime;
 
-        return {
-          connected: true,
-          lastChecked: new Date(),
-          responseTime,
-        };
-      } finally {
-        // DuckDB Node.js API handles cleanup automatically
-        // No explicit cleanup needed
-      }
+      return {
+        connected: true,
+        lastChecked: new Date(),
+        responseTime,
+      };
     } catch (error) {
       // eslint-disable-next-line no-console
       console.error('DuckDB connection test failed:', error);
@@ -186,6 +183,28 @@ export class DuckDBCatalogAdapter extends CatalogAdapter {
         responseTime: Date.now() - startTime,
         error: (error as Error).message,
       };
+    } finally {
+      // Explicitly clean up test resources
+      if (testConnection) {
+        try {
+          testConnection.closeSync();
+          // eslint-disable-next-line no-console
+          console.log('[DuckDB] Closed test connection');
+        } catch (error) {
+          // eslint-disable-next-line no-console
+          console.error('Error closing test connection:', error);
+        }
+      }
+      if (testInstance && typeof testInstance.close === 'function') {
+        try {
+          await testInstance.close();
+          // eslint-disable-next-line no-console
+          console.log('[DuckDB] Closed test instance');
+        } catch (error) {
+          // eslint-disable-next-line no-console
+          console.error('Error closing test instance:', error);
+        }
+      }
     }
   }
 

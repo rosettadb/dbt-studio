@@ -51,20 +51,6 @@ const registerDuckLakeHandlers = () => {
 
   // Catalog Management Handlers
   ipcMain.handle(
-    'ducklake:catalog:connect',
-    async (_event, instanceId: string) => {
-      return DuckLakeService.connectToCatalog(instanceId);
-    },
-  );
-
-  ipcMain.handle(
-    'ducklake:catalog:disconnect',
-    async (_event, instanceId: string) => {
-      return DuckLakeService.disconnectFromCatalog(instanceId);
-    },
-  );
-
-  ipcMain.handle(
     'ducklake:catalog:test',
     async (_event, config: DuckLakeCatalogConfig) => {
       return DuckLakeService.testCatalogConnection(config);

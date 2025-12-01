@@ -230,6 +230,24 @@ export interface DuckLakeInstance {
   catalog: DuckLakeCatalogConfig;
   createdAt: Date;
   updatedAt: Date;
+  /**
+   * Operational status of the instance configuration
+   *
+   * - `'active'`: Configuration validated and ready to use
+   * - `'inactive'`: Not yet validated or disabled by user
+   * - `'error'`: Configuration issue detected, needs attention
+   * - `'connecting'`: Currently establishing initial connection (rarely used)
+   *
+   * **Important**: This represents configuration/operational state, NOT connection state.
+   * Connections are managed lazily by the ConnectionManager and auto-cleanup after idle timeout.
+   *
+   * **When to update:**
+   * - ✅ Instance created successfully → 'active'
+   * - ✅ Configuration validated → 'active'
+   * - ✅ Health check fails → 'error'
+   * - ✅ User disables instance → 'inactive'
+   * - ❌ Do NOT update on connection establish/close (lazy connections)
+   */
   status: DuckLakeInstanceStatus;
   tags?: string[];
   runtimeOptions?: DuckLakeRuntimeOptions;

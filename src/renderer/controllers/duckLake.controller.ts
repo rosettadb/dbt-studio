@@ -152,44 +152,6 @@ export function useDeleteDuckLakeInstance() {
   });
 }
 
-export function useConnectDuckLakeInstance() {
-  const queryClient = useQueryClient();
-
-  return useMutation({
-    mutationFn: DuckLakeService.connectToCatalog,
-    onSuccess: (_, instanceId) => {
-      // Invalidate instance data to refetch with new status
-      queryClient.invalidateQueries(duckLakeKeys.instance(instanceId));
-      queryClient.invalidateQueries(duckLakeKeys.instanceHealth(instanceId));
-      queryClient.invalidateQueries(duckLakeKeys.instances());
-
-      toast.success('Instance connected successfully');
-    },
-    onError: (error: Error) => {
-      toast.error(`Failed to connect instance: ${error.message}`);
-    },
-  });
-}
-
-export function useDisconnectDuckLakeInstance() {
-  const queryClient = useQueryClient();
-
-  return useMutation({
-    mutationFn: DuckLakeService.disconnectFromCatalog,
-    onSuccess: (_, instanceId) => {
-      // Invalidate instance data to refetch with new status
-      queryClient.invalidateQueries(duckLakeKeys.instance(instanceId));
-      queryClient.invalidateQueries(duckLakeKeys.instanceHealth(instanceId));
-      queryClient.invalidateQueries(duckLakeKeys.instances());
-
-      toast.success('Instance disconnected successfully');
-    },
-    onError: (error: Error) => {
-      toast.error(`Failed to disconnect instance: ${error.message}`);
-    },
-  });
-}
-
 export function useRefreshDuckLakeInstanceHealth() {
   const queryClient = useQueryClient();
 

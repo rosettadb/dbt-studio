@@ -1,35 +1,31 @@
 import React, { useState } from 'react';
 import {
   Box,
-  Card,
-  CardContent,
   Typography,
-  Button,
-  Chip,
   Grid,
-  Paper,
+  Chip,
   List,
   ListItem,
-  ListItemIcon,
   ListItemText,
-  IconButton,
+  ListItemIcon,
+  Button,
+  Tabs,
+  Tab,
+  Alert,
   Dialog,
   DialogTitle,
   DialogContent,
   DialogActions,
-  Alert,
+  Paper,
+  Card,
+  CardContent,
   LinearProgress,
-  Tabs,
-  Tab,
 } from '@mui/material';
 import {
   Dataset as Database,
   Settings,
   Edit,
   Delete,
-  // PlayArrow,
-  // Stop,
-  Refresh,
   Circle,
   Info,
   CheckCircle,
@@ -48,6 +44,10 @@ import {
   databaseIcons,
   cloudStorageImages,
 } from '../../../../assets/connectionIcons';
+import {
+  useRefreshDuckLakeInstanceHealth,
+  useDuckLakeInstanceHealth,
+} from '../../controllers/duckLake.controller';
 
 interface DuckLakeInstance {
   id: string;
@@ -92,28 +92,23 @@ interface DuckLakeInstance {
 
 interface DuckLakeInstanceDetailsProps {
   instance: DuckLakeInstance;
-  // onConnect?: (instanceId: string) => void;
-  // onDisconnect?: (instanceId: string) => void;
   onEdit?: (instanceId: string) => void;
   onDelete?: (instanceId: string) => void;
-  onRefreshHealth?: (instanceId: string) => void;
   isLoading?: boolean;
 }
 
 export const DuckLakeInstanceDetails: React.FC<
   DuckLakeInstanceDetailsProps
-> = ({
-  instance,
-  // onConnect,
-  // onDisconnect,
-  onEdit,
-  onDelete,
-  onRefreshHealth,
-  isLoading = false,
-}) => {
+> = ({ instance, onEdit, onDelete, isLoading = false }) => {
   const navigate = useNavigate();
   const [currentTab, setCurrentTab] = useState(0);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+
+  // Use the health check mutation for test connection
+  const testConnectionMutation = useRefreshDuckLakeInstanceHealth();
+
+  // Fetch health data for this instance
+  const healthQuery = useDuckLakeInstanceHealth(instance.id);
 
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -151,17 +146,9 @@ export const DuckLakeInstanceDetails: React.FC<
     return `${Math.round((bytes / 1024 ** i) * 100) / 100} ${sizes[i]}`;
   };
 
-  // const handleConnect = () => {
-  //   if (onConnect) {
-  //     onConnect(instance.id);
-  //   }
-  // };
-
-  // const handleDisconnect = () => {
-  //   if (onDisconnect) {
-  //     onDisconnect(instance.id);
-  //   }
-  // };
+  const handleTestConnection = () => {
+    testConnectionMutation.mutate(instance.id);
+  };
 
   const handleEdit = () => {
     if (onEdit) {
@@ -176,12 +163,6 @@ export const DuckLakeInstanceDetails: React.FC<
       onDelete(instance.id);
     }
     setDeleteDialogOpen(false);
-  };
-
-  const handleRefreshHealth = () => {
-    if (onRefreshHealth) {
-      onRefreshHealth(instance.id);
-    }
   };
 
   const getStorageType = (dataPath: string) => {
@@ -298,72 +279,129 @@ export const DuckLakeInstanceDetails: React.FC<
               <Info color="primary" />
               Health Status
             </Box>
-            <IconButton
+            <Button
+              variant="outlined"
+              color="inherit"
               size="small"
-              onClick={handleRefreshHealth}
-              disabled={isLoading}
+              onClick={handleTestConnection}
+              disabled={isLoading || testConnectionMutation.isLoading}
+              sx={{
+                position: 'relative',
+                paddingRight: '32px',
+                minWidth: '140px',
+                color: 'text.secondary',
+                borderColor: 'divider',
+                '&:hover': {
+                  borderColor: 'primary.main',
+                  backgroundColor: 'action.hover',
+                },
+              }}
             >
-              <Refresh />
-            </IconButton>
+              {testConnectionMutation.isLoading
+                ? 'Testing...'
+                : 'Test Connection'}
+              <Box
+                sx={{
+                  position: 'absolute',
+                  right: 10,
+                  top: '50%',
+                  transform: 'translateY(-50%)',
+                  width: 10,
+                  height: 10,
+                  borderRadius: '50%',
+                  backgroundColor: (() => {
+                    if (testConnectionMutation.isLoading) return 'warning.main';
+                    if (testConnectionMutation.isSuccess) return 'success.main';
+                    if (testConnectionMutation.isError) return 'error.main';
+                    return 'grey.400';
+                  })(),
+                  border: '1px solid',
+                  borderColor: 'background.paper',
+                }}
+              />
+            </Button>
           </Typography>
-          {instance.health ? (
-            <List dense>
-              <ListItem>
-                <ListItemIcon sx={{ minWidth: 32 }}>
-                  {getHealthIcon(instance.health.catalogConnected)}
-                </ListItemIcon>
-                <ListItemText
-                  primary="Catalog Connection"
-                  secondary={
-                    instance.health.catalogConnected
-                      ? 'Connected'
-                      : 'Disconnected'
-                  }
-                />
-              </ListItem>
-              <ListItem>
-                <ListItemIcon sx={{ minWidth: 32 }}>
-                  {getHealthIcon(instance.health.dataPathAccessible)}
-                </ListItemIcon>
-                <ListItemText
-                  primary="Data Path"
-                  secondary={
-                    instance.health.dataPathAccessible
-                      ? 'Accessible'
-                      : 'Not accessible'
-                  }
-                />
-              </ListItem>
-              <ListItem>
-                <ListItemIcon sx={{ minWidth: 32 }}>
-                  {getHealthIcon(instance.health.extensionLoaded)}
-                </ListItemIcon>
-                <ListItemText
-                  primary="DuckLake Extension"
-                  secondary={
-                    instance.health.extensionLoaded ? 'Loaded' : 'Not loaded'
-                  }
-                />
-              </ListItem>
-              <ListItem>
-                <ListItemText
-                  primary="Last Checked"
-                  secondary={moment(instance.health.lastChecked).fromNow()}
-                />
-              </ListItem>
-              {instance.health.error && (
+          {(() => {
+            if (healthQuery.isLoading) {
+              return (
+                <Typography variant="body2" color="text.secondary">
+                  Loading health status...
+                </Typography>
+              );
+            }
+
+            if (!healthQuery.data) {
+              return (
+                <Typography variant="body2" color="text.secondary">
+                  Health check not available
+                </Typography>
+              );
+            }
+
+            return (
+              <List dense>
                 <ListItem>
-                  <Alert severity="error" sx={{ width: '100%' }}>
-                    {instance.health.error}
-                  </Alert>
+                  <ListItemIcon sx={{ minWidth: 32 }}>
+                    {getHealthIcon(healthQuery.data.catalogConnected)}
+                  </ListItemIcon>
+                  <ListItemText
+                    primary="Catalog Connection"
+                    secondary={
+                      healthQuery.data.catalogConnected
+                        ? 'Connected'
+                        : 'Disconnected'
+                    }
+                  />
                 </ListItem>
-              )}
-            </List>
-          ) : (
-            <Typography variant="body2" color="text.secondary">
-              Health check not available
-            </Typography>
-          )}
+                <ListItem>
+                  <ListItemIcon sx={{ minWidth: 32 }}>
+                    {getHealthIcon(healthQuery.data.dataPathAccessible)}
+                  </ListItemIcon>
+                  <ListItemText
+                    primary="Data Path"
+                    secondary={
+                      healthQuery.data.dataPathAccessible
+                        ? 'Accessible'
+                        : 'Not accessible'
+                    }
+                  />
+                </ListItem>
+                <ListItem>
+                  <ListItemIcon sx={{ minWidth: 32 }}>
+                    {getHealthIcon(healthQuery.data.extensionLoaded)}
+                  </ListItemIcon>
+                  <ListItemText
+                    primary="DuckLake Extension"
+                    secondary={
+                      healthQuery.data.extensionLoaded ? 'Loaded' : 'Not loaded'
+                    }
+                  />
+                </ListItem>
+                <ListItem>
+                  <ListItemText
+                    primary="Last Checked"
+                    secondary={moment(healthQuery.data.lastChecked).fromNow()}
+                  />
+                </ListItem>
+                {healthQuery.data.errors &&
+                  healthQuery.data.errors.length > 0 && (
+                    <ListItem>
+                      <Alert severity="error" sx={{ width: '100%' }}>
+                        {healthQuery.data.errors.join(', ')}
+                      </Alert>
+                    </ListItem>
+                  )}
+                {healthQuery.data.warnings &&
+                  healthQuery.data.warnings.length > 0 && (
+                    <ListItem>
+                      <Alert severity="warning" sx={{ width: '100%' }}>
+                        {healthQuery.data.warnings.join(', ')}
+                      </Alert>
+                    </ListItem>
+                  )}
+              </List>
+            );
+          })()}
         </Grid>
 
         {/* Statistics */}
@@ -669,27 +707,6 @@ export const DuckLakeInstanceDetails: React.FC<
         </Box>
 
         <Box sx={{ display: 'flex', gap: 1 }}>
-          {/* {instance.status === 'active' ? (
-            <Button
-              variant="outlined"
-              color="warning"
-              startIcon={<Stop />}
-              onClick={handleDisconnect}
-              disabled={isLoading}
-            >
-              Disconnect
-            </Button>
-          ) : (
-            <Button
-              variant="contained"
-              color="success"
-              startIcon={<PlayArrow />}
-              onClick={handleConnect}
-              disabled={isLoading}
-            >
-              Connect
-            </Button>
-          )} */}
           <Button
             variant="outlined"
             startIcon={<Edit />}
