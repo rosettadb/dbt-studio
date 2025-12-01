@@ -14,7 +14,7 @@ import {
   Checkbox,
   Divider,
 } from '@mui/material';
-import { Save, Storage } from '@mui/icons-material';
+import { Save, Folder, Cloud, CloudQueue } from '@mui/icons-material';
 import { useForm, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
@@ -90,6 +90,22 @@ export const DuckLakeInstanceEditForm: React.FC = () => {
 
   const instance = instanceQuery.data;
 
+  // Get storage icon based on data path type
+  const getStorageIcon = () => {
+    const dataPath = instance.dataPath.toLowerCase();
+    if (dataPath.startsWith('s3://')) {
+      return <Cloud color="primary" />;
+    }
+    if (dataPath.startsWith('az://') || dataPath.startsWith('azure://')) {
+      return <CloudQueue color="primary" />;
+    }
+    if (dataPath.startsWith('gs://') || dataPath.startsWith('gcs://')) {
+      return <Cloud color="primary" />;
+    }
+    // Local path
+    return <Folder color="primary" />;
+  };
+
   const handleSave = async (data: InstanceEditData) => {
     // Transform form data to match DuckLakeInstanceUpdateRequest
     // Note: tempDirectory is intentionally excluded from updates
@@ -139,7 +155,7 @@ export const DuckLakeInstanceEditForm: React.FC = () => {
               gap: 1,
             }}
           >
-            <Storage color="primary" />
+            {getStorageIcon()}
             Edit Instance
           </Typography>
           <Typography variant="body2" color="text.secondary">

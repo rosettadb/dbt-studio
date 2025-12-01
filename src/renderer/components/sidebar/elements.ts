@@ -37,7 +37,7 @@ const baseSidebarElements: SideBarElementType[] = [
   {
     path: '/app/duck-lake',
     text: 'DuckLake',
-    icon: Icons.DataLake,
+    icon: Icons.DataLakeSVG,
   },
 ];
 

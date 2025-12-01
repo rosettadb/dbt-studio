@@ -22,45 +22,6 @@ import {
   useRefreshDuckLakeInstanceHealth,
 } from '../../controllers/duckLake.controller';
 
-// Mock recent queries data - this would come from backend in real implementation
-const mockRecentQueries = [
-  {
-    id: 'query-1',
-    query: 'SELECT * FROM customer_analytics WHERE region = "US"',
-    instanceId: 'instance-1',
-    instanceName: 'Analytics Lake',
-    executedAt: new Date(Date.now() - 1800000).toISOString(),
-    duration: 245,
-  },
-  {
-    id: 'query-2',
-    query: 'SELECT COUNT(*) FROM sales_data',
-    instanceId: 'instance-1',
-    instanceName: 'Analytics Lake',
-    executedAt: new Date(Date.now() - 3600000).toISOString(),
-    duration: 89,
-  },
-];
-
-const mockRecentTables = [
-  {
-    id: 'table-1',
-    name: 'customer_analytics',
-    instanceId: 'instance-1',
-    instanceName: 'Analytics Lake',
-    accessedAt: new Date(Date.now() - 3600000).toISOString(),
-    rowCount: 1250000,
-  },
-  {
-    id: 'table-2',
-    name: 'sales_data',
-    instanceId: 'instance-1',
-    instanceName: 'Analytics Lake',
-    accessedAt: new Date(Date.now() - 7200000).toISOString(),
-    rowCount: 850000,
-  },
-];
-
 const DuckLake: React.FC = () => {
   const location = useLocation();
   const params = useParams();
@@ -147,13 +108,7 @@ const DuckLake: React.FC = () => {
   const renderContent = () => {
     switch (currentSection) {
       case 'dashboard':
-        return (
-          <DuckLakeDashboard
-            instances={instances as any}
-            recentQueries={mockRecentQueries}
-            recentTables={mockRecentTables}
-          />
-        );
+        return <DuckLakeDashboard instances={instances as any} />;
 
       case 'instances':
         return <DuckLakeInstances />;
@@ -278,8 +233,8 @@ const DuckLake: React.FC = () => {
         return (
           <DuckLakeInstanceDetails
             instance={currentInstance as any}
-            onConnect={(id) => connectMutation.mutate(id)}
-            onDisconnect={(id) => disconnectMutation.mutate(id)}
+            // onConnect={(id) => connectMutation.mutate(id)}
+            // onDisconnect={(id) => disconnectMutation.mutate(id)}
             onEdit={(id) => navigate(`/app/duck-lake/instances/${id}/edit`)}
             onDelete={(id) => {
               deleteMutation.mutate(id, {

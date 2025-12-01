@@ -71,12 +71,30 @@ export const ElectricalServices: React.FC = () => (
   <ElectricalServicesIcon color="primary" />
 );
 
+export const DataLakeSVG: React.FC = () => {
+  const theme = useTheme();
+  return (
+    <Icon
+      src={icons.duckLakeSVG}
+      width={36}
+      height={36}
+      style={{
+        display: 'inline-block',
+        verticalAlign: 'middle',
+        margin: '-6px 2px 0 -6px',
+        overflow: 'hidden',
+      }}
+      color={theme.palette.primary.main}
+    />
+  );
+};
+
 export const DataLake: React.FC = () => {
   return (
     <img
       src={icons.duckLake}
-      alt="data lake"
-      style={{ ...style, width: 24, height: 24, marginLeft: 2 }}
+      alt="data-lake"
+      style={{ ...style, width: 24, height: 24 }}
     />
   );
 };

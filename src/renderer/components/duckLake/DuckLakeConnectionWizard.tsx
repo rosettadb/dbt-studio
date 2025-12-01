@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
   Box,
   Card,
@@ -20,6 +20,9 @@ import {
   FormLabel,
   FormControlLabel,
   Checkbox,
+  IconButton,
+  CircularProgress,
+  useTheme,
 } from '@mui/material';
 import {
   Dataset as Database,
@@ -27,10 +30,12 @@ import {
   CheckCircle,
   Info,
   Folder,
-  Security,
   ArrowForward,
   ArrowBack,
   Close,
+  FolderOpen,
+  Visibility,
+  VisibilityOff,
 } from '@mui/icons-material';
 import { useNavigate } from 'react-router-dom';
 import { useForm, Controller } from 'react-hook-form';
@@ -41,6 +46,7 @@ import connectionIcons, {
 } from '../../../../assets/connectionIcons';
 import sqliteIcon from '../../../../assets/connectionIcons/sqlite.png';
 import { DuckLakeService } from '../../services/duckLake.service';
+import { useFilePicker } from '../../controllers';
 
 // Database icons mapping - import from assets
 const getDatabaseIcon = (type: string) => {
@@ -260,14 +266,34 @@ interface DuckLakeConnectionWizardProps {
   isLoading?: boolean;
 }
 
+// Get default temp directory based on OS
+const getDefaultTempDirectory = (): string => {
+  const platform = navigator.platform.toLowerCase();
+  if (platform.includes('win')) {
+    return 'C:\\temp\\ducklake';
+  }
+  // macOS and Linux
+  return '/tmp/ducklake';
+};
+
 export const DuckLakeConnectionWizard: React.FC<
   DuckLakeConnectionWizardProps
 > = ({ onComplete, onCancel, isLoading = false }) => {
   const navigate = useNavigate();
+  const theme = useTheme();
   const [activeStep, setActiveStep] = useState(0);
   const [wizardData, setWizardData] = useState<Partial<WizardData>>({});
   const [validating, setValidating] = useState(false);
   const [validationError, setValidationError] = useState<string | null>(null);
+  const [isTestingStorage, setIsTestingStorage] = useState(false);
+  const [storageConnectionStatus, setStorageConnectionStatus] = useState<
+    'idle' | 'success' | 'failed'
+  >('idle');
+  const [isTestingCatalog, setIsTestingCatalog] = useState(false);
+  const [catalogConnectionStatus, setCatalogConnectionStatus] = useState<
+    'idle' | 'success' | 'failed'
+  >('idle');
+  const [showPassword, setShowPassword] = useState(false);
   const isFinalStep = activeStep === steps.length - 1;
   const nextButtonLabel = getNextButtonLabel(
     isLoading || validating,
@@ -297,6 +323,10 @@ export const DuckLakeConnectionWizard: React.FC<
     mode: 'onChange', // Validate on change
     defaultValues: wizardData.catalog || {
       type: 'duckdb',
+      postgresql: {
+        port: 5432,
+        ssl: false,
+      },
     },
   });
 
@@ -307,7 +337,7 @@ export const DuckLakeConnectionWizard: React.FC<
       maxMemory: '4GB',
       threads: 4,
       enableOptimizer: true,
-      tempDirectory: '',
+      tempDirectory: getDefaultTempDirectory(),
     },
   });
 
@@ -320,6 +350,175 @@ export const DuckLakeConnectionWizard: React.FC<
     setValidationError(null);
   }, [activeStep, basicsForm, storageForm, catalogForm, runtimeForm]);
 
+  const { mutate: getFiles } = useFilePicker();
+
+  const handleLocalPathSelect = () => {
+    getFiles(
+      {
+        properties: ['openDirectory'],
+      },
+      {
+        onSuccess: (filePaths) => {
+          if (filePaths && filePaths.length > 0) {
+            storageForm.setValue('local.path', filePaths[0], {
+              shouldValidate: true,
+              shouldDirty: true,
+            });
+          }
+        },
+      },
+    );
+  };
+
+  const handleCatalogPathSelect = () => {
+    getFiles(
+      {
+        properties: ['openFile'],
+        filters: [{ name: 'DuckDB Database', extensions: ['duckdb', 'db'] }],
+      },
+      {
+        onSuccess: (filePaths) => {
+          if (filePaths && filePaths.length > 0) {
+            catalogForm.setValue('duckdb.metadataPath', filePaths[0], {
+              shouldValidate: true,
+              shouldDirty: true,
+            });
+          }
+        },
+      },
+    );
+  };
+
+  const handleMetadataPathSelect = () => {
+    getFiles(
+      {
+        properties: ['openFile'],
+        filters: [{ name: 'SQLite Database', extensions: ['sqlite', 'db'] }],
+      },
+      {
+        onSuccess: (filePaths) => {
+          if (filePaths && filePaths.length > 0) {
+            catalogForm.setValue('sqlite.metadataPath', filePaths[0], {
+              shouldValidate: true,
+              shouldDirty: true,
+            });
+          }
+        },
+      },
+    );
+  };
+
+  const handleTempDirectorySelect = () => {
+    getFiles(
+      {
+        properties: ['openDirectory'],
+      },
+      {
+        onSuccess: (filePaths) => {
+          if (filePaths && filePaths.length > 0) {
+            runtimeForm.setValue('tempDirectory', filePaths[0], {
+              shouldValidate: true,
+              shouldDirty: true,
+            });
+          }
+        },
+      },
+    );
+  };
+
+  const handleTestStorage = async () => {
+    const isValid = await storageForm.trigger();
+    if (!isValid) {
+      return;
+    }
+
+    setIsTestingStorage(true);
+    setStorageConnectionStatus('idle');
+    setValidationError(null);
+
+    try {
+      const data = storageForm.getValues();
+      const result = await DuckLakeService.validateStorageConnection(data);
+      if (result.success) {
+        setStorageConnectionStatus('success');
+      } else {
+        setStorageConnectionStatus('failed');
+        setValidationError(result.error || 'Connection test failed');
+      }
+    } catch (error) {
+      setStorageConnectionStatus('failed');
+      setValidationError((error as Error).message);
+    } finally {
+      setIsTestingStorage(false);
+    }
+  };
+
+  const handleTestCatalog = async () => {
+    const isValid = await catalogForm.trigger();
+    if (!isValid) {
+      return;
+    }
+
+    setIsTestingCatalog(true);
+    setCatalogConnectionStatus('idle');
+    setValidationError(null);
+
+    try {
+      const data = catalogForm.getValues();
+      const result = await DuckLakeService.testCatalogConnection(data);
+      if (result.success) {
+        setCatalogConnectionStatus('success');
+      } else {
+        setCatalogConnectionStatus('failed');
+        setValidationError(result.error || 'Connection test failed');
+      }
+    } catch (error) {
+      setCatalogConnectionStatus('failed');
+      setValidationError((error as Error).message);
+    } finally {
+      setIsTestingCatalog(false);
+    }
+  };
+
+  const getIndicatorColor = (status: 'idle' | 'success' | 'failed') => {
+    switch (status) {
+      case 'success':
+        return theme.palette.success.main;
+      case 'failed':
+        return theme.palette.error.main;
+      default:
+        return '#9e9e9e';
+    }
+  };
+
+  const getButtonStartIcon = (isTesting: boolean) => {
+    if (isTesting) {
+      return <CircularProgress size={20} color="inherit" sx={{ mr: 1 }} />;
+    }
+    return null;
+  };
+
+  // Generate PostgreSQL database URL
+  const pgHost = catalogForm.watch('postgresql.host');
+  const pgPort = catalogForm.watch('postgresql.port');
+  const pgDatabase = catalogForm.watch('postgresql.database');
+  const pgUsername = catalogForm.watch('postgresql.username');
+  const pgPassword = catalogForm.watch('postgresql.password');
+  const pgSsl = catalogForm.watch('postgresql.ssl');
+
+  const postgresqlDatabaseUrl = useMemo(() => {
+    // Only generate URL if we have the minimum required fields
+    if (!pgHost || !pgDatabase || !pgUsername) return '';
+
+    // Mask password with asterisks for display
+    const maskedPassword = pgPassword ? '****' : '';
+    const encodedUsername = encodeURIComponent(pgUsername);
+    const encodedDatabase = encodeURIComponent(pgDatabase);
+    const sslMode = pgSsl ? '?sslmode=require' : '';
+
+    return `postgresql://${encodedUsername}:${maskedPassword}@${pgHost}:${pgPort || 5432}/${encodedDatabase}${sslMode}`;
+  }, [pgHost, pgPort, pgDatabase, pgUsername, pgPassword, pgSsl]);
+
   const selectedStorageType = storageForm.watch('type');
   const selectedCatalogType = catalogForm.watch('type');
 
@@ -328,6 +527,9 @@ export const DuckLakeConnectionWizard: React.FC<
     if (!selectedStorageType) {
       return;
     }
+
+    // Reset connection test status when storage type changes
+    setStorageConnectionStatus('idle');
 
     const clearStorageFields = (
       fields: ('local' | 's3' | 'azure' | 'gcs')[],
@@ -365,6 +567,9 @@ export const DuckLakeConnectionWizard: React.FC<
     if (!selectedCatalogType) {
       return;
     }
+
+    // Reset catalog connection test status when catalog type changes
+    setCatalogConnectionStatus('idle');
 
     const clearCatalogFields = (
       fields: ('duckdb' | 'sqlite' | 'postgresql')[],
@@ -616,8 +821,6 @@ export const DuckLakeConnectionWizard: React.FC<
                       onBlur={field.onBlur}
                       label="Description (Optional)"
                       fullWidth
-                      multiline
-                      rows={3}
                       placeholder="Describe the purpose of this DuckLake instance..."
                     />
                   )}
@@ -729,8 +932,13 @@ export const DuckLakeConnectionWizard: React.FC<
                       }
                       placeholder="/path/to/data"
                       InputProps={{
-                        startAdornment: (
-                          <Folder sx={{ mr: 1, color: 'text.secondary' }} />
+                        endAdornment: (
+                          <IconButton
+                            onClick={handleLocalPathSelect}
+                            edge="end"
+                          >
+                            <FolderOpen />
+                          </IconButton>
                         ),
                       }}
                     />
@@ -1009,6 +1217,47 @@ export const DuckLakeConnectionWizard: React.FC<
                 </>
               )}
             </Box>
+
+            {/* Test Storage Connection Button */}
+            {selectedStorageType && selectedStorageType !== 'local' && (
+              <Box
+                sx={{ mt: 3, display: 'flex', justifyContent: 'flex-start' }}
+              >
+                <Button
+                  type="button"
+                  variant="contained"
+                  color="primary"
+                  onClick={handleTestStorage}
+                  disabled={isTestingStorage}
+                  sx={{
+                    position: 'relative',
+                    paddingRight: '32px',
+                    minWidth: '150px',
+                  }}
+                  startIcon={getButtonStartIcon(isTestingStorage)}
+                >
+                  {isTestingStorage ? 'Testing...' : 'Test Connection'}
+                  <Box
+                    sx={{
+                      position: 'absolute',
+                      right: 10,
+                      top: '50%',
+                      transform: 'translateY(-50%)',
+                      width: 12,
+                      height: 12,
+                      borderRadius: '50%',
+                      backgroundColor: getIndicatorColor(
+                        storageConnectionStatus,
+                      ),
+                      border: `1px solid ${theme.palette.primary.contrastText}`,
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                    }}
+                  />
+                </Button>
+              </Box>
+            )}
           </Box>
         );
 
@@ -1085,7 +1334,7 @@ export const DuckLakeConnectionWizard: React.FC<
                   </Grid>
 
                   {/* Show selected catalog details */}
-                  {field.value && (
+                  {/* {field.value && (
                     <Paper sx={{ p: 2, mt: 3, bgcolor: 'background.default' }}>
                       <Typography
                         variant="subtitle2"
@@ -1138,7 +1387,7 @@ export const DuckLakeConnectionWizard: React.FC<
                         }
                       </Typography>
                     </Paper>
-                  )}
+                  )} */}
                 </FormControl>
               )}
             />
@@ -1175,13 +1424,57 @@ export const DuckLakeConnectionWizard: React.FC<
                       }
                       placeholder="/path/to/ducklake-catalog.duckdb"
                       InputProps={{
-                        startAdornment: (
-                          <Folder sx={{ mr: 1, color: 'text.secondary' }} />
+                        endAdornment: (
+                          <IconButton
+                            onClick={handleCatalogPathSelect}
+                            edge="end"
+                          >
+                            <FolderOpen />
+                          </IconButton>
                         ),
                       }}
                     />
                   )}
                 />
+
+                {/* Test Connection Button */}
+                <Box
+                  sx={{ mt: 3, display: 'flex', justifyContent: 'flex-start' }}
+                >
+                  <Button
+                    type="button"
+                    variant="contained"
+                    color="primary"
+                    onClick={handleTestCatalog}
+                    disabled={isTestingCatalog || !selectedCatalogType}
+                    sx={{
+                      position: 'relative',
+                      paddingRight: '32px',
+                      minWidth: '150px',
+                    }}
+                    startIcon={getButtonStartIcon(isTestingCatalog)}
+                  >
+                    {isTestingCatalog ? 'Testing...' : 'Test Connection'}
+                    <Box
+                      sx={{
+                        position: 'absolute',
+                        right: 10,
+                        top: '50%',
+                        transform: 'translateY(-50%)',
+                        width: 12,
+                        height: 12,
+                        borderRadius: '50%',
+                        backgroundColor: getIndicatorColor(
+                          catalogConnectionStatus,
+                        ),
+                        border: `1px solid ${theme.palette.primary.contrastText}`,
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                      }}
+                    />
+                  </Button>
+                </Box>
               </Box>
             )}
 
@@ -1191,9 +1484,22 @@ export const DuckLakeConnectionWizard: React.FC<
                   SQLite Configuration
                 </Typography>
                 <Alert severity="info" sx={{ mb: 2 }}>
-                  <Typography variant="body2">
+                  <Typography variant="body2" gutterBottom>
                     SQLite will store catalog metadata in a database file. The
                     file must have a .db or .sqlite extension.
+                  </Typography>
+                  <Typography variant="body2" sx={{ mt: 1 }}>
+                    To create a new SQLite database, run:{' '}
+                    <code
+                      style={{
+                        backgroundColor: 'rgba(0, 0, 0, 0.1)',
+                        padding: '2px 6px',
+                        borderRadius: '4px',
+                        fontFamily: 'monospace',
+                      }}
+                    >
+                      sqlite3 mydatabase.sqlite &quot;VACUUM;&quot;
+                    </code>
                   </Typography>
                 </Alert>
                 <Controller
@@ -1214,13 +1520,57 @@ export const DuckLakeConnectionWizard: React.FC<
                       }
                       placeholder="/path/to/metadata.sqlite"
                       InputProps={{
-                        startAdornment: (
-                          <Folder sx={{ mr: 1, color: 'text.secondary' }} />
+                        endAdornment: (
+                          <IconButton
+                            onClick={handleMetadataPathSelect}
+                            edge="end"
+                          >
+                            <FolderOpen />
+                          </IconButton>
                         ),
                       }}
                     />
                   )}
                 />
+
+                {/* Test Connection Button */}
+                <Box
+                  sx={{ mt: 3, display: 'flex', justifyContent: 'flex-start' }}
+                >
+                  <Button
+                    type="button"
+                    variant="contained"
+                    color="primary"
+                    onClick={handleTestCatalog}
+                    disabled={isTestingCatalog}
+                    sx={{
+                      position: 'relative',
+                      paddingRight: '32px',
+                      minWidth: '150px',
+                    }}
+                    startIcon={getButtonStartIcon(isTestingCatalog)}
+                  >
+                    {isTestingCatalog ? 'Testing...' : 'Test Connection'}
+                    <Box
+                      sx={{
+                        position: 'absolute',
+                        right: 10,
+                        top: '50%',
+                        transform: 'translateY(-50%)',
+                        width: 12,
+                        height: 12,
+                        borderRadius: '50%',
+                        backgroundColor: getIndicatorColor(
+                          catalogConnectionStatus,
+                        ),
+                        border: `1px solid ${theme.palette.primary.contrastText}`,
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                      }}
+                    />
+                  </Button>
+                </Box>
               </Box>
             )}
 
@@ -1256,7 +1606,7 @@ export const DuckLakeConnectionWizard: React.FC<
                       render={({ field, fieldState }) => (
                         <TextField
                           name={field.name}
-                          value={field.value || 5432}
+                          value={field.value ?? 5432}
                           onBlur={field.onBlur}
                           label="Port"
                           type="number"
@@ -1264,9 +1614,10 @@ export const DuckLakeConnectionWizard: React.FC<
                           error={!!fieldState.error}
                           helperText={fieldState.error?.message}
                           placeholder="5432"
-                          onChange={(e) =>
-                            field.onChange(parseInt(e.target.value, 10) || 5432)
-                          }
+                          onChange={(e) => {
+                            const value = parseInt(e.target.value, 10);
+                            field.onChange(Number.isNaN(value) ? 5432 : value);
+                          }}
                         />
                       )}
                     />
@@ -1325,11 +1676,19 @@ export const DuckLakeConnectionWizard: React.FC<
                           error={!!fieldState.error}
                           helperText={fieldState.error?.message}
                           InputProps={{
-                            startAdornment: (
-                              <Security
-                                sx={{ mr: 1, color: 'text.secondary' }}
-                              />
+                            endAdornment: (
+                              <IconButton
+                                onClick={() => setShowPassword(!showPassword)}
+                                edge="end"
+                              >
+                                {showPassword ? (
+                                  <VisibilityOff />
+                                ) : (
+                                  <Visibility />
+                                )}
+                              </IconButton>
                             ),
+                            type: showPassword ? 'text' : 'password',
                           }}
                         />
                       )}
@@ -1354,7 +1713,70 @@ export const DuckLakeConnectionWizard: React.FC<
                       )}
                     />
                   </Grid>
+                  {postgresqlDatabaseUrl && (
+                    <Grid item xs={12}>
+                      <Box
+                        sx={{
+                          p: 2,
+                          backgroundColor: 'rgba(0, 0, 0, 0.05)',
+                          borderRadius: 1,
+                          border: '1px solid',
+                          borderColor: 'divider',
+                        }}
+                      >
+                        <Typography
+                          variant="body2"
+                          sx={{
+                            fontFamily: 'monospace',
+                            wordBreak: 'break-all',
+                            color: 'text.primary',
+                          }}
+                        >
+                          {postgresqlDatabaseUrl}
+                        </Typography>
+                      </Box>
+                    </Grid>
+                  )}
                 </Grid>
+
+                {/* Test Connection Button */}
+                <Box
+                  sx={{ mt: 3, display: 'flex', justifyContent: 'flex-start' }}
+                >
+                  <Button
+                    type="button"
+                    variant="contained"
+                    color="primary"
+                    onClick={handleTestCatalog}
+                    disabled={isTestingCatalog}
+                    sx={{
+                      position: 'relative',
+                      paddingRight: '32px',
+                      minWidth: '150px',
+                    }}
+                    startIcon={getButtonStartIcon(isTestingCatalog)}
+                  >
+                    {isTestingCatalog ? 'Testing...' : 'Test Connection'}
+                    <Box
+                      sx={{
+                        position: 'absolute',
+                        right: 10,
+                        top: '50%',
+                        transform: 'translateY(-50%)',
+                        width: 12,
+                        height: 12,
+                        borderRadius: '50%',
+                        backgroundColor: getIndicatorColor(
+                          catalogConnectionStatus,
+                        ),
+                        border: `1px solid ${theme.palette.primary.contrastText}`,
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                      }}
+                    />
+                  </Button>
+                </Box>
               </Box>
             )}
           </Box>
@@ -1447,6 +1869,16 @@ export const DuckLakeConnectionWizard: React.FC<
                       fullWidth
                       helperText="Directory for temporary files during processing"
                       placeholder="/tmp/ducklake"
+                      InputProps={{
+                        endAdornment: (
+                          <IconButton
+                            onClick={handleTempDirectorySelect}
+                            edge="end"
+                          >
+                            <FolderOpen />
+                          </IconButton>
+                        ),
+                      }}
                     />
                   )}
                 />

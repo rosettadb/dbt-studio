@@ -10,18 +10,26 @@ import {
   styled,
   Button,
 } from '@mui/material';
-import {
-  Storage,
-  Dashboard,
-  TableChart,
-  History,
-  Add,
-  Folder,
-} from '@mui/icons-material';
+import { Dashboard, History, Add, Folder } from '@mui/icons-material';
 import { NavLink, useLocation, useNavigate } from 'react-router-dom';
 import { SettingsSidebarElement } from '../../screens/settings/settingsElements';
 import { cloudStorageImages } from '../../../../assets/connectionIcons';
+import { icons } from '../../../../assets';
 import type { DuckLakeInstanceStatus } from '../../../types/duckLake';
+
+const DuckLakeIcon: React.FC<{
+  fontSize?: 'small' | 'medium';
+}> = ({ fontSize = 'small' }) => (
+  <Box
+    component="img"
+    src={icons.duckLake}
+    alt="DuckLake"
+    sx={{
+      width: fontSize === 'small' ? 20 : 24,
+      height: fontSize === 'small' ? 20 : 24,
+    }}
+  />
+);
 
 export const StyledDuckLakeNavLink = styled(NavLink)(({ theme }) => ({
   textDecoration: 'none',
@@ -48,14 +56,9 @@ export const duckLakeSidebarElements: SettingsSidebarElement[] = [
     path: '/app/duck-lake/dashboard',
   },
   {
-    icon: Storage,
+    icon: DuckLakeIcon as any,
     text: 'DuckLakes',
     path: '/app/duck-lake/instances',
-  },
-  {
-    icon: TableChart,
-    text: 'Tables',
-    path: '/app/duck-lake/tables',
   },
   {
     icon: History,
@@ -148,7 +151,7 @@ export const DuckLakeSidebar: React.FC<DuckLakeSidebarProps> = ({
           }}
         >
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-            <Storage color="primary" fontSize="small" />
+            <DuckLakeIcon fontSize="small" />
             <Typography variant="h6" sx={{ m: 0 }}>
               DuckLake
             </Typography>
@@ -271,6 +274,8 @@ export const DuckLakeSidebar: React.FC<DuckLakeSidebarProps> = ({
           mt: 'auto',
           pt: 2,
           borderTop: `1px solid ${theme.palette.divider}`,
+          width: '270px',
+          boxSizing: 'border-box',
         }}
       >
         <Button
@@ -279,6 +284,7 @@ export const DuckLakeSidebar: React.FC<DuckLakeSidebarProps> = ({
           fullWidth
           startIcon={<Add />}
           onClick={() => navigate('/app/duck-lake/new-instance')}
+          sx={{ width: '100%', boxSizing: 'border-box' }}
         >
           New DuckLake
         </Button>

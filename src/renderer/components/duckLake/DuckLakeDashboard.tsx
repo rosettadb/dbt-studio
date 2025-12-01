@@ -19,7 +19,10 @@ import {
   Add,
   Folder,
 } from '@mui/icons-material';
-import { cloudStorageImages } from '../../../../assets/connectionIcons';
+import {
+  cloudStorageImages,
+  databaseIcons,
+} from '../../../../assets/connectionIcons';
 
 interface DuckLakeInstance {
   id: string;
@@ -69,28 +72,10 @@ const getStorageIconForInstance = (dataPath: string) => {
 
 interface DuckLakeDashboardProps {
   instances?: DuckLakeInstance[];
-  recentQueries?: Array<{
-    id: string;
-    query: string;
-    instanceId: string;
-    instanceName: string;
-    executedAt: string;
-    duration: number;
-  }>;
-  recentTables?: Array<{
-    id: string;
-    name: string;
-    instanceId: string;
-    instanceName: string;
-    accessedAt: string;
-    rowCount?: number;
-  }>;
 }
 
 export const DuckLakeDashboard: React.FC<DuckLakeDashboardProps> = ({
   instances = [],
-  recentQueries = [],
-  recentTables = [],
 }) => {
   const navigate = useNavigate();
 
@@ -112,10 +97,8 @@ export const DuckLakeDashboard: React.FC<DuckLakeDashboardProps> = ({
       activeInstances,
       totalInstances,
       catalogTypes,
-      totalQueries: recentQueries.length,
-      totalTables: recentTables.length,
     };
-  }, [instances, recentQueries, recentTables]);
+  }, [instances]);
 
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -243,10 +226,10 @@ export const DuckLakeDashboard: React.FC<DuckLakeDashboardProps> = ({
               component="div"
               sx={{ fontWeight: 'bold' }}
             >
-              {stats.totalQueries}
+              0
             </Typography>
             <Typography variant="body2" color="text.secondary">
-              Queries executed recently
+              Coming soon
             </Typography>
           </CardContent>
         </Card>
@@ -284,10 +267,10 @@ export const DuckLakeDashboard: React.FC<DuckLakeDashboardProps> = ({
               component="div"
               sx={{ fontWeight: 'bold' }}
             >
-              {stats.totalTables}
+              0
             </Typography>
             <Typography variant="body2" color="text.secondary">
-              Tables accessed recently
+              Coming soon
             </Typography>
           </CardContent>
         </Card>
@@ -335,12 +318,45 @@ export const DuckLakeDashboard: React.FC<DuckLakeDashboardProps> = ({
                 gap: 0.5,
               }}
             >
-              {Object.entries(stats.catalogTypes).map(([type, count]) => (
-                <Typography key={type} variant="body2" color="text.secondary">
-                  {count} {type.toUpperCase()}{' '}
-                  {count === 1 ? 'catalog' : 'catalogs'}
-                </Typography>
-              ))}
+              {Object.entries(stats.catalogTypes).map(([type, count]) => {
+                const getCatalogIcon = () => {
+                  let iconSrc;
+                  switch (type.toLowerCase()) {
+                    case 'duckdb':
+                      iconSrc = databaseIcons.duckdb;
+                      break;
+                    case 'sqlite':
+                      iconSrc = databaseIcons.sqlite;
+                      break;
+                    case 'postgres':
+                    case 'postgresql':
+                      iconSrc = databaseIcons.postgresql;
+                      break;
+                    default:
+                      iconSrc = databaseIcons.duckdb;
+                  }
+                  return (
+                    <Box
+                      component="img"
+                      src={iconSrc}
+                      alt={type}
+                      sx={{ width: 16, height: 16, mr: 0.5 }}
+                    />
+                  );
+                };
+                return (
+                  <Box
+                    key={type}
+                    sx={{ display: 'flex', alignItems: 'center' }}
+                  >
+                    {getCatalogIcon()}
+                    <Typography variant="body2" color="text.secondary">
+                      {count} {type.toUpperCase()}{' '}
+                      {count === 1 ? 'catalog' : 'catalogs'}
+                    </Typography>
+                  </Box>
+                );
+              })}
             </Box>
           </CardContent>
         </Card>
@@ -486,7 +502,7 @@ export const DuckLakeDashboard: React.FC<DuckLakeDashboardProps> = ({
                     Recent Queries
                   </Typography>
                   <Typography variant="body2" color="text.secondary">
-                    Recently executed queries
+                    Coming soon
                   </Typography>
                 </Box>
                 <QueryStats sx={{ color: 'text.secondary', fontSize: 24 }} />
@@ -494,71 +510,35 @@ export const DuckLakeDashboard: React.FC<DuckLakeDashboardProps> = ({
             }
           />
           <CardContent
-            sx={{ display: 'flex', flexDirection: 'column', height: '100%' }}
+            sx={{
+              display: 'flex',
+              flexDirection: 'column',
+              height: '100%',
+              justifyContent: 'center',
+              alignItems: 'center',
+              minHeight: '200px',
+            }}
           >
-            <Box sx={{ flex: 1, mb: 2 }}>
-              {recentQueries.length === 0 ? (
-                <Typography variant="body2" color="text.secondary">
-                  No recent queries
-                </Typography>
-              ) : (
-                <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-                  {recentQueries.slice(0, 5).map((query) => (
-                    <Box
-                      key={query.id}
-                      sx={{
-                        display: 'flex',
-                        justifyContent: 'space-between',
-                        alignItems: 'center',
-                        cursor: 'pointer',
-                        p: 1,
-                        borderRadius: 1,
-                        '&:hover': {
-                          backgroundColor: 'action.hover',
-                        },
-                      }}
-                    >
-                      <Box
-                        sx={{ display: 'flex', alignItems: 'center', gap: 1 }}
-                      >
-                        <QueryStats
-                          sx={{ fontSize: 16, color: 'text.secondary' }}
-                        />
-                        <Box>
-                          <Typography
-                            variant="body2"
-                            sx={{
-                              fontWeight: 500,
-                              fontFamily: 'monospace',
-                              maxWidth: '200px',
-                              overflow: 'hidden',
-                              textOverflow: 'ellipsis',
-                              whiteSpace: 'nowrap',
-                            }}
-                          >
-                            {query.query}
-                          </Typography>
-                          <Typography variant="caption" color="text.secondary">
-                            {query.instanceName} • {query.duration}ms
-                          </Typography>
-                        </Box>
-                      </Box>
-                      <Typography variant="caption" color="text.secondary">
-                        {moment(query.executedAt).fromNow()}
-                      </Typography>
-                    </Box>
-                  ))}
-                </Box>
-              )}
-            </Box>
-            <Button
-              variant="outlined"
-              size="small"
-              onClick={() => navigate('/app/duck-lake/history')}
-              fullWidth
+            <Typography
+              variant="h6"
+              color="text.secondary"
+              sx={{
+                fontWeight: 500,
+                textAlign: 'center',
+              }}
             >
-              View Query History
-            </Button>
+              Coming Soon
+            </Typography>
+            <Typography
+              variant="body2"
+              color="text.secondary"
+              sx={{
+                mt: 1,
+                textAlign: 'center',
+              }}
+            >
+              Query history tracking is not yet implemented
+            </Typography>
           </CardContent>
         </Card>
       </Box>

@@ -81,12 +81,20 @@ export const useFilePicker = (
   customOptions?: UseMutationOptions<
     string[],
     CustomError,
-    { properties: FileDialogProperties[]; defaultPath?: string }
+    {
+      properties: FileDialogProperties[];
+      defaultPath?: string;
+      filters?: { name: string; extensions: string[] }[];
+    }
   >,
 ): UseMutationResult<
   string[],
   CustomError,
-  { properties: FileDialogProperties[]; defaultPath?: string }
+  {
+    properties: FileDialogProperties[];
+    defaultPath?: string;
+    filters?: { name: string; extensions: string[] }[];
+  }
 > => {
   const { onSuccess: onCustomSuccess, onError: onCustomError } =
     customOptions || {};

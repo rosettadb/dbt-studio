@@ -160,11 +160,9 @@ export const DuckLakeTableDetails: React.FC = () => {
     <Box sx={{ p: 2 }}>
       {/* Header */}
       <Box sx={{ display: 'flex', alignItems: 'center', mb: 3, gap: 2 }}>
-        <Tooltip title="Back to Tables">
+        <Tooltip title="Back to Instance Details">
           <IconButton
-            onClick={() =>
-              navigate(`/app/duck-lake/instances/${instanceId}/tables`)
-            }
+            onClick={() => navigate(`/app/duck-lake/instances/${instanceId}`)}
             sx={{ mr: 1 }}
           >
             <ArrowBack />

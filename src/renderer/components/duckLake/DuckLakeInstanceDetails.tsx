@@ -27,8 +27,8 @@ import {
   Settings,
   Edit,
   Delete,
-  PlayArrow,
-  Stop,
+  // PlayArrow,
+  // Stop,
   Refresh,
   Circle,
   Info,
@@ -92,8 +92,8 @@ interface DuckLakeInstance {
 
 interface DuckLakeInstanceDetailsProps {
   instance: DuckLakeInstance;
-  onConnect?: (instanceId: string) => void;
-  onDisconnect?: (instanceId: string) => void;
+  // onConnect?: (instanceId: string) => void;
+  // onDisconnect?: (instanceId: string) => void;
   onEdit?: (instanceId: string) => void;
   onDelete?: (instanceId: string) => void;
   onRefreshHealth?: (instanceId: string) => void;
@@ -104,8 +104,8 @@ export const DuckLakeInstanceDetails: React.FC<
   DuckLakeInstanceDetailsProps
 > = ({
   instance,
-  onConnect,
-  onDisconnect,
+  // onConnect,
+  // onDisconnect,
   onEdit,
   onDelete,
   onRefreshHealth,
@@ -151,17 +151,17 @@ export const DuckLakeInstanceDetails: React.FC<
     return `${Math.round((bytes / 1024 ** i) * 100) / 100} ${sizes[i]}`;
   };
 
-  const handleConnect = () => {
-    if (onConnect) {
-      onConnect(instance.id);
-    }
-  };
+  // const handleConnect = () => {
+  //   if (onConnect) {
+  //     onConnect(instance.id);
+  //   }
+  // };
 
-  const handleDisconnect = () => {
-    if (onDisconnect) {
-      onDisconnect(instance.id);
-    }
-  };
+  // const handleDisconnect = () => {
+  //   if (onDisconnect) {
+  //     onDisconnect(instance.id);
+  //   }
+  // };
 
   const handleEdit = () => {
     if (onEdit) {
@@ -669,7 +669,7 @@ export const DuckLakeInstanceDetails: React.FC<
         </Box>
 
         <Box sx={{ display: 'flex', gap: 1 }}>
-          {instance.status === 'active' ? (
+          {/* {instance.status === 'active' ? (
             <Button
               variant="outlined"
               color="warning"
@@ -689,7 +689,7 @@ export const DuckLakeInstanceDetails: React.FC<
             >
               Connect
             </Button>
-          )}
+          )} */}
           <Button
             variant="outlined"
             startIcon={<Edit />}
@@ -719,14 +719,14 @@ export const DuckLakeInstanceDetails: React.FC<
             value={currentTab}
             onChange={(_, newValue) => setCurrentTab(newValue)}
           >
-            <Tab label="Overview" />
             <Tab label="Tables" />
+            <Tab label="Overview" />
             <Tab label="Activity" />
           </Tabs>
         </Box>
         <CardContent>
-          {currentTab === 0 && renderOverviewTab()}
-          {currentTab === 1 && <DuckLakeTablesView instanceId={instance.id} />}
+          {currentTab === 0 && <DuckLakeTablesView instanceId={instance.id} />}
+          {currentTab === 1 && renderOverviewTab()}
           {currentTab === 2 && (
             <Box sx={{ mt: 2 }}>
               <Typography variant="body1" color="text.secondary">
