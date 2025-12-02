@@ -84,7 +84,7 @@ interface DuckLakeInstancesFile {
   lastModified: string;
 }
 
-export class DuckLakeInstanceStore {
+export default class DuckLakeInstanceStore {
   private static readonly STORE_VERSION = '1.0.0';
 
   private static readonly DUCKLAKE_DIR = path.join(

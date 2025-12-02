@@ -215,3 +215,81 @@ export const useUninstallRosetta = (
     },
   });
 };
+
+// DuckDB hooks
+export const useGetDuckDbMetadata = (
+  customOptions?: UseQueryOptions<any, CustomError, any>,
+) => {
+  return useQuery({
+    queryKey: ['duckdb-metadata'],
+    queryFn: async () => {
+      return settingsServices.getDuckDbMetadata();
+    },
+    ...customOptions,
+  });
+};
+
+export const useRefreshDuckDbMetadata = (
+  customOptions?: UseMutationOptions<any, CustomError, void>,
+): UseMutationResult<any, CustomError, void> => {
+  const { onSuccess: onCustomSuccess, onError: onCustomError } =
+    customOptions || {};
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async () => {
+      return settingsServices.refreshDuckDbMetadata();
+    },
+    onSuccess: async (...args) => {
+      await queryClient.invalidateQueries(['duckdb-metadata']);
+      await queryClient.invalidateQueries([
+        QUERY_KEYS.GET_SETTINGS,
+        'with-db-info',
+      ]);
+      onCustomSuccess?.(...args);
+    },
+    onError: (...args) => {
+      onCustomError?.(...args);
+    },
+  });
+};
+
+export const useReinitializeDuckDb = (
+  customOptions?: UseMutationOptions<
+    any,
+    CustomError,
+    { dropExisting?: boolean }
+  >,
+): UseMutationResult<any, CustomError, { dropExisting?: boolean }> => {
+  const { onSuccess: onCustomSuccess, onError: onCustomError } =
+    customOptions || {};
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (options) => {
+      return settingsServices.reinitializeDuckDb(options);
+    },
+    onSuccess: async (...args) => {
+      await queryClient.invalidateQueries(['duckdb-metadata']);
+      await queryClient.invalidateQueries([
+        QUERY_KEYS.GET_SETTINGS,
+        'with-db-info',
+      ]);
+      onCustomSuccess?.(...args);
+    },
+    onError: (...args) => {
+      onCustomError?.(...args);
+    },
+  });
+};
+
+export const useDiagnoseDuckDb = (
+  customOptions?: UseQueryOptions<any, CustomError, any>,
+) => {
+  return useQuery({
+    queryKey: ['duckdb-diagnostics'],
+    queryFn: async () => {
+      return settingsServices.diagnoseDuckDb();
+    },
+    ...customOptions,
+    refetchInterval: 5000, // Auto-refresh every 5s when open
+  });
+};

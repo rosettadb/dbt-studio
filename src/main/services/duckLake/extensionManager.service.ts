@@ -15,7 +15,7 @@ export interface ExtensionInfo {
   verified: boolean;
 }
 
-export class DuckLakeExtensionManager {
+export default class DuckLakeExtensionManager {
   private static extensionInfo: ExtensionInfo | null = null;
 
   private static initialized = false;

@@ -4,12 +4,12 @@
  * Follows the same architecture pattern as other services in the project
  */
 
-import { DuckLakeInstanceStore } from './duckLake/instanceStore.service';
-import { DuckLakeValidationService } from './duckLake/validation.service';
+import DuckLakeInstanceStore from './duckLake/instanceStore.service';
+import DuckLakeValidationService from './duckLake/validation.service';
 import { CatalogAdapterFactory, CatalogAdapter } from './duckLake/adapters';
-import { DuckLakeConnectionManager } from './duckLake/connectionManager.service';
+import DuckLakeConnectionManager from './duckLake/connectionManager.service';
 import CloudExplorerService from './cloudExplorer.service';
-import { DuckLakeExtensionManager } from './duckLake/extensionManager.service';
+import DuckLakeExtensionManager from './duckLake/extensionManager.service';
 import {
   DuckLakeInstance,
   DuckLakeInstanceCreateRequest,

@@ -13,7 +13,7 @@ import {
 } from '../../../types/duckLake';
 import { DuckLakeError } from '../../../types/duckLakeErrors';
 
-export class DuckLakeValidationService {
+export default class DuckLakeValidationService {
   /**
    * Validate instance creation request
    */

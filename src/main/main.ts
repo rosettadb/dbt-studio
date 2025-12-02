@@ -6,7 +6,12 @@ import { loadEnvironment } from './utils/setupHelpers';
 import { AssetUrl } from './utils/assetUrl';
 import { AssetServer } from './utils/assetServer';
 import { setupApplicationIcon } from './utils/iconUtils';
-import { SettingsService, AnalyticsService, UpdateService } from './services';
+import {
+  SettingsService,
+  AnalyticsService,
+  UpdateService,
+  DuckLakeConnectionManager,
+} from './services';
 import { copyAssetsToUserData } from './utils/fileHelper';
 
 const isProd = process.env.NODE_ENV === 'production';
@@ -173,13 +178,9 @@ app.on('before-quit', async (event) => {
   console.log('[App] Shutting down, cleaning up DuckLake connections...');
 
   try {
-    // Dynamically import to avoid circular dependencies
-    const { DuckLakeConnectionManager } = await import(
-      './services/duckLake/connectionManager.service'
-    );
-
     // Get memory stats before cleanup
     const memBefore = DuckLakeConnectionManager.getMemoryStats();
+    // eslint-disable-next-line no-console
     console.log('[App] Memory before cleanup:', memBefore);
 
     // Disconnect all connections
@@ -190,10 +191,12 @@ app.on('before-quit', async (event) => {
 
     // Get memory stats after cleanup
     const memAfter = DuckLakeConnectionManager.getMemoryStats();
+    // eslint-disable-next-line no-console
     console.log('[App] Memory after cleanup:', memAfter);
-
+    // eslint-disable-next-line no-console
     console.log('[App] DuckLake cleanup complete');
   } catch (error) {
+    // eslint-disable-next-line no-console
     console.error('[App] Error during DuckLake cleanup:', error);
   } finally {
     // Allow the app to quit

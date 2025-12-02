@@ -18,7 +18,7 @@ interface ConnectionEntry {
   connectionCount: number;
 }
 
-export class DuckLakeConnectionManager {
+export default class DuckLakeConnectionManager {
   private static connections: Map<string, ConnectionEntry> = new Map();
 
   private static healthCheckInterval: ReturnType<typeof setInterval> | null =

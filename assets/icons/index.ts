@@ -11,6 +11,7 @@ import rosettaLabs from './rosetta-labs.png';
 import bot from './bot.svg';
 import duckLakeSVG from './duck-lake.svg';
 import duckLake from './duck-lake.png';
+import duckdb from './duckdb.svg';
 
 export const icons = {
   settings,
@@ -26,4 +27,5 @@ export const icons = {
   bot,
   duckLakeSVG,
   duckLake,
+  duckdb,
 };
