@@ -9,6 +9,7 @@ import CloudExplorerService from './cloudExplorer.service';
 import CloudPreviewService from './cloudPreview.service';
 import UtilsService from './utilsService';
 import SelectedFileContextProvider from './selectedFileContextProvider.service';
+import DuckDBBootstrap from './duckdb.service';
 
 export {
   ProjectsService,
@@ -22,4 +23,5 @@ export {
   CloudPreviewService,
   UtilsService,
   SelectedFileContextProvider,
+  DuckDBBootstrap,
 };
