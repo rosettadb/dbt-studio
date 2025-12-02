@@ -131,16 +131,16 @@ export const ConnectionForm: React.FC<ConnectionFormProps> = ({
   // On edit, fetch credentials from secure storage
   useEffect(() => {
     if (initialValues) {
-      const { name, provider } = initialValues;
+      const { id, provider } = initialValues;
       (async () => {
         if (provider === 'gcs') {
-          const stored = await getCloudGcsCredential(name);
+          const stored = await getCloudGcsCredential(id);
           setFormData((prev) => ({ ...prev, credentials: stored || '' }));
         } else if (provider === 'aws') {
-          const stored = await getCloudAwsSecret(name);
+          const stored = await getCloudAwsSecret(id);
           setFormData((prev) => ({ ...prev, secretAccessKey: stored || '' }));
         } else if (provider === 'azure') {
-          const stored = await getCloudAzureKey(name);
+          const stored = await getCloudAzureKey(id);
           setFormData((prev) => ({ ...prev, accountKey: stored || '' }));
         }
       })();
@@ -230,8 +230,12 @@ export const ConnectionForm: React.FC<ConnectionFormProps> = ({
     try {
       const rawConfig = createConfigFromFormData();
       let finalConfig: typeof rawConfig;
+
+      // Generate connection ID first so we can use it for secure storage
+      const connId = connectionId || uuidv4();
+
       if (formData.provider === 'gcs') {
-        await setCloudGcsCredential(formData.credentials, formData.name);
+        await setCloudGcsCredential(formData.credentials, connId);
         // Omit credentials if present
         const config = { ...rawConfig };
         if ('credentials' in config) {
@@ -239,14 +243,14 @@ export const ConnectionForm: React.FC<ConnectionFormProps> = ({
         }
         finalConfig = config;
       } else if (formData.provider === 'aws') {
-        await setCloudAwsSecret(formData.secretAccessKey, formData.name);
+        await setCloudAwsSecret(formData.secretAccessKey, connId);
         const config = { ...rawConfig };
         if ('secretAccessKey' in config) {
           delete (config as any).secretAccessKey;
         }
         finalConfig = config;
       } else if (formData.provider === 'azure') {
-        await setCloudAzureKey(formData.accountKey, formData.name);
+        await setCloudAzureKey(formData.accountKey, connId);
         const config = { ...rawConfig };
         if ('accountKey' in config) {
           delete (config as any).accountKey;
@@ -256,7 +260,7 @@ export const ConnectionForm: React.FC<ConnectionFormProps> = ({
         finalConfig = rawConfig;
       }
       const connection: CloudConnection = {
-        id: connectionId || uuidv4(),
+        id: connId,
         name: formData.name,
         provider: formData.provider,
         config: finalConfig,
