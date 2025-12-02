@@ -28,6 +28,7 @@ import {
   RosettaSettings,
   AboutSettings,
   AIProvidersSettings,
+  DuckDBSettings,
 } from '../../components';
 import { AppLayout } from '../../layouts';
 import { settingsSidebarElements } from './settingsElements';
@@ -100,6 +101,7 @@ const Settings: React.FC = () => {
   const getSectionTitle = (section: string) => {
     if (section === 'dbt') return 'dbt™ Core';
     if (section === 'ai-providers') return 'AI Providers';
+    if (section === 'duckdb') return 'DuckDB';
     return section.charAt(0).toUpperCase() + section.slice(1).replace('-', ' ');
   };
 
@@ -120,6 +122,8 @@ const Settings: React.FC = () => {
             onFilePicker={handleFilePicker}
           />
         );
+      case 'duckdb':
+        return <DuckDBSettings />;
       case 'ai-providers':
         return <AIProvidersSettings />;
       case 'dbt':

@@ -9,6 +9,7 @@ import dbtBlack from './dbt-black.svg';
 import rosetta from './rosetta.png';
 import rosettaLabs from './rosetta-labs.png';
 import bot from './bot.svg';
+import duckdb from './duckdb.svg';
 
 export const icons = {
   settings,
@@ -22,4 +23,5 @@ export const icons = {
   rosetta,
   rosettaLabs,
   bot,
+  duckdb,
 };

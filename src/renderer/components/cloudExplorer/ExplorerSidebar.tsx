@@ -282,6 +282,8 @@ export const ExplorerSidebar: React.FC = () => {
           mt: 'auto',
           pt: 2,
           borderTop: `1px solid ${theme.palette.divider}`,
+          width: '270px',
+          boxSizing: 'border-box',
         }}
       >
         <Button
