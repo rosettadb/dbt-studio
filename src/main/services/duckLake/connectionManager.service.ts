@@ -21,22 +21,17 @@ interface ConnectionEntry {
 export default class DuckLakeConnectionManager {
   private static connections: Map<string, ConnectionEntry> = new Map();
 
-  private static healthCheckInterval: ReturnType<typeof setInterval> | null =
-    null;
-
-  private static readonly HEALTH_CHECK_INTERVAL_MS = 15000; // 15 seconds (reduced from 30s for more aggressive cleanup)
-
-  private static readonly MAX_IDLE_TIME_MS = 60000; // 1 minute (reduced from 5 minutes to prevent memory buildup)
+  private static readonly MAX_IDLE_TIME_MS = 60000; // 1 minute - for manual cleanup calls
 
   private static readonly MAX_CONNECTIONS_PER_INSTANCE = 1; // DuckLake is single-connection per instance
 
   /**
    * Initialize the connection manager
+   * Note: Automatic health checks are disabled to reduce CPU usage.
+   * Health checks only run on-demand when user explicitly tests connections.
    */
   static initialize(): void {
-    if (!this.healthCheckInterval) {
-      this.startHealthChecking();
-    }
+    // No automatic background tasks - health checks run only on user interaction
   }
 
   /**
@@ -227,6 +222,8 @@ export default class DuckLakeConnectionManager {
 
   /**
    * Clean up idle connections
+   * Note: This is NOT called automatically. Call manually when needed to free resources.
+   * Connections idle for more than MAX_IDLE_TIME_MS will be disconnected.
    */
   static async cleanupIdleConnections(): Promise<void> {
     const now = new Date();
@@ -281,64 +278,6 @@ export default class DuckLakeConnectionManager {
         // eslint-disable-next-line no-console
         console.log('[DuckLake] Triggered garbage collection');
       }
-    }
-  }
-
-  /**
-   * Start periodic health checking and cleanup
-   */
-  private static startHealthChecking(): void {
-    this.healthCheckInterval = setInterval(async () => {
-      try {
-        await this.performHealthChecks();
-        await this.cleanupIdleConnections();
-      } catch (error) {
-        // eslint-disable-next-line no-console
-        console.error('Error during DuckLake health check cycle:', error);
-      }
-    }, this.HEALTH_CHECK_INTERVAL_MS);
-  }
-
-  /**
-   * Perform health checks on all connections
-   */
-  private static async performHealthChecks(): Promise<void> {
-    const healthCheckPromises = Array.from(this.connections.entries()).map(
-      async ([instanceId, entry]) => {
-        try {
-          const health = await entry.adapter.healthCheck();
-          if (!health.connected) {
-            // eslint-disable-next-line no-console
-            console.warn(
-              `DuckLake instance ${instanceId} health check failed:`,
-              health.error,
-            );
-
-            // Optionally disconnect unhealthy connections
-            if (entry.connectionCount === 0) {
-              await this.disconnect(instanceId);
-            }
-          }
-        } catch (error) {
-          // eslint-disable-next-line no-console
-          console.error(
-            `Health check error for instance ${instanceId}:`,
-            error,
-          );
-        }
-      },
-    );
-
-    await Promise.all(healthCheckPromises);
-  }
-
-  /**
-   * Stop health checking
-   */
-  static shutdown(): void {
-    if (this.healthCheckInterval) {
-      clearInterval(this.healthCheckInterval);
-      this.healthCheckInterval = null;
     }
   }
 

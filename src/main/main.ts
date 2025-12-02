@@ -175,26 +175,9 @@ ipcMain.handle('windows:closeSetup', () => {
 app.on('before-quit', async (event) => {
   event.preventDefault();
 
-  console.log('[App] Shutting down, cleaning up DuckLake connections...');
-
   try {
-    // Get memory stats before cleanup
-    const memBefore = DuckLakeConnectionManager.getMemoryStats();
-    // eslint-disable-next-line no-console
-    console.log('[App] Memory before cleanup:', memBefore);
-
-    // Disconnect all connections
+    // Disconnect all DuckLake connections to prevent memory leaks
     await DuckLakeConnectionManager.disconnectAll();
-
-    // Shutdown the connection manager
-    DuckLakeConnectionManager.shutdown();
-
-    // Get memory stats after cleanup
-    const memAfter = DuckLakeConnectionManager.getMemoryStats();
-    // eslint-disable-next-line no-console
-    console.log('[App] Memory after cleanup:', memAfter);
-    // eslint-disable-next-line no-console
-    console.log('[App] DuckLake cleanup complete');
   } catch (error) {
     // eslint-disable-next-line no-console
     console.error('[App] Error during DuckLake cleanup:', error);
