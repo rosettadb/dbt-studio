@@ -16,7 +16,11 @@ export type SettingsChannels =
   | 'version:rosetta:uninstall'
   | 'settings:reset-factory'
   | 'settings:restart'
-  | 'settings:getFileName';
+  | 'settings:getFileName'
+  | 'settings:duckdb:metadata'
+  | 'settings:duckdb:refresh'
+  | 'settings:duckdb:reinitialize'
+  | 'settings:duckdb:diagnose';
 
 export type ProjectChannels =
   | 'project:get'

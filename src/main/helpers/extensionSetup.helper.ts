@@ -15,13 +15,21 @@ export async function setupExtensions(
   objectPath: string,
 ): Promise<void> {
   // Install and load httpfs extension (required for all cloud providers)
-  await connection.run('INSTALL httpfs');
-  await connection.run('LOAD httpfs');
+  try {
+    await connection.run('INSTALL httpfs');
+    await connection.run('LOAD httpfs');
+  } catch (e) {
+    // Ignore if already installed/loaded
+  }
 
   // Install cloud-specific extensions
   if (provider === 'azure') {
-    await connection.run('INSTALL azure');
-    await connection.run('LOAD azure');
+    try {
+      await connection.run('INSTALL azure');
+      await connection.run('LOAD azure');
+    } catch (e) {
+      // Ignore
+    }
   }
 
   // Install file-type-specific extensions

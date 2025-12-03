@@ -33,7 +33,6 @@ import { CliProvider } from './hooks/useCli';
 const App: React.FC = () => {
   return (
     <Router>
-      <CssBaseline />
       <ScrollbarStyles />
       <Routes>
         <Route path="/" element={<SelectProjectLayout />}>
@@ -53,6 +52,7 @@ const App: React.FC = () => {
             element={<Navigate to="/app/settings/general" />}
           />
           <Route path="settings/general" element={<Settings />} />
+          <Route path="settings/duckdb" element={<Settings />} />
           <Route path="settings/ai-providers" element={<Settings />} />
           <Route path="settings/dbt" element={<Settings />} />
           <Route path="settings/rosetta" element={<Settings />} />
@@ -105,6 +105,7 @@ const AppWithProjectProvider: React.FC = () => {
       <AppProvider>
         <CliProvider>
           <ProcessProvider>
+            <CssBaseline />
             <CssVarsProvider
               theme={theme}
               defaultMode={initialMode}
