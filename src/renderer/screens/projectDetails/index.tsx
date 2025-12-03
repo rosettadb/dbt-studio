@@ -111,6 +111,11 @@ const ProjectDetails: React.FC = () => {
     reset,
     getTabByPath,
     refreshTabContentByPath,
+    // Unsaved changes dialog support
+    pendingClose,
+    onSaveAndClose,
+    onDiscardAndClose,
+    onCancelClose,
   } = useTabManager(project?.id);
   const fileContent = activeTab?.content;
 
@@ -838,6 +843,11 @@ const ProjectDetails: React.FC = () => {
                       onTabError={(tabId, errorMessage) => {
                         setTabError(tabId, errorMessage);
                       }}
+                      pendingClose={pendingClose}
+                      onSaveAndClose={onSaveAndClose}
+                      onDiscardAndClose={onDiscardAndClose}
+                      onCancelClose={onCancelClose}
+                      onGitStatusRefresh={updateStatuses}
                     />
                   )}
                 </EditorContainer>

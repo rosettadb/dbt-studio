@@ -6,6 +6,7 @@ import type {
   EditorTabId,
   EditorTabState,
   TabContentUpdateOptions,
+  PendingCloseState,
 } from '../../types/editor';
 
 const STORAGE_KEY_PREFIX = 'dbt-studio:tabs:';
@@ -168,6 +169,11 @@ export interface UseTabManagerReturn {
   reset: () => void;
   getTabByPath: (path: string) => EditorTabState | undefined;
   refreshTabContentByPath: (path: string) => Promise<void>;
+  // Unsaved changes dialog support
+  pendingClose: PendingCloseState | null;
+  onSaveAndClose: (tabId: EditorTabId) => Promise<void>;
+  onDiscardAndClose: (tabId: EditorTabId) => void;
+  onCancelClose: () => void;
 }
 
 const useTabManager = (projectId?: string): UseTabManagerReturn => {
@@ -176,6 +182,8 @@ const useTabManager = (projectId?: string): UseTabManagerReturn => {
     null,
   );
   const [isHydrated, setIsHydrated] = React.useState(false);
+  const [pendingClose, setPendingClose] =
+    React.useState<PendingCloseState | null>(null);
   const tabsRef = React.useRef<EditorTabState[]>(tabs);
 
   React.useEffect(() => {
@@ -225,7 +233,7 @@ const useTabManager = (projectId?: string): UseTabManagerReturn => {
     setActiveTabId(tabId);
   }, []);
 
-  const closeTab = React.useCallback(
+  const performClose = React.useCallback(
     (tabId: EditorTabId) => {
       setTabs((current) => {
         const index = current.findIndex((tab) => tab.id === tabId);
@@ -244,6 +252,22 @@ const useTabManager = (projectId?: string): UseTabManagerReturn => {
       });
     },
     [activeTabId],
+  );
+
+  const closeTab = React.useCallback(
+    (tabId: EditorTabId) => {
+      const tab = tabsRef.current.find((t) => t.id === tabId);
+
+      if (tab?.isModified) {
+        // Show unsaved changes dialog
+        setPendingClose({ tabId, tab });
+        return;
+      }
+
+      // Proceed with close
+      performClose(tabId);
+    },
+    [performClose],
   );
 
   const closeTabByPath = React.useCallback(
@@ -524,6 +548,50 @@ const useTabManager = (projectId?: string): UseTabManagerReturn => {
     [],
   );
 
+  // Unsaved changes dialog handlers
+  const onSaveAndClose = React.useCallback(
+    async (tabId: EditorTabId) => {
+      const tab = tabsRef.current.find((t) => t.id === tabId);
+      if (!tab) {
+        setPendingClose(null);
+        return;
+      }
+
+      try {
+        // Save the file
+        await projectsServices.saveFileContent({
+          path: tab.path,
+          content: tab.content,
+        });
+
+        // Mark as saved
+        markTabSaved(tabId);
+
+        // Close the tab
+        performClose(tabId);
+
+        // Clear pending close
+        setPendingClose(null);
+      } catch (error: any) {
+        // If save fails, keep the dialog open and show error
+        setTabError(tabId, error?.message || 'Failed to save file');
+      }
+    },
+    [performClose, markTabSaved, setTabError],
+  );
+
+  const onDiscardAndClose = React.useCallback(
+    (tabId: EditorTabId) => {
+      performClose(tabId);
+      setPendingClose(null);
+    },
+    [performClose],
+  );
+
+  const onCancelClose = React.useCallback(() => {
+    setPendingClose(null);
+  }, []);
+
   const activeTab = React.useMemo(
     () => tabs.find((tab) => tab.id === activeTabId),
     [tabs, activeTabId],
@@ -548,6 +616,11 @@ const useTabManager = (projectId?: string): UseTabManagerReturn => {
     reset,
     getTabByPath,
     refreshTabContentByPath,
+    // Unsaved changes dialog support
+    pendingClose,
+    onSaveAndClose,
+    onDiscardAndClose,
+    onCancelClose,
   };
 };
 

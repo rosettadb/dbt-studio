@@ -115,6 +115,9 @@ export const ProjectSidebar: React.FC<ProjectSidebarProps> = ({
   const [activeTab, setActiveTab] = useState<SidebarTab>('explorer');
   const theme = useTheme();
 
+  // Calculate number of changed files for badge
+  const changedFilesCount = statuses.length;
+
   return (
     <Box
       sx={{
@@ -176,7 +179,7 @@ export const ProjectSidebar: React.FC<ProjectSidebarProps> = ({
           </Box>
         </Tooltip>
 
-        {/* Source Control Icon */}
+        {/* Source Control Icon with Badge */}
         <Tooltip
           title="Source Control"
           placement="bottom"
@@ -186,6 +189,7 @@ export const ProjectSidebar: React.FC<ProjectSidebarProps> = ({
           <Box
             onClick={() => setActiveTab('scm')}
             sx={{
+              position: 'relative',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
@@ -213,6 +217,30 @@ export const ProjectSidebar: React.FC<ProjectSidebarProps> = ({
                   : theme.palette.text.secondary
               }
             />
+            {/* Badge positioned inside icon at top-right */}
+            {changedFilesCount > 0 && (
+              <Box
+                sx={{
+                  position: 'absolute',
+                  top: 2,
+                  right: -2,
+                  backgroundColor: 'primary.main',
+                  color: 'primary.contrastText',
+                  borderRadius: '8px',
+                  fontSize: 9,
+                  fontWeight: 600,
+                  minWidth: 14,
+                  height: 14,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  padding: '0 3px',
+                  lineHeight: 1,
+                }}
+              >
+                {changedFilesCount > 99 ? '99+' : changedFilesCount}
+              </Box>
+            )}
           </Box>
         </Tooltip>
       </Box>

@@ -59,7 +59,7 @@ export const CollapsibleSection: React.FC<CollapsibleSectionProps> = ({
             {isExpanded ? (
               <ExpandMore sx={{ fontSize: 16 }} />
             ) : (
-              <ExpandLess sx={{ fontSize: 16, transform: 'rotate(-90deg)' }} />
+              <ExpandLess sx={{ fontSize: 16, transform: 'rotate(90deg)' }} />
             )}
           </IconButton>
 
