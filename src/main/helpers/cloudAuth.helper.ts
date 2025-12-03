@@ -96,10 +96,18 @@ export async function buildCloudSecretQuery(
   provider: CloudProvider,
   config: CloudStorageConfig,
 ): Promise<string> {
+  // Drop all existing secrets to prevent conflicts between providers
+  const dropSecretsQuery = `
+    DROP SECRET IF EXISTS s3_secret;
+    DROP SECRET IF EXISTS gcs_secret;
+    DROP SECRET IF EXISTS azure_secret;
+  `;
+
   switch (provider) {
     case 'aws': {
       const awsConfig = config as S3Config;
       return `
+        ${dropSecretsQuery}
         CREATE OR REPLACE SECRET s3_secret (
           TYPE s3,
           PROVIDER config,
@@ -120,6 +128,7 @@ export async function buildCloudSecretQuery(
 
           // Set up HTTP authentication secret for GCS
           return `
+            ${dropSecretsQuery}
             CREATE OR REPLACE SECRET gcs_secret (
               TYPE http,
               EXTRA_HTTP_HEADERS MAP {'Authorization': 'Bearer ${token}'}
@@ -129,11 +138,11 @@ export async function buildCloudSecretQuery(
           // eslint-disable-next-line no-console
           console.error('Failed to generate GCS Bearer token:', error);
           // Fall back to no authentication (will only work for public files)
-          return `SELECT 'GCS HTTPS access enabled (public files only)' as message;`;
+          return `${dropSecretsQuery}SELECT 'GCS HTTPS access enabled (public files only)' as message;`;
         }
       } else {
         // No credentials provided, only public files will work
-        return `SELECT 'GCS HTTPS access enabled (public files only)' as message;`;
+        return `${dropSecretsQuery}SELECT 'GCS HTTPS access enabled (public files only)' as message;`;
       }
     }
     case 'azure': {
@@ -145,6 +154,7 @@ export async function buildCloudSecretQuery(
         const connectionString = `DefaultEndpointsProtocol=https;AccountName=${azureConfig.accountName};AccountKey=${azureConfig.accountKey};EndpointSuffix=core.windows.net`;
 
         return `
+          ${dropSecretsQuery}
           CREATE OR REPLACE SECRET azure_secret (
             TYPE azure,
             CONNECTION_STRING '${connectionString}'
@@ -155,6 +165,7 @@ export async function buildCloudSecretQuery(
       if (azureConfig.connectionString) {
         // Use provided connection string
         return `
+          ${dropSecretsQuery}
           CREATE OR REPLACE SECRET azure_secret (
             TYPE azure,
             CONNECTION_STRING '${azureConfig.connectionString}'
@@ -165,6 +176,7 @@ export async function buildCloudSecretQuery(
       if (azureConfig.accountName) {
         // Use account name only (for anonymous access)
         return `
+          ${dropSecretsQuery}
           CREATE OR REPLACE SECRET azure_secret (
             TYPE azure,
             PROVIDER config,
