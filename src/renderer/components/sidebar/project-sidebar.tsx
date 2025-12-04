@@ -217,6 +217,7 @@ export const ProjectSidebar: React.FC<ProjectSidebarProps> = ({
                   : theme.palette.text.secondary
               }
             />
+
             {/* Badge positioned inside icon at top-right */}
             {changedFilesCount > 0 && (
               <Box

@@ -111,26 +111,24 @@ export const ChangesSection: React.FC<ChangesSectionProps> = ({
 
   return (
     <Box sx={{ flex: 1, overflow: 'auto' }}>
-      {/* Staged Changes Section */}
-      {stagedFiles.length > 0 && (
-        <CollapsibleSection
-          title="Staged Changes"
-          count={stagedFiles.length}
-          defaultExpanded
-          actions={stagedActions}
-        >
-          {stagedFiles.map((file: FileStatus) => (
-            <FileItem
-              key={file.path}
-              file={file}
-              onStage={onStage}
-              onUnstage={onUnstage}
-              onDiscard={onDiscard}
-              onOpenFile={onOpenFile}
-            />
-          ))}
-        </CollapsibleSection>
-      )}
+      {/* Staged Changes Section - Always show (matches VSCode behavior) */}
+      <CollapsibleSection
+        title="Staged Changes"
+        count={stagedFiles.length}
+        defaultExpanded
+        actions={stagedActions}
+      >
+        {stagedFiles.map((file: FileStatus) => (
+          <FileItem
+            key={file.path}
+            file={file}
+            onStage={onStage}
+            onUnstage={onUnstage}
+            onDiscard={onDiscard}
+            onOpenFile={onOpenFile}
+          />
+        ))}
+      </CollapsibleSection>
 
       {/* Unstaged Changes Section - Always show */}
       <CollapsibleSection

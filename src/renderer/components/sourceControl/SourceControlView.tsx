@@ -4,6 +4,7 @@ import { useQueryClient } from 'react-query';
 import { RepositoryHeader } from './RepositoryHeader';
 import { TipTapCommitInput } from './TipTapCommitInput';
 import { ChangesSection } from './ChangesSection';
+import { ConfirmationModal } from '../modals/confirmationModal';
 import {
   useGitIsInitialized,
   useGetFileStatuses,
@@ -79,43 +80,9 @@ export const SourceControlView: React.FC<SourceControlViewProps> = ({
     enabled: !!projectPath,
   });
 
-  const { data: fileStatuses = [], refetch: refetchStatuses } =
-    useGetFileStatuses(projectPath || '', {
-      enabled: !!projectPath && !!isInitialized,
-    });
-
-  // Debug: Log file statuses when they change
-  React.useEffect(() => {
-    if (fileStatuses.length > 0) {
-      // eslint-disable-next-line no-console
-      console.log('=== FRONTEND FILE STATUSES ===');
-      // eslint-disable-next-line no-console
-      console.log('Project path:', projectPath);
-      // eslint-disable-next-line no-console
-      console.log('Total files:', fileStatuses.length);
-      // eslint-disable-next-line no-console
-      console.log(
-        'Staged files:',
-        fileStatuses.filter((f) => f.status === 'staged').length,
-      );
-      // eslint-disable-next-line no-console
-      console.log(
-        'Unstaged files:',
-        fileStatuses.filter((f) => f.status !== 'staged').length,
-      );
-      // eslint-disable-next-line no-console
-      console.log(
-        'File list:',
-        fileStatuses.map((f) => ({
-          path: f.path,
-          status: f.status,
-          basename: f.path.split('/').pop(),
-        })),
-      );
-      // eslint-disable-next-line no-console
-      console.log('=== END FRONTEND DEBUG ===');
-    }
-  }, [fileStatuses, projectPath]);
+  const { data: fileStatuses = [] } = useGetFileStatuses(projectPath || '', {
+    enabled: !!projectPath && !!isInitialized,
+  });
 
   const stagedFilesCount = fileStatuses.filter(
     (f) => f.status === 'staged',
@@ -123,31 +90,23 @@ export const SourceControlView: React.FC<SourceControlViewProps> = ({
 
   const queryClient = useQueryClient();
 
+  // State for discard confirmation dialog
+  const [discardConfirmation, setDiscardConfirmation] = React.useState<{
+    open: boolean;
+    files: string[];
+    message: string;
+  }>({
+    open: false,
+    files: [],
+    message: '',
+  });
+
   const handleRefresh = async () => {
-    // eslint-disable-next-line no-console
-    console.log('=== REFRESH BUTTON CLICKED ===');
-    // eslint-disable-next-line no-console
-    console.log('Project path:', projectPath);
-    // eslint-disable-next-line no-console
-    console.log('Current file statuses count:', fileStatuses.length);
-
-    // Force invalidate and refetch all git queries
-    await queryClient.invalidateQueries([QUERY_KEYS.GIT_STATUSES]);
-    await queryClient.invalidateQueries([QUERY_KEYS.GIT_IS_INITIALIZED]);
-
-    // eslint-disable-next-line no-console
-    console.log('Cache invalidated, refetching...');
-
-    // Force refetch
-    const result = await refetchStatuses();
-
-    // eslint-disable-next-line no-console
-    console.log('Refetch complete, new data:', result.data?.length, 'files');
-    // eslint-disable-next-line no-console
-    console.log('=== END REFRESH DEBUG ===');
+    // Simply invalidate the query - React Query will handle refetching
+    await queryClient.invalidateQueries([QUERY_KEYS.GIT_STATUSES, projectPath]);
   };
 
-  // Git operations hooks
+  // Git operations hooks - optimistic updates make these feel instant
   const { mutate: stageFiles } = useGitStage({
     onSuccess: () => {
       handleRefresh();
@@ -211,14 +170,15 @@ export const SourceControlView: React.FC<SourceControlViewProps> = ({
 
   const handleDiscard = (filePath: string) => {
     if (projectPath) {
-      // Show confirmation dialog for discard operation
-      // eslint-disable-next-line no-alert
-      const confirmed = window.confirm(
-        `Are you sure you want to discard changes to ${filePath}? This action cannot be undone.`,
-      );
-      if (confirmed) {
-        discardFiles({ path: projectPath, files: [filePath] });
-      }
+      // Get just the filename for display
+      const fileName = filePath.split('/').pop() || filePath;
+
+      // Show confirmation dialog
+      setDiscardConfirmation({
+        open: true,
+        files: [filePath],
+        message: `Are you sure you want to discard changes to "${fileName}"? This action cannot be undone.`,
+      });
     }
   };
 
@@ -229,16 +189,24 @@ export const SourceControlView: React.FC<SourceControlViewProps> = ({
       );
       if (unstagedFiles.length === 0) return;
 
-      // Show confirmation dialog for discard all operation
-      // eslint-disable-next-line no-alert
-      const confirmed = window.confirm(
-        `Are you sure you want to discard all ${unstagedFiles.length} unstaged changes? This action cannot be undone.`,
-      );
-      if (confirmed) {
-        const filePaths = unstagedFiles.map((file) => file.path);
-        discardFiles({ path: projectPath, files: filePaths });
-      }
+      // Show confirmation dialog
+      setDiscardConfirmation({
+        open: true,
+        files: unstagedFiles.map((file) => file.path),
+        message: `Are you sure you want to discard all ${unstagedFiles.length} unstaged change${unstagedFiles.length === 1 ? '' : 's'}? This action cannot be undone.`,
+      });
     }
+  };
+
+  const handleConfirmDiscard = () => {
+    if (projectPath && discardConfirmation.files.length > 0) {
+      discardFiles({ path: projectPath, files: discardConfirmation.files });
+      setDiscardConfirmation({ open: false, files: [], message: '' });
+    }
+  };
+
+  const handleCancelDiscard = () => {
+    setDiscardConfirmation({ open: false, files: [], message: '' });
   };
 
   const handleOpenFile = (filePath: string) => {
@@ -305,35 +273,46 @@ export const SourceControlView: React.FC<SourceControlViewProps> = ({
   }
 
   return (
-    <Box
-      sx={{
-        height: '100%',
-        display: 'flex',
-        flexDirection: 'column',
-        overflow: 'hidden',
-      }}
-    >
-      {/* Repository Header with Actions */}
-      <RepositoryHeader projectPath={projectPath} onRefresh={handleRefresh} />
+    <>
+      <Box
+        sx={{
+          height: '100%',
+          display: 'flex',
+          flexDirection: 'column',
+          overflow: 'hidden',
+        }}
+      >
+        {/* Repository Header with Actions */}
+        <RepositoryHeader projectPath={projectPath} onRefresh={handleRefresh} />
 
-      {/* TipTap Commit Input */}
-      <TipTapCommitInput
-        projectPath={projectPath}
-        stagedFilesCount={stagedFilesCount}
-        onCommitSuccess={handleRefresh}
-      />
+        {/* TipTap Commit Input */}
+        <TipTapCommitInput
+          projectPath={projectPath}
+          stagedFilesCount={stagedFilesCount}
+          onCommitSuccess={handleRefresh}
+        />
 
-      {/* Changes Section */}
-      <ChangesSection
-        fileStatuses={fileStatuses}
-        onStage={handleStage}
-        onUnstage={handleUnstage}
-        onStageAll={handleStageAll}
-        onUnstageAll={handleUnstageAll}
-        onDiscard={handleDiscard}
-        onDiscardAll={handleDiscardAll}
-        onOpenFile={handleOpenFile}
+        {/* Changes Section */}
+        <ChangesSection
+          fileStatuses={fileStatuses}
+          onStage={handleStage}
+          onUnstage={handleUnstage}
+          onStageAll={handleStageAll}
+          onUnstageAll={handleUnstageAll}
+          onDiscard={handleDiscard}
+          onDiscardAll={handleDiscardAll}
+          onOpenFile={handleOpenFile}
+        />
+      </Box>
+
+      {/* Discard Confirmation Dialog */}
+      <ConfirmationModal
+        isOpen={discardConfirmation.open}
+        onClose={handleCancelDiscard}
+        onConfirm={handleConfirmDiscard}
+        title="Discard Changes"
+        question={discardConfirmation.message}
       />
-    </Box>
+    </>
   );
 };

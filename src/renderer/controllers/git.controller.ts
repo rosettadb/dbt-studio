@@ -25,6 +25,8 @@ export const useGitIsInitialized = (
     queryFn: async () => {
       return gitServices.isInitialized(path);
     },
+    staleTime: 30000, // Git init status rarely changes - 30 seconds
+    cacheTime: 600000,
     ...customOptions,
   });
 };
@@ -42,6 +44,8 @@ export const useGetRemotes = (
     queryFn: async () => {
       return gitServices.getRemotes(path);
     },
+    staleTime: 30000, // Remotes rarely change - 30 seconds
+    cacheTime: 600000,
     ...customOptions,
   });
 };
@@ -55,6 +59,8 @@ export const useGetBranches = (
     queryFn: async () => {
       return gitServices.listBranches(path);
     },
+    staleTime: 10000, // Branches change occasionally - 10 seconds
+    cacheTime: 600000,
     ...customOptions,
   });
 };
@@ -68,6 +74,8 @@ export const useGetFileStatuses = (
     queryFn: async () => {
       return gitServices.getFileStatusList(path);
     },
+    staleTime: 5000, // Consider data fresh for 5 seconds
+    cacheTime: 600000, // Keep in cache for 10 minutes
     ...customOptions,
   });
 };
@@ -201,14 +209,15 @@ export const useGitCommit = (
       return gitServices.commit(data.path, data.message, data.files);
     },
     onSuccess: async (...args) => {
-      // Invalidate all git-related queries for this project
-      await queryClient.invalidateQueries([QUERY_KEYS.GIT_REMOTES]);
-      await queryClient.invalidateQueries([QUERY_KEYS.GIT_STATUSES]);
-      await queryClient.invalidateQueries([QUERY_KEYS.GIT_BRANCHES]);
-      await queryClient.invalidateQueries([QUERY_KEYS.GIT_AHEAD_BEHIND]);
-
-      // Also try to refetch immediately
-      await queryClient.refetchQueries([QUERY_KEYS.GIT_STATUSES, args[1].path]);
+      // Only invalidate queries for this specific path - more targeted
+      await queryClient.invalidateQueries([
+        QUERY_KEYS.GIT_STATUSES,
+        args[1].path,
+      ]);
+      await queryClient.invalidateQueries([
+        QUERY_KEYS.GIT_AHEAD_BEHIND,
+        args[1].path,
+      ]);
 
       onCustomSuccess?.(...args);
     },
@@ -288,14 +297,53 @@ export const useGitStage = (
     mutationFn: async (data: { path: string; files: string[] }) => {
       return gitServices.add(data.path, data.files);
     },
-    onSuccess: async (...args) => {
-      // Aggressive cache invalidation and refetch
-      await queryClient.invalidateQueries([QUERY_KEYS.GIT_STATUSES]);
-      await queryClient.refetchQueries([QUERY_KEYS.GIT_STATUSES, args[1].path]);
-      onCustomSuccess?.(...args);
+    onMutate: async (variables) => {
+      // Cancel any outgoing refetches to prevent overwriting optimistic update
+      await queryClient.cancelQueries([
+        QUERY_KEYS.GIT_STATUSES,
+        variables.path,
+      ]);
+
+      // Snapshot the previous value for rollback
+      const previousStatuses = queryClient.getQueryData<FileStatus[]>([
+        QUERY_KEYS.GIT_STATUSES,
+        variables.path,
+      ]);
+
+      // Optimistically update the cache
+      queryClient.setQueryData<FileStatus[]>(
+        [QUERY_KEYS.GIT_STATUSES, variables.path],
+        (old = []) => {
+          return old.map((file) => {
+            // If this file is being staged, change its status to 'staged'
+            if (variables.files.includes(file.path)) {
+              return { ...file, status: 'staged' as const };
+            }
+            return file;
+          });
+        },
+      );
+
+      // Return context with snapshot for potential rollback
+      return { previousStatuses };
     },
-    onError: (...args) => {
-      onCustomError?.(...args);
+    onError: (error, variables, context) => {
+      // Rollback to previous state on error
+      if (context?.previousStatuses) {
+        queryClient.setQueryData(
+          [QUERY_KEYS.GIT_STATUSES, variables.path],
+          context.previousStatuses,
+        );
+      }
+      onCustomError?.(error, variables, context);
+    },
+    onSuccess: async (data, variables, context) => {
+      // Invalidate to ensure we have latest data from server
+      await queryClient.invalidateQueries([
+        QUERY_KEYS.GIT_STATUSES,
+        variables.path,
+      ]);
+      onCustomSuccess?.(data, variables, context);
     },
   });
 };
@@ -318,15 +366,53 @@ export const useGitUnstage = (
     mutationFn: async (data) => {
       return gitServices.unstage(data.path, data.files);
     },
-    onSuccess: async (...args) => {
+    onMutate: async (variables) => {
+      // Cancel any outgoing refetches
+      await queryClient.cancelQueries([
+        QUERY_KEYS.GIT_STATUSES,
+        variables.path,
+      ]);
+
+      // Snapshot the previous value
+      const previousStatuses = queryClient.getQueryData<FileStatus[]>([
+        QUERY_KEYS.GIT_STATUSES,
+        variables.path,
+      ]);
+
+      // Optimistically update - change 'staged' back to 'modified'
+      queryClient.setQueryData<FileStatus[]>(
+        [QUERY_KEYS.GIT_STATUSES, variables.path],
+        (old = []) => {
+          return old.map((file) => {
+            if (
+              variables.files.includes(file.path) &&
+              file.status === 'staged'
+            ) {
+              return { ...file, status: 'modified' as const };
+            }
+            return file;
+          });
+        },
+      );
+
+      return { previousStatuses };
+    },
+    onError: (error, variables, context) => {
+      // Rollback on error
+      if (context?.previousStatuses) {
+        queryClient.setQueryData(
+          [QUERY_KEYS.GIT_STATUSES, variables.path],
+          context.previousStatuses,
+        );
+      }
+      onCustomError?.(error, variables, context);
+    },
+    onSuccess: async (data, variables, context) => {
       await queryClient.invalidateQueries([
         QUERY_KEYS.GIT_STATUSES,
-        args[1].path,
+        variables.path,
       ]);
-      onCustomSuccess?.(...args);
-    },
-    onError: (...args) => {
-      onCustomError?.(...args);
+      onCustomSuccess?.(data, variables, context);
     },
   });
 };
@@ -345,15 +431,51 @@ export const useGitStageAll = (
     mutationFn: async (data) => {
       return gitServices.stageAll(data.path);
     },
-    onSuccess: async (...args) => {
+    onMutate: async (variables) => {
+      // Cancel any outgoing refetches
+      await queryClient.cancelQueries([
+        QUERY_KEYS.GIT_STATUSES,
+        variables.path,
+      ]);
+
+      // Snapshot the previous value
+      const previousStatuses = queryClient.getQueryData<FileStatus[]>([
+        QUERY_KEYS.GIT_STATUSES,
+        variables.path,
+      ]);
+
+      // Optimistically stage all unstaged files
+      queryClient.setQueryData<FileStatus[]>(
+        [QUERY_KEYS.GIT_STATUSES, variables.path],
+        (old = []) => {
+          return old.map((file) => {
+            // Stage all files that aren't already staged
+            if (file.status !== 'staged') {
+              return { ...file, status: 'staged' as const };
+            }
+            return file;
+          });
+        },
+      );
+
+      return { previousStatuses };
+    },
+    onError: (error, variables, context) => {
+      // Rollback on error
+      if (context?.previousStatuses) {
+        queryClient.setQueryData(
+          [QUERY_KEYS.GIT_STATUSES, variables.path],
+          context.previousStatuses,
+        );
+      }
+      onCustomError?.(error, variables, context);
+    },
+    onSuccess: async (data, variables, context) => {
       await queryClient.invalidateQueries([
         QUERY_KEYS.GIT_STATUSES,
-        args[1].path,
+        variables.path,
       ]);
-      onCustomSuccess?.(...args);
-    },
-    onError: (...args) => {
-      onCustomError?.(...args);
+      onCustomSuccess?.(data, variables, context);
     },
   });
 };
@@ -372,15 +494,51 @@ export const useGitUnstageAll = (
     mutationFn: async (data) => {
       return gitServices.unstageAll(data.path);
     },
-    onSuccess: async (...args) => {
+    onMutate: async (variables) => {
+      // Cancel any outgoing refetches
+      await queryClient.cancelQueries([
+        QUERY_KEYS.GIT_STATUSES,
+        variables.path,
+      ]);
+
+      // Snapshot the previous value
+      const previousStatuses = queryClient.getQueryData<FileStatus[]>([
+        QUERY_KEYS.GIT_STATUSES,
+        variables.path,
+      ]);
+
+      // Optimistically unstage all staged files
+      queryClient.setQueryData<FileStatus[]>(
+        [QUERY_KEYS.GIT_STATUSES, variables.path],
+        (old = []) => {
+          return old.map((file) => {
+            // Unstage all staged files back to modified
+            if (file.status === 'staged') {
+              return { ...file, status: 'modified' as const };
+            }
+            return file;
+          });
+        },
+      );
+
+      return { previousStatuses };
+    },
+    onError: (error, variables, context) => {
+      // Rollback on error
+      if (context?.previousStatuses) {
+        queryClient.setQueryData(
+          [QUERY_KEYS.GIT_STATUSES, variables.path],
+          context.previousStatuses,
+        );
+      }
+      onCustomError?.(error, variables, context);
+    },
+    onSuccess: async (data, variables, context) => {
       await queryClient.invalidateQueries([
         QUERY_KEYS.GIT_STATUSES,
-        args[1].path,
+        variables.path,
       ]);
-      onCustomSuccess?.(...args);
-    },
-    onError: (...args) => {
-      onCustomError?.(...args);
+      onCustomSuccess?.(data, variables, context);
     },
   });
 };
@@ -403,15 +561,45 @@ export const useGitDiscardChanges = (
     mutationFn: async (data) => {
       return gitServices.discardChanges(data.path, data.files);
     },
-    onSuccess: async (...args) => {
+    onMutate: async (variables) => {
+      // Cancel any outgoing refetches
+      await queryClient.cancelQueries([
+        QUERY_KEYS.GIT_STATUSES,
+        variables.path,
+      ]);
+
+      // Snapshot the previous value
+      const previousStatuses = queryClient.getQueryData<FileStatus[]>([
+        QUERY_KEYS.GIT_STATUSES,
+        variables.path,
+      ]);
+
+      // Optimistically remove discarded files from the list
+      queryClient.setQueryData<FileStatus[]>(
+        [QUERY_KEYS.GIT_STATUSES, variables.path],
+        (old = []) => {
+          return old.filter((file) => !variables.files.includes(file.path));
+        },
+      );
+
+      return { previousStatuses };
+    },
+    onError: (error, variables, context) => {
+      // Rollback on error
+      if (context?.previousStatuses) {
+        queryClient.setQueryData(
+          [QUERY_KEYS.GIT_STATUSES, variables.path],
+          context.previousStatuses,
+        );
+      }
+      onCustomError?.(error, variables, context);
+    },
+    onSuccess: async (data, variables, context) => {
       await queryClient.invalidateQueries([
         QUERY_KEYS.GIT_STATUSES,
-        args[1].path,
+        variables.path,
       ]);
-      onCustomSuccess?.(...args);
-    },
-    onError: (...args) => {
-      onCustomError?.(...args);
+      onCustomSuccess?.(data, variables, context);
     },
   });
 };
@@ -430,6 +618,8 @@ export const useGetAheadBehindCount = (
       if (!path) return null;
       return gitServices.getAheadBehindCount(path);
     },
+    staleTime: 10000, // Ahead/behind changes with commits/pulls - 10 seconds
+    cacheTime: 600000,
     ...customOptions,
   });
 };

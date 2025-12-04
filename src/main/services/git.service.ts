@@ -250,21 +250,7 @@ export default class GitService {
         return path.relative(repoPath, file);
       });
 
-      // eslint-disable-next-line no-console
-      console.log('=== GIT ADD DEBUG ===');
-      // eslint-disable-next-line no-console
-      console.log('Repo path:', repoPath);
-      // eslint-disable-next-line no-console
-      console.log('Original files:', files);
-      // eslint-disable-next-line no-console
-      console.log('Relative paths:', relativePaths);
-
       await git.add(relativePaths);
-
-      // eslint-disable-next-line no-console
-      console.log('Git add successful');
-      // eslint-disable-next-line no-console
-      console.log('=== END GIT ADD DEBUG ===');
 
       return { success: true };
     } catch (err: any) {
@@ -505,40 +491,13 @@ export default class GitService {
     const results: FileStatus[] = [];
     const processedFiles = new Set<string>();
 
-    // eslint-disable-next-line no-console
-    console.log('=== GIT STATUS DETAILED DEBUG ===');
-    // eslint-disable-next-line no-console
-    console.log('Repo path:', repoPath);
-
     try {
-      // Check if we're in a git repository
-      const isRepo = await git.checkIsRepo();
-      // eslint-disable-next-line no-console
-      console.log('Is git repo:', isRepo);
-
-      // Get current working directory
-      const cwd = await git.raw(['rev-parse', '--show-toplevel']);
-      // eslint-disable-next-line no-console
-      console.log('Git root directory:', cwd.trim());
-
       // Force refresh git index to detect file changes
       try {
         await git.raw(['update-index', '--refresh']);
       } catch (refreshError) {
         // Git index refresh can fail normally, ignore errors
       }
-
-      // Try regular git status first
-      const regularStatus = await git.status();
-      // eslint-disable-next-line no-console
-      console.log('Regular git status after refresh:', {
-        staged: regularStatus.staged,
-        modified: regularStatus.modified,
-        not_added: regularStatus.not_added,
-        deleted: regularStatus.deleted,
-        renamed: regularStatus.renamed,
-        conflicted: regularStatus.conflicted,
-      });
     } catch (error) {
       // eslint-disable-next-line no-console
       console.error('Git status check failed:', error);
@@ -547,24 +506,8 @@ export default class GitService {
     // Step 1: Get git status for tracked/modified files
     const rawStatus = await git.raw(['status', '--porcelain']);
 
-    // eslint-disable-next-line no-console
-    console.log('Raw porcelain status length:', rawStatus.length);
-    // eslint-disable-next-line no-console
-    console.log(
-      'Raw porcelain status (first 200 chars):',
-      JSON.stringify(rawStatus.substring(0, 200)),
-    );
-
     // Don't trim the whole string - preserve leading spaces on each line
     const lines = rawStatus.split('\n').filter((line) => line.length > 0);
-
-    // eslint-disable-next-line no-console
-    console.log('Filtered lines count:', lines.length);
-    // eslint-disable-next-line no-console
-    console.log(
-      'Raw status lines:',
-      lines.map((l) => JSON.stringify(l)),
-    );
 
     lines.forEach((line) => {
       if (line.length < 3) return;
@@ -578,36 +521,6 @@ export default class GitService {
       const workTreeStatus = line[1]; // Working tree status (position 1)
       const filePath = line.substring(3); // File path (skip 'XY ' - 2 status chars + 1 space)
       const fullPath = path.join(repoPath, filePath);
-
-      // eslint-disable-next-line no-console
-      console.log('Parsing line:', JSON.stringify(line));
-      // eslint-disable-next-line no-console
-      console.log('  Line length:', line.length);
-      // eslint-disable-next-line no-console
-      console.log(
-        '  Char 0 (index):',
-        JSON.stringify(line[0]),
-        'code:',
-        line.charCodeAt(0),
-      );
-      // eslint-disable-next-line no-console
-      console.log(
-        '  Char 1 (work tree):',
-        JSON.stringify(line[1]),
-        'code:',
-        line.charCodeAt(1),
-      );
-      // eslint-disable-next-line no-console
-      console.log(
-        '  Char 2 (space):',
-        JSON.stringify(line[2]),
-        'code:',
-        line.charCodeAt(2),
-      );
-      // eslint-disable-next-line no-console
-      console.log('  File path:', JSON.stringify(filePath));
-      // eslint-disable-next-line no-console
-      console.log('  Full path:', fullPath);
 
       // Skip directories
       if (filePath.endsWith('/')) {
@@ -669,31 +582,6 @@ export default class GitService {
       processedFiles,
     );
     results.push(...untrackedFiles);
-
-    // eslint-disable-next-line no-console
-    console.log('=== GIT STATUS DEBUG ===');
-    // eslint-disable-next-line no-console
-    console.log('Raw git status:', rawStatus);
-    // eslint-disable-next-line no-console
-    console.log('Git status files:', processedFiles.size);
-    // eslint-disable-next-line no-console
-    console.log(
-      'File tree scan found:',
-      untrackedFiles.length,
-      'additional files',
-    );
-    // eslint-disable-next-line no-console
-    console.log('Total file statuses:', results.length);
-    // eslint-disable-next-line no-console
-    console.log(
-      'Results:',
-      results.map((r) => ({
-        path: r.path.replace(repoPath, ''),
-        status: r.status,
-      })),
-    );
-    // eslint-disable-next-line no-console
-    console.log('=== END DEBUG ===');
 
     return results;
   }
