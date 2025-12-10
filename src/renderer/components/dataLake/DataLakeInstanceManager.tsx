@@ -8,7 +8,7 @@ import {
 } from '@mui/material';
 import { Add, Close } from '@mui/icons-material';
 import { useNavigate } from 'react-router-dom';
-import { DuckLakeConnectionWizard } from './DuckLakeConnectionWizard';
+import { DataLakeConnectionWizard } from './DataLakeConnectionWizard';
 import { useCreateDuckLakeInstance } from '../../controllers/duckLake.controller';
 
 interface DuckLakeInstanceManagerProps {
@@ -112,7 +112,7 @@ export const DataLakeInstanceManager: React.FC<
           </IconButton>
         </DialogTitle>
         <DialogContent>
-          <DuckLakeConnectionWizard
+          <DataLakeConnectionWizard
             onComplete={handleCreateInstance}
             onCancel={handleCancel}
             isLoading={createInstanceMutation.isLoading}
