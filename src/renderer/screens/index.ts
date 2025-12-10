@@ -7,7 +7,7 @@ import SelectProject from './selectProject';
 import Setup from './setup';
 import Connections from './connections';
 import CloudExplorer from './cloudExplorer';
-import DuckLake from './duckLake';
+import DuckLake from './dataLake';
 
 export {
   Settings,

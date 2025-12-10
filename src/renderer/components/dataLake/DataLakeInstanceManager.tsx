@@ -18,7 +18,7 @@ interface DuckLakeInstanceManagerProps {
   showButton?: boolean;
 }
 
-export const DuckLakeInstanceManager: React.FC<
+export const DataLakeInstanceManager: React.FC<
   DuckLakeInstanceManagerProps
 > = ({
   onInstanceCreated,
@@ -60,7 +60,7 @@ export const DuckLakeInstanceManager: React.FC<
         onInstanceCreated(newInstance.id);
       } else {
         // Navigate to the new instance
-        navigate(`/app/duck-lake/instances/${newInstance.id}`);
+        navigate(`/app/data-lake/duck-lake/instances/${newInstance.id}`);
       }
     } catch {
       // Error handling is done by the mutation hook via toast

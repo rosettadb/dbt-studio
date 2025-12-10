@@ -23,6 +23,7 @@ import {
   IconButton,
   CircularProgress,
   useTheme,
+  Tooltip,
 } from '@mui/material';
 import {
   Dataset as Database,
@@ -250,6 +251,7 @@ const catalogTypeInfo = {
     pros: ['Multiple clients', 'File-based', 'Good for teams'],
     cons: ['Limited concurrency', 'No remote access'],
     recommended: 'Team collaboration on local network',
+    disabled: true,
   },
   postgresql: {
     title: 'PostgreSQL',
@@ -257,6 +259,7 @@ const catalogTypeInfo = {
     pros: ['Full concurrency', 'Remote access', 'ACID transactions'],
     cons: ['Requires PostgreSQL server', 'More complex setup'],
     recommended: 'Production multi-user environments',
+    disabled: true,
   },
 };
 
@@ -276,7 +279,7 @@ const getDefaultTempDirectory = (): string => {
   return '/tmp/ducklake';
 };
 
-export const DuckLakeConnectionWizard: React.FC<
+export const DataLakeConnectionWizard: React.FC<
   DuckLakeConnectionWizardProps
 > = ({ onComplete, onCancel, isLoading = false }) => {
   const navigate = useNavigate();
@@ -623,6 +626,22 @@ export const DuckLakeConnectionWizard: React.FC<
               await DuckLakeService.validateStorageConnection(data);
             if (result.success) {
               setWizardData((prev) => ({ ...prev, storage: data }));
+
+              // Pre-populate DuckDB metadata path if empty
+              const currentMetadataPath = catalogForm.getValues(
+                'duckdb.metadataPath',
+              );
+              if (!currentMetadataPath) {
+                const instanceName = basicsForm.getValues('name');
+                if (instanceName) {
+                  // Sanitize instance name for filename
+                  const safeName = instanceName
+                    .toLowerCase()
+                    .replace(/[^a-z0-9]/g, '_');
+                  const defaultPath = `/tmp/ducklake/${safeName}.duckdb`;
+                  catalogForm.setValue('duckdb.metadataPath', defaultPath);
+                }
+              }
             } else {
               isValid = false;
               setValidationError(result.error || 'Connection failed');
@@ -727,7 +746,7 @@ export const DuckLakeConnectionWizard: React.FC<
     if (onCancel) {
       onCancel();
     } else {
-      navigate('/app/duck-lake/instances');
+      navigate('/app/data-lake/duck-lake/instances');
     }
   };
 
@@ -1280,55 +1299,101 @@ export const DuckLakeConnectionWizard: React.FC<
                   <Grid container spacing={2} sx={{ mt: 1 }}>
                     {Object.entries(catalogTypeInfo).map(([type, info]) => (
                       <Grid item xs={12} sm={4} key={type}>
-                        <Card
-                          variant={
-                            field.value === type ? 'elevation' : 'outlined'
+                        <Tooltip
+                          title={
+                            (info as any).disabled
+                              ? 'This catalog type will be available in a future release'
+                              : ''
                           }
-                          sx={{
-                            cursor: 'pointer',
-                            transition: 'all 0.2s',
-                            height: '140px',
-                            border:
-                              field.value === type ? '2px solid' : '1px solid',
-                            borderColor:
-                              field.value === type ? 'primary.main' : 'divider',
-                            '&:hover': {
-                              elevation: 4,
-                              borderColor: 'primary.main',
-                            },
-                          }}
-                          onClick={() => field.onChange(type)}
                         >
-                          <Box
-                            sx={{
-                              p: 2,
-                              height: '100%',
-                              display: 'flex',
-                              flexDirection: 'column',
-                              alignItems: 'center',
-                              justifyContent: 'center',
-                              gap: 1,
-                            }}
-                          >
-                            <Box
-                              component="img"
-                              src={getDatabaseIcon(type)}
-                              alt={info.title}
+                          <Box>
+                            <Card
+                              variant={
+                                field.value === type ? 'elevation' : 'outlined'
+                              }
                               sx={{
-                                width: 56,
-                                height: 56,
-                                objectFit: 'contain',
+                                cursor: (info as any).disabled
+                                  ? 'not-allowed'
+                                  : 'pointer',
+                                transition: 'all 0.2s',
+                                height: '140px',
+                                border:
+                                  field.value === type
+                                    ? '2px solid'
+                                    : '1px solid',
+                                borderColor:
+                                  field.value === type
+                                    ? 'primary.main'
+                                    : 'divider',
+                                opacity: (info as any).disabled ? 0.6 : 1,
+                                position: 'relative',
+                                overflow: 'hidden',
+                                '&:hover': {
+                                  elevation: (info as any).disabled ? 0 : 4,
+                                  borderColor: (info as any).disabled
+                                    ? 'divider'
+                                    : 'primary.main',
+                                },
                               }}
-                            />
-                            <Typography
-                              variant="body2"
-                              textAlign="center"
-                              fontWeight="medium"
+                              onClick={() => {
+                                if (!(info as any).disabled) {
+                                  field.onChange(type);
+                                }
+                              }}
                             >
-                              {info.title}
-                            </Typography>
+                              {(info as any).disabled && (
+                                <Box
+                                  sx={{
+                                    position: 'absolute',
+                                    top: 12,
+                                    right: -32,
+                                    transform: 'rotate(45deg)',
+                                    backgroundColor: 'primary.main',
+                                    color: 'primary.contrastText',
+                                    width: '100px',
+                                    textAlign: 'center',
+                                    py: 0.5,
+                                    fontSize: '0.75rem',
+                                    fontWeight: 'bold',
+                                    boxShadow: 2,
+                                    zIndex: 1,
+                                  }}
+                                >
+                                  Soon
+                                </Box>
+                              )}
+                              <Box
+                                sx={{
+                                  p: 2,
+                                  height: '100%',
+                                  display: 'flex',
+                                  flexDirection: 'column',
+                                  alignItems: 'center',
+                                  justifyContent: 'center',
+                                  gap: 1,
+                                }}
+                              >
+                                <Box
+                                  component="img"
+                                  src={getDatabaseIcon(type)}
+                                  alt={info.title}
+                                  sx={{
+                                    width: 56,
+                                    height: 56,
+                                    objectFit: 'contain',
+                                  }}
+                                />
+                                <Typography
+                                  variant="body2"
+                                  textAlign="center"
+                                  fontWeight="medium"
+                                >
+                                  {info.title}
+                                </Typography>
+                              </Box>
+                            </Card>
                           </Box>
-                        </Card>
+                        </Tooltip>
                       </Grid>
                     ))}
                   </Grid>

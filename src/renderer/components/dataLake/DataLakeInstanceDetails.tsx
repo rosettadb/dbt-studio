@@ -39,7 +39,7 @@ import {
 } from '@mui/icons-material';
 import { useNavigate } from 'react-router-dom';
 import moment from 'moment';
-import { DuckLakeTablesView } from './DuckLakeTablesView';
+import { DataLakeTablesView } from './DataLakeTablesView';
 import {
   databaseIcons,
   cloudStorageImages,
@@ -97,7 +97,7 @@ interface DuckLakeInstanceDetailsProps {
   isLoading?: boolean;
 }
 
-export const DuckLakeInstanceDetails: React.FC<
+export const DataLakeInstanceDetails: React.FC<
   DuckLakeInstanceDetailsProps
 > = ({ instance, onEdit, onDelete, isLoading = false }) => {
   const navigate = useNavigate();
@@ -109,17 +109,6 @@ export const DuckLakeInstanceDetails: React.FC<
 
   // Fetch health data for this instance
   const healthQuery = useDuckLakeInstanceHealth(instance.id);
-
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case 'active':
-        return 'success';
-      case 'error':
-        return 'error';
-      default:
-        return 'default';
-    }
-  };
 
   const getStatusIcon = (status: string) => {
     switch (status) {
@@ -154,7 +143,7 @@ export const DuckLakeInstanceDetails: React.FC<
     if (onEdit) {
       onEdit(instance.id);
     } else {
-      navigate(`/app/duck-lake/instances/${instance.id}/edit`);
+      navigate(`/app/data-lake/duck-lake/instances/${instance.id}/edit`);
     }
   };
 
@@ -226,18 +215,6 @@ export const DuckLakeInstanceDetails: React.FC<
             Instance Status
           </Typography>
           <List dense>
-            <ListItem>
-              <ListItemText
-                primary="Status"
-                secondary={
-                  <Chip
-                    label={instance.status}
-                    size="small"
-                    color={getStatusColor(instance.status) as any}
-                  />
-                }
-              />
-            </ListItem>
             <ListItem>
               <ListItemText
                 primary="Created"
@@ -742,7 +719,7 @@ export const DuckLakeInstanceDetails: React.FC<
           </Tabs>
         </Box>
         <CardContent>
-          {currentTab === 0 && <DuckLakeTablesView instanceId={instance.id} />}
+          {currentTab === 0 && <DataLakeTablesView instanceId={instance.id} />}
           {currentTab === 1 && renderOverviewTab()}
           {currentTab === 2 && (
             <Box sx={{ mt: 2 }}>

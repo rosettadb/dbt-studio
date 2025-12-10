@@ -17,7 +17,7 @@ import {
   CircularProgress,
   Alert,
 } from '@mui/material';
-import { Edit, Delete, Circle, Storage, Refresh } from '@mui/icons-material';
+import { Edit, Delete, Storage, Refresh } from '@mui/icons-material';
 import { useNavigate } from 'react-router-dom';
 import moment from 'moment';
 import {
@@ -30,7 +30,7 @@ interface DuckLakeInstancesProps {
   onInstanceSelect?: (instanceId: string) => void;
 }
 
-export const DuckLakeInstances: React.FC<DuckLakeInstancesProps> = ({
+export const DataLakeInstances: React.FC<DuckLakeInstancesProps> = ({
   onInstanceSelect,
 }) => {
   const navigate = useNavigate();
@@ -52,27 +52,6 @@ export const DuckLakeInstances: React.FC<DuckLakeInstancesProps> = ({
     refetch,
   } = useDuckLakeInstances();
   const deleteMutation = useDeleteDuckLakeInstance();
-
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case 'active':
-        return 'success';
-      case 'error':
-        return 'error';
-      default:
-        return 'default';
-    }
-  };
-
-  const getStatusIcon = (status: string) => {
-    let color = 'grey.500';
-    if (status === 'active') {
-      color = 'success.main';
-    } else if (status === 'error') {
-      color = 'error.main';
-    }
-    return <Circle sx={{ fontSize: 12, color }} />;
-  };
 
   const handleDelete = (instanceId: string) => {
     const instance = instances.find((inst) => inst.id === instanceId);
@@ -103,14 +82,14 @@ export const DuckLakeInstances: React.FC<DuckLakeInstancesProps> = ({
   };
 
   const handleEdit = (instanceId: string) => {
-    navigate(`/app/duck-lake/instances/${instanceId}/edit`);
+    navigate(`/app/data-lake/duck-lake/instances/${instanceId}/edit`);
   };
 
   const handleInstanceClick = (instanceId: string) => {
     if (onInstanceSelect) {
       onInstanceSelect(instanceId);
     } else {
-      navigate(`/app/duck-lake/instances/${instanceId}`);
+      navigate(`/app/data-lake/duck-lake/instances/${instanceId}`);
     }
   };
 
@@ -118,7 +97,7 @@ export const DuckLakeInstances: React.FC<DuckLakeInstancesProps> = ({
     return (
       <Box sx={{ p: 2 }}>
         <Alert severity="error" sx={{ mb: 2 }}>
-          Failed to load DuckLake instances: {(error as Error).message}
+          Failed to load DataLake instances: {(error as Error).message}
         </Alert>
         <Button onClick={() => refetch()} startIcon={<Refresh />}>
           Retry
@@ -140,10 +119,10 @@ export const DuckLakeInstances: React.FC<DuckLakeInstancesProps> = ({
       >
         <Box>
           <Typography variant="h5" component="h1" sx={{ fontWeight: 'bold' }}>
-            DuckLake Instances
+            DataLake Instances
           </Typography>
           <Typography variant="body2" color="text.secondary">
-            Manage your DuckLake data lake instances
+            Manage your DataLake instances
           </Typography>
         </Box>
         <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
@@ -170,11 +149,11 @@ export const DuckLakeInstances: React.FC<DuckLakeInstancesProps> = ({
           <CardContent>
             <Storage sx={{ fontSize: 64, color: 'text.secondary', mb: 2 }} />
             <Typography variant="h6" gutterBottom>
-              No DuckLake Instances
+              No DataLake Instances
             </Typography>
             <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
-              Create your first DuckLake instance using the &quot;New
-              Instance&quot; button in the sidebar.
+              Create your first DataLake instance using the &quot;New
+              DataLake&quot; button in the sidebar.
             </Typography>
           </CardContent>
         </Card>
@@ -187,7 +166,7 @@ export const DuckLakeInstances: React.FC<DuckLakeInstancesProps> = ({
             <TableHead>
               <TableRow>
                 <TableCell>Name</TableCell>
-                <TableCell>Status</TableCell>
+                <TableCell>DataLake Type</TableCell>
                 <TableCell>Catalog Type</TableCell>
                 <TableCell>Data Path</TableCell>
                 <TableCell>Created</TableCell>
@@ -219,15 +198,12 @@ export const DuckLakeInstances: React.FC<DuckLakeInstancesProps> = ({
                     </Box>
                   </TableCell>
                   <TableCell>
-                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                      {getStatusIcon(instance.status)}
-                      <Chip
-                        label={instance.status}
-                        size="small"
-                        color={getStatusColor(instance.status) as any}
-                        variant="outlined"
-                      />
-                    </Box>
+                    <Chip
+                      label="DuckLake"
+                      size="small"
+                      color="primary"
+                      variant="outlined"
+                    />
                   </TableCell>
                   <TableCell>
                     <Chip
@@ -292,7 +268,7 @@ export const DuckLakeInstances: React.FC<DuckLakeInstancesProps> = ({
         isOpen={deleteConfirmation.isOpen}
         onClose={handleCancelDelete}
         onConfirm={handleConfirmDelete}
-        title="Delete DuckLake Instance"
+        title="Delete DataLake Instance"
         question={`Are you sure you want to delete "${deleteConfirmation.instanceName}"? This action cannot be undone.`}
       />
     </Box>

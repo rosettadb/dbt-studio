@@ -13,6 +13,7 @@ import {
   Paper,
   Chip,
   IconButton,
+  Tooltip,
 } from '@mui/material';
 import { TableChart, Visibility, QueryStats } from '@mui/icons-material';
 import { useNavigate } from 'react-router-dom';
@@ -37,7 +38,7 @@ interface DuckLakeTablesProps {
   onQuery?: (tableId: string) => void;
 }
 
-export const DuckLakeTables: React.FC<DuckLakeTablesProps> = ({
+export const DataLakeTables: React.FC<DuckLakeTablesProps> = ({
   tables = [],
   selectedInstanceId,
   onPreview,
@@ -163,7 +164,7 @@ export const DuckLakeTables: React.FC<DuckLakeTablesProps> = ({
                   }}
                   onClick={() =>
                     navigate(
-                      `/app/duck-lake/instances/${table.instanceId}/tables/${table.name}`,
+                      `/app/data-lake/duck-lake/instances/${table.instanceId}/tables/${table.name}`,
                     )
                   }
                 >
@@ -206,28 +207,36 @@ export const DuckLakeTables: React.FC<DuckLakeTablesProps> = ({
                   </TableCell>
                   <TableCell align="right">
                     <Box sx={{ display: 'flex', gap: 0.5 }}>
-                      <IconButton
-                        size="small"
-                        color="primary"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handlePreview(table.id);
-                        }}
-                        title="Preview Data"
-                      >
-                        <Visibility fontSize="small" />
-                      </IconButton>
-                      <IconButton
-                        size="small"
-                        color="secondary"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleQuery(table.id);
-                        }}
-                        title="Query Table"
-                      >
-                        <QueryStats fontSize="small" />
-                      </IconButton>
+                      <Tooltip title="Preview Data coming soon">
+                        <span>
+                          <IconButton
+                            size="small"
+                            color="primary"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handlePreview(table.id);
+                            }}
+                            disabled
+                          >
+                            <Visibility fontSize="small" />
+                          </IconButton>
+                        </span>
+                      </Tooltip>
+                      <Tooltip title="Query Table coming soon">
+                        <span>
+                          <IconButton
+                            size="small"
+                            color="secondary"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleQuery(table.id);
+                            }}
+                            disabled
+                          >
+                            <QueryStats fontSize="small" />
+                          </IconButton>
+                        </span>
+                      </Tooltip>
                     </Box>
                   </TableCell>
                 </TableRow>

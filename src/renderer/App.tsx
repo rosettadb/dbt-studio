@@ -21,7 +21,7 @@ import {
   Setup,
   CloudExplorer,
   Connections,
-  DuckLake,
+  DuckLake as DataLake,
 } from './screens';
 import { SelectProjectLayout } from './layouts';
 import { AppProvider, ProcessProvider } from './context';
@@ -90,26 +90,25 @@ const App: React.FC = () => {
             element={<CloudExplorer />}
           />
           <Route
-            path="duck-lake"
-            element={<Navigate to="/app/duck-lake/dashboard" />}
+            path="data-lake"
+            element={<Navigate to="/app/data-lake/dashboard" />}
           />
-          <Route path="duck-lake/dashboard" element={<DuckLake />} />
-          <Route path="duck-lake/instances" element={<DuckLake />} />
+          <Route path="data-lake/dashboard" element={<DataLake />} />
+          <Route path="data-lake/instances" element={<DataLake />} />
+          <Route path="data-lake/new-instance" element={<DataLake />} />
+          <Route path="data-lake/history" element={<DataLake />} />
           <Route
-            path="duck-lake/instances/:instanceId"
-            element={<DuckLake />}
-          />
-          <Route
-            path="duck-lake/instances/:instanceId/edit"
-            element={<DuckLake />}
+            path="data-lake/:type/instances/:instanceId"
+            element={<DataLake />}
           />
           <Route
-            path="duck-lake/instances/:instanceId/tables/:tableName"
-            element={<DuckLake />}
+            path="data-lake/:type/instances/:instanceId/edit"
+            element={<DataLake />}
           />
-          <Route path="duck-lake/history" element={<DuckLake />} />
-          <Route path="duck-lake/new-instance" element={<DuckLake />} />
-          <Route path="duck-lake/table/:tableId" element={<DuckLake />} />
+          <Route
+            path="data-lake/:type/instances/:instanceId/tables/:tableName"
+            element={<DataLake />}
+          />
           <Route path="loading" element={<Loading />} />
           <Route path="*" element={<Navigate to="/app" />} />
         </Route>

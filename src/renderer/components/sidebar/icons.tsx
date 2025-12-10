@@ -71,7 +71,7 @@ export const ElectricalServices: React.FC = () => (
   <ElectricalServicesIcon color="primary" />
 );
 
-export const DataLakeSVG: React.FC = () => {
+export const DuckLakeSVG: React.FC = () => {
   const theme = useTheme();
   return (
     <Icon
@@ -89,10 +89,41 @@ export const DataLakeSVG: React.FC = () => {
   );
 };
 
-export const DataLake: React.FC = () => {
+export const DuckLake: React.FC = () => {
   return (
     <img
       src={icons.duckLake}
+      alt="data-lake"
+      style={{ ...style, width: 24, height: 24 }}
+    />
+  );
+};
+
+export const DataLakeSVG: React.FC<{ width?: number; height?: number }> = ({
+  width = 24,
+  height = 24,
+}) => {
+  const theme = useTheme();
+  return (
+    <Icon
+      src={icons.dataLakeSVG}
+      width={width || 24}
+      height={height || 24}
+      style={{
+        display: 'inline-block',
+        verticalAlign: 'middle',
+        margin: '0 2px 0 0',
+        overflow: 'hidden',
+      }}
+      color={theme.palette.primary.main}
+    />
+  );
+};
+
+export const DataLake: React.FC = () => {
+  return (
+    <img
+      src={icons.dataLake}
       alt="data-lake"
       style={{ ...style, width: 24, height: 24 }}
     />

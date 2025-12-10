@@ -36,7 +36,7 @@ const instanceEditSchema = z.object({
 
 type InstanceEditData = z.infer<typeof instanceEditSchema>;
 
-export const DuckLakeInstanceEditForm: React.FC = () => {
+export const DataLakeInstanceEditForm: React.FC = () => {
   const { instanceId } = useParams<{ instanceId: string }>();
   const navigate = useNavigate();
   const instanceQuery = useDuckLakeInstance(instanceId || '');
@@ -59,7 +59,7 @@ export const DuckLakeInstanceEditForm: React.FC = () => {
   });
 
   if (!instanceId) {
-    return <Navigate to="/app/duck-lake/instances" replace />;
+    return <Navigate to="/app/data-lake/duck-lake/instances" replace />;
   }
 
   if (instanceQuery.isLoading) {
@@ -126,11 +126,11 @@ export const DuckLakeInstanceEditForm: React.FC = () => {
       data: updateRequest,
     });
 
-    navigate(`/app/duck-lake/instances/${instanceId}`);
+    navigate(`/app/data-lake/duck-lake/instances/${instanceId}`);
   };
 
   const handleCancel = () => {
-    navigate(`/app/duck-lake/instances/${instanceId}`);
+    navigate(`/app/data-lake/duck-lake/instances/${instanceId}`);
   };
 
   return (

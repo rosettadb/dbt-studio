@@ -89,7 +89,7 @@ export default class DuckLakeInstanceStore {
 
   private static readonly DUCKLAKE_DIR = path.join(
     app.getPath('userData'),
-    'ducklake',
+    'datalake',
   );
 
   private static readonly INSTANCES_FILE = path.join(

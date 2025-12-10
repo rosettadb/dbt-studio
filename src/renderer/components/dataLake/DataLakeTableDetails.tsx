@@ -69,7 +69,7 @@ function TabPanel(props: TabPanelProps) {
   );
 }
 
-export const DuckLakeTableDetails: React.FC = () => {
+export const DataLakeTableDetails: React.FC = () => {
   const navigate = useNavigate();
   const { instanceId, tableName } = useParams<{
     instanceId: string;
@@ -162,7 +162,9 @@ export const DuckLakeTableDetails: React.FC = () => {
       <Box sx={{ display: 'flex', alignItems: 'center', mb: 3, gap: 2 }}>
         <Tooltip title="Back to Instance Details">
           <IconButton
-            onClick={() => navigate(`/app/duck-lake/instances/${instanceId}`)}
+            onClick={() =>
+              navigate(`/app/data-lake/duck-lake/instances/${instanceId}`)
+            }
             sx={{ mr: 1 }}
           >
             <ArrowBack />

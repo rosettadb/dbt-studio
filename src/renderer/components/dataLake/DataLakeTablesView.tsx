@@ -7,8 +7,8 @@ import {
   Typography,
 } from '@mui/material';
 import { Add } from '@mui/icons-material';
-import { DuckLakeTables } from './DuckLakeTables';
-import { DuckLakeTableImportWizard } from './DuckLakeTableImportWizard';
+import { DataLakeTables } from './DataLakeTables';
+import { DataLakeTableImportWizard } from './DataLakeTableImportWizard';
 import {
   useDuckLakeTables,
   useImportDuckLakeTable,
@@ -16,13 +16,13 @@ import {
   useDuckLakeInstance,
 } from '../../controllers/duckLake.controller';
 
-interface DuckLakeTablesViewProps {
+interface DataLakeTablesViewProps {
   instanceId: string;
   onPreview?: (tableName: string) => void;
   onQuery?: (tableName: string) => void;
 }
 
-export const DuckLakeTablesView: React.FC<DuckLakeTablesViewProps> = ({
+export const DataLakeTablesView: React.FC<DataLakeTablesViewProps> = ({
   instanceId,
   onPreview,
   onQuery,
@@ -37,16 +37,16 @@ export const DuckLakeTablesView: React.FC<DuckLakeTablesViewProps> = ({
 
   // Debug logging
   // eslint-disable-next-line no-console
-  console.log('[DuckLakeTablesView] instanceId:', instanceId);
+  console.log('[DataLakeTablesView] instanceId:', instanceId);
   // eslint-disable-next-line no-console
   console.log(
-    '[DuckLakeTablesView] tablesQuery.isLoading:',
+    '[DataLakeTablesView] tablesQuery.isLoading:',
     tablesQuery.isLoading,
   );
   // eslint-disable-next-line no-console
-  console.log('[DuckLakeTablesView] tablesQuery.error:', tablesQuery.error);
+  console.log('[DataLakeTablesView] tablesQuery.error:', tablesQuery.error);
   // eslint-disable-next-line no-console
-  console.log('[DuckLakeTablesView] tablesQuery.data:', tablesQuery.data);
+  console.log('[DataLakeTablesView] tablesQuery.data:', tablesQuery.data);
 
   const handleImportTable = (tableName: string, sourceQuery: string) => {
     importTableMutation.mutate(
@@ -119,7 +119,7 @@ export const DuckLakeTablesView: React.FC<DuckLakeTablesViewProps> = ({
     );
   }
 
-  // Convert tables to format expected by DuckLakeTables component
+  // Convert tables to format expected by DataLakeTables component
   const formattedTables = (tablesQuery.data || []).map((table) => ({
     id: `${instanceId}-${table.name}`,
     name: table.name,
@@ -132,7 +132,7 @@ export const DuckLakeTablesView: React.FC<DuckLakeTablesViewProps> = ({
   }));
 
   // eslint-disable-next-line no-console
-  console.log('[DuckLakeTablesView] formattedTables:', formattedTables);
+  console.log('[DataLakeTablesView] formattedTables:', formattedTables);
 
   return (
     <Box>
@@ -146,14 +146,14 @@ export const DuckLakeTablesView: React.FC<DuckLakeTablesViewProps> = ({
         </Button>
       </Box>
 
-      <DuckLakeTables
+      <DataLakeTables
         tables={formattedTables}
         selectedInstanceId={instanceId}
         onPreview={onPreview}
         onQuery={onQuery}
       />
 
-      <DuckLakeTableImportWizard
+      <DataLakeTableImportWizard
         open={importWizardOpen}
         onClose={() => setImportWizardOpen(false)}
         onImport={handleImportTable}

@@ -8,7 +8,6 @@ import {
   CardHeader,
   Typography,
   Button,
-  Chip,
 } from '@mui/material';
 import {
   Storage,
@@ -23,6 +22,8 @@ import {
   cloudStorageImages,
   databaseIcons,
 } from '../../../../assets/connectionIcons';
+import { icons } from '../../../../assets/icons';
+import { DataLakeSVG } from '../sidebar/icons';
 
 interface DuckLakeInstance {
   id: string;
@@ -74,7 +75,7 @@ interface DuckLakeDashboardProps {
   instances?: DuckLakeInstance[];
 }
 
-export const DuckLakeDashboard: React.FC<DuckLakeDashboardProps> = ({
+export const DataLakeDashboard: React.FC<DuckLakeDashboardProps> = ({
   instances = [],
 }) => {
   const navigate = useNavigate();
@@ -100,20 +101,9 @@ export const DuckLakeDashboard: React.FC<DuckLakeDashboardProps> = ({
     };
   }, [instances]);
 
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case 'active':
-        return 'success';
-      case 'error':
-        return 'error';
-      default:
-        return 'default';
-    }
-  };
-
   return (
     <Box sx={{ p: 2 }}>
-      {/* Header with title and manage ducklakes button */}
+      {/* Header with title and manage datalakes button */}
       <Box
         sx={{
           display: 'flex',
@@ -130,16 +120,16 @@ export const DuckLakeDashboard: React.FC<DuckLakeDashboardProps> = ({
           }}
         >
           <Typography variant="h4" component="h1" sx={{ fontWeight: 'bold' }}>
-            DuckLake Dashboard
+            DataLake Dashboard
           </Typography>
           <Dashboard sx={{ color: 'text.secondary', fontSize: 28 }} />
         </Box>
         <Button
           variant="outlined"
           startIcon={<Settings />}
-          onClick={() => navigate('/app/duck-lake/instances')}
+          onClick={() => navigate('/app/data-lake/instances')}
         >
-          Manage ducklakes
+          Manage DataLakes
         </Button>
       </Box>
 
@@ -171,9 +161,11 @@ export const DuckLakeDashboard: React.FC<DuckLakeDashboardProps> = ({
                 }}
               >
                 <Typography variant="subtitle2" color="text.secondary">
-                  Total ducklakes
+                  Total DataLakes
                 </Typography>
-                <Storage sx={{ color: 'text.secondary', fontSize: 20 }} />
+                <Box>
+                  <DataLakeSVG width={24} height={24} />
+                </Box>
               </Box>
             }
             sx={{ pb: 1 }}
@@ -182,14 +174,119 @@ export const DuckLakeDashboard: React.FC<DuckLakeDashboardProps> = ({
             <Typography
               variant="h4"
               component="div"
-              sx={{ fontWeight: 'bold' }}
+              sx={{ fontWeight: 'bold', mb: 2 }}
             >
               {stats.totalInstances}
             </Typography>
-            <Typography variant="body2" color="text.secondary">
-              {stats.activeInstances} active,{' '}
-              {stats.totalInstances - stats.activeInstances} inactive
-            </Typography>
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5 }}>
+              <Box
+                sx={{
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center',
+                }}
+              >
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                  <DataLakeSVG width={16} height={16} />
+                  <Typography variant="body2" color="text.secondary">
+                    DuckLake
+                  </Typography>
+                </Box>
+                <Typography variant="body2" sx={{ fontWeight: 500 }}>
+                  {instances.length}
+                </Typography>
+              </Box>
+              <Box
+                sx={{
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center',
+                }}
+              >
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                  <Box
+                    component="img"
+                    src={icons.apacheIcebergLake}
+                    alt="Apache Iceberg"
+                    sx={{ width: 16, height: 16, opacity: 0.4 }}
+                  />
+                  <Typography
+                    variant="body2"
+                    color="text.secondary"
+                    sx={{ opacity: 0.6 }}
+                  >
+                    Apache Iceberg
+                  </Typography>
+                </Box>
+                <Typography
+                  variant="body2"
+                  color="text.secondary"
+                  sx={{ opacity: 0.6 }}
+                >
+                  0
+                </Typography>
+              </Box>
+              <Box
+                sx={{
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center',
+                }}
+              >
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                  <Box
+                    component="img"
+                    src={icons.deltaLake}
+                    alt="Delta Lake"
+                    sx={{ width: 16, height: 16, opacity: 0.4 }}
+                  />
+                  <Typography
+                    variant="body2"
+                    color="text.secondary"
+                    sx={{ opacity: 0.6 }}
+                  >
+                    Delta Lake
+                  </Typography>
+                </Box>
+                <Typography
+                  variant="body2"
+                  color="text.secondary"
+                  sx={{ opacity: 0.6 }}
+                >
+                  0
+                </Typography>
+              </Box>
+              <Box
+                sx={{
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center',
+                }}
+              >
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                  <Box
+                    component="img"
+                    src={icons.apacheHudiLake}
+                    alt="Apache Hudi"
+                    sx={{ width: 16, height: 16, opacity: 0.4 }}
+                  />
+                  <Typography
+                    variant="body2"
+                    color="text.secondary"
+                    sx={{ opacity: 0.6 }}
+                  >
+                    Apache Hudi
+                  </Typography>
+                </Box>
+                <Typography
+                  variant="body2"
+                  color="text.secondary"
+                  sx={{ opacity: 0.6 }}
+                >
+                  0
+                </Typography>
+              </Box>
+            </Box>
           </CardContent>
         </Card>
 
@@ -371,7 +468,7 @@ export const DuckLakeDashboard: React.FC<DuckLakeDashboardProps> = ({
           mt: 3,
         }}
       >
-        {/* Recent ducklakes */}
+        {/* Recent DataLakes */}
         <Card
           sx={{
             display: 'flex',
@@ -395,13 +492,15 @@ export const DuckLakeDashboard: React.FC<DuckLakeDashboardProps> = ({
               >
                 <Box>
                   <Typography variant="h6" component="h2">
-                    Recent ducklakes
+                    Recent DataLakes
                   </Typography>
                   <Typography variant="body2" color="text.secondary">
-                    Recently updated ducklakes
+                    Recently updated DataLakes
                   </Typography>
                 </Box>
-                <Storage sx={{ color: 'text.secondary', fontSize: 24 }} />
+                <Box>
+                  <DataLakeSVG width={24} height={24} />
+                </Box>
               </Box>
             }
           />
@@ -411,7 +510,7 @@ export const DuckLakeDashboard: React.FC<DuckLakeDashboardProps> = ({
             <Box sx={{ flex: 1, mb: 2 }}>
               {instances.length === 0 ? (
                 <Typography variant="body2" color="text.secondary">
-                  No ducklakes created yet
+                  No DataLakes created yet
                 </Typography>
               ) : (
                 <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
@@ -430,7 +529,9 @@ export const DuckLakeDashboard: React.FC<DuckLakeDashboardProps> = ({
                         },
                       }}
                       onClick={() =>
-                        navigate(`/app/duck-lake/instance/${instance.id}`)
+                        navigate(
+                          `/app/data-lake/duck-lake/instances/${instance.id}`,
+                        )
                       }
                     >
                       <Box
@@ -449,11 +550,12 @@ export const DuckLakeDashboard: React.FC<DuckLakeDashboardProps> = ({
                       <Box
                         sx={{ display: 'flex', alignItems: 'center', gap: 1 }}
                       >
-                        <Chip
-                          label={instance.status}
-                          size="small"
-                          color={getStatusColor(instance.status) as any}
-                          variant="outlined"
+                        <Box
+                          component="img"
+                          src={icons.duckLake}
+                          alt="DuckLake"
+                          sx={{ width: 16, height: 16 }}
+                          title="DuckLake"
                         />
                         <Typography variant="caption" color="text.secondary">
                           {moment(instance.updatedAt).fromNow()}
@@ -467,10 +569,10 @@ export const DuckLakeDashboard: React.FC<DuckLakeDashboardProps> = ({
             <Button
               variant="outlined"
               size="small"
-              onClick={() => navigate('/app/duck-lake/instances')}
+              onClick={() => navigate('/app/data-lake/instances')}
               fullWidth
             >
-              View all ducklakes
+              View all DataLakes
             </Button>
           </CardContent>
         </Card>
@@ -559,24 +661,24 @@ export const DuckLakeDashboard: React.FC<DuckLakeDashboardProps> = ({
             <CardHeader
               title={
                 <Typography variant="h6" component="h2">
-                  Welcome to DuckLake
+                  Welcome to DataLake
                 </Typography>
               }
-              subheader="Get started by creating your first DuckLake ducklakes"
+              subheader="Get started by creating your first DataLake"
             />
             <CardContent>
               <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
-                DuckLake allows you to create and manage DuckDB ducklakes with
-                various catalog backends including DuckDB, SQLite, and
-                PostgreSQL. Start by creating your first ducklakes.
+                DataLake allows you to create and manage DataLakes with various
+                catalog backends including DuckDB, SQLite, and PostgreSQL. Start
+                by creating your first DataLake.
               </Typography>
               <Button
                 variant="contained"
                 color="primary"
                 startIcon={<Add />}
-                onClick={() => navigate('/app/duck-lake/new-instance')}
+                onClick={() => navigate('/app/data-lake/new-instance')}
               >
-                Create ducklakes
+                Create DataLake
               </Button>
             </CardContent>
           </Card>

@@ -15,15 +15,19 @@ import {
   Card,
   CardContent,
   CardActionArea,
+  IconButton,
 } from '@mui/material';
 import {
   Link as LinkIcon,
   ArrowBack,
   ArrowForward,
   Folder,
+  FolderOpen,
+  Close,
 } from '@mui/icons-material';
+import { useFilePicker } from '../../controllers';
 
-interface DuckLakeTableImportWizardProps {
+interface DataLakeTableImportWizardProps {
   open: boolean;
   onClose: () => void;
   onImport: (tableName: string, sourceQuery: string) => void;
@@ -35,15 +39,37 @@ type SourceType = 'url' | 'file';
 
 const steps = ['Select Source', 'Configure Import', 'Review'];
 
-export const DuckLakeTableImportWizard: React.FC<
-  DuckLakeTableImportWizardProps
+export const DataLakeTableImportWizard: React.FC<
+  DataLakeTableImportWizardProps
 > = ({ open, onClose, onImport, isLoading = false, dataPath }) => {
   const [activeStep, setActiveStep] = useState(0);
   const [sourceType, setSourceType] = useState<SourceType>('url');
   const [tableName, setTableName] = useState('');
   const [sourceUrl, setSourceUrl] = useState('');
   const [filePath, setFilePath] = useState('');
+
   const [error, setError] = useState<string>('');
+
+  const { mutate: getFiles } = useFilePicker();
+
+  const handleFileSelect = () => {
+    getFiles(
+      {
+        properties: ['openFile'],
+        filters: [
+          { name: 'Data Files', extensions: ['csv', 'parquet', 'json'] },
+          { name: 'All Files', extensions: ['*'] },
+        ],
+      },
+      {
+        onSuccess: (filePaths) => {
+          if (filePaths && filePaths.length > 0) {
+            setFilePath(filePaths[0]);
+          }
+        },
+      },
+    );
+  };
 
   const handleNext = () => {
     if (activeStep === 0) {
@@ -216,6 +242,13 @@ export const DuckLakeTableImportWizard: React.FC<
             onChange={(e) => setFilePath(e.target.value)}
             placeholder="/path/to/file.csv"
             helperText="Absolute or relative path to CSV, Parquet, or JSON file"
+            InputProps={{
+              endAdornment: (
+                <IconButton onClick={handleFileSelect} edge="end">
+                  <FolderOpen />
+                </IconButton>
+              ),
+            }}
           />
           <Alert severity="info" sx={{ mt: 2 }}>
             <Typography variant="body2">
@@ -359,7 +392,12 @@ export const DuckLakeTableImportWizard: React.FC<
         {renderStepContent()}
       </DialogContent>
       <DialogActions>
-        <Button onClick={handleClose} disabled={isLoading}>
+        <Button
+          onClick={handleClose}
+          disabled={isLoading}
+          variant="outlined"
+          startIcon={<Close />}
+        >
           Cancel
         </Button>
         {activeStep > 0 && (
@@ -367,6 +405,7 @@ export const DuckLakeTableImportWizard: React.FC<
             onClick={handleBack}
             startIcon={<ArrowBack />}
             disabled={isLoading}
+            variant="outlined"
           >
             Back
           </Button>

@@ -10,14 +10,14 @@ import {
   styled,
   Button,
 } from '@mui/material';
-import { Dashboard, History, Add, Folder } from '@mui/icons-material';
+import { Dashboard, History, Add } from '@mui/icons-material';
 import { NavLink, useLocation, useNavigate } from 'react-router-dom';
 import { SettingsSidebarElement } from '../../screens/settings/settingsElements';
-import { cloudStorageImages } from '../../../../assets/connectionIcons';
 import { icons } from '../../../../assets';
 import type { DuckLakeInstanceStatus } from '../../../types/duckLake';
+import { DataLakeSVG } from '../sidebar/icons';
 
-const DuckLakeIcon: React.FC<{
+export const DataLakeIcon: React.FC<{
   fontSize?: 'small' | 'medium';
 }> = ({ fontSize = 'small' }) => (
   <Box
@@ -25,8 +25,8 @@ const DuckLakeIcon: React.FC<{
     src={icons.duckLake}
     alt="DuckLake"
     sx={{
-      width: fontSize === 'small' ? 20 : 24,
-      height: fontSize === 'small' ? 20 : 24,
+      width: fontSize === 'small' ? 14 : 18,
+      height: fontSize === 'small' ? 14 : 18,
     }}
   />
 );
@@ -49,34 +49,38 @@ export const StyledDuckLakeNavLink = styled(NavLink)(({ theme }) => ({
   },
 }));
 
-export const duckLakeSidebarElements: SettingsSidebarElement[] = [
+// Create a wrapper component for DataLakeSVG to use as an icon
+const DataLakeIconSmall: React.FC = () => (
+  <DataLakeSVG width={18} height={18} />
+);
+
+export const dataLakeSidebarElements: SettingsSidebarElement[] = [
   {
     icon: Dashboard,
     text: 'Dashboard',
-    path: '/app/duck-lake/dashboard',
+    path: '/app/data-lake/dashboard',
   },
   {
-    icon: DuckLakeIcon as any,
-    text: 'DuckLakes',
-    path: '/app/duck-lake/instances',
+    icon: DataLakeIconSmall as any,
+    text: 'DataLakes',
+    path: '/app/data-lake/instances',
   },
   {
     icon: History,
     text: 'Query History',
-    path: '/app/duck-lake/history',
+    path: '/app/data-lake/history',
   },
 ];
 
-interface DuckLakeSidebarProps {
+interface DataLakeSidebarProps {
   instances?: Array<{
     id: string;
     name: string;
     status: DuckLakeInstanceStatus;
-    storageType?: 'local' | 's3' | 'azure' | 'gcs';
   }>;
 }
 
-export const DuckLakeSidebar: React.FC<DuckLakeSidebarProps> = ({
+export const DataLakeSidebar: React.FC<DataLakeSidebarProps> = ({
   instances = [],
 }) => {
   const theme = useTheme();
@@ -92,42 +96,6 @@ export const DuckLakeSidebar: React.FC<DuckLakeSidebarProps> = ({
   const selectedInstance = instances.find(
     (instance) => instance.id === instanceId,
   );
-
-  const getStorageIconElement = (storageType?: string) => {
-    switch (storageType) {
-      case 'local':
-        return <Folder fontSize="small" />;
-      case 's3':
-        return cloudStorageImages.s3 ? (
-          <Box
-            component="img"
-            src={cloudStorageImages.s3}
-            alt="S3"
-            sx={{ width: 20, height: 20 }}
-          />
-        ) : null;
-      case 'azure':
-        return cloudStorageImages.azure ? (
-          <Box
-            component="img"
-            src={cloudStorageImages.azure}
-            alt="Azure"
-            sx={{ width: 20, height: 20 }}
-          />
-        ) : null;
-      case 'gcs':
-        return cloudStorageImages.gcs ? (
-          <Box
-            component="img"
-            src={cloudStorageImages.gcs}
-            alt="GCS"
-            sx={{ width: 20, height: 20 }}
-          />
-        ) : null;
-      default:
-        return null;
-    }
-  };
 
   return (
     <Box
@@ -151,13 +119,12 @@ export const DuckLakeSidebar: React.FC<DuckLakeSidebarProps> = ({
           }}
         >
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-            <DuckLakeIcon fontSize="small" />
+            <DataLakeSVG width={18} height={18} />
             <Typography variant="h6" sx={{ m: 0 }}>
-              DuckLake
+              DataLake
             </Typography>
           </Box>
         </Box>
-
         <Box sx={{ overflow: 'auto', maxHeight: 'calc(100vh - 200px)' }}>
           {/* Main Navigation */}
           <List
@@ -172,7 +139,7 @@ export const DuckLakeSidebar: React.FC<DuckLakeSidebarProps> = ({
               },
             }}
           >
-            {duckLakeSidebarElements.map((element) => (
+            {dataLakeSidebarElements.map((element) => (
               <StyledDuckLakeNavLink key={element.text} to={element.path}>
                 <ListItem
                   sx={{
@@ -217,7 +184,7 @@ export const DuckLakeSidebar: React.FC<DuckLakeSidebarProps> = ({
                   letterSpacing: '0.5px',
                 }}
               >
-                DuckLakes
+                DataLakes
               </Typography>
               <List
                 sx={{
@@ -234,7 +201,7 @@ export const DuckLakeSidebar: React.FC<DuckLakeSidebarProps> = ({
                 {instances.map((instance) => (
                   <StyledDuckLakeNavLink
                     key={instance.id}
-                    to={`/app/duck-lake/instances/${instance.id}`}
+                    to={`/app/data-lake/duck-lake/instances/${instance.id}`}
                   >
                     <ListItem
                       sx={{
@@ -249,9 +216,7 @@ export const DuckLakeSidebar: React.FC<DuckLakeSidebarProps> = ({
                       }}
                     >
                       <ListItemIcon sx={{ minWidth: 32 }}>
-                        {getStorageIconElement(instance.storageType) || (
-                          <Folder fontSize="small" />
-                        )}
+                        <DataLakeIcon fontSize="small" />
                       </ListItemIcon>
                       <ListItemText
                         primary={instance.name}
@@ -283,10 +248,10 @@ export const DuckLakeSidebar: React.FC<DuckLakeSidebarProps> = ({
           color="primary"
           fullWidth
           startIcon={<Add />}
-          onClick={() => navigate('/app/duck-lake/new-instance')}
+          onClick={() => navigate('/app/data-lake/new-instance')}
           sx={{ width: '100%', boxSizing: 'border-box' }}
         >
-          New DuckLake
+          New DataLake
         </Button>
       </Box>
     </Box>

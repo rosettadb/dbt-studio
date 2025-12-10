@@ -1,17 +1,18 @@
-import React from 'react';
-import { Typography, Box, Button } from '@mui/material';
+import React, { useState } from 'react';
+import { Typography, Box, Button, styled } from '@mui/material';
 import { useLocation, useParams, useNavigate } from 'react-router-dom';
 import { AppLayout } from '../../layouts';
 import {
-  DuckLakeDashboard,
-  DuckLakeSidebar,
-  DuckLakeInstances,
-  DuckLakeTablesView,
-  DuckLakeConnectionWizard,
-  DuckLakeInstanceDetails,
-  DuckLakeInstanceEditForm,
-  DuckLakeTableDetails, // Phase 8b
-} from '../../components/duckLake';
+  DataLakeDashboard,
+  DataLakeSidebar,
+  DataLakeInstances,
+  DataLakeTablesView,
+  DataLakeConnectionWizard,
+  DataLakeInstanceDetails,
+  DataLakeInstanceEditForm,
+  DataLakeTableDetails,
+} from '../../components/dataLake';
+import { DataLakeCard } from '../../components/dataLakeCards';
 import {
   useDuckLakeInstances,
   useCreateDuckLakeInstance,
@@ -19,14 +20,27 @@ import {
   useDeleteDuckLakeInstance,
 } from '../../controllers/duckLake.controller';
 
-const DuckLake: React.FC = () => {
+const DataLake: React.FC = () => {
   const location = useLocation();
-  const params = useParams();
+  const params = useParams<{
+    type?: string;
+    instanceId?: string;
+  }>();
   const navigate = useNavigate();
+
+  // Extract type from URL params (for type-specific routes)
+  const { type, instanceId } = params;
+
+  // State for type selection in new-instance flow
+  const [selectedType, setSelectedType] = useState<string>();
 
   // React Query hooks
   const instancesQuery = useDuckLakeInstances();
-  const instances = instancesQuery.data || [];
+  // Add type field to instances for routing
+  const instances = (instancesQuery.data || []).map((i) => ({
+    ...i,
+    type: 'duck-lake', // Hardcoded for now since only DuckLake exists
+  }));
   const createInstanceMutation = useCreateDuckLakeInstance();
 
   // Mutations for instance actions
@@ -75,6 +89,49 @@ const DuckLake: React.FC = () => {
     return pathSegments.pop() || 'dashboard';
   })();
 
+  // Define data lake types (UI only)
+  const dataLakeTypes = [
+    {
+      id: 'duck-lake',
+      name: 'DuckLake',
+      description: 'Lightweight, local-first lakehouse for DuckDB',
+      img: 'duckLake' as const,
+      disabled: false,
+    },
+    {
+      id: 'iceberg',
+      name: 'Apache Iceberg',
+      description: 'Multi-engine, cloud-agnostic open standard',
+      img: 'apacheIcebergLake' as const,
+      disabled: true,
+    },
+    {
+      id: 'delta',
+      name: 'Delta Lake',
+      description: 'Strong ACID transactions and time travel',
+      img: 'deltaLake' as const,
+      disabled: true,
+    },
+    {
+      id: 'hudi',
+      name: 'Apache Hudi',
+      description: 'Streaming and incremental pipelines',
+      img: 'apacheHudiLake' as const,
+      disabled: true,
+    },
+  ];
+
+  // Styled container for cards (reuse from addConnection pattern)
+  const ConnectionCardsContainer = styled(Box)`
+    display: flex;
+    justify-content: center;
+    flex-wrap: wrap;
+    gap: 24px;
+    padding: 12px 0 36px;
+    max-width: 1400px;
+    margin: 0 auto;
+  `;
+
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const handleTablePreview = (tableId: string) => {
     // In real implementation, this would open a preview modal
@@ -86,13 +143,13 @@ const DuckLake: React.FC = () => {
     // In real implementation, this would navigate to SQL editor with table query
   };
 
-  // Get current instance for detail views
-  const instanceId =
-    params.instanceId || pathSegments[pathSegments.indexOf('instance') + 1];
+  // Get current instance ID from params or path
+  const currentInstanceId =
+    instanceId || pathSegments[pathSegments.indexOf('instance') + 1];
 
   // Get instance details if viewing a specific instance
   const instanceQuery = useDuckLakeInstance(
-    currentSection === 'instance-detail' ? instanceId || '' : '',
+    currentSection === 'instance-detail' ? currentInstanceId || '' : '',
   );
   const currentInstance = instanceQuery.data;
 
@@ -102,16 +159,16 @@ const DuckLake: React.FC = () => {
   const renderContent = () => {
     switch (currentSection) {
       case 'dashboard':
-        return <DuckLakeDashboard instances={instances as any} />;
+        return <DataLakeDashboard instances={instances as any} />;
 
       case 'instances':
-        return <DuckLakeInstances />;
+        return <DataLakeInstances />;
 
       case 'instance-tables':
         // Show tables for a specific instance from route: /instances/:id/tables
         return (
-          <DuckLakeTablesView
-            instanceId={instanceId || ''}
+          <DataLakeTablesView
+            instanceId={currentInstanceId || ''}
             onPreview={handleTablePreview}
             onQuery={handleTableQuery}
           />
@@ -121,7 +178,7 @@ const DuckLake: React.FC = () => {
         // Show tables for a specific instance if instanceId is in URL
         if (instanceId) {
           return (
-            <DuckLakeTablesView
+            <DataLakeTablesView
               instanceId={instanceId}
               onPreview={handleTablePreview}
               onQuery={handleTableQuery}
@@ -161,35 +218,79 @@ const DuckLake: React.FC = () => {
         );
 
       case 'new-instance':
-        return (
-          <DuckLakeConnectionWizard
-            onComplete={async (wizardData) => {
-              // Ensure dataPath is defined (it should always be computed by the wizard)
-              if (!wizardData.basics.dataPath) {
-                throw new Error(
-                  'Data path is required but was not provided by the wizard',
-                );
-              }
+        // Step 1: Show type selection cards
+        if (!selectedType) {
+          return (
+            <Box sx={{ p: 2 }}>
+              <Typography variant="h6" component="h6" gutterBottom>
+                Create New DataLake
+              </Typography>
+              <Typography variant="body2" color="text.secondary" gutterBottom>
+                Select a data lake type to create a new instance
+              </Typography>
+              <ConnectionCardsContainer>
+                {dataLakeTypes.map((lakeType, index) => (
+                  <DataLakeCard
+                    key={index}
+                    itemDetails={lakeType}
+                    onClick={() => setSelectedType(lakeType.id)}
+                  />
+                ))}
+              </ConnectionCardsContainer>
+            </Box>
+          );
+        }
 
-              const createRequest = {
-                name: wizardData.basics.name,
-                dataPath: wizardData.basics.dataPath,
-                description: wizardData.basics.description,
-                catalog: wizardData.catalog,
-                storage: wizardData.storage,
-                runtimeOptions: wizardData.runtime,
-              };
-              const newInstance =
-                await createInstanceMutation.mutateAsync(createRequest);
-              navigate(`/app/duck-lake/instances/${newInstance.id}`);
-            }}
-            onCancel={() => navigate('/app/duck-lake/instances')}
-            isLoading={createInstanceMutation.isLoading}
-          />
+        // Step 2: Show wizard for selected type (only duck-lake is implemented)
+        if (selectedType === 'duck-lake') {
+          return (
+            <DataLakeConnectionWizard
+              onComplete={async (wizardData) => {
+                if (!wizardData.basics.dataPath) {
+                  throw new Error(
+                    'Data path is required but was not provided by the wizard',
+                  );
+                }
+
+                const createRequest = {
+                  name: wizardData.basics.name,
+                  dataPath: wizardData.basics.dataPath,
+                  description: wizardData.basics.description,
+                  catalog: wizardData.catalog,
+                  storage: wizardData.storage,
+                  runtimeOptions: wizardData.runtime,
+                };
+                const newInstance =
+                  await createInstanceMutation.mutateAsync(createRequest);
+                // Navigate to type-specific route
+                navigate(
+                  `/app/data-lake/duck-lake/instances/${newInstance.id}`,
+                );
+              }}
+              onCancel={() => {
+                setSelectedType(undefined);
+                navigate('/app/data-lake/instances');
+              }}
+              isLoading={createInstanceMutation.isLoading}
+            />
+          );
+        }
+
+        // Other types not yet implemented
+        return (
+          <Box sx={{ p: 2 }}>
+            <Typography variant="h6">Coming Soon</Typography>
+            <Typography variant="body2" color="text.secondary">
+              {selectedType} support is coming in a future release.
+            </Typography>
+            <Button onClick={() => setSelectedType(undefined)} sx={{ mt: 2 }}>
+              Back to Type Selection
+            </Button>
+          </Box>
         );
 
       case 'edit-instance':
-        return <DuckLakeInstanceEditForm />;
+        return <DataLakeInstanceEditForm />;
 
       case 'instance-detail':
         if (instanceQuery.isLoading) {
@@ -216,7 +317,7 @@ const DuckLake: React.FC = () => {
               <Button
                 variant="contained"
                 sx={{ mt: 2 }}
-                onClick={() => navigate('/app/duck-lake/instances')}
+                onClick={() => navigate('/app/data-lake/instances')}
               >
                 Back to Instances
               </Button>
@@ -225,12 +326,16 @@ const DuckLake: React.FC = () => {
         }
 
         return (
-          <DuckLakeInstanceDetails
+          <DataLakeInstanceDetails
             instance={currentInstance as any}
-            onEdit={(id) => navigate(`/app/duck-lake/instances/${id}/edit`)}
+            onEdit={(id) =>
+              navigate(
+                `/app/data-lake/${type || 'duck-lake'}/instances/${id}/edit`,
+              )
+            }
             onDelete={(id) => {
               deleteMutation.mutate(id, {
-                onSuccess: () => navigate('/app/duck-lake/instances'),
+                onSuccess: () => navigate('/app/data-lake/instances'),
               });
             }}
             isLoading={deleteMutation.isLoading}
@@ -239,7 +344,7 @@ const DuckLake: React.FC = () => {
 
       case 'table-detail':
         // Phase 8b: Render comprehensive table detail view
-        return <DuckLakeTableDetails />;
+        return <DataLakeTableDetails />;
 
       default:
         return (
@@ -262,17 +367,11 @@ const DuckLake: React.FC = () => {
   return (
     <AppLayout
       sidebarContent={
-        <DuckLakeSidebar
+        <DataLakeSidebar
           instances={instances.map((i) => ({
             id: i.id,
             name: i.name,
             status: i.status,
-            storageType: i.storage?.type as
-              | 'local'
-              | 's3'
-              | 'azure'
-              | 'gcs'
-              | undefined,
           }))}
         />
       }
@@ -284,4 +383,4 @@ const DuckLake: React.FC = () => {
   );
 };
 
-export default DuckLake;
+export default DataLake;
