@@ -1,6 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from 'react-query';
 import { toast } from 'react-toastify';
 import { DuckLakeService } from '../services/duckLake.service';
+import { cloudExplorerKeys } from './cloudExplorer.controller';
 
 // Query keys for React Query cache management
 export const duckLakeKeys = {
@@ -396,4 +397,70 @@ export function useInvalidateDuckLakeCache() {
       queryClient.invalidateQueries(duckLakeKeys.tables(instanceId)),
     invalidateAll: () => queryClient.invalidateQueries(duckLakeKeys.all),
   };
+}
+
+// Cloud Connection Management Hooks
+
+export const cloudConnectionKeys = {
+  all: ['cloudConnections'] as const,
+  list: () => [...cloudConnectionKeys.all, 'list'] as const,
+  connection: (id: string) => [...cloudConnectionKeys.all, id] as const,
+};
+
+export function useCloudConnections() {
+  return useQuery({
+    queryKey: cloudConnectionKeys.list(),
+    queryFn: DuckLakeService.listCloudConnections,
+    staleTime: 60000, // 1 minute
+  });
+}
+
+export function useCloudConnection(id: string | undefined) {
+  return useQuery({
+    queryKey: cloudConnectionKeys.connection(id!),
+    queryFn: () => DuckLakeService.getCloudConnection(id!),
+    enabled: !!id,
+    staleTime: 60000,
+  });
+}
+
+export function useCreateCloudConnection() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: DuckLakeService.createCloudConnection,
+    onSuccess: (newConnection) => {
+      // Invalidate connections list
+      queryClient.invalidateQueries(cloudConnectionKeys.list());
+
+      // Also invalidate Cloud Explorer connections
+      queryClient.invalidateQueries(cloudExplorerKeys.connections);
+
+      // Add to cache
+      queryClient.setQueryData(
+        cloudConnectionKeys.connection(newConnection.id),
+        newConnection,
+      );
+
+      toast.success(`Connection "${newConnection.name}" created successfully`);
+    },
+    onError: (error: Error) => {
+      toast.error(`Failed to create connection: ${error.message}`);
+    },
+  });
+}
+
+export function useTestDuckLakeConnection() {
+  return useMutation({
+    mutationFn: ({
+      provider,
+      config,
+    }: {
+      provider: 'aws' | 'azure' | 'gcs';
+      config: any;
+    }) => DuckLakeService.testCloudConnection(provider, config),
+    onError: (error: Error) => {
+      toast.error(`Connection test failed: ${error.message}`);
+    },
+  });
 }

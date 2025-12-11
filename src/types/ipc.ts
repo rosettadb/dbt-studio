@@ -267,7 +267,13 @@ export type DuckLakeChannels =
 
   // Storage Management
   | 'ducklake:storage:stats'
-  | 'ducklake:storage:validate';
+  | 'ducklake:storage:validate'
+
+  // Cloud Connection Management
+  | 'ducklake:connection:list'
+  | 'ducklake:connection:get'
+  | 'ducklake:connection:create'
+  | 'ducklake:connection:test';
 
 export type Channels =
   | TestChannels

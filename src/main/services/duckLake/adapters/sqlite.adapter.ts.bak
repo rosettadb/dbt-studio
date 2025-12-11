@@ -1,6 +1,6 @@
 /**
- * DuckDB Catalog Adapter
- * Implements DuckLake integration with DuckDB file-based catalog
+ * SQLite Catalog Adapter
+ * Implements DuckLake integration with SQLite file-based catalog
  */
 
 import * as fs from 'fs';
@@ -23,19 +23,19 @@ import {
 import { DuckLakeError } from '../../../../types/duckLakeErrors';
 import { normalizeNumericValue } from '../../../../renderer/utils/fileUtils';
 
-export class DuckDBCatalogAdapter extends CatalogAdapter {
+export class SQLiteCatalogAdapter extends CatalogAdapter {
   async connect(
     config: DuckLakeCatalogConfig,
     instance: DuckLakeInstance,
     storageConfig?: DuckLakeStorageConfig,
   ): Promise<ConnectionInfo> {
     try {
-      if (config.type !== 'duckdb') {
+      if (config.type !== 'sqlite') {
         throw DuckLakeError.unsupportedCatalog(config.type);
       }
 
-      if (!config.duckdb?.metadataPath) {
-        throw DuckLakeError.validation('DuckDB metadata path is required');
+      if (!config.sqlite?.metadataPath) {
+        throw DuckLakeError.validation('SQLite metadata path is required');
       }
 
       // Initialize DuckDB instance
@@ -44,20 +44,21 @@ export class DuckDBCatalogAdapter extends CatalogAdapter {
       );
       const connection = await duckdbInstance.connect();
 
-      // Load DuckLake extension
+      // Load DuckLake and SQLite extensions
       await this.loadDuckLakeExtension(connection);
+      await this.loadCatalogExtensions(connection, ['sqlite']);
 
       // Create secrets for cloud storage
       await this.createSecrets(connection, storageConfig);
 
       // Ensure metadata directory exists
-      const metadataDir = path.dirname(config.duckdb.metadataPath);
+      const metadataDir = path.dirname(config.sqlite.metadataPath);
       if (!fs.existsSync(metadataDir)) {
         fs.mkdirSync(metadataDir, { recursive: true });
       }
 
-      // Attach DuckLake catalog with DuckDB backend
-      const attachString = `ducklake:${config.duckdb.metadataPath}`;
+      // Attach DuckLake catalog with SQLite backend
+      const attachString = `ducklake:sqlite:${config.sqlite.metadataPath}`;
       await this.attachDuckLakeCatalog(
         connection,
         attachString,
@@ -68,7 +69,7 @@ export class DuckDBCatalogAdapter extends CatalogAdapter {
       this.connectionInfo = {
         instance: duckdbInstance,
         connection,
-        catalogType: 'duckdb',
+        catalogType: 'sqlite',
         instanceName: instance.name,
         connectedAt: new Date(),
       };
@@ -76,7 +77,7 @@ export class DuckDBCatalogAdapter extends CatalogAdapter {
       return this.connectionInfo;
     } catch (error) {
       // eslint-disable-next-line no-console
-      console.error('DuckDB catalog connection failed:', error);
+      console.error('SQLite catalog connection failed:', error);
       throw DuckLakeError.catalogConnection(instance.id, error as Error);
     }
   }
@@ -93,18 +94,18 @@ export class DuckDBCatalogAdapter extends CatalogAdapter {
     const warnings: string[] = [];
 
     try {
-      if (config.type !== 'duckdb') {
-        errors.push('Invalid catalog type for DuckDB adapter');
+      if (config.type !== 'sqlite') {
+        errors.push('Invalid catalog type for SQLite adapter');
         return { valid: false, errors, warnings };
       }
 
-      if (!config.duckdb?.metadataPath) {
-        errors.push('DuckDB metadata path is required');
+      if (!config.sqlite?.metadataPath) {
+        errors.push('SQLite metadata path is required');
         return { valid: false, errors, warnings };
       }
 
       // Validate metadata path
-      const { metadataPath } = config.duckdb;
+      const { metadataPath } = config.sqlite;
       const metadataDir = path.dirname(metadataPath);
 
       // Check if directory exists or can be created
@@ -127,8 +128,18 @@ export class DuckDBCatalogAdapter extends CatalogAdapter {
       }
 
       // Validate file extension
-      if (!metadataPath.endsWith('.duckdb')) {
-        warnings.push('DuckDB metadata file should have .duckdb extension');
+      if (!metadataPath.endsWith('.sqlite') && !metadataPath.endsWith('.db')) {
+        warnings.push(
+          'SQLite metadata file should have .sqlite or .db extension',
+        );
+      }
+
+      // Check for existing file locks (SQLite specific)
+      const lockFile = `${metadataPath}-wal`;
+      if (fs.existsSync(lockFile)) {
+        warnings.push(
+          'SQLite WAL file exists - database may be in use by another process',
+        );
       }
 
       return {
@@ -138,7 +149,7 @@ export class DuckDBCatalogAdapter extends CatalogAdapter {
       };
     } catch (error) {
       // eslint-disable-next-line no-console
-      console.error('DuckDB config validation error:', error);
+      console.error('SQLite config validation error:', error);
       errors.push(`Validation error: ${(error as Error).message}`);
       return { valid: false, errors, warnings };
     }
@@ -160,12 +171,13 @@ export class DuckDBCatalogAdapter extends CatalogAdapter {
         };
       }
 
-      // Test DuckDB connection
+      // Test DuckDB connection with SQLite extension
       testInstance = await this.initializeDuckDB();
       testConnection = await testInstance.connect();
 
-      // Test DuckLake extension loading
+      // Test DuckLake and SQLite extension loading
       await this.loadDuckLakeExtension(testConnection);
+      await this.loadCatalogExtensions(testConnection, ['sqlite']);
 
       const responseTime = Date.now() - startTime;
 
@@ -176,7 +188,7 @@ export class DuckDBCatalogAdapter extends CatalogAdapter {
       };
     } catch (error) {
       // eslint-disable-next-line no-console
-      console.error('DuckDB connection test failed:', error);
+      console.error('SQLite connection test failed:', error);
       return {
         connected: false,
         lastChecked: new Date(),
@@ -189,7 +201,7 @@ export class DuckDBCatalogAdapter extends CatalogAdapter {
         try {
           testConnection.closeSync();
           // eslint-disable-next-line no-console
-          console.log('[DuckDB] Closed test connection');
+          console.log('[SQLite] Closed test connection');
         } catch (error) {
           // eslint-disable-next-line no-console
           console.error('Error closing test connection:', error);
@@ -199,7 +211,7 @@ export class DuckDBCatalogAdapter extends CatalogAdapter {
         try {
           await testInstance.close();
           // eslint-disable-next-line no-console
-          console.log('[DuckDB] Closed test instance');
+          console.log('[SQLite] Closed test instance');
         } catch (error) {
           // eslint-disable-next-line no-console
           console.error('Error closing test instance:', error);
@@ -232,7 +244,7 @@ export class DuckDBCatalogAdapter extends CatalogAdapter {
       };
     } catch (error) {
       // eslint-disable-next-line no-console
-      console.error('DuckDB health check failed:', error);
+      console.error('SQLite health check failed:', error);
       return {
         connected: false,
         lastChecked: new Date(),
@@ -248,7 +260,7 @@ export class DuckDBCatalogAdapter extends CatalogAdapter {
         throw new Error('No active connection');
       }
 
-      // First, find the DuckLake metadata database (attached database)
+      // Discover the DuckLake metadata database (attached DuckDB database)
       const databasesQuery = `
         SELECT database_name
         FROM duckdb_databases()
@@ -272,9 +284,9 @@ export class DuckDBCatalogAdapter extends CatalogAdapter {
         ? databaseRows[0][0]
         : (databaseRows[0] as any).database_name;
 
-      // Quote the database name to handle special characters (hyphens, etc.)
       const quotedMetadataDatabase = `"${metadataDatabase}"`;
 
+      // List logical DuckLake tables from metadata tables, similar to DuckDB adapter
       const query = `
         WITH current_snapshot AS (
           SELECT COALESCE(max(snapshot_id), 0) as snapshot_id
@@ -333,16 +345,8 @@ export class DuckDBCatalogAdapter extends CatalogAdapter {
 
       return tables;
     } catch (error: any) {
-      const errorMessage = error.message || '';
-
-      if (
-        errorMessage.includes('ducklake_snapshot does not exist') ||
-        errorMessage.includes('ducklake_table does not exist') ||
-        errorMessage.includes('Catalog Error')
-      ) {
-        return [];
-      }
-
+      // eslint-disable-next-line no-console
+      console.error('Failed to list SQLite tables:', error);
       throw error;
     }
   }
@@ -353,40 +357,18 @@ export class DuckDBCatalogAdapter extends CatalogAdapter {
         throw new Error('No active connection');
       }
 
-      const databasesQuery = `
-        SELECT database_name
-        FROM duckdb_databases()
-        WHERE database_name LIKE '__ducklake_metadata_%'
-        LIMIT 1
-      `;
-
-      const databasesResult =
-        await this.connectionInfo.connection.run(databasesQuery);
-      const databaseRows = await databasesResult.getRows();
-
-      if (databaseRows.length === 0) {
-        throw new Error('DuckLake metadata database not found');
-      }
-
-      const metadataDatabase = Array.isArray(databaseRows[0])
-        ? databaseRows[0][0]
-        : (databaseRows[0] as any).database_name;
-
-      // Quote the database name to handle special characters (hyphens, etc.)
-      const quotedMetadataDatabase = `"${metadataDatabase}"`;
-
       // Escape single quotes in table name for SQL safety
       const escapedTableName = tableName.replace(/'/g, "''");
 
+      // Get table metadata
       const tableQuery = `
         SELECT
-          t.table_name,
-          s.schema_name,
-          t.created_at,
-          t.updated_at
-        FROM ${quotedMetadataDatabase}.main.ducklake_table t
-        JOIN ${quotedMetadataDatabase}.main.ducklake_schema s ON t.schema_id = s.schema_id
-        WHERE t.table_name = '${escapedTableName}'
+          table_name,
+          schema_name,
+          created_at,
+          updated_at
+        FROM ducklake_table
+        WHERE table_name = '${escapedTableName}'
       `;
 
       const tableResult = await this.connectionInfo.connection.run(tableQuery);
@@ -396,61 +378,43 @@ export class DuckDBCatalogAdapter extends CatalogAdapter {
         throw new Error(`Table not found: ${tableName}`);
       }
 
-      const tableRow = Array.isArray(tableRows[0])
-        ? {
-            table_name: tableRows[0][0],
-            schema_name: tableRows[0][1],
-            created_at: tableRows[0][2],
-            updated_at: tableRows[0][3],
-          }
-        : tableRows[0];
+      const tableRow = tableRows[0];
 
+      // Get column information
       const columnsQuery = `
         SELECT
-          c.column_name,
-          c.data_type,
-          c.is_nullable,
-          c.comment
-        FROM ${quotedMetadataDatabase}.main.ducklake_column c
-        JOIN ${quotedMetadataDatabase}.main.ducklake_table t ON c.table_id = t.table_id
-        WHERE t.table_name = '${escapedTableName}'
-        ORDER BY c.ordinal_position
+          column_name,
+          data_type,
+          is_nullable,
+          comment
+        FROM ducklake_column
+        WHERE table_name = '${escapedTableName}'
+        ORDER BY ordinal_position
       `;
 
       const columnsResult =
         await this.connectionInfo.connection.run(columnsQuery);
       const columnRows = await columnsResult.getRows();
 
-      const columns = columnRows.map((col: any) => {
-        if (Array.isArray(col)) {
-          return {
-            name: col[0],
-            type: col[1],
-            nullable: col[2],
-            comment: col[3],
-          };
-        }
-
-        return {
-          name: col.column_name,
-          type: col.data_type,
-          nullable: col.is_nullable,
-          comment: col.comment,
-        };
-      });
+      const columns = columnRows.map((col: any) => ({
+        name: col.column_name,
+        type: col.data_type,
+        nullable: col.is_nullable,
+        comment: col.comment,
+      }));
 
       return {
         name: tableRow.table_name,
         schema: tableRow.schema_name || 'main',
-        instanceId: '',
+        instanceId: '', // Will be set by calling service
         columns,
-        snapshots: [],
+        snapshots: [], // Will be populated by separate call
         createdAt: new Date(tableRow.created_at),
         updatedAt: new Date(tableRow.updated_at),
       };
     } catch (error) {
       // eslint-disable-next-line no-console
-      console.error(`Failed to get DuckDB table ${tableName}:`, error);
+      console.error(`Failed to get SQLite table ${tableName}:`, error);
       throw error;
     }
   }
@@ -501,7 +465,7 @@ export class DuckDBCatalogAdapter extends CatalogAdapter {
       };
     } catch (error) {
       // eslint-disable-next-line no-console
-      console.error('DuckDB query execution failed:', error);
+      console.error('SQLite query execution failed:', error);
       throw error;
     }
   }
@@ -606,8 +570,8 @@ export class DuckDBCatalogAdapter extends CatalogAdapter {
           s.schema_name,
           t.begin_snapshot,
           t.end_snapshot
-        FROM ${quotedMetadataDatabase}.main.ducklake_table t
-        JOIN ${quotedMetadataDatabase}.main.ducklake_schema s ON t.schema_id = s.schema_id
+        FROM ${metadataDatabase}.main.ducklake_table t
+        JOIN ${metadataDatabase}.main.ducklake_schema s ON t.schema_id = s.schema_id
         WHERE t.table_name = '${escapedTableName}'
           AND ${currentSnapshot} >= t.begin_snapshot
           AND (${currentSnapshot} < t.end_snapshot OR t.end_snapshot IS NULL)
@@ -647,7 +611,7 @@ export class DuckDBCatalogAdapter extends CatalogAdapter {
           parent_column,
           begin_snapshot,
           end_snapshot
-        FROM ${quotedMetadataDatabase}.main.ducklake_column
+        FROM ${metadataDatabase}.main.ducklake_column
         WHERE table_id = ${tableId}
           AND ${currentSnapshot} >= begin_snapshot
           AND (${currentSnapshot} < end_snapshot OR end_snapshot IS NULL)
@@ -693,7 +657,7 @@ export class DuckDBCatalogAdapter extends CatalogAdapter {
           record_count,
           next_row_id,
           file_size_bytes
-        FROM ${quotedMetadataDatabase}.main.ducklake_table_stats
+        FROM ${metadataDatabase}.main.ducklake_table_stats
         WHERE table_id = ${tableId}
       `;
 
@@ -736,8 +700,8 @@ export class DuckDBCatalogAdapter extends CatalogAdapter {
           cs.contains_nan,
           cs.min_value,
           cs.max_value
-        FROM ${quotedMetadataDatabase}.main.ducklake_table_column_stats cs
-        JOIN ${quotedMetadataDatabase}.main.ducklake_column c 
+        FROM ${metadataDatabase}.main.ducklake_table_column_stats cs
+        JOIN ${metadataDatabase}.main.ducklake_column c 
           ON cs.column_id = c.column_id 
           AND cs.table_id = c.table_id
           AND ${currentSnapshot} >= c.begin_snapshot
@@ -787,7 +751,7 @@ export class DuckDBCatalogAdapter extends CatalogAdapter {
           begin_snapshot,
           end_snapshot,
           partition_id
-        FROM ${quotedMetadataDatabase}.main.ducklake_data_file
+        FROM ${metadataDatabase}.main.ducklake_data_file
         WHERE table_id = ${tableId}
           AND ${currentSnapshot} >= begin_snapshot
           AND (${currentSnapshot} < end_snapshot OR end_snapshot IS NULL)
@@ -841,7 +805,7 @@ export class DuckDBCatalogAdapter extends CatalogAdapter {
             partition_id,
             begin_snapshot,
             end_snapshot
-          FROM ${quotedMetadataDatabase}.main.ducklake_partition_info
+          FROM ${metadataDatabase}.main.ducklake_partition_info
           WHERE table_id = ${tableId}
             AND ${currentSnapshot} >= begin_snapshot
             AND (${currentSnapshot} < end_snapshot OR end_snapshot IS NULL)
@@ -869,8 +833,8 @@ export class DuckDBCatalogAdapter extends CatalogAdapter {
               pc.column_id,
               c.column_name,
               pc.transform
-            FROM ${quotedMetadataDatabase}.main.ducklake_partition_column pc
-            JOIN ${quotedMetadataDatabase}.main.ducklake_column c 
+            FROM ${metadataDatabase}.main.ducklake_partition_column pc
+            JOIN ${metadataDatabase}.main.ducklake_column c 
               ON pc.column_id = c.column_id
               AND pc.table_id = c.table_id
               AND ${currentSnapshot} >= c.begin_snapshot
@@ -910,7 +874,7 @@ export class DuckDBCatalogAdapter extends CatalogAdapter {
               data_file_id,
               partition_key_index,
               partition_value
-            FROM ${quotedMetadataDatabase}.main.ducklake_file_partition_value
+            FROM ${metadataDatabase}.main.ducklake_file_partition_value
             WHERE table_id = ${tableId}
             ORDER BY data_file_id, partition_key_index
           `;
@@ -961,8 +925,8 @@ export class DuckDBCatalogAdapter extends CatalogAdapter {
           s.next_catalog_id,
           s.next_file_id,
           sc.changes_made
-        FROM ${quotedMetadataDatabase}.main.ducklake_snapshot s
-        LEFT JOIN ${quotedMetadataDatabase}.main.ducklake_snapshot_changes sc
+        FROM ${metadataDatabase}.main.ducklake_snapshot s
+        LEFT JOIN ${metadataDatabase}.main.ducklake_snapshot_changes sc
           ON s.snapshot_id = sc.snapshot_id
         ORDER BY s.snapshot_id DESC
         LIMIT 50
@@ -1000,7 +964,7 @@ export class DuckDBCatalogAdapter extends CatalogAdapter {
           value,
           begin_snapshot,
           end_snapshot
-        FROM ${quotedMetadataDatabase}.main.ducklake_tag
+        FROM ${metadataDatabase}.main.ducklake_tag
         WHERE object_id = ${tableId}
           AND ${currentSnapshot} >= begin_snapshot
           AND (${currentSnapshot} < end_snapshot OR end_snapshot IS NULL)
@@ -1037,8 +1001,8 @@ export class DuckDBCatalogAdapter extends CatalogAdapter {
           ct.value,
           ct.begin_snapshot,
           ct.end_snapshot
-        FROM ${quotedMetadataDatabase}.main.ducklake_column_tag ct
-        JOIN ${quotedMetadataDatabase}.main.ducklake_column c 
+        FROM ${metadataDatabase}.main.ducklake_column_tag ct
+        JOIN ${metadataDatabase}.main.ducklake_column c 
           ON ct.column_id = c.column_id
           AND ct.table_id = c.table_id
           AND ${currentSnapshot} >= c.begin_snapshot
@@ -1094,9 +1058,12 @@ export class DuckDBCatalogAdapter extends CatalogAdapter {
         // Handle objects
         if (typeof obj === 'object') {
           const converted: any = {};
-          Object.keys(obj).forEach((key) => {
-            converted[key] = convertHugeInts(obj[key]);
-          });
+          // eslint-disable-next-line no-restricted-syntax
+          for (const key in obj) {
+            if (Object.prototype.hasOwnProperty.call(obj, key)) {
+              converted[key] = convertHugeInts(obj[key]);
+            }
+          }
           return converted;
         }
 
@@ -1132,6 +1099,6 @@ export class DuckDBCatalogAdapter extends CatalogAdapter {
 
   // eslint-disable-next-line class-methods-use-this
   getCatalogType(): string {
-    return 'duckdb';
+    return 'sqlite';
   }
 }

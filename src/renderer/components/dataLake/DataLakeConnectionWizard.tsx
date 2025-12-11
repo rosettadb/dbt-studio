@@ -48,6 +48,7 @@ import connectionIcons, {
 import sqliteIcon from '../../../../assets/connectionIcons/sqlite.png';
 import { DuckLakeService } from '../../services/duckLake.service';
 import { useFilePicker } from '../../controllers';
+import { DataLakeConnectionSelector } from './DataLakeConnectionSelector';
 
 // Database icons mapping - import from assets
 const getDatabaseIcon = (type: string) => {
@@ -73,6 +74,12 @@ const instanceBasicsSchema = z.object({
 const storageConfigSchema = z
   .object({
     type: z.enum(['local', 's3', 'azure', 'gcs']),
+
+    // Cloud Explorer connection integration
+    connectionId: z.string().optional(),
+    bucket: z.string().optional(), // For cloud storage with connectionId
+    prefix: z.string().optional(), // For cloud storage with connectionId
+
     local: z
       .object({
         path: z.string().min(1, 'Local path is required'),
@@ -109,6 +116,13 @@ const storageConfigSchema = z
   .refine(
     (data) => {
       if (data.type === 'local') return !!data.local?.path;
+
+      // If using connectionId, only bucket is required
+      if (data.connectionId) {
+        return !!data.bucket;
+      }
+
+      // Otherwise, validate inline configs
       if (data.type === 's3')
         return (
           !!data.s3?.bucket &&
@@ -297,6 +311,7 @@ export const DataLakeConnectionWizard: React.FC<
     'idle' | 'success' | 'failed'
   >('idle');
   const [showPassword, setShowPassword] = useState(false);
+
   const isFinalStep = activeStep === steps.length - 1;
   const nextButtonLabel = getNextButtonLabel(
     isLoading || validating,
@@ -371,6 +386,71 @@ export const DataLakeConnectionWizard: React.FC<
         },
       },
     );
+  };
+
+  const normalizeStorageConfig = (storage: StorageConfig): StorageConfig => {
+    if (storage.connectionId) {
+      const base = {
+        ...storage,
+        bucket: storage.bucket?.trim(),
+        prefix: storage.prefix?.trim() || undefined,
+      };
+
+      if (storage.type === 's3') {
+        base.s3 = {
+          bucket: base.bucket || '',
+          prefix: base.prefix,
+        } as StorageConfig['s3'];
+      }
+
+      if (storage.type === 'azure') {
+        base.azure = {
+          container: base.bucket || '',
+          prefix: base.prefix,
+        } as StorageConfig['azure'];
+      }
+
+      if (storage.type === 'gcs') {
+        base.gcs = {
+          bucket: base.bucket || '',
+          prefix: base.prefix,
+        } as StorageConfig['gcs'];
+      }
+
+      return base;
+    }
+
+    return storage;
+  };
+
+  const buildDataPathFromStorage = (storage: StorageConfig | undefined) => {
+    if (!storage) {
+      return '';
+    }
+
+    const bucketOrContainer =
+      storage.bucket ||
+      storage.s3?.bucket ||
+      storage.azure?.container ||
+      storage.gcs?.bucket;
+    const prefix =
+      storage.prefix ||
+      storage.s3?.prefix ||
+      storage.azure?.prefix ||
+      storage.gcs?.prefix;
+
+    switch (storage.type) {
+      case 'local':
+        return storage.local?.path || '';
+      case 's3':
+        return `s3://${bucketOrContainer || ''}${prefix ? `/${prefix}` : ''}`;
+      case 'azure':
+        return `abfss://${bucketOrContainer || ''}${prefix ? `/${prefix}` : ''}`;
+      case 'gcs':
+        return `gs://${bucketOrContainer || ''}${prefix ? `/${prefix}` : ''}`;
+      default:
+        return '';
+    }
   };
 
   const handleCatalogPathSelect = () => {
@@ -619,13 +699,19 @@ export const DataLakeConnectionWizard: React.FC<
         isValid = await storageForm.trigger();
         if (isValid) {
           const data = storageForm.getValues();
+          const normalizedStorage = normalizeStorageConfig(data);
           setValidating(true);
           setValidationError(null);
           try {
             const result =
-              await DuckLakeService.validateStorageConnection(data);
+              await DuckLakeService.validateStorageConnection(
+                normalizedStorage,
+              );
             if (result.success) {
-              setWizardData((prev) => ({ ...prev, storage: data }));
+              setWizardData((prev) => ({
+                ...prev,
+                storage: normalizedStorage,
+              }));
 
               // Pre-populate DuckDB metadata path if empty
               const currentMetadataPath = catalogForm.getValues(
@@ -692,28 +778,7 @@ export const DataLakeConnectionWizard: React.FC<
           };
 
           // Construct dataPath from storage config for DuckLake ATTACH command
-          let dataPath = '';
-          if (wizardData.storage.type === 'local' && wizardData.storage.local) {
-            dataPath = wizardData.storage.local.path;
-          } else if (
-            wizardData.storage.type === 's3' &&
-            wizardData.storage.s3
-          ) {
-            const { bucket, prefix } = wizardData.storage.s3;
-            dataPath = `s3://${bucket}${prefix ? `/${prefix}` : ''}`;
-          } else if (
-            wizardData.storage.type === 'azure' &&
-            wizardData.storage.azure
-          ) {
-            const { container, prefix } = wizardData.storage.azure;
-            dataPath = `abfss://${container}${prefix ? `/${prefix}` : ''}`;
-          } else if (
-            wizardData.storage.type === 'gcs' &&
-            wizardData.storage.gcs
-          ) {
-            const { bucket, prefix } = wizardData.storage.gcs;
-            dataPath = `gs://${bucket}${prefix ? `/${prefix}` : ''}`;
-          }
+          const dataPath = buildDataPathFromStorage(wizardData.storage);
 
           onComplete({
             basics: {
@@ -965,275 +1030,24 @@ export const DataLakeConnectionWizard: React.FC<
                 />
               )}
 
-              {storageForm.watch('type') === 's3' && (
-                <>
-                  <Controller
-                    name="s3.bucket"
-                    control={storageForm.control}
-                    render={({ field, fieldState }) => (
-                      <TextField
-                        label="Bucket Name"
-                        fullWidth
-                        margin="normal"
-                        value={field.value || ''}
-                        onChange={field.onChange}
-                        error={!!fieldState.error}
-                        helperText={fieldState.error?.message}
-                        required
-                      />
-                    )}
-                  />
-                  <Controller
-                    name="s3.prefix"
-                    control={storageForm.control}
-                    render={({ field }) => (
-                      <TextField
-                        label="Prefix (Optional)"
-                        fullWidth
-                        margin="normal"
-                        value={field.value || ''}
-                        onChange={field.onChange}
-                        placeholder="data/warehouse"
-                      />
-                    )}
-                  />
-                  <Controller
-                    name="s3.region"
-                    control={storageForm.control}
-                    render={({ field, fieldState }) => (
-                      <TextField
-                        label="Region"
-                        placeholder="us-east-1"
-                        fullWidth
-                        margin="normal"
-                        value={field.value || ''}
-                        onChange={field.onChange}
-                        error={!!fieldState.error}
-                        helperText={
-                          fieldState.error?.message ||
-                          'Your AWS region (e.g., us-east-1)'
-                        }
-                        required
-                      />
-                    )}
-                  />
-                  <Controller
-                    name="s3.accessKeyId"
-                    control={storageForm.control}
-                    render={({ field, fieldState }) => (
-                      <TextField
-                        label="Access Key ID"
-                        placeholder="AKIAIOSFODNN7EXAMPLE"
-                        fullWidth
-                        margin="normal"
-                        value={field.value || ''}
-                        onChange={field.onChange}
-                        error={!!fieldState.error}
-                        helperText={
-                          fieldState.error?.message || 'Your AWS Access Key ID'
-                        }
-                        required
-                      />
-                    )}
-                  />
-                  <Controller
-                    name="s3.secretAccessKey"
-                    control={storageForm.control}
-                    render={({ field, fieldState }) => (
-                      <TextField
-                        label="Secret Access Key"
-                        placeholder="wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY"
-                        type="password"
-                        fullWidth
-                        margin="normal"
-                        value={field.value || ''}
-                        onChange={field.onChange}
-                        error={!!fieldState.error}
-                        helperText={
-                          fieldState.error?.message ||
-                          'Your AWS Secret Access Key'
-                        }
-                        required
-                      />
-                    )}
-                  />
-                </>
-              )}
-
-              {storageForm.watch('type') === 'azure' && (
-                <>
-                  <Controller
-                    name="azure.container"
-                    control={storageForm.control}
-                    render={({ field, fieldState }) => (
-                      <TextField
-                        label="Container Name"
-                        fullWidth
-                        margin="normal"
-                        value={field.value || ''}
-                        onChange={field.onChange}
-                        error={!!fieldState.error}
-                        helperText={fieldState.error?.message}
-                        required
-                      />
-                    )}
-                  />
-                  <Controller
-                    name="azure.prefix"
-                    control={storageForm.control}
-                    render={({ field }) => (
-                      <TextField
-                        label="Prefix (Optional)"
-                        fullWidth
-                        margin="normal"
-                        value={field.value || ''}
-                        onChange={field.onChange}
-                        placeholder="data/warehouse"
-                      />
-                    )}
-                  />
-                  <Controller
-                    name="azure.accountName"
-                    control={storageForm.control}
-                    render={({ field, fieldState }) => (
-                      <TextField
-                        label="Account Name"
-                        fullWidth
-                        margin="normal"
-                        value={field.value || ''}
-                        onChange={field.onChange}
-                        error={!!fieldState.error}
-                        helperText={
-                          fieldState.error?.message ||
-                          'Your Azure Storage account name'
-                        }
-                        required
-                      />
-                    )}
-                  />
-                  <Controller
-                    name="azure.accountKey"
-                    control={storageForm.control}
-                    render={({ field, fieldState }) => (
-                      <TextField
-                        label="Account Key"
-                        type="password"
-                        fullWidth
-                        margin="normal"
-                        value={field.value || ''}
-                        onChange={field.onChange}
-                        error={!!fieldState.error}
-                        helperText={
-                          fieldState.error?.message ||
-                          'Your Azure Storage account key'
-                        }
-                        required
-                      />
-                    )}
-                  />
-                  <Controller
-                    name="azure.connectionString"
-                    control={storageForm.control}
-                    render={({ field }) => (
-                      <TextField
-                        label="Connection String (Optional)"
-                        fullWidth
-                        margin="normal"
-                        value={field.value || ''}
-                        onChange={field.onChange}
-                        helperText="Alternative to account name/key"
-                      />
-                    )}
-                  />
-                </>
-              )}
-
-              {storageForm.watch('type') === 'gcs' && (
-                <>
-                  <Controller
-                    name="gcs.bucket"
-                    control={storageForm.control}
-                    render={({ field, fieldState }) => (
-                      <TextField
-                        label="Bucket Name"
-                        fullWidth
-                        margin="normal"
-                        value={field.value || ''}
-                        onChange={field.onChange}
-                        error={!!fieldState.error}
-                        helperText={fieldState.error?.message}
-                        required
-                      />
-                    )}
-                  />
-                  <Controller
-                    name="gcs.prefix"
-                    control={storageForm.control}
-                    render={({ field }) => (
-                      <TextField
-                        label="Prefix (Optional)"
-                        fullWidth
-                        margin="normal"
-                        value={field.value || ''}
-                        onChange={field.onChange}
-                        placeholder="data/warehouse"
-                      />
-                    )}
-                  />
-                  <Controller
-                    name="gcs.projectId"
-                    control={storageForm.control}
-                    render={({ field, fieldState }) => (
-                      <TextField
-                        label="Project ID"
-                        fullWidth
-                        margin="normal"
-                        value={field.value || ''}
-                        onChange={field.onChange}
-                        error={!!fieldState.error}
-                        helperText={
-                          fieldState.error?.message || 'Your GCP project ID'
-                        }
-                        required
-                      />
-                    )}
-                  />
-                  <Controller
-                    name="gcs.credentials"
-                    control={storageForm.control}
-                    render={({ field }) => (
-                      <TextField
-                        label="Service Account Credentials (JSON)"
-                        placeholder='{"type": "service_account", "project_id": "your-project-id", ...}'
-                        fullWidth
-                        multiline
-                        rows={10}
-                        margin="normal"
-                        value={field.value || ''}
-                        onChange={field.onChange}
-                        helperText="Paste your service account JSON credentials here (optional for local development)"
-                        variant="outlined"
-                        InputProps={{
-                          style: {
-                            minHeight: '120px',
-                            fontFamily:
-                              'Consolas, Monaco, "Lucida Console", "Liberation Mono", "DejaVu Sans Mono", "Bitstream Vera Sans Mono", "Courier New", monospace',
-                            fontSize: '13px',
-                          },
-                        }}
-                        sx={{
-                          '& .MuiOutlinedInput-root': {
-                            height: 'auto',
-                          },
-                          '& .MuiInputBase-inputMultiline': {
-                            height: 'auto !important',
-                            resize: 'vertical',
-                          },
-                        }}
-                      />
-                    )}
-                  />
-                </>
+              {/* Cloud storage - show connection selector */}
+              {['s3', 'azure', 'gcs'].includes(storageForm.watch('type')) && (
+                <DataLakeConnectionSelector
+                  selectedProvider={
+                    // Map storage type to provider: s3 -> aws, others stay the same
+                    (storageForm.watch('type') === 's3'
+                      ? 'aws'
+                      : storageForm.watch('type')) as 'aws' | 'azure' | 'gcs'
+                  }
+                  initialConnectionId={storageForm.watch('connectionId')}
+                  initialBucket={storageForm.watch('bucket')}
+                  initialPrefix={storageForm.watch('prefix')}
+                  onSelectExisting={(connectionId, bucket, prefix) => {
+                    storageForm.setValue('connectionId', connectionId);
+                    storageForm.setValue('bucket', bucket);
+                    storageForm.setValue('prefix', prefix);
+                  }}
+                />
               )}
             </Box>
 

@@ -35,19 +35,6 @@ export const DataLakeTablesView: React.FC<DataLakeTablesViewProps> = ({
   const { invalidateTables } = useInvalidateDuckLakeCache();
   const instanceQuery = useDuckLakeInstance(instanceId);
 
-  // Debug logging
-  // eslint-disable-next-line no-console
-  console.log('[DataLakeTablesView] instanceId:', instanceId);
-  // eslint-disable-next-line no-console
-  console.log(
-    '[DataLakeTablesView] tablesQuery.isLoading:',
-    tablesQuery.isLoading,
-  );
-  // eslint-disable-next-line no-console
-  console.log('[DataLakeTablesView] tablesQuery.error:', tablesQuery.error);
-  // eslint-disable-next-line no-console
-  console.log('[DataLakeTablesView] tablesQuery.data:', tablesQuery.data);
-
   const handleImportTable = (tableName: string, sourceQuery: string) => {
     importTableMutation.mutate(
       { instanceId, tableName, sourceQuery },
@@ -130,9 +117,6 @@ export const DataLakeTablesView: React.FC<DataLakeTablesViewProps> = ({
     sizeBytes: table.sizeBytes,
     createdAt: table.createdAt?.toISOString() || new Date().toISOString(),
   }));
-
-  // eslint-disable-next-line no-console
-  console.log('[DataLakeTablesView] formattedTables:', formattedTables);
 
   return (
     <Box>

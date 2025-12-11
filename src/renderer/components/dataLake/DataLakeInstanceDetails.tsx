@@ -48,12 +48,14 @@ import {
   useRefreshDuckLakeInstanceHealth,
   useDuckLakeInstanceHealth,
 } from '../../controllers/duckLake.controller';
+import { DuckLakeStorageConfig } from '../../../types/duckLake';
 
 interface DuckLakeInstance {
   id: string;
   name: string;
   status: 'active' | 'inactive' | 'error';
   dataPath: string;
+  storage?: DuckLakeStorageConfig;
   catalog: {
     type: 'duckdb' | 'sqlite' | 'postgresql';
     duckdb?: { metadataPath: string };
@@ -129,6 +131,20 @@ export const DataLakeInstanceDetails: React.FC<
     );
   };
 
+  const getOptionalHealthIcon = (value?: boolean) => {
+    if (typeof value !== 'boolean') {
+      return <Info sx={{ color: 'warning.main', fontSize: 16 }} />;
+    }
+    return getHealthIcon(value);
+  };
+
+  const getStorageStatusLabel = (value?: boolean) => {
+    if (typeof value !== 'boolean') {
+      return 'Pending test';
+    }
+    return value ? 'Connected' : 'Connection failed';
+  };
+
   const formatBytes = (bytes: number) => {
     const sizes = ['Bytes', 'KB', 'MB', 'GB', 'TB'];
     const i = Math.floor(Math.log(bytes) / Math.log(1024));
@@ -137,6 +153,28 @@ export const DataLakeInstanceDetails: React.FC<
 
   const handleTestConnection = () => {
     testConnectionMutation.mutate(instance.id);
+  };
+
+  const isStorageHealthy = (value?: boolean) =>
+    typeof value !== 'boolean' || value;
+
+  const getTestIndicatorColor = () => {
+    if (testConnectionMutation.isLoading) {
+      return 'warning.main';
+    }
+
+    if (healthQuery.data) {
+      const { catalogConnected, dataPathAccessible, storageConnected } =
+        healthQuery.data;
+      const healthy =
+        catalogConnected &&
+        dataPathAccessible &&
+        isStorageHealthy(storageConnected);
+
+      return healthy ? 'success.main' : 'error.main';
+    }
+
+    return 'grey.400';
   };
 
   const handleEdit = () => {
@@ -286,12 +324,7 @@ export const DataLakeInstanceDetails: React.FC<
                   width: 10,
                   height: 10,
                   borderRadius: '50%',
-                  backgroundColor: (() => {
-                    if (testConnectionMutation.isLoading) return 'warning.main';
-                    if (testConnectionMutation.isSuccess) return 'success.main';
-                    if (testConnectionMutation.isError) return 'error.main';
-                    return 'grey.400';
-                  })(),
+                  backgroundColor: getTestIndicatorColor(),
                   border: '1px solid',
                   borderColor: 'background.paper',
                 }}
@@ -354,6 +387,33 @@ export const DataLakeInstanceDetails: React.FC<
                     }
                   />
                 </ListItem>
+                {instance.storage && (
+                  <ListItem>
+                    <ListItemIcon sx={{ minWidth: 32 }}>
+                      {getOptionalHealthIcon(healthQuery.data.storageConnected)}
+                    </ListItemIcon>
+                    <ListItemText
+                      primary="Storage Connection"
+                      secondary={getStorageStatusLabel(
+                        healthQuery.data.storageConnected,
+                      )}
+                    />
+                  </ListItem>
+                )}
+                {healthQuery.data.storageLocation && (
+                  <ListItem>
+                    <ListItemIcon sx={{ minWidth: 32 }}>
+                      <Folder color="action" fontSize="small" />
+                    </ListItemIcon>
+                    <ListItemText
+                      primary="Storage Path"
+                      secondary={healthQuery.data.storageLocation}
+                      secondaryTypographyProps={{
+                        sx: { fontFamily: 'monospace' },
+                      }}
+                    />
+                  </ListItem>
+                )}
                 <ListItem>
                   <ListItemText
                     primary="Last Checked"

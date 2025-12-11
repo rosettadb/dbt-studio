@@ -542,10 +542,13 @@ export class SQLiteCatalogAdapter extends CatalogAdapter {
         ? databaseRows[0][0]
         : (databaseRows[0] as any).database_name;
 
+      // Quote the database name to handle special characters (hyphens, etc.)
+      const quotedMetadataDatabase = `"${metadataDatabase}"`;
+
       // Get current snapshot
       const currentSnapshotQuery = `
         SELECT COALESCE(MAX(snapshot_id), 0) as current_snapshot
-        FROM ${metadataDatabase}.main.ducklake_snapshot
+        FROM ${quotedMetadataDatabase}.main.ducklake_snapshot
       `;
       const snapshotResult =
         await this.connectionInfo.connection.run(currentSnapshotQuery);
@@ -567,8 +570,8 @@ export class SQLiteCatalogAdapter extends CatalogAdapter {
           s.schema_name,
           t.begin_snapshot,
           t.end_snapshot
-        FROM ${metadataDatabase}.main.ducklake_table t
-        JOIN ${metadataDatabase}.main.ducklake_schema s ON t.schema_id = s.schema_id
+        FROM ${quotedMetadataDatabase}.main.ducklake_table t
+        JOIN ${quotedMetadataDatabase}.main.ducklake_schema s ON t.schema_id = s.schema_id
         WHERE t.table_name = '${escapedTableName}'
           AND ${currentSnapshot} >= t.begin_snapshot
           AND (${currentSnapshot} < t.end_snapshot OR t.end_snapshot IS NULL)
@@ -608,7 +611,7 @@ export class SQLiteCatalogAdapter extends CatalogAdapter {
           parent_column,
           begin_snapshot,
           end_snapshot
-        FROM ${metadataDatabase}.main.ducklake_column
+        FROM ${quotedMetadataDatabase}.main.ducklake_column
         WHERE table_id = ${tableId}
           AND ${currentSnapshot} >= begin_snapshot
           AND (${currentSnapshot} < end_snapshot OR end_snapshot IS NULL)
@@ -654,7 +657,7 @@ export class SQLiteCatalogAdapter extends CatalogAdapter {
           record_count,
           next_row_id,
           file_size_bytes
-        FROM ${metadataDatabase}.main.ducklake_table_stats
+        FROM ${quotedMetadataDatabase}.main.ducklake_table_stats
         WHERE table_id = ${tableId}
       `;
 
@@ -697,8 +700,8 @@ export class SQLiteCatalogAdapter extends CatalogAdapter {
           cs.contains_nan,
           cs.min_value,
           cs.max_value
-        FROM ${metadataDatabase}.main.ducklake_table_column_stats cs
-        JOIN ${metadataDatabase}.main.ducklake_column c 
+        FROM ${quotedMetadataDatabase}.main.ducklake_table_column_stats cs
+        JOIN ${quotedMetadataDatabase}.main.ducklake_column c 
           ON cs.column_id = c.column_id 
           AND cs.table_id = c.table_id
           AND ${currentSnapshot} >= c.begin_snapshot
@@ -748,7 +751,7 @@ export class SQLiteCatalogAdapter extends CatalogAdapter {
           begin_snapshot,
           end_snapshot,
           partition_id
-        FROM ${metadataDatabase}.main.ducklake_data_file
+        FROM ${quotedMetadataDatabase}.main.ducklake_data_file
         WHERE table_id = ${tableId}
           AND ${currentSnapshot} >= begin_snapshot
           AND (${currentSnapshot} < end_snapshot OR end_snapshot IS NULL)
@@ -802,7 +805,7 @@ export class SQLiteCatalogAdapter extends CatalogAdapter {
             partition_id,
             begin_snapshot,
             end_snapshot
-          FROM ${metadataDatabase}.main.ducklake_partition_info
+          FROM ${quotedMetadataDatabase}.main.ducklake_partition_info
           WHERE table_id = ${tableId}
             AND ${currentSnapshot} >= begin_snapshot
             AND (${currentSnapshot} < end_snapshot OR end_snapshot IS NULL)
@@ -830,8 +833,8 @@ export class SQLiteCatalogAdapter extends CatalogAdapter {
               pc.column_id,
               c.column_name,
               pc.transform
-            FROM ${metadataDatabase}.main.ducklake_partition_column pc
-            JOIN ${metadataDatabase}.main.ducklake_column c 
+            FROM ${quotedMetadataDatabase}.main.ducklake_partition_column pc
+            JOIN ${quotedMetadataDatabase}.main.ducklake_column c 
               ON pc.column_id = c.column_id
               AND pc.table_id = c.table_id
               AND ${currentSnapshot} >= c.begin_snapshot
@@ -871,7 +874,7 @@ export class SQLiteCatalogAdapter extends CatalogAdapter {
               data_file_id,
               partition_key_index,
               partition_value
-            FROM ${metadataDatabase}.main.ducklake_file_partition_value
+            FROM ${quotedMetadataDatabase}.main.ducklake_file_partition_value
             WHERE table_id = ${tableId}
             ORDER BY data_file_id, partition_key_index
           `;
@@ -922,8 +925,8 @@ export class SQLiteCatalogAdapter extends CatalogAdapter {
           s.next_catalog_id,
           s.next_file_id,
           sc.changes_made
-        FROM ${metadataDatabase}.main.ducklake_snapshot s
-        LEFT JOIN ${metadataDatabase}.main.ducklake_snapshot_changes sc
+        FROM ${quotedMetadataDatabase}.main.ducklake_snapshot s
+        LEFT JOIN ${quotedMetadataDatabase}.main.ducklake_snapshot_changes sc
           ON s.snapshot_id = sc.snapshot_id
         ORDER BY s.snapshot_id DESC
         LIMIT 50
@@ -961,7 +964,7 @@ export class SQLiteCatalogAdapter extends CatalogAdapter {
           value,
           begin_snapshot,
           end_snapshot
-        FROM ${metadataDatabase}.main.ducklake_tag
+        FROM ${quotedMetadataDatabase}.main.ducklake_tag
         WHERE object_id = ${tableId}
           AND ${currentSnapshot} >= begin_snapshot
           AND (${currentSnapshot} < end_snapshot OR end_snapshot IS NULL)
@@ -998,8 +1001,8 @@ export class SQLiteCatalogAdapter extends CatalogAdapter {
           ct.value,
           ct.begin_snapshot,
           ct.end_snapshot
-        FROM ${metadataDatabase}.main.ducklake_column_tag ct
-        JOIN ${metadataDatabase}.main.ducklake_column c 
+        FROM ${quotedMetadataDatabase}.main.ducklake_column_tag ct
+        JOIN ${quotedMetadataDatabase}.main.ducklake_column c 
           ON ct.column_id = c.column_id
           AND ct.table_id = c.table_id
           AND ${currentSnapshot} >= c.begin_snapshot

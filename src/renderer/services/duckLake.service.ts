@@ -233,4 +233,30 @@ export namespace DuckLakeService {
       storageConfig,
     );
   }
+
+  // Cloud Connection Management
+  export async function listCloudConnections(): Promise<any[]> {
+    return window.electron.ipcRenderer.invoke('ducklake:connection:list');
+  }
+
+  export async function getCloudConnection(id: string): Promise<any | null> {
+    return window.electron.ipcRenderer.invoke('ducklake:connection:get', id);
+  }
+
+  export async function createCloudConnection(connection: any): Promise<any> {
+    return window.electron.ipcRenderer.invoke(
+      'ducklake:connection:create',
+      connection,
+    );
+  }
+
+  export async function testCloudConnection(
+    provider: 'aws' | 'azure' | 'gcs',
+    config: any,
+  ): Promise<boolean> {
+    return window.electron.ipcRenderer.invoke('ducklake:connection:test', {
+      provider,
+      config,
+    });
+  }
 }

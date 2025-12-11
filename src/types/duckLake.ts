@@ -181,9 +181,22 @@ export type DuckLakeStorageType = 'local' | 's3' | 'azure' | 'gcs';
 
 export interface DuckLakeStorageConfig {
   type: DuckLakeStorageType;
+
+  // NEW: Cloud Explorer connection integration
+  // Reference to CloudConnection.id for reusing existing connections
+  connectionId?: string;
+
+  // DataLake-specific properties (used with connectionId)
+  bucket?: string; // Bucket/container name
+  prefix?: string; // Folder prefix within bucket
+
+  // Local storage (no connection needed)
   local?: {
     path: string;
   };
+
+  // Legacy: Inline configs for backward compatibility
+  // These are used when connectionId is not provided
   s3?: {
     bucket: string;
     region: string;
@@ -379,6 +392,8 @@ export interface DuckLakeInstanceHealth {
   catalogConnected: boolean;
   extensionLoaded: boolean;
   dataPathAccessible: boolean;
+  storageConnected?: boolean;
+  storageLocation?: string;
   errors?: string[];
   warnings?: string[];
   metrics?: DuckLakeInstanceMetrics;
@@ -550,4 +565,13 @@ export interface DuckLakeIpcChannels {
     instanceId: string,
     tableName: string,
   ) => Promise<DuckLakeTableDetails>;
+
+  // Cloud Connection Management (Phase: Connection Integration)
+  'ducklake:connection:list': () => Promise<any[]>; // Returns CloudConnection[]
+  'ducklake:connection:get': (id: string) => Promise<any | null>; // Returns CloudConnection | null
+  'ducklake:connection:create': (connection: any) => Promise<any>; // CloudConnection
+  'ducklake:connection:test': (params: {
+    provider: 'aws' | 'azure' | 'gcs';
+    config: any;
+  }) => Promise<boolean>;
 }

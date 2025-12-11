@@ -181,6 +181,45 @@ const registerDuckLakeHandlers = () => {
       return DuckLakeService.validateStorageConnection(storageConfig);
     },
   );
+
+  // Cloud Connection Management Handlers
+  ipcMain.handle('ducklake:connection:list', async () => {
+    const ConnectorsService = (await import('../services/connectors.service'))
+      .default;
+    return ConnectorsService.loadCloudConnections();
+  });
+
+  ipcMain.handle('ducklake:connection:get', async (_event, id: string) => {
+    const ConnectorsService = (await import('../services/connectors.service'))
+      .default;
+    return ConnectorsService.getCloudConnectionById(id);
+  });
+
+  ipcMain.handle(
+    'ducklake:connection:create',
+    async (_event, connection: any) => {
+      const ConnectorsService = (await import('../services/connectors.service'))
+        .default;
+      await ConnectorsService.saveCloudConnection(connection);
+      return connection;
+    },
+  );
+
+  ipcMain.handle(
+    'ducklake:connection:test',
+    async (
+      _event,
+      params: { provider: 'aws' | 'azure' | 'gcs'; config: any },
+    ) => {
+      const CloudExplorerService = (
+        await import('../services/cloudExplorer.service')
+      ).default;
+      return CloudExplorerService.testConnection(
+        params.provider,
+        params.config,
+      );
+    },
+  );
 };
 
 export default registerDuckLakeHandlers;

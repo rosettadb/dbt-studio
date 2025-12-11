@@ -112,6 +112,14 @@ export default class DuckLakeService {
         request.catalog,
       );
 
+      // Resolve storage config with credentials when using saved connections
+      let storageConfig = request.storage;
+      if (request.storage?.connectionId) {
+        storageConfig = await this.getStorageConfigWithCredentials(
+          request.storage,
+        );
+      }
+
       // Create instance
       const id = this.generateInstanceId();
       const now = new Date();
@@ -119,6 +127,7 @@ export default class DuckLakeService {
       const instance: DuckLakeInstance = {
         id,
         ...request,
+        storage: storageConfig ?? request.storage,
         createdAt: now,
         updatedAt: now,
         status: 'inactive',
@@ -162,10 +171,19 @@ export default class DuckLakeService {
         );
       }
 
+      // Resolve storage config with credentials when using saved connections
+      let storageConfig = request.storage;
+      if (request.storage?.connectionId) {
+        storageConfig = await this.getStorageConfigWithCredentials(
+          request.storage,
+        );
+      }
+
       // Update instance
       const updatedInstance: DuckLakeInstance = {
         ...instance,
         ...request,
+        storage: storageConfig ?? request.storage ?? instance.storage,
         updatedAt: new Date(),
       };
 
@@ -210,6 +228,8 @@ export default class DuckLakeService {
       const errors: string[] = [];
       const warnings: string[] = [];
       let dataPathAccessible = true;
+      let storageConnected: boolean | undefined;
+      let storageLocation: string | undefined;
 
       // Check data path accessibility
       try {
@@ -246,6 +266,18 @@ export default class DuckLakeService {
         errors.push(`Catalog connection failed: ${(error as Error).message}`);
       }
 
+      // Test storage connectivity if configured
+      if (instance.storage) {
+        storageLocation = instance.dataPath;
+        const storageResult = await this.validateStorageConnection(
+          instance.storage,
+        );
+        storageConnected = storageResult.success;
+        if (!storageResult.success && storageResult.error) {
+          errors.push(`Storage connection failed: ${storageResult.error}`);
+        }
+      }
+
       const health: DuckLakeInstanceHealth = {
         instanceId: id,
         status: instance.status,
@@ -253,6 +285,8 @@ export default class DuckLakeService {
         catalogConnected,
         extensionLoaded,
         dataPathAccessible,
+        storageConnected,
+        storageLocation,
         errors,
         warnings,
       };
@@ -283,14 +317,19 @@ export default class DuckLakeService {
       }
 
       // Retrieve credentials (catalog and storage)
-      const {
-        catalog: catalogWithCredentials,
-        storage: storageWithCredentials,
-      } = await DuckLakeInstanceStore.retrieveCredentials(
-        instanceId,
-        instance.catalog as any,
-        instance.storage as any,
-      );
+      const { catalog: catalogWithCredentials, storage: persistedStorage } =
+        await DuckLakeInstanceStore.retrieveCredentials(
+          instanceId,
+          instance.catalog as any,
+          instance.storage as any,
+        );
+
+      let storageWithCredentials = persistedStorage;
+      if (this.storageConfigNeedsResolution(persistedStorage)) {
+        storageWithCredentials = await this.getStorageConfigWithCredentials(
+          persistedStorage!,
+        );
+      }
 
       // eslint-disable-next-line no-console
       console.debug(
@@ -611,12 +650,19 @@ export default class DuckLakeService {
 
   private static async getAdapter(instanceId: string): Promise<CatalogAdapter> {
     const instance = await this.getInstance(instanceId);
-    const { catalog: catalogWithCredentials, storage: storageWithCredentials } =
+    const { catalog: catalogWithCredentials, storage: persistedStorage } =
       await DuckLakeInstanceStore.retrieveCredentials(
         instanceId,
         instance.catalog as any,
         instance.storage as any,
       );
+
+    let storageWithCredentials = persistedStorage;
+    if (this.storageConfigNeedsResolution(persistedStorage)) {
+      storageWithCredentials = await this.getStorageConfigWithCredentials(
+        persistedStorage!,
+      );
+    }
 
     return DuckLakeConnectionManager.getConnection(
       instanceId,
@@ -643,45 +689,49 @@ export default class DuckLakeService {
     try {
       DuckLakeValidationService.validateStorageConfig(storageConfig);
 
+      // Resolve full config with credentials if using connectionId
+      const fullConfig =
+        await this.getStorageConfigWithCredentials(storageConfig);
+
       let success = false;
-      switch (storageConfig.type) {
+      switch (fullConfig.type) {
         case 'local':
           // For local, we just check if path exists or can be created
-          if (storageConfig.local?.path) {
+          if (fullConfig.local?.path) {
             await DuckLakeValidationService.validateDataPathAccess(
-              storageConfig.local.path,
+              fullConfig.local.path,
             );
             success = true;
           }
           break;
         case 's3':
-          if (storageConfig.s3) {
+          if (fullConfig.s3) {
             success = await CloudExplorerService.testConnection('aws', {
-              region: storageConfig.s3.region,
-              accessKeyId: storageConfig.s3.accessKeyId,
-              secretAccessKey: storageConfig.s3.secretAccessKey,
+              region: fullConfig.s3.region,
+              accessKeyId: fullConfig.s3.accessKeyId,
+              secretAccessKey: fullConfig.s3.secretAccessKey,
             });
           }
           break;
         case 'azure':
-          if (storageConfig.azure) {
+          if (fullConfig.azure) {
             success = await CloudExplorerService.testConnection('azure', {
-              accountName: storageConfig.azure.accountName,
-              accountKey: storageConfig.azure.accountKey,
-              connectionString: storageConfig.azure.connectionString,
+              accountName: fullConfig.azure.accountName,
+              accountKey: fullConfig.azure.accountKey,
+              connectionString: fullConfig.azure.connectionString,
             });
           }
           break;
         case 'gcs':
-          if (storageConfig.gcs) {
+          if (fullConfig.gcs) {
             success = await CloudExplorerService.testConnection('gcs', {
-              projectId: storageConfig.gcs.projectId,
-              credentials: storageConfig.gcs.credentials,
+              projectId: fullConfig.gcs.projectId,
+              credentials: fullConfig.gcs.credentials,
             });
           }
           break;
         default:
-          throw new Error(`Unsupported storage type: ${storageConfig.type}`);
+          throw new Error(`Unsupported storage type: ${fullConfig.type}`);
       }
 
       if (!success) {
@@ -691,6 +741,154 @@ export default class DuckLakeService {
       return { success: true };
     } catch (error) {
       return { success: false, error: (error as Error).message };
+    }
+  }
+
+  // Cloud Connection Integration
+  /**
+   * Resolve cloud connection from Cloud Explorer database
+   */
+  static async resolveCloudConnection(
+    connectionId: string,
+  ): Promise<any | null> {
+    try {
+      const ConnectorsService = (await import('./connectors.service')).default;
+      return await ConnectorsService.getCloudConnectionById(connectionId);
+    } catch (error) {
+      // eslint-disable-next-line no-console
+      console.error('Failed to resolve cloud connection:', error);
+      return null;
+    }
+  }
+
+  /**
+   * Get full storage config with credentials from Cloud Explorer connection
+   */
+  static async getStorageConfigWithCredentials(
+    storage: DuckLakeStorageConfig,
+  ): Promise<DuckLakeStorageConfig> {
+    try {
+      // If no connectionId, return as-is (local or legacy inline config)
+      if (!storage.connectionId) {
+        return storage;
+      }
+
+      // Resolve the cloud connection
+      const connection = await this.resolveCloudConnection(
+        storage.connectionId,
+      );
+      if (!connection) {
+        throw new Error(`Cloud connection not found: ${storage.connectionId}`);
+      }
+
+      // Fetch credentials from secure storage
+      const credentials = await this.getConnectionCredentials(connection);
+
+      // Merge connection config with DataLake-specific properties
+      const result: DuckLakeStorageConfig = {
+        type: storage.type,
+        connectionId: storage.connectionId,
+        bucket: storage.bucket,
+        prefix: storage.prefix,
+      };
+
+      // Add provider-specific config with credentials
+      if (storage.type === 's3' && connection.provider === 'aws') {
+        result.s3 = {
+          ...connection.config,
+          ...credentials,
+          bucket: storage.bucket || '',
+          prefix: storage.prefix,
+        };
+      } else if (storage.type === 'azure' && connection.provider === 'azure') {
+        result.azure = {
+          ...connection.config,
+          ...credentials,
+          container: storage.bucket || '',
+          prefix: storage.prefix,
+        };
+      } else if (storage.type === 'gcs' && connection.provider === 'gcs') {
+        result.gcs = {
+          ...connection.config,
+          ...credentials,
+          bucket: storage.bucket || '',
+          prefix: storage.prefix,
+        };
+      }
+
+      return result;
+    } catch (error) {
+      // eslint-disable-next-line no-console
+      console.error('Failed to get storage config with credentials:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Fetch credentials from secure storage for a cloud connection
+   */
+  private static async getConnectionCredentials(connection: any): Promise<any> {
+    try {
+      const SecureStorageService = (await import('./secureStorage.service'))
+        .default;
+      const { provider, name } = connection;
+
+      if (provider === 'aws') {
+        const secretAccessKey = await SecureStorageService.getCredential(
+          `cloud-aws-${name}`,
+        );
+        return { secretAccessKey };
+      }
+
+      if (provider === 'azure') {
+        const accountKey = await SecureStorageService.getCredential(
+          `cloud-azure-${name}`,
+        );
+        return { accountKey };
+      }
+
+      if (provider === 'gcs') {
+        const credentials = await SecureStorageService.getCredential(
+          `cloud-gcs-${name}`,
+        );
+        return { credentials };
+      }
+
+      return {};
+    } catch (error) {
+      // eslint-disable-next-line no-console
+      console.error('Failed to get connection credentials:', error);
+      throw error;
+    }
+  }
+
+  private static storageConfigNeedsResolution(
+    storage?: DuckLakeStorageConfig,
+  ): storage is DuckLakeStorageConfig & { connectionId: string } {
+    if (!storage?.connectionId) {
+      return false;
+    }
+
+    switch (storage.type) {
+      case 's3':
+        return (
+          !storage.s3 ||
+          !storage.s3.region ||
+          !storage.s3.accessKeyId ||
+          !storage.s3.secretAccessKey
+        );
+      case 'azure':
+        return (
+          !storage.azure ||
+          (!storage.azure.connectionString &&
+            (!storage.azure.accountName || !storage.azure.accountKey))
+        );
+      case 'gcs':
+        return (
+          !storage.gcs || !storage.gcs.projectId || !storage.gcs.credentials
+        );
+      default:
+        return false;
     }
   }
 

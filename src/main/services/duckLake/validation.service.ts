@@ -561,6 +561,8 @@ export default class DuckLakeValidationService {
       );
     }
 
+    const isUsingSavedConnection = !!storage.connectionId;
+
     switch (storage.type) {
       case 'local':
         if (!storage.local?.path) {
@@ -578,74 +580,113 @@ export default class DuckLakeValidationService {
         break;
 
       case 's3':
-        if (!storage.s3) {
-          throw DuckLakeError.validation(
-            'S3 configuration is required',
-            'storage.s3',
-          );
-        }
-        if (!storage.s3.bucket) {
-          throw DuckLakeError.validation(
-            'S3 bucket is required',
-            'storage.s3.bucket',
-          );
-        }
-        if (!storage.s3.region) {
-          throw DuckLakeError.validation(
-            'S3 region is required',
-            'storage.s3.region',
-          );
-        }
-        if (!storage.s3.accessKeyId) {
-          throw DuckLakeError.validation(
-            'S3 access key ID is required',
-            'storage.s3.accessKeyId',
-          );
+        if (isUsingSavedConnection) {
+          if (!storage.bucket) {
+            throw DuckLakeError.validation(
+              'Bucket is required when using a saved S3 connection',
+              'storage.bucket',
+            );
+          }
+        } else {
+          if (!storage.s3) {
+            throw DuckLakeError.validation(
+              'S3 configuration is required',
+              'storage.s3',
+            );
+          }
+          if (!storage.s3.bucket) {
+            throw DuckLakeError.validation(
+              'S3 bucket is required',
+              'storage.s3.bucket',
+            );
+          }
+          if (!storage.s3.region) {
+            throw DuckLakeError.validation(
+              'S3 region is required',
+              'storage.s3.region',
+            );
+          }
+          if (!storage.s3.accessKeyId) {
+            throw DuckLakeError.validation(
+              'S3 access key ID is required',
+              'storage.s3.accessKeyId',
+            );
+          }
+          if (!storage.s3.secretAccessKey) {
+            throw DuckLakeError.validation(
+              'S3 secret access key is required',
+              'storage.s3.secretAccessKey',
+            );
+          }
         }
         break;
 
       case 'azure':
-        if (!storage.azure) {
-          throw DuckLakeError.validation(
-            'Azure configuration is required',
-            'storage.azure',
-          );
-        }
-        if (!storage.azure.container) {
-          throw DuckLakeError.validation(
-            'Azure container is required',
-            'storage.azure.container',
-          );
-        }
-        if (
-          !storage.azure.connectionString &&
-          (!storage.azure.accountName || !storage.azure.accountKey)
-        ) {
-          throw DuckLakeError.validation(
-            'Azure connection string or account name/key is required',
-            'storage.azure',
-          );
+        if (isUsingSavedConnection) {
+          if (!storage.bucket) {
+            throw DuckLakeError.validation(
+              'Container name is required when using a saved Azure connection',
+              'storage.bucket',
+            );
+          }
+        } else {
+          if (!storage.azure) {
+            throw DuckLakeError.validation(
+              'Azure configuration is required',
+              'storage.azure',
+            );
+          }
+          if (!storage.azure.container) {
+            throw DuckLakeError.validation(
+              'Azure container is required',
+              'storage.azure.container',
+            );
+          }
+          if (
+            !storage.azure.connectionString &&
+            (!storage.azure.accountName || !storage.azure.accountKey)
+          ) {
+            throw DuckLakeError.validation(
+              'Azure connection string or account name/key is required',
+              'storage.azure',
+            );
+          }
         }
         break;
 
       case 'gcs':
-        if (!storage.gcs) {
-          throw DuckLakeError.validation(
-            'GCS configuration is required',
-            'storage.gcs',
-          );
-        }
-        if (!storage.gcs.bucket) {
-          throw DuckLakeError.validation(
-            'GCS bucket is required',
-            'storage.gcs.bucket',
-          );
-        }
-        if (!storage.gcs.projectId) {
-          throw DuckLakeError.validation(
-            'GCS project ID is required',
-            'storage.gcs.projectId',
-          );
+        if (isUsingSavedConnection) {
+          if (!storage.bucket) {
+            throw DuckLakeError.validation(
+              'Bucket is required when using a saved GCS connection',
+              'storage.bucket',
+            );
+          }
+        } else {
+          if (!storage.gcs) {
+            throw DuckLakeError.validation(
+              'GCS configuration is required',
+              'storage.gcs',
+            );
+          }
+          if (!storage.gcs.bucket) {
+            throw DuckLakeError.validation(
+              'GCS bucket is required',
+              'storage.gcs.bucket',
+            );
+          }
+          if (!storage.gcs.projectId) {
+            throw DuckLakeError.validation(
+              'GCS project ID is required',
+              'storage.gcs.projectId',
+            );
+          }
+          if (!storage.gcs.credentials) {
+            throw DuckLakeError.validation(
+              'GCS service account credentials are required',
+              'storage.gcs.credentials',
+            );
+          }
         }
         break;
 
