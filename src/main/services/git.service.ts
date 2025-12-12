@@ -144,18 +144,50 @@ export default class GitService {
 
   async checkoutBranch(repoPath: string, branchName: string) {
     const git = this.getGitInstance(repoPath);
-    await git.fetch();
-
-    const localBranches = await git.branchLocal();
-    const remoteBranches = await git.branch(['-r']);
-    const hasLocal = localBranches.all.includes(branchName);
-    const hasRemote = remoteBranches.all.includes(`origin/${branchName}`);
 
     try {
+      // First, check if we have any remotes configured
+      const remotes = await git.getRemotes();
+      const hasRemotes = remotes.length > 0;
+
+      // Only fetch if we have remotes
+      if (hasRemotes) {
+        try {
+          await git.fetch();
+        } catch (fetchErr: any) {
+          // eslint-disable-next-line no-console
+          console.error(
+            'Fetch failed, continuing with local branches:',
+            fetchErr,
+          );
+          // Continue even if fetch fails - we can still checkout local branches
+        }
+      }
+
+      const localBranches = await git.branchLocal();
+      const hasLocal = localBranches.all.includes(branchName);
+
+      let hasRemote = false;
+      if (hasRemotes) {
+        const remoteBranches = await git.branch(['-r']);
+        hasRemote = remoteBranches.all.includes(`origin/${branchName}`);
+      }
+
       if (hasLocal) {
+        // Branch exists locally, just checkout
         await git.checkout(branchName);
-        await this.ensureTrackingUpstream(repoPath, branchName);
+        // Try to set upstream if remote branch exists
+        if (hasRemote) {
+          try {
+            await this.ensureTrackingUpstream(repoPath, branchName);
+          } catch (upstreamErr: any) {
+            // eslint-disable-next-line no-console
+            console.error('Failed to set upstream tracking:', upstreamErr);
+            // Continue even if upstream tracking fails
+          }
+        }
       } else if (hasRemote) {
+        // Branch exists on remote but not locally, create local tracking branch
         await git.checkout([
           '-b',
           branchName,
@@ -163,11 +195,14 @@ export default class GitService {
           `origin/${branchName}`,
         ]);
       } else {
+        // Branch doesn't exist anywhere, create new local branch
         await git.checkoutLocalBranch(branchName);
       }
 
       return { success: true, checkedOut: branchName };
     } catch (err: any) {
+      // eslint-disable-next-line no-console
+      console.error('Checkout error:', err);
       throw new Error(`Checkout failed: ${err.message}`);
     }
   }
