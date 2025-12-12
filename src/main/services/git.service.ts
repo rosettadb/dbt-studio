@@ -64,8 +64,123 @@ export function isAuthError(error: any): boolean {
 }
 
 export default class GitService {
+  private static lockFileRetries = 3;
+
+  private static lockFileRetryDelay = 100;
+
+  // Operation queue to prevent concurrent git operations on same repo
+  private static operationQueues: Map<string, Promise<any>> = new Map();
+
   getGitInstance(repoPath: string): SimpleGit {
     return simpleGit(repoPath);
+  }
+
+  private async queueOperation<T>(
+    repoPath: string,
+    operation: () => Promise<T>,
+  ): Promise<T> {
+    // Get or create queue for this repo
+    const currentQueue =
+      GitService.operationQueues.get(repoPath) || Promise.resolve();
+
+    // Chain this operation after the current queue
+    const newQueue = currentQueue
+      .then(() => operation())
+      .catch((err) => {
+        // Don't let one failed operation break the queue
+        throw err;
+      });
+
+    // Update the queue
+    GitService.operationQueues.set(repoPath, newQueue);
+
+    try {
+      return await newQueue;
+    } finally {
+      // Clean up if this was the last operation
+      if (GitService.operationQueues.get(repoPath) === newQueue) {
+        GitService.operationQueues.delete(repoPath);
+      }
+    }
+  }
+
+  private async removeLockFileIfStale(repoPath: string): Promise<void> {
+    const lockFilePath = path.join(repoPath, '.git', 'index.lock');
+    try {
+      const exists = fs.existsSync(lockFilePath);
+      if (exists) {
+        // Check if lock file is stale (older than 10 seconds for more aggressive cleanup)
+        const stats = fs.statSync(lockFilePath);
+        const ageInMs = Date.now() - stats.mtimeMs;
+        const tenSecondsInMs = 10 * 1000;
+
+        if (ageInMs > tenSecondsInMs) {
+          // eslint-disable-next-line no-console
+          console.log('Removing stale git lock file');
+          fs.unlinkSync(lockFilePath);
+        }
+      }
+    } catch (error) {
+      // eslint-disable-next-line no-console
+      console.error('Error checking/removing lock file:', error);
+    }
+  }
+
+  async clearLockFile(repoPath: string): Promise<void> {
+    const lockFilePath = path.join(repoPath, '.git', 'index.lock');
+    try {
+      if (fs.existsSync(lockFilePath)) {
+        fs.unlinkSync(lockFilePath);
+        // eslint-disable-next-line no-console
+        console.log('Cleared git lock file');
+      }
+    } catch (error) {
+      // eslint-disable-next-line no-console
+      console.error('Error clearing lock file:', error);
+      throw new Error('Failed to clear git lock file');
+    }
+  }
+
+  private async retryWithLockHandling<T>(
+    repoPath: string,
+    operation: () => Promise<T>,
+  ): Promise<T> {
+    let lastError: any;
+
+    for (let i = 0; i < GitService.lockFileRetries; i += 1) {
+      try {
+        // Always check for stale lock before attempting operation
+        if (i > 0) {
+          // eslint-disable-next-line no-await-in-loop
+          await this.removeLockFileIfStale(repoPath);
+        }
+
+        // eslint-disable-next-line no-await-in-loop
+        return await operation();
+      } catch (error: any) {
+        lastError = error;
+        const errorMsg = error.message?.toLowerCase() || '';
+
+        if (errorMsg.includes('index.lock')) {
+          // Always try to remove lock file on lock errors
+          // eslint-disable-next-line no-await-in-loop
+          await this.removeLockFileIfStale(repoPath);
+
+          if (i < GitService.lockFileRetries - 1) {
+            // Wait before retrying with exponential backoff
+            // eslint-disable-next-line no-await-in-loop
+            await new Promise((resolve) => {
+              setTimeout(resolve, GitService.lockFileRetryDelay * (i + 1));
+            });
+          }
+        } else {
+          // Not a lock file error, throw immediately
+          throw error;
+        }
+      }
+    }
+
+    throw lastError;
   }
 
   async isTrackingSet(repoPath: string): Promise<boolean> {
@@ -272,68 +387,130 @@ export default class GitService {
   }
 
   async add(repoPath: string, files: string[] = ['.']) {
-    const git = this.getGitInstance(repoPath);
+    return this.queueOperation(repoPath, () =>
+      this.retryWithLockHandling(repoPath, async () => {
+        const git = this.getGitInstance(repoPath);
 
-    try {
-      // Convert absolute paths to relative paths for git
-      const relativePaths = files.map((file) => {
-        // If it's already a relative path or '.', use it as is
-        if (file === '.' || !path.isAbsolute(file)) {
-          return file;
+        try {
+          // Convert absolute paths to relative paths for git
+          const relativePaths = files.map((file) => {
+            // If it's already a relative path or '.', use it as is
+            if (file === '.' || !path.isAbsolute(file)) {
+              return file;
+            }
+            // Convert absolute path to relative path
+            return path.relative(repoPath, file);
+          });
+
+          // Get current git status to check what needs staging
+          const status = await git.status();
+
+          const filesToAdd: string[] = [];
+          const filesToUpdate: string[] = [];
+
+          relativePaths.forEach((file) => {
+            if (file === '.') {
+              filesToAdd.push(file);
+              return;
+            }
+
+            // Check if file is already staged
+            const isStaged = status.staged.includes(file);
+
+            // Check if file exists on filesystem
+            const fullPath = path.join(repoPath, file);
+            const exists = fs.existsSync(fullPath);
+
+            if (isStaged) {
+              // File is already staged, skip it
+              return;
+            }
+
+            if (exists) {
+              // File exists, add it normally
+              filesToAdd.push(file);
+            } else if (status.deleted.includes(file)) {
+              // File is deleted but not staged, use -u flag
+              filesToUpdate.push(file);
+            }
+          });
+
+          // Stage existing/new files
+          if (filesToAdd.length > 0) {
+            await git.add(filesToAdd);
+          }
+
+          // Stage deleted files with -u flag
+          if (filesToUpdate.length > 0) {
+            await git.add(['-u', ...filesToUpdate]);
+          }
+
+          return { success: true };
+        } catch (err: any) {
+          // eslint-disable-next-line no-console
+          console.error('Git add failed:', err);
+          throw new Error(`Add failed: ${err.message}`);
         }
-        // Convert absolute path to relative path
-        return path.relative(repoPath, file);
-      });
-
-      await git.add(relativePaths);
-
-      return { success: true };
-    } catch (err: any) {
-      // eslint-disable-next-line no-console
-      console.error('Git add failed:', err);
-      throw new Error(`Add failed: ${err.message}`);
-    }
+      }),
+    );
   }
 
   async unstage(repoPath: string, files: string[]) {
-    const git = this.getGitInstance(repoPath);
+    return this.queueOperation(repoPath, () =>
+      this.retryWithLockHandling(repoPath, async () => {
+        const git = this.getGitInstance(repoPath);
 
-    try {
-      // Convert absolute paths to relative paths for git
-      const relativePaths = files.map((file) => {
-        if (!path.isAbsolute(file)) {
-          return file;
+        try {
+          // Convert absolute paths to relative paths for git
+          const relativePaths = files.map((file) => {
+            if (!path.isAbsolute(file)) {
+              return file;
+            }
+            return path.relative(repoPath, file);
+          });
+
+          // For renamed files, git reset HEAD works on the new filename
+          // Git will automatically handle the rename and restore both old and new files
+          await git.reset(['HEAD', ...relativePaths]);
+          return { success: true };
+        } catch (err: any) {
+          // eslint-disable-next-line no-console
+          console.error('Unstage failed:', err);
+          throw new Error(`Unstage failed: ${err.message}`);
         }
-        return path.relative(repoPath, file);
-      });
-
-      await git.reset(['HEAD', ...relativePaths]);
-      return { success: true };
-    } catch (err: any) {
-      throw new Error(`Unstage failed: ${err.message}`);
-    }
+      }),
+    );
   }
 
   async stageAll(repoPath: string) {
-    const git = this.getGitInstance(repoPath);
+    return this.queueOperation(repoPath, () =>
+      this.retryWithLockHandling(repoPath, async () => {
+        const git = this.getGitInstance(repoPath);
 
-    try {
-      await git.add('.');
-      return { success: true };
-    } catch (err: any) {
-      throw new Error(`Stage all failed: ${err.message}`);
-    }
+        try {
+          // Use -A flag to stage all changes including deletions and renames
+          await git.add(['-A']);
+          return { success: true };
+        } catch (err: any) {
+          throw new Error(`Stage all failed: ${err.message}`);
+        }
+      }),
+    );
   }
 
   async unstageAll(repoPath: string) {
-    const git = this.getGitInstance(repoPath);
+    return this.queueOperation(repoPath, () =>
+      this.retryWithLockHandling(repoPath, async () => {
+        const git = this.getGitInstance(repoPath);
 
-    try {
-      await git.reset(['HEAD']);
-      return { success: true };
-    } catch (err: any) {
-      throw new Error(`Unstage all failed: ${err.message}`);
-    }
+        try {
+          await git.reset(['HEAD']);
+          return { success: true };
+        } catch (err: any) {
+          throw new Error(`Unstage all failed: ${err.message}`);
+        }
+      }),
+    );
   }
 
   async discardChanges(repoPath: string, files: string[]) {
@@ -348,23 +525,78 @@ export default class GitService {
         return path.relative(repoPath, file);
       });
 
-      await git.checkout(['--', ...relativePaths]);
+      // Get status to check which files are untracked
+      const status = await git.status();
+      const untrackedFiles: string[] = [];
+      const trackedFiles: string[] = [];
+
+      relativePaths.forEach((file) => {
+        if (status.not_added.includes(file)) {
+          untrackedFiles.push(file);
+        } else if (
+          status.modified.includes(file) ||
+          status.deleted.includes(file) ||
+          status.staged.includes(file)
+        ) {
+          trackedFiles.push(file);
+        }
+      });
+
+      // Discard changes for tracked files
+      if (trackedFiles.length > 0) {
+        try {
+          await git.checkout(['--', ...trackedFiles]);
+        } catch (checkoutErr: any) {
+          // eslint-disable-next-line no-console
+          console.error('Checkout failed for some files:', checkoutErr);
+          // Continue to try cleaning untracked files
+        }
+      }
+
+      // Delete untracked files
+      if (untrackedFiles.length > 0) {
+        try {
+          // Delete untracked files manually since git clean with specific files is tricky
+          const fsPromises = fs.promises;
+          await Promise.all(
+            untrackedFiles.map(async (file) => {
+              const fullPath = path.join(repoPath, file);
+              try {
+                await fsPromises.unlink(fullPath);
+              } catch (unlinkErr) {
+                // eslint-disable-next-line no-console
+                console.error(`Failed to delete ${file}:`, unlinkErr);
+              }
+            }),
+          );
+        } catch (cleanErr: any) {
+          // eslint-disable-next-line no-console
+          console.error('Clean failed for some files:', cleanErr);
+        }
+      }
+
       return { success: true };
     } catch (err: any) {
+      // eslint-disable-next-line no-console
+      console.error('Discard changes error:', err);
       throw new Error(`Discard changes failed: ${err.message}`);
     }
   }
 
   async commit(repoPath: string, message: string, files: string[] = ['.']) {
-    const git = this.getGitInstance(repoPath);
+    return this.queueOperation(repoPath, () =>
+      this.retryWithLockHandling(repoPath, async () => {
+        const git = this.getGitInstance(repoPath);
 
-    try {
-      await git.add(files);
-      await git.commit(message);
-      return { success: true };
-    } catch (err: any) {
-      throw new Error(`Commit failed: ${err.message}`);
-    }
+        try {
+          await git.add(files);
+          await git.commit(message);
+          return { success: true };
+        } catch (err: any) {
+          throw new Error(`Commit failed: ${err.message}`);
+        }
+      }),
+    );
   }
 
   async push(
@@ -554,7 +786,15 @@ export default class GitService {
       // Filename starts at position 3
       const indexStatus = line[0]; // Staged status (position 0)
       const workTreeStatus = line[1]; // Working tree status (position 1)
-      const filePath = line.substring(3); // File path (skip 'XY ' - 2 status chars + 1 space)
+      let filePath = line.substring(3); // File path (skip 'XY ' - 2 status chars + 1 space)
+
+      // Handle renamed files: "old -> new" format
+      // For renamed files, we want to track the NEW filename
+      if (filePath.includes(' -> ')) {
+        const [, newFilePath] = filePath.split(' -> ');
+        filePath = newFilePath; // Use the new filename
+      }
+
       const fullPath = path.join(repoPath, filePath);
 
       // Skip directories
@@ -566,7 +806,7 @@ export default class GitService {
 
       // Handle staged changes (index status)
       if (indexStatus !== ' ' && indexStatus !== '?') {
-        let status: 'staged' | 'deleted' | 'renamed';
+        let status: 'staged' | 'renamed' | 'staged-deleted';
         switch (indexStatus) {
           case 'A':
             status = 'staged';
@@ -575,7 +815,7 @@ export default class GitService {
             status = 'staged';
             break;
           case 'D':
-            status = 'deleted';
+            status = 'staged-deleted'; // Staged deletion - distinct from unstaged deletion
             break;
           case 'R':
             status = 'renamed';
@@ -598,7 +838,7 @@ export default class GitService {
             status = 'modified';
             break;
           case 'D':
-            status = 'deleted';
+            status = 'deleted'; // Unstaged deletion
             break;
           case '?':
             status = 'untracked';

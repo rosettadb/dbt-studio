@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Box, Button, useTheme } from '@mui/material';
+import { Check, Sync, ArrowUpward } from '@mui/icons-material';
 import {
   useGitCommit,
   useGetAheadBehindCount,
@@ -90,10 +91,10 @@ export const TipTapCommitInput: React.FC<TipTapCommitInputProps> = ({
   };
 
   const handleCommit = () => {
-    if (message.trim() && stagedFilesCount > 0 && projectPath) {
+    if (stagedFilesCount > 0 && projectPath) {
       commitFiles({
         path: projectPath,
-        message: message.trim(),
+        message: message.trim() || 'Update files', // Default message if empty
         files: ['.'],
       });
     }
@@ -139,8 +140,7 @@ export const TipTapCommitInput: React.FC<TipTapCommitInputProps> = ({
   }
 
   const isLoading = isCommitting || isPushing;
-  const isCommitDisabled =
-    !message.trim() || stagedFilesCount === 0 || isLoading;
+  const isCommitDisabled = stagedFilesCount === 0 || isLoading;
   const isPushDisabled = !shouldShowPush || isLoading;
   const isPublishDisabled = isLoading;
   const buttonDisabled = (() => {
@@ -165,12 +165,25 @@ export const TipTapCommitInput: React.FC<TipTapCommitInputProps> = ({
       return 'Publishing...';
     }
     if (primaryAction === 'push') {
-      return `Push (${aheadCount})`;
+      return `Sync Changes ${aheadCount}↑`;
     }
     if (primaryAction === 'publish') {
       return 'Publish Branch';
     }
     return stagedFilesCount > 0 ? `Commit (${stagedFilesCount})` : 'Commit';
+  })();
+
+  const buttonIcon = (() => {
+    if (isLoading) {
+      return null;
+    }
+    if (primaryAction === 'push') {
+      return <Sync sx={{ fontSize: 16, mr: 0.5 }} />;
+    }
+    if (primaryAction === 'publish') {
+      return <ArrowUpward sx={{ fontSize: 16, mr: 0.5 }} />;
+    }
+    return <Check sx={{ fontSize: 16, mr: 0.5 }} />;
   })();
 
   const handlePrimaryAction = () => {
@@ -262,19 +275,20 @@ export const TipTapCommitInput: React.FC<TipTapCommitInputProps> = ({
           />
         </Box>
 
-        {/* Dynamic Commit/Push Button */}
+        {/* Dynamic Commit/Push/Sync Button */}
         <Button
           fullWidth
           variant="contained"
           disabled={buttonDisabled}
           onClick={handlePrimaryAction}
+          startIcon={buttonIcon}
           sx={{
             textTransform: 'none',
             fontSize: '13px',
             fontWeight: 500,
             py: 0.75,
             minHeight: 32,
-            borderRadius: theme.shape.borderRadius / 8, // Use theme border radius
+            borderRadius: theme.shape.borderRadius / 8,
             backgroundColor: buttonDisabled
               ? theme.palette.action.disabled
               : theme.palette.primary.main,

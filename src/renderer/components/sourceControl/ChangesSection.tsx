@@ -27,35 +27,44 @@ export const ChangesSection: React.FC<ChangesSectionProps> = ({
   onOpenFile,
 }) => {
   // Filter files by staged status
+  // Staged files include: 'staged', 'renamed', and 'staged-deleted'
   const stagedFiles = fileStatuses.filter(
-    (file: FileStatus) => file.status === 'staged',
+    (file: FileStatus) =>
+      file.status === 'staged' ||
+      file.status === 'renamed' ||
+      file.status === 'staged-deleted',
   );
   const unstagedFiles = fileStatuses.filter(
-    (file: FileStatus) => file.status !== 'staged',
+    (file: FileStatus) =>
+      file.status !== 'staged' &&
+      file.status !== 'renamed' &&
+      file.status !== 'staged-deleted',
   );
 
   // Bulk action buttons
   const stagedActions = (
     <Tooltip title="Unstage All Changes" placement="top" enterDelay={500}>
-      <IconButton
-        size="small"
-        onClick={onUnstageAll}
-        disabled={stagedFiles.length === 0}
-        sx={{
-          width: 20,
-          height: 20,
-          color: 'text.secondary',
-          '&:hover': {
-            backgroundColor: 'action.hover',
-            color: 'error.main',
-          },
-          '&.Mui-disabled': {
-            color: 'text.disabled',
-          },
-        }}
-      >
-        <Remove sx={{ fontSize: 14 }} />
-      </IconButton>
+      <span>
+        <IconButton
+          size="small"
+          onClick={onUnstageAll}
+          disabled={stagedFiles.length === 0}
+          sx={{
+            width: 20,
+            height: 20,
+            color: 'text.secondary',
+            '&:hover': {
+              backgroundColor: 'action.hover',
+              color: 'error.main',
+            },
+            '&.Mui-disabled': {
+              color: 'text.disabled',
+            },
+          }}
+        >
+          <Remove sx={{ fontSize: 14 }} />
+        </IconButton>
+      </span>
     </Tooltip>
   );
 
@@ -63,48 +72,52 @@ export const ChangesSection: React.FC<ChangesSectionProps> = ({
     <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.25 }}>
       {/* Discard All Changes Button */}
       <Tooltip title="Discard All Changes" placement="top" enterDelay={500}>
-        <IconButton
-          size="small"
-          onClick={onDiscardAll}
-          disabled={unstagedFiles.length === 0}
-          sx={{
-            width: 20,
-            height: 20,
-            color: 'text.secondary',
-            '&:hover': {
-              backgroundColor: 'action.hover',
-              color: 'warning.main',
-            },
-            '&.Mui-disabled': {
-              color: 'text.disabled',
-            },
-          }}
-        >
-          <Undo sx={{ fontSize: 14 }} />
-        </IconButton>
+        <span>
+          <IconButton
+            size="small"
+            onClick={onDiscardAll}
+            disabled={unstagedFiles.length === 0}
+            sx={{
+              width: 20,
+              height: 20,
+              color: 'text.secondary',
+              '&:hover': {
+                backgroundColor: 'action.hover',
+                color: 'warning.main',
+              },
+              '&.Mui-disabled': {
+                color: 'text.disabled',
+              },
+            }}
+          >
+            <Undo sx={{ fontSize: 14 }} />
+          </IconButton>
+        </span>
       </Tooltip>
 
       {/* Stage All Changes Button */}
       <Tooltip title="Stage All Changes" placement="top" enterDelay={500}>
-        <IconButton
-          size="small"
-          onClick={onStageAll}
-          disabled={unstagedFiles.length === 0}
-          sx={{
-            width: 20,
-            height: 20,
-            color: 'text.secondary',
-            '&:hover': {
-              backgroundColor: 'action.hover',
-              color: 'success.main',
-            },
-            '&.Mui-disabled': {
-              color: 'text.disabled',
-            },
-          }}
-        >
-          <Add sx={{ fontSize: 14 }} />
-        </IconButton>
+        <span>
+          <IconButton
+            size="small"
+            onClick={onStageAll}
+            disabled={unstagedFiles.length === 0}
+            sx={{
+              width: 20,
+              height: 20,
+              color: 'text.secondary',
+              '&:hover': {
+                backgroundColor: 'action.hover',
+                color: 'success.main',
+              },
+              '&.Mui-disabled': {
+                color: 'text.disabled',
+              },
+            }}
+          >
+            <Add sx={{ fontSize: 14 }} />
+          </IconButton>
+        </span>
       </Tooltip>
     </Box>
   );

@@ -78,36 +78,50 @@ export const CollapsibleSection: React.FC<CollapsibleSectionProps> = ({
         </Box>
 
         {/* Count Badge and Actions */}
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-          {/* Actions - Show only on hover */}
-          {actions && isHovered && (
+        <Box
+          sx={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 0.5,
+            minHeight: '20px', // Fixed height to prevent jumping
+          }}
+        >
+          {/* Actions - Show only on hover AND when count > 0 */}
+          {actions && isHovered && count > 0 && (
             <Box
-              sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}
+              sx={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 0.5,
+                height: '20px', // Match parent height
+              }}
               onClick={(e: React.MouseEvent) => e.stopPropagation()}
             >
               {actions}
             </Box>
           )}
 
-          {/* Count Badge - Always visible */}
-          {count > 0 && (
-            <Typography
-              variant="body2"
-              sx={{
-                fontSize: '10px',
-                fontWeight: 500,
-                color: 'primary.contrastText',
-                backgroundColor: 'primary.main',
-                borderRadius: theme.shape.borderRadius, // Use theme border radius
-                px: 0.5,
-                py: 0.25,
-                minWidth: '16px',
-                textAlign: 'center',
-              }}
-            >
-              {count}
-            </Typography>
-          )}
+          {/* Count Badge - Always visible as badge, shows 0 when no files */}
+          <Box
+            sx={{
+              fontSize: '9px',
+              fontWeight: 500,
+              color: theme.palette.primary.contrastText,
+              backgroundColor: theme.palette.primary.main,
+              borderRadius: '50%',
+              minWidth: '16px',
+              width: '16px',
+              height: '16px',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              flexShrink: 0,
+              lineHeight: 1,
+              paddingTop: '1px', // Fine-tune vertical centering
+            }}
+          >
+            {count}
+          </Box>
         </Box>
       </Box>
 

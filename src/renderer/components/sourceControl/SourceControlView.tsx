@@ -85,7 +85,10 @@ export const SourceControlView: React.FC<SourceControlViewProps> = ({
   });
 
   const stagedFilesCount = fileStatuses.filter(
-    (f) => f.status === 'staged',
+    (f) =>
+      f.status === 'staged' ||
+      f.status === 'renamed' ||
+      f.status === 'staged-deleted',
   ).length;
 
   const queryClient = useQueryClient();

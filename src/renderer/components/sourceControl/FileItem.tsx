@@ -22,7 +22,11 @@ export const FileItem: React.FC<FileItemProps> = ({
 }) => {
   const [isHovered, setIsHovered] = useState(false);
 
-  const isStaged = file.status === 'staged';
+  // A file is staged if it has status 'staged', 'renamed', or 'staged-deleted'
+  const isStaged =
+    file.status === 'staged' ||
+    file.status === 'renamed' ||
+    file.status === 'staged-deleted';
 
   // Get git status letter for display
   const getStatusLetter = (status: string) => {
@@ -34,6 +38,8 @@ export const FileItem: React.FC<FileItemProps> = ({
       case 'staged':
         return 'M'; // Staged files are typically modified
       case 'deleted':
+        return 'D';
+      case 'staged-deleted':
         return 'D';
       case 'renamed':
         return 'R';
@@ -131,6 +137,14 @@ export const FileItem: React.FC<FileItemProps> = ({
             color: 'text.primary',
             fontWeight: 500,
             flexShrink: 0,
+            textDecoration:
+              file.status === 'deleted' || file.status === 'staged-deleted'
+                ? 'line-through'
+                : 'none',
+            opacity:
+              file.status === 'deleted' || file.status === 'staged-deleted'
+                ? 0.6
+                : 1,
           }}
         >
           {fileName}
@@ -143,11 +157,18 @@ export const FileItem: React.FC<FileItemProps> = ({
             sx={{
               fontSize: '11px',
               color: 'text.secondary',
-              opacity: 0.7,
+              opacity:
+                file.status === 'deleted' || file.status === 'staged-deleted'
+                  ? 0.4
+                  : 0.7,
               overflow: 'hidden',
               textOverflow: 'ellipsis',
               whiteSpace: 'nowrap',
               minWidth: 0,
+              textDecoration:
+                file.status === 'deleted' || file.status === 'staged-deleted'
+                  ? 'line-through'
+                  : 'none',
             }}
           >
             {shortDirectory}
@@ -234,6 +255,9 @@ export const FileItem: React.FC<FileItemProps> = ({
           sx={{
             fontSize: '11px',
             color: (() => {
+              // Special case: staged deletions should be red
+              if (file.status === 'staged-deleted') return 'error.main';
+              // Other staged files are green
               if (isStaged) return 'success.main';
               switch (file.status) {
                 case 'modified':
