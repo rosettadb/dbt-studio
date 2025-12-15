@@ -187,7 +187,15 @@ export default class GitService {
     const git = this.getGitInstance(repoPath);
     const result = await git.raw(['status', '-sb']);
     const firstLine = result.trim().split('\n')[0];
-    return firstLine.includes('...');
+    const hasTracking = firstLine.includes('...');
+    // eslint-disable-next-line no-console
+    console.log(
+      '[GitService.isTrackingSet] Status line:',
+      firstLine,
+      'hasTracking:',
+      hasTracking,
+    );
+    return hasTracking;
   }
 
   async ensureTrackingUpstream(repoPath: string, branch: string) {
@@ -584,15 +592,72 @@ export default class GitService {
   }
 
   async commit(repoPath: string, message: string, files: string[] = ['.']) {
+    // eslint-disable-next-line no-console
+    console.log('[GitService.commit] Starting commit:', {
+      repoPath,
+      message,
+      files,
+    });
     return this.queueOperation(repoPath, () =>
       this.retryWithLockHandling(repoPath, async () => {
         const git = this.getGitInstance(repoPath);
 
         try {
+          // eslint-disable-next-line no-console
+          console.log('[GitService.commit] Adding files:', files);
           await git.add(files);
+          // eslint-disable-next-line no-console
+          console.log('[GitService.commit] Committing with message:', message);
           await git.commit(message);
+
+          // Check and ensure tracking is set after commit
+          const branchSummary = await git.branch();
+          const currentBranch = branchSummary.current;
+          // eslint-disable-next-line no-console
+          console.log('[GitService.commit] Current branch:', currentBranch);
+
+          // Check if tracking is already set
+          const isTracking = await this.isTrackingSet(repoPath);
+          // eslint-disable-next-line no-console
+          console.log(
+            '[GitService.commit] Tracking set after commit:',
+            isTracking,
+          );
+
+          // If not tracking and we have a remote, try to set it
+          if (!isTracking) {
+            const remotes = await git.getRemotes();
+            if (remotes.length > 0) {
+              try {
+                // eslint-disable-next-line no-console
+                console.log(
+                  `[GitService.commit] Setting upstream tracking to origin/${currentBranch}`,
+                );
+                await git.branch([
+                  '--set-upstream-to',
+                  `origin/${currentBranch}`,
+                  currentBranch,
+                ]);
+                // eslint-disable-next-line no-console
+                console.log(
+                  '[GitService.commit] Upstream tracking set successfully',
+                );
+              } catch (upstreamErr: any) {
+                // eslint-disable-next-line no-console
+                console.log(
+                  '[GitService.commit] Could not set upstream (branch may not exist on remote):',
+                  upstreamErr.message,
+                );
+              }
+            }
+          }
+
+          // eslint-disable-next-line no-console
+          console.log('[GitService.commit] Commit successful');
           return { success: true };
         } catch (err: any) {
+          // eslint-disable-next-line no-console
+          console.error('[GitService.commit] Commit failed:', err);
           throw new Error(`Commit failed: ${err.message}`);
         }
       }),
@@ -603,6 +668,11 @@ export default class GitService {
     repoPath: string,
     credentials?: { username: string; password: string },
   ) {
+    // eslint-disable-next-line no-console
+    console.log('[GitService.push] Starting push:', {
+      repoPath,
+      hasCredentials: !!credentials,
+    });
     const git = this.getGitInstance(repoPath);
 
     try {
@@ -614,14 +684,36 @@ export default class GitService {
 
       const branchSummary = await git.branch();
       const currentBranch = branchSummary.current;
+      // eslint-disable-next-line no-console
+      console.log('[GitService.push] Pushing branch:', currentBranch);
       const remoteWithAuth = credentials
         ? injectCredentialsIntoRemoteUrl(origin.refs.push, credentials)
         : origin.refs.push;
 
       await git.remote(['set-url', 'origin', remoteWithAuth]);
 
+      // Check if tracking is set before pushing
+      const isTracking = await this.isTrackingSet(repoPath);
+      // eslint-disable-next-line no-console
+      console.log('[GitService.push] Tracking set before push:', isTracking);
+
       try {
-        await git.push('origin', currentBranch);
+        // Always use -u flag if tracking is not set to ensure upstream is configured
+        if (!isTracking) {
+          // eslint-disable-next-line no-console
+          console.log(
+            '[GitService.push] No tracking, pushing with -u flag to set upstream',
+          );
+          await git.push(['-u', 'origin', currentBranch]);
+          // eslint-disable-next-line no-console
+          console.log('[GitService.push] Push with upstream successful');
+        } else {
+          // eslint-disable-next-line no-console
+          console.log('[GitService.push] Attempting push to origin');
+          await git.push('origin', currentBranch);
+          // eslint-disable-next-line no-console
+          console.log('[GitService.push] Push successful');
+        }
       } catch (err: any) {
         const msg = err.message?.toLowerCase() ?? '';
 
@@ -632,7 +724,13 @@ export default class GitService {
           msg.includes('has no upstream');
 
         if (shouldTryUpstreamPush) {
+          // eslint-disable-next-line no-console
+          console.log(
+            '[GitService.push] Error indicates no upstream, pushing with -u flag',
+          );
           await git.push(['-u', 'origin', currentBranch]);
+          // eslint-disable-next-line no-console
+          console.log('[GitService.push] Push with upstream successful');
         } else {
           throw err;
         }
@@ -642,6 +740,8 @@ export default class GitService {
 
       return { success: true };
     } catch (err) {
+      // eslint-disable-next-line no-console
+      console.error('[GitService.push] Push failed:', err);
       if (isAuthError(err)) throw new AuthError();
       throw err;
     }
@@ -930,8 +1030,15 @@ export default class GitService {
     const git = this.getGitInstance(repoPath);
 
     try {
+      // eslint-disable-next-line no-console
+      console.log(
+        '[GitService.getAheadBehindCount] Checking tracking for:',
+        repoPath,
+      );
       // Check if there's a remote tracking branch
       const isTracking = await this.isTrackingSet(repoPath);
+      // eslint-disable-next-line no-console
+      console.log('[GitService.getAheadBehindCount] isTracking:', isTracking);
       if (!isTracking) {
         return null;
       }
@@ -945,8 +1052,15 @@ export default class GitService {
       ]);
       const [ahead, behind] = result.trim().split('\t').map(Number);
 
+      // eslint-disable-next-line no-console
+      console.log('[GitService.getAheadBehindCount] Result:', {
+        ahead,
+        behind,
+      });
       return { ahead, behind };
     } catch (error) {
+      // eslint-disable-next-line no-console
+      console.error('[GitService.getAheadBehindCount] Error:', error);
       // No remote tracking branch or other error
       return null;
     }

@@ -206,9 +206,13 @@ export const useGitCommit = (
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: async (data) => {
+      // eslint-disable-next-line no-console
+      console.log('[useGitCommit] Starting commit:', data);
       return gitServices.commit(data.path, data.message, data.files);
     },
     onSuccess: async (...args) => {
+      // eslint-disable-next-line no-console
+      console.log('[useGitCommit] Commit successful, invalidating queries');
       // Only invalidate queries for this specific path - more targeted
       await queryClient.invalidateQueries([
         QUERY_KEYS.GIT_STATUSES,
@@ -219,9 +223,15 @@ export const useGitCommit = (
         args[1].path,
       ]);
 
+      // eslint-disable-next-line no-console
+      console.log('[useGitCommit] Calling custom onSuccess callback');
       onCustomSuccess?.(...args);
+      // eslint-disable-next-line no-console
+      console.log('[useGitCommit] Commit flow complete');
     },
     onError: (...args) => {
+      // eslint-disable-next-line no-console
+      console.error('[useGitCommit] Commit failed:', args[0]);
       onCustomError?.(...args);
     },
   });
@@ -242,12 +252,18 @@ export const useGitPush = (
     customOptions || {};
   return useMutation({
     mutationFn: async (data) => {
+      // eslint-disable-next-line no-console
+      console.log('[useGitPush] Starting push:', data);
       return gitServices.push(data.path);
     },
     onSuccess: async (...args) => {
+      // eslint-disable-next-line no-console
+      console.log('[useGitPush] Push successful');
       onCustomSuccess?.(...args);
     },
     onError: (...args) => {
+      // eslint-disable-next-line no-console
+      console.error('[useGitPush] Push failed:', args[0]);
       onCustomError?.(...args);
     },
   });
