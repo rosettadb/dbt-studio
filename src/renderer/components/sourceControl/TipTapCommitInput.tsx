@@ -1,6 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Box, Button, useTheme } from '@mui/material';
 import { Check, Sync, ArrowUpward } from '@mui/icons-material';
+import { toast } from 'react-toastify';
 import {
   useGitCommit,
   useGetAheadBehindCount,
@@ -34,51 +35,33 @@ export const TipTapCommitInput: React.FC<TipTapCommitInputProps> = ({
 
   const { mutate: commitFiles, isLoading: isCommitting } = useGitCommit({
     onSuccess: () => {
-      // eslint-disable-next-line no-console
-      console.log(
-        '[TipTapCommitInput.useGitCommit.onSuccess] Commit succeeded',
-      );
       setMessage('');
       setHeight(36);
       if (textareaRef.current) {
         textareaRef.current.textContent = '';
       }
-      // eslint-disable-next-line no-console
-      console.log(
-        '[TipTapCommitInput.useGitCommit.onSuccess] Calling onCommitSuccess callback',
-      );
       onCommitSuccess?.();
       // Delay refetch to prevent race conditions with button state
       setTimeout(() => {
-        // eslint-disable-next-line no-console
-        console.log(
-          '[TipTapCommitInput.useGitCommit.onSuccess] Refetching ahead/behind count',
-        );
         refetchAheadBehind();
       }, 100);
     },
-    onError: (error: any) => {
-      // eslint-disable-next-line no-console
-      console.error(
-        '[TipTapCommitInput.useGitCommit.onError] Commit failed:',
-        error,
-      );
+    onError: (error) => {
+      const errorMessage =
+        error instanceof Error ? error.message : 'Unknown error';
+      toast.error(`Commit failed: ${errorMessage}`);
     },
   });
 
   const { mutate: pushFiles, isLoading: isPushing } = useGitPush({
     onSuccess: () => {
-      // eslint-disable-next-line no-console
-      console.log('[TipTapCommitInput.useGitPush.onSuccess] Push succeeded');
       refetchAheadBehind();
       onCommitSuccess?.();
     },
-    onError: (error: any) => {
-      // eslint-disable-next-line no-console
-      console.error(
-        '[TipTapCommitInput.useGitPush.onError] Push failed:',
-        error,
-      );
+    onError: (error) => {
+      const errorMessage =
+        error instanceof Error ? error.message : 'Unknown error';
+      toast.error(`Push failed: ${errorMessage}`);
     },
   });
 
@@ -115,15 +98,7 @@ export const TipTapCommitInput: React.FC<TipTapCommitInputProps> = ({
   };
 
   const handleCommit = () => {
-    // eslint-disable-next-line no-console
-    console.log('[TipTapCommitInput.handleCommit] Called with:', {
-      stagedFilesCount,
-      projectPath,
-      message,
-    });
     if (stagedFilesCount > 0 && projectPath) {
-      // eslint-disable-next-line no-console
-      console.log('[TipTapCommitInput.handleCommit] Calling commitFiles');
       commitFiles({
         path: projectPath,
         message: message.trim() || 'Update files', // Default message if empty
@@ -133,24 +108,15 @@ export const TipTapCommitInput: React.FC<TipTapCommitInputProps> = ({
   };
 
   const handlePush = () => {
-    // eslint-disable-next-line no-console
-    console.log('[TipTapCommitInput.handlePush] Called with:', {
-      projectPath,
-      remotesCount: remotes.length,
-    });
     if (!projectPath) {
       return;
     }
 
     if (remotes.length === 0) {
-      // eslint-disable-next-line no-console
-      console.log('[TipTapCommitInput.handlePush] No remotes, opening modal');
       setIsAddRemoteModalOpen(true);
       return;
     }
 
-    // eslint-disable-next-line no-console
-    console.log('[TipTapCommitInput.handlePush] Calling pushFiles');
     pushFiles({ path: projectPath });
   };
 
@@ -173,16 +139,6 @@ export const TipTapCommitInput: React.FC<TipTapCommitInputProps> = ({
   const hasRemote = remotes.length > 0;
   const hasTrackingBranch = aheadBehind !== null; // null means no upstream tracking branch
 
-  // eslint-disable-next-line no-console
-  console.log('[TipTapCommitInput] Button state calculation:', {
-    aheadBehind,
-    aheadCount,
-    hasRemote,
-    hasTrackingBranch,
-    stagedFilesCount,
-    remotesCount: remotes.length,
-  });
-
   // Show "Publish Branch" when:
   // 1. No remote exists, OR
   // 2. Remote exists but current branch has no tracking branch
@@ -196,21 +152,12 @@ export const TipTapCommitInput: React.FC<TipTapCommitInputProps> = ({
   const shouldShowPush =
     hasRemote && hasTrackingBranch && aheadCount > 0 && stagedFilesCount === 0;
 
-  // eslint-disable-next-line no-console
-  console.log('[TipTapCommitInput] Button decision:', {
-    shouldShowPublish,
-    shouldShowPush,
-  });
-
   let primaryAction: 'commit' | 'push' | 'publish' = 'commit';
   if (shouldShowPublish) {
     primaryAction = 'publish';
   } else if (shouldShowPush) {
     primaryAction = 'push';
   }
-
-  // eslint-disable-next-line no-console
-  console.log('[TipTapCommitInput] Final primaryAction:', primaryAction);
 
   const isLoading = isCommitting || isPushing;
   const isCommitDisabled = stagedFilesCount === 0 || isLoading;
@@ -260,40 +207,23 @@ export const TipTapCommitInput: React.FC<TipTapCommitInputProps> = ({
   })();
 
   const handlePrimaryAction = () => {
-    // eslint-disable-next-line no-console
-    console.log(
-      '[TipTapCommitInput.handlePrimaryAction] Called with primaryAction:',
-      primaryAction,
-    );
     // Prevent rapid successive actions (debounce 1 second)
     const now = Date.now();
     if (now - lastActionTime < 1000) {
-      // eslint-disable-next-line no-console
-      console.log(
-        '[TipTapCommitInput.handlePrimaryAction] Debounced - too soon',
-      );
       return;
     }
     setLastActionTime(now);
 
     // Prevent action if already loading
     if (isLoading) {
-      // eslint-disable-next-line no-console
-      console.log(
-        '[TipTapCommitInput.handlePrimaryAction] Already loading, skipping',
-      );
       return;
     }
 
     if (primaryAction === 'push') {
-      // eslint-disable-next-line no-console
-      console.log('[TipTapCommitInput.handlePrimaryAction] Action is push');
       handlePush();
       return;
     }
     if (primaryAction === 'publish') {
-      // eslint-disable-next-line no-console
-      console.log('[TipTapCommitInput.handlePrimaryAction] Action is publish');
       // If no remote exists, show modal to add one
       if (remotes.length === 0) {
         setIsAddRemoteModalOpen(true);
@@ -303,8 +233,6 @@ export const TipTapCommitInput: React.FC<TipTapCommitInputProps> = ({
       }
       return;
     }
-    // eslint-disable-next-line no-console
-    console.log('[TipTapCommitInput.handlePrimaryAction] Action is commit');
     handleCommit();
   };
 

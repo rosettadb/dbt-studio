@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Box, Typography, IconButton, Tooltip } from '@mui/material';
-import { Add, Undo, FileOpen, Remove } from '@mui/icons-material';
+import { Add, Undo, Remove } from '@mui/icons-material';
 
 import { FileIcon } from '../fileIcon';
 import { FileStatus } from '../../../types/backend';
@@ -136,7 +136,12 @@ export const FileItem: React.FC<FileItemProps> = ({
             fontSize: '14px',
             color: 'text.primary',
             fontWeight: 500,
-            flexShrink: 0,
+            flexShrink: 1,
+            minWidth: 0,
+            maxWidth: '100%',
+            overflow: 'hidden',
+            textOverflow: 'ellipsis',
+            whiteSpace: 'nowrap',
             textDecoration:
               file.status === 'deleted' || file.status === 'staged-deleted'
                 ? 'line-through'
@@ -179,25 +184,6 @@ export const FileItem: React.FC<FileItemProps> = ({
       {/* Action Buttons - Show on Hover */}
       {isHovered && (
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.25 }}>
-          {/* Open File Button */}
-          <Tooltip title="Open File" placement="top" enterDelay={500}>
-            <IconButton
-              size="small"
-              onClick={(e) => handleOpenFile(e)}
-              sx={{
-                width: 20,
-                height: 20,
-                color: 'text.secondary',
-                '&:hover': {
-                  backgroundColor: 'action.hover',
-                  color: 'info.main',
-                },
-              }}
-            >
-              <FileOpen sx={{ fontSize: 14 }} />
-            </IconButton>
-          </Tooltip>
-
           {/* Discard Changes Button - Only for unstaged files */}
           {!isStaged && (
             <Tooltip title="Discard Changes" placement="top" enterDelay={500}>

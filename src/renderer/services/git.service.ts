@@ -171,3 +171,35 @@ export const getAheadBehindCount = async (repoPath: string) => {
   >('git:aheadBehind', { repoPath });
   return data;
 };
+
+export const createBranch = async (
+  repoPath: string,
+  branchName: string,
+): Promise<void> => {
+  await client.post<{ repoPath: string; branchName: string }, void>(
+    'git:createBranch',
+    { repoPath, branchName },
+  );
+};
+
+export const deleteBranch = async (
+  repoPath: string,
+  branchName: string,
+  force: boolean = false,
+): Promise<void> => {
+  await client.post<
+    { repoPath: string; branchName: string; force?: boolean },
+    void
+  >('git:deleteBranch', { repoPath, branchName, force });
+};
+
+export const renameBranch = async (
+  repoPath: string,
+  oldName: string,
+  newName: string,
+): Promise<void> => {
+  await client.post<
+    { repoPath: string; oldName: string; newName: string },
+    void
+  >('git:renameBranch', { repoPath, oldName, newName });
+};

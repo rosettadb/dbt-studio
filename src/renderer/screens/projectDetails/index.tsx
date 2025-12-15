@@ -133,6 +133,7 @@ const ProjectDetails: React.FC = () => {
   const [aiTransformationResponse, setAitTransformationResponse] =
     React.useState<string>();
   const [isPushModalOpen, setIsPushModalOpen] = React.useState(false);
+  const [isSynchronizing, setIsSynchronizing] = React.useState(false);
 
   const {
     data: directories,
@@ -398,6 +399,68 @@ const ProjectDetails: React.FC = () => {
   const handleConnectionMenuClose = () => {
     setConnectionMenuAnchor(null);
   };
+
+  /**
+   * Comprehensive synchronization function that coordinates all three components:
+   * 1. Git status (file changes, staging, commits)
+   * 2. Monaco editor tabs (open files, modified state, content)
+   * 3. File explorer (file tree, status indicators)
+   */
+  const handleSynchronizeAll = React.useCallback(async () => {
+    setIsSynchronizing(true);
+    try {
+      // Step 1: Refresh git status from backend
+      await updateStatuses();
+
+      // Step 2: Refresh file explorer tree
+      await fetchDirectories();
+
+      // Step 3: Get current git statuses
+      const currentStatuses = statuses;
+
+      // Step 4: Sync Monaco tabs with git state
+      // Close tabs for deleted files
+      tabs.forEach((tab) => {
+        const fileStatus = currentStatuses?.find((s) => s.path === tab.path);
+        if (!fileStatus) {
+          // File no longer exists in git or file system
+          closeTabByPath(tab.path);
+        }
+      });
+
+      // Update tab states based on git status
+      tabs.forEach((tab) => {
+        const fileStatus = currentStatuses?.find((s) => s.path === tab.path);
+        if (!fileStatus) {
+          // If file is not in status list, it's committed - mark as saved
+          markTabSavedByPath(tab.path);
+        }
+      });
+
+      // Step 5: Refresh content for modified files
+      tabs.forEach((tab) => {
+        const fileStatus = currentStatuses?.find((s) => s.path === tab.path);
+        if (fileStatus?.status === 'modified' && !tab.isModified) {
+          // File was modified externally, refresh its content
+          refreshTabContentByPath(tab.path);
+        }
+      });
+    } catch (error: any) {
+      toast.error(`Sync failed: ${error?.message || 'Unknown error'}`);
+      // eslint-disable-next-line no-console
+      console.error('Synchronization error:', error);
+    } finally {
+      setIsSynchronizing(false);
+    }
+  }, [
+    tabs,
+    statuses,
+    updateStatuses,
+    fetchDirectories,
+    closeTabByPath,
+    markTabSavedByPath,
+    refreshTabContentByPath,
+  ]);
 
   React.useEffect(() => {
     const fetchData = async () => {
@@ -700,6 +763,9 @@ const ProjectDetails: React.FC = () => {
             setSelectedFilePath(filePath);
           }}
           onSourceControlRefreshFileContent={refreshTabContentByPath}
+          // Synchronization
+          onSourceControlSynchronize={handleSynchronizeAll}
+          isSourceControlSynchronizing={isSynchronizing}
         />
       }
     >

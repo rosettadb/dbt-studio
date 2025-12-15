@@ -68,6 +68,9 @@ interface SourceControlViewProps {
   onOpenFile?: (filePath: string) => void;
   onFileSelect?: (filePath: string) => void;
   onRefreshFileContent?: (filePath: string) => void;
+  // Synchronization
+  onSynchronize?: () => Promise<void>;
+  isSynchronizing?: boolean;
 }
 
 export const SourceControlView: React.FC<SourceControlViewProps> = ({
@@ -75,6 +78,8 @@ export const SourceControlView: React.FC<SourceControlViewProps> = ({
   onOpenFile,
   onFileSelect,
   onRefreshFileContent,
+  onSynchronize,
+  isSynchronizing,
 }) => {
   const { data: isInitialized } = useGitIsInitialized(projectPath || '', {
     enabled: !!projectPath,
@@ -286,7 +291,12 @@ export const SourceControlView: React.FC<SourceControlViewProps> = ({
         }}
       >
         {/* Repository Header with Actions */}
-        <RepositoryHeader projectPath={projectPath} onRefresh={handleRefresh} />
+        <RepositoryHeader
+          projectPath={projectPath}
+          onSynchronize={onSynchronize}
+          isSynchronizing={isSynchronizing}
+          hasPendingChanges={fileStatuses.length > 0}
+        />
 
         {/* TipTap Commit Input */}
         <TipTapCommitInput

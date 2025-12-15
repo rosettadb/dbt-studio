@@ -58,6 +58,9 @@ interface SourceControlTabProps {
   onOpenFile?: (filePath: string) => void;
   onFileSelect?: (filePath: string) => void;
   onRefreshFileContent?: (filePath: string) => void;
+  onSynchronize?: () => Promise<void>;
+  isSynchronizing?: boolean;
+  onBranchSwitch?: (branchName: string) => void;
 }
 
 const SourceControlTab: React.FC<SourceControlTabProps> = ({
@@ -65,6 +68,9 @@ const SourceControlTab: React.FC<SourceControlTabProps> = ({
   onOpenFile,
   onFileSelect,
   onRefreshFileContent,
+  onSynchronize,
+  isSynchronizing,
+  onBranchSwitch,
 }) => {
   return (
     <SourceControlView
@@ -72,6 +78,9 @@ const SourceControlTab: React.FC<SourceControlTabProps> = ({
       onOpenFile={onOpenFile}
       onFileSelect={onFileSelect}
       onRefreshFileContent={onRefreshFileContent}
+      onSynchronize={onSynchronize}
+      isSynchronizing={isSynchronizing}
+      onBranchSwitch={onBranchSwitch}
     />
   );
 };
@@ -95,6 +104,11 @@ interface ProjectSidebarProps {
   onSourceControlOpenFile?: (filePath: string) => void;
   onSourceControlFileSelect?: (filePath: string) => void;
   onSourceControlRefreshFileContent?: (filePath: string) => void;
+
+  // Synchronization
+  onSourceControlSynchronize?: () => Promise<void>;
+  isSourceControlSynchronizing?: boolean;
+  onSourceControlBranchSwitch?: (branchName: string) => void;
 }
 
 export const ProjectSidebar: React.FC<ProjectSidebarProps> = ({
@@ -111,6 +125,9 @@ export const ProjectSidebar: React.FC<ProjectSidebarProps> = ({
   onSourceControlOpenFile,
   onSourceControlFileSelect,
   onSourceControlRefreshFileContent,
+  onSourceControlSynchronize,
+  isSourceControlSynchronizing,
+  onSourceControlBranchSwitch,
 }) => {
   const [activeTab, setActiveTab] = useState<SidebarTab>('explorer');
   const theme = useTheme();
@@ -270,6 +287,9 @@ export const ProjectSidebar: React.FC<ProjectSidebarProps> = ({
             onOpenFile={onSourceControlOpenFile}
             onFileSelect={onSourceControlFileSelect}
             onRefreshFileContent={onSourceControlRefreshFileContent}
+            onSynchronize={onSourceControlSynchronize}
+            isSynchronizing={isSourceControlSynchronizing}
+            onBranchSwitch={onSourceControlBranchSwitch}
           />
         )}
       </Box>

@@ -190,7 +190,10 @@ export type GitChannels =
   | 'git:stageAll'
   | 'git:unstageAll'
   | 'git:discardChanges'
-  | 'git:aheadBehind';
+  | 'git:aheadBehind'
+  | 'git:createBranch'
+  | 'git:deleteBranch'
+  | 'git:renameBranch';
 
 export type UtilChannels =
   | 'open:external'

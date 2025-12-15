@@ -24,6 +24,9 @@ const handlerChannels = [
   'git:fileDiff',
   'git:fileStatusList',
   'git:aheadBehind',
+  'git:createBranch',
+  'git:deleteBranch',
+  'git:renameBranch',
 ];
 
 const removeGitIpcHandlers = () => {
@@ -233,6 +236,44 @@ const registerGitHandlers = () => {
     'git:aheadBehind',
     async (_event, { repoPath }: { repoPath: string }) => {
       return gitService.getAheadBehindCount(repoPath);
+    },
+  );
+
+  ipcMain.handle(
+    'git:createBranch',
+    async (
+      _event,
+      { repoPath, branchName }: { repoPath: string; branchName: string },
+    ) => {
+      return gitService.createBranch(repoPath, branchName);
+    },
+  );
+
+  ipcMain.handle(
+    'git:deleteBranch',
+    async (
+      _event,
+      {
+        repoPath,
+        branchName,
+        force,
+      }: { repoPath: string; branchName: string; force?: boolean },
+    ) => {
+      return gitService.deleteBranch(repoPath, branchName, force);
+    },
+  );
+
+  ipcMain.handle(
+    'git:renameBranch',
+    async (
+      _event,
+      {
+        repoPath,
+        oldName,
+        newName,
+      }: { repoPath: string; oldName: string; newName: string },
+    ) => {
+      return gitService.renameBranch(repoPath, oldName, newName);
     },
   );
 };
