@@ -1,5 +1,5 @@
 import React from 'react';
-import { Box, Button } from '@mui/material';
+import { Box, Button, CircularProgress } from '@mui/material';
 import { useQueryClient } from 'react-query';
 import { RepositoryHeader } from './RepositoryHeader';
 import { TipTapCommitInput } from './TipTapCommitInput';
@@ -284,6 +284,7 @@ export const SourceControlView: React.FC<SourceControlViewProps> = ({
     <>
       <Box
         sx={{
+          position: 'relative',
           height: '100%',
           display: 'flex',
           flexDirection: 'column',
@@ -316,6 +317,46 @@ export const SourceControlView: React.FC<SourceControlViewProps> = ({
           onDiscardAll={handleDiscardAll}
           onOpenFile={handleOpenFile}
         />
+
+        {isSynchronizing && (
+          <Box
+            sx={{
+              position: 'absolute',
+              inset: 0,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              backgroundColor: 'rgba(0,0,0,0.25)',
+              backdropFilter: 'blur(1px)',
+              zIndex: 10,
+            }}
+          >
+            <Box
+              sx={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 1,
+                backgroundColor: 'background.paper',
+                px: 2,
+                py: 1,
+                borderRadius: 1,
+                boxShadow: 3,
+              }}
+            >
+              <CircularProgress size={16} thickness={5} />
+              <Box
+                component="span"
+                sx={{
+                  fontSize: '12px',
+                  fontWeight: 500,
+                  color: 'text.secondary',
+                }}
+              >
+                Synchronizing…
+              </Box>
+            </Box>
+          </Box>
+        )}
       </Box>
 
       {/* Discard Confirmation Dialog */}

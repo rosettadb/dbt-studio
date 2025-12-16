@@ -11,6 +11,7 @@ import {
 } from '@mui/material';
 import { MoreHoriz, Sync } from '@mui/icons-material';
 import { toast } from 'react-toastify';
+import { useQueryClient } from 'react-query';
 import {
   useGitPull,
   useGitPush,
@@ -24,6 +25,7 @@ import {
 import { BranchDialog } from './BranchDialog';
 import { Icon } from '../icon';
 import { icons } from '../../../../assets';
+import { QUERY_KEYS } from '../../config/constants';
 
 interface RepositoryHeaderProps {
   projectPath?: string;
@@ -39,6 +41,7 @@ export const RepositoryHeader: React.FC<RepositoryHeaderProps> = ({
   hasPendingChanges = false,
 }) => {
   const theme = useTheme();
+  const queryClient = useQueryClient();
   const [branchMenuAnchor, setBranchMenuAnchor] = useState<null | HTMLElement>(
     null,
   );
@@ -71,10 +74,32 @@ export const RepositoryHeader: React.FC<RepositoryHeaderProps> = ({
   const [branchInput, setBranchInput] = useState('');
 
   // Branch operation hooks
+  const resetBranchDialog = React.useCallback(() => {
+    setBranchDialogOpen(false);
+    setBranchInput('');
+    setBranchAction(null);
+  }, []);
+
+  const invalidateGitQueries = React.useCallback(async () => {
+    if (!projectPath) return;
+    await Promise.all([
+      queryClient.invalidateQueries([QUERY_KEYS.GIT_BRANCHES, projectPath]),
+      queryClient.invalidateQueries([QUERY_KEYS.GIT_STATUSES, projectPath]),
+      queryClient.invalidateQueries([QUERY_KEYS.GIT_REMOTES, projectPath]),
+    ]);
+  }, [projectPath, queryClient]);
+
+  const handlePostBranchOperation = React.useCallback(async () => {
+    await Promise.all([
+      invalidateGitQueries(),
+      onSynchronize ? onSynchronize() : Promise.resolve(),
+    ]);
+    resetBranchDialog();
+  }, [invalidateGitQueries, onSynchronize, resetBranchDialog]);
+
   const { mutate: createBranch, isLoading: isCreating } = useGitCreateBranch({
     onSuccess: async () => {
-      // Reload app on branch create for consistency
-      window.location.reload();
+      await handlePostBranchOperation();
     },
     onError: (error) => {
       toast.error(`Failed to create branch: ${error.message}`);
@@ -83,8 +108,7 @@ export const RepositoryHeader: React.FC<RepositoryHeaderProps> = ({
 
   const { mutate: deleteBranch, isLoading: isDeleting } = useGitDeleteBranch({
     onSuccess: async () => {
-      // Reload app on branch delete for consistency
-      window.location.reload();
+      await handlePostBranchOperation();
     },
     onError: (error) => {
       toast.error(`Failed to delete branch: ${error.message}`);
@@ -93,8 +117,7 @@ export const RepositoryHeader: React.FC<RepositoryHeaderProps> = ({
 
   const { mutate: renameBranch, isLoading: isRenaming } = useGitRenameBranch({
     onSuccess: async () => {
-      // Reload app on branch rename for consistency
-      window.location.reload();
+      await handlePostBranchOperation();
     },
     onError: (error) => {
       toast.error(`Failed to rename branch: ${error.message}`);
@@ -103,8 +126,7 @@ export const RepositoryHeader: React.FC<RepositoryHeaderProps> = ({
 
   const { mutate: switchBranch, isLoading: isSwitching } = useGitCheckout({
     onSuccess: async () => {
-      // Reload app on branch switch for consistency
-      window.location.reload();
+      await handlePostBranchOperation();
     },
     onError: (error) => {
       toast.error(`Failed to switch branch: ${error.message}`);

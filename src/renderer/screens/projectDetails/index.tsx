@@ -409,39 +409,30 @@ const ProjectDetails: React.FC = () => {
   const handleSynchronizeAll = React.useCallback(async () => {
     setIsSynchronizing(true);
     try {
-      // Step 1: Refresh git status from backend
-      await updateStatuses();
+      const [statusesResult] = await Promise.all([
+        updateStatuses(),
+        fetchDirectories(),
+      ]);
 
-      // Step 2: Refresh file explorer tree
-      await fetchDirectories();
+      const currentStatuses = statusesResult?.data ?? statuses ?? [];
 
-      // Step 3: Get current git statuses
-      const currentStatuses = statuses;
-
-      // Step 4: Sync Monaco tabs with git state
-      // Close tabs for deleted files
       tabs.forEach((tab) => {
-        const fileStatus = currentStatuses?.find((s) => s.path === tab.path);
+        const fileStatus = currentStatuses.find((s) => s.path === tab.path);
         if (!fileStatus) {
-          // File no longer exists in git or file system
           closeTabByPath(tab.path);
         }
       });
 
-      // Update tab states based on git status
       tabs.forEach((tab) => {
-        const fileStatus = currentStatuses?.find((s) => s.path === tab.path);
+        const fileStatus = currentStatuses.find((s) => s.path === tab.path);
         if (!fileStatus) {
-          // If file is not in status list, it's committed - mark as saved
           markTabSavedByPath(tab.path);
         }
       });
 
-      // Step 5: Refresh content for modified files
       tabs.forEach((tab) => {
-        const fileStatus = currentStatuses?.find((s) => s.path === tab.path);
+        const fileStatus = currentStatuses.find((s) => s.path === tab.path);
         if (fileStatus?.status === 'modified' && !tab.isModified) {
-          // File was modified externally, refresh its content
           refreshTabContentByPath(tab.path);
         }
       });
