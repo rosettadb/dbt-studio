@@ -32,15 +32,12 @@ export const CodeEditor = ({
   const completionDisposableRef = useRef<IDisposable | null>(null);
 
   const applyHighlights = (current: string, original: string | null) => {
-    if (!editorRef.current || !monacoRef.current || !isMounted || isDisposed)
-      return;
+    if (!editorRef.current || !monacoRef.current) return;
 
     try {
       const monacoInstance = monacoRef.current;
       const editor = editorRef.current;
-
-      // Check if editor is still valid
-      if (!editor.getModel) return;
+      if (!editor || !editor.getModel) return;
 
       const model = editor.getModel();
       if (!model) return;
@@ -54,7 +51,6 @@ export const CodeEditor = ({
         model.getLineCount(),
         range,
       );
-
       if (!decorationsRef.current) {
         decorationsRef.current =
           editor.createDecorationsCollection(decorations);
