@@ -60,7 +60,6 @@ interface SourceControlTabProps {
   onRefreshFileContent?: (filePath: string) => void;
   onSynchronize?: () => Promise<void>;
   isSynchronizing?: boolean;
-  onBranchSwitch?: (branchName: string) => void;
 }
 
 const SourceControlTab: React.FC<SourceControlTabProps> = ({
@@ -70,7 +69,6 @@ const SourceControlTab: React.FC<SourceControlTabProps> = ({
   onRefreshFileContent,
   onSynchronize,
   isSynchronizing,
-  onBranchSwitch,
 }) => {
   return (
     <SourceControlView
@@ -80,7 +78,6 @@ const SourceControlTab: React.FC<SourceControlTabProps> = ({
       onRefreshFileContent={onRefreshFileContent}
       onSynchronize={onSynchronize}
       isSynchronizing={isSynchronizing}
-      onBranchSwitch={onBranchSwitch}
     />
   );
 };
@@ -108,7 +105,6 @@ interface ProjectSidebarProps {
   // Synchronization
   onSourceControlSynchronize?: () => Promise<void>;
   isSourceControlSynchronizing?: boolean;
-  onSourceControlBranchSwitch?: (branchName: string) => void;
 }
 
 export const ProjectSidebar: React.FC<ProjectSidebarProps> = ({
@@ -127,7 +123,6 @@ export const ProjectSidebar: React.FC<ProjectSidebarProps> = ({
   onSourceControlRefreshFileContent,
   onSourceControlSynchronize,
   isSourceControlSynchronizing,
-  onSourceControlBranchSwitch,
 }) => {
   const [activeTab, setActiveTab] = useState<SidebarTab>('explorer');
   const theme = useTheme();
@@ -289,7 +284,6 @@ export const ProjectSidebar: React.FC<ProjectSidebarProps> = ({
             onRefreshFileContent={onSourceControlRefreshFileContent}
             onSynchronize={onSourceControlSynchronize}
             isSynchronizing={isSourceControlSynchronizing}
-            onBranchSwitch={onSourceControlBranchSwitch}
           />
         )}
       </Box>
