@@ -25,9 +25,14 @@ export const updateSettings = async (settings: SettingsType): Promise<void> => {
 export const getFilePaths = async (body: {
   properties: FileDialogProperties[];
   defaultPath?: string;
+  filters?: { name: string; extensions: string[] }[];
 }): Promise<string[]> => {
   const { data } = await client.post<
-    { properties: FileDialogProperties[]; defaultPath?: string },
+    {
+      properties: FileDialogProperties[];
+      defaultPath?: string;
+      filters?: { name: string; extensions: string[] }[];
+    },
     string[]
   >('settings:dialog', body);
   return data;
@@ -129,4 +134,30 @@ export const installRosettaVersion = async (
 
 export const uninstallRosetta = async (): Promise<void> => {
   await client.get<void>('version:rosetta:uninstall');
+};
+
+// DuckDB management services
+export const getDuckDbMetadata = async (): Promise<any> => {
+  const { data } = await client.get<any>('settings:duckdb:metadata');
+  return data;
+};
+
+export const refreshDuckDbMetadata = async (): Promise<any> => {
+  const { data } = await client.get<any>('settings:duckdb:refresh');
+  return data;
+};
+
+export const reinitializeDuckDb = async (options?: {
+  dropExisting?: boolean;
+}): Promise<any> => {
+  const { data } = await client.post<any, any>(
+    'settings:duckdb:reinitialize',
+    options,
+  );
+  return data;
+};
+
+export const diagnoseDuckDb = async (): Promise<any> => {
+  const { data } = await client.get<any>('settings:duckdb:diagnose');
+  return data;
 };

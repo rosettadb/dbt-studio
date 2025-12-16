@@ -79,7 +79,6 @@ export const GeneralSettings: React.FC<GeneralSettingsProps> = ({
           </Button>
         </Box>
       </Box>
-
       <InstallationSettings />
     </Box>
   );

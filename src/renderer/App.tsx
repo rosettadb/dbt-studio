@@ -21,6 +21,7 @@ import {
   Setup,
   CloudExplorer,
   Connections,
+  DuckLake as DataLake,
 } from './screens';
 import { SelectProjectLayout } from './layouts';
 import { AppProvider, ProcessProvider } from './context';
@@ -33,7 +34,6 @@ import { CliProvider } from './hooks/useCli';
 const App: React.FC = () => {
   return (
     <Router>
-      <CssBaseline />
       <ScrollbarStyles />
       <Routes>
         <Route path="/" element={<SelectProjectLayout />}>
@@ -53,6 +53,7 @@ const App: React.FC = () => {
             element={<Navigate to="/app/settings/general" />}
           />
           <Route path="settings/general" element={<Settings />} />
+          <Route path="settings/duckdb" element={<Settings />} />
           <Route path="settings/profile" element={<Settings />} />
           <Route path="settings/ai-providers" element={<Settings />} />
           <Route path="settings/dbt" element={<Settings />} />
@@ -89,6 +90,26 @@ const App: React.FC = () => {
             path="cloud-explorer/bucket/:connectionId/:bucketName"
             element={<CloudExplorer />}
           />
+          <Route
+            path="data-lake"
+            element={<Navigate to="/app/data-lake/dashboard" />}
+          />
+          <Route path="data-lake/dashboard" element={<DataLake />} />
+          <Route path="data-lake/instances" element={<DataLake />} />
+          <Route path="data-lake/new-instance" element={<DataLake />} />
+          <Route path="data-lake/history" element={<DataLake />} />
+          <Route
+            path="data-lake/:type/instances/:instanceId"
+            element={<DataLake />}
+          />
+          <Route
+            path="data-lake/:type/instances/:instanceId/edit"
+            element={<DataLake />}
+          />
+          <Route
+            path="data-lake/:type/instances/:instanceId/tables/:tableName"
+            element={<DataLake />}
+          />
           <Route path="loading" element={<Loading />} />
           <Route path="*" element={<Navigate to="/app" />} />
         </Route>
@@ -106,6 +127,7 @@ const AppWithProjectProvider: React.FC = () => {
       <AppProvider>
         <CliProvider>
           <ProcessProvider>
+            <CssBaseline />
             <CssVarsProvider
               theme={theme}
               defaultMode={initialMode}

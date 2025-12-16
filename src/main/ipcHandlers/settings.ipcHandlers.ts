@@ -100,6 +100,23 @@ const registerSettingsHandlers = (mainWindow: BrowserWindow) => {
   ipcMain.handle('settings:getFileName', async (_event, body: string[]) => {
     return SettingsService.getFileName(body);
   });
+
+  // DuckDB management handlers
+  ipcMain.handle('settings:duckdb:metadata', async () => {
+    return SettingsService.getDuckDbMetadata();
+  });
+  ipcMain.handle('settings:duckdb:refresh', async () => {
+    return SettingsService.refreshDuckDbMetadata();
+  });
+  ipcMain.handle(
+    'settings:duckdb:reinitialize',
+    async (_event, options?: { dropExisting?: boolean }) => {
+      return SettingsService.reinitializeDuckDb(options);
+    },
+  );
+  ipcMain.handle('settings:duckdb:diagnose', async () => {
+    return SettingsService.diagnoseDuckDb();
+  });
 };
 
 export default registerSettingsHandlers;

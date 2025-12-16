@@ -213,6 +213,53 @@ export type CloudDeploymentPayload = {
   CUSTOM_DBT_COMMANDS?: string;
 };
 
+export type DuckDBStatus =
+  | 'ready'
+  | 'stopped'
+  | 'missing'
+  | 'initializing'
+  | 'error'
+  | 'fallback_memory';
+export type DuckDBLockStatus = 'idle' | 'active' | 'contended' | 'unknown';
+export type DuckDBMetadataPayload = {
+  path: string;
+  sizeBytes: number;
+  sizeHumanReadable: string;
+  status: DuckDBStatus;
+  lockStatus: DuckDBLockStatus;
+  lastCheckedAt: string;
+  initialized: boolean;
+  poolSize: number;
+  activeConnections: number;
+  maxConnections: number;
+  fileExists: boolean;
+};
+export type DuckDBLeakInfo = {
+  id: string;
+  heldForMs: number;
+  acquiredBy: string[];
+  acquiredAt: string;
+};
+export type DuckDBConnectionSample = {
+  id: string;
+  inUse: boolean;
+  refCount: number;
+  acquiredBy: string[];
+  holdTimeMs: number;
+};
+export type DuckDBDiagnostics = {
+  metadata: DuckDBMetadataPayload;
+  leaks: DuckDBLeakInfo[];
+  pool: {
+    activeConnections: number;
+    totalConnections: number;
+    maxConnections: number;
+    peakActive: number;
+    averageHoldTime: number;
+  };
+  connectionsSample: DuckDBConnectionSample[];
+};
+
 export type SettingsType = {
   rosettaPath: string;
   rosettaVersion: string;
@@ -227,11 +274,22 @@ export type SettingsType = {
   isSetup?: string;
   // AI Database Information (read-only)
   mainDatabasePath?: string;
-  mainDatabaseSize?: string;
+  mainDatabaseSize?: string | number;
   sqliteVersion?: string;
   mainDatabaseStatus?: 'connected' | 'disconnected' | 'error';
 
   env?: 'local' | 'cloud';
+  // DuckDB metadata (read-only)
+  duckdbPath?: string;
+  duckdbSize?: string | number;
+  duckdbStatus?: DuckDBStatus;
+  duckdbLockStatus?: DuckDBLockStatus;
+  duckdbLastCheckedAt?: string;
+  duckdbActiveConnections?: number;
+  duckdbPoolSize?: number;
+  duckdbMaxConnections?: number;
+  cloudWorkspaceUrl?: string;
+  cloudWorkspaceLastSyncedAt?: string;
 };
 
 export type FileDialogProperties = 'openFile' | 'openDirectory';

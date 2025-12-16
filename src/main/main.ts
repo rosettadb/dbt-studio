@@ -11,6 +11,7 @@ import {
   AnalyticsService,
   UpdateService,
   RosettaCloudService,
+  DuckLakeConnectionManager,
 } from './services';
 import { copyAssetsToUserData } from './utils/fileHelper';
 
@@ -261,6 +262,22 @@ if (!gotTheLock) {
 ipcMain.handle('windows:closeSetup', () => {
   if (windowManager) {
     windowManager.closeSetupWindow();
+  }
+});
+
+// Cleanup DuckLake connections before app quits
+app.on('before-quit', async (event) => {
+  event.preventDefault();
+
+  try {
+    // Disconnect all DuckLake connections to prevent memory leaks
+    await DuckLakeConnectionManager.disconnectAll();
+  } catch (error) {
+    // eslint-disable-next-line no-console
+    console.error('[App] Error during DuckLake cleanup:', error);
+  } finally {
+    // Allow the app to quit
+    app.exit(0);
   }
 });
 

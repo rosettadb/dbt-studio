@@ -7,3 +7,4 @@ export * from './cloudExplorer.controller';
 export * from './utils.controller';
 export * from './profile.controller';
 export * from './rosettaCloud.controller';
+export * from './duckLake.controller';

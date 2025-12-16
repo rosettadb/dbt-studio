@@ -8,6 +8,7 @@ import * as utilsService from './utils.service';
 import cloudExplorerService from './cloudExplorer.service';
 import { connectionStorage } from './connectionStorage.service';
 import * as rosettaCloudServices from './rosettaCloud.service';
+import { DuckLakeService } from './duckLake.service';
 
 export {
   settingsServices,
@@ -20,4 +21,5 @@ export {
   connectionStorage,
   utilsService,
   rosettaCloudServices,
+  DuckLakeService,
 };

@@ -9,6 +9,14 @@ import dbtBlack from './dbt-black.svg';
 import rosetta from './rosetta.png';
 import rosettaLabs from './rosetta-labs.png';
 import bot from './bot.svg';
+import duckLakeSVG from './duck-lake.svg';
+import duckLake from './duck-lake.png';
+import duckdb from './duckdb.svg';
+import dataLakeSVG from './data-lake.svg';
+import dataLake from './data-lake.png';
+import apacheIcebergLake from './apache-iceberg-lake.png';
+import deltaLake from './delta-lake.png';
+import apacheHudiLake from './apache-hudi-lake.png';
 
 export const icons = {
   settings,
@@ -22,4 +30,12 @@ export const icons = {
   rosetta,
   rosettaLabs,
   bot,
+  duckLakeSVG,
+  duckLake,
+  duckdb,
+  dataLakeSVG,
+  dataLake,
+  apacheIcebergLake,
+  deltaLake,
+  apacheHudiLake,
 };

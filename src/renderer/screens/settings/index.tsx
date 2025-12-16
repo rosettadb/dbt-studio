@@ -29,6 +29,7 @@ import {
   RosettaSettings,
   AboutSettings,
   AIProvidersSettings,
+  DuckDBSettings,
 } from '../../components';
 import { AppLayout } from '../../layouts';
 import { settingsSidebarElements } from './settingsElements';
@@ -102,6 +103,7 @@ const Settings: React.FC = () => {
     if (section === 'dbt') return 'dbt™ Core';
     if (section === 'ai-providers') return 'AI Providers';
     if (section === 'profile') return 'Rosetta Cloud';
+    if (section === 'duckdb') return 'DuckDB';
     return section.charAt(0).toUpperCase() + section.slice(1).replace('-', ' ');
   };
 
@@ -124,6 +126,8 @@ const Settings: React.FC = () => {
         );
       case 'profile':
         return <ProfileSettings />;
+      case 'duckdb':
+        return <DuckDBSettings />;
       case 'ai-providers':
         return <AIProvidersSettings />;
       case 'dbt':

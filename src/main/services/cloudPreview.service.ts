@@ -1,21 +1,22 @@
 /* eslint-disable no-await-in-loop */
-import { DuckDBInstance } from '@duckdb/node-api';
+import DuckDBBootstrap from './duckdb.service';
 import type { PreviewResult, PreviewOptions } from '../../types/frontend';
 import {
   buildCloudSecretQuery,
   getCloudUrl,
   isPreviewSupported,
   handleProviderError,
-  setupExtensions,
-  buildPreviewQuery,
-  extractColumns,
-  cleanup,
   convertDuckDBValue,
 } from '../helpers';
+import {
+  buildPreviewQuery,
+  extractColumns,
+  setupExtensions,
+} from '../helpers/extensionSetup.helper';
 
 class CloudPreviewService {
   /**
-   * Preview cloud data using DuckDB in-memory database
+   * Preview cloud data using DuckDB persistent database
    */
   static async previewCloudData({
     provider,
@@ -24,14 +25,12 @@ class CloudPreviewService {
     previewType = 'sample',
     limit = 100,
   }: PreviewOptions): Promise<PreviewResult> {
-    let instance: any = null;
     let connection: any = null;
     try {
-      // Create in-memory DuckDB instance
-      instance = await DuckDBInstance.create(':memory:');
-      connection = await instance.connect();
+      // Get connection from persistent pool
+      connection = await DuckDBBootstrap.getConnection('cloud-preview');
 
-      // Install and load required extensions
+      // Install and load required extensions (idempotent)
       await setupExtensions(connection, provider, objectPath);
 
       // Configure cloud access secrets
@@ -94,7 +93,9 @@ class CloudPreviewService {
         previewType,
       );
     } finally {
-      await cleanup(connection, instance);
+      if (connection) {
+        await DuckDBBootstrap.releaseConnection(connection);
+      }
     }
   }
 
