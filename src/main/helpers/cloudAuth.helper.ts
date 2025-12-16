@@ -17,6 +17,7 @@ import type {
  */
 export async function generateGCSBearerToken(
   credentials: string,
+  scope: string = 'https://www.googleapis.com/auth/devstorage.read_write',
 ): Promise<string> {
   try {
     // Parse the service account credentials
@@ -33,7 +34,7 @@ export async function generateGCSBearerToken(
     const now = Math.floor(Date.now() / 1000);
     const payload = {
       iss: serviceAccount.client_email,
-      scope: 'https://www.googleapis.com/auth/devstorage.read_only',
+      scope,
       aud: 'https://oauth2.googleapis.com/token',
       exp: now + 3600, // Token expires in 1 hour
       iat: now,

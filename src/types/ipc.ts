@@ -223,6 +223,58 @@ export type CloudExplorerChannels =
   | 'cloudExplorer:testConnection'
   | 'cloudExplorer:previewData';
 
+export type DuckLakeChannels =
+  // Extension Management
+  | 'ducklake:extension:load'
+  | 'ducklake:extension:verify'
+
+  // Instance Management
+  | 'ducklake:instance:list'
+  | 'ducklake:instance:get'
+  | 'ducklake:instance:create'
+  | 'ducklake:instance:update'
+  | 'ducklake:instance:delete'
+  | 'ducklake:instance:health'
+
+  // Instance Attachment (new terminology matching DuckLake SQL)
+  | 'ducklake:instance:attach'
+  | 'ducklake:instance:detach'
+
+  // Catalog Management (legacy, kept for backward compatibility)
+  | 'ducklake:catalog:connect'
+  | 'ducklake:catalog:disconnect'
+  | 'ducklake:catalog:test'
+
+  // Table Management
+  | 'ducklake:table:list'
+  | 'ducklake:table:get'
+  | 'ducklake:table:import'
+  | 'ducklake:table:delete'
+  | 'ducklake:table:getDetails' // Phase 8b: Table Detail View
+
+  // Snapshot Management
+  | 'ducklake:snapshot:list'
+  | 'ducklake:snapshot:restore'
+
+  // Query Execution
+  | 'ducklake:query:execute'
+
+  // Maintenance Operations
+  | 'ducklake:maintenance:optimize'
+  | 'ducklake:maintenance:vacuum'
+  | 'ducklake:maintenance:checkpoint'
+  | 'ducklake:maintenance:status'
+
+  // Storage Management
+  | 'ducklake:storage:stats'
+  | 'ducklake:storage:validate'
+
+  // Cloud Connection Management
+  | 'ducklake:connection:list'
+  | 'ducklake:connection:get'
+  | 'ducklake:connection:create'
+  | 'ducklake:connection:test';
+
 export type Channels =
   | TestChannels
   | CliChannels
@@ -236,7 +288,8 @@ export type Channels =
   | UpdateChannels
   | CloudExplorerChannels
   | SourcesChannels
-  | AIChannels;
+  | AIChannels
+  | DuckLakeChannels;
 
 export type ConfigureConnectionBody = {
   projectId?: string;

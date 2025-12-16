@@ -55,7 +55,7 @@ const CloudExplorer: React.FC = () => {
 
   return (
     <AppLayout sidebarContent={<ExplorerSidebar />}>
-      <Box sx={{ my: 2, p: 2 }}>
+      <Box sx={{ p: 2 }}>
         <Box>{renderContent()}</Box>
       </Box>
     </AppLayout>

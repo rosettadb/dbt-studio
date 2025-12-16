@@ -5,3 +5,4 @@ export * from './git.controller';
 export * from './update.controller';
 export * from './cloudExplorer.controller';
 export * from './utils.controller';
+export * from './duckLake.controller';
