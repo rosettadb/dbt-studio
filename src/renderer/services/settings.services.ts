@@ -25,9 +25,14 @@ export const updateSettings = async (settings: SettingsType): Promise<void> => {
 export const getFilePaths = async (body: {
   properties: FileDialogProperties[];
   defaultPath?: string;
+  filters?: { name: string; extensions: string[] }[];
 }): Promise<string[]> => {
   const { data } = await client.post<
-    { properties: FileDialogProperties[]; defaultPath?: string },
+    {
+      properties: FileDialogProperties[];
+      defaultPath?: string;
+      filters?: { name: string; extensions: string[] }[];
+    },
     string[]
   >('settings:dialog', body);
   return data;

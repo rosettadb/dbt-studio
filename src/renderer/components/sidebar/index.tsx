@@ -24,6 +24,12 @@ export const Sidebar: React.FC<Props> = ({ content }) => {
     if (location.pathname.includes('cloud-explorer')) {
       return 4;
     }
+    if (
+      location.pathname.includes('data-lake') ||
+      location.pathname.includes('datalake')
+    ) {
+      return 5;
+    }
     if (location.pathname.includes('connection')) {
       return 0;
     }
