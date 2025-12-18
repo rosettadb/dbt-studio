@@ -6,11 +6,13 @@ import {
   getCloudUrl,
   isPreviewSupported,
   handleProviderError,
-  setupExtensions,
-  buildPreviewQuery,
-  extractColumns,
   convertDuckDBValue,
 } from '../helpers';
+import {
+  buildPreviewQuery,
+  extractColumns,
+  setupExtensions,
+} from '../helpers/extensionSetup.helper';
 
 class CloudPreviewService {
   /**

@@ -6,7 +6,12 @@ import { loadEnvironment } from './utils/setupHelpers';
 import { AssetUrl } from './utils/assetUrl';
 import { AssetServer } from './utils/assetServer';
 import { setupApplicationIcon } from './utils/iconUtils';
-import { SettingsService, AnalyticsService, UpdateService } from './services';
+import {
+  SettingsService,
+  AnalyticsService,
+  UpdateService,
+  DuckLakeConnectionManager,
+} from './services';
 import { copyAssetsToUserData } from './utils/fileHelper';
 
 const isProd = process.env.NODE_ENV === 'production';
@@ -163,6 +168,22 @@ if (!gotTheLock) {
 ipcMain.handle('windows:closeSetup', () => {
   if (windowManager) {
     windowManager.closeSetupWindow();
+  }
+});
+
+// Cleanup DuckLake connections before app quits
+app.on('before-quit', async (event) => {
+  event.preventDefault();
+
+  try {
+    // Disconnect all DuckLake connections to prevent memory leaks
+    await DuckLakeConnectionManager.disconnectAll();
+  } catch (error) {
+    // eslint-disable-next-line no-console
+    console.error('[App] Error during DuckLake cleanup:', error);
+  } finally {
+    // Allow the app to quit
+    app.exit(0);
   }
 });
 
