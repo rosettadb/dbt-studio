@@ -1,4 +1,4 @@
-import React, { useMemo, useState, useEffect } from 'react';
+import React, { useMemo, useState, useEffect, useCallback } from 'react';
 import { Box, Divider, Grid, Typography, Alert } from '@mui/material';
 import { Modal } from '../modals/modal';
 import { LineageToolbar } from './LineageToolbar';
@@ -9,6 +9,9 @@ import {
   useLineageModelMetadata,
   useCurrentModelId,
 } from '../../controllers/lineage.controller';
+import { lineageService } from '../../services';
+import type { LineageNode, LineageEdge } from '../../../types/lineage';
+import { DEFAULT_LINEAGE_SETTINGS } from '../../config/constants';
 
 type LineageModalProps = {
   isOpen: boolean;
@@ -25,8 +28,15 @@ export const LineageModal: React.FC<LineageModalProps> = ({
   modelId: initialModelId,
   filePath,
 }) => {
-  const [depth, setDepth] = useState(1);
+  const [depth, setDepth] = useState(
+    DEFAULT_LINEAGE_SETTINGS.lineageDefaults.depth,
+  );
   const [selectedNodeId, setSelectedNodeId] = useState<string | undefined>();
+  const [localGraph, setLocalGraph] = useState<{
+    nodes: LineageNode[];
+    edges: LineageEdge[];
+  }>({ nodes: [], edges: [] });
+  const [isExpanding, setIsExpanding] = useState(false);
 
   // Resolve modelId if filePath is provided
   const { data: currentModelData } = useCurrentModelId(
@@ -66,15 +76,22 @@ export const LineageModal: React.FC<LineageModalProps> = ({
     enabled: Boolean(effectiveModelId),
   });
 
+  // Sync graphData to local state when it changes
+  useEffect(() => {
+    if (graphData) {
+      setLocalGraph(graphData);
+    }
+  }, [graphData]);
+
   const selectedNode = useMemo(() => {
-    if (!graphData?.nodes) {
+    if (!localGraph.nodes.length) {
       return undefined;
     }
     return (
-      graphData.nodes.find((node) => node.uniqueId === selectedNodeId) ??
-      graphData.nodes.find((node) => node.uniqueId === effectiveModelId)
+      localGraph.nodes.find((node) => node.uniqueId === selectedNodeId) ??
+      localGraph.nodes.find((node) => node.uniqueId === effectiveModelId)
     );
-  }, [graphData?.nodes, selectedNodeId, effectiveModelId]);
+  }, [localGraph.nodes, selectedNodeId, effectiveModelId]);
 
   const { data: selectedNodeMetadata } = useLineageModelMetadata(
     {
@@ -91,6 +108,55 @@ export const LineageModal: React.FC<LineageModalProps> = ({
   const handleDepthChange = (value: number) => {
     setDepth(value);
   };
+
+  const handleNodeExpand = useCallback(
+    async (nodeId: string, direction: 'upstream' | 'downstream') => {
+      if (!projectId) return;
+      setIsExpanding(true);
+      try {
+        const result =
+          direction === 'upstream'
+            ? await lineageService.getUpstreamLineage({
+                projectId,
+                modelId: nodeId,
+                depth: 1,
+              })
+            : await lineageService.getDownstreamLineage({
+                projectId,
+                modelId: nodeId,
+                depth: 1,
+              });
+
+        setLocalGraph((prev) => {
+          const newNodes = [...prev.nodes];
+          const newEdges = [...prev.edges];
+
+          result.nodes.forEach((node) => {
+            if (!newNodes.find((n) => n.uniqueId === node.uniqueId)) {
+              newNodes.push(node);
+            }
+          });
+
+          result.edges.forEach((edge) => {
+            if (
+              !newEdges.find(
+                (e) => e.source === edge.source && e.target === edge.target,
+              )
+            ) {
+              newEdges.push(edge);
+            }
+          });
+
+          return { nodes: newNodes, edges: newEdges };
+        });
+      } catch (error) {
+        console.error('Failed to expand node:', error);
+      } finally {
+        setIsExpanding(false);
+      }
+    },
+    [projectId],
+  );
 
   const renderContent = (): React.ReactNode => {
     if (!effectiveModelId) {
@@ -112,11 +178,12 @@ export const LineageModal: React.FC<LineageModalProps> = ({
       <Grid container spacing={2} sx={{ mt: 1, height: '100%' }}>
         <Grid item xs={12} md={7} lg={8} sx={{ maxHeight: '70vh' }}>
           <LineageGraph
-            nodes={graphData?.nodes}
-            edges={graphData?.edges}
+            nodes={localGraph.nodes}
+            edges={localGraph.edges}
             selectedNodeId={selectedNodeId}
             onSelectNode={handleSelectNode}
-            isLoading={isGraphLoading}
+            onNodeExpand={handleNodeExpand}
+            isLoading={isGraphLoading || isExpanding}
           />
         </Grid>
         <Grid item xs={12} md={5} lg={4} sx={{ maxHeight: '70vh' }}>

@@ -158,3 +158,11 @@ export const MonacoAutocompleteSQLKeywords = [
   'ELSE',
   'END',
 ] as const;
+
+export const DEFAULT_LINEAGE_SETTINGS = {
+  enableLineagePanel: true,
+  lineageDefaults: {
+    depth: 1,
+    orientation: 'LR',
+  },
+};

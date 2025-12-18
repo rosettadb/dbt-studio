@@ -22,6 +22,7 @@ type LineageGraphProps = {
   edges?: LineageEdge[];
   selectedNodeId?: string;
   onSelectNode?: (nodeId: string) => void;
+  onNodeExpand?: (nodeId: string, direction: 'upstream' | 'downstream') => void;
   isLoading?: boolean;
 };
 
@@ -37,6 +38,7 @@ export const LineageGraph: React.FC<LineageGraphProps> = ({
   edges: initialEdges,
   selectedNodeId,
   onSelectNode,
+  onNodeExpand,
   isLoading,
 }) => {
   const theme = useTheme();
@@ -92,7 +94,10 @@ export const LineageGraph: React.FC<LineageGraphProps> = ({
     const flowNodes: Node[] = initialNodes.map((node) => ({
       id: node.uniqueId,
       type: 'dbtNode',
-      data: node,
+      data: {
+        ...node,
+        onExpand: onNodeExpand,
+      },
       position: { x: 0, y: 0 }, // Position will be calculated by layout
       selected: node.uniqueId === selectedNodeId,
     }));
@@ -124,6 +129,7 @@ export const LineageGraph: React.FC<LineageGraphProps> = ({
     setEdges,
     theme.palette.text.disabled,
     selectedNodeId,
+    onNodeExpand,
   ]);
 
   // Handle selection
