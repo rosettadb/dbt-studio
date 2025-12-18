@@ -298,7 +298,7 @@ export default class ConnectorsService {
     // Clean up connection-specific credentials from secure storage
     try {
       await SecureStorageService.cleanupConnectionCredentials(
-        connectionToDelete.connection.name,
+        connectionToDelete.id,
       );
     } catch (error) {
       // eslint-disable-next-line no-console
@@ -1136,7 +1136,7 @@ export default class ConnectorsService {
       // Clean up cloud connection-specific credentials from secure storage
       try {
         await SecureStorageService.cleanupConnectionCredentials(
-          connectionToDelete.name,
+          connectionToDelete.id,
         );
       } catch (error) {
         // eslint-disable-next-line no-console
