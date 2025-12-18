@@ -262,7 +262,7 @@ export const DataLakeConnectionSelector: React.FC<
         const accessKeyId = newConnectionConfig.accessKeyId?.trim();
         const secretAccessKey = newConnectionConfig.secretAccessKey?.trim();
 
-        await setCloudAwsSecret(secretAccessKey, connectionName);
+        await setCloudAwsSecret(secretAccessKey, connectionId);
 
         providerConfig = {
           region,
@@ -273,7 +273,7 @@ export const DataLakeConnectionSelector: React.FC<
         const accountKey = newConnectionConfig.accountKey?.trim();
         const connectionString = newConnectionConfig.connectionString?.trim();
 
-        await setCloudAzureKey(accountKey, connectionName);
+        await setCloudAzureKey(accountKey, connectionId);
 
         providerConfig = {
           accountName,
@@ -284,7 +284,7 @@ export const DataLakeConnectionSelector: React.FC<
         const credentials = newConnectionConfig.credentials?.trim();
 
         if (credentials) {
-          await setCloudGcsCredential(credentials, connectionName);
+          await setCloudGcsCredential(credentials, connectionId);
         }
 
         providerConfig = {
