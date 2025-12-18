@@ -31,11 +31,11 @@ class SecureStorageService {
   /**
    * Clean up all credentials associated with a specific connection
    */
-  async cleanupConnectionCredentials(connectionName: string): Promise<void> {
+  async cleanupConnectionCredentials(connectionId: string): Promise<void> {
     const credentialTypes = [
-      `cloud-gcs-${connectionName}`,
-      `cloud-aws-${connectionName}`,
-      `cloud-azure-${connectionName}`,
+      `cloud-gcs-${connectionId}`,
+      `cloud-aws-${connectionId}`,
+      `cloud-azure-${connectionId}`,
     ];
 
     await Promise.all(
