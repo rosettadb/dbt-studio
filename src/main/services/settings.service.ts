@@ -22,7 +22,8 @@ import {
 } from '../../types/backend';
 import { CliAdapter } from '../adapters';
 import { DB_FILE, initializeDataStorage } from '../utils/setupHelpers';
-import { DuckDBBootstrap, SecureStorageService } from '.';
+import DuckDBBootstrap from './duckdb.service';
+import SecureStorageService from './secureStorage.service';
 
 const cliConfig: Record<
   keyof CliUpdateResponseType,

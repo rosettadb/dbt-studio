@@ -14,6 +14,7 @@ import DuckLakeInstanceStore from './duckLake/instanceStore.service';
 import DuckLakeValidationService from './duckLake/validation.service';
 import DuckLakeConnectionManager from './duckLake/connectionManager.service';
 import DuckDBBootstrap from './duckdb.service';
+import LineageService from './lineage.service';
 
 export {
   ProjectsService,
@@ -32,4 +33,5 @@ export {
   DuckLakeValidationService,
   DuckLakeConnectionManager,
   DuckDBBootstrap,
+  LineageService,
 };

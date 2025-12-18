@@ -275,6 +275,14 @@ export type DuckLakeChannels =
   | 'ducklake:connection:create'
   | 'ducklake:connection:test';
 
+export type LineageChannels =
+  | 'lineage:getUpstream'
+  | 'lineage:getDownstream'
+  | 'lineage:getFullLineage'
+  | 'lineage:getModelMetadata'
+  | 'lineage:getCurrentModelId'
+  | 'lineage:getColumnLineage';
+
 export type Channels =
   | TestChannels
   | CliChannels
@@ -289,7 +297,8 @@ export type Channels =
   | CloudExplorerChannels
   | SourcesChannels
   | AIChannels
-  | DuckLakeChannels;
+  | DuckLakeChannels
+  | LineageChannels;
 
 export type ConfigureConnectionBody = {
   projectId?: string;
