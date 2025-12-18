@@ -66,8 +66,6 @@ export const LineageModal: React.FC<LineageModalProps> = ({
     enabled: Boolean(effectiveModelId),
   });
 
-  console.log('graphData', graphData);
-
   const selectedNode = useMemo(() => {
     if (!graphData?.nodes) {
       return undefined;
@@ -85,8 +83,6 @@ export const LineageModal: React.FC<LineageModalProps> = ({
     },
     { enabled: Boolean(selectedNodeId ?? effectiveModelId) },
   );
-
-  console.log('selectedNodeMetadata', selectedNodeMetadata);
 
   const handleSelectNode = (nodeId: string) => {
     setSelectedNodeId(nodeId);
