@@ -198,7 +198,7 @@ class LineageService {
       }
 
       const normalized = path.normalize(request.filePath);
-      const match = this.findNodeByFilePath(manifest, normalized);
+      const match = this.findNodeByFilePath(manifest, normalized, project.path);
 
       console.log(
         '[LineageService] Found modelId:',
@@ -428,9 +428,10 @@ class LineageService {
   private static findNodeByFilePath(
     manifest: ManifestLike,
     absolutePath: string,
+    projectPath: string,
   ): string | undefined {
     // Case-insensitive matching for robustness
-    const normalized = path.normalize(absolutePath).toLowerCase();
+    const normalizedTarget = path.normalize(absolutePath).toLowerCase();
 
     const entries = [
       ...(Object.entries(manifest.nodes ?? {}) as Array<
@@ -441,12 +442,26 @@ class LineageService {
       >),
     ];
 
+    // Try exact absolute path match first
+    const exactMatch = entries.find(([, value]) => {
+      if (!value.original_file_path) {
+        return false;
+      }
+      const entryAbs = path
+        .normalize(path.resolve(projectPath, value.original_file_path))
+        .toLowerCase();
+      return normalizedTarget === entryAbs;
+    });
+
+    if (exactMatch) return exactMatch[0];
+
+    // Fallback to relative path suffix match (legacy behavior, just in case)
     return entries.find(([, value]) => {
       if (!value.original_file_path) {
         return false;
       }
       const candidate = path.normalize(value.original_file_path).toLowerCase();
-      return normalized.endsWith(candidate);
+      return normalizedTarget.endsWith(candidate);
     })?.[0];
   }
 }
