@@ -20,7 +20,8 @@ export type SettingsChannels =
   | 'settings:duckdb:metadata'
   | 'settings:duckdb:refresh'
   | 'settings:duckdb:reinitialize'
-  | 'settings:duckdb:diagnose';
+  | 'settings:duckdb:diagnose'
+  | 'settings:installSqlGlot';
 
 export type ProjectChannels =
   | 'project:get'

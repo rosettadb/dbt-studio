@@ -1,5 +1,7 @@
 import React, { useMemo, useState, useEffect, useCallback } from 'react';
-import { Box, Divider, Grid, Typography, Alert } from '@mui/material';
+import { useQueryClient } from 'react-query';
+import { Box, Divider, Grid, Typography, Alert, Button } from '@mui/material';
+import RefreshIcon from '@mui/icons-material/Refresh';
 import { Modal } from '../modals/modal';
 import { LineageToolbar } from './LineageToolbar';
 import { LineageGraph } from './LineageGraph';
@@ -8,10 +10,12 @@ import {
   useFullLineage,
   useLineageModelMetadata,
   useCurrentModelId,
+  useLineagePrefetch,
 } from '../../controllers/lineage.controller';
+
 import { lineageService } from '../../services';
 import type { LineageNode, LineageEdge } from '../../../types/lineage';
-import { DEFAULT_LINEAGE_SETTINGS } from '../../config/constants';
+import { DEFAULT_LINEAGE_SETTINGS, QUERY_KEYS } from '../../config/constants';
 
 type LineageModalProps = {
   isOpen: boolean;
@@ -37,6 +41,48 @@ export const LineageModal: React.FC<LineageModalProps> = ({
     edges: LineageEdge[];
   }>({ nodes: [], edges: [] });
   const [isExpanding, setIsExpanding] = useState(false);
+  const [highlightedNodeIds, setHighlightedNodeIds] = useState<string[]>([]);
+
+  const { prefetchNeighbors } = useLineagePrefetch();
+  const queryClient = useQueryClient();
+  const [isRefreshing, setIsRefreshing] = useState(false);
+
+  const handleRefresh = useCallback(async () => {
+    setIsRefreshing(true);
+    try {
+      await Promise.all([
+        queryClient.invalidateQueries([QUERY_KEYS.GET_LINEAGE_CURRENT_MODEL]),
+        queryClient.invalidateQueries([QUERY_KEYS.GET_LINEAGE_UPSTREAM]),
+        queryClient.invalidateQueries([QUERY_KEYS.GET_LINEAGE_DOWNSTREAM]),
+        queryClient.invalidateQueries([QUERY_KEYS.GET_LINEAGE_FULL]),
+      ]);
+    } finally {
+      setIsRefreshing(false);
+    }
+  }, [queryClient]);
+
+  const handleNodeMouseEnter = (nodeId: string) => {
+    if (!projectId) return;
+    prefetchNeighbors({ projectId, modelId: nodeId });
+  };
+
+  const handleColumnHover = useCallback(
+    (nodeNames: string[]) => {
+      if (nodeNames.length === 0) {
+        setHighlightedNodeIds([]);
+        return;
+      }
+      // Resolve names to uniqueIds locally
+      const ids = localGraph.nodes
+        .filter(
+          (n) => nodeNames.includes(n.name) || nodeNames.includes(n.uniqueId),
+        )
+        .map((n) => n.uniqueId);
+
+      setHighlightedNodeIds(ids);
+    },
+    [localGraph.nodes],
+  );
 
   // Resolve modelId if filePath is provided
   const { data: currentModelData } = useCurrentModelId(
@@ -52,11 +98,12 @@ export const LineageModal: React.FC<LineageModalProps> = ({
   const effectiveModelId = initialModelId ?? currentModelData?.modelId;
 
   // Initialize selectedNodeId when modelId becomes available
+  // Sync selectedNodeId when modelId changes
   useEffect(() => {
-    if (effectiveModelId && !selectedNodeId) {
+    if (effectiveModelId) {
       setSelectedNodeId(effectiveModelId);
     }
-  }, [effectiveModelId, selectedNodeId]);
+  }, [effectiveModelId]);
 
   const requestPayload = useMemo(
     () => ({
@@ -70,12 +117,11 @@ export const LineageModal: React.FC<LineageModalProps> = ({
   const {
     data: graphData,
     isLoading: isGraphLoading,
-    refetch: refetchGraph,
     error: graphError,
   } = useFullLineage(requestPayload, {
-    enabled: Boolean(effectiveModelId),
+    enabled: Boolean(effectiveModelId && projectId),
+    keepPreviousData: false,
   });
-
   // Sync graphData to local state when it changes
   useEffect(() => {
     if (graphData) {
@@ -150,6 +196,7 @@ export const LineageModal: React.FC<LineageModalProps> = ({
           return { nodes: newNodes, edges: newEdges };
         });
       } catch (error) {
+        // eslint-disable-next-line no-console
         console.error('Failed to expand node:', error);
       } finally {
         setIsExpanding(false);
@@ -159,6 +206,78 @@ export const LineageModal: React.FC<LineageModalProps> = ({
   );
 
   const renderContent = (): React.ReactNode => {
+    // If manifest is missing, prompt user to run dbt
+    if (currentModelData?.error === 'MANIFEST_NOT_FOUND') {
+      return (
+        <Box
+          sx={{
+            py: 6,
+            px: 4,
+            display: 'flex',
+            justifyContent: 'center',
+            flexDirection: 'column',
+            alignItems: 'center',
+            gap: 2,
+          }}
+        >
+          <Alert severity="warning" variant="outlined" sx={{ maxWidth: 600 }}>
+            <Typography variant="subtitle2" sx={{ fontWeight: 600, mb: 0.5 }}>
+              dbt Manifest Not Found
+            </Typography>
+            <Typography variant="body2">
+              Lineage requires a compiled manifest file. Please run{' '}
+              <code style={{ fontWeight: 'bold' }}>dbt compile</code> or{' '}
+              <code style={{ fontWeight: 'bold' }}>dbt run</code> in your
+              project to generate it.
+            </Typography>
+          </Alert>
+        </Box>
+      );
+    }
+
+    if (currentModelData?.error === 'MODEL_NOT_FOUND') {
+      return (
+        <Box
+          sx={{
+            py: 6,
+            px: 4,
+            display: 'flex',
+            justifyContent: 'center',
+            flexDirection: 'column',
+            alignItems: 'center',
+            gap: 2,
+          }}
+        >
+          <Alert severity="info" variant="outlined" sx={{ maxWidth: 600 }}>
+            <Typography variant="subtitle2" sx={{ fontWeight: 600, mb: 0.5 }}>
+              Model Not Found in Manifest
+            </Typography>
+            <Typography variant="body2">
+              This model was not found in the compiled `manifest.json`.
+              <br />
+              Please run <code style={{ fontWeight: 'bold' }}>
+                dbt compile
+              </code>{' '}
+              or <code style={{ fontWeight: 'bold' }}>dbt run</code> to include
+              this model in the project lineage.
+            </Typography>
+            <Box sx={{ mt: 2, display: 'flex', justifyContent: 'center' }}>
+              <Button
+                variant="outlined"
+                color="inherit"
+                size="small"
+                startIcon={<RefreshIcon />}
+                onClick={handleRefresh}
+                disabled={isRefreshing}
+              >
+                Refresh Manifest
+              </Button>
+            </Box>
+          </Alert>
+        </Box>
+      );
+    }
+
     if (!effectiveModelId) {
       return (
         <Box
@@ -181,13 +300,19 @@ export const LineageModal: React.FC<LineageModalProps> = ({
             nodes={localGraph.nodes}
             edges={localGraph.edges}
             selectedNodeId={selectedNodeId}
+            highlightedNodeIds={highlightedNodeIds}
             onSelectNode={handleSelectNode}
             onNodeExpand={handleNodeExpand}
+            onNodeMouseEnter={handleNodeMouseEnter}
             isLoading={isGraphLoading || isExpanding}
           />
         </Grid>
         <Grid item xs={12} md={5} lg={4} sx={{ maxHeight: '70vh' }}>
-          <NodeDetailsPanel node={selectedNodeMetadata ?? selectedNode} />
+          <NodeDetailsPanel
+            node={selectedNodeMetadata ?? selectedNode}
+            projectId={projectId}
+            onColumnHover={handleColumnHover}
+          />
         </Grid>
       </Grid>
     );
@@ -214,9 +339,9 @@ export const LineageModal: React.FC<LineageModalProps> = ({
           <LineageToolbar
             depth={depth}
             onDepthChange={handleDepthChange}
-            onRefresh={() => refetchGraph()}
-            isRefreshing={isGraphLoading}
-            disabled={!effectiveModelId}
+            onRefresh={handleRefresh}
+            isRefreshing={isRefreshing}
+            disabled={isRefreshing}
           />
         </Box>
 

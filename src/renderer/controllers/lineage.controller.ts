@@ -4,6 +4,7 @@ import {
   useMutation,
   UseMutationOptions,
   UseMutationResult,
+  useQueryClient,
 } from 'react-query';
 import type {
   ColumnLineageRequest,
@@ -135,4 +136,38 @@ export const useColumnLineage = (
   });
 
   return mutation;
+};
+
+export const useLineagePrefetch = () => {
+  const queryClient = useQueryClient();
+
+  const prefetchNeighbors = async (request: LineageTraversalRequest) => {
+    // Prefetch upstream
+    await queryClient.prefetchQuery({
+      queryKey: [
+        QUERY_KEYS.GET_LINEAGE_UPSTREAM,
+        request.projectId,
+        request.modelId,
+        1, // neighbors are depth 1
+      ],
+      queryFn: () =>
+        lineageService.getUpstreamLineage({ ...request, depth: 1 }),
+      staleTime: 5 * 60 * 1000,
+    });
+
+    // Prefetch downstream
+    await queryClient.prefetchQuery({
+      queryKey: [
+        QUERY_KEYS.GET_LINEAGE_DOWNSTREAM,
+        request.projectId,
+        request.modelId,
+        1,
+      ],
+      queryFn: () =>
+        lineageService.getDownstreamLineage({ ...request, depth: 1 }),
+      staleTime: 5 * 60 * 1000,
+    });
+  };
+
+  return { prefetchNeighbors };
 };

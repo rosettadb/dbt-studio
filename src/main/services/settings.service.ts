@@ -634,6 +634,35 @@ export default class SettingsService {
     return `https://github.com/rosettadb/rosetta/releases/download/v${version}/rosetta-${version}-${osName}_${archName}-with-drivers.zip`;
   }
 
+  static async installPackage(packageName: string): Promise<void> {
+    const settings = await this.loadSettings();
+
+    if (!settings.pythonPath || !fs.existsSync(settings.pythonPath)) {
+      throw new Error(
+        'Python environment not found. Please install Python first.',
+      );
+    }
+
+    // Derive pip path from pythonPath (which points to venv python binary)
+    const binDir = path.dirname(settings.pythonPath);
+    const pipExecutable = process.platform === 'win32' ? 'pip.exe' : 'pip';
+    const pipPath = path.join(binDir, pipExecutable);
+
+    if (!fs.existsSync(pipPath)) {
+      throw new Error(`pip not found at ${pipPath}`);
+    }
+
+    const cliAdapter = new CliAdapter();
+    // Using --no-cache-dir to avoid potential cache issues in packaged app
+    await cliAdapter.runCommandWithoutStreaming(
+      `"${pipPath}" install ${packageName} --no-cache-dir`,
+    );
+  }
+
+  static async installSqlGlot(): Promise<void> {
+    return this.installPackage('sqlglot');
+  }
+
   private static compareVersions(version1: string, version2: string): number {
     const v1Parts = version1.split('.').map(Number);
     const v2Parts = version2.split('.').map(Number);

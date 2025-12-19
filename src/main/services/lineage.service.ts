@@ -16,6 +16,8 @@ import {
 import type { Project } from '../../types/backend';
 import ProjectsService from './projects.service';
 
+import SqlParserService from './sqlParser.service';
+
 type ManifestColumn = {
   name: string;
   description?: string;
@@ -39,6 +41,11 @@ type ManifestNode = {
   tags?: string[];
   meta?: Record<string, any>;
   is_external?: boolean;
+  compiled_code?: string; // dbt v1.3+
+  compiled_sql?: string; // older dbt
+  compiled_path?: string; // Check external file if content missing
+  raw_code?: string;
+  raw_sql?: string;
 };
 
 type ManifestSource = {
@@ -72,6 +79,7 @@ type ManifestCacheEntry = {
   manifest: ManifestLike;
   project: Project;
   lastAccessed: number;
+  mtimeMs?: number;
 };
 
 const DEFAULT_DEPTH = 1;
@@ -95,6 +103,7 @@ class LineageService {
     } catch (error) {
       // eslint-disable-next-line no-console
       console.error('[LineageService] getUpstreamModels failed', error);
+
       throw error;
     }
   }
@@ -109,6 +118,7 @@ class LineageService {
     } catch (error) {
       // eslint-disable-next-line no-console
       console.error('[LineageService] getDownstreamModels failed', error);
+
       throw error;
     }
   }
@@ -145,6 +155,7 @@ class LineageService {
     } catch (error) {
       // eslint-disable-next-line no-console
       console.error('[LineageService] getFullLineage failed', error);
+
       throw error;
     }
   }
@@ -190,7 +201,7 @@ class LineageService {
           '[LineageService] Manifest not loaded for project:',
           project.path,
         );
-        return { projectId: project.id };
+        return { projectId: project.id, error: 'MANIFEST_NOT_FOUND' };
       }
 
       if (!request.filePath) {
@@ -207,6 +218,13 @@ class LineageService {
         normalized,
       );
 
+      if (!match) {
+        return {
+          projectId: project.id,
+          error: 'MODEL_NOT_FOUND',
+        };
+      }
+
       return {
         projectId: project.id,
         modelId: match,
@@ -218,17 +236,137 @@ class LineageService {
     }
   }
 
+  public static async refreshManifest(projectId: string): Promise<void> {
+    const project = await this.resolveProject(projectId);
+    this.manifestCache.delete(project.path);
+  }
+
   static async getColumnLineage(
     request: ColumnLineageRequest,
   ): Promise<ColumnLineageResponse> {
     try {
-      throw new Error('Column lineage support is not implemented yet.');
+      if (!request.modelId) {
+        throw new Error('modelId is required for column lineage');
+      }
+
+      const { manifest, rootId } = await this.prepareManifestContext({
+        projectId: request.projectId,
+        modelId: request.modelId,
+        depth: 1, // Depth irrelevant for fetching single node SQL
+      });
+
+      const node = manifest.nodes?.[rootId];
+      if (!node) {
+        throw new Error(`Node ${rootId} not found in manifest`);
+      }
+
+      let compiledSql = node.compiled_code ?? node.compiled_sql;
+
+      // Fallback: Try reading file from disk
+      if (!compiledSql) {
+        let absolutePath: string | undefined;
+
+        const project = await this.resolveProject(request.projectId);
+
+        if (node.compiled_path) {
+          // node.compiled_path is relative to project root (e.g. "target/compiled/...")
+          absolutePath = path.resolve(project.path, node.compiled_path);
+        } else if (node.package_name && node.original_file_path) {
+          // Construct path manually: target/compiled/package_name/original_file_path
+          absolutePath = path.resolve(
+            project.path,
+            'target',
+            'compiled',
+            node.package_name,
+            node.original_file_path,
+          );
+        }
+
+        if (absolutePath) {
+          try {
+            compiledSql = await fs.readFile(absolutePath, 'utf-8');
+          } catch (err) {
+            console.warn(
+              `[LineageService] Failed to read compiled SQL from ${absolutePath}:`,
+              err,
+            );
+          }
+        }
+      }
+
+      if (!compiledSql) {
+        console.error(
+          '[LineageService] Compiled SQL extraction failed for node:',
+          node.unique_id,
+        );
+        // Fallback or error? For accurate lineage, we need compiled SQL.
+        throw new Error(
+          'Compiled SQL not found. Please run "dbt compile" or "dbt run" to generate compiled code.',
+        );
+      }
+
+      // TODO: Get dialect from project config or connection?
+      // For now, default to snowflake as it is the most common target for this user per history,
+      // or generic. SqlParserService defaults to snowflake.
+      const parseResult = await SqlParserService.parseSql(
+        compiledSql,
+        'snowflake',
+      );
+
+      if (parseResult.error) {
+        throw new Error(`SQL Parse Error: ${parseResult.error}`);
+      }
+
+      // Convert parse result to ColumnLineageResponse
+      // parseResult.columns is { outputCol: [sourceCols...] }
+      // We need to map this to:
+      // dependencies: { "target_col": { "source_node": ["source_col"] } }
+      //
+      // ISSUE: sqlglot extract_lineage (in our script) returns flattened source columns strings like "table.col".
+      // We need to resolve "table" back to a unique_id in the manifest if possible.
+      //
+      // For Phase 4 MVP, we might just return the raw strings or try to map basic table names.
+      //
+      // Let's format dependencies as `Record<string, Record<string, string[]>>`
+      // target_column -> source_node_id -> source_columns[]
+
+      const columnLineage: any[] = []; // Explicitly typed as ColumnLineageEdge[] in return
+
+      Object.entries(parseResult.columns).forEach(([targetCol, sourceCols]) => {
+        sourceCols.forEach((sourceColStr) => {
+          const parts = sourceColStr.split('.');
+          let colName = sourceColStr;
+          let tableName = 'upstream';
+
+          if (parts.length >= 2) {
+            colName = parts.pop()!;
+            tableName = parts.join('.');
+          }
+
+          // Try to resolve tableName to unique_id if possible, or leave as is
+          // This is a naive attempt, better logic might be needed
+          // For now, we pass the raw table name from SQL.
+          // The UI or refined logic handles mapping if needed.
+
+          columnLineage.push({
+            source: [tableName, colName],
+            target: [rootId, targetCol],
+            type: 'direct',
+          });
+        });
+      });
+
+      return {
+        columnLineage,
+      };
     } catch (error) {
       // eslint-disable-next-line no-console
       console.error('[LineageService] getColumnLineage failed', {
         error,
         request,
       });
+      // Return empty response on error so UI doesn't crash? Or rethrow?
+      // Rethrowing allows controller to handle.
       throw error;
     }
   }
@@ -245,6 +383,11 @@ class LineageService {
     }
     const project = await this.resolveProject(request.projectId);
     const manifest = await this.getManifest(project);
+    if (!manifest) {
+      throw new Error(
+        'Manifest not found. Please run "dbt compile" or "dbt run" first.',
+      );
+    }
     return {
       manifest,
       rootId: request.modelId,
@@ -254,29 +397,55 @@ class LineageService {
 
   private static async resolveProject(projectId?: string): Promise<Project> {
     if (projectId) {
-      const project = await ProjectsService.getProject(projectId);
-      if (project) {
-        return project;
+      // Use loadProjects directly to avoid triggering connection validation/loading
+      // which can fail if the connection is missing, but we only need the project path.
+      const projects = await ProjectsService.loadProjects();
+      const project = projects.find((p) => p.id === projectId);
+
+      if (!project) {
+        throw new Error(`Project not found: ${projectId}`);
       }
+      return project;
     }
-    const selected = await ProjectsService.getSelectedProject();
-    if (!selected) {
-      throw new Error('No active project found for lineage request.');
+    const project = await ProjectsService.getSelectedProject();
+    if (!project) {
+      throw new Error('No project selected.');
     }
-    return selected;
+    return project;
   }
 
-  private static async getManifest(project: Project): Promise<ManifestLike> {
+  private static async getManifest(
+    project: Project,
+  ): Promise<ManifestLike | undefined> {
+    const manifestPath = path.join(project.path, MANIFEST_FILE);
+    let stats;
+    try {
+      stats = await fs.stat(manifestPath);
+    } catch (e: any) {
+      if (e.code === 'ENOENT') {
+        console.warn(
+          `[LineageService] Manifest not found at ${manifestPath}. Lineage will be unavailable.`,
+        );
+        return undefined;
+      }
+      throw e;
+    }
+
     const cacheHit = this.manifestCache.get(project.path);
-    if (cacheHit) {
+    if (cacheHit && cacheHit.mtimeMs && stats.mtimeMs <= cacheHit.mtimeMs) {
       cacheHit.lastAccessed = Date.now();
       return cacheHit.manifest;
     }
-    const manifestPath = path.join(project.path, MANIFEST_FILE);
+
+    console.log(
+      `[LineageService] cache miss or stale for ${project.path}. Loading manifest...`,
+    );
+
     try {
       const raw = await fs.readFile(manifestPath, 'utf-8');
       const manifest = JSON.parse(raw) as ManifestLike;
-      this.setCache(project, manifest);
+      this.setCache(project, manifest, stats.mtimeMs);
+
       return manifest;
     } catch (error) {
       console.error(
@@ -287,7 +456,11 @@ class LineageService {
     }
   }
 
-  private static setCache(project: Project, manifest: ManifestLike) {
+  private static setCache(
+    project: Project,
+    manifest: ManifestLike,
+    mtimeMs: number,
+  ) {
     if (this.manifestCache.size >= MAX_CACHE_SIZE) {
       const oldest = [...this.manifestCache.entries()].sort(
         (a, b) => a[1].lastAccessed - b[1].lastAccessed,
@@ -300,6 +473,7 @@ class LineageService {
       manifest,
       project,
       lastAccessed: Date.now(),
+      mtimeMs,
     });
   }
 

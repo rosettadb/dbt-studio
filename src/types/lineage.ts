@@ -68,6 +68,7 @@ export type LineageFullGraphRequest = LineageTraversalRequest;
 
 export type ColumnLineageRequest = {
   projectId?: string;
+  modelId?: string; // Added for model-centric column lineage
   targets: [string, string][];
   selectedColumn: { table: string; name: string };
   upstreamExpansion?: boolean;
@@ -100,4 +101,5 @@ export type LineageCurrentModelRequest = {
 export type LineageCurrentModelResponse = {
   projectId?: string;
   modelId?: string;
+  error?: string;
 };

@@ -14,6 +14,7 @@ import { LineageNode } from '../../../types/lineage';
 
 export type DbtNodeData = LineageNode & {
   onExpand?: (nodeId: string, direction: 'upstream' | 'downstream') => void;
+  isHighlighted?: boolean;
 };
 
 export const DbtNode = memo(({ data, selected }: NodeProps<DbtNodeData>) => {
@@ -37,6 +38,12 @@ export const DbtNode = memo(({ data, selected }: NodeProps<DbtNodeData>) => {
   };
 
   const typeColor = getResourceTypeColor(data.resourceType);
+  let borderColor = 'transparent';
+  if (selected) {
+    borderColor = theme.palette.primary.main;
+  } else if (data.isHighlighted) {
+    borderColor = theme.palette.secondary.main;
+  }
 
   return (
     <Box sx={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
@@ -70,7 +77,7 @@ export const DbtNode = memo(({ data, selected }: NodeProps<DbtNodeData>) => {
           minWidth: 160,
           maxWidth: 240,
           borderRadius: 2,
-          border: `2px solid ${selected ? theme.palette.primary.main : 'transparent'}`,
+          border: `2px solid ${borderColor}`,
           backgroundColor: theme.palette.background.paper,
           transition: 'all 0.2s',
           '&:hover': {

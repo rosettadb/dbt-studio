@@ -23,6 +23,8 @@ type LineageGraphProps = {
   selectedNodeId?: string;
   onSelectNode?: (nodeId: string) => void;
   onNodeExpand?: (nodeId: string, direction: 'upstream' | 'downstream') => void;
+  onNodeMouseEnter?: (nodeId: string) => void; // New trigger for prefetching
+  highlightedNodeIds?: string[];
   isLoading?: boolean;
 };
 
@@ -39,6 +41,8 @@ export const LineageGraph: React.FC<LineageGraphProps> = ({
   selectedNodeId,
   onSelectNode,
   onNodeExpand,
+  onNodeMouseEnter,
+  highlightedNodeIds,
   isLoading,
 }) => {
   const theme = useTheme();
@@ -97,6 +101,7 @@ export const LineageGraph: React.FC<LineageGraphProps> = ({
       data: {
         ...node,
         onExpand: onNodeExpand,
+        isHighlighted: highlightedNodeIds?.includes(node.uniqueId),
       },
       position: { x: 0, y: 0 }, // Position will be calculated by layout
       selected: node.uniqueId === selectedNodeId,
@@ -128,9 +133,21 @@ export const LineageGraph: React.FC<LineageGraphProps> = ({
     setNodes,
     setEdges,
     theme.palette.text.disabled,
-    selectedNodeId,
+    theme.palette.text.disabled,
     onNodeExpand,
+    highlightedNodeIds,
+    // selectedNodeId removed to prevent re-layout on selection
   ]);
+
+  // Handle selection changes efficiently without re-layout
+  useEffect(() => {
+    setNodes((nds) =>
+      nds.map((node) => ({
+        ...node,
+        selected: node.id === selectedNodeId,
+      })),
+    );
+  }, [selectedNodeId, setNodes]);
 
   // Handle selection
   const onNodeClick = useCallback(
@@ -180,6 +197,7 @@ export const LineageGraph: React.FC<LineageGraphProps> = ({
           setEdges((eds) => applyEdgeChanges(changes, eds))
         }
         onNodeClick={onNodeClick}
+        onNodeMouseEnter={(_event, node) => onNodeMouseEnter?.(node.id)}
         nodeTypes={nodeTypes}
         fitView
       >
