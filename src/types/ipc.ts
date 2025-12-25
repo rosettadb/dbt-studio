@@ -201,9 +201,17 @@ export type GitChannels =
   | 'git:checkout'
   | 'git:fileDiff'
   | 'git:fileStatusList'
-  | 'git:fileStatus'
   | 'git:getLocalChanges'
-  | 'git:repoInfo';
+  | 'git:repoInfo'
+  | 'git:fileStatus'
+  | 'git:unstage'
+  | 'git:stageAll'
+  | 'git:unstageAll'
+  | 'git:discardChanges'
+  | 'git:aheadBehind'
+  | 'git:createBranch'
+  | 'git:deleteBranch'
+  | 'git:renameBranch';
 
 export type UtilChannels =
   | 'open:external'

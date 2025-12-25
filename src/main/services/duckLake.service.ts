@@ -831,25 +831,25 @@ export default class DuckLakeService {
     try {
       const SecureStorageService = (await import('./secureStorage.service'))
         .default;
-      const { provider, name } = connection;
+      const { provider, id } = connection;
 
       if (provider === 'aws') {
         const secretAccessKey = await SecureStorageService.getCredential(
-          `cloud-aws-${name}`,
+          `cloud-aws-${id}`,
         );
         return { secretAccessKey };
       }
 
       if (provider === 'azure') {
         const accountKey = await SecureStorageService.getCredential(
-          `cloud-azure-${name}`,
+          `cloud-azure-${id}`,
         );
         return { accountKey };
       }
 
       if (provider === 'gcs') {
         const credentials = await SecureStorageService.getCredential(
-          `cloud-gcs-${name}`,
+          `cloud-gcs-${id}`,
         );
         return { credentials };
       }

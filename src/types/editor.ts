@@ -43,3 +43,13 @@ export interface TabOperation {
 export interface TabContentUpdateOptions {
   markModified?: boolean;
 }
+
+export interface UpdateTabByPathOptions {
+  markModified?: boolean;
+  markSaved?: boolean;
+}
+
+export interface PendingCloseState {
+  tabId: EditorTabId;
+  tab: EditorTabState;
+}

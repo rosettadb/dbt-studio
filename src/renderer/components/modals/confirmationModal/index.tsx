@@ -6,7 +6,10 @@ import {
   DialogContent,
   DialogContentText,
   DialogTitle,
+  IconButton,
+  Box,
 } from '@mui/material';
+import { Close, Check, Clear } from '@mui/icons-material';
 
 type Props = {
   isOpen: boolean;
@@ -30,23 +33,51 @@ export const ConfirmationModal: React.FC<Props> = ({
       aria-labelledby="alert-dialog-title"
       aria-describedby="alert-dialog-description"
     >
-      <DialogTitle id="alert-dialog-title">{title}</DialogTitle>
+      <DialogTitle id="alert-dialog-title">
+        <Box
+          sx={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+          }}
+        >
+          {title}
+          <IconButton
+            aria-label="close"
+            onClick={onClose}
+            sx={{
+              color: 'text.secondary',
+              '&:hover': {
+                backgroundColor: 'action.hover',
+              },
+            }}
+          >
+            <Close fontSize="small" />
+          </IconButton>
+        </Box>
+      </DialogTitle>
       <DialogContent>
         <DialogContentText id="alert-dialog-description">
           {question}
         </DialogContentText>
       </DialogContent>
       <DialogActions>
-        <Button onClick={onClose} color="secondary" variant="outlined">
-          No
+        <Button
+          onClick={onClose}
+          color="secondary"
+          variant="outlined"
+          startIcon={<Clear />}
+        >
+          Cancel
         </Button>
         <Button
           onClick={onConfirm}
           color="primary"
           variant="contained"
           autoFocus
+          startIcon={<Check />}
         >
-          Yes
+          OK
         </Button>
       </DialogActions>
     </Dialog>

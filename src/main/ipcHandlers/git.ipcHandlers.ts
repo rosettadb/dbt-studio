@@ -19,11 +19,19 @@ const handlerChannels = [
   'git:isInitialized',
   'git:getRemotes',
   'git:add',
+  'git:unstage',
+  'git:stageAll',
+  'git:unstageAll',
+  'git:discardChanges',
   'git:commit',
   'git:pull',
   'git:push',
   'git:fileDiff',
   'git:fileStatusList',
+  'git:aheadBehind',
+  'git:createBranch',
+  'git:deleteBranch',
+  'git:renameBranch',
 ];
 
 const removeGitIpcHandlers = () => {
@@ -212,6 +220,85 @@ const registerGitHandlers = () => {
       { repoPath }: { repoPath: string },
     ): Promise<RepoInfoRes | null> => {
       return gitService.getRepoInfo(repoPath);
+    },
+  );
+
+  ipcMain.handle(
+    'git:unstage',
+    async (
+      _event,
+      { repoPath, files }: { repoPath: string; files: string[] },
+    ) => {
+      return gitService.unstage(repoPath, files);
+    },
+  );
+
+  ipcMain.handle(
+    'git:stageAll',
+    async (_event, { repoPath }: { repoPath: string }) => {
+      return gitService.stageAll(repoPath);
+    },
+  );
+
+  ipcMain.handle(
+    'git:unstageAll',
+    async (_event, { repoPath }: { repoPath: string }) => {
+      return gitService.unstageAll(repoPath);
+    },
+  );
+
+  ipcMain.handle(
+    'git:discardChanges',
+    async (
+      _event,
+      { repoPath, files }: { repoPath: string; files: string[] },
+    ) => {
+      return gitService.discardChanges(repoPath, files);
+    },
+  );
+
+  ipcMain.handle(
+    'git:aheadBehind',
+    async (_event, { repoPath }: { repoPath: string }) => {
+      return gitService.getAheadBehindCount(repoPath);
+    },
+  );
+
+  ipcMain.handle(
+    'git:createBranch',
+    async (
+      _event,
+      { repoPath, branchName }: { repoPath: string; branchName: string },
+    ) => {
+      return gitService.createBranch(repoPath, branchName);
+    },
+  );
+
+  ipcMain.handle(
+    'git:deleteBranch',
+    async (
+      _event,
+      {
+        repoPath,
+        branchName,
+        force,
+      }: { repoPath: string; branchName: string; force?: boolean },
+    ) => {
+      return gitService.deleteBranch(repoPath, branchName, force);
+    },
+  );
+
+  ipcMain.handle(
+    'git:renameBranch',
+    async (
+      _event,
+      {
+        repoPath,
+        oldName,
+        newName,
+      }: { repoPath: string; oldName: string; newName: string },
+    ) => {
+      return gitService.renameBranch(repoPath, oldName, newName);
     },
   );
 };

@@ -434,6 +434,7 @@ export type FileStatus = {
     | 'modified'
     | 'staged'
     | 'deleted'
+    | 'staged-deleted'
     | 'renamed'
     | 'conflicted';
 };

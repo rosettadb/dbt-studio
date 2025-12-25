@@ -95,14 +95,14 @@ export const ExplorerBucketContent: React.FC<ExplorerBucketContentProps> = ({
       const config = { ...connection.config };
       try {
         if (connection.provider === 'aws') {
-          const secret = await getCloudAwsSecret(connection.name);
+          const secret = await getCloudAwsSecret(connection.id);
           (config as { secretAccessKey?: string }).secretAccessKey =
             secret || '';
         } else if (connection.provider === 'azure') {
-          const key = await getCloudAzureKey(connection.name);
+          const key = await getCloudAzureKey(connection.id);
           (config as { accountKey?: string }).accountKey = key || '';
         } else if (connection.provider === 'gcs') {
-          const cred = await getCloudGcsCredential(connection.name);
+          const cred = await getCloudGcsCredential(connection.id);
           (config as { credentials?: any }).credentials = cred || '';
         }
       } catch (e) {
