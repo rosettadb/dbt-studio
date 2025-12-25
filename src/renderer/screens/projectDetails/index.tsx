@@ -131,7 +131,6 @@ const ProjectDetails: React.FC = () => {
     React.useState<HTMLElement | null>(null);
   const [aiTransformationResponse, setAitTransformationResponse] =
     React.useState<string>();
-  const [isPushModalOpen, setIsPushModalOpen] = React.useState(false);
   const [isSynchronizing, setIsSynchronizing] = React.useState(false);
 
   const {
