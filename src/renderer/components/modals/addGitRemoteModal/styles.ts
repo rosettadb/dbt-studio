@@ -1,9 +1,9 @@
 import { styled } from '@mui/material';
 
-export const StyledForm = styled('form')(() => ({
+export const StyledForm = styled('form')(({ theme }) => ({
   display: 'flex',
-  alignItems: 'center',
-  justifyContent: 'space-between',
-  padding: '20px 0',
-  gap: 10,
+  flexDirection: 'column',
+  alignItems: 'stretch',
+  gap: theme.spacing(1.5),
+  padding: theme.spacing(2.5, 0, 0),
 }));
