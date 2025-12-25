@@ -235,7 +235,7 @@ const FileTreeViewer: React.FC<Props> = ({
   return (
     <Container>
       <Box
-        padding={1}
+        paddingX={0.5}
         display="flex"
         sx={{ alignItems: 'center', mb: 1, gap: 1 }}
       >
