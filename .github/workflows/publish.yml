@@ -5,6 +5,7 @@ on:
     branches:
       - main
       - release/dev
+      - version/1.2.5-fix
 
 env:
   # This will be set by the first job and used by all others
@@ -241,7 +242,7 @@ jobs:
           fi
 
   publish-mac-x64:
-    runs-on: macos-13
+    runs-on: macos-15-intel
     needs: extract-version
     steps:
       - name: Checkout code
