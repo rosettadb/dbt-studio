@@ -59,14 +59,13 @@ export class PostgreSQLCatalogAdapter extends CatalogAdapter {
       const connectionString = this.buildPostgreSQLConnectionString(pgConfig);
 
       // Attach DuckLake catalog with PostgreSQL backend
+      // We must escape single quotes in the connection string for SQL safety
       const attachString = `ducklake:postgres:${connectionString}`;
+      const escapedAttachString = attachString.replace(/'/g, "''");
 
-      // For S3 storage we expect instance.dataPath to be an s3:// URI such as
-      // s3://adaptivescale/ducklake_nuri/ and rely on httpfs + secret created
-      // via createSecrets above. We just pass through instance.dataPath here.
       await this.attachDuckLakeCatalog(
         connection,
-        attachString,
+        escapedAttachString,
         instance.name,
         instance.dataPath,
       );
@@ -185,10 +184,21 @@ export class PostgreSQLCatalogAdapter extends CatalogAdapter {
       // Test PostgreSQL connection
       const pgConfig = config.postgresql!;
       const connectionString = this.buildPostgreSQLConnectionString(pgConfig);
+      const escapedConnectionString = connectionString.replace(/'/g, "''");
 
-      // Test basic PostgreSQL connection
-      const testQuery = `SELECT 1 FROM postgres_query('${connectionString}', 'SELECT 1 as test')`;
-      await testConnection.run(testQuery);
+      // Test basic PostgreSQL connection using ATTACH (more reliable than postgres_query for testing)
+      const tempAlias = `test_pg_${Date.now()}`;
+      try {
+        await testConnection.run(
+          `ATTACH '${escapedConnectionString}' AS ${tempAlias} (TYPE postgres)`,
+        );
+        await testConnection.run(`DETACH ${tempAlias}`);
+      } catch (err) {
+        // If ATTACH fails, we still try a direct query as a fallback
+        // in case the specific DuckDB version doesn't support ATTACH (TYPE postgres)
+        const testQuery = `SELECT 1 FROM postgres_query('${escapedConnectionString}', 'SELECT 1 as test')`;
+        await testConnection.run(testQuery);
+      }
 
       const responseTime = Date.now() - startTime;
 
@@ -1289,14 +1299,18 @@ export class PostgreSQLCatalogAdapter extends CatalogAdapter {
   private buildPostgreSQLConnectionString(
     config: NonNullable<DuckLakeCatalogConfig['postgresql']>,
   ): string {
+    // For DuckDB's postgres extension, the keyword=value format is often more reliable
+    // across different versions than the URI format.
     const parts = [
-      `dbname=${config.database}`,
       `host=${config.host}`,
       `port=${config.port}`,
       `user=${config.username}`,
+      `dbname=${config.database}`,
     ];
 
     if (config.password) {
+      // For DuckDB's postgres extension, we use the keyword=value format.
+      // We don't need internal quoting here because we escape the whole string in the SQL literals.
       parts.push(`password=${config.password}`);
     }
 
