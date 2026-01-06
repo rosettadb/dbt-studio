@@ -227,6 +227,29 @@ export type DuckLakeInstanceStatus =
   | 'error'
   | 'connecting';
 
+// Health and Status Types
+export interface DuckLakeInstanceMetrics {
+  tableCount: number;
+  totalRows: number;
+  totalSize: number;
+  snapshotCount: number;
+  lastActivity?: Date;
+}
+
+export interface DuckLakeInstanceHealth {
+  instanceId: string;
+  status: DuckLakeInstanceStatus;
+  lastChecked: Date | string;
+  catalogConnected: boolean;
+  extensionLoaded: boolean;
+  dataPathAccessible: boolean;
+  storageConnected?: boolean;
+  storageLocation?: string;
+  errors?: string[];
+  warnings?: string[];
+  metrics?: DuckLakeInstanceMetrics;
+}
+
 export interface DuckLakeRuntimeOptions {
   maxMemory?: string;
   threads?: number;
@@ -384,29 +407,6 @@ export interface DuckLakeQueryResult {
   totalRows?: number;
   executionTime: number;
   snapshotId?: string;
-}
-
-// Health and Status Types
-export interface DuckLakeInstanceMetrics {
-  tableCount: number;
-  totalRows: number;
-  totalSize: number;
-  snapshotCount: number;
-  lastActivity?: Date;
-}
-
-export interface DuckLakeInstanceHealth {
-  instanceId: string;
-  status: DuckLakeInstanceStatus;
-  lastChecked: Date;
-  catalogConnected: boolean;
-  extensionLoaded: boolean;
-  dataPathAccessible: boolean;
-  storageConnected?: boolean;
-  storageLocation?: string;
-  errors?: string[];
-  warnings?: string[];
-  metrics?: DuckLakeInstanceMetrics;
 }
 
 // Configuration and Settings Types
