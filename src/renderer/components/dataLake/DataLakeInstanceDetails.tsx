@@ -21,6 +21,15 @@ import {
   Card,
   CardContent,
   LinearProgress,
+  Table,
+  TableBody,
+  TableCell,
+  TableContainer,
+  TableHead,
+  TableRow,
+  TablePagination,
+  TextField,
+  InputAdornment,
 } from '@mui/material';
 import {
   Dataset as Database,
@@ -38,6 +47,7 @@ import {
   Speed,
   Memory,
   Refresh,
+  Search,
 } from '@mui/icons-material';
 import { useNavigate } from 'react-router-dom';
 import moment from 'moment';
@@ -50,8 +60,12 @@ import {
   useRefreshDuckLakeInstanceHealth,
   useDuckLakeInstanceHealth,
   duckLakeKeys,
+  useDuckLakeInstanceSnapshots,
 } from '../../controllers/duckLake.controller';
-import { DuckLakeInstance } from '../../../types/duckLake';
+import {
+  DuckLakeInstance,
+  DuckLakeSnapshotDetail,
+} from '../../../types/duckLake';
 
 interface DuckLakeInstanceDetailsProps {
   instance: DuckLakeInstance;
@@ -71,8 +85,29 @@ export const DataLakeInstanceDetails: React.FC<
   // Use the health check mutation for test connection
   const testConnectionMutation = useRefreshDuckLakeInstanceHealth();
 
+  // Snapshot Pagination State
+  const [snapshotPage, setSnapshotPage] = useState(0);
+  const [snapshotRowsPerPage, setSnapshotRowsPerPage] = useState(10);
+  const [snapshotFilter, setSnapshotFilter] = useState('');
+
   // Fetch health data for this instance
   const healthQuery = useDuckLakeInstanceHealth(instance.id);
+  const snapshotsQuery = useDuckLakeInstanceSnapshots(instance.id, {
+    page: snapshotPage + 1,
+    pageSize: snapshotRowsPerPage,
+    filter: snapshotFilter,
+  });
+
+  const handleChangePage = (_event: unknown, newPage: number) => {
+    setSnapshotPage(newPage);
+  };
+
+  const handleChangeRowsPerPage = (
+    event: React.ChangeEvent<HTMLInputElement>,
+  ) => {
+    setSnapshotRowsPerPage(parseInt(event.target.value, 10));
+    setSnapshotPage(0);
+  };
 
   const getStatusIcon = (status: string) => {
     switch (status) {
@@ -719,6 +754,25 @@ export const DataLakeInstanceDetails: React.FC<
     </Box>
   );
 
+  /**
+   * Safely convert any value to string for React rendering
+   * Handles DuckDB hugeint objects and other non-primitive types
+   */
+  const safeToString = (value: any): string => {
+    if (value === null || value === undefined) {
+      return '-';
+    }
+    if (typeof value === 'object') {
+      // Handle DuckDB hugeint objects
+      if (value.hugeint !== undefined) {
+        return String(value.hugeint);
+      }
+      // Handle other objects
+      return JSON.stringify(value);
+    }
+    return String(value);
+  };
+
   return (
     <Box sx={{ p: 2 }}>
       {/* Header */}
@@ -789,6 +843,7 @@ export const DataLakeInstanceDetails: React.FC<
           >
             <Tab label="Tables" />
             <Tab label="Overview" />
+            <Tab label="History" />
             <Tab label="Activity" />
           </Tabs>
         </Box>
@@ -796,9 +851,108 @@ export const DataLakeInstanceDetails: React.FC<
           {currentTab === 0 && <DataLakeTablesView instanceId={instance.id} />}
           {currentTab === 1 && renderOverviewTab()}
           {currentTab === 2 && (
+            <Box sx={{ mt: 1 }}>
+              <Box sx={{ display: 'flex', justifyContent: 'flex-end', mb: 1 }}>
+                <TextField
+                  size="small"
+                  placeholder="Search snapshots (ID or changes)..."
+                  value={snapshotFilter}
+                  onChange={(e) => setSnapshotFilter(e.target.value)}
+                  InputProps={{
+                    startAdornment: (
+                      <InputAdornment position="start">
+                        <Search fontSize="small" />
+                      </InputAdornment>
+                    ),
+                    sx: { fontSize: '0.8125rem', height: '32px' },
+                  }}
+                  sx={{
+                    width: 300,
+                    '& .MuiInputBase-input': {
+                      paddingTop: '2px', // Very small padding for minimal height
+                      paddingBottom: '2px',
+                    },
+                    '& .MuiOutlinedInput-root': {
+                      minHeight: '32px', // Force minimal height
+                    },
+                  }}
+                />
+              </Box>
+
+              {snapshotsQuery.isLoading && <LinearProgress />}
+
+              {!snapshotsQuery.isLoading &&
+                snapshotsQuery.data &&
+                snapshotsQuery.data.data.length > 0 && (
+                  <>
+                    <TableContainer>
+                      <Table size="small">
+                        <TableHead>
+                          <TableRow>
+                            <TableCell>Snapshot ID</TableCell>
+                            <TableCell>Time</TableCell>
+                            <TableCell>Schema Version</TableCell>
+                            <TableCell>Changes</TableCell>
+                          </TableRow>
+                        </TableHead>
+                        <TableBody>
+                          {snapshotsQuery.data.data.map(
+                            (snapshot: DuckLakeSnapshotDetail) => (
+                              <TableRow key={safeToString(snapshot.snapshotId)}>
+                                <TableCell>
+                                  <Chip
+                                    label={safeToString(snapshot.snapshotId)}
+                                    size="small"
+                                    color="primary"
+                                  />
+                                </TableCell>
+                                <TableCell>
+                                  {moment(snapshot.snapshotTime).format(
+                                    'YYYY-MM-DD HH:mm:ss',
+                                  )}
+                                  <Typography
+                                    variant="caption"
+                                    display="block"
+                                    color="text.secondary"
+                                  >
+                                    {moment(snapshot.snapshotTime).fromNow()}
+                                  </Typography>
+                                </TableCell>
+                                <TableCell>
+                                  {safeToString(snapshot.schemaVersion)}
+                                </TableCell>
+                                <TableCell>
+                                  {snapshot.changesMade || '-'}
+                                </TableCell>
+                              </TableRow>
+                            ),
+                          )}
+                        </TableBody>
+                      </Table>
+                    </TableContainer>
+                    <TablePagination
+                      component="div"
+                      count={snapshotsQuery.data.total}
+                      page={snapshotPage}
+                      onPageChange={handleChangePage}
+                      rowsPerPage={snapshotRowsPerPage}
+                      onRowsPerPageChange={handleChangeRowsPerPage}
+                      rowsPerPageOptions={[10, 25, 50, 100]}
+                    />
+                  </>
+                )}
+
+              {!snapshotsQuery.isLoading &&
+                (!snapshotsQuery.data ||
+                  snapshotsQuery.data.data.length === 0) && (
+                  <Alert severity="info">No snapshot history available</Alert>
+                )}
+            </Box>
+          )}
+          {currentTab === 3 && (
             <Box sx={{ mt: 2 }}>
               <Typography variant="body1" color="text.secondary">
-                Activity history coming soon...
+                Activity coming soon...
               </Typography>
             </Box>
           )}

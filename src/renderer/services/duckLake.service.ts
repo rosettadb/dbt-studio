@@ -10,11 +10,14 @@ import {
   DuckLakeInstanceHealth,
   DuckLakeTableInfo,
   DuckLakeSnapshotInfo,
+  DuckLakeSnapshotDetail,
   DuckLakeQueryRequest,
   DuckLakeQueryResult,
   DuckLakeMaintenanceTask,
   DuckLakeCatalogConfig,
   DuckLakeStorageConfig,
+  DuckLakeSnapshotParams,
+  DuckLakePaginatedResult,
 } from '../../types/duckLake';
 
 export namespace DuckLakeService {
@@ -149,6 +152,17 @@ export namespace DuckLakeService {
       'ducklake:snapshot:list',
       instanceId,
       tableName,
+    );
+  }
+
+  export async function listInstanceSnapshots(
+    instanceId: string,
+    params?: DuckLakeSnapshotParams,
+  ): Promise<DuckLakePaginatedResult<DuckLakeSnapshotDetail>> {
+    return window.electron.ipcRenderer.invoke(
+      'ducklake:instance:listSnapshots',
+      instanceId,
+      params,
     );
   }
 

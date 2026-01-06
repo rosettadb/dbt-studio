@@ -105,6 +105,20 @@ const registerDuckLakeHandlers = () => {
   );
 
   ipcMain.handle(
+    'ducklake:instance:listSnapshots',
+    async (_event, instanceId: string, params: any) => {
+      console.log(
+        '[DuckLake IPC] Handling ducklake:instance:listSnapshots for:',
+        instanceId,
+        params,
+      );
+      // Ensure params has defaults if missing (though Service also defaults)
+      const listParams = params || { page: 1, pageSize: 100 };
+      return DuckLakeService.listInstanceSnapshots(instanceId, listParams);
+    },
+  );
+
+  ipcMain.handle(
     'ducklake:snapshot:restore',
     async (
       _event,

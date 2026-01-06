@@ -262,6 +262,7 @@ export type DuckLakeChannels =
 
   // Snapshot Management
   | 'ducklake:snapshot:list'
+  | 'ducklake:instance:listSnapshots'
   | 'ducklake:snapshot:restore'
 
   // Query Execution

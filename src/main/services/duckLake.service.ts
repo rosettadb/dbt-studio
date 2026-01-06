@@ -17,12 +17,15 @@ import {
   DuckLakeInstanceHealth,
   DuckLakeTableInfo,
   DuckLakeSnapshotInfo,
+  DuckLakeSnapshotDetail,
   DuckLakeQueryRequest,
   DuckLakeQueryResult,
   DuckLakeMaintenanceTask,
   DuckLakeCatalogConfig,
   DuckLakeMaintenanceType,
   DuckLakeStorageConfig,
+  DuckLakeSnapshotParams,
+  DuckLakePaginatedResult,
 } from '../../types/duckLake';
 import { DuckLakeError } from '../../types/duckLakeErrors';
 
@@ -559,6 +562,24 @@ export default class DuckLakeService {
     } catch (error) {
       // eslint-disable-next-line no-console
       console.error(error);
+      throw error;
+    }
+  }
+
+  static async listInstanceSnapshots(
+    instanceId: string,
+    params: DuckLakeSnapshotParams = { page: 1, pageSize: 100 },
+  ): Promise<DuckLakePaginatedResult<DuckLakeSnapshotDetail>> {
+    try {
+      await this.ensureConnected(instanceId);
+      const adapter = await this.getAdapter(instanceId);
+      return await adapter.listInstanceSnapshots(params);
+    } catch (error) {
+      // eslint-disable-next-line no-console
+      console.error(
+        `[DuckLakeService] Failed to list instance snapshots for ${instanceId}:`,
+        error,
+      );
       throw error;
     }
   }

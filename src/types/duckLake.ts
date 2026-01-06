@@ -121,9 +121,6 @@ export interface DuckLakeSnapshotDetail {
   nextCatalogId: number;
   nextFileId: number;
   changesMade?: string;
-  author?: string;
-  commitMessage?: string;
-  commitExtraInfo?: string;
 }
 
 /**
@@ -576,6 +573,12 @@ export interface DuckLakeIpcChannels {
     tableName: string,
   ) => Promise<DuckLakeTableDetails>;
 
+  // Instance Snapshots (Phase: History Fix)
+  'ducklake:instance:listSnapshots': (
+    instanceId: string,
+    params: DuckLakeSnapshotParams,
+  ) => Promise<DuckLakePaginatedResult<DuckLakeSnapshotDetail>>;
+
   // Cloud Connection Management (Phase: Connection Integration)
   'ducklake:connection:list': () => Promise<any[]>; // Returns CloudConnection[]
   'ducklake:connection:get': (id: string) => Promise<any | null>; // Returns CloudConnection | null
@@ -584,4 +587,21 @@ export interface DuckLakeIpcChannels {
     provider: 'aws' | 'azure' | 'gcs';
     config: any;
   }) => Promise<boolean>;
+}
+
+// ============================================================================
+// Phase 9: Snapshot Pagination Types
+// ============================================================================
+
+export interface DuckLakeSnapshotParams {
+  page: number;
+  pageSize: number;
+  filter?: string;
+}
+
+export interface DuckLakePaginatedResult<T> {
+  data: T[];
+  total: number;
+  page: number;
+  pageSize: number;
 }

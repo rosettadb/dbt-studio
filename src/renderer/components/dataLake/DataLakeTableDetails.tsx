@@ -621,9 +621,7 @@ export const DataLakeTableDetails: React.FC = () => {
                       <TableCell>Snapshot ID</TableCell>
                       <TableCell>Time</TableCell>
                       <TableCell>Schema Version</TableCell>
-                      <TableCell>Author</TableCell>
                       <TableCell>Changes</TableCell>
-                      <TableCell>Commit Message</TableCell>
                     </TableRow>
                   </TableHead>
                   <TableBody>
@@ -652,9 +650,7 @@ export const DataLakeTableDetails: React.FC = () => {
                           <TableCell>
                             {safeToString(snapshot.schemaVersion)}
                           </TableCell>
-                          <TableCell>{snapshot.author || '-'}</TableCell>
                           <TableCell>{snapshot.changesMade || '-'}</TableCell>
-                          <TableCell>{snapshot.commitMessage || '-'}</TableCell>
                         </TableRow>
                       ),
                     )}

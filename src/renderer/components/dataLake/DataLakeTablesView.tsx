@@ -115,6 +115,7 @@ export const DataLakeTablesView: React.FC<DataLakeTablesViewProps> = ({
     schema: table.schema,
     rowCount: table.rowCount,
     sizeBytes: table.sizeBytes,
+    lastAccessed: table.updatedAt?.toISOString(),
     createdAt: table.createdAt?.toISOString() || new Date().toISOString(),
   }));
 
