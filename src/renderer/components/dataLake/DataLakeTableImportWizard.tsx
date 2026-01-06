@@ -109,16 +109,17 @@ export const DataLakeTableImportWizard: React.FC<
   const handleImport = () => {
     let sourceQuery = '';
     const src = sourceType === 'url' ? sourceUrl : filePath;
+    const escapedSrc = src.replace(/'/g, "''");
     const isCsv = src.toLowerCase().endsWith('.csv');
 
     if (isCsv) {
       // Use specific CSV reader with error handling options
       // ignore_errors=true: Skips rows with parsing errors
       // null_padding=true: Pads missing columns with NULL
-      sourceQuery = `CREATE TABLE ${tableName} AS SELECT * FROM read_csv_auto('${src}', ignore_errors=true, null_padding=true)`;
+      sourceQuery = `CREATE TABLE ${tableName} AS SELECT * FROM read_csv_auto('${escapedSrc}', ignore_errors=true, null_padding=true)`;
     } else {
       // Default behavior for other formats (Parquet, JSON, etc.)
-      sourceQuery = `CREATE TABLE ${tableName} AS FROM '${src}'`;
+      sourceQuery = `CREATE TABLE ${tableName} AS FROM '${escapedSrc}'`;
     }
 
     onImport(tableName, sourceQuery);
