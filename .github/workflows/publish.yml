@@ -5,7 +5,7 @@ on:
     branches:
       - main
       - release/dev
-      - bugfix/workflow
+      - version/1.2.5-fix
 
 env:
   # This will be set by the first job and used by all others
