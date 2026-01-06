@@ -437,8 +437,14 @@ export default class DuckLakeInstanceStore {
       dataPath: instance.dataPath,
       storage: storagePersisted,
       catalog: catalogPersisted,
-      createdAt: instance.createdAt.toISOString(),
-      updatedAt: instance.updatedAt.toISOString(),
+      createdAt: (instance.createdAt instanceof Date
+        ? instance.createdAt
+        : new Date(instance.createdAt)
+      ).toISOString(),
+      updatedAt: (instance.updatedAt instanceof Date
+        ? instance.updatedAt
+        : new Date(instance.updatedAt)
+      ).toISOString(),
       status: instance.status,
       tags: instance.tags,
       runtimeOptions: instance.runtimeOptions,
