@@ -5,7 +5,7 @@ on:
     branches:
       - main
       - release/dev
-      - version/1.2.5-fix
+      - bugfix/workflow
 
 env:
   # This will be set by the first job and used by all others
@@ -67,6 +67,32 @@ jobs:
         run: |
           npm install
           npm run postinstall
+
+      - name: Verify native binaries (ARM64)
+        run: |
+          echo "=== Verifying native module binaries for ARM64 ==="
+
+          # Check DuckDB bindings
+          echo "DuckDB bindings:"
+          ls -la release/app/node_modules/@duckdb/ 2>/dev/null || echo "DuckDB not found at expected location"
+
+          # Check if ARM64 DuckDB binding is present
+          if [ -d "release/app/node_modules/@duckdb/node-bindings-darwin-arm64" ]; then
+            echo "✓ DuckDB ARM64 binding found"
+          else
+            echo "⚠ DuckDB ARM64 binding not found, forcing installation..."
+            cd release/app && npm install @duckdb/node-bindings-darwin-arm64@1.3.0-alpha.21 && cd ../..
+          fi
+
+          # Check better-sqlite3 bindings
+          echo "better-sqlite3 bindings:"
+          find release/app/node_modules/better-sqlite3 -name "*.node" 2>/dev/null || echo "No .node files found"
+
+          # Check keytar bindings
+          echo "keytar bindings:"
+          find release/app/node_modules/keytar -name "*.node" 2>/dev/null || echo "No .node files found"
+
+          echo "=== Verification complete ==="
 
       - name: Build project
         run: npm run build
@@ -242,25 +268,69 @@ jobs:
           fi
 
   publish-mac-x64:
-    runs-on: macos-15-intel
+    runs-on: macos-latest
     needs: extract-version
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Install Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: 18
-          cache: npm
-
-      - name: Install dependencies
+      - name: Install Node.js (x86_64)
         run: |
-          npm install
-          npm run postinstall
+          # Download and install x86_64 version of Node.js
+          curl -fsSL https://nodejs.org/dist/v18.20.5/node-v18.20.5-darwin-x64.tar.gz -o node-x64.tar.gz
+          mkdir -p $HOME/node-x64
+          tar -xzf node-x64.tar.gz -C $HOME/node-x64 --strip-components=1
+          echo "$HOME/node-x64/bin" >> $GITHUB_PATH
 
-      - name: Build project
-        run: npm run build
+      - name: Verify x86_64 Node.js
+        run: |
+          export PATH="$HOME/node-x64/bin:$PATH"
+          echo "Node.js architecture:"
+          arch -x86_64 node -p "process.arch"
+          echo "Node.js version:"
+          arch -x86_64 node -v
+          echo "npm version:"
+          arch -x86_64 npm -v
+
+      - name: Install dependencies (x86_64)
+        run: |
+          export PATH="$HOME/node-x64/bin:$PATH"
+          # Install dependencies under x86_64 architecture
+          # This ensures prebuild-install downloads x64 binaries
+          arch -x86_64 npm install
+          arch -x86_64 npm run postinstall
+
+      - name: Verify native binaries (x86_64)
+        run: |
+          export PATH="$HOME/node-x64/bin:$PATH"
+          echo "=== Verifying native module binaries for x86_64 ==="
+
+          # Check DuckDB bindings
+          echo "DuckDB bindings:"
+          ls -la release/app/node_modules/@duckdb/ 2>/dev/null || echo "DuckDB not found at expected location"
+
+          # Check if x64 DuckDB binding is present
+          if [ -d "release/app/node_modules/@duckdb/node-bindings-darwin-x64" ]; then
+            echo "✓ DuckDB x64 binding found"
+          else
+            echo "⚠ DuckDB x64 binding not found, forcing installation..."
+            cd release/app && arch -x86_64 npm install @duckdb/node-bindings-darwin-x64@1.3.0-alpha.21 && cd ../..
+          fi
+
+          # Check better-sqlite3 bindings
+          echo "better-sqlite3 bindings:"
+          find release/app/node_modules/better-sqlite3 -name "*.node" 2>/dev/null || echo "No .node files found"
+
+          # Check keytar bindings
+          echo "keytar bindings:"
+          find release/app/node_modules/keytar -name "*.node" 2>/dev/null || echo "No .node files found"
+
+          echo "=== Verification complete ==="
+
+      - name: Build project (x86_64)
+        run: |
+          export PATH="$HOME/node-x64/bin:$PATH"
+          arch -x86_64 npm run build
 
       - name: Build for macOS x64 (no publish yet)
         env:
@@ -270,7 +340,8 @@ jobs:
           CSC_LINK: ${{ secrets.CSC_LINK }}
           CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
         run: |
-          npm exec electron-builder -- --publish never --mac --x64
+          export PATH="$HOME/node-x64/bin:$PATH"
+          arch -x86_64 npm exec electron-builder -- --publish never --mac --x64
 
       - name: Find and filter x64 artifacts
         run: |
@@ -302,6 +373,7 @@ jobs:
 
       - name: Recalculate hashes for latest-mac.yml
         run: |
+          export PATH="$HOME/node-x64/bin:$PATH"
           cd "$BUILD_DIR"
 
           if [ ! -f "latest-mac.yml" ]; then
@@ -312,7 +384,7 @@ jobs:
           echo "Recalculating hashes for macOS x64 artifacts..."
 
           # Install js-yaml for YAML manipulation
-          npm install -g js-yaml
+          arch -x86_64 npm install -g js-yaml
 
           # Create a Node.js script inline to update the YAML
           cat > update-manifest.js << 'EOF'
@@ -382,7 +454,7 @@ jobs:
           EOF
 
           # Run the update script
-          node update-manifest.js
+          arch -x86_64 node update-manifest.js
 
           # Clean up
           rm update-manifest.js
@@ -423,6 +495,12 @@ jobs:
               uploaded=true
             fi
           done
+
+          # Upload the x64 manifest
+          if [[ -f "latest-mac-x64.yml" ]]; then
+            echo "Uploading manifest: latest-mac-x64.yml to release $RELEASE_TAG"
+            gh release upload "$RELEASE_TAG" "latest-mac-x64.yml" --clobber
+          fi
 
           if [ "$uploaded" = false ]; then
             echo "Warning: No x64 files found to upload"
