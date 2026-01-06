@@ -409,7 +409,11 @@ export const DataLakeInstanceDetails: React.FC<
                       primary="Storage Path"
                       secondary={healthQuery.data.storageLocation}
                       secondaryTypographyProps={{
-                        sx: { fontFamily: 'monospace' },
+                        sx: {
+                          fontFamily: 'monospace',
+                          wordBreak: 'break-all',
+                          overflowWrap: 'anywhere',
+                        },
                       }}
                     />
                   </ListItem>
@@ -525,7 +529,12 @@ export const DataLakeInstanceDetails: React.FC<
                 primary="Data Path"
                 secondary={instance.dataPath}
                 secondaryTypographyProps={{
-                  sx: { fontFamily: 'monospace', fontSize: '0.875rem' },
+                  sx: {
+                    fontFamily: 'monospace',
+                    fontSize: '0.875rem',
+                    wordBreak: 'break-all',
+                    overflowWrap: 'anywhere',
+                  },
                 }}
               />
             </ListItem>
@@ -582,7 +591,12 @@ export const DataLakeInstanceDetails: React.FC<
                   primary="Metadata Path"
                   secondary={instance.catalog.duckdb.metadataPath}
                   secondaryTypographyProps={{
-                    sx: { fontFamily: 'monospace', fontSize: '0.875rem' },
+                    sx: {
+                      fontFamily: 'monospace',
+                      fontSize: '0.875rem',
+                      wordBreak: 'break-all',
+                      overflowWrap: 'anywhere',
+                    },
                   }}
                 />
               </ListItem>
@@ -593,7 +607,12 @@ export const DataLakeInstanceDetails: React.FC<
                   primary="Metadata Path"
                   secondary={instance.catalog.sqlite.metadataPath}
                   secondaryTypographyProps={{
-                    sx: { fontFamily: 'monospace', fontSize: '0.875rem' },
+                    sx: {
+                      fontFamily: 'monospace',
+                      fontSize: '0.875rem',
+                      wordBreak: 'break-all',
+                      overflowWrap: 'anywhere',
+                    },
                   }}
                 />
               </ListItem>
@@ -605,6 +624,12 @@ export const DataLakeInstanceDetails: React.FC<
                     <ListItemText
                       primary="Host"
                       secondary={`${instance.catalog.postgresql.host}:${instance.catalog.postgresql.port}`}
+                      secondaryTypographyProps={{
+                        sx: {
+                          wordBreak: 'break-all',
+                          overflowWrap: 'anywhere',
+                        },
+                      }}
                     />
                   </ListItem>
                   <ListItem>
@@ -698,7 +723,12 @@ export const DataLakeInstanceDetails: React.FC<
                       </Typography>
                       <Typography
                         variant="body1"
-                        sx={{ fontFamily: 'monospace', fontSize: '0.875rem' }}
+                        sx={{
+                          fontFamily: 'monospace',
+                          fontSize: '0.875rem',
+                          wordBreak: 'break-all',
+                          overflowWrap: 'anywhere',
+                        }}
                       >
                         {instance.runtime.tempDirectory || 'Default'}
                       </Typography>

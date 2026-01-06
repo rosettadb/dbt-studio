@@ -1811,6 +1811,12 @@ export const DataLakeConnectionWizard: React.FC<
                       <ListItemText
                         primary="Location"
                         secondary={getStorageLocation()}
+                        secondaryTypographyProps={{
+                          sx: {
+                            wordBreak: 'break-all',
+                            overflowWrap: 'anywhere',
+                          },
+                        }}
                       />
                     </ListItem>
                     {wizardData.basics?.description && (

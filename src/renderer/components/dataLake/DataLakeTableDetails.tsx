@@ -251,9 +251,26 @@ export const DataLakeTableDetails: React.FC = () => {
                         <TableCell>
                           <strong>Path</strong>
                         </TableCell>
-                        <TableCell>
-                          {tableDetails.path}
-                          {tableDetails.pathIsRelative && ' (relative)'}
+                        <TableCell
+                          sx={{
+                            wordBreak: 'break-all',
+                            overflowWrap: 'anywhere',
+                          }}
+                        >
+                          <Typography
+                            variant="body2"
+                            sx={{ fontFamily: 'monospace' }}
+                          >
+                            {tableDetails.path}
+                          </Typography>
+                          {tableDetails.pathIsRelative && (
+                            <Typography
+                              variant="caption"
+                              color="text.secondary"
+                            >
+                              (relative)
+                            </Typography>
+                          )}
                         </TableCell>
                       </TableRow>
                     )}
@@ -458,7 +475,11 @@ export const DataLakeTableDetails: React.FC = () => {
                           <TableCell>
                             <Typography
                               variant="body2"
-                              sx={{ fontFamily: 'monospace' }}
+                              sx={{
+                                fontFamily: 'monospace',
+                                wordBreak: 'break-all',
+                                overflowWrap: 'anywhere',
+                              }}
                             >
                               {file.path}
                             </Typography>
