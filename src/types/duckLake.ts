@@ -487,6 +487,19 @@ export interface DuckLakeTableDetails {
   columnTags: DuckLakeColumnTag[];
 }
 
+export interface DuckLakeSnapshotParams {
+  page: number;
+  pageSize: number;
+  filter?: string;
+}
+
+export interface DuckLakePaginatedResult<T> {
+  data: T[];
+  total: number;
+  page: number;
+  pageSize: number;
+}
+
 // IPC Channel Types (for type-safe IPC communication)
 export interface DuckLakeIpcChannels {
   // Instance Management
@@ -587,21 +600,4 @@ export interface DuckLakeIpcChannels {
     provider: 'aws' | 'azure' | 'gcs';
     config: any;
   }) => Promise<boolean>;
-}
-
-// ============================================================================
-// Phase 9: Snapshot Pagination Types
-// ============================================================================
-
-export interface DuckLakeSnapshotParams {
-  page: number;
-  pageSize: number;
-  filter?: string;
-}
-
-export interface DuckLakePaginatedResult<T> {
-  data: T[];
-  total: number;
-  page: number;
-  pageSize: number;
 }
