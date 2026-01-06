@@ -105,7 +105,7 @@ export const DataLakeTables: React.FC<DuckLakeTablesProps> = ({
         </Box>
         {selectedInstanceId && (
           <Chip
-            label={`ducklakes: ${tables.find((t) => t.instanceId === selectedInstanceId)?.instanceName || selectedInstanceId}`}
+            label={`${tables.find((t) => t.instanceId === selectedInstanceId)?.instanceName || selectedInstanceId}`}
             variant="outlined"
             color="primary"
           />

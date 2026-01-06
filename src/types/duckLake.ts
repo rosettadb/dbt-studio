@@ -241,8 +241,8 @@ export interface DuckLakeInstance {
   dataPath: string;
   storage?: DuckLakeStorageConfig;
   catalog: DuckLakeCatalogConfig;
-  createdAt: Date;
-  updatedAt: Date;
+  createdAt: Date | string;
+  updatedAt: Date | string;
   /**
    * Operational status of the instance configuration
    *
@@ -264,6 +264,16 @@ export interface DuckLakeInstance {
   status: DuckLakeInstanceStatus;
   tags?: string[];
   runtimeOptions?: DuckLakeRuntimeOptions;
+  runtime?: DuckLakeRuntimeOptions; // Alias for UI components
+
+  // Hydrated data for UI
+  health?: DuckLakeInstanceHealth;
+  stats?: {
+    tableCount: number;
+    totalSize: number;
+    lastQuery: string;
+    queryCount: number;
+  };
 }
 
 // Snapshot and Time Travel Types

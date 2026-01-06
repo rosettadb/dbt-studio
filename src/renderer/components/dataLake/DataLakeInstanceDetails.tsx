@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { useQueryClient } from 'react-query';
 import {
   Box,
   Typography,
@@ -36,6 +37,7 @@ import {
   Security,
   Speed,
   Memory,
+  Refresh,
 } from '@mui/icons-material';
 import { useNavigate } from 'react-router-dom';
 import moment from 'moment';
@@ -47,50 +49,9 @@ import {
 import {
   useRefreshDuckLakeInstanceHealth,
   useDuckLakeInstanceHealth,
+  duckLakeKeys,
 } from '../../controllers/duckLake.controller';
-import { DuckLakeStorageConfig } from '../../../types/duckLake';
-
-interface DuckLakeInstance {
-  id: string;
-  name: string;
-  status: 'active' | 'inactive' | 'error';
-  dataPath: string;
-  storage?: DuckLakeStorageConfig;
-  catalog: {
-    type: 'duckdb' | 'sqlite' | 'postgresql';
-    duckdb?: { metadataPath: string };
-    sqlite?: { metadataPath: string };
-    postgresql?: {
-      host: string;
-      port: number;
-      database: string;
-      username: string;
-      ssl: boolean;
-    };
-  };
-  runtime?: {
-    maxMemory?: string;
-    threads?: number;
-    enableOptimizer?: boolean;
-    tempDirectory?: string;
-  };
-  createdAt: string;
-  updatedAt: string;
-  description?: string;
-  health?: {
-    catalogConnected: boolean;
-    dataPathAccessible: boolean;
-    extensionLoaded: boolean;
-    lastChecked: string;
-    error?: string;
-  };
-  stats?: {
-    tableCount: number;
-    totalSize: number;
-    lastQuery: string;
-    queryCount: number;
-  };
-}
+import { DuckLakeInstance } from '../../../types/duckLake';
 
 interface DuckLakeInstanceDetailsProps {
   instance: DuckLakeInstance;
@@ -103,6 +64,7 @@ export const DataLakeInstanceDetails: React.FC<
   DuckLakeInstanceDetailsProps
 > = ({ instance, onEdit, onDelete, isLoading = false }) => {
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const [currentTab, setCurrentTab] = useState(0);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
 
@@ -153,6 +115,13 @@ export const DataLakeInstanceDetails: React.FC<
 
   const handleTestConnection = () => {
     testConnectionMutation.mutate(instance.id);
+  };
+
+  const handleRefresh = () => {
+    // Invalidate tables and health status for this instance
+    queryClient.invalidateQueries(duckLakeKeys.tables(instance.id));
+    queryClient.invalidateQueries(duckLakeKeys.instanceHealth(instance.id));
+    queryClient.invalidateQueries(duckLakeKeys.instance(instance.id));
   };
 
   const isStorageHealthy = (value?: boolean) =>
@@ -661,7 +630,7 @@ export const DataLakeInstanceDetails: React.FC<
         </Grid>
 
         {/* Runtime Configuration */}
-        {instance.runtime && (
+        {(instance.runtime || instance.runtimeOptions) && (
           <Grid item xs={12}>
             <Paper sx={{ p: 2 }}>
               <Typography
@@ -681,7 +650,9 @@ export const DataLakeInstanceDetails: React.FC<
                         Max Memory
                       </Typography>
                       <Typography variant="body1">
-                        {instance.runtime.maxMemory || 'Default'}
+                        {instance.runtime?.maxMemory ||
+                          instance.runtimeOptions?.maxMemory ||
+                          'Default'}
                       </Typography>
                     </Box>
                   </Box>
@@ -694,7 +665,9 @@ export const DataLakeInstanceDetails: React.FC<
                         Threads
                       </Typography>
                       <Typography variant="body1">
-                        {instance.runtime.threads || 'Auto'}
+                        {instance.runtime?.threads ||
+                          instance.runtimeOptions?.threads ||
+                          'Auto'}
                       </Typography>
                     </Box>
                   </Box>
@@ -707,7 +680,8 @@ export const DataLakeInstanceDetails: React.FC<
                         Optimizer
                       </Typography>
                       <Typography variant="body1">
-                        {instance.runtime.enableOptimizer
+                        {instance.runtime?.enableOptimizer ||
+                        instance.runtimeOptions?.enableOptimizer
                           ? 'Enabled'
                           : 'Disabled'}
                       </Typography>
@@ -730,7 +704,9 @@ export const DataLakeInstanceDetails: React.FC<
                           overflowWrap: 'anywhere',
                         }}
                       >
-                        {instance.runtime.tempDirectory || 'Default'}
+                        {instance.runtime?.tempDirectory ||
+                          instance.runtimeOptions?.tempDirectory ||
+                          'Default'}
                       </Typography>
                     </Box>
                   </Box>
@@ -769,11 +745,19 @@ export const DataLakeInstanceDetails: React.FC<
             {instance.name}
           </Typography>
           <Typography variant="body2" color="text.secondary">
-            DuckLake Instance • {instance.catalog.type.toUpperCase()} Catalog
+            DataLake Instance • {instance.catalog.type.toUpperCase()} Catalog
           </Typography>
         </Box>
 
         <Box sx={{ display: 'flex', gap: 1 }}>
+          <Button
+            variant="outlined"
+            startIcon={<Refresh />}
+            onClick={handleRefresh}
+            disabled={isLoading}
+          >
+            Refresh
+          </Button>
           <Button
             variant="outlined"
             startIcon={<Edit />}
