@@ -3,30 +3,80 @@
  * Contains logic for detecting if a CSV file has headers based on content analysis
  */
 
+// In-memory cache for header detection results (5-minute TTL)
+const headerCache = new Map<
+  string,
+  { hasHeaders: boolean; expiresAt: number }
+>();
+const CACHE_TTL = 5 * 60 * 1000; // 5 minutes
+
+/**
+ * Clear expired entries from the header cache
+ */
+function cleanupHeaderCache(): void {
+  const now = Date.now();
+  for (const [key, value] of headerCache.entries()) {
+    if (value.expiresAt < now) {
+      headerCache.delete(key);
+    }
+  }
+}
+
+/**
+ * Clear the header cache (useful for testing or manual refresh)
+ */
+export function clearHeaderCache(): void {
+  headerCache.clear();
+}
+
 /**
  * Detect if a CSV file has headers by analyzing the first few rows
  * Uses multiple heuristics to determine if the first row contains headers or data
+ * Results are cached for 5 minutes to avoid redundant file scans
  */
 export async function detectCsvHeaders(
   connection: any,
   filePath: string,
 ): Promise<boolean> {
+  // Check cache first
+  const cached = headerCache.get(filePath);
+  if (cached && cached.expiresAt > Date.now()) {
+    // eslint-disable-next-line no-console
+    console.log('[CsvHeaderDetection] Cache HIT:', {
+      filePath,
+      hasHeaders: cached.hasHeaders,
+    });
+    return cached.hasHeaders;
+  }
+
+  const startTime = Date.now();
   try {
     // Read the first three rows without header specification
-    const sampleQuery = `SELECT * FROM read_csv('${filePath}', header=false) LIMIT 3`;
+    // OPTIMIZATION: Use sample_size=3 to limit DuckDB's type inference scanning
+    const sampleQuery = `SELECT * FROM read_csv('${filePath}', header=false, sample_size=3, auto_detect=true) LIMIT 3`;
     const sampleResult = await connection.run(sampleQuery);
     const sampleRows = await sampleResult.getRows();
 
     if (sampleRows.length < 2) {
       // If there's only one row, assume it's data (no headers)
-      return false;
+      const hasHeaders = false;
+      headerCache.set(filePath, {
+        hasHeaders,
+        expiresAt: Date.now() + CACHE_TTL,
+      });
+      return hasHeaders;
     }
 
     const firstRow = sampleRows[0];
     const secondRow = sampleRows[1];
 
     if (!Array.isArray(firstRow) || !Array.isArray(secondRow)) {
-      return false;
+      const hasHeaders = false;
+      headerCache.set(filePath, {
+        hasHeaders,
+        expiresAt: Date.now() + CACHE_TTL,
+      });
+      return hasHeaders;
     }
 
     const totalCols = firstRow.length;
@@ -149,12 +199,24 @@ export async function detectCsvHeaders(
     const strongDataThreshold = Math.max(2, totalCols * 0.4);
 
     // If we have strong data patterns, lean towards no headers
+    let hasHeaders: boolean;
     if (noHeadersScore >= strongDataThreshold) {
-      return false;
+      hasHeaders = false;
+    } else {
+      // Otherwise, use headers score
+      hasHeaders = hasHeadersScore >= hasHeadersThreshold;
     }
 
-    // Otherwise, use headers score
-    const hasHeaders = hasHeadersScore >= hasHeadersThreshold;
+    // Cache the result
+    headerCache.set(filePath, {
+      hasHeaders,
+      expiresAt: Date.now() + CACHE_TTL,
+    });
+
+    // Periodically clean up expired entries
+    if (headerCache.size > 100) {
+      cleanupHeaderCache();
+    }
 
     return hasHeaders;
   } catch (error) {

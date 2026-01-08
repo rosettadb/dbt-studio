@@ -26,6 +26,7 @@ class CloudPreviewService {
     limit = 100,
   }: PreviewOptions): Promise<PreviewResult> {
     let connection: any = null;
+
     try {
       // Get connection from persistent pool
       connection = await DuckDBBootstrap.getConnection('cloud-preview');
@@ -38,7 +39,9 @@ class CloudPreviewService {
       await connection.run(secretQuery);
 
       // Execute preview query
-      const query = await buildPreviewQuery(
+      // OPTIMIZATION: buildPreviewQuery now returns both query and readerFunction
+      // so we can reuse readerFunction in extractColumns (avoiding redundant header detection)
+      const { query, readerFunction } = await buildPreviewQuery(
         connection,
         objectPath,
         previewType,
@@ -46,14 +49,17 @@ class CloudPreviewService {
       );
 
       const result = await connection.run(query);
+
       const rows = await result.getRows();
 
       // Get column information
+      // OPTIMIZATION: Pass readerFunction to avoid redundant header detection
       const columns = await extractColumns(
         result,
         connection,
         objectPath,
         rows,
+        readerFunction, // Pass cached reader function to avoid redundant header detection
       );
 
       // Convert DuckDB-specific types to regular JavaScript values
@@ -75,13 +81,17 @@ class CloudPreviewService {
         success: true,
         data: convertedRows,
         columns,
-        totalRows: previewType === 'stats' ? rows[0]?.total_rows : rows.length,
+        totalRows:
+          previewType === 'stats' ? rows[0]?.sampled_rows : rows.length,
         objectPath,
         previewType,
       };
     } catch (error) {
       // eslint-disable-next-line no-console
-      console.error('Error in previewCloudData:', error);
+      console.error('Error in previewCloudData:', error, {
+        objectPath,
+        previewType,
+      });
 
       const errorMessage =
         error instanceof Error ? error.message : String(error);
