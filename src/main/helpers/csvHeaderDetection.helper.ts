@@ -15,11 +15,11 @@ const CACHE_TTL = 5 * 60 * 1000; // 5 minutes
  */
 function cleanupHeaderCache(): void {
   const now = Date.now();
-  for (const [key, value] of headerCache.entries()) {
+  Array.from(headerCache.entries()).forEach(([key, value]) => {
     if (value.expiresAt < now) {
       headerCache.delete(key);
     }
-  }
+  });
 }
 
 /**
@@ -49,7 +49,7 @@ export async function detectCsvHeaders(
     return cached.hasHeaders;
   }
 
-  const startTime = Date.now();
+  // const startTime = Date.now();
   try {
     // Read the first three rows without header specification
     // OPTIMIZATION: Use sample_size=3 to limit DuckDB's type inference scanning
@@ -83,7 +83,8 @@ export async function detectCsvHeaders(
     let hasHeadersScore = 0;
     let noHeadersScore = 0;
 
-    for (let i = 0; i < totalCols; i += 1) {
+    // Use Array.from or forEach to avoid restricted syntax loop
+    Array.from({ length: totalCols }).forEach((_, i) => {
       const firstValue = String(firstRow[i] || '').trim();
       const secondValue = String(secondRow[i] || '').trim();
 
@@ -192,7 +193,7 @@ export async function detectCsvHeaders(
       } else if (!firstIsEmail && secondIsEmail) {
         hasHeadersScore += 2; // First row is probably header
       }
-    }
+    });
 
     // Decision logic: use a more balanced approach
     const hasHeadersThreshold = Math.max(3, totalCols * 0.5);
@@ -220,10 +221,12 @@ export async function detectCsvHeaders(
 
     return hasHeaders;
   } catch (error) {
+    // const totalTime = Date.now() - startTime;
     // eslint-disable-next-line no-console
     console.warn(
       'Failed to detect CSV headers, defaulting to no headers:',
       error,
+      // { totalTimeMs: totalTime },
     );
     return false;
   }

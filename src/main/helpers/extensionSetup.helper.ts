@@ -141,19 +141,17 @@ export async function extractColumns(
     }));
   }
 
-  // OPTIMIZATION: Try to infer columns from rows BEFORE running expensive DESCRIBE query
-  // DESCRIBE can trigger a full file scan on CSVs (~30s+ for large files)
-  // Since we already have the rows (which contain keys), we can use them to build the schema instantly.
+  // OPTIMIZATION: Try to infer columns from rows, BUT only if we can get actual names
   if (columns.length === 0 && rows.length > 0) {
     const firstRow = rows[0];
-    if (Array.isArray(firstRow)) {
-      columns = firstRow.map((_, index) => ({
-        name: `Column ${index + 1}`,
-        type: 'unknown',
-      }));
-    } else if (typeof firstRow === 'object' && firstRow !== null) {
+
+    // If rows are objects, we have the keys! Fast and correct.
+    if (
+      typeof firstRow === 'object' &&
+      firstRow !== null &&
+      !Array.isArray(firstRow)
+    ) {
       columns = Object.keys(firstRow).map((key) => {
-        // Try to infer simple types from value
         const val = firstRow[key];
         let type = 'VARCHAR'; // Default
         if (typeof val === 'number')
@@ -163,14 +161,15 @@ export async function extractColumns(
 
         return {
           name: key,
-          type: type,
+          type,
         };
       });
     }
+    // If arrays, we lack names. We MUST try DESCRIBE or we get "Column 1".
+    // We defer array handling to the fallback below.
   }
 
-  // If we still don't have columns (e.g. no rows returned), THEN try DESCRIBE query
-  // This is now a fallback for empty results or when strict schema is absolutely needed
+  // If we still don't have columns, try DESCRIBE query
   if (columns.length === 0) {
     try {
       // OPTIMIZATION: Use cached reader function if provided to avoid redundant header detection
@@ -203,6 +202,25 @@ export async function extractColumns(
     } catch (columnError) {
       // eslint-disable-next-line no-console
       console.warn('Failed to get column names with DESCRIBE:', columnError);
+    }
+  }
+
+  // Fallback: If DESCRIBE failed but we have rows (arrays), generate "Column N"
+  if (columns.length === 0 && rows.length > 0) {
+    const firstRow = rows[0];
+    if (Array.isArray(firstRow)) {
+      columns = firstRow.map((value, index) => {
+        let type = 'VARCHAR'; // Default
+        if (typeof value === 'number')
+          type = Number.isInteger(value) ? 'BIGINT' : 'DOUBLE';
+        else if (typeof value === 'boolean') type = 'BOOLEAN';
+        else if (value instanceof Date) type = 'TIMESTAMP';
+
+        return {
+          name: `Column ${index + 1}`,
+          type,
+        };
+      });
     }
   }
 
