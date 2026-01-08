@@ -706,28 +706,41 @@ export default class DuckLakeService {
           break;
         case 's3':
           if (fullConfig.s3) {
-            success = await CloudExplorerService.testConnection('aws', {
-              region: fullConfig.s3.region,
-              accessKeyId: fullConfig.s3.accessKeyId,
-              secretAccessKey: fullConfig.s3.secretAccessKey,
-            });
+            try {
+              success = await CloudExplorerService.testConnection('aws', {
+                region: fullConfig.s3.region,
+                accessKeyId: fullConfig.s3.accessKeyId,
+                secretAccessKey: fullConfig.s3.secretAccessKey,
+              });
+            } catch (error) {
+              return { success: false, error: (error as Error).message };
+            }
           }
           break;
         case 'azure':
           if (fullConfig.azure) {
-            success = await CloudExplorerService.testConnection('azure', {
-              accountName: fullConfig.azure.accountName,
-              accountKey: fullConfig.azure.accountKey,
-              connectionString: fullConfig.azure.connectionString,
-            });
+            try {
+              success = await CloudExplorerService.testConnection('azure', {
+                accountName: fullConfig.azure.accountName,
+                accountKey: fullConfig.azure.accountKey,
+                connectionString: fullConfig.azure.connectionString,
+              });
+            } catch (error) {
+              return { success: false, error: (error as Error).message };
+            }
           }
           break;
         case 'gcs':
           if (fullConfig.gcs) {
-            success = await CloudExplorerService.testConnection('gcs', {
-              projectId: fullConfig.gcs.projectId,
-              credentials: fullConfig.gcs.credentials,
-            });
+            try {
+              success = await CloudExplorerService.testConnection('gcs', {
+                projectId: fullConfig.gcs.projectId,
+                credentials: fullConfig.gcs.credentials,
+              });
+            } catch (error) {
+              // Propagate the specific error message from testGCSConnection
+              return { success: false, error: (error as Error).message };
+            }
           }
           break;
         default:

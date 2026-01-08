@@ -108,7 +108,9 @@ const storageConfigSchema = z
       .object({
         bucket: z.string().min(1, 'Bucket is required'),
         projectId: z.string().min(1, 'Project ID is required'),
-        credentials: z.string().optional(),
+        credentials: z
+          .string()
+          .min(1, 'Service account credentials are required'),
         prefix: z.string().optional(),
       })
       .optional(),
@@ -137,7 +139,9 @@ const storageConfigSchema = z
           !!data.azure?.accountKey
         );
       if (data.type === 'gcs')
-        return !!data.gcs?.bucket && !!data.gcs?.projectId;
+        return (
+          !!data.gcs?.bucket && !!data.gcs?.projectId && !!data.gcs?.credentials
+        );
       return false;
     },
     {
