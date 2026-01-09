@@ -25,6 +25,7 @@ type Props = {
   statuses: FileStatus[];
   copyPath: (source: string, target: string) => Promise<void>;
   selectedPath?: string;
+  onRenameCallback?: (oldPath: string, newPath: string) => void;
 };
 
 const filterTreeAndCollectExpanded = (
@@ -106,6 +107,7 @@ const FileTreeViewer: React.FC<Props> = ({
   statuses,
   copyPath,
   selectedPath,
+  onRenameCallback,
 }) => {
   const { data: project } = useGetSelectedProject();
   const [expandedItems, setExpandedItems] = React.useState<string[]>([]);
@@ -294,6 +296,7 @@ const FileTreeViewer: React.FC<Props> = ({
           onPastePath={(source, target) => copyPath(source, target)}
           copyPathData={copyPathData}
           selectedPath={selectedPath}
+          onRename={onRenameCallback}
         />
       </StyledTreeView>
       {(fileModal || folderModal) && (
