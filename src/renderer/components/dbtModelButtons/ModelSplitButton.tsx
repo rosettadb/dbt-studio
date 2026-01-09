@@ -489,8 +489,6 @@ export const ModelSplitButton: React.FC<ModelSplitButtonProps> = ({
     }
   };
 
-
-
   return (
     <>
       <SplitButton
@@ -601,7 +599,6 @@ export const ModelSplitButton: React.FC<ModelSplitButtonProps> = ({
             leftIcon: <Icon src={icons.dbtTm} width={16} height={16} />,
             subTitle: 'Preview the dbt model data',
           },
-
         ]}
       />
 
@@ -621,8 +618,6 @@ export const ModelSplitButton: React.FC<ModelSplitButtonProps> = ({
         loading={isPreviewing}
         error={previewError}
       />
-
-
     </>
   );
 };
