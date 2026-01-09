@@ -191,7 +191,12 @@ export const NodeDetailsPanel: React.FC<NodeDetailsPanelProps> = ({
 
       {dependsOn?.nodes && dependsOn.nodes.length > 0 && (
         <Box>
-          <Typography variant="subtitle2" gutterBottom>
+          <Typography
+            variant="caption"
+            color="text.secondary"
+            fontWeight={600}
+            gutterBottom
+          >
             Depends On
           </Typography>
           <List dense disablePadding>

@@ -182,7 +182,7 @@ export const LineageGraph: React.FC<LineageGraphProps> = ({
   }
 
   return (
-    <Box sx={{ height: '100%', width: '100%', minHeight: 400 }}>
+    <Box sx={{ height: '100%', width: '100%' }}>
       {/* 
         Must force height on container for React Flow to render correctly. 
         In parent, make sure this component has explicit height or flex grow. 

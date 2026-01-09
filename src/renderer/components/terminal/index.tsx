@@ -23,6 +23,7 @@ import {
   StopRounded,
   PowerOffRounded,
   TimerRounded,
+  AccountTree,
 } from '@mui/icons-material';
 import { Terminal } from './terminal';
 import {
@@ -36,7 +37,11 @@ import {
 } from './styles';
 import { ProcessTerminal } from './processTerminal';
 import { useProcess } from '../../hooks';
+import { useSelectedFileContext } from '../../hooks/useSelectedFileContext';
 import { Project } from '../../../types/backend';
+import { LineageModal } from '../lineage/LineageModal';
+import { LineageView } from '../lineage/LineageView';
+import { useCurrentModelId } from '../../controllers/lineage.controller';
 
 type Props = {
   project: Project;
@@ -49,6 +54,17 @@ export const TerminalLayout: React.FC<Props> = ({ children, project }) => {
   const { isRunning, stop, forceStop, pid, duration, status, command } =
     useProcess();
 
+  const { selectedFilePath } = useSelectedFileContext();
+  const { data: currentModelData } = useCurrentModelId(
+    {
+      projectId: project.id,
+      filePath: selectedFilePath,
+    },
+    { enabled: !!project.id && !!selectedFilePath },
+  );
+
+  const showLineageTab = !!currentModelData?.modelId;
+
   const [selectedTab, setSelectedTab] = React.useState(0);
   const [lock, setLock] = React.useState(false);
   const [sizes, setSizes] = React.useState<number[]>([
@@ -58,6 +74,7 @@ export const TerminalLayout: React.FC<Props> = ({ children, project }) => {
   const [isMinimized, setIsMinimized] = React.useState(false);
   const [menuAnchor, setMenuAnchor] = React.useState<null | HTMLElement>(null);
   const [isStoppingGracefully, setIsStoppingGracefully] = React.useState(false);
+  const [openLineageModal, setOpenLineageModal] = React.useState(false);
   const [hasStartedProcess, setHasStartedProcess] =
     React.useState<boolean>(false);
   const lastTerminalHeight = React.useRef<number>(300);
@@ -121,6 +138,13 @@ export const TerminalLayout: React.FC<Props> = ({ children, project }) => {
   //     setIsStoppingGracefully(false);
   //   }
   // }, [isRunning]);
+
+  // If Lineage tab is hidden but selected, switch back to terminal
+  React.useEffect(() => {
+    if (!showLineageTab && selectedTab === 2) {
+      setSelectedTab(0);
+    }
+  }, [showLineageTab, selectedTab]);
 
   const getBackgroundColor = (
     themeMode: string | undefined,
@@ -218,29 +242,62 @@ export const TerminalLayout: React.FC<Props> = ({ children, project }) => {
             <>
               <TerminalHeader>
                 {/* CLI Terminal Tab */}
-                <IconButton
-                  style={{
+                {/* CLI Terminal Tab */}
+                <Box
+                  component="button"
+                  sx={{
+                    display: 'flex',
+                    alignItems: 'center',
                     backgroundColor: getBackgroundColor(
                       mode,
                       selectedTab === 0,
                     ),
                     borderRadius: '8px 8px 0 0',
-                    padding: '6px 32px',
+                    padding: '6px 16px',
                     marginRight: '4px',
                     transition: 'background-color 0.2s',
                     height: 32,
+                    cursor: 'pointer',
+                    border: 'none',
+                    gap: 1,
+                    color: getTextColor(mode),
                   }}
                   onClick={() => setSelectedTab(0)}
-                  size="small"
                 >
-                  <CodeOutlined
-                    style={{
+                  <CodeOutlined sx={{ fontSize: 18 }} />
+                  <Typography variant="caption" sx={{ fontWeight: 600 }}>
+                    Terminal
+                  </Typography>
+                </Box>
+                {/* Lineage Terminal Tab */}
+                {showLineageTab && (
+                  <Box
+                    component="button"
+                    sx={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      backgroundColor: getBackgroundColor(
+                        mode,
+                        selectedTab === 2,
+                      ),
+                      borderRadius: '8px 8px 0 0',
+                      padding: '6px 16px',
+                      marginRight: '4px',
+                      transition: 'background-color 0.2s',
+                      height: 32,
+                      cursor: 'pointer',
+                      border: 'none',
+                      gap: 1,
                       color: getTextColor(mode),
-                      fontSize: 20,
                     }}
-                  />
-                </IconButton>
-
+                    onClick={() => setSelectedTab(2)}
+                  >
+                    <AccountTree sx={{ fontSize: 18 }} />
+                    <Typography variant="caption" sx={{ fontWeight: 600 }}>
+                      Lineage
+                    </Typography>
+                  </Box>
+                )}
                 {/* Process Tab - Only show when running */}
                 {hasStartedProcess && (
                   <Box
@@ -359,6 +416,13 @@ export const TerminalLayout: React.FC<Props> = ({ children, project }) => {
               {/* Tab Content */}
               {selectedTab === 0 && <Terminal project={project} />}
               {selectedTab === 1 && <ProcessTerminal />}
+              {selectedTab === 2 && showLineageTab && (
+                <LineageView
+                  projectId={project.id}
+                  filePath={selectedFilePath}
+                  onExpandClick={() => setOpenLineageModal(true)}
+                />
+              )}
             </>
           )}
         </TerminalWrapper>
@@ -445,6 +509,12 @@ export const TerminalLayout: React.FC<Props> = ({ children, project }) => {
           </MenuItem>
         )}
       </Menu>
+      <LineageModal
+        isOpen={openLineageModal}
+        onClose={() => setOpenLineageModal(false)}
+        projectId={project.id}
+        filePath={selectedFilePath}
+      />
     </Root>
   );
 };

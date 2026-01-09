@@ -110,7 +110,7 @@
     "@mui/x-tree-view": "^7.26.0",
     "@tiptap/react": "^3.2.0",
     "@tiptap/starter-kit": "^3.2.0",
-    "@types/dagre": "^0.7.53",
+
     "ace-builds": "^1.37.5",
     "adm-zip": "^0.5.16",
     "ansi-to-html": "^0.7.2",
@@ -150,6 +150,7 @@
     "zod": "^3.25.76"
   },
   "devDependencies": {
+    "@types/dagre": "^0.7.53",
     "@electron/rebuild": "^3.3.0",
     "@pmmmwh/react-refresh-webpack-plugin": "^0.5.11",
     "@svgr/webpack": "^8.1.0",

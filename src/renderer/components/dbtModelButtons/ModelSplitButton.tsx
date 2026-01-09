@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { DirectionsRun, AccountTree } from '@mui/icons-material';
+import { DirectionsRun } from '@mui/icons-material';
 
 import { toast } from 'react-toastify';
 import { SplitButton } from '../splitButton';
@@ -9,7 +9,6 @@ import { Icon } from '../icon';
 import { extractModelNameFromPath } from '../../helpers/utils';
 import { CompileModal } from '../modals/CompileModal';
 import { MiniSqlEditorModal } from '../modals/MiniSqlEditorModal';
-import { LineageModal } from '../lineage';
 import useDbt from '../../hooks/useDbt';
 import {
   queryData,
@@ -46,7 +45,6 @@ export const ModelSplitButton: React.FC<ModelSplitButtonProps> = ({
     null,
   );
   const [previewError, setPreviewError] = useState<string | undefined>();
-  const [showLineageModal, setShowLineageModal] = useState(false);
 
   const {
     compile: dbtCompileModel,
@@ -491,9 +489,7 @@ export const ModelSplitButton: React.FC<ModelSplitButtonProps> = ({
     }
   };
 
-  const handleLineage = () => {
-    setShowLineageModal(true);
-  };
+
 
   return (
     <>
@@ -605,12 +601,7 @@ export const ModelSplitButton: React.FC<ModelSplitButtonProps> = ({
             leftIcon: <Icon src={icons.dbtTm} width={16} height={16} />,
             subTitle: 'Preview the dbt model data',
           },
-          {
-            name: 'Lineage',
-            onClick: handleLineage,
-            leftIcon: <AccountTree sx={{ fontSize: '16px' }} />,
-            subTitle: 'View model lineage graph',
-          },
+
         ]}
       />
 
@@ -631,12 +622,7 @@ export const ModelSplitButton: React.FC<ModelSplitButtonProps> = ({
         error={previewError}
       />
 
-      <LineageModal
-        isOpen={showLineageModal}
-        onClose={() => setShowLineageModal(false)}
-        projectId={project.id}
-        filePath={modelPath}
-      />
+
     </>
   );
 };

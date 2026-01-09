@@ -1,3 +1,4 @@
+export * from './LineageView';
 export * from './LineageGraph';
 export * from './LineageModal';
 export * from './LineageToolbar';
