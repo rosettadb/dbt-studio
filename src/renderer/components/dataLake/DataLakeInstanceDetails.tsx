@@ -153,10 +153,11 @@ export const DataLakeInstanceDetails: React.FC<
   };
 
   const handleRefresh = () => {
-    // Invalidate tables and health status for this instance
+    // Invalidate tables, health status, and snapshots for this instance
     queryClient.invalidateQueries(duckLakeKeys.tables(instance.id));
     queryClient.invalidateQueries(duckLakeKeys.instanceHealth(instance.id));
     queryClient.invalidateQueries(duckLakeKeys.instance(instance.id));
+    queryClient.invalidateQueries(duckLakeKeys.instanceSnapshots(instance.id));
   };
 
   const isStorageHealthy = (value?: boolean) =>
@@ -857,7 +858,10 @@ export const DataLakeInstanceDetails: React.FC<
                   size="small"
                   placeholder="Search snapshots (ID or changes)..."
                   value={snapshotFilter}
-                  onChange={(e) => setSnapshotFilter(e.target.value)}
+                  onChange={(e) => {
+                    setSnapshotFilter(e.target.value);
+                    setSnapshotPage(0); // Reset pagination when filter changes
+                  }}
                   slotProps={{
                     input: {
                       startAdornment: (
