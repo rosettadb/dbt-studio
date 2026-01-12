@@ -720,8 +720,8 @@ export const DataLakeInstanceDetails: React.FC<
                         Optimizer
                       </Typography>
                       <Typography variant="body1">
-                        {instance.runtime?.enableOptimizer ||
-                        instance.runtimeOptions?.enableOptimizer
+                        {(instance.runtime?.enableOptimizer ??
+                        instance.runtimeOptions?.enableOptimizer)
                           ? 'Enabled'
                           : 'Disabled'}
                       </Typography>
@@ -896,7 +896,15 @@ export const DataLakeInstanceDetails: React.FC<
 
               {snapshotsQuery.isLoading && <LinearProgress />}
 
+              {snapshotsQuery.isError && (
+                <Alert severity="error">
+                  Failed to load snapshot history:{' '}
+                  {(snapshotsQuery.error as Error)?.message || 'Unknown error'}
+                </Alert>
+              )}
+
               {!snapshotsQuery.isLoading &&
+                !snapshotsQuery.isError &&
                 snapshotsQuery.data &&
                 snapshotsQuery.data.data.length > 0 && (
                   <>
@@ -958,6 +966,7 @@ export const DataLakeInstanceDetails: React.FC<
                 )}
 
               {!snapshotsQuery.isLoading &&
+                !snapshotsQuery.isError &&
                 (!snapshotsQuery.data ||
                   snapshotsQuery.data.data.length === 0) && (
                   <Alert severity="info">No snapshot history available</Alert>

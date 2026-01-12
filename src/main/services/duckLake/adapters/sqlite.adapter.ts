@@ -555,10 +555,15 @@ export class SQLiteCatalogAdapter extends CatalogAdapter {
         // Sanitize filter for simple SQL injection prevention (basic)
         // In real implementations, use bound parameters if possible, but DuckDB Node bindings might differ
         // For text search in snapshots
-        const safeFilter = filter.replace(/'/g, "''");
+        // Escape LIKE wildcards first, then single quotes for SQL
+        const safeFilter = filter
+          .replace(/\\/g, '\\\\')
+          .replace(/%/g, '\\%')
+          .replace(/_/g, '\\_')
+          .replace(/'/g, "''");
         whereClause = `
-          WHERE CAST(s.snapshot_id AS VARCHAR) LIKE '%${safeFilter}%'
-             OR sc.changes_made LIKE '%${safeFilter}%'
+          WHERE CAST(s.snapshot_id AS VARCHAR) LIKE '%${safeFilter}%' ESCAPE '\\'
+             OR sc.changes_made LIKE '%${safeFilter}%' ESCAPE '\\'
         `;
       }
 
