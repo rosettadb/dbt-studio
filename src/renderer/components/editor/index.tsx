@@ -151,13 +151,46 @@ export const Editor: React.FC<EditorProps> = ({
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [handleSave]);
 
+  // Track the active tab ID and expected content using refs to prevent stale closures
+  // This is critical because Monaco fires onChange when content prop changes,
+  // but at that moment the closure might still have the old activeTab
+  const activeTabIdRef = React.useRef(activeTabId);
+  const expectedContentRef = React.useRef(activeContent);
+
+  // Update refs synchronously before render completes
+  activeTabIdRef.current = activeTabId;
+  expectedContentRef.current = activeContent;
+
   // Content change handler (no auto-save)
-  const handleChange: OnChange = (value) => {
-    if (value === undefined || !activeTab || !activeTabId) {
-      return;
-    }
-    onTabContentChange(activeTabId, value);
-  };
+  // Only handle ACTUAL user edits, not programmatic content changes from tab switching
+  const handleChange: OnChange = React.useCallback(
+    (value) => {
+      // Ignore undefined values
+      if (value === undefined) {
+        return;
+      }
+
+      // Get the current active tab ID from the ref (always up-to-date)
+      const currentTabId = activeTabIdRef.current;
+      if (!currentTabId) {
+        return;
+      }
+
+      // Get the expected content for the current tab
+      const expectedContent = expectedContentRef.current;
+
+      // CRITICAL: If the incoming value matches what we expect for this tab,
+      // it means Monaco is just syncing to our controlled value (tab switch).
+      // Only process changes that are DIFFERENT from what we set.
+      if (value === expectedContent) {
+        return;
+      }
+
+      // This is a genuine user edit - update the tab content
+      onTabContentChange(currentTabId, value);
+    },
+    [onTabContentChange],
+  );
 
   if (tabs.length === 0) {
     return (
