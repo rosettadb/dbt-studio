@@ -472,12 +472,15 @@ const useTabManager = (projectId?: string): UseTabManagerReturn => {
       let isEditable = false;
       let hasInitialContent = false;
 
+      isEditable = isEditableFile(path);
+      hasInitialContent = typeof options?.content === 'string';
+
       setTabs((current) => {
         const existingTab = current.find((tab) => tab.path === path);
         if (existingTab) {
           targetId = existingTab.id;
           // Update existing tab with new options
-          return current.map((tab) =>
+          const updated = current.map((tab) =>
             tab.path === path
               ? {
                   ...tab,
@@ -485,11 +488,13 @@ const useTabManager = (projectId?: string): UseTabManagerReturn => {
                 }
               : tab,
           );
+          tabsRef.current = updated;
+          return updated;
         }
 
-        isEditable = isEditableFile(path);
-        hasInitialContent = typeof options?.content === 'string';
         const id = ensureUniqueId(path, current);
+        targetId = id;
+
         const initialContent =
           options?.content ??
           (isEditable ? '' : getNonEditableFileMessage(path));
@@ -507,13 +512,13 @@ const useTabManager = (projectId?: string): UseTabManagerReturn => {
           isReadOnly: options?.isReadOnly ?? !isEditable,
         };
 
-        targetId = id;
         shouldLoadContent = isEditable && !hasInitialContent;
         const updated = [...current, newTab];
         tabsRef.current = updated;
         return updated;
       });
 
+      // The setTabs callback runs synchronously, so targetId is set before this line
       if (!targetId) {
         return null;
       }
