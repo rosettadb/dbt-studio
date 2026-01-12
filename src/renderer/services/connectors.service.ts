@@ -57,12 +57,22 @@ export const queryData = async (body: {
   connection: ConnectionInput;
   query: string;
   projectName: string;
+  queryId?: string;
 }): Promise<QueryResponseType> => {
   const { data } = await client.post<
-    { connection: ConnectionInput; query: string },
+    {
+      connection: ConnectionInput;
+      query: string;
+      projectName: string;
+      queryId?: string;
+    },
     QueryResponseType
   >('connector:query', body);
   return data;
+};
+
+export const cancelQuery = async (queryId: string): Promise<void> => {
+  await client.post<string, void>('connector:cancel-query', queryId);
 };
 
 export const setConnectionEnvVariable = async (
