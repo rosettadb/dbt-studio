@@ -60,7 +60,12 @@ export const queryData = async (body: {
   queryId?: string;
 }): Promise<QueryResponseType> => {
   const { data } = await client.post<
-    { connection: ConnectionInput; query: string; queryId?: string },
+    {
+      connection: ConnectionInput;
+      query: string;
+      projectName: string;
+      queryId?: string;
+    },
     QueryResponseType
   >('connector:query', body);
   return data;

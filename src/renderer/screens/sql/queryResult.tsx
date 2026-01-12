@@ -88,17 +88,15 @@ export const QueryResult: React.FC<Props> = ({ results }) => {
       name=""
       toolbarContent={
         results.duration !== undefined ? (
-          <span
-            style={{
-              fontSize: '0.875rem',
-              color: 'text.secondary',
-              opacity: 0.7,
-            }}
+          <Typography
+            variant="body2"
+            color="text.secondary"
+            sx={{ opacity: 0.7 }}
           >
             {results.duration > 1000
               ? `${(results.duration / 1000).toFixed(2)}s`
               : `${results.duration}ms`}
-          </span>
+          </Typography>
         ) : null
       }
       rows={rows as any}
