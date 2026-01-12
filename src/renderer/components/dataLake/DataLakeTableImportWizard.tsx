@@ -244,12 +244,14 @@ export const DataLakeTableImportWizard: React.FC<
             onChange={(e) => setFilePath(e.target.value)}
             placeholder="/path/to/file.csv"
             helperText="Absolute or relative path to CSV, Parquet, or JSON file"
-            InputProps={{
-              endAdornment: (
-                <IconButton onClick={handleFileSelect} edge="end">
-                  <FolderOpen />
-                </IconButton>
-              ),
+            slotProps={{
+              input: {
+                endAdornment: (
+                  <IconButton onClick={handleFileSelect} edge="end">
+                    <FolderOpen />
+                  </IconButton>
+                ),
+              },
             }}
           />
           <Alert severity="info" sx={{ mt: 2 }}>

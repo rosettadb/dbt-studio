@@ -858,13 +858,15 @@ export const DataLakeInstanceDetails: React.FC<
                   placeholder="Search snapshots (ID or changes)..."
                   value={snapshotFilter}
                   onChange={(e) => setSnapshotFilter(e.target.value)}
-                  InputProps={{
-                    startAdornment: (
-                      <InputAdornment position="start">
-                        <Search fontSize="small" />
-                      </InputAdornment>
-                    ),
-                    sx: { fontSize: '0.8125rem', height: '32px' },
+                  slotProps={{
+                    input: {
+                      startAdornment: (
+                        <InputAdornment position="start">
+                          <Search fontSize="small" />
+                        </InputAdornment>
+                      ),
+                      sx: { fontSize: '0.8125rem', height: '32px' },
+                    },
                   }}
                   sx={{
                     width: 300,
