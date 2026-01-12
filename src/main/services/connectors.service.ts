@@ -637,10 +637,6 @@ export default class ConnectorsService {
     conn: ConnectionInput,
   ): Promise<string> {
     const profileConfig = {
-      config: {
-        send_anonymous_usage_stats: false,
-        partial_parse: true,
-      },
       [name]: {
         target: 'dev',
         outputs: {
