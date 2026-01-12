@@ -110,6 +110,7 @@ const ProjectDetails: React.FC = () => {
     reorderTabs,
     reset,
     getTabByPath,
+    renameTab,
     refreshTabContentByPath,
     // Unsaved changes dialog support
     pendingClose,
@@ -744,6 +745,12 @@ const ProjectDetails: React.FC = () => {
             }
             setSelectedFilePath(filePath);
             openTab(filePath);
+          }}
+          onRenameFile={(oldPath, newPath) => {
+            renameTab(oldPath, newPath);
+            if (activeTab?.path === oldPath || selectedFilePath === oldPath) {
+              setSelectedFilePath(newPath);
+            }
           }}
           // Source Control Monaco Editor Integration
           onSourceControlOpenFile={(filePath: string) => {
