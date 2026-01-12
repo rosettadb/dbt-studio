@@ -365,17 +365,7 @@ const DataLake: React.FC = () => {
   };
 
   return (
-    <AppLayout
-      sidebarContent={
-        <DataLakeSidebar
-          instances={instances.map((i) => ({
-            id: i.id,
-            name: i.name,
-            status: i.status,
-          }))}
-        />
-      }
-    >
+    <AppLayout sidebarContent={<DataLakeSidebar instances={instances} />}>
       <Box sx={{ p: 2 }}>
         <Box>{renderContent()}</Box>
       </Box>
