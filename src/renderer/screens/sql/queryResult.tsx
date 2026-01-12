@@ -7,9 +7,9 @@ import { CustomTable } from '../../components/customTable';
 import { underscoreToTitleCase } from '../../helpers/utils';
 
 const SuccessContainer = styled(Box)(({ theme }) => ({
-  backgroundColor: theme.palette.success.light,
-  color: theme.palette.success.contrastText,
-  border: `1px solid ${theme.palette.success.main}`,
+  backgroundColor: theme.palette.background.paper,
+  color: theme.palette.text.primary,
+  border: `1px solid ${theme.palette.divider}`,
   borderRadius: theme.shape.borderRadius,
   padding: theme.spacing(2),
   display: 'flex',
@@ -56,7 +56,7 @@ export const QueryResult: React.FC<Props> = ({ results }) => {
     return (
       <SuccessContainer>
         <IconWrapper>
-          <CheckCircleOutline fontSize="large" />
+          <CheckCircleOutline fontSize="large" color="success" />
         </IconWrapper>
         <Box>
           <Typography variant="h6" fontWeight="bold">

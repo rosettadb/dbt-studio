@@ -23,6 +23,29 @@ import { Container } from './styles';
 import { QueryHistoryType } from '../../../../types/frontend';
 import { projectsServices } from '../../../services';
 
+const formatQueryPreview = (query: string, maxLength: number = 30) => {
+  if (!query) return '';
+
+  const lines = query.split('\n');
+  // Find the first line that is not a comment and not empty
+  const firstSignificantLine = lines.find((line) => {
+    const trimmed = line.trim();
+    return (
+      trimmed.length > 0 &&
+      !trimmed.startsWith('--') &&
+      !trimmed.startsWith('/*')
+    );
+  });
+
+  // If no significant line found, fallback to the first non-empty line
+  const preview = firstSignificantLine
+    ? firstSignificantLine.trim()
+    : query.trim().split('\n')[0].trim();
+
+  if (preview.length <= maxLength) return preview;
+  return `${preview.slice(0, maxLength)}...`;
+};
+
 type Props = {
   onQuerySelect: (value: QueryHistoryType) => void;
   queryHistory: QueryHistoryType[];
@@ -248,8 +271,7 @@ export const QueryHistoryToolbar: React.FC<ToolbarProps> = ({
                   maxWidth: '200px',
                 }}
               >
-                {qh.query.trim().slice(0, 30)}
-                {qh.query.trim().length > 30 ? '...' : ''}
+                {formatQueryPreview(qh.query, 30)}
               </div>
               <div
                 style={{
@@ -469,8 +491,7 @@ const QueryHistory: React.FC<Props> = ({
                   maxWidth: '200px',
                 }}
               >
-                {qh.query.trim().slice(0, 30)}
-                {qh.query.trim().length > 30 ? '...' : ''}
+                {formatQueryPreview(qh.query, 30)}
               </div>
               <div
                 style={{
