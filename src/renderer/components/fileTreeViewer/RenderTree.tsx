@@ -115,15 +115,13 @@ const RenderTree: React.FC<Props> = ({
         path: node.path,
         newName,
       });
-      const parentPath = node.path.substring(
-        0,
-        node.path.lastIndexOf(node.name),
+      const lastSepIndex = Math.max(
+        node.path.lastIndexOf('/'),
+        node.path.lastIndexOf('\\'),
       );
-      const separator = node.path.includes('\\') ? '\\' : '/';
-      const cleanParentPath = parentPath.endsWith(separator)
-        ? parentPath
-        : parentPath + separator;
-      const newPath = cleanParentPath + newName;
+      const parentPath =
+        lastSepIndex > 0 ? node.path.substring(0, lastSepIndex + 1) : '';
+      const newPath = parentPath + newName;
 
       if (typeof onRename === 'function') {
         onRename(node.path, newPath);

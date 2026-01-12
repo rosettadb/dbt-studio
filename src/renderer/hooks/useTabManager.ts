@@ -395,14 +395,32 @@ const useTabManager = (projectId?: string): UseTabManagerReturn => {
   const renameTab = React.useCallback((oldPath: string, newPath: string) => {
     setTabs((current) =>
       current.map((tab) => {
-        if (tab.path !== oldPath) {
-          return tab;
+        // Exact match - file rename
+        if (tab.path === oldPath) {
+          return {
+            ...tab,
+            path: newPath,
+            title: deriveTitleFromPath(newPath),
+          };
         }
-        return {
-          ...tab,
-          path: newPath,
-          title: deriveTitleFromPath(newPath),
-        };
+
+        // Check if tab is a child of renamed folder
+        // Normalize paths to ensure proper prefix matching
+        const isChild =
+          tab.path.startsWith(`${oldPath}/`) ||
+          tab.path.startsWith(`${oldPath}\\`);
+
+        if (isChild) {
+          // Replace the old path prefix with the new path
+          const updatedPath = tab.path.replace(oldPath, newPath);
+          return {
+            ...tab,
+            path: updatedPath,
+            title: deriveTitleFromPath(updatedPath),
+          };
+        }
+
+        return tab;
       }),
     );
   }, []);
