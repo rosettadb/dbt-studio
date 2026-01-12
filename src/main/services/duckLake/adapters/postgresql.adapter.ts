@@ -848,7 +848,7 @@ export class PostgreSQLCatalogAdapter extends CatalogAdapter {
           cs.contains_null,
           cs.contains_nan,
           cs.min_value,
-          cs.max_value,
+          cs.max_value
         FROM ${quotedMetadataDatabase}.ducklake_table_column_stats cs
         JOIN ${quotedMetadataDatabase}.ducklake_column c 
           ON cs.column_id = c.column_id 
@@ -899,7 +899,7 @@ export class PostgreSQLCatalogAdapter extends CatalogAdapter {
           file_order,
           begin_snapshot,
           end_snapshot,
-          partition_id,
+          partition_id
         FROM ${quotedMetadataDatabase}.ducklake_data_file
         WHERE table_id = ${tableId}
           AND ${currentSnapshot} >= begin_snapshot

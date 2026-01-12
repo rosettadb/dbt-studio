@@ -158,7 +158,10 @@ export const DataLakeInstanceDetails: React.FC<
     queryClient.invalidateQueries(duckLakeKeys.tables(instance.id));
     queryClient.invalidateQueries(duckLakeKeys.instanceHealth(instance.id));
     queryClient.invalidateQueries(duckLakeKeys.instance(instance.id));
-    queryClient.invalidateQueries(duckLakeKeys.instanceSnapshots(instance.id));
+    // Use exact: false to match parameterized snapshot queries
+    queryClient.invalidateQueries(duckLakeKeys.instanceSnapshots(instance.id), {
+      exact: false,
+    });
   };
 
   const isStorageHealthy = (value?: boolean) =>
@@ -756,21 +759,26 @@ export const DataLakeInstanceDetails: React.FC<
     </Box>
   );
 
-  /**
-   * Safely convert any value to string for React rendering
-   * Handles DuckDB hugeint objects and other non-primitive types
-   */
+  // Safely convert any value to string for React rendering (handles DuckDB hugeint, BigInt, circular objects)
   const safeToString = (value: any): string => {
     if (value === null || value === undefined) {
       return '-';
+    }
+    // Handle BigInt explicitly
+    if (typeof value === 'bigint') {
+      return String(value);
     }
     if (typeof value === 'object') {
       // Handle DuckDB hugeint objects
       if (value.hugeint !== undefined) {
         return String(value.hugeint);
       }
-      // Handle other objects
-      return JSON.stringify(value);
+      // Handle other objects with try/catch for circular references
+      try {
+        return JSON.stringify(value);
+      } catch {
+        return '-';
+      }
     }
     return String(value);
   };
