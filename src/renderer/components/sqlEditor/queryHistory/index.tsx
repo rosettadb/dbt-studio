@@ -206,48 +206,60 @@ export const QueryHistoryToolbar: React.FC<ToolbarProps> = ({
           maxHeight: 500,
         }}
       >
-        <MenuItem
+        <div
           style={{
-            marginTop: -8,
-            paddingTop: 8,
+            padding: '8px 16px',
+            fontWeight: 600,
+            color: theme.palette.text.secondary,
           }}
-          disabled
         >
           Query History
-        </MenuItem>
+        </div>
         {sortedHistory.map((qh, index) => (
           <Tooltip key={index} title={qh.query} placement="left">
             <MenuItem
               style={{
                 display: 'flex',
                 alignItems: 'center',
-                gap: 10,
-                margin: '4px 0',
+                gap: 12,
+                padding: '8px 16px',
+                borderBottom: `1px solid ${theme.palette.divider}`,
               }}
               onClick={() => {
                 setSelectedQueryHistory(qh);
                 handleClose();
               }}
             >
+              <HistoryOutlined
+                style={{
+                  fontSize: 18,
+                  color: theme.palette.text.secondary,
+                }}
+              />
               <div
                 style={{
-                  padding: '4px 12px',
-                  background: theme.palette.background.paper,
-                  borderRadius: theme.shape.borderRadius,
-                  fontSize: 16,
-                  color: theme.palette.primary.main,
+                  fontFamily: 'monospace',
+                  fontSize: 14,
+                  fontWeight: 500,
+                  color: theme.palette.text.primary,
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis',
+                  whiteSpace: 'nowrap',
+                  maxWidth: '200px',
                 }}
               >
-                {qh.query.trim().slice(0, 16)}...
+                {qh.query.trim().slice(0, 30)}
+                {qh.query.trim().length > 30 ? '...' : ''}
               </div>
               <div
                 style={{
                   marginLeft: 'auto',
-                  fontSize: 14,
+                  fontSize: 12,
                   color: theme.palette.text.secondary,
+                  whiteSpace: 'nowrap',
                 }}
               >
-                {moment(qh.executedAt).fromNow()}
+                {moment(qh.executedAt).fromNow(true)} ago
               </div>
             </MenuItem>
           </Tooltip>
@@ -415,48 +427,60 @@ const QueryHistory: React.FC<Props> = ({
           maxHeight: 500,
         }}
       >
-        <MenuItem
+        <div
           style={{
-            marginTop: -8,
-            paddingTop: 8,
+            padding: '8px 16px',
+            fontWeight: 600,
+            color: theme.palette.text.secondary,
           }}
-          disabled
         >
           Query History
-        </MenuItem>
+        </div>
         {sortedHistory.map((qh, index) => (
           <Tooltip key={index} title={qh.query} placement="left">
             <MenuItem
               style={{
                 display: 'flex',
                 alignItems: 'center',
-                gap: 10,
-                margin: '4px 0',
+                gap: 12,
+                padding: '8px 16px',
+                borderBottom: `1px solid ${theme.palette.divider}`,
               }}
               onClick={() => {
                 setSelectedQueryHistory(qh);
                 handleClose();
               }}
             >
+              <HistoryOutlined
+                style={{
+                  fontSize: 18,
+                  color: theme.palette.text.secondary,
+                }}
+              />
               <div
                 style={{
-                  padding: '4px 12px',
-                  background: theme.palette.background.paper,
-                  borderRadius: theme.shape.borderRadius,
-                  fontSize: 16,
-                  color: theme.palette.primary.main,
+                  fontFamily: 'monospace',
+                  fontSize: 14,
+                  fontWeight: 500,
+                  color: theme.palette.text.primary,
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis',
+                  whiteSpace: 'nowrap',
+                  maxWidth: '200px',
                 }}
               >
-                {qh.query.trim().slice(0, 16)}...
+                {qh.query.trim().slice(0, 30)}
+                {qh.query.trim().length > 30 ? '...' : ''}
               </div>
               <div
                 style={{
                   marginLeft: 'auto',
-                  fontSize: 14,
+                  fontSize: 12,
                   color: theme.palette.text.secondary,
+                  whiteSpace: 'nowrap',
                 }}
               >
-                {moment(qh.executedAt).fromNow()}
+                {moment(qh.executedAt).fromNow(true)} ago
               </div>
             </MenuItem>
           </Tooltip>
