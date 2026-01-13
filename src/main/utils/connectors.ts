@@ -70,6 +70,7 @@ export async function testRedshiftConnection(
 export const executePostgresQuery = async (
   config: PostgresConnection,
   query: string,
+  registerCancel?: (fn: () => void) => void,
 ): Promise<QueryResponseType> => {
   const client = new pg.Client({
     host: config.host,
@@ -79,6 +80,12 @@ export const executePostgresQuery = async (
     database: config.database,
     connectionTimeoutMillis: 5000,
   });
+
+  if (registerCancel) {
+    registerCancel(() => {
+      client.end();
+    });
+  }
 
   try {
     await client.connect();
@@ -99,6 +106,7 @@ export const executePostgresQuery = async (
 export const executeRedshiftQuery = async (
   config: RedshiftConnection,
   query: string,
+  registerCancel?: (fn: () => void) => void,
 ): Promise<QueryResponseType> => {
   const clientConfig: any = {
     host: config.host,
@@ -117,6 +125,12 @@ export const executeRedshiftQuery = async (
   }
 
   const client = new pg.Client(clientConfig);
+
+  if (registerCancel) {
+    registerCancel(() => {
+      client.end();
+    });
+  }
 
   try {
     await client.connect();
@@ -187,8 +201,15 @@ export async function testSnowflakeConnection(
 export const executeSnowflakeQuery = async (
   config: SnowflakeConnection,
   query: string,
+  registerCancel?: (fn: () => void) => void,
 ): Promise<QueryResponseType> => {
   const connection = createSnowflakeConnection(config);
+
+  if (registerCancel) {
+    registerCancel(() => {
+      connection.destroy(() => {});
+    });
+  }
 
   return new Promise((resolve) => {
     connection.connect((err) => {
@@ -255,8 +276,23 @@ export async function testDatabricksConnection(
 export const executeDatabricksQuery = async (
   config: DatabricksConnection,
   query: string,
+  registerCancel?: (fn: () => void) => void,
 ): Promise<QueryResponseType> => {
   const client = new DBSQLClient();
+  let session: any;
+  let queryOperation: any;
+
+  if (registerCancel) {
+    registerCancel(async () => {
+      try {
+        if (queryOperation) await queryOperation.close();
+        if (session) await session.close();
+        await client.close();
+      } catch (e) {
+        // ignore errors during cancellation
+      }
+    });
+  }
 
   try {
     const connection = await client.connect({
@@ -265,8 +301,8 @@ export const executeDatabricksQuery = async (
       path: config.httpPath,
     });
 
-    const session = await connection.openSession();
-    const queryOperation = await session.executeStatement(query, {
+    session = await connection.openSession();
+    queryOperation = await session.executeStatement(query, {
       runAsync: true,
     });
 
@@ -582,9 +618,31 @@ export async function testDuckDBConnection(
 export const executeDuckDBQuery = async (
   config: DuckDBConnection,
   query: string,
+  registerCancel?: (fn: () => void) => void,
 ): Promise<QueryResponseType> => {
   let instance: any = null;
   let connection: any = null;
+
+  if (registerCancel) {
+    registerCancel(async () => {
+      try {
+        if (connection) {
+          if (typeof connection.close === 'function') await connection.close();
+          else if (typeof connection.closeSync === 'function')
+            connection.closeSync();
+        }
+        if (instance) {
+          if (typeof instance.close === 'function') await instance.close();
+          else if (typeof instance.closeSync === 'function')
+            instance.closeSync();
+          else if (typeof instance.terminate === 'function')
+            await instance.terminate();
+        }
+      } catch (e) {
+        // ignore
+      }
+    });
+  }
 
   try {
     instance = await DuckDBInstance.create(config.database_path);

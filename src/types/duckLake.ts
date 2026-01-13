@@ -121,9 +121,6 @@ export interface DuckLakeSnapshotDetail {
   nextCatalogId: number;
   nextFileId: number;
   changesMade?: string;
-  author?: string;
-  commitMessage?: string;
-  commitExtraInfo?: string;
 }
 
 /**
@@ -227,6 +224,29 @@ export type DuckLakeInstanceStatus =
   | 'error'
   | 'connecting';
 
+// Health and Status Types
+export interface DuckLakeInstanceMetrics {
+  tableCount: number;
+  totalRows: number;
+  totalSize: number;
+  snapshotCount: number;
+  lastActivity?: Date;
+}
+
+export interface DuckLakeInstanceHealth {
+  instanceId: string;
+  status: DuckLakeInstanceStatus;
+  lastChecked: Date | string;
+  catalogConnected: boolean;
+  extensionLoaded: boolean;
+  dataPathAccessible: boolean;
+  storageConnected?: boolean;
+  storageLocation?: string;
+  errors?: string[];
+  warnings?: string[];
+  metrics?: DuckLakeInstanceMetrics;
+}
+
 export interface DuckLakeRuntimeOptions {
   maxMemory?: string;
   threads?: number;
@@ -241,8 +261,8 @@ export interface DuckLakeInstance {
   dataPath: string;
   storage?: DuckLakeStorageConfig;
   catalog: DuckLakeCatalogConfig;
-  createdAt: Date;
-  updatedAt: Date;
+  createdAt: Date | string;
+  updatedAt: Date | string;
   /**
    * Operational status of the instance configuration
    *
@@ -264,6 +284,16 @@ export interface DuckLakeInstance {
   status: DuckLakeInstanceStatus;
   tags?: string[];
   runtimeOptions?: DuckLakeRuntimeOptions;
+  runtime?: DuckLakeRuntimeOptions; // Alias for UI components
+
+  // Hydrated data for UI
+  health?: DuckLakeInstanceHealth;
+  stats?: {
+    tableCount: number;
+    totalSize: number;
+    lastQuery: string;
+    queryCount: number;
+  };
 }
 
 // Snapshot and Time Travel Types
@@ -376,29 +406,6 @@ export interface DuckLakeQueryResult {
   snapshotId?: string;
 }
 
-// Health and Status Types
-export interface DuckLakeInstanceMetrics {
-  tableCount: number;
-  totalRows: number;
-  totalSize: number;
-  snapshotCount: number;
-  lastActivity?: Date;
-}
-
-export interface DuckLakeInstanceHealth {
-  instanceId: string;
-  status: DuckLakeInstanceStatus;
-  lastChecked: Date;
-  catalogConnected: boolean;
-  extensionLoaded: boolean;
-  dataPathAccessible: boolean;
-  storageConnected?: boolean;
-  storageLocation?: string;
-  errors?: string[];
-  warnings?: string[];
-  metrics?: DuckLakeInstanceMetrics;
-}
-
 // Configuration and Settings Types
 export interface DuckLakeMaintenanceSchedule {
   enabled: boolean;
@@ -478,6 +485,19 @@ export interface DuckLakeTableDetails {
   // Tags (from ducklake_tag and ducklake_column_tag)
   tags: DuckLakeTag[];
   columnTags: DuckLakeColumnTag[];
+}
+
+export interface DuckLakeSnapshotParams {
+  page: number;
+  pageSize: number;
+  filter?: string;
+}
+
+export interface DuckLakePaginatedResult<T> {
+  data: T[];
+  total: number;
+  page: number;
+  pageSize: number;
 }
 
 // IPC Channel Types (for type-safe IPC communication)
@@ -565,6 +585,12 @@ export interface DuckLakeIpcChannels {
     instanceId: string,
     tableName: string,
   ) => Promise<DuckLakeTableDetails>;
+
+  // Instance Snapshots (Phase: History Fix)
+  'ducklake:instance:listSnapshots': (
+    instanceId: string,
+    params: DuckLakeSnapshotParams,
+  ) => Promise<DuckLakePaginatedResult<DuckLakeSnapshotDetail>>;
 
   // Cloud Connection Management (Phase: Connection Integration)
   'ducklake:connection:list': () => Promise<any[]>; // Returns CloudConnection[]

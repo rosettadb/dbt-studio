@@ -37,4 +37,5 @@ export type CustomTableType<T> = {
   customPagination?: CustomTablePagination<T>;
   rowActions?: Array<TableRowAction<T>>;
   containerStyle?: CSSProperties;
+  toolbarContent?: ReactNode;
 };

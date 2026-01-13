@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { useQueryClient } from 'react-query';
 import {
   Box,
   Typography,
@@ -20,6 +21,15 @@ import {
   Card,
   CardContent,
   LinearProgress,
+  Table,
+  TableBody,
+  TableCell,
+  TableContainer,
+  TableHead,
+  TableRow,
+  TablePagination,
+  TextField,
+  InputAdornment,
 } from '@mui/material';
 import {
   Dataset as Database,
@@ -36,6 +46,8 @@ import {
   Security,
   Speed,
   Memory,
+  Refresh,
+  Search,
 } from '@mui/icons-material';
 import { useNavigate } from 'react-router-dom';
 import moment from 'moment';
@@ -47,50 +59,13 @@ import {
 import {
   useRefreshDuckLakeInstanceHealth,
   useDuckLakeInstanceHealth,
+  duckLakeKeys,
+  useDuckLakeInstanceSnapshots,
 } from '../../controllers/duckLake.controller';
-import { DuckLakeStorageConfig } from '../../../types/duckLake';
-
-interface DuckLakeInstance {
-  id: string;
-  name: string;
-  status: 'active' | 'inactive' | 'error';
-  dataPath: string;
-  storage?: DuckLakeStorageConfig;
-  catalog: {
-    type: 'duckdb' | 'sqlite' | 'postgresql';
-    duckdb?: { metadataPath: string };
-    sqlite?: { metadataPath: string };
-    postgresql?: {
-      host: string;
-      port: number;
-      database: string;
-      username: string;
-      ssl: boolean;
-    };
-  };
-  runtime?: {
-    maxMemory?: string;
-    threads?: number;
-    enableOptimizer?: boolean;
-    tempDirectory?: string;
-  };
-  createdAt: string;
-  updatedAt: string;
-  description?: string;
-  health?: {
-    catalogConnected: boolean;
-    dataPathAccessible: boolean;
-    extensionLoaded: boolean;
-    lastChecked: string;
-    error?: string;
-  };
-  stats?: {
-    tableCount: number;
-    totalSize: number;
-    lastQuery: string;
-    queryCount: number;
-  };
-}
+import {
+  DuckLakeInstance,
+  DuckLakeSnapshotDetail,
+} from '../../../types/duckLake';
 
 interface DuckLakeInstanceDetailsProps {
   instance: DuckLakeInstance;
@@ -103,14 +78,36 @@ export const DataLakeInstanceDetails: React.FC<
   DuckLakeInstanceDetailsProps
 > = ({ instance, onEdit, onDelete, isLoading = false }) => {
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const [currentTab, setCurrentTab] = useState(0);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
 
   // Use the health check mutation for test connection
   const testConnectionMutation = useRefreshDuckLakeInstanceHealth();
 
+  // Snapshot Pagination State
+  const [snapshotPage, setSnapshotPage] = useState(0);
+  const [snapshotRowsPerPage, setSnapshotRowsPerPage] = useState(10);
+  const [snapshotFilter, setSnapshotFilter] = useState('');
+
   // Fetch health data for this instance
   const healthQuery = useDuckLakeInstanceHealth(instance.id);
+  const snapshotsQuery = useDuckLakeInstanceSnapshots(instance.id, {
+    page: snapshotPage + 1,
+    pageSize: snapshotRowsPerPage,
+    filter: snapshotFilter,
+  });
+
+  const handleChangePage = (_event: unknown, newPage: number) => {
+    setSnapshotPage(newPage);
+  };
+
+  const handleChangeRowsPerPage = (
+    event: React.ChangeEvent<HTMLInputElement>,
+  ) => {
+    setSnapshotRowsPerPage(parseInt(event.target.value, 10));
+    setSnapshotPage(0);
+  };
 
   const getStatusIcon = (status: string) => {
     switch (status) {
@@ -146,6 +143,7 @@ export const DataLakeInstanceDetails: React.FC<
   };
 
   const formatBytes = (bytes: number) => {
+    if (bytes <= 0) return '0 Bytes';
     const sizes = ['Bytes', 'KB', 'MB', 'GB', 'TB'];
     const i = Math.floor(Math.log(bytes) / Math.log(1024));
     return `${Math.round((bytes / 1024 ** i) * 100) / 100} ${sizes[i]}`;
@@ -153,6 +151,17 @@ export const DataLakeInstanceDetails: React.FC<
 
   const handleTestConnection = () => {
     testConnectionMutation.mutate(instance.id);
+  };
+
+  const handleRefresh = () => {
+    // Invalidate tables, health status, and snapshots for this instance
+    queryClient.invalidateQueries(duckLakeKeys.tables(instance.id));
+    queryClient.invalidateQueries(duckLakeKeys.instanceHealth(instance.id));
+    queryClient.invalidateQueries(duckLakeKeys.instance(instance.id));
+    // Use exact: false to match parameterized snapshot queries
+    queryClient.invalidateQueries(duckLakeKeys.instanceSnapshots(instance.id), {
+      exact: false,
+    });
   };
 
   const isStorageHealthy = (value?: boolean) =>
@@ -409,7 +418,11 @@ export const DataLakeInstanceDetails: React.FC<
                       primary="Storage Path"
                       secondary={healthQuery.data.storageLocation}
                       secondaryTypographyProps={{
-                        sx: { fontFamily: 'monospace' },
+                        sx: {
+                          fontFamily: 'monospace',
+                          wordBreak: 'break-all',
+                          overflowWrap: 'anywhere',
+                        },
                       }}
                     />
                   </ListItem>
@@ -525,7 +538,12 @@ export const DataLakeInstanceDetails: React.FC<
                 primary="Data Path"
                 secondary={instance.dataPath}
                 secondaryTypographyProps={{
-                  sx: { fontFamily: 'monospace', fontSize: '0.875rem' },
+                  sx: {
+                    fontFamily: 'monospace',
+                    fontSize: '0.875rem',
+                    wordBreak: 'break-all',
+                    overflowWrap: 'anywhere',
+                  },
                 }}
               />
             </ListItem>
@@ -582,7 +600,12 @@ export const DataLakeInstanceDetails: React.FC<
                   primary="Metadata Path"
                   secondary={instance.catalog.duckdb.metadataPath}
                   secondaryTypographyProps={{
-                    sx: { fontFamily: 'monospace', fontSize: '0.875rem' },
+                    sx: {
+                      fontFamily: 'monospace',
+                      fontSize: '0.875rem',
+                      wordBreak: 'break-all',
+                      overflowWrap: 'anywhere',
+                    },
                   }}
                 />
               </ListItem>
@@ -593,7 +616,12 @@ export const DataLakeInstanceDetails: React.FC<
                   primary="Metadata Path"
                   secondary={instance.catalog.sqlite.metadataPath}
                   secondaryTypographyProps={{
-                    sx: { fontFamily: 'monospace', fontSize: '0.875rem' },
+                    sx: {
+                      fontFamily: 'monospace',
+                      fontSize: '0.875rem',
+                      wordBreak: 'break-all',
+                      overflowWrap: 'anywhere',
+                    },
                   }}
                 />
               </ListItem>
@@ -605,6 +633,12 @@ export const DataLakeInstanceDetails: React.FC<
                     <ListItemText
                       primary="Host"
                       secondary={`${instance.catalog.postgresql.host}:${instance.catalog.postgresql.port}`}
+                      secondaryTypographyProps={{
+                        sx: {
+                          wordBreak: 'break-all',
+                          overflowWrap: 'anywhere',
+                        },
+                      }}
                     />
                   </ListItem>
                   <ListItem>
@@ -636,7 +670,7 @@ export const DataLakeInstanceDetails: React.FC<
         </Grid>
 
         {/* Runtime Configuration */}
-        {instance.runtime && (
+        {(instance.runtime || instance.runtimeOptions) && (
           <Grid item xs={12}>
             <Paper sx={{ p: 2 }}>
               <Typography
@@ -656,7 +690,9 @@ export const DataLakeInstanceDetails: React.FC<
                         Max Memory
                       </Typography>
                       <Typography variant="body1">
-                        {instance.runtime.maxMemory || 'Default'}
+                        {instance.runtime?.maxMemory ||
+                          instance.runtimeOptions?.maxMemory ||
+                          'Default'}
                       </Typography>
                     </Box>
                   </Box>
@@ -669,7 +705,9 @@ export const DataLakeInstanceDetails: React.FC<
                         Threads
                       </Typography>
                       <Typography variant="body1">
-                        {instance.runtime.threads || 'Auto'}
+                        {instance.runtime?.threads ||
+                          instance.runtimeOptions?.threads ||
+                          'Auto'}
                       </Typography>
                     </Box>
                   </Box>
@@ -682,7 +720,8 @@ export const DataLakeInstanceDetails: React.FC<
                         Optimizer
                       </Typography>
                       <Typography variant="body1">
-                        {instance.runtime.enableOptimizer
+                        {(instance.runtime?.enableOptimizer ??
+                        instance.runtimeOptions?.enableOptimizer)
                           ? 'Enabled'
                           : 'Disabled'}
                       </Typography>
@@ -698,9 +737,16 @@ export const DataLakeInstanceDetails: React.FC<
                       </Typography>
                       <Typography
                         variant="body1"
-                        sx={{ fontFamily: 'monospace', fontSize: '0.875rem' }}
+                        sx={{
+                          fontFamily: 'monospace',
+                          fontSize: '0.875rem',
+                          wordBreak: 'break-all',
+                          overflowWrap: 'anywhere',
+                        }}
                       >
-                        {instance.runtime.tempDirectory || 'Default'}
+                        {instance.runtime?.tempDirectory ||
+                          instance.runtimeOptions?.tempDirectory ||
+                          'Default'}
                       </Typography>
                     </Box>
                   </Box>
@@ -712,6 +758,30 @@ export const DataLakeInstanceDetails: React.FC<
       </Grid>
     </Box>
   );
+
+  // Safely convert any value to string for React rendering (handles DuckDB hugeint, BigInt, circular objects)
+  const safeToString = (value: any): string => {
+    if (value === null || value === undefined) {
+      return '-';
+    }
+    // Handle BigInt explicitly
+    if (typeof value === 'bigint') {
+      return String(value);
+    }
+    if (typeof value === 'object') {
+      // Handle DuckDB hugeint objects
+      if (value.hugeint !== undefined) {
+        return String(value.hugeint);
+      }
+      // Handle other objects with try/catch for circular references
+      try {
+        return JSON.stringify(value);
+      } catch {
+        return '-';
+      }
+    }
+    return String(value);
+  };
 
   return (
     <Box sx={{ p: 2 }}>
@@ -739,11 +809,19 @@ export const DataLakeInstanceDetails: React.FC<
             {instance.name}
           </Typography>
           <Typography variant="body2" color="text.secondary">
-            DuckLake Instance • {instance.catalog.type.toUpperCase()} Catalog
+            DataLake Instance • {instance.catalog.type.toUpperCase()} Catalog
           </Typography>
         </Box>
 
         <Box sx={{ display: 'flex', gap: 1 }}>
+          <Button
+            variant="outlined"
+            startIcon={<Refresh />}
+            onClick={handleRefresh}
+            disabled={isLoading}
+          >
+            Refresh
+          </Button>
           <Button
             variant="outlined"
             startIcon={<Edit />}
@@ -775,6 +853,7 @@ export const DataLakeInstanceDetails: React.FC<
           >
             <Tab label="Tables" />
             <Tab label="Overview" />
+            <Tab label="History" />
             <Tab label="Activity" />
           </Tabs>
         </Box>
@@ -782,9 +861,122 @@ export const DataLakeInstanceDetails: React.FC<
           {currentTab === 0 && <DataLakeTablesView instanceId={instance.id} />}
           {currentTab === 1 && renderOverviewTab()}
           {currentTab === 2 && (
+            <Box sx={{ mt: 1 }}>
+              <Box sx={{ display: 'flex', justifyContent: 'flex-end', mb: 1 }}>
+                <TextField
+                  size="small"
+                  placeholder="Search snapshots (ID or changes)..."
+                  value={snapshotFilter}
+                  onChange={(e) => {
+                    setSnapshotFilter(e.target.value);
+                    setSnapshotPage(0); // Reset pagination when filter changes
+                  }}
+                  slotProps={{
+                    input: {
+                      startAdornment: (
+                        <InputAdornment position="start">
+                          <Search fontSize="small" />
+                        </InputAdornment>
+                      ),
+                      sx: { fontSize: '0.8125rem', height: '32px' },
+                    },
+                  }}
+                  sx={{
+                    width: 300,
+                    '& .MuiInputBase-input': {
+                      paddingTop: '2px', // Very small padding for minimal height
+                      paddingBottom: '2px',
+                    },
+                    '& .MuiOutlinedInput-root': {
+                      minHeight: '32px', // Force minimal height
+                    },
+                  }}
+                />
+              </Box>
+
+              {snapshotsQuery.isLoading && <LinearProgress />}
+
+              {snapshotsQuery.isError && (
+                <Alert severity="error">
+                  Failed to load snapshot history:{' '}
+                  {(snapshotsQuery.error as Error)?.message || 'Unknown error'}
+                </Alert>
+              )}
+
+              {!snapshotsQuery.isLoading &&
+                !snapshotsQuery.isError &&
+                snapshotsQuery.data &&
+                snapshotsQuery.data.data.length > 0 && (
+                  <>
+                    <TableContainer>
+                      <Table size="small">
+                        <TableHead>
+                          <TableRow>
+                            <TableCell>Snapshot ID</TableCell>
+                            <TableCell>Time</TableCell>
+                            <TableCell>Schema Version</TableCell>
+                            <TableCell>Changes</TableCell>
+                          </TableRow>
+                        </TableHead>
+                        <TableBody>
+                          {snapshotsQuery.data.data.map(
+                            (snapshot: DuckLakeSnapshotDetail) => (
+                              <TableRow key={safeToString(snapshot.snapshotId)}>
+                                <TableCell>
+                                  <Chip
+                                    label={safeToString(snapshot.snapshotId)}
+                                    size="small"
+                                    color="primary"
+                                  />
+                                </TableCell>
+                                <TableCell>
+                                  {moment(snapshot.snapshotTime).format(
+                                    'YYYY-MM-DD HH:mm:ss',
+                                  )}
+                                  <Typography
+                                    variant="caption"
+                                    display="block"
+                                    color="text.secondary"
+                                  >
+                                    {moment(snapshot.snapshotTime).fromNow()}
+                                  </Typography>
+                                </TableCell>
+                                <TableCell>
+                                  {safeToString(snapshot.schemaVersion)}
+                                </TableCell>
+                                <TableCell>
+                                  {snapshot.changesMade || '-'}
+                                </TableCell>
+                              </TableRow>
+                            ),
+                          )}
+                        </TableBody>
+                      </Table>
+                    </TableContainer>
+                    <TablePagination
+                      component="div"
+                      count={snapshotsQuery.data.total}
+                      page={snapshotPage}
+                      onPageChange={handleChangePage}
+                      rowsPerPage={snapshotRowsPerPage}
+                      onRowsPerPageChange={handleChangeRowsPerPage}
+                      rowsPerPageOptions={[10, 25, 50, 100]}
+                    />
+                  </>
+                )}
+
+              {!snapshotsQuery.isLoading &&
+                !snapshotsQuery.isError &&
+                (!snapshotsQuery.data ||
+                  snapshotsQuery.data.data.length === 0) && (
+                  <Alert severity="info">No snapshot history available</Alert>
+                )}
+            </Box>
+          )}
+          {currentTab === 3 && (
             <Box sx={{ mt: 2 }}>
               <Typography variant="body1" color="text.secondary">
-                Activity history coming soon...
+                Activity coming soon...
               </Typography>
             </Box>
           )}

@@ -16,9 +16,12 @@ import {
   DuckLakeInstance,
   DuckLakeTableInfo,
   DuckLakeSnapshotInfo,
+  DuckLakeSnapshotDetail,
   DuckLakeQueryResult,
   DuckLakeQueryRequest,
   DuckLakeStorageConfig,
+  DuckLakeSnapshotParams,
+  DuckLakePaginatedResult,
 } from '../../../../types/duckLake';
 import { DuckLakeError } from '../../../../types/duckLakeErrors';
 import { normalizeNumericValue } from '../../../../renderer/utils/fileUtils';
@@ -512,6 +515,130 @@ export class SQLiteCatalogAdapter extends CatalogAdapter {
     }
   }
 
+  async listInstanceSnapshots(
+    params: DuckLakeSnapshotParams,
+  ): Promise<DuckLakePaginatedResult<DuckLakeSnapshotDetail>> {
+    try {
+      if (!this.connectionInfo) {
+        throw new Error('No active connection');
+      }
+
+      const { page, pageSize, filter } = params;
+      const offset = (page - 1) * pageSize;
+
+      // Find the DuckLake metadata database
+      const databasesQuery = `
+        SELECT database_name
+        FROM duckdb_databases()
+        WHERE database_name LIKE '__ducklake_metadata_%'
+        LIMIT 1
+      `;
+
+      const databasesResult =
+        await this.connectionInfo.connection.run(databasesQuery);
+      const databaseRows = await databasesResult.getRows();
+
+      if (databaseRows.length === 0) {
+        throw new Error('DuckLake metadata database not found');
+      }
+
+      const metadataDatabase = Array.isArray(databaseRows[0])
+        ? databaseRows[0][0]
+        : (databaseRows[0] as any).database_name;
+
+      // Quote the database name
+      const quotedMetadataDatabase = `"${metadataDatabase}"`;
+
+      // Build WHERE clause
+      let whereClause = '';
+      if (filter) {
+        // Sanitize filter for simple SQL injection prevention (basic)
+        // In real implementations, use bound parameters if possible, but DuckDB Node bindings might differ
+        // For text search in snapshots
+        // Escape LIKE wildcards first, then single quotes for SQL
+        const safeFilter = filter
+          .replace(/\\/g, '\\\\')
+          .replace(/%/g, '\\%')
+          .replace(/_/g, '\\_')
+          .replace(/'/g, "''");
+        whereClause = `
+          WHERE CAST(s.snapshot_id AS VARCHAR) LIKE '%${safeFilter}%' ESCAPE '\\'
+             OR sc.changes_made LIKE '%${safeFilter}%' ESCAPE '\\'
+        `;
+      }
+
+      // 1. Get Total Count
+      const countQuery = `
+        SELECT COUNT(*) as total
+        FROM ${quotedMetadataDatabase}.main.ducklake_snapshot s
+        LEFT JOIN ${quotedMetadataDatabase}.main.ducklake_snapshot_changes sc
+          ON s.snapshot_id = sc.snapshot_id
+        ${whereClause}
+      `;
+
+      const countResult = await this.connectionInfo.connection.run(countQuery);
+      const countRows = await countResult.getRows();
+      // Handle count result safely for BigInt/Number
+      const totalRaw = Array.isArray(countRows[0])
+        ? countRows[0][0]
+        : countRows[0].total;
+      const total = Number(String(totalRaw));
+
+      // 2. Get Data with Pagination
+      const snapshotsQuery = `
+        SELECT
+          s.snapshot_id,
+          s.snapshot_time,
+          s.schema_version,
+          s.next_catalog_id,
+          s.next_file_id,
+          sc.changes_made
+        FROM ${quotedMetadataDatabase}.main.ducklake_snapshot s
+        LEFT JOIN ${quotedMetadataDatabase}.main.ducklake_snapshot_changes sc
+          ON s.snapshot_id = sc.snapshot_id
+        ${whereClause}
+        ORDER BY s.snapshot_id DESC
+        LIMIT ${pageSize} OFFSET ${offset}
+      `;
+
+      const snapshotsResult =
+        await this.connectionInfo.connection.run(snapshotsQuery);
+      const rows = await snapshotsResult.getRows();
+
+      const data = rows.map((row: any) => {
+        if (Array.isArray(row)) {
+          return {
+            snapshotId: row[0],
+            snapshotTime: new Date(row[1]),
+            schemaVersion: row[2],
+            nextCatalogId: row[3],
+            nextFileId: row[4],
+            changesMade: row[5],
+          };
+        }
+        return {
+          snapshotId: row.snapshot_id,
+          snapshotTime: new Date(row.snapshot_time),
+          schemaVersion: row.schema_version,
+          nextCatalogId: row.next_catalog_id,
+          nextFileId: row.next_file_id,
+          changesMade: row.changes_made,
+        };
+      });
+
+      return {
+        data,
+        total,
+        page,
+        pageSize,
+      };
+    } catch (error) {
+      // eslint-disable-next-line no-console
+      console.error('Failed to list instance snapshots:', error);
+      throw error;
+    }
+  }
+
   /**
    * Get comprehensive table details from DuckLake metadata catalog (Phase 8b)
    * Queries multiple metadata tables to provide complete table information
@@ -916,8 +1043,49 @@ export class SQLiteCatalogAdapter extends CatalogAdapter {
         console.debug('No partition info found for table:', tableName);
       }
 
-      // 7. Get snapshots
+      // 7. Get table-specific snapshots using CTE
       const snapshotsQuery = `
+        WITH table_snapshots AS (
+          -- Snapshot when table was created
+          SELECT t.begin_snapshot as snapshot_id
+          FROM ${quotedMetadataDatabase}.main.ducklake_table t
+          WHERE t.table_id = ${tableId}
+          
+          UNION
+          
+          -- Snapshot when table was deleted (if applicable)
+          SELECT t.end_snapshot as snapshot_id
+          FROM ${quotedMetadataDatabase}.main.ducklake_table t
+          WHERE t.table_id = ${tableId} AND t.end_snapshot IS NOT NULL
+          
+          UNION
+          
+          -- Snapshots when columns were added/modified
+          SELECT c.begin_snapshot as snapshot_id
+          FROM ${quotedMetadataDatabase}.main.ducklake_column c
+          WHERE c.table_id = ${tableId}
+          
+          UNION
+          
+          -- Snapshots when columns were dropped
+          SELECT c.end_snapshot as snapshot_id
+          FROM ${quotedMetadataDatabase}.main.ducklake_column c
+          WHERE c.table_id = ${tableId} AND c.end_snapshot IS NOT NULL
+          
+          UNION
+          
+          -- Snapshots when data files were added
+          SELECT df.begin_snapshot as snapshot_id
+          FROM ${quotedMetadataDatabase}.main.ducklake_data_file df
+          WHERE df.table_id = ${tableId}
+          
+          UNION
+          
+          -- Snapshots when data files were deleted
+          SELECT df.end_snapshot as snapshot_id
+          FROM ${quotedMetadataDatabase}.main.ducklake_data_file df
+          WHERE df.table_id = ${tableId} AND df.end_snapshot IS NOT NULL
+        )
         SELECT
           s.snapshot_id,
           s.snapshot_time,
@@ -926,10 +1094,10 @@ export class SQLiteCatalogAdapter extends CatalogAdapter {
           s.next_file_id,
           sc.changes_made
         FROM ${quotedMetadataDatabase}.main.ducklake_snapshot s
+        INNER JOIN table_snapshots ts ON s.snapshot_id = ts.snapshot_id
         LEFT JOIN ${quotedMetadataDatabase}.main.ducklake_snapshot_changes sc
           ON s.snapshot_id = sc.snapshot_id
         ORDER BY s.snapshot_id DESC
-        LIMIT 50
       `;
 
       const snapshotsResult =

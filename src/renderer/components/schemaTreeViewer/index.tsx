@@ -60,10 +60,22 @@ const SchemaTreeViewer: React.FC<Props> = React.memo(
             </Tooltip>
           </Header>
         </Box>
-        {tables.length === 0 && (
+        {isLoadingSchema && (
+          <Box
+            sx={{
+              display: 'flex',
+              justifyContent: 'center',
+              alignItems: 'center',
+              padding: 4,
+            }}
+          >
+            <CircularProgress size={24} />
+          </Box>
+        )}
+        {!isLoadingSchema && tables.length === 0 && (
           <NoDataMessage>No Schema available</NoDataMessage>
         )}
-        {tables.length > 0 && (
+        {!isLoadingSchema && tables.length > 0 && (
           <StyledTreeView
             expandedItems={expandedItems}
             onExpandedItemsChange={handleExpandedItemsChange}

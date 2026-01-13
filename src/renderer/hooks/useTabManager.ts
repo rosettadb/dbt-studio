@@ -168,6 +168,7 @@ export interface UseTabManagerReturn {
   reorderTabs: (fromIndex: number, toIndex: number) => void;
   reset: () => void;
   getTabByPath: (path: string) => EditorTabState | undefined;
+  renameTab: (oldPath: string, newPath: string) => void;
   refreshTabContentByPath: (path: string) => Promise<void>;
   // Unsaved changes dialog support
   pendingClose: PendingCloseState | null;
@@ -270,15 +271,41 @@ const useTabManager = (projectId?: string): UseTabManagerReturn => {
     [performClose],
   );
 
-  const closeTabByPath = React.useCallback(
-    (path: string) => {
-      const targetTab = tabsRef.current.find((tab) => tab.path === path);
-      if (targetTab) {
-        closeTab(targetTab.id);
+  const closeTabByPath = React.useCallback((path: string) => {
+    const currentTabs = tabsRef.current;
+    const tabsToClose = currentTabs.filter(
+      (tab) =>
+        tab.path === path ||
+        tab.path.startsWith(`${path}/`) ||
+        tab.path.startsWith(`${path}\\`),
+    );
+
+    if (tabsToClose.length === 0) {
+      return;
+    }
+
+    const idsToClose = new Set(tabsToClose.map((t) => t.id));
+
+    setTabs((current) => {
+      const nextTabs = current.filter((t) => !idsToClose.has(t.id));
+
+      return nextTabs;
+    });
+
+    setActiveTabId((currentId) => {
+      if (currentId && idsToClose.has(currentId)) {
+        // If the active tab was closed, try to find a neighbor in the remaining tabs.
+        // Since tabs ref might not be updated yet, we derive remaining tabs from current ref.
+        const remaining = tabsRef.current.filter((t) => !idsToClose.has(t.id));
+        if (remaining.length === 0) {
+          return null;
+        }
+        // Fallback to the last available tab, or similar logic to performClose
+        return remaining[remaining.length - 1].id;
       }
-    },
-    [closeTab],
-  );
+      return currentId;
+    });
+  }, []);
 
   const updateTab = React.useCallback(
     (tabId: EditorTabId, updater: (tab: EditorTabState) => EditorTabState) => {
@@ -365,6 +392,39 @@ const useTabManager = (projectId?: string): UseTabManagerReturn => {
     [markTabSaved],
   );
 
+  const renameTab = React.useCallback((oldPath: string, newPath: string) => {
+    setTabs((current) =>
+      current.map((tab) => {
+        // Exact match - file rename
+        if (tab.path === oldPath) {
+          return {
+            ...tab,
+            path: newPath,
+            title: deriveTitleFromPath(newPath),
+          };
+        }
+
+        // Check if tab is a child of renamed folder
+        // Normalize paths to ensure proper prefix matching
+        const isChild =
+          tab.path.startsWith(`${oldPath}/`) ||
+          tab.path.startsWith(`${oldPath}\\`);
+
+        if (isChild) {
+          // Replace the old path prefix with the new path
+          const updatedPath = tab.path.replace(oldPath, newPath);
+          return {
+            ...tab,
+            path: updatedPath,
+            title: deriveTitleFromPath(updatedPath),
+          };
+        }
+
+        return tab;
+      }),
+    );
+  }, []);
+
   const reorderTabs = React.useCallback(
     (fromIndex: number, toIndex: number) => {
       setTabs((current) => {
@@ -412,12 +472,15 @@ const useTabManager = (projectId?: string): UseTabManagerReturn => {
       let isEditable = false;
       let hasInitialContent = false;
 
+      isEditable = isEditableFile(path);
+      hasInitialContent = typeof options?.content === 'string';
+
       setTabs((current) => {
         const existingTab = current.find((tab) => tab.path === path);
         if (existingTab) {
           targetId = existingTab.id;
           // Update existing tab with new options
-          return current.map((tab) =>
+          const updated = current.map((tab) =>
             tab.path === path
               ? {
                   ...tab,
@@ -425,11 +488,13 @@ const useTabManager = (projectId?: string): UseTabManagerReturn => {
                 }
               : tab,
           );
+          tabsRef.current = updated;
+          return updated;
         }
 
-        isEditable = isEditableFile(path);
-        hasInitialContent = typeof options?.content === 'string';
         const id = ensureUniqueId(path, current);
+        targetId = id;
+
         const initialContent =
           options?.content ??
           (isEditable ? '' : getNonEditableFileMessage(path));
@@ -447,13 +512,13 @@ const useTabManager = (projectId?: string): UseTabManagerReturn => {
           isReadOnly: options?.isReadOnly ?? !isEditable,
         };
 
-        targetId = id;
         shouldLoadContent = isEditable && !hasInitialContent;
         const updated = [...current, newTab];
         tabsRef.current = updated;
         return updated;
       });
 
+      // The setTabs callback runs synchronously, so targetId is set before this line
       if (!targetId) {
         return null;
       }
@@ -615,6 +680,7 @@ const useTabManager = (projectId?: string): UseTabManagerReturn => {
     reorderTabs,
     reset,
     getTabByPath,
+    renameTab,
     refreshTabContentByPath,
     // Unsaved changes dialog support
     pendingClose,

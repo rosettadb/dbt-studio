@@ -108,16 +108,20 @@ export const DataLakeTableImportWizard: React.FC<
 
   const handleImport = () => {
     let sourceQuery = '';
+    const src = sourceType === 'url' ? sourceUrl : filePath;
+    const escapedSrc = src.replace(/'/g, "''");
+    // Quote table name as identifier to prevent SQL injection and handle reserved words
+    const escapedTableName = `"${tableName.replace(/"/g, '""')}"`;
+    const isCsv = src.toLowerCase().endsWith('.csv');
 
-    switch (sourceType) {
-      case 'url':
-        sourceQuery = `CREATE TABLE ${tableName} AS FROM '${sourceUrl}'`;
-        break;
-      case 'file':
-        sourceQuery = `CREATE TABLE ${tableName} AS FROM '${filePath}'`;
-        break;
-      default:
-        sourceQuery = '';
+    if (isCsv) {
+      // Use specific CSV reader with error handling options
+      // ignore_errors=true: Skips rows with parsing errors
+      // null_padding=true: Pads missing columns with NULL
+      sourceQuery = `CREATE TABLE ${escapedTableName} AS SELECT * FROM read_csv_auto('${escapedSrc}', ignore_errors=true, null_padding=true)`;
+    } else {
+      // Default behavior for other formats (Parquet, JSON, etc.)
+      sourceQuery = `CREATE TABLE ${escapedTableName} AS FROM '${escapedSrc}'`;
     }
 
     onImport(tableName, sourceQuery);
@@ -242,12 +246,14 @@ export const DataLakeTableImportWizard: React.FC<
             onChange={(e) => setFilePath(e.target.value)}
             placeholder="/path/to/file.csv"
             helperText="Absolute or relative path to CSV, Parquet, or JSON file"
-            InputProps={{
-              endAdornment: (
-                <IconButton onClick={handleFileSelect} edge="end">
-                  <FolderOpen />
-                </IconButton>
-              ),
+            slotProps={{
+              input: {
+                endAdornment: (
+                  <IconButton onClick={handleFileSelect} edge="end">
+                    <FolderOpen />
+                  </IconButton>
+                ),
+              },
             }}
           />
           <Alert severity="info" sx={{ mt: 2 }}>
