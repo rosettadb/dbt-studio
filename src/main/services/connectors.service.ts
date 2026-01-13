@@ -523,7 +523,7 @@ export default class ConnectorsService {
     connection: ConnectionInput,
     projectName: string,
   ): Promise<string> {
-    const jdbcUrl = await this.generateJdbcUrl(connection, projectName);
+    const jdbcUrl = await this.generateJdbcUrl(connection);
     // Removed BigQuery keyfile fetch/validation here
     // USER and PASSWORD only declared here
     const USER = `db-user-${connection.name}`;
@@ -588,10 +588,7 @@ export default class ConnectorsService {
     }
   }
 
-  static async generateJdbcUrl(
-    conn: ConnectionInput,
-    projectName: string,
-  ): Promise<string> {
+  static async generateJdbcUrl(conn: ConnectionInput): Promise<string> {
     switch (conn.type) {
       case 'postgres':
         return `jdbc:postgresql://${conn.host}:${conn.port}/${conn.database}?currentSchema=${conn.schema}`;
@@ -617,7 +614,7 @@ export default class ConnectorsService {
       }
       case 'databricks':
         // Use token-based authentication with no username (UID)
-        const TOKEN = `db-token-${projectName}`;
+        const TOKEN = `db-token-${conn.name}`;
         return `jdbc:databricks://${conn.host}:443/default;transportMode=http;ssl=1;AuthMech=3;httpPath=${conn.httpPath};PWD=\${${TOKEN}}`;
       case 'duckdb':
         // DuckDB JDBC URL format
@@ -631,7 +628,7 @@ export default class ConnectorsService {
     connection: ConnectionInput,
     project: Project,
   ): Promise<RosettaConnection> {
-    const rosettaJdbcUrl = await this.generateJdbcUrl(connection, project.name);
+    const rosettaJdbcUrl = await this.generateJdbcUrl(connection);
     if (
       connection.type === 'bigquery' &&
       connection.method === 'service-account'

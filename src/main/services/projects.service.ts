@@ -228,6 +228,12 @@ export default class ProjectsService {
     }
     projects.push(project);
     await this.saveProjects(projects);
+
+    // If connection is selected, generate config files
+    if (connectionId) {
+      await ConnectorsService.loadConfigurations(project.id);
+    }
+
     return (await this.getProject(project.id)) ?? project;
   }
 
@@ -318,11 +324,16 @@ export default class ProjectsService {
     projects.push(project);
     await this.saveProjects(projects);
 
-    // Don't create empty profiles.yml - it will be generated when connection is configured
-    // For existing profiles.yml, update project name if needed
-    const profilesYmlPath = path.join(projectPath, 'profiles.yml');
-    if (fs.existsSync(profilesYmlPath)) {
-      await this.updateProfilesYmlProjectName(projectPath, finalProjectName);
+    // If connection is selected, generate config files
+    if (connectionId) {
+      await ConnectorsService.loadConfigurations(project.id);
+    } else {
+      // Don't create empty profiles.yml - it will be generated when connection is configured
+      // For existing profiles.yml, update project name if needed
+      const profilesYmlPath = path.join(projectPath, 'profiles.yml');
+      if (fs.existsSync(profilesYmlPath)) {
+        await this.updateProfilesYmlProjectName(projectPath, finalProjectName);
+      }
     }
 
     return project;

@@ -66,7 +66,7 @@ function generateProfileOutputFields(
         method: connection.method,
         project: connection.project,
         dataset: connection.dataset,
-        keyfile: `{{ env_var("db-keyfile-${connection.name}") }}`,
+        keyfile: `{{ env_var("db-bigquery-${connection.name}") }}`,
         location: connection.location,
         priority: connection.priority,
       };
@@ -106,6 +106,7 @@ function generateProfileOutputFields(
 
 /**
  * Generates the JDBC URL for main.conf
+ * @param connection - Connection configuration
  */
 function generateJdbcUrl(connection: ConnectionInput): string {
   switch (connection.type) {
@@ -115,10 +116,8 @@ function generateJdbcUrl(connection: ConnectionInput): string {
     case 'snowflake':
       return `jdbc:snowflake://${connection.account}.snowflakecomputing.com/?warehouse=${connection.warehouse}&db=${connection.database}&schema=${connection.schema}`;
 
-    case 'redshift': {
-      const baseUrl = `jdbc:redshift://${connection.host}:${connection.port}/${connection.database}?currentSchema=${connection.schema}`;
-      return connection.ssl ? `${baseUrl}&ssl=true&sslmode=require` : baseUrl;
-    }
+    case 'redshift':
+      return `jdbc:redshift://${connection.host}:${connection.port}/${connection.database}?currentSchema=${connection.schema}`;
 
     case 'bigquery':
       return `jdbc:bigquery://https://www.googleapis.com/bigquery/v2:443;ProjectId=${connection.project};`;
