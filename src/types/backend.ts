@@ -387,6 +387,9 @@ export type QueryResponseType = {
   fields?: { name: string; type: number }[];
   rowCount?: number; // Add rowCount for affected rows in INSERT/UPDATE/DELETE operations
   error?: string;
+  duration?: number;
+  isCommand?: boolean;
+  commandType?: string;
 };
 
 export type CliUpdateItem = {
@@ -496,6 +499,7 @@ export type ExecuteStatementType = {
   connection: ConnectionInput;
   query: string;
   projectName: string;
+  queryId?: string;
 };
 
 // AI Provider Types

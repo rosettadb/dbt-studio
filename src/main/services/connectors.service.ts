@@ -347,6 +347,17 @@ export default class ConnectorsService {
     }
   }
 
+  private static runningQueries = new Map<string, () => void>();
+
+  static async cancelQuery(queryId: string): Promise<void> {
+    const cancelFn = this.runningQueries.get(queryId);
+    if (cancelFn) {
+      // Execute the cancellation function (closes connection/client)
+      cancelFn();
+      this.runningQueries.delete(queryId);
+    }
+  }
+
   /**
    * Run a select statement and expect the results and fields
    */
@@ -354,6 +365,7 @@ export default class ConnectorsService {
     connection,
     query,
     projectName,
+    queryId,
   }: ExecuteStatementType): Promise<QueryResponseType> {
     const storeUser = await SecureStorageService.getCredential(
       `db-user-${projectName}`,
@@ -384,25 +396,71 @@ export default class ConnectorsService {
       (connection as any).keyfile = bigQueryKey;
     }
 
-    switch (connection.type) {
-      case 'postgres':
-        return executePostgresQuery(connection, query);
-      case 'snowflake':
-        return executeSnowflakeQuery(connection, query);
-      case 'bigquery':
-        return executeBigQueryQuery(connection, query);
-      case 'databricks':
-        return executeDatabricksQuery(connection, query);
-      case 'duckdb':
-        return executeDuckDBQuery(connection, query);
-      case 'redshift':
-        return executeRedshiftQuery(connection, query);
-      default:
-        // Use the literal type instead of accessing the property to avoid TypeScript error
-        throw new Error(
-          `Unsupported connection type: ${(connection as any).type}`,
-        );
+    const startTime = Date.now();
+    let response: QueryResponseType;
+
+    // Helper to register cancel callback if queryId is present
+    const registerCancel = queryId
+      ? (fn: () => void) => {
+          this.runningQueries.set(queryId, fn);
+        }
+      : undefined;
+
+    try {
+      switch (connection.type) {
+        case 'postgres':
+          response = await executePostgresQuery(
+            connection,
+            query,
+            registerCancel,
+          );
+          break;
+        case 'snowflake':
+          response = await executeSnowflakeQuery(
+            connection,
+            query,
+            registerCancel,
+          );
+          break;
+        case 'bigquery':
+          // BigQuery cancellation not yet implemented in utils
+          response = await executeBigQueryQuery(connection, query);
+          break;
+        case 'databricks':
+          response = await executeDatabricksQuery(
+            connection,
+            query,
+            registerCancel,
+          );
+          break;
+        case 'duckdb':
+          response = await executeDuckDBQuery(
+            connection,
+            query,
+            registerCancel,
+          );
+          break;
+        case 'redshift':
+          response = await executeRedshiftQuery(
+            connection,
+            query,
+            registerCancel,
+          );
+          break;
+        default:
+          throw new Error(
+            `Unsupported connection type: ${(connection as any).type}`,
+          );
+      }
+    } finally {
+      // Clean up running query registry
+      if (queryId) {
+        this.runningQueries.delete(queryId);
+      }
     }
+
+    response.duration = Date.now() - startTime;
+    return response;
   }
 
   static extractDbNameFromPath = (url: string) => {
@@ -637,10 +695,6 @@ export default class ConnectorsService {
     conn: ConnectionInput,
   ): Promise<string> {
     const profileConfig = {
-      config: {
-        send_anonymous_usage_stats: false,
-        partial_parse: true,
-      },
       [name]: {
         target: 'dev',
         outputs: {

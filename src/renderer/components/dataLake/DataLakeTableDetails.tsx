@@ -251,9 +251,26 @@ export const DataLakeTableDetails: React.FC = () => {
                         <TableCell>
                           <strong>Path</strong>
                         </TableCell>
-                        <TableCell>
-                          {tableDetails.path}
-                          {tableDetails.pathIsRelative && ' (relative)'}
+                        <TableCell
+                          sx={{
+                            wordBreak: 'break-all',
+                            overflowWrap: 'anywhere',
+                          }}
+                        >
+                          <Typography
+                            variant="body2"
+                            sx={{ fontFamily: 'monospace' }}
+                          >
+                            {tableDetails.path}
+                          </Typography>
+                          {tableDetails.pathIsRelative && (
+                            <Typography
+                              variant="caption"
+                              color="text.secondary"
+                            >
+                              (relative)
+                            </Typography>
+                          )}
                         </TableCell>
                       </TableRow>
                     )}
@@ -458,7 +475,11 @@ export const DataLakeTableDetails: React.FC = () => {
                           <TableCell>
                             <Typography
                               variant="body2"
-                              sx={{ fontFamily: 'monospace' }}
+                              sx={{
+                                fontFamily: 'monospace',
+                                wordBreak: 'break-all',
+                                overflowWrap: 'anywhere',
+                              }}
                             >
                               {file.path}
                             </Typography>
@@ -600,9 +621,7 @@ export const DataLakeTableDetails: React.FC = () => {
                       <TableCell>Snapshot ID</TableCell>
                       <TableCell>Time</TableCell>
                       <TableCell>Schema Version</TableCell>
-                      <TableCell>Author</TableCell>
                       <TableCell>Changes</TableCell>
-                      <TableCell>Commit Message</TableCell>
                     </TableRow>
                   </TableHead>
                   <TableBody>
@@ -631,9 +650,7 @@ export const DataLakeTableDetails: React.FC = () => {
                           <TableCell>
                             {safeToString(snapshot.schemaVersion)}
                           </TableCell>
-                          <TableCell>{snapshot.author || '-'}</TableCell>
                           <TableCell>{snapshot.changesMade || '-'}</TableCell>
-                          <TableCell>{snapshot.commitMessage || '-'}</TableCell>
                         </TableRow>
                       ),
                     )}

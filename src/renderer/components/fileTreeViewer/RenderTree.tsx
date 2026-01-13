@@ -50,6 +50,7 @@ type Props = {
   copyPathData: string;
   onPastePath: (source: string, target: string) => void;
   selectedPath?: string;
+  onRename?: (oldPath: string, newPath: string) => void;
 };
 
 const getColorByStatus = (status?: string) => {
@@ -85,6 +86,7 @@ const RenderTree: React.FC<Props> = ({
   onPastePath,
   copyPathData,
   selectedPath,
+  onRename,
 }) => {
   const [menuPosition, setMenuPosition] =
     React.useState<null | PopoverPosition>(null);
@@ -113,6 +115,18 @@ const RenderTree: React.FC<Props> = ({
         path: node.path,
         newName,
       });
+      const lastSepIndex = Math.max(
+        node.path.lastIndexOf('/'),
+        node.path.lastIndexOf('\\'),
+      );
+      const parentPath =
+        lastSepIndex > 0 ? node.path.substring(0, lastSepIndex + 1) : '';
+      const newPath = parentPath + newName;
+
+      if (typeof onRename === 'function') {
+        onRename(node.path, newPath);
+      }
+
       if (typeof onRefresh === 'function') {
         onRefresh();
       }
@@ -121,7 +135,7 @@ const RenderTree: React.FC<Props> = ({
     } finally {
       setRenameOpen(false);
     }
-  }, [renameValue, node.path, node.name, onRefresh]);
+  }, [renameValue, node.path, node.name, onRefresh, onRename]);
 
   const fileStatus = fileStatuses[node.path];
   const labelColor = getColorByStatus(fileStatus);
@@ -416,6 +430,7 @@ const RenderTree: React.FC<Props> = ({
           onPastePath={onPastePath}
           copyPathData={copyPathData}
           selectedPath={selectedPath}
+          onRename={onRename}
         />
       ))}
     </TreeItem>

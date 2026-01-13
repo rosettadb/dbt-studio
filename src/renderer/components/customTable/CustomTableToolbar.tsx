@@ -1,5 +1,5 @@
-import React from 'react';
-import { Toolbar, Typography, Tooltip, TextField } from '@mui/material';
+import React, { ReactNode } from 'react';
+import { Toolbar, Typography, Tooltip, TextField, Box } from '@mui/material';
 import { makeStyles } from '@mui/styles';
 
 const useStyles = makeStyles({
@@ -10,33 +10,53 @@ const useStyles = makeStyles({
   title: {
     flex: '1 1 45%',
   },
+  searchContainer: {
+    paddingTop: '4px',
+    paddingBottom: '4px',
+  },
 });
 
 type Props = {
   name: string;
   handleSearch: (keyword: string) => void;
+  toolbarContent?: ReactNode;
 };
 
-const CustomTableToolbar = ({ name, handleSearch }: Props) => {
+const CustomTableToolbar = ({ name, handleSearch, toolbarContent }: Props) => {
   const classes = useStyles();
   return (
     <div>
-      <Toolbar>
-        <Typography
-          className={classes.title}
-          variant="h6"
-          id="tableTitle"
-          component="div"
-        >
-          {name}
-        </Typography>
+      <Toolbar
+        variant="dense"
+        style={{ minHeight: '36px', paddingLeft: '8px', paddingRight: '8px' }}
+      >
+        {name ? (
+          <Typography
+            className={classes.title}
+            variant="h6"
+            id="tableTitle"
+            component="div"
+          >
+            {name}
+          </Typography>
+        ) : (
+          <div className={classes.title} />
+        )}
+
+        {toolbarContent && <Box mr={2}>{toolbarContent}</Box>}
+
         <Tooltip title="Search by name">
           <TextField
             name="search"
-            label="Search"
-            color="primary"
+            placeholder="Search..."
+            variant="outlined"
+            size="small"
+            className={classes.searchContainer}
             onChange={(event) => {
               handleSearch(event.target.value);
+            }}
+            InputProps={{
+              style: { height: 32, fontSize: '0.875rem' },
             }}
           />
         </Tooltip>

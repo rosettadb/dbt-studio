@@ -23,6 +23,29 @@ import { Container } from './styles';
 import { QueryHistoryType } from '../../../../types/frontend';
 import { projectsServices } from '../../../services';
 
+const formatQueryPreview = (query: string, maxLength: number = 30) => {
+  if (!query) return '';
+
+  const lines = query.split('\n');
+  // Find the first line that is not a comment and not empty
+  const firstSignificantLine = lines.find((line) => {
+    const trimmed = line.trim();
+    return (
+      trimmed.length > 0 &&
+      !trimmed.startsWith('--') &&
+      !trimmed.startsWith('/*')
+    );
+  });
+
+  // If no significant line found, fallback to the first non-empty line
+  const preview = firstSignificantLine
+    ? firstSignificantLine.trim()
+    : query.trim().split('\n')[0].trim();
+
+  if (preview.length <= maxLength) return preview;
+  return `${preview.slice(0, maxLength)}...`;
+};
+
 type Props = {
   onQuerySelect: (value: QueryHistoryType) => void;
   queryHistory: QueryHistoryType[];
@@ -206,48 +229,59 @@ export const QueryHistoryToolbar: React.FC<ToolbarProps> = ({
           maxHeight: 500,
         }}
       >
-        <MenuItem
+        <div
           style={{
-            marginTop: -8,
-            paddingTop: 8,
+            padding: '8px 16px',
+            fontWeight: 600,
+            color: theme.palette.text.secondary,
           }}
-          disabled
         >
           Query History
-        </MenuItem>
+        </div>
         {sortedHistory.map((qh, index) => (
           <Tooltip key={index} title={qh.query} placement="left">
             <MenuItem
               style={{
                 display: 'flex',
                 alignItems: 'center',
-                gap: 10,
-                margin: '4px 0',
+                gap: 12,
+                padding: '8px 16px',
+                borderBottom: `1px solid ${theme.palette.divider}`,
               }}
               onClick={() => {
                 setSelectedQueryHistory(qh);
                 handleClose();
               }}
             >
+              <HistoryOutlined
+                style={{
+                  fontSize: 18,
+                  color: theme.palette.text.secondary,
+                }}
+              />
               <div
                 style={{
-                  padding: '4px 12px',
-                  background: theme.palette.background.paper,
-                  borderRadius: theme.shape.borderRadius,
-                  fontSize: 16,
-                  color: theme.palette.primary.main,
+                  fontFamily: 'monospace',
+                  fontSize: 14,
+                  fontWeight: 500,
+                  color: theme.palette.text.primary,
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis',
+                  whiteSpace: 'nowrap',
+                  maxWidth: '200px',
                 }}
               >
-                {qh.query.trim().slice(0, 16)}...
+                {formatQueryPreview(qh.query, 30)}
               </div>
               <div
                 style={{
                   marginLeft: 'auto',
-                  fontSize: 14,
+                  fontSize: 12,
                   color: theme.palette.text.secondary,
+                  whiteSpace: 'nowrap',
                 }}
               >
-                {moment(qh.executedAt).fromNow()}
+                {moment(qh.executedAt).fromNow(true)} ago
               </div>
             </MenuItem>
           </Tooltip>
@@ -415,48 +449,59 @@ const QueryHistory: React.FC<Props> = ({
           maxHeight: 500,
         }}
       >
-        <MenuItem
+        <div
           style={{
-            marginTop: -8,
-            paddingTop: 8,
+            padding: '8px 16px',
+            fontWeight: 600,
+            color: theme.palette.text.secondary,
           }}
-          disabled
         >
           Query History
-        </MenuItem>
+        </div>
         {sortedHistory.map((qh, index) => (
           <Tooltip key={index} title={qh.query} placement="left">
             <MenuItem
               style={{
                 display: 'flex',
                 alignItems: 'center',
-                gap: 10,
-                margin: '4px 0',
+                gap: 12,
+                padding: '8px 16px',
+                borderBottom: `1px solid ${theme.palette.divider}`,
               }}
               onClick={() => {
                 setSelectedQueryHistory(qh);
                 handleClose();
               }}
             >
+              <HistoryOutlined
+                style={{
+                  fontSize: 18,
+                  color: theme.palette.text.secondary,
+                }}
+              />
               <div
                 style={{
-                  padding: '4px 12px',
-                  background: theme.palette.background.paper,
-                  borderRadius: theme.shape.borderRadius,
-                  fontSize: 16,
-                  color: theme.palette.primary.main,
+                  fontFamily: 'monospace',
+                  fontSize: 14,
+                  fontWeight: 500,
+                  color: theme.palette.text.primary,
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis',
+                  whiteSpace: 'nowrap',
+                  maxWidth: '200px',
                 }}
               >
-                {qh.query.trim().slice(0, 16)}...
+                {formatQueryPreview(qh.query, 30)}
               </div>
               <div
                 style={{
                   marginLeft: 'auto',
-                  fontSize: 14,
+                  fontSize: 12,
                   color: theme.palette.text.secondary,
+                  whiteSpace: 'nowrap',
                 }}
               >
-                {moment(qh.executedAt).fromNow()}
+                {moment(qh.executedAt).fromNow(true)} ago
               </div>
             </MenuItem>
           </Tooltip>

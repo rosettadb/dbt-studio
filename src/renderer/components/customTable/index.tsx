@@ -19,6 +19,7 @@ const CustomTable = <T,>({
   loading,
   rowActions,
   containerStyle,
+  toolbarContent,
 }: CustomTableType<T>) => {
   const [page, setPage] = React.useState(0);
   const [perPage, setPerPage] = useLocalStorage(id, '10');
@@ -58,6 +59,7 @@ const CustomTable = <T,>({
       )}
       <CustomTableToolbar
         name={name}
+        toolbarContent={toolbarContent}
         handleSearch={(value) => {
           if (customPagination) {
             customPagination.setKeyword(value);
@@ -73,7 +75,7 @@ const CustomTable = <T,>({
           pointerEvents: loading ? 'none' : 'auto',
         }}
       >
-        <Table stickyHeader>
+        <Table stickyHeader size="small">
           <CustomTableHead
             onRequestSort={(property) => {
               if (customPagination) {

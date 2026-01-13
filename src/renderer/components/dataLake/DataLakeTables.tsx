@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import {
   Box,
   Card,
@@ -46,9 +46,18 @@ export const DataLakeTables: React.FC<DuckLakeTablesProps> = ({
 }) => {
   const navigate = useNavigate();
 
-  const filteredTables = selectedInstanceId
-    ? tables.filter((table) => table.instanceId === selectedInstanceId)
-    : tables;
+  const filteredTables = useMemo(() => {
+    const result = selectedInstanceId
+      ? tables.filter((table) => table.instanceId === selectedInstanceId)
+      : [...tables];
+
+    // Sort by createdAt descending (newest first)
+    return result.sort((a, b) => {
+      const dateA = new Date(a.createdAt).getTime();
+      const dateB = new Date(b.createdAt).getTime();
+      return dateB - dateA;
+    });
+  }, [tables, selectedInstanceId]);
 
   const formatBytes = (bytes?: number) => {
     if (!bytes) return 'Unknown';
@@ -105,7 +114,7 @@ export const DataLakeTables: React.FC<DuckLakeTablesProps> = ({
         </Box>
         {selectedInstanceId && (
           <Chip
-            label={`ducklakes: ${tables.find((t) => t.instanceId === selectedInstanceId)?.instanceName || selectedInstanceId}`}
+            label={`${tables.find((t) => t.instanceId === selectedInstanceId)?.instanceName || selectedInstanceId}`}
             variant="outlined"
             color="primary"
           />

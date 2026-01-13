@@ -81,7 +81,8 @@ export type ConnectorChannels =
   | 'connector:list'
   | 'connector:get'
   | 'connector:update'
-  | 'connector:delete';
+  | 'connector:delete'
+  | 'connector:cancel-query';
 
 export type SourcesChannels =
   | 'sources:create'
@@ -280,6 +281,7 @@ export type DuckLakeChannels =
 
   // Snapshot Management
   | 'ducklake:snapshot:list'
+  | 'ducklake:instance:listSnapshots'
   | 'ducklake:snapshot:restore'
 
   // Query Execution

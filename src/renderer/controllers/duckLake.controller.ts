@@ -1,6 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from 'react-query';
 import { toast } from 'react-toastify';
 import { DuckLakeService } from '../services/duckLake.service';
+import { DuckLakeSnapshotParams } from '../../types/duckLake';
 import { cloudExplorerKeys } from './cloudExplorer.controller';
 
 // Query keys for React Query cache management
@@ -18,6 +19,8 @@ export const duckLakeKeys = {
     [...duckLakeKeys.table(instanceId, tableName), 'details'] as const, // Phase 8b
   snapshots: (instanceId: string, tableName: string) =>
     [...duckLakeKeys.table(instanceId, tableName), 'snapshots'] as const,
+  instanceSnapshots: (instanceId: string, params?: DuckLakeSnapshotParams) =>
+    [...duckLakeKeys.instance(instanceId), 'snapshots', params] as const,
   maintenanceTasks: (instanceId: string) =>
     [...duckLakeKeys.instance(instanceId), 'maintenance'] as const,
   maintenanceTask: (taskId: string) =>
@@ -189,6 +192,19 @@ export function useDuckLakeSnapshots(instanceId: string, tableName: string) {
     queryKey: duckLakeKeys.snapshots(instanceId, tableName),
     queryFn: () => DuckLakeService.listSnapshots(instanceId, tableName),
     enabled: !!instanceId && !!tableName,
+    staleTime: 30000,
+  });
+}
+
+export function useDuckLakeInstanceSnapshots(
+  instanceId: string,
+  params: DuckLakeSnapshotParams,
+) {
+  return useQuery({
+    queryKey: duckLakeKeys.instanceSnapshots(instanceId, params),
+    queryFn: () => DuckLakeService.listInstanceSnapshots(instanceId, params),
+    enabled: !!instanceId,
+    keepPreviousData: true,
     staleTime: 30000,
   });
 }

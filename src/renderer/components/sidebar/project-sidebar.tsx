@@ -20,6 +20,7 @@ interface ExplorerTabProps {
   onRefreshFiles: () => Promise<void>;
   onCopyPath: (source: string, target: string) => Promise<void>;
   onNewFile: (filePath?: string) => void;
+  onRenameFile?: (oldPath: string, newPath: string) => void;
 }
 
 const ExplorerTab: React.FC<ExplorerTabProps> = ({
@@ -32,6 +33,7 @@ const ExplorerTab: React.FC<ExplorerTabProps> = ({
   onRefreshFiles,
   onCopyPath,
   onNewFile,
+  onRenameFile,
 }) => {
   return (
     <FileTreeContainer>
@@ -46,6 +48,7 @@ const ExplorerTab: React.FC<ExplorerTabProps> = ({
           copyPath={onCopyPath}
           onNewFileCallback={onNewFile}
           selectedPath={selectedFilePath}
+          onRenameCallback={onRenameFile}
         />
       )}
     </FileTreeContainer>
@@ -96,6 +99,7 @@ interface ProjectSidebarProps {
   onRefreshFiles: () => Promise<void>;
   onCopyPath: (source: string, target: string) => Promise<void>;
   onNewFile: (filePath?: string) => void;
+  onRenameFile?: (oldPath: string, newPath: string) => void;
 
   // Source Control tab integration with Monaco editor
   onSourceControlOpenFile?: (filePath: string) => void;
@@ -118,6 +122,7 @@ export const ProjectSidebar: React.FC<ProjectSidebarProps> = ({
   onRefreshFiles,
   onCopyPath,
   onNewFile,
+  onRenameFile,
   onSourceControlOpenFile,
   onSourceControlFileSelect,
   onSourceControlRefreshFileContent,
@@ -272,6 +277,7 @@ export const ProjectSidebar: React.FC<ProjectSidebarProps> = ({
             onRefreshFiles={onRefreshFiles}
             onCopyPath={onCopyPath}
             onNewFile={onNewFile}
+            onRenameFile={onRenameFile}
           />
         )}
 
