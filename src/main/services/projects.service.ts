@@ -65,9 +65,18 @@ export default class ProjectsService {
         ...project,
         lastOpenedAt: Date.now(),
       });
+      // Parse config files to populate rosettaConnection and dbtConnection
+      // without regenerating the files
       try {
-        return ConnectorsService.loadConfigurations(project.id);
+        const parsedConfig =
+          await ConnectorsService.parseProjectConnectionFiles(project.path);
+        return {
+          ...project,
+          rosettaConnection: parsedConfig.rosettaConnection,
+          dbtConnection: parsedConfig.dbtConnection,
+        };
       } catch {
+        // If parsing fails, return project without these properties
         return project;
       }
     }
@@ -212,6 +221,7 @@ export default class ProjectsService {
       }
     }
     await this.copyDbtTemplateFiles(project.path, project.name);
+    // Always copy main.conf template (rosetta requires it), but profiles.yml is excluded from template
     await this.copyRosettaMainConf(project.path);
     if (createTemplateFolders) {
       await this.createDbtTemplateFolderStructure(project.path);
@@ -301,18 +311,17 @@ export default class ProjectsService {
     try {
       await fs.promises.access(rosettaPath);
     } catch {
+      // Always copy main.conf template (rosetta requires it)
       await this.copyRosettaMainConf(projectPath);
     }
 
     projects.push(project);
     await this.saveProjects(projects);
 
-    // Check if profiles.yml exists, if not create an empty one
+    // Don't create empty profiles.yml - it will be generated when connection is configured
+    // For existing profiles.yml, update project name if needed
     const profilesYmlPath = path.join(projectPath, 'profiles.yml');
-    if (!fs.existsSync(profilesYmlPath)) {
-      await this.createEmptyProfilesYml(projectPath, finalProjectName);
-    } else {
-      // Update existing profiles.yml with correct project name
+    if (fs.existsSync(profilesYmlPath)) {
       await this.updateProfilesYmlProjectName(projectPath, finalProjectName);
     }
 
@@ -441,6 +450,50 @@ export default class ProjectsService {
     return searchDbtProject(rootPath);
   }
 
+  /**
+   * Find the actual dbt project root directory by searching for dbt_project.yml
+   * Handles nested directory structures (e.g., from cloned repos or zips)
+   * Recursively searches subdirectories
+   */
+  static async findDbtProjectRoot(startPath: string): Promise<string | null> {
+    const searchRecursively = async (
+      currentPath: string,
+    ): Promise<string | null> => {
+      try {
+        const entries = fs.readdirSync(currentPath, { withFileTypes: true });
+
+        // Check if dbt_project.yml exists in current directory
+        const hasDbtProject = entries.some(
+          (entry) => entry.isFile() && entry.name === 'dbt_project.yml',
+        );
+
+        if (hasDbtProject) {
+          return currentPath;
+        }
+
+        // Search in subdirectories (skip hidden directories)
+        // eslint-disable-next-line no-restricted-syntax
+        for (const entry of entries) {
+          if (entry.isDirectory() && !entry.name.startsWith('.')) {
+            const subdirPath = path.join(currentPath, entry.name);
+            // eslint-disable-next-line no-await-in-loop
+            const result = await searchRecursively(subdirPath);
+            if (result) {
+              return result;
+            }
+          }
+        }
+
+        return null;
+      } catch {
+        // Handle permission errors or other issues
+        return null;
+      }
+    };
+
+    return searchRecursively(startPath);
+  }
+
   static async validateDbtProject(projectPath: string): Promise<{
     isValid: boolean;
     projectName?: string;
@@ -450,10 +503,10 @@ export default class ProjectsService {
     let projectName: string | undefined;
 
     try {
-      // Check if dbt_project.yml exists
+      // Check if dbt_project.yml exists at root or in nested directory
       const dbtProjectPath = path.join(projectPath, 'dbt_project.yml');
       if (!fs.existsSync(dbtProjectPath)) {
-        errors.push('dbt_project.yml file not found');
+        errors.push('dbt_project.yml file not found at expected location');
         return { isValid: false, errors };
       }
 
@@ -527,6 +580,15 @@ export default class ProjectsService {
         projectPath = await this.extractCompressedFile(selectedPath);
         isExtracted = true;
       }
+
+      // Find the actual dbt project root (handles nested directories)
+      const dbtRoot = await this.findDbtProjectRoot(projectPath);
+      if (!dbtRoot) {
+        throw new Error(
+          'No dbt_project.yml found. Please ensure this is a valid dbt project.',
+        );
+      }
+      projectPath = dbtRoot;
 
       // Validate the dbt project
       const validation = await this.validateDbtProject(projectPath);
@@ -608,6 +670,7 @@ export default class ProjectsService {
         isExtracted,
       };
 
+      // Always copy main.conf template if rosetta folder doesn't exist (rosetta requires it)
       const rosettaPath = path.join(projectPath, 'rosetta');
       if (!fs.existsSync(rosettaPath)) {
         await this.copyRosettaMainConf(projectPath);
@@ -616,12 +679,10 @@ export default class ProjectsService {
       projects.push(newProject);
       await this.saveProjects(projects);
 
-      // Check if profiles.yml exists, if not create an empty one, or update existing one
+      // Don't create empty profiles.yml - it will be generated when connection is configured
+      // For existing profiles.yml, update project name if needed
       const profilesYmlPath = path.join(projectPath, 'profiles.yml');
-      if (!fs.existsSync(profilesYmlPath)) {
-        await this.createEmptyProfilesYml(projectPath, finalProjectName);
-      } else {
-        // Update existing profiles.yml with correct project name
+      if (fs.existsSync(profilesYmlPath)) {
         await this.updateProfilesYmlProjectName(projectPath, finalProjectName);
       }
 
@@ -649,6 +710,12 @@ export default class ProjectsService {
     const projects = await this.loadProjects();
     const index = projects.findIndex((p) => p.id === project.id);
     if (index === -1) return null;
+
+    // Check if connectionId is changing
+    const oldConnectionId = projects[index].connectionId;
+    const newConnectionId = project.connectionId;
+    const connectionChanged = oldConnectionId !== newConnectionId;
+
     const updatedProject = { ...projects[index], ...project };
 
     // Patch: If the project has a bigquery connection, store only the key name
@@ -667,7 +734,13 @@ export default class ProjectsService {
     projects[index] = updatedProject;
     await updateDatabase<'selectedProject'>('selectedProject', updatedProject);
     await this.saveProjects(projects);
-    await ConnectorsService.loadConfigurations(project.id);
+
+    // Only regenerate config files if the connection changed
+    // This is a full regeneration because it's switching to a different connection
+    if (connectionChanged && newConnectionId) {
+      await ConnectorsService.loadConfigurations(project.id);
+    }
+
     return projects;
   }
 
@@ -748,7 +821,14 @@ export default class ProjectsService {
     const templatePath = (await SettingsService.loadSettings())
       .dbtSampleDirectory;
 
-    fs.cpSync(templatePath, targetPath, { recursive: true });
+    // Copy template files excluding profiles.yml (will be generated when connection is configured)
+    fs.cpSync(templatePath, targetPath, {
+      recursive: true,
+      filter: (source) => {
+        // Exclude profiles.yml from template copy
+        return !source.endsWith('profiles.yml');
+      },
+    });
 
     const dbtProjectYmlPath = path.join(targetPath, 'dbt_project.yml');
     const dbtProjectContent = fs.readFileSync(dbtProjectYmlPath, 'utf8');

@@ -1,4 +1,4 @@
-/* eslint-disable no-case-declarations, @typescript-eslint/no-shadow */
+/* eslint-disable no-case-declarations, @typescript-eslint/no-shadow, no-restricted-syntax, no-await-in-loop */
 import yaml from 'js-yaml';
 import path from 'path';
 import fs from 'fs';
@@ -33,6 +33,7 @@ import {
 } from '../utils/connectors';
 import SecureStorageService from './secureStorage.service';
 import { CloudConnection, RecentItem } from '../../types/frontend';
+import { updateProjectConfigFiles } from '../utils/yamlPartialUpdate';
 
 export default class ConnectorsService {
   static async loadConnections(): Promise<ConnectionModel[]> {
@@ -152,7 +153,11 @@ export default class ConnectorsService {
     );
     await fs.promises.writeFile(profilesPath, profilesContent, 'utf8');
 
-    const mainConfPath = path.join(project.path, 'rosetta', 'main.conf');
+    // Ensure rosetta directory exists before writing main.conf
+    const rosettaDir = path.join(project.path, 'rosetta');
+    await fs.promises.mkdir(rosettaDir, { recursive: true });
+
+    const mainConfPath = path.join(rosettaDir, 'main.conf');
     const rosettaYaml = await this.generateRosettaYml(
       connection.connection,
       project.name,
@@ -262,6 +267,53 @@ export default class ConnectorsService {
 
     connections[connectionIndex] = connection;
     await updateDatabase<'connections'>('connections', connections);
+
+    // Find all projects using this connection and update their config files
+    const projects = await ProjectsService.loadProjects();
+    const affectedProjects = projects.filter(
+      (project) => project.connectionId === connection.id,
+    );
+
+    // Track errors for each project
+    const updateErrors: Array<{ projectName: string; errors: string[] }> = [];
+
+    for (const project of affectedProjects) {
+      try {
+        const result = await updateProjectConfigFiles(
+          project.path,
+          project.name,
+          connection.connection,
+        );
+
+        if (!result.success) {
+          updateErrors.push({
+            projectName: project.name,
+            errors: result.errors,
+          });
+        }
+      } catch (error) {
+        updateErrors.push({
+          projectName: project.name,
+          errors: [
+            error instanceof Error ? error.message : 'Unknown error occurred',
+          ],
+        });
+      }
+    }
+
+    // If there were any errors updating config files, throw an error with details
+    if (updateErrors.length > 0) {
+      const errorMessages = updateErrors
+        .map(
+          ({ projectName, errors }) =>
+            `Project "${projectName}":\n${errors.map((e) => `  - ${e}`).join('\n')}`,
+        )
+        .join('\n\n');
+
+      throw new Error(
+        `Connection updated in database, but failed to update configuration files for some projects:\n\n${errorMessages}\n\nPlease check that the profiles.yml and main.conf files exist and are not corrupted. You may need to reconfigure the connection for these projects.`,
+      );
+    }
   }
 
   /**
