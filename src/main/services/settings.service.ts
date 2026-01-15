@@ -183,6 +183,23 @@ export default class SettingsService {
   }
 
   static async updateRosetta() {
+    if (process.env.E2E_TESTING === 'true') {
+      const settings = await this.loadSettings();
+      const dummyPath = path.join(os.tmpdir(), 'dummy-rosetta');
+      fs.ensureFileSync(dummyPath);
+      fs.chmodSync(dummyPath, 0o755);
+
+      settings.rosettaVersion = '0.0.0-test';
+      settings.rosettaPath = dummyPath;
+      await this.saveSettings(settings);
+
+      return {
+        binaryPath: dummyPath,
+        version: '0.0.0-test',
+        binDirectory: path.dirname(dummyPath),
+        status: 'installed',
+      };
+    }
     const settings = await this.loadSettings();
 
     const { platform, arch } = process;
@@ -289,6 +306,23 @@ export default class SettingsService {
   }
 
   static async updatePython() {
+    if (process.env.E2E_TESTING === 'true') {
+      const settings = await this.loadSettings();
+      const dummyPath = path.join(os.tmpdir(), 'dummy-python');
+      fs.ensureFileSync(dummyPath);
+      fs.chmodSync(dummyPath, 0o755);
+
+      settings.pythonVersion = '0.0.0-test';
+      settings.pythonPath = dummyPath;
+      settings.pythonBinary = dummyPath;
+      await this.saveSettings(settings);
+
+      return {
+        binaryPath: dummyPath,
+        version: '0.0.0-test',
+        status: 'installed',
+      };
+    }
     const settings = await this.loadSettings();
 
     const version = '3.10.17';

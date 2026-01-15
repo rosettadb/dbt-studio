@@ -38,3 +38,4 @@ docs/ai-context/*
 # E2E Test Results
 test-results/
 playwright-report/
+.erb/renderer/
