@@ -89,6 +89,18 @@ const registerDuckLakeHandlers = () => {
   );
 
   ipcMain.handle(
+    'ducklake:table:rename',
+    async (
+      _event,
+      instanceId: string,
+      oldName: string,
+      newName: string,
+    ) => {
+      return DuckLakeService.renameTable(instanceId, oldName, newName);
+    },
+  );
+
+  ipcMain.handle(
     'ducklake:table:updateRows',
     async (
       _event,

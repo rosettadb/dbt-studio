@@ -104,6 +104,28 @@ export class DuckDBCatalogAdapter extends CatalogAdapter {
     }
   }
 
+  async renameTable(oldName: string, newName: string): Promise<void> {
+    try {
+      if (!this.connectionInfo) {
+        throw new Error('No active connection');
+      }
+
+      const escapedOldName = oldName.replace(/"/g, '""');
+      const escapedNewName = newName.replace(/"/g, '""');
+
+      await this.connectionInfo.connection.run(
+        `ALTER TABLE "${escapedOldName}" RENAME TO "${escapedNewName}"`,
+      );
+    } catch (error) {
+      // eslint-disable-next-line no-console
+      console.error(
+        `Failed to rename DuckDB table ${oldName} to ${newName}:`,
+        error,
+      );
+      throw error;
+    }
+  }
+
   async updateRows(
     _tableName: string,
     updateQuery: string,

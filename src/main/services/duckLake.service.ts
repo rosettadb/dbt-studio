@@ -50,6 +50,46 @@ export default class DuckLakeService {
     }
   }
 
+  static async renameTable(
+    instanceId: string,
+    oldName: string,
+    newName: string,
+  ): Promise<void> {
+    try {
+      await this.ensureConnected(instanceId);
+      const adapter = await this.getAdapter(instanceId);
+
+      if (!oldName || oldName.trim() === '') {
+        throw DuckLakeError.validation('Old table name is required');
+      }
+
+      if (!newName || newName.trim() === '') {
+        throw DuckLakeError.validation('New table name is required');
+      }
+
+      if (oldName.trim() === newName.trim()) {
+        throw DuckLakeError.validation('New table name must be different');
+      }
+
+      const tables = await adapter.listTables();
+      const oldExists = tables.some((t) => t.name === oldName);
+      if (!oldExists) {
+        throw DuckLakeError.validation(`Table ${oldName} does not exist`);
+      }
+
+      const newExists = tables.some((t) => t.name === newName);
+      if (newExists) {
+        throw DuckLakeError.validation(`Table ${newName} already exists`);
+      }
+
+      await adapter.renameTable(oldName, newName);
+    } catch (error) {
+      // eslint-disable-next-line no-console
+      console.error(error);
+      throw error;
+    }
+  }
+
   static async updateRows(
     instanceId: string,
     tableName: string,

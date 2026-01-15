@@ -19,16 +19,21 @@ import {
   DialogContent,
   DialogActions,
   Button,
+  TextField,
 } from '@mui/material';
 import {
   TableChart,
   Visibility,
   QueryStats,
   Delete,
+  Edit,
 } from '@mui/icons-material';
 import { useNavigate } from 'react-router-dom';
 import moment from 'moment';
-import { useDeleteDuckLakeTable } from '../../controllers/duckLake.controller';
+import {
+  useDeleteDuckLakeTable,
+  useRenameDuckLakeTable,
+} from '../../controllers/duckLake.controller';
 
 interface DuckLakeTable {
   id: string;
@@ -57,10 +62,16 @@ export const DataLakeTables: React.FC<DuckLakeTablesProps> = ({
 }) => {
   const navigate = useNavigate();
   const deleteTableMutation = useDeleteDuckLakeTable();
+  const renameTableMutation = useRenameDuckLakeTable();
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [tableToDelete, setTableToDelete] = useState<DuckLakeTable | null>(
     null,
   );
+  const [renameDialogOpen, setRenameDialogOpen] = useState(false);
+  const [tableToRename, setTableToRename] = useState<DuckLakeTable | null>(
+    null,
+  );
+  const [newTableName, setNewTableName] = useState('');
 
   const filteredTables = useMemo(() => {
     const result = selectedInstanceId
@@ -123,6 +134,29 @@ export const DataLakeTables: React.FC<DuckLakeTablesProps> = ({
 
     setDeleteDialogOpen(false);
     setTableToDelete(null);
+  };
+
+  const handleRequestRename = (table: DuckLakeTable) => {
+    setTableToRename(table);
+    setNewTableName(table.name);
+    setRenameDialogOpen(true);
+  };
+
+  const handleConfirmRename = () => {
+    if (!tableToRename) {
+      setRenameDialogOpen(false);
+      return;
+    }
+
+    renameTableMutation.mutate({
+      instanceId: tableToRename.instanceId,
+      oldName: tableToRename.name,
+      newName: newTableName,
+    });
+
+    setRenameDialogOpen(false);
+    setTableToRename(null);
+    setNewTableName('');
   };
 
   return (
@@ -297,6 +331,20 @@ export const DataLakeTables: React.FC<DuckLakeTablesProps> = ({
                           </IconButton>
                         </span>
                       </Tooltip>
+                      <Tooltip title="Rename Table">
+                        <span>
+                          <IconButton
+                            size="small"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleRequestRename(table);
+                            }}
+                            disabled={renameTableMutation.isLoading}
+                          >
+                            <Edit fontSize="small" />
+                          </IconButton>
+                        </span>
+                      </Tooltip>
                     </Box>
                   </TableCell>
                 </TableRow>
@@ -340,6 +388,56 @@ export const DataLakeTables: React.FC<DuckLakeTablesProps> = ({
             disabled={!tableToDelete || deleteTableMutation.isLoading}
           >
             Delete
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      <Dialog
+        open={renameDialogOpen}
+        onClose={() => {
+          setRenameDialogOpen(false);
+          setTableToRename(null);
+          setNewTableName('');
+        }}
+        maxWidth="sm"
+        fullWidth
+      >
+        <DialogTitle>Rename table</DialogTitle>
+        <DialogContent>
+          <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+            Rename <strong>{tableToRename?.name}</strong>
+          </Typography>
+          <TextField
+            fullWidth
+            label="New table name"
+            value={newTableName}
+            onChange={(e) => setNewTableName(e.target.value)}
+            disabled={renameTableMutation.isLoading}
+            autoFocus
+          />
+        </DialogContent>
+        <DialogActions>
+          <Button
+            onClick={() => {
+              setRenameDialogOpen(false);
+              setTableToRename(null);
+              setNewTableName('');
+            }}
+            color="inherit"
+          >
+            Cancel
+          </Button>
+          <Button
+            onClick={handleConfirmRename}
+            variant="contained"
+            disabled={
+              !tableToRename ||
+              renameTableMutation.isLoading ||
+              !newTableName ||
+              newTableName.trim() === ''
+            }
+          >
+            Rename
           </Button>
         </DialogActions>
       </Dialog>

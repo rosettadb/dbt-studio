@@ -121,6 +121,19 @@ export namespace DuckLakeService {
     );
   }
 
+  export async function renameTable(
+    instanceId: string,
+    oldName: string,
+    newName: string,
+  ): Promise<void> {
+    return window.electron.ipcRenderer.invoke(
+      'ducklake:table:rename',
+      instanceId,
+      oldName,
+      newName,
+    );
+  }
+
   /**
    * Get comprehensive table details from DuckLake metadata catalog (Phase 8b)
    */

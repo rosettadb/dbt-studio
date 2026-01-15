@@ -39,6 +39,36 @@ export function useDuckLakeInstances() {
   });
 }
 
+export function useRenameDuckLakeTable() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: ({
+      instanceId,
+      oldName,
+      newName,
+    }: {
+      instanceId: string;
+      oldName: string;
+      newName: string;
+    }) => DuckLakeService.renameTable(instanceId, oldName, newName),
+    onSuccess: (_, { instanceId, oldName, newName }) => {
+      queryClient.invalidateQueries(duckLakeKeys.tables(instanceId));
+      queryClient.invalidateQueries(duckLakeKeys.table(instanceId, oldName));
+      queryClient.invalidateQueries(duckLakeKeys.tableDetails(instanceId, oldName));
+      queryClient.invalidateQueries(duckLakeKeys.snapshots(instanceId, oldName));
+      queryClient.invalidateQueries(duckLakeKeys.table(instanceId, newName));
+      queryClient.invalidateQueries(duckLakeKeys.tableDetails(instanceId, newName));
+      queryClient.invalidateQueries(duckLakeKeys.snapshots(instanceId, newName));
+
+      toast.success('Table renamed successfully');
+    },
+    onError: (error: Error) => {
+      toast.error(`Failed to rename table: ${error.message}`);
+    },
+  });
+}
+
 export function useUpdateDuckLakeRows() {
   const queryClient = useQueryClient();
 
