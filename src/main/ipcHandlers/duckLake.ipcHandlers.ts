@@ -133,6 +133,24 @@ const registerDuckLakeHandlers = () => {
   );
 
   ipcMain.handle(
+    'ducklake:table:renameColumn',
+    async (
+      _event,
+      instanceId: string,
+      tableName: string,
+      oldColumnName: string,
+      newColumnName: string,
+    ) => {
+      return DuckLakeService.renameColumn(
+        instanceId,
+        tableName,
+        oldColumnName,
+        newColumnName,
+      );
+    },
+  );
+
+  ipcMain.handle(
     'ducklake:table:updateRows',
     async (
       _event,

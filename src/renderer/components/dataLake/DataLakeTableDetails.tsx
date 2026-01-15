@@ -42,6 +42,7 @@ import {
   Restore,
   Add,
   Delete,
+  DriveFileRenameOutline,
 } from '@mui/icons-material';
 import { useNavigate, useParams } from 'react-router-dom';
 import moment from 'moment';
@@ -49,6 +50,7 @@ import {
   useAddDuckLakeColumn,
   useDuckLakeTableDetails,
   useDropDuckLakeColumn,
+  useRenameDuckLakeColumn,
   useRestoreDuckLakeSnapshot,
 } from '../../controllers/duckLake.controller';
 import {
@@ -104,9 +106,15 @@ export const DataLakeTableDetails: React.FC = () => {
     null,
   );
 
+  const [renameColumnDialogOpen, setRenameColumnDialogOpen] = useState(false);
+  const [columnToRename, setColumnToRename] =
+    useState<DuckLakeColumnDetail | null>(null);
+  const [renameColumnNewName, setRenameColumnNewName] = useState('');
+
   const restoreSnapshotMutation = useRestoreDuckLakeSnapshot();
   const addColumnMutation = useAddDuckLakeColumn();
   const dropColumnMutation = useDropDuckLakeColumn();
+  const renameColumnMutation = useRenameDuckLakeColumn();
 
   const {
     data: tableDetails,
@@ -157,6 +165,12 @@ export const DataLakeTableDetails: React.FC = () => {
     setDropColumnDialogOpen(true);
   };
 
+  const handleRequestRenameColumn = (column: DuckLakeColumnDetail) => {
+    setColumnToRename(column);
+    setRenameColumnNewName(column.columnName);
+    setRenameColumnDialogOpen(true);
+  };
+
   const handleConfirmDropColumn = () => {
     if (!instanceId || !tableName || !columnToDrop) {
       setDropColumnDialogOpen(false);
@@ -172,6 +186,24 @@ export const DataLakeTableDetails: React.FC = () => {
 
     setDropColumnDialogOpen(false);
     setColumnToDrop(null);
+  };
+
+  const handleConfirmRenameColumn = () => {
+    if (!instanceId || !tableName || !columnToRename) {
+      setRenameColumnDialogOpen(false);
+      setColumnToRename(null);
+      return;
+    }
+
+    renameColumnMutation.mutate({
+      instanceId,
+      tableName,
+      oldColumnName: columnToRename.columnName,
+      newColumnName: renameColumnNewName,
+    });
+
+    setRenameColumnDialogOpen(false);
+    setColumnToRename(null);
   };
 
   const formatBytes = (bytes: number) => {
@@ -462,7 +494,9 @@ export const DataLakeTableDetails: React.FC = () => {
                 startIcon={<Add />}
                 onClick={handleOpenAddColumnDialog}
                 disabled={
-                  addColumnMutation.isLoading || dropColumnMutation.isLoading
+                  addColumnMutation.isLoading ||
+                  dropColumnMutation.isLoading ||
+                  renameColumnMutation.isLoading
                 }
               >
                 Add column
@@ -516,6 +550,28 @@ export const DataLakeTableDetails: React.FC = () => {
                         <Tooltip
                           title={
                             isPartitionColumnId(column.columnId)
+                              ? 'Partition columns cannot be renamed'
+                              : 'Rename column'
+                          }
+                        >
+                          <span>
+                            <IconButton
+                              size="small"
+                              onClick={() => handleRequestRenameColumn(column)}
+                              disabled={
+                                renameColumnMutation.isLoading ||
+                                dropColumnMutation.isLoading ||
+                                addColumnMutation.isLoading ||
+                                isPartitionColumnId(column.columnId)
+                              }
+                            >
+                              <DriveFileRenameOutline fontSize="small" />
+                            </IconButton>
+                          </span>
+                        </Tooltip>
+                        <Tooltip
+                          title={
+                            isPartitionColumnId(column.columnId)
                               ? 'Partition columns cannot be dropped'
                               : 'Drop column'
                           }
@@ -528,6 +584,7 @@ export const DataLakeTableDetails: React.FC = () => {
                               disabled={
                                 dropColumnMutation.isLoading ||
                                 addColumnMutation.isLoading ||
+                                renameColumnMutation.isLoading ||
                                 isPartitionColumnId(column.columnId)
                               }
                             >
@@ -638,6 +695,59 @@ export const DataLakeTableDetails: React.FC = () => {
                   disabled={!columnToDrop || dropColumnMutation.isLoading}
                 >
                   Drop
+                </Button>
+              </DialogActions>
+            </Dialog>
+
+            <Dialog
+              open={renameColumnDialogOpen}
+              onClose={() => {
+                setRenameColumnDialogOpen(false);
+                setColumnToRename(null);
+              }}
+              maxWidth="sm"
+              fullWidth
+            >
+              <DialogTitle>Rename column</DialogTitle>
+              <DialogContent>
+                <Typography
+                  variant="body2"
+                  color="text.secondary"
+                  sx={{ mb: 2 }}
+                >
+                  Renaming <strong>{columnToRename?.columnName}</strong>
+                </Typography>
+                <TextField
+                  fullWidth
+                  label="New column name"
+                  value={renameColumnNewName}
+                  onChange={(e) => setRenameColumnNewName(e.target.value)}
+                  disabled={renameColumnMutation.isLoading}
+                  autoFocus
+                />
+              </DialogContent>
+              <DialogActions>
+                <Button
+                  color="inherit"
+                  onClick={() => {
+                    setRenameColumnDialogOpen(false);
+                    setColumnToRename(null);
+                  }}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  variant="contained"
+                  onClick={handleConfirmRenameColumn}
+                  disabled={
+                    !columnToRename ||
+                    renameColumnMutation.isLoading ||
+                    renameColumnNewName.trim() === '' ||
+                    renameColumnNewName.trim() ===
+                      columnToRename?.columnName.trim()
+                  }
+                >
+                  Rename
                 </Button>
               </DialogActions>
             </Dialog>

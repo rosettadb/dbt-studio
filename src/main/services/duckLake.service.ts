@@ -149,6 +149,75 @@ export default class DuckLakeService {
     }
   }
 
+  static async renameColumn(
+    instanceId: string,
+    tableName: string,
+    oldColumnName: string,
+    newColumnName: string,
+  ): Promise<void> {
+    try {
+      await this.ensureConnected(instanceId);
+      const adapter = await this.getAdapter(instanceId);
+
+      if (!tableName || tableName.trim() === '') {
+        throw DuckLakeError.validation('Table name is required');
+      }
+
+      if (!oldColumnName || oldColumnName.trim() === '') {
+        throw DuckLakeError.validation('Old column name is required');
+      }
+
+      if (!newColumnName || newColumnName.trim() === '') {
+        throw DuckLakeError.validation('New column name is required');
+      }
+
+      if (oldColumnName.trim() === newColumnName.trim()) {
+        throw DuckLakeError.validation('New column name must be different');
+      }
+
+      const tables = await adapter.listTables();
+      const tableExists = tables.some((t) => t.name === tableName);
+      if (!tableExists) {
+        throw DuckLakeError.validation(`Table ${tableName} does not exist`);
+      }
+
+      const details = await adapter.getTableDetails(tableName);
+      const existingColumns = Array.isArray(details?.columns) ? details.columns : [];
+      const activeOldColumn = existingColumns.find(
+        (c: any) => c?.columnName === oldColumnName && c?.endSnapshot == null,
+      );
+      if (!activeOldColumn) {
+        throw DuckLakeError.validation(
+          `Column ${oldColumnName} does not exist on table ${tableName}`,
+        );
+      }
+
+      const newColumnExists = existingColumns.some(
+        (c: any) => c?.columnName === newColumnName && c?.endSnapshot == null,
+      );
+      if (newColumnExists) {
+        throw DuckLakeError.validation(
+          `Column ${newColumnName} already exists on table ${tableName}`,
+        );
+      }
+
+      const partitionColumnIds = new Set<number>(
+        (details?.partitionInfo?.columns || []).map((c: any) => Number(c.columnId)),
+      );
+      if (partitionColumnIds.has(Number(activeOldColumn.columnId))) {
+        throw DuckLakeError.validation(
+          `Column ${oldColumnName} is a partition column and cannot be renamed`,
+        );
+      }
+
+      await adapter.renameColumn(tableName, oldColumnName, newColumnName);
+    } catch (error) {
+      // eslint-disable-next-line no-console
+      console.error(error);
+      throw error;
+    }
+  }
+
   static async renameTable(
     instanceId: string,
     oldName: string,

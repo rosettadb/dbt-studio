@@ -100,6 +100,12 @@ export abstract class CatalogAdapter {
 
   abstract dropColumn(tableName: string, columnName: string): Promise<void>;
 
+  abstract renameColumn(
+    tableName: string,
+    oldColumnName: string,
+    newColumnName: string,
+  ): Promise<void>;
+
   abstract restoreSnapshot(tableName: string, snapshotId: number): Promise<void>;
 
   abstract updateRows(

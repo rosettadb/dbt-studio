@@ -262,6 +262,7 @@ export type DuckLakeChannels =
   | 'ducklake:table:rename'
   | 'ducklake:table:addColumn'
   | 'ducklake:table:dropColumn'
+  | 'ducklake:table:renameColumn'
   | 'ducklake:table:updateRows'
   | 'ducklake:table:deleteRows'
   | 'ducklake:table:upsertRows'

@@ -104,6 +104,41 @@ export function useDropDuckLakeColumn() {
   });
 }
 
+export function useRenameDuckLakeColumn() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: ({
+      instanceId,
+      tableName,
+      oldColumnName,
+      newColumnName,
+    }: {
+      instanceId: string;
+      tableName: string;
+      oldColumnName: string;
+      newColumnName: string;
+    }) =>
+      DuckLakeService.renameColumn(
+        instanceId,
+        tableName,
+        oldColumnName,
+        newColumnName,
+      ),
+    onSuccess: (_, { instanceId, tableName }) => {
+      queryClient.invalidateQueries(duckLakeKeys.tableDetails(instanceId, tableName));
+      queryClient.invalidateQueries(duckLakeKeys.snapshots(instanceId, tableName));
+      queryClient.invalidateQueries(duckLakeKeys.table(instanceId, tableName));
+      queryClient.invalidateQueries(duckLakeKeys.tables(instanceId));
+
+      toast.success('Column renamed successfully');
+    },
+    onError: (error: Error) => {
+      toast.error(`Failed to rename column: ${error.message}`);
+    },
+  });
+}
+
 export function useRenameDuckLakeTable() {
   const queryClient = useQueryClient();
 

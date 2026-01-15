@@ -164,6 +164,21 @@ export namespace DuckLakeService {
     );
   }
 
+  export async function renameColumn(
+    instanceId: string,
+    tableName: string,
+    oldColumnName: string,
+    newColumnName: string,
+  ): Promise<void> {
+    return window.electron.ipcRenderer.invoke(
+      'ducklake:table:renameColumn',
+      instanceId,
+      tableName,
+      oldColumnName,
+      newColumnName,
+    );
+  }
+
   /**
    * Get comprehensive table details from DuckLake metadata catalog (Phase 8b)
    */

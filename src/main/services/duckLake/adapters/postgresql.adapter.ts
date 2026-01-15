@@ -160,6 +160,33 @@ export class PostgreSQLCatalogAdapter extends CatalogAdapter {
     }
   }
 
+  async renameColumn(
+    tableName: string,
+    oldColumnName: string,
+    newColumnName: string,
+  ): Promise<void> {
+    try {
+      if (!this.connectionInfo) {
+        throw new Error('No active connection');
+      }
+
+      const escapedTableName = tableName.replace(/"/g, '""');
+      const escapedOldColumnName = oldColumnName.replace(/"/g, '""');
+      const escapedNewColumnName = newColumnName.replace(/"/g, '""');
+
+      await this.connectionInfo.connection.run(
+        `ALTER TABLE "${escapedTableName}" RENAME COLUMN "${escapedOldColumnName}" TO "${escapedNewColumnName}"`,
+      );
+    } catch (error) {
+      // eslint-disable-next-line no-console
+      console.error(
+        `Failed to rename column ${oldColumnName} to ${newColumnName} on PostgreSQL table ${tableName}:`,
+        error,
+      );
+      throw error;
+    }
+  }
+
   async renameTable(oldName: string, newName: string): Promise<void> {
     try {
       if (!this.connectionInfo) {
