@@ -597,14 +597,46 @@ export default class DuckLakeService {
 
   static async restoreSnapshot(
     instanceId: string,
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
     tableName: string,
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
     snapshotId: string,
   ): Promise<void> {
     try {
       await this.ensureConnected(instanceId);
-      // TODO: Implement snapshot restoration for tableName using snapshotId
+
+      const adapter = await this.getAdapter(instanceId);
+
+      if (!tableName || tableName.trim() === '') {
+        throw DuckLakeError.validation('Table name is required');
+      }
+
+      if (!snapshotId || snapshotId.trim() === '') {
+        throw DuckLakeError.validation('Snapshot ID is required');
+      }
+
+      const parsedSnapshotId = Number.parseInt(snapshotId, 10);
+      if (Number.isNaN(parsedSnapshotId)) {
+        throw DuckLakeError.validation('Snapshot ID must be a number');
+      }
+
+      // Validate table exists
+      const tables = await adapter.listTables();
+      const tableExists = tables.some((t) => t.name === tableName);
+      if (!tableExists) {
+        throw DuckLakeError.validation(`Table ${tableName} does not exist`);
+      }
+
+      // Validate snapshot exists for table
+      const snapshots = await adapter.listSnapshots(tableName);
+      const snapshotExists = snapshots.some(
+        (s) => Number.parseInt(String(s.id), 10) === parsedSnapshotId,
+      );
+      if (!snapshotExists) {
+        throw DuckLakeError.validation(
+          `Snapshot ${snapshotId} not found for table ${tableName}`,
+        );
+      }
+
+      await adapter.restoreSnapshot(tableName, parsedSnapshotId);
     } catch (error) {
       // eslint-disable-next-line no-console
       console.error(error);

@@ -89,6 +89,8 @@ export abstract class CatalogAdapter {
 
   abstract deleteTable(tableName: string): Promise<void>;
 
+  abstract restoreSnapshot(tableName: string, snapshotId: number): Promise<void>;
+
   /**
    * Execute query against the DuckLake instance
    */

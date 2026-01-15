@@ -39,6 +39,33 @@ export function useDuckLakeInstances() {
   });
 }
 
+export function useRestoreDuckLakeSnapshot() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: ({
+      instanceId,
+      tableName,
+      snapshotId,
+    }: {
+      instanceId: string;
+      tableName: string;
+      snapshotId: string;
+    }) => DuckLakeService.restoreSnapshot(instanceId, tableName, snapshotId),
+    onSuccess: (_, { instanceId, tableName }) => {
+      queryClient.invalidateQueries(duckLakeKeys.tableDetails(instanceId, tableName));
+      queryClient.invalidateQueries(duckLakeKeys.snapshots(instanceId, tableName));
+      queryClient.invalidateQueries(duckLakeKeys.table(instanceId, tableName));
+      queryClient.invalidateQueries(duckLakeKeys.tables(instanceId));
+
+      toast.success('Snapshot restored successfully');
+    },
+    onError: (error: Error) => {
+      toast.error(`Failed to restore snapshot: ${error.message}`);
+    },
+  });
+}
+
 export function useDuckLakeInstance(instanceId: string) {
   return useQuery({
     queryKey: duckLakeKeys.instance(instanceId),

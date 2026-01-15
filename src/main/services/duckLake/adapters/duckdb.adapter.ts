@@ -84,6 +84,26 @@ export class DuckDBCatalogAdapter extends CatalogAdapter {
     }
   }
 
+  async restoreSnapshot(tableName: string, snapshotId: number): Promise<void> {
+    try {
+      if (!this.connectionInfo) {
+        throw new Error('No active connection');
+      }
+
+      const escapedName = tableName.replace(/"/g, '""');
+      await this.connectionInfo.connection.run(
+        `CREATE OR REPLACE TABLE "${escapedName}" AS SELECT * FROM "${escapedName}" FOR SYSTEM_VERSION AS OF ${snapshotId}`,
+      );
+    } catch (error) {
+      // eslint-disable-next-line no-console
+      console.error(
+        `Failed to restore DuckDB table ${tableName} to snapshot ${snapshotId}:`,
+        error,
+      );
+      throw error;
+    }
+  }
+
   async disconnect(): Promise<void> {
     await this.cleanup();
   }

@@ -23,6 +23,11 @@ import {
   Alert,
   IconButton,
   Tooltip,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions,
+  Button,
 } from '@mui/material';
 import {
   ArrowBack,
@@ -33,10 +38,14 @@ import {
   Splitscreen,
   History,
   Label,
+  Restore,
 } from '@mui/icons-material';
 import { useNavigate, useParams } from 'react-router-dom';
 import moment from 'moment';
-import { useDuckLakeTableDetails } from '../../controllers/duckLake.controller';
+import {
+  useDuckLakeTableDetails,
+  useRestoreDuckLakeSnapshot,
+} from '../../controllers/duckLake.controller';
 import {
   DuckLakeColumnDetail,
   DuckLakeColumnStats,
@@ -76,6 +85,11 @@ export const DataLakeTableDetails: React.FC = () => {
     tableName: string;
   }>();
   const [currentTab, setCurrentTab] = useState(0);
+  const [restoreDialogOpen, setRestoreDialogOpen] = useState(false);
+  const [snapshotToRestore, setSnapshotToRestore] =
+    useState<DuckLakeSnapshotDetail | null>(null);
+
+  const restoreSnapshotMutation = useRestoreDuckLakeSnapshot();
 
   const {
     data: tableDetails,
@@ -116,6 +130,28 @@ export const DataLakeTableDetails: React.FC = () => {
       return JSON.stringify(value);
     }
     return String(value);
+  };
+
+  const handleRequestRestoreSnapshot = (snapshot: DuckLakeSnapshotDetail) => {
+    setSnapshotToRestore(snapshot);
+    setRestoreDialogOpen(true);
+  };
+
+  const handleConfirmRestoreSnapshot = () => {
+    if (!instanceId || !tableName || !snapshotToRestore) {
+      setRestoreDialogOpen(false);
+      setSnapshotToRestore(null);
+      return;
+    }
+
+    restoreSnapshotMutation.mutate({
+      instanceId,
+      tableName,
+      snapshotId: safeToString(snapshotToRestore.snapshotId),
+    });
+
+    setRestoreDialogOpen(false);
+    setSnapshotToRestore(null);
   };
 
   if (isLoading) {
@@ -622,6 +658,7 @@ export const DataLakeTableDetails: React.FC = () => {
                       <TableCell>Time</TableCell>
                       <TableCell>Schema Version</TableCell>
                       <TableCell>Changes</TableCell>
+                      <TableCell align="right">Actions</TableCell>
                     </TableRow>
                   </TableHead>
                   <TableBody>
@@ -651,6 +688,21 @@ export const DataLakeTableDetails: React.FC = () => {
                             {safeToString(snapshot.schemaVersion)}
                           </TableCell>
                           <TableCell>{snapshot.changesMade || '-'}</TableCell>
+                          <TableCell align="right">
+                            <Tooltip title="Restore this snapshot">
+                              <span>
+                                <IconButton
+                                  size="small"
+                                  onClick={() =>
+                                    handleRequestRestoreSnapshot(snapshot)
+                                  }
+                                  disabled={restoreSnapshotMutation.isLoading}
+                                >
+                                  <Restore fontSize="small" />
+                                </IconButton>
+                              </span>
+                            </Tooltip>
+                          </TableCell>
                         </TableRow>
                       ),
                     )}
@@ -662,6 +714,42 @@ export const DataLakeTableDetails: React.FC = () => {
             )}
           </CardContent>
         </Card>
+
+        <Dialog
+          open={restoreDialogOpen}
+          onClose={() => {
+            setRestoreDialogOpen(false);
+            setSnapshotToRestore(null);
+          }}
+          maxWidth="sm"
+          fullWidth
+        >
+          <DialogTitle>Restore snapshot</DialogTitle>
+          <DialogContent>
+            <Typography variant="body2" color="text.secondary">
+              This will create a new snapshot by restoring the table to snapshot{' '}
+              <strong>{safeToString(snapshotToRestore?.snapshotId)}</strong>.
+            </Typography>
+          </DialogContent>
+          <DialogActions>
+            <Button
+              color="inherit"
+              onClick={() => {
+                setRestoreDialogOpen(false);
+                setSnapshotToRestore(null);
+              }}
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="contained"
+              onClick={handleConfirmRestoreSnapshot}
+              disabled={!snapshotToRestore || restoreSnapshotMutation.isLoading}
+            >
+              Restore
+            </Button>
+          </DialogActions>
+        </Dialog>
       </TabPanel>
 
       {/* Tab 6: Tags */}
