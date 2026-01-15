@@ -179,6 +179,45 @@ export namespace DuckLakeService {
     );
   }
 
+  export async function updateRows(
+    instanceId: string,
+    tableName: string,
+    updateQuery: string,
+  ): Promise<{ rowsAffected: number }> {
+    return window.electron.ipcRenderer.invoke(
+      'ducklake:table:updateRows',
+      instanceId,
+      tableName,
+      updateQuery,
+    );
+  }
+
+  export async function deleteRows(
+    instanceId: string,
+    tableName: string,
+    deleteQuery: string,
+  ): Promise<{ rowsAffected: number }> {
+    return window.electron.ipcRenderer.invoke(
+      'ducklake:table:deleteRows',
+      instanceId,
+      tableName,
+      deleteQuery,
+    );
+  }
+
+  export async function upsertRows(
+    instanceId: string,
+    tableName: string,
+    upsertQuery: string,
+  ): Promise<{ rowsAffected: number }> {
+    return window.electron.ipcRenderer.invoke(
+      'ducklake:table:upsertRows',
+      instanceId,
+      tableName,
+      upsertQuery,
+    );
+  }
+
   // Query Execution
   export async function executeQuery(
     request: DuckLakeQueryRequest,

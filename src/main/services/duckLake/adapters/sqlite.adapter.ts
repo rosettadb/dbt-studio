@@ -105,6 +105,87 @@ export class SQLiteCatalogAdapter extends CatalogAdapter {
     }
   }
 
+  async updateRows(
+    _tableName: string,
+    updateQuery: string,
+  ): Promise<{ rowsAffected: number }> {
+    try {
+      if (!this.connectionInfo) {
+        throw new Error('No active connection');
+      }
+
+      await this.connectionInfo.connection.run(updateQuery);
+      const changesResult = await this.connectionInfo.connection.run(
+        'SELECT changes() as changes',
+      );
+      const rows = await changesResult.getRows();
+      const value = rows?.[0]?.[0] ?? 0;
+      const numeric = typeof value === 'object' && value?.hugeint !== undefined
+        ? Number(value.hugeint)
+        : Number(value);
+
+      return { rowsAffected: Number.isFinite(numeric) ? numeric : 0 };
+    } catch (error) {
+      // eslint-disable-next-line no-console
+      console.error('Failed to update rows:', error);
+      throw error;
+    }
+  }
+
+  async deleteRows(
+    _tableName: string,
+    deleteQuery: string,
+  ): Promise<{ rowsAffected: number }> {
+    try {
+      if (!this.connectionInfo) {
+        throw new Error('No active connection');
+      }
+
+      await this.connectionInfo.connection.run(deleteQuery);
+      const changesResult = await this.connectionInfo.connection.run(
+        'SELECT changes() as changes',
+      );
+      const rows = await changesResult.getRows();
+      const value = rows?.[0]?.[0] ?? 0;
+      const numeric = typeof value === 'object' && value?.hugeint !== undefined
+        ? Number(value.hugeint)
+        : Number(value);
+
+      return { rowsAffected: Number.isFinite(numeric) ? numeric : 0 };
+    } catch (error) {
+      // eslint-disable-next-line no-console
+      console.error('Failed to delete rows:', error);
+      throw error;
+    }
+  }
+
+  async upsertRows(
+    _tableName: string,
+    upsertQuery: string,
+  ): Promise<{ rowsAffected: number }> {
+    try {
+      if (!this.connectionInfo) {
+        throw new Error('No active connection');
+      }
+
+      await this.connectionInfo.connection.run(upsertQuery);
+      const changesResult = await this.connectionInfo.connection.run(
+        'SELECT changes() as changes',
+      );
+      const rows = await changesResult.getRows();
+      const value = rows?.[0]?.[0] ?? 0;
+      const numeric = typeof value === 'object' && value?.hugeint !== undefined
+        ? Number(value.hugeint)
+        : Number(value);
+
+      return { rowsAffected: Number.isFinite(numeric) ? numeric : 0 };
+    } catch (error) {
+      // eslint-disable-next-line no-console
+      console.error('Failed to upsert rows:', error);
+      throw error;
+    }
+  }
+
   async disconnect(): Promise<void> {
     await this.cleanup();
   }

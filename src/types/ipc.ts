@@ -259,6 +259,9 @@ export type DuckLakeChannels =
   | 'ducklake:table:get'
   | 'ducklake:table:import'
   | 'ducklake:table:delete'
+  | 'ducklake:table:updateRows'
+  | 'ducklake:table:deleteRows'
+  | 'ducklake:table:upsertRows'
   | 'ducklake:table:getDetails' // Phase 8b: Table Detail View
 
   // Snapshot Management

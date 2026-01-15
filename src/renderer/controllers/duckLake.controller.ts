@@ -39,6 +39,87 @@ export function useDuckLakeInstances() {
   });
 }
 
+export function useUpdateDuckLakeRows() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: ({
+      instanceId,
+      tableName,
+      updateQuery,
+    }: {
+      instanceId: string;
+      tableName: string;
+      updateQuery: string;
+    }) => DuckLakeService.updateRows(instanceId, tableName, updateQuery),
+    onSuccess: (result, { instanceId, tableName }) => {
+      queryClient.invalidateQueries(duckLakeKeys.tableDetails(instanceId, tableName));
+      queryClient.invalidateQueries(duckLakeKeys.snapshots(instanceId, tableName));
+      queryClient.invalidateQueries(duckLakeKeys.table(instanceId, tableName));
+      queryClient.invalidateQueries(duckLakeKeys.tables(instanceId));
+
+      toast.success(`${result.rowsAffected} row(s) updated`);
+    },
+    onError: (error: Error) => {
+      toast.error(`Failed to update rows: ${error.message}`);
+    },
+  });
+}
+
+export function useDeleteDuckLakeRows() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: ({
+      instanceId,
+      tableName,
+      deleteQuery,
+    }: {
+      instanceId: string;
+      tableName: string;
+      deleteQuery: string;
+    }) => DuckLakeService.deleteRows(instanceId, tableName, deleteQuery),
+    onSuccess: (result, { instanceId, tableName }) => {
+      queryClient.invalidateQueries(duckLakeKeys.tableDetails(instanceId, tableName));
+      queryClient.invalidateQueries(duckLakeKeys.snapshots(instanceId, tableName));
+      queryClient.invalidateQueries(duckLakeKeys.table(instanceId, tableName));
+      queryClient.invalidateQueries(duckLakeKeys.tables(instanceId));
+
+      toast.success(`${result.rowsAffected} row(s) deleted`);
+    },
+    onError: (error: Error) => {
+      toast.error(`Failed to delete rows: ${error.message}`);
+    },
+  });
+}
+
+export function useUpsertDuckLakeRows() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: ({
+      instanceId,
+      tableName,
+      upsertQuery,
+    }: {
+      instanceId: string;
+      tableName: string;
+      upsertQuery: string;
+    }) => DuckLakeService.upsertRows(instanceId, tableName, upsertQuery),
+    onSuccess: (result, { instanceId, tableName }) => {
+      queryClient.invalidateQueries(duckLakeKeys.tableDetails(instanceId, tableName));
+      queryClient.invalidateQueries(duckLakeKeys.snapshots(instanceId, tableName));
+      queryClient.invalidateQueries(duckLakeKeys.table(instanceId, tableName));
+      queryClient.invalidateQueries(duckLakeKeys.tables(instanceId));
+
+      toast.success(`${result.rowsAffected} row(s) upserted`);
+    },
+    onError: (error: Error) => {
+      toast.error(`Failed to upsert rows: ${error.message}`);
+    },
+  });
+}
+
 export function useRestoreDuckLakeSnapshot() {
   const queryClient = useQueryClient();
 

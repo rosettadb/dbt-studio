@@ -88,6 +88,42 @@ const registerDuckLakeHandlers = () => {
     },
   );
 
+  ipcMain.handle(
+    'ducklake:table:updateRows',
+    async (
+      _event,
+      instanceId: string,
+      tableName: string,
+      updateQuery: string,
+    ) => {
+      return DuckLakeService.updateRows(instanceId, tableName, updateQuery);
+    },
+  );
+
+  ipcMain.handle(
+    'ducklake:table:deleteRows',
+    async (
+      _event,
+      instanceId: string,
+      tableName: string,
+      deleteQuery: string,
+    ) => {
+      return DuckLakeService.deleteRows(instanceId, tableName, deleteQuery);
+    },
+  );
+
+  ipcMain.handle(
+    'ducklake:table:upsertRows',
+    async (
+      _event,
+      instanceId: string,
+      tableName: string,
+      upsertQuery: string,
+    ) => {
+      return DuckLakeService.upsertRows(instanceId, tableName, upsertQuery);
+    },
+  );
+
   // Phase 8b: Table Details Handler
   ipcMain.handle(
     'ducklake:table:getDetails',

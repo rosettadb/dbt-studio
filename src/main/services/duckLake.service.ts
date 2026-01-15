@@ -50,6 +50,111 @@ export default class DuckLakeService {
     }
   }
 
+  static async updateRows(
+    instanceId: string,
+    tableName: string,
+    updateQuery: string,
+  ): Promise<{ rowsAffected: number }> {
+    try {
+      await this.ensureConnected(instanceId);
+      const adapter = await this.getAdapter(instanceId);
+
+      if (!tableName || tableName.trim() === '') {
+        throw DuckLakeError.validation('Table name is required');
+      }
+
+      if (!updateQuery || updateQuery.trim() === '') {
+        throw DuckLakeError.validation('Update query is required');
+      }
+
+      if (!updateQuery.trim().toUpperCase().startsWith('UPDATE')) {
+        throw DuckLakeError.validation('Query must be an UPDATE statement');
+      }
+
+      const tables = await adapter.listTables();
+      const tableExists = tables.some((t) => t.name === tableName);
+      if (!tableExists) {
+        throw DuckLakeError.validation(`Table ${tableName} does not exist`);
+      }
+
+      return await adapter.updateRows(tableName, updateQuery);
+    } catch (error) {
+      // eslint-disable-next-line no-console
+      console.error(error);
+      throw error;
+    }
+  }
+
+  static async deleteRows(
+    instanceId: string,
+    tableName: string,
+    deleteQuery: string,
+  ): Promise<{ rowsAffected: number }> {
+    try {
+      await this.ensureConnected(instanceId);
+      const adapter = await this.getAdapter(instanceId);
+
+      if (!tableName || tableName.trim() === '') {
+        throw DuckLakeError.validation('Table name is required');
+      }
+
+      if (!deleteQuery || deleteQuery.trim() === '') {
+        throw DuckLakeError.validation('Delete query is required');
+      }
+
+      if (!deleteQuery.trim().toUpperCase().startsWith('DELETE')) {
+        throw DuckLakeError.validation('Query must be a DELETE statement');
+      }
+
+      const tables = await adapter.listTables();
+      const tableExists = tables.some((t) => t.name === tableName);
+      if (!tableExists) {
+        throw DuckLakeError.validation(`Table ${tableName} does not exist`);
+      }
+
+      return await adapter.deleteRows(tableName, deleteQuery);
+    } catch (error) {
+      // eslint-disable-next-line no-console
+      console.error(error);
+      throw error;
+    }
+  }
+
+  static async upsertRows(
+    instanceId: string,
+    tableName: string,
+    upsertQuery: string,
+  ): Promise<{ rowsAffected: number }> {
+    try {
+      await this.ensureConnected(instanceId);
+      const adapter = await this.getAdapter(instanceId);
+
+      if (!tableName || tableName.trim() === '') {
+        throw DuckLakeError.validation('Table name is required');
+      }
+
+      if (!upsertQuery || upsertQuery.trim() === '') {
+        throw DuckLakeError.validation('Upsert query is required');
+      }
+
+      if (!upsertQuery.trim().toUpperCase().startsWith('INSERT')) {
+        throw DuckLakeError.validation('Query must be an INSERT statement');
+      }
+
+      const tables = await adapter.listTables();
+      const tableExists = tables.some((t) => t.name === tableName);
+      if (!tableExists) {
+        throw DuckLakeError.validation(`Table ${tableName} does not exist`);
+      }
+
+      return await adapter.upsertRows(tableName, upsertQuery);
+    } catch (error) {
+      // eslint-disable-next-line no-console
+      console.error(error);
+      throw error;
+    }
+  }
+
   // Extension Management
   static async loadDuckLakeExtension(): Promise<void> {
     try {

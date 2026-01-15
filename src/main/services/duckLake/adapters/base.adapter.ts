@@ -91,6 +91,21 @@ export abstract class CatalogAdapter {
 
   abstract restoreSnapshot(tableName: string, snapshotId: number): Promise<void>;
 
+  abstract updateRows(
+    tableName: string,
+    updateQuery: string,
+  ): Promise<{ rowsAffected: number }>;
+
+  abstract deleteRows(
+    tableName: string,
+    deleteQuery: string,
+  ): Promise<{ rowsAffected: number }>;
+
+  abstract upsertRows(
+    tableName: string,
+    upsertQuery: string,
+  ): Promise<{ rowsAffected: number }>;
+
   /**
    * Execute query against the DuckLake instance
    */
