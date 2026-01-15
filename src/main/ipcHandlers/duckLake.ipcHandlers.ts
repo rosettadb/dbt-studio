@@ -151,6 +151,24 @@ const registerDuckLakeHandlers = () => {
   );
 
   ipcMain.handle(
+    'ducklake:table:alterColumnType',
+    async (
+      _event,
+      instanceId: string,
+      tableName: string,
+      columnName: string,
+      newType: string,
+    ) => {
+      return DuckLakeService.alterColumnType(
+        instanceId,
+        tableName,
+        columnName,
+        newType,
+      );
+    },
+  );
+
+  ipcMain.handle(
     'ducklake:table:updateRows',
     async (
       _event,

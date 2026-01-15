@@ -139,6 +139,35 @@ export function useRenameDuckLakeColumn() {
   });
 }
 
+export function useAlterDuckLakeColumnType() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: ({
+      instanceId,
+      tableName,
+      columnName,
+      newType,
+    }: {
+      instanceId: string;
+      tableName: string;
+      columnName: string;
+      newType: string;
+    }) => DuckLakeService.alterColumnType(instanceId, tableName, columnName, newType),
+    onSuccess: (_, { instanceId, tableName }) => {
+      queryClient.invalidateQueries(duckLakeKeys.tableDetails(instanceId, tableName));
+      queryClient.invalidateQueries(duckLakeKeys.snapshots(instanceId, tableName));
+      queryClient.invalidateQueries(duckLakeKeys.table(instanceId, tableName));
+      queryClient.invalidateQueries(duckLakeKeys.tables(instanceId));
+
+      toast.success('Column type updated successfully');
+    },
+    onError: (error: Error) => {
+      toast.error(`Failed to alter column type: ${error.message}`);
+    },
+  });
+}
+
 export function useRenameDuckLakeTable() {
   const queryClient = useQueryClient();
 

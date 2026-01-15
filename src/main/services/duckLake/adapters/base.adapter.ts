@@ -106,6 +106,12 @@ export abstract class CatalogAdapter {
     newColumnName: string,
   ): Promise<void>;
 
+  abstract alterColumnType(
+    tableName: string,
+    columnName: string,
+    newType: string,
+  ): Promise<void>;
+
   abstract restoreSnapshot(tableName: string, snapshotId: number): Promise<void>;
 
   abstract updateRows(

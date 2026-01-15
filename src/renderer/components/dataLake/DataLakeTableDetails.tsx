@@ -43,11 +43,13 @@ import {
   Add,
   Delete,
   DriveFileRenameOutline,
+  SwapHoriz,
 } from '@mui/icons-material';
 import { useNavigate, useParams } from 'react-router-dom';
 import moment from 'moment';
 import {
   useAddDuckLakeColumn,
+  useAlterDuckLakeColumnType,
   useDuckLakeTableDetails,
   useDropDuckLakeColumn,
   useRenameDuckLakeColumn,
@@ -111,10 +113,16 @@ export const DataLakeTableDetails: React.FC = () => {
     useState<DuckLakeColumnDetail | null>(null);
   const [renameColumnNewName, setRenameColumnNewName] = useState('');
 
+  const [alterTypeDialogOpen, setAlterTypeDialogOpen] = useState(false);
+  const [columnToAlterType, setColumnToAlterType] =
+    useState<DuckLakeColumnDetail | null>(null);
+  const [alterTypeNewType, setAlterTypeNewType] = useState('');
+
   const restoreSnapshotMutation = useRestoreDuckLakeSnapshot();
   const addColumnMutation = useAddDuckLakeColumn();
   const dropColumnMutation = useDropDuckLakeColumn();
   const renameColumnMutation = useRenameDuckLakeColumn();
+  const alterColumnTypeMutation = useAlterDuckLakeColumnType();
 
   const {
     data: tableDetails,
@@ -171,6 +179,12 @@ export const DataLakeTableDetails: React.FC = () => {
     setRenameColumnDialogOpen(true);
   };
 
+  const handleRequestAlterColumnType = (column: DuckLakeColumnDetail) => {
+    setColumnToAlterType(column);
+    setAlterTypeNewType(column.columnType);
+    setAlterTypeDialogOpen(true);
+  };
+
   const handleConfirmDropColumn = () => {
     if (!instanceId || !tableName || !columnToDrop) {
       setDropColumnDialogOpen(false);
@@ -204,6 +218,24 @@ export const DataLakeTableDetails: React.FC = () => {
 
     setRenameColumnDialogOpen(false);
     setColumnToRename(null);
+  };
+
+  const handleConfirmAlterColumnType = () => {
+    if (!instanceId || !tableName || !columnToAlterType) {
+      setAlterTypeDialogOpen(false);
+      setColumnToAlterType(null);
+      return;
+    }
+
+    alterColumnTypeMutation.mutate({
+      instanceId,
+      tableName,
+      columnName: columnToAlterType.columnName,
+      newType: alterTypeNewType,
+    });
+
+    setAlterTypeDialogOpen(false);
+    setColumnToAlterType(null);
   };
 
   const formatBytes = (bytes: number) => {
@@ -496,7 +528,8 @@ export const DataLakeTableDetails: React.FC = () => {
                 disabled={
                   addColumnMutation.isLoading ||
                   dropColumnMutation.isLoading ||
-                  renameColumnMutation.isLoading
+                  renameColumnMutation.isLoading ||
+                  alterColumnTypeMutation.isLoading
                 }
               >
                 Add column
@@ -560,12 +593,38 @@ export const DataLakeTableDetails: React.FC = () => {
                               onClick={() => handleRequestRenameColumn(column)}
                               disabled={
                                 renameColumnMutation.isLoading ||
+                                alterColumnTypeMutation.isLoading ||
                                 dropColumnMutation.isLoading ||
                                 addColumnMutation.isLoading ||
                                 isPartitionColumnId(column.columnId)
                               }
                             >
                               <DriveFileRenameOutline fontSize="small" />
+                            </IconButton>
+                          </span>
+                        </Tooltip>
+                        <Tooltip
+                          title={
+                            isPartitionColumnId(column.columnId)
+                              ? 'Partition columns cannot be altered'
+                              : 'Alter column type'
+                          }
+                        >
+                          <span>
+                            <IconButton
+                              size="small"
+                              onClick={() =>
+                                handleRequestAlterColumnType(column)
+                              }
+                              disabled={
+                                alterColumnTypeMutation.isLoading ||
+                                renameColumnMutation.isLoading ||
+                                dropColumnMutation.isLoading ||
+                                addColumnMutation.isLoading ||
+                                isPartitionColumnId(column.columnId)
+                              }
+                            >
+                              <SwapHoriz fontSize="small" />
                             </IconButton>
                           </span>
                         </Tooltip>
@@ -585,6 +644,7 @@ export const DataLakeTableDetails: React.FC = () => {
                                 dropColumnMutation.isLoading ||
                                 addColumnMutation.isLoading ||
                                 renameColumnMutation.isLoading ||
+                                alterColumnTypeMutation.isLoading ||
                                 isPartitionColumnId(column.columnId)
                               }
                             >
@@ -748,6 +808,60 @@ export const DataLakeTableDetails: React.FC = () => {
                   }
                 >
                   Rename
+                </Button>
+              </DialogActions>
+            </Dialog>
+
+            <Dialog
+              open={alterTypeDialogOpen}
+              onClose={() => {
+                setAlterTypeDialogOpen(false);
+                setColumnToAlterType(null);
+              }}
+              maxWidth="sm"
+              fullWidth
+            >
+              <DialogTitle>Alter column type</DialogTitle>
+              <DialogContent>
+                <Typography
+                  variant="body2"
+                  color="text.secondary"
+                  sx={{ mb: 2 }}
+                >
+                  Changing type for{' '}
+                  <strong>{columnToAlterType?.columnName}</strong>
+                </Typography>
+                <TextField
+                  fullWidth
+                  label="New type"
+                  value={alterTypeNewType}
+                  onChange={(e) => setAlterTypeNewType(e.target.value)}
+                  disabled={alterColumnTypeMutation.isLoading}
+                  autoFocus
+                />
+              </DialogContent>
+              <DialogActions>
+                <Button
+                  color="inherit"
+                  onClick={() => {
+                    setAlterTypeDialogOpen(false);
+                    setColumnToAlterType(null);
+                  }}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  variant="contained"
+                  onClick={handleConfirmAlterColumnType}
+                  disabled={
+                    !columnToAlterType ||
+                    alterColumnTypeMutation.isLoading ||
+                    alterTypeNewType.trim() === '' ||
+                    alterTypeNewType.trim() ===
+                      columnToAlterType?.columnType.trim()
+                  }
+                >
+                  Update
                 </Button>
               </DialogActions>
             </Dialog>

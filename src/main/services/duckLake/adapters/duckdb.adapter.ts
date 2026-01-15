@@ -185,6 +185,32 @@ export class DuckDBCatalogAdapter extends CatalogAdapter {
     }
   }
 
+  async alterColumnType(
+    tableName: string,
+    columnName: string,
+    newType: string,
+  ): Promise<void> {
+    try {
+      if (!this.connectionInfo) {
+        throw new Error('No active connection');
+      }
+
+      const escapedTableName = tableName.replace(/"/g, '""');
+      const escapedColumnName = columnName.replace(/"/g, '""');
+
+      await this.connectionInfo.connection.run(
+        `ALTER TABLE "${escapedTableName}" ALTER COLUMN "${escapedColumnName}" TYPE ${newType}`,
+      );
+    } catch (error) {
+      // eslint-disable-next-line no-console
+      console.error(
+        `Failed to alter column ${columnName} type to ${newType} on DuckDB table ${tableName}:`,
+        error,
+      );
+      throw error;
+    }
+  }
+
   async renameTable(oldName: string, newName: string): Promise<void> {
     try {
       if (!this.connectionInfo) {
