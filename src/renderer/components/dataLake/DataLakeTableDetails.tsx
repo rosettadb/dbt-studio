@@ -556,7 +556,7 @@ export const DataLakeTableDetails: React.FC = () => {
                   sx={{ mb: 2 }}
                 >
                   Default value is treated as a raw SQL expression (e.g.{' '}
-                  <strong>0</strong>,<strong> 'x'</strong>,{' '}
+                  <strong>0</strong>,<strong> &apos;x&apos;</strong>,{' '}
                   <strong>current_timestamp</strong>).
                 </Typography>
                 <TextField
