@@ -473,6 +473,25 @@ export class DuckDBCatalogAdapter extends CatalogAdapter {
     }
   }
 
+  async deleteTable(tableName: string): Promise<void> {
+    try {
+      if (!this.connectionInfo) {
+        throw new Error('No active connection');
+      }
+
+      // Escape double quotes in identifier parts and quote them.
+      // This is safe for typical DuckLake table names and avoids SQL injection.
+      const escapedName = tableName.replace(/"/g, '""');
+      await this.connectionInfo.connection.run(
+        `DROP TABLE IF EXISTS "${escapedName}"`,
+      );
+    } catch (error) {
+      // eslint-disable-next-line no-console
+      console.error(`Failed to delete DuckDB table ${tableName}:`, error);
+      throw error;
+    }
+  }
+
   async executeQuery(
     request: DuckLakeQueryRequest,
   ): Promise<DuckLakeQueryResult> {
@@ -877,8 +896,8 @@ export class DuckDBCatalogAdapter extends CatalogAdapter {
           cs.min_value,
           cs.max_value
         FROM ${quotedMetadataDatabase}.main.ducklake_table_column_stats cs
-        JOIN ${quotedMetadataDatabase}.main.ducklake_column c 
-          ON cs.column_id = c.column_id 
+        JOIN ${quotedMetadataDatabase}.main.ducklake_column c
+          ON cs.column_id = c.column_id
           AND cs.table_id = c.table_id
           AND ${currentSnapshot} >= c.begin_snapshot
           AND (${currentSnapshot} < c.end_snapshot OR c.end_snapshot IS NULL)
@@ -1010,7 +1029,7 @@ export class DuckDBCatalogAdapter extends CatalogAdapter {
               c.column_name,
               pc.transform
             FROM ${quotedMetadataDatabase}.main.ducklake_partition_column pc
-            JOIN ${quotedMetadataDatabase}.main.ducklake_column c 
+            JOIN ${quotedMetadataDatabase}.main.ducklake_column c
               ON pc.column_id = c.column_id
               AND pc.table_id = c.table_id
               AND ${currentSnapshot} >= c.begin_snapshot
@@ -1099,37 +1118,37 @@ export class DuckDBCatalogAdapter extends CatalogAdapter {
           SELECT t.begin_snapshot as snapshot_id
           FROM ${quotedMetadataDatabase}.main.ducklake_table t
           WHERE t.table_id = ${tableId}
-          
+
           UNION
-          
+
           -- Snapshot when table was deleted (if applicable)
           SELECT t.end_snapshot as snapshot_id
           FROM ${quotedMetadataDatabase}.main.ducklake_table t
           WHERE t.table_id = ${tableId} AND t.end_snapshot IS NOT NULL
-          
+
           UNION
-          
+
           -- Snapshots when columns were added/modified
           SELECT c.begin_snapshot as snapshot_id
           FROM ${quotedMetadataDatabase}.main.ducklake_column c
           WHERE c.table_id = ${tableId}
-          
+
           UNION
-          
+
           -- Snapshots when columns were dropped
           SELECT c.end_snapshot as snapshot_id
           FROM ${quotedMetadataDatabase}.main.ducklake_column c
           WHERE c.table_id = ${tableId} AND c.end_snapshot IS NOT NULL
-          
+
           UNION
-          
+
           -- Snapshots when data files were added
           SELECT df.begin_snapshot as snapshot_id
           FROM ${quotedMetadataDatabase}.main.ducklake_data_file df
           WHERE df.table_id = ${tableId}
-          
+
           UNION
-          
+
           -- Snapshots when data files were deleted
           SELECT df.end_snapshot as snapshot_id
           FROM ${quotedMetadataDatabase}.main.ducklake_data_file df
@@ -1219,7 +1238,7 @@ export class DuckDBCatalogAdapter extends CatalogAdapter {
           ct.begin_snapshot,
           ct.end_snapshot
         FROM ${quotedMetadataDatabase}.main.ducklake_column_tag ct
-        JOIN ${quotedMetadataDatabase}.main.ducklake_column c 
+        JOIN ${quotedMetadataDatabase}.main.ducklake_column c
           ON ct.column_id = c.column_id
           AND ct.table_id = c.table_id
           AND ${currentSnapshot} >= c.begin_snapshot

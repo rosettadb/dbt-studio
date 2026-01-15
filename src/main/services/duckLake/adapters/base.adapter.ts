@@ -87,6 +87,8 @@ export abstract class CatalogAdapter {
    */
   abstract getTable(tableName: string): Promise<DuckLakeTableInfo>;
 
+  abstract deleteTable(tableName: string): Promise<void>;
+
   /**
    * Execute query against the DuckLake instance
    */

@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, useState } from 'react';
 import {
   Box,
   Card,
@@ -14,10 +14,21 @@ import {
   Chip,
   IconButton,
   Tooltip,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions,
+  Button,
 } from '@mui/material';
-import { TableChart, Visibility, QueryStats } from '@mui/icons-material';
+import {
+  TableChart,
+  Visibility,
+  QueryStats,
+  Delete,
+} from '@mui/icons-material';
 import { useNavigate } from 'react-router-dom';
 import moment from 'moment';
+import { useDeleteDuckLakeTable } from '../../controllers/duckLake.controller';
 
 interface DuckLakeTable {
   id: string;
@@ -45,6 +56,11 @@ export const DataLakeTables: React.FC<DuckLakeTablesProps> = ({
   onQuery,
 }) => {
   const navigate = useNavigate();
+  const deleteTableMutation = useDeleteDuckLakeTable();
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [tableToDelete, setTableToDelete] = useState<DuckLakeTable | null>(
+    null,
+  );
 
   const filteredTables = useMemo(() => {
     const result = selectedInstanceId
@@ -87,6 +103,26 @@ export const DataLakeTables: React.FC<DuckLakeTablesProps> = ({
     if (onQuery) {
       onQuery(tableId);
     }
+  };
+
+  const handleRequestDelete = (table: DuckLakeTable) => {
+    setTableToDelete(table);
+    setDeleteDialogOpen(true);
+  };
+
+  const handleConfirmDelete = () => {
+    if (!tableToDelete) {
+      setDeleteDialogOpen(false);
+      return;
+    }
+
+    deleteTableMutation.mutate({
+      instanceId: tableToDelete.instanceId,
+      tableName: tableToDelete.name,
+    });
+
+    setDeleteDialogOpen(false);
+    setTableToDelete(null);
   };
 
   return (
@@ -246,6 +282,21 @@ export const DataLakeTables: React.FC<DuckLakeTablesProps> = ({
                           </IconButton>
                         </span>
                       </Tooltip>
+                      <Tooltip title="Delete Table">
+                        <span>
+                          <IconButton
+                            size="small"
+                            color="error"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleRequestDelete(table);
+                            }}
+                            disabled={deleteTableMutation.isLoading}
+                          >
+                            <Delete fontSize="small" />
+                          </IconButton>
+                        </span>
+                      </Tooltip>
                     </Box>
                   </TableCell>
                 </TableRow>
@@ -254,6 +305,44 @@ export const DataLakeTables: React.FC<DuckLakeTablesProps> = ({
           </Table>
         </TableContainer>
       )}
+
+      <Dialog
+        open={deleteDialogOpen}
+        onClose={() => {
+          setDeleteDialogOpen(false);
+          setTableToDelete(null);
+        }}
+        maxWidth="sm"
+        fullWidth
+      >
+        <DialogTitle>Delete table</DialogTitle>
+        <DialogContent>
+          <Typography variant="body2" color="text.secondary">
+            Are you sure you want to delete{' '}
+            <strong>{tableToDelete?.name}</strong>? This will remove the table
+            from the DataLake instance.
+          </Typography>
+        </DialogContent>
+        <DialogActions>
+          <Button
+            onClick={() => {
+              setDeleteDialogOpen(false);
+              setTableToDelete(null);
+            }}
+            color="inherit"
+          >
+            Cancel
+          </Button>
+          <Button
+            onClick={handleConfirmDelete}
+            color="error"
+            variant="contained"
+            disabled={!tableToDelete || deleteTableMutation.isLoading}
+          >
+            Delete
+          </Button>
+        </DialogActions>
+      </Dialog>
     </Box>
   );
 };

@@ -494,13 +494,24 @@ export default class DuckLakeService {
 
   static async deleteTable(
     instanceId: string,
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
     tableName: string,
   ): Promise<void> {
     try {
       await this.ensureConnected(instanceId);
 
-      // TODO: Implement table deletion for tableName
+      const adapter = await this.getAdapter(instanceId);
+
+      if (!tableName || tableName.trim() === '') {
+        throw DuckLakeError.validation('Table name is required');
+      }
+
+      const tables = await adapter.listTables();
+      const tableExists = tables.some((t) => t.name === tableName);
+      if (!tableExists) {
+        throw DuckLakeError.validation(`Table ${tableName} does not exist`);
+      }
+
+      await adapter.deleteTable(tableName);
     } catch (error) {
       // eslint-disable-next-line no-console
       console.error(error);
