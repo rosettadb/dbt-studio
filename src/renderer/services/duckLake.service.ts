@@ -134,6 +134,36 @@ export namespace DuckLakeService {
     );
   }
 
+  export async function addColumn(
+    instanceId: string,
+    tableName: string,
+    columnName: string,
+    columnType: string,
+    defaultValue?: string,
+  ): Promise<void> {
+    return window.electron.ipcRenderer.invoke(
+      'ducklake:table:addColumn',
+      instanceId,
+      tableName,
+      columnName,
+      columnType,
+      defaultValue,
+    );
+  }
+
+  export async function dropColumn(
+    instanceId: string,
+    tableName: string,
+    columnName: string,
+  ): Promise<void> {
+    return window.electron.ipcRenderer.invoke(
+      'ducklake:table:dropColumn',
+      instanceId,
+      tableName,
+      columnName,
+    );
+  }
+
   /**
    * Get comprehensive table details from DuckLake metadata catalog (Phase 8b)
    */

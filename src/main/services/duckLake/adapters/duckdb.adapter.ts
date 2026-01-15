@@ -104,6 +104,60 @@ export class DuckDBCatalogAdapter extends CatalogAdapter {
     }
   }
 
+  async addColumn(
+    tableName: string,
+    columnName: string,
+    columnType: string,
+    defaultValue?: string,
+  ): Promise<void> {
+    try {
+      if (!this.connectionInfo) {
+        throw new Error('No active connection');
+      }
+
+      const escapedTableName = tableName.replace(/"/g, '""');
+      const escapedColumnName = columnName.replace(/"/g, '""');
+
+      const defaultClause =
+        defaultValue && defaultValue.trim() !== ''
+          ? ` DEFAULT ${defaultValue}`
+          : '';
+
+      await this.connectionInfo.connection.run(
+        `ALTER TABLE "${escapedTableName}" ADD COLUMN "${escapedColumnName}" ${columnType}${defaultClause}`,
+      );
+    } catch (error) {
+      // eslint-disable-next-line no-console
+      console.error(
+        `Failed to add column ${columnName} to DuckDB table ${tableName}:`,
+        error,
+      );
+      throw error;
+    }
+  }
+
+  async dropColumn(tableName: string, columnName: string): Promise<void> {
+    try {
+      if (!this.connectionInfo) {
+        throw new Error('No active connection');
+      }
+
+      const escapedTableName = tableName.replace(/"/g, '""');
+      const escapedColumnName = columnName.replace(/"/g, '""');
+
+      await this.connectionInfo.connection.run(
+        `ALTER TABLE "${escapedTableName}" DROP COLUMN "${escapedColumnName}"`,
+      );
+    } catch (error) {
+      // eslint-disable-next-line no-console
+      console.error(
+        `Failed to drop column ${columnName} from DuckDB table ${tableName}:`,
+        error,
+      );
+      throw error;
+    }
+  }
+
   async renameTable(oldName: string, newName: string): Promise<void> {
     try {
       if (!this.connectionInfo) {

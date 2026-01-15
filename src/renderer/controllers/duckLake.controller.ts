@@ -39,6 +39,71 @@ export function useDuckLakeInstances() {
   });
 }
 
+export function useAddDuckLakeColumn() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: ({
+      instanceId,
+      tableName,
+      columnName,
+      columnType,
+      defaultValue,
+    }: {
+      instanceId: string;
+      tableName: string;
+      columnName: string;
+      columnType: string;
+      defaultValue?: string;
+    }) =>
+      DuckLakeService.addColumn(
+        instanceId,
+        tableName,
+        columnName,
+        columnType,
+        defaultValue,
+      ),
+    onSuccess: (_, { instanceId, tableName }) => {
+      queryClient.invalidateQueries(duckLakeKeys.tableDetails(instanceId, tableName));
+      queryClient.invalidateQueries(duckLakeKeys.snapshots(instanceId, tableName));
+      queryClient.invalidateQueries(duckLakeKeys.table(instanceId, tableName));
+      queryClient.invalidateQueries(duckLakeKeys.tables(instanceId));
+
+      toast.success('Column added successfully');
+    },
+    onError: (error: Error) => {
+      toast.error(`Failed to add column: ${error.message}`);
+    },
+  });
+}
+
+export function useDropDuckLakeColumn() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: ({
+      instanceId,
+      tableName,
+      columnName,
+    }: {
+      instanceId: string;
+      tableName: string;
+      columnName: string;
+    }) => DuckLakeService.dropColumn(instanceId, tableName, columnName),
+    onSuccess: (_, { instanceId, tableName }) => {
+      queryClient.invalidateQueries(duckLakeKeys.tableDetails(instanceId, tableName));
+      queryClient.invalidateQueries(duckLakeKeys.snapshots(instanceId, tableName));
+      queryClient.invalidateQueries(duckLakeKeys.table(instanceId, tableName));
+      queryClient.invalidateQueries(duckLakeKeys.tables(instanceId));
+
+      toast.success('Column dropped successfully');
+    },
+    onError: (error: Error) => {
+      toast.error(`Failed to drop column: ${error.message}`);
+    },
+  });
+}
+
 export function useRenameDuckLakeTable() {
   const queryClient = useQueryClient();
 

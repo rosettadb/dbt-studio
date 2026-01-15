@@ -50,6 +50,105 @@ export default class DuckLakeService {
     }
   }
 
+  static async addColumn(
+    instanceId: string,
+    tableName: string,
+    columnName: string,
+    columnType: string,
+    defaultValue?: string,
+  ): Promise<void> {
+    try {
+      await this.ensureConnected(instanceId);
+      const adapter = await this.getAdapter(instanceId);
+
+      if (!tableName || tableName.trim() === '') {
+        throw DuckLakeError.validation('Table name is required');
+      }
+
+      if (!columnName || columnName.trim() === '') {
+        throw DuckLakeError.validation('Column name is required');
+      }
+
+      if (!columnType || columnType.trim() === '') {
+        throw DuckLakeError.validation('Column type is required');
+      }
+
+      const tables = await adapter.listTables();
+      const tableExists = tables.some((t) => t.name === tableName);
+      if (!tableExists) {
+        throw DuckLakeError.validation(`Table ${tableName} does not exist`);
+      }
+
+      const details = await adapter.getTableDetails(tableName);
+      const existingColumns = Array.isArray(details?.columns) ? details.columns : [];
+      const columnExists = existingColumns.some(
+        (c: any) => c?.columnName === columnName && c?.endSnapshot == null,
+      );
+      if (columnExists) {
+        throw DuckLakeError.validation(
+          `Column ${columnName} already exists on table ${tableName}`,
+        );
+      }
+
+      await adapter.addColumn(tableName, columnName, columnType, defaultValue);
+    } catch (error) {
+      // eslint-disable-next-line no-console
+      console.error(error);
+      throw error;
+    }
+  }
+
+  static async dropColumn(
+    instanceId: string,
+    tableName: string,
+    columnName: string,
+  ): Promise<void> {
+    try {
+      await this.ensureConnected(instanceId);
+      const adapter = await this.getAdapter(instanceId);
+
+      if (!tableName || tableName.trim() === '') {
+        throw DuckLakeError.validation('Table name is required');
+      }
+
+      if (!columnName || columnName.trim() === '') {
+        throw DuckLakeError.validation('Column name is required');
+      }
+
+      const tables = await adapter.listTables();
+      const tableExists = tables.some((t) => t.name === tableName);
+      if (!tableExists) {
+        throw DuckLakeError.validation(`Table ${tableName} does not exist`);
+      }
+
+      const details = await adapter.getTableDetails(tableName);
+      const existingColumns = Array.isArray(details?.columns) ? details.columns : [];
+      const activeColumn = existingColumns.find(
+        (c: any) => c?.columnName === columnName && c?.endSnapshot == null,
+      );
+      if (!activeColumn) {
+        throw DuckLakeError.validation(
+          `Column ${columnName} does not exist on table ${tableName}`,
+        );
+      }
+
+      const partitionColumnIds = new Set<number>(
+        (details?.partitionInfo?.columns || []).map((c: any) => Number(c.columnId)),
+      );
+      if (partitionColumnIds.has(Number(activeColumn.columnId))) {
+        throw DuckLakeError.validation(
+          `Column ${columnName} is a partition column and cannot be dropped`,
+        );
+      }
+
+      await adapter.dropColumn(tableName, columnName);
+    } catch (error) {
+      // eslint-disable-next-line no-console
+      console.error(error);
+      throw error;
+    }
+  }
+
   static async renameTable(
     instanceId: string,
     oldName: string,

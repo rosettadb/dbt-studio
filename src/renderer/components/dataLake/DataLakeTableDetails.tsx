@@ -28,6 +28,7 @@ import {
   DialogContent,
   DialogActions,
   Button,
+  TextField,
 } from '@mui/material';
 import {
   ArrowBack,
@@ -39,11 +40,15 @@ import {
   History,
   Label,
   Restore,
+  Add,
+  Delete,
 } from '@mui/icons-material';
 import { useNavigate, useParams } from 'react-router-dom';
 import moment from 'moment';
 import {
+  useAddDuckLakeColumn,
   useDuckLakeTableDetails,
+  useDropDuckLakeColumn,
   useRestoreDuckLakeSnapshot,
 } from '../../controllers/duckLake.controller';
 import {
@@ -89,7 +94,19 @@ export const DataLakeTableDetails: React.FC = () => {
   const [snapshotToRestore, setSnapshotToRestore] =
     useState<DuckLakeSnapshotDetail | null>(null);
 
+  const [addColumnDialogOpen, setAddColumnDialogOpen] = useState(false);
+  const [newColumnName, setNewColumnName] = useState('');
+  const [newColumnType, setNewColumnType] = useState('');
+  const [newColumnDefault, setNewColumnDefault] = useState('');
+
+  const [dropColumnDialogOpen, setDropColumnDialogOpen] = useState(false);
+  const [columnToDrop, setColumnToDrop] = useState<DuckLakeColumnDetail | null>(
+    null,
+  );
+
   const restoreSnapshotMutation = useRestoreDuckLakeSnapshot();
+  const addColumnMutation = useAddDuckLakeColumn();
+  const dropColumnMutation = useDropDuckLakeColumn();
 
   const {
     data: tableDetails,
@@ -99,6 +116,62 @@ export const DataLakeTableDetails: React.FC = () => {
 
   const handleTabChange = (_event: React.SyntheticEvent, newValue: number) => {
     setCurrentTab(newValue);
+  };
+
+  const handleOpenAddColumnDialog = () => {
+    setNewColumnName('');
+    setNewColumnType('');
+    setNewColumnDefault('');
+    setAddColumnDialogOpen(true);
+  };
+
+  const handleConfirmAddColumn = () => {
+    if (!instanceId || !tableName) {
+      setAddColumnDialogOpen(false);
+      return;
+    }
+
+    addColumnMutation.mutate({
+      instanceId,
+      tableName,
+      columnName: newColumnName,
+      columnType: newColumnType,
+      defaultValue:
+        newColumnDefault.trim() === '' ? undefined : newColumnDefault,
+    });
+
+    setAddColumnDialogOpen(false);
+  };
+
+  const isPartitionColumnId = (columnId: number) => {
+    const ids = new Set<number>(
+      (tableDetails?.partitionInfo?.columns || []).map((c: any) =>
+        Number(c.columnId),
+      ),
+    );
+    return ids.has(Number(columnId));
+  };
+
+  const handleRequestDropColumn = (column: DuckLakeColumnDetail) => {
+    setColumnToDrop(column);
+    setDropColumnDialogOpen(true);
+  };
+
+  const handleConfirmDropColumn = () => {
+    if (!instanceId || !tableName || !columnToDrop) {
+      setDropColumnDialogOpen(false);
+      setColumnToDrop(null);
+      return;
+    }
+
+    dropColumnMutation.mutate({
+      instanceId,
+      tableName,
+      columnName: columnToDrop.columnName,
+    });
+
+    setDropColumnDialogOpen(false);
+    setColumnToDrop(null);
   };
 
   const formatBytes = (bytes: number) => {
@@ -372,9 +445,29 @@ export const DataLakeTableDetails: React.FC = () => {
       <TabPanel value={currentTab} index={1}>
         <Card>
           <CardContent>
-            <Typography variant="h6" gutterBottom>
-              Column Schema ({tableDetails.columns.length} columns)
-            </Typography>
+            <Box
+              sx={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                mb: 2,
+                gap: 2,
+              }}
+            >
+              <Typography variant="h6">
+                Column Schema ({tableDetails.columns.length} columns)
+              </Typography>
+              <Button
+                variant="contained"
+                startIcon={<Add />}
+                onClick={handleOpenAddColumnDialog}
+                disabled={
+                  addColumnMutation.isLoading || dropColumnMutation.isLoading
+                }
+              >
+                Add column
+              </Button>
+            </Box>
             <TableContainer>
               <Table>
                 <TableHead>
@@ -385,6 +478,7 @@ export const DataLakeTableDetails: React.FC = () => {
                     <TableCell>Nullable</TableCell>
                     <TableCell>Default Value</TableCell>
                     <TableCell>Snapshot Range</TableCell>
+                    <TableCell align="right">Actions</TableCell>
                   </TableRow>
                 </TableHead>
                 <TableBody>
@@ -418,11 +512,135 @@ export const DataLakeTableDetails: React.FC = () => {
                           ? ` - ${safeToString(column.endSnapshot)}`
                           : ' (current)'}
                       </TableCell>
+                      <TableCell align="right">
+                        <Tooltip
+                          title={
+                            isPartitionColumnId(column.columnId)
+                              ? 'Partition columns cannot be dropped'
+                              : 'Drop column'
+                          }
+                        >
+                          <span>
+                            <IconButton
+                              size="small"
+                              color="error"
+                              onClick={() => handleRequestDropColumn(column)}
+                              disabled={
+                                dropColumnMutation.isLoading ||
+                                addColumnMutation.isLoading ||
+                                isPartitionColumnId(column.columnId)
+                              }
+                            >
+                              <Delete fontSize="small" />
+                            </IconButton>
+                          </span>
+                        </Tooltip>
+                      </TableCell>
                     </TableRow>
                   ))}
                 </TableBody>
               </Table>
             </TableContainer>
+
+            <Dialog
+              open={addColumnDialogOpen}
+              onClose={() => setAddColumnDialogOpen(false)}
+              maxWidth="sm"
+              fullWidth
+            >
+              <DialogTitle>Add column</DialogTitle>
+              <DialogContent>
+                <Typography
+                  variant="body2"
+                  color="text.secondary"
+                  sx={{ mb: 2 }}
+                >
+                  Default value is treated as a raw SQL expression (e.g.{' '}
+                  <strong>0</strong>,<strong> 'x'</strong>,{' '}
+                  <strong>current_timestamp</strong>).
+                </Typography>
+                <TextField
+                  fullWidth
+                  label="Column name"
+                  value={newColumnName}
+                  onChange={(e) => setNewColumnName(e.target.value)}
+                  sx={{ mb: 2 }}
+                  disabled={addColumnMutation.isLoading}
+                  autoFocus
+                />
+                <TextField
+                  fullWidth
+                  label="Column type"
+                  value={newColumnType}
+                  onChange={(e) => setNewColumnType(e.target.value)}
+                  sx={{ mb: 2 }}
+                  disabled={addColumnMutation.isLoading}
+                />
+                <TextField
+                  fullWidth
+                  label="Default (optional)"
+                  value={newColumnDefault}
+                  onChange={(e) => setNewColumnDefault(e.target.value)}
+                  disabled={addColumnMutation.isLoading}
+                />
+              </DialogContent>
+              <DialogActions>
+                <Button
+                  color="inherit"
+                  onClick={() => setAddColumnDialogOpen(false)}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  variant="contained"
+                  onClick={handleConfirmAddColumn}
+                  disabled={
+                    addColumnMutation.isLoading ||
+                    newColumnName.trim() === '' ||
+                    newColumnType.trim() === ''
+                  }
+                >
+                  Add
+                </Button>
+              </DialogActions>
+            </Dialog>
+
+            <Dialog
+              open={dropColumnDialogOpen}
+              onClose={() => {
+                setDropColumnDialogOpen(false);
+                setColumnToDrop(null);
+              }}
+              maxWidth="sm"
+              fullWidth
+            >
+              <DialogTitle>Drop column</DialogTitle>
+              <DialogContent>
+                <Typography variant="body2" color="text.secondary">
+                  Are you sure you want to drop{' '}
+                  <strong>{columnToDrop?.columnName}</strong>?
+                </Typography>
+              </DialogContent>
+              <DialogActions>
+                <Button
+                  color="inherit"
+                  onClick={() => {
+                    setDropColumnDialogOpen(false);
+                    setColumnToDrop(null);
+                  }}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  color="error"
+                  variant="contained"
+                  onClick={handleConfirmDropColumn}
+                  disabled={!columnToDrop || dropColumnMutation.isLoading}
+                >
+                  Drop
+                </Button>
+              </DialogActions>
+            </Dialog>
           </CardContent>
         </Card>
       </TabPanel>

@@ -91,6 +91,15 @@ export abstract class CatalogAdapter {
 
   abstract renameTable(oldName: string, newName: string): Promise<void>;
 
+  abstract addColumn(
+    tableName: string,
+    columnName: string,
+    columnType: string,
+    defaultValue?: string,
+  ): Promise<void>;
+
+  abstract dropColumn(tableName: string, columnName: string): Promise<void>;
+
   abstract restoreSnapshot(tableName: string, snapshotId: number): Promise<void>;
 
   abstract updateRows(

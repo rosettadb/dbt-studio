@@ -101,6 +101,38 @@ const registerDuckLakeHandlers = () => {
   );
 
   ipcMain.handle(
+    'ducklake:table:addColumn',
+    async (
+      _event,
+      instanceId: string,
+      tableName: string,
+      columnName: string,
+      columnType: string,
+      defaultValue?: string,
+    ) => {
+      return DuckLakeService.addColumn(
+        instanceId,
+        tableName,
+        columnName,
+        columnType,
+        defaultValue,
+      );
+    },
+  );
+
+  ipcMain.handle(
+    'ducklake:table:dropColumn',
+    async (
+      _event,
+      instanceId: string,
+      tableName: string,
+      columnName: string,
+    ) => {
+      return DuckLakeService.dropColumn(instanceId, tableName, columnName);
+    },
+  );
+
+  ipcMain.handle(
     'ducklake:table:updateRows',
     async (
       _event,
