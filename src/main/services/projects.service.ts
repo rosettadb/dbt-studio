@@ -1231,7 +1231,7 @@ export default class ProjectsService {
         fileStream.end();
         resolve();
       });
-      response.on('error', (err) => {
+      response.on('error', (err: Error) => {
         fileStream.destroy();
         reject(err);
       });
