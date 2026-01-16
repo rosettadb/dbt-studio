@@ -28,14 +28,20 @@ export class AppHelper {
    */
   async waitForNewWindow(timeout = 10000): Promise<Page> {
     return new Promise((resolve, reject) => {
-      const timer = setTimeout(() => {
+      let timer: ReturnType<typeof setTimeout>;
+
+      const handler = (page: Page) => {
+        clearTimeout(timer);
+        this.electronApp.off('window', handler);
+        resolve(page);
+      };
+
+      timer = setTimeout(() => {
+        this.electronApp.off('window', handler);
         reject(new Error('Timeout waiting for new window'));
       }, timeout);
 
-      this.electronApp.on('window', (page) => {
-        clearTimeout(timer);
-        resolve(page);
-      });
+      this.electronApp.on('window', handler);
     });
   }
 
