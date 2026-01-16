@@ -2,6 +2,8 @@ import { Page, ElectronApplication } from '@playwright/test';
 import { test, expect } from '../../fixtures/electron.fixture';
 import { SetupWizardPage } from '../../page-objects/screens/SetupWizard';
 
+test.use({ autoSkipSetup: false });
+
 // Helper to find the setup window
 const findSetupWindow = async (
   electronApp: ElectronApplication,
@@ -18,7 +20,7 @@ const findSetupWindow = async (
   });
   if (existing) return existing;
 
-  console.log('Waiting for setup window...');
+  // Waiting for setup window...
   try {
     return await electronApp.waitForEvent('window', {
       predicate: (w) => {
@@ -41,20 +43,11 @@ test.describe('First Run Experience', () => {
     const setupWindow = await findSetupWindow(electronApp);
 
     if (!setupWindow) {
-      // Log all windows
-      const windows = electronApp.windows();
-      const logs = await Promise.all(
-        windows.map(
-          async (w) => `Available window: ${w.url()} - ${await w.title()}`,
-        ),
-      );
-      logs.forEach((msg) => console.log(msg));
       throw new Error('Setup window failed to appear.');
     }
 
-    const title = await setupWindow.title();
+    // Setup Window detected
     const url = setupWindow.url();
-    console.log(`Setup Window detected. Title: "${title}", URL: "${url}"`);
 
     if (url.startsWith('chrome-error:')) {
       throw new Error(`Setup window failed to load content. URL: ${url}`);

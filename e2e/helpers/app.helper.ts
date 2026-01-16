@@ -72,42 +72,69 @@ export class AppHelper {
    */
   async skipSetupIfPresent(): Promise<void> {
     if (await this.isFirstRun()) {
-      // Try various skip mechanisms
+      // First, try to find and click the Skip Setup button (added for E2E testing)
+      const skipSetupBtn = this.mainWindow.locator(
+        '[data-testid="setup-skip-btn"]',
+      );
+      const skipSetupVisible = await skipSetupBtn
+        .isVisible({ timeout: 2000 })
+        .catch(() => false);
+
+      if (skipSetupVisible) {
+        await skipSetupBtn.click();
+        // Wait for setup to close and main app to appear
+        await this.mainWindow.waitForTimeout(1000);
+        return;
+      }
+
+      // Fallback: Try various skip mechanisms
       const skipSelectors = [
         '[data-testid="setup-skip-all-btn"]',
-        '[data-testid="setup-skip-btn"]',
         '[data-testid="onboarding-skip-btn"]',
         'button:has-text("Skip")',
       ];
 
       // Try each skip selector
-      await skipSelectors.reduce(async (promise, selector) => {
-        await promise;
+      // eslint-disable-next-line no-restricted-syntax
+      for (const selector of skipSelectors) {
         const btn = this.mainWindow.locator(selector);
+        // eslint-disable-next-line no-await-in-loop
         const isVisible = await btn
           .isVisible({ timeout: 1000 })
           .catch(() => false);
         if (isVisible) {
+          // eslint-disable-next-line no-await-in-loop
           await btn.click();
+          // eslint-disable-next-line no-await-in-loop
           await this.mainWindow.waitForTimeout(500);
+          return;
         }
-      }, Promise.resolve());
+      }
 
-      // Click through any remaining steps using recursion
+      // Last resort: Click through steps (only if buttons are enabled)
       const clickNextUntilDone = async (attempts: number): Promise<void> => {
         if (attempts >= 10 || !(await this.isFirstRun())) return;
 
         const nextBtn = this.mainWindow.locator(
-          '[data-testid="setup-next-btn"], [data-testid="onboarding-next-btn"], button:has-text("Next"), button:has-text("Continue")',
+          '[data-testid="setup-next-btn"], [data-testid="onboarding-next-btn"], [data-testid="setup-finish-btn"]',
         );
         const isVisible = await nextBtn
           .isVisible({ timeout: 1000 })
           .catch(() => false);
+
         if (isVisible) {
-          await nextBtn.click();
-          await this.mainWindow.waitForTimeout(500);
+          // Check if button is enabled before clicking
+          const isEnabled = await nextBtn
+            .isEnabled({ timeout: 500 })
+            .catch(() => false);
+
+          if (isEnabled) {
+            await nextBtn.click();
+            await this.mainWindow.waitForTimeout(500);
+            await clickNextUntilDone(attempts + 1);
+          }
+          // Button is disabled, can't proceed
         }
-        await clickNextUntilDone(attempts + 1);
       };
 
       await clickNextUntilDone(0);

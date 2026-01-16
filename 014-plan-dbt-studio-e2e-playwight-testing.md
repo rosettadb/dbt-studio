@@ -1,9 +1,9 @@
 # DBT Studio End-to-End Testing Plan with Playwright
 
 **Document Type:** Implementation Plan  
-**Status:** In Progress (Phase 3.1 Complete)  
+**Status:** In Progress (Phase 3 Complete, Phase 4 Started)  
 **Created:** 2026-01-15  
-**Last Updated:** 2026-01-15
+**Last Updated:** 2026-01-16
 
 ---
 
@@ -766,7 +766,7 @@ export class WaitHelper {
 
 ---
 
-## Phase 3: Critical User Flow Tests
+## Phase 3: Critical User Flow Tests (Completed)
 
 ### 3.1 First-Run & Setup Tests
 
@@ -813,7 +813,9 @@ test.describe('First Run Experience', () => {
 });
 ```
 
-### 3.2 Project Management Tests
+### 3.2 Project Management Tests (Completed)
+
+> **Implementation Note:** Project management tests initially faced challenges with right-click context menus. The implementation was updated to use a dedicated "Options" button (`data-testid="project-options-{name}"`) for better reliability in E2E environments. Additionally, programmatic seeding of `database.json` and project files was implemented to ensure test isolation.
 
 **File:** `e2e/tests/projects/project-lifecycle.spec.ts`
 
@@ -1030,7 +1032,7 @@ test.describe('Connection Management', () => {
 
 ---
 
-## Phase 4: Feature-Specific Test Suites
+## Phase 4: Feature-Specific Test Suites (In Progress)
 
 ### 4.1 Cloud Explorer Tests
 
@@ -1718,11 +1720,11 @@ snapshot-paths: ["snapshots"]
    - Component POMs exist for reusable elements
    - Helper utilities provide common functionality
 
-3. **Phase 3 Complete When:**
-   - First-run experience is fully tested
-   - Project CRUD operations are tested
-   - Basic SQL editor functionality is tested
-   - Connection management is tested
+3. **Phase 3 Complete When (Verified 2026-01-16):**
+   - First-run experience is fully tested [DONE]
+   - Project CRUD operations (Create, Open, Delete) are tested [DONE]
+   - Basic SQL editor functionality is tested [DONE]
+   - Connection management is tested [DONE]
 
 4. **Phase 4 Complete When:**
    - All major features have test suites

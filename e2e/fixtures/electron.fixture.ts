@@ -18,6 +18,8 @@ import * as os from 'os';
 export type ElectronFixtures = {
   /** Isolated user data directory for this test */
   userData: string;
+  /** Whether to automatically skip the setup wizard by seeding database.json */
+  autoSkipSetup: boolean;
   /** The Electron application instance */
   electronApp: ElectronApplication;
   /** The main browser window */
@@ -28,6 +30,9 @@ export type ElectronFixtures = {
  * Extended test with Electron fixtures
  */
 export const test = base.extend<ElectronFixtures>({
+  // Default to skipping setup for convenience in most tests
+  autoSkipSetup: [true, { option: true }],
+
   // Create isolated userData directory for each test
   // eslint-disable-next-line no-empty-pattern
   userData: async ({}, use, testInfo) => {
@@ -52,7 +57,47 @@ export const test = base.extend<ElectronFixtures>({
   },
 
   // Launch Electron app
-  electronApp: async ({ userData }, use) => {
+  electronApp: async ({ userData, autoSkipSetup }, use) => {
+    // Helper to seed database if skipping setup
+    if (autoSkipSetup) {
+      // Create projects directory
+      fs.mkdirSync(path.join(userData, 'projects'), { recursive: true });
+
+      // Copy assets to userData (dbt_sample, main.conf)
+      const assetsDir = path.join(__dirname, '../../assets');
+      const dbtSampleSrc = path.join(assetsDir, 'dbt_sample');
+      const mainConfSrc = path.join(assetsDir, 'main.conf');
+
+      if (fs.existsSync(dbtSampleSrc)) {
+        fs.cpSync(dbtSampleSrc, path.join(userData, 'dbt_sample'), {
+          recursive: true,
+        });
+      }
+      if (fs.existsSync(mainConfSrc)) {
+        fs.cpSync(mainConfSrc, path.join(userData, 'main.conf'));
+      }
+
+      const dbPath = path.join(userData, 'database.json');
+      const settings = {
+        settings: {
+          isSetup: 'true',
+          pythonPath:
+            process.platform === 'win32'
+              ? 'C:\\Python39\\python.exe'
+              : '/usr/bin/python3',
+          dbtPath:
+            process.platform === 'win32' ? 'dbt.exe' : '/usr/local/bin/dbt',
+          rosettaVersion: '0.0.0-test',
+          projectsDirectory: path.join(userData, 'projects'),
+          dbtSampleDirectory: path.join(userData, 'dbt_sample'),
+          sampleRosettaMainConf: path.join(userData, 'main.conf'),
+        },
+        projects: [],
+        connections: [],
+      };
+      fs.writeFileSync(dbPath, JSON.stringify(settings, null, 2));
+    }
+
     // Path to the main bundle
     const mainBundlePath = path.join(
       __dirname,

@@ -91,6 +91,13 @@ const Setup: React.FC = () => {
       )}
       <div style={{ display: 'flex', justifyContent: 'space-between' }}>
         <Button
+          variant="outlined"
+          data-testid="setup-skip-btn"
+          onClick={handleSkip}
+        >
+          Skip Setup
+        </Button>
+        <Button
           variant="contained"
           disabled={currentStep === 0 && !settings.dbtPath}
           style={{ marginLeft: 'auto' }}
