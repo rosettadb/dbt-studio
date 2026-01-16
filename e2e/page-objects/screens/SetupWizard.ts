@@ -143,6 +143,9 @@ export class SetupWizardPage extends BasePage {
       // eslint-disable-next-line no-await-in-loop
       await this.page.waitForTimeout(500);
     }
+
+    // Ensure the wizard is actually gone
+    await expect(this.wizardContainer).toBeHidden({ timeout: 2000 });
   }
 
   // ==================== Assertions ====================

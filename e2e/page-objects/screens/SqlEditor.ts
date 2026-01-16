@@ -6,7 +6,10 @@
  */
 
 import { Page, Locator, expect } from '@playwright/test';
+import * as os from 'os';
 import { BasePage } from '../BasePage';
+
+const modifier = os.platform() === 'darwin' ? 'Meta' : 'Control';
 
 export class SqlEditorPage extends BasePage {
   // Container
@@ -67,7 +70,7 @@ export class SqlEditorPage extends BasePage {
   async setQuery(query: string): Promise<void> {
     await this.monacoEditor.click();
     // Select all and replace
-    await this.page.keyboard.press('Meta+A');
+    await this.page.keyboard.press(`${modifier}+A`);
     await this.page.keyboard.type(query);
   }
 
@@ -76,7 +79,7 @@ export class SqlEditorPage extends BasePage {
    */
   async clearQuery(): Promise<void> {
     await this.monacoEditor.click();
-    await this.page.keyboard.press('Meta+A');
+    await this.page.keyboard.press(`${modifier}+A`);
     await this.page.keyboard.press('Backspace');
   }
 
@@ -91,7 +94,7 @@ export class SqlEditorPage extends BasePage {
    * Run the current query using keyboard shortcut
    */
   async runQueryWithKeyboard(): Promise<void> {
-    await this.page.keyboard.press('Meta+Enter');
+    await this.page.keyboard.press(`${modifier}+Enter`);
   }
 
   /**

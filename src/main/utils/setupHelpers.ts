@@ -65,6 +65,13 @@ export function resolveHtmlPath(htmlFileName: string, routePath = '') {
       '.erb/renderer/',
       htmlFileName,
     );
+
+    if (!fs.existsSync(filePath)) {
+      throw new Error(
+        `E2E_TESTING is true but renderer file is missing: ${filePath}. ensure you have built the renderer locally.`,
+      );
+    }
+
     if (routePath) {
       return `file://${filePath}#${routePath}`;
     }

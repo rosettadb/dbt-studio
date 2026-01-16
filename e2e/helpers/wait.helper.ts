@@ -190,6 +190,10 @@ export class WaitHelper {
       await locator
         .filter({ hasText: text })
         .waitFor({ state: 'visible', timeout });
+    } else if (typeof selector !== 'string') {
+      await locator
+        .filter({ hasText: text })
+        .waitFor({ state: 'visible', timeout });
     } else {
       await this.page.waitForFunction(
         ({ sel, pattern }) => {
@@ -197,7 +201,7 @@ export class WaitHelper {
           return el && new RegExp(pattern).test(el.textContent || '');
         },
         {
-          sel: typeof selector === 'string' ? selector : '',
+          sel: selector,
           pattern: text.source,
         },
         { timeout },

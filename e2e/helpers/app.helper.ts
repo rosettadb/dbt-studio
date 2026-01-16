@@ -4,7 +4,11 @@
  * Utilities for common app-level operations during E2E tests
  */
 
+import * as fs from 'fs';
+import * as path from 'path';
 import { ElectronApplication, Page } from '@playwright/test';
+
+const SCREENSHOT_DIR = 'test-results/screenshots';
 
 export class AppHelper {
   private electronApp: ElectronApplication;
@@ -196,8 +200,13 @@ export class AppHelper {
    * Take a screenshot of the main window
    */
   async takeScreenshot(name: string): Promise<void> {
+    // Ensure screenshot directory exists
+    if (!fs.existsSync(SCREENSHOT_DIR)) {
+      fs.mkdirSync(SCREENSHOT_DIR, { recursive: true });
+    }
+
     await this.mainWindow.screenshot({
-      path: `test-results/screenshots/${name}-${Date.now()}.png`,
+      path: path.join(SCREENSHOT_DIR, `${name}-${Date.now()}.png`),
       fullPage: true,
     });
   }

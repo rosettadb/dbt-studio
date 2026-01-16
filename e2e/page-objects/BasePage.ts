@@ -198,13 +198,12 @@ export abstract class BasePage {
    */
   async dismissToasts(): Promise<void> {
     const closeButtons = this.page.locator('.Toastify__close-button');
-    const count = await closeButtons.count();
-    const indices = Array.from({ length: count }, (_, i) => i);
-
-    // Click each close button sequentially
-    await indices.reduce(async (promise, i) => {
-      await promise;
-      await closeButtons.nth(i).click();
-    }, Promise.resolve());
+    // Click until none remain (list shrinks as we dismiss)
+    /* eslint-disable no-await-in-loop */
+    while ((await closeButtons.count()) > 0) {
+      await closeButtons.first().click();
+      await this.page.waitForTimeout(100); // Small delay to allow UI update
+    }
+    /* eslint-enable no-await-in-loop */
   }
 }

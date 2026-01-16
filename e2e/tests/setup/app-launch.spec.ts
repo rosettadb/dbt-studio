@@ -69,7 +69,8 @@ test.describe('App Launch', () => {
           description: 'Window failed to load content',
         });
       }
-      expect(true).toBe(true);
+      // Empty title is acceptable during initial load - explicitly skip assertion
+      test.skip(true, 'Title empty during initial load - skipping validation');
     }
   });
 
@@ -118,7 +119,11 @@ test.describe('App Launch', () => {
     // In test mode, userData should be our custom temp directory
     expect(userData).toBeDefined();
     expect(appUserData).toBeDefined();
-    // Path might differ slightly depending on OS norms, but passing check means API works
+    // Verify the app is using our test userData directory
+    // Normalize paths for cross-platform comparison
+    expect(appUserData.toLowerCase()).toContain(
+      userData.toLowerCase().replace(/\\/g, '/').split('/').pop() || '',
+    );
   });
 });
 
