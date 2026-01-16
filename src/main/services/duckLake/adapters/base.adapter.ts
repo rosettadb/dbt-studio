@@ -15,6 +15,7 @@ import {
   DuckLakeStorageConfig,
   DuckLakeSnapshotParams,
   DuckLakePaginatedResult,
+  DuckLakeTableChange,
 } from '../../../../types/duckLake';
 import { generateGCSBearerToken } from '../../../helpers/cloudAuth.helper';
 
@@ -117,7 +118,10 @@ export abstract class CatalogAdapter {
     columnNames: string[],
   ): Promise<void>;
 
-  abstract restoreSnapshot(tableName: string, snapshotId: number): Promise<void>;
+  abstract restoreSnapshot(
+    tableName: string,
+    snapshotId: number,
+  ): Promise<void>;
 
   abstract updateRows(
     tableName: string,
@@ -159,6 +163,131 @@ export abstract class CatalogAdapter {
    * Queries multiple metadata tables to provide complete table information
    */
   abstract getTableDetails(tableName: string): Promise<any>; // Returns DuckLakeTableDetails
+
+  /**
+   * Query change data capture between two snapshots (Phase 3.2)
+   */
+  async queryTableChanges(
+    tableName: string,
+    fromSnapshotId: number,
+    toSnapshotId?: number,
+  ): Promise<DuckLakeTableChange[]> {
+    if (!this.connectionInfo) {
+      throw new Error('Not connected to catalog');
+    }
+
+    if (Number.isNaN(fromSnapshotId)) {
+      throw new Error('fromSnapshotId must be a valid number');
+    }
+
+    const metadataDatabase = await this.getMetadataDatabaseName();
+    const quotedMetadataDatabase = `"${metadataDatabase}"`;
+    const escapedIdentifier = tableName.replace(/"/g, '""');
+
+    const tableInfo = await this.getTable(tableName);
+    const schemaName = tableInfo?.schema || 'main';
+
+    const sanitizedCatalogName = this.connectionInfo.instanceName.replace(
+      /'/g,
+      "''",
+    );
+    const sanitizedSchemaLiteral = schemaName.replace(/'/g, "''");
+    const sanitizedTableLiteral = tableName.replace(/'/g, "''");
+
+    let resolvedToSnapshotId = toSnapshotId;
+    if (
+      typeof resolvedToSnapshotId !== 'number' ||
+      Number.isNaN(resolvedToSnapshotId)
+    ) {
+      const snapshotResult = await this.connectionInfo.connection.run(`
+        SELECT COALESCE(MAX(s.snapshot_id), ${fromSnapshotId}) AS snapshot_id
+        FROM ${quotedMetadataDatabase}.main.ducklake_snapshot s
+        JOIN ${quotedMetadataDatabase}.main.ducklake_table t ON s.table_id = t.table_id
+        WHERE t.table_name = '${escapedIdentifier}'
+      `);
+      const snapshotRows = await snapshotResult.getRows();
+      if (snapshotRows.length > 0) {
+        const snapshotRecord = CatalogAdapter.mapResultRow(
+          snapshotResult.schema,
+          snapshotRows[0],
+        );
+        const snapshotValue =
+          snapshotRecord.snapshot_id ?? snapshotRecord.SNAPSHOT_ID;
+        const numericSnapshot =
+          typeof snapshotValue === 'number'
+            ? snapshotValue
+            : Number(snapshotValue);
+        if (Number.isFinite(numericSnapshot)) {
+          resolvedToSnapshotId = numericSnapshot;
+        }
+      }
+    }
+
+    if (
+      typeof resolvedToSnapshotId !== 'number' ||
+      Number.isNaN(resolvedToSnapshotId)
+    ) {
+      resolvedToSnapshotId = fromSnapshotId;
+    }
+
+    const changeQuery = `
+      SELECT *
+      FROM ducklake_table_changes(
+        '${sanitizedCatalogName}',
+        '${sanitizedSchemaLiteral}',
+        '${sanitizedTableLiteral}',
+        ${fromSnapshotId},
+        ${resolvedToSnapshotId}
+      )
+    `;
+
+    const result = await this.connectionInfo.connection.run(changeQuery);
+    const rows = await result.getRows();
+    const { schema } = result;
+
+    if (!rows || rows.length === 0) {
+      return [];
+    }
+
+    return rows.map((row: any) => {
+      const record = CatalogAdapter.mapResultRow(schema, row);
+      const operationRaw = (record.change_type ||
+        record.operation ||
+        record.op ||
+        record.CHANGE_TYPE ||
+        '') as string;
+      let operation: 'INSERT' | 'UPDATE' | 'DELETE';
+      switch (operationRaw.toUpperCase()) {
+        case 'INSERT':
+          operation = 'INSERT';
+          break;
+        case 'DELETE':
+          operation = 'DELETE';
+          break;
+        default:
+          operation = 'UPDATE';
+      }
+
+      const snapshotValue =
+        record.snapshot_id ?? record.SNAPSHOT_ID ?? record.snapshot;
+
+      let snapshotId: number | undefined;
+      if (typeof snapshotValue === 'number') {
+        snapshotId = snapshotValue;
+      } else {
+        const numericSnapshotId = Number(snapshotValue);
+        if (Number.isFinite(numericSnapshotId)) {
+          snapshotId = numericSnapshotId;
+        }
+      }
+
+      return {
+        operation,
+        snapshotId,
+        row: record,
+      } as DuckLakeTableChange;
+    });
+  }
 
   /**
    * Get current connection info
@@ -506,5 +635,61 @@ CREATE OR REPLACE SECRET ${secretName} (
       );
       throw error;
     }
+  }
+
+  /**
+   * Resolve the attached DuckLake metadata database name
+   */
+  protected async getMetadataDatabaseName(): Promise<string> {
+    if (!this.connectionInfo) {
+      throw new Error('Not connected to catalog');
+    }
+
+    const databasesQuery = `
+      SELECT database_name
+      FROM duckdb_databases()
+      WHERE database_name LIKE '__ducklake_metadata_%'
+      LIMIT 1
+    `;
+
+    const databasesResult =
+      await this.connectionInfo.connection.run(databasesQuery);
+    const databaseRows = await databasesResult.getRows();
+
+    if (databaseRows.length === 0) {
+      throw new Error('DuckLake metadata database not found');
+    }
+
+    return Array.isArray(databaseRows[0])
+      ? databaseRows[0][0]
+      : (databaseRows[0] as any).database_name;
+  }
+
+  protected static mapResultRow(
+    schema: any[] | undefined,
+    row: any,
+  ): Record<string, unknown> {
+    if (!Array.isArray(row)) {
+      return (row ?? {}) as Record<string, unknown>;
+    }
+
+    if (!schema || schema.length === 0) {
+      return row.reduce(
+        (acc: Record<string, unknown>, value: unknown, index: number) => {
+          acc[`col_${index}`] = value;
+          return acc;
+        },
+        {},
+      );
+    }
+
+    return schema.reduce(
+      (acc: Record<string, unknown>, column: any, index: number) => {
+        const key = column?.name || `col_${index}`;
+        acc[key] = row[index];
+        return acc;
+      },
+      {},
+    );
   }
 }

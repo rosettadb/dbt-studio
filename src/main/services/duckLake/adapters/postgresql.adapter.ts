@@ -223,8 +223,8 @@ export class PostgreSQLCatalogAdapter extends CatalogAdapter {
       }
 
       const escapedTableName = tableName.replace(/"/g, '""');
-      const escapedColumns = columnNames.map((c) =>
-        `"${c.replace(/"/g, '""')}"`,
+      const escapedColumns = columnNames.map(
+        (c) => `"${c.replace(/"/g, '""')}"`,
       );
 
       await this.connectionInfo.connection.run(
@@ -279,9 +279,10 @@ export class PostgreSQLCatalogAdapter extends CatalogAdapter {
       );
       const rows = await changesResult.getRows();
       const value = rows?.[0]?.[0] ?? 0;
-      const numeric = typeof value === 'object' && value?.hugeint !== undefined
-        ? Number(value.hugeint)
-        : Number(value);
+      const numeric =
+        typeof value === 'object' && value?.hugeint !== undefined
+          ? Number(value.hugeint)
+          : Number(value);
 
       return { rowsAffected: Number.isFinite(numeric) ? numeric : 0 };
     } catch (error) {
@@ -306,9 +307,10 @@ export class PostgreSQLCatalogAdapter extends CatalogAdapter {
       );
       const rows = await changesResult.getRows();
       const value = rows?.[0]?.[0] ?? 0;
-      const numeric = typeof value === 'object' && value?.hugeint !== undefined
-        ? Number(value.hugeint)
-        : Number(value);
+      const numeric =
+        typeof value === 'object' && value?.hugeint !== undefined
+          ? Number(value.hugeint)
+          : Number(value);
 
       return { rowsAffected: Number.isFinite(numeric) ? numeric : 0 };
     } catch (error) {
@@ -333,9 +335,10 @@ export class PostgreSQLCatalogAdapter extends CatalogAdapter {
       );
       const rows = await changesResult.getRows();
       const value = rows?.[0]?.[0] ?? 0;
-      const numeric = typeof value === 'object' && value?.hugeint !== undefined
-        ? Number(value.hugeint)
-        : Number(value);
+      const numeric =
+        typeof value === 'object' && value?.hugeint !== undefined
+          ? Number(value.hugeint)
+          : Number(value);
 
       return { rowsAffected: Number.isFinite(numeric) ? numeric : 0 };
     } catch (error) {

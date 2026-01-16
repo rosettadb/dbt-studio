@@ -17,6 +17,18 @@ export const duckLakeKeys = {
     [...duckLakeKeys.tables(instanceId), tableName] as const,
   tableDetails: (instanceId: string, tableName: string) =>
     [...duckLakeKeys.table(instanceId, tableName), 'details'] as const, // Phase 8b
+  tableChanges: (
+    instanceId: string,
+    tableName: string,
+    fromSnapshotId?: number,
+    toSnapshotId?: number,
+  ) =>
+    [
+      ...duckLakeKeys.table(instanceId, tableName),
+      'changes',
+      fromSnapshotId,
+      toSnapshotId,
+    ] as const,
   snapshots: (instanceId: string, tableName: string) =>
     [...duckLakeKeys.table(instanceId, tableName), 'snapshots'] as const,
   instanceSnapshots: (instanceId: string, params?: DuckLakeSnapshotParams) =>
@@ -36,6 +48,47 @@ export function useDuckLakeInstances() {
     queryFn: DuckLakeService.listInstances,
     staleTime: 30000, // 30 seconds
     refetchInterval: 60000, // 1 minute
+  });
+}
+
+export function useDuckLakeTableChanges({
+  instanceId,
+  tableName,
+  fromSnapshotId,
+  toSnapshotId,
+  enabled = true,
+}: {
+  instanceId: string;
+  tableName: string;
+  fromSnapshotId?: number | null;
+  toSnapshotId?: number | null;
+  enabled?: boolean;
+}) {
+  const normalizedFrom =
+    typeof fromSnapshotId === 'number' ? fromSnapshotId : undefined;
+  const normalizedTo =
+    typeof toSnapshotId === 'number' ? toSnapshotId : undefined;
+  const selectionValid =
+    typeof normalizedFrom === 'number' &&
+    typeof normalizedTo === 'number' &&
+    normalizedFrom <= normalizedTo;
+
+  return useQuery({
+    queryKey: duckLakeKeys.tableChanges(
+      instanceId,
+      tableName,
+      normalizedFrom,
+      normalizedTo,
+    ),
+    queryFn: () =>
+      DuckLakeService.queryTableChanges(
+        instanceId,
+        tableName,
+        normalizedFrom!,
+        normalizedTo,
+      ),
+    enabled: enabled && !!instanceId && !!tableName && Boolean(selectionValid),
+    keepPreviousData: true,
   });
 }
 
@@ -64,8 +117,12 @@ export function useAddDuckLakeColumn() {
         defaultValue,
       ),
     onSuccess: (_, { instanceId, tableName }) => {
-      queryClient.invalidateQueries(duckLakeKeys.tableDetails(instanceId, tableName));
-      queryClient.invalidateQueries(duckLakeKeys.snapshots(instanceId, tableName));
+      queryClient.invalidateQueries(
+        duckLakeKeys.tableDetails(instanceId, tableName),
+      );
+      queryClient.invalidateQueries(
+        duckLakeKeys.snapshots(instanceId, tableName),
+      );
       queryClient.invalidateQueries(duckLakeKeys.table(instanceId, tableName));
       queryClient.invalidateQueries(duckLakeKeys.tables(instanceId));
 
@@ -91,8 +148,12 @@ export function useDropDuckLakeColumn() {
       columnName: string;
     }) => DuckLakeService.dropColumn(instanceId, tableName, columnName),
     onSuccess: (_, { instanceId, tableName }) => {
-      queryClient.invalidateQueries(duckLakeKeys.tableDetails(instanceId, tableName));
-      queryClient.invalidateQueries(duckLakeKeys.snapshots(instanceId, tableName));
+      queryClient.invalidateQueries(
+        duckLakeKeys.tableDetails(instanceId, tableName),
+      );
+      queryClient.invalidateQueries(
+        duckLakeKeys.snapshots(instanceId, tableName),
+      );
       queryClient.invalidateQueries(duckLakeKeys.table(instanceId, tableName));
       queryClient.invalidateQueries(duckLakeKeys.tables(instanceId));
 
@@ -126,8 +187,12 @@ export function useRenameDuckLakeColumn() {
         newColumnName,
       ),
     onSuccess: (_, { instanceId, tableName }) => {
-      queryClient.invalidateQueries(duckLakeKeys.tableDetails(instanceId, tableName));
-      queryClient.invalidateQueries(duckLakeKeys.snapshots(instanceId, tableName));
+      queryClient.invalidateQueries(
+        duckLakeKeys.tableDetails(instanceId, tableName),
+      );
+      queryClient.invalidateQueries(
+        duckLakeKeys.snapshots(instanceId, tableName),
+      );
       queryClient.invalidateQueries(duckLakeKeys.table(instanceId, tableName));
       queryClient.invalidateQueries(duckLakeKeys.tables(instanceId));
 
@@ -153,10 +218,20 @@ export function useAlterDuckLakeColumnType() {
       tableName: string;
       columnName: string;
       newType: string;
-    }) => DuckLakeService.alterColumnType(instanceId, tableName, columnName, newType),
+    }) =>
+      DuckLakeService.alterColumnType(
+        instanceId,
+        tableName,
+        columnName,
+        newType,
+      ),
     onSuccess: (_, { instanceId, tableName }) => {
-      queryClient.invalidateQueries(duckLakeKeys.tableDetails(instanceId, tableName));
-      queryClient.invalidateQueries(duckLakeKeys.snapshots(instanceId, tableName));
+      queryClient.invalidateQueries(
+        duckLakeKeys.tableDetails(instanceId, tableName),
+      );
+      queryClient.invalidateQueries(
+        duckLakeKeys.snapshots(instanceId, tableName),
+      );
       queryClient.invalidateQueries(duckLakeKeys.table(instanceId, tableName));
       queryClient.invalidateQueries(duckLakeKeys.tables(instanceId));
 
@@ -182,8 +257,12 @@ export function useSetDuckLakeTablePartitionedBy() {
       columnNames: string[];
     }) => DuckLakeService.setPartitionedBy(instanceId, tableName, columnNames),
     onSuccess: (_, { instanceId, tableName }) => {
-      queryClient.invalidateQueries(duckLakeKeys.tableDetails(instanceId, tableName));
-      queryClient.invalidateQueries(duckLakeKeys.snapshots(instanceId, tableName));
+      queryClient.invalidateQueries(
+        duckLakeKeys.tableDetails(instanceId, tableName),
+      );
+      queryClient.invalidateQueries(
+        duckLakeKeys.snapshots(instanceId, tableName),
+      );
       queryClient.invalidateQueries(duckLakeKeys.table(instanceId, tableName));
       queryClient.invalidateQueries(duckLakeKeys.tables(instanceId));
 
@@ -211,11 +290,19 @@ export function useRenameDuckLakeTable() {
     onSuccess: (_, { instanceId, oldName, newName }) => {
       queryClient.invalidateQueries(duckLakeKeys.tables(instanceId));
       queryClient.invalidateQueries(duckLakeKeys.table(instanceId, oldName));
-      queryClient.invalidateQueries(duckLakeKeys.tableDetails(instanceId, oldName));
-      queryClient.invalidateQueries(duckLakeKeys.snapshots(instanceId, oldName));
+      queryClient.invalidateQueries(
+        duckLakeKeys.tableDetails(instanceId, oldName),
+      );
+      queryClient.invalidateQueries(
+        duckLakeKeys.snapshots(instanceId, oldName),
+      );
       queryClient.invalidateQueries(duckLakeKeys.table(instanceId, newName));
-      queryClient.invalidateQueries(duckLakeKeys.tableDetails(instanceId, newName));
-      queryClient.invalidateQueries(duckLakeKeys.snapshots(instanceId, newName));
+      queryClient.invalidateQueries(
+        duckLakeKeys.tableDetails(instanceId, newName),
+      );
+      queryClient.invalidateQueries(
+        duckLakeKeys.snapshots(instanceId, newName),
+      );
 
       toast.success('Table renamed successfully');
     },
@@ -239,8 +326,12 @@ export function useUpdateDuckLakeRows() {
       updateQuery: string;
     }) => DuckLakeService.updateRows(instanceId, tableName, updateQuery),
     onSuccess: (result, { instanceId, tableName }) => {
-      queryClient.invalidateQueries(duckLakeKeys.tableDetails(instanceId, tableName));
-      queryClient.invalidateQueries(duckLakeKeys.snapshots(instanceId, tableName));
+      queryClient.invalidateQueries(
+        duckLakeKeys.tableDetails(instanceId, tableName),
+      );
+      queryClient.invalidateQueries(
+        duckLakeKeys.snapshots(instanceId, tableName),
+      );
       queryClient.invalidateQueries(duckLakeKeys.table(instanceId, tableName));
       queryClient.invalidateQueries(duckLakeKeys.tables(instanceId));
 
@@ -266,8 +357,12 @@ export function useDeleteDuckLakeRows() {
       deleteQuery: string;
     }) => DuckLakeService.deleteRows(instanceId, tableName, deleteQuery),
     onSuccess: (result, { instanceId, tableName }) => {
-      queryClient.invalidateQueries(duckLakeKeys.tableDetails(instanceId, tableName));
-      queryClient.invalidateQueries(duckLakeKeys.snapshots(instanceId, tableName));
+      queryClient.invalidateQueries(
+        duckLakeKeys.tableDetails(instanceId, tableName),
+      );
+      queryClient.invalidateQueries(
+        duckLakeKeys.snapshots(instanceId, tableName),
+      );
       queryClient.invalidateQueries(duckLakeKeys.table(instanceId, tableName));
       queryClient.invalidateQueries(duckLakeKeys.tables(instanceId));
 
@@ -293,8 +388,12 @@ export function useUpsertDuckLakeRows() {
       upsertQuery: string;
     }) => DuckLakeService.upsertRows(instanceId, tableName, upsertQuery),
     onSuccess: (result, { instanceId, tableName }) => {
-      queryClient.invalidateQueries(duckLakeKeys.tableDetails(instanceId, tableName));
-      queryClient.invalidateQueries(duckLakeKeys.snapshots(instanceId, tableName));
+      queryClient.invalidateQueries(
+        duckLakeKeys.tableDetails(instanceId, tableName),
+      );
+      queryClient.invalidateQueries(
+        duckLakeKeys.snapshots(instanceId, tableName),
+      );
       queryClient.invalidateQueries(duckLakeKeys.table(instanceId, tableName));
       queryClient.invalidateQueries(duckLakeKeys.tables(instanceId));
 
@@ -320,8 +419,12 @@ export function useRestoreDuckLakeSnapshot() {
       snapshotId: string;
     }) => DuckLakeService.restoreSnapshot(instanceId, tableName, snapshotId),
     onSuccess: (_, { instanceId, tableName }) => {
-      queryClient.invalidateQueries(duckLakeKeys.tableDetails(instanceId, tableName));
-      queryClient.invalidateQueries(duckLakeKeys.snapshots(instanceId, tableName));
+      queryClient.invalidateQueries(
+        duckLakeKeys.tableDetails(instanceId, tableName),
+      );
+      queryClient.invalidateQueries(
+        duckLakeKeys.snapshots(instanceId, tableName),
+      );
       queryClient.invalidateQueries(duckLakeKeys.table(instanceId, tableName));
       queryClient.invalidateQueries(duckLakeKeys.tables(instanceId));
 

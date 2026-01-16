@@ -123,6 +123,14 @@ export interface DuckLakeSnapshotDetail {
   changesMade?: string;
 }
 
+export type DuckLakeChangeOperation = 'INSERT' | 'UPDATE' | 'DELETE';
+
+export interface DuckLakeTableChange {
+  operation: DuckLakeChangeOperation;
+  snapshotId?: number;
+  row: Record<string, unknown>;
+}
+
 /**
  * Table-level tag from ducklake_tag
  */

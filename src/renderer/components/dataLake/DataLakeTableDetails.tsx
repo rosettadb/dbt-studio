@@ -3,7 +3,7 @@
  * Displays comprehensive table metadata from DuckLake catalog
  */
 
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import {
   Box,
   Typography,
@@ -29,6 +29,11 @@ import {
   DialogActions,
   Button,
   TextField,
+  MenuItem,
+  FormControl,
+  InputLabel,
+  Select,
+  Stack,
 } from '@mui/material';
 import {
   ArrowBack,
@@ -57,6 +62,7 @@ import {
   useRestoreDuckLakeSnapshot,
   useUpdateDuckLakeRows,
   useUpsertDuckLakeRows,
+  useDuckLakeTableChanges,
 } from '../../controllers/duckLake.controller';
 import {
   DuckLakeColumnDetail,
@@ -89,6 +95,36 @@ function TabPanel(props: TabPanelProps) {
     </div>
   );
 }
+
+const formatBytes = (bytes: number) => {
+  if (bytes === 0) return '0 Bytes';
+  const k = 1024;
+  const sizes = ['Bytes', 'KB', 'MB', 'GB', 'TB'];
+  const i = Math.floor(Math.log(bytes) / Math.log(k));
+  return `${Math.round((bytes / k ** i) * 100) / 100} ${sizes[i]}`;
+};
+
+const formatNumber = (num: number) => {
+  return new Intl.NumberFormat().format(num);
+};
+
+function safeToString(value: any): string {
+  if (value === null || value === undefined) {
+    return '-';
+  }
+  if (typeof value === 'object') {
+    if (value.hugeint !== undefined) {
+      return String(value.hugeint);
+    }
+    return JSON.stringify(value);
+  }
+  return String(value);
+}
+
+type SnapshotOption = {
+  label: string;
+  value: number;
+};
 
 export const DataLakeTableDetails: React.FC = () => {
   const navigate = useNavigate();
@@ -130,6 +166,9 @@ export const DataLakeTableDetails: React.FC = () => {
   const [upsertRowsDialogOpen, setUpsertRowsDialogOpen] = useState(false);
   const [upsertRowsQuery, setUpsertRowsQuery] = useState('');
 
+  const [fromSnapshotId, setFromSnapshotId] = useState<number | null>(null);
+  const [toSnapshotId, setToSnapshotId] = useState<number | null>(null);
+
   const restoreSnapshotMutation = useRestoreDuckLakeSnapshot();
   const addColumnMutation = useAddDuckLakeColumn();
   const dropColumnMutation = useDropDuckLakeColumn();
@@ -144,6 +183,30 @@ export const DataLakeTableDetails: React.FC = () => {
     isLoading,
     error,
   } = useDuckLakeTableDetails(instanceId || '', tableName || '');
+
+  const snapshotOptions = useMemo<SnapshotOption[]>(() => {
+    return (tableDetails?.snapshots || []).map(
+      (snapshot: DuckLakeSnapshotDetail) => ({
+        label: `${safeToString(snapshot.snapshotId)} · ${moment(
+          snapshot.snapshotTime,
+        ).format('YYYY-MM-DD HH:mm:ss')}`,
+        value: Number(snapshot.snapshotId),
+      }),
+    );
+  }, [tableDetails]);
+
+  const {
+    data: tableChanges,
+    isLoading: isCDCLoading,
+    isFetching: isCDCRefreshing,
+    error: cdcError,
+  } = useDuckLakeTableChanges({
+    instanceId: instanceId || '',
+    tableName: tableName || '',
+    fromSnapshotId,
+    toSnapshotId,
+    enabled: Boolean(instanceId && tableName && fromSnapshotId && toSnapshotId),
+  });
 
   const handleTabChange = (_event: React.SyntheticEvent, newValue: number) => {
     setCurrentTab(newValue);
@@ -324,37 +387,6 @@ export const DataLakeTableDetails: React.FC = () => {
     });
 
     setUpsertRowsDialogOpen(false);
-  };
-
-  const formatBytes = (bytes: number) => {
-    if (bytes === 0) return '0 Bytes';
-    const k = 1024;
-    const sizes = ['Bytes', 'KB', 'MB', 'GB', 'TB'];
-    const i = Math.floor(Math.log(bytes) / Math.log(k));
-    return `${Math.round((bytes / k ** i) * 100) / 100} ${sizes[i]}`;
-  };
-
-  const formatNumber = (num: number) => {
-    return new Intl.NumberFormat().format(num);
-  };
-
-  /**
-   * Safely convert any value to string for React rendering
-   * Handles DuckDB hugeint objects and other non-primitive types
-   */
-  const safeToString = (value: any): string => {
-    if (value === null || value === undefined) {
-      return '-';
-    }
-    if (typeof value === 'object') {
-      // Handle DuckDB hugeint objects
-      if (value.hugeint !== undefined) {
-        return String(value.hugeint);
-      }
-      // Handle other objects
-      return JSON.stringify(value);
-    }
-    return String(value);
   };
 
   const handleRequestRestoreSnapshot = (snapshot: DuckLakeSnapshotDetail) => {
@@ -1420,6 +1452,179 @@ export const DataLakeTableDetails: React.FC = () => {
             ) : (
               <Alert severity="info">No snapshot history available</Alert>
             )}
+          </CardContent>
+        </Card>
+
+        <Card sx={{ mt: 3 }}>
+          <CardContent>
+            <Box
+              sx={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                flexWrap: 'wrap',
+                gap: 2,
+                mb: 2,
+              }}
+            >
+              <Typography variant="h6">Change Data Capture</Typography>
+              <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2}>
+                <FormControl size="small" sx={{ minWidth: 180 }}>
+                  <InputLabel id="from-snapshot-label">
+                    From snapshot
+                  </InputLabel>
+                  <Select
+                    labelId="from-snapshot-label"
+                    label="From snapshot"
+                    value={fromSnapshotId ?? ''}
+                    onChange={(event) =>
+                      setFromSnapshotId(
+                        event.target.value === ''
+                          ? null
+                          : Number(event.target.value),
+                      )
+                    }
+                  >
+                    <MenuItem value="">
+                      <em>Select snapshot</em>
+                    </MenuItem>
+                    {snapshotOptions.map((option) => (
+                      <MenuItem key={option.value} value={option.value}>
+                        {option.label}
+                      </MenuItem>
+                    ))}
+                  </Select>
+                </FormControl>
+                <FormControl size="small" sx={{ minWidth: 180 }}>
+                  <InputLabel id="to-snapshot-label">To snapshot</InputLabel>
+                  <Select
+                    labelId="to-snapshot-label"
+                    label="To snapshot"
+                    value={toSnapshotId ?? ''}
+                    onChange={(event) =>
+                      setToSnapshotId(
+                        event.target.value === ''
+                          ? null
+                          : Number(event.target.value),
+                      )
+                    }
+                  >
+                    <MenuItem value="">
+                      <em>Select snapshot</em>
+                    </MenuItem>
+                    {snapshotOptions.map((option) => (
+                      <MenuItem key={option.value} value={option.value}>
+                        {option.label}
+                      </MenuItem>
+                    ))}
+                  </Select>
+                </FormControl>
+              </Stack>
+            </Box>
+
+            {!fromSnapshotId || !toSnapshotId ? (
+              <Alert severity="info">
+                Select both snapshots to view row-level changes.
+              </Alert>
+            ) : null}
+
+            {Boolean(cdcError) && (
+              <Alert severity="error" sx={{ mt: 2 }}>
+                {(cdcError as Error).message}
+              </Alert>
+            )}
+
+            {fromSnapshotId && toSnapshotId ? (
+              <TableContainer sx={{ mt: 2 }}>
+                <Table size="small">
+                  <TableHead>
+                    <TableRow>
+                      <TableCell width="10%">Operation</TableCell>
+                      <TableCell width="15%">Snapshot</TableCell>
+                      <TableCell>Row</TableCell>
+                    </TableRow>
+                  </TableHead>
+                  <TableBody>
+                    {(() => {
+                      if (isCDCLoading) {
+                        return (
+                          <TableRow>
+                            <TableCell colSpan={3} align="center">
+                              <Box
+                                sx={{
+                                  display: 'flex',
+                                  justifyContent: 'center',
+                                }}
+                              >
+                                <CircularProgress size={24} />
+                              </Box>
+                            </TableCell>
+                          </TableRow>
+                        );
+                      }
+
+                      if ((tableChanges || []).length === 0) {
+                        return (
+                          <TableRow>
+                            <TableCell colSpan={3}>
+                              <Alert severity="info" sx={{ my: 1 }}>
+                                No changes detected between snapshots.
+                              </Alert>
+                            </TableCell>
+                          </TableRow>
+                        );
+                      }
+
+                      return tableChanges?.map((change, index) => (
+                        <TableRow key={`change-${index}`}>
+                          <TableCell>
+                            <Chip
+                              label={change.operation}
+                              size="small"
+                              color={(() => {
+                                if (change.operation === 'INSERT') {
+                                  return 'success';
+                                }
+                                if (change.operation === 'DELETE') {
+                                  return 'error';
+                                }
+                                return 'warning';
+                              })()}
+                            />
+                          </TableCell>
+                          <TableCell>{change.snapshotId ?? '-'}</TableCell>
+                          <TableCell>
+                            <Box
+                              component="pre"
+                              sx={{
+                                m: 0,
+                                p: 1,
+                                borderRadius: 1,
+                                bgcolor: 'action.hover',
+                                fontSize: 12,
+                                whiteSpace: 'pre-wrap',
+                                wordBreak: 'break-all',
+                              }}
+                            >
+                              {JSON.stringify(change.row, null, 2)}
+                            </Box>
+                          </TableCell>
+                        </TableRow>
+                      ));
+                    })()}
+                    {isCDCRefreshing && !isCDCLoading ? (
+                      <TableRow>
+                        <TableCell colSpan={3} align="center">
+                          <Typography variant="caption" color="text.secondary">
+                            Refreshing changes…
+                          </Typography>
+                        </TableCell>
+                      </TableRow>
+                    ) : null}
+                  </TableBody>
+                </Table>
+              </TableContainer>
+            ) : null}
           </CardContent>
         </Card>
 

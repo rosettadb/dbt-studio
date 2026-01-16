@@ -26,6 +26,7 @@ import {
   DuckLakeStorageConfig,
   DuckLakeSnapshotParams,
   DuckLakePaginatedResult,
+  DuckLakeTableChange,
 } from '../../types/duckLake';
 import { DuckLakeError } from '../../types/duckLakeErrors';
 
@@ -80,7 +81,9 @@ export default class DuckLakeService {
       }
 
       const details = await adapter.getTableDetails(tableName);
-      const existingColumns = Array.isArray(details?.columns) ? details.columns : [];
+      const existingColumns = Array.isArray(details?.columns)
+        ? details.columns
+        : [];
       const columnExists = existingColumns.some(
         (c: any) => c?.columnName === columnName && c?.endSnapshot == null,
       );
@@ -122,7 +125,9 @@ export default class DuckLakeService {
       }
 
       const details = await adapter.getTableDetails(tableName);
-      const existingColumns = Array.isArray(details?.columns) ? details.columns : [];
+      const existingColumns = Array.isArray(details?.columns)
+        ? details.columns
+        : [];
       const activeColumn = existingColumns.find(
         (c: any) => c?.columnName === columnName && c?.endSnapshot == null,
       );
@@ -133,7 +138,9 @@ export default class DuckLakeService {
       }
 
       const partitionColumnIds = new Set<number>(
-        (details?.partitionInfo?.columns || []).map((c: any) => Number(c.columnId)),
+        (details?.partitionInfo?.columns || []).map((c: any) =>
+          Number(c.columnId),
+        ),
       );
       if (partitionColumnIds.has(Number(activeColumn.columnId))) {
         throw DuckLakeError.validation(
@@ -182,7 +189,9 @@ export default class DuckLakeService {
       }
 
       const details = await adapter.getTableDetails(tableName);
-      const existingColumns = Array.isArray(details?.columns) ? details.columns : [];
+      const existingColumns = Array.isArray(details?.columns)
+        ? details.columns
+        : [];
       const activeOldColumn = existingColumns.find(
         (c: any) => c?.columnName === oldColumnName && c?.endSnapshot == null,
       );
@@ -202,7 +211,9 @@ export default class DuckLakeService {
       }
 
       const partitionColumnIds = new Set<number>(
-        (details?.partitionInfo?.columns || []).map((c: any) => Number(c.columnId)),
+        (details?.partitionInfo?.columns || []).map((c: any) =>
+          Number(c.columnId),
+        ),
       );
       if (partitionColumnIds.has(Number(activeOldColumn.columnId))) {
         throw DuckLakeError.validation(
@@ -247,7 +258,9 @@ export default class DuckLakeService {
       }
 
       const details = await adapter.getTableDetails(tableName);
-      const existingColumns = Array.isArray(details?.columns) ? details.columns : [];
+      const existingColumns = Array.isArray(details?.columns)
+        ? details.columns
+        : [];
       const activeColumn = existingColumns.find(
         (c: any) => c?.columnName === columnName && c?.endSnapshot == null,
       );
@@ -258,7 +271,9 @@ export default class DuckLakeService {
       }
 
       const partitionColumnIds = new Set<number>(
-        (details?.partitionInfo?.columns || []).map((c: any) => Number(c.columnId)),
+        (details?.partitionInfo?.columns || []).map((c: any) =>
+          Number(c.columnId),
+        ),
       );
       if (partitionColumnIds.has(Number(activeColumn.columnId))) {
         throw DuckLakeError.validation(
@@ -288,14 +303,18 @@ export default class DuckLakeService {
       }
 
       if (!Array.isArray(columnNames) || columnNames.length === 0) {
-        throw DuckLakeError.validation('At least one partition column is required');
+        throw DuckLakeError.validation(
+          'At least one partition column is required',
+        );
       }
 
       const normalizedColumns = columnNames
         .map((c) => c?.trim())
         .filter((c): c is string => !!c);
       if (normalizedColumns.length === 0) {
-        throw DuckLakeError.validation('At least one partition column is required');
+        throw DuckLakeError.validation(
+          'At least one partition column is required',
+        );
       }
 
       const tables = await adapter.listTables();
@@ -309,7 +328,7 @@ export default class DuckLakeService {
         ? details.columns
         : [];
 
-      for (const col of normalizedColumns) {
+      normalizedColumns.forEach((col) => {
         const activeColumn = existingColumns.find(
           (c: any) => c?.columnName === col && c?.endSnapshot == null,
         );
@@ -318,7 +337,7 @@ export default class DuckLakeService {
             `Column ${col} does not exist on table ${tableName}`,
           );
         }
-      }
+      });
 
       await adapter.setPartitionedBy(tableName, normalizedColumns);
     } catch (error) {
@@ -1063,6 +1082,61 @@ export default class DuckLakeService {
     } catch (error) {
       // eslint-disable-next-line no-console
       console.error(error);
+      throw error;
+    }
+  }
+
+  static async queryTableChanges(
+    instanceId: string,
+    tableName: string,
+    fromSnapshotId: number,
+    toSnapshotId?: number,
+  ): Promise<DuckLakeTableChange[]> {
+    try {
+      await this.ensureConnected(instanceId);
+      const adapter = await this.getAdapter(instanceId);
+
+      if (!tableName || tableName.trim() === '') {
+        throw DuckLakeError.validation('Table name is required');
+      }
+
+      if (
+        fromSnapshotId === undefined ||
+        fromSnapshotId === null ||
+        Number.isNaN(Number(fromSnapshotId))
+      ) {
+        throw DuckLakeError.validation('fromSnapshotId must be a valid number');
+      }
+
+      const normalizedFrom = Number(fromSnapshotId);
+      let normalizedTo: number | undefined;
+      if (toSnapshotId !== undefined && toSnapshotId !== null) {
+        if (Number.isNaN(Number(toSnapshotId))) {
+          throw DuckLakeError.validation('toSnapshotId must be a valid number');
+        }
+        normalizedTo = Number(toSnapshotId);
+      }
+
+      if (normalizedTo !== undefined && normalizedTo < normalizedFrom) {
+        throw DuckLakeError.validation(
+          'toSnapshotId must be greater than or equal to fromSnapshotId',
+        );
+      }
+
+      const tables = await adapter.listTables();
+      const tableExists = tables.some((t) => t.name === tableName);
+      if (!tableExists) {
+        throw DuckLakeError.validation(`Table ${tableName} does not exist`);
+      }
+
+      return await adapter.queryTableChanges(
+        tableName,
+        normalizedFrom,
+        normalizedTo,
+      );
+    } catch (error) {
+      // eslint-disable-next-line no-console
+      console.error('[DuckLakeService.queryTableChanges] Error:', error);
       throw error;
     }
   }

@@ -90,12 +90,7 @@ const registerDuckLakeHandlers = () => {
 
   ipcMain.handle(
     'ducklake:table:rename',
-    async (
-      _event,
-      instanceId: string,
-      oldName: string,
-      newName: string,
-    ) => {
+    async (_event, instanceId: string, oldName: string, newName: string) => {
       return DuckLakeService.renameTable(instanceId, oldName, newName);
     },
   );
@@ -176,7 +171,11 @@ const registerDuckLakeHandlers = () => {
       tableName: string,
       columnNames: string[],
     ) => {
-      return DuckLakeService.setPartitionedBy(instanceId, tableName, columnNames);
+      return DuckLakeService.setPartitionedBy(
+        instanceId,
+        tableName,
+        columnNames,
+      );
     },
   );
 
@@ -213,6 +212,31 @@ const registerDuckLakeHandlers = () => {
       upsertQuery: string,
     ) => {
       return DuckLakeService.upsertRows(instanceId, tableName, upsertQuery);
+    },
+  );
+
+  ipcMain.handle(
+    'ducklake:table:queryChanges',
+    async (
+      _event,
+      {
+        instanceId,
+        tableName,
+        fromSnapshotId,
+        toSnapshotId,
+      }: {
+        instanceId: string;
+        tableName: string;
+        fromSnapshotId: number;
+        toSnapshotId?: number;
+      },
+    ) => {
+      return DuckLakeService.queryTableChanges(
+        instanceId,
+        tableName,
+        fromSnapshotId,
+        toSnapshotId,
+      );
     },
   );
 
