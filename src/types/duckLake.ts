@@ -533,6 +533,11 @@ export interface DuckLakeIpcChannels {
     tableName: string,
     schema: DuckLakeColumnInfo[],
   ) => Promise<void>;
+  'ducklake:table:setPartitionedBy': (
+    instanceId: string,
+    tableName: string,
+    columnNames: string[],
+  ) => Promise<void>;
   'ducklake:table:delete': (
     instanceId: string,
     tableName: string,

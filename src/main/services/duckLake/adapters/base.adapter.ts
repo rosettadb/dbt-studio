@@ -112,6 +112,11 @@ export abstract class CatalogAdapter {
     newType: string,
   ): Promise<void>;
 
+  abstract setPartitionedBy(
+    tableName: string,
+    columnNames: string[],
+  ): Promise<void>;
+
   abstract restoreSnapshot(tableName: string, snapshotId: number): Promise<void>;
 
   abstract updateRows(

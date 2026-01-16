@@ -212,6 +212,35 @@ export class SQLiteCatalogAdapter extends CatalogAdapter {
     }
   }
 
+  async setPartitionedBy(
+    tableName: string,
+    columnNames: string[],
+  ): Promise<void> {
+    try {
+      if (!this.connectionInfo) {
+        throw new Error('No active connection');
+      }
+
+      const escapedTableName = tableName.replace(/"/g, '""');
+      const escapedColumns = columnNames.map((c) =>
+        `"${c.replace(/"/g, '""')}"`,
+      );
+
+      await this.connectionInfo.connection.run(
+        `ALTER TABLE "${escapedTableName}" SET PARTITIONED BY (${escapedColumns.join(
+          ', ',
+        )})`,
+      );
+    } catch (error) {
+      // eslint-disable-next-line no-console
+      console.error(
+        `Failed to set partition columns (${columnNames.join(', ')}) on SQLite table ${tableName}:`,
+        error,
+      );
+      throw error;
+    }
+  }
+
   async renameTable(oldName: string, newName: string): Promise<void> {
     try {
       if (!this.connectionInfo) {

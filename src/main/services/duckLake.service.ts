@@ -274,6 +274,60 @@ export default class DuckLakeService {
     }
   }
 
+  static async setPartitionedBy(
+    instanceId: string,
+    tableName: string,
+    columnNames: string[],
+  ): Promise<void> {
+    try {
+      await this.ensureConnected(instanceId);
+      const adapter = await this.getAdapter(instanceId);
+
+      if (!tableName || tableName.trim() === '') {
+        throw DuckLakeError.validation('Table name is required');
+      }
+
+      if (!Array.isArray(columnNames) || columnNames.length === 0) {
+        throw DuckLakeError.validation('At least one partition column is required');
+      }
+
+      const normalizedColumns = columnNames
+        .map((c) => c?.trim())
+        .filter((c): c is string => !!c);
+      if (normalizedColumns.length === 0) {
+        throw DuckLakeError.validation('At least one partition column is required');
+      }
+
+      const tables = await adapter.listTables();
+      const tableExists = tables.some((t) => t.name === tableName);
+      if (!tableExists) {
+        throw DuckLakeError.validation(`Table ${tableName} does not exist`);
+      }
+
+      const details = await adapter.getTableDetails(tableName);
+      const existingColumns = Array.isArray(details?.columns)
+        ? details.columns
+        : [];
+
+      for (const col of normalizedColumns) {
+        const activeColumn = existingColumns.find(
+          (c: any) => c?.columnName === col && c?.endSnapshot == null,
+        );
+        if (!activeColumn) {
+          throw DuckLakeError.validation(
+            `Column ${col} does not exist on table ${tableName}`,
+          );
+        }
+      }
+
+      await adapter.setPartitionedBy(tableName, normalizedColumns);
+    } catch (error) {
+      // eslint-disable-next-line no-console
+      console.error(error);
+      throw error;
+    }
+  }
+
   static async renameTable(
     instanceId: string,
     oldName: string,

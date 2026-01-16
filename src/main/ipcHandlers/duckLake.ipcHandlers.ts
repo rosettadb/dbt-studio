@@ -169,6 +169,18 @@ const registerDuckLakeHandlers = () => {
   );
 
   ipcMain.handle(
+    'ducklake:table:setPartitionedBy',
+    async (
+      _event,
+      instanceId: string,
+      tableName: string,
+      columnNames: string[],
+    ) => {
+      return DuckLakeService.setPartitionedBy(instanceId, tableName, columnNames);
+    },
+  );
+
+  ipcMain.handle(
     'ducklake:table:updateRows',
     async (
       _event,

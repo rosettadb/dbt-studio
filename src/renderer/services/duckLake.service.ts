@@ -194,6 +194,19 @@ export namespace DuckLakeService {
     );
   }
 
+  export async function setPartitionedBy(
+    instanceId: string,
+    tableName: string,
+    columnNames: string[],
+  ): Promise<void> {
+    return window.electron.ipcRenderer.invoke(
+      'ducklake:table:setPartitionedBy',
+      instanceId,
+      tableName,
+      columnNames,
+    );
+  }
+
   /**
    * Get comprehensive table details from DuckLake metadata catalog (Phase 8b)
    */

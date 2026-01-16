@@ -14,6 +14,7 @@ import {
   useImportDuckLakeTable,
   useInvalidateDuckLakeCache,
   useDuckLakeInstance,
+  useSetDuckLakeTablePartitionedBy,
 } from '../../controllers/duckLake.controller';
 
 interface DataLakeTablesViewProps {
@@ -32,14 +33,36 @@ export const DataLakeTablesView: React.FC<DataLakeTablesViewProps> = ({
   // React Query hooks
   const tablesQuery = useDuckLakeTables(instanceId);
   const importTableMutation = useImportDuckLakeTable();
+  const setPartitionedByMutation = useSetDuckLakeTablePartitionedBy();
   const { invalidateTables } = useInvalidateDuckLakeCache();
   const instanceQuery = useDuckLakeInstance(instanceId);
 
-  const handleImportTable = (tableName: string, sourceQuery: string) => {
+  const handleImportTable = (
+    tableName: string,
+    sourceQuery: string,
+    partitionColumns?: string[],
+  ) => {
     importTableMutation.mutate(
       { instanceId, tableName, sourceQuery },
       {
         onSuccess: () => {
+          if (partitionColumns && partitionColumns.length > 0) {
+            setPartitionedByMutation.mutate(
+              {
+                instanceId,
+                tableName,
+                columnNames: partitionColumns,
+              },
+              {
+                onSuccess: () => {
+                  setImportWizardOpen(false);
+                  invalidateTables(instanceId);
+                },
+              },
+            );
+            return;
+          }
+
           setImportWizardOpen(false);
           invalidateTables(instanceId);
         },
@@ -142,7 +165,9 @@ export const DataLakeTablesView: React.FC<DataLakeTablesViewProps> = ({
         open={importWizardOpen}
         onClose={() => setImportWizardOpen(false)}
         onImport={handleImportTable}
-        isLoading={importTableMutation.isLoading}
+        isLoading={
+          importTableMutation.isLoading || setPartitionedByMutation.isLoading
+        }
         dataPath={instanceQuery.data?.dataPath}
       />
     </Box>

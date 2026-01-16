@@ -168,6 +168,33 @@ export function useAlterDuckLakeColumnType() {
   });
 }
 
+export function useSetDuckLakeTablePartitionedBy() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: ({
+      instanceId,
+      tableName,
+      columnNames,
+    }: {
+      instanceId: string;
+      tableName: string;
+      columnNames: string[];
+    }) => DuckLakeService.setPartitionedBy(instanceId, tableName, columnNames),
+    onSuccess: (_, { instanceId, tableName }) => {
+      queryClient.invalidateQueries(duckLakeKeys.tableDetails(instanceId, tableName));
+      queryClient.invalidateQueries(duckLakeKeys.snapshots(instanceId, tableName));
+      queryClient.invalidateQueries(duckLakeKeys.table(instanceId, tableName));
+      queryClient.invalidateQueries(duckLakeKeys.tables(instanceId));
+
+      toast.success('Partition columns updated successfully');
+    },
+    onError: (error: Error) => {
+      toast.error(`Failed to set partition columns: ${error.message}`);
+    },
+  });
+}
+
 export function useRenameDuckLakeTable() {
   const queryClient = useQueryClient();
 
