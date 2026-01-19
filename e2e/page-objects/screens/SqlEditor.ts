@@ -34,24 +34,21 @@ export class SqlEditorPage extends BasePage {
 
   readonly resultsTable: Locator;
 
-  // Tabs
-  readonly tabBar: Locator;
-
-  readonly newTabBtn: Locator;
-
   constructor(page: Page) {
     super(page);
     this.container = this.getByTestId('sql-editor-screen');
     this.editorPane = this.getByTestId('sql-editor-pane');
-    this.monacoEditor = this.page.locator('.monaco-editor');
-    this.runQueryBtn = this.getByTestId('sql-run-query-btn');
+    // Prefer the split editor as it's the primary one, defaulting to first if multiple found
+    this.monacoEditor = this.page
+      .locator('[data-testid="sql-editor-split"] .monaco-editor')
+      .or(this.page.locator('.monaco-editor').first());
+    // The run button is now an icon in the gutter
+    this.runQueryBtn = this.page.locator('.run-query-glyph').first();
     this.stopQueryBtn = this.getByTestId('sql-stop-query-btn');
     this.formatBtn = this.getByTestId('sql-format-btn');
     this.exportBtn = this.getByTestId('sql-export-btn');
     this.resultsPane = this.getByTestId('sql-results-pane');
     this.resultsTable = this.getByTestId('sql-results-table');
-    this.tabBar = this.getByTestId('sql-tab-bar');
-    this.newTabBtn = this.getByTestId('sql-new-tab-btn');
   }
 
   // ==================== Actions ====================
@@ -84,9 +81,10 @@ export class SqlEditorPage extends BasePage {
   }
 
   /**
-   * Run the current query using the button
+   * Run the current query using the button/icon
    */
   async runQuery(): Promise<void> {
+    // Click the run icon in the gutter
     await this.runQueryBtn.click();
   }
 
@@ -94,6 +92,7 @@ export class SqlEditorPage extends BasePage {
    * Run the current query using keyboard shortcut
    */
   async runQueryWithKeyboard(): Promise<void> {
+    await this.monacoEditor.click();
     await this.page.keyboard.press(`${modifier}+Enter`);
   }
 
@@ -109,31 +108,6 @@ export class SqlEditorPage extends BasePage {
    */
   async formatQuery(): Promise<void> {
     await this.formatBtn.click();
-  }
-
-  /**
-   * Create a new query tab
-   */
-  async createNewTab(): Promise<void> {
-    await this.newTabBtn.click();
-  }
-
-  /**
-   * Select a specific tab by index (0-based)
-   */
-  async selectTab(index: number): Promise<void> {
-    const tab = this.tabBar.locator(`[data-testid="sql-tab-${index}"]`);
-    await tab.click();
-  }
-
-  /**
-   * Close a tab by index
-   */
-  async closeTab(index: number): Promise<void> {
-    const closeBtn = this.tabBar.locator(
-      `[data-testid="sql-tab-${index}"] [data-testid="tab-close-btn"]`,
-    );
-    await closeBtn.click();
   }
 
   /**
@@ -169,14 +143,6 @@ export class SqlEditorPage extends BasePage {
       .locator('.view-lines')
       .textContent();
     return content || '';
-  }
-
-  /**
-   * Get the number of open tabs
-   */
-  async getTabCount(): Promise<number> {
-    const tabs = this.tabBar.locator('[data-testid^="sql-tab-"]');
-    return tabs.count();
   }
 
   // ==================== Assertions ====================

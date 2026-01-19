@@ -70,8 +70,33 @@ DBT Studio's E2E testing framework is built on industry-standard principles for 
 ## Project Structure
 
 -   `e2e/fixtures/`: Playwright fixtures (Electron app launch, userData setup).
-    -   `electron.fixture.ts`: Main fixture handling launching and `autoSkipSetup` logic.
+    -   `electron.fixture.ts`: **Clean State Fixture** for lifecycle/setup tests.
+    -   `electron-seeded.fixture.ts`: **Seeded fixture** with pre-configured Project and DuckDB connection for feature tests (SQL Editor, etc.).
 -   `e2e/page-objects/`: Page Object Models for screens.
+
+## Using Fixtures
+
+We provide two main fixtures depending on your test needs:
+
+### 1. `electron.fixture.ts` (Clean State)
+Use this when you need to test the creation of resources or the setup flow itself.
+```typescript
+import { test, expect } from '../../fixtures/electron.fixture';
+
+test('should create a project', async ({ mainWindow }) => { ... });
+```
+
+### 2. `electron-seeded.fixture.ts` (Pre-Seeded)
+Use this for feature tests where you need a working environment immediately. It comes with:
+- A `test_project` automatically selected.
+- A `test_db` DuckDB in-memory connection ready to query.
+- Skips setup wizard and lands directly on the dashboard.
+
+```typescript
+import { test, expect } from '../../fixtures/electron-seeded.fixture';
+
+test('should run query', async ({ mainWindow }) => { ... });
+```
 -   `e2e/tests/`: Test specifications.
     -   `setup/`: Installation and onboarding tests.
     -   `projects/`: Project lifecycle tests.

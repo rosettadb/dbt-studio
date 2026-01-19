@@ -78,6 +78,7 @@ export const test = base.extend<ElectronFixtures>({
       }
 
       const dbPath = path.join(userData, 'database.json');
+
       const settings = {
         settings: {
           isSetup: 'true',

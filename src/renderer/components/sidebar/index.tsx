@@ -119,6 +119,7 @@ export const Sidebar: React.FC<Props> = ({ content }) => {
                 >
                   <StyledNavLink
                     to={element.path}
+                    data-testid={element.testId}
                     style={{
                       cursor: 'pointer',
                       pointerEvents: isDisabled ? 'none' : 'auto',

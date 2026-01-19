@@ -105,17 +105,19 @@ const Sql = () => {
             onChange={(newSizes) => setSizes(newSizes as [number, number])}
             sashRender={renderSash}
           >
-            <SqlEditor
-              completions={completions}
-              connectionInput={connectionInput as ConnectionInput}
-              selectedProject={selectedProject}
-              queryHistory={queryHistory}
-              setQueryHistory={setQueryHistory}
-              setLoadingQuery={setLoadingQuery}
-              setQueryResults={setQueryResults}
-              setError={setError}
-              onQueryStart={(id) => setActiveQueryId(id)}
-            />
+            <Box sx={{ height: '100%' }} data-testid="sql-editor-split">
+              <SqlEditor
+                completions={completions}
+                connectionInput={connectionInput as ConnectionInput}
+                selectedProject={selectedProject}
+                queryHistory={queryHistory}
+                setQueryHistory={setQueryHistory}
+                setLoadingQuery={setLoadingQuery}
+                setQueryResults={setQueryResults}
+                setError={setError}
+                onQueryStart={(id) => setActiveQueryId(id)}
+              />
+            </Box>
 
             <Box
               sx={{
@@ -158,16 +160,18 @@ const Sql = () => {
           </SplitPane>
         )}
         {selectedProject && connectionInput && !queryResults && !error && (
-          <SqlEditor
-            completions={completions}
-            connectionInput={connectionInput as ConnectionInput}
-            selectedProject={selectedProject}
-            queryHistory={queryHistory}
-            setQueryHistory={setQueryHistory}
-            setLoadingQuery={setLoadingQuery}
-            setQueryResults={setQueryResults}
-            setError={setError}
-          />
+          <Box sx={{ height: '100%' }} data-testid="sql-editor-standalone">
+            <SqlEditor
+              completions={completions}
+              connectionInput={connectionInput as ConnectionInput}
+              selectedProject={selectedProject}
+              queryHistory={queryHistory}
+              setQueryHistory={setQueryHistory}
+              setLoadingQuery={setLoadingQuery}
+              setQueryResults={setQueryResults}
+              setError={setError}
+            />
+          </Box>
         )}
       </Box>
     </AppLayout>

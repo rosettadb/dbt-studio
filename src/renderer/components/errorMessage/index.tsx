@@ -33,7 +33,7 @@ export const ErrorMessage: React.FC<Props> = ({
   description = 'Please try again or contact support.',
 }) => {
   return (
-    <ErrorContainer>
+    <ErrorContainer data-testid="sql-error-message">
       <IconWrapper>
         <ErrorOutlineIcon fontSize="large" color="error" />
       </IconWrapper>
