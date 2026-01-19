@@ -189,13 +189,14 @@ export class WaitHelper {
         .waitFor({ state: 'visible', timeout });
     } else {
       await this.page.waitForFunction(
-        ({ sel, pattern }) => {
+        ({ sel, pattern, flags }) => {
           const el = document.querySelector(sel);
-          return el && new RegExp(pattern).test(el.textContent || '');
+          return el && new RegExp(pattern, flags).test(el.textContent || '');
         },
         {
           sel: selector,
           pattern: text.source,
+          flags: text.flags,
         },
         { timeout },
       );
