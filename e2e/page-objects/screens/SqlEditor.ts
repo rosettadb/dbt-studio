@@ -138,11 +138,40 @@ export class SqlEditorPage extends BasePage {
    * Get the current query text from the editor
    */
   async getQueryText(): Promise<string> {
-    // Get text from Monaco editor's content
-    const content = await this.monacoEditor
-      .locator('.view-lines')
-      .textContent();
-    return content || '';
+    // Ensure the editor has focus
+    await this.monacoEditor.click();
+
+    // Attempt 1: Global Monaco instance (if available via loader)
+    const monacoContent = await this.page.evaluate(() => {
+      const { monaco } = window as any;
+      if (monaco?.editor) {
+        const focused = monaco.editor.getFocusedCodeEditor();
+        if (focused) return focused.getValue();
+
+        const models = monaco.editor.getModels();
+        if (models.length > 0) return models[models.length - 1].getValue();
+      }
+      return null;
+    });
+
+    if (monacoContent !== null) return monacoContent;
+
+    // Attempt 2: Clipboard (Black-box fallback)
+    await this.page.keyboard.press(`${modifier}+A`);
+    await this.page.keyboard.press(`${modifier}+C`);
+
+    const clipboardContent = await this.page.evaluate(async () => {
+      try {
+        return await navigator.clipboard.readText();
+      } catch {
+        return null;
+      }
+    });
+
+    if (clipboardContent !== null) return clipboardContent;
+
+    // Attempt 3: DOM Fallback (May be truncated, but better than nothing)
+    return (await this.monacoEditor.locator('.view-lines').textContent()) || '';
   }
 
   // ==================== Assertions ====================

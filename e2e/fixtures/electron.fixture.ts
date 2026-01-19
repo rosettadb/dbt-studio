@@ -34,6 +34,7 @@ export const test = base.extend<ElectronFixtures>({
   autoSkipSetup: [true, { option: true }],
 
   // Create isolated userData directory for each test
+  // biome-ignore lint/complexity/noEmptyPattern: Playwright requires object destructuring
   // eslint-disable-next-line no-empty-pattern
   userData: async ({}, use, testInfo) => {
     const testName = testInfo.title.replace(/[^a-zA-Z0-9]/g, '_');

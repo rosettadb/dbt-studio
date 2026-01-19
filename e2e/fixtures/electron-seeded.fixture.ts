@@ -27,6 +27,7 @@ export type TestFixtures = {
  * - Tests that need to start from a clean state
  */
 export const test = base.extend<TestFixtures>({
+  // biome-ignore lint/complexity/noEmptyPattern: Playwright requires object destructuring
   // eslint-disable-next-line no-empty-pattern
   userData: async ({}, use) => {
     const userDataDir = path.join(

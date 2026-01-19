@@ -7,6 +7,7 @@
 
 import { Page, Locator, expect } from '@playwright/test';
 import { BasePage } from '../BasePage';
+import 'css.escape';
 
 export class ProjectSelectionPage extends BasePage {
   // Container
@@ -52,7 +53,7 @@ export class ProjectSelectionPage extends BasePage {
    */
   async selectProject(projectName: string): Promise<void> {
     const projectCard = this.page.locator(
-      `[data-testid="project-card-${projectName}"]`,
+      `[data-testid="project-card-${CSS.escape(projectName)}"]`,
     );
     await projectCard.click();
   }
@@ -62,7 +63,7 @@ export class ProjectSelectionPage extends BasePage {
    */
   async openProject(projectName: string): Promise<void> {
     const projectCard = this.page.locator(
-      `[data-testid="project-card-${projectName}"]`,
+      `[data-testid="project-card-${CSS.escape(projectName)}"]`,
     );
     await projectCard.dblclick();
   }
@@ -112,28 +113,21 @@ export class ProjectSelectionPage extends BasePage {
    * Useful for setting up test state
    */
   async createAndSelectProject(projectName: string): Promise<void> {
-    // If not visible, assume we might be on a different screen, but this method is generally called when on selection
-    if (await this.isVisible()) {
-      await this.clickCreateProject();
+    await this.expectToBeVisible();
+    await this.clickCreateProject();
 
-      const nameInput = this.page.locator('[data-testid="project-name-input"]');
-      await nameInput.fill(projectName);
+    const nameInput = this.page.locator('[data-testid="project-name-input"]');
+    await nameInput.fill(projectName);
 
-      const createBtn = this.page.locator(
-        '[data-testid="project-create-confirm-btn"]',
-      );
-      await createBtn.click();
+    const createBtn = this.page.locator(
+      '[data-testid="project-create-confirm-btn"]',
+    );
+    await createBtn.click();
 
-      // Wait for navigation or sidebar to appear indicating success
-      try {
-        await this.page.waitForSelector('[data-testid="sidebar"]', {
-          timeout: 10000,
-        });
-      } catch (error) {
-        // If sidebar doesn't appear, maybe just check if we are no longer on selection screen
-        await expect(this.container).toBeHidden();
-      }
-    }
+    // Wait for navigation or sidebar to appear indicating success
+    await this.page.waitForSelector('[data-testid="sidebar"]', {
+      timeout: 10000,
+    });
   }
 
   // ==================== Assertions ====================
@@ -150,7 +144,7 @@ export class ProjectSelectionPage extends BasePage {
    */
   async expectProjectToExist(projectName: string): Promise<void> {
     const projectCard = this.page.locator(
-      `[data-testid="project-card-${projectName}"]`,
+      `[data-testid="project-card-${CSS.escape(projectName)}"]`,
     );
     await expect(projectCard).toBeVisible();
   }
@@ -160,7 +154,7 @@ export class ProjectSelectionPage extends BasePage {
    */
   async expectProjectNotToExist(projectName: string): Promise<void> {
     const projectCard = this.page.locator(
-      `[data-testid="project-card-${projectName}"]`,
+      `[data-testid="project-card-${CSS.escape(projectName)}"]`,
     );
     await expect(projectCard).toBeHidden();
   }

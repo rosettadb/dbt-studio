@@ -4,7 +4,7 @@
  * Utilities for waiting on various conditions during E2E tests
  */
 
-import { Page, Locator } from '@playwright/test';
+import { Page, Locator, expect } from '@playwright/test';
 
 export class WaitHelper {
   private page: Page;
@@ -139,14 +139,7 @@ export class WaitHelper {
     const locator =
       typeof selector === 'string' ? this.page.locator(selector) : selector;
     await locator.waitFor({ state: 'visible', timeout });
-    await this.page.waitForFunction(
-      (el) => {
-        const element = el as HTMLButtonElement;
-        return !element.disabled;
-      },
-      await locator.elementHandle(),
-      { timeout },
-    );
+    await expect(locator).toBeEnabled({ timeout });
     return locator;
   }
 

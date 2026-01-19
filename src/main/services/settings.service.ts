@@ -185,9 +185,14 @@ export default class SettingsService {
   static async updateRosetta() {
     if (process.env.E2E_TESTING === 'true') {
       const settings = await this.loadSettings();
-      const dummyPath = path.join(os.tmpdir(), 'dummy-rosetta');
+      const dummyName =
+        process.platform === 'win32' ? 'dummy-rosetta.exe' : 'dummy-rosetta';
+      const dummyPath = path.join(os.tmpdir(), dummyName);
       fs.ensureFileSync(dummyPath);
-      fs.chmodSync(dummyPath, 0o755);
+
+      if (process.platform !== 'win32') {
+        fs.chmodSync(dummyPath, 0o755);
+      }
 
       settings.rosettaVersion = '0.0.0-test';
       settings.rosettaPath = dummyPath;
