@@ -12,6 +12,13 @@ import path from 'path';
 import { ConnectionInput } from '../../types/backend';
 
 /**
+ * Extracts the database name from a file path (filename without extension)
+ */
+function extractDbNameFromPath(filePath: string): string {
+  return path.parse(filePath).name;
+}
+
+/**
  * Error thrown when partial update fails
  */
 export class PartialUpdateError extends Error {
@@ -107,8 +114,12 @@ function generateProfileOutputFields(
 /**
  * Generates the JDBC URL for main.conf
  * @param connection - Connection configuration
+ * @param projectName - Name of the project (used for token references)
  */
-function generateJdbcUrl(connection: ConnectionInput): string {
+function generateJdbcUrl(
+  connection: ConnectionInput,
+  projectName: string,
+): string {
   switch (connection.type) {
     case 'postgres':
       return `jdbc:postgresql://${connection.host}:${connection.port}/${connection.database}?currentSchema=${connection.schema}`;
@@ -123,7 +134,7 @@ function generateJdbcUrl(connection: ConnectionInput): string {
       return `jdbc:bigquery://https://www.googleapis.com/bigquery/v2:443;ProjectId=${connection.project};`;
 
     case 'databricks':
-      return `jdbc:databricks://${connection.host}:443/default;transportMode=http;ssl=1;AuthMech=3;httpPath=${connection.httpPath};PWD=\${db-token-${connection.name}}`;
+      return `jdbc:databricks://${connection.host}:443/default;transportMode=http;ssl=1;AuthMech=3;httpPath=${connection.httpPath};PWD=\${db-token-${projectName}}`;
 
     case 'duckdb':
       return `jdbc:duckdb:${connection.database_path}`;
@@ -270,14 +281,14 @@ export async function updateMainConf(
     // Determine database name based on connection type
     const databaseName =
       connection.type === 'duckdb'
-        ? connection.database_path
+        ? extractDbNameFromPath(connection.database_path)
         : connection.database;
 
     // Update connection fields (preserve other custom fields in connectionEntry)
     connectionEntry.databaseName = databaseName;
     connectionEntry.schemaName = connection.schema;
     connectionEntry.dbType = connection.type;
-    connectionEntry.url = generateJdbcUrl(connection);
+    connectionEntry.url = generateJdbcUrl(connection, projectName);
 
     // Handle userName and password (some connection types don't use them)
     const typesWithoutCredentials = ['bigquery', 'databricks', 'duckdb'];
