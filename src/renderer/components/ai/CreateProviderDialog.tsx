@@ -33,7 +33,7 @@ import type {
   NewAIProvider,
 } from '../../controllers/aiProviders.controller';
 
-const providerSchema = z.object({
+export const providerSchema = z.object({
   name: z.string().min(1, 'Name is required').max(50, 'Name too long'),
   type: z.enum(['openai', 'ollama', 'gemini', 'anthropic'], {
     errorMap: () => ({ message: 'Please select a provider type' }),
