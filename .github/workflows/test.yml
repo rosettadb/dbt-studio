@@ -41,3 +41,7 @@ jobs:
         run: |
           npm run lint
           npm exec tsc
+
+      - name: npm test
+        run: |
+          npm test

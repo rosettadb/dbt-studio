@@ -35,7 +35,11 @@
     "start:main": "concurrently -k \"cross-env NODE_ENV=development TS_NODE_TRANSPILE_ONLY=true webpack --watch --config ./.erb/configs/webpack.config.main.dev.ts\" \"electronmon .\"",
     "start:preload": "cross-env NODE_ENV=development TS_NODE_TRANSPILE_ONLY=true webpack --config ./.erb/configs/webpack.config.preload.dev.ts",
     "start:renderer": "cross-env NODE_ENV=development TS_NODE_TRANSPILE_ONLY=true webpack serve --config ./.erb/configs/webpack.config.renderer.dev.ts",
-    "test": "jest",
+    "test": "jest --config tests/unit/jest.config.js",
+    "test:watch": "jest --config tests/unit/jest.config.js --watch",
+    "test:coverage": "jest --config tests/unit/jest.config.js --coverage",
+    "test:integration": "jest --config jest.integration.config.js --runInBand",
+    "test:all": "npm run test && npm run test:integration",
     "sync-version": "node .erb/scripts/sync-version.js",
     "version": "npm run sync-version && git add .",
     "prepare": "husky"
