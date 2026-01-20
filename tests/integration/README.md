@@ -2,11 +2,21 @@
 
 This directory contains integration tests for dbt Studio. These tests are designed to validate the interaction between different layers of the backend (Main Process) without launching the full Electron application window.
 
+## ✅ Completed Phases
+
+### Phase 2.1: Main Database Service ✅ COMPLETE
+- **Tests**: 29 tests, 100% passing
+- **Coverage**: AI Providers, Conversations, Messages, Templates, Usage Analytics, Database Management
+- **File**: `tests/integration/services/mainDatabase.service.test.ts`
+
 ## 🚀 Running Tests
 
 ```bash
 # Run all integration tests
 npm run test:integration
+
+# Run only Phase 2.1 (mainDatabase service tests)
+npm run test:integration -- tests/integration/services/mainDatabase.service.test.ts
 
 # Watch mode
 npm run test:integration:watch
@@ -66,7 +76,7 @@ moduleNameMapper: {
 tests/integration/
 ├── ipc/                    # IPC handler tests (Controller <-> IPC <-> Service)
 ├── services/               # Backend service integration tests
-│   └── mainDatabase.service.test.ts
+│   └── mainDatabase.service.test.ts ✅ (29 tests)
 ├── lib/
 │   └── db/                 # Database driver tests (Postgres, DuckDB, etc.)
 ├── fixtures/               # Test data and static assets
@@ -82,6 +92,7 @@ Test services in isolation from the UI but with real file system / DB side effec
 1. **Mock Electron**: Mock `app.getPath` and other Electron APIs that services depend on.
 2. **Temp Directory**: Create a unique temp directory for each test suite to avoid conflicts.
 3. **Cleanup**: Always clean up temp directories and close database connections in `afterAll` / `afterEach`.
+4. **No Conditional Expects**: Avoid wrapping expects in if statements. Use `beforeEach` to set up required data.
 
 ```typescript
 // Example Setup
@@ -99,6 +110,26 @@ afterAll(() => {
   // Service.close();
   // Delete temp dir
 });
+
+// ✅ GOOD: Use beforeEach to ensure data exists
+beforeEach(async () => {
+  const provider = await MainDatabaseService.saveProvider({...});
+  providerId = provider.id;
+});
+
+it('should use the provider', async () => {
+  expect(providerId).toBeDefined(); // Always runs
+  const result = await service.getProvider(providerId);
+  expect(result).toBeDefined();
+});
+
+// ❌ BAD: Conditional expects fail ESLint checks
+it('bad test', async () => {
+  const data = await service.getData();
+  if (data.length > 0) {
+    expect(data[0]).toBeDefined(); // ESLint error!
+  }
+});
 ```
 
 ### IPC Tests
@@ -110,3 +141,23 @@ Use `tests/integration/utils/ipc-mock.ts` to mock `ipcMain` and test that handle
 2. **Teardown**: Ensure DB connections are closed (`MainDatabaseService.close()`) to prevent locking files.
 3. **Mocking**: Only mock the boundary to the OS/UI if necessary. Prefer real interactions with SQLite/DuckDB where possible for true integration confidence.
 4. **Imports**: Use relative imports or proper aliases. If using aliases, ensure they are mapped in `jest.integration.config.js`.
+5. **Foreign Keys**: When testing services that reference other entities (e.g., `providerId`), create those entities in `beforeEach` to satisfy constraints.
+6. **Property Names**: Verify schema definitions before writing tests. Use actual field names (e.g., `template` not `prompt` for templates).
+
+## 🎯 Phase Completion Checklist
+
+- [x] **Phase 2.1** - Main Database Service Integration Tests (29 tests)
+  - [x] AI Provider Management (7 tests)
+  - [x] Conversation Management (6 tests)
+  - [x] Chat Message Management (5 tests)
+  - [x] Prompt Template Management (5 tests)
+  - [x] Usage Analytics (3 tests)
+  - [x] Database Management (3 tests)
+
+- [ ] **Phase 2.2** - DuckDB Service Integration Tests
+- [ ] **Phase 2.3** - PostgreSQL Connector with Testcontainers
+- [ ] **Phase 3** - IPC Handler Integration Tests
+- [ ] **Phase 4** - Cloud Service Integration Tests
+- [ ] **Phase 5** - Git Service Integration Tests
+- [ ] **Phase 6** - AI Provider Integration Tests
+- [ ] **Phase 7** - CI/CD Pipeline Integration
