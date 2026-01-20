@@ -13,6 +13,7 @@ module.exports = {
     '^@ipc/(.*)$': '<rootDir>/src/main/ipcHandlers/$1',
     '^@schemas/(.*)$': '<rootDir>/src/main/schemas/$1',
     '^better-sqlite3$': '<rootDir>/node_modules/better-sqlite3',
+    '^electron-store$': '<rootDir>/tests/integration/mocks/electron-store.ts',
   },
   transform: {
     '^.+\\.tsx?$': [
