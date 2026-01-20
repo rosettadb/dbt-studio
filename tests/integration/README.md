@@ -26,6 +26,29 @@ npm run test:integration:coverage
 
 dbt Studio uses `better-sqlite3` which is a native module. In the production app, this is rebuilt for Electron. However, for integration tests running in a standard Node.js environment, we need a standard Node.js build of the module.
 
+### 🐳 Docker Requirement
+
+PostgreSQL Connector tests (`tests/integration/lib/db/postgres.test.ts`) use `testcontainers` which requires a running Docker environment. Ensure the `docker` CLI is in your path and the daemon is running. If Docker is not available, these tests will fail with connection errors.
+
+**Testcontainers** automatically manages container lifecycle (start/stop) for each test run. However, if you need to manually create a PostgreSQL container for debugging or development:
+
+```bash
+# Create and start a PostgreSQL container
+docker run --name manual-postgres-test \
+  -e POSTGRES_PASSWORD=testpassword \
+  -e POSTGRES_USER=testuser \
+  -e POSTGRES_DB=testdb \
+  -d -p 5432:5432 postgres:14
+
+# Stop the container
+docker stop manual-postgres-test
+
+# Remove the container
+docker rm manual-postgres-test
+```
+
+**Note:** The integration tests use `postgres:14` image. Make sure this image is available locally or can be pulled from Docker Hub.
+
 **The Solution:**
 1. We install `better-sqlite3` as a `devDependency`.
 2. `jest.integration.config.js` forces resolution to `<rootDir>/node_modules/better-sqlite3` (the Node version) instead of `release/app/node_modules` (the Electron version).
