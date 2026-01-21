@@ -32,8 +32,8 @@ jest.mock('@google-cloud/bigquery', () => ({
 const { GenericContainer } = require('testcontainers');
 
 describe('PostgreSQL Connector Integration', () => {
-  // Increase timeout for container startup
-  jest.setTimeout(60000);
+  // Increase timeout for container startup (must exceed withStartupTimeout of 120000)
+  jest.setTimeout(130000);
 
   let container: any;
   let config: PostgresConnection;

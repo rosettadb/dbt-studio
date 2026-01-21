@@ -32,10 +32,11 @@ describe('MainDatabaseService Integration', () => {
   const testUserDataPath = path.join(os.tmpdir(), TEST_DIR_NAME);
 
   beforeAll(() => {
-    // Ensure directory exists because MainDatabaseService expects it for the DB file
-    if (!fs.existsSync(testUserDataPath)) {
-      fs.mkdirSync(testUserDataPath, { recursive: true });
+    // Clear any existing test directory and recreate it to ensure clean state
+    if (fs.existsSync(testUserDataPath)) {
+      fs.rmSync(testUserDataPath, { recursive: true, force: true });
     }
+    fs.mkdirSync(testUserDataPath, { recursive: true });
   });
 
   afterAll(() => {

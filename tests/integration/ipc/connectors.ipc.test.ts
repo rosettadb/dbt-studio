@@ -231,7 +231,9 @@ describe('Connectors IPC Integration', () => {
         });
 
         expect(result).toBeDefined();
-        expect(result).toHaveProperty('valid');
+        expect(result.valid).toBe(false);
+        expect(result.error).toBeDefined();
+        expect(result.error).toContain('Project');
       });
 
       it('should validate optional BigQuery parameters', async () => {

@@ -130,12 +130,47 @@ describe('Projects IPC Integration', () => {
     });
 
     it('should have correct structure when projects exist', async () => {
+      // Create a project for this test to ensure we have data to test against
+      const projectPath = path.join(
+        TEST_DIR,
+        `structure-test-project-${Date.now()}`,
+      );
+      if (!fs.existsSync(projectPath)) {
+        fs.mkdirSync(projectPath, { recursive: true });
+      }
+
+      // Ensure required template files exist
+      const dbtSampleDir = path.join(MOCK_USER_DATA, 'dbt_sample');
+      if (!fs.existsSync(dbtSampleDir)) {
+        fs.mkdirSync(dbtSampleDir, { recursive: true });
+        fs.writeFileSync(
+          path.join(dbtSampleDir, 'dbt_project.yml'),
+          'name: "my_dbt_project"\nversion: "1.0.0"',
+        );
+      }
+
+      const mainConfPath = path.join(MOCK_USER_DATA, 'main.conf');
+      if (!fs.existsSync(mainConfPath)) {
+        fs.writeFileSync(mainConfPath, 'content');
+      }
+
+      // Create the project
+      await mockIpc.invoke('project:add', {
+        name: projectPath,
+        connectionId: undefined,
+        createTemplateFolders: true,
+      });
+
+      // Now test the list functionality
       const projects = await mockIpc.invoke('project:list');
       expect(Array.isArray(projects)).toBe(true);
-      // Ensure at least one project exists from previous test
       expect(projects.length).toBeGreaterThanOrEqual(1);
-      expect(projects[0]).toHaveProperty('path');
-      expect(projects[0]).toHaveProperty('id');
+
+      // Find our created project and verify its structure
+      const createdProject = projects.find((p: any) => p.path === projectPath);
+      expect(createdProject).toBeDefined();
+      expect(createdProject).toHaveProperty('path');
+      expect(createdProject).toHaveProperty('id');
     });
   });
 
