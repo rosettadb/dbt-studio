@@ -5,14 +5,20 @@ import fs from 'fs';
 import os from 'os';
 import { v4 as uuidV4 } from 'uuid';
 import {
+  BigQueryConnection,
   BigQueryTestResponse,
   ConnectionInput,
   ConnectionModel,
+  DatabricksConnection,
   DBTConnection,
+  DuckDBConnection,
   ExecuteStatementType,
+  PostgresConnection,
   Project,
   QueryResponseType,
+  RedshiftConnection,
   RosettaConnection,
+  SnowflakeConnection,
 } from '../../types/backend';
 import { loadDatabaseFile, updateDatabase } from '../utils/fileHelper';
 import { ProjectsService } from './index';
@@ -59,6 +65,115 @@ export default class ConnectorsService {
       (conn) =>
         conn.connection.name.toLowerCase().trim() === name.toLowerCase().trim(),
     );
+  }
+
+  /**
+   * Compare two connection configurations to determine if they represent the same connection
+   * Used to prevent incorrect connection reuse when cloning projects
+   */
+  private static areConnectionConfigsEqual(
+    conn1: ConnectionInput,
+    conn2: ConnectionInput,
+  ): boolean {
+    // Different types means different connections
+    if (conn1.type !== conn2.type) {
+      return false;
+    }
+
+    // Compare based on connection type
+    switch (conn1.type) {
+      case 'duckdb':
+        return (
+          conn1.database_path === (conn2 as DuckDBConnection).database_path &&
+          conn1.database === conn2.database &&
+          conn1.schema === conn2.schema
+        );
+
+      case 'postgres':
+        return (
+          conn1.host === (conn2 as PostgresConnection).host &&
+          conn1.port === (conn2 as PostgresConnection).port &&
+          conn1.database === conn2.database &&
+          conn1.username === (conn2 as PostgresConnection).username &&
+          conn1.schema === conn2.schema
+        );
+
+      case 'snowflake':
+        return (
+          conn1.account === (conn2 as SnowflakeConnection).account &&
+          conn1.database === conn2.database &&
+          conn1.username === (conn2 as SnowflakeConnection).username &&
+          conn1.warehouse === (conn2 as SnowflakeConnection).warehouse &&
+          conn1.schema === conn2.schema
+        );
+
+      case 'bigquery':
+        return (
+          conn1.project === (conn2 as BigQueryConnection).project &&
+          conn1.database === conn2.database &&
+          conn1.schema === conn2.schema &&
+          conn1.keyfile === (conn2 as BigQueryConnection).keyfile
+        );
+
+      case 'redshift':
+        return (
+          conn1.host === (conn2 as RedshiftConnection).host &&
+          conn1.port === (conn2 as RedshiftConnection).port &&
+          conn1.database === conn2.database &&
+          conn1.username === (conn2 as RedshiftConnection).username &&
+          conn1.schema === conn2.schema
+        );
+
+      case 'databricks':
+        return (
+          conn1.host === (conn2 as DatabricksConnection).host &&
+          conn1.httpPath === (conn2 as DatabricksConnection).httpPath &&
+          conn1.database === conn2.database &&
+          conn1.schema === conn2.schema
+        );
+
+      default:
+        return false;
+    }
+  }
+
+  /**
+   * Generate a unique connection name based on connection details
+   * Used when a connection with the default name exists but has different config
+   */
+  private static generateUniqueConnectionName(
+    connection: ConnectionInput,
+  ): string {
+    const timestamp = Date.now();
+    let baseName = 'DBT Connection';
+
+    // Try to use database name or path as part of the unique name
+    // eslint-disable-next-line default-case
+    switch (connection.type) {
+      case 'duckdb': {
+        const duckConn = connection as DuckDBConnection;
+        // Extract filename from path if available
+        const pathParts = duckConn.database_path.split('/');
+        const fileName = pathParts[pathParts.length - 1].replace('.duckdb', '');
+        baseName = fileName || duckConn.database;
+        break;
+      }
+      case 'postgres':
+      case 'redshift':
+        baseName = connection.database;
+        break;
+      case 'snowflake':
+        baseName = `${connection.database}`;
+        break;
+      case 'bigquery':
+        baseName = (connection as BigQueryConnection).project;
+        break;
+      case 'databricks':
+        baseName = connection.database;
+        break;
+    }
+
+    return `${baseName}_${timestamp}`;
   }
 
   /**
@@ -205,8 +320,24 @@ export default class ConnectorsService {
           connection.name,
         );
         if (existingConnection) {
-          // Reuse existing connection for the starter project
-          connectionId = existingConnection.id;
+          // Only reuse if the connection configurations actually match
+          // This prevents different projects from sharing connections with different configs
+          const configsMatch = this.areConnectionConfigsEqual(
+            connection,
+            existingConnection.connection,
+          );
+          if (configsMatch) {
+            // Reuse existing connection for the starter project
+            connectionId = existingConnection.id;
+          } else {
+            // Configs don't match - create new connection with unique name
+            // Generate a unique name based on the database details
+            const uniqueName = this.generateUniqueConnectionName(connection);
+            connectionId = await this.saveNewConnection({
+              ...connection,
+              name: uniqueName,
+            });
+          }
         } else {
           // Create new connection if none exists
           connectionId = await this.saveNewConnectionForTemplate(
