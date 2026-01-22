@@ -20,6 +20,8 @@ export const app = {
   whenReady: jest.fn(() => Promise.resolve()),
   on: jest.fn(),
   quit: jest.fn(),
+  relaunch: jest.fn(),
+  exit: jest.fn(),
 };
 
 export const BrowserWindow = jest.fn();
