@@ -3,6 +3,7 @@ export const ipcMain = {
   on: jest.fn(),
   once: jest.fn(),
   removeListener: jest.fn(),
+  removeAllListeners: jest.fn(),
   removeHandler: jest.fn(),
 };
 
