@@ -41,7 +41,7 @@ import {
   SnowflakeExtractor,
 } from '../extractor';
 import SecureStorageService from './secureStorage.service';
-import { ConnectorsService } from './index';
+import ConnectorsService from './connectors.service';
 
 export default class ProjectsService {
   static async loadProjects(): Promise<Project[]> {
@@ -66,7 +66,7 @@ export default class ProjectsService {
         lastOpenedAt: Date.now(),
       });
       try {
-        return ConnectorsService.loadConfigurations(project.id);
+        return await ConnectorsService.loadConfigurations(project.id);
       } catch {
         return project;
       }
@@ -667,7 +667,11 @@ export default class ProjectsService {
     projects[index] = updatedProject;
     await updateDatabase<'selectedProject'>('selectedProject', updatedProject);
     await this.saveProjects(projects);
-    await ConnectorsService.loadConfigurations(project.id);
+    try {
+      await ConnectorsService.loadConfigurations(project.id);
+    } catch {
+      return projects;
+    }
     return projects;
   }
 

@@ -3,6 +3,7 @@ export const ipcMain = {
   on: jest.fn(),
   once: jest.fn(),
   removeListener: jest.fn(),
+  removeHandler: jest.fn(),
 };
 
 export const ipcRenderer = {
@@ -25,3 +26,9 @@ export const BrowserWindow = jest.fn();
 export const Menu = { buildFromTemplate: jest.fn(), setApplicationMenu: jest.fn() };
 export const dialog = { showOpenDialog: jest.fn(), showSaveDialog: jest.fn(), showMessageBox: jest.fn() };
 export const shell = { openExternal: jest.fn() };
+
+export const net = {
+  request: jest.fn(),
+};
+
+export const IncomingMessage = jest.fn();
