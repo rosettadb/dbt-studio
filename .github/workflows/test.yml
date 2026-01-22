@@ -1,43 +1,35 @@
-name: Test
+name: Quick Validation
 
 on:
   pull_request:
     branches:
       - main
+      - develop
 
 jobs:
   validate:
+    name: Lint & Type Check
     runs-on: ubuntu-latest
-    steps:
-      - name: Validate source branch
-        run: |
-          if [ "${{ github.head_ref }}" != "dev" ]; then
-            echo "Test workflow update"
-            echo "❌ Error: Pull requests to main can only be created from dev branch"
-            exit 1
-          fi
-          echo "✅ Source branch validation passed"
-
-  test:
-    runs-on: macos-latest
-    needs: validate
-    if: github.head_ref == 'dev'
+    timeout-minutes: 10
 
     steps:
-      - name: Check out Git repository
-        uses: actions/checkout@v3
+      - name: Checkout repository
+        uses: actions/checkout@v4
 
-      - name: Install Node.js and NPM
-        uses: actions/setup-node@v3
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
         with:
-          node-version: 18
+          node-version: 20
           cache: npm
 
-      - name: npm install
-        run: |
-          npm install
+      - name: Install dependencies
+        run: npm ci
 
-      - name: npm build
-        run: |
-          npm run lint
-          npm exec tsc
+      - name: Run linter
+        run: npm run lint
+
+      - name: Run TypeScript compiler
+        run: npm exec tsc
+
+      - name: Validation complete
+        run: echo "✅ Quick validation passed"

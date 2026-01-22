@@ -3,6 +3,7 @@ import * as path from 'path';
 import * as fs from 'fs';
 import { AIProviderManager } from '../../../src/main/services/ai/providerManager.service';
 import MainDatabaseService from '../../../src/main/services/mainDatabase.service';
+import SecureStorageService from '../../../src/main/services/secureStorage.service';
 
 // Define path constants
 const TEST_DIR_NAME = 'dbt-studio-ai-provider-test';
@@ -12,7 +13,9 @@ const MOCK_USER_DATA = path.join(TEST_DIR, 'userData');
 // Mock electron app
 jest.mock('electron', () => ({
   app: {
-    getPath: jest.fn(() => path.join(os.tmpdir(), 'dbt-studio-ai-provider-test', 'userData')),
+    getPath: jest.fn(() =>
+      path.join(os.tmpdir(), 'dbt-studio-ai-provider-test', 'userData'),
+    ),
     getName: jest.fn().mockReturnValue('Rosetta DBT Studio Test'),
     getVersion: jest.fn().mockReturnValue('1.0.0'),
   },
@@ -67,9 +70,9 @@ jest.mock('../../../src/main/services/ai/providers/gemini.provider', () => ({
       message: 'Connection successful',
       latencyMs: 110,
     }),
-    getAvailableModels: jest.fn().mockResolvedValue([
-      { id: 'gemini-pro', name: 'Gemini Pro' },
-    ]),
+    getAvailableModels: jest
+      .fn()
+      .mockResolvedValue([{ id: 'gemini-pro', name: 'Gemini Pro' }]),
     complete: jest.fn().mockResolvedValue({
       content: 'Test response from Gemini',
       model: 'gemini-pro',
@@ -312,8 +315,6 @@ describe('AI Provider Integration', () => {
         await AIProviderManager.deleteProvider(provider.id!);
 
         // Verify deletion was attempted (mocked)
-        const SecureStorageService = require('../../../src/main/services/secureStorage.service')
-          .default;
         expect(
           SecureStorageService.deleteAIProviderCredential,
         ).toHaveBeenCalled();
