@@ -13,7 +13,7 @@ import {
   FormatListNumbered,
   Cloud,
   Computer,
-  Dashboard,
+  OpenInNew,
 } from '@mui/icons-material';
 import { toast } from 'react-toastify';
 import { useNavigate, useLocation } from 'react-router-dom';
@@ -223,8 +223,9 @@ export const Menu: React.FC = () => {
                 }}
               >
                 <AuthButtonContent>
-                  <Dashboard sx={{ fontSize: 16 }} />
-                  <AuthLabel>Dashboard</AuthLabel>
+                  <AuthIcon src={rosettaIcon} alt="Rosetta" />
+                  <AuthLabel>Cloud Dashboard</AuthLabel>
+                  <OpenInNew sx={{ fontSize: 14, opacity: 0.8 }} />
                 </AuthButtonContent>
               </Button>
             </Tooltip>
