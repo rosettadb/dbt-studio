@@ -519,6 +519,60 @@ const ProjectDetails: React.FC = () => {
     registerSyncEditorContent,
   ]);
 
+  // Auto-refresh tab content when focusing on a tab
+  const previousActiveTabIdRef = React.useRef<EditorTabId | null>(null);
+  React.useEffect(() => {
+    if (!activeTabId || !activeTab || !isHydrated) {
+      return;
+    }
+
+    // Only refresh if we actually switched to a different tab
+    if (previousActiveTabIdRef.current === activeTabId) {
+      return;
+    }
+
+    // Skip if tab has unsaved changes
+    if (activeTab.isModified) {
+      previousActiveTabIdRef.current = activeTabId;
+      return;
+    }
+
+    // Refresh content from disk when tab becomes active
+    refreshTabContentByPath(activeTab.path);
+    previousActiveTabIdRef.current = activeTabId;
+  }, [activeTabId, activeTab, isHydrated, refreshTabContentByPath]);
+
+  // Auto-refresh config files when connection is updated
+  const previousConnectionRef = React.useRef(connection);
+  React.useEffect(() => {
+    if (!project?.path || !connection || !isHydrated) {
+      return;
+    }
+
+    const previousConnection = previousConnectionRef.current;
+
+    // Check if connection data actually changed (not just initial load)
+    if (previousConnection && previousConnection.id === connection.id) {
+      // Connection was updated - refresh config files if they're open
+      const configPaths = [
+        `${project.path}/profiles.yml`,
+        `${project.path}/rosetta/main.conf`,
+      ];
+
+      configPaths.forEach((configPath) => {
+        const tab = tabs.find((t) => t.path === configPath);
+        if (tab && !tab.isModified) {
+          // Only refresh if tab is open and has no unsaved changes
+          refreshTabContentByPath(configPath);
+        }
+      });
+    }
+
+    previousConnectionRef.current = connection;
+    // DO NOT include 'tabs' in dependencies - it would cause infinite loop!
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [connection, project?.path, isHydrated, refreshTabContentByPath]);
+
   const generateBasicTransformationPrompt = async (
     filePath: string,
     _project: Project,
