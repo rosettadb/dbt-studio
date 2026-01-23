@@ -1,18 +1,24 @@
-/* eslint-disable no-case-declarations, @typescript-eslint/no-shadow */
+/* eslint-disable no-case-declarations, @typescript-eslint/no-shadow, no-restricted-syntax, no-await-in-loop */
 import yaml from 'js-yaml';
 import path from 'path';
 import fs from 'fs';
 import os from 'os';
 import { v4 as uuidV4 } from 'uuid';
 import {
+  BigQueryConnection,
   BigQueryTestResponse,
   ConnectionInput,
   ConnectionModel,
+  DatabricksConnection,
   DBTConnection,
+  DuckDBConnection,
   ExecuteStatementType,
+  PostgresConnection,
   Project,
   QueryResponseType,
+  RedshiftConnection,
   RosettaConnection,
+  SnowflakeConnection,
 } from '../../types/backend';
 import { loadDatabaseFile, updateDatabase } from '../utils/fileHelper';
 import { ProjectsService } from './index';
@@ -33,6 +39,7 @@ import {
 } from '../utils/connectors';
 import SecureStorageService from './secureStorage.service';
 import { CloudConnection, RecentItem } from '../../types/frontend';
+import { updateProjectConfigFiles } from '../utils/yamlPartialUpdate';
 
 export default class ConnectorsService {
   static async loadConnections(): Promise<ConnectionModel[]> {
@@ -58,6 +65,115 @@ export default class ConnectorsService {
       (conn) =>
         conn.connection.name.toLowerCase().trim() === name.toLowerCase().trim(),
     );
+  }
+
+  /**
+   * Compare two connection configurations to determine if they represent the same connection
+   * Used to prevent incorrect connection reuse when cloning projects
+   */
+  private static areConnectionConfigsEqual(
+    conn1: ConnectionInput,
+    conn2: ConnectionInput,
+  ): boolean {
+    // Different types means different connections
+    if (conn1.type !== conn2.type) {
+      return false;
+    }
+
+    // Compare based on connection type
+    switch (conn1.type) {
+      case 'duckdb':
+        return (
+          conn1.database_path === (conn2 as DuckDBConnection).database_path &&
+          conn1.database === conn2.database &&
+          conn1.schema === conn2.schema
+        );
+
+      case 'postgres':
+        return (
+          conn1.host === (conn2 as PostgresConnection).host &&
+          conn1.port === (conn2 as PostgresConnection).port &&
+          conn1.database === conn2.database &&
+          conn1.username === (conn2 as PostgresConnection).username &&
+          conn1.schema === conn2.schema
+        );
+
+      case 'snowflake':
+        return (
+          conn1.account === (conn2 as SnowflakeConnection).account &&
+          conn1.database === conn2.database &&
+          conn1.username === (conn2 as SnowflakeConnection).username &&
+          conn1.warehouse === (conn2 as SnowflakeConnection).warehouse &&
+          conn1.schema === conn2.schema
+        );
+
+      case 'bigquery':
+        return (
+          conn1.project === (conn2 as BigQueryConnection).project &&
+          conn1.database === conn2.database &&
+          conn1.schema === conn2.schema &&
+          conn1.keyfile === (conn2 as BigQueryConnection).keyfile
+        );
+
+      case 'redshift':
+        return (
+          conn1.host === (conn2 as RedshiftConnection).host &&
+          conn1.port === (conn2 as RedshiftConnection).port &&
+          conn1.database === conn2.database &&
+          conn1.username === (conn2 as RedshiftConnection).username &&
+          conn1.schema === conn2.schema
+        );
+
+      case 'databricks':
+        return (
+          conn1.host === (conn2 as DatabricksConnection).host &&
+          conn1.httpPath === (conn2 as DatabricksConnection).httpPath &&
+          conn1.database === conn2.database &&
+          conn1.schema === conn2.schema
+        );
+
+      default:
+        return false;
+    }
+  }
+
+  /**
+   * Generate a unique connection name based on connection details
+   * Used when a connection with the default name exists but has different config
+   */
+  private static generateUniqueConnectionName(
+    connection: ConnectionInput,
+  ): string {
+    const timestamp = Date.now();
+    let baseName = 'DBT Connection';
+
+    // Try to use database name or path as part of the unique name
+    // eslint-disable-next-line default-case
+    switch (connection.type) {
+      case 'duckdb': {
+        const duckConn = connection as DuckDBConnection;
+        // Extract filename from path if available
+        const pathParts = duckConn.database_path.split('/');
+        const fileName = pathParts[pathParts.length - 1].replace('.duckdb', '');
+        baseName = fileName || duckConn.database;
+        break;
+      }
+      case 'postgres':
+      case 'redshift':
+        baseName = connection.database;
+        break;
+      case 'snowflake':
+        baseName = `${connection.database}`;
+        break;
+      case 'bigquery':
+        baseName = (connection as BigQueryConnection).project;
+        break;
+      case 'databricks':
+        baseName = connection.database;
+        break;
+    }
+
+    return `${baseName}_${timestamp}`;
   }
 
   /**
@@ -152,7 +268,11 @@ export default class ConnectorsService {
     );
     await fs.promises.writeFile(profilesPath, profilesContent, 'utf8');
 
-    const mainConfPath = path.join(project.path, 'rosetta', 'main.conf');
+    // Ensure rosetta directory exists before writing main.conf
+    const rosettaDir = path.join(project.path, 'rosetta');
+    await fs.promises.mkdir(rosettaDir, { recursive: true });
+
+    const mainConfPath = path.join(rosettaDir, 'main.conf');
     const rosettaYaml = await this.generateRosettaYml(
       connection.connection,
       project.name,
@@ -200,8 +320,24 @@ export default class ConnectorsService {
           connection.name,
         );
         if (existingConnection) {
-          // Reuse existing connection for the starter project
-          connectionId = existingConnection.id;
+          // Only reuse if the connection configurations actually match
+          // This prevents different projects from sharing connections with different configs
+          const configsMatch = this.areConnectionConfigsEqual(
+            connection,
+            existingConnection.connection,
+          );
+          if (configsMatch) {
+            // Reuse existing connection for the starter project
+            connectionId = existingConnection.id;
+          } else {
+            // Configs don't match - create new connection with unique name
+            // Generate a unique name based on the database details
+            const uniqueName = this.generateUniqueConnectionName(connection);
+            connectionId = await this.saveNewConnection({
+              ...connection,
+              name: uniqueName,
+            });
+          }
         } else {
           // Create new connection if none exists
           connectionId = await this.saveNewConnectionForTemplate(
@@ -262,6 +398,53 @@ export default class ConnectorsService {
 
     connections[connectionIndex] = connection;
     await updateDatabase<'connections'>('connections', connections);
+
+    // Find all projects using this connection and update their config files
+    const projects = await ProjectsService.loadProjects();
+    const affectedProjects = projects.filter(
+      (project) => project.connectionId === connection.id,
+    );
+
+    // Track errors for each project
+    const updateErrors: Array<{ projectName: string; errors: string[] }> = [];
+
+    for (const project of affectedProjects) {
+      try {
+        const result = await updateProjectConfigFiles(
+          project.path,
+          project.name,
+          connection.connection,
+        );
+
+        if (!result.success) {
+          updateErrors.push({
+            projectName: project.name,
+            errors: result.errors,
+          });
+        }
+      } catch (error) {
+        updateErrors.push({
+          projectName: project.name,
+          errors: [
+            error instanceof Error ? error.message : 'Unknown error occurred',
+          ],
+        });
+      }
+    }
+
+    // If there were any errors updating config files, throw an error with details
+    if (updateErrors.length > 0) {
+      const errorMessages = updateErrors
+        .map(
+          ({ projectName, errors }) =>
+            `Project "${projectName}":\n${errors.map((e) => `  - ${e}`).join('\n')}`,
+        )
+        .join('\n\n');
+
+      throw new Error(
+        `Connection updated in database, but failed to update configuration files for some projects:\n\n${errorMessages}\n\nPlease check that the profiles.yml and main.conf files exist and are not corrupted. You may need to reconfigure the connection for these projects.`,
+      );
+    }
   }
 
   /**
@@ -471,7 +654,7 @@ export default class ConnectorsService {
     connection: ConnectionInput,
     projectName: string,
   ): Promise<string> {
-    const jdbcUrl = await this.generateJdbcUrl(connection, projectName);
+    const jdbcUrl = await this.generateJdbcUrl(connection);
     // Removed BigQuery keyfile fetch/validation here
     // USER and PASSWORD only declared here
     const USER = `db-user-${connection.name}`;
@@ -536,10 +719,7 @@ export default class ConnectorsService {
     }
   }
 
-  static async generateJdbcUrl(
-    conn: ConnectionInput,
-    projectName: string,
-  ): Promise<string> {
+  static async generateJdbcUrl(conn: ConnectionInput): Promise<string> {
     switch (conn.type) {
       case 'postgres':
         return `jdbc:postgresql://${conn.host}:${conn.port}/${conn.database}?currentSchema=${conn.schema}`;
@@ -565,7 +745,7 @@ export default class ConnectorsService {
       }
       case 'databricks':
         // Use token-based authentication with no username (UID)
-        const TOKEN = `db-token-${projectName}`;
+        const TOKEN = `db-token-${conn.name}`;
         return `jdbc:databricks://${conn.host}:443/default;transportMode=http;ssl=1;AuthMech=3;httpPath=${conn.httpPath};PWD=\${${TOKEN}}`;
       case 'duckdb':
         // DuckDB JDBC URL format
@@ -579,7 +759,7 @@ export default class ConnectorsService {
     connection: ConnectionInput,
     project: Project,
   ): Promise<RosettaConnection> {
-    const rosettaJdbcUrl = await this.generateJdbcUrl(connection, project.name);
+    const rosettaJdbcUrl = await this.generateJdbcUrl(connection);
     if (
       connection.type === 'bigquery' &&
       connection.method === 'service-account'

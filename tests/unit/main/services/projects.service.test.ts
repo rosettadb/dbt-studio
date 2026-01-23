@@ -36,11 +36,14 @@ jest.mock('../../../../src/main/services/secureStorage.service', () => ({
 }));
 
 const loadConfigurations = jest.fn();
+const parseProjectConnectionFiles = jest.fn();
 
 jest.mock('../../../../src/main/services/connectors.service', () => ({
   __esModule: true,
   default: {
     loadConfigurations: (...args: any[]) => loadConfigurations(...args),
+    parseProjectConnectionFiles: (...args: any[]) =>
+      parseProjectConnectionFiles(...args),
   },
 }));
 
@@ -104,7 +107,10 @@ describe('ProjectsService (main)', () => {
         ],
       });
 
-      loadConfigurations.mockResolvedValue({ id: 'p1', configured: true });
+      parseProjectConnectionFiles.mockResolvedValue({
+        rosettaConnection: { dialect: 'duckdb' },
+        dbtConnection: { type: 'duckdb' },
+      });
 
       const result = await ProjectsService.getProject('p1');
 
@@ -114,8 +120,14 @@ describe('ProjectsService (main)', () => {
           expect.objectContaining({ id: 'p1', lastOpenedAt: 123 }),
         ]),
       );
-      expect(loadConfigurations).toHaveBeenCalledWith('p1');
-      expect(result).toEqual({ id: 'p1', configured: true });
+      expect(parseProjectConnectionFiles).toHaveBeenCalledWith('/tmp/proj');
+      expect(result).toEqual(
+        expect.objectContaining({
+          id: 'p1',
+          rosettaConnection: { dialect: 'duckdb' },
+          dbtConnection: { type: 'duckdb' },
+        }),
+      );
 
       nowSpy.mockRestore();
     });
@@ -134,7 +146,7 @@ describe('ProjectsService (main)', () => {
         ],
       });
 
-      loadConfigurations.mockImplementation(async () => {
+      parseProjectConnectionFiles.mockImplementation(async () => {
         throw new Error('Missing connection');
       });
 
