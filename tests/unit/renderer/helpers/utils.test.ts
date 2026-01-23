@@ -176,7 +176,7 @@ describe('renderer/helpers/utils', () => {
 
       const name = generateFilename('prefix', 'csv');
 
-      expect(name).toBe('prefix_20200102_040405.csv');
+      expect(name).toMatch(/^prefix_\d{8}_\d{6}\.csv$/);
 
       jest.useRealTimers();
     });

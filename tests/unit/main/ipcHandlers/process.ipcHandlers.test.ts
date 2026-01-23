@@ -31,6 +31,7 @@ describe('process.ipcHandlers', () => {
     registerProcessHandlers({} as any);
 
     expect(ipcMain.removeHandler).toHaveBeenCalledWith('process:start');
+    expect(ipcMain.removeHandler).toHaveBeenCalledWith('process:stop');
     expect(ipcMain.removeHandler).toHaveBeenCalledWith('process:status');
     expect(ipcMain.removeAllListeners).toHaveBeenCalledWith('process:output');
 
@@ -64,7 +65,8 @@ describe('process.ipcHandlers', () => {
 
     const handler = getHandleHandler(ipcMain, 'process:status');
 
-    expect(handler(null)).toEqual({ running: true });
+    const result = await Promise.resolve(handler(null));
+    expect(result).toEqual({ running: true });
     expect(getStatus).toHaveBeenCalled();
   });
 });

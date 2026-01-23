@@ -52,10 +52,10 @@ describe('updates.ipcHandlers', () => {
     );
   });
 
-  it('delegates updates:reject-version to UpdateManager.rejectVersion', async () => {
+  it('delegates updates:reject-version to UpdateService.rejectVersion', async () => {
     const { ipcMain } = await import('electron');
 
-    const rejectVersion = jest.fn().mockResolvedValue(true);
+    const rejectVersion = jest.fn().mockImplementation(() => undefined);
 
     jest.doMock('electron-updater', () => ({
       autoUpdater: {
@@ -81,7 +81,7 @@ describe('updates.ipcHandlers', () => {
 
     const handler = getHandleHandler(ipcMain, 'updates:reject-version');
 
-    await expect(handler(null, '1.2.3')).resolves.toEqual(true);
+    await expect(handler(null, '1.2.3')).resolves.toBeUndefined();
     expect(rejectVersion).toHaveBeenCalledWith('1.2.3');
   });
 });
