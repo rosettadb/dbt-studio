@@ -10,7 +10,6 @@ import {
   useTheme,
 } from '@mui/material';
 import { MoreHoriz, Sync } from '@mui/icons-material';
-import { toast } from 'react-toastify';
 import { useQueryClient } from 'react-query';
 import {
   useGitPull,
@@ -26,12 +25,14 @@ import { BranchDialog } from './BranchDialog';
 import { Icon } from '../icon';
 import { icons } from '../../../../assets';
 import { QUERY_KEYS } from '../../config/constants';
+import { GitUiError } from '../modals';
 
 interface RepositoryHeaderProps {
   projectPath?: string;
   onSynchronize?: () => Promise<void>;
   isSynchronizing?: boolean;
   hasPendingChanges?: boolean;
+  onGitError?: (error: GitUiError) => void;
 }
 
 export const RepositoryHeader: React.FC<RepositoryHeaderProps> = ({
@@ -39,11 +40,19 @@ export const RepositoryHeader: React.FC<RepositoryHeaderProps> = ({
   onSynchronize,
   isSynchronizing,
   hasPendingChanges = false,
+  onGitError,
 }) => {
   const theme = useTheme();
   const queryClient = useQueryClient();
   const [branchMenuAnchor, setBranchMenuAnchor] = useState<null | HTMLElement>(
     null,
+  );
+
+  const emitGitError = React.useCallback(
+    (error: GitUiError) => {
+      onGitError?.(error);
+    },
+    [onGitError],
   );
 
   const { data: remotes = [] } = useGetRemotes(projectPath || '', {
@@ -55,14 +64,70 @@ export const RepositoryHeader: React.FC<RepositoryHeaderProps> = ({
   });
 
   const { mutate: pull, isLoading: isPulling } = useGitPull({
-    onSuccess: () => {
+    onSuccess: (data) => {
+      if (data?.authRequired) {
+        emitGitError({
+          title: 'Authentication required',
+          message:
+            'Authentication is required to pull from the remote repository.',
+          operation: 'pull',
+          repoPath: projectPath,
+        });
+        return;
+      }
+
+      if (data?.error) {
+        emitGitError({
+          title: 'Pull failed',
+          message: data.error,
+          operation: 'pull',
+          repoPath: projectPath,
+        });
+        return;
+      }
       onSynchronize?.();
+    },
+    onError: (error) => {
+      emitGitError({
+        title: 'Pull failed',
+        message: error.message ?? 'Unknown error',
+        operation: 'pull',
+        repoPath: projectPath,
+      });
     },
   });
 
   const { mutate: push, isLoading: isPushing } = useGitPush({
-    onSuccess: () => {
+    onSuccess: (data) => {
+      if (data?.authRequired) {
+        emitGitError({
+          title: 'Authentication required',
+          message:
+            'Authentication is required to push to the remote repository.',
+          operation: 'push',
+          repoPath: projectPath,
+        });
+        return;
+      }
+
+      if (data?.error) {
+        emitGitError({
+          title: 'Push failed',
+          message: data.error,
+          operation: 'push',
+          repoPath: projectPath,
+        });
+        return;
+      }
       onSynchronize?.();
+    },
+    onError: (error) => {
+      emitGitError({
+        title: 'Push failed',
+        message: error.message ?? 'Unknown error',
+        operation: 'push',
+        repoPath: projectPath,
+      });
     },
   });
 
@@ -102,7 +167,12 @@ export const RepositoryHeader: React.FC<RepositoryHeaderProps> = ({
       await handlePostBranchOperation();
     },
     onError: (error) => {
-      toast.error(`Failed to create branch: ${error.message}`);
+      emitGitError({
+        title: 'Failed to create branch',
+        message: error.message ?? 'Unknown error',
+        operation: 'branch:create',
+        repoPath: projectPath,
+      });
     },
   });
 
@@ -111,7 +181,12 @@ export const RepositoryHeader: React.FC<RepositoryHeaderProps> = ({
       await handlePostBranchOperation();
     },
     onError: (error) => {
-      toast.error(`Failed to delete branch: ${error.message}`);
+      emitGitError({
+        title: 'Failed to delete branch',
+        message: error.message ?? 'Unknown error',
+        operation: 'branch:delete',
+        repoPath: projectPath,
+      });
     },
   });
 
@@ -120,7 +195,12 @@ export const RepositoryHeader: React.FC<RepositoryHeaderProps> = ({
       await handlePostBranchOperation();
     },
     onError: (error) => {
-      toast.error(`Failed to rename branch: ${error.message}`);
+      emitGitError({
+        title: 'Failed to rename branch',
+        message: error.message ?? 'Unknown error',
+        operation: 'branch:rename',
+        repoPath: projectPath,
+      });
     },
   });
 
@@ -129,7 +209,12 @@ export const RepositoryHeader: React.FC<RepositoryHeaderProps> = ({
       await handlePostBranchOperation();
     },
     onError: (error) => {
-      toast.error(`Failed to switch branch: ${error.message}`);
+      emitGitError({
+        title: 'Failed to switch branch',
+        message: error.message ?? 'Unknown error',
+        operation: 'branch:switch',
+        repoPath: projectPath,
+      });
     },
   });
 
@@ -163,8 +248,12 @@ export const RepositoryHeader: React.FC<RepositoryHeaderProps> = ({
     try {
       await onSynchronize?.();
     } catch (error) {
-      // eslint-disable-next-line no-console
-      console.error('Sync error:', error);
+      emitGitError({
+        title: 'Synchronize failed',
+        message: error instanceof Error ? error.message : 'Unknown error',
+        operation: 'sync',
+        repoPath: projectPath,
+      });
     }
   };
 
@@ -172,9 +261,12 @@ export const RepositoryHeader: React.FC<RepositoryHeaderProps> = ({
     if (!hasPendingChanges) {
       return true;
     }
-    toast.info(
-      `Please commit or discard all changes before ${actionDescription}.`,
-    );
+    emitGitError({
+      title: 'Pending changes',
+      message: `Please commit or discard all changes before ${actionDescription}.`,
+      operation: 'guard:pending-changes',
+      repoPath: projectPath,
+    });
     return false;
   };
 
