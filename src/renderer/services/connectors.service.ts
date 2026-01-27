@@ -94,3 +94,57 @@ export const getConnectionById = async (
   );
   return data;
 };
+
+/**
+ * Extract schema directly from a connection (not project-based)
+ */
+export const extractSchemaFromConnection = async (
+  connectionId: string,
+): Promise<{ tables: any[]; error?: string }> => {
+  const { data } = await client.post<string, { tables: any[]; error?: string }>(
+    'connector:extractSchema',
+    connectionId,
+  );
+  return data;
+};
+
+/**
+ * Save a query for a specific connection
+ */
+export const updateConnectionQuery = async (
+  connectionId: string,
+  query: string,
+): Promise<void> => {
+  await client.post<{ connectionId: string; query: string }, void>(
+    'connector:updateQuery',
+    { connectionId, query },
+  );
+};
+
+/**
+ * Get the saved query for a specific connection
+ */
+export const getConnectionQuery = async (
+  connectionId: string,
+): Promise<string> => {
+  const { data } = await client.post<string, string>(
+    'connector:getQuery',
+    connectionId,
+  );
+  return data;
+};
+
+/**
+ * Execute a query directly using a connection (not project-based)
+ */
+export const executeQueryForConnection = async (body: {
+  connectionId: string;
+  query: string;
+  queryId?: string;
+}): Promise<QueryResponseType> => {
+  const { data } = await client.post<
+    { connectionId: string; query: string; queryId?: string },
+    QueryResponseType
+  >('connector:executeQuery', body);
+  return data;
+};

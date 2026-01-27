@@ -66,7 +66,11 @@ export type ConnectorChannels =
   | 'connector:get'
   | 'connector:update'
   | 'connector:delete'
-  | 'connector:cancel-query';
+  | 'connector:cancel-query'
+  | 'connector:extractSchema'
+  | 'connector:updateQuery'
+  | 'connector:getQuery'
+  | 'connector:executeQuery';
 
 export type SourcesChannels =
   | 'sources:create'

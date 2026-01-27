@@ -53,6 +53,11 @@ const EditConnection: React.FC = () => {
       case 'duckdb': {
         return <Connections.DuckDB onCancel={handleCancel} connection={conn} />;
       }
+      case 'kinetica': {
+        return (
+          <Connections.Kinetica onCancel={handleCancel} connection={conn} />
+        );
+      }
       default: {
         return (
           <Connections.Postgres onCancel={handleCancel} connection={conn} />

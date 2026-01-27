@@ -1517,4 +1517,268 @@ export default class ConnectorsService {
   static async clearRecentItems(): Promise<void> {
     await updateDatabase<'recentItems'>('recentItems', []);
   }
+
+  /**
+   * Extract schema directly from a connection (not project-based)
+   */
+  static async extractSchemaFromConnection(
+    connectionId: string,
+  ): Promise<{ tables: any[] }> {
+    const conn = await this.getConnectionById(connectionId);
+
+    if (!conn) {
+      throw new Error(`Connection with id ${connectionId} not found`);
+    }
+
+    const { connection } = conn;
+
+    if (!connection.type) {
+      throw new Error(
+        'Database connection type is not defined. Please reconfigure your connection.',
+      );
+    }
+
+    // Get credentials from secure storage
+    const storeUser = await SecureStorageService.getCredential(
+      `db-user-${connection.name}`,
+    );
+    const storePassword = await SecureStorageService.getCredential(
+      `db-password-${connection.name}`,
+    );
+
+    if (storeUser) {
+      (connection as { username: string }).username = storeUser;
+    }
+    if (storePassword) {
+      (connection as { password: string }).password = storePassword;
+    }
+
+    const storeToken = await SecureStorageService.getCredential(
+      `db-token-${connection.name}`,
+    );
+    if (storeToken) {
+      (connection as { token: string }).token = storeToken;
+    }
+
+    const bigqueryKey = await SecureStorageService.getCredential(
+      `db-bigquery-${connection.name}`,
+    );
+    if (bigqueryKey) {
+      (connection as { keyfile: string }).keyfile = bigqueryKey;
+    }
+
+    // Import extractors dynamically to avoid circular dependency
+    const {
+      PGSchemaExtractor,
+      SnowflakeExtractor,
+      DatabricksExtractor,
+      BigQueryExtractor,
+      DuckDBExtractor,
+      RedshiftExtractor,
+      KineticaExtractor,
+    } = await import('../extractor');
+
+    switch (connection.type) {
+      case 'postgres': {
+        const pgConn = connection as PostgresConnection;
+        const extractor = new PGSchemaExtractor({
+          user: pgConn.username,
+          host: pgConn.host,
+          database: pgConn.database,
+          password: pgConn.password,
+          port: pgConn.port,
+        });
+        await extractor.connect();
+        const schema = await extractor.extractSchema();
+        await extractor.disconnect();
+        return schema;
+      }
+      case 'redshift': {
+        const rsConn = connection as RedshiftConnection;
+        const extractor = new RedshiftExtractor({
+          user: rsConn.username,
+          host: rsConn.host,
+          database: rsConn.database,
+          password: rsConn.password,
+          port: rsConn.port,
+          ssl: rsConn.ssl ?? true,
+          sslrootcert: rsConn.sslrootcert,
+        });
+        await extractor.connect();
+        const schema = await extractor.extractSchema();
+        await extractor.disconnect();
+        return schema;
+      }
+      case 'snowflake': {
+        const sfConn = connection as SnowflakeConnection;
+        const extractor = new SnowflakeExtractor({
+          account: sfConn.account.split('.')[0],
+          username: sfConn.username,
+          password: sfConn.password,
+          warehouse: sfConn.warehouse,
+          database: sfConn.database,
+          schema: sfConn.schema,
+          role: sfConn.role,
+        });
+        await extractor.connect();
+        const schema = await extractor.extractSchema();
+        await extractor.disconnect();
+        return schema;
+      }
+      case 'databricks': {
+        const dbConn = connection as DatabricksConnection;
+        const extractor = new DatabricksExtractor({
+          token: dbConn.token,
+          host: dbConn.host,
+          path: dbConn.httpPath,
+          catalog: dbConn.database || 'default',
+          schema: dbConn.schema,
+        });
+        await extractor.connect();
+        const schema = await extractor.extractSchema();
+        await extractor.disconnect();
+        return schema;
+      }
+      case 'bigquery': {
+        const bqConn = connection as BigQueryConnection;
+        const config: any = {
+          projectId: bqConn.project,
+        };
+        let keyfileValue = bqConn.keyfile;
+        if (
+          typeof keyfileValue === 'string' &&
+          keyfileValue.startsWith('db-bigquery-')
+        ) {
+          const stored = await SecureStorageService.getCredential(keyfileValue);
+          if (!stored) {
+            throw new Error(
+              'BigQuery service account key not found in secure storage',
+            );
+          }
+          keyfileValue = stored;
+        }
+        try {
+          config.credentials = JSON.parse(keyfileValue);
+        } catch (err) {
+          throw new Error('Invalid service account key JSON');
+        }
+        if (bqConn.location) {
+          config.location = bqConn.location;
+        }
+        const extractor = new BigQueryExtractor(config);
+        await extractor.connect();
+        const schema = await extractor.extractSchema();
+        return schema;
+      }
+      case 'duckdb': {
+        const duckConn = connection as DuckDBConnection;
+        const extractor = new DuckDBExtractor({
+          database_path: duckConn.database_path,
+          schema: duckConn.schema,
+        });
+        const schema = await extractor.extractSchema();
+        return schema;
+      }
+      case 'kinetica': {
+        const kinConn = connection as KineticaConnection;
+        const extractor = new KineticaExtractor({
+          host: kinConn.host,
+          port: kinConn.port,
+          username: kinConn.username,
+          password: kinConn.password,
+          useSSL: kinConn.useSSL,
+          timeout: kinConn.timeout,
+          schema: kinConn.schema,
+        });
+        await extractor.connect();
+        const schema = await extractor.extractSchema();
+        await extractor.disconnect();
+        return schema;
+      }
+      default:
+        throw new Error(
+          `Unsupported connection type: "${(connection as any).type}"`,
+        );
+    }
+  }
+
+  /**
+   * Save a query for a specific connection (connection-based, not project-based)
+   */
+  static async updateConnectionQuery(
+    connectionId: string,
+    query: string,
+  ): Promise<void> {
+    const db = await loadDatabaseFile();
+    const queries = db.queries ?? {};
+    // Use a connection-specific key prefix to distinguish from project queries
+    queries[`connection:${connectionId}`] = query;
+    await updateDatabase('queries', queries);
+  }
+
+  /**
+   * Get the saved query for a specific connection
+   */
+  static async getConnectionQuery(connectionId: string): Promise<string> {
+    const db = await loadDatabaseFile();
+    return db.queries?.[`connection:${connectionId}`] ?? '';
+  }
+
+  /**
+   * Execute a query directly using a connection (not project-based)
+   */
+  static async executeQueryForConnection({
+    connectionId,
+    query,
+    queryId,
+  }: {
+    connectionId: string;
+    query: string;
+    queryId?: string;
+  }): Promise<QueryResponseType> {
+    const conn = await this.getConnectionById(connectionId);
+
+    if (!conn) {
+      throw new Error(`Connection with id ${connectionId} not found`);
+    }
+
+    const { connection } = conn;
+
+    // Get credentials from secure storage
+    const storeUser = await SecureStorageService.getCredential(
+      `db-user-${connection.name}`,
+    );
+    const storePassword = await SecureStorageService.getCredential(
+      `db-password-${connection.name}`,
+    );
+
+    if (storeUser) {
+      (connection as any).username = storeUser;
+    }
+    if (storePassword) {
+      (connection as any).password = storePassword;
+    }
+
+    const storeToken = await SecureStorageService.getCredential(
+      `db-token-${connection.name}`,
+    );
+    if (storeToken) {
+      (connection as any).token = storeToken;
+    }
+
+    const bigQueryKey = await SecureStorageService.getCredential(
+      `db-bigquery-${connection.name}`,
+    );
+    if (bigQueryKey) {
+      (connection as any).keyfile = bigQueryKey;
+    }
+
+    // Use a dummy project name for credential lookup (use connection name)
+    return this.executeSelectStatement({
+      connection,
+      query,
+      projectName: connection.name,
+      queryId,
+    });
+  }
 }

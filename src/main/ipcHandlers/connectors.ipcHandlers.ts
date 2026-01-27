@@ -16,6 +16,10 @@ const handlerChannels = [
   'connector:query',
   'connector:cancel-query',
   'connector:list',
+  'connector:extractSchema',
+  'connector:updateQuery',
+  'connector:getQuery',
+  'connector:executeQuery',
 ];
 
 const removeConnectorsIpcHandlers = () => {
@@ -129,6 +133,49 @@ const registerConnectorsHandlers = () => {
   ipcMain.handle('source:deleteRecentItem', async (_event, id: string) => {
     return ConnectorsService.removeRecentItem(id);
   });
+
+  // Connection-based schema extraction
+  ipcMain.handle(
+    'connector:extractSchema',
+    async (_event, connectionId: string) => {
+      try {
+        return ConnectorsService.extractSchemaFromConnection(connectionId);
+      } catch (error: any) {
+        return { tables: [], error: error.message };
+      }
+    },
+  );
+
+  // Connection-based query save
+  ipcMain.handle(
+    'connector:updateQuery',
+    async (
+      _event,
+      { connectionId, query }: { connectionId: string; query: string },
+    ) => {
+      return ConnectorsService.updateConnectionQuery(connectionId, query);
+    },
+  );
+
+  // Connection-based query load
+  ipcMain.handle('connector:getQuery', async (_event, connectionId: string) => {
+    return ConnectorsService.getConnectionQuery(connectionId);
+  });
+
+  // Connection-based query execution
+  ipcMain.handle(
+    'connector:executeQuery',
+    async (
+      _event,
+      body: { connectionId: string; query: string; queryId?: string },
+    ): Promise<QueryResponseType> => {
+      try {
+        return ConnectorsService.executeQueryForConnection(body);
+      } catch (error: any) {
+        return { success: false, error: error.message };
+      }
+    },
+  );
 };
 
 export default registerConnectorsHandlers;
