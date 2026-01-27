@@ -12,7 +12,9 @@ import {
 } from '../../components/schemaTreeViewer/styles';
 import { SupportedConnectionTypes, Table } from '../../../types/backend';
 import { TreeItems } from '../../components/schemaTreeViewer/TreeItems';
-import connectionIcons from '../../../../assets/connectionIcons';
+import connectionIcons, {
+  defaultIcon,
+} from '../../../../assets/connectionIcons';
 
 type Props = {
   databaseName: string;
@@ -34,6 +36,11 @@ export const SchemaTreeViewerWithSchema: React.FC<Props> = React.memo(
     ]);
 
     const schemaMap = React.useMemo(() => {
+      // eslint-disable-next-line no-console
+      console.log(
+        'SchemaTreeViewerWithSchema: Processing tables for display',
+        tables,
+      );
       return tables.reduce<Record<string, Table[]>>((acc, table) => {
         if (!acc[table.schema]) {
           acc[table.schema] = [];
@@ -96,8 +103,8 @@ export const SchemaTreeViewerWithSchema: React.FC<Props> = React.memo(
               itemId={databaseName}
               label={
                 <TreeItems.Database
-                  label={databaseName}
-                  icon={connectionIcons.images[type]}
+                  label={databaseName || 'Database'}
+                  icon={connectionIcons.images[type] || defaultIcon}
                 />
               }
             >

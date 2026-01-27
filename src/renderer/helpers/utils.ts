@@ -263,6 +263,17 @@ export const getConnectionInput = (conn: ConnectionModel) => {
         schema: duck.schema || 'main',
         name: connection.name,
       };
+    case 'kinetica':
+      const kinetica = connection as any; // Using any as explicit import for KineticaConnection might be circular or redundant if not already there, but let's use the type structure we know
+      return {
+        type,
+        host: kinetica.host,
+        port: kinetica.port,
+        username: kinetica.username,
+        password: kinetica.password,
+        database: kinetica.database || '',
+        schema: kinetica.schema || '',
+      };
     default:
       return undefined;
   }

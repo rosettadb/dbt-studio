@@ -855,7 +855,7 @@ export const executeKineticaQuery = async (
       db.execute_sql(
         query,
         0,
-        10000, // Limit
+        -9999, // Limit
         '',
         null,
         {},
@@ -870,33 +870,29 @@ export const executeKineticaQuery = async (
     });
 
     // Transform GPUdb response to QueryResponseType
-    // GPUdb returns data in format: { column_1: [...], column_2: [...], column_headers: [...] }
-    const {
-      data,
-      column_headers: columnHeaders,
-      total_number_of_records: totalNumberOfRecords,
-    } = result;
+    // GPUdb returns data in format: { data: { column_1: [...], column_2: [...], column_headers: [...] }, ... }
+    const { data } = result;
 
-    if (!columnHeaders || !data) {
+    if (!data || !data.column_headers) {
       return {
         success: false,
-        error: 'Invalid response from Kinetica',
+        error: 'Invalid response from Kinetica: Missing data or column headers',
       };
     }
 
+    const columnHeaders = data.column_headers;
+    const totalNumberOfRecords = result.total_number_of_records;
+
     // Map column headers to fields
-    const fields = columnHeaders.map((header: string, index: number) => ({
+    const fields = columnHeaders.map((header: string) => ({
       name: header,
-      type: index, // GPUdb doesn't provide type info in execute_sql response
+      type: 0, // GPUdb doesn't provide type info in execute_sql response
     }));
 
     // Transform columnar data to row-based format
-    // GPUdb returns: { column_1: [val1, val2], column_2: [val3, val4] }
+    // data returns: { column_1: [val1, val2], column_2: [val3, val4] }
     // We need: [{ col1: val1, col2: val3 }, { col1: val2, col2: val4 }]
-    const columnKeys = columnHeaders.map(
-      (_: string, index: number) => `column_${index + 1}`,
-    );
-    const numRows = data[columnKeys[0]]?.length || 0;
+    const numRows = data.column_1?.length || 0;
     const rows: any[] = [];
 
     for (let i = 0; i < numRows; i += 1) {

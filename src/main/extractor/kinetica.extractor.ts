@@ -41,7 +41,8 @@ export default class KineticaExtractor {
 
   private async executeSQL(sql: string): Promise<any[]> {
     return new Promise((resolve, reject) => {
-      this.db.execute_sql(sql, 0, 10000, '', null, {}, (err: any, res: any) => {
+      console.log('[Kinetica] Executing SQL:', sql);
+      this.db.execute_sql(sql, 0, -9999, '', null, {}, (err: any, res: any) => {
         if (err) {
           reject(err);
           return;
@@ -83,13 +84,97 @@ export default class KineticaExtractor {
 
     try {
       // Use standard information_schema
-      const tableRows = await this.executeSQL(`
-        SELECT TABLE_SCHEMA, TABLE_NAME, TABLE_TYPE
-        FROM information_schema.TABLES
-        WHERE TABLE_SCHEMA NOT IN ('information_schema', 'pg_catalog', 'ki_catalog', 'sys_catalog')
-      `);
+      // Use API instead of SQL to avoid "Field 23 out of bounds" error on information_schema.TABLES
+      const tablesResponse: any = await new Promise((resolve, reject) => {
+        this.db.show_table(
+          '*',
+          { show_children: 'true' },
+          (err: any, res: any) => {
+            if (err) {
+              reject(err);
+            } else {
+              resolve(res);
+            }
+          },
+        );
+      });
 
-      console.log('[Kinetica] Found tables:', tableRows.length);
+      const systemSchemas = [
+        'information_schema',
+        'pg_catalog',
+        'ki_catalog',
+        'sys_catalog',
+        'sys_temp',
+      ];
+      const tableNames = tablesResponse.table_names || [];
+
+      // Create a Set of all names to help identify schemas (if a name appears as a prefix for others)
+      // But better rely on naming convention or type if available.
+      // Kinetica returns schemas as items too. Usually schemas don't have dots, tables do (schema.table).
+      // Exception: default schema tables might not have dots? No, usually they are just "table".
+
+      const tableRows = tableNames
+        .map((fullName: string) => {
+          let schemaName = 'default';
+          let tableName = fullName;
+
+          // Handle schema.table format
+          const dotIndex = fullName.indexOf('.');
+          if (dotIndex !== -1) {
+            schemaName = fullName.substring(0, dotIndex);
+            tableName = fullName.substring(dotIndex + 1);
+          } else {
+            // If no dot, it could be a table in default schema OR a schema itself.
+            // If it's a known schema name, skip it.
+            // Also, check if it's one of the schemas we found used as a prefix in other tables?
+            // For now, let's assume if it matches a known system schema, it's a schema object.
+          }
+
+          if (
+            systemSchemas.includes(schemaName) ||
+            systemSchemas.includes(fullName)
+          ) {
+            return null;
+          }
+
+          // Very simple heuristic: If the name is exactly the same as a schema name used by other tables,
+          // it's likely the schema object itself.
+          // However, simpler: User schemas usually don't have dots. Tables in "default" schema don't have dots.
+          // If we see "nurilacka_gmail" and "nurilacka_gmail.clients", the first one is the schema.
+
+          // Let's defer filtering to a second pass or check against other names?
+          // For now, let's just mark the type.
+
+          // Debug log
+          // console.log(`[Kinetica] Item: ${fullName}, Schema: ${schemaName}, Table: ${tableName}`);
+
+          return {
+            fullName,
+            TABLE_SCHEMA: schemaName,
+            TABLE_NAME: tableName,
+            TABLE_TYPE: 'TABLE', // Default
+          };
+        })
+        .filter((r: any) => r !== null)
+        .filter((r: any, _: number, arr: any[]) => {
+          // Filter out items that are actually schemas.
+          // If 'r.fullName' matches the 'TABLE_SCHEMA' of another item, then 'r' is a schema object.
+          const isSchema = arr.some(
+            (other) =>
+              other.TABLE_SCHEMA === r.fullName &&
+              other.fullName !== r.fullName,
+          );
+          // Also filter out 'default' schema object if it exists?
+          // And filter out system schemas explicitly if missed
+          if (['public', 'information_schema'].includes(r.fullName))
+            return false;
+
+          // If isSchema is true, it's a folder/schema, not a table.
+          return !isSchema;
+        });
+
+      console.log('[Kinetica] Found tables (API):', tableRows.length);
+      // console.log('[Kinetica] Table list:', tableRows.map((t: any) => t.fullName).join(', '));
 
       for (const row of tableRows) {
         const tableName = row.TABLE_NAME;
