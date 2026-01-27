@@ -77,6 +77,12 @@ const baseItems: ItemType[] = [
     img: 'duckdb',
     disabled: false,
   },
+  {
+    id: 'kinetica',
+    name: 'Kinetica',
+    img: 'kinetica',
+    disabled: false,
+  },
 ];
 
 const AddConnection: React.FC = () => {
@@ -133,6 +139,14 @@ const AddConnection: React.FC = () => {
       case 'duckdb': {
         return (
           <Connections.DuckDB
+            onCancel={() => setSelectedItem(undefined)}
+            projectId={projectId}
+          />
+        );
+      }
+      case 'kinetica': {
+        return (
+          <Connections.Kinetica
             onCancel={() => setSelectedItem(undefined)}
             projectId={projectId}
           />

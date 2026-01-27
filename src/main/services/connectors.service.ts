@@ -13,6 +13,7 @@ import {
   DBTConnection,
   DuckDBConnection,
   ExecuteStatementType,
+  KineticaConnection,
   PostgresConnection,
   Project,
   QueryResponseType,
@@ -36,6 +37,8 @@ import {
   testPostgresConnection,
   testRedshiftConnection,
   testSnowflakeConnection,
+  testKineticaConnection,
+  executeKineticaQuery,
 } from '../utils/connectors';
 import SecureStorageService from './secureStorage.service';
 import { CloudConnection, RecentItem } from '../../types/frontend';
@@ -132,6 +135,16 @@ export default class ConnectorsService {
           conn1.schema === conn2.schema
         );
 
+      case 'kinetica':
+        return (
+          conn1.host === (conn2 as KineticaConnection).host &&
+          conn1.port === (conn2 as KineticaConnection).port &&
+          conn1.useSSL === (conn2 as KineticaConnection).useSSL &&
+          conn1.database === conn2.database &&
+          conn1.username === (conn2 as KineticaConnection).username &&
+          conn1.schema === conn2.schema
+        );
+
       default:
         return false;
     }
@@ -170,6 +183,9 @@ export default class ConnectorsService {
         break;
       case 'databricks':
         baseName = connection.database;
+        break;
+      case 'kinetica':
+        baseName = connection.database || 'kinetica';
         break;
     }
 
@@ -523,6 +539,8 @@ export default class ConnectorsService {
         return testDuckDBConnection(connection);
       case 'redshift':
         return testRedshiftConnection(connection);
+      case 'kinetica':
+        return testKineticaConnection(connection);
       default:
         throw new Error(
           `Unsupported connection type: ${(connection as any).type}`,
@@ -630,6 +648,13 @@ export default class ConnectorsService {
             registerCancel,
           );
           break;
+        case 'kinetica':
+          response = await executeKineticaQuery(
+            connection,
+            query,
+            registerCancel,
+          );
+          break;
         default:
           throw new Error(
             `Unsupported connection type: ${(connection as any).type}`,
@@ -714,6 +739,10 @@ export default class ConnectorsService {
         // DuckDB specific validations
         if (!conn.database_path) throw new Error('Database path is required');
         break;
+      case 'kinetica':
+        if (!conn.host) throw new Error('Host is required');
+        if (!conn.port) throw new Error('Port is required');
+        break;
       default:
         throw new Error('Unsupported connection type!');
     }
@@ -750,6 +779,29 @@ export default class ConnectorsService {
       case 'duckdb':
         // DuckDB JDBC URL format
         return `jdbc:duckdb:${conn.database_path}`;
+      case 'kinetica':
+        // Kinetica JDBC URL format: jdbc:kinetica:URL=http://<host>:9191
+        // Optional parameters can be appended
+        const kineticaProtocol = conn.useSSL ? 'https' : 'http';
+        let cleanKineticaHost = conn.host.replace(/(^\w+:|^)\/\//, '');
+        let kineticaPath = '';
+
+        // Handle path in host (e.g. cloud-host/gpudb-0)
+        const pathIdx = cleanKineticaHost.indexOf('/');
+        if (pathIdx !== -1) {
+          kineticaPath = cleanKineticaHost.substring(pathIdx);
+          cleanKineticaHost = cleanKineticaHost.substring(0, pathIdx);
+        }
+
+        let kineticaUrl = `jdbc:kinetica:URL=${kineticaProtocol}://${cleanKineticaHost}:${conn.port}${kineticaPath}`;
+        // Add additional params if needed (e.g., timeout)
+        if (conn.timeout) {
+          kineticaUrl += `;Timeout=${conn.timeout}`;
+        }
+        if (conn.bypassSslCertCheck && conn.useSSL) {
+          kineticaUrl += ';BypassSslCertCheck=1';
+        }
+        return kineticaUrl;
       default:
         throw new Error('Unsupported connection type!');
     }
@@ -861,6 +913,19 @@ export default class ConnectorsService {
           path: conn.database_path, // Map database_path to path for DBT connection
           database: conn.database,
           schema: conn.schema,
+        };
+      case 'kinetica':
+        return {
+          type: 'kinetica',
+          host: conn.host,
+          port: conn.port,
+          username: conn.username,
+          password: conn.password,
+          database: conn.database,
+          schema: conn.schema,
+          timeout: conn.timeout,
+          useSSL: conn.useSSL,
+          bypassSslCertCheck: conn.bypassSslCertCheck,
         };
       default:
         // Use type assertion to access the type property for error message
@@ -999,6 +1064,22 @@ export default class ConnectorsService {
           path: conn.database_path,
           schema: conn.schema,
           threads: 4,
+        };
+      case 'kinetica':
+        // Map to a dbt profile. NOTE: dbt-kinetica adapter does not exist natively.
+        // This output assumes users might use dbt-trino or have a custom adapter.
+        // We output a generic 'kinetica' type profile for now.
+        return {
+          type: 'kinetica',
+          host: conn.host,
+          port: conn.port,
+          user: dbUserName,
+          password: dbPassword,
+          database: conn.database, // Optional in Kinetica but standard for dbt
+          schema: conn.schema,
+          threads: 4,
+          ...(conn.timeout && { timeout: conn.timeout }),
+          ...(conn.useSSL && { ssl: conn.useSSL }),
         };
       default:
         throw new Error('Unsupported connection type!');
