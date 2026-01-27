@@ -43,11 +43,9 @@ export default class KineticaExtractor {
     return new Promise((resolve, reject) => {
       this.db.execute_sql(sql, 0, 10000, '', null, {}, (err: any, res: any) => {
         if (err) {
-          console.error('[Kinetica] SQL Error:', err.message);
           reject(err);
           return;
         }
-        // column_headers is INSIDE data object
         const { data } = res;
         if (!data) {
           resolve([]);
@@ -84,42 +82,36 @@ export default class KineticaExtractor {
     const allTables: Table[] = [];
 
     try {
-      // Use ki_catalog.ki_objects which exists based on the DDL we saw
+      // Use standard information_schema
       const tableRows = await this.executeSQL(`
-        SELECT schema_name, object_name, obj_kind
-        FROM ki_catalog.ki_objects
-        WHERE obj_kind IN ('R', 'H', 'V', 'M', 'E')
-        AND schema_name NOT LIKE 'ki_%'
-        AND schema_name NOT LIKE 'sys_%'
-        AND schema_name != 'information_schema'
-        AND schema_name != 'pg_catalog'
+        SELECT TABLE_SCHEMA, TABLE_NAME, TABLE_TYPE
+        FROM information_schema.TABLES
+        WHERE TABLE_SCHEMA NOT IN ('information_schema', 'pg_catalog', 'ki_catalog', 'sys_catalog')
       `);
 
       console.log('[Kinetica] Found tables:', tableRows.length);
 
       for (const row of tableRows) {
-        const tableName = row.object_name;
-        const schemaName = row.schema_name || 'default';
-        const objKind = row.obj_kind;
-        // R=regular table, H=replicated, E=external, V=view, M=materialized view
-        const tableType = objKind === 'V' || objKind === 'M' ? 'VIEW' : 'TABLE';
+        const tableName = row.TABLE_NAME;
+        const schemaName = row.TABLE_SCHEMA || 'default';
+        const tableType = (row.TABLE_TYPE || '').includes('VIEW')
+          ? 'VIEW'
+          : 'TABLE';
 
         if (tableName) {
           let columns: Column[] = [];
           try {
-            // Get columns from ki_catalog.ki_columns
             const colRows = await this.executeSQL(`
-              SELECT column_name, column_type, column_position
-              FROM ki_catalog.ki_columns
-              WHERE schema_name = '${schemaName}'
-              AND table_name = '${tableName}'
-              ORDER BY column_position
+              SELECT COLUMN_NAME, DATA_TYPE, ORDINAL_POSITION, IS_NULLABLE
+              FROM information_schema.COLUMNS
+              WHERE TABLE_SCHEMA = '${schemaName}' AND TABLE_NAME = '${tableName}'
+              ORDER BY ORDINAL_POSITION
             `);
 
             columns = colRows.map((c, idx) => ({
-              name: c.column_name || '',
-              typeName: (c.column_type || 'VARCHAR').toUpperCase(),
-              ordinalPosition: c.column_position || idx + 1,
+              name: c.COLUMN_NAME || '',
+              typeName: (c.DATA_TYPE || 'VARCHAR').toUpperCase(),
+              ordinalPosition: c.ORDINAL_POSITION || idx + 1,
               primaryKeySequenceId: 0,
               columnDisplaySize: 0,
               scale: 0,
@@ -127,15 +119,15 @@ export default class KineticaExtractor {
               columnProperties: [],
               autoincrement: false,
               primaryKey: false,
-              nullable: true,
+              nullable: c.IS_NULLABLE !== 'NO',
             }));
-          } catch (e: any) {
-            console.log('[Kinetica] Failed to get columns for', tableName);
+          } catch {
+            // Skip columns if query fails
           }
 
           allTables.push({
             name: tableName,
-            type: tableType,
+            type: tableType as 'TABLE' | 'VIEW',
             schema: schemaName,
             columns,
           });

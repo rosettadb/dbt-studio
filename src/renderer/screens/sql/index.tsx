@@ -91,12 +91,14 @@ const Sql = () => {
         const result =
           await connectorsServices.extractSchemaFromConnection(connectionId);
         if (result.error) {
+          // eslint-disable-next-line no-console
           console.error('Failed to fetch schema:', result.error);
           setTabSchemas((prev) => ({ ...prev, [connectionId]: [] }));
         } else {
           setTabSchemas((prev) => ({ ...prev, [connectionId]: result.tables }));
         }
       } catch (error: any) {
+        // eslint-disable-next-line no-console
         console.error('Failed to fetch schema:', error);
         setTabSchemas((prev) => ({ ...prev, [connectionId]: [] }));
       } finally {
