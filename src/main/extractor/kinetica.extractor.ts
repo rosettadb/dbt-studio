@@ -41,7 +41,6 @@ export default class KineticaExtractor {
 
   private async executeSQL(sql: string): Promise<any[]> {
     return new Promise((resolve, reject) => {
-      console.log('[Kinetica] Executing SQL:', sql);
       this.db.execute_sql(sql, 0, -9999, '', null, {}, (err: any, res: any) => {
         if (err) {
           reject(err);
@@ -173,7 +172,6 @@ export default class KineticaExtractor {
           return !isSchema;
         });
 
-      console.log('[Kinetica] Found tables (API):', tableRows.length);
       // console.log('[Kinetica] Table list:', tableRows.map((t: any) => t.fullName).join(', '));
 
       for (const row of tableRows) {
@@ -222,7 +220,6 @@ export default class KineticaExtractor {
       console.error('[Kinetica] Schema extraction error:', err.message);
     }
 
-    console.log('[Kinetica] Final tables count:', allTables.length);
     return { tables: allTables };
   }
 }

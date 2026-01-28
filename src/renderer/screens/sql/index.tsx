@@ -6,9 +6,22 @@ import {
   CircularProgress,
   useTheme,
   Typography,
+  FormControl,
+  Select,
+  MenuItem,
+  TextField,
+  InputAdornment,
+  IconButton,
 } from '@mui/material';
-import { Stop, TableChart } from '@mui/icons-material';
+import {
+  Stop,
+  TableChart,
+  Refresh,
+  Add,
+  FilterList,
+} from '@mui/icons-material';
 import { toast } from 'react-toastify';
+import { useNavigate } from 'react-router-dom';
 import { connectorsServices } from '../../services';
 import { useLocalStorage } from '../../hooks';
 import { QueryHistoryType } from '../../../types/frontend';
@@ -20,16 +33,21 @@ import { QueryResult } from './queryResult';
 import { ConnectionInput, Table } from '../../../types/backend';
 import { getConnectionInput } from '../../helpers/utils';
 import { SqlTabManager } from '../../components/sqlTabs';
-import { SqlConnectionsSidebar } from '../../components/sqlConnectionsSidebar';
 import useSqlTabManager from '../../hooks/useSqlTabManager';
-import { useGetConnectionById } from '../../controllers';
+import { useGetConnectionById, useGetConnections } from '../../controllers';
 import { SchemaTreeViewerWithSchema } from './SchemaTreeViewerWithSchema';
+import connectionIcons, {
+  defaultIcon,
+} from '../../../../assets/connectionIcons';
 
 const QUERY_HISTORY_KEY = 'query_history_key';
 
 const Sql = () => {
   const theme = useTheme();
+  const navigate = useNavigate();
   const tabManager = useSqlTabManager();
+  const { data: connections = [] } = useGetConnections();
+  const [filter, setFilter] = useState('');
   const {
     tabs,
     activeTabId,
@@ -214,28 +232,181 @@ const Sql = () => {
   return (
     <AppLayout
       sidebarContent={
-        <Box sx={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
-          {/* Connections List */}
-          <Box sx={{ flex: '0 0 auto', maxHeight: '40%', overflow: 'hidden' }}>
-            <SqlConnectionsSidebar
-              openTabs={tabs}
-              activeTabId={activeTabId}
-              onConnectionSelect={handleConnectionSelect}
+        <Box
+          sx={{
+            display: 'flex',
+            flexDirection: 'column',
+            height: '100%',
+            bgcolor: theme.palette.mode === 'dark' ? '#1e1e1e' : '#f5f5f5',
+          }}
+        >
+          {/* Connection Selection & Actions */}
+          <Box
+            sx={{
+              p: '8px',
+              display: 'flex',
+              gap: '4px',
+              alignItems: 'center',
+              bgcolor: theme.palette.mode === 'dark' ? '#1e1e1e' : '#f5f5f5',
+              borderBottom: `1px solid ${theme.palette.divider}`,
+            }}
+          >
+            <FormControl fullWidth size="small">
+              <Select
+                value={activeTab?.connectionId || ''}
+                onChange={(e) => {
+                  const conn = connections.find((c) => c.id === e.target.value);
+                  if (conn) {
+                    handleConnectionSelect({
+                      id: conn.id,
+                      name: conn.connection.name,
+                      type: conn.connection.type,
+                    });
+                  }
+                }}
+                displayEmpty
+                renderValue={(selected) => {
+                  if (!selected) return 'Select Connection';
+                  const conn = connections.find((c) => c.id === selected);
+                  if (!conn) return 'Select Connection';
+                  const icon =
+                    connectionIcons.images[conn.connection.type] || defaultIcon;
+                  return (
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                      <img
+                        src={icon}
+                        alt=""
+                        style={{ width: 14, height: 14, objectFit: 'contain' }}
+                      />
+                      <span
+                        style={{
+                          whiteSpace: 'nowrap',
+                          overflow: 'hidden',
+                          textOverflow: 'ellipsis',
+                        }}
+                      >
+                        {conn.connection.name}
+                      </span>
+                    </Box>
+                  );
+                }}
+                sx={{
+                  height: 28,
+                  bgcolor:
+                    theme.palette.mode === 'dark' ? '#2d2d2d' : '#e0e0e0',
+                  '& .MuiSelect-select': {
+                    py: 0,
+                    px: 1,
+                    fontSize: '0.8rem',
+                    display: 'flex',
+                    alignItems: 'center',
+                  },
+                  '& .MuiOutlinedInput-notchedOutline': { border: 'none' },
+                }}
+              >
+                <MenuItem value="" disabled sx={{ fontSize: '0.8rem' }}>
+                  Select Connection
+                </MenuItem>
+                {connections.map((conn) => (
+                  <MenuItem
+                    key={conn.id}
+                    value={conn.id}
+                    sx={{
+                      fontSize: '0.8rem',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 1,
+                    }}
+                  >
+                    <img
+                      src={
+                        connectionIcons.images[conn.connection.type] ||
+                        defaultIcon
+                      }
+                      alt=""
+                      style={{ width: 14, height: 14, objectFit: 'contain' }}
+                    />
+                    {conn.connection.name}
+                  </MenuItem>
+                ))}
+              </Select>
+            </FormControl>
+            <IconButton
+              size="small"
+              onClick={handleRefreshSchema}
+              disabled={!activeTab}
+              sx={{
+                width: 28,
+                height: 28,
+                bgcolor: 'transparent',
+                '&:hover': { bgcolor: 'rgba(0,0,0,0.05)' },
+              }}
+            >
+              <Refresh sx={{ fontSize: 18 }} />
+            </IconButton>
+            <IconButton
+              size="small"
+              onClick={() => navigate('/app/add-connection')}
+              sx={{
+                width: 28,
+                height: 28,
+                bgcolor: 'transparent',
+                '&:hover': { bgcolor: 'rgba(0,0,0,0.05)' },
+              }}
+            >
+              <Add sx={{ fontSize: 18 }} />
+            </IconButton>
+          </Box>
+
+          {/* Search Field */}
+          <Box
+            sx={{
+              p: '8px',
+              bgcolor: theme.palette.mode === 'dark' ? '#1e1e1e' : '#f5f5f5',
+              borderBottom: `1px solid ${theme.palette.divider}`,
+            }}
+          >
+            <TextField
+              fullWidth
+              size="small"
+              placeholder="Filter"
+              value={filter}
+              onChange={(e) => setFilter(e.target.value)}
+              InputProps={{
+                endAdornment: (
+                  <InputAdornment position="end">
+                    <FilterList sx={{ fontSize: 16, color: 'text.disabled' }} />
+                  </InputAdornment>
+                ),
+                sx: {
+                  height: 28,
+                  fontSize: '0.8rem',
+                  bgcolor: theme.palette.background.paper,
+                  '& .MuiOutlinedInput-notchedOutline': {
+                    borderColor: theme.palette.divider,
+                  },
+                  '&:hover .MuiOutlinedInput-notchedOutline': {
+                    borderColor: theme.palette.divider,
+                  },
+                  borderRadius: '4px',
+                },
+              }}
             />
           </Box>
 
-          {/* Divider */}
           <Box
             sx={{
-              height: '1px',
-              backgroundColor: theme.palette.divider,
-              mx: 1,
+              flex: 1,
+              overflow: 'hidden',
+              bgcolor: theme.palette.mode === 'dark' ? '#1e1e1e' : '#f5f5f5',
             }}
-          />
-
-          {/* Schema Tree */}
-          <Box sx={{ flex: 1, overflow: 'hidden' }}>
-            <SchemaViewContainer>
+          >
+            <SchemaViewContainer
+              style={{
+                width: '100%',
+                background: 'transparent',
+              }}
+            >
               <SchemaViewGrid>
                 {activeTab && connectionInput ? (
                   <SchemaTreeViewerWithSchema
@@ -244,6 +415,7 @@ const Sql = () => {
                     schema={activeSchema || []}
                     isLoading={isLoadingSchema}
                     onRefresh={handleRefreshSchema}
+                    filter={filter}
                   />
                 ) : (
                   <Box
@@ -347,7 +519,7 @@ const Sql = () => {
                     >
                       <Button
                         variant="contained"
-                        color="error"
+                        color="primary"
                         onClick={handleCancelQuery}
                         size="small"
                         startIcon={<Stop />}

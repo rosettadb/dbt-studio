@@ -35,7 +35,7 @@ export const SqlTabBar = styled(Box)(({ theme }) => ({
   borderBottom: `1px solid ${theme.palette.divider}`,
   flex: '0 0 auto',
   minWidth: 0,
-  height: 40,
+  height: 44,
 }));
 
 export const TabsContainer = styled(Box)(() => ({
@@ -67,8 +67,8 @@ export const SqlTabButton = styled(ButtonBase)<{ active: boolean }>(
     display: 'flex',
     alignItems: 'center',
     gap: theme.spacing(0.75),
-    padding: theme.spacing(0.5, 1.25),
-    minHeight: 32,
+    padding: theme.spacing(0, 1.25),
+    height: 44,
     borderRadius: 0,
     cursor: 'pointer',
     backgroundColor: getBaseBackgroundColor(theme, active),
@@ -146,8 +146,11 @@ export const EmptyTabsPlaceholder = styled(Box)(({ theme }) => ({
   display: 'flex',
   alignItems: 'center',
   justifyContent: 'center',
+  height: 44,
   flex: 1,
   color: theme.palette.text.secondary,
   fontSize: 13,
-  padding: theme.spacing(0, 1),
+  padding: theme.spacing(0, 2),
+  borderBottom: `1px solid ${theme.palette.divider}`,
+  backgroundColor: theme.palette.background.paper,
 }));

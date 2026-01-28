@@ -1,12 +1,10 @@
 /* eslint-disable react/prop-types */
 import React from 'react';
 import { TreeItem } from '@mui/x-tree-view';
-import { Box, CircularProgress, Tooltip } from '@mui/material';
-import { Cached } from '@mui/icons-material';
+import { Box, CircularProgress } from '@mui/material';
 import { RenderTree } from '../../components/schemaTreeViewer/RenderTree';
 import {
   Container,
-  Header,
   NoDataMessage,
   StyledTreeView,
 } from '../../components/schemaTreeViewer/styles';
@@ -22,6 +20,7 @@ type Props = {
   schema: Table[];
   isLoading: boolean;
   onRefresh: () => void;
+  filter?: string;
 };
 
 /**
@@ -30,25 +29,30 @@ type Props = {
  * schema display in the SQL tool.
  */
 export const SchemaTreeViewerWithSchema: React.FC<Props> = React.memo(
-  ({ databaseName, type, schema: tables = [], isLoading, onRefresh }) => {
+  ({ databaseName, type, schema: tables = [], isLoading, filter = '' }) => {
     const [expandedItems, setExpandedItems] = React.useState<string[]>([
       databaseName,
     ]);
 
-    const schemaMap = React.useMemo(() => {
-      // eslint-disable-next-line no-console
-      console.log(
-        'SchemaTreeViewerWithSchema: Processing tables for display',
-        tables,
+    const filteredTables = React.useMemo(() => {
+      if (!filter) return tables;
+      const lowerFilter = filter.toLowerCase();
+      return tables.filter(
+        (table) =>
+          table.name.toLowerCase().includes(lowerFilter) ||
+          table.schema.toLowerCase().includes(lowerFilter),
       );
-      return tables.reduce<Record<string, Table[]>>((acc, table) => {
+    }, [tables, filter]);
+
+    const schemaMap = React.useMemo(() => {
+      return filteredTables.reduce<Record<string, Table[]>>((acc, table) => {
         if (!acc[table.schema]) {
           acc[table.schema] = [];
         }
         acc[table.schema].push(table);
         return acc;
       }, {});
-    }, [tables]);
+    }, [filteredTables]);
 
     const handleExpandedItemsChange = React.useCallback(
       (_: React.SyntheticEvent, newExpanded: string[]) => {
@@ -64,21 +68,6 @@ export const SchemaTreeViewerWithSchema: React.FC<Props> = React.memo(
 
     return (
       <Container>
-        <Box padding={1}>
-          <Header>
-            <div>Schema</div>
-            <Tooltip title="Refresh schema">
-              {isLoading ? (
-                <CircularProgress size={20} />
-              ) : (
-                <Cached
-                  sx={{ color: 'primary.main', cursor: 'pointer' }}
-                  onClick={onRefresh}
-                />
-              )}
-            </Tooltip>
-          </Header>
-        </Box>
         {isLoading && (
           <Box
             sx={{
@@ -91,10 +80,12 @@ export const SchemaTreeViewerWithSchema: React.FC<Props> = React.memo(
             <CircularProgress size={24} />
           </Box>
         )}
-        {!isLoading && tables.length === 0 && (
-          <NoDataMessage>No Schema available</NoDataMessage>
+        {!isLoading && filteredTables.length === 0 && (
+          <NoDataMessage>
+            {filter ? 'No results found' : 'No Schema available'}
+          </NoDataMessage>
         )}
-        {!isLoading && tables.length > 0 && (
+        {!isLoading && filteredTables.length > 0 && (
           <StyledTreeView
             expandedItems={expandedItems}
             onExpandedItemsChange={handleExpandedItemsChange}

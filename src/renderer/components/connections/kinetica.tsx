@@ -104,14 +104,10 @@ export const Kinetica: React.FC<Props> = ({
   });
   const { mutate: testConnection } = useTestConnection({
     onMutate: () => {
-      // eslint-disable-next-line no-console
-      console.log('Test Connection: Started');
       setIsTesting(true);
       setConnectionStatus('idle');
     },
     onSettled: () => {
-      // eslint-disable-next-line no-console
-      console.log('Test Connection: Settled');
       setIsTesting(false);
     },
     onSuccess: (success) => {
@@ -210,8 +206,6 @@ export const Kinetica: React.FC<Props> = ({
   };
 
   const handleTest = () => {
-    // eslint-disable-next-line no-console
-    console.log('Test Button Clicked', formState);
     testConnection(formState);
   };
 

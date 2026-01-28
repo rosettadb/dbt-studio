@@ -745,16 +745,6 @@ export async function testKineticaConnection(
 
   const url = `${protocol}://${cleanHost}:${config.port}${path}`;
 
-  // eslint-disable-next-line no-console
-  console.log('Testing Kinetica Connection:', {
-    url,
-    host: cleanHost,
-    path,
-    port: config.port,
-    user: config.username,
-    ssl: config.useSSL,
-  });
-
   try {
     // Create GPUdb instance
     const db = new GPUdb(url, {
@@ -827,9 +817,6 @@ export const executeKineticaQuery = async (
   }
 
   const url = `${protocol}://${cleanHost}:${config.port}${path}`;
-
-  // eslint-disable-next-line no-console
-  console.log('Executing Kinetica Query:', { url, query });
 
   let db: any;
 

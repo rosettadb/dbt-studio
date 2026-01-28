@@ -1,8 +1,8 @@
 import { styled, Typography } from '@mui/material';
-import { SimpleTreeView } from '@mui/x-tree-view';
+import { SimpleTreeView, treeItemClasses } from '@mui/x-tree-view';
 
 export const Container = styled('div')(() => ({
-  height: 'calc(100% - 30px)',
+  height: '100%',
   borderRadius: 7,
 }));
 
@@ -18,26 +18,59 @@ export const Header = styled('div')(() => ({
 }));
 
 export const StyledTreeItem = styled('div')(() => ({
-  padding: 1,
+  padding: 0,
   display: 'flex',
   alignItems: 'center',
+  minHeight: '22px',
 }));
 
 export const StyledLabel = styled(Typography)(({ theme }) => ({
   color: theme.palette.text.primary,
-  fontSize: 15,
-  marginLeft: 5,
+  fontSize: '15px',
+  marginLeft: '4px',
+  width: 220,
+}));
+
+export const StyledColumnLabel = styled(Typography)(({ theme }) => ({
+  color: theme.palette.text.secondary,
+  fontSize: '14px',
+  marginLeft: '4px',
   width: 200,
 }));
 
 export const StyledTreeView = styled(SimpleTreeView)(() => ({
-  height: 'calc(100% - 30px)',
+  height: '100%',
   overflowY: 'auto',
+  [`& .${treeItemClasses.content}`]: {
+    padding: '0px 2px',
+    minHeight: '22px',
+    '&.Mui-selected': {
+      backgroundColor: 'rgba(0, 0, 0, 0.08)',
+    },
+  },
+  [`& .${treeItemClasses.iconContainer}`]: {
+    width: '12px',
+    marginRight: '2px',
+    '& svg': {
+      fontSize: '16px',
+    },
+  },
+  [`& .${treeItemClasses.groupTransition}`]: {
+    marginLeft: '12px',
+    paddingLeft: '0px',
+    // Tighter indentation for columns (nested levels)
+    [`& .${treeItemClasses.groupTransition}`]: {
+      marginLeft: '8px',
+      [`& .${treeItemClasses.groupTransition}`]: {
+        marginLeft: '6px',
+      },
+    },
+  },
 }));
 
 export const DatabaseIcon = styled('img')(() => ({
-  width: 18,
-  height: 18,
+  width: 14,
+  height: 14,
   marginRight: 2,
 }));
 
