@@ -40,6 +40,12 @@
     "test:coverage": "jest --config tests/unit/jest.config.js --coverage",
     "test:integration": "jest --config jest.integration.config.js --runInBand",
     "test:all": "npm run test && npm run test:integration",
+    "test:e2e": "playwright test",
+    "test:e2e:ui": "playwright test --ui",
+    "test:e2e:debug": "playwright test --debug",
+    "test:e2e:headed": "playwright test --headed",
+    "test:e2e:smoke": "playwright test --grep @smoke",
+    "test:e2e:report": "playwright show-report test-results/html",
     "sync-version": "node .erb/scripts/sync-version.js",
     "version": "npm run sync-version && git add .",
     "prepare": "husky"
@@ -152,6 +158,7 @@
   },
   "devDependencies": {
     "@electron/rebuild": "^3.3.0",
+    "@playwright/test": "^1.57.0",
     "@pmmmwh/react-refresh-webpack-plugin": "^0.5.11",
     "@svgr/webpack": "^8.1.0",
     "@teamsupercell/typings-for-css-modules-loader": "^2.5.2",
@@ -207,6 +214,7 @@
     "jest": "^29.7.0",
     "jest-environment-jsdom": "^29.7.0",
     "mini-css-extract-plugin": "^2.7.6",
+    "playwright": "^1.57.0",
     "prettier": "^3.0.3",
     "react-refresh": "^0.14.0",
     "react-test-renderer": "^18.2.0",
