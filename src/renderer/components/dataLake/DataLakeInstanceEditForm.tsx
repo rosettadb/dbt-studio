@@ -24,7 +24,7 @@ import {
 } from '../../controllers/duckLake.controller';
 
 // Validation schema for instance editing (only editable fields)
-const instanceEditSchema = z.object({
+export const instanceEditSchema = z.object({
   name: z.string().min(1, 'Instance name is required').max(50, 'Name too long'),
   description: z.string().optional(),
   runtime: z.object({

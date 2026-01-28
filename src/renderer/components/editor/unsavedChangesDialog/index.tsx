@@ -46,6 +46,7 @@ export const UnsavedChangesDialog: React.FC<UnsavedChangesDialogProps> = ({
             <Typography variant="h6">Unsaved Changes</Typography>
           </Box>
           <IconButton
+            aria-label="Close"
             onClick={onCancel}
             size="small"
             sx={{

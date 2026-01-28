@@ -19,3 +19,4 @@ jest.setTimeout(30000);
 // But mostly we are testing main process services.
 
 // Example: Global teardown or setup can go here
+process.env.NODE_ENV = 'test';

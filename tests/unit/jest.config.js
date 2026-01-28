@@ -1,0 +1,38 @@
+module.exports = {
+  rootDir: '../..',
+  testEnvironment: 'jsdom',
+  testMatch: ['**/tests/unit/**/*.test.ts', '**/tests/unit/**/*.test.tsx'],
+  setupFilesAfterEnv: ['<rootDir>/tests/unit/__setup__/jest.setup.ts'],
+  moduleDirectories: ['node_modules', 'release/app/node_modules', 'src'],
+  moduleNameMapper: {
+    'file-icons-js': '<rootDir>/.erb/mocks/file-icons-js.js',
+    '^split-pane-react$': '<rootDir>/.erb/mocks/split-pane-react.js',
+    '^electron$': '<rootDir>/tests/unit/__setup__/electron.mock.ts',
+    '\\.(css|less|sass|scss)$': 'identity-obj-proxy',
+    '\\.(jpg|jpeg|png|gif|eot|otf|webp|svg|ttf|woff|woff2|mp4|webm|wav|mp3|m4a|aac|oga)$':
+      '<rootDir>/.erb/mocks/fileMock.js',
+  },
+  transform: {
+    '^.+\\.(ts|tsx|js|jsx)$': 'ts-jest',
+  },
+  testEnvironmentOptions: {
+    url: 'http://localhost/',
+  },
+  modulePathIgnorePatterns: ['<rootDir>/release/app'],
+  testPathIgnorePatterns: ['release/app/dist', '.erb/dll'],
+  testTimeout: 10000,
+  maxWorkers: '50%',
+  collectCoverageFrom: [
+    'src/**/*.{ts,tsx}',
+    '!src/**/*.d.ts',
+    '!src/**/index.ts',
+  ],
+  coverageThreshold: {
+    global: {
+      branches: 70,
+      functions: 75,
+      lines: 75,
+      statements: 75,
+    },
+  },
+};

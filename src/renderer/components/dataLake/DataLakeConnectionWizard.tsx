@@ -65,13 +65,13 @@ const getDatabaseIcon = (type: string) => {
 };
 
 // Validation schemas
-const instanceBasicsSchema = z.object({
+export const instanceBasicsSchema = z.object({
   name: z.string().min(1, 'Instance name is required').max(50, 'Name too long'),
   description: z.string().optional(),
   dataPath: z.string().optional(), // Computed from storage config
 });
 
-const storageConfigSchema = z
+export const storageConfigSchema = z
   .object({
     type: z.enum(['local', 's3', 'azure', 'gcs']),
 
@@ -150,7 +150,7 @@ const storageConfigSchema = z
     },
   );
 
-const catalogConfigSchema = z
+export const catalogConfigSchema = z
   .object({
     type: z.enum(['duckdb', 'sqlite', 'postgresql']),
     duckdb: z
@@ -211,7 +211,7 @@ const catalogConfigSchema = z
     },
   );
 
-const runtimeOptionsSchema = z.object({
+export const runtimeOptionsSchema = z.object({
   maxMemory: z.string().optional(),
   threads: z.number().min(1).max(32).optional(),
   enableOptimizer: z.boolean(),
