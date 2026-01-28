@@ -55,7 +55,11 @@ export const Sidebar: React.FC<Props> = ({ content }) => {
   return (
     <>
       <Menu />
-      <StyledDrawer variant="permanent" open={content ? isSidebarOpen : false}>
+      <StyledDrawer
+        variant="permanent"
+        open={content ? isSidebarOpen : false}
+        data-testid="sidebar"
+      >
         <Box flexGrow={1} display="flex">
           <List sx={{ width: 55, marginTop: '-24px' }}>
             {getSidebarElements(isProjectSelected).map((element, index) => {
@@ -115,6 +119,7 @@ export const Sidebar: React.FC<Props> = ({ content }) => {
                 >
                   <StyledNavLink
                     to={element.path}
+                    data-testid={element.testId}
                     style={{
                       cursor: 'pointer',
                       pointerEvents: isDisabled ? 'none' : 'auto',

@@ -43,7 +43,7 @@ import {
   SnowflakeExtractor,
 } from '../extractor';
 import SecureStorageService from './secureStorage.service';
-import { ConnectorsService } from './index';
+import ConnectorsService from './connectors.service';
 
 export default class ProjectsService {
   static async loadProjects(): Promise<Project[]> {
@@ -1343,7 +1343,7 @@ export default class ProjectsService {
         fileStream.end();
         resolve();
       });
-      response.on('error', (err) => {
+      response.on('error', (err: Error) => {
         fileStream.destroy();
         reject(err);
       });

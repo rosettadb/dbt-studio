@@ -57,6 +57,27 @@ export const loadEnvironment = (isDebug: boolean, isProd: boolean) => {
 };
 
 export function resolveHtmlPath(htmlFileName: string, routePath = '') {
+  // E2E Test specific path resolution to ensure we find the renderer files
+  // This must be checked first because webpack might hardcode NODE_ENV='development'
+  if (process.env.E2E_TESTING === 'true') {
+    const filePath = path.resolve(
+      process.cwd(),
+      '.erb/renderer/',
+      htmlFileName,
+    );
+
+    if (!fs.existsSync(filePath)) {
+      throw new Error(
+        `E2E_TESTING is true but renderer file is missing: ${filePath}. ensure you have built the renderer locally.`,
+      );
+    }
+
+    if (routePath) {
+      return `file://${filePath}#${routePath}`;
+    }
+    return `file://${filePath}`;
+  }
+
   if (process.env.NODE_ENV === 'development') {
     const port = process.env.PORT || 1212;
     const url = new URL(`http://localhost:${port}`);

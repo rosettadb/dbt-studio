@@ -238,12 +238,15 @@ const SelectProject: React.FC = () => {
 
     try {
       const path = await pathJoin(defaultProjectPath, newProject.name);
+
       const project = await projectsServices.addProject({
         name: path,
         connectionId: selectedConnection || undefined,
         createTemplateFolders: newProject.createTemplateFolders,
       });
+
       await selectProject({ projectId: project.id });
+
       toast.success(`Project ${project.name} created successfully!`);
       setIsAddingProject(false);
       setNewProject({ name: '', createTemplateFolders: true });
@@ -346,10 +349,12 @@ const SelectProject: React.FC = () => {
       );
     }
     return (
-      <ProjectsContainer>
+      <ProjectsContainer data-testid="project-list">
         {filteredProjects.map((project) => (
           <ProjectCard
             key={project.id}
+            data-testid={`project-card-${project.name}`}
+            data-project-name={project.name}
             onClick={async () => {
               await selectProject({ projectId: project.id });
               navigate('/app');
@@ -419,6 +424,7 @@ const SelectProject: React.FC = () => {
               <IconButton
                 size="small"
                 onClick={(e) => handleOpenMenu(e, project.id)}
+                data-testid={`project-options-${project.name}`}
               >
                 <MoreVertIcon />
               </IconButton>
@@ -472,7 +478,10 @@ const SelectProject: React.FC = () => {
               <ListItemText>Remove Connection</ListItemText>
             </MenuItem>
           )}
-          <MenuItem onClick={handleDeleteProject}>
+          <MenuItem
+            onClick={handleDeleteProject}
+            data-testid="context-menu-delete"
+          >
             <ListItemIcon>
               <DeleteIcon fontSize="small" color="error" />
             </ListItemIcon>
@@ -489,7 +498,7 @@ const SelectProject: React.FC = () => {
 
   return (
     <AppLayout>
-      <ProjectSelectionContainer>
+      <ProjectSelectionContainer data-testid="project-selection">
         {isAddingProject ? (
           <NewProject
             defaultProjectPath={defaultProjectPath}
@@ -522,6 +531,7 @@ const SelectProject: React.FC = () => {
                   size="small"
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
+                  inputProps={{ 'data-testid': 'project-search-input' }}
                   slotProps={{
                     input: {
                       startAdornment: (
@@ -571,6 +581,7 @@ const SelectProject: React.FC = () => {
                   <Button
                     variant="contained"
                     color="primary"
+                    data-testid="import-project-btn"
                     onClick={async () => {
                       try {
                         const project =
@@ -634,6 +645,7 @@ const SelectProject: React.FC = () => {
                     startIcon={<AddIcon />}
                     onClick={() => setIsAddingProject(true)}
                     sx={{ height: 40 }}
+                    data-testid="create-project-btn"
                   >
                     New
                   </Button>
@@ -668,6 +680,7 @@ const SelectProject: React.FC = () => {
               color="error"
               variant="contained"
               autoFocus
+              data-testid="confirm-delete-btn"
             >
               Delete
             </Button>

@@ -64,7 +64,7 @@ const registerConnectorsHandlers = () => {
     'connector:validate',
     async (_event, connection: ConnectionInput) => {
       try {
-        ConnectorsService.validateConnection(connection);
+        await ConnectorsService.validateConnection(connection);
         return { valid: true };
       } catch (error: any) {
         const errorMessage =
