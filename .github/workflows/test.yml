@@ -17,7 +17,6 @@ jobs:
             exit 1
           fi
           echo "✅ Source branch validation passed"
-
   test:
     runs-on: macos-latest
     needs: validate
@@ -36,12 +35,10 @@ jobs:
       - name: npm install
         run: |
           npm install
-
       - name: npm build
         run: |
           npm run lint
           npm exec tsc
-
       - name: npm test
         run: |
           npm test
