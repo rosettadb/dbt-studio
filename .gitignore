@@ -34,3 +34,8 @@ bin/rosetta/*
 # Ai Context
 .github/copilot-instructions.md
 docs/ai-context/*
+
+# E2E Test Results
+test-results/
+playwright-report/
+.erb/renderer/

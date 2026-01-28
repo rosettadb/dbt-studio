@@ -139,6 +139,7 @@ export const NewProject: React.FC<NewProjectProps> = ({
               startIcon={<Save />}
               onClick={handleAddProject}
               size="medium"
+              data-testid="project-create-confirm-btn"
             >
               Save
             </Button>
@@ -218,6 +219,7 @@ export const NewProject: React.FC<NewProjectProps> = ({
             }
             autoFocus
             sx={{ mb: 2 }}
+            inputProps={{ 'data-testid': 'project-name-input' }}
           />
           <FormControl fullWidth sx={{ mb: 2 }}>
             <InputLabel id="connection-select-label">
