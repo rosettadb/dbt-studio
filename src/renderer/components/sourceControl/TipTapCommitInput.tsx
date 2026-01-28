@@ -167,11 +167,22 @@ export const TipTapCommitInput: React.FC<TipTapCommitInputProps> = ({
   };
 
   const handleRemoteAdded = async () => {
-    await refetchRemotes();
-    setIsAddRemoteModalOpen(false);
-    if (projectPath) {
-      setPendingAction('push');
-      pushFiles({ path: projectPath });
+    try {
+      await refetchRemotes();
+      setIsAddRemoteModalOpen(false);
+      if (projectPath) {
+        setPendingAction('push');
+        pushFiles({ path: projectPath });
+      }
+    } catch (error) {
+      setPendingAction(null);
+      setIsAddRemoteModalOpen(false);
+      onGitError?.({
+        title: 'Failed to refresh remotes',
+        message: error instanceof Error ? error.message : 'Unknown error',
+        operation: 'remotes:refresh',
+        repoPath: projectPath,
+      });
     }
   };
 
