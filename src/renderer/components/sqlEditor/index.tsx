@@ -25,6 +25,7 @@ type Props = {
   setQueryResults: (v: any) => void;
   setError: (v: any) => void;
   onQueryStart?: (queryId: string) => void;
+  isLoading?: boolean;
 };
 
 export const SqlEditor: React.FC<Props> = ({
@@ -40,6 +41,7 @@ export const SqlEditor: React.FC<Props> = ({
   setQueryResults,
   setError,
   onQueryStart,
+  isLoading,
 }) => {
   const { fetchSchema } = useAppContext();
   const editorRef = useRef<monacoType.editor.IStandaloneCodeEditor | null>(
@@ -85,12 +87,12 @@ export const SqlEditor: React.FC<Props> = ({
   const handleRunQuery = async (selectedQuery: string) => {
     // Validate we have a connection
     if (isConnectionMode) {
-      if (!connectionId) {
-        toast.error('No database connection selected');
+      if (!connectionId || isLoading) {
+        toast.error('Connection is still loading...');
         return;
       }
-    } else if (!connectionInput || !selectedProject) {
-      toast.error('No database connection configured for this project');
+    } else if (!connectionInput || !selectedProject || isLoading) {
+      toast.error('Connection is still loading...');
       return;
     }
 
@@ -272,6 +274,7 @@ export const SqlEditor: React.FC<Props> = ({
           completions={completions}
           editorRef={editorRef}
           onRunSelected={(lineQuery) => handleRunQuery(lineQuery)}
+          isLoading={isLoading}
         />
         {queryHistory.length > 0 && historyFilterId && (
           <QueryHistory

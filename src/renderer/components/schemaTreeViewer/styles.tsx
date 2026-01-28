@@ -50,7 +50,7 @@ export const StyledTreeView = styled(SimpleTreeView)(() => ({
   },
   [`& .${treeItemClasses.iconContainer}`]: {
     width: '12px',
-    marginRight: '2px',
+    marginRight: '-4px',
     '& svg': {
       fontSize: '16px',
     },

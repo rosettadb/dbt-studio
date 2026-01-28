@@ -63,9 +63,8 @@ const Sql = () => {
   } = tabManager;
 
   // Get active connection
-  const { data: activeConnection } = useGetConnectionById(
-    activeTab?.connectionId,
-  );
+  const { data: activeConnection, isLoading: isLoadingConnection } =
+    useGetConnectionById(activeTab?.connectionId);
 
   // Schema state for active tab
   const [tabSchemas, setTabSchemas] = useState<Record<string, Table[]>>({});
@@ -81,7 +80,7 @@ const Sql = () => {
     window.innerHeight - 350,
     350,
   ]);
-  const [activeQueryId, setActiveQueryId] = useState<string | null>(null);
+  const [tabQueryIds, setTabQueryIds] = useState<Record<string, string>>({});
 
   // Get connection input for active tab
   const connectionInput = useMemo(() => {
@@ -186,6 +185,7 @@ const Sql = () => {
   );
 
   const handleCancelQuery = async () => {
+    const activeQueryId = activeTabId ? tabQueryIds[activeTabId] : null;
     if (activeQueryId) {
       try {
         await connectorsServices.cancelQuery(activeQueryId);
@@ -193,8 +193,12 @@ const Sql = () => {
       } catch (e) {
         toast.error('Failed to cancel query');
       } finally {
-        setActiveQueryId(null);
         if (activeTabId) {
+          setTabQueryIds((prev) => {
+            const updated = { ...prev };
+            delete updated[activeTabId];
+            return updated;
+          });
           setTabLoading(activeTabId, false);
         }
       }
@@ -485,6 +489,7 @@ const Sql = () => {
                 sashRender={renderSash}
               >
                 <SqlEditor
+                  key={activeTabId}
                   completions={completions}
                   connectionInput={connectionInput as ConnectionInput}
                   connectionId={activeTab.connectionId}
@@ -495,7 +500,15 @@ const Sql = () => {
                   setQueryResults={handleQueryResults}
                   setError={handleSetError}
                   onQueryChange={handleQueryChange}
-                  onQueryStart={(id) => setActiveQueryId(id)}
+                  onQueryStart={(id) => {
+                    if (activeTabId) {
+                      setTabQueryIds((prev) => ({
+                        ...prev,
+                        [activeTabId]: id,
+                      }));
+                    }
+                  }}
+                  isLoading={isLoadingConnection}
                 />
 
                 <Box
@@ -542,6 +555,7 @@ const Sql = () => {
               </SplitPane>
             ) : (
               <SqlEditor
+                key={activeTabId}
                 completions={completions}
                 connectionInput={connectionInput as ConnectionInput}
                 connectionId={activeTab.connectionId}
@@ -552,7 +566,12 @@ const Sql = () => {
                 setQueryResults={handleQueryResults}
                 setError={handleSetError}
                 onQueryChange={handleQueryChange}
-                onQueryStart={(id) => setActiveQueryId(id)}
+                onQueryStart={(id) => {
+                  if (activeTabId) {
+                    setTabQueryIds((prev) => ({ ...prev, [activeTabId]: id }));
+                  }
+                }}
+                isLoading={isLoadingConnection}
               />
             ))}
         </Box>
