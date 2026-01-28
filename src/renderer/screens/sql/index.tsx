@@ -235,6 +235,7 @@ const Sql = () => {
 
   return (
     <AppLayout
+      data-testid="sql-editor-screen"
       sidebarContent={
         <Box
           sx={{
@@ -257,6 +258,7 @@ const Sql = () => {
           >
             <FormControl fullWidth size="small">
               <Select
+                data-testid="sql-connection-select"
                 value={activeTab?.connectionId || ''}
                 onChange={(e) => {
                   const conn = connections.find((c) => c.id === e.target.value);
@@ -488,28 +490,30 @@ const Sql = () => {
                 onChange={(newSizes) => setSizes(newSizes as [number, number])}
                 sashRender={renderSash}
               >
-                <SqlEditor
-                  key={activeTabId}
-                  completions={completions}
-                  connectionInput={connectionInput as ConnectionInput}
-                  connectionId={activeTab.connectionId}
-                  initialQuery={activeTab.query}
-                  queryHistory={queryHistory}
-                  setQueryHistory={setQueryHistory}
-                  setLoadingQuery={handleSetLoadingQuery}
-                  setQueryResults={handleQueryResults}
-                  setError={handleSetError}
-                  onQueryChange={handleQueryChange}
-                  onQueryStart={(id) => {
-                    if (activeTabId) {
-                      setTabQueryIds((prev) => ({
-                        ...prev,
-                        [activeTabId]: id,
-                      }));
-                    }
-                  }}
-                  isLoading={isLoadingConnection}
-                />
+                <Box data-testid="sql-editor-pane" sx={{ height: '100%' }}>
+                  <SqlEditor
+                    key={activeTabId}
+                    completions={completions}
+                    connectionInput={connectionInput as ConnectionInput}
+                    connectionId={activeTab.connectionId}
+                    initialQuery={activeTab.query}
+                    queryHistory={queryHistory}
+                    setQueryHistory={setQueryHistory}
+                    setLoadingQuery={handleSetLoadingQuery}
+                    setQueryResults={handleQueryResults}
+                    setError={handleSetError}
+                    onQueryChange={handleQueryChange}
+                    onQueryStart={(id) => {
+                      if (activeTabId) {
+                        setTabQueryIds((prev) => ({
+                          ...prev,
+                          [activeTabId]: id,
+                        }));
+                      }
+                    }}
+                    isLoading={isLoadingConnection}
+                  />
+                </Box>
 
                 <Box
                   sx={{
@@ -554,25 +558,30 @@ const Sql = () => {
                 </Box>
               </SplitPane>
             ) : (
-              <SqlEditor
-                key={activeTabId}
-                completions={completions}
-                connectionInput={connectionInput as ConnectionInput}
-                connectionId={activeTab.connectionId}
-                initialQuery={activeTab.query}
-                queryHistory={queryHistory}
-                setQueryHistory={setQueryHistory}
-                setLoadingQuery={handleSetLoadingQuery}
-                setQueryResults={handleQueryResults}
-                setError={handleSetError}
-                onQueryChange={handleQueryChange}
-                onQueryStart={(id) => {
-                  if (activeTabId) {
-                    setTabQueryIds((prev) => ({ ...prev, [activeTabId]: id }));
-                  }
-                }}
-                isLoading={isLoadingConnection}
-              />
+              <Box data-testid="sql-editor-pane" sx={{ height: '100%' }}>
+                <SqlEditor
+                  key={activeTabId}
+                  completions={completions}
+                  connectionInput={connectionInput as ConnectionInput}
+                  connectionId={activeTab.connectionId}
+                  initialQuery={activeTab.query}
+                  queryHistory={queryHistory}
+                  setQueryHistory={setQueryHistory}
+                  setLoadingQuery={handleSetLoadingQuery}
+                  setQueryResults={handleQueryResults}
+                  setError={handleSetError}
+                  onQueryChange={handleQueryChange}
+                  onQueryStart={(id) => {
+                    if (activeTabId) {
+                      setTabQueryIds((prev) => ({
+                        ...prev,
+                        [activeTabId]: id,
+                      }));
+                    }
+                  }}
+                  isLoading={isLoadingConnection}
+                />
+              </Box>
             ))}
         </Box>
       </Box>
