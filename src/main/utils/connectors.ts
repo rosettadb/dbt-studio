@@ -22,14 +22,22 @@ import SecureStorageService from '../services/secureStorage.service';
 export async function testPostgresConnection(
   config: PostgresConnection,
 ): Promise<boolean> {
-  const client = new pg.Client({
+  const clientConfig: any = {
     host: config.host,
     port: config.port,
     user: config.username,
     password: config.password,
     database: config.database,
     connectionTimeoutMillis: 5000,
-  });
+  };
+
+  if (config.ssl) {
+    clientConfig.ssl = {
+      rejectUnauthorized: false,
+    };
+  }
+
+  const client = new pg.Client(clientConfig);
 
   await client.connect();
   const result = await client.query('SELECT 1 as connection_test');
@@ -73,14 +81,22 @@ export const executePostgresQuery = async (
   query: string,
   registerCancel?: (fn: () => void) => void,
 ): Promise<QueryResponseType> => {
-  const client = new pg.Client({
+  const clientConfig: any = {
     host: config.host,
     port: config.port,
     user: config.username,
     password: config.password,
     database: config.database,
     connectionTimeoutMillis: 5000,
-  });
+  };
+
+  if (config.ssl) {
+    clientConfig.ssl = {
+      rejectUnauthorized: false,
+    };
+  }
+
+  const client = new pg.Client(clientConfig);
 
   if (registerCancel) {
     registerCancel(() => {

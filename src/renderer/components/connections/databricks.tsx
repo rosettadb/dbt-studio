@@ -55,38 +55,13 @@ export const Databricks: React.FC<Props> = ({
   });
 
   const [showToken, setShowToken] = React.useState(false);
-  const [isTesting, setIsTesting] = React.useState(false);
   const [connectionStatus, setConnectionStatus] = React.useState<
     'idle' | 'success' | 'failed'
   >('idle');
   const [nameTouched, setNameTouched] = React.useState(false);
 
-  const { mutate: configureConnection } = useConfigureConnection({
-    onSuccess: () => {
-      toast.success('Databricks connection configured successfully!');
-      if (projectId) {
-        navigate('/app');
-        return;
-      }
-      navigate('/app/connections');
-    },
-    onError: (error) => {
-      toast.error(`Configuration failed: ${error}`);
-    },
-  });
-
-  const { mutate: updateConnection } = useUpdateConnection({
-    onSuccess: () => {
-      toast.success('Databricks connection updated successfully!');
-    },
-    onError: (error) => {
-      toast.error(`Update failed: ${error}`);
-    },
-  });
-
-  const { mutate: testConnection } = useTestConnection({
+  const { mutate: testConnection, isLoading: isTesting } = useTestConnection({
     onSuccess: (success) => {
-      setIsTesting(false);
       if (success) {
         toast.success('Connection test successful!');
         setConnectionStatus('success');
@@ -96,11 +71,35 @@ export const Databricks: React.FC<Props> = ({
       setConnectionStatus('failed');
     },
     onError: (error) => {
-      setIsTesting(false);
       toast.error(`Test failed: ${error.message}`);
       setConnectionStatus('failed');
     },
   });
+
+  const { mutate: configureConnection, isLoading: isConfiguring } =
+    useConfigureConnection({
+      onSuccess: () => {
+        toast.success('Databricks connection configured successfully!');
+        if (projectId) {
+          navigate('/app');
+          return;
+        }
+        navigate('/app/connections');
+      },
+      onError: (error) => {
+        toast.error(`Configuration failed: ${error}`);
+      },
+    });
+
+  const { mutate: updateConnection, isLoading: isUpdating } =
+    useUpdateConnection({
+      onSuccess: () => {
+        toast.success('Databricks connection updated successfully!');
+      },
+      onError: (error) => {
+        toast.error(`Update failed: ${error}`);
+      },
+    });
 
   // Get existing connections for name validation
   const { data: existingConnections = [] } = useGetConnections();
@@ -162,7 +161,6 @@ export const Databricks: React.FC<Props> = ({
   };
 
   const handleTest = () => {
-    setIsTesting(true);
     setConnectionStatus('idle');
     testConnection(formState);
   };
@@ -200,6 +198,7 @@ export const Databricks: React.FC<Props> = ({
         imageSource={connectionIcons.images.databricks}
         onClose={onCancel}
         onSave={handleSubmit}
+        isLoading={isUpdating || isConfiguring}
       />
       <Box
         component="form"

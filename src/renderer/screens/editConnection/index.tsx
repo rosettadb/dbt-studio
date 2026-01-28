@@ -23,44 +23,79 @@ const EditConnection: React.FC = () => {
   const renderComponent = (
     connectionType: SupportedConnectionTypes,
     conn: ConnectionModel,
+    connId: string,
   ) => {
     switch (connectionType) {
       case 'postgres': {
         return (
-          <Connections.Postgres onCancel={handleCancel} connection={conn} />
+          <Connections.Postgres
+            key={connId}
+            onCancel={handleCancel}
+            connection={conn}
+          />
         );
       }
       case 'snowflake': {
         return (
-          <Connections.Snowflake onCancel={handleCancel} connection={conn} />
+          <Connections.Snowflake
+            key={connId}
+            onCancel={handleCancel}
+            connection={conn}
+          />
         );
       }
       case 'bigquery': {
         return (
-          <Connections.BigQuery onCancel={handleCancel} connection={conn} />
+          <Connections.BigQuery
+            key={connId}
+            onCancel={handleCancel}
+            connection={conn}
+          />
         );
       }
       case 'redshift': {
         return (
-          <Connections.Redshift onCancel={handleCancel} connection={conn} />
+          <Connections.Redshift
+            key={connId}
+            onCancel={handleCancel}
+            connection={conn}
+          />
         );
       }
       case 'databricks': {
         return (
-          <Connections.Databricks onCancel={handleCancel} connection={conn} />
+          <Connections.Databricks
+            key={connId}
+            onCancel={handleCancel}
+            connection={conn}
+          />
         );
       }
       case 'duckdb': {
-        return <Connections.DuckDB onCancel={handleCancel} connection={conn} />;
+        return (
+          <Connections.DuckDB
+            key={connId}
+            onCancel={handleCancel}
+            connection={conn}
+          />
+        );
       }
       case 'kinetica': {
         return (
-          <Connections.Kinetica onCancel={handleCancel} connection={conn} />
+          <Connections.Kinetica
+            key={connId}
+            onCancel={handleCancel}
+            connection={conn}
+          />
         );
       }
       default: {
         return (
-          <Connections.Postgres onCancel={handleCancel} connection={conn} />
+          <Connections.Postgres
+            key={connId}
+            onCancel={handleCancel}
+            connection={conn}
+          />
         );
       }
     }
@@ -105,7 +140,7 @@ const EditConnection: React.FC = () => {
   return (
     <AppLayout sidebarContent={<ConnectionsSidebar />}>
       <Container>
-        {renderComponent(connection.connection.type, connection)}
+        {renderComponent(connection.connection.type, connection, id)}
       </Container>
     </AppLayout>
   );

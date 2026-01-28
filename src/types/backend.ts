@@ -29,6 +29,7 @@ export type PostgresConnection = ConnectionBase & {
   host: string;
   port: number;
   keepalives_idle?: number;
+  ssl?: boolean;
 };
 
 export type SnowflakeConnection = ConnectionBase & {
@@ -120,6 +121,7 @@ export type PostgresDBTConnection = DBTConnectionBase & {
   host: string;
   port: number;
   keepalives_idle?: number;
+  ssl?: boolean;
 };
 
 export type SnowflakeDBTConnection = DBTConnectionBase & {

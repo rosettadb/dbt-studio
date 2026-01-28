@@ -11,8 +11,23 @@ export default class PGSchemaExtractor {
     database: string;
     password: string;
     port: number;
+    ssl?: boolean;
   }) {
-    this.client = new Client(config);
+    const clientConfig: any = {
+      user: config.user,
+      host: config.host,
+      database: config.database,
+      password: config.password,
+      port: config.port,
+    };
+
+    if (config.ssl) {
+      clientConfig.ssl = {
+        rejectUnauthorized: false,
+      };
+    }
+
+    this.client = new Client(clientConfig);
   }
 
   async connect() {

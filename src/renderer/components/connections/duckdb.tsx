@@ -63,41 +63,37 @@ export const DuckDB: React.FC<Props> = ({
       : '',
   });
 
-  const [isTesting, setIsTesting] = React.useState(false);
   const [connectionStatus, setConnectionStatus] = React.useState<
     'idle' | 'success' | 'failed'
   >('idle');
   const [nameTouched, setNameTouched] = React.useState(false);
 
-  const { mutate: updateConnection } = useUpdateConnection({
-    onSuccess: () => {
-      toast.success('DuckDB connection updated successfully!');
-    },
-    onError: (error) => {
-      toast.error(`Update failed: ${error}`);
-    },
-  });
+  const { mutate: updateConnection, isLoading: isUpdating } =
+    useUpdateConnection({
+      onSuccess: () => {
+        toast.success('DuckDB connection updated successfully!');
+      },
+      onError: (error) => {
+        toast.error(`Update failed: ${error}`);
+      },
+    });
 
-  const { mutate: configureConnection } = useConfigureConnection({
-    onSuccess: () => {
-      toast.success('DuckDB connection configured successfully!');
-      if (projectId) {
-        navigate('/app');
-        return;
-      }
-      navigate('/app/connections');
-    },
-    onError: (error) => {
-      toast.error(`Configuration failed: ${error}`);
-    },
-  });
+  const { mutate: configureConnection, isLoading: isConfiguring } =
+    useConfigureConnection({
+      onSuccess: () => {
+        toast.success('DuckDB connection configured successfully!');
+        if (projectId) {
+          navigate('/app');
+          return;
+        }
+        navigate('/app/connections');
+      },
+      onError: (error) => {
+        toast.error(`Configuration failed: ${error}`);
+      },
+    });
 
-  const { mutate: testConnection } = useTestConnection({
-    onMutate: () => {
-      setIsTesting(true);
-      setConnectionStatus('idle');
-    },
-    onSettled: () => setIsTesting(false),
+  const { mutate: testConnection, isLoading: isTesting } = useTestConnection({
     onSuccess: (success) => {
       if (success) {
         toast.success('Connection test successful!');
@@ -207,6 +203,7 @@ export const DuckDB: React.FC<Props> = ({
       ...formState,
       database: formState.database_path,
     };
+    setConnectionStatus('idle');
     testConnection(connectionData);
   };
 
@@ -251,6 +248,7 @@ export const DuckDB: React.FC<Props> = ({
         imageSource={connectionIcons.images.duckdb}
         onClose={onCancel}
         onSave={handleSubmit}
+        isLoading={isUpdating || isConfiguring}
       />
       <Box
         component="form"

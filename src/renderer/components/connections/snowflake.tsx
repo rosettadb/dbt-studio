@@ -48,7 +48,6 @@ export const Snowflake: React.FC<Props> = ({
     [connection],
   );
 
-  const [isTesting, setIsTesting] = React.useState(false);
   const [connectionStatus, setConnectionStatus] = React.useState<
     'idle' | 'success' | 'failed'
   >('idle');
@@ -67,47 +66,46 @@ export const Snowflake: React.FC<Props> = ({
     role: 'SYSADMIN',
   });
 
-  const { mutate: configureConnection } = useConfigureConnection({
-    onSuccess: () => {
-      toast.success('Snowflake connection configured successfully!');
-      if (projectId) {
-        navigate('/app');
-        return;
-      }
-      navigate('/app/connections');
-    },
-    onError: (error) => {
-      toast.error(`Configuration failed: ${error}`);
-    },
-  });
-
-  const { mutate: updateConnection } = useUpdateConnection({
-    onSuccess: () => {
-      toast.success('Snowflake connection updated successfully!');
-    },
-    onError: (error) => {
-      toast.error(`Configuration failed: ${error}`);
-    },
-  });
-
-  const { mutate: testConnection } = useTestConnection({
+  const { mutate: testConnection, isLoading: isTesting } = useTestConnection({
     onSuccess: (success) => {
       if (success) {
         toast.success('Connection test successful!');
         setConnectionStatus('success');
-        setIsTesting(false);
         return;
       }
       toast.error('Connection test failed');
       setConnectionStatus('failed');
-      setIsTesting(false);
     },
     onError: (error) => {
       toast.error(`Test failed: ${error.message}`);
       setConnectionStatus('failed');
-      setIsTesting(false);
     },
   });
+
+  const { mutate: configureConnection, isLoading: isConfiguring } =
+    useConfigureConnection({
+      onSuccess: () => {
+        toast.success('Snowflake connection configured successfully!');
+        if (projectId) {
+          navigate('/app');
+          return;
+        }
+        navigate('/app/connections');
+      },
+      onError: (error) => {
+        toast.error(`Configuration failed: ${error}`);
+      },
+    });
+
+  const { mutate: updateConnection, isLoading: isUpdating } =
+    useUpdateConnection({
+      onSuccess: () => {
+        toast.success('Snowflake connection updated successfully!');
+      },
+      onError: (error) => {
+        toast.error(`Configuration failed: ${error}`);
+      },
+    });
 
   // Get existing connections for name validation
   const { data: connections = [] } = useGetConnections();
@@ -169,7 +167,6 @@ export const Snowflake: React.FC<Props> = ({
   };
 
   const handleTest = () => {
-    setIsTesting(true);
     setConnectionStatus('idle');
     testConnection(formState);
   };
@@ -203,6 +200,7 @@ export const Snowflake: React.FC<Props> = ({
         imageSource={connectionIcons.images.snowflake}
         onClose={onCancel}
         onSave={handleSubmit}
+        isLoading={isUpdating || isConfiguring}
       />
 
       <Box

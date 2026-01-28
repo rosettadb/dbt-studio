@@ -750,8 +750,13 @@ export default class ConnectorsService {
 
   static async generateJdbcUrl(conn: ConnectionInput): Promise<string> {
     switch (conn.type) {
-      case 'postgres':
-        return `jdbc:postgresql://${conn.host}:${conn.port}/${conn.database}?currentSchema=${conn.schema}`;
+      case 'postgres': {
+        let postgresUrl = `jdbc:postgresql://${conn.host}:${conn.port}/${conn.database}?currentSchema=${conn.schema}`;
+        if (conn.ssl) {
+          postgresUrl += '&sslmode=require';
+        }
+        return postgresUrl;
+      }
       case 'snowflake':
         return `jdbc:snowflake://${conn.account}.snowflakecomputing.com/?warehouse=${conn.warehouse}&db=${conn.database}&schema=${conn.schema}`;
       case 'redshift': {
@@ -883,6 +888,7 @@ export default class ConnectorsService {
           schema: conn.schema,
           host: conn.host,
           port: conn.port,
+          ssl: conn.ssl,
         };
       case 'redshift':
         return {
@@ -1001,6 +1007,7 @@ export default class ConnectorsService {
           dbname: conn.database,
           schema: conn.schema,
           threads: 4,
+          ...(conn.ssl && { sslmode: 'require' }),
         };
       case 'snowflake':
         return {
@@ -1587,6 +1594,7 @@ export default class ConnectorsService {
           database: pgConn.database,
           password: pgConn.password,
           port: pgConn.port,
+          ssl: pgConn.ssl,
         });
         await extractor.connect();
         const schema = await extractor.extractSchema();
