@@ -10,8 +10,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Validate source branch
+        env:
+          HEAD_REF: ${{ github.head_ref }}
         run: |
-          if [ "${{ github.head_ref }}" != "dev" ]; then
+          if [[ "$HEAD_REF" != "dev" ]]; then
             echo "Test workflow update"
             echo "❌ Error: Pull requests to main can only be created from dev branch"
             exit 1
@@ -24,12 +26,12 @@ jobs:
 
     steps:
       - name: Check out Git repository
-        uses: actions/checkout@v3
+        uses: actions/checkout@v6
 
       - name: Install Node.js and NPM
-        uses: actions/setup-node@v3
+        uses: actions/setup-node@v6
         with:
-          node-version: 18
+          node-version: 'lts/*'
           cache: npm
 
       - name: npm install
