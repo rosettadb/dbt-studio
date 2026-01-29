@@ -84,8 +84,11 @@ const Sql = () => {
 
   // Get connection input for active tab
   const connectionInput = useMemo(() => {
-    return activeConnection ? getConnectionInput(activeConnection) : undefined;
-  }, [activeConnection]);
+    if (!activeConnection || activeConnection.id !== activeTab?.connectionId) {
+      return undefined;
+    }
+    return getConnectionInput(activeConnection);
+  }, [activeConnection, activeTab]);
 
   // Get schema for active tab
   const activeSchema = activeTab ? tabSchemas[activeTab.connectionId] : [];
