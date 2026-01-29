@@ -46,30 +46,46 @@ export const ExplorerBuckets: React.FC<ExplorerBucketsProps> = ({
   const { getCloudAwsSecret, getCloudAzureKey, getCloudGcsCredential } =
     useSecureStorage();
   const [secureConfig, setSecureConfig] = useState<any | null>(null);
+  const [credentialsMissing, setCredentialsMissing] = useState(false);
 
   useEffect(() => {
     const fetchSecrets = async () => {
       if (!connection) {
         setSecureConfig(null);
+        setCredentialsMissing(false);
         return;
       }
       const config = { ...connection.config };
+      let missing = false;
       try {
         if (connection.provider === 'aws') {
-          const secret = await getCloudAwsSecret(connection.name);
-          (config as { secretAccessKey?: string }).secretAccessKey =
-            secret || '';
+          const secret = await getCloudAwsSecret(connection.id);
+          if (secret === null) {
+            missing = true;
+          } else {
+            (config as { secretAccessKey?: string }).secretAccessKey = secret;
+          }
         } else if (connection.provider === 'azure') {
-          const key = await getCloudAzureKey(connection.name);
-          (config as { accountKey?: string }).accountKey = key || '';
+          const key = await getCloudAzureKey(connection.id);
+          if (key === null) {
+            missing = true;
+          } else {
+            (config as { accountKey?: string }).accountKey = key;
+          }
         } else if (connection.provider === 'gcs') {
-          const cred = await getCloudGcsCredential(connection.name);
-          (config as { credentials?: any }).credentials = cred || '';
+          const cred = await getCloudGcsCredential(connection.id);
+          if (cred === null) {
+            missing = true;
+          } else {
+            (config as { credentials?: any }).credentials = cred;
+          }
         }
       } catch (e) {
-        // handle error if needed
+        // eslint-disable-next-line no-console
+        console.error('Error fetching secrets:', e);
       }
-      setSecureConfig(config);
+      setCredentialsMissing(missing);
+      setSecureConfig(missing ? null : config);
     };
     fetchSecrets();
   }, [connection]);
@@ -77,7 +93,7 @@ export const ExplorerBuckets: React.FC<ExplorerBucketsProps> = ({
   const bucketsQuery = useListBuckets(
     connection?.provider as CloudProvider,
     secureConfig as CloudStorageConfig,
-    !!connection && !!secureConfig,
+    !!connection && !!secureConfig && !credentialsMissing,
   );
 
   const buckets = bucketsQuery.data || [];
@@ -213,11 +229,33 @@ export const ExplorerBuckets: React.FC<ExplorerBucketsProps> = ({
       )}
       {!bucketsQuery.isLoading &&
         !bucketsQuery.isError &&
+        !credentialsMissing &&
         buckets.length === 0 && (
           <Box sx={{ textAlign: 'center', p: 4 }}>
             <Typography color="text.secondary">No buckets found</Typography>
           </Box>
         )}
+
+      {credentialsMissing && (
+        <Alert
+          severity="error"
+          sx={{ mb: 2 }}
+          action={
+            <Button
+              color="inherit"
+              size="small"
+              variant="outlined"
+              onClick={() =>
+                navigate(`/app/cloud-explorer/edit-connection/${connectionId}`)
+              }
+            >
+              Edit Source
+            </Button>
+          }
+        >
+          Credentials for this connection are missing from secure storage.
+        </Alert>
+      )}
       {!bucketsQuery.isLoading &&
         !bucketsQuery.isError &&
         buckets.length > 0 && (

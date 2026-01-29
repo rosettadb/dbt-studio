@@ -14,9 +14,12 @@ import {
   DuckLakeInstance,
   DuckLakeTableInfo,
   DuckLakeSnapshotInfo,
+  DuckLakeSnapshotDetail,
   DuckLakeQueryResult,
   DuckLakeQueryRequest,
   DuckLakeStorageConfig,
+  DuckLakeSnapshotParams,
+  DuckLakePaginatedResult,
 } from '../../../../types/duckLake';
 import { DuckLakeError } from '../../../../types/duckLakeErrors';
 import { normalizeNumericValue } from '../../../../renderer/utils/fileUtils';
@@ -56,14 +59,13 @@ export class PostgreSQLCatalogAdapter extends CatalogAdapter {
       const connectionString = this.buildPostgreSQLConnectionString(pgConfig);
 
       // Attach DuckLake catalog with PostgreSQL backend
+      // We must escape single quotes in the connection string for SQL safety
       const attachString = `ducklake:postgres:${connectionString}`;
+      const escapedAttachString = attachString.replace(/'/g, "''");
 
-      // For S3 storage we expect instance.dataPath to be an s3:// URI such as
-      // s3://adaptivescale/ducklake_nuri/ and rely on httpfs + secret created
-      // via createSecrets above. We just pass through instance.dataPath here.
       await this.attachDuckLakeCatalog(
         connection,
-        attachString,
+        escapedAttachString,
         instance.name,
         instance.dataPath,
       );
@@ -182,10 +184,21 @@ export class PostgreSQLCatalogAdapter extends CatalogAdapter {
       // Test PostgreSQL connection
       const pgConfig = config.postgresql!;
       const connectionString = this.buildPostgreSQLConnectionString(pgConfig);
+      const escapedConnectionString = connectionString.replace(/'/g, "''");
 
-      // Test basic PostgreSQL connection
-      const testQuery = `SELECT 1 FROM postgres_query('${connectionString}', 'SELECT 1 as test')`;
-      await testConnection.run(testQuery);
+      // Test basic PostgreSQL connection using ATTACH (more reliable than postgres_query for testing)
+      const tempAlias = `test_pg_${Date.now()}`;
+      try {
+        await testConnection.run(
+          `ATTACH '${escapedConnectionString}' AS ${tempAlias} (TYPE postgres)`,
+        );
+        await testConnection.run(`DETACH ${tempAlias}`);
+      } catch (err) {
+        // If ATTACH fails, we still try a direct query as a fallback
+        // in case the specific DuckDB version doesn't support ATTACH (TYPE postgres)
+        const testQuery = `SELECT 1 FROM postgres_query('${escapedConnectionString}', 'SELECT 1 as test')`;
+        await testConnection.run(testQuery);
+      }
 
       const responseTime = Date.now() - startTime;
 
@@ -533,6 +546,126 @@ export class PostgreSQLCatalogAdapter extends CatalogAdapter {
     }
   }
 
+  async listInstanceSnapshots(
+    params: DuckLakeSnapshotParams,
+  ): Promise<DuckLakePaginatedResult<DuckLakeSnapshotDetail>> {
+    try {
+      if (!this.connectionInfo) {
+        throw new Error('No active connection');
+      }
+
+      const { page, pageSize, filter } = params;
+      const offset = (page - 1) * pageSize;
+
+      // Find the DuckLake metadata database
+      const databasesQuery = `
+        SELECT database_name
+        FROM duckdb_databases()
+        WHERE database_name LIKE '__ducklake_metadata_%'
+        LIMIT 1
+      `;
+
+      const databasesResult =
+        await this.connectionInfo.connection.run(databasesQuery);
+      const databaseRows = await databasesResult.getRows();
+
+      if (databaseRows.length === 0) {
+        throw new Error('DuckLake metadata database not found');
+      }
+
+      const metadataDatabase = Array.isArray(databaseRows[0])
+        ? databaseRows[0][0]
+        : (databaseRows[0] as any).database_name;
+
+      const quotedMetadataDatabase = `"${metadataDatabase}"`;
+
+      // Build WHERE clause
+      let whereClause = '';
+      if (filter) {
+        // Escape LIKE wildcards first, then single quotes for SQL
+        const safeFilter = filter
+          .replace(/\\/g, '\\\\')
+          .replace(/%/g, '\\%')
+          .replace(/_/g, '\\_')
+          .replace(/'/g, "''");
+        whereClause = `
+          WHERE CAST(s.snapshot_id AS VARCHAR) LIKE '%${safeFilter}%' ESCAPE '\\'
+             OR sc.changes_made LIKE '%${safeFilter}%' ESCAPE '\\'
+        `;
+      }
+
+      // 1. Get Total Count
+      const countQuery = `
+        SELECT COUNT(*) as total
+        FROM ${quotedMetadataDatabase}.ducklake_snapshot s
+        LEFT JOIN ${quotedMetadataDatabase}.ducklake_snapshot_changes sc
+          ON s.snapshot_id = sc.snapshot_id
+        ${whereClause}
+      `;
+
+      const countResult = await this.connectionInfo.connection.run(countQuery);
+      const countRows = await countResult.getRows();
+
+      const totalRaw = Array.isArray(countRows[0])
+        ? countRows[0][0]
+        : countRows[0].total;
+      const total = Number(String(totalRaw));
+
+      // 2. Get Data with Pagination
+      const snapshotsQuery = `
+        SELECT
+          s.snapshot_id,
+          s.snapshot_time,
+          s.schema_version,
+          s.next_catalog_id,
+          s.next_file_id,
+          sc.changes_made
+        FROM ${quotedMetadataDatabase}.ducklake_snapshot s
+        LEFT JOIN ${quotedMetadataDatabase}.ducklake_snapshot_changes sc
+          ON s.snapshot_id = sc.snapshot_id
+        ${whereClause}
+        ORDER BY s.snapshot_id DESC
+        LIMIT ${pageSize} OFFSET ${offset}
+      `;
+
+      const snapshotsResult =
+        await this.connectionInfo.connection.run(snapshotsQuery);
+      const rows = await snapshotsResult.getRows();
+
+      const data = rows.map((row: any) => {
+        if (Array.isArray(row)) {
+          return {
+            snapshotId: row[0],
+            snapshotTime: new Date(row[1]),
+            schemaVersion: row[2],
+            nextCatalogId: row[3],
+            nextFileId: row[4],
+            changesMade: row[5],
+          };
+        }
+        return {
+          snapshotId: row.snapshot_id,
+          snapshotTime: new Date(row.snapshot_time),
+          schemaVersion: row.schema_version,
+          nextCatalogId: row.next_catalog_id,
+          nextFileId: row.next_file_id,
+          changesMade: row.changes_made,
+        };
+      });
+
+      return {
+        data,
+        total,
+        page,
+        pageSize,
+      };
+    } catch (error) {
+      // eslint-disable-next-line no-console
+      console.error('Failed to list instance snapshots:', error);
+      throw error;
+    }
+  }
+
   /**
    * Get comprehensive table details from DuckLake metadata catalog (Phase 8b)
    * Queries multiple metadata tables to provide complete table information
@@ -720,7 +853,7 @@ export class PostgreSQLCatalogAdapter extends CatalogAdapter {
           cs.contains_null,
           cs.contains_nan,
           cs.min_value,
-          cs.max_value,
+          cs.max_value
         FROM ${quotedMetadataDatabase}.ducklake_table_column_stats cs
         JOIN ${quotedMetadataDatabase}.ducklake_column c 
           ON cs.column_id = c.column_id 
@@ -771,7 +904,7 @@ export class PostgreSQLCatalogAdapter extends CatalogAdapter {
           file_order,
           begin_snapshot,
           end_snapshot,
-          partition_id,
+          partition_id
         FROM ${quotedMetadataDatabase}.ducklake_data_file
         WHERE table_id = ${tableId}
           AND ${currentSnapshot} >= begin_snapshot
@@ -937,20 +1070,61 @@ export class PostgreSQLCatalogAdapter extends CatalogAdapter {
         console.debug('No partition info found for table:', tableName);
       }
 
-      // 7. Get snapshots
+      // 7. Get table-specific snapshots using CTE
       const snapshotsQuery = `
+        WITH table_snapshots AS (
+          -- Snapshot when table was created
+          SELECT t.begin_snapshot as snapshot_id
+          FROM ${quotedMetadataDatabase}.ducklake_table t
+          WHERE t.table_id = ${tableId}
+          
+          UNION
+          
+          -- Snapshot when table was deleted (if applicable)
+          SELECT t.end_snapshot as snapshot_id
+          FROM ${quotedMetadataDatabase}.ducklake_table t
+          WHERE t.table_id = ${tableId} AND t.end_snapshot IS NOT NULL
+          
+          UNION
+          
+          -- Snapshots when columns were added/modified
+          SELECT c.begin_snapshot as snapshot_id
+          FROM ${quotedMetadataDatabase}.ducklake_column c
+          WHERE c.table_id = ${tableId}
+          
+          UNION
+          
+          -- Snapshots when columns were dropped
+          SELECT c.end_snapshot as snapshot_id
+          FROM ${quotedMetadataDatabase}.ducklake_column c
+          WHERE c.table_id = ${tableId} AND c.end_snapshot IS NOT NULL
+          
+          UNION
+          
+          -- Snapshots when data files were added
+          SELECT df.begin_snapshot as snapshot_id
+          FROM ${quotedMetadataDatabase}.ducklake_data_file df
+          WHERE df.table_id = ${tableId}
+          
+          UNION
+          
+          -- Snapshots when data files were deleted
+          SELECT df.end_snapshot as snapshot_id
+          FROM ${quotedMetadataDatabase}.ducklake_data_file df
+          WHERE df.table_id = ${tableId} AND df.end_snapshot IS NOT NULL
+        )
         SELECT
           s.snapshot_id,
           s.snapshot_time,
           s.schema_version,
           s.next_catalog_id,
           s.next_file_id,
-          sc.changes_made,
+          sc.changes_made
         FROM ${quotedMetadataDatabase}.ducklake_snapshot s
+        INNER JOIN table_snapshots ts ON s.snapshot_id = ts.snapshot_id
         LEFT JOIN ${quotedMetadataDatabase}.ducklake_snapshot_changes sc
           ON s.snapshot_id = sc.snapshot_id
         ORDER BY s.snapshot_id DESC
-        LIMIT 50
       `;
 
       const snapshotsResult =
@@ -1130,14 +1304,18 @@ export class PostgreSQLCatalogAdapter extends CatalogAdapter {
   private buildPostgreSQLConnectionString(
     config: NonNullable<DuckLakeCatalogConfig['postgresql']>,
   ): string {
+    // For DuckDB's postgres extension, the keyword=value format is often more reliable
+    // across different versions than the URI format.
     const parts = [
-      `dbname=${config.database}`,
       `host=${config.host}`,
       `port=${config.port}`,
       `user=${config.username}`,
+      `dbname=${config.database}`,
     ];
 
     if (config.password) {
+      // For DuckDB's postgres extension, we use the keyword=value format.
+      // We don't need internal quoting here because we escape the whole string in the SQL literals.
       parts.push(`password=${config.password}`);
     }
 

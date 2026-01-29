@@ -17,12 +17,15 @@ import {
   DuckLakeInstanceHealth,
   DuckLakeTableInfo,
   DuckLakeSnapshotInfo,
+  DuckLakeSnapshotDetail,
   DuckLakeQueryRequest,
   DuckLakeQueryResult,
   DuckLakeMaintenanceTask,
   DuckLakeCatalogConfig,
   DuckLakeMaintenanceType,
   DuckLakeStorageConfig,
+  DuckLakeSnapshotParams,
+  DuckLakePaginatedResult,
 } from '../../types/duckLake';
 import { DuckLakeError } from '../../types/duckLakeErrors';
 
@@ -563,6 +566,24 @@ export default class DuckLakeService {
     }
   }
 
+  static async listInstanceSnapshots(
+    instanceId: string,
+    params: DuckLakeSnapshotParams = { page: 1, pageSize: 100 },
+  ): Promise<DuckLakePaginatedResult<DuckLakeSnapshotDetail>> {
+    try {
+      await this.ensureConnected(instanceId);
+      const adapter = await this.getAdapter(instanceId);
+      return await adapter.listInstanceSnapshots(params);
+    } catch (error) {
+      // eslint-disable-next-line no-console
+      console.error(
+        `[DuckLakeService] Failed to list instance snapshots for ${instanceId}:`,
+        error,
+      );
+      throw error;
+    }
+  }
+
   static async restoreSnapshot(
     instanceId: string,
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
@@ -706,28 +727,41 @@ export default class DuckLakeService {
           break;
         case 's3':
           if (fullConfig.s3) {
-            success = await CloudExplorerService.testConnection('aws', {
-              region: fullConfig.s3.region,
-              accessKeyId: fullConfig.s3.accessKeyId,
-              secretAccessKey: fullConfig.s3.secretAccessKey,
-            });
+            try {
+              success = await CloudExplorerService.testConnection('aws', {
+                region: fullConfig.s3.region,
+                accessKeyId: fullConfig.s3.accessKeyId,
+                secretAccessKey: fullConfig.s3.secretAccessKey,
+              });
+            } catch (error) {
+              return { success: false, error: (error as Error).message };
+            }
           }
           break;
         case 'azure':
           if (fullConfig.azure) {
-            success = await CloudExplorerService.testConnection('azure', {
-              accountName: fullConfig.azure.accountName,
-              accountKey: fullConfig.azure.accountKey,
-              connectionString: fullConfig.azure.connectionString,
-            });
+            try {
+              success = await CloudExplorerService.testConnection('azure', {
+                accountName: fullConfig.azure.accountName,
+                accountKey: fullConfig.azure.accountKey,
+                connectionString: fullConfig.azure.connectionString,
+              });
+            } catch (error) {
+              return { success: false, error: (error as Error).message };
+            }
           }
           break;
         case 'gcs':
           if (fullConfig.gcs) {
-            success = await CloudExplorerService.testConnection('gcs', {
-              projectId: fullConfig.gcs.projectId,
-              credentials: fullConfig.gcs.credentials,
-            });
+            try {
+              success = await CloudExplorerService.testConnection('gcs', {
+                projectId: fullConfig.gcs.projectId,
+                credentials: fullConfig.gcs.credentials,
+              });
+            } catch (error) {
+              // Propagate the specific error message from testGCSConnection
+              return { success: false, error: (error as Error).message };
+            }
           }
           break;
         default:
@@ -831,25 +865,25 @@ export default class DuckLakeService {
     try {
       const SecureStorageService = (await import('./secureStorage.service'))
         .default;
-      const { provider, name } = connection;
+      const { provider, id } = connection;
 
       if (provider === 'aws') {
         const secretAccessKey = await SecureStorageService.getCredential(
-          `cloud-aws-${name}`,
+          `cloud-aws-${id}`,
         );
         return { secretAccessKey };
       }
 
       if (provider === 'azure') {
         const accountKey = await SecureStorageService.getCredential(
-          `cloud-azure-${name}`,
+          `cloud-azure-${id}`,
         );
         return { accountKey };
       }
 
       if (provider === 'gcs') {
         const credentials = await SecureStorageService.getCredential(
-          `cloud-gcs-${name}`,
+          `cloud-gcs-${id}`,
         );
         return { credentials };
       }

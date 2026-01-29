@@ -212,7 +212,9 @@ export const DataLakeInstances: React.FC<DuckLakeInstancesProps> = ({
                       variant="outlined"
                     />
                   </TableCell>
-                  <TableCell>
+                  <TableCell
+                    sx={{ wordBreak: 'break-all', overflowWrap: 'anywhere' }}
+                  >
                     <Typography
                       variant="body2"
                       sx={{ fontFamily: 'monospace' }}

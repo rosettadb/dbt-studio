@@ -1,6 +1,10 @@
 import { ipcMain } from 'electron';
 import { ConnectorsService } from '../services';
-import type { ConnectionInput, QueryResponseType } from '../../types/backend';
+import type {
+  ConnectionInput,
+  QueryResponseType,
+  ExecuteStatementType,
+} from '../../types/backend';
 import { ConfigureConnectionBody, UpdateConnectionBody } from '../../types/ipc';
 import { CloudConnection, RecentItem } from '../../types/frontend';
 
@@ -10,6 +14,7 @@ const handlerChannels = [
   'connector:validate',
   'connector:getJdbcUrl',
   'connector:query',
+  'connector:cancel-query',
   'connector:list',
 ];
 
@@ -55,7 +60,7 @@ const registerConnectorsHandlers = () => {
     'connector:validate',
     async (_event, connection: ConnectionInput) => {
       try {
-        ConnectorsService.validateConnection(connection);
+        await ConnectorsService.validateConnection(connection);
         return { valid: true };
       } catch (error: any) {
         const errorMessage =
@@ -67,15 +72,19 @@ const registerConnectorsHandlers = () => {
 
   ipcMain.handle(
     'connector:query',
-    async (
-      _event,
-      body: { connection: ConnectionInput; query: string; projectName: string },
-    ): Promise<QueryResponseType> => {
+    async (_event, body: ExecuteStatementType): Promise<QueryResponseType> => {
       try {
         return ConnectorsService.executeSelectStatement(body);
       } catch (error: any) {
         return { success: false, error: error.message };
       }
+    },
+  );
+
+  ipcMain.handle(
+    'connector:cancel-query',
+    async (_event, queryId: string): Promise<void> => {
+      return ConnectorsService.cancelQuery(queryId);
     },
   );
 

@@ -27,11 +27,18 @@ import {
 class CloudExplorerService {
   // AWS S3 Methods
   private static createS3Client(config: S3Config): S3Client {
+    // Validate credentials are provided
+    if (!config.accessKeyId || !config.secretAccessKey) {
+      throw new Error(
+        'AWS credentials are required (Access Key ID and Secret Access Key)',
+      );
+    }
+
     return new S3Client({
       region: config.region,
       credentials: {
-        accessKeyId: config.accessKeyId || '',
-        secretAccessKey: config.secretAccessKey || '',
+        accessKeyId: config.accessKeyId,
+        secretAccessKey: config.secretAccessKey,
       },
     });
   }
@@ -119,7 +126,49 @@ class CloudExplorerService {
       await client.send(new ListBucketsCommand({}));
       return true;
     } catch (error) {
-      return false;
+      // eslint-disable-next-line no-console
+      console.error('S3 connection test failed:', error);
+      // Re-throw with user-friendly message
+      const errorMessage = (error as Error).message;
+      const errorName = (error as any).name;
+
+      if (
+        errorName === 'InvalidAccessKeyId' ||
+        errorMessage.includes('InvalidAccessKeyId')
+      ) {
+        throw new Error(
+          'Invalid AWS Access Key ID. Please check your credentials.',
+        );
+      } else if (
+        errorName === 'SignatureDoesNotMatch' ||
+        errorMessage.includes('SignatureDoesNotMatch')
+      ) {
+        throw new Error(
+          'Invalid AWS Secret Access Key. Please check your credentials.',
+        );
+      } else if (
+        errorName === 'InvalidClientTokenId' ||
+        errorMessage.includes('security token')
+      ) {
+        throw new Error(
+          'Invalid AWS credentials. Please verify your Access Key ID and Secret Access Key.',
+        );
+      } else if (
+        errorMessage.includes('ENOTFOUND') ||
+        errorMessage.includes('ECONNREFUSED')
+      ) {
+        throw new Error(
+          'Cannot reach AWS S3. Check your internet connection and region.',
+        );
+      } else if (
+        errorMessage.includes('AccessDenied') ||
+        errorName === 'AccessDenied'
+      ) {
+        throw new Error(
+          'AWS credentials are valid but lack permissions to list buckets.',
+        );
+      }
+      throw new Error(`S3 connection failed: ${errorMessage}`);
     }
   }
 
@@ -131,9 +180,16 @@ class CloudExplorerService {
       return BlobServiceClient.fromConnectionString(config.connectionString);
     }
 
+    // Validate credentials are provided
+    if (!config.accountName || !config.accountKey) {
+      throw new Error(
+        'Azure credentials are required (Account Name and Account Key)',
+      );
+    }
+
     const credential = new StorageSharedKeyCredential(
       config.accountName,
-      config.accountKey || '',
+      config.accountKey,
     );
     const url = `https://${config.accountName}.blob.core.windows.net`;
     return new BlobServiceClient(url, credential);
@@ -261,7 +317,39 @@ class CloudExplorerService {
       const firstResult = await containerIterator.next();
       return !firstResult.done || firstResult.value !== undefined;
     } catch (error) {
-      return false;
+      // eslint-disable-next-line no-console
+      console.error('Azure connection test failed:', error);
+      // Re-throw with user-friendly message
+      const errorMessage = (error as Error).message;
+      const errorCode = (error as any).code;
+
+      if (
+        errorCode === 'AuthenticationFailed' ||
+        errorMessage.includes('AuthenticationFailed')
+      ) {
+        throw new Error(
+          'Invalid Azure credentials. Please check your Account Name and Account Key.',
+        );
+      } else if (
+        errorMessage.includes('AccountNotFound') ||
+        errorCode === 'ResourceNotFound'
+      ) {
+        throw new Error(
+          'Azure Storage Account not found. Please verify your Account Name.',
+        );
+      } else if (
+        errorMessage.includes('ENOTFOUND') ||
+        errorMessage.includes('ECONNREFUSED')
+      ) {
+        throw new Error(
+          'Cannot reach Azure Blob Storage. Check your internet connection.',
+        );
+      } else if (errorMessage.includes('InvalidAuthenticationInfo')) {
+        throw new Error(
+          'Invalid Azure Account Key. Please check your credentials.',
+        );
+      }
+      throw new Error(`Azure connection failed: ${errorMessage}`);
     }
   }
 
@@ -272,10 +360,17 @@ class CloudExplorerService {
     };
 
     if (config.credentials) {
-      options.credentials =
-        typeof config.credentials === 'string'
-          ? JSON.parse(config.credentials)
-          : config.credentials;
+      try {
+        options.credentials =
+          typeof config.credentials === 'string'
+            ? JSON.parse(config.credentials)
+            : config.credentials;
+      } catch (error) {
+        throw new Error('Invalid GCS credentials JSON format');
+      }
+    } else {
+      // Don't allow falling back to ADC - require explicit credentials
+      throw new Error('GCS credentials are required');
     }
 
     return new Storage(options);
@@ -381,7 +476,30 @@ class CloudExplorerService {
       await storage.getBuckets({ maxResults: 1 });
       return true;
     } catch (error) {
-      return false;
+      // eslint-disable-next-line no-console
+      console.error('GCS connection test failed:', error);
+      // Re-throw with a user-friendly message
+      const errorMessage = (error as Error).message;
+      if (errorMessage.includes('BAD_BASE64_DECODE')) {
+        throw new Error(
+          'Invalid GCS service account credentials. Please check your JSON key file.',
+        );
+      } else if (
+        errorMessage.includes('ENOTFOUND') ||
+        errorMessage.includes('ECONNREFUSED')
+      ) {
+        throw new Error(
+          'Cannot reach Google Cloud Storage. Check your internet connection.',
+        );
+      } else if (
+        errorMessage.includes('invalid_grant') ||
+        errorMessage.includes('unauthorized')
+      ) {
+        throw new Error(
+          'GCS authentication failed. Verify your service account has the correct permissions.',
+        );
+      }
+      throw new Error(`GCS connection failed: ${errorMessage}`);
     }
   }
 

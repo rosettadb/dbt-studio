@@ -65,13 +65,13 @@ const getDatabaseIcon = (type: string) => {
 };
 
 // Validation schemas
-const instanceBasicsSchema = z.object({
+export const instanceBasicsSchema = z.object({
   name: z.string().min(1, 'Instance name is required').max(50, 'Name too long'),
   description: z.string().optional(),
   dataPath: z.string().optional(), // Computed from storage config
 });
 
-const storageConfigSchema = z
+export const storageConfigSchema = z
   .object({
     type: z.enum(['local', 's3', 'azure', 'gcs']),
 
@@ -108,7 +108,9 @@ const storageConfigSchema = z
       .object({
         bucket: z.string().min(1, 'Bucket is required'),
         projectId: z.string().min(1, 'Project ID is required'),
-        credentials: z.string().optional(),
+        credentials: z
+          .string()
+          .min(1, 'Service account credentials are required'),
         prefix: z.string().optional(),
       })
       .optional(),
@@ -137,7 +139,9 @@ const storageConfigSchema = z
           !!data.azure?.accountKey
         );
       if (data.type === 'gcs')
-        return !!data.gcs?.bucket && !!data.gcs?.projectId;
+        return (
+          !!data.gcs?.bucket && !!data.gcs?.projectId && !!data.gcs?.credentials
+        );
       return false;
     },
     {
@@ -146,7 +150,7 @@ const storageConfigSchema = z
     },
   );
 
-const catalogConfigSchema = z
+export const catalogConfigSchema = z
   .object({
     type: z.enum(['duckdb', 'sqlite', 'postgresql']),
     duckdb: z
@@ -207,7 +211,7 @@ const catalogConfigSchema = z
     },
   );
 
-const runtimeOptionsSchema = z.object({
+export const runtimeOptionsSchema = z.object({
   maxMemory: z.string().optional(),
   threads: z.number().min(1).max(32).optional(),
   enableOptimizer: z.boolean(),
@@ -1811,6 +1815,12 @@ export const DataLakeConnectionWizard: React.FC<
                       <ListItemText
                         primary="Location"
                         secondary={getStorageLocation()}
+                        secondaryTypographyProps={{
+                          sx: {
+                            wordBreak: 'break-all',
+                            overflowWrap: 'anywhere',
+                          },
+                        }}
                       />
                     </ListItem>
                     {wizardData.basics?.description && (

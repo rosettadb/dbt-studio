@@ -14,7 +14,7 @@ import { Dashboard, History, Add } from '@mui/icons-material';
 import { NavLink, useLocation, useNavigate } from 'react-router-dom';
 import { SettingsSidebarElement } from '../../screens/settings/settingsElements';
 import { icons } from '../../../../assets';
-import type { DuckLakeInstanceStatus } from '../../../types/duckLake';
+import type { DuckLakeInstance } from '../../../types/duckLake';
 import { DataLakeSVG } from '../sidebar/icons';
 
 export const DataLakeIcon: React.FC<{
@@ -73,11 +73,7 @@ export const dataLakeSidebarElements: SettingsSidebarElement[] = [
 ];
 
 interface DataLakeSidebarProps {
-  instances?: Array<{
-    id: string;
-    name: string;
-    status: DuckLakeInstanceStatus;
-  }>;
+  instances?: DuckLakeInstance[];
 }
 
 export const DataLakeSidebar: React.FC<DataLakeSidebarProps> = ({

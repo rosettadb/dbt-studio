@@ -1,6 +1,9 @@
 import React, { useState } from 'react';
 import SplitPane from 'split-pane-react';
-import { Box, useTheme } from '@mui/material';
+import { Box, Button, CircularProgress, useTheme } from '@mui/material';
+import { Stop } from '@mui/icons-material';
+import { toast } from 'react-toastify';
+import { connectorsServices } from '../../services';
 import { useGetConnectionById, useGetSelectedProject } from '../../controllers';
 import { useAppContext, useLocalStorage } from '../../hooks';
 import { QueryHistoryType } from '../../../types/frontend';
@@ -35,9 +38,10 @@ const Sql = () => {
     JSON.stringify([]),
   );
   const [sizes, setSizes] = useState<[number, number]>([
-    window.innerHeight - 250,
-    250,
+    window.innerHeight - 350,
+    350,
   ]);
+  const [activeQueryId, setActiveQueryId] = useState<string | null>(null);
 
   const connectionInput = React.useMemo(() => {
     return connection ? getConnectionInput(connection) : undefined;
@@ -46,6 +50,20 @@ const Sql = () => {
   const completions = React.useMemo(() => {
     return schema ? utils.generateMonacoCompletions(schema) : [];
   }, [schema]);
+
+  const handleCancelQuery = async () => {
+    if (activeQueryId) {
+      try {
+        await connectorsServices.cancelQuery(activeQueryId);
+        toast.info('Query execution cancelled');
+      } catch (e) {
+        toast.error('Failed to cancel query');
+      } finally {
+        setActiveQueryId(null);
+        setLoadingQuery(false);
+      }
+    }
+  };
 
   const renderSash = () => (
     <Box
@@ -87,16 +105,19 @@ const Sql = () => {
             onChange={(newSizes) => setSizes(newSizes as [number, number])}
             sashRender={renderSash}
           >
-            <SqlEditor
-              completions={completions}
-              connectionInput={connectionInput as ConnectionInput}
-              selectedProject={selectedProject}
-              queryHistory={queryHistory}
-              setQueryHistory={setQueryHistory}
-              setLoadingQuery={setLoadingQuery}
-              setQueryResults={setQueryResults}
-              setError={setError}
-            />
+            <Box sx={{ height: '100%' }} data-testid="sql-editor-split">
+              <SqlEditor
+                completions={completions}
+                connectionInput={connectionInput as ConnectionInput}
+                selectedProject={selectedProject}
+                queryHistory={queryHistory}
+                setQueryHistory={setQueryHistory}
+                setLoadingQuery={setLoadingQuery}
+                setQueryResults={setQueryResults}
+                setError={setError}
+                onQueryStart={(id) => setActiveQueryId(id)}
+              />
+            </Box>
 
             <Box
               sx={{
@@ -106,7 +127,29 @@ const Sql = () => {
                 background: theme.palette.background.paper,
               }}
             >
-              {loadingQuery && <Loader />}
+              {loadingQuery && (
+                <Box
+                  sx={{
+                    display: 'flex',
+                    flexDirection: 'column',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    height: '100%',
+                    gap: 2,
+                  }}
+                >
+                  <Button
+                    variant="contained"
+                    color="error"
+                    onClick={handleCancelQuery}
+                    size="small"
+                    startIcon={<Stop />}
+                  >
+                    Stop Query
+                  </Button>
+                  <CircularProgress size={50} />
+                </Box>
+              )}
               {!loadingQuery && error && (
                 <ErrorMessage title="Query Failed" description={error} />
               )}
@@ -117,16 +160,18 @@ const Sql = () => {
           </SplitPane>
         )}
         {selectedProject && connectionInput && !queryResults && !error && (
-          <SqlEditor
-            completions={completions}
-            connectionInput={connectionInput as ConnectionInput}
-            selectedProject={selectedProject}
-            queryHistory={queryHistory}
-            setQueryHistory={setQueryHistory}
-            setLoadingQuery={setLoadingQuery}
-            setQueryResults={setQueryResults}
-            setError={setError}
-          />
+          <Box sx={{ height: '100%' }} data-testid="sql-editor-standalone">
+            <SqlEditor
+              completions={completions}
+              connectionInput={connectionInput as ConnectionInput}
+              selectedProject={selectedProject}
+              queryHistory={queryHistory}
+              setQueryHistory={setQueryHistory}
+              setLoadingQuery={setLoadingQuery}
+              setQueryResults={setQueryResults}
+              setError={setError}
+            />
+          </Box>
         )}
       </Box>
     </AppLayout>

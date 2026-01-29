@@ -66,7 +66,8 @@ export type ConnectorChannels =
   | 'connector:list'
   | 'connector:get'
   | 'connector:update'
-  | 'connector:delete';
+  | 'connector:delete'
+  | 'connector:cancel-query';
 
 export type SourcesChannels =
   | 'sources:create'
@@ -186,7 +187,15 @@ export type GitChannels =
   | 'git:checkout'
   | 'git:fileDiff'
   | 'git:fileStatusList'
-  | 'git:fileStatus';
+  | 'git:fileStatus'
+  | 'git:unstage'
+  | 'git:stageAll'
+  | 'git:unstageAll'
+  | 'git:discardChanges'
+  | 'git:aheadBehind'
+  | 'git:createBranch'
+  | 'git:deleteBranch'
+  | 'git:renameBranch';
 
 export type UtilChannels =
   | 'open:external'
@@ -255,6 +264,7 @@ export type DuckLakeChannels =
 
   // Snapshot Management
   | 'ducklake:snapshot:list'
+  | 'ducklake:instance:listSnapshots'
   | 'ducklake:snapshot:restore'
 
   // Query Execution

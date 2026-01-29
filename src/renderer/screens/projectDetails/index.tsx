@@ -22,7 +22,6 @@ import yaml from 'js-yaml';
 import {
   AddConnectionModal,
   Editor,
-  FileTreeViewer,
   Loader,
   ModelSplitButton,
   NoAiSetModal,
@@ -33,6 +32,8 @@ import {
   AiPromptModal,
   PushToCloudModal,
 } from '../../components';
+// import { ProjectSidebar } from '../../components/sidebar/project-sidebar';
+import { ProjectSidebar } from '../../components/sidebar/project-sidebar';
 import { TabManager } from '../../components/editor/tabManager';
 import {
   useGetConnectionById,
@@ -52,7 +53,6 @@ import {
   Container,
   Content,
   EditorContainer,
-  FileTreeContainer,
   Header,
   NoFileSelected,
 } from './styles';
@@ -110,6 +110,13 @@ const ProjectDetails: React.FC = () => {
     reorderTabs,
     reset,
     getTabByPath,
+    renameTab,
+    refreshTabContentByPath,
+    // Unsaved changes dialog support
+    pendingClose,
+    onSaveAndClose,
+    onDiscardAndClose,
+    onCancelClose,
   } = useTabManager(project?.id);
   const fileContent = activeTab?.content;
 
@@ -127,6 +134,7 @@ const ProjectDetails: React.FC = () => {
   const [aiTransformationResponse, setAitTransformationResponse] =
     React.useState<string>();
   const [isPushModalOpen, setIsPushModalOpen] = React.useState(false);
+  const [isSynchronizing, setIsSynchronizing] = React.useState(false);
 
   const {
     data: directories,
@@ -393,6 +401,59 @@ const ProjectDetails: React.FC = () => {
     setConnectionMenuAnchor(null);
   };
 
+  /**
+   * Comprehensive synchronization function that coordinates all three components:
+   * 1. Git status (file changes, staging, commits)
+   * 2. Monaco editor tabs (open files, modified state, content)
+   * 3. File explorer (file tree, status indicators)
+   */
+  const handleSynchronizeAll = React.useCallback(async () => {
+    setIsSynchronizing(true);
+    try {
+      const [statusesResult] = await Promise.all([
+        updateStatuses(),
+        fetchDirectories(),
+      ]);
+
+      const currentStatuses = statusesResult?.data ?? statuses ?? [];
+
+      tabs.forEach((tab) => {
+        const fileStatus = currentStatuses.find((s) => s.path === tab.path);
+        if (!fileStatus) {
+          closeTabByPath(tab.path);
+        }
+      });
+
+      tabs.forEach((tab) => {
+        const fileStatus = currentStatuses.find((s) => s.path === tab.path);
+        if (!fileStatus) {
+          markTabSavedByPath(tab.path);
+        }
+      });
+
+      tabs.forEach((tab) => {
+        const fileStatus = currentStatuses.find((s) => s.path === tab.path);
+        if (fileStatus?.status === 'modified' && !tab.isModified) {
+          refreshTabContentByPath(tab.path);
+        }
+      });
+    } catch (error: any) {
+      toast.error(`Sync failed: ${error?.message || 'Unknown error'}`);
+      // eslint-disable-next-line no-console
+      console.error('Synchronization error:', error);
+    } finally {
+      setIsSynchronizing(false);
+    }
+  }, [
+    tabs,
+    statuses,
+    updateStatuses,
+    fetchDirectories,
+    closeTabByPath,
+    markTabSavedByPath,
+    refreshTabContentByPath,
+  ]);
+
   React.useEffect(() => {
     const fetchData = async () => {
       if (project && project.path) {
@@ -459,6 +520,60 @@ const ProjectDetails: React.FC = () => {
     getTabByPath,
     registerSyncEditorContent,
   ]);
+
+  // Auto-refresh tab content when focusing on a tab
+  const previousActiveTabIdRef = React.useRef<EditorTabId | null>(null);
+  React.useEffect(() => {
+    if (!activeTabId || !activeTab || !isHydrated) {
+      return;
+    }
+
+    // Only refresh if we actually switched to a different tab
+    if (previousActiveTabIdRef.current === activeTabId) {
+      return;
+    }
+
+    // Skip if tab has unsaved changes
+    if (activeTab.isModified) {
+      previousActiveTabIdRef.current = activeTabId;
+      return;
+    }
+
+    // Refresh content from disk when tab becomes active
+    refreshTabContentByPath(activeTab.path);
+    previousActiveTabIdRef.current = activeTabId;
+  }, [activeTabId, activeTab, isHydrated, refreshTabContentByPath]);
+
+  // Auto-refresh config files when connection is updated
+  const previousConnectionRef = React.useRef(connection);
+  React.useEffect(() => {
+    if (!project?.path || !connection || !isHydrated) {
+      return;
+    }
+
+    const previousConnection = previousConnectionRef.current;
+
+    // Check if connection data actually changed (not just initial load)
+    if (previousConnection && previousConnection.id === connection.id) {
+      // Connection was updated - refresh config files if they're open
+      const configPaths = [
+        `${project.path}/profiles.yml`,
+        `${project.path}/rosetta/main.conf`,
+      ];
+
+      configPaths.forEach((configPath) => {
+        const tab = tabs.find((t) => t.path === configPath);
+        if (tab && !tab.isModified) {
+          // Only refresh if tab is open and has no unsaved changes
+          refreshTabContentByPath(configPath);
+        }
+      });
+    }
+
+    previousConnectionRef.current = connection;
+    // DO NOT include 'tabs' in dependencies - it would cause infinite loop!
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [connection, project?.path, isHydrated, refreshTabContentByPath]);
 
   const generateBasicTransformationPrompt = async (
     filePath: string,
@@ -645,50 +760,65 @@ const ProjectDetails: React.FC = () => {
   return (
     <AppLayout
       sidebarContent={
-        <FileTreeContainer>
-          {directories && (
-            <FileTreeViewer
-              statuses={statuses}
-              node={directories}
-              onDeleteFileCallback={(deletedFile: string) => {
-                closeTabByPath(deletedFile);
-                if (selectedFilePath?.includes(deletedFile)) {
-                  setSelectedFilePath(undefined);
-                }
-              }}
-              onFileSelect={async (fileNode) => {
-                if (!utils.isEditableFile(fileNode.path)) {
-                  setSelectedFilePath(fileNode.path);
-                  openTab(fileNode.path, { isReadOnly: true });
-                  return;
-                }
-                setSelectedFilePath(fileNode.path);
-                openTab(fileNode.path);
-              }}
-              isLoadingFiles={isLoadingDirectories}
-              refreshFiles={async () => {
-                await fetchDirectories();
-                await updateStatuses();
-              }}
-              copyPath={async (source, target) => {
-                await projectsServices.copyPath({
-                  source,
-                  target,
-                });
-                await fetchDirectories();
-                await updateStatuses();
-              }}
-              onNewFileCallback={(filePath) => {
-                if (!filePath) {
-                  return;
-                }
-                setSelectedFilePath(filePath);
-                openTab(filePath);
-              }}
-              selectedPath={selectedFilePath}
-            />
-          )}
-        </FileTreeContainer>
+        <ProjectSidebar
+          directories={directories}
+          statuses={statuses}
+          isLoadingDirectories={isLoadingDirectories}
+          selectedFilePath={selectedFilePath}
+          project={project}
+          onDeleteFile={(deletedFile: string) => {
+            closeTabByPath(deletedFile);
+            if (selectedFilePath?.includes(deletedFile)) {
+              setSelectedFilePath(undefined);
+            }
+          }}
+          onFileSelect={async (fileNode) => {
+            if (!utils.isEditableFile(fileNode.path)) {
+              setSelectedFilePath(fileNode.path);
+              openTab(fileNode.path, { isReadOnly: true });
+              return;
+            }
+            setSelectedFilePath(fileNode.path);
+            openTab(fileNode.path);
+          }}
+          onRefreshFiles={async () => {
+            await fetchDirectories();
+            await updateStatuses();
+          }}
+          onCopyPath={async (source, target) => {
+            await projectsServices.copyPath({
+              source,
+              target,
+            });
+            await fetchDirectories();
+            await updateStatuses();
+          }}
+          onNewFile={(filePath) => {
+            if (!filePath) {
+              return;
+            }
+            setSelectedFilePath(filePath);
+            openTab(filePath);
+          }}
+          onRenameFile={(oldPath, newPath) => {
+            renameTab(oldPath, newPath);
+            if (activeTab?.path === oldPath || selectedFilePath === oldPath) {
+              setSelectedFilePath(newPath);
+            }
+          }}
+          // Source Control Monaco Editor Integration
+          onSourceControlOpenFile={(filePath: string) => {
+            setSelectedFilePath(filePath);
+            openTab(filePath);
+          }}
+          onSourceControlFileSelect={(filePath: string) => {
+            setSelectedFilePath(filePath);
+          }}
+          onSourceControlRefreshFileContent={refreshTabContentByPath}
+          // Synchronization
+          onSourceControlSynchronize={handleSynchronizeAll}
+          isSourceControlSynchronizing={isSynchronizing}
+        />
       }
     >
       <Box display="flex" flexDirection="row" width="100%" height="100%">
@@ -831,6 +961,11 @@ const ProjectDetails: React.FC = () => {
                       onTabError={(tabId, errorMessage) => {
                         setTabError(tabId, errorMessage);
                       }}
+                      pendingClose={pendingClose}
+                      onSaveAndClose={onSaveAndClose}
+                      onDiscardAndClose={onDiscardAndClose}
+                      onCancelClose={onCancelClose}
+                      onGitStatusRefresh={updateStatuses}
                     />
                   )}
                 </EditorContainer>

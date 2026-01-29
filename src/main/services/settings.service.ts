@@ -184,6 +184,28 @@ export default class SettingsService {
   }
 
   static async updateRosetta() {
+    if (process.env.E2E_TESTING === 'true') {
+      const settings = await this.loadSettings();
+      const dummyName =
+        process.platform === 'win32' ? 'dummy-rosetta.exe' : 'dummy-rosetta';
+      const dummyPath = path.join(os.tmpdir(), dummyName);
+      fs.ensureFileSync(dummyPath);
+
+      if (process.platform !== 'win32') {
+        fs.chmodSync(dummyPath, 0o755);
+      }
+
+      settings.rosettaVersion = '0.0.0-test';
+      settings.rosettaPath = dummyPath;
+      await this.saveSettings(settings);
+
+      return {
+        binaryPath: dummyPath,
+        version: '0.0.0-test',
+        binDirectory: path.dirname(dummyPath),
+        status: 'installed',
+      };
+    }
     const settings = await this.loadSettings();
 
     const { platform, arch } = process;
@@ -290,6 +312,35 @@ export default class SettingsService {
   }
 
   static async updatePython() {
+    if (process.env.E2E_TESTING === 'true') {
+      const settings = await this.loadSettings();
+
+      // Create a dummy venv structure
+      const venvPath = path.join(os.tmpdir(), 'dummy-venv');
+      const binDir =
+        process.platform === 'win32'
+          ? path.join(venvPath, 'Scripts')
+          : path.join(venvPath, 'bin');
+      const dummyBinaryPath = path.join(
+        binDir,
+        process.platform === 'win32' ? 'python.exe' : 'python3',
+      );
+
+      await fs.ensureDir(binDir);
+      await fs.ensureFile(dummyBinaryPath);
+      await fs.chmod(dummyBinaryPath, 0o755);
+
+      settings.pythonVersion = '0.0.0-test';
+      settings.pythonPath = dummyBinaryPath;
+      settings.pythonBinary = dummyBinaryPath;
+      await this.saveSettings(settings);
+
+      return {
+        binaryPath: dummyBinaryPath,
+        version: '0.0.0-test',
+        status: 'installed',
+      };
+    }
     const settings = await this.loadSettings();
 
     const version = '3.10.17';

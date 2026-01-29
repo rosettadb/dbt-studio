@@ -4,9 +4,9 @@ import { Box, Typography } from '@mui/material';
 import ErrorOutlineIcon from '@mui/icons-material/ErrorOutline';
 
 const ErrorContainer = styled(Box)(({ theme }) => ({
-  backgroundColor: theme.palette.error.light,
-  color: theme.palette.error.contrastText,
-  border: `1px solid ${theme.palette.error.main}`,
+  backgroundColor: theme.palette.background.paper,
+  color: theme.palette.text.primary,
+  border: `1px solid ${theme.palette.divider}`,
   borderRadius: theme.shape.borderRadius,
   padding: theme.spacing(2),
   display: 'flex',
@@ -33,9 +33,9 @@ export const ErrorMessage: React.FC<Props> = ({
   description = 'Please try again or contact support.',
 }) => {
   return (
-    <ErrorContainer>
+    <ErrorContainer data-testid="sql-error-message">
       <IconWrapper>
-        <ErrorOutlineIcon fontSize="large" />
+        <ErrorOutlineIcon fontSize="large" color="error" />
       </IconWrapper>
       <Box>
         <Typography variant="h6" fontWeight="bold">

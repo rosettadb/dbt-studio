@@ -9,9 +9,12 @@ import {
   DuckLakeInstance,
   DuckLakeTableInfo,
   DuckLakeSnapshotInfo,
+  DuckLakeSnapshotDetail,
   DuckLakeQueryResult,
   DuckLakeQueryRequest,
   DuckLakeStorageConfig,
+  DuckLakeSnapshotParams,
+  DuckLakePaginatedResult,
 } from '../../../../types/duckLake';
 import { generateGCSBearerToken } from '../../../helpers/cloudAuth.helper';
 
@@ -95,6 +98,14 @@ export abstract class CatalogAdapter {
    * List snapshots for a table
    */
   abstract listSnapshots(tableName: string): Promise<DuckLakeSnapshotInfo[]>;
+
+  /**
+   * Get all snapshots for the entire instance (not table-specific)
+   * Used for instance-wide history view with pagination
+   */
+  abstract listInstanceSnapshots(
+    params: DuckLakeSnapshotParams,
+  ): Promise<DuckLakePaginatedResult<DuckLakeSnapshotDetail>>;
 
   /**
    * Get comprehensive table details from DuckLake metadata catalog (Phase 8b)
