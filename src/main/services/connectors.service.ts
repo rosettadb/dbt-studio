@@ -1602,10 +1602,13 @@ export default class ConnectorsService {
           ssl: pgConn.ssl,
           sslRejectUnauthorized: pgConn.sslRejectUnauthorized,
         });
-        await extractor.connect();
-        const schema = await extractor.extractSchema();
-        await extractor.disconnect();
-        return schema;
+        try {
+          await extractor.connect();
+          const schema = await extractor.extractSchema();
+          return schema;
+        } finally {
+          await extractor.disconnect();
+        }
       }
       case 'redshift': {
         const rsConn = connection as RedshiftConnection;
@@ -1618,10 +1621,13 @@ export default class ConnectorsService {
           ssl: rsConn.ssl ?? true,
           sslrootcert: rsConn.sslrootcert,
         });
-        await extractor.connect();
-        const schema = await extractor.extractSchema();
-        await extractor.disconnect();
-        return schema;
+        try {
+          await extractor.connect();
+          const schema = await extractor.extractSchema();
+          return schema;
+        } finally {
+          await extractor.disconnect();
+        }
       }
       case 'snowflake': {
         const sfConn = connection as SnowflakeConnection;
@@ -1634,10 +1640,13 @@ export default class ConnectorsService {
           schema: sfConn.schema,
           role: sfConn.role,
         });
-        await extractor.connect();
-        const schema = await extractor.extractSchema();
-        await extractor.disconnect();
-        return schema;
+        try {
+          await extractor.connect();
+          const schema = await extractor.extractSchema();
+          return schema;
+        } finally {
+          await extractor.disconnect();
+        }
       }
       case 'databricks': {
         const dbConn = connection as DatabricksConnection;
@@ -1648,10 +1657,13 @@ export default class ConnectorsService {
           catalog: dbConn.database || 'default',
           schema: dbConn.schema,
         });
-        await extractor.connect();
-        const schema = await extractor.extractSchema();
-        await extractor.disconnect();
-        return schema;
+        try {
+          await extractor.connect();
+          const schema = await extractor.extractSchema();
+          return schema;
+        } finally {
+          await extractor.disconnect();
+        }
       }
       case 'bigquery': {
         const bqConn = connection as BigQueryConnection;
@@ -1680,9 +1692,13 @@ export default class ConnectorsService {
           config.location = bqConn.location;
         }
         const extractor = new BigQueryExtractor(config);
-        await extractor.connect();
-        const schema = await extractor.extractSchema();
-        return schema;
+        try {
+          await extractor.connect();
+          const schema = await extractor.extractSchema();
+          return schema;
+        } finally {
+          await extractor.disconnect();
+        }
       }
       case 'duckdb': {
         const duckConn = connection as DuckDBConnection;
@@ -1704,10 +1720,13 @@ export default class ConnectorsService {
           timeout: kinConn.timeout,
           schema: kinConn.schema,
         });
-        await extractor.connect();
-        const schema = await extractor.extractSchema();
-        await extractor.disconnect();
-        return schema;
+        try {
+          await extractor.connect();
+          const schema = await extractor.extractSchema();
+          return schema;
+        } finally {
+          await extractor.disconnect();
+        }
       }
       default:
         throw new Error(
