@@ -87,7 +87,7 @@ export const Databricks: React.FC<Props> = ({
         navigate('/app/connections');
       },
       onError: (error) => {
-        toast.error(`Configuration failed: ${error}`);
+        toast.error(`Configuration failed: ${error.message}`);
       },
     });
 
@@ -97,7 +97,7 @@ export const Databricks: React.FC<Props> = ({
         toast.success('Databricks connection updated successfully!');
       },
       onError: (error) => {
-        toast.error(`Update failed: ${error}`);
+        toast.error(`Update failed: ${error.message}`);
       },
     });
 

@@ -18,17 +18,18 @@ export default class KineticaExtractor {
     timeout?: number;
     schema?: string;
   }) {
-    const protocol = config.useSSL ? 'https' : 'http';
-    let cleanHost = config.host.replace(/(^\w+:|^)\/\//, '');
-    let path = '';
+    const protocol = config.useSSL ? 'https:' : 'http:';
+    const normalized = config.host.match(/^https?:\/\//)
+      ? config.host
+      : `${protocol}//${config.host}`;
 
-    const pathIndex = cleanHost.indexOf('/');
-    if (pathIndex !== -1) {
-      path = cleanHost.substring(pathIndex);
-      cleanHost = cleanHost.substring(0, pathIndex);
+    const urlObj = new URL(normalized);
+    urlObj.protocol = protocol;
+    if (!urlObj.port && config.port) {
+      urlObj.port = String(config.port);
     }
 
-    const url = `${protocol}://${cleanHost}:${config.port}${path}`;
+    const url = `${urlObj.protocol}//${urlObj.hostname}${urlObj.port ? `:${urlObj.port}` : ''}${urlObj.pathname}`;
 
     this.db = new GPUdb(url, {
       username: config.username,
@@ -235,6 +236,7 @@ export default class KineticaExtractor {
       }
     } catch (err: any) {
       console.error('[Kinetica] Schema extraction error:', err.message);
+      throw err;
     }
 
     return { tables: allTables };

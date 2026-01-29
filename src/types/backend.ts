@@ -30,6 +30,7 @@ export type PostgresConnection = ConnectionBase & {
   port: number;
   keepalives_idle?: number;
   ssl?: boolean;
+  sslRejectUnauthorized?: boolean;
 };
 
 export type SnowflakeConnection = ConnectionBase & {

@@ -12,6 +12,10 @@ class SecureStorageService {
   }
 
   async setCredential(account: string, password: string): Promise<void> {
+    if (!password) {
+      await this.deleteCredential(account);
+      return;
+    }
     await keytar.setPassword(this.serviceName, account, password);
   }
 

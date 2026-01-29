@@ -77,8 +77,8 @@ const Sql = () => {
     JSON.stringify([]),
   );
   const [sizes, setSizes] = useState<[number, number]>([
-    window.innerHeight - 350,
-    350,
+    window.innerHeight - 410,
+    410,
   ]);
   const [tabQueryIds, setTabQueryIds] = useState<Record<string, string>>({});
 
@@ -416,7 +416,11 @@ const Sql = () => {
               <SchemaViewGrid>
                 {activeTab && connectionInput ? (
                   <SchemaTreeViewerWithSchema
-                    databaseName={String(connectionInput.database)}
+                    databaseName={String(
+                      (connectionInput as any)?.database ??
+                        activeConnection?.connection.name ??
+                        'Database',
+                    )}
                     type={connectionInput.type}
                     schema={activeSchema || []}
                     isLoading={isLoadingSchema}
@@ -477,6 +481,25 @@ const Sql = () => {
               </Typography>
               <Typography variant="body2" color="text.secondary">
                 Select a connection from the sidebar to start querying
+              </Typography>
+            </Box>
+          )}
+
+          {activeTab && !connectionInput && (
+            <Box
+              sx={{
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'center',
+                justifyContent: 'center',
+                height: '100%',
+                color: 'text.secondary',
+                gap: 1,
+              }}
+            >
+              <CircularProgress size={28} />
+              <Typography variant="body2" color="text.secondary">
+                Loading connection...
               </Typography>
             </Box>
           )}

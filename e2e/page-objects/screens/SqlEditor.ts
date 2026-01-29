@@ -41,6 +41,7 @@ export class SqlEditorPage extends BasePage {
     // Prefer the split editor as it's the primary one, defaulting to first if multiple found
     this.monacoEditor = this.page
       .locator('[data-testid="sql-editor-pane"] .monaco-editor')
+      .first()
       .or(this.page.locator('.monaco-editor').first());
     // The run button is now an icon in the gutter
     this.runQueryBtn = this.page.locator('.run-query-glyph').first();

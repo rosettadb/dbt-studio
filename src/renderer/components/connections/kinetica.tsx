@@ -235,7 +235,7 @@ export const Kinetica: React.FC<Props> = ({
       }}
     >
       <ConnectionHeader
-        title="No name"
+        title="Kinetica Connection"
         imageSource={connectionIcons.images.kinetica}
         onClose={onCancel}
         onSave={handleSubmit}

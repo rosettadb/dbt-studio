@@ -52,7 +52,19 @@ const SqlTab: React.FC<SqlTabProps> = ({
       enterDelay={600}
       enterNextDelay={600}
     >
-      <SqlTabButton active={isActive} onClick={onSelect} disableRipple>
+      <SqlTabButton
+        active={isActive}
+        onClick={onSelect}
+        role="tab"
+        tabIndex={0}
+        aria-selected={isActive}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault(); // Prevent scrolling on Space
+            onSelect();
+          }
+        }}
+      >
         {tab.isLoading && <LoadingDot />}
         {!tab.isLoading && tab.isModified && <ModifiedDot />}
         {!tab.isLoading && tab.error && (

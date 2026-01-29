@@ -790,18 +790,19 @@ export default class ConnectorsService {
       case 'kinetica': {
         // Kinetica JDBC URL format: jdbc:kinetica:URL=http://<host>:9191
         // Optional parameters can be appended
-        const kineticaProtocol = conn.useSSL ? 'https' : 'http';
-        let cleanKineticaHost = conn.host.replace(/(^\w+:|^)\/\//, '');
-        let kineticaPath = '';
+        const kineticaProtocol = conn.useSSL ? 'https:' : 'http:';
+        const normalized = conn.host.match(/^https?:\/\//)
+          ? conn.host
+          : `${kineticaProtocol}//${conn.host}`;
 
-        // Handle path in host (e.g. cloud-host/gpudb-0)
-        const pathIdx = cleanKineticaHost.indexOf('/');
-        if (pathIdx !== -1) {
-          kineticaPath = cleanKineticaHost.substring(pathIdx);
-          cleanKineticaHost = cleanKineticaHost.substring(0, pathIdx);
+        const urlObj = new URL(normalized);
+        urlObj.protocol = kineticaProtocol;
+        if (!urlObj.port && conn.port) {
+          urlObj.port = String(conn.port);
         }
 
-        let kineticaUrl = `jdbc:kinetica:URL=${kineticaProtocol}://${cleanKineticaHost}:${conn.port}${kineticaPath}`;
+        const kineticaFinalUrl = `${urlObj.protocol}//${urlObj.hostname}${urlObj.port ? `:${urlObj.port}` : ''}${urlObj.pathname}`;
+        let kineticaUrl = `jdbc:kinetica:URL=${kineticaFinalUrl}`;
         // Add additional params if needed (e.g., timeout)
         if (conn.timeout) {
           kineticaUrl += `;Timeout=${conn.timeout}`;
@@ -1599,6 +1600,7 @@ export default class ConnectorsService {
           password: pgConn.password,
           port: pgConn.port,
           ssl: pgConn.ssl,
+          sslRejectUnauthorized: pgConn.sslRejectUnauthorized,
         });
         await extractor.connect();
         const schema = await extractor.extractSchema();

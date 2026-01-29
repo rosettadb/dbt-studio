@@ -106,7 +106,10 @@ export const SchemaTreeViewerWithSchema: React.FC<Props> = React.memo(
                   label={<TreeItems.Schema label={schemaName} />}
                 >
                   {schemaTables.map((table) => (
-                    <RenderTree key={table.name} table={table} />
+                    <RenderTree
+                      key={`${schemaName}.${table.name}`}
+                      table={table}
+                    />
                   ))}
                 </TreeItem>
               ))}
