@@ -78,7 +78,7 @@ const registerConnectorsHandlers = () => {
     'connector:query',
     async (_event, body: ExecuteStatementType): Promise<QueryResponseType> => {
       try {
-        return ConnectorsService.executeSelectStatement(body);
+        return await ConnectorsService.executeSelectStatement(body);
       } catch (error: any) {
         return { success: false, error: error.message };
       }
@@ -139,7 +139,9 @@ const registerConnectorsHandlers = () => {
     'connector:extractSchema',
     async (_event, connectionId: string) => {
       try {
-        return ConnectorsService.extractSchemaFromConnection(connectionId);
+        return await ConnectorsService.extractSchemaFromConnection(
+          connectionId,
+        );
       } catch (error: any) {
         return { tables: [], error: error.message };
       }
@@ -170,7 +172,7 @@ const registerConnectorsHandlers = () => {
       body: { connectionId: string; query: string; queryId?: string },
     ): Promise<QueryResponseType> => {
       try {
-        return ConnectorsService.executeQueryForConnection(body);
+        return await ConnectorsService.executeQueryForConnection(body);
       } catch (error: any) {
         return { success: false, error: error.message };
       }

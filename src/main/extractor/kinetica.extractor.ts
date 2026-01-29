@@ -70,6 +70,14 @@ export default class KineticaExtractor {
     });
   }
 
+  /**
+   * Escape single quotes in SQL string literals to prevent SQL injection.
+   * Doubles single quotes as per SQL standard.
+   */
+  private escapeIdentifier(value: string): string {
+    return value.replace(/'/g, "''");
+  }
+
   async connect(): Promise<void> {
     await this.executeSQL('SELECT 1');
   }
@@ -172,9 +180,14 @@ export default class KineticaExtractor {
           return !isSchema;
         });
 
-      // console.log('[Kinetica] Table list:', tableRows.map((t: any) => t.fullName).join(', '));
+      // Apply optional schema filter if provided in constructor
+      const filteredTableRows = this.schema
+        ? tableRows.filter((r: any) => r.TABLE_SCHEMA === this.schema)
+        : tableRows;
 
-      for (const row of tableRows) {
+      // console.log('[Kinetica] Table list:', filteredTableRows.map((t: any) => t.fullName).join(', '));
+
+      for (const row of filteredTableRows) {
         const tableName = row.TABLE_NAME;
         const schemaName = row.TABLE_SCHEMA || 'default';
         const tableType = (row.TABLE_TYPE || '').includes('VIEW')
@@ -184,10 +197,14 @@ export default class KineticaExtractor {
         if (tableName) {
           let columns: Column[] = [];
           try {
+            // Escape identifiers to prevent SQL injection
+            const safeSchema = this.escapeIdentifier(schemaName);
+            const safeTable = this.escapeIdentifier(tableName);
+
             const colRows = await this.executeSQL(`
               SELECT COLUMN_NAME, DATA_TYPE, ORDINAL_POSITION, IS_NULLABLE
               FROM information_schema.COLUMNS
-              WHERE TABLE_SCHEMA = '${schemaName}' AND TABLE_NAME = '${tableName}'
+              WHERE TABLE_SCHEMA = '${safeSchema}' AND TABLE_NAME = '${safeTable}'
               ORDER BY ORDINAL_POSITION
             `);
 

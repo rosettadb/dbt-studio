@@ -156,15 +156,17 @@ export const Kinetica: React.FC<Props> = ({
             newPort = 9191;
           }
         }
-      } else if (name === 'port' || name === 'timeout') {
+      } else if (name === 'port') {
         newValue = Number(value);
         newPort = Number(value);
+      } else if (name === 'timeout') {
+        newValue = Number(value);
       }
 
       return {
         ...prev,
         [name]: newValue,
-        port: name === 'port' ? Number(newValue) : newPort,
+        port: newPort,
       };
     });
 

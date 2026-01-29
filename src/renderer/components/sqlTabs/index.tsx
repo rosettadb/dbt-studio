@@ -71,6 +71,7 @@ const SqlTab: React.FC<SqlTabProps> = ({
         <IconButton
           size="small"
           onClick={handleClose}
+          aria-label={`Close ${tab.connectionName} tab`}
           sx={{
             ml: 0.5,
             width: 20,

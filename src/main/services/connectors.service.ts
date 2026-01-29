@@ -142,7 +142,10 @@ export default class ConnectorsService {
           conn1.useSSL === (conn2 as KineticaConnection).useSSL &&
           conn1.database === conn2.database &&
           conn1.username === (conn2 as KineticaConnection).username &&
-          conn1.schema === conn2.schema
+          conn1.schema === conn2.schema &&
+          conn1.timeout === (conn2 as KineticaConnection).timeout &&
+          conn1.bypassSslCertCheck ===
+            (conn2 as KineticaConnection).bypassSslCertCheck
         );
 
       default:
@@ -784,7 +787,7 @@ export default class ConnectorsService {
       case 'duckdb':
         // DuckDB JDBC URL format
         return `jdbc:duckdb:${conn.database_path}`;
-      case 'kinetica':
+      case 'kinetica': {
         // Kinetica JDBC URL format: jdbc:kinetica:URL=http://<host>:9191
         // Optional parameters can be appended
         const kineticaProtocol = conn.useSSL ? 'https' : 'http';
@@ -807,6 +810,7 @@ export default class ConnectorsService {
           kineticaUrl += ';BypassSslCertCheck=1';
         }
         return kineticaUrl;
+      }
       default:
         throw new Error('Unsupported connection type!');
     }
