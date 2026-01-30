@@ -32,7 +32,7 @@ export const EditorTab: React.FC<EditorTabProps> = ({
       enterDelay={600}
       enterNextDelay={600}
     >
-      <TabButton active={isActive} onClick={onSelect} disableRipple>
+      <TabButton active={isActive} onClick={onSelect}>
         {tab.isLoading && <LoadingDot />}
         {!tab.isLoading && tab.isModified && <ModifiedDot />}
         {!tab.isLoading && tab.error && (

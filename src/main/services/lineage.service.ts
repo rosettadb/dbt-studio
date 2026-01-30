@@ -191,9 +191,7 @@ class LineageService {
     request: LineageCurrentModelRequest,
   ): Promise<LineageCurrentModelResponse> {
     try {
-      console.log('[LineageService] getCurrentModelId request:', request);
       const project = await this.resolveProject(request.projectId);
-      console.log('[LineageService] Resolved project:', project.path);
 
       const manifest = await this.getManifest(project);
       if (!manifest) {
@@ -210,13 +208,6 @@ class LineageService {
 
       const normalized = path.normalize(request.filePath);
       const match = this.findNodeByFilePath(manifest, normalized, project.path);
-
-      console.log(
-        '[LineageService] Found modelId:',
-        match,
-        'for file:',
-        normalized,
-      );
 
       if (!match) {
         return {
@@ -434,10 +425,6 @@ class LineageService {
       return cacheHit.manifest;
     }
 
-    console.log(
-      `[LineageService] cache miss or stale for ${project.path}. Loading manifest...`,
-    );
-
     try {
       const raw = await fs.readFile(manifestPath, 'utf-8');
       const manifest = JSON.parse(raw) as ManifestLike;
@@ -494,10 +481,6 @@ class LineageService {
       { id: rootId, depth: 0 },
     ];
     const visited = new Map<string, number>([[rootId, 0]]);
-
-    console.log(
-      `[LineageService] Building ${direction} graph for ${rootId}, maxDepth: ${maxDepth}`,
-    );
 
     while (queue.length > 0) {
       const { id, depth } = queue.shift()!;
@@ -635,7 +618,7 @@ class LineageService {
         return false;
       }
       const candidate = path.normalize(value.original_file_path).toLowerCase();
-      
+
       if (!normalizedTarget.endsWith(candidate)) {
         return false;
       }
@@ -649,7 +632,11 @@ class LineageService {
 
       // Check if preceded by path separator
       const precedingChar = normalizedTarget[matchIndex - 1];
-      return precedingChar === path.sep || precedingChar === '/' || precedingChar === '\\';
+      return (
+        precedingChar === path.sep ||
+        precedingChar === '/' ||
+        precedingChar === '\\'
+      );
     })?.[0];
   }
 

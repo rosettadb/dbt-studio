@@ -142,6 +142,15 @@ export const NodeDetailsPanel: React.FC<NodeDetailsPanelProps> = ({
   const { label, resourceType, description, tags, dependsOn, uniqueId } = node;
 
   const handleLoadColumnLineage = () => {
+    // Guard against undefined or empty projectId
+    if (!projectId) {
+      // eslint-disable-next-line no-console
+      console.error(
+        '[NodeDetailsPanel] Cannot load column lineage: projectId is required',
+      );
+      return;
+    }
+
     fetchColumnLineage(
       {
         projectId,

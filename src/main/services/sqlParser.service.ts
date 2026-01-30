@@ -112,6 +112,14 @@ export default class SqlParserService {
         reject(new Error(`Failed to start Python: ${err.message}`));
       });
 
+      process.stdin.on('error', (err: { code?: string; message: string }) => {
+        if (err.code === 'EPIPE') {
+          // Child exited before reading; close handler will handle stdout/stderr.
+          return;
+        }
+        reject(new Error(`Failed to write to Python stdin: ${err.message}`));
+      });
+
       let stdout = '';
       let stderr = '';
 
@@ -167,8 +175,10 @@ export default class SqlParserService {
 
       // Write input to stdin
       const input = JSON.stringify({ sql, dialect });
-      process.stdin.write(input);
-      process.stdin.end();
+      if (process.stdin.writable) {
+        process.stdin.write(input);
+        process.stdin.end();
+      }
     });
   }
 }

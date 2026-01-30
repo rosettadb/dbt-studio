@@ -1,6 +1,5 @@
 import { styled, type Theme } from '@mui/material/styles';
 import Box from '@mui/material/Box';
-import ButtonBase from '@mui/material/ButtonBase';
 
 const getBaseBackgroundColor = (theme: Theme, active: boolean) => {
   if (!active) {
@@ -60,8 +59,9 @@ export const DropIndicator = styled('div')(({ theme }) => ({
   transition: 'opacity 120ms ease',
 }));
 
-export const TabButton = styled(ButtonBase)<{ active: boolean }>(
-  ({ theme, active }) => ({
+export const TabButton = styled(Box, {
+  shouldForwardProp: (prop) => prop !== 'active',
+})<{ active: boolean }>(({ theme, active }) => ({
     display: 'flex',
     alignItems: 'center',
     gap: theme.spacing(0.75),

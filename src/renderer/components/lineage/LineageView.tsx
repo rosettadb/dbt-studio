@@ -149,7 +149,7 @@ export const LineageView: React.FC<LineageViewProps> = ({
       projectId,
       modelId: selectedNodeId ?? effectiveModelId ?? '',
     },
-    { enabled: Boolean(selectedNodeId ?? effectiveModelId) },
+    { enabled: Boolean(projectId && (selectedNodeId ?? effectiveModelId)) },
   );
 
   const handleSelectNode = (nodeId: string) => {
