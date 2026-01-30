@@ -626,13 +626,30 @@ class LineageService {
 
     if (exactMatch) return exactMatch[0];
 
-    // Fallback to relative path suffix match (legacy behavior, just in case)
+    // Fallback to relative path suffix match (legacy behavior for compatibility)
+    // NOTE: This can produce false positives if paths share common suffixes
+    // (e.g., "staging/models/foo.sql" vs "models/foo.sql"). To mitigate this,
+    // we ensure the match occurs on a path boundary (preceded by separator or at start).
     return entries.find(([, value]) => {
       if (!value.original_file_path) {
         return false;
       }
       const candidate = path.normalize(value.original_file_path).toLowerCase();
-      return normalizedTarget.endsWith(candidate);
+      
+      if (!normalizedTarget.endsWith(candidate)) {
+        return false;
+      }
+
+      // Ensure match is on a path boundary
+      const matchIndex = normalizedTarget.length - candidate.length;
+      if (matchIndex === 0) {
+        // Match starts at beginning
+        return true;
+      }
+
+      // Check if preceded by path separator
+      const precedingChar = normalizedTarget[matchIndex - 1];
+      return precedingChar === path.sep || precedingChar === '/' || precedingChar === '\\';
     })?.[0];
   }
 

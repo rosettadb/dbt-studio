@@ -59,6 +59,7 @@ export const LineageView: React.FC<LineageViewProps> = ({
         queryClient.invalidateQueries([QUERY_KEYS.GET_LINEAGE_UPSTREAM]),
         queryClient.invalidateQueries([QUERY_KEYS.GET_LINEAGE_DOWNSTREAM]),
         queryClient.invalidateQueries([QUERY_KEYS.GET_LINEAGE_FULL]),
+        queryClient.invalidateQueries([QUERY_KEYS.GET_LINEAGE_METADATA]),
       ]);
     } finally {
       setIsRefreshing(false);

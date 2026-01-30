@@ -108,7 +108,7 @@ export const LineageGraph: React.FC<LineageGraphProps> = ({
     }));
 
     const flowEdges: Edge[] = initialEdges.map((edge) => ({
-      id: `${edge.source}-${edge.target}`,
+      id: `${edge.source}-${edge.target}-${edge.relationship}-${edge.depth}`,
       source: edge.source,
       target: edge.target,
       type: 'smoothstep',

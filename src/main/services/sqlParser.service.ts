@@ -40,10 +40,10 @@ def extract_lineage(sql, dialect):
     tables = []
     for table in parsed.find_all(exp.Table):
         tables.append(table.sql())
-    
+
     # 2. Extract Column Dependencies
     columns = {}
-    
+
     if isinstance(parsed, exp.Select):
         for expression in parsed.expressions:
             output_col = None
@@ -53,11 +53,11 @@ def extract_lineage(sql, dialect):
                 output_col = expression.name
             else:
                 output_col = expression.sql()
-            
+
             deps = []
             for col in expression.find_all(exp.Column):
                 deps.append(col.sql())
-            
+
             columns[output_col] = list(set(deps))
 
     return {
@@ -71,10 +71,10 @@ def main():
         input_data = json.load(sys.stdin)
         sql = input_data.get("sql")
         dialect = input_data.get("dialect", "snowflake")
-        
+
         # Determine dialect mapping
         if dialect not in ['snowflake', 'bigquery', 'databricks', 'redshift', 'postgres']:
-            pass
+            dialect = 'snowflake'
 
         result = extract_lineage(sql, dialect)
         print(json.dumps(result))
@@ -107,6 +107,10 @@ export default class SqlParserService {
 
     return new Promise((resolve, reject) => {
       const process = spawn(pythonPath, ['-c', PYTHON_SCRIPT]);
+
+      process.on('error', (err) => {
+        reject(new Error(`Failed to start Python: ${err.message}`));
+      });
 
       let stdout = '';
       let stderr = '';

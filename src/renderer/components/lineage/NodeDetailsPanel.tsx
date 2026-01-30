@@ -42,6 +42,7 @@ export const NodeDetailsPanel: React.FC<NodeDetailsPanelProps> = ({
     new Set(),
   );
   const [isInstallingSqlglot, setIsInstallingSqlglot] = useState(false);
+  const [hasFetchedLineage, setHasFetchedLineage] = useState(false);
 
   const {
     mutate: fetchColumnLineage,
@@ -50,6 +51,12 @@ export const NodeDetailsPanel: React.FC<NodeDetailsPanelProps> = ({
     error: lineageError,
     isError: isLineageError,
   } = useColumnLineage();
+
+  // Reset UI state when selected node changes
+  React.useEffect(() => {
+    setExpandedColumns(new Set());
+    setHasFetchedLineage(false);
+  }, [node?.uniqueId]);
 
   React.useEffect(() => {
     if (isLineageError && lineageError) {
@@ -75,12 +82,19 @@ export const NodeDetailsPanel: React.FC<NodeDetailsPanelProps> = ({
     try {
       await settingsServices.installSqlGlot();
       if (projectId && node && node.uniqueId) {
-        fetchColumnLineage({
-          projectId,
-          modelId: node.uniqueId,
-          targets: [],
-          selectedColumn: { table: node.name, name: '' },
-        });
+        fetchColumnLineage(
+          {
+            projectId,
+            modelId: node.uniqueId,
+            targets: [],
+            selectedColumn: { table: node.name, name: '' },
+          },
+          {
+            onSuccess: () => {
+              setHasFetchedLineage(true);
+            },
+          },
+        );
       }
     } catch (e) {
       // eslint-disable-next-line no-console
@@ -89,7 +103,6 @@ export const NodeDetailsPanel: React.FC<NodeDetailsPanelProps> = ({
       setIsInstallingSqlglot(false);
     }
   };
-  const [hasFetchedLineage, setHasFetchedLineage] = useState(false);
 
   const displayColumns = useMemo(() => {
     if (!node) return {};

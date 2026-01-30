@@ -53,15 +53,31 @@ export const TerminalLayout: React.FC<Props> = ({ children, project }) => {
     useProcess();
 
   const { selectedFilePath } = useSelectedFileContext();
-  const { data: currentModelData } = useCurrentModelId(
+
+  // Only query for lineage if the file is a SQL model (not .yml/.yaml)
+  const isExecutableModel = React.useMemo(() => {
+    if (!selectedFilePath) return false;
+    const ext = selectedFilePath.toLowerCase().split('.').pop();
+    return ext === 'sql';
+  }, [selectedFilePath]);
+
+  const {
+    data: currentModelData,
+    isLoading: isLoadingCurrentModel,
+    isError: isErrorCurrentModel,
+  } = useCurrentModelId(
     {
       projectId: project.id,
       filePath: selectedFilePath,
     },
-    { enabled: !!project.id && !!selectedFilePath },
+    { enabled: !!project.id && !!selectedFilePath && isExecutableModel },
   );
 
-  const showLineageTab = !!currentModelData?.modelId;
+  const showLineageTab =
+    isExecutableModel &&
+    (Boolean(currentModelData?.modelId) ||
+      isLoadingCurrentModel ||
+      isErrorCurrentModel);
 
   const [selectedTab, setSelectedTab] = React.useState(0);
   const [lock, setLock] = React.useState(false);
@@ -136,11 +152,12 @@ export const TerminalLayout: React.FC<Props> = ({ children, project }) => {
   // }, [isRunning]);
 
   // If Lineage tab is hidden but selected, switch back to terminal
+  // Only auto-switch when the query is settled (not loading)
   React.useEffect(() => {
-    if (!showLineageTab && selectedTab === 2) {
+    if (!showLineageTab && selectedTab === 2 && !isLoadingCurrentModel) {
       setSelectedTab(0);
     }
-  }, [showLineageTab, selectedTab]);
+  }, [showLineageTab, selectedTab, isLoadingCurrentModel]);
 
   const getTextColor = (themeMode: string | undefined) => {
     switch (themeMode) {
