@@ -262,11 +262,11 @@ class LineageService {
 
       let compiledSql = node.compiled_code ?? node.compiled_sql;
 
+      const project = await this.resolveProject(request.projectId);
+
       // Fallback: Try reading file from disk
       if (!compiledSql) {
         let absolutePath: string | undefined;
-
-        const project = await this.resolveProject(request.projectId);
 
         if (node.compiled_path) {
           // node.compiled_path is relative to project root (e.g. "target/compiled/...")
@@ -305,13 +305,10 @@ class LineageService {
         );
       }
 
-      // TODO: Get dialect from project config or connection?
-      // For now, default to snowflake as it is the most common target for this user per history,
-      // or generic. SqlParserService defaults to snowflake.
-      const parseResult = await SqlParserService.parseSql(
-        compiledSql,
-        'snowflake',
-      );
+      const dialect = this.resolveSqlDialect(project);
+      const parseResult = dialect
+        ? await SqlParserService.parseSql(compiledSql, dialect)
+        : await SqlParserService.parseSql(compiledSql);
 
       if (parseResult.error) {
         throw new Error(`SQL Parse Error: ${parseResult.error}`);
@@ -637,6 +634,41 @@ class LineageService {
       const candidate = path.normalize(value.original_file_path).toLowerCase();
       return normalizedTarget.endsWith(candidate);
     })?.[0];
+  }
+
+  private static resolveSqlDialect(project: Project): string | undefined {
+    const rawAdapter =
+      project.dbtConnection?.type ??
+      project.connection?.type ??
+      project.rosettaConnection?.dbType;
+
+    return this.mapAdapterToSqlParserDialect(rawAdapter);
+  }
+
+  private static mapAdapterToSqlParserDialect(
+    adapter?: string,
+  ): string | undefined {
+    if (!adapter) {
+      return undefined;
+    }
+
+    const normalized = adapter.toLowerCase().trim();
+
+    switch (normalized) {
+      case 'snowflake':
+        return 'snowflake';
+      case 'bigquery':
+        return 'bigquery';
+      case 'databricks':
+        return 'databricks';
+      case 'redshift':
+        return 'redshift';
+      case 'postgres':
+      case 'postgresql':
+        return 'postgres';
+      default:
+        return undefined;
+    }
   }
 }
 

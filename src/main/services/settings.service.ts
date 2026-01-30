@@ -688,6 +688,20 @@ export default class SettingsService {
   static async installPackage(packageName: string): Promise<void> {
     const settings = await this.loadSettings();
 
+    const safeName = packageName.trim();
+    const allowedPackages = new Set(['sqlglot']);
+    const isValidPackageName = /^[a-z0-9](?:[a-z0-9._-]*[a-z0-9])?$/i.test(
+      safeName,
+    );
+
+    if (!isValidPackageName) {
+      throw new Error(`Invalid package name: ${packageName}`);
+    }
+
+    if (!allowedPackages.has(safeName)) {
+      throw new Error(`Package not allowed: ${packageName}`);
+    }
+
     if (!settings.pythonPath || !fs.existsSync(settings.pythonPath)) {
       throw new Error(
         'Python environment not found. Please install Python first.',
@@ -706,7 +720,7 @@ export default class SettingsService {
     const cliAdapter = new CliAdapter();
     // Using --no-cache-dir to avoid potential cache issues in packaged app
     await cliAdapter.runCommandWithoutStreaming(
-      `"${pipPath}" install ${packageName} --no-cache-dir`,
+      `"${pipPath}" install ${safeName} --no-cache-dir`,
     );
   }
 
