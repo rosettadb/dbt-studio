@@ -1,4 +1,10 @@
-import React, { useState, useCallback, useMemo, useEffect } from 'react';
+import React, {
+  useState,
+  useCallback,
+  useMemo,
+  useEffect,
+  useContext,
+} from 'react';
 import SplitPane from 'split-pane-react';
 import {
   Box,
@@ -12,6 +18,7 @@ import {
   TextField,
   InputAdornment,
   IconButton,
+  Tooltip,
 } from '@mui/material';
 import {
   Stop,
@@ -19,6 +26,7 @@ import {
   Refresh,
   Add,
   FilterList,
+  Link as LinkIcon,
 } from '@mui/icons-material';
 import { toast } from 'react-toastify';
 import { useNavigate } from 'react-router-dom';
@@ -39,12 +47,14 @@ import { SchemaTreeViewerWithSchema } from './SchemaTreeViewerWithSchema';
 import connectionIcons, {
   defaultIcon,
 } from '../../../../assets/connectionIcons';
+import { AppContext } from '../../context/AppProvider';
 
 const QUERY_HISTORY_KEY = 'query_history_key';
 
 const Sql = () => {
   const theme = useTheme();
   const navigate = useNavigate();
+  const { selectedProject } = useContext(AppContext);
   const tabManager = useSqlTabManager();
   const { data: connections = [] } = useGetConnections();
   const [filter, setFilter] = useState('');
@@ -280,8 +290,17 @@ const Sql = () => {
                   if (!conn) return 'Select Connection';
                   const icon =
                     connectionIcons.images[conn.connection.type] || defaultIcon;
+                  const isProjectConnection =
+                    conn.id === selectedProject?.connectionId;
                   return (
-                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                    <Box
+                      sx={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 1,
+                        width: '100%',
+                      }}
+                    >
                       <img
                         src={icon}
                         alt=""
@@ -292,10 +311,24 @@ const Sql = () => {
                           whiteSpace: 'nowrap',
                           overflow: 'hidden',
                           textOverflow: 'ellipsis',
+                          flex: 1,
                         }}
                       >
                         {conn.connection.name}
                       </span>
+                      {isProjectConnection && (
+                        <Tooltip title="Project Connection">
+                          <LinkIcon
+                            sx={{
+                              ml: 'auto',
+                              fontSize: 16,
+                              color: 'primary.main',
+                              mr: 2,
+                              transform: 'rotate(-45deg)',
+                            }}
+                          />
+                        </Tooltip>
+                      )}
                     </Box>
                   );
                 }}
@@ -316,28 +349,52 @@ const Sql = () => {
                 <MenuItem value="" disabled sx={{ fontSize: '0.8rem' }}>
                   Select Connection
                 </MenuItem>
-                {connections.map((conn) => (
-                  <MenuItem
-                    key={conn.id}
-                    value={conn.id}
-                    sx={{
-                      fontSize: '0.8rem',
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: 1,
-                    }}
-                  >
-                    <img
-                      src={
-                        connectionIcons.images[conn.connection.type] ||
-                        defaultIcon
-                      }
-                      alt=""
-                      style={{ width: 14, height: 14, objectFit: 'contain' }}
-                    />
-                    {conn.connection.name}
-                  </MenuItem>
-                ))}
+                {connections.map((conn) => {
+                  const isProjectConnection =
+                    conn.id === selectedProject?.connectionId;
+                  return (
+                    <MenuItem
+                      key={conn.id}
+                      value={conn.id}
+                      sx={{
+                        fontSize: '0.8rem',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 1,
+                        justifyContent: 'space-between',
+                      }}
+                    >
+                      <Box
+                        sx={{ display: 'flex', alignItems: 'center', gap: 1 }}
+                      >
+                        <img
+                          src={
+                            connectionIcons.images[conn.connection.type] ||
+                            defaultIcon
+                          }
+                          alt=""
+                          style={{
+                            width: 14,
+                            height: 14,
+                            objectFit: 'contain',
+                          }}
+                        />
+                        {conn.connection.name}
+                      </Box>
+                      {isProjectConnection && (
+                        <Tooltip title="Project Connection">
+                          <LinkIcon
+                            sx={{
+                              fontSize: 16,
+                              color: 'primary.main',
+                              transform: 'rotate(-45deg)',
+                            }}
+                          />
+                        </Tooltip>
+                      )}
+                    </MenuItem>
+                  );
+                })}
               </Select>
             </FormControl>
             <IconButton
