@@ -2,6 +2,7 @@
 import fs from 'fs/promises';
 import path from 'path';
 import {
+  ColumnLineageEdge,
   ColumnLineageRequest,
   ColumnLineageResponse,
   LineageCurrentModelRequest,
@@ -307,20 +308,37 @@ class LineageService {
 
       // Convert parse result to ColumnLineageResponse
       // parseResult.columns is { outputCol: [sourceCols...] }
-      // We need to map this to:
-      // dependencies: { "target_col": { "source_node": ["source_col"] } }
+      // We need to map this to ColumnLineageEdge[] format
       //
-      // ISSUE: sqlglot extract_lineage (in our script) returns flattened source columns strings like "table.col".
-      // We need to resolve "table" back to a unique_id in the manifest if possible.
-      //
-      // For Phase 4 MVP, we might just return the raw strings or try to map basic table names.
-      //
-      // Let's format dependencies as `Record<string, Record<string, string[]>>`
-      // target_column -> source_node_id -> source_columns[]
+      // Apply request filters:
+      // - selectedColumn: if provided, only return lineage for that specific column
+      // - targets: if provided, only return lineage for columns in targets list
+      // - showIndirectEdges: if false, exclude indirect edges (currently all are 'direct')
+      // - upstreamExpansion: controls upstream table resolution (not fully implemented yet)
 
-      const columnLineage: any[] = []; // Explicitly typed as ColumnLineageEdge[] in return
+      const columnLineage: ColumnLineageEdge[] = [];
 
       Object.entries(parseResult.columns).forEach(([targetCol, sourceCols]) => {
+        // Filter by selectedColumn if provided
+        if (
+          request.selectedColumn?.name &&
+          targetCol.toLowerCase() !== request.selectedColumn.name.toLowerCase()
+        ) {
+          return; // Skip columns that don't match selectedColumn
+        }
+
+        // Filter by targets if provided
+        if (request.targets && request.targets.length > 0) {
+          const matchesTarget = request.targets.some(
+            ([targetTable, targetColName]) =>
+              targetTable === rootId &&
+              targetColName.toLowerCase() === targetCol.toLowerCase(),
+          );
+          if (!matchesTarget) {
+            return; // Skip columns not in targets list
+          }
+        }
+
         sourceCols.forEach((sourceColStr) => {
           const parts = sourceColStr.split('.');
           let colName = sourceColStr;
@@ -336,11 +354,18 @@ class LineageService {
           // For now, we pass the raw table name from SQL.
           // The UI or refined logic handles mapping if needed.
 
-          columnLineage.push({
+          const edge: ColumnLineageEdge = {
             source: [tableName, colName],
             target: [rootId, targetCol],
-            type: 'direct',
-          });
+            type: 'direct', // All edges from sqlglot are direct
+          };
+
+          // Apply showIndirectEdges filter
+          if (request.showIndirectEdges === false && edge.type === 'indirect') {
+            return; // Skip indirect edges if filter is false
+          }
+
+          columnLineage.push(edge);
         });
       });
 
