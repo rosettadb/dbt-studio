@@ -29,12 +29,14 @@ type NodeDetailsPanelProps = {
   node?: LineageNodeDetails;
   projectId?: string; // Need projectId to make requests
   onColumnHover?: (upstreamNodeIds: string[]) => void;
+  compact?: boolean;
 };
 
 export const NodeDetailsPanel: React.FC<NodeDetailsPanelProps> = ({
   node,
   projectId,
   onColumnHover,
+  compact = false,
 }) => {
   const [expandedColumns, setExpandedColumns] = useState<Set<string>>(
     new Set(),
@@ -163,9 +165,21 @@ export const NodeDetailsPanel: React.FC<NodeDetailsPanelProps> = ({
   };
 
   return (
-    <Stack spacing={2} sx={{ px: 3, py: 3, height: '100%', overflow: 'auto' }}>
+    <Stack
+      spacing={compact ? 1 : 2}
+      sx={{
+        px: compact ? 1.5 : 3,
+        py: compact ? 1 : 3,
+        height: '100%',
+        overflow: 'auto',
+        fontSize: 12,
+        '& .MuiTypography-root': { fontSize: 12 },
+      }}
+    >
       <Box>
-        <Typography variant="subtitle1">{label}</Typography>
+        <Typography variant="subtitle1" sx={{ fontSize: 12, fontWeight: 600 }}>
+          {label}
+        </Typography>
         <Typography variant="caption" color="text.secondary">
           {resourceType}
         </Typography>
@@ -182,9 +196,9 @@ export const NodeDetailsPanel: React.FC<NodeDetailsPanelProps> = ({
       )}
 
       {tags && tags.length > 0 && (
-        <Stack direction="row" spacing={1} flexWrap="wrap">
+        <Stack direction="row" spacing={compact ? 0.5 : 1} flexWrap="wrap">
           {tags.map((tag) => (
-            <Chip key={tag} label={tag} size="small" />
+            <Chip key={tag} label={tag} size="small" sx={{ fontSize: 12 }} />
           ))}
         </Stack>
       )}
@@ -232,7 +246,7 @@ export const NodeDetailsPanel: React.FC<NodeDetailsPanelProps> = ({
               </Button>
             )}
           </Stack>
-          <Divider sx={{ my: 1 }} />
+          <Divider sx={{ my: compact ? 0.5 : 1 }} />
           {isLineageError && (
             <Alert severity="warning" sx={{ mb: 1, fontSize: '0.8rem' }}>
               {(lineageError as Error)?.message?.includes(
@@ -263,7 +277,7 @@ export const NodeDetailsPanel: React.FC<NodeDetailsPanelProps> = ({
               from SQL.
             </Typography>
           )}
-          <List dense disablePadding>
+          <List dense disablePadding sx={{ mb: compact ? 3 : 6 }}>
             {Object.values(displayColumns).map((column: any) => {
               const upstream = getUpstreamCols(column.name);
               const hasUpstream = upstream.length > 0;
@@ -274,7 +288,7 @@ export const NodeDetailsPanel: React.FC<NodeDetailsPanelProps> = ({
                   <ListItem
                     disableGutters
                     dense
-                    alignItems="flex-start"
+                    alignItems="center"
                     onMouseEnter={() => {
                       if (hasUpstream && onColumnHover) {
                         const nodeNames = upstream.map(([table]) => table);
@@ -312,7 +326,7 @@ export const NodeDetailsPanel: React.FC<NodeDetailsPanelProps> = ({
                               size="small"
                               label={column.meta.data_type}
                               variant="outlined"
-                              sx={{ height: 20, fontSize: '0.7rem' }}
+                              sx={{ height: 20, fontSize: 12 }}
                             />
                           )}
                         </Stack>
@@ -324,7 +338,10 @@ export const NodeDetailsPanel: React.FC<NodeDetailsPanelProps> = ({
                               variant="caption"
                               display="block"
                               color="text.secondary"
-                              sx={{ whiteSpace: 'pre-wrap', mb: 0.5 }}
+                              sx={{
+                                whiteSpace: 'pre-wrap',
+                                mb: compact ? 0.25 : 0.5,
+                              }}
                             >
                               {column.description}
                             </Typography>
@@ -335,7 +352,7 @@ export const NodeDetailsPanel: React.FC<NodeDetailsPanelProps> = ({
                   </ListItem>
                   {hasUpstream && (
                     <Collapse in={isExpanded} timeout="auto" unmountOnExit>
-                      <Box sx={{ pl: 6, pb: 1, pr: 2 }}>
+                      <Box sx={{ pl: 6, pb: compact ? 0.5 : 1, pr: 2 }}>
                         <Typography
                           variant="caption"
                           color="text.secondary"

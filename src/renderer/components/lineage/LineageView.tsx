@@ -317,14 +317,37 @@ export const LineageView: React.FC<LineageViewProps> = ({
             borderLeft: 1,
             borderColor: 'divider',
             height: '100%',
-            overflow: 'auto',
+            overflow: onExpandClick ? 'hidden' : 'auto',
+            display: 'flex',
+            flexDirection: 'column',
           }}
         >
-          <NodeDetailsPanel
-            node={selectedNodeMetadata ?? selectedNode}
-            projectId={projectId}
-            onColumnHover={handleColumnHover}
-          />
+          {onExpandClick && (
+            <Box sx={{ px: 2, pt: 1.5, pb: 0.5 }}>
+              <LineageToolbar
+                depth={depth}
+                onDepthChange={handleDepthChange}
+                onRefresh={handleRefresh}
+                isRefreshing={isRefreshing}
+                disabled={isRefreshing}
+                extraActions={
+                  <Tooltip title="Maximize">
+                    <IconButton onClick={onExpandClick} size="small">
+                      <OpenInFullIcon fontSize="small" />
+                    </IconButton>
+                  </Tooltip>
+                }
+              />
+            </Box>
+          )}
+          <Box sx={{ flex: 1, minHeight: 0, overflow: 'hidden' }}>
+            <NodeDetailsPanel
+              node={selectedNodeMetadata ?? selectedNode}
+              projectId={projectId}
+              onColumnHover={handleColumnHover}
+              compact={Boolean(onExpandClick)}
+            />
+          </Box>
         </Box>
       </Box>
     );
@@ -332,24 +355,18 @@ export const LineageView: React.FC<LineageViewProps> = ({
 
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
-      <Box sx={{ px: 2, pt: 2 }}>
-        <LineageToolbar
-          depth={depth}
-          onDepthChange={handleDepthChange}
-          onRefresh={handleRefresh}
-          isRefreshing={isRefreshing}
-          disabled={isRefreshing}
-          extraActions={
-            onExpandClick ? (
-              <Tooltip title="Maximize">
-                <IconButton onClick={onExpandClick} size="small">
-                  <OpenInFullIcon fontSize="small" />
-                </IconButton>
-              </Tooltip>
-            ) : null
-          }
-        />
-      </Box>
+      {/* Show this on large screen on modal, hide it on the smal terminal window */}
+      {!onExpandClick && (
+        <Box sx={{ px: 2, pt: 2 }}>
+          <LineageToolbar
+            depth={depth}
+            onDepthChange={handleDepthChange}
+            onRefresh={handleRefresh}
+            isRefreshing={isRefreshing}
+            disabled={isRefreshing}
+          />
+        </Box>
+      )}
 
       {!!graphError && (
         <Box sx={{ px: 2, pt: 1 }}>
