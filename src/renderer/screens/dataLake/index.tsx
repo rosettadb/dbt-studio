@@ -290,7 +290,7 @@ const DataLake: React.FC = () => {
         );
 
       case 'edit-instance':
-        return <DataLakeInstanceEditForm />;
+        return <DataLakeInstanceEditForm key={instanceId} />;
 
       case 'instance-detail':
         if (instanceQuery.isLoading) {

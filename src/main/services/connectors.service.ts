@@ -13,6 +13,7 @@ import {
   DBTConnection,
   DuckDBConnection,
   ExecuteStatementType,
+  KineticaConnection,
   PostgresConnection,
   Project,
   QueryResponseType,
@@ -36,6 +37,8 @@ import {
   testPostgresConnection,
   testRedshiftConnection,
   testSnowflakeConnection,
+  testKineticaConnection,
+  executeKineticaQuery,
 } from '../utils/connectors';
 import SecureStorageService from './secureStorage.service';
 import { CloudConnection, RecentItem } from '../../types/frontend';
@@ -132,6 +135,19 @@ export default class ConnectorsService {
           conn1.schema === conn2.schema
         );
 
+      case 'kinetica':
+        return (
+          conn1.host === (conn2 as KineticaConnection).host &&
+          conn1.port === (conn2 as KineticaConnection).port &&
+          conn1.useSSL === (conn2 as KineticaConnection).useSSL &&
+          conn1.database === conn2.database &&
+          conn1.username === (conn2 as KineticaConnection).username &&
+          conn1.schema === conn2.schema &&
+          conn1.timeout === (conn2 as KineticaConnection).timeout &&
+          conn1.bypassSslCertCheck ===
+            (conn2 as KineticaConnection).bypassSslCertCheck
+        );
+
       default:
         return false;
     }
@@ -170,6 +186,9 @@ export default class ConnectorsService {
         break;
       case 'databricks':
         baseName = connection.database;
+        break;
+      case 'kinetica':
+        baseName = connection.database || 'kinetica';
         break;
     }
 
@@ -523,6 +542,8 @@ export default class ConnectorsService {
         return testDuckDBConnection(connection);
       case 'redshift':
         return testRedshiftConnection(connection);
+      case 'kinetica':
+        return testKineticaConnection(connection);
       default:
         throw new Error(
           `Unsupported connection type: ${(connection as any).type}`,
@@ -630,6 +651,13 @@ export default class ConnectorsService {
             registerCancel,
           );
           break;
+        case 'kinetica':
+          response = await executeKineticaQuery(
+            connection,
+            query,
+            registerCancel,
+          );
+          break;
         default:
           throw new Error(
             `Unsupported connection type: ${(connection as any).type}`,
@@ -714,6 +742,10 @@ export default class ConnectorsService {
         // DuckDB specific validations
         if (!conn.database_path) throw new Error('Database path is required');
         break;
+      case 'kinetica':
+        if (!conn.host) throw new Error('Host is required');
+        if (!conn.port) throw new Error('Port is required');
+        break;
       default:
         throw new Error('Unsupported connection type!');
     }
@@ -721,8 +753,13 @@ export default class ConnectorsService {
 
   static async generateJdbcUrl(conn: ConnectionInput): Promise<string> {
     switch (conn.type) {
-      case 'postgres':
-        return `jdbc:postgresql://${conn.host}:${conn.port}/${conn.database}?currentSchema=${conn.schema}`;
+      case 'postgres': {
+        let postgresUrl = `jdbc:postgresql://${conn.host}:${conn.port}/${conn.database}?currentSchema=${conn.schema}`;
+        if (conn.ssl) {
+          postgresUrl += '&sslmode=require';
+        }
+        return postgresUrl;
+      }
       case 'snowflake':
         return `jdbc:snowflake://${conn.account}.snowflakecomputing.com/?warehouse=${conn.warehouse}&db=${conn.database}&schema=${conn.schema}`;
       case 'redshift': {
@@ -750,6 +787,31 @@ export default class ConnectorsService {
       case 'duckdb':
         // DuckDB JDBC URL format
         return `jdbc:duckdb:${conn.database_path}`;
+      case 'kinetica': {
+        // Kinetica JDBC URL format: jdbc:kinetica:URL=http://<host>:9191
+        // Optional parameters can be appended
+        const kineticaProtocol = conn.useSSL ? 'https:' : 'http:';
+        const normalized = conn.host.match(/^https?:\/\//)
+          ? conn.host
+          : `${kineticaProtocol}//${conn.host}`;
+
+        const urlObj = new URL(normalized);
+        urlObj.protocol = kineticaProtocol;
+        if (!urlObj.port && conn.port) {
+          urlObj.port = String(conn.port);
+        }
+
+        const kineticaFinalUrl = `${urlObj.protocol}//${urlObj.hostname}${urlObj.port ? `:${urlObj.port}` : ''}${urlObj.pathname}`;
+        let kineticaUrl = `jdbc:kinetica:URL=${kineticaFinalUrl}`;
+        // Add additional params if needed (e.g., timeout)
+        if (conn.timeout) {
+          kineticaUrl += `;Timeout=${conn.timeout}`;
+        }
+        if (conn.bypassSslCertCheck && conn.useSSL) {
+          kineticaUrl += ';BypassSslCertCheck=1';
+        }
+        return kineticaUrl;
+      }
       default:
         throw new Error('Unsupported connection type!');
     }
@@ -831,6 +893,7 @@ export default class ConnectorsService {
           schema: conn.schema,
           host: conn.host,
           port: conn.port,
+          ssl: conn.ssl,
         };
       case 'redshift':
         return {
@@ -861,6 +924,19 @@ export default class ConnectorsService {
           path: conn.database_path, // Map database_path to path for DBT connection
           database: conn.database,
           schema: conn.schema,
+        };
+      case 'kinetica':
+        return {
+          type: 'kinetica',
+          host: conn.host,
+          port: conn.port,
+          username: conn.username,
+          password: conn.password,
+          database: conn.database,
+          schema: conn.schema,
+          timeout: conn.timeout,
+          useSSL: conn.useSSL,
+          bypassSslCertCheck: conn.bypassSslCertCheck,
         };
       default:
         // Use type assertion to access the type property for error message
@@ -936,6 +1012,7 @@ export default class ConnectorsService {
           dbname: conn.database,
           schema: conn.schema,
           threads: 4,
+          ...(conn.ssl && { sslmode: 'require' }),
         };
       case 'snowflake':
         return {
@@ -999,6 +1076,22 @@ export default class ConnectorsService {
           path: conn.database_path,
           schema: conn.schema,
           threads: 4,
+        };
+      case 'kinetica':
+        // Map to a dbt profile. NOTE: dbt-kinetica adapter does not exist natively.
+        // This output assumes users might use dbt-trino or have a custom adapter.
+        // We output a generic 'kinetica' type profile for now.
+        return {
+          type: 'kinetica',
+          host: conn.host,
+          port: conn.port,
+          user: dbUserName,
+          password: dbPassword,
+          database: conn.database, // Optional in Kinetica but standard for dbt
+          schema: conn.schema,
+          threads: 4,
+          ...(conn.timeout && { timeout: conn.timeout }),
+          ...(conn.useSSL && { ssl: conn.useSSL }),
         };
       default:
         throw new Error('Unsupported connection type!');
@@ -1435,5 +1528,290 @@ export default class ConnectorsService {
 
   static async clearRecentItems(): Promise<void> {
     await updateDatabase<'recentItems'>('recentItems', []);
+  }
+
+  /**
+   * Extract schema directly from a connection (not project-based)
+   */
+  static async extractSchemaFromConnection(
+    connectionId: string,
+  ): Promise<{ tables: any[] }> {
+    const conn = await this.getConnectionById(connectionId);
+
+    if (!conn) {
+      throw new Error(`Connection with id ${connectionId} not found`);
+    }
+
+    const { connection } = conn;
+
+    if (!connection.type) {
+      throw new Error(
+        'Database connection type is not defined. Please reconfigure your connection.',
+      );
+    }
+
+    // Get credentials from secure storage
+    const storeUser = await SecureStorageService.getCredential(
+      `db-user-${connection.name}`,
+    );
+    const storePassword = await SecureStorageService.getCredential(
+      `db-password-${connection.name}`,
+    );
+
+    if (storeUser) {
+      (connection as { username: string }).username = storeUser;
+    }
+    if (storePassword) {
+      (connection as { password: string }).password = storePassword;
+    }
+
+    const storeToken = await SecureStorageService.getCredential(
+      `db-token-${connection.name}`,
+    );
+    if (storeToken) {
+      (connection as { token: string }).token = storeToken;
+    }
+
+    const bigqueryKey = await SecureStorageService.getCredential(
+      `db-bigquery-${connection.name}`,
+    );
+    if (bigqueryKey) {
+      (connection as { keyfile: string }).keyfile = bigqueryKey;
+    }
+
+    // Import extractors dynamically to avoid circular dependency
+    const {
+      PGSchemaExtractor,
+      SnowflakeExtractor,
+      DatabricksExtractor,
+      BigQueryExtractor,
+      DuckDBExtractor,
+      RedshiftExtractor,
+      KineticaExtractor,
+    } = await import('../extractor');
+
+    switch (connection.type) {
+      case 'postgres': {
+        const pgConn = connection as PostgresConnection;
+        const extractor = new PGSchemaExtractor({
+          user: pgConn.username,
+          host: pgConn.host,
+          database: pgConn.database,
+          password: pgConn.password,
+          port: pgConn.port,
+          ssl: pgConn.ssl,
+          sslRejectUnauthorized: pgConn.sslRejectUnauthorized,
+        });
+        try {
+          await extractor.connect();
+          const schema = await extractor.extractSchema();
+          return schema;
+        } finally {
+          await extractor.disconnect();
+        }
+      }
+      case 'redshift': {
+        const rsConn = connection as RedshiftConnection;
+        const extractor = new RedshiftExtractor({
+          user: rsConn.username,
+          host: rsConn.host,
+          database: rsConn.database,
+          password: rsConn.password,
+          port: rsConn.port,
+          ssl: rsConn.ssl ?? true,
+          sslrootcert: rsConn.sslrootcert,
+        });
+        try {
+          await extractor.connect();
+          const schema = await extractor.extractSchema();
+          return schema;
+        } finally {
+          await extractor.disconnect();
+        }
+      }
+      case 'snowflake': {
+        const sfConn = connection as SnowflakeConnection;
+        const extractor = new SnowflakeExtractor({
+          account: sfConn.account.split('.')[0],
+          username: sfConn.username,
+          password: sfConn.password,
+          warehouse: sfConn.warehouse,
+          database: sfConn.database,
+          schema: sfConn.schema,
+          role: sfConn.role,
+        });
+        try {
+          await extractor.connect();
+          const schema = await extractor.extractSchema();
+          return schema;
+        } finally {
+          await extractor.disconnect();
+        }
+      }
+      case 'databricks': {
+        const dbConn = connection as DatabricksConnection;
+        const extractor = new DatabricksExtractor({
+          token: dbConn.token,
+          host: dbConn.host,
+          path: dbConn.httpPath,
+          catalog: dbConn.database || 'default',
+          schema: dbConn.schema,
+        });
+        try {
+          await extractor.connect();
+          const schema = await extractor.extractSchema();
+          return schema;
+        } finally {
+          await extractor.disconnect();
+        }
+      }
+      case 'bigquery': {
+        const bqConn = connection as BigQueryConnection;
+        const config: any = {
+          projectId: bqConn.project,
+        };
+        let keyfileValue = bqConn.keyfile;
+        if (
+          typeof keyfileValue === 'string' &&
+          keyfileValue.startsWith('db-bigquery-')
+        ) {
+          const stored = await SecureStorageService.getCredential(keyfileValue);
+          if (!stored) {
+            throw new Error(
+              'BigQuery service account key not found in secure storage',
+            );
+          }
+          keyfileValue = stored;
+        }
+        try {
+          config.credentials = JSON.parse(keyfileValue);
+        } catch (err) {
+          throw new Error('Invalid service account key JSON');
+        }
+        if (bqConn.location) {
+          config.location = bqConn.location;
+        }
+        const extractor = new BigQueryExtractor(config);
+        try {
+          await extractor.connect();
+          const schema = await extractor.extractSchema();
+          return schema;
+        } finally {
+          await extractor.disconnect();
+        }
+      }
+      case 'duckdb': {
+        const duckConn = connection as DuckDBConnection;
+        const extractor = new DuckDBExtractor({
+          database_path: duckConn.database_path,
+          schema: duckConn.schema,
+        });
+        const schema = await extractor.extractSchema();
+        return schema;
+      }
+      case 'kinetica': {
+        const kinConn = connection as KineticaConnection;
+        const extractor = new KineticaExtractor({
+          host: kinConn.host,
+          port: kinConn.port,
+          username: kinConn.username,
+          password: kinConn.password,
+          useSSL: kinConn.useSSL,
+          timeout: kinConn.timeout,
+          schema: kinConn.schema,
+        });
+        try {
+          await extractor.connect();
+          const schema = await extractor.extractSchema();
+          return schema;
+        } finally {
+          await extractor.disconnect();
+        }
+      }
+      default:
+        throw new Error(
+          `Unsupported connection type: "${(connection as any).type}"`,
+        );
+    }
+  }
+
+  /**
+   * Save a query for a specific connection (connection-based, not project-based)
+   */
+  static async updateConnectionQuery(
+    connectionId: string,
+    query: string,
+  ): Promise<void> {
+    const db = await loadDatabaseFile();
+    const queries = db.queries ?? {};
+    // Use a connection-specific key prefix to distinguish from project queries
+    queries[`connection:${connectionId}`] = query;
+    await updateDatabase('queries', queries);
+  }
+
+  /**
+   * Get the saved query for a specific connection
+   */
+  static async getConnectionQuery(connectionId: string): Promise<string> {
+    const db = await loadDatabaseFile();
+    return db.queries?.[`connection:${connectionId}`] ?? '';
+  }
+
+  /**
+   * Execute a query directly using a connection (not project-based)
+   */
+  static async executeQueryForConnection({
+    connectionId,
+    query,
+    queryId,
+  }: {
+    connectionId: string;
+    query: string;
+    queryId?: string;
+  }): Promise<QueryResponseType> {
+    const conn = await this.getConnectionById(connectionId);
+
+    if (!conn) {
+      throw new Error(`Connection with id ${connectionId} not found`);
+    }
+
+    const { connection } = conn;
+
+    // Get credentials from secure storage
+    const storeUser = await SecureStorageService.getCredential(
+      `db-user-${connection.name}`,
+    );
+    const storePassword = await SecureStorageService.getCredential(
+      `db-password-${connection.name}`,
+    );
+
+    if (storeUser) {
+      (connection as any).username = storeUser;
+    }
+    if (storePassword) {
+      (connection as any).password = storePassword;
+    }
+
+    const storeToken = await SecureStorageService.getCredential(
+      `db-token-${connection.name}`,
+    );
+    if (storeToken) {
+      (connection as any).token = storeToken;
+    }
+
+    const bigQueryKey = await SecureStorageService.getCredential(
+      `db-bigquery-${connection.name}`,
+    );
+    if (bigQueryKey) {
+      (connection as any).keyfile = bigQueryKey;
+    }
+
+    // Use a dummy project name for credential lookup (use connection name)
+    return this.executeSelectStatement({
+      connection,
+      query,
+      projectName: connection.name,
+      queryId,
+    });
   }
 }

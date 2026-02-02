@@ -20,7 +20,7 @@ export const StyledDrawer = styled(Drawer, {
   '& .MuiDrawer-paper': {
     width: open ? drawerWidth : theme.spacing(7),
     top: 42,
-    // height: 'calc(100% - 42px)',
+    height: 'calc(100% - 42px)',
     overflowX: 'hidden',
     borderRight: 'none',
     transition: theme.transitions.create('width', {
@@ -45,5 +45,5 @@ export const SidebarContent = styled(Box)(({ theme }) => ({
   backgroundColor: theme.palette.background.paper,
   borderLeft: `2px solid ${theme.palette.background.default}`,
   width: '100%',
-  height: 'calc(100vh - 42px)',
+  height: '100%',
 }));

@@ -47,6 +47,11 @@ export default class BigQueryExtractor {
     }
   }
 
+  // eslint-disable-next-line class-methods-use-this
+  async disconnect(): Promise<void> {
+    // BigQuery client doesn't require explicit disconnection
+  }
+
   private async getDatasets(): Promise<string[]> {
     const [datasets] = await this.client.getDatasets();
     return datasets.map((dataset) => dataset.id as string);

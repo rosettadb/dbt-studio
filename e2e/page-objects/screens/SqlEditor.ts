@@ -40,7 +40,8 @@ export class SqlEditorPage extends BasePage {
     this.editorPane = this.getByTestId('sql-editor-pane');
     // Prefer the split editor as it's the primary one, defaulting to first if multiple found
     this.monacoEditor = this.page
-      .locator('[data-testid="sql-editor-split"] .monaco-editor')
+      .locator('[data-testid="sql-editor-pane"] .monaco-editor')
+      .first()
       .or(this.page.locator('.monaco-editor').first());
     // The run button is now an icon in the gutter
     this.runQueryBtn = this.page.locator('.run-query-glyph').first();
@@ -52,6 +53,20 @@ export class SqlEditorPage extends BasePage {
   }
 
   // ==================== Actions ====================
+
+  /**
+   * Select a connection from the dropdown
+   */
+  async selectConnection(name: string): Promise<void> {
+    const select = this.page.locator('[data-testid="sql-connection-select"]');
+    await select.click();
+    // In MUI, the menu items are in a portal, so we find them in the body
+    const option = this.page
+      .locator('.MuiMenuItem-root')
+      .filter({ hasText: name })
+      .first();
+    await option.click();
+  }
 
   /**
    * Type a query into the Monaco editor

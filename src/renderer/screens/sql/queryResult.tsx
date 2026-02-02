@@ -86,6 +86,7 @@ export const QueryResult: React.FC<Props> = ({ results }) => {
     <div data-testid="sql-results-pane">
       <CustomTable<Record<string, any>>
         id="query-result"
+        dataTestId="sql-results-table"
         name=""
         toolbarContent={
           results.duration !== undefined ? (

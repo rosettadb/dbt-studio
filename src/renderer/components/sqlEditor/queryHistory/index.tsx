@@ -49,7 +49,8 @@ const formatQueryPreview = (query: string, maxLength: number = 30) => {
 type Props = {
   onQuerySelect: (value: QueryHistoryType) => void;
   queryHistory: QueryHistoryType[];
-  projectId: string;
+  projectId?: string;
+  connectionId?: string;
 };
 
 type ToolbarProps = {
@@ -296,6 +297,7 @@ const QueryHistory: React.FC<Props> = ({
   queryHistory,
   onQuerySelect,
   projectId,
+  connectionId,
 }) => {
   const [anchorEl, setAnchorEl] = React.useState<null | HTMLElement>(null);
   const [selectedQueryHistory, setSelectedQueryHistory] =
@@ -303,14 +305,20 @@ const QueryHistory: React.FC<Props> = ({
   const theme = useTheme();
   const isDarkMode = theme.palette.mode === 'dark';
 
+  // Filter by connectionId if provided, otherwise by projectId
   const sortedHistory: QueryHistoryType[] = React.useMemo(() => {
     return queryHistory
-      .filter((qh) => qh.projectId === projectId)
+      .filter((qh) => {
+        if (connectionId) {
+          return qh.connectionId === connectionId;
+        }
+        return qh.projectId === projectId;
+      })
       .sort(
         (a, b) =>
           new Date(b.executedAt).getTime() - new Date(a.executedAt).getTime(),
       );
-  }, [queryHistory]);
+  }, [queryHistory, connectionId, projectId]);
 
   const open = Boolean(anchorEl);
   const handleClick = (event: React.MouseEvent<HTMLElement>) => {
@@ -365,7 +373,17 @@ const QueryHistory: React.FC<Props> = ({
                 </div>
               </div>
               <div style={{ marginBottom: 6 }}>
-                Project: <u>{selectedQueryHistory.projectName}</u>
+                {selectedQueryHistory.connectionName && (
+                  <>
+                    Connection: <u>{selectedQueryHistory.connectionName}</u>
+                  </>
+                )}
+                {!selectedQueryHistory.connectionName &&
+                  selectedQueryHistory.projectName && (
+                    <>
+                      Project: <u>{selectedQueryHistory.projectName}</u>
+                    </>
+                  )}
               </div>
             </div>
             <AceEditor
@@ -424,6 +442,11 @@ const QueryHistory: React.FC<Props> = ({
         </DialogActions>
       </Dialog>
     );
+  }
+
+  // Don't render if no history for this filter
+  if (sortedHistory.length === 0) {
+    return null;
   }
 
   return (

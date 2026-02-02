@@ -38,4 +38,5 @@ export type CustomTableType<T> = {
   rowActions?: Array<TableRowAction<T>>;
   containerStyle?: CSSProperties;
   toolbarContent?: ReactNode;
+  dataTestId?: string;
 };

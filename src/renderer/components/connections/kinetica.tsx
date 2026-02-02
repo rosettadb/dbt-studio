@@ -3,15 +3,18 @@ import { useNavigate } from 'react-router-dom';
 import {
   Box,
   Button,
+  IconButton,
+  InputAdornment,
   TextField,
   useTheme,
   CircularProgress,
-  IconButton,
-  InputAdornment,
+  FormControlLabel,
+  Checkbox,
+  Tooltip,
 } from '@mui/material';
-import { Visibility, VisibilityOff } from '@mui/icons-material';
+import { Visibility, VisibilityOff, HelpOutline } from '@mui/icons-material';
 import { toast } from 'react-toastify';
-import { ConnectionModel, SnowflakeConnection } from '../../../types/backend';
+import { ConnectionModel, KineticaConnection } from '../../../types/backend';
 import connectionIcons from '../../../../assets/connectionIcons';
 import {
   useConfigureConnection,
@@ -29,13 +32,13 @@ type Props = {
   projectId?: string;
 };
 
-export const Snowflake: React.FC<Props> = ({
+export const Kinetica: React.FC<Props> = ({
   onCancel,
   connection,
   projectId,
 }) => {
-  const navigate = useNavigate();
   const theme = useTheme();
+  const navigate = useNavigate();
   const {
     getDatabaseUsername,
     getDatabasePassword,
@@ -44,28 +47,62 @@ export const Snowflake: React.FC<Props> = ({
   } = useSecureStorage();
 
   const existingConnection = React.useMemo(
-    () => connection?.connection as SnowflakeConnection,
+    () => connection?.connection as KineticaConnection,
     [connection],
   );
 
-  const [connectionStatus, setConnectionStatus] = React.useState<
-    'idle' | 'success' | 'failed'
-  >('idle');
-  const [showPassword, setShowPassword] = React.useState(false);
-  const [nameTouched, setNameTouched] = React.useState(false);
-
-  const [formState, setFormState] = React.useState<SnowflakeConnection>({
-    type: 'snowflake',
-    name: existingConnection?.name || 'Snowflake Connection',
-    account: existingConnection?.account ?? '',
-    warehouse: existingConnection?.warehouse ?? '',
-    database: existingConnection?.database ?? '',
+  const [formState, setFormState] = React.useState<KineticaConnection>({
+    type: 'kinetica',
+    name: existingConnection?.name ?? '',
+    host: existingConnection?.host ?? '',
+    port: existingConnection?.port ?? 9191,
+    database: existingConnection?.database ?? 'public', // Default schema/db concept can be vague in Kinetica/GPUdb but 'public' is safe placeholder or user input
     schema: existingConnection?.schema ?? '',
     username: '',
     password: '',
-    role: 'SYSADMIN',
+    useSSL: existingConnection?.useSSL ?? false,
+    bypassSslCertCheck: existingConnection?.bypassSslCertCheck ?? false,
+    timeout: existingConnection?.timeout ?? 30000,
   });
 
+  const [showPassword, setShowPassword] = React.useState(false);
+  const [connectionStatus, setConnectionStatus] = React.useState<
+    'idle' | 'success' | 'failed'
+  >('idle');
+  const [nameTouched, setNameTouched] = React.useState(false);
+
+  // Get existing connections for validation
+  const { data: existingConnections = [] } = useGetConnections();
+  const { validateName } = useConnectionNameValidation(
+    existingConnections,
+    connection?.id,
+  );
+  const nameValidation = validateName(formState.name);
+
+  const { mutate: updateConnection, isLoading: isUpdating } =
+    useUpdateConnection({
+      onSuccess: () => {
+        toast.success('Kinetica connection updated successfully!');
+      },
+      onError: (error) => {
+        toast.error(`Update failed: ${error}`);
+      },
+    });
+
+  const { mutate: configureConnection, isLoading: isConfiguring } =
+    useConfigureConnection({
+      onSuccess: () => {
+        toast.success('Kinetica connection created successfully!');
+        if (projectId) {
+          navigate('/app');
+          return;
+        }
+        navigate('/app/connections');
+      },
+      onError: (error) => {
+        toast.error(`Configuration failed: ${error}`);
+      },
+    });
   const { mutate: testConnection, isLoading: isTesting } = useTestConnection({
     onSuccess: (success) => {
       if (success) {
@@ -82,42 +119,14 @@ export const Snowflake: React.FC<Props> = ({
     },
   });
 
-  const { mutate: configureConnection, isLoading: isConfiguring } =
-    useConfigureConnection({
-      onSuccess: () => {
-        toast.success('Snowflake connection configured successfully!');
-        if (projectId) {
-          navigate('/app');
-          return;
-        }
-        navigate('/app/connections');
-      },
-      onError: (error) => {
-        toast.error(`Configuration failed: ${error}`);
-      },
-    });
-
-  const { mutate: updateConnection, isLoading: isUpdating } =
-    useUpdateConnection({
-      onSuccess: () => {
-        toast.success('Snowflake connection updated successfully!');
-      },
-      onError: (error) => {
-        toast.error(`Configuration failed: ${error}`);
-      },
-    });
-
-  // Get existing connections for name validation
-  const { data: connections = [] } = useGetConnections();
-  const { validateName } = useConnectionNameValidation(
-    connections,
-    connection?.id,
-  );
-
   React.useEffect(() => {
     const fetchCredentials = async () => {
-      const storedUsername = await getDatabaseUsername(existingConnection.name);
-      const storedPassword = await getDatabasePassword(existingConnection.name);
+      const storedUsername = await getDatabaseUsername(
+        existingConnection?.name,
+      );
+      const storedPassword = await getDatabasePassword(
+        existingConnection?.name,
+      );
       setFormState((prev) => ({
         ...prev,
         username: storedUsername || '',
@@ -130,20 +139,47 @@ export const Snowflake: React.FC<Props> = ({
   }, [existingConnection]);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const { name, value } = e.target;
-    setFormState((prev) => ({ ...prev, [name]: value }));
+    const { name, value, checked, type } = e.target;
 
-    // Reset connection status whenever an input changes
+    // Update form state
+    setFormState((prev) => {
+      let newValue: string | number | boolean = value;
+      let newPort = prev.port;
+
+      if (type === 'checkbox') {
+        newValue = checked;
+        if (name === 'useSSL') {
+          // Auto-switch port if it's currently at the default of the other protocol
+          if (checked && prev.port === 9191) {
+            newPort = 443;
+          } else if (!checked && prev.port === 443) {
+            newPort = 9191;
+          }
+        }
+      } else if (name === 'port') {
+        newValue = Number(value);
+        newPort = Number(value);
+      } else if (name === 'timeout') {
+        newValue = Number(value);
+      }
+
+      return {
+        ...prev,
+        [name]: newValue,
+        port: newPort,
+      };
+    });
+
     setConnectionStatus('idle');
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    // Validate connection name before submitting
-    const nameValidation = validateName(formState.name);
+    // Validate connection name before submission
     if (!nameValidation.isValid) {
       toast.error(nameValidation.message || 'Invalid connection name');
+      setNameTouched(true);
       return;
     }
 
@@ -159,7 +195,6 @@ export const Snowflake: React.FC<Props> = ({
       });
       return;
     }
-
     configureConnection({
       projectId,
       connection: formState,
@@ -182,8 +217,12 @@ export const Snowflake: React.FC<Props> = ({
     }
   };
 
-  // Get real-time validation result for name field
-  const nameValidation = validateName(formState.name);
+  const getButtonStartIcon = () => {
+    if (isTesting) {
+      return <CircularProgress size={20} color="inherit" sx={{ mr: 1 }} />;
+    }
+    return null;
+  };
 
   return (
     <Box
@@ -196,13 +235,12 @@ export const Snowflake: React.FC<Props> = ({
       }}
     >
       <ConnectionHeader
-        title="Snowflake Connection"
-        imageSource={connectionIcons.images.snowflake}
+        title="Kinetica Connection"
+        imageSource={connectionIcons.images.kinetica}
         onClose={onCancel}
         onSave={handleSubmit}
         isLoading={isUpdating || isConfiguring}
       />
-
       <Box
         component="form"
         onSubmit={handleSubmit}
@@ -226,54 +264,53 @@ export const Snowflake: React.FC<Props> = ({
           required
           error={nameTouched && !nameValidation.isValid}
           helperText={
-            nameTouched && !nameValidation.isValid ? nameValidation.message : ''
+            nameTouched && !nameValidation.isValid
+              ? nameValidation.message
+              : 'Enter a unique name for this connection'
           }
         />
 
         <TextField
-          label="Account Identifier"
-          name="account"
-          value={formState.account}
+          label="Host / URL"
+          name="host"
+          value={formState?.host}
           onChange={handleChange}
           fullWidth
           required
-          placeholder="xy12345.us-east-2.aws"
+          placeholder="e.g. 192.168.1.100 or my-kinetica.com/cluster.../gpudb-0"
+          helperText="For Kinetica Cloud, include the full path (e.g. /clusterXXXX/gpudb-0)"
         />
 
         <TextField
-          label="Warehouse"
-          name="warehouse"
-          value={formState.warehouse}
+          label="Port"
+          name="port"
+          type="number"
+          value={formState?.port}
           onChange={handleChange}
           fullWidth
           required
+          placeholder="Default: 9191 (HTTP), 8082 (HTTPS), or 443 (Cloud)"
         />
 
-        <TextField
-          label="Role"
-          name="role"
-          value={formState.role}
-          onChange={handleChange}
-          fullWidth
-        />
+        <Box sx={{ display: 'flex', gap: 2 }}>
+          <TextField
+            label="Database (Optional)"
+            name="database"
+            value={formState.database}
+            onChange={handleChange}
+            fullWidth
+            placeholder="Default system database"
+          />
 
-        <TextField
-          label="Database"
-          name="database"
-          value={formState.database}
-          onChange={handleChange}
-          fullWidth
-          required
-        />
-
-        <TextField
-          label="Schema"
-          name="schema"
-          value={formState.schema}
-          onChange={handleChange}
-          fullWidth
-          required
-        />
+          <TextField
+            label="Schema (Optional)"
+            name="schema"
+            value={formState.schema}
+            onChange={handleChange}
+            fullWidth
+            placeholder="Default user schema"
+          />
+        </Box>
 
         <TextField
           label="Username"
@@ -281,6 +318,7 @@ export const Snowflake: React.FC<Props> = ({
           value={formState.username}
           onChange={handleChange}
           fullWidth
+          required
         />
 
         <TextField
@@ -290,6 +328,7 @@ export const Snowflake: React.FC<Props> = ({
           value={formState.password}
           onChange={handleChange}
           fullWidth
+          required
           slotProps={{
             input: {
               endAdornment: (
@@ -306,6 +345,50 @@ export const Snowflake: React.FC<Props> = ({
             },
           }}
         />
+
+        <Box
+          sx={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 2,
+            flexWrap: 'wrap',
+          }}
+        >
+          <FormControlLabel
+            control={
+              <Checkbox
+                checked={formState.useSSL}
+                onChange={handleChange}
+                name="useSSL"
+                color="primary"
+              />
+            }
+            label={
+              <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                Use SSL (HTTPS)
+                <Tooltip title="Enable if your Kinetica instance is running on HTTPS (usually port 8082)">
+                  <HelpOutline
+                    sx={{ fontSize: 16, ml: 0.5, color: 'text.secondary' }}
+                  />
+                </Tooltip>
+              </Box>
+            }
+          />
+
+          {formState.useSSL && (
+            <FormControlLabel
+              control={
+                <Checkbox
+                  checked={formState.bypassSslCertCheck}
+                  onChange={handleChange}
+                  name="bypassSslCertCheck"
+                  color="warning"
+                />
+              }
+              label="Bypass SSL Cert Check"
+            />
+          )}
+        </Box>
 
         <Box
           sx={{
@@ -326,11 +409,7 @@ export const Snowflake: React.FC<Props> = ({
               paddingRight: '32px',
               minWidth: '150px',
             }}
-            startIcon={
-              isTesting ? (
-                <CircularProgress size={20} color="inherit" sx={{ mr: 1 }} />
-              ) : null
-            }
+            startIcon={getButtonStartIcon()}
           >
             {isTesting ? 'Testing...' : 'Test Connection'}
             <Box

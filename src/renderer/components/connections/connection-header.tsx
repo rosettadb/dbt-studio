@@ -1,5 +1,11 @@
 import React from 'react';
-import { Box, Button, Divider, Typography } from '@mui/material';
+import {
+  Box,
+  Button,
+  CircularProgress,
+  Divider,
+  Typography,
+} from '@mui/material';
 import { Save, Close } from '@mui/icons-material';
 
 interface Props {
@@ -7,9 +13,16 @@ interface Props {
   imageSource: string;
   onClose: () => void;
   onSave: (e: React.FormEvent) => void;
+  isLoading?: boolean;
 }
 
-const ConnectionHeader = ({ title, imageSource, onClose, onSave }: Props) => {
+const ConnectionHeader = ({
+  title,
+  imageSource,
+  onClose,
+  onSave,
+  isLoading,
+}: Props) => {
   return (
     <Box
       sx={{
@@ -36,17 +49,25 @@ const ConnectionHeader = ({ title, imageSource, onClose, onSave }: Props) => {
             startIcon={<Close />}
             onClick={onClose}
             size="small"
+            disabled={isLoading}
           >
             Cancel
           </Button>
           <Button
             variant="contained"
             color="primary"
-            startIcon={<Save />}
+            startIcon={
+              isLoading ? (
+                <CircularProgress size={16} color="inherit" />
+              ) : (
+                <Save />
+              )
+            }
             onClick={(e) => onSave(e as React.FormEvent)}
             size="small"
+            disabled={isLoading}
           >
-            Save
+            {isLoading ? 'Saving...' : 'Save'}
           </Button>
         </Box>
       </Box>

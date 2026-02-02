@@ -11,6 +11,7 @@ import {
   CloudDeploymentPayload,
   DatabricksConnection,
   DuckDBConnection,
+  KineticaConnection,
   PostgresConnection,
   Project,
   RedshiftConnection,
@@ -36,6 +37,7 @@ import {
   BigQueryExtractor,
   DatabricksExtractor,
   DuckDBExtractor,
+  KineticaExtractor,
   PGSchemaExtractor,
   RedshiftExtractor,
   SnowflakeExtractor,
@@ -1146,6 +1148,23 @@ export default class ProjectsService {
     return schema.tables;
   }
 
+  static async extractKineticaSchema(connection: KineticaConnection) {
+    const extractor = new KineticaExtractor({
+      host: connection.host,
+      port: connection.port,
+      username: connection.username,
+      password: connection.password,
+      useSSL: connection.useSSL,
+      timeout: connection.timeout,
+      schema: connection.schema,
+    });
+
+    await extractor.connect();
+    const schema = await extractor.extractSchema();
+    await extractor.disconnect();
+    return schema.tables;
+  }
+
   static async extractSchema(project: Project): Promise<Table[]> {
     if (!project.connectionId) {
       throw new Error('No database connection configured for this project');
@@ -1209,6 +1228,8 @@ export default class ProjectsService {
         return this.extractBigQuerySchema(connection as BigQueryConnection);
       case 'duckdb':
         return this.extractDuckDBSchema(connection as DuckDBConnection);
+      case 'kinetica':
+        return this.extractKineticaSchema(connection as KineticaConnection);
       default:
         throw new Error(
           `Unsupported connection type: "${(connection as any).type}"`,

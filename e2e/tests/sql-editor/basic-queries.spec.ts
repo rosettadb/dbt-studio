@@ -61,6 +61,17 @@ test.describe('SQL Editor', () => {
 
     // Navigate to SQL editor
     await nav.navigateTo('sql');
+
+    // Ensure a connection is selected (new UI requires a tab to be open)
+    const sqlEditor = new SqlEditorPage(mainWindow);
+    const isEditorVisible = await sqlEditor.monacoEditor
+      .isVisible({ timeout: 5000 })
+      .catch(() => false);
+
+    if (!isEditorVisible) {
+      await sqlEditor.selectConnection('test_db');
+      await expect(sqlEditor.monacoEditor).toBeVisible({ timeout: 10000 });
+    }
   });
 
   test('should execute a simple query', async ({ electronApp }) => {

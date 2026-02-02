@@ -4,6 +4,7 @@ import SnowflakeExtractor from './snowflake.extractor';
 import BigQueryExtractor from './bigquery.extractor';
 import DuckDBExtractor from './duckdb.extractor';
 import RedshiftExtractor from './redshift.extractor';
+import KineticaExtractor from './kinetica.extractor';
 
 export {
   PGSchemaExtractor,
@@ -12,4 +13,5 @@ export {
   BigQueryExtractor,
   DuckDBExtractor,
   RedshiftExtractor,
+  KineticaExtractor,
 };
