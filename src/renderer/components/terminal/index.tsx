@@ -1,6 +1,7 @@
 import React from 'react';
 import SplitPane from 'split-pane-react';
 import {
+  Button,
   IconButton,
   Typography,
   useColorScheme,
@@ -16,9 +17,7 @@ import {
 import TerminalIcon from '@mui/icons-material/Terminal';
 import {
   CloseRounded,
-  CodeOutlined,
   MinimizeRounded,
-  PauseOutlined,
   MoreVertRounded,
   StopRounded,
   PowerOffRounded,
@@ -36,7 +35,11 @@ import {
 } from './styles';
 import { ProcessTerminal } from './processTerminal';
 import { useProcess } from '../../hooks';
+import { useSelectedFileContext } from '../../hooks/useSelectedFileContext';
 import { Project } from '../../../types/backend';
+import { LineageModal } from '../lineage/LineageModal';
+import { LineageView } from '../lineage/LineageView';
+import { useCurrentModelId } from '../../controllers/lineage.controller';
 
 type Props = {
   project: Project;
@@ -49,6 +52,33 @@ export const TerminalLayout: React.FC<Props> = ({ children, project }) => {
   const { isRunning, stop, forceStop, pid, duration, status, command } =
     useProcess();
 
+  const { selectedFilePath } = useSelectedFileContext();
+
+  // Only query for lineage if the file is a SQL model (not .yml/.yaml)
+  const isExecutableModel = React.useMemo(() => {
+    if (!selectedFilePath) return false;
+    const ext = selectedFilePath.toLowerCase().split('.').pop();
+    return ext === 'sql';
+  }, [selectedFilePath]);
+
+  const {
+    data: currentModelData,
+    isLoading: isLoadingCurrentModel,
+    isError: isErrorCurrentModel,
+  } = useCurrentModelId(
+    {
+      projectId: project.id,
+      filePath: selectedFilePath,
+    },
+    { enabled: !!project.id && !!selectedFilePath && isExecutableModel },
+  );
+
+  const showLineageTab =
+    isExecutableModel &&
+    (Boolean(currentModelData?.modelId) ||
+      isLoadingCurrentModel ||
+      isErrorCurrentModel);
+
   const [selectedTab, setSelectedTab] = React.useState(0);
   const [lock, setLock] = React.useState(false);
   const [sizes, setSizes] = React.useState<number[]>([
@@ -57,7 +87,7 @@ export const TerminalLayout: React.FC<Props> = ({ children, project }) => {
   ]);
   const [isMinimized, setIsMinimized] = React.useState(false);
   const [menuAnchor, setMenuAnchor] = React.useState<null | HTMLElement>(null);
-  const [isStoppingGracefully, setIsStoppingGracefully] = React.useState(false);
+  const [openLineageModal, setOpenLineageModal] = React.useState(false);
   const [hasStartedProcess, setHasStartedProcess] =
     React.useState<boolean>(false);
   const lastTerminalHeight = React.useRef<number>(300);
@@ -86,7 +116,6 @@ export const TerminalLayout: React.FC<Props> = ({ children, project }) => {
   };
 
   const handleGracefulStop = async () => {
-    setIsStoppingGracefully(true);
     handleMenuClose();
     await stop();
     setSelectedTab(0);
@@ -122,24 +151,13 @@ export const TerminalLayout: React.FC<Props> = ({ children, project }) => {
   //   }
   // }, [isRunning]);
 
-  const getBackgroundColor = (
-    themeMode: string | undefined,
-    isSelected: boolean = false,
-  ) => {
-    if (isSelected) {
-      return theme.palette.action.selected;
+  // If Lineage tab is hidden but selected, switch back to terminal
+  // Only auto-switch when the query is settled (not loading)
+  React.useEffect(() => {
+    if (!showLineageTab && selectedTab === 2 && !isLoadingCurrentModel) {
+      setSelectedTab(0);
     }
-    switch (themeMode) {
-      case 'dark':
-        return theme.palette.grey[800];
-      case 'light':
-        return theme.palette.grey[300];
-      case 'system':
-        return theme.palette.background.paper;
-      default:
-        return theme.palette.background.default;
-    }
-  };
+  }, [showLineageTab, selectedTab, isLoadingCurrentModel]);
 
   const getTextColor = (themeMode: string | undefined) => {
     switch (themeMode) {
@@ -153,6 +171,28 @@ export const TerminalLayout: React.FC<Props> = ({ children, project }) => {
         return theme.palette.text.primary;
     }
   };
+
+  const tabButtonSx = (isSelected: boolean) => ({
+    minHeight: 22,
+    height: 22,
+    padding: '0 10px',
+    borderRadius: '4px',
+    marginRight: '6px',
+    backgroundColor: isSelected ? theme.palette.action.selected : 'transparent',
+    transition: 'background-color 0.15s, border-color 0.15s',
+    border: `1px solid ${isSelected ? theme.palette.divider : 'transparent'}`,
+    color: isSelected
+      ? theme.palette.text.primary
+      : theme.palette.text.secondary,
+    textTransform: 'none',
+    letterSpacing: 0.2,
+    '&:hover': {
+      backgroundColor: isSelected
+        ? theme.palette.action.selected
+        : theme.palette.action.hover,
+      borderColor: isSelected ? theme.palette.divider : 'transparent',
+    },
+  });
 
   const formatDuration = (ms: number | null) => {
     if (!ms) return '0s';
@@ -181,21 +221,6 @@ export const TerminalLayout: React.FC<Props> = ({ children, project }) => {
     }
   };
 
-  const getStatusIcon = () => {
-    if (isStoppingGracefully || status === 'stopping') {
-      return (
-        <StopRounded
-          style={{ color: theme.palette.warning.main, fontSize: 20 }}
-        />
-      );
-    }
-    return (
-      <PauseOutlined
-        style={{ color: theme.palette.success.main, fontSize: 20 }}
-      />
-    );
-  };
-
   return (
     <Root>
       <SplitPane
@@ -216,128 +241,133 @@ export const TerminalLayout: React.FC<Props> = ({ children, project }) => {
         <TerminalWrapper>
           {!isMinimized && (
             <>
-              <TerminalHeader>
+              <TerminalHeader
+                sx={{
+                  backgroundColor:
+                    theme.palette.mode === 'dark'
+                      ? theme.palette.grey[900]
+                      : theme.palette.grey[50],
+                  borderBottom: `1px solid ${theme.palette.divider}`,
+                  padding: '4px 6px',
+                  height: 32,
+                }}
+              >
                 {/* CLI Terminal Tab */}
-                <IconButton
-                  style={{
-                    backgroundColor: getBackgroundColor(
-                      mode,
-                      selectedTab === 0,
-                    ),
-                    borderRadius: '8px 8px 0 0',
-                    padding: '6px 32px',
-                    marginRight: '4px',
-                    transition: 'background-color 0.2s',
-                    height: 32,
-                  }}
-                  onClick={() => setSelectedTab(0)}
+                {/* CLI Terminal Tab */}
+                <Button
                   size="small"
+                  disableRipple
+                  sx={tabButtonSx(selectedTab === 0)}
+                  onClick={() => setSelectedTab(0)}
                 >
-                  <CodeOutlined
-                    style={{
-                      color: getTextColor(mode),
-                      fontSize: 20,
-                    }}
-                  />
-                </IconButton>
-
+                  <Typography
+                    sx={{ fontWeight: 500, fontSize: 10.5, lineHeight: 1 }}
+                  >
+                    TERMINAL
+                  </Typography>
+                </Button>
+                {/* Lineage Terminal Tab */}
+                {showLineageTab && (
+                  <Button
+                    size="small"
+                    disableRipple
+                    sx={tabButtonSx(selectedTab === 2)}
+                    onClick={() => setSelectedTab(2)}
+                  >
+                    <Typography
+                      sx={{ fontWeight: 500, fontSize: 10.5, lineHeight: 1 }}
+                    >
+                      LINEAGE
+                    </Typography>
+                  </Button>
+                )}
                 {/* Process Tab - Only show when running */}
                 {hasStartedProcess && (
-                  <Box
-                    component="button"
-                    sx={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      backgroundColor: getBackgroundColor(
-                        mode,
-                        selectedTab === 1,
-                      ),
-                      borderRadius: '8px 8px 0 0',
-                      padding: '6px 8px 6px 16px',
-                      marginRight: '4px',
-                      position: 'relative',
-                      transition: 'background-color 0.2s',
-                      height: 32,
-                      cursor: 'pointer',
-                      border: 'none',
-                      minWidth: 0,
-                      gap: 1,
-                    }}
-                    onClick={() => setSelectedTab(1)}
-                  >
-                    {/* Process Status Icon */}
-                    <IconButton
-                      size="small"
-                      style={{ padding: 0, minWidth: 'auto' }}
-                    >
-                      {getStatusIcon()}
-                    </IconButton>
-
-                    {/* Process Info */}
+                  <Box sx={{ display: 'flex', alignItems: 'center' }}>
                     <Box
+                      component="button"
+                      type="button"
+                      onClick={() => setSelectedTab(1)}
                       sx={{
+                        ...tabButtonSx(selectedTab === 1),
                         display: 'flex',
                         alignItems: 'center',
-                        gap: 0.5,
-                        minWidth: 0,
+                        gap: 0.75,
+                        padding: '0 6px 0 10px',
+                        cursor: 'pointer',
+                        outline: 'none',
                       }}
                     >
-                      {pid && (
-                        <Chip
-                          label={`PID: ${pid}`}
+                      <Typography
+                        sx={{ fontWeight: 500, fontSize: 10.5, lineHeight: 1 }}
+                      >
+                        PID SERVER
+                      </Typography>
+
+                      <Box
+                        sx={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: 0.5,
+                        }}
+                      >
+                        {pid && (
+                          <Chip
+                            label={`PID: ${pid}`}
+                            size="small"
+                            variant="outlined"
+                            sx={{ height: 16, fontSize: '0.6rem' }}
+                          />
+                        )}
+                        {duration && (
+                          <Chip
+                            label={formatDuration(duration)}
+                            size="small"
+                            color={getStatusColor(status)}
+                            sx={{ height: 16, fontSize: '0.6rem' }}
+                          />
+                        )}
+                      </Box>
+
+                      {/* Stop Options Menu */}
+                      <Tooltip title="Stop options">
+                        <IconButton
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleMenuOpen(e);
+                          }}
                           size="small"
-                          variant="outlined"
-                          sx={{ height: 18, fontSize: '0.65rem' }}
-                        />
-                      )}
-                      {duration && (
-                        <Chip
-                          label={formatDuration(duration)}
+                          disabled={status === 'stopping'}
+                          sx={{
+                            padding: 0.25,
+                            color: 'inherit',
+                            minWidth: 'auto',
+                          }}
+                        >
+                          <MoreVertRounded style={{ fontSize: 16 }} />
+                        </IconButton>
+                      </Tooltip>
+
+                      {/* Quick Stop */}
+                      <Tooltip title="Quick stop (Ctrl+C)">
+                        <IconButton
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleQuickStop();
+                            setHasStartedProcess(false);
+                          }}
                           size="small"
-                          color={getStatusColor(status)}
-                          sx={{ height: 18, fontSize: '0.65rem' }}
-                        />
-                      )}
+                          disabled={status === 'stopping'}
+                          sx={{
+                            padding: 0.25,
+                            color: 'inherit',
+                            minWidth: 'auto',
+                          }}
+                        >
+                          <CloseRounded style={{ fontSize: 14 }} />
+                        </IconButton>
+                      </Tooltip>
                     </Box>
-
-                    {/* Stop Options Menu */}
-                    <Tooltip title="Stop options">
-                      <IconButton
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleMenuOpen(e);
-                        }}
-                        size="small"
-                        disabled={status === 'stopping'}
-                        sx={{
-                          padding: 0.5,
-                          color: getTextColor(mode),
-                          minWidth: 'auto',
-                        }}
-                      >
-                        <MoreVertRounded style={{ fontSize: 16 }} />
-                      </IconButton>
-                    </Tooltip>
-
-                    {/* Quick Stop */}
-                    <Tooltip title="Quick stop (Ctrl+C)">
-                      <IconButton
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleQuickStop();
-                          setHasStartedProcess(false);
-                        }}
-                        size="small"
-                        disabled={status === 'stopping'}
-                        sx={{
-                          padding: 0.5,
-                          color: getTextColor(mode),
-                          minWidth: 'auto',
-                        }}
-                      >
-                        <CloseRounded style={{ fontSize: 14 }} />
-                      </IconButton>
-                    </Tooltip>
                   </Box>
                 )}
                 {/* Minimize Button */}
@@ -359,6 +389,13 @@ export const TerminalLayout: React.FC<Props> = ({ children, project }) => {
               {/* Tab Content */}
               {selectedTab === 0 && <Terminal project={project} />}
               {selectedTab === 1 && <ProcessTerminal />}
+              {selectedTab === 2 && showLineageTab && (
+                <LineageView
+                  projectId={project.id}
+                  filePath={selectedFilePath}
+                  onExpandClick={() => setOpenLineageModal(true)}
+                />
+              )}
             </>
           )}
         </TerminalWrapper>
@@ -445,6 +482,12 @@ export const TerminalLayout: React.FC<Props> = ({ children, project }) => {
           </MenuItem>
         )}
       </Menu>
+      <LineageModal
+        isOpen={openLineageModal}
+        onClose={() => setOpenLineageModal(false)}
+        projectId={project.id}
+        filePath={selectedFilePath}
+      />
     </Root>
   );
 };

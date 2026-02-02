@@ -9,7 +9,7 @@ export const TerminalContainer = styled('form')(({ theme }) => ({
       : theme.palette.grey[50],
   color: theme.palette.text.primary,
   fontFamily: 'monospace',
-  padding: theme.spacing(2),
+  padding: theme.spacing(1),
   height: '100%',
   width: '100%',
   overflow: 'hidden',
@@ -24,7 +24,7 @@ export const OutputBox = styled(Box)(({ theme }) => ({
       ? theme.palette.grey[900]
       : theme.palette.grey[50],
   paddingRight: theme.spacing(1),
-  marginBottom: theme.spacing(1),
+  marginBottom: 0,
   whiteSpace: 'pre-wrap',
   fontFamily: 'monospace',
 }));
@@ -32,7 +32,7 @@ export const OutputBox = styled(Box)(({ theme }) => ({
 export const StyledInput = styled(InputBase)(({ theme }) => ({
   color: theme.palette.text.primary,
   fontFamily: 'monospace',
-  fontSize: 14,
+  fontSize: 12,
   backgroundColor: 'transparent',
   flex: 1,
   '& input': {
@@ -45,7 +45,7 @@ export const InputLine = styled('div')(({ theme }) => ({
   display: 'flex',
   alignItems: 'center',
   gap: '8px',
-  padding: `${theme.spacing(1)} 0`,
+  padding: `${theme.spacing(0.5)} 0`,
 }));
 
 export const Root = styled(Box)(() => ({

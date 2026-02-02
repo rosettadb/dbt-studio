@@ -20,7 +20,8 @@ export type SettingsChannels =
   | 'settings:duckdb:metadata'
   | 'settings:duckdb:refresh'
   | 'settings:duckdb:reinitialize'
-  | 'settings:duckdb:diagnose';
+  | 'settings:duckdb:diagnose'
+  | 'settings:installSqlGlot';
 
 export type ProjectChannels =
   | 'project:get'
@@ -285,6 +286,14 @@ export type DuckLakeChannels =
   | 'ducklake:connection:create'
   | 'ducklake:connection:test';
 
+export type LineageChannels =
+  | 'lineage:getUpstream'
+  | 'lineage:getDownstream'
+  | 'lineage:getFullLineage'
+  | 'lineage:getModelMetadata'
+  | 'lineage:getCurrentModelId'
+  | 'lineage:getColumnLineage';
+
 export type Channels =
   | TestChannels
   | CliChannels
@@ -299,7 +308,8 @@ export type Channels =
   | CloudExplorerChannels
   | SourcesChannels
   | AIChannels
-  | DuckLakeChannels;
+  | DuckLakeChannels
+  | LineageChannels;
 
 export type ConfigureConnectionBody = {
   projectId?: string;
