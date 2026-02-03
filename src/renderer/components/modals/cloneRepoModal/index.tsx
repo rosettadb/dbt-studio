@@ -1,5 +1,12 @@
 import React from 'react';
-import { Button, TextField, Box } from '@mui/material';
+import {
+  Button,
+  TextField,
+  Box,
+  FormControlLabel,
+  Checkbox,
+  Tooltip,
+} from '@mui/material';
 import { toast } from 'react-toastify';
 import { useNavigate } from 'react-router-dom';
 import GitIcon from '@mui/icons-material/Source';
@@ -21,6 +28,7 @@ export const CloneRepoModal: React.FC<Props> = ({
   const navigate = useNavigate();
   const [url, setUrl] = React.useState('');
   const [loading, setLoading] = React.useState(false);
+  const [removeGit, setRemoveGit] = React.useState(false);
   return (
     <Modal isOpen={isOpen} onClose={onClose} title="Clone Repo">
       <StyledForm
@@ -29,7 +37,7 @@ export const CloneRepoModal: React.FC<Props> = ({
           setLoading(true);
           try {
             const { error, authRequired, path, name, connectionId } =
-              await gitServices.gitClone(url);
+              await gitServices.gitClone(url, undefined, removeGit);
 
             if (error) {
               toast.error(error);
@@ -74,6 +82,21 @@ export const CloneRepoModal: React.FC<Props> = ({
             autoFocus
             disabled={loading}
           />
+          <Tooltip
+            title="Check this if you're cloning an external repository that you want to make your own. This removes the original .git history so you can initialize your own repository."
+            placement="top"
+          >
+            <FormControlLabel
+              control={
+                <Checkbox
+                  checked={removeGit}
+                  onChange={(e) => setRemoveGit(e.target.checked)}
+                  disabled={loading}
+                />
+              }
+              label="Remove .git directory (for external repos)"
+            />
+          </Tooltip>
           <Box sx={{ display: 'flex', justifyContent: 'flex-end' }}>
             <Button
               type="submit"
