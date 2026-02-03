@@ -33,6 +33,7 @@ describe('renderer/services/git.service', () => {
       expect(client.post).toHaveBeenCalledWith('git:clone', {
         url: 'https://github.com/org/repo.git',
         credentials: undefined,
+        removeGit: undefined,
       });
       expect(result).toEqual(response);
     });
@@ -44,7 +45,10 @@ describe('renderer/services/git.service', () => {
 
       const result = await isInitialized('/tmp/repo');
 
-      expect(client.post).toHaveBeenCalledWith('git:isInitialized', '/tmp/repo');
+      expect(client.post).toHaveBeenCalledWith(
+        'git:isInitialized',
+        '/tmp/repo',
+      );
       expect(result).toBe(true);
     });
   });
