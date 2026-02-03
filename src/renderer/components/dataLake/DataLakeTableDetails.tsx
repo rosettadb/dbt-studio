@@ -34,6 +34,7 @@ import {
   InputLabel,
   Select,
   Stack,
+  Autocomplete,
 } from '@mui/material';
 import {
   ArrowBack,
@@ -74,6 +75,7 @@ import {
   DuckLakeTag,
   DuckLakeColumnTag,
 } from '../../../types/duckLake';
+import { DUCKLAKE_SUPPORTED_COLUMN_TYPES } from '../../config/ducklake';
 
 interface TabPanelProps {
   children?: React.ReactNode;
@@ -806,13 +808,24 @@ export const DataLakeTableDetails: React.FC = () => {
                   disabled={addColumnMutation.isLoading}
                   autoFocus
                 />
-                <TextField
-                  fullWidth
-                  label="Column type"
+                <Autocomplete
+                  freeSolo
+                  options={DUCKLAKE_SUPPORTED_COLUMN_TYPES}
                   value={newColumnType}
-                  onChange={(e) => setNewColumnType(e.target.value)}
-                  sx={{ mb: 2 }}
+                  onInputChange={(_event, newValue) =>
+                    setNewColumnType(newValue)
+                  }
                   disabled={addColumnMutation.isLoading}
+                  renderInput={(params) => (
+                    <TextField
+                      // eslint-disable-next-line react/jsx-props-no-spreading
+                      {...params}
+                      label="Column type"
+                      fullWidth
+                      sx={{ mb: 1 }}
+                      helperText="For nested types: INT[], LIST(INT), STRUCT(a INT, b VARCHAR), MAP(Key, Value)"
+                    />
+                  )}
                 />
                 <TextField
                   fullWidth
@@ -952,13 +965,24 @@ export const DataLakeTableDetails: React.FC = () => {
                   Changing type for{' '}
                   <strong>{columnToAlterType?.columnName}</strong>
                 </Typography>
-                <TextField
-                  fullWidth
-                  label="New type"
+                <Autocomplete
+                  freeSolo
+                  options={DUCKLAKE_SUPPORTED_COLUMN_TYPES}
                   value={alterTypeNewType}
-                  onChange={(e) => setAlterTypeNewType(e.target.value)}
+                  onInputChange={(_event, newValue) =>
+                    setAlterTypeNewType(newValue)
+                  }
                   disabled={alterColumnTypeMutation.isLoading}
-                  autoFocus
+                  renderInput={(params) => (
+                    <TextField
+                      // eslint-disable-next-line react/jsx-props-no-spreading
+                      {...params}
+                      label="New type"
+                      fullWidth
+                      autoFocus
+                      helperText="For nested types: INT[], LIST(INT), STRUCT(a INT), MAP(K,V)"
+                    />
+                  )}
                 />
               </DialogContent>
               <DialogActions>
