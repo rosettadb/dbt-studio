@@ -696,7 +696,11 @@ export default class GitService {
     }
   }
 
-  async cloneRepo(remoteUrl: string, credentials?: GitCredentials) {
+  async cloneRepo(
+    remoteUrl: string,
+    credentials?: GitCredentials,
+    removeGit: boolean = false,
+  ) {
     const basePath = (await SettingsService.loadSettings()).projectsDirectory;
 
     if (!basePath) {
@@ -715,6 +719,22 @@ export default class GitService {
       }
 
       await git.clone(urlToUse, destinationPath);
+
+      // Remove .git directory if requested (for external repos that users want to make their own)
+      if (removeGit) {
+        const gitDirPath = path.join(destinationPath, '.git');
+        try {
+          if (fs.existsSync(gitDirPath)) {
+            await fs.promises.rm(gitDirPath, { recursive: true, force: true });
+            // eslint-disable-next-line no-console
+            console.log('Removed .git directory from cloned repository');
+          }
+        } catch (removeError) {
+          // eslint-disable-next-line no-console
+          console.error('Failed to remove .git directory:', removeError);
+          // Don't throw - this is not critical, continue with project setup
+        }
+      }
 
       const dbtProjectPath = await this.findDbtProjectPath(destinationPath);
       const projectPath = dbtProjectPath || destinationPath;

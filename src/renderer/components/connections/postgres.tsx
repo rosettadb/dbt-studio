@@ -8,6 +8,8 @@ import {
   TextField,
   useTheme,
   CircularProgress,
+  FormControlLabel,
+  Checkbox,
 } from '@mui/material';
 import { Visibility, VisibilityOff } from '@mui/icons-material';
 import { toast } from 'react-toastify';
@@ -57,10 +59,10 @@ export const Postgres: React.FC<Props> = ({
     schema: existingConnection?.schema ?? 'public',
     username: '',
     password: '',
+    ssl: existingConnection?.ssl ?? false,
   });
 
   const [showPassword, setShowPassword] = React.useState(false);
-  const [isTesting, setIsTesting] = React.useState(false);
   const [connectionStatus, setConnectionStatus] = React.useState<
     'idle' | 'success' | 'failed'
   >('idle');
@@ -74,34 +76,31 @@ export const Postgres: React.FC<Props> = ({
   );
   const nameValidation = validateName(formState.name);
 
-  const { mutate: updateConnection } = useUpdateConnection({
-    onSuccess: () => {
-      toast.success('PostgreSQL connection updated successfully!');
-    },
-    onError: (error) => {
-      toast.error(`Update failed: ${error}`);
-    },
-  });
+  const { mutate: updateConnection, isLoading: isUpdating } =
+    useUpdateConnection({
+      onSuccess: () => {
+        toast.success('PostgreSQL connection updated successfully!');
+      },
+      onError: (error) => {
+        toast.error(`Update failed: ${error}`);
+      },
+    });
 
-  const { mutate: configureConnection } = useConfigureConnection({
-    onSuccess: () => {
-      toast.success('PostgreSQL connection created successfully!');
-      if (projectId) {
-        navigate('/app');
-        return;
-      }
-      navigate('/app/connections');
-    },
-    onError: (error) => {
-      toast.error(`Configuration failed: ${error}`);
-    },
-  });
-  const { mutate: testConnection } = useTestConnection({
-    onMutate: () => {
-      setIsTesting(true);
-      setConnectionStatus('idle');
-    },
-    onSettled: () => setIsTesting(false),
+  const { mutate: configureConnection, isLoading: isConfiguring } =
+    useConfigureConnection({
+      onSuccess: () => {
+        toast.success('PostgreSQL connection created successfully!');
+        if (projectId) {
+          navigate('/app');
+          return;
+        }
+        navigate('/app/connections');
+      },
+      onError: (error) => {
+        toast.error(`Configuration failed: ${error}`);
+      },
+    });
+  const { mutate: testConnection, isLoading: isTesting } = useTestConnection({
     onSuccess: (success) => {
       if (success) {
         toast.success('Connection test successful!');
@@ -132,13 +131,24 @@ export const Postgres: React.FC<Props> = ({
     }
   }, [existingConnection]);
 
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const { name, value } = e.target;
+  const handleChange = (
+    e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>,
+  ) => {
+    const { name, value, type } = e.target as HTMLInputElement;
+    const { checked } = e.target as HTMLInputElement;
+
+    let finalValue: string | number | boolean = value;
+
+    if (type === 'checkbox') {
+      finalValue = checked;
+    } else if (name === 'port') {
+      finalValue = Number(value);
+    }
 
     // Update form state
     setFormState((prev) => ({
       ...prev,
-      [name]: name === 'port' ? Number(value) : value,
+      [name]: finalValue,
     }));
 
     setConnectionStatus('idle');
@@ -173,6 +183,7 @@ export const Postgres: React.FC<Props> = ({
   };
 
   const handleTest = () => {
+    setConnectionStatus('idle');
     testConnection(formState);
   };
 
@@ -211,6 +222,7 @@ export const Postgres: React.FC<Props> = ({
         imageSource={connectionIcons.images.postgres}
         onClose={onCancel}
         onSave={handleSubmit}
+        isLoading={isUpdating || isConfiguring}
       />
       <Box
         component="form"
@@ -308,6 +320,17 @@ export const Postgres: React.FC<Props> = ({
               ),
             },
           }}
+        />
+
+        <FormControlLabel
+          control={
+            <Checkbox
+              name="ssl"
+              checked={formState.ssl || false}
+              onChange={handleChange}
+            />
+          }
+          label="Enable SSL/TLS (Recommended for production)"
         />
 
         <Box

@@ -13,6 +13,7 @@ import {
   registerAIHandlers,
   registerRosettaCloudIpcHandlers,
   registerDuckLakeHandlers,
+  registerLineageHandlers,
 } from './ipcHandlers';
 
 const registerHandlers = (mainWindow: BrowserWindow) => {
@@ -29,6 +30,7 @@ const registerHandlers = (mainWindow: BrowserWindow) => {
   registerAIHandlers();
   registerRosettaCloudIpcHandlers();
   registerDuckLakeHandlers();
+  registerLineageHandlers();
 };
 
 export default registerHandlers;

@@ -13,7 +13,12 @@ import {
   CheckBox as BooleanIcon,
   QuestionMark as UnknownTypeIcon,
 } from '@mui/icons-material';
-import { StyledTreeItem, StyledLabel, DatabaseIcon } from './styles';
+import {
+  StyledTreeItem,
+  StyledLabel,
+  StyledColumnLabel,
+  DatabaseIcon,
+} from './styles';
 import { ItemProps } from '../../../types/frontend';
 import { OverflowTip } from '../overflowTip';
 
@@ -23,12 +28,12 @@ const getColumnIcon = (
   foreignKey?: boolean,
 ) => {
   if (primaryKey)
-    return <KeyIcon sx={{ color: '#f4b350', width: 18, height: 18 }} />;
+    return <KeyIcon sx={{ color: '#f4b350', width: 14, height: 14 }} />;
   if (foreignKey)
-    return <LinkIcon sx={{ color: '#f4b350', width: 18, height: 18 }} />;
+    return <LinkIcon sx={{ color: '#f4b350', width: 14, height: 14 }} />;
 
   if (!typeName)
-    return <UnknownTypeIcon sx={{ color: '#5f89f4', width: 18, height: 18 }} />;
+    return <UnknownTypeIcon sx={{ color: '#5f89f4', width: 14, height: 14 }} />;
 
   const lowerType = typeName.toLowerCase();
 
@@ -37,47 +42,47 @@ const getColumnIcon = (
     lowerType.includes('serial') ||
     lowerType.includes('number')
   ) {
-    return <LooksOneIcon sx={{ color: '#5f89f4', width: 18, height: 18 }} />;
+    return <LooksOneIcon sx={{ color: '#5f89f4', width: 14, height: 14 }} />;
   }
   if (
     lowerType.includes('char') ||
     lowerType.includes('text') ||
     lowerType.includes('string')
   ) {
-    return <TagIcon sx={{ color: '#5f89f4', width: 18, height: 18 }} />;
+    return <TagIcon sx={{ color: '#5f89f4', width: 14, height: 14 }} />;
   }
   if (lowerType.includes('bool')) {
-    return <BooleanIcon sx={{ color: '#5f89f4', width: 18, height: 18 }} />;
+    return <BooleanIcon sx={{ color: '#5f89f4', width: 14, height: 14 }} />;
   }
   if (lowerType.includes('date') || lowerType.includes('time')) {
-    return <CalendarIcon sx={{ color: '#5f89f4', width: 18, height: 18 }} />;
+    return <CalendarIcon sx={{ color: '#5f89f4', width: 14, height: 14 }} />;
   }
   if (lowerType.includes('json') || lowerType.includes('xml')) {
-    return <CodeIcon sx={{ color: '#5f89f4', width: 18, height: 18 }} />;
+    return <CodeIcon sx={{ color: '#5f89f4', width: 14, height: 14 }} />;
   }
   if (
     lowerType.includes('decimal') ||
     lowerType.includes('numeric') ||
     lowerType.includes('float')
   ) {
-    return <NumbersIcon sx={{ color: '#5f89f4', width: 18, height: 18 }} />;
+    return <NumbersIcon sx={{ color: '#5f89f4', width: 14, height: 14 }} />;
   }
 
-  return <UnknownTypeIcon sx={{ color: '#5f89f4', width: 18, height: 18 }} />;
+  return <UnknownTypeIcon sx={{ color: '#5f89f4', width: 14, height: 14 }} />;
 };
 
 export const TreeItems = {
   Column: ({ label, typeName, primaryKey, foreignKey }: ItemProps) => (
     <StyledTreeItem>
       {getColumnIcon(typeName, primaryKey, foreignKey)}
-      <StyledLabel variant="caption">
+      <StyledColumnLabel variant="caption">
         <OverflowTip>{label}</OverflowTip>
-      </StyledLabel>
+      </StyledColumnLabel>
     </StyledTreeItem>
   ),
   Schema: ({ label }: ItemProps) => (
     <StyledTreeItem>
-      <SchemaIcon sx={{ color: '#5f89f4', width: 18, height: 18 }} />
+      <SchemaIcon sx={{ color: '#5f89f4', width: 14, height: 14 }} />
       <StyledLabel variant="caption">
         <OverflowTip>{label}</OverflowTip>
       </StyledLabel>
@@ -85,7 +90,7 @@ export const TreeItems = {
   ),
   Table: ({ label }: ItemProps) => (
     <StyledTreeItem>
-      <TableChart sx={{ color: '#5f89f4', width: 18, height: 18 }} />
+      <TableChart sx={{ color: '#5f89f4', width: 14, height: 14 }} />
       <StyledLabel variant="caption">
         <OverflowTip>{label}</OverflowTip>
       </StyledLabel>
@@ -93,7 +98,7 @@ export const TreeItems = {
   ),
   View: ({ label }: ItemProps) => (
     <StyledTreeItem>
-      <TableChart sx={{ color: '#b3c5f3', width: 18, height: 18 }} />
+      <TableChart sx={{ color: '#4db6ac', width: 14, height: 14 }} />
       <StyledLabel variant="caption">
         <OverflowTip>{label}</OverflowTip>
       </StyledLabel>

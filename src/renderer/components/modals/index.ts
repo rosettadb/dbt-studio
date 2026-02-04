@@ -4,6 +4,7 @@ export * from './confirmationModal';
 export * from './generateAiQueriesModal';
 export * from './addGitRemoteModal';
 export * from './gitCommitModal';
+export * from './gitErrorModal';
 export * from './newBranchModal';
 export * from './cloneRepoModal';
 export * from './noAiSetModal';

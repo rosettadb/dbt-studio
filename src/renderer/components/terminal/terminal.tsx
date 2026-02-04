@@ -197,6 +197,8 @@ export const Terminal: React.FC<Props> = ({ project }) => {
             variant="body2"
             sx={{
               fontFamily: 'monospace',
+              fontSize: 12,
+              lineHeight: 1.25,
               whiteSpace: 'pre-wrap',
               color: terminalColors.fg,
             }}
@@ -210,6 +212,8 @@ export const Terminal: React.FC<Props> = ({ project }) => {
             color="error"
             sx={{
               fontFamily: 'monospace',
+              fontSize: 12,
+              lineHeight: 1.25,
               whiteSpace: 'pre-wrap',
             }}
             dangerouslySetInnerHTML={{ __html: ansiConverter.toHtml(line) }}
@@ -220,6 +224,8 @@ export const Terminal: React.FC<Props> = ({ project }) => {
             variant="body2"
             sx={{
               fontFamily: 'monospace',
+              fontSize: 12,
+              lineHeight: 1.25,
               color: theme.palette.info.main,
               opacity: 0.7,
             }}
@@ -239,6 +245,8 @@ export const Terminal: React.FC<Props> = ({ project }) => {
           variant="body2"
           sx={{
             fontFamily: 'monospace',
+            fontSize: 12,
+            lineHeight: 1.25,
             color: terminalColors.promptColor,
           }}
         >
@@ -256,6 +264,8 @@ export const Terminal: React.FC<Props> = ({ project }) => {
             '& .MuiInputBase-input': {
               color: terminalColors.fg,
               fontFamily: 'monospace',
+              fontSize: 12,
+              lineHeight: 1.25,
             },
             '& .MuiInputBase-input::placeholder': {
               color: theme.palette.text.secondary,

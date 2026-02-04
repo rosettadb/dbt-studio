@@ -117,6 +117,10 @@ const registerSettingsHandlers = (mainWindow: BrowserWindow) => {
   ipcMain.handle('settings:duckdb:diagnose', async () => {
     return SettingsService.diagnoseDuckDb();
   });
+
+  ipcMain.handle('settings:installSqlGlot', async () => {
+    return SettingsService.installSqlGlot();
+  });
 };
 
 export default registerSettingsHandlers;

@@ -11,8 +11,39 @@ export default class PGSchemaExtractor {
     database: string;
     password: string;
     port: number;
+    ssl?: boolean;
+    sslRejectUnauthorized?: boolean;
   }) {
-    this.client = new Client(config);
+    const clientConfig: any = {
+      user: config.user,
+      host: config.host,
+      database: config.database,
+      password: config.password,
+      port: config.port,
+    };
+
+    if (config.ssl) {
+      // Default to secure (true) if not specified, unless strictly documented otherwise.
+      // However, to maintain some compatibility or valid default behavior:
+      // The prompt asked: "rejectUnauthorized is set from config.sslRejectUnauthorized (default true when not provided)"
+      const rejectUnauthorized =
+        config.sslRejectUnauthorized !== undefined
+          ? config.sslRejectUnauthorized
+          : true;
+
+      clientConfig.ssl = {
+        rejectUnauthorized,
+      };
+
+      if (!rejectUnauthorized) {
+        // eslint-disable-next-line no-console
+        console.warn(
+          'Postgres connection: SSL certificate verification is disabled (rejectUnauthorized: false). This is insecure.',
+        );
+      }
+    }
+
+    this.client = new Client(clientConfig);
   }
 
   async connect() {

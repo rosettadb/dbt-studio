@@ -50,10 +50,18 @@ const registerGitHandlers = () => {
     'git:clone',
     async (
       _event,
-      { url, credentials }: { url: string; credentials?: GitCredentials },
+      {
+        url,
+        credentials,
+        removeGit,
+      }: { url: string; credentials?: GitCredentials; removeGit?: boolean },
     ) => {
       try {
-        const result = await gitService.cloneRepo(url, credentials);
+        const result = await gitService.cloneRepo(
+          url,
+          credentials,
+          removeGit ?? false,
+        );
         return {
           name: result.name,
           path: result.path,

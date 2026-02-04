@@ -51,6 +51,7 @@ export const DbtSettings: React.FC<DbtSettingsProps> = ({
     'dbt-redshift': true,
     'dbt-databricks': true,
     'dbt-duckdb': true,
+    sqlglot: true,
   });
 
   const [installedPackages, setInstalledPackages] = React.useState<{
@@ -66,6 +67,7 @@ export const DbtSettings: React.FC<DbtSettingsProps> = ({
     'dbt-redshift': 'Adapter for Amazon Redshift',
     'dbt-databricks': 'Adapter for Databricks',
     'dbt-duckdb': 'Adapter for DuckDB - embedded analytics database',
+    sqlglot: 'SQL Parser and Transpiler (Required for Lineage)',
   };
 
   const handlePackageToggle = (packageName: string) => {
@@ -111,6 +113,7 @@ export const DbtSettings: React.FC<DbtSettingsProps> = ({
       'dbt-redshift',
       'dbt-databricks',
       'dbt-duckdb',
+      'sqlglot',
     ];
 
     const packages = allPackages.filter(

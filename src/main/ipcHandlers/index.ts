@@ -11,6 +11,7 @@ import registerCloudExplorerHandlers from './cloudExplorer.ipcHandlers';
 import registerAIHandlers from './ai.ipcHandlers';
 import registerRosettaCloudIpcHandlers from './rosettaCloud.ipcHandlers';
 import registerDuckLakeHandlers from './duckLake.ipcHandlers';
+import registerLineageHandlers from './lineage.ipcHandlers';
 
 export {
   registerCliHandlers,
@@ -26,4 +27,5 @@ export {
   registerAIHandlers,
   registerRosettaCloudIpcHandlers,
   registerDuckLakeHandlers,
+  registerLineageHandlers,
 };

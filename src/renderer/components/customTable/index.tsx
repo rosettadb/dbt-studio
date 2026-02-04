@@ -20,6 +20,7 @@ const CustomTable = <T,>({
   rowActions,
   containerStyle,
   toolbarContent,
+  dataTestId,
 }: CustomTableType<T>) => {
   const [page, setPage] = React.useState(0);
   const [perPage, setPerPage] = useLocalStorage(id, '10');
@@ -75,7 +76,7 @@ const CustomTable = <T,>({
           pointerEvents: loading ? 'none' : 'auto',
         }}
       >
-        <Table stickyHeader size="small">
+        <Table data-testid={dataTestId} stickyHeader size="small">
           <CustomTableHead
             onRequestSort={(property) => {
               if (customPagination) {

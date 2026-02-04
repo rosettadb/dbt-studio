@@ -55,7 +55,10 @@ const Setup: React.FC = () => {
   if (!settings) return null;
 
   return (
-    <Box style={{ display: 'flex', flexDirection: 'column' }}>
+    <Box
+      style={{ display: 'flex', flexDirection: 'column' }}
+      data-testid="setup-wizard"
+    >
       <h2
         style={{
           marginTop: -16,
@@ -67,24 +70,40 @@ const Setup: React.FC = () => {
         Rosetta dbt™ Studio - Setup
       </h2>
       {currentStep === 0 && (
-        <DbtSetup
-          settings={settings}
-          adapters={ADAPTERS}
-          selectedAdapters={selectedAdapters}
-          setSelectedAdapters={setSelectedAdapters}
-          onInstallComplete={(path) => {
-            toast.info('Installation completed');
-            saveSetting('dbtPath', path);
-            setCurrentStep(currentStep + 1);
-          }}
-        />
+        <div data-testid="setup-step-cli" style={{ width: '100%' }}>
+          <DbtSetup
+            settings={settings}
+            adapters={ADAPTERS}
+            selectedAdapters={selectedAdapters}
+            setSelectedAdapters={setSelectedAdapters}
+            onInstallComplete={(path) => {
+              toast.info('Installation completed');
+              saveSetting('dbtPath', path);
+              setCurrentStep(currentStep + 1);
+            }}
+          />
+        </div>
       )}
-      {currentStep === 1 && <FinishSetup settings={settings} />}
+      {currentStep === 1 && (
+        <div data-testid="setup-step-complete" style={{ width: '100%' }}>
+          <FinishSetup settings={settings} />
+        </div>
+      )}
       <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+        <Button
+          variant="outlined"
+          data-testid="setup-skip-btn"
+          onClick={handleSkip}
+        >
+          Skip Setup
+        </Button>
         <Button
           variant="contained"
           disabled={currentStep === 0 && !settings.dbtPath}
           style={{ marginLeft: 'auto' }}
+          data-testid={
+            currentStep === 1 ? 'setup-finish-btn' : 'setup-next-btn'
+          }
           onClick={() => {
             if (currentStep === 1) {
               handleSkip();
@@ -93,7 +112,7 @@ const Setup: React.FC = () => {
             setCurrentStep(currentStep + 1);
           }}
         >
-          {currentStep === 11 ? 'Finish' : 'Next'}
+          {currentStep === 1 ? 'Finish' : 'Next'}
         </Button>
       </div>
     </Box>

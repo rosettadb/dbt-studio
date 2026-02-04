@@ -29,6 +29,8 @@ export type PostgresConnection = ConnectionBase & {
   host: string;
   port: number;
   keepalives_idle?: number;
+  ssl?: boolean;
+  sslRejectUnauthorized?: boolean;
 };
 
 export type SnowflakeConnection = ConnectionBase & {
@@ -84,13 +86,23 @@ export type DuckDBConnection = Omit<ConnectionBase, 'username' | 'password'> & {
   // No username/password needed for DuckDB
 };
 
+export type KineticaConnection = ConnectionBase & {
+  type: 'kinetica';
+  host: string;
+  port: number;
+  timeout?: number;
+  useSSL?: boolean;
+  bypassSslCertCheck?: boolean;
+};
+
 export type ConnectionInput =
   | PostgresConnection
   | SnowflakeConnection
   | BigQueryConnection
   | RedshiftConnection
   | DatabricksConnection
-  | DuckDBConnection;
+  | DuckDBConnection
+  | KineticaConnection;
 
 export type ConnectionModel = {
   id: string;
@@ -110,6 +122,7 @@ export type PostgresDBTConnection = DBTConnectionBase & {
   host: string;
   port: number;
   keepalives_idle?: number;
+  ssl?: boolean;
 };
 
 export type SnowflakeDBTConnection = DBTConnectionBase & {
@@ -162,13 +175,23 @@ export type DuckDBDBTConnection = Omit<
   path: string; // Database file path
 };
 
+export type KineticaDBTConnection = DBTConnectionBase & {
+  type: 'kinetica';
+  host: string;
+  port: number;
+  timeout?: number;
+  useSSL?: boolean;
+  bypassSslCertCheck?: boolean;
+};
+
 export type DBTConnection =
   | PostgresDBTConnection
   | SnowflakeDBTConnection
   | BigQueryDBTConnection
   | RedshiftDBTConnection
   | DatabricksDBTConnection
-  | DuckDBDBTConnection;
+  | DuckDBDBTConnection
+  | KineticaDBTConnection;
 
 export type RosettaConnection = {
   name: string;

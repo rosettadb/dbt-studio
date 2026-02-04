@@ -1,5 +1,7 @@
 import * as fs from 'fs-extra';
 import * as path from 'path';
+import ProjectsService from './projects.service';
+import LineageService from './lineage.service';
 
 // Context item interface for context providers (without messageId)
 export interface ResolvedContextItem {
@@ -52,6 +54,7 @@ export default class SelectedFileContextProvider {
         filePath,
         content,
         fileType,
+        projectPath,
       );
 
       return {
@@ -116,10 +119,11 @@ export default class SelectedFileContextProvider {
     filePath: string,
     content: string,
     fileType: DBTFileType,
+    projectPath?: string,
   ): Promise<DBTContextEnhancement> {
     switch (fileType) {
       case 'model':
-        return this.enhanceModelContext(filePath, content);
+        return this.enhanceModelContext(filePath, content, projectPath);
       case 'schema':
         return this.enhanceSchemaContext(filePath, content);
       case 'macro':
@@ -140,12 +144,59 @@ export default class SelectedFileContextProvider {
   /**
    * Enhance model context with dependencies and metadata
    */
-  private static enhanceModelContext(
+  private static async enhanceModelContext(
     filePath: string,
     content: string,
-  ): DBTContextEnhancement {
+    projectPath?: string,
+  ): Promise<DBTContextEnhancement> {
     const modelName = path.basename(filePath, '.sql');
-    const dependencies = this.extractModelDependencies(content);
+    let dependencies: string[] = [];
+
+    // Try to use LineageService for accurate dependency resolution
+    if (projectPath) {
+      try {
+        const projects = await ProjectsService.loadProjects();
+        const project = projects.find((p) => p.path === projectPath);
+
+        if (project) {
+          // We need to handle potential circular dependency if LineageService imports this service
+          // But typically LineageService imports ProjectsService.
+          // We need to import LineageService inside method or ensure no cycle.
+          // We will import at top level but ensure LineageService doesn't import this.
+
+          const { modelId } = await LineageService.getCurrentModelId({
+            projectId: project.id,
+            filePath,
+          });
+
+          if (modelId) {
+            const upstream = await LineageService.getUpstreamModels({
+              projectId: project.id,
+              modelId,
+              depth: 1,
+            });
+
+            // Filter out the current model if it appears
+            dependencies = upstream.nodes
+              .filter((n) => n.uniqueId !== modelId)
+              .map((n) => n.name);
+          }
+        }
+      } catch (e) {
+        // Fallback to regex if Lineage service fails (e.g. project not compiled)
+        dependencies = this.extractModelDependencies(content);
+      }
+    } else {
+      dependencies = this.extractModelDependencies(content);
+    }
+
+    // If LineageService found nothing (maybe isolated node), try regex fallback?
+    // Actually LineageService is authoritative. If it says 0, it means 0 (or manifest broken).
+    // But safely falling back is okay.
+    if (dependencies.length === 0) {
+      dependencies = this.extractModelDependencies(content);
+    }
+
     const columns = this.extractColumnReferences(content);
     const materializations = this.extractMaterializations(content);
     const hasConfig = content.includes('{{ config(');

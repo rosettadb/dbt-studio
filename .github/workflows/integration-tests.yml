@@ -1,0 +1,104 @@
+name: Integration Tests
+
+on:
+  push:
+    branches: [develop]
+  pull_request:
+    branches: [develop]
+
+jobs:
+  integration-tests:
+    name: Integration Tests (Node ${{ matrix.node-version }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+        node-version: [18, 20]
+
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: test
+          POSTGRES_PASSWORD: testpass
+          POSTGRES_DB: testdb
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js ${{ matrix.node-version }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node-version }}
+          cache: 'npm'
+
+      - name: Install system dependencies (Ubuntu)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libsecret-1-dev
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run integration tests
+        run: npm run test:integration
+        env:
+          NODE_ENV: test
+          ELECTRON_DISABLE_GPU: 1
+          CI: true
+          # PostgreSQL test configuration
+          TEST_POSTGRES_HOST: localhost
+          TEST_POSTGRES_PORT: 5432
+          TEST_POSTGRES_DB: testdb
+          TEST_POSTGRES_USER: test
+          TEST_POSTGRES_PASSWORD: testpass
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: integration-test-results-${{ matrix.os }}-node${{ matrix.node-version }}
+          path: |
+            coverage/
+            test-results/
+          retention-days: 7
+
+      - name: Upload coverage to Codecov
+        if: matrix.os == 'ubuntu-latest' && matrix.node-version == '20'
+        uses: codecov/codecov-action@v4
+        with:
+          files: ./coverage/coverage-final.json
+          flags: integration
+          name: integration-tests
+          fail_ci_if_error: false
+
+  integration-tests-summary:
+    name: Integration Tests Summary
+    runs-on: ubuntu-latest
+    needs: integration-tests
+    if: always()
+
+    steps:
+      - name: Check integration test results
+        run: |
+          if [ "${{ needs.integration-tests.result }}" == "failure" ]; then
+            echo "❌ Integration tests failed"
+            exit 1
+          elif [ "${{ needs.integration-tests.result }}" == "cancelled" ]; then
+            echo "⚠️ Integration tests were cancelled"
+            exit 1
+          else
+            echo "✅ All integration tests passed"
+          fi
