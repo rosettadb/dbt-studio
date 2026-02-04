@@ -14,6 +14,10 @@ import {
 } from '../../components/dataLake';
 import { DataLakeCard } from '../../components/dataLakeCards';
 import {
+  NotebookEditor,
+  NotebooksList,
+} from '../../components/notebook';
+import {
   useDuckLakeInstances,
   useCreateDuckLakeInstance,
   useDuckLakeInstance,
@@ -25,11 +29,13 @@ const DataLake: React.FC = () => {
   const params = useParams<{
     type?: string;
     instanceId?: string;
+    notebookId?: string;
+    tableName?: string;
   }>();
   const navigate = useNavigate();
 
   // Extract type from URL params (for type-specific routes)
-  const { type, instanceId } = params;
+  const { type, instanceId, notebookId, tableName } = params;
 
   // State for type selection in new-instance flow
   const [selectedType, setSelectedType] = useState<string>();
@@ -55,6 +61,18 @@ const DataLake: React.FC = () => {
     // Check for edit route pattern: /app/duck-lake/instances/:id/edit
     if (pathSegments.includes('edit')) {
       return 'edit-instance';
+    }
+    // Check for notebook editor route: /app/duck-lake/instances/:id/notebooks/:notebookId
+    if (
+      pathSegments.includes('instances') &&
+      pathSegments.includes('notebooks') &&
+      notebookId
+    ) {
+      return 'notebook-editor';
+    }
+    // Check for notebooks list route: /app/duck-lake/instances/:id/notebooks
+    if (pathSegments.includes('instances') && pathSegments.includes('notebooks')) {
+      return 'instance-notebooks';
     }
     // Check for table detail route pattern: /app/duck-lake/instances/:id/tables/:tableName
     if (
@@ -345,6 +363,33 @@ const DataLake: React.FC = () => {
       case 'table-detail':
         // Phase 8b: Render comprehensive table detail view
         return <DataLakeTableDetails />;
+
+      case 'instance-notebooks':
+        // Show notebooks list for a specific instance
+        return (
+          <NotebooksList
+            instanceId={currentInstanceId || ''}
+            instanceType={type || 'duck-lake'}
+          />
+        );
+
+      case 'notebook-editor':
+        // Show notebook editor
+        if (!notebookId || !currentInstanceId) {
+          return (
+            <Box sx={{ p: 2 }}>
+              <Typography variant="body1" color="text.secondary">
+                Invalid notebook or instance ID
+              </Typography>
+            </Box>
+          );
+        }
+        return (
+          <NotebookEditor
+            instanceId={currentInstanceId}
+            notebookId={notebookId}
+          />
+        );
 
       default:
         return (

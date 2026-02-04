@@ -49,6 +49,11 @@ if (!gotTheLock) {
       windowManager = new WindowManager();
       windowManager.startApplication();
       copyAssetsToUserData();
+      
+      // Initialize notebook service
+      const { NotebookService } = await import('./services/notebook.service');
+      NotebookService.initialize();
+      
       const splash = windowManager.getSplash();
 
       if (splash) {
@@ -178,9 +183,13 @@ app.on('before-quit', async (event) => {
   try {
     // Disconnect all DuckLake connections to prevent memory leaks
     await DuckLakeConnectionManager.disconnectAll();
+    
+    // Shutdown notebook service and cleanup sessions
+    const { NotebookService } = await import('./services/notebook.service');
+    NotebookService.shutdown();
   } catch (error) {
     // eslint-disable-next-line no-console
-    console.error('[App] Error during DuckLake cleanup:', error);
+    console.error('[App] Error during cleanup:', error);
   } finally {
     // Allow the app to quit
     app.exit(0);

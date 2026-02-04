@@ -109,6 +109,14 @@ const App: React.FC = () => {
             path="data-lake/:type/instances/:instanceId/tables/:tableName"
             element={<DataLake />}
           />
+          <Route
+            path="data-lake/:type/instances/:instanceId/notebooks"
+            element={<DataLake />}
+          />
+          <Route
+            path="data-lake/:type/instances/:instanceId/notebooks/:notebookId"
+            element={<DataLake />}
+          />
           <Route path="loading" element={<Loading />} />
           <Route path="*" element={<Navigate to="/app" />} />
         </Route>

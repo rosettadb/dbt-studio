@@ -501,13 +501,14 @@ export class DuckDBCatalogAdapter extends CatalogAdapter {
       const result = await this.connectionInfo.connection.run(query);
       const rows = await result.getRows();
 
-      // Handle DDL statements (CREATE, DROP, etc.) that don't return a schema
-      const columns = result.schema
-        ? result.schema.map((col: any) => ({
-            name: col.name,
-            type: col.type,
-          }))
-        : [];
+      // Get column names and types using DuckDB Node API methods
+      const columnNames = result.columnNames();
+      const columnTypes = result.columnTypes();
+
+      const columns = columnNames.map((name: string, index: number) => ({
+        name,
+        type: columnTypes[index]?.toString() || 'UNKNOWN',
+      }));
 
       const executionTime = Date.now() - startTime;
 

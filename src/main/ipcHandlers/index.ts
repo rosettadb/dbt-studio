@@ -11,6 +11,7 @@ import registerCloudExplorerHandlers from './cloudExplorer.ipcHandlers';
 import registerAIHandlers from './ai.ipcHandlers';
 import registerDuckLakeHandlers from './duckLake.ipcHandlers';
 import registerLineageHandlers from './lineage.ipcHandlers';
+import { registerNotebookHandlers } from './notebook.ipcHandlers';
 
 export {
   registerCliHandlers,
@@ -26,4 +27,5 @@ export {
   registerAIHandlers,
   registerDuckLakeHandlers,
   registerLineageHandlers,
+  registerNotebookHandlers,
 };
