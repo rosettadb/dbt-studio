@@ -1,5 +1,5 @@
 {
-  "version": "1.3.0",
+  "version": "1.3.1-auth-internal",
   "name": "rosetta-dbt-studio",
   "description": "Turn Raw Data into Business Insights—Faster with RosettaDB",
   "keywords": [
