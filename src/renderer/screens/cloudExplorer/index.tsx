@@ -43,7 +43,11 @@ const CloudExplorer: React.FC = () => {
       case 'new-connection':
         return <ExplorerNewConnection />;
       case 'edit-connection':
-        return <ExplorerEditConnection />;
+        return (
+          <ExplorerEditConnection
+            key={pathSegments[pathSegments.indexOf('edit-connection') + 1]}
+          />
+        );
       case 'buckets':
         return <CloudExplorerBuckets />;
       case 'bucket-content':

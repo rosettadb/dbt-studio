@@ -8,6 +8,7 @@ import * as utilsService from './utils.service';
 import cloudExplorerService from './cloudExplorer.service';
 import { connectionStorage } from './connectionStorage.service';
 import { DuckLakeService } from './duckLake.service';
+import * as lineageService from './lineage.service';
 
 export {
   settingsServices,
@@ -20,4 +21,5 @@ export {
   connectionStorage,
   utilsService,
   DuckLakeService,
+  lineageService,
 };

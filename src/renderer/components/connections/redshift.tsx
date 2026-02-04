@@ -78,40 +78,14 @@ export const Redshift: React.FC<Props> = ({
   });
 
   const [showPassword, setShowPassword] = React.useState(false);
-  const [isTesting, setIsTesting] = React.useState(false);
   const [connectionStatus, setConnectionStatus] = React.useState<
     'idle' | 'success' | 'failed'
   >('idle');
   const [infoModalOpen, setInfoModalOpen] = React.useState(false);
   const [nameTouched, setNameTouched] = React.useState(false);
 
-  const { mutate: updateConnection } = useUpdateConnection({
-    onSuccess: () => {
-      toast.success('Redshift connection updated successfully!');
-    },
-    onError: (error) => {
-      toast.error(`Update failed: ${error}`);
-    },
-  });
-
-  const { mutate: configureConnection } = useConfigureConnection({
-    onSuccess: () => {
-      toast.success('Redshift connection configured successfully!');
-      navigate(`/app/project-details`);
-    },
-    onError: (error) => {
-      toast.error(`Configuration failed: ${error}`);
-    },
-  });
-
-  const { mutate: testConnection } = useTestConnection({
-    onMutate: () => {
-      setIsTesting(true);
-      setConnectionStatus('idle');
-    },
-    onSettled: () => setIsTesting(false),
+  const { mutate: testConnection, isLoading: isTesting } = useTestConnection({
     onSuccess: (success) => {
-      setIsTesting(false);
       if (success) {
         toast.success('Connection test successful!');
         setConnectionStatus('success');
@@ -121,11 +95,31 @@ export const Redshift: React.FC<Props> = ({
       setConnectionStatus('failed');
     },
     onError: (error) => {
-      setIsTesting(false);
       toast.error(`Test failed: ${error.message}`);
       setConnectionStatus('failed');
     },
   });
+
+  const { mutate: updateConnection, isLoading: isUpdating } =
+    useUpdateConnection({
+      onSuccess: () => {
+        toast.success('Redshift connection updated successfully!');
+      },
+      onError: (error) => {
+        toast.error(`Update failed: ${error}`);
+      },
+    });
+
+  const { mutate: configureConnection, isLoading: isConfiguring } =
+    useConfigureConnection({
+      onSuccess: () => {
+        toast.success('Redshift connection configured successfully!');
+        navigate(`/app/project-details`);
+      },
+      onError: (error) => {
+        toast.error(`Configuration failed: ${error}`);
+      },
+    });
 
   // Get existing connections for name validation
   const { data: existingConnections = [] } = useGetConnections();
@@ -202,7 +196,7 @@ export const Redshift: React.FC<Props> = ({
   };
 
   const handleTest = () => {
-    setIsTesting(true);
+    setConnectionStatus('idle');
     testConnection(formState);
   };
 
@@ -254,6 +248,7 @@ export const Redshift: React.FC<Props> = ({
         imageSource={connectionIcons.images.redshift}
         onClose={onCancel}
         onSave={handleSubmit}
+        isLoading={isUpdating || isConfiguring}
       />
 
       <Box

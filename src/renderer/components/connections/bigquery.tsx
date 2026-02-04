@@ -58,40 +58,14 @@ export const BigQuery: React.FC<Props> = ({
     priority: existingConnection?.priority || 'interactive',
   });
 
-  const [isTesting, setIsTesting] = React.useState(false);
   const [connectionStatus, setConnectionStatus] = React.useState<
     'idle' | 'success' | 'failed'
   >('idle');
   const [nameTouched, setNameTouched] = React.useState(false);
   const [keyfileError, setKeyfileError] = React.useState<string>('');
 
-  const { mutate: configureConnection } = useConfigureConnection({
-    onSuccess: () => {
-      toast.success('BigQuery connection configured successfully!');
-      if (projectId) {
-        navigate('/app');
-        return;
-      }
-      navigate('/app/connections');
-    },
-    onError: (error) => {
-      toast.error(`Configuration failed: ${error}`);
-    },
-  });
-
-  const { mutate: updateConnection } = useUpdateConnection({
-    onSuccess: () => {
-      toast.success('BigQuery connection updated successfully!');
-      navigate('/app/project-details');
-    },
-    onError: (error) => {
-      toast.error(`Update failed: ${error}`);
-    },
-  });
-
-  const { mutate: testConnection } = useTestConnection({
+  const { mutate: testConnection, isLoading: isTesting } = useTestConnection({
     onSuccess: (response: BigQueryTestResponse | boolean) => {
-      setIsTesting(false);
       // Handle BigQuery specific response
       if (typeof response === 'object' && response.success) {
         toast.success('Connection test successful!');
@@ -105,11 +79,36 @@ export const BigQuery: React.FC<Props> = ({
       }
     },
     onError: (error) => {
-      setIsTesting(false);
       toast.error(`Test failed: ${error.message}`);
       setConnectionStatus('failed');
     },
   });
+
+  const { mutate: configureConnection, isLoading: isConfiguring } =
+    useConfigureConnection({
+      onSuccess: () => {
+        toast.success('BigQuery connection configured successfully!');
+        if (projectId) {
+          navigate('/app');
+          return;
+        }
+        navigate('/app/connections');
+      },
+      onError: (error) => {
+        toast.error(`Configuration failed: ${error}`);
+      },
+    });
+
+  const { mutate: updateConnection, isLoading: isUpdating } =
+    useUpdateConnection({
+      onSuccess: () => {
+        toast.success('BigQuery connection updated successfully!');
+        navigate('/app/project-details');
+      },
+      onError: (error) => {
+        toast.error(`Update failed: ${error}`);
+      },
+    });
 
   const { setBigQueryServiceAccountKey, getBigQueryServiceAccountKey } =
     useSecureStorage();
@@ -204,7 +203,6 @@ export const BigQuery: React.FC<Props> = ({
     if (formState.name && formState.keyfile) {
       await setBigQueryServiceAccountKey(formState.keyfile, formState.name);
     }
-    setIsTesting(true);
     setConnectionStatus('idle');
     testConnection({
       ...formState,
@@ -248,6 +246,7 @@ export const BigQuery: React.FC<Props> = ({
         imageSource={connectionIcons.images.bigquery}
         onClose={onCancel}
         onSave={handleSubmit}
+        isLoading={isUpdating || isConfiguring}
       />
 
       <Box

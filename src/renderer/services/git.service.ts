@@ -13,9 +13,13 @@ export const gitInit = async (path: string) => {
   await client.post<string>('git:init', path);
 };
 
-export const gitClone = async (url: string, credentials?: GitCredentials) => {
+export const gitClone = async (
+  url: string,
+  credentials?: GitCredentials,
+  removeGit?: boolean,
+) => {
   const { data } = await client.post<
-    { url: string; credentials?: GitCredentials },
+    { url: string; credentials?: GitCredentials; removeGit?: boolean },
     {
       error?: string;
       authRequired?: boolean;
@@ -28,6 +32,7 @@ export const gitClone = async (url: string, credentials?: GitCredentials) => {
   >('git:clone', {
     url,
     credentials,
+    removeGit,
   });
   return data;
 };

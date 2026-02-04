@@ -161,3 +161,7 @@ export const diagnoseDuckDb = async (): Promise<any> => {
   const { data } = await client.get<any>('settings:duckdb:diagnose');
   return data;
 };
+
+export const installSqlGlot = async (): Promise<void> => {
+  await client.get<void>('settings:installSqlGlot');
+};

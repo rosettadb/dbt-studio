@@ -40,8 +40,12 @@ export type QueryHistoryType = {
   query: string;
   executedAt: Date;
   results?: QueryResponseType;
-  projectId: string;
-  projectName: string;
+  // Project-based fields (optional for backwards compatibility)
+  projectId?: string;
+  projectName?: string;
+  // Connection-based fields (new)
+  connectionId?: string;
+  connectionName?: string;
 };
 
 export type CompletionItem = Monaco.languages.CompletionItem;

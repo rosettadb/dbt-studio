@@ -53,3 +53,23 @@ export interface PendingCloseState {
   tabId: EditorTabId;
   tab: EditorTabState;
 }
+
+// SQL Tab types for connection-based SQL tool
+export type SqlTabId = string;
+
+export interface SqlTabState {
+  id: SqlTabId;
+  connectionId: string;
+  connectionName: string;
+  connectionType: string;
+  query: string;
+  results?: any;
+  isModified: boolean;
+  isLoading: boolean;
+  error?: string;
+}
+
+export interface SqlPendingCloseState {
+  tabId: SqlTabId;
+  tab: SqlTabState;
+}

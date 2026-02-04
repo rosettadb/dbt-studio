@@ -2,7 +2,7 @@
 import React, { useEffect, useRef } from 'react';
 import MonacoEditor, { OnMount, OnChange, loader } from '@monaco-editor/react';
 import * as monaco from 'monaco-editor';
-import { useTheme } from '@mui/material';
+import { useTheme, Box, CircularProgress, Typography } from '@mui/material';
 import { projectsServices } from '../../../services';
 import { Container } from './styles';
 import { Shimmer } from '../../shimmer';
@@ -15,6 +15,7 @@ type Props = {
   completions?: Omit<CompletionItem, 'range'>[];
   editorRef?: React.MutableRefObject<monaco.editor.IStandaloneCodeEditor | null>;
   onRunSelected?: (query: string) => void;
+  isLoading?: boolean;
 };
 
 export const SqlEditorComponent: React.FC<Props> = ({
@@ -24,6 +25,7 @@ export const SqlEditorComponent: React.FC<Props> = ({
   completions = [],
   editorRef,
   onRunSelected,
+  isLoading,
 }) => {
   const theme = useTheme();
   const isDarkMode = theme.palette.mode === 'dark';
@@ -214,8 +216,41 @@ export const SqlEditorComponent: React.FC<Props> = ({
           lineNumbers: 'on',
           scrollBeyondLastLine: false,
           automaticLayout: true,
+          readOnly: isLoading,
         }}
       />
+      {isLoading && (
+        <Box
+          sx={{
+            position: 'absolute',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            justifyContent: 'center',
+            backgroundColor: isDarkMode
+              ? 'rgba(30, 30, 30, 0.7)'
+              : 'rgba(255, 255, 255, 0.7)',
+            zIndex: 10,
+            backdropFilter: 'blur(2px)',
+          }}
+        >
+          <CircularProgress size={40} thickness={4} />
+          <Typography
+            variant="body2"
+            sx={{
+              mt: 2,
+              color: theme.palette.text.primary,
+              fontWeight: 500,
+            }}
+          >
+            Switching connection...
+          </Typography>
+        </Box>
+      )}
     </Container>
   );
 };

@@ -5,6 +5,7 @@ import {
   DialogContent,
   IconButton,
   Box,
+  Breakpoint,
 } from '@mui/material';
 import CloseIcon from '@mui/icons-material/Close';
 
@@ -14,6 +15,8 @@ type Props = {
   onClose: () => void;
   title?: string;
   hideHeader?: boolean;
+  maxWidth?: Breakpoint;
+  fullScreen?: boolean;
 };
 
 export const Modal: React.FC<Props> = ({
@@ -22,10 +25,18 @@ export const Modal: React.FC<Props> = ({
   onClose,
   title,
   hideHeader,
+  maxWidth,
+  fullScreen,
 }) => {
   return (
-    <Dialog open={isOpen} onClose={onClose} fullWidth maxWidth="sm">
-      {!hideHeader && (
+    <Dialog
+      open={isOpen}
+      onClose={onClose}
+      fullWidth
+      maxWidth={maxWidth || 'sm'}
+      fullScreen={fullScreen}
+    >
+      {!hideHeader ? (
         <DialogTitle>
           <Box
             display="flex"
@@ -38,8 +49,23 @@ export const Modal: React.FC<Props> = ({
             </IconButton>
           </Box>
         </DialogTitle>
+      ) : (
+        <IconButton
+          onClick={onClose}
+          sx={{
+            position: 'absolute',
+            right: 8,
+            top: 8,
+            zIndex: 1,
+            color: (theme) => theme.palette.grey[500],
+          }}
+        >
+          <CloseIcon />
+        </IconButton>
       )}
-      <DialogContent dividers>{children}</DialogContent>
+      <DialogContent dividers={!hideHeader} sx={fullScreen ? { p: 0 } : {}}>
+        {children}
+      </DialogContent>
     </Dialog>
   );
 };

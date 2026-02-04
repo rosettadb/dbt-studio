@@ -12,30 +12,44 @@ import { useAppContext } from '../../hooks';
 type Props = {
   completions: Omit<monacoType.languages.CompletionItem, 'range'>[];
   connectionInput?: ConnectionInput;
-  selectedProject: Project;
+  // Project-based mode (legacy)
+  selectedProject?: Project;
+  // Connection-based mode (new)
+  connectionId?: string;
+  initialQuery?: string;
+  onQueryChange?: (query: string) => void;
+  // Common props
   queryHistory: QueryHistoryType[];
   setQueryHistory: (v: QueryHistoryType[]) => void;
   setLoadingQuery: (v: boolean) => void;
   setQueryResults: (v: any) => void;
   setError: (v: any) => void;
   onQueryStart?: (queryId: string) => void;
+  isLoading?: boolean;
 };
 
 export const SqlEditor: React.FC<Props> = ({
   completions,
   connectionInput,
   selectedProject,
+  connectionId,
+  initialQuery,
+  onQueryChange,
   queryHistory,
   setQueryHistory,
   setLoadingQuery,
   setQueryResults,
   setError,
   onQueryStart,
+  isLoading,
 }) => {
   const { fetchSchema } = useAppContext();
   const editorRef = useRef<monacoType.editor.IStandaloneCodeEditor | null>(
     null,
   );
+
+  // Determine if we're in connection-based mode
+  const isConnectionMode = !!connectionId;
 
   // Helper function to detect DDL operations that modify schema
   const isDDLOperation = (query: string): boolean => {
@@ -71,8 +85,14 @@ export const SqlEditor: React.FC<Props> = ({
   };
 
   const handleRunQuery = async (selectedQuery: string) => {
-    if (!connectionInput || !selectedProject) {
-      toast.error('No database connection configured for this project');
+    // Validate we have a connection
+    if (isConnectionMode) {
+      if (!connectionId || isLoading) {
+        toast.error('Connection is still loading...');
+        return;
+      }
+    } else if (!connectionInput || !selectedProject || isLoading) {
+      toast.error('Connection is still loading...');
       return;
     }
 
@@ -89,12 +109,28 @@ export const SqlEditor: React.FC<Props> = ({
     }
 
     try {
-      const result = await connectorsServices.queryData({
-        connection: connectionInput,
-        query: selectedQuery,
-        projectName: selectedProject.name,
-        queryId,
-      });
+      let result;
+
+      if (isConnectionMode && connectionId) {
+        // Connection-based execution
+        result = await connectorsServices.executeQueryForConnection({
+          connectionId,
+          query: selectedQuery,
+          queryId,
+        });
+      } else if (connectionInput && selectedProject) {
+        // Legacy project-based execution
+        result = await connectorsServices.queryData({
+          connection: connectionInput,
+          query: selectedQuery,
+          projectName: selectedProject.name,
+          queryId,
+        });
+      } else {
+        toast.error('Invalid query configuration');
+        setLoadingQuery(false);
+        return;
+      }
 
       if (result.error) {
         setError(result.error);
@@ -125,9 +161,13 @@ export const SqlEditor: React.FC<Props> = ({
         id: new Date().toISOString(),
         executedAt: new Date(),
         results: historyResults,
-        projectId: selectedProject.id,
-        projectName: selectedProject.name,
         query: selectedQuery,
+        // Project-based fields (optional)
+        projectId: selectedProject?.id,
+        projectName: selectedProject?.name,
+        // Connection-based fields (new)
+        connectionId: isConnectionMode ? connectionId : undefined,
+        connectionName: isConnectionMode ? connectionInput?.name : undefined,
       };
 
       // Limit history to last 50 items to prevent storage overflow
@@ -140,7 +180,8 @@ export const SqlEditor: React.FC<Props> = ({
       }
 
       // Refresh schema if DDL operation was executed
-      if (wasDDL) {
+      // Only for project-based mode (connection-based mode handles this differently)
+      if (wasDDL && !isConnectionMode) {
         fetchSchema();
       }
     } catch (error) {
@@ -151,23 +192,27 @@ export const SqlEditor: React.FC<Props> = ({
     }
   };
 
-  const [queryContent, setQueryContent] = React.useState('');
+  const [queryContent, setQueryContent] = React.useState(initialQuery || '');
   const saveDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  // Load query based on mode
   React.useEffect(() => {
-    const loadQuery = async () => {
-      if (selectedProject?.id) {
+    if (isConnectionMode) {
+      // Connection-based mode: use initialQuery prop
+      setQueryContent(initialQuery || '');
+    } else if (selectedProject?.id) {
+      // Project-based mode: load from backend
+      const loadQuery = async () => {
         try {
           const query = await projectsServices.getQuery(selectedProject);
           setQueryContent(query);
         } catch (error) {
           setQueryContent('');
         }
-      }
-    };
-
-    loadQuery();
-  }, [selectedProject?.id]);
+      };
+      loadQuery();
+    }
+  }, [isConnectionMode, initialQuery, selectedProject?.id, selectedProject]);
 
   React.useEffect(() => {
     return () => {
@@ -178,18 +223,31 @@ export const SqlEditor: React.FC<Props> = ({
   }, []);
 
   // Handle query content changes with debouncing
-  const handleQueryChange = React.useCallback(
+  const handleQueryContentChange = React.useCallback(
     (content: string) => {
       // Update local state immediately for UI responsiveness
       setQueryContent(content);
 
-      // Debounce the API call
+      // Debounce the save operation
       if (saveDebounceRef.current) {
         clearTimeout(saveDebounceRef.current);
       }
 
       saveDebounceRef.current = setTimeout(() => {
-        if (selectedProject?.id) {
+        if (isConnectionMode) {
+          // Connection-based mode: notify parent and save to backend
+          if (onQueryChange) {
+            onQueryChange(content);
+          }
+          if (connectionId) {
+            connectorsServices
+              .updateConnectionQuery(connectionId, content)
+              .catch(() => {
+                // Silently fail - query is still in local state
+              });
+          }
+        } else if (selectedProject?.id) {
+          // Project-based mode: save to backend
           projectsServices
             .updateProjectQuery({
               projectId: selectedProject.id,
@@ -201,24 +259,29 @@ export const SqlEditor: React.FC<Props> = ({
         }
       }, 500);
     },
-    [selectedProject?.id],
+    [isConnectionMode, connectionId, onQueryChange, selectedProject?.id],
   );
+
+  // Get filter ID for query history based on mode
+  const historyFilterId = isConnectionMode ? connectionId : selectedProject?.id;
 
   return (
     <Inputs>
       <RelativeContainer>
         <SqlEditorComponent
           content={queryContent}
-          setContent={handleQueryChange}
+          setContent={handleQueryContentChange}
           completions={completions}
           editorRef={editorRef}
           onRunSelected={(lineQuery) => handleRunQuery(lineQuery)}
+          isLoading={isLoading}
         />
-        {queryHistory.length > 0 && (
+        {queryHistory.length > 0 && historyFilterId && (
           <QueryHistory
-            onQuerySelect={(qh) => handleQueryChange(qh.query)}
+            onQuerySelect={(qh) => handleQueryContentChange(qh.query)}
             queryHistory={queryHistory}
-            projectId={selectedProject.id}
+            projectId={isConnectionMode ? undefined : selectedProject?.id}
+            connectionId={isConnectionMode ? connectionId : undefined}
           />
         )}
       </RelativeContainer>

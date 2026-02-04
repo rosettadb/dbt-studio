@@ -1,6 +1,5 @@
 import { styled, type Theme } from '@mui/material/styles';
 import Box from '@mui/material/Box';
-import ButtonBase from '@mui/material/ButtonBase';
 
 const getBaseBackgroundColor = (theme: Theme, active: boolean) => {
   if (!active) {
@@ -60,44 +59,44 @@ export const DropIndicator = styled('div')(({ theme }) => ({
   transition: 'opacity 120ms ease',
 }));
 
-export const TabButton = styled(ButtonBase)<{ active: boolean }>(
-  ({ theme, active }) => ({
-    display: 'flex',
-    alignItems: 'center',
-    gap: theme.spacing(0.75),
-    padding: theme.spacing(0.5, 1.25),
-    minHeight: 32,
-    borderRadius: 0,
-    cursor: 'pointer',
-    backgroundColor: getBaseBackgroundColor(theme, active),
-    color: active ? theme.palette.text.primary : theme.palette.text.secondary,
-    borderTop: active
-      ? `2px solid ${theme.palette.primary.main}`
-      : `1px solid ${theme.palette.divider}`,
-    borderBottom: active
-      ? '1px solid transparent'
-      : `1px solid ${theme.palette.divider}`,
+export const TabButton = styled(Box, {
+  shouldForwardProp: (prop) => prop !== 'active',
+})<{ active: boolean }>(({ theme, active }) => ({
+  display: 'flex',
+  alignItems: 'center',
+  gap: theme.spacing(0.75),
+  padding: theme.spacing(0.5, 1.25),
+  minHeight: 32,
+  borderRadius: 0,
+  cursor: 'pointer',
+  backgroundColor: getBaseBackgroundColor(theme, active),
+  color: active ? theme.palette.text.primary : theme.palette.text.secondary,
+  borderTop: active
+    ? `2px solid ${theme.palette.primary.main}`
+    : `1px solid ${theme.palette.divider}`,
+  borderBottom: active
+    ? '1px solid transparent'
+    : `1px solid ${theme.palette.divider}`,
+  borderLeft: `1px solid ${theme.palette.divider}`,
+  borderRight: `1px solid ${theme.palette.divider}`,
+  boxShadow: 'none',
+  transition:
+    'background-color 120ms ease, border-color 120ms ease, box-shadow 120ms ease',
+  '&:hover': {
+    backgroundColor: getHoverBackgroundColor(theme, active),
+    color: theme.palette.text.primary,
+  },
+  '&:not(:first-of-type)': {
+    marginLeft: -1,
+  },
+  '&:first-of-type': {
     borderLeft: `1px solid ${theme.palette.divider}`,
+    marginLeft: 0,
+  },
+  '&:last-of-type': {
     borderRight: `1px solid ${theme.palette.divider}`,
-    boxShadow: 'none',
-    transition:
-      'background-color 120ms ease, border-color 120ms ease, box-shadow 120ms ease',
-    '&:hover': {
-      backgroundColor: getHoverBackgroundColor(theme, active),
-      color: theme.palette.text.primary,
-    },
-    '&:not(:first-of-type)': {
-      marginLeft: -1,
-    },
-    '&:first-of-type': {
-      borderLeft: `1px solid ${theme.palette.divider}`,
-      marginLeft: 0,
-    },
-    '&:last-of-type': {
-      borderRight: `1px solid ${theme.palette.divider}`,
-    },
-  }),
-);
+  },
+}));
 
 export const TabTitle = styled('span')(({ theme }) => ({
   fontSize: 13,

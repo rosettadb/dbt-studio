@@ -22,7 +22,8 @@ import {
 } from '../../types/backend';
 import { CliAdapter } from '../adapters';
 import { DB_FILE, initializeDataStorage } from '../utils/setupHelpers';
-import { DuckDBBootstrap, SecureStorageService } from '.';
+import DuckDBBootstrap from './duckdb.service';
+import SecureStorageService from './secureStorage.service';
 
 const cliConfig: Record<
   keyof CliUpdateResponseType,
@@ -183,6 +184,28 @@ export default class SettingsService {
   }
 
   static async updateRosetta() {
+    if (process.env.E2E_TESTING === 'true') {
+      const settings = await this.loadSettings();
+      const dummyName =
+        process.platform === 'win32' ? 'dummy-rosetta.exe' : 'dummy-rosetta';
+      const dummyPath = path.join(os.tmpdir(), dummyName);
+      fs.ensureFileSync(dummyPath);
+
+      if (process.platform !== 'win32') {
+        fs.chmodSync(dummyPath, 0o755);
+      }
+
+      settings.rosettaVersion = '0.0.0-test';
+      settings.rosettaPath = dummyPath;
+      await this.saveSettings(settings);
+
+      return {
+        binaryPath: dummyPath,
+        version: '0.0.0-test',
+        binDirectory: path.dirname(dummyPath),
+        status: 'installed',
+      };
+    }
     const settings = await this.loadSettings();
 
     const { platform, arch } = process;
@@ -289,6 +312,35 @@ export default class SettingsService {
   }
 
   static async updatePython() {
+    if (process.env.E2E_TESTING === 'true') {
+      const settings = await this.loadSettings();
+
+      // Create a dummy venv structure
+      const venvPath = path.join(os.tmpdir(), 'dummy-venv');
+      const binDir =
+        process.platform === 'win32'
+          ? path.join(venvPath, 'Scripts')
+          : path.join(venvPath, 'bin');
+      const dummyBinaryPath = path.join(
+        binDir,
+        process.platform === 'win32' ? 'python.exe' : 'python3',
+      );
+
+      await fs.ensureDir(binDir);
+      await fs.ensureFile(dummyBinaryPath);
+      await fs.chmod(dummyBinaryPath, 0o755);
+
+      settings.pythonVersion = '0.0.0-test';
+      settings.pythonPath = dummyBinaryPath;
+      settings.pythonBinary = dummyBinaryPath;
+      await this.saveSettings(settings);
+
+      return {
+        binaryPath: dummyBinaryPath,
+        version: '0.0.0-test',
+        status: 'installed',
+      };
+    }
     const settings = await this.loadSettings();
 
     const version = '3.10.17';
@@ -631,6 +683,49 @@ export default class SettingsService {
     }
 
     return `https://github.com/rosettadb/rosetta/releases/download/v${version}/rosetta-${version}-${osName}_${archName}-with-drivers.zip`;
+  }
+
+  static async installPackage(packageName: string): Promise<void> {
+    const settings = await this.loadSettings();
+
+    const safeName = packageName.trim();
+    const allowedPackages = new Set(['sqlglot']);
+    const isValidPackageName = /^[a-z0-9](?:[a-z0-9._-]*[a-z0-9])?$/i.test(
+      safeName,
+    );
+
+    if (!isValidPackageName) {
+      throw new Error(`Invalid package name: ${packageName}`);
+    }
+
+    if (!allowedPackages.has(safeName)) {
+      throw new Error(`Package not allowed: ${packageName}`);
+    }
+
+    if (!settings.pythonPath || !fs.existsSync(settings.pythonPath)) {
+      throw new Error(
+        'Python environment not found. Please install Python first.',
+      );
+    }
+
+    // Derive pip path from pythonPath (which points to venv python binary)
+    const binDir = path.dirname(settings.pythonPath);
+    const pipExecutable = process.platform === 'win32' ? 'pip.exe' : 'pip';
+    const pipPath = path.join(binDir, pipExecutable);
+
+    if (!fs.existsSync(pipPath)) {
+      throw new Error(`pip not found at ${pipPath}`);
+    }
+
+    const cliAdapter = new CliAdapter();
+    // Using --no-cache-dir to avoid potential cache issues in packaged app
+    await cliAdapter.runCommandWithoutStreaming(
+      `"${pipPath}" install ${safeName} --no-cache-dir`,
+    );
+  }
+
+  static async installSqlGlot(): Promise<void> {
+    return this.installPackage('sqlglot');
   }
 
   private static compareVersions(version1: string, version2: string): number {

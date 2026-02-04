@@ -54,7 +54,7 @@ export const QueryResult: React.FC<Props> = ({ results }) => {
 
   if (isCommand) {
     return (
-      <SuccessContainer>
+      <SuccessContainer data-testid="sql-results-pane">
         <IconWrapper>
           <CheckCircleOutline fontSize="large" color="success" />
         </IconWrapper>
@@ -83,39 +83,42 @@ export const QueryResult: React.FC<Props> = ({ results }) => {
   }
 
   return (
-    <CustomTable<Record<string, any>>
-      id="query-result"
-      name=""
-      toolbarContent={
-        results.duration !== undefined ? (
-          <Typography
-            variant="body2"
-            color="text.secondary"
-            sx={{ opacity: 0.7 }}
-          >
-            {results.duration > 1000
-              ? `${(results.duration / 1000).toFixed(2)}s`
-              : `${results.duration}ms`}
-          </Typography>
-        ) : null
-      }
-      rows={rows as any}
-      columns={columns.map((column) => ({
-        id: column,
-        label: underscoreToTitleCase(column),
-        render: (value) => (
-          <div
-            style={{
-              whiteSpace: 'nowrap',
-              minHeight: '24px',
-              display: 'flex',
-              alignItems: 'center',
-            }}
-          >
-            {JSON.stringify(value[column]).replace(/"/g, '')}
-          </div>
-        ),
-      }))}
-    />
+    <div data-testid="sql-results-pane">
+      <CustomTable<Record<string, any>>
+        id="query-result"
+        dataTestId="sql-results-table"
+        name=""
+        toolbarContent={
+          results.duration !== undefined ? (
+            <Typography
+              variant="body2"
+              color="text.secondary"
+              sx={{ opacity: 0.7 }}
+            >
+              {results.duration > 1000
+                ? `${(results.duration / 1000).toFixed(2)}s`
+                : `${results.duration}ms`}
+            </Typography>
+          ) : null
+        }
+        rows={rows as any}
+        columns={columns.map((column) => ({
+          id: column,
+          label: underscoreToTitleCase(column),
+          render: (value) => (
+            <div
+              style={{
+                whiteSpace: 'nowrap',
+                minHeight: '24px',
+                display: 'flex',
+                alignItems: 'center',
+              }}
+            >
+              {JSON.stringify(value[column]).replace(/"/g, '')}
+            </div>
+          ),
+        }))}
+      />
+    </div>
   );
 };

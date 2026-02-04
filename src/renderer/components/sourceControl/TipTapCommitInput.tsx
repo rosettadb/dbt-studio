@@ -1,40 +1,48 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Box, Button, useTheme } from '@mui/material';
+import { Box, Button, CircularProgress, useTheme } from '@mui/material';
 import { Check, Sync, ArrowUpward } from '@mui/icons-material';
-import { toast } from 'react-toastify';
 import {
   useGitCommit,
   useGetAheadBehindCount,
   useGitPush,
   useGetRemotes,
 } from '../../controllers';
-import { AddGitRemoteModal } from '../modals';
+import { AddGitRemoteModal, GitUiError } from '../modals';
 
 interface TipTapCommitInputProps {
   projectPath?: string;
   stagedFilesCount?: number;
   onCommitSuccess?: () => void;
+  onGitError?: (error: GitUiError) => void;
 }
 
 export const TipTapCommitInput: React.FC<TipTapCommitInputProps> = ({
   projectPath,
   stagedFilesCount = 0,
   onCommitSuccess,
+  onGitError,
 }) => {
   const [message, setMessage] = useState('');
   const [height, setHeight] = useState(36);
   const [isFocused, setIsFocused] = useState(false);
   const [lastActionTime, setLastActionTime] = useState(0);
+  const [pendingAction, setPendingAction] = useState<
+    'commit' | 'push' | 'publish' | null
+  >(null);
   const theme = useTheme();
   const textareaRef = useRef<HTMLDivElement>(null);
 
-  const { data: aheadBehind, refetch: refetchAheadBehind } =
-    useGetAheadBehindCount(projectPath, {
-      enabled: !!projectPath,
-    });
+  const {
+    data: aheadBehind,
+    refetch: refetchAheadBehind,
+    isLoading: isAheadBehindLoading,
+  } = useGetAheadBehindCount(projectPath, {
+    enabled: !!projectPath,
+  });
 
   const { mutate: commitFiles, isLoading: isCommitting } = useGitCommit({
     onSuccess: () => {
+      setPendingAction(null);
       setMessage('');
       setHeight(36);
       if (textareaRef.current) {
@@ -47,30 +55,60 @@ export const TipTapCommitInput: React.FC<TipTapCommitInputProps> = ({
       }, 100);
     },
     onError: (error) => {
-      const errorMessage =
-        error instanceof Error ? error.message : 'Unknown error';
-      toast.error(`Commit failed: ${errorMessage}`);
+      setPendingAction(null);
+      onGitError?.({
+        title: 'Commit failed',
+        message: error.message ?? 'Unknown error',
+        operation: 'commit',
+        repoPath: projectPath,
+      });
     },
   });
 
   const { mutate: pushFiles, isLoading: isPushing } = useGitPush({
-    onSuccess: () => {
+    onSuccess: (data) => {
+      setPendingAction(null);
+      if (data?.authRequired) {
+        onGitError?.({
+          title: 'Authentication required',
+          message:
+            'Authentication is required to push to the remote repository.',
+          operation: 'push',
+          repoPath: projectPath,
+        });
+        return;
+      }
+
+      if (data?.error) {
+        onGitError?.({
+          title: 'Push failed',
+          message: data.error,
+          operation: 'push',
+          repoPath: projectPath,
+        });
+        return;
+      }
       refetchAheadBehind();
       onCommitSuccess?.();
     },
     onError: (error) => {
-      const errorMessage =
-        error instanceof Error ? error.message : 'Unknown error';
-      toast.error(`Push failed: ${errorMessage}`);
+      setPendingAction(null);
+      onGitError?.({
+        title: 'Push failed',
+        message: error.message ?? 'Unknown error',
+        operation: 'push',
+        repoPath: projectPath,
+      });
     },
   });
 
-  const { data: remotes = [], refetch: refetchRemotes } = useGetRemotes(
-    projectPath || '',
-    {
-      enabled: !!projectPath,
-    },
-  );
+  const {
+    data: remotes = [],
+    refetch: refetchRemotes,
+    isLoading: isRemotesLoading,
+  } = useGetRemotes(projectPath || '', {
+    enabled: !!projectPath,
+  });
 
   const [isAddRemoteModalOpen, setIsAddRemoteModalOpen] = useState(false);
 
@@ -99,6 +137,7 @@ export const TipTapCommitInput: React.FC<TipTapCommitInputProps> = ({
 
   const handleCommit = () => {
     if (stagedFilesCount > 0 && projectPath) {
+      setPendingAction('commit');
       commitFiles({
         path: projectPath,
         message: message.trim() || 'Update files', // Default message if empty
@@ -113,22 +152,37 @@ export const TipTapCommitInput: React.FC<TipTapCommitInputProps> = ({
     }
 
     if (remotes.length === 0) {
+      setPendingAction('publish');
       setIsAddRemoteModalOpen(true);
       return;
     }
 
+    setPendingAction('push');
     pushFiles({ path: projectPath });
   };
 
   const handleCloseAddRemoteModal = () => {
+    setPendingAction(null);
     setIsAddRemoteModalOpen(false);
   };
 
   const handleRemoteAdded = async () => {
-    await refetchRemotes();
-    setIsAddRemoteModalOpen(false);
-    if (projectPath) {
-      pushFiles({ path: projectPath });
+    try {
+      await refetchRemotes();
+      setIsAddRemoteModalOpen(false);
+      if (projectPath) {
+        setPendingAction('push');
+        pushFiles({ path: projectPath });
+      }
+    } catch (error) {
+      setPendingAction(null);
+      setIsAddRemoteModalOpen(false);
+      onGitError?.({
+        title: 'Failed to refresh remotes',
+        message: error instanceof Error ? error.message : 'Unknown error',
+        operation: 'remotes:refresh',
+        repoPath: projectPath,
+      });
     }
   };
 
@@ -137,7 +191,7 @@ export const TipTapCommitInput: React.FC<TipTapCommitInputProps> = ({
   // are no staged files to commit.
   const aheadCount = aheadBehind?.ahead ?? 0;
   const hasRemote = remotes.length > 0;
-  const hasTrackingBranch = aheadBehind !== null; // null means no upstream tracking branch
+  const hasTrackingBranch = aheadBehind !== null && aheadBehind !== undefined;
 
   // Show "Publish Branch" when:
   // 1. No remote exists, OR
@@ -159,12 +213,18 @@ export const TipTapCommitInput: React.FC<TipTapCommitInputProps> = ({
     primaryAction = 'push';
   }
 
-  const isLoading = isCommitting || isPushing;
+  const isLoading = isCommitting || isPushing || pendingAction !== null;
+  const isSwitchingPrimaryAction =
+    isAheadBehindLoading || isRemotesLoading || projectPath === undefined;
+  const effectivePrimaryAction: 'commit' | 'push' | 'publish' =
+    isSwitchingPrimaryAction ? 'commit' : primaryAction;
   const isCommitDisabled = stagedFilesCount === 0 || isLoading;
-  const isPushDisabled = !shouldShowPush || isLoading;
-  const isPublishDisabled = isLoading;
+  const isPushDisabled = isSwitchingPrimaryAction
+    ? true
+    : !shouldShowPush || isLoading;
+  const isPublishDisabled = isSwitchingPrimaryAction ? true : isLoading;
   const buttonDisabled = (() => {
-    switch (primaryAction) {
+    switch (effectivePrimaryAction) {
       case 'push':
         return isPushDisabled;
       case 'publish':
@@ -176,18 +236,23 @@ export const TipTapCommitInput: React.FC<TipTapCommitInputProps> = ({
 
   const buttonLabel = (() => {
     if (isLoading) {
-      if (primaryAction === 'push') {
+      if (pendingAction === 'push' || effectivePrimaryAction === 'push') {
         return 'Pushing...';
       }
-      if (primaryAction === 'commit') {
+      if (pendingAction === 'commit' || effectivePrimaryAction === 'commit') {
         return 'Committing...';
       }
       return 'Publishing...';
     }
-    if (primaryAction === 'push') {
+
+    if (isSwitchingPrimaryAction) {
+      return stagedFilesCount > 0 ? `Commit (${stagedFilesCount})` : 'Commit';
+    }
+
+    if (effectivePrimaryAction === 'push') {
       return `Sync Changes ${aheadCount}↑`;
     }
-    if (primaryAction === 'publish') {
+    if (effectivePrimaryAction === 'publish') {
       return 'Publish Branch';
     }
     return stagedFilesCount > 0 ? `Commit (${stagedFilesCount})` : 'Commit';
@@ -195,12 +260,12 @@ export const TipTapCommitInput: React.FC<TipTapCommitInputProps> = ({
 
   const buttonIcon = (() => {
     if (isLoading) {
-      return null;
+      return <CircularProgress size={16} thickness={5} color="inherit" />;
     }
-    if (primaryAction === 'push') {
+    if (effectivePrimaryAction === 'push') {
       return <Sync sx={{ fontSize: 16, mr: 0.5 }} />;
     }
-    if (primaryAction === 'publish') {
+    if (effectivePrimaryAction === 'publish') {
       return <ArrowUpward sx={{ fontSize: 16, mr: 0.5 }} />;
     }
     return <Check sx={{ fontSize: 16, mr: 0.5 }} />;
@@ -219,11 +284,11 @@ export const TipTapCommitInput: React.FC<TipTapCommitInputProps> = ({
       return;
     }
 
-    if (primaryAction === 'push') {
+    if (effectivePrimaryAction === 'push') {
       handlePush();
       return;
     }
-    if (primaryAction === 'publish') {
+    if (effectivePrimaryAction === 'publish') {
       // If no remote exists, show modal to add one
       if (remotes.length === 0) {
         setIsAddRemoteModalOpen(true);
