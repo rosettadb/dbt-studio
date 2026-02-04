@@ -25,11 +25,18 @@ import {
   MenuItem,
   ListItemIcon,
   ListItemText,
+  FormControl,
+  InputLabel,
+  Select,
+  Stack,
+  Divider,
 } from '@mui/material';
 import {
   Refresh as RefreshIcon,
   Download as DownloadIcon,
   ArrowDropDown as ArrowDropDownIcon,
+  DeleteOutline as DeleteIcon,
+  Add as AddIcon,
 } from '@mui/icons-material';
 import {
   useDeleteDuckLakeRows,
@@ -50,7 +57,15 @@ export const TableDataRowsTab: React.FC<TableDataRowsTabProps> = ({
   tableName,
 }) => {
   const [updateRowsDialogOpen, setUpdateRowsDialogOpen] = useState(false);
-  const [updateRowsQuery, setUpdateRowsQuery] = useState('');
+  // Form state for structured update
+  const [whereColumn, setWhereColumn] = useState('');
+  const [whereValue, setWhereValue] = useState('');
+  const [updateFields, setUpdateFields] = useState<
+    Array<{ id: string; column: string; value: string }>
+  >([{ id: 'init', column: '', value: '' }]);
+
+  // Computed SQL for the preview/submission
+  const [generatedUpdateQuery, setGeneratedUpdateQuery] = useState('');
 
   const [deleteRowsDialogOpen, setDeleteRowsDialogOpen] = useState(false);
   const [deleteRowsQuery, setDeleteRowsQuery] = useState('');
@@ -234,11 +249,69 @@ export const TableDataRowsTab: React.FC<TableDataRowsTabProps> = ({
   };
 
   const handleOpenUpdateRowsDialog = () => {
-    setUpdateRowsQuery(
-      `UPDATE ${tableName} SET /* column = value */ WHERE /* condition */;`,
-    );
+    // Reset form state
+    setWhereColumn('');
+    setWhereValue('');
+    setUpdateFields([{ id: Date.now().toString(), column: '', value: '' }]);
+    setGeneratedUpdateQuery('');
     setUpdateRowsDialogOpen(true);
   };
+
+  // Helper to determine if quotes are needed based on column type
+  const needsQuotes = (colName: string) => {
+    if (!tableDetails?.columns) return true;
+    const col = tableDetails.columns.find((c) => c.columnName === colName);
+    if (!col) return true;
+    const type = col.columnType.toUpperCase();
+    // Numeric and boolean types typically don't need quotes
+    // This is a basic heuristic; might need refinement for complex types
+    return !(
+      type.includes('INT') ||
+      type.includes('DOUBLE') ||
+      type.includes('FLOAT') ||
+      type.includes('DECIMAL') ||
+      type.includes('BOOL')
+    );
+  };
+
+  // Effect to update the generated query whenever form state changes
+  React.useEffect(() => {
+    if (!updateRowsDialogOpen) return;
+
+    if (!tableName || !whereColumn || updateFields.every((f) => !f.column)) {
+      setGeneratedUpdateQuery('');
+      return;
+    }
+
+    const setClauses = updateFields
+      .filter((f) => f.column) // Only include fields with a column selected
+      .map((f) => {
+        const val = needsQuotes(f.column)
+          ? `'${f.value.replace(/'/g, "''")}'`
+          : f.value || 'NULL';
+        return `${f.column} = ${val}`;
+      });
+
+    if (setClauses.length === 0) {
+      setGeneratedUpdateQuery('');
+      return;
+    }
+
+    const whereVal = needsQuotes(whereColumn)
+      ? `'${whereValue.replace(/'/g, "''")}'`
+      : whereValue || 'NULL';
+    const whereClause = `${whereColumn} = ${whereVal}`;
+
+    const query = `UPDATE "${tableName}"\nSET\n  ${setClauses.join(',\n  ')}\nWHERE ${whereClause};`;
+    setGeneratedUpdateQuery(query);
+  }, [
+    updateRowsDialogOpen,
+    tableName,
+    whereColumn,
+    whereValue,
+    updateFields,
+    tableDetails,
+  ]);
 
   const handleConfirmUpdateRows = () => {
     if (!instanceId || !tableName) {
@@ -249,7 +322,7 @@ export const TableDataRowsTab: React.FC<TableDataRowsTabProps> = ({
     updateRowsMutation.mutate({
       instanceId,
       tableName,
-      updateQuery: updateRowsQuery,
+      updateQuery: generatedUpdateQuery,
     });
 
     setUpdateRowsDialogOpen(false);
@@ -362,16 +435,155 @@ export const TableDataRowsTab: React.FC<TableDataRowsTabProps> = ({
           >
             <DialogTitle>Update rows</DialogTitle>
             <DialogContent>
-              <TextField
-                fullWidth
-                multiline
-                minRows={8}
-                label="UPDATE SQL"
-                value={updateRowsQuery}
-                onChange={(e) => setUpdateRowsQuery(e.target.value)}
-                disabled={updateRowsMutation.isLoading}
-                autoFocus
-              />
+              <Stack spacing={3} sx={{ mt: 1 }}>
+                {/* SET Section */}
+                <Box>
+                  <Typography variant="subtitle2" gutterBottom>
+                    SET (Fields to update)
+                  </Typography>
+                  <Stack spacing={2}>
+                    {updateFields.map((field, index) => (
+                      <Box key={field.id} sx={{ display: 'flex', gap: 2 }}>
+                        <FormControl fullWidth size="small">
+                          <InputLabel>Column</InputLabel>
+                          <Select
+                            value={field.column}
+                            label="Column"
+                            onChange={(e) => {
+                              const newFields = [...updateFields];
+                              newFields[index].column = e.target.value;
+                              setUpdateFields(newFields);
+                            }}
+                          >
+                            {tableDetails?.columns.map((col) => (
+                              <MenuItem
+                                key={col.columnId}
+                                value={col.columnName}
+                              >
+                                {col.columnName}
+                                <Typography
+                                  component="span"
+                                  variant="caption"
+                                  color="text.secondary"
+                                  sx={{ ml: 1 }}
+                                >
+                                  ({col.columnType})
+                                </Typography>
+                              </MenuItem>
+                            ))}
+                          </Select>
+                        </FormControl>
+                        <TextField
+                          fullWidth
+                          size="small"
+                          label="Value"
+                          value={field.value}
+                          onChange={(e) => {
+                            const newFields = [...updateFields];
+                            newFields[index].value = e.target.value;
+                            setUpdateFields(newFields);
+                          }}
+                        />
+                        <IconButton
+                          color="error"
+                          onClick={() => {
+                            if (updateFields.length > 1) {
+                              setUpdateFields(
+                                updateFields.filter((f) => f.id !== field.id),
+                              );
+                            } else {
+                              // If it's the last one, just clear it
+                              setUpdateFields([
+                                {
+                                  id: Date.now().toString(),
+                                  column: '',
+                                  value: '',
+                                },
+                              ]);
+                            }
+                          }}
+                        >
+                          <DeleteIcon />
+                        </IconButton>
+                      </Box>
+                    ))}
+                    <Button
+                      startIcon={<AddIcon />}
+                      onClick={() =>
+                        setUpdateFields([
+                          ...updateFields,
+                          {
+                            id: Date.now().toString(),
+                            column: '',
+                            value: '',
+                          },
+                        ])
+                      }
+                      sx={{ alignSelf: 'start' }}
+                    >
+                      Add Field
+                    </Button>
+                  </Stack>
+                </Box>
+
+                <Divider />
+
+                {/* WHERE Section */}
+                <Box>
+                  <Typography variant="subtitle2" gutterBottom>
+                    WHERE (Condition)
+                  </Typography>
+                  <Box sx={{ display: 'flex', gap: 2 }}>
+                    <FormControl fullWidth size="small">
+                      <InputLabel>Column</InputLabel>
+                      <Select
+                        value={whereColumn}
+                        label="Column"
+                        onChange={(e) => setWhereColumn(e.target.value)}
+                      >
+                        {tableDetails?.columns.map((col) => (
+                          <MenuItem key={col.columnId} value={col.columnName}>
+                            {col.columnName}
+                            <Typography
+                              component="span"
+                              variant="caption"
+                              color="text.secondary"
+                              sx={{ ml: 1 }}
+                            >
+                              ({col.columnType})
+                            </Typography>
+                          </MenuItem>
+                        ))}
+                      </Select>
+                    </FormControl>
+                    <TextField
+                      fullWidth
+                      size="small"
+                      label="Value"
+                      value={whereValue}
+                      onChange={(e) => setWhereValue(e.target.value)}
+                    />
+                  </Box>
+                </Box>
+
+                {/* Preview Section */}
+                <Box
+                  sx={{
+                    p: 2,
+                    bgcolor: 'action.hover',
+                    borderRadius: 1,
+                    fontFamily: 'monospace',
+                    fontSize: '0.875rem',
+                  }}
+                >
+                  <Typography variant="caption" color="text.secondary">
+                    Generated Query Preview:
+                  </Typography>
+                  <pre style={{ margin: '8px 0 0', whiteSpace: 'pre-wrap' }}>
+                    {generatedUpdateQuery || '(Complete the form to see SQL)'}
+                  </pre>
+                </Box>
+              </Stack>
             </DialogContent>
             <DialogActions>
               <Button
@@ -384,7 +596,8 @@ export const TableDataRowsTab: React.FC<TableDataRowsTabProps> = ({
                 variant="contained"
                 onClick={handleConfirmUpdateRows}
                 disabled={
-                  updateRowsMutation.isLoading || updateRowsQuery.trim() === ''
+                  updateRowsMutation.isLoading ||
+                  generatedUpdateQuery.trim() === ''
                 }
               >
                 Run
