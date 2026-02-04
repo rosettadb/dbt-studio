@@ -419,3 +419,28 @@ export const generateFilename = (prefix = 'file', extension = 'txt') => {
 
   return `${prefix}_${timestamp}.${extension}`;
 };
+
+export const formatBytes = (bytes: number) => {
+  if (bytes === 0) return '0 Bytes';
+  const k = 1024;
+  const sizes = ['Bytes', 'KB', 'MB', 'GB', 'TB'];
+  const i = Math.floor(Math.log(bytes) / Math.log(k));
+  return `${Math.round((bytes / k ** i) * 100) / 100} ${sizes[i]}`;
+};
+
+export const formatNumber = (num: number) => {
+  return new Intl.NumberFormat().format(num);
+};
+
+export function safeToString(value: any): string {
+  if (value === null || value === undefined) {
+    return '-';
+  }
+  if (typeof value === 'object') {
+    if (value.hugeint !== undefined) {
+      return String(value.hugeint);
+    }
+    return JSON.stringify(value);
+  }
+  return String(value);
+}
