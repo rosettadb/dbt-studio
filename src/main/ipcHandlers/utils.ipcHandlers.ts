@@ -1,7 +1,13 @@
-import { ipcMain, shell } from 'electron';
+import { ipcMain, shell, dialog } from 'electron';
+import fs from 'fs-extra';
 import { UtilsService } from '../services';
 
-const handlerChannels = ['open:external'];
+const handlerChannels = [
+  'open:external',
+  'utils:getFileContentList',
+  'dialog:showOpenDialog',
+  'dialog:showSaveDialog',
+];
 
 const removeUtilsIpcHandlers = () => {
   handlerChannels.forEach((channel) => {
@@ -25,6 +31,24 @@ const registerUtilsHandlers = () => {
     'utils:getFileContentList',
     async (_event, files: string[]) => {
       return UtilsService.getFilesWithContent(files);
+    },
+  );
+
+  // Handler for showOpenDialog
+  ipcMain.handle(
+    'dialog:showOpenDialog',
+    async (_event, options: Electron.OpenDialogOptions) => {
+      const result = await dialog.showOpenDialog(options);
+      return result;
+    },
+  );
+
+  // Handler for showSaveDialog
+  ipcMain.handle(
+    'dialog:showSaveDialog',
+    async (_event, options: Electron.SaveDialogOptions) => {
+      const result = await dialog.showSaveDialog(options);
+      return result;
     },
   );
 };

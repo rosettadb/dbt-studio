@@ -21,13 +21,7 @@ import {
   Button,
   TextField,
 } from '@mui/material';
-import {
-  TableChart,
-  Visibility,
-  QueryStats,
-  Delete,
-  Edit,
-} from '@mui/icons-material';
+import { TableChart, Delete, Edit } from '@mui/icons-material';
 import { useNavigate } from 'react-router-dom';
 import moment from 'moment';
 import {
@@ -50,15 +44,11 @@ interface DuckLakeTable {
 interface DuckLakeTablesProps {
   tables?: DuckLakeTable[];
   selectedInstanceId?: string;
-  onPreview?: (tableId: string) => void;
-  onQuery?: (tableId: string) => void;
 }
 
 export const DataLakeTables: React.FC<DuckLakeTablesProps> = ({
   tables = [],
   selectedInstanceId,
-  onPreview,
-  onQuery,
 }) => {
   const navigate = useNavigate();
   const deleteTableMutation = useDeleteDuckLakeTable();
@@ -102,18 +92,6 @@ export const DataLakeTables: React.FC<DuckLakeTablesProps> = ({
       return `${(count / 1000).toFixed(1)}K`;
     }
     return count.toString();
-  };
-
-  const handlePreview = (tableId: string) => {
-    if (onPreview) {
-      onPreview(tableId);
-    }
-  };
-
-  const handleQuery = (tableId: string) => {
-    if (onQuery) {
-      onQuery(tableId);
-    }
   };
 
   const handleRequestDelete = (table: DuckLakeTable) => {
@@ -286,36 +264,6 @@ export const DataLakeTables: React.FC<DuckLakeTablesProps> = ({
                   </TableCell>
                   <TableCell align="right">
                     <Box sx={{ display: 'flex', gap: 0.5 }}>
-                      <Tooltip title="Preview Data coming soon">
-                        <span>
-                          <IconButton
-                            size="small"
-                            color="primary"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              handlePreview(table.id);
-                            }}
-                            disabled
-                          >
-                            <Visibility fontSize="small" />
-                          </IconButton>
-                        </span>
-                      </Tooltip>
-                      <Tooltip title="Query Table coming soon">
-                        <span>
-                          <IconButton
-                            size="small"
-                            color="secondary"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              handleQuery(table.id);
-                            }}
-                            disabled
-                          >
-                            <QueryStats fontSize="small" />
-                          </IconButton>
-                        </span>
-                      </Tooltip>
                       <Tooltip title="Delete Table">
                         <span>
                           <IconButton

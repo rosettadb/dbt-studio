@@ -780,15 +780,18 @@ export class DuckDBCatalogAdapter extends CatalogAdapter {
       }
 
       const result = await this.connectionInfo.connection.run(query);
-      const rows = await result.getRows();
 
-      // Handle DDL statements (CREATE, DROP, etc.) that don't return a schema
-      const columns = result.schema
-        ? result.schema.map((col: any) => ({
-            name: col.name,
-            type: col.type,
-          }))
-        : [];
+      // Get column names and types using the correct DuckDB Node Neo API
+      const columnNames = result.columnNames();
+      const columnTypes = result.columnTypes();
+
+      // Map to our column format
+      const columns = columnNames.map((name: string, index: number) => ({
+        name,
+        type: columnTypes[index]?.toString() || 'UNKNOWN',
+      }));
+
+      const rows = await result.getRows();
 
       const executionTime = Date.now() - startTime;
 
@@ -800,7 +803,7 @@ export class DuckDBCatalogAdapter extends CatalogAdapter {
       };
     } catch (error) {
       // eslint-disable-next-line no-console
-      console.error('DuckDB query execution failed:', error);
+      console.error('Failed to execute DuckDB query:', error);
       throw error;
     }
   }

@@ -19,14 +19,10 @@ import {
 
 interface DataLakeTablesViewProps {
   instanceId: string;
-  onPreview?: (tableName: string) => void;
-  onQuery?: (tableName: string) => void;
 }
 
 export const DataLakeTablesView: React.FC<DataLakeTablesViewProps> = ({
   instanceId,
-  onPreview,
-  onQuery,
 }) => {
   const [importWizardOpen, setImportWizardOpen] = useState(false);
 
@@ -157,8 +153,6 @@ export const DataLakeTablesView: React.FC<DataLakeTablesViewProps> = ({
       <DataLakeTables
         tables={formattedTables}
         selectedInstanceId={instanceId}
-        onPreview={onPreview}
-        onQuery={onQuery}
       />
 
       <DataLakeTableImportWizard
