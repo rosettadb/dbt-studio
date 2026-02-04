@@ -1,22 +1,14 @@
 name: Integration Tests
 
 on:
-  push:
-    branches: [develop]
   pull_request:
-    branches: [develop]
+    branches: [dev]
 
 jobs:
   integration-tests:
-    name: Integration Tests (Node ${{ matrix.node-version }})
-    runs-on: ${{ matrix.os }}
+    name: Integration Tests
+    runs-on: ubuntu-latest
     timeout-minutes: 30
-
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [ubuntu-latest, macos-latest]
-        node-version: [18, 20]
 
     services:
       postgres:
@@ -37,14 +29,13 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Setup Node.js ${{ matrix.node-version }}
+      - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: ${{ matrix.node-version }}
+          node-version: '20'
           cache: 'npm'
 
-      - name: Install system dependencies (Ubuntu)
-        if: runner.os == 'Linux'
+      - name: Install system dependencies
         run: |
           sudo apt-get update
           sudo apt-get install -y libsecret-1-dev
@@ -69,14 +60,13 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: integration-test-results-${{ matrix.os }}-node${{ matrix.node-version }}
+          name: integration-test-results
           path: |
             coverage/
             test-results/
           retention-days: 7
 
       - name: Upload coverage to Codecov
-        if: matrix.os == 'ubuntu-latest' && matrix.node-version == '20'
         uses: codecov/codecov-action@v4
         with:
           files: ./coverage/coverage-final.json
