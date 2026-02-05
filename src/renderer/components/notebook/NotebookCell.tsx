@@ -1,172 +1,275 @@
-/**
- * Notebook Cell Component
- * Wrapper for different cell types (SQL, Markdown, Visualization)
- */
-
-import React from 'react';
-import { Box, Paper, IconButton, Menu, MenuItem, Tooltip } from '@mui/material';
+import React, { useState } from 'react';
 import {
-  MoreVert as MoreIcon,
-  PlayArrow as RunIcon,
-  Delete as DeleteIcon,
-  ContentCopy as DuplicateIcon,
-  ArrowUpward as MoveUpIcon,
-  ArrowDownward as MoveDownIcon,
+  Box,
+  IconButton,
+  Typography,
+  Collapse,
+  Chip,
+  Menu,
+  MenuItem,
+  Tooltip,
+} from '@mui/material';
+import {
+  ExpandMore,
+  ExpandLess,
+  MoreVert,
+  PlayArrow,
+  Delete,
+  ContentCopy,
+  Clear,
+  DragIndicator,
 } from '@mui/icons-material';
 import { NotebookCell as NotebookCellType } from '../../../types/notebook';
 import { SQLCell } from './SQLCell';
 import { MarkdownCell } from './MarkdownCell';
+import { OutputPanel } from './OutputPanel';
 
 interface NotebookCellProps {
   cell: NotebookCellType;
-  isFirst: boolean;
-  isLast: boolean;
+  index: number;
   isExecuting: boolean;
-  onRun: (content: string) => void;
-  onUpdate: (content: string) => void;
+  onRun: () => void;
   onDelete: () => void;
   onDuplicate: () => void;
-  onMoveUp: () => void;
-  onMoveDown: () => void;
   onClearOutput: () => void;
+  onUpdate: (content: string) => void;
+  dragHandleProps?: any;
 }
+
+type SectionFilter = 'all' | 'code' | 'output';
 
 export const NotebookCell: React.FC<NotebookCellProps> = ({
   cell,
-  isFirst,
-  isLast,
+  index,
   isExecuting,
   onRun,
-  onUpdate,
   onDelete,
   onDuplicate,
-  onMoveUp,
-  onMoveDown,
   onClearOutput,
+  onUpdate,
+  dragHandleProps,
 }) => {
-  const [anchorEl, setAnchorEl] = React.useState<null | HTMLElement>(null);
-  const [isHovered, setIsHovered] = React.useState(false);
+  const [collapsed, setCollapsed] = useState(false);
+  const [section, setSection] = useState<SectionFilter>('all');
+  const [menuAnchor, setMenuAnchor] = useState<null | HTMLElement>(null);
 
-  const handleMenuOpen = (event: React.MouseEvent<HTMLElement>) => {
-    setAnchorEl(event.currentTarget);
+  // Generate smart summary for collapsed view
+  const getCellSummary = (): string => {
+    if (cell.type === 'sql') {
+      const firstLine = cell.content.split('\n')[0].trim();
+      const preview =
+        firstLine.length > 60 ? `${firstLine.substring(0, 60)}...` : firstLine;
+
+      if (cell.output) {
+        const { rowCount, executionTime } = cell.output;
+        return `${preview} • ${rowCount?.toLocaleString() || 0} rows in ${executionTime}ms`;
+      }
+
+      return preview;
+    }
+
+    if (cell.type === 'markdown') {
+      const firstLine = cell.content
+        .split('\n')[0]
+        .replace(/^#+\s*/, '')
+        .trim();
+      return firstLine.length > 80
+        ? `${firstLine.substring(0, 80)}...`
+        : firstLine;
+    }
+
+    return 'Empty cell';
   };
 
   const handleMenuClose = () => {
-    setAnchorEl(null);
+    setMenuAnchor(null);
   };
 
-  const handleAction = (action: () => void) => {
-    action();
+  const handleDuplicate = () => {
+    onDuplicate();
+    handleMenuClose();
+  };
+
+  const handleClearOutput = () => {
+    onClearOutput();
+    handleMenuClose();
+  };
+
+  const handleDelete = () => {
+    onDelete();
     handleMenuClose();
   };
 
   return (
-    <Paper
-      elevation={isHovered ? 3 : 1}
-      onMouseEnter={() => setIsHovered(true)}
-      onMouseLeave={() => setIsHovered(false)}
+    <Box
       sx={{
         mb: 2,
-        position: 'relative',
-        transition: 'all 0.2s ease',
-        '&:hover': {
-          boxShadow: 3,
-        },
+        border: '1px solid',
+        borderColor: 'divider',
+        borderRadius: 1,
+        '&:hover': { borderColor: 'primary.main' },
       }}
     >
-      {/* Cell Actions Toolbar */}
+      {/* Cell Header */}
       <Box
         sx={{
-          position: 'absolute',
-          top: 8,
-          right: 8,
           display: 'flex',
-          gap: 0.5,
-          opacity: isHovered ? 1 : 0,
-          transition: 'opacity 0.2s ease',
-          zIndex: 10,
+          alignItems: 'center',
+          gap: 1,
+          p: 1,
+          bgcolor: 'grey.900',
+          borderBottom: collapsed ? 'none' : '1px solid',
+          borderColor: 'divider',
         }}
       >
-        {cell.type === 'sql' && (
-          <Tooltip title="Run Cell (Cmd+Enter)">
-            <IconButton
-              size="small"
-              onClick={() => onRun(cell.content)}
-              disabled={isExecuting}
-              sx={{
-                bgcolor: 'primary.main',
-                color: 'white',
-                '&:hover': { bgcolor: 'primary.dark' },
-              }}
-            >
-              <RunIcon fontSize="small" />
-            </IconButton>
-          </Tooltip>
+        {/* Drag Handle */}
+        {dragHandleProps && (
+          <Box
+            {...dragHandleProps}
+            sx={{
+              display: 'flex',
+              alignItems: 'center',
+              cursor: 'grab',
+              '&:active': { cursor: 'grabbing' },
+              color: 'text.secondary',
+              '&:hover': { color: 'text.primary' },
+            }}
+          >
+            <Tooltip title="Drag to reorder">
+              <DragIndicator fontSize="small" />
+            </Tooltip>
+          </Box>
         )}
 
-        <Tooltip title="More Actions">
-          <IconButton size="small" onClick={handleMenuOpen}>
-            <MoreIcon fontSize="small" />
+        {/* Collapse Toggle */}
+        <IconButton size="small" onClick={() => setCollapsed(!collapsed)}>
+          {collapsed ? <ExpandMore /> : <ExpandLess />}
+        </IconButton>
+
+        {/* Cell Type Badge */}
+        <Chip
+          label={cell.type.toUpperCase()}
+          size="small"
+          color={cell.type === 'sql' ? 'primary' : 'default'}
+        />
+
+        {/* Cell Summary (collapsed) */}
+        {collapsed && (
+          <Typography
+            variant="body2"
+            sx={{
+              flex: 1,
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+              whiteSpace: 'nowrap',
+              fontFamily: cell.type === 'sql' ? 'monospace' : 'inherit',
+              fontSize: 12,
+            }}
+          >
+            {getCellSummary()}
+          </Typography>
+        )}
+
+        {/* Cell Index */}
+        {!collapsed && (
+          <Typography variant="caption" color="text.secondary">
+            [{index + 1}]
+          </Typography>
+        )}
+
+        {/* Section Dropdown (expanded, SQL with output) */}
+        {!collapsed && cell.type === 'sql' && cell.output && (
+          <Box sx={{ display: 'flex', gap: 0.5 }}>
+            <Chip
+              label="All"
+              size="small"
+              variant={section === 'all' ? 'filled' : 'outlined'}
+              onClick={() => setSection('all')}
+              sx={{ cursor: 'pointer' }}
+            />
+            <Chip
+              label="Code"
+              size="small"
+              variant={section === 'code' ? 'filled' : 'outlined'}
+              onClick={() => setSection('code')}
+              sx={{ cursor: 'pointer' }}
+            />
+            <Chip
+              label="Output"
+              size="small"
+              variant={section === 'output' ? 'filled' : 'outlined'}
+              onClick={() => setSection('output')}
+              sx={{ cursor: 'pointer' }}
+            />
+          </Box>
+        )}
+
+        <Box sx={{ flex: 1 }} />
+
+        {/* Run Button */}
+        {!collapsed && cell.type === 'sql' && (
+          <IconButton
+            size="small"
+            onClick={onRun}
+            disabled={isExecuting}
+            color="primary"
+          >
+            <PlayArrow />
           </IconButton>
-        </Tooltip>
+        )}
+
+        {/* More Menu */}
+        <IconButton
+          size="small"
+          onClick={(e) => setMenuAnchor(e.currentTarget)}
+        >
+          <MoreVert />
+        </IconButton>
 
         <Menu
-          anchorEl={anchorEl}
-          open={Boolean(anchorEl)}
+          anchorEl={menuAnchor}
+          open={Boolean(menuAnchor)}
           onClose={handleMenuClose}
         >
-          {!isFirst && (
-            <MenuItem onClick={() => handleAction(onMoveUp)}>
-              <MoveUpIcon fontSize="small" sx={{ mr: 1 }} />
-              Move Up
-            </MenuItem>
-          )}
-          {!isLast && (
-            <MenuItem onClick={() => handleAction(onMoveDown)}>
-              <MoveDownIcon fontSize="small" sx={{ mr: 1 }} />
-              Move Down
-            </MenuItem>
-          )}
-          <MenuItem onClick={() => handleAction(onDuplicate)}>
-            <DuplicateIcon fontSize="small" sx={{ mr: 1 }} />
-            Duplicate
+          <MenuItem onClick={handleDuplicate}>
+            <ContentCopy fontSize="small" sx={{ mr: 1 }} /> Duplicate
           </MenuItem>
           {cell.output && (
-            <MenuItem onClick={() => handleAction(onClearOutput)}>
-              Clear Output
+            <MenuItem onClick={handleClearOutput}>
+              <Clear fontSize="small" sx={{ mr: 1 }} /> Clear Output
             </MenuItem>
           )}
-          <MenuItem
-            onClick={() => handleAction(onDelete)}
-            sx={{ color: 'error.main' }}
-          >
-            <DeleteIcon fontSize="small" sx={{ mr: 1 }} />
-            Delete Cell
+          <MenuItem onClick={handleDelete}>
+            <Delete fontSize="small" sx={{ mr: 1 }} /> Delete
           </MenuItem>
         </Menu>
       </Box>
 
-      {/* Cell Content */}
-      <Box sx={{ p: 2, pt: 5 }}>
-        {cell.type === 'sql' && (
-          <SQLCell
-            cell={cell}
-            isExecuting={isExecuting}
-            onRun={onRun}
-            onUpdate={onUpdate}
-          />
-        )}
+      {/* Cell Content (collapsible) */}
+      <Collapse in={!collapsed}>
+        <Box sx={{ p: 2 }}>
+          {/* Code Section */}
+          {(section === 'all' || section === 'code') && (
+            <Box sx={{ mb: section === 'all' && cell.output ? 2 : 0 }}>
+              {cell.type === 'sql' ? (
+                <SQLCell
+                  cell={cell}
+                  isExecuting={isExecuting}
+                  onRun={onRun}
+                  onUpdate={onUpdate}
+                />
+              ) : (
+                <MarkdownCell cell={cell} onUpdate={onUpdate} />
+              )}
+            </Box>
+          )}
 
-        {cell.type === 'markdown' && (
-          <MarkdownCell cell={cell} onUpdate={onUpdate} />
-        )}
-
-        {cell.type === 'visualization' && (
-          <Box sx={{ p: 2, textAlign: 'center', color: 'text.secondary' }}>
-            Visualization cells coming soon...
-          </Box>
-        )}
-      </Box>
-    </Paper>
+          {/* Output Section */}
+          {(section === 'all' || section === 'output') &&
+            cell.output &&
+            !isExecuting && <OutputPanel output={cell.output} cellId={cell.id} />}
+        </Box>
+      </Collapse>
+    </Box>
   );
 };

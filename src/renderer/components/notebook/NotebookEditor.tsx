@@ -14,6 +14,12 @@ import {
 import { Add as AddIcon } from '@mui/icons-material';
 import { v4 as uuidv4 } from 'uuid';
 import {
+  DragDropContext,
+  Droppable,
+  Draggable,
+  DropResult,
+} from 'react-beautiful-dnd';
+import {
   useNotebook,
   useUpdateNotebook,
   useRunCell,
@@ -171,31 +177,30 @@ export const NotebookEditor: React.FC<NotebookEditorProps> = ({
     [instanceId, notebook, notebookId, updateNotebook],
   );
 
-  const handleMoveCell = useCallback(
-    (cellId: string, direction: 'up' | 'down') => {
-      if (!notebook) return;
+  // Drag-and-drop cell reordering
+  const handleDragEnd = useCallback(
+    (result: DropResult) => {
+      if (!notebook || !result.destination) return;
 
-      const cellIndex = notebook.cells.findIndex((c) => c.id === cellId);
-      if (cellIndex === -1) return;
+      const { source, destination } = result;
+      if (source.index === destination.index) return;
 
-      const newIndex = direction === 'up' ? cellIndex - 1 : cellIndex + 1;
-      if (newIndex < 0 || newIndex >= notebook.cells.length) return;
+      // Reorder cells
+      const reorderedCells = Array.from(notebook.cells);
+      const [movedCell] = reorderedCells.splice(source.index, 1);
+      reorderedCells.splice(destination.index, 0, movedCell);
 
-      const updatedCells = [...notebook.cells];
-      [updatedCells[cellIndex], updatedCells[newIndex]] = [
-        updatedCells[newIndex],
-        updatedCells[cellIndex],
-      ];
-
-      const reorderedCells = updatedCells.map((cell, index) => ({
+      // Update order property
+      const updatedCells = reorderedCells.map((cell, index) => ({
         ...cell,
         order: index,
       }));
 
+      // Save to backend
       updateNotebook.mutate({
         instanceId,
         notebookId,
-        cells: reorderedCells,
+        cells: updatedCells,
       });
     },
     [instanceId, notebook, notebookId, updateNotebook],
@@ -347,24 +352,62 @@ export const NotebookEditor: React.FC<NotebookEditorProps> = ({
           </Box>
         ) : (
           <>
-            {notebook.cells
-              .sort((a, b) => a.order - b.order)
-              .map((cell, index) => (
-                <NotebookCell
-                  key={cell.id}
-                  cell={cell}
-                  isFirst={index === 0}
-                  isLast={index === notebook.cells.length - 1}
-                  isExecuting={executingCells.has(cell.id) || isRunningAll}
-                  onRun={(content) => handleRunCell(cell.id, content)}
-                  onUpdate={(content) => handleUpdateCell(cell.id, content)}
-                  onDelete={() => handleDeleteCell(cell.id)}
-                  onDuplicate={() => handleDuplicateCell(cell.id)}
-                  onMoveUp={() => handleMoveCell(cell.id, 'up')}
-                  onMoveDown={() => handleMoveCell(cell.id, 'down')}
-                  onClearOutput={() => handleClearOutput(cell.id)}
-                />
-              ))}
+            <DragDropContext onDragEnd={handleDragEnd}>
+              <Droppable droppableId="notebook-cells">
+                {(droppableProvided) => (
+                  <Box
+                    ref={droppableProvided.innerRef}
+                    // eslint-disable-next-line react/jsx-props-no-spreading
+                    {...droppableProvided.droppableProps}
+                  >
+                    {notebook.cells
+                      .sort((a, b) => a.order - b.order)
+                      .map((cell, index) => (
+                        <Draggable
+                          key={cell.id}
+                          draggableId={cell.id}
+                          index={index}
+                        >
+                          {(draggableProvided, snapshot) => (
+                            <Box
+                              ref={draggableProvided.innerRef}
+                              // eslint-disable-next-line react/jsx-props-no-spreading
+                              {...draggableProvided.draggableProps}
+                              sx={{
+                                opacity: snapshot.isDragging ? 0.8 : 1,
+                                transform: snapshot.isDragging
+                                  ? 'rotate(2deg)'
+                                  : 'none',
+                              }}
+                            >
+                              <NotebookCell
+                                cell={cell}
+                                index={index}
+                                isExecuting={
+                                  executingCells.has(cell.id) || isRunningAll
+                                }
+                                onRun={() =>
+                                  handleRunCell(cell.id, cell.content)
+                                }
+                                onUpdate={(content: string) =>
+                                  handleUpdateCell(cell.id, content)
+                                }
+                                onDelete={() => handleDeleteCell(cell.id)}
+                                onDuplicate={() => handleDuplicateCell(cell.id)}
+                                onClearOutput={() => handleClearOutput(cell.id)}
+                                dragHandleProps={
+                                  draggableProvided.dragHandleProps
+                                }
+                              />
+                            </Box>
+                          )}
+                        </Draggable>
+                      ))}
+                    {droppableProvided.placeholder}
+                  </Box>
+                )}
+              </Droppable>
+            </DragDropContext>
 
             {/* Add Cell Button */}
             <Box sx={{ display: 'flex', justifyContent: 'center', mt: 2 }}>

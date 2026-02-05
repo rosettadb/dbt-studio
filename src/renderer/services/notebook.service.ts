@@ -95,4 +95,19 @@ export const notebookService = {
   getActiveSessionCount: (): Promise<number> => {
     return window.electron.ipcRenderer.invoke('notebook:sessions:count');
   },
+
+  /**
+   * Export cell data to file
+   */
+  exportData: (
+    cellId: string,
+    format: 'csv' | 'tsv' | 'json' | 'parquet',
+    data: any[],
+  ): Promise<string> => {
+    return window.electron.ipcRenderer.invoke('notebook:export', {
+      cellId,
+      format,
+      data,
+    });
+  },
 };

@@ -223,6 +223,42 @@ export class NotebookStorageService {
   }
 
   /**
+   * Custom JSON replacer to handle BigInt values
+   */
+  private static bigIntReplacer(_key: string, value: any): any {
+    if (typeof value === 'bigint') {
+      return value.toString();
+    }
+    return value;
+  }
+
+  /**
+   * Convert BigInt values in nested objects/arrays
+   */
+  private static convertBigInts(obj: any): any {
+    if (obj === null || obj === undefined) {
+      return obj;
+    }
+
+    if (typeof obj === 'bigint') {
+      return obj.toString();
+    }
+
+    if (Array.isArray(obj)) {
+      return obj.map((item) => this.convertBigInts(item));
+    }
+
+    if (typeof obj === 'object') {
+      return Object.entries(obj).reduce((acc, [key, value]) => {
+        acc[key] = this.convertBigInts(value);
+        return acc;
+      }, {} as any);
+    }
+
+    return obj;
+  }
+
+  /**
    * Save cell output to disk
    */
   static async saveCellOutput(
@@ -235,8 +271,11 @@ export class NotebookStorageService {
       const outputsDir = this.getOutputsDir(instanceId, notebookId);
       await fs.ensureDir(outputsDir);
 
+      // Convert BigInt values to strings before serialization
+      const sanitizedOutput = this.convertBigInts(output);
+
       const outputPath = this.getCellOutputPath(instanceId, notebookId, cellId);
-      await fs.writeJson(outputPath, output, { spaces: 2 });
+      await fs.writeJson(outputPath, sanitizedOutput, { spaces: 2 });
     } catch (error) {
       // eslint-disable-next-line no-console
       console.error(error);

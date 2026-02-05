@@ -6,6 +6,7 @@
 
 import { ipcMain } from 'electron';
 import { NotebookService } from '../services/notebook.service';
+import { DataExportService, ExportFormat } from '../services/notebook/export.service';
 import {
   CreateNotebookRequest,
   UpdateNotebookRequest,
@@ -76,5 +77,20 @@ export const registerNotebookHandlers = (): void => {
   // Monitoring
   ipcMain.handle('notebook:sessions:count', async () =>
     NotebookService.getActiveSessionCount(),
+  );
+
+  // Export cell data
+  ipcMain.handle(
+    'notebook:export',
+    async (
+      _event,
+      {
+        cellId,
+        format,
+        data,
+      }: { cellId: string; format: ExportFormat; data: any[] },
+    ) => {
+      return DataExportService.exportData(cellId, format, data);
+    },
   );
 };

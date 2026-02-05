@@ -18,21 +18,36 @@ import {
   Chip,
   IconButton,
   Tooltip,
+  Menu,
+  MenuItem,
+  ListItemIcon,
+  ListItemText,
+  CircularProgress,
 } from '@mui/material';
 import {
   CheckCircle as SuccessIcon,
   Error as ErrorIcon,
   GetApp as ExportIcon,
+  Description as CsvIcon,
+  TableChart as TsvIcon,
+  Storage as ParquetIcon,
+  Code as JsonIcon,
 } from '@mui/icons-material';
 import { CellOutput } from '../../../types/notebook';
+import { notebookService } from '../../services/notebook.service';
 
 interface OutputPanelProps {
   output: CellOutput;
+  cellId: string;
 }
 
-export const OutputPanel: React.FC<OutputPanelProps> = ({ output }) => {
+export const OutputPanel: React.FC<OutputPanelProps> = ({ output, cellId }) => {
   const [page, setPage] = useState(0);
   const [rowsPerPage, setRowsPerPage] = useState(10);
+  const [exportMenuAnchor, setExportMenuAnchor] = useState<null | HTMLElement>(
+    null,
+  );
+  const [isExporting, setIsExporting] = useState(false);
 
   // Debug logging
   useEffect(() => {
@@ -57,11 +72,25 @@ export const OutputPanel: React.FC<OutputPanelProps> = ({ output }) => {
     setPage(0);
   };
 
-  const handleExport = () => {
+  const handleExport = async (format: 'csv' | 'tsv' | 'json' | 'parquet') => {
     if (output.type === 'table' && output.data) {
-      // TODO: Implement export functionality (CSV, JSON, etc.)
-      // eslint-disable-next-line no-console
-      console.log('Export data:', output.data);
+      setIsExporting(true);
+      setExportMenuAnchor(null);
+
+      try {
+        const filePath = await notebookService.exportData(
+          cellId,
+          format,
+          output.data,
+        );
+        // eslint-disable-next-line no-console
+        console.log(`Data exported to: ${filePath}`);
+      } catch (error) {
+        // eslint-disable-next-line no-console
+        console.error('Export failed:', error);
+      } finally {
+        setIsExporting(false);
+      }
     }
   };
 
@@ -166,10 +195,49 @@ export const OutputPanel: React.FC<OutputPanelProps> = ({ output }) => {
         </Box>
 
         <Tooltip title="Export Results">
-          <IconButton size="small" onClick={handleExport}>
-            <ExportIcon fontSize="small" />
+          <IconButton
+            size="small"
+            onClick={(e) => setExportMenuAnchor(e.currentTarget)}
+            disabled={isExporting}
+          >
+            {isExporting ? (
+              <CircularProgress size={20} />
+            ) : (
+              <ExportIcon fontSize="small" />
+            )}
           </IconButton>
         </Tooltip>
+
+        <Menu
+          anchorEl={exportMenuAnchor}
+          open={Boolean(exportMenuAnchor)}
+          onClose={() => setExportMenuAnchor(null)}
+        >
+          <MenuItem onClick={() => handleExport('csv')}>
+            <ListItemIcon>
+              <CsvIcon fontSize="small" />
+            </ListItemIcon>
+            <ListItemText>CSV (Comma-Separated)</ListItemText>
+          </MenuItem>
+          <MenuItem onClick={() => handleExport('tsv')}>
+            <ListItemIcon>
+              <TsvIcon fontSize="small" />
+            </ListItemIcon>
+            <ListItemText>TSV (Tab-Separated)</ListItemText>
+          </MenuItem>
+          <MenuItem onClick={() => handleExport('json')}>
+            <ListItemIcon>
+              <JsonIcon fontSize="small" />
+            </ListItemIcon>
+            <ListItemText>JSON</ListItemText>
+          </MenuItem>
+          <MenuItem onClick={() => handleExport('parquet')}>
+            <ListItemIcon>
+              <ParquetIcon fontSize="small" />
+            </ListItemIcon>
+            <ListItemText>Parquet</ListItemText>
+          </MenuItem>
+        </Menu>
       </Box>
 
       {/* Table */}
