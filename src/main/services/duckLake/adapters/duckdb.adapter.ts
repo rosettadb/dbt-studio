@@ -271,18 +271,20 @@ export class DuckDBCatalogAdapter extends CatalogAdapter {
         throw new Error('No active connection');
       }
 
-      await this.connectionInfo.connection.run(updateQuery);
-      const changesResult = await this.connectionInfo.connection.run(
-        'SELECT changes() as changes',
-      );
-      const rows = await changesResult.getRows();
-      const value = rows?.[0]?.[0] ?? 0;
-      const numeric =
-        typeof value === 'object' && value?.hugeint !== undefined
-          ? Number(value.hugeint)
-          : Number(value);
+      const result = await this.connectionInfo.connection.run(updateQuery);
 
-      return { rowsAffected: Number.isFinite(numeric) ? numeric : 0 };
+      // Try to get rows to determine affected count (requires RETURNING clause in query)
+      let rowsAffected = 0;
+      try {
+        const rows = await result.getRows();
+        if (rows && rows.length > 0) {
+          rowsAffected = rows.length;
+        }
+      } catch (e) {
+        // Ignore errors if result doesn't support getRows
+      }
+
+      return { rowsAffected };
     } catch (error) {
       // eslint-disable-next-line no-console
       console.error('Failed to update rows:', error);
@@ -299,18 +301,19 @@ export class DuckDBCatalogAdapter extends CatalogAdapter {
         throw new Error('No active connection');
       }
 
-      await this.connectionInfo.connection.run(deleteQuery);
-      const changesResult = await this.connectionInfo.connection.run(
-        'SELECT changes() as changes',
-      );
-      const rows = await changesResult.getRows();
-      const value = rows?.[0]?.[0] ?? 0;
-      const numeric =
-        typeof value === 'object' && value?.hugeint !== undefined
-          ? Number(value.hugeint)
-          : Number(value);
+      const result = await this.connectionInfo.connection.run(deleteQuery);
 
-      return { rowsAffected: Number.isFinite(numeric) ? numeric : 0 };
+      let rowsAffected = 0;
+      try {
+        const rows = await result.getRows();
+        if (rows && rows.length > 0) {
+          rowsAffected = rows.length;
+        }
+      } catch (e) {
+        // Ignore
+      }
+
+      return { rowsAffected };
     } catch (error) {
       // eslint-disable-next-line no-console
       console.error('Failed to delete rows:', error);
@@ -327,18 +330,19 @@ export class DuckDBCatalogAdapter extends CatalogAdapter {
         throw new Error('No active connection');
       }
 
-      await this.connectionInfo.connection.run(upsertQuery);
-      const changesResult = await this.connectionInfo.connection.run(
-        'SELECT changes() as changes',
-      );
-      const rows = await changesResult.getRows();
-      const value = rows?.[0]?.[0] ?? 0;
-      const numeric =
-        typeof value === 'object' && value?.hugeint !== undefined
-          ? Number(value.hugeint)
-          : Number(value);
+      const result = await this.connectionInfo.connection.run(upsertQuery);
 
-      return { rowsAffected: Number.isFinite(numeric) ? numeric : 0 };
+      let rowsAffected = 0;
+      try {
+        const rows = await result.getRows();
+        if (rows && rows.length > 0) {
+          rowsAffected = rows.length;
+        }
+      } catch (e) {
+        // Ignore
+      }
+
+      return { rowsAffected };
     } catch (error) {
       // eslint-disable-next-line no-console
       console.error('Failed to upsert rows:', error);
@@ -556,7 +560,8 @@ export class DuckDBCatalogAdapter extends CatalogAdapter {
           snap.snapshot_time
         FROM ${quotedMetadataDatabase}.main.ducklake_table t
         JOIN ${quotedMetadataDatabase}.main.ducklake_schema s ON t.schema_id = s.schema_id
-        LEFT JOIN ${quotedMetadataDatabase}.main.ducklake_table_stats ts ON ts.table_id = t.table_id
+        LEFT JOIN ${quotedMetadataDatabase}.main.ducklake_table_stats ts 
+          ON ts.table_id = t.table_id
         LEFT JOIN ${quotedMetadataDatabase}.main.ducklake_snapshot snap ON snap.snapshot_id = t.begin_snapshot
         CROSS JOIN current_snapshot cs
         WHERE cs.snapshot_id >= t.begin_snapshot

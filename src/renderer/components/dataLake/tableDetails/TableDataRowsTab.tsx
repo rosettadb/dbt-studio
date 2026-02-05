@@ -45,7 +45,10 @@ import {
   useExecuteDuckLakeQuery,
   useDuckLakeTableDetails,
 } from '../../../controllers/duckLake.controller';
-import { DuckLakeQueryResult } from '../../../../types/duckLake';
+import {
+  DuckLakeQueryResult,
+  DuckLakeColumnDetail,
+} from '../../../../types/duckLake';
 
 interface TableDataRowsTabProps {
   instanceId: string;
@@ -58,8 +61,9 @@ export const TableDataRowsTab: React.FC<TableDataRowsTabProps> = ({
 }) => {
   const [updateRowsDialogOpen, setUpdateRowsDialogOpen] = useState(false);
   // Form state for structured update
-  const [whereColumn, setWhereColumn] = useState('');
-  const [whereValue, setWhereValue] = useState('');
+  const [whereConditions, setWhereConditions] = useState<
+    Array<{ id: string; column: string; operator: string; value: string }>
+  >([{ id: 'init', column: '', operator: '=', value: '' }]);
   const [updateFields, setUpdateFields] = useState<
     Array<{ id: string; column: string; value: string }>
   >([{ id: 'init', column: '', value: '' }]);
@@ -250,17 +254,21 @@ export const TableDataRowsTab: React.FC<TableDataRowsTabProps> = ({
 
   const handleOpenUpdateRowsDialog = () => {
     // Reset form state
-    setWhereColumn('');
-    setWhereValue('');
+    setWhereConditions([
+      { id: Date.now().toString(), column: '', operator: '=', value: '' },
+    ]);
     setUpdateFields([{ id: Date.now().toString(), column: '', value: '' }]);
     setGeneratedUpdateQuery('');
+
     setUpdateRowsDialogOpen(true);
   };
 
   // Helper to determine if quotes are needed based on column type
   const needsQuotes = (colName: string) => {
     if (!tableDetails?.columns) return true;
-    const col = tableDetails.columns.find((c) => c.columnName === colName);
+    const col = tableDetails.columns.find(
+      (c: DuckLakeColumnDetail) => c.columnName === colName,
+    );
     if (!col) return true;
     const type = col.columnType.toUpperCase();
     // Numeric and boolean types typically don't need quotes
@@ -278,37 +286,58 @@ export const TableDataRowsTab: React.FC<TableDataRowsTabProps> = ({
   React.useEffect(() => {
     if (!updateRowsDialogOpen) return;
 
-    if (!tableName || !whereColumn || updateFields.every((f) => !f.column)) {
+    if (
+      !tableName ||
+      whereConditions.every((c) => !c.column) ||
+      updateFields.every((f) => !f.column)
+    ) {
       setGeneratedUpdateQuery('');
       return;
     }
 
-    const setClauses = updateFields
-      .filter((f) => f.column) // Only include fields with a column selected
-      .map((f) => {
-        const val = needsQuotes(f.column)
-          ? `'${f.value.replace(/'/g, "''")}'`
-          : f.value || 'NULL';
-        return `${f.column} = ${val}`;
+    const whereClauses = whereConditions
+      .filter((c) => c.column)
+      .map((c) => {
+        const val = needsQuotes(c.column)
+          ? `'${c.value.replace(/'/g, "''")}'`
+          : c.value || 'NULL';
+        return `${c.column} ${c.operator} ${val}`;
       });
 
-    if (setClauses.length === 0) {
-      setGeneratedUpdateQuery('');
-      return;
-    }
+    const whereClause =
+      whereClauses.length > 0 ? whereClauses.join(' AND ') : '1=1';
 
-    const whereVal = needsQuotes(whereColumn)
-      ? `'${whereValue.replace(/'/g, "''")}'`
-      : whereValue || 'NULL';
-    const whereClause = `${whereColumn} = ${whereVal}`;
+    // Lakehouse Rewrite Pattern (CTAS)
+    // This is the only safe way to handle updates in DuckLake without Primary Keys
+    const updatedCols = updateFields
+      .filter((f) => f.column)
+      .map((f) => f.column);
 
-    const query = `UPDATE "${tableName}"\nSET\n  ${setClauses.join(',\n  ')}\nWHERE ${whereClause};`;
+    const caseStatements = updateFields
+      .filter((f) => f.column)
+      .map((f) => {
+        let val: string;
+        if (needsQuotes(f.column)) {
+          // String/text type - wrap in quotes and escape internal quotes
+          val = `'${f.value.replace(/'/g, "''")}'`;
+        } else {
+          // Numeric/boolean type - use raw value
+          val = f.value || 'NULL';
+        }
+        return `CASE WHEN ${whereClause} THEN ${val} ELSE ${f.column} END AS ${f.column}`;
+      });
+
+    const query = `CREATE OR REPLACE TABLE "${tableName}" AS
+SELECT
+  * EXCLUDE (${updatedCols.join(', ')}),
+  ${caseStatements.join(',\n  ')}
+FROM "${tableName}";`;
+
     setGeneratedUpdateQuery(query);
   }, [
     updateRowsDialogOpen,
     tableName,
-    whereColumn,
-    whereValue,
+    whereConditions,
     updateFields,
     tableDetails,
   ]);
@@ -455,22 +484,24 @@ export const TableDataRowsTab: React.FC<TableDataRowsTabProps> = ({
                               setUpdateFields(newFields);
                             }}
                           >
-                            {tableDetails?.columns.map((col) => (
-                              <MenuItem
-                                key={col.columnId}
-                                value={col.columnName}
-                              >
-                                {col.columnName}
-                                <Typography
-                                  component="span"
-                                  variant="caption"
-                                  color="text.secondary"
-                                  sx={{ ml: 1 }}
+                            {tableDetails?.columns.map(
+                              (col: DuckLakeColumnDetail) => (
+                                <MenuItem
+                                  key={col.columnId}
+                                  value={col.columnName}
                                 >
-                                  ({col.columnType})
-                                </Typography>
-                              </MenuItem>
-                            ))}
+                                  {col.columnName}
+                                  <Typography
+                                    component="span"
+                                    variant="caption"
+                                    color="text.secondary"
+                                    sx={{ ml: 1 }}
+                                  >
+                                    ({col.columnType})
+                                  </Typography>
+                                </MenuItem>
+                              ),
+                            )}
                           </Select>
                         </FormControl>
                         <TextField
@@ -528,42 +559,132 @@ export const TableDataRowsTab: React.FC<TableDataRowsTabProps> = ({
 
                 <Divider />
 
+                {/* Lakehouse Strategy Section */}
+                <Alert severity="info" sx={{ mb: 1 }}>
+                  DuckLake uses a <strong>Safe Rewrite (CTAS)</strong> pattern
+                  to ensure data integrity in an append-only lakehouse.
+                </Alert>
+
+                <Divider />
+
                 {/* WHERE Section */}
                 <Box>
                   <Typography variant="subtitle2" gutterBottom>
-                    WHERE (Condition)
+                    WHERE (Conditions)
                   </Typography>
-                  <Box sx={{ display: 'flex', gap: 2 }}>
-                    <FormControl fullWidth size="small">
-                      <InputLabel>Column</InputLabel>
-                      <Select
-                        value={whereColumn}
-                        label="Column"
-                        onChange={(e) => setWhereColumn(e.target.value)}
-                      >
-                        {tableDetails?.columns.map((col) => (
-                          <MenuItem key={col.columnId} value={col.columnName}>
-                            {col.columnName}
-                            <Typography
-                              component="span"
-                              variant="caption"
-                              color="text.secondary"
-                              sx={{ ml: 1 }}
-                            >
-                              ({col.columnType})
-                            </Typography>
-                          </MenuItem>
-                        ))}
-                      </Select>
-                    </FormControl>
-                    <TextField
-                      fullWidth
-                      size="small"
-                      label="Value"
-                      value={whereValue}
-                      onChange={(e) => setWhereValue(e.target.value)}
-                    />
-                  </Box>
+                  <Stack spacing={2}>
+                    {whereConditions.map((condition, index) => (
+                      <Box key={condition.id} sx={{ display: 'flex', gap: 2 }}>
+                        <FormControl fullWidth size="small" sx={{ flex: 2 }}>
+                          <InputLabel>Column</InputLabel>
+                          <Select
+                            value={condition.column}
+                            label="Column"
+                            onChange={(e) => {
+                              const newConditions = [...whereConditions];
+                              newConditions[index].column = e.target.value;
+                              setWhereConditions(newConditions);
+                            }}
+                          >
+                            {tableDetails?.columns.map(
+                              (col: DuckLakeColumnDetail) => (
+                                <MenuItem
+                                  key={col.columnId}
+                                  value={col.columnName}
+                                >
+                                  {col.columnName}
+                                  <Typography
+                                    component="span"
+                                    variant="caption"
+                                    color="text.secondary"
+                                    sx={{ ml: 1 }}
+                                  >
+                                    ({col.columnType})
+                                  </Typography>
+                                </MenuItem>
+                              ),
+                            )}
+                          </Select>
+                        </FormControl>
+                        <FormControl
+                          size="small"
+                          sx={{ flex: 1, minWidth: 80 }}
+                        >
+                          <InputLabel>Op</InputLabel>
+                          <Select
+                            value={condition.operator}
+                            label="Op"
+                            onChange={(e) => {
+                              const newConditions = [...whereConditions];
+                              newConditions[index].operator = e.target.value;
+                              setWhereConditions(newConditions);
+                            }}
+                          >
+                            <MenuItem value="=">=</MenuItem>
+                            <MenuItem value="!=">!=</MenuItem>
+                            <MenuItem value=">">&gt;</MenuItem>
+                            <MenuItem value=">=">&gt;=</MenuItem>
+                            <MenuItem value="<">&lt;</MenuItem>
+                            <MenuItem value="<=">&lt;=</MenuItem>
+                            <MenuItem value="LIKE">LIKE</MenuItem>
+                          </Select>
+                        </FormControl>
+                        <TextField
+                          fullWidth
+                          size="small"
+                          label="Value"
+                          value={condition.value}
+                          onChange={(e) => {
+                            const newConditions = [...whereConditions];
+                            newConditions[index].value = e.target.value;
+                            setWhereConditions(newConditions);
+                          }}
+                          sx={{ flex: 2 }}
+                        />
+                        <IconButton
+                          color="error"
+                          onClick={() => {
+                            if (whereConditions.length > 1) {
+                              setWhereConditions(
+                                whereConditions.filter(
+                                  (c) => c.id !== condition.id,
+                                ),
+                              );
+                            } else {
+                              // If it's the last one, just clear it
+                              setWhereConditions([
+                                {
+                                  id: Date.now().toString(),
+                                  column: '',
+                                  operator: '=',
+                                  value: '',
+                                },
+                              ]);
+                            }
+                          }}
+                        >
+                          <DeleteIcon />
+                        </IconButton>
+                      </Box>
+                    ))}
+                    <Button
+                      startIcon={<AddIcon />}
+                      onClick={() =>
+                        setWhereConditions([
+                          ...whereConditions,
+                          {
+                            id: Date.now().toString(),
+                            column: '',
+                            operator: '=',
+                            value: '',
+                          },
+                        ])
+                      }
+                      sx={{ alignSelf: 'start' }}
+                    >
+                      Add Condition
+                    </Button>
+                  </Stack>
                 </Box>
 
                 {/* Preview Section */}

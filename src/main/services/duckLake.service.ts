@@ -404,8 +404,14 @@ export default class DuckLakeService {
         throw DuckLakeError.validation('Update query is required');
       }
 
-      if (!updateQuery.trim().toUpperCase().startsWith('UPDATE')) {
-        throw DuckLakeError.validation('Query must be an UPDATE statement');
+      const normalizedQuery = updateQuery.trim().toUpperCase();
+      if (
+        !normalizedQuery.startsWith('UPDATE') &&
+        !normalizedQuery.startsWith('CREATE')
+      ) {
+        throw DuckLakeError.validation(
+          'Query must be an UPDATE or CREATE statement',
+        );
       }
 
       const tables = await adapter.listTables();

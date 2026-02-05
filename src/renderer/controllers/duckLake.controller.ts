@@ -335,7 +335,7 @@ export function useUpdateDuckLakeRows() {
       queryClient.invalidateQueries(duckLakeKeys.table(instanceId, tableName));
       queryClient.invalidateQueries(duckLakeKeys.tables(instanceId));
 
-      toast.success(`${result.rowsAffected} row(s) updated`);
+      toast.success('Update query executed successfully');
     },
     onError: (error: Error) => {
       toast.error(`Failed to update rows: ${error.message}`);
@@ -366,7 +366,7 @@ export function useDeleteDuckLakeRows() {
       queryClient.invalidateQueries(duckLakeKeys.table(instanceId, tableName));
       queryClient.invalidateQueries(duckLakeKeys.tables(instanceId));
 
-      toast.success(`${result.rowsAffected} row(s) deleted`);
+      toast.success('Delete query executed successfully');
     },
     onError: (error: Error) => {
       toast.error(`Failed to delete rows: ${error.message}`);
@@ -397,7 +397,7 @@ export function useUpsertDuckLakeRows() {
       queryClient.invalidateQueries(duckLakeKeys.table(instanceId, tableName));
       queryClient.invalidateQueries(duckLakeKeys.tables(instanceId));
 
-      toast.success(`${result.rowsAffected} row(s) upserted`);
+      toast.success('Upsert query executed successfully');
     },
     onError: (error: Error) => {
       toast.error(`Failed to upsert rows: ${error.message}`);
