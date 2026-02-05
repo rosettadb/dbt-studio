@@ -793,7 +793,7 @@ export class DuckDBCatalogAdapter extends CatalogAdapter {
             let countVal;
 
             if (Array.isArray(countRow)) {
-              countVal = countRow[0];
+              [countVal] = countRow;
             } else if (countRow && typeof countRow === 'object') {
               countVal = countRow.total || Object.values(countRow)[0];
             }

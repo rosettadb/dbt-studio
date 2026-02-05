@@ -1,5 +1,10 @@
-import { ipcMain, shell, dialog } from 'electron';
-import fs from 'fs-extra';
+import {
+  ipcMain,
+  shell,
+  dialog,
+  OpenDialogOptions,
+  SaveDialogOptions,
+} from 'electron';
 import { UtilsService } from '../services';
 
 const handlerChannels = [
@@ -37,7 +42,7 @@ const registerUtilsHandlers = () => {
   // Handler for showOpenDialog
   ipcMain.handle(
     'dialog:showOpenDialog',
-    async (_event, options: Electron.OpenDialogOptions) => {
+    async (_event, options: OpenDialogOptions) => {
       const result = await dialog.showOpenDialog(options);
       return result;
     },
@@ -46,7 +51,7 @@ const registerUtilsHandlers = () => {
   // Handler for showSaveDialog
   ipcMain.handle(
     'dialog:showSaveDialog',
-    async (_event, options: Electron.SaveDialogOptions) => {
+    async (_event, options: SaveDialogOptions) => {
       const result = await dialog.showSaveDialog(options);
       return result;
     },
