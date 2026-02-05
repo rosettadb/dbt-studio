@@ -72,7 +72,10 @@ export const TableDataRowsTab: React.FC<TableDataRowsTabProps> = ({
   const [generatedUpdateQuery, setGeneratedUpdateQuery] = useState('');
 
   const [deleteRowsDialogOpen, setDeleteRowsDialogOpen] = useState(false);
-  const [deleteRowsQuery, setDeleteRowsQuery] = useState('');
+  const [deleteConditions, setDeleteConditions] = useState<
+    Array<{ id: string; column: string; operator: string; value: string }>
+  >([{ id: 'init', column: '', operator: '=', value: '' }]);
+  const [generatedDeleteQuery, setGeneratedDeleteQuery] = useState('');
 
   const [upsertRowsDialogOpen, setUpsertRowsDialogOpen] = useState(false);
   const [upsertRowsQuery, setUpsertRowsQuery] = useState('');
@@ -85,6 +88,7 @@ export const TableDataRowsTab: React.FC<TableDataRowsTabProps> = ({
   );
   const [loadingData, setLoadingData] = useState(false);
   const [fetchError, setFetchError] = useState<string | null>(null);
+  const [actualRowCount, setActualRowCount] = useState<number | null>(null);
 
   // Export Menu State
   const [exportAnchorEl, setExportAnchorEl] = useState<null | HTMLElement>(
@@ -191,6 +195,7 @@ export const TableDataRowsTab: React.FC<TableDataRowsTabProps> = ({
   const fetchData = React.useCallback(() => {
     if (!instanceId || !tableName) return;
 
+    console.log('[fetchData] Starting data fetch for table:', tableName);
     setLoadingData(true);
     setFetchError(null);
 
@@ -209,10 +214,15 @@ export const TableDataRowsTab: React.FC<TableDataRowsTabProps> = ({
       },
       {
         onSuccess: (data) => {
+          console.log('[fetchData] Query success, rows:', data.rows?.length);
           setQueryResult(data);
+          if (data.totalRows !== undefined) {
+            setActualRowCount(data.totalRows);
+          }
           setLoadingData(false);
         },
         onError: (error: Error) => {
+          console.error('[fetchData] Query error:', error);
           setFetchError(error.message);
           setLoadingData(false);
         },
@@ -348,19 +358,58 @@ FROM "${tableName}";`;
       return;
     }
 
-    updateRowsMutation.mutate({
-      instanceId,
-      tableName,
-      updateQuery: generatedUpdateQuery,
-    });
-
-    setUpdateRowsDialogOpen(false);
+    updateRowsMutation.mutate(
+      {
+        instanceId,
+        tableName,
+        updateQuery: generatedUpdateQuery,
+      },
+      {
+        onSuccess: () => {
+          setUpdateRowsDialogOpen(false);
+          fetchData(); // Refresh data after successful update
+        },
+        onError: () => {
+          setUpdateRowsDialogOpen(false);
+        },
+      },
+    );
   };
 
   const handleOpenDeleteRowsDialog = () => {
-    setDeleteRowsQuery(`DELETE FROM ${tableName} WHERE /* condition */;`);
+    // Reset form state
+    setDeleteConditions([
+      { id: Date.now().toString(), column: '', operator: '=', value: '' },
+    ]);
+    setGeneratedDeleteQuery('');
     setDeleteRowsDialogOpen(true);
   };
+
+  // Effect to update the generated delete query whenever form state changes
+  React.useEffect(() => {
+    if (!deleteRowsDialogOpen) return;
+
+    if (!tableName || deleteConditions.every((c) => !c.column)) {
+      setGeneratedDeleteQuery('');
+      return;
+    }
+
+    const whereClauses = deleteConditions
+      .filter((c) => c.column)
+      .map((c) => {
+        const val = needsQuotes(c.column)
+          ? `'${c.value.replace(/'/g, "''")}'`
+          : c.value || 'NULL';
+        return `${c.column} ${c.operator} ${val}`;
+      });
+
+    const whereClause =
+      whereClauses.length > 0 ? whereClauses.join(' AND ') : '1=1';
+
+    const query = `DELETE FROM "${tableName}"
+WHERE ${whereClause};`;
+    setGeneratedDeleteQuery(query);
+  }, [deleteRowsDialogOpen, tableName, deleteConditions, tableDetails]);
 
   const handleConfirmDeleteRows = () => {
     if (!instanceId || !tableName) {
@@ -368,13 +417,22 @@ FROM "${tableName}";`;
       return;
     }
 
-    deleteRowsMutation.mutate({
-      instanceId,
-      tableName,
-      deleteQuery: deleteRowsQuery,
-    });
-
-    setDeleteRowsDialogOpen(false);
+    deleteRowsMutation.mutate(
+      {
+        instanceId,
+        tableName,
+        deleteQuery: generatedDeleteQuery,
+      },
+      {
+        onSuccess: () => {
+          setDeleteRowsDialogOpen(false);
+          fetchData(); // Refresh data after successful delete
+        },
+        onError: () => {
+          setDeleteRowsDialogOpen(false);
+        },
+      },
+    );
   };
 
   const handleOpenUpsertRowsDialog = () => {
@@ -390,13 +448,22 @@ FROM "${tableName}";`;
       return;
     }
 
-    upsertRowsMutation.mutate({
-      instanceId,
-      tableName,
-      upsertQuery: upsertRowsQuery,
-    });
-
-    setUpsertRowsDialogOpen(false);
+    upsertRowsMutation.mutate(
+      {
+        instanceId,
+        tableName,
+        upsertQuery: upsertRowsQuery,
+      },
+      {
+        onSuccess: () => {
+          setUpsertRowsDialogOpen(false);
+          fetchData(); // Refresh data after successful upsert
+        },
+        onError: () => {
+          setUpsertRowsDialogOpen(false);
+        },
+      },
+    );
   };
 
   return (
@@ -734,16 +801,145 @@ FROM "${tableName}";`;
           >
             <DialogTitle>Delete rows</DialogTitle>
             <DialogContent>
-              <TextField
-                fullWidth
-                multiline
-                minRows={8}
-                label="DELETE SQL"
-                value={deleteRowsQuery}
-                onChange={(e) => setDeleteRowsQuery(e.target.value)}
-                disabled={deleteRowsMutation.isLoading}
-                autoFocus
-              />
+              <Stack spacing={3} sx={{ mt: 1 }}>
+                {/* WHERE Section */}
+                <Box>
+                  <Typography variant="subtitle2" gutterBottom>
+                    WHERE (Conditions)
+                  </Typography>
+                  <Stack spacing={2}>
+                    {deleteConditions.map((condition, index) => (
+                      <Box key={condition.id} sx={{ display: 'flex', gap: 2 }}>
+                        <FormControl fullWidth size="small" sx={{ flex: 2 }}>
+                          <InputLabel>Column</InputLabel>
+                          <Select
+                            value={condition.column}
+                            label="Column"
+                            onChange={(e) => {
+                              const newConditions = [...deleteConditions];
+                              newConditions[index].column = e.target.value;
+                              setDeleteConditions(newConditions);
+                            }}
+                          >
+                            {tableDetails?.columns.map(
+                              (col: DuckLakeColumnDetail) => (
+                                <MenuItem
+                                  key={col.columnId}
+                                  value={col.columnName}
+                                >
+                                  {col.columnName}
+                                  <Typography
+                                    component="span"
+                                    variant="caption"
+                                    color="text.secondary"
+                                    sx={{ ml: 1 }}
+                                  >
+                                    ({col.columnType})
+                                  </Typography>
+                                </MenuItem>
+                              ),
+                            )}
+                          </Select>
+                        </FormControl>
+                        <FormControl
+                          size="small"
+                          sx={{ flex: 1, minWidth: 80 }}
+                        >
+                          <InputLabel>Op</InputLabel>
+                          <Select
+                            value={condition.operator}
+                            label="Op"
+                            onChange={(e) => {
+                              const newConditions = [...deleteConditions];
+                              newConditions[index].operator = e.target.value;
+                              setDeleteConditions(newConditions);
+                            }}
+                          >
+                            <MenuItem value="=">=</MenuItem>
+                            <MenuItem value="!=">!=</MenuItem>
+                            <MenuItem value=">">&gt;</MenuItem>
+                            <MenuItem value=">=">&gt;=</MenuItem>
+                            <MenuItem value="<">&lt;</MenuItem>
+                            <MenuItem value="<=">&lt;=</MenuItem>
+                            <MenuItem value="LIKE">LIKE</MenuItem>
+                          </Select>
+                        </FormControl>
+                        <TextField
+                          fullWidth
+                          size="small"
+                          label="Value"
+                          value={condition.value}
+                          onChange={(e) => {
+                            const newConditions = [...deleteConditions];
+                            newConditions[index].value = e.target.value;
+                            setDeleteConditions(newConditions);
+                          }}
+                          sx={{ flex: 2 }}
+                        />
+                        <IconButton
+                          color="error"
+                          onClick={() => {
+                            if (deleteConditions.length > 1) {
+                              setDeleteConditions(
+                                deleteConditions.filter(
+                                  (c) => c.id !== condition.id,
+                                ),
+                              );
+                            } else {
+                              // If it's the last one, just clear it
+                              setDeleteConditions([
+                                {
+                                  id: Date.now().toString(),
+                                  column: '',
+                                  operator: '=',
+                                  value: '',
+                                },
+                              ]);
+                            }
+                          }}
+                        >
+                          <DeleteIcon />
+                        </IconButton>
+                      </Box>
+                    ))}
+                    <Button
+                      startIcon={<AddIcon />}
+                      onClick={() =>
+                        setDeleteConditions([
+                          ...deleteConditions,
+                          {
+                            id: Date.now().toString(),
+                            column: '',
+                            operator: '=',
+                            value: '',
+                          },
+                        ])
+                      }
+                      sx={{ alignSelf: 'start' }}
+                    >
+                      Add Condition
+                    </Button>
+                  </Stack>
+                </Box>
+
+                {/* Preview Section */}
+                <Box
+                  sx={{
+                    p: 2,
+                    bgcolor: 'action.hover',
+                    borderRadius: 1,
+                    fontFamily: 'monospace',
+                    fontSize: '0.875rem',
+                  }}
+                >
+                  <Typography variant="caption" color="text.secondary">
+                    Generated Query Preview:
+                  </Typography>
+                  <pre style={{ margin: '8px 0 0', whiteSpace: 'pre-wrap' }}>
+                    {generatedDeleteQuery || '(Select columns to see SQL)'}
+                  </pre>
+                </Box>
+              </Stack>
             </DialogContent>
             <DialogActions>
               <Button
@@ -757,7 +953,8 @@ FROM "${tableName}";`;
                 variant="contained"
                 onClick={handleConfirmDeleteRows}
                 disabled={
-                  deleteRowsMutation.isLoading || deleteRowsQuery.trim() === ''
+                  deleteRowsMutation.isLoading ||
+                  generatedDeleteQuery.trim() === ''
                 }
               >
                 Run
@@ -817,16 +1014,31 @@ FROM "${tableName}";`;
           >
             <Typography variant="body1">
               Table Data
-              {tableDetails?.stats?.recordCount !== undefined && (
-                <Typography
-                  component="span"
-                  variant="body2"
-                  color="text.secondary"
-                  sx={{ ml: 1 }}
-                >
-                  ({tableDetails.stats.recordCount.toLocaleString()} total rows)
-                </Typography>
+              {actualRowCount !== null && (
+                <Tooltip title="Actual row count after applying deletes">
+                  <Typography
+                    component="span"
+                    variant="body2"
+                    color="text.secondary"
+                    sx={{ ml: 1 }}
+                  >
+                    ({actualRowCount.toLocaleString()} rows)
+                  </Typography>
+                </Tooltip>
               )}
+              {actualRowCount === null &&
+                tableDetails?.stats?.recordCount !== undefined && (
+                  <Tooltip title="Upper bound from metadata (may include deleted rows)">
+                    <Typography
+                      component="span"
+                      variant="body2"
+                      color="text.secondary"
+                      sx={{ ml: 1 }}
+                    >
+                      (~{tableDetails.stats.recordCount.toLocaleString()} rows)
+                    </Typography>
+                  </Tooltip>
+                )}
             </Typography>
             <Box sx={{ display: 'flex', gap: 1 }}>
               <Button
@@ -1022,7 +1234,7 @@ FROM "${tableName}";`;
 
           <TablePagination
             component="div"
-            count={tableDetails?.stats?.recordCount || -1}
+            count={actualRowCount ?? tableDetails?.stats?.recordCount ?? -1}
             page={page}
             onPageChange={handleChangePage}
             rowsPerPage={rowsPerPage}

@@ -776,8 +776,40 @@ export class DuckDBCatalogAdapter extends CatalogAdapter {
         query = `${query} FOR SYSTEM_TIME AS OF SNAPSHOT '${request.snapshotId}'`;
       }
 
+      let totalRows: number | undefined;
+
       // Add limit and offset if specified
       if (request.limit) {
+        // If pagination is requested, calculate total rows for the base query
+        try {
+          const countQuery = `SELECT COUNT(*) as total FROM (${query})`;
+          const countResult =
+            await this.connectionInfo.connection.run(countQuery);
+          const countRows = await countResult.getRows();
+
+          if (countRows && countRows.length > 0) {
+            // Handle different result formats (array or object)
+            const countRow = countRows[0];
+            let countVal;
+
+            if (Array.isArray(countRow)) {
+              countVal = countRow[0];
+            } else if (countRow && typeof countRow === 'object') {
+              countVal = countRow.total || Object.values(countRow)[0];
+            }
+
+            if (countVal !== undefined) {
+              totalRows = Number(countVal);
+            }
+          }
+        } catch (error) {
+          // eslint-disable-next-line no-console
+          console.warn(
+            '[DuckDB] Failed to fetch total rows for pagination:',
+            error,
+          );
+        }
+
         query += ` LIMIT ${request.limit}`;
         if (request.offset) {
           query += ` OFFSET ${request.offset}`;
@@ -803,6 +835,7 @@ export class DuckDBCatalogAdapter extends CatalogAdapter {
       return {
         columns,
         rows,
+        totalRows,
         executionTime,
         snapshotId: request.snapshotId,
       };
