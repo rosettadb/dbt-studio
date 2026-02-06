@@ -18,7 +18,6 @@ import {
   DuckLakeStorageConfig,
   DuckLakeSnapshotParams,
   DuckLakePaginatedResult,
-  DuckLakeTableChange,
 } from '../../types/duckLake';
 
 export namespace DuckLakeService {

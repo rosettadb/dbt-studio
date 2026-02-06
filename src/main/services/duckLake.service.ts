@@ -26,7 +26,6 @@ import {
   DuckLakeStorageConfig,
   DuckLakeSnapshotParams,
   DuckLakePaginatedResult,
-  DuckLakeTableChange,
 } from '../../types/duckLake';
 import { DuckLakeError } from '../../types/duckLakeErrors';
 

@@ -15,7 +15,6 @@ import {
   DuckLakeStorageConfig,
   DuckLakeSnapshotParams,
   DuckLakePaginatedResult,
-  DuckLakeTableChange,
 } from '../../../../types/duckLake';
 import { generateGCSBearerToken } from '../../../helpers/cloudAuth.helper';
 
