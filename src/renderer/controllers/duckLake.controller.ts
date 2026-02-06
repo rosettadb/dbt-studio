@@ -51,47 +51,6 @@ export function useDuckLakeInstances() {
   });
 }
 
-export function useDuckLakeTableChanges({
-  instanceId,
-  tableName,
-  fromSnapshotId,
-  toSnapshotId,
-  enabled = true,
-}: {
-  instanceId: string;
-  tableName: string;
-  fromSnapshotId?: number | null;
-  toSnapshotId?: number | null;
-  enabled?: boolean;
-}) {
-  const normalizedFrom =
-    typeof fromSnapshotId === 'number' ? fromSnapshotId : undefined;
-  const normalizedTo =
-    typeof toSnapshotId === 'number' ? toSnapshotId : undefined;
-  const selectionValid =
-    typeof normalizedFrom === 'number' &&
-    typeof normalizedTo === 'number' &&
-    normalizedFrom <= normalizedTo;
-
-  return useQuery({
-    queryKey: duckLakeKeys.tableChanges(
-      instanceId,
-      tableName,
-      normalizedFrom,
-      normalizedTo,
-    ),
-    queryFn: () =>
-      DuckLakeService.queryTableChanges(
-        instanceId,
-        tableName,
-        normalizedFrom!,
-        normalizedTo,
-      ),
-    enabled: enabled && !!instanceId && !!tableName && Boolean(selectionValid),
-    keepPreviousData: true,
-  });
-}
-
 export function useAddDuckLakeColumn() {
   const queryClient = useQueryClient();
 

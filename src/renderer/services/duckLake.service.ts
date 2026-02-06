@@ -305,20 +305,6 @@ export namespace DuckLakeService {
     );
   }
 
-  export async function queryTableChanges(
-    instanceId: string,
-    tableName: string,
-    fromSnapshotId: number,
-    toSnapshotId?: number,
-  ): Promise<DuckLakeTableChange[]> {
-    return window.electron.ipcRenderer.invoke('ducklake:table:queryChanges', {
-      instanceId,
-      tableName,
-      fromSnapshotId,
-      toSnapshotId,
-    });
-  }
-
   // Query Execution
   export async function executeQuery(
     request: DuckLakeQueryRequest,

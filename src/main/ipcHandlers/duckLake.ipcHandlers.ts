@@ -215,31 +215,6 @@ const registerDuckLakeHandlers = () => {
     },
   );
 
-  ipcMain.handle(
-    'ducklake:table:queryChanges',
-    async (
-      _event,
-      {
-        instanceId,
-        tableName,
-        fromSnapshotId,
-        toSnapshotId,
-      }: {
-        instanceId: string;
-        tableName: string;
-        fromSnapshotId: number;
-        toSnapshotId?: number;
-      },
-    ) => {
-      return DuckLakeService.queryTableChanges(
-        instanceId,
-        tableName,
-        fromSnapshotId,
-        toSnapshotId,
-      );
-    },
-  );
-
   // Phase 8b: Table Details Handler
   ipcMain.handle(
     'ducklake:table:getDetails',

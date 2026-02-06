@@ -1092,61 +1092,6 @@ export default class DuckLakeService {
     }
   }
 
-  static async queryTableChanges(
-    instanceId: string,
-    tableName: string,
-    fromSnapshotId: number,
-    toSnapshotId?: number,
-  ): Promise<DuckLakeTableChange[]> {
-    try {
-      await this.ensureConnected(instanceId);
-      const adapter = await this.getAdapter(instanceId);
-
-      if (!tableName || tableName.trim() === '') {
-        throw DuckLakeError.validation('Table name is required');
-      }
-
-      if (
-        fromSnapshotId === undefined ||
-        fromSnapshotId === null ||
-        Number.isNaN(Number(fromSnapshotId))
-      ) {
-        throw DuckLakeError.validation('fromSnapshotId must be a valid number');
-      }
-
-      const normalizedFrom = Number(fromSnapshotId);
-      let normalizedTo: number | undefined;
-      if (toSnapshotId !== undefined && toSnapshotId !== null) {
-        if (Number.isNaN(Number(toSnapshotId))) {
-          throw DuckLakeError.validation('toSnapshotId must be a valid number');
-        }
-        normalizedTo = Number(toSnapshotId);
-      }
-
-      if (normalizedTo !== undefined && normalizedTo < normalizedFrom) {
-        throw DuckLakeError.validation(
-          'toSnapshotId must be greater than or equal to fromSnapshotId',
-        );
-      }
-
-      const tables = await adapter.listTables();
-      const tableExists = tables.some((t) => t.name === tableName);
-      if (!tableExists) {
-        throw DuckLakeError.validation(`Table ${tableName} does not exist`);
-      }
-
-      return await adapter.queryTableChanges(
-        tableName,
-        normalizedFrom,
-        normalizedTo,
-      );
-    } catch (error) {
-      // eslint-disable-next-line no-console
-      console.error('[DuckLakeService.queryTableChanges] Error:', error);
-      throw error;
-    }
-  }
-
   // Query Execution
   static async executeQuery(
     request: DuckLakeQueryRequest,
