@@ -33,12 +33,12 @@ export const MarkdownCell: React.FC<MarkdownCellProps> = ({
   return (
     <Box>
       {/* Mode Toggle */}
-      <Box sx={{ display: 'flex', justifyContent: 'flex-end', mb: 1 }}>
-        <IconButton size="small" onClick={toggleMode}>
+      <Box sx={{ display: 'flex', justifyContent: 'flex-end', mb: 0.5 }}>
+        <IconButton size="small" onClick={toggleMode} sx={{ p: 0.25 }}>
           {isEditing ? (
-            <PreviewIcon fontSize="small" />
+            <PreviewIcon sx={{ fontSize: 16 }} />
           ) : (
-            <EditIcon fontSize="small" />
+            <EditIcon sx={{ fontSize: 16 }} />
           )}
         </IconButton>
       </Box>
@@ -57,7 +57,11 @@ export const MarkdownCell: React.FC<MarkdownCellProps> = ({
           sx={{
             '& .MuiInputBase-root': {
               fontFamily: 'monospace',
-              fontSize: 14,
+              fontSize: 12,
+              padding: '6px 8px',
+            },
+            '& .MuiInputBase-input': {
+              padding: 0,
             },
           }}
         />
@@ -66,11 +70,11 @@ export const MarkdownCell: React.FC<MarkdownCellProps> = ({
         <Paper
           elevation={0}
           sx={{
-            p: 2,
+            p: 1,
             bgcolor: 'grey.50',
             border: '1px solid',
             borderColor: 'divider',
-            minHeight: 60,
+            minHeight: 40,
           }}
         >
           {cell.content ? (
@@ -80,11 +84,13 @@ export const MarkdownCell: React.FC<MarkdownCellProps> = ({
               sx={{
                 whiteSpace: 'pre-wrap',
                 wordBreak: 'break-word',
-                '& h1': { fontSize: '1.5rem', fontWeight: 'bold', mb: 1 },
-                '& h2': { fontSize: '1.25rem', fontWeight: 'bold', mb: 1 },
-                '& h3': { fontSize: '1.1rem', fontWeight: 'bold', mb: 1 },
-                '& p': { mb: 1 },
-                '& ul, & ol': { pl: 3, mb: 1 },
+                fontSize: 12,
+                lineHeight: 1.5,
+                '& h1': { fontSize: '1.25rem', fontWeight: 'bold', mb: 0.5 },
+                '& h2': { fontSize: '1.1rem', fontWeight: 'bold', mb: 0.5 },
+                '& h3': { fontSize: '1rem', fontWeight: 'bold', mb: 0.5 },
+                '& p': { mb: 0.5 },
+                '& ul, & ol': { pl: 2, mb: 0.5 },
                 '& code': {
                   bgcolor: 'grey.200',
                   px: 0.5,
@@ -132,6 +138,7 @@ export const MarkdownCell: React.FC<MarkdownCellProps> = ({
               variant="body2"
               color="text.secondary"
               fontStyle="italic"
+              sx={{ fontSize: 11 }}
             >
               Empty markdown cell. Click edit to add content.
             </Typography>

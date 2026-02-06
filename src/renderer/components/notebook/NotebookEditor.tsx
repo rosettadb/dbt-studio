@@ -13,6 +13,7 @@ import {
 } from '@mui/material';
 import { Add as AddIcon } from '@mui/icons-material';
 import { v4 as uuidv4 } from 'uuid';
+import { useNavigate } from 'react-router-dom';
 import {
   DragDropContext,
   Droppable,
@@ -25,6 +26,7 @@ import {
   useRunCell,
   useRunAllCells,
   useInterruptExecution,
+  useDeleteNotebook,
 } from '../../controllers/notebook.controller';
 import { NotebookCell as NotebookCellType } from '../../../types/notebook';
 import { NotebookToolbar } from './NotebookToolbar';
@@ -39,6 +41,7 @@ export const NotebookEditor: React.FC<NotebookEditorProps> = ({
   instanceId,
   notebookId,
 }) => {
+  const navigate = useNavigate();
   const {
     data: notebook,
     isLoading,
@@ -48,6 +51,7 @@ export const NotebookEditor: React.FC<NotebookEditorProps> = ({
   const runCell = useRunCell();
   const runAllCells = useRunAllCells();
   const interruptExecution = useInterruptExecution();
+  const deleteNotebook = useDeleteNotebook();
 
   const [executingCells, setExecutingCells] = useState<Set<string>>(new Set());
   const [isRunningAll, setIsRunningAll] = useState(false);
@@ -270,6 +274,64 @@ export const NotebookEditor: React.FC<NotebookEditorProps> = ({
     URL.revokeObjectURL(url);
   }, [notebook]);
 
+  const handleRename = useCallback(() => {
+    if (!notebook) return;
+    
+    const newName = prompt('Enter new notebook name:', notebook.name);
+    if (newName && newName.trim() && newName !== notebook.name) {
+      updateNotebook.mutate({
+        instanceId,
+        notebookId,
+        name: newName.trim(),
+      });
+    }
+  }, [notebook, instanceId, notebookId, updateNotebook]);
+
+  const handleClone = useCallback(() => {
+    if (!notebook) return;
+    
+    // TODO: Implement clone functionality
+    // This would require creating a new notebook with the same cells
+    // eslint-disable-next-line no-console
+    console.log('Clone functionality not yet implemented');
+    alert('Clone functionality coming soon!');
+  }, [notebook]);
+
+  const handleDeleteAllCells = useCallback(() => {
+    if (!notebook) return;
+
+    const confirmed = window.confirm(
+      'Are you sure you want to delete all cells? This action cannot be undone.',
+    );
+
+    if (confirmed) {
+      updateNotebook.mutate({
+        instanceId,
+        notebookId,
+        cells: [],
+      });
+    }
+  }, [notebook, instanceId, notebookId, updateNotebook]);
+
+  const handleDeleteNotebook = useCallback(async () => {
+    if (!notebook) return;
+
+    const confirmed = window.confirm(
+      `Are you sure you want to delete the notebook "${notebook.name}"? This action cannot be undone.`,
+    );
+
+    if (confirmed) {
+      try {
+        await deleteNotebook.mutateAsync({ instanceId, notebookId });
+        // Navigate back to notebooks list
+        navigate(`/app/data-lake/duck-lake/instances/${instanceId}/notebooks`);
+      } catch (err) {
+        // eslint-disable-next-line no-console
+        console.error('Failed to delete notebook:', err);
+      }
+    }
+  }, [notebook, instanceId, notebookId, deleteNotebook, navigate]);
+
   if (isLoading) {
     return (
       <Box
@@ -312,6 +374,10 @@ export const NotebookEditor: React.FC<NotebookEditorProps> = ({
         onExport={handleExport}
         onAddCell={handleAddCell}
         onInterrupt={handleInterrupt}
+        onRename={handleRename}
+        onClone={handleClone}
+        onDeleteAllCells={handleDeleteAllCells}
+        onDeleteNotebook={handleDeleteNotebook}
       />
 
       {/* Cells */}
@@ -383,6 +449,7 @@ export const NotebookEditor: React.FC<NotebookEditorProps> = ({
                               <NotebookCell
                                 cell={cell}
                                 index={index}
+                                instanceId={instanceId}
                                 isExecuting={
                                   executingCells.has(cell.id) || isRunningAll
                                 }

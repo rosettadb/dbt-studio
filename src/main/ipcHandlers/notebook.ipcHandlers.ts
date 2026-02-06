@@ -7,6 +7,7 @@
 import { ipcMain } from 'electron';
 import { NotebookService } from '../services/notebook.service';
 import { DataExportService, ExportFormat } from '../services/notebook/export.service';
+import { SchemaService } from '../services/notebook/schema.service';
 import {
   CreateNotebookRequest,
   UpdateNotebookRequest,
@@ -92,5 +93,16 @@ export const registerNotebookHandlers = (): void => {
     ) => {
       return DataExportService.exportData(cellId, format, data);
     },
+  );
+
+  // Schema autocomplete (Phase 4)
+  ipcMain.handle('notebook:schema:get', async (_event, instanceId: string) =>
+    SchemaService.extractSchema(instanceId),
+  );
+
+  ipcMain.handle(
+    'notebook:schema:summary',
+    async (_event, instanceId: string) =>
+      SchemaService.getSchemaSummary(instanceId),
   );
 };

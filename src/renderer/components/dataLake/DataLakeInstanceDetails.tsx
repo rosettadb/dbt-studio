@@ -48,6 +48,7 @@ import {
   Memory,
   Refresh,
   Search,
+  Description,
 } from '@mui/icons-material';
 import { useNavigate } from 'react-router-dom';
 import moment from 'moment';
@@ -816,6 +817,18 @@ export const DataLakeInstanceDetails: React.FC<
         <Box sx={{ display: 'flex', gap: 1 }}>
           <Button
             variant="outlined"
+            startIcon={<Description />}
+            onClick={() =>
+              navigate(
+                `/app/data-lake/duck-lake/instances/${instance.id}/notebooks`,
+              )
+            }
+            disabled={isLoading}
+          >
+            Notebooks
+          </Button>
+          <Button
+            variant="outlined"
             startIcon={<Refresh />}
             onClick={handleRefresh}
             disabled={isLoading}
@@ -852,7 +865,6 @@ export const DataLakeInstanceDetails: React.FC<
             onChange={(_, newValue) => setCurrentTab(newValue)}
           >
             <Tab label="Tables" />
-            <Tab label="Notebooks" />
             <Tab label="Overview" />
             <Tab label="History" />
             <Tab label="Activity" />
@@ -860,22 +872,8 @@ export const DataLakeInstanceDetails: React.FC<
         </Box>
         <CardContent>
           {currentTab === 0 && <DataLakeTablesView instanceId={instance.id} />}
-          {currentTab === 1 && (
-            <Box>
-              <Button
-                variant="contained"
-                onClick={() =>
-                  navigate(
-                    `/app/data-lake/duck-lake/instances/${instance.id}/notebooks`,
-                  )
-                }
-              >
-                View All Notebooks
-              </Button>
-            </Box>
-          )}
-          {currentTab === 2 && renderOverviewTab()}
-          {currentTab === 3 && (
+          {currentTab === 1 && renderOverviewTab()}
+          {currentTab === 2 && (
             <Box sx={{ mt: 1 }}>
               <Box sx={{ display: 'flex', justifyContent: 'flex-end', mb: 1 }}>
                 <TextField
@@ -988,7 +986,7 @@ export const DataLakeInstanceDetails: React.FC<
                 )}
             </Box>
           )}
-          {currentTab === 4 && (
+          {currentTab === 3 && (
             <Box sx={{ mt: 2 }}>
               <Typography variant="body1" color="text.secondary">
                 Activity coming soon...

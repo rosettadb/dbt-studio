@@ -105,3 +105,57 @@ export interface NotebookData {
   updatedAt: string;
   lastExecutedAt?: string;
 }
+
+// Schema Autocomplete Types (Phase 4)
+export interface SchemaInfo {
+  snapshot_id: number;
+  snapshot_time: string;
+  schema_version: number;
+  schemas: SchemaMetadata[];
+  tables: TableMetadata[];
+  columns: ColumnMetadata[];
+}
+
+export interface SchemaMetadata {
+  schema_id: number;
+  schema_name: string;
+  schema_uuid: string;
+  path: string | null;
+}
+
+export interface TableMetadata {
+  table_id: number;
+  table_name: string;
+  table_uuid: string;
+  schema_id: number;
+  schema_name: string;
+  path: string | null;
+  record_count: number | null;
+  file_size_bytes: number | null;
+}
+
+export interface ColumnMetadata {
+  column_id: number;
+  column_name: string;
+  column_type: string;
+  column_order: number;
+  nulls_allowed: boolean;
+  parent_column: number | null;
+  parent_column_name: string | null;
+  table_id: number;
+  table_name: string;
+  schema_name: string;
+  contains_null: boolean | null;
+  min_value: string | null;
+  max_value: string | null;
+}
+
+export interface CompletionItem {
+  label: string;
+  kind: number; // monaco.languages.CompletionItemKind
+  detail?: string;
+  documentation?: string;
+  insertText: string;
+  sortText?: string;
+  range?: any;
+}

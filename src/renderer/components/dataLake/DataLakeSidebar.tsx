@@ -9,13 +9,15 @@ import {
   ListItemText,
   styled,
   Button,
+  Alert,
 } from '@mui/material';
-import { Dashboard, History, Add } from '@mui/icons-material';
+import { Dashboard, History, Add, Description } from '@mui/icons-material';
 import { NavLink, useLocation, useNavigate } from 'react-router-dom';
 import { SettingsSidebarElement } from '../../screens/settings/settingsElements';
 import { icons } from '../../../../assets';
 import type { DuckLakeInstance } from '../../../types/duckLake';
 import { DataLakeSVG } from '../sidebar/icons';
+import { useNotebooks } from '../../controllers/notebook.controller';
 
 export const DataLakeIcon: React.FC<{
   fontSize?: 'small' | 'medium';
@@ -93,6 +95,21 @@ export const DataLakeSidebar: React.FC<DataLakeSidebarProps> = ({
     (instance) => instance.id === instanceId,
   );
 
+  // Check if we're in the notebooks section
+  const isInNotebooksSection = pathSegments.includes('notebooks');
+
+  // Fetch notebooks if we're in the notebooks section and have an instanceId
+  const { data: notebooks = [] } = useNotebooks(
+    isInNotebooksSection && instanceId ? instanceId : '',
+  );
+
+  // Extract current notebookId if viewing a specific notebook
+  const notebookId =
+    pathSegments.includes('notebooks') &&
+    pathSegments.length > pathSegments.indexOf('notebooks') + 1
+      ? pathSegments[pathSegments.indexOf('notebooks') + 1]
+      : null;
+
   return (
     <Box
       sx={{
@@ -166,7 +183,7 @@ export const DataLakeSidebar: React.FC<DataLakeSidebarProps> = ({
           </List>
 
           {/* Instances List */}
-          {instances.length > 0 && (
+          {instances.length > 0 && !isInNotebooksSection && (
             <Box sx={{ mt: 3 }}>
               <Typography
                 variant="caption"
@@ -225,6 +242,139 @@ export const DataLakeSidebar: React.FC<DataLakeSidebarProps> = ({
                   </StyledDuckLakeNavLink>
                 ))}
               </List>
+            </Box>
+          )}
+
+          {/* Active Instance (when in notebooks section) */}
+          {isInNotebooksSection && selectedInstance && (
+            <Box sx={{ mt: 3 }}>
+              <Typography
+                variant="caption"
+                sx={{
+                  display: 'block',
+                  px: 2,
+                  pb: 1,
+                  fontWeight: 600,
+                  color: theme.palette.text.secondary,
+                  textTransform: 'uppercase',
+                  letterSpacing: '0.5px',
+                }}
+              >
+                DataLake
+              </Typography>
+              <List
+                sx={{
+                  py: 0,
+                  width: '100%',
+                  '& .MuiListItem-root': {
+                    py: 0.25,
+                    px: 1,
+                    minHeight: '32px',
+                    width: '100%',
+                  },
+                }}
+              >
+                <StyledDuckLakeNavLink
+                  to={`/app/data-lake/duck-lake/instances/${selectedInstance.id}`}
+                >
+                  <ListItem
+                    sx={{
+                      cursor: 'pointer',
+                      borderRadius: 1,
+                      mb: 0,
+                      width: '270px',
+                      backgroundColor: theme.palette.divider,
+                    }}
+                  >
+                    <ListItemIcon sx={{ minWidth: 32 }}>
+                      <DataLakeIcon fontSize="small" />
+                    </ListItemIcon>
+                    <ListItemText
+                      primary={selectedInstance.name}
+                      primaryTypographyProps={{
+                        variant: 'body2',
+                        sx: { fontSize: '0.875rem', fontWeight: 500 },
+                      }}
+                    />
+                  </ListItem>
+                </StyledDuckLakeNavLink>
+              </List>
+            </Box>
+          )}
+
+          {/* Notebooks List */}
+          {isInNotebooksSection && (
+            <Box sx={{ mt: 3 }}>
+              <Typography
+                variant="caption"
+                sx={{
+                  display: 'block',
+                  px: 2,
+                  pb: 1,
+                  fontWeight: 600,
+                  color: theme.palette.text.secondary,
+                  textTransform: 'uppercase',
+                  letterSpacing: '0.5px',
+                }}
+              >
+                Notebooks
+              </Typography>
+              {notebooks.length > 0 ? (
+                <List
+                  sx={{
+                    py: 0,
+                    width: '100%',
+                    '& .MuiListItem-root': {
+                      py: 0.25,
+                      px: 1,
+                      minHeight: '32px',
+                      width: '100%',
+                    },
+                  }}
+                >
+                  {notebooks.map((notebook) => (
+                    <StyledDuckLakeNavLink
+                      key={notebook.id}
+                      to={`/app/data-lake/duck-lake/instances/${instanceId}/notebooks/${notebook.id}`}
+                    >
+                      <ListItem
+                        sx={{
+                          cursor: 'pointer',
+                          borderRadius: 1,
+                          mb: 0,
+                          width: '270px',
+                          backgroundColor:
+                            notebookId === notebook.id
+                              ? theme.palette.divider
+                              : 'transparent',
+                        }}
+                      >
+                        <ListItemIcon sx={{ minWidth: 32 }}>
+                          <Description fontSize="small" />
+                        </ListItemIcon>
+                        <ListItemText
+                          primary={notebook.name}
+                          primaryTypographyProps={{
+                            variant: 'body2',
+                            sx: {
+                              fontSize: '0.875rem',
+                              overflow: 'hidden',
+                              textOverflow: 'ellipsis',
+                              whiteSpace: 'nowrap',
+                            },
+                          }}
+                        />
+                      </ListItem>
+                    </StyledDuckLakeNavLink>
+                  ))}
+                </List>
+              ) : (
+                <Box sx={{ px: 2, py: 1 }}>
+                  <Alert severity="info" sx={{ fontSize: '0.75rem', py: 0.5 }}>
+                    No notebooks yet
+                  </Alert>
+                </Box>
+              )}
             </Box>
           )}
         </Box>

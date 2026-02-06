@@ -12,6 +12,7 @@ import {
   RunCellRequest,
   RunAllCellsRequest,
   RunAllCellsResponse,
+  SchemaInfo,
 } from '../../types/notebook';
 
 export const notebookService = {
@@ -109,5 +110,25 @@ export const notebookService = {
       format,
       data,
     });
+  },
+
+  /**
+   * Get schema metadata for autocomplete (Phase 4)
+   */
+  getSchema: (instanceId: string): Promise<SchemaInfo> => {
+    return window.electron.ipcRenderer.invoke('notebook:schema:get', instanceId);
+  },
+
+  /**
+   * Get schema summary statistics (Phase 4)
+   */
+  getSchemaSummary: (instanceId: string): Promise<{
+    schemaCount: number;
+    tableCount: number;
+    columnCount: number;
+    totalRows: number;
+    totalSize: number;
+  }> => {
+    return window.electron.ipcRenderer.invoke('notebook:schema:summary', instanceId);
   },
 };

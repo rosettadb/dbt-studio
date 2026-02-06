@@ -102,13 +102,18 @@ export const OutputPanel: React.FC<OutputPanelProps> = ({ output, cellId }) => {
         sx={{
           bgcolor: (theme) =>
             theme.palette.mode === 'dark' ? 'error.dark' : 'error.light',
-          p: 2,
+          p: 1,
         }}
       >
-        <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1 }}>
-          <ErrorIcon color="error" />
+        <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 0.75 }}>
+          <ErrorIcon color="error" sx={{ fontSize: 18 }} />
           <Box sx={{ flex: 1 }}>
-            <Typography variant="subtitle2" color="error" gutterBottom>
+            <Typography
+              variant="subtitle2"
+              color="error"
+              gutterBottom
+              sx={{ fontSize: 12, mb: 0.5 }}
+            >
               Execution Error
             </Typography>
             <Typography
@@ -116,14 +121,20 @@ export const OutputPanel: React.FC<OutputPanelProps> = ({ output, cellId }) => {
               component="pre"
               sx={{
                 fontFamily: 'monospace',
+                fontSize: 11,
                 whiteSpace: 'pre-wrap',
                 wordBreak: 'break-word',
                 m: 0,
+                lineHeight: 1.4,
               }}
             >
               {output.error}
             </Typography>
-            <Typography variant="caption" color="text.secondary" sx={{ mt: 1 }}>
+            <Typography
+              variant="caption"
+              color="text.secondary"
+              sx={{ mt: 0.5, fontSize: 10 }}
+            >
               Execution time: {output.executionTime}ms
             </Typography>
           </Box>
@@ -140,16 +151,16 @@ export const OutputPanel: React.FC<OutputPanelProps> = ({ output, cellId }) => {
         sx={{
           bgcolor: (theme) =>
             theme.palette.mode === 'dark' ? 'grey.800' : 'grey.100',
-          p: 2,
+          p: 1,
         }}
       >
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-          <SuccessIcon color="success" />
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
+          <SuccessIcon color="success" sx={{ fontSize: 18 }} />
           <Box>
-            <Typography variant="body2" color="text.secondary">
+            <Typography variant="body2" color="text.secondary" sx={{ fontSize: 12 }}>
               Query executed successfully (no results)
             </Typography>
-            <Typography variant="caption" color="text.secondary">
+            <Typography variant="caption" color="text.secondary" sx={{ fontSize: 10 }}>
               Execution time: {output.executionTime}ms
             </Typography>
           </Box>
@@ -172,25 +183,37 @@ export const OutputPanel: React.FC<OutputPanelProps> = ({ output, cellId }) => {
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'space-between',
-          p: 1.5,
+          px: 1,
+          py: 0.5,
           borderBottom: '1px solid',
           borderColor: 'divider',
           bgcolor: (theme) =>
             theme.palette.mode === 'dark' ? 'grey.900' : 'grey.50',
+          minHeight: '32px',
         }}
       >
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-          <SuccessIcon color="success" fontSize="small" />
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
+          <SuccessIcon color="success" sx={{ fontSize: 16 }} />
           <Chip
             label={`${output.rowCount} rows`}
             size="small"
             color="primary"
             variant="outlined"
+            sx={{
+              height: '20px',
+              fontSize: '10px',
+              '& .MuiChip-label': { px: 0.75, py: 0 },
+            }}
           />
           <Chip
             label={`${output.executionTime}ms`}
             size="small"
             variant="outlined"
+            sx={{
+              height: '20px',
+              fontSize: '10px',
+              '& .MuiChip-label': { px: 0.75, py: 0 },
+            }}
           />
         </Box>
 
@@ -199,11 +222,12 @@ export const OutputPanel: React.FC<OutputPanelProps> = ({ output, cellId }) => {
             size="small"
             onClick={(e) => setExportMenuAnchor(e.currentTarget)}
             disabled={isExporting}
+            sx={{ p: 0.25 }}
           >
             {isExporting ? (
-              <CircularProgress size={20} />
+              <CircularProgress size={16} />
             ) : (
-              <ExportIcon fontSize="small" />
+              <ExportIcon sx={{ fontSize: 16 }} />
             )}
           </IconButton>
         </Tooltip>
@@ -213,29 +237,37 @@ export const OutputPanel: React.FC<OutputPanelProps> = ({ output, cellId }) => {
           open={Boolean(exportMenuAnchor)}
           onClose={() => setExportMenuAnchor(null)}
         >
-          <MenuItem onClick={() => handleExport('csv')}>
+          <MenuItem onClick={() => handleExport('csv')} sx={{ py: 0.5, fontSize: 12 }}>
             <ListItemIcon>
-              <CsvIcon fontSize="small" />
+              <CsvIcon sx={{ fontSize: 16 }} />
             </ListItemIcon>
-            <ListItemText>CSV (Comma-Separated)</ListItemText>
+            <ListItemText primaryTypographyProps={{ fontSize: 12 }}>
+              CSV (Comma-Separated)
+            </ListItemText>
           </MenuItem>
-          <MenuItem onClick={() => handleExport('tsv')}>
+          <MenuItem onClick={() => handleExport('tsv')} sx={{ py: 0.5, fontSize: 12 }}>
             <ListItemIcon>
-              <TsvIcon fontSize="small" />
+              <TsvIcon sx={{ fontSize: 16 }} />
             </ListItemIcon>
-            <ListItemText>TSV (Tab-Separated)</ListItemText>
+            <ListItemText primaryTypographyProps={{ fontSize: 12 }}>
+              TSV (Tab-Separated)
+            </ListItemText>
           </MenuItem>
-          <MenuItem onClick={() => handleExport('json')}>
+          <MenuItem onClick={() => handleExport('json')} sx={{ py: 0.5, fontSize: 12 }}>
             <ListItemIcon>
-              <JsonIcon fontSize="small" />
+              <JsonIcon sx={{ fontSize: 16 }} />
             </ListItemIcon>
-            <ListItemText>JSON</ListItemText>
+            <ListItemText primaryTypographyProps={{ fontSize: 12 }}>
+              JSON
+            </ListItemText>
           </MenuItem>
-          <MenuItem onClick={() => handleExport('parquet')}>
+          <MenuItem onClick={() => handleExport('parquet')} sx={{ py: 0.5, fontSize: 12 }}>
             <ListItemIcon>
-              <ParquetIcon fontSize="small" />
+              <ParquetIcon sx={{ fontSize: 16 }} />
             </ListItemIcon>
-            <ListItemText>Parquet</ListItemText>
+            <ListItemText primaryTypographyProps={{ fontSize: 12 }}>
+              Parquet
+            </ListItemText>
           </MenuItem>
         </Menu>
       </Box>
@@ -250,6 +282,9 @@ export const OutputPanel: React.FC<OutputPanelProps> = ({ output, cellId }) => {
                   key={column}
                   sx={{
                     fontWeight: 'bold',
+                    fontSize: 12,
+                    py: 0.25,
+                    px: 1,
                     bgcolor: (theme) =>
                       theme.palette.mode === 'dark' ? 'grey.800' : 'grey.100',
                     whiteSpace: 'nowrap',
@@ -275,6 +310,9 @@ export const OutputPanel: React.FC<OutputPanelProps> = ({ output, cellId }) => {
                       overflow: 'hidden',
                       textOverflow: 'ellipsis',
                       whiteSpace: 'nowrap',
+                      fontSize: 12,
+                      py: 0.25,
+                      px: 1,
                     }}
                   >
                     {row[column] === null ? (
@@ -282,6 +320,7 @@ export const OutputPanel: React.FC<OutputPanelProps> = ({ output, cellId }) => {
                         variant="body2"
                         color="text.secondary"
                         fontStyle="italic"
+                        sx={{ fontSize: 12 }}
                       >
                         NULL
                       </Typography>
@@ -306,6 +345,19 @@ export const OutputPanel: React.FC<OutputPanelProps> = ({ output, cellId }) => {
           rowsPerPage={rowsPerPage}
           onRowsPerPageChange={handleChangeRowsPerPage}
           rowsPerPageOptions={[10, 25, 50, 100]}
+          sx={{
+            '& .MuiTablePagination-toolbar': {
+              minHeight: '40px',
+              px: 1,
+            },
+            '& .MuiTablePagination-selectLabel, & .MuiTablePagination-displayedRows': {
+              fontSize: 11,
+              m: 0,
+            },
+            '& .MuiTablePagination-select': {
+              fontSize: 11,
+            },
+          }}
         />
       )}
     </Paper>

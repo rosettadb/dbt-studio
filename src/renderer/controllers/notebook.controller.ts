@@ -14,6 +14,7 @@ import {
   RunCellRequest,
   RunAllCellsRequest,
   RunAllCellsResponse,
+  SchemaInfo,
 } from '../../types/notebook';
 
 // Query keys for cache management
@@ -26,6 +27,9 @@ export const notebookKeys = {
     [...notebookKeys.details(), instanceId, notebookId] as const,
   sessions: () => [...notebookKeys.all, 'sessions'] as const,
   sessionCount: () => [...notebookKeys.sessions(), 'count'] as const,
+  schema: (instanceId: string) => [...notebookKeys.all, 'schema', instanceId] as const,
+  schemaSummary: (instanceId: string) =>
+    [...notebookKeys.all, 'schema', 'summary', instanceId] as const,
 };
 
 /**
@@ -286,5 +290,56 @@ export const useInvalidateNotebookCache = () => {
       queryClient.invalidateQueries(
         notebookKeys.detail(instanceId, notebookId),
       ),
+  };
+};
+
+/**
+ * Query: Get schema metadata for autocomplete (Phase 4)
+ */
+export const useSchema = (instanceId: string, enabled = true) => {
+  return useQuery<SchemaInfo, Error>(
+    notebookKeys.schema(instanceId),
+    () => notebookService.getSchema(instanceId),
+    {
+      staleTime: 5 * 60 * 1000, // 5 minutes
+      enabled: !!instanceId && enabled,
+    },
+  );
+};
+
+/**
+ * Query: Get schema summary statistics (Phase 4)
+ */
+export const useSchemaSummary = (instanceId: string, enabled = true) => {
+  return useQuery<
+    {
+      schemaCount: number;
+      tableCount: number;
+      columnCount: number;
+      totalRows: number;
+      totalSize: number;
+    },
+    Error
+  >(
+    notebookKeys.schemaSummary(instanceId),
+    () => notebookService.getSchemaSummary(instanceId),
+    {
+      staleTime: 5 * 60 * 1000, // 5 minutes
+      enabled: !!instanceId && enabled,
+    },
+  );
+};
+
+/**
+ * Utility: Refresh schema cache (Phase 4)
+ */
+export const useRefreshSchema = () => {
+  const queryClient = useQueryClient();
+
+  return {
+    refreshSchema: (instanceId: string) => {
+      queryClient.invalidateQueries(notebookKeys.schema(instanceId));
+      queryClient.invalidateQueries(notebookKeys.schemaSummary(instanceId));
+    },
   };
 };

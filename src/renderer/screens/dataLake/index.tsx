@@ -13,10 +13,7 @@ import {
   DataLakeTableDetails,
 } from '../../components/dataLake';
 import { DataLakeCard } from '../../components/dataLakeCards';
-import {
-  NotebookEditor,
-  NotebooksList,
-} from '../../components/notebook';
+import { NotebookEditor, NotebooksList } from '../../components/notebook';
 import {
   useDuckLakeInstances,
   useCreateDuckLakeInstance,
@@ -30,12 +27,11 @@ const DataLake: React.FC = () => {
     type?: string;
     instanceId?: string;
     notebookId?: string;
-    tableName?: string;
   }>();
   const navigate = useNavigate();
 
   // Extract type from URL params (for type-specific routes)
-  const { type, instanceId, notebookId, tableName } = params;
+  const { type, instanceId, notebookId } = params;
 
   // State for type selection in new-instance flow
   const [selectedType, setSelectedType] = useState<string>();
@@ -71,7 +67,10 @@ const DataLake: React.FC = () => {
       return 'notebook-editor';
     }
     // Check for notebooks list route: /app/duck-lake/instances/:id/notebooks
-    if (pathSegments.includes('instances') && pathSegments.includes('notebooks')) {
+    if (
+      pathSegments.includes('instances') &&
+      pathSegments.includes('notebooks')
+    ) {
       return 'instance-notebooks';
     }
     // Check for table detail route pattern: /app/duck-lake/instances/:id/tables/:tableName
