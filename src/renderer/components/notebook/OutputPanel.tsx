@@ -157,10 +157,18 @@ export const OutputPanel: React.FC<OutputPanelProps> = ({ output, cellId }) => {
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
           <SuccessIcon color="success" sx={{ fontSize: 18 }} />
           <Box>
-            <Typography variant="body2" color="text.secondary" sx={{ fontSize: 12 }}>
+            <Typography
+              variant="body2"
+              color="text.secondary"
+              sx={{ fontSize: 12 }}
+            >
               Query executed successfully (no results)
             </Typography>
-            <Typography variant="caption" color="text.secondary" sx={{ fontSize: 10 }}>
+            <Typography
+              variant="caption"
+              color="text.secondary"
+              sx={{ fontSize: 10 }}
+            >
               Execution time: {output.executionTime}ms
             </Typography>
           </Box>
@@ -237,7 +245,10 @@ export const OutputPanel: React.FC<OutputPanelProps> = ({ output, cellId }) => {
           open={Boolean(exportMenuAnchor)}
           onClose={() => setExportMenuAnchor(null)}
         >
-          <MenuItem onClick={() => handleExport('csv')} sx={{ py: 0.5, fontSize: 12 }}>
+          <MenuItem
+            onClick={() => handleExport('csv')}
+            sx={{ py: 0.5, fontSize: 12 }}
+          >
             <ListItemIcon>
               <CsvIcon sx={{ fontSize: 16 }} />
             </ListItemIcon>
@@ -245,7 +256,10 @@ export const OutputPanel: React.FC<OutputPanelProps> = ({ output, cellId }) => {
               CSV (Comma-Separated)
             </ListItemText>
           </MenuItem>
-          <MenuItem onClick={() => handleExport('tsv')} sx={{ py: 0.5, fontSize: 12 }}>
+          <MenuItem
+            onClick={() => handleExport('tsv')}
+            sx={{ py: 0.5, fontSize: 12 }}
+          >
             <ListItemIcon>
               <TsvIcon sx={{ fontSize: 16 }} />
             </ListItemIcon>
@@ -253,7 +267,10 @@ export const OutputPanel: React.FC<OutputPanelProps> = ({ output, cellId }) => {
               TSV (Tab-Separated)
             </ListItemText>
           </MenuItem>
-          <MenuItem onClick={() => handleExport('json')} sx={{ py: 0.5, fontSize: 12 }}>
+          <MenuItem
+            onClick={() => handleExport('json')}
+            sx={{ py: 0.5, fontSize: 12 }}
+          >
             <ListItemIcon>
               <JsonIcon sx={{ fontSize: 16 }} />
             </ListItemIcon>
@@ -261,7 +278,10 @@ export const OutputPanel: React.FC<OutputPanelProps> = ({ output, cellId }) => {
               JSON
             </ListItemText>
           </MenuItem>
-          <MenuItem onClick={() => handleExport('parquet')} sx={{ py: 0.5, fontSize: 12 }}>
+          <MenuItem
+            onClick={() => handleExport('parquet')}
+            sx={{ py: 0.5, fontSize: 12 }}
+          >
             <ListItemIcon>
               <ParquetIcon sx={{ fontSize: 16 }} />
             </ListItemIcon>
@@ -350,10 +370,11 @@ export const OutputPanel: React.FC<OutputPanelProps> = ({ output, cellId }) => {
               minHeight: '40px',
               px: 1,
             },
-            '& .MuiTablePagination-selectLabel, & .MuiTablePagination-displayedRows': {
-              fontSize: 11,
-              m: 0,
-            },
+            '& .MuiTablePagination-selectLabel, & .MuiTablePagination-displayedRows':
+              {
+                fontSize: 11,
+                m: 0,
+              },
             '& .MuiTablePagination-select': {
               fontSize: 11,
             },

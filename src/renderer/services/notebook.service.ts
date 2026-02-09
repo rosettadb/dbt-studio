@@ -27,7 +27,11 @@ export const notebookService = {
    * Get a notebook by ID
    */
   getNotebook: (instanceId: string, notebookId: string): Promise<Notebook> => {
-    return window.electron.ipcRenderer.invoke('notebook:get', instanceId, notebookId);
+    return window.electron.ipcRenderer.invoke(
+      'notebook:get',
+      instanceId,
+      notebookId,
+    );
   },
 
   /**
@@ -48,7 +52,11 @@ export const notebookService = {
    * Delete a notebook
    */
   deleteNotebook: (instanceId: string, notebookId: string): Promise<void> => {
-    return window.electron.ipcRenderer.invoke('notebook:delete', instanceId, notebookId);
+    return window.electron.ipcRenderer.invoke(
+      'notebook:delete',
+      instanceId,
+      notebookId,
+    );
   },
 
   /**
@@ -66,7 +74,10 @@ export const notebookService = {
    * Dispose a session
    */
   disposeSession: (notebookId: string): Promise<void> => {
-    return window.electron.ipcRenderer.invoke('notebook:session:dispose', notebookId);
+    return window.electron.ipcRenderer.invoke(
+      'notebook:session:dispose',
+      notebookId,
+    );
   },
 
   /**
@@ -87,7 +98,10 @@ export const notebookService = {
    * Interrupt execution
    */
   interruptExecution: (notebookId: string): Promise<void> => {
-    return window.electron.ipcRenderer.invoke('notebook:execution:interrupt', notebookId);
+    return window.electron.ipcRenderer.invoke(
+      'notebook:execution:interrupt',
+      notebookId,
+    );
   },
 
   /**
@@ -116,19 +130,27 @@ export const notebookService = {
    * Get schema metadata for autocomplete (Phase 4)
    */
   getSchema: (instanceId: string): Promise<SchemaInfo> => {
-    return window.electron.ipcRenderer.invoke('notebook:schema:get', instanceId);
+    return window.electron.ipcRenderer.invoke(
+      'notebook:schema:get',
+      instanceId,
+    );
   },
 
   /**
    * Get schema summary statistics (Phase 4)
    */
-  getSchemaSummary: (instanceId: string): Promise<{
+  getSchemaSummary: (
+    instanceId: string,
+  ): Promise<{
     schemaCount: number;
     tableCount: number;
     columnCount: number;
     totalRows: number;
     totalSize: number;
   }> => {
-    return window.electron.ipcRenderer.invoke('notebook:schema:summary', instanceId);
+    return window.electron.ipcRenderer.invoke(
+      'notebook:schema:summary',
+      instanceId,
+    );
   },
 };

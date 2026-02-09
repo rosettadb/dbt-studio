@@ -6,7 +6,10 @@
 
 import { ipcMain } from 'electron';
 import { NotebookService } from '../services/notebook.service';
-import { DataExportService, ExportFormat } from '../services/notebook/export.service';
+import {
+  DataExportService,
+  ExportFormat,
+} from '../services/notebook/export.service';
 import { SchemaService } from '../services/notebook/schema.service';
 import {
   CreateNotebookRequest,

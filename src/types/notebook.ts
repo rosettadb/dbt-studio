@@ -107,15 +107,6 @@ export interface NotebookData {
 }
 
 // Schema Autocomplete Types (Phase 4)
-export interface SchemaInfo {
-  snapshot_id: number;
-  snapshot_time: string;
-  schema_version: number;
-  schemas: SchemaMetadata[];
-  tables: TableMetadata[];
-  columns: ColumnMetadata[];
-}
-
 export interface SchemaMetadata {
   schema_id: number;
   schema_name: string;
@@ -148,6 +139,15 @@ export interface ColumnMetadata {
   contains_null: boolean | null;
   min_value: string | null;
   max_value: string | null;
+}
+
+export interface SchemaInfo {
+  snapshot_id: number;
+  snapshot_time: string;
+  schema_version: number;
+  schemas: SchemaMetadata[];
+  tables: TableMetadata[];
+  columns: ColumnMetadata[];
 }
 
 export interface CompletionItem {

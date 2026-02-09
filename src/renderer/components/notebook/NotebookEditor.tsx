@@ -10,6 +10,11 @@ import {
   CircularProgress,
   Alert,
   Typography,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions,
+  TextField,
 } from '@mui/material';
 import { Add as AddIcon } from '@mui/icons-material';
 import { v4 as uuidv4 } from 'uuid';
@@ -25,7 +30,6 @@ import {
   useUpdateNotebook,
   useRunCell,
   useRunAllCells,
-  useInterruptExecution,
   useDeleteNotebook,
 } from '../../controllers/notebook.controller';
 import { NotebookCell as NotebookCellType } from '../../../types/notebook';
@@ -50,11 +54,12 @@ export const NotebookEditor: React.FC<NotebookEditorProps> = ({
   const updateNotebook = useUpdateNotebook();
   const runCell = useRunCell();
   const runAllCells = useRunAllCells();
-  const interruptExecution = useInterruptExecution();
   const deleteNotebook = useDeleteNotebook();
 
   const [executingCells, setExecutingCells] = useState<Set<string>>(new Set());
   const [isRunningAll, setIsRunningAll] = useState(false);
+  const [renameDialogOpen, setRenameDialogOpen] = useState(false);
+  const [newNotebookName, setNewNotebookName] = useState('');
 
   const handleSave = useCallback(() => {
     // Notebook is auto-saved on every change, so this is just a visual confirmation
@@ -254,12 +259,6 @@ export const NotebookEditor: React.FC<NotebookEditorProps> = ({
     [instanceId, notebookId, runCell],
   );
 
-  const handleInterrupt = useCallback(() => {
-    interruptExecution.mutate(notebookId);
-    setExecutingCells(new Set());
-    setIsRunningAll(false);
-  }, [notebookId, interruptExecution]);
-
   const handleExport = useCallback(() => {
     if (!notebook) return;
 
@@ -276,20 +275,36 @@ export const NotebookEditor: React.FC<NotebookEditorProps> = ({
 
   const handleRename = useCallback(() => {
     if (!notebook) return;
-    
-    const newName = prompt('Enter new notebook name:', notebook.name);
-    if (newName && newName.trim() && newName !== notebook.name) {
-      updateNotebook.mutate({
-        instanceId,
-        notebookId,
-        name: newName.trim(),
-      });
+    setNewNotebookName(notebook.name);
+    setRenameDialogOpen(true);
+  }, [notebook]);
+
+  const handleRenameConfirm = useCallback(() => {
+    if (
+      !notebook ||
+      !newNotebookName.trim() ||
+      newNotebookName === notebook.name
+    ) {
+      setRenameDialogOpen(false);
+      return;
     }
-  }, [notebook, instanceId, notebookId, updateNotebook]);
+
+    updateNotebook.mutate({
+      instanceId,
+      notebookId,
+      name: newNotebookName.trim(),
+    });
+    setRenameDialogOpen(false);
+  }, [notebook, newNotebookName, instanceId, notebookId, updateNotebook]);
+
+  const handleRenameCancel = useCallback(() => {
+    setRenameDialogOpen(false);
+    setNewNotebookName('');
+  }, []);
 
   const handleClone = useCallback(() => {
     if (!notebook) return;
-    
+
     // TODO: Implement clone functionality
     // This would require creating a new notebook with the same cells
     // eslint-disable-next-line no-console
@@ -370,10 +385,7 @@ export const NotebookEditor: React.FC<NotebookEditorProps> = ({
         notebook={notebook}
         isExecuting={isRunningAll || executingCells.size > 0}
         onRunAll={handleRunAll}
-        onSave={handleSave}
         onExport={handleExport}
-        onAddCell={handleAddCell}
-        onInterrupt={handleInterrupt}
         onRename={handleRename}
         onClone={handleClone}
         onDeleteAllCells={handleDeleteAllCells}
@@ -489,6 +501,46 @@ export const NotebookEditor: React.FC<NotebookEditorProps> = ({
           </>
         )}
       </Box>
+
+      {/* Rename Dialog */}
+      <Dialog
+        open={renameDialogOpen}
+        onClose={handleRenameCancel}
+        maxWidth="sm"
+        fullWidth
+      >
+        <DialogTitle>Rename Notebook</DialogTitle>
+        <DialogContent>
+          <TextField
+            autoFocus
+            margin="dense"
+            label="Notebook Name"
+            type="text"
+            fullWidth
+            variant="outlined"
+            value={newNotebookName}
+            onChange={(e) => setNewNotebookName(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') {
+                e.preventDefault();
+                handleRenameConfirm();
+              }
+            }}
+          />
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={handleRenameCancel}>Cancel</Button>
+          <Button
+            onClick={handleRenameConfirm}
+            variant="contained"
+            disabled={
+              !newNotebookName.trim() || newNotebookName === notebook?.name
+            }
+          >
+            Rename
+          </Button>
+        </DialogActions>
+      </Dialog>
     </Box>
   );
 };

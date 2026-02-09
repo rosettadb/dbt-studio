@@ -76,10 +76,7 @@ export class DataExportService {
   /**
    * Export to CSV format
    */
-  private static async exportCSV(
-    filePath: string,
-    data: any[],
-  ): Promise<void> {
+  private static async exportCSV(filePath: string, data: any[]): Promise<void> {
     const csv = Papa.unparse(data, {
       header: true,
       delimiter: ',',
@@ -91,10 +88,7 @@ export class DataExportService {
   /**
    * Export to TSV format
    */
-  private static async exportTSV(
-    filePath: string,
-    data: any[],
-  ): Promise<void> {
+  private static async exportTSV(filePath: string, data: any[]): Promise<void> {
     const tsv = Papa.unparse(data, {
       header: true,
       delimiter: '\t',

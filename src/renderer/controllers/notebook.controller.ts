@@ -27,7 +27,8 @@ export const notebookKeys = {
     [...notebookKeys.details(), instanceId, notebookId] as const,
   sessions: () => [...notebookKeys.all, 'sessions'] as const,
   sessionCount: () => [...notebookKeys.sessions(), 'count'] as const,
-  schema: (instanceId: string) => [...notebookKeys.all, 'schema', instanceId] as const,
+  schema: (instanceId: string) =>
+    [...notebookKeys.all, 'schema', instanceId] as const,
   schemaSummary: (instanceId: string) =>
     [...notebookKeys.all, 'schema', 'summary', instanceId] as const,
 };
@@ -194,7 +195,10 @@ export const useRunCell = () => {
           notebookKey,
           (oldNotebook) => {
             // eslint-disable-next-line no-console
-            console.log('[useRunCell] Updating cache, old notebook:', oldNotebook);
+            console.log(
+              '[useRunCell] Updating cache, old notebook:',
+              oldNotebook,
+            );
 
             if (!oldNotebook) return undefined;
 

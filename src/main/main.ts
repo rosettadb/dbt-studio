@@ -49,11 +49,11 @@ if (!gotTheLock) {
       windowManager = new WindowManager();
       windowManager.startApplication();
       copyAssetsToUserData();
-      
+
       // Initialize notebook service
       const { NotebookService } = await import('./services/notebook.service');
       NotebookService.initialize();
-      
+
       const splash = windowManager.getSplash();
 
       if (splash) {
@@ -183,7 +183,7 @@ app.on('before-quit', async (event) => {
   try {
     // Disconnect all DuckLake connections to prevent memory leaks
     await DuckLakeConnectionManager.disconnectAll();
-    
+
     // Shutdown notebook service and cleanup sessions
     const { NotebookService } = await import('./services/notebook.service');
     NotebookService.shutdown();

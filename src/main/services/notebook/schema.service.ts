@@ -5,7 +5,12 @@
  */
 
 import DuckLakeService from '../duckLake.service';
-import { SchemaInfo, SchemaMetadata, TableMetadata, ColumnMetadata } from '../../../types/notebook';
+import {
+  SchemaInfo,
+  SchemaMetadata,
+  TableMetadata,
+  ColumnMetadata,
+} from '../../../types/notebook';
 
 export class SchemaService {
   /**
@@ -13,6 +18,8 @@ export class SchemaService {
    */
   static async extractSchema(instanceId: string): Promise<SchemaInfo> {
     try {
+      // Verify instance exists
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
       const instance = await DuckLakeService.getInstance(instanceId);
 
       // Execute query using DuckLake service

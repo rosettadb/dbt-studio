@@ -31,10 +31,7 @@ interface NotebookToolbarProps {
   notebook: Notebook;
   isExecuting: boolean;
   onRunAll: () => void;
-  onSave: () => void;
   onExport: () => void;
-  onAddCell: (type: 'sql' | 'markdown') => void;
-  onInterrupt: () => void;
   onRename?: () => void;
   onClone?: () => void;
   onDeleteAllCells?: () => void;
@@ -153,12 +150,17 @@ export const NotebookToolbar: React.FC<NotebookToolbarProps> = ({
             disabled={notebook.cells.length === 0 || isExecuting}
             sx={{
               textTransform: 'none',
-              bgcolor: theme.palette.mode === 'dark' ? 'primary.dark' : 'primary.main',
+              bgcolor:
+                theme.palette.mode === 'dark' ? 'primary.dark' : 'primary.main',
               '&:hover': {
-                bgcolor: theme.palette.mode === 'dark' ? 'primary.main' : 'primary.dark',
+                bgcolor:
+                  theme.palette.mode === 'dark'
+                    ? 'primary.main'
+                    : 'primary.dark',
               },
               '&.Mui-disabled': {
-                bgcolor: theme.palette.mode === 'dark' ? 'grey.800' : 'grey.300',
+                bgcolor:
+                  theme.palette.mode === 'dark' ? 'grey.800' : 'grey.300',
                 color: theme.palette.mode === 'dark' ? 'grey.600' : 'grey.500',
               },
             }}
@@ -174,11 +176,14 @@ export const NotebookToolbar: React.FC<NotebookToolbarProps> = ({
             sx={{
               minWidth: 'auto',
               px: 1,
-              borderColor: theme.palette.mode === 'dark' ? 'grey.700' : 'grey.300',
+              borderColor:
+                theme.palette.mode === 'dark' ? 'grey.700' : 'grey.300',
               color: theme.palette.mode === 'dark' ? 'grey.300' : 'grey.700',
               '&:hover': {
-                borderColor: theme.palette.mode === 'dark' ? 'grey.600' : 'grey.400',
-                bgcolor: theme.palette.mode === 'dark' ? 'grey.800' : 'grey.100',
+                borderColor:
+                  theme.palette.mode === 'dark' ? 'grey.600' : 'grey.400',
+                bgcolor:
+                  theme.palette.mode === 'dark' ? 'grey.800' : 'grey.100',
               },
             }}
           >
@@ -201,9 +206,13 @@ export const NotebookToolbar: React.FC<NotebookToolbarProps> = ({
               sx: {
                 mt: 1,
                 minWidth: 200,
-                bgcolor: theme.palette.mode === 'dark' ? 'grey.900' : 'background.paper',
+                bgcolor:
+                  theme.palette.mode === 'dark'
+                    ? 'grey.900'
+                    : 'background.paper',
                 border: '1px solid',
-                borderColor: theme.palette.mode === 'dark' ? 'grey.800' : 'grey.200',
+                borderColor:
+                  theme.palette.mode === 'dark' ? 'grey.800' : 'grey.200',
               },
             }}
           >
@@ -212,14 +221,18 @@ export const NotebookToolbar: React.FC<NotebookToolbarProps> = ({
               sx={{
                 color: theme.palette.mode === 'dark' ? 'grey.300' : 'grey.900',
                 '&:hover': {
-                  bgcolor: theme.palette.mode === 'dark' ? 'grey.800' : 'grey.100',
+                  bgcolor:
+                    theme.palette.mode === 'dark' ? 'grey.800' : 'grey.100',
                 },
               }}
             >
               <ListItemIcon>
                 <RenameIcon
                   fontSize="small"
-                  sx={{ color: theme.palette.mode === 'dark' ? 'grey.400' : 'grey.600' }}
+                  sx={{
+                    color:
+                      theme.palette.mode === 'dark' ? 'grey.400' : 'grey.600',
+                  }}
                 />
               </ListItemIcon>
               <ListItemText>Rename</ListItemText>
@@ -230,14 +243,18 @@ export const NotebookToolbar: React.FC<NotebookToolbarProps> = ({
               sx={{
                 color: theme.palette.mode === 'dark' ? 'grey.300' : 'grey.900',
                 '&:hover': {
-                  bgcolor: theme.palette.mode === 'dark' ? 'grey.800' : 'grey.100',
+                  bgcolor:
+                    theme.palette.mode === 'dark' ? 'grey.800' : 'grey.100',
                 },
               }}
             >
               <ListItemIcon>
                 <CloneIcon
                   fontSize="small"
-                  sx={{ color: theme.palette.mode === 'dark' ? 'grey.400' : 'grey.600' }}
+                  sx={{
+                    color:
+                      theme.palette.mode === 'dark' ? 'grey.400' : 'grey.600',
+                  }}
                 />
               </ListItemIcon>
               <ListItemText>Clone</ListItemText>
@@ -248,14 +265,18 @@ export const NotebookToolbar: React.FC<NotebookToolbarProps> = ({
               sx={{
                 color: theme.palette.mode === 'dark' ? 'grey.300' : 'grey.900',
                 '&:hover': {
-                  bgcolor: theme.palette.mode === 'dark' ? 'grey.800' : 'grey.100',
+                  bgcolor:
+                    theme.palette.mode === 'dark' ? 'grey.800' : 'grey.100',
                 },
               }}
             >
               <ListItemIcon>
                 <ExportIcon
                   fontSize="small"
-                  sx={{ color: theme.palette.mode === 'dark' ? 'grey.400' : 'grey.600' }}
+                  sx={{
+                    color:
+                      theme.palette.mode === 'dark' ? 'grey.400' : 'grey.600',
+                  }}
                 />
               </ListItemIcon>
               <ListItemText>Export</ListItemText>
@@ -268,8 +289,14 @@ export const NotebookToolbar: React.FC<NotebookToolbarProps> = ({
               sx={{
                 color: 'error.main',
                 '&:hover': {
-                  bgcolor: theme.palette.mode === 'dark' ? 'error.dark' : 'error.light',
-                  color: theme.palette.mode === 'dark' ? 'error.light' : 'error.dark',
+                  bgcolor:
+                    theme.palette.mode === 'dark'
+                      ? 'error.dark'
+                      : 'error.light',
+                  color:
+                    theme.palette.mode === 'dark'
+                      ? 'error.light'
+                      : 'error.dark',
                 },
               }}
             >
@@ -284,8 +311,14 @@ export const NotebookToolbar: React.FC<NotebookToolbarProps> = ({
               sx={{
                 color: 'error.main',
                 '&:hover': {
-                  bgcolor: theme.palette.mode === 'dark' ? 'error.dark' : 'error.light',
-                  color: theme.palette.mode === 'dark' ? 'error.light' : 'error.dark',
+                  bgcolor:
+                    theme.palette.mode === 'dark'
+                      ? 'error.dark'
+                      : 'error.light',
+                  color:
+                    theme.palette.mode === 'dark'
+                      ? 'error.light'
+                      : 'error.dark',
                 },
               }}
             >
@@ -303,4 +336,3 @@ export const NotebookToolbar: React.FC<NotebookToolbarProps> = ({
     </>
   );
 };
-

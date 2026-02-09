@@ -30,6 +30,7 @@ import {
   Description as NotebookIcon,
   Delete as DeleteIcon,
   AutoAwesome as AutoAwesomeIcon,
+  ArrowBack as ArrowBackIcon,
 } from '@mui/icons-material';
 import { useNavigate } from 'react-router-dom';
 import { v4 as uuidv4 } from 'uuid';
@@ -210,17 +211,27 @@ export const NotebooksList: React.FC<NotebooksListProps> = ({
 
   return (
     <Box>
-      {/* Header - only show when there are notebooks */}
-      {notebooks && notebooks.length > 0 && (
-        <Box
-          sx={{
-            display: 'flex',
-            justifyContent: 'space-between',
-            alignItems: 'center',
-            mb: 3,
-          }}
-        >
+      {/* Header with Back Button */}
+      <Box
+        sx={{
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          mb: 3,
+        }}
+      >
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+          <IconButton
+            onClick={() =>
+              navigate(`/app/data-lake/${instanceType}/instances/${instanceId}`)
+            }
+            size="small"
+          >
+            <ArrowBackIcon />
+          </IconButton>
           <Typography variant="h6">Notebooks</Typography>
+        </Box>
+        {notebooks && notebooks.length > 0 && (
           <Box sx={{ display: 'flex', gap: 1 }}>
             <Button
               variant="outlined"
@@ -238,8 +249,8 @@ export const NotebooksList: React.FC<NotebooksListProps> = ({
               New Notebook
             </Button>
           </Box>
-        </Box>
-      )}
+        )}
+      </Box>
 
       {/* Notebooks Grid */}
       {notebooks && notebooks.length > 0 ? (
