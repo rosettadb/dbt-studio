@@ -120,6 +120,9 @@ export class PostgreSQLCatalogAdapter extends CatalogAdapter {
       const escapedTableName = tableName.replace(/"/g, '""');
       const escapedColumnName = columnName.replace(/"/g, '""');
 
+      // Validate column type to prevent SQL injection
+      const validatedType = this.validateColumnType(columnType);
+
       let defaultClause = '';
       if (defaultValue && defaultValue.trim() !== '') {
         // Sanitize default value to prevent SQL injection
@@ -128,7 +131,7 @@ export class PostgreSQLCatalogAdapter extends CatalogAdapter {
       }
 
       await this.connectionInfo.connection.run(
-        `ALTER TABLE "${escapedTableName}" ADD COLUMN "${escapedColumnName}" ${columnType}${defaultClause}`,
+        `ALTER TABLE "${escapedTableName}" ADD COLUMN "${escapedColumnName}" ${validatedType}${defaultClause}`,
       );
     } catch (error) {
       // eslint-disable-next-line no-console
@@ -202,8 +205,11 @@ export class PostgreSQLCatalogAdapter extends CatalogAdapter {
       const escapedTableName = tableName.replace(/"/g, '""');
       const escapedColumnName = columnName.replace(/"/g, '""');
 
+      // Validate column type to prevent SQL injection
+      const validatedType = this.validateColumnType(newType);
+
       await this.connectionInfo.connection.run(
-        `ALTER TABLE "${escapedTableName}" ALTER COLUMN "${escapedColumnName}" TYPE ${newType}`,
+        `ALTER TABLE "${escapedTableName}" ALTER COLUMN "${escapedColumnName}" TYPE ${validatedType}`,
       );
     } catch (error) {
       // eslint-disable-next-line no-console

@@ -575,6 +575,52 @@ CREATE OR REPLACE SECRET ${secretName} (
     return `'${escapedValue}'`;
   }
 
+  /**
+   * Validate column type to prevent SQL injection
+   * Checks type against allowlist of valid DuckDB/PostgreSQL/SQLite types
+   */
+  // eslint-disable-next-line class-methods-use-this
+  protected validateColumnType(columnType: string): string {
+    const trimmedType = columnType.trim();
+
+    // Check for dangerous SQL patterns
+    if (
+      trimmedType.includes(';') ||
+      trimmedType.includes('--') ||
+      trimmedType.includes('/*') ||
+      trimmedType.includes('*/') ||
+      trimmedType.toLowerCase().includes('drop') ||
+      trimmedType.toLowerCase().includes('delete') ||
+      trimmedType.toLowerCase().includes('insert') ||
+      trimmedType.toLowerCase().includes('update') ||
+      trimmedType.toLowerCase().includes('create') ||
+      trimmedType.toLowerCase().includes('alter')
+    ) {
+      throw new Error(
+        'Invalid column type: contains potentially dangerous SQL patterns',
+      );
+    }
+
+    // Comprehensive regex for DuckDB/PostgreSQL/SQLite types
+    // Supports: basic types, sized types, precision types, arrays, structs, maps, etc.
+    const typePattern =
+      /^(TINYINT|SMALLINT|INTEGER|BIGINT|HUGEINT|UTINYINT|USMALLINT|UINTEGER|UBIGINT|UHUGEINT|INT|DOUBLE\s+PRECISION|DOUBLE|REAL|FLOAT|DECIMAL(\(\d+(\s*,\s*\d+)?\))?|NUMERIC(\(\d+(\s*,\s*\d+)?\))?|VARCHAR(\(\d+\))?|CHAR(\(\d+\))?|TEXT|STRING|BLOB|BYTEA|BOOLEAN|BOOL|DATE|TIME|TIMESTAMP|TIMESTAMPTZ|TIMESTAMP\s+WITH\s+TIME\s+ZONE|TIMESTAMP\s+WITHOUT\s+TIME\s+ZONE|TIME\s+WITH\s+TIME\s+ZONE|TIME\s+WITHOUT\s+TIME\s+ZONE|INTERVAL|JSON|JSONB|UUID|BIT(\(\d+\))?|VARBIT(\(\d+\))?|BIT\s+VARYING(\(\d+\))?)(\[\])*$/i;
+
+    // Also support complex types like STRUCT, MAP, LIST, ENUM with parentheses
+    const complexTypePattern = /^(STRUCT|MAP|LIST|ENUM)\s*\(.+\)$/i;
+
+    if (
+      !typePattern.test(trimmedType) &&
+      !complexTypePattern.test(trimmedType)
+    ) {
+      throw new Error(
+        `Invalid column type: "${trimmedType}" is not a recognized SQL type`,
+      );
+    }
+
+    return trimmedType;
+  }
+
   protected static mapResultRow(
     schema: any[] | undefined,
     row: any,
