@@ -43,8 +43,13 @@ export const ExplorerBuckets: React.FC<ExplorerBucketsProps> = ({
   const connection = connectionQuery.data;
 
   // Secure storage logic
-  const { getCloudAwsSecret, getCloudAzureKey, getCloudGcsCredential, getCloudMinioSecret } =
-    useSecureStorage();
+  const {
+    getCloudAwsSecret,
+    getCloudAzureKey,
+    getCloudGcsCredential,
+    getCloudMinioSecret,
+    getCloudR2Secret,
+  } = useSecureStorage();
   const [secureConfig, setSecureConfig] = useState<any | null>(null);
   const [credentialsMissing, setCredentialsMissing] = useState(false);
 
@@ -81,6 +86,13 @@ export const ExplorerBuckets: React.FC<ExplorerBucketsProps> = ({
           }
         } else if (connection.provider === 'minio') {
           const secret = await getCloudMinioSecret(connection.id);
+          if (secret === null) {
+            missing = true;
+          } else {
+            (config as { secretAccessKey?: string }).secretAccessKey = secret;
+          }
+        } else if (connection.provider === 'cloudflare-r2') {
+          const secret = await getCloudR2Secret(connection.id);
           if (secret === null) {
             missing = true;
           } else {

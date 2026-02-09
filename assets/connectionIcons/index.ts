@@ -14,6 +14,7 @@ import googlecloud from './googlecloud.png';
 import azureBlob from './azure_blob.png';
 import s3Bucket from './s3_bucktet.png';
 import minio from './minio.png';
+import cloudflareR2 from './cloudflare_r2.png';
 import openai from './openai.svg';
 import ollama from './ollama.svg';
 import google from './google.svg';
@@ -30,6 +31,7 @@ export const cloudStorageImages = {
   s3: s3Bucket,
   azure: azureBlob,
   minio,
+  'cloudflare-r2': cloudflareR2,
 };
 
 // AI provider specific images

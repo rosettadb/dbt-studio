@@ -83,8 +83,13 @@ export const ExplorerBucketContent: React.FC<ExplorerBucketContentProps> = ({
 
   const connectionQuery = useConnection(connectionId);
   const connection = connectionQuery.data;
-  const { getCloudAwsSecret, getCloudAzureKey, getCloudGcsCredential, getCloudMinioSecret } =
-    useSecureStorage();
+  const {
+    getCloudAwsSecret,
+    getCloudAzureKey,
+    getCloudGcsCredential,
+    getCloudMinioSecret,
+    getCloudR2Secret,
+  } = useSecureStorage();
 
   useEffect(() => {
     const fetchSecrets = async () => {
@@ -106,6 +111,10 @@ export const ExplorerBucketContent: React.FC<ExplorerBucketContentProps> = ({
           (config as { credentials?: any }).credentials = cred || '';
         } else if (connection.provider === 'minio') {
           const secret = await getCloudMinioSecret(connection.id);
+          (config as { secretAccessKey?: string }).secretAccessKey =
+            secret || '';
+        } else if (connection.provider === 'cloudflare-r2') {
+          const secret = await getCloudR2Secret(connection.id);
           (config as { secretAccessKey?: string }).secretAccessKey =
             secret || '';
         }

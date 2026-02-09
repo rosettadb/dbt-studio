@@ -59,6 +59,7 @@ export type SecureStorageAccount =
   | `cloud-aws-${string}`
   | `cloud-azure-${string}`
   | `cloud-minio-${string}`
+  | `cloud-cloudflare-r2-${string}`
   | `db-bigquery-${string}`
   | 'cloud-api-key';
 
@@ -107,9 +108,21 @@ export interface MinIOConfig {
   region?: string;
 }
 
-export type CloudStorageConfig = S3Config | AzureConfig | GCSConfig | MinIOConfig;
+export interface CloudflareR2Config {
+  accountId: string;
+  accessKeyId: string;
+  secretAccessKey: string;
+  jurisdiction?: 'eu';
+}
 
-export type CloudProvider = 'aws' | 'azure' | 'gcs' | 'minio';
+export type CloudStorageConfig =
+  | S3Config
+  | AzureConfig
+  | GCSConfig
+  | MinIOConfig
+  | CloudflareR2Config;
+
+export type CloudProvider = 'aws' | 'azure' | 'gcs' | 'minio' | 'cloudflare-r2';
 
 export type CloudConnection = {
   id: string;

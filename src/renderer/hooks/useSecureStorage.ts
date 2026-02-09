@@ -145,6 +145,27 @@ const useSecureStorage = () => {
     await secureStorageService.delete(`cloud-minio-${connectionName}`);
   };
 
+  // Cloudflare R2 credential storage
+  const setCloudR2Secret = async (
+    secret: string,
+    connectionName: string,
+  ): Promise<void> => {
+    await secureStorageService.set(
+      `cloud-cloudflare-r2-${connectionName}`,
+      secret,
+    );
+  };
+
+  const getCloudR2Secret = async (
+    connectionName: string,
+  ): Promise<string | null> => {
+    return secureStorageService.get(`cloud-cloudflare-r2-${connectionName}`);
+  };
+
+  const deleteCloudR2Secret = async (connectionName: string): Promise<void> => {
+    await secureStorageService.delete(`cloud-cloudflare-r2-${connectionName}`);
+  };
+
   // BigQuery service account key storage
   const setBigQueryServiceAccountKey = async (
     key: string,
@@ -202,6 +223,9 @@ const useSecureStorage = () => {
     setCloudMinioSecret,
     getCloudMinioSecret,
     deleteCloudMinioSecret,
+    setCloudR2Secret,
+    getCloudR2Secret,
+    deleteCloudR2Secret,
     setBigQueryServiceAccountKey,
     getBigQueryServiceAccountKey,
     deleteBigQueryServiceAccountKey,

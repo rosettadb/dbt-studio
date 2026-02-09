@@ -6,6 +6,7 @@ import type {
   AzureConfig,
   GCSConfig,
   MinIOConfig,
+  CloudflareR2Config,
 } from '../../types/frontend';
 
 /**
@@ -104,6 +105,7 @@ export async function buildCloudSecretQuery(
     DROP SECRET IF EXISTS gcs_secret;
     DROP SECRET IF EXISTS azure_secret;
     DROP SECRET IF EXISTS minio_secret;
+    DROP SECRET IF EXISTS r2_secret;
   `;
 
   switch (provider) {
@@ -150,6 +152,26 @@ export async function buildCloudSecretQuery(
           ENDPOINT '${cleanEndpoint}',
           USE_SSL ${minioConfig.useSSL ? 'true' : 'false'},
           URL_STYLE 'path'
+        );
+      `;
+    }
+    case 'cloudflare-r2': {
+      const r2Config = config as CloudflareR2Config;
+
+      // eslint-disable-next-line no-console
+      console.log('[DuckDB R2 Secret] Building secret with:', {
+        accountId: r2Config.accountId,
+        jurisdiction: r2Config.jurisdiction,
+        accessKeyId: r2Config.accessKeyId,
+      });
+
+      return `
+        ${dropSecretsQuery}
+        CREATE OR REPLACE SECRET r2_secret (
+          TYPE R2,
+          KEY_ID '${r2Config.accessKeyId}',
+          SECRET '${r2Config.secretAccessKey}',
+          ACCOUNT_ID '${r2Config.accountId}'
         );
       `;
     }
@@ -243,6 +265,8 @@ export function getCloudUrl(
       return `s3://${bucketName}/${objectName}`;
     case 'minio':
       return `s3://${bucketName}/${objectName}`;
+    case 'cloudflare-r2':
+      return `r2://${bucketName}/${objectName}`;
     case 'gcs':
       // Use HTTPS URL for GCS since native gcs:// might not be supported
       return `https://storage.googleapis.com/${bucketName}/${objectName}`;

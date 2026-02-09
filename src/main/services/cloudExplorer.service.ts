@@ -21,6 +21,7 @@ import {
   AzureConfig,
   GCSConfig,
   MinIOConfig,
+  CloudflareR2Config,
   CloudStorageConfig,
 } from '../../types/frontend';
 
@@ -691,9 +692,227 @@ class CloudExplorerService {
     }
   }
 
+  // Cloudflare R2 Methods (S3-compatible)
+  private static createR2Client(config: CloudflareR2Config): S3Client {
+    // Validate credentials are provided
+    if (!config.accessKeyId || !config.secretAccessKey) {
+      throw new Error(
+        'Cloudflare R2 credentials are required (Access Key ID and Secret Access Key)',
+      );
+    }
+
+    if (!config.accountId) {
+      throw new Error('Cloudflare R2 Account ID is required');
+    }
+
+    // Validate account ID format (32-character alphanumeric string)
+    // Cloudflare Account IDs are typically 32 characters, alphanumeric (case-insensitive)
+    if (!/^[a-zA-Z0-9]{32}$/.test(config.accountId)) {
+      throw new Error(
+        'Invalid Cloudflare R2 Account ID format. Must be a 32-character alphanumeric string.',
+      );
+    }
+
+    // Build R2 endpoint from account ID
+    const jurisdiction = config.jurisdiction === 'eu' ? '.eu' : '';
+    const endpoint = `https://${config.accountId}.r2.cloudflarestorage.com${jurisdiction}`;
+
+    // eslint-disable-next-line no-console
+    console.log('[Cloudflare R2 Backend] Creating R2 client with config:', {
+      accountId: config.accountId,
+      jurisdiction: config.jurisdiction,
+      endpoint,
+      accessKeyId: config.accessKeyId,
+      hasSecretKey: !!config.secretAccessKey,
+    });
+
+    return new S3Client({
+      endpoint,
+      region: 'auto', // R2 uses 'auto' region
+      credentials: {
+        accessKeyId: config.accessKeyId,
+        secretAccessKey: config.secretAccessKey,
+      },
+    });
+  }
+
+  static async listR2Buckets(config: CloudflareR2Config): Promise<Bucket[]> {
+    const client = CloudExplorerService.createR2Client(config);
+    try {
+      const data = await client.send(new ListBucketsCommand({}));
+      return (data.Buckets || []).map((bucket) => ({
+        name: bucket.Name!,
+        created: bucket.CreationDate!,
+        location: config.jurisdiction === 'eu' ? 'EU' : 'Global',
+      }));
+    } catch (error) {
+      throw new Error(`Error listing Cloudflare R2 buckets: ${error}`);
+    }
+  }
+
+  static async listR2Objects(
+    config: CloudflareR2Config,
+    bucketName: string,
+    continuationToken?: string,
+    prefix = '',
+  ): Promise<CloudListResult> {
+    const client = CloudExplorerService.createR2Client(config);
+    try {
+      const result = await client.send(
+        new ListObjectsV2Command({
+          Bucket: bucketName,
+          Prefix: prefix || undefined,
+          Delimiter: '/',
+          ContinuationToken: continuationToken,
+          MaxKeys: 100,
+        }),
+      );
+
+      const folders = (result.CommonPrefixes || []).map((folderPrefix) => ({
+        name: folderPrefix.Prefix!,
+        size: 0,
+        updated: new Date(),
+        isDirectory: true,
+      }));
+
+      const files = (result.Contents || [])
+        .filter((obj) => obj.Key !== prefix)
+        .map((obj) => ({
+          name: obj.Key!,
+          size: obj.Size || 0,
+          updated: obj.LastModified || new Date(),
+          contentType: undefined,
+          isDirectory: false,
+        }));
+
+      return {
+        objects: [...folders, ...files],
+        nextPageToken: result.IsTruncated
+          ? result.NextContinuationToken
+          : undefined,
+      };
+    } catch (error) {
+      throw new Error(`Error listing Cloudflare R2 objects: ${error}`);
+    }
+  }
+
+  static async getR2DownloadUrl(
+    config: CloudflareR2Config,
+    bucketName: string,
+    objectKey: string,
+  ): Promise<string> {
+    const client = CloudExplorerService.createR2Client(config);
+    try {
+      const command = new GetObjectCommand({
+        Bucket: bucketName,
+        Key: objectKey,
+      });
+      return await getSignedUrl(client, command, { expiresIn: 3600 });
+    } catch (error) {
+      throw new Error(`Error generating Cloudflare R2 signed URL: ${error}`);
+    }
+  }
+
+  static async testR2Connection(config: CloudflareR2Config): Promise<boolean> {
+    const client = CloudExplorerService.createR2Client(config);
+    try {
+      // Try ListBuckets first (requires Admin permissions)
+      await client.send(new ListBucketsCommand({}));
+      return true;
+    } catch (error) {
+      // eslint-disable-next-line no-console
+      console.error(
+        'Cloudflare R2 ListBuckets failed, trying alternative test:',
+        error,
+      );
+
+      // If ListBuckets fails with AccessDenied, it might be a permission issue
+      // Try a simpler operation that works with Object Read & Write permissions
+      const errorName = (error as any).name;
+      if (
+        errorName === 'AccessDenied' ||
+        (error as any).Code === 'AccessDenied'
+      ) {
+        // eslint-disable-next-line no-console
+        console.log(
+          'ListBuckets denied. This might be expected with "Object Read & Write" permissions.',
+        );
+        // eslint-disable-next-line no-console
+        console.log(
+          'Connection credentials appear valid (endpoint resolved, authentication accepted).',
+        );
+        // eslint-disable-next-line no-console
+        console.log(
+          'You may need "Admin Read & Write" permissions to list all buckets.',
+        );
+
+        throw new Error(
+          'R2 API token authenticated successfully, but lacks permission to list buckets. ' +
+            'This token has "Object Read & Write" permissions but needs "Admin Read & Write" to list all buckets. ' +
+            'Please create a new token with "Admin Read & Write" permissions in Cloudflare Dashboard → R2 → Manage R2 API Tokens.',
+        );
+      }
+
+      // For other errors, use the existing error handling
+      // eslint-disable-next-line no-console
+      console.error('Cloudflare R2 connection test failed:', error);
+      // eslint-disable-next-line no-console
+      console.error('Error details:', {
+        name: (error as any).name,
+        message: (error as Error).message,
+        code: (error as any).Code,
+        statusCode: (error as any).$metadata?.httpStatusCode,
+      });
+
+      // Re-throw with user-friendly message
+      const errorMessage = (error as Error).message;
+
+      if (
+        errorName === 'InvalidAccessKeyId' ||
+        errorMessage.includes('InvalidAccessKeyId')
+      ) {
+        throw new Error(
+          'Invalid R2 API token. Generate a new token in Cloudflare dashboard → R2 → Manage API Tokens.',
+        );
+      } else if (
+        errorName === 'SignatureDoesNotMatch' ||
+        errorMessage.includes('SignatureDoesNotMatch')
+      ) {
+        throw new Error(
+          'Invalid R2 Secret Access Key. Please verify your credentials.',
+        );
+      } else if (
+        errorMessage.includes('ENOTFOUND') ||
+        errorMessage.includes('getaddrinfo')
+      ) {
+        throw new Error(
+          'Cannot resolve Cloudflare R2 endpoint. Check your Account ID.',
+        );
+      } else if (errorMessage.includes('ECONNREFUSED')) {
+        throw new Error(
+          'Cannot connect to Cloudflare R2. Check your internet connection.',
+        );
+      } else if (errorMessage.includes('ETIMEDOUT')) {
+        throw new Error(
+          'Connection to Cloudflare R2 timed out. Check your network.',
+        );
+      } else if (
+        errorMessage.includes('NoSuchBucket') ||
+        errorName === 'NoSuchBucket'
+      ) {
+        throw new Error('Bucket not found. Verify bucket name and account ID.');
+      } else if (errorMessage.includes('InvalidAccountId')) {
+        throw new Error(
+          'Invalid account ID. Must be a 32-character alphanumeric string.',
+        );
+      }
+      throw new Error(`Cloudflare R2 connection failed: ${errorMessage}`);
+    }
+  }
+
   // Generic methods for different cloud providers
   static async listBuckets(
-    provider: 'aws' | 'azure' | 'gcs' | 'minio',
+    provider: 'aws' | 'azure' | 'gcs' | 'minio' | 'cloudflare-r2',
     config: CloudStorageConfig,
   ): Promise<Bucket[]> {
     switch (provider) {
@@ -705,13 +924,15 @@ class CloudExplorerService {
         return CloudExplorerService.listGCSBuckets(config as GCSConfig);
       case 'minio':
         return CloudExplorerService.listMinIOBuckets(config as MinIOConfig);
+      case 'cloudflare-r2':
+        return CloudExplorerService.listR2Buckets(config as CloudflareR2Config);
       default:
         throw new Error(`Unsupported provider: ${provider}`);
     }
   }
 
   static async listObjects(
-    provider: 'aws' | 'azure' | 'gcs' | 'minio',
+    provider: 'aws' | 'azure' | 'gcs' | 'minio' | 'cloudflare-r2',
     config: CloudStorageConfig,
     bucketName: string,
     continuationToken?: string,
@@ -746,13 +967,20 @@ class CloudExplorerService {
           continuationToken,
           prefix,
         );
+      case 'cloudflare-r2':
+        return CloudExplorerService.listR2Objects(
+          config as CloudflareR2Config,
+          bucketName,
+          continuationToken,
+          prefix,
+        );
       default:
         throw new Error(`Unsupported provider: ${provider}`);
     }
   }
 
   static async getDownloadUrl(
-    provider: 'aws' | 'azure' | 'gcs' | 'minio',
+    provider: 'aws' | 'azure' | 'gcs' | 'minio' | 'cloudflare-r2',
     config: CloudStorageConfig,
     bucketName: string,
     objectName: string,
@@ -782,13 +1010,19 @@ class CloudExplorerService {
           bucketName,
           objectName,
         );
+      case 'cloudflare-r2':
+        return CloudExplorerService.getR2DownloadUrl(
+          config as CloudflareR2Config,
+          bucketName,
+          objectName,
+        );
       default:
         throw new Error(`Unsupported provider: ${provider}`);
     }
   }
 
   static async testConnection(
-    provider: 'aws' | 'azure' | 'gcs' | 'minio',
+    provider: 'aws' | 'azure' | 'gcs' | 'minio' | 'cloudflare-r2',
     config: CloudStorageConfig,
   ): Promise<boolean> {
     switch (provider) {
@@ -800,6 +1034,10 @@ class CloudExplorerService {
         return CloudExplorerService.testGCSConnection(config as GCSConfig);
       case 'minio':
         return CloudExplorerService.testMinIOConnection(config as MinIOConfig);
+      case 'cloudflare-r2':
+        return CloudExplorerService.testR2Connection(
+          config as CloudflareR2Config,
+        );
       default:
         throw new Error(`Unsupported provider: ${provider}`);
     }

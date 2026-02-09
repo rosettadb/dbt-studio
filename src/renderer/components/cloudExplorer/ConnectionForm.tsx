@@ -31,6 +31,7 @@ import {
   AzureConfig,
   GCSConfig,
   MinIOConfig,
+  CloudflareR2Config,
 } from '../../../types/frontend';
 import {
   useTestCloudConnection,
@@ -59,6 +60,9 @@ interface FormData {
   // MinIO fields
   endpoint: string;
   useSSL: boolean;
+  // Cloudflare R2 fields
+  accountId: string;
+  jurisdiction: 'eu' | '';
 }
 
 export const ConnectionForm: React.FC<ConnectionFormProps> = ({
@@ -78,6 +82,8 @@ export const ConnectionForm: React.FC<ConnectionFormProps> = ({
     getCloudAzureKey,
     setCloudMinioSecret,
     getCloudMinioSecret,
+    setCloudR2Secret,
+    getCloudR2Secret,
   } = useSecureStorage();
 
   const [testStatus, setTestStatus] = useState<
@@ -97,6 +103,8 @@ export const ConnectionForm: React.FC<ConnectionFormProps> = ({
     connectionString: '',
     endpoint: '',
     useSSL: false,
+    accountId: '',
+    jurisdiction: '',
   });
 
   const getProviderIcon = (provider: CloudProvider, size: number = 20) => {
@@ -126,14 +134,25 @@ export const ConnectionForm: React.FC<ConnectionFormProps> = ({
         provider: initialValues.provider,
         projectId: (config as GCSConfig).projectId || '',
         credentials: (config as GCSConfig).credentials || '',
-        region: (config as S3Config).region || (config as MinIOConfig).region || '',
-        accessKeyId: (config as S3Config).accessKeyId || (config as MinIOConfig).accessKeyId || '',
-        secretAccessKey: (config as S3Config).secretAccessKey || (config as MinIOConfig).secretAccessKey || '',
+        region:
+          (config as S3Config).region || (config as MinIOConfig).region || '',
+        accessKeyId:
+          (config as S3Config).accessKeyId ||
+          (config as MinIOConfig).accessKeyId ||
+          (config as CloudflareR2Config).accessKeyId ||
+          '',
+        secretAccessKey:
+          (config as S3Config).secretAccessKey ||
+          (config as MinIOConfig).secretAccessKey ||
+          (config as CloudflareR2Config).secretAccessKey ||
+          '',
         accountName: (config as AzureConfig).accountName || '',
         accountKey: (config as AzureConfig).accountKey || '',
         connectionString: (config as AzureConfig).connectionString || '',
         endpoint: (config as MinIOConfig).endpoint || '',
         useSSL: (config as MinIOConfig).useSSL || false,
+        accountId: (config as CloudflareR2Config).accountId || '',
+        jurisdiction: (config as CloudflareR2Config).jurisdiction || '',
       });
     }
   }, [initialValues]);
@@ -154,6 +173,9 @@ export const ConnectionForm: React.FC<ConnectionFormProps> = ({
           setFormData((prev) => ({ ...prev, accountKey: stored || '' }));
         } else if (provider === 'minio') {
           const stored = await getCloudMinioSecret(id);
+          setFormData((prev) => ({ ...prev, secretAccessKey: stored || '' }));
+        } else if (provider === 'cloudflare-r2') {
+          const stored = await getCloudR2Secret(id);
           setFormData((prev) => ({ ...prev, secretAccessKey: stored || '' }));
         }
       })();
@@ -181,6 +203,12 @@ export const ConnectionForm: React.FC<ConnectionFormProps> = ({
       case 'minio':
         return (
           !!formData.endpoint.trim() &&
+          !!formData.accessKeyId.trim() &&
+          !!formData.secretAccessKey.trim()
+        );
+      case 'cloudflare-r2':
+        return (
+          !!formData.accountId.trim() &&
           !!formData.accessKeyId.trim() &&
           !!formData.secretAccessKey.trim()
         );
@@ -216,6 +244,13 @@ export const ConnectionForm: React.FC<ConnectionFormProps> = ({
           useSSL: formData.useSSL,
           region: formData.region.trim() || 'us-east-1',
         } as MinIOConfig;
+      case 'cloudflare-r2':
+        return {
+          accountId: formData.accountId.trim(),
+          accessKeyId: formData.accessKeyId.trim(),
+          secretAccessKey: formData.secretAccessKey.trim(),
+          jurisdiction: formData.jurisdiction || undefined,
+        } as CloudflareR2Config;
       default:
         throw new Error(`Unsupported provider: ${formData.provider}`);
     }
@@ -232,24 +267,36 @@ export const ConnectionForm: React.FC<ConnectionFormProps> = ({
     try {
       const rawConfig = createConfigFromFormData();
       const config = rawConfig;
-      
+
       // eslint-disable-next-line no-console
-      console.log('[MinIO Frontend] Testing connection with form data:', {
+      console.log('[Cloud Frontend] Testing connection with form data:', {
         provider: formData.provider,
         name: formData.name,
         endpoint: formData.endpoint,
         useSSL: formData.useSSL,
         region: formData.region,
         accessKeyId: formData.accessKeyId,
+        accountId: formData.accountId,
         hasSecretKey: !!formData.secretAccessKey,
       });
-      
+
       // eslint-disable-next-line no-console
-      console.log('[MinIO Frontend] Created config object:', {
+      console.log('[Cloud Frontend] Created config object:', {
         ...config,
-        secretAccessKey: config.secretAccessKey ? '***REDACTED***' : undefined,
+        secretAccessKey:
+          'secretAccessKey' in config && config.secretAccessKey
+            ? '***REDACTED***'
+            : undefined,
+        accountKey:
+          'accountKey' in config && config.accountKey
+            ? '***REDACTED***'
+            : undefined,
+        credentials:
+          'credentials' in config && config.credentials
+            ? '***REDACTED***'
+            : undefined,
       });
-      
+
       // Validate config before sending
       if (!config) {
         throw new Error('Failed to create configuration object');
@@ -305,6 +352,13 @@ export const ConnectionForm: React.FC<ConnectionFormProps> = ({
         finalConfig = config;
       } else if (formData.provider === 'minio') {
         await setCloudMinioSecret(formData.secretAccessKey, connId);
+        const config = { ...rawConfig };
+        if ('secretAccessKey' in config) {
+          delete (config as any).secretAccessKey;
+        }
+        finalConfig = config;
+      } else if (formData.provider === 'cloudflare-r2') {
+        await setCloudR2Secret(formData.secretAccessKey, connId);
         const config = { ...rawConfig };
         if ('secretAccessKey' in config) {
           delete (config as any).secretAccessKey;
@@ -433,14 +487,20 @@ export const ConnectionForm: React.FC<ConnectionFormProps> = ({
                     type="checkbox"
                     id="useSSL"
                     checked={formData.useSSL}
-                    onChange={(e) => handleChange('useSSL', e.target.checked as any)}
+                    onChange={(e) =>
+                      handleChange('useSSL', e.target.checked as any)
+                    }
                     style={{ cursor: 'pointer' }}
                   />
                   <label htmlFor="useSSL" style={{ cursor: 'pointer' }}>
                     Use SSL/TLS
                   </label>
                 </Box>
-                <Typography variant="caption" color="text.secondary" sx={{ mt: 0.5 }}>
+                <Typography
+                  variant="caption"
+                  color="text.secondary"
+                  sx={{ mt: 0.5 }}
+                >
                   Enable for HTTPS connections (default: HTTP)
                 </Typography>
               </FormControl>
@@ -475,6 +535,68 @@ export const ConnectionForm: React.FC<ConnectionFormProps> = ({
               onChange={(e) => handleChange('region', e.target.value)}
               helperText="MinIO region (default: us-east-1)"
             />
+          </>
+        );
+      case 'cloudflare-r2':
+        return (
+          <>
+            <TextField
+              label="Account ID"
+              placeholder="a1b2c3d4e5f6g7h8i9j0k1l2m3n4o5p6"
+              fullWidth
+              margin="normal"
+              value={formData.accountId}
+              onChange={(e) => handleChange('accountId', e.target.value)}
+              required
+              helperText="Your Cloudflare Account ID (32-character alphanumeric string)"
+            />
+            <TextField
+              label="Access Key ID"
+              placeholder="Your R2 API token"
+              fullWidth
+              margin="normal"
+              value={formData.accessKeyId}
+              onChange={(e) => handleChange('accessKeyId', e.target.value)}
+              required
+              helperText="Your R2 API token (Access Key ID)"
+            />
+            <TextField
+              label="Secret Access Key"
+              placeholder="Your R2 API secret"
+              type="password"
+              fullWidth
+              margin="normal"
+              value={formData.secretAccessKey}
+              onChange={(e) => handleChange('secretAccessKey', e.target.value)}
+              required
+              helperText="Your R2 API secret (Secret Access Key)"
+            />
+            <FormControl fullWidth margin="normal">
+              <FormLabel>Jurisdiction (Optional)</FormLabel>
+              <Box
+                sx={{ display: 'flex', alignItems: 'center', gap: 2, mt: 1 }}
+              >
+                <input
+                  type="checkbox"
+                  id="euJurisdiction"
+                  checked={formData.jurisdiction === 'eu'}
+                  onChange={(e) =>
+                    handleChange('jurisdiction', e.target.checked ? 'eu' : '')
+                  }
+                  style={{ cursor: 'pointer' }}
+                />
+                <label htmlFor="euJurisdiction" style={{ cursor: 'pointer' }}>
+                  EU Jurisdiction Only
+                </label>
+              </Box>
+              <Typography
+                variant="caption"
+                color="text.secondary"
+                sx={{ mt: 0.5 }}
+              >
+                Enable to restrict data to EU-only storage (optional)
+              </Typography>
+            </FormControl>
           </>
         );
       case 'azure':
@@ -738,6 +860,57 @@ export const ConnectionForm: React.FC<ConnectionFormProps> = ({
                           fontWeight="medium"
                         >
                           MinIO
+                        </Typography>
+                      </Box>
+                    </CardActionArea>
+                  </Card>
+                </Grid>
+                <Grid item xs={12} sm={3}>
+                  <Card
+                    variant={
+                      formData.provider === 'cloudflare-r2'
+                        ? 'elevation'
+                        : 'outlined'
+                    }
+                    sx={{
+                      cursor: 'pointer',
+                      transition: 'all 0.2s',
+                      height: '120px',
+                      border:
+                        formData.provider === 'cloudflare-r2'
+                          ? '2px solid'
+                          : '1px solid',
+                      borderColor:
+                        formData.provider === 'cloudflare-r2'
+                          ? 'primary.main'
+                          : 'divider',
+                      '&:hover': {
+                        elevation: 4,
+                        borderColor: 'primary.main',
+                      },
+                    }}
+                  >
+                    <CardActionArea
+                      onClick={() => handleChange('provider', 'cloudflare-r2')}
+                      sx={{ p: 2, height: '100%' }}
+                    >
+                      <Box
+                        sx={{
+                          display: 'flex',
+                          flexDirection: 'column',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          gap: 1,
+                          height: '100%',
+                        }}
+                      >
+                        {getProviderIcon('cloudflare-r2', 48)}
+                        <Typography
+                          variant="body2"
+                          textAlign="center"
+                          fontWeight="medium"
+                        >
+                          Cloudflare R2
                         </Typography>
                       </Box>
                     </CardActionArea>
