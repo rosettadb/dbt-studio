@@ -7,6 +7,7 @@ import type {
   GCSConfig,
   MinIOConfig,
   CloudflareR2Config,
+  BackblazeB2Config,
 } from '../../types/frontend';
 
 /**
@@ -106,6 +107,7 @@ export async function buildCloudSecretQuery(
     DROP SECRET IF EXISTS azure_secret;
     DROP SECRET IF EXISTS minio_secret;
     DROP SECRET IF EXISTS r2_secret;
+    DROP SECRET IF EXISTS b2_secret;
   `;
 
   switch (provider) {
@@ -172,6 +174,34 @@ export async function buildCloudSecretQuery(
           KEY_ID '${r2Config.accessKeyId}',
           SECRET '${r2Config.secretAccessKey}',
           ACCOUNT_ID '${r2Config.accountId}'
+        );
+      `;
+    }
+    case 'backblaze-b2': {
+      const b2Config = config as BackblazeB2Config;
+      const endpoint = b2Config.endpoint || 's3.us-west-004.backblazeb2.com';
+      
+      // Extract region from endpoint (e.g., 's3.us-west-004.backblazeb2.com' -> 'us-west-004')
+      const regionMatch = endpoint.match(/s3\.([^.]+\-[^.]+\-\d+)\./);
+      const region = regionMatch ? regionMatch[1] : 'us-west-004';
+
+      // eslint-disable-next-line no-console
+      console.log('[DuckDB B2 Secret] Building secret with:', {
+        endpoint,
+        region,
+        applicationKeyId: b2Config.applicationKeyId,
+      });
+
+      return `
+        ${dropSecretsQuery}
+        CREATE OR REPLACE SECRET b2_secret (
+          TYPE s3,
+          PROVIDER config,
+          KEY_ID '${b2Config.applicationKeyId}',
+          SECRET '${b2Config.applicationKey}',
+          REGION '${region}',
+          ENDPOINT '${endpoint}',
+          USE_SSL true
         );
       `;
     }
@@ -267,6 +297,8 @@ export function getCloudUrl(
       return `s3://${bucketName}/${objectName}`;
     case 'cloudflare-r2':
       return `r2://${bucketName}/${objectName}`;
+    case 'backblaze-b2':
+      return `s3://${bucketName}/${objectName}`;
     case 'gcs':
       // Use HTTPS URL for GCS since native gcs:// might not be supported
       return `https://storage.googleapis.com/${bucketName}/${objectName}`;

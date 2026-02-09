@@ -89,6 +89,7 @@ export const ExplorerBucketContent: React.FC<ExplorerBucketContentProps> = ({
     getCloudGcsCredential,
     getCloudMinioSecret,
     getCloudR2Secret,
+    getCloudB2Secret,
   } = useSecureStorage();
 
   useEffect(() => {
@@ -116,6 +117,10 @@ export const ExplorerBucketContent: React.FC<ExplorerBucketContentProps> = ({
         } else if (connection.provider === 'cloudflare-r2') {
           const secret = await getCloudR2Secret(connection.id);
           (config as { secretAccessKey?: string }).secretAccessKey =
+            secret || '';
+        } else if (connection.provider === 'backblaze-b2') {
+          const secret = await getCloudB2Secret(connection.id);
+          (config as { applicationKey?: string }).applicationKey =
             secret || '';
         }
       } catch (e) {

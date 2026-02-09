@@ -32,6 +32,7 @@ import {
   GCSConfig,
   MinIOConfig,
   CloudflareR2Config,
+  BackblazeB2Config,
 } from '../../../types/frontend';
 import {
   useTestCloudConnection,
@@ -63,6 +64,9 @@ interface FormData {
   // Cloudflare R2 fields
   accountId: string;
   jurisdiction: 'eu' | '';
+  // Backblaze B2 fields
+  applicationKeyId: string;
+  applicationKey: string;
 }
 
 export const ConnectionForm: React.FC<ConnectionFormProps> = ({
@@ -84,6 +88,8 @@ export const ConnectionForm: React.FC<ConnectionFormProps> = ({
     getCloudMinioSecret,
     setCloudR2Secret,
     getCloudR2Secret,
+    setCloudB2Secret,
+    getCloudB2Secret,
   } = useSecureStorage();
 
   const [testStatus, setTestStatus] = useState<
@@ -105,6 +111,8 @@ export const ConnectionForm: React.FC<ConnectionFormProps> = ({
     useSSL: false,
     accountId: '',
     jurisdiction: '',
+    applicationKeyId: '',
+    applicationKey: '',
   });
 
   const getProviderIcon = (provider: CloudProvider, size: number = 20) => {
@@ -140,6 +148,7 @@ export const ConnectionForm: React.FC<ConnectionFormProps> = ({
           (config as S3Config).accessKeyId ||
           (config as MinIOConfig).accessKeyId ||
           (config as CloudflareR2Config).accessKeyId ||
+          (config as BackblazeB2Config).applicationKeyId ||
           '',
         secretAccessKey:
           (config as S3Config).secretAccessKey ||
@@ -149,10 +158,12 @@ export const ConnectionForm: React.FC<ConnectionFormProps> = ({
         accountName: (config as AzureConfig).accountName || '',
         accountKey: (config as AzureConfig).accountKey || '',
         connectionString: (config as AzureConfig).connectionString || '',
-        endpoint: (config as MinIOConfig).endpoint || '',
+        endpoint: (config as MinIOConfig).endpoint || (config as BackblazeB2Config).endpoint || '',
         useSSL: (config as MinIOConfig).useSSL || false,
         accountId: (config as CloudflareR2Config).accountId || '',
         jurisdiction: (config as CloudflareR2Config).jurisdiction || '',
+        applicationKeyId: (config as BackblazeB2Config).applicationKeyId || '',
+        applicationKey: (config as BackblazeB2Config).applicationKey || '',
       });
     }
   }, [initialValues]);
@@ -177,6 +188,9 @@ export const ConnectionForm: React.FC<ConnectionFormProps> = ({
         } else if (provider === 'cloudflare-r2') {
           const stored = await getCloudR2Secret(id);
           setFormData((prev) => ({ ...prev, secretAccessKey: stored || '' }));
+        } else if (provider === 'backblaze-b2') {
+          const stored = await getCloudB2Secret(id);
+          setFormData((prev) => ({ ...prev, applicationKey: stored || '' }));
         }
       })();
     }
@@ -211,6 +225,11 @@ export const ConnectionForm: React.FC<ConnectionFormProps> = ({
           !!formData.accountId.trim() &&
           !!formData.accessKeyId.trim() &&
           !!formData.secretAccessKey.trim()
+        );
+      case 'backblaze-b2':
+        return (
+          !!formData.applicationKeyId.trim() &&
+          !!formData.applicationKey.trim()
         );
       default:
         return false;
@@ -251,6 +270,12 @@ export const ConnectionForm: React.FC<ConnectionFormProps> = ({
           secretAccessKey: formData.secretAccessKey.trim(),
           jurisdiction: formData.jurisdiction || undefined,
         } as CloudflareR2Config;
+      case 'backblaze-b2':
+        return {
+          applicationKeyId: formData.applicationKeyId.trim(),
+          applicationKey: formData.applicationKey.trim(),
+          endpoint: formData.endpoint.trim() || 's3.us-west-004.backblazeb2.com',
+        } as BackblazeB2Config;
       default:
         throw new Error(`Unsupported provider: ${formData.provider}`);
     }
@@ -362,6 +387,13 @@ export const ConnectionForm: React.FC<ConnectionFormProps> = ({
         const config = { ...rawConfig };
         if ('secretAccessKey' in config) {
           delete (config as any).secretAccessKey;
+        }
+        finalConfig = config;
+      } else if (formData.provider === 'backblaze-b2') {
+        await setCloudB2Secret(formData.applicationKey, connId);
+        const config = { ...rawConfig };
+        if ('applicationKey' in config) {
+          delete (config as any).applicationKey;
         }
         finalConfig = config;
       } else {
@@ -597,6 +629,41 @@ export const ConnectionForm: React.FC<ConnectionFormProps> = ({
                 Enable to restrict data to EU-only storage (optional)
               </Typography>
             </FormControl>
+          </>
+        );
+      case 'backblaze-b2':
+        return (
+          <>
+            <TextField
+              label="Application Key ID"
+              placeholder="Your B2 Application Key ID"
+              fullWidth
+              margin="normal"
+              value={formData.applicationKeyId}
+              onChange={(e) => handleChange('applicationKeyId', e.target.value)}
+              required
+              helperText="Your Backblaze B2 Application Key ID"
+            />
+            <TextField
+              label="Application Key"
+              placeholder="Your B2 Application Key"
+              type="password"
+              fullWidth
+              margin="normal"
+              value={formData.applicationKey}
+              onChange={(e) => handleChange('applicationKey', e.target.value)}
+              required
+              helperText="Your Backblaze B2 Application Key (stored securely)"
+            />
+            <TextField
+              label="Endpoint (Optional)"
+              placeholder="s3.us-west-004.backblazeb2.com"
+              fullWidth
+              margin="normal"
+              value={formData.endpoint}
+              onChange={(e) => handleChange('endpoint', e.target.value)}
+              helperText="B2 S3-compatible endpoint. US: s3.us-west-004.backblazeb2.com, EU: s3.eu-central-003.backblazeb2.com"
+            />
           </>
         );
       case 'azure':
@@ -911,6 +978,57 @@ export const ConnectionForm: React.FC<ConnectionFormProps> = ({
                           fontWeight="medium"
                         >
                           Cloudflare R2
+                        </Typography>
+                      </Box>
+                    </CardActionArea>
+                  </Card>
+                </Grid>
+                <Grid item xs={12} sm={3}>
+                  <Card
+                    variant={
+                      formData.provider === 'backblaze-b2'
+                        ? 'elevation'
+                        : 'outlined'
+                    }
+                    sx={{
+                      cursor: 'pointer',
+                      transition: 'all 0.2s',
+                      height: '120px',
+                      border:
+                        formData.provider === 'backblaze-b2'
+                          ? '2px solid'
+                          : '1px solid',
+                      borderColor:
+                        formData.provider === 'backblaze-b2'
+                          ? 'primary.main'
+                          : 'divider',
+                      '&:hover': {
+                        elevation: 4,
+                        borderColor: 'primary.main',
+                      },
+                    }}
+                  >
+                    <CardActionArea
+                      onClick={() => handleChange('provider', 'backblaze-b2')}
+                      sx={{ p: 2, height: '100%' }}
+                    >
+                      <Box
+                        sx={{
+                          display: 'flex',
+                          flexDirection: 'column',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          gap: 1,
+                          height: '100%',
+                        }}
+                      >
+                        {getProviderIcon('backblaze-b2', 48)}
+                        <Typography
+                          variant="body2"
+                          textAlign="center"
+                          fontWeight="medium"
+                        >
+                          Backblaze B2
                         </Typography>
                       </Box>
                     </CardActionArea>

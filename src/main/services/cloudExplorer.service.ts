@@ -22,6 +22,7 @@ import {
   GCSConfig,
   MinIOConfig,
   CloudflareR2Config,
+  BackblazeB2Config,
   CloudStorageConfig,
 } from '../../types/frontend';
 
@@ -910,9 +911,208 @@ class CloudExplorerService {
     }
   }
 
+  // ==================== Backblaze B2 Methods ====================
+
+  static createB2Client(config: BackblazeB2Config): S3Client {
+    const endpoint = config.endpoint || 's3.us-west-004.backblazeb2.com';
+
+    // Extract region from endpoint (e.g., 's3.us-west-004.backblazeb2.com' -> 'us-west-004')
+    // or 's3.eu-central-003.backblazeb2.com' -> 'eu-central-003'
+    const regionMatch = endpoint.match(/s3\.([^.]+-.+-\d+)\./);
+    const region = regionMatch ? regionMatch[1] : 'us-west-004';
+
+    // eslint-disable-next-line no-console
+    console.log('[Backblaze B2 Backend] Creating B2 client with config:', {
+      endpoint,
+      region,
+      applicationKeyId: config.applicationKeyId,
+      hasApplicationKey: !!config.applicationKey,
+    });
+
+    return new S3Client({
+      region,
+      endpoint: `https://${endpoint}`,
+      credentials: {
+        accessKeyId: config.applicationKeyId,
+        secretAccessKey: config.applicationKey,
+      },
+      // B2 requires virtual-hosted-style URLs (forcePathStyle: false is default)
+      // AWS SDK v3 uses signature version 4 by default (required by B2)
+      forcePathStyle: false,
+    });
+  }
+
+  static async listB2Buckets(config: BackblazeB2Config): Promise<Bucket[]> {
+    const client = CloudExplorerService.createB2Client(config);
+    try {
+      const command = new ListBucketsCommand({});
+      const response = await client.send(command);
+      return (
+        response.Buckets?.map((bucket) => ({
+          name: bucket.Name || '',
+          created: bucket.CreationDate,
+        })) || []
+      );
+    } catch (error) {
+      // eslint-disable-next-line no-console
+      console.error('Backblaze B2 ListBuckets failed:', error);
+      throw new Error(`Error listing Backblaze B2 buckets: ${error}`);
+    }
+  }
+
+  static async listB2Objects(
+    config: BackblazeB2Config,
+    bucketName: string,
+    continuationToken?: string,
+    prefix = '',
+  ): Promise<CloudListResult> {
+    const client = CloudExplorerService.createB2Client(config);
+    try {
+      const command = new ListObjectsV2Command({
+        Bucket: bucketName,
+        ContinuationToken: continuationToken,
+        Prefix: prefix,
+        Delimiter: '/',
+      });
+      const response = await client.send(command);
+
+      const objects: StorageObject[] = [];
+
+      // Add folders (common prefixes)
+      if (response.CommonPrefixes) {
+        response.CommonPrefixes.forEach((cp) => {
+          if (cp.Prefix) {
+            objects.push({
+              name: cp.Prefix,
+              size: 0,
+              updated: new Date(),
+              isDirectory: true,
+            });
+          }
+        });
+      }
+
+      // Add files
+      if (response.Contents) {
+        response.Contents.forEach((obj) => {
+          if (obj.Key && obj.Key !== prefix) {
+            objects.push({
+              name: obj.Key,
+              size: obj.Size || 0,
+              updated: obj.LastModified || new Date(),
+              contentType: undefined,
+              isDirectory: false,
+            });
+          }
+        });
+      }
+
+      return {
+        objects,
+        nextPageToken: response.NextContinuationToken,
+      };
+    } catch (error) {
+      throw new Error(`Error listing Backblaze B2 objects: ${error}`);
+    }
+  }
+
+  static async getB2DownloadUrl(
+    config: BackblazeB2Config,
+    bucketName: string,
+    objectKey: string,
+  ): Promise<string> {
+    const client = CloudExplorerService.createB2Client(config);
+    try {
+      const command = new GetObjectCommand({
+        Bucket: bucketName,
+        Key: objectKey,
+      });
+      return await getSignedUrl(client, command, { expiresIn: 3600 });
+    } catch (error) {
+      throw new Error(`Error generating Backblaze B2 signed URL: ${error}`);
+    }
+  }
+
+  static async testB2Connection(config: BackblazeB2Config): Promise<boolean> {
+    const client = CloudExplorerService.createB2Client(config);
+    try {
+      await client.send(new ListBucketsCommand({}));
+      return true;
+    } catch (error) {
+      // eslint-disable-next-line no-console
+      console.error('Backblaze B2 connection test failed:', error);
+      // eslint-disable-next-line no-console
+      console.error('Error details:', {
+        name: (error as any).name,
+        message: (error as Error).message,
+        code: (error as any).Code,
+        statusCode: (error as any).$metadata?.httpStatusCode,
+      });
+
+      // Re-throw with user-friendly message
+      const errorMessage = (error as Error).message;
+      const errorName = (error as any).name;
+
+      if (
+        errorName === 'InvalidAccessKeyId' ||
+        errorMessage.includes('InvalidAccessKeyId')
+      ) {
+        throw new Error(
+          'Invalid B2 Application Key ID. Check your credentials in Backblaze dashboard.',
+        );
+      } else if (
+        errorName === 'SignatureDoesNotMatch' ||
+        errorMessage.includes('SignatureDoesNotMatch')
+      ) {
+        throw new Error('Invalid B2 Application Key. Verify your credentials.');
+      } else if (
+        errorMessage.includes('ENOTFOUND') ||
+        errorMessage.includes('getaddrinfo')
+      ) {
+        throw new Error(
+          'Cannot resolve Backblaze B2 endpoint. Check your endpoint address.',
+        );
+      } else if (errorMessage.includes('ECONNREFUSED')) {
+        throw new Error(
+          'Cannot connect to Backblaze B2. Check your internet connection.',
+        );
+      } else if (errorMessage.includes('ETIMEDOUT')) {
+        throw new Error(
+          'Connection to Backblaze B2 timed out. Check your network.',
+        );
+      } else if (
+        errorMessage.includes('NoSuchBucket') ||
+        errorName === 'NoSuchBucket'
+      ) {
+        throw new Error('Bucket not found. Verify bucket name.');
+      } else if (
+        errorName === 'InvalidRequest' ||
+        errorMessage.includes('InvalidRequest')
+      ) {
+        throw new Error(
+          'B2 only supports S3 v4 signatures. Ensure your SDK is configured correctly.',
+        );
+      } else if (
+        errorName === 'AccessDenied' ||
+        errorMessage.includes('AccessDenied')
+      ) {
+        throw new Error(
+          'Access denied. Check: 1) Application Key has correct permissions, 2) Key is applied to correct buckets, 3) Endpoint matches your B2 region.',
+        );
+      }
+      throw new Error(`Backblaze B2 connection failed: ${errorMessage}`);
+    }
+  }
+
   // Generic methods for different cloud providers
   static async listBuckets(
-    provider: 'aws' | 'azure' | 'gcs' | 'minio' | 'cloudflare-r2',
+    provider:
+      | 'aws'
+      | 'azure'
+      | 'gcs'
+      | 'minio'
+      | 'cloudflare-r2'
+      | 'backblaze-b2',
     config: CloudStorageConfig,
   ): Promise<Bucket[]> {
     switch (provider) {
@@ -926,13 +1126,21 @@ class CloudExplorerService {
         return CloudExplorerService.listMinIOBuckets(config as MinIOConfig);
       case 'cloudflare-r2':
         return CloudExplorerService.listR2Buckets(config as CloudflareR2Config);
+      case 'backblaze-b2':
+        return CloudExplorerService.listB2Buckets(config as BackblazeB2Config);
       default:
         throw new Error(`Unsupported provider: ${provider}`);
     }
   }
 
   static async listObjects(
-    provider: 'aws' | 'azure' | 'gcs' | 'minio' | 'cloudflare-r2',
+    provider:
+      | 'aws'
+      | 'azure'
+      | 'gcs'
+      | 'minio'
+      | 'cloudflare-r2'
+      | 'backblaze-b2',
     config: CloudStorageConfig,
     bucketName: string,
     continuationToken?: string,
@@ -974,13 +1182,26 @@ class CloudExplorerService {
           continuationToken,
           prefix,
         );
+      case 'backblaze-b2':
+        return CloudExplorerService.listB2Objects(
+          config as BackblazeB2Config,
+          bucketName,
+          continuationToken,
+          prefix,
+        );
       default:
         throw new Error(`Unsupported provider: ${provider}`);
     }
   }
 
   static async getDownloadUrl(
-    provider: 'aws' | 'azure' | 'gcs' | 'minio' | 'cloudflare-r2',
+    provider:
+      | 'aws'
+      | 'azure'
+      | 'gcs'
+      | 'minio'
+      | 'cloudflare-r2'
+      | 'backblaze-b2',
     config: CloudStorageConfig,
     bucketName: string,
     objectName: string,
@@ -1016,13 +1237,25 @@ class CloudExplorerService {
           bucketName,
           objectName,
         );
+      case 'backblaze-b2':
+        return CloudExplorerService.getB2DownloadUrl(
+          config as BackblazeB2Config,
+          bucketName,
+          objectName,
+        );
       default:
         throw new Error(`Unsupported provider: ${provider}`);
     }
   }
 
   static async testConnection(
-    provider: 'aws' | 'azure' | 'gcs' | 'minio' | 'cloudflare-r2',
+    provider:
+      | 'aws'
+      | 'azure'
+      | 'gcs'
+      | 'minio'
+      | 'cloudflare-r2'
+      | 'backblaze-b2',
     config: CloudStorageConfig,
   ): Promise<boolean> {
     switch (provider) {
@@ -1037,6 +1270,10 @@ class CloudExplorerService {
       case 'cloudflare-r2':
         return CloudExplorerService.testR2Connection(
           config as CloudflareR2Config,
+        );
+      case 'backblaze-b2':
+        return CloudExplorerService.testB2Connection(
+          config as BackblazeB2Config,
         );
       default:
         throw new Error(`Unsupported provider: ${provider}`);

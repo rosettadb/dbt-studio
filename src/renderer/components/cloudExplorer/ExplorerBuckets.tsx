@@ -49,6 +49,7 @@ export const ExplorerBuckets: React.FC<ExplorerBucketsProps> = ({
     getCloudGcsCredential,
     getCloudMinioSecret,
     getCloudR2Secret,
+    getCloudB2Secret,
   } = useSecureStorage();
   const [secureConfig, setSecureConfig] = useState<any | null>(null);
   const [credentialsMissing, setCredentialsMissing] = useState(false);
@@ -97,6 +98,13 @@ export const ExplorerBuckets: React.FC<ExplorerBucketsProps> = ({
             missing = true;
           } else {
             (config as { secretAccessKey?: string }).secretAccessKey = secret;
+          }
+        } else if (connection.provider === 'backblaze-b2') {
+          const secret = await getCloudB2Secret(connection.id);
+          if (secret === null) {
+            missing = true;
+          } else {
+            (config as { applicationKey?: string }).applicationKey = secret;
           }
         }
       } catch (e) {

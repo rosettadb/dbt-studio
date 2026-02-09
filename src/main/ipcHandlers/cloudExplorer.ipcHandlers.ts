@@ -27,7 +27,7 @@ const registerCloudExplorerHandlers = () => {
         provider,
         config,
       }: {
-        provider: 'aws' | 'azure' | 'gcs' | 'minio' | 'cloudflare-r2';
+        provider: 'aws' | 'azure' | 'gcs' | 'minio' | 'cloudflare-r2' | 'backblaze-b2';
         config: CloudStorageConfig;
       },
     ) => {
@@ -46,7 +46,7 @@ const registerCloudExplorerHandlers = () => {
         continuationToken,
         prefix = '',
       }: {
-        provider: 'aws' | 'azure' | 'gcs' | 'minio' | 'cloudflare-r2';
+        provider: 'aws' | 'azure' | 'gcs' | 'minio' | 'cloudflare-r2' | 'backblaze-b2';
         config: CloudStorageConfig;
         bucketName: string;
         continuationToken?: string;
@@ -73,7 +73,7 @@ const registerCloudExplorerHandlers = () => {
         bucketName,
         objectName,
       }: {
-        provider: 'aws' | 'azure' | 'gcs' | 'minio' | 'cloudflare-r2';
+        provider: 'aws' | 'azure' | 'gcs' | 'minio' | 'cloudflare-r2' | 'backblaze-b2';
         config: CloudStorageConfig;
         bucketName: string;
         objectName: string;
@@ -96,7 +96,7 @@ const registerCloudExplorerHandlers = () => {
         provider,
         config,
       }: {
-        provider: 'aws' | 'azure' | 'gcs' | 'minio' | 'cloudflare-r2';
+        provider: 'aws' | 'azure' | 'gcs' | 'minio' | 'cloudflare-r2' | 'backblaze-b2';
         config: CloudStorageConfig;
       },
     ) => {
@@ -139,6 +139,16 @@ const registerCloudExplorerHandlers = () => {
             `Invalid Cloudflare R2 config: missing required fields. Received: ${JSON.stringify(r2Config)}`,
           );
         }
+      } else if (provider === 'backblaze-b2') {
+        const b2Config = config as any;
+        if (
+          !b2Config.applicationKeyId ||
+          !b2Config.applicationKey
+        ) {
+          throw new Error(
+            `Invalid Backblaze B2 config: missing required fields. Received: ${JSON.stringify(b2Config)}`,
+          );
+        }
       }
 
       return CloudExplorerService.testConnection(provider, config);
@@ -157,7 +167,7 @@ const registerCloudExplorerHandlers = () => {
         previewType = 'sample',
         limit = 100,
       }: {
-        provider: 'aws' | 'azure' | 'gcs' | 'minio' | 'cloudflare-r2';
+        provider: 'aws' | 'azure' | 'gcs' | 'minio' | 'cloudflare-r2' | 'backblaze-b2';
         config: CloudStorageConfig;
         bucketName: string;
         objectName: string;

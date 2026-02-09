@@ -166,6 +166,27 @@ const useSecureStorage = () => {
     await secureStorageService.delete(`cloud-cloudflare-r2-${connectionName}`);
   };
 
+  // Backblaze B2 credential storage
+  const setCloudB2Secret = async (
+    secret: string,
+    connectionName: string,
+  ): Promise<void> => {
+    await secureStorageService.set(
+      `cloud-backblaze-b2-${connectionName}`,
+      secret,
+    );
+  };
+
+  const getCloudB2Secret = async (
+    connectionName: string,
+  ): Promise<string | null> => {
+    return secureStorageService.get(`cloud-backblaze-b2-${connectionName}`);
+  };
+
+  const deleteCloudB2Secret = async (connectionName: string): Promise<void> => {
+    await secureStorageService.delete(`cloud-backblaze-b2-${connectionName}`);
+  };
+
   // BigQuery service account key storage
   const setBigQueryServiceAccountKey = async (
     key: string,
@@ -226,6 +247,9 @@ const useSecureStorage = () => {
     setCloudR2Secret,
     getCloudR2Secret,
     deleteCloudR2Secret,
+    setCloudB2Secret,
+    getCloudB2Secret,
+    deleteCloudB2Secret,
     setBigQueryServiceAccountKey,
     getBigQueryServiceAccountKey,
     deleteBigQueryServiceAccountKey,

@@ -60,6 +60,7 @@ export type SecureStorageAccount =
   | `cloud-azure-${string}`
   | `cloud-minio-${string}`
   | `cloud-cloudflare-r2-${string}`
+  | `cloud-backblaze-b2-${string}`
   | `db-bigquery-${string}`
   | 'cloud-api-key';
 
@@ -115,14 +116,27 @@ export interface CloudflareR2Config {
   jurisdiction?: 'eu';
 }
 
+export interface BackblazeB2Config {
+  applicationKeyId: string;
+  applicationKey: string;
+  endpoint?: string;
+}
+
 export type CloudStorageConfig =
   | S3Config
   | AzureConfig
   | GCSConfig
   | MinIOConfig
-  | CloudflareR2Config;
+  | CloudflareR2Config
+  | BackblazeB2Config;
 
-export type CloudProvider = 'aws' | 'azure' | 'gcs' | 'minio' | 'cloudflare-r2';
+export type CloudProvider =
+  | 'aws'
+  | 'azure'
+  | 'gcs'
+  | 'minio'
+  | 'cloudflare-r2'
+  | 'backblaze-b2';
 
 export type CloudConnection = {
   id: string;
