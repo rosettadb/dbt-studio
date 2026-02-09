@@ -29,6 +29,65 @@ import {
 } from '../../types/duckLake';
 import { DuckLakeError } from '../../types/duckLakeErrors';
 
+/**
+ * Validates a SQL query to prevent statement chaining attacks
+ * @param query The SQL query to validate
+ * @param expectedPrefix The expected SQL statement prefix (e.g., 'UPDATE', 'DELETE', 'INSERT')
+ * @param allowedPrefixes Additional allowed prefixes (e.g., ['CREATE'] for UPDATE statements)
+ * @throws DuckLakeError if the query contains multiple statements or doesn't match expected prefix
+ */
+function validateSingleStatement(
+  query: string,
+  expectedPrefix: string,
+  allowedPrefixes: string[] = [],
+): void {
+  const trimmedQuery = query.trim();
+
+  // Check for empty query
+  if (!trimmedQuery) {
+    throw DuckLakeError.validation('Query cannot be empty');
+  }
+
+  // Remove trailing semicolon if present (single terminal semicolon is acceptable)
+  const queryWithoutTerminalSemicolon = trimmedQuery.endsWith(';')
+    ? trimmedQuery.slice(0, -1).trim()
+    : trimmedQuery;
+
+  // Check for multiple statements (semicolons in the middle of the query)
+  if (queryWithoutTerminalSemicolon.includes(';')) {
+    throw DuckLakeError.validation(
+      'Multiple SQL statements are not allowed. Query contains statement chaining.',
+    );
+  }
+
+  // Validate the query starts with expected prefix
+  const normalizedQuery = trimmedQuery.toUpperCase();
+  const allAllowedPrefixes = [expectedPrefix, ...allowedPrefixes];
+  const startsWithAllowedPrefix = allAllowedPrefixes.some((prefix) =>
+    normalizedQuery.startsWith(prefix.toUpperCase()),
+  );
+
+  if (!startsWithAllowedPrefix) {
+    const prefixList = allAllowedPrefixes.join(' or ');
+    throw DuckLakeError.validation(`Query must be a ${prefixList} statement`);
+  }
+
+  // Additional check: ensure no suspicious patterns that could indicate injection
+  // Check for common SQL injection patterns after semicolon removal
+  const suspiciousPatterns = [
+    /--\s*$/m, // SQL comments at the end
+    /\/\*.*\*\//s, // Multi-line comments
+  ];
+
+  suspiciousPatterns.forEach((pattern) => {
+    if (pattern.test(queryWithoutTerminalSemicolon)) {
+      throw DuckLakeError.validation(
+        'Query contains suspicious patterns that may indicate SQL injection',
+      );
+    }
+  });
+}
+
 export default class DuckLakeService {
   private static initialized = false;
 
@@ -403,15 +462,8 @@ export default class DuckLakeService {
         throw DuckLakeError.validation('Update query is required');
       }
 
-      const normalizedQuery = updateQuery.trim().toUpperCase();
-      if (
-        !normalizedQuery.startsWith('UPDATE') &&
-        !normalizedQuery.startsWith('CREATE')
-      ) {
-        throw DuckLakeError.validation(
-          'Query must be an UPDATE or CREATE statement',
-        );
-      }
+      // Validate query to prevent statement chaining
+      validateSingleStatement(updateQuery, 'UPDATE', ['CREATE']);
 
       const tables = await adapter.listTables();
       const tableExists = tables.some((t) => t.name === tableName);
@@ -444,9 +496,8 @@ export default class DuckLakeService {
         throw DuckLakeError.validation('Delete query is required');
       }
 
-      if (!deleteQuery.trim().toUpperCase().startsWith('DELETE')) {
-        throw DuckLakeError.validation('Query must be a DELETE statement');
-      }
+      // Validate query to prevent statement chaining
+      validateSingleStatement(deleteQuery, 'DELETE');
 
       const tables = await adapter.listTables();
       const tableExists = tables.some((t) => t.name === tableName);
@@ -479,9 +530,8 @@ export default class DuckLakeService {
         throw DuckLakeError.validation('Upsert query is required');
       }
 
-      if (!upsertQuery.trim().toUpperCase().startsWith('INSERT')) {
-        throw DuckLakeError.validation('Query must be an INSERT statement');
-      }
+      // Validate query to prevent statement chaining
+      validateSingleStatement(upsertQuery, 'INSERT');
 
       const tables = await adapter.listTables();
       const tableExists = tables.some((t) => t.name === tableName);
