@@ -309,12 +309,12 @@ export const NotebookEditor: React.FC<NotebookEditorProps> = ({
     // This would require creating a new notebook with the same cells
     // eslint-disable-next-line no-console
     console.log('Clone functionality not yet implemented');
-    alert('Clone functionality coming soon!');
   }, [notebook]);
 
   const handleDeleteAllCells = useCallback(() => {
     if (!notebook) return;
 
+    // eslint-disable-next-line no-alert
     const confirmed = window.confirm(
       'Are you sure you want to delete all cells? This action cannot be undone.',
     );
@@ -331,6 +331,7 @@ export const NotebookEditor: React.FC<NotebookEditorProps> = ({
   const handleDeleteNotebook = useCallback(async () => {
     if (!notebook) return;
 
+    // eslint-disable-next-line no-alert
     const confirmed = window.confirm(
       `Are you sure you want to delete the notebook "${notebook.name}"? This action cannot be undone.`,
     );

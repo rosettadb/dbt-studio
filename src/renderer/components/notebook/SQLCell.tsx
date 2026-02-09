@@ -568,6 +568,7 @@ export const SQLCell: React.FC<SQLCellProps> = ({
         return undefined;
       })
       .catch((error) => {
+        // eslint-disable-next-line no-console
         console.error('Failed to initialize Monaco editor:', error);
       });
   }, [monacoConfigured]);
