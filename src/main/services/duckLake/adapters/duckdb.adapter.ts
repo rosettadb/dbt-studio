@@ -118,10 +118,12 @@ export class DuckDBCatalogAdapter extends CatalogAdapter {
       const escapedTableName = tableName.replace(/"/g, '""');
       const escapedColumnName = columnName.replace(/"/g, '""');
 
-      const defaultClause =
-        defaultValue && defaultValue.trim() !== ''
-          ? ` DEFAULT ${defaultValue}`
-          : '';
+      let defaultClause = '';
+      if (defaultValue && defaultValue.trim() !== '') {
+        // Sanitize default value to prevent SQL injection
+        const sanitizedDefault = this.sanitizeDefaultValue(defaultValue);
+        defaultClause = ` DEFAULT ${sanitizedDefault}`;
+      }
 
       await this.connectionInfo.connection.run(
         `ALTER TABLE "${escapedTableName}" ADD COLUMN "${escapedColumnName}" ${columnType}${defaultClause}`,

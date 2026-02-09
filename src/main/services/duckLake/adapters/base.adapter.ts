@@ -539,6 +539,42 @@ CREATE OR REPLACE SECRET ${secretName} (
       : (databaseRows[0] as any).database_name;
   }
 
+  /**
+   * Sanitize default value for SQL injection protection
+   * Validates and escapes default values to prevent SQL injection
+   */
+  // eslint-disable-next-line class-methods-use-this
+  protected sanitizeDefaultValue(defaultValue: string): string {
+    // Check for dangerous SQL patterns
+    if (
+      defaultValue.includes(';') ||
+      defaultValue.includes('--') ||
+      defaultValue.includes('/*') ||
+      defaultValue.includes('*/') ||
+      defaultValue.includes('DROP') ||
+      defaultValue.includes('DELETE') ||
+      defaultValue.includes('INSERT') ||
+      defaultValue.includes('UPDATE') ||
+      defaultValue.includes('CREATE') ||
+      defaultValue.includes('ALTER')
+    ) {
+      throw new Error(
+        'Invalid default value: contains potentially dangerous SQL patterns',
+      );
+    }
+
+    // Check if it's a simple literal (number, boolean, NULL)
+    const simpleLiteralPattern =
+      /^(NULL|TRUE|FALSE|-?\d+(\.\d+)?|CURRENT_TIMESTAMP|CURRENT_DATE|CURRENT_TIME)$/i;
+    if (simpleLiteralPattern.test(defaultValue.trim())) {
+      return defaultValue.trim();
+    }
+
+    // Treat as string literal: escape single quotes and wrap in quotes
+    const escapedValue = defaultValue.replace(/'/g, "''");
+    return `'${escapedValue}'`;
+  }
+
   protected static mapResultRow(
     schema: any[] | undefined,
     row: any,
