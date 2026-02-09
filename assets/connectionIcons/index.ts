@@ -13,6 +13,7 @@ import kinetica from './kinetica.png';
 import googlecloud from './googlecloud.png';
 import azureBlob from './azure_blob.png';
 import s3Bucket from './s3_bucktet.png';
+import minio from './minio.png';
 import openai from './openai.svg';
 import ollama from './ollama.svg';
 import google from './google.svg';
@@ -28,6 +29,7 @@ export const cloudStorageImages = {
   aws: s3Bucket,
   s3: s3Bucket,
   azure: azureBlob,
+  minio,
 };
 
 // AI provider specific images

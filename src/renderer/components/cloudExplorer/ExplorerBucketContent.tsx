@@ -83,7 +83,7 @@ export const ExplorerBucketContent: React.FC<ExplorerBucketContentProps> = ({
 
   const connectionQuery = useConnection(connectionId);
   const connection = connectionQuery.data;
-  const { getCloudAwsSecret, getCloudAzureKey, getCloudGcsCredential } =
+  const { getCloudAwsSecret, getCloudAzureKey, getCloudGcsCredential, getCloudMinioSecret } =
     useSecureStorage();
 
   useEffect(() => {
@@ -104,6 +104,10 @@ export const ExplorerBucketContent: React.FC<ExplorerBucketContentProps> = ({
         } else if (connection.provider === 'gcs') {
           const cred = await getCloudGcsCredential(connection.id);
           (config as { credentials?: any }).credentials = cred || '';
+        } else if (connection.provider === 'minio') {
+          const secret = await getCloudMinioSecret(connection.id);
+          (config as { secretAccessKey?: string }).secretAccessKey =
+            secret || '';
         }
       } catch (e) {
         // eslint-disable-next-line no-console

@@ -20,6 +20,7 @@ import {
   S3Config,
   AzureConfig,
   GCSConfig,
+  MinIOConfig,
   CloudStorageConfig,
 } from '../../types/frontend';
 
@@ -503,9 +504,196 @@ class CloudExplorerService {
     }
   }
 
+  // MinIO Methods (S3-compatible)
+  private static createMinIOClient(config: MinIOConfig): S3Client {
+    // Validate credentials are provided
+    if (!config.accessKeyId || !config.secretAccessKey) {
+      throw new Error(
+        'MinIO credentials are required (Access Key ID and Secret Access Key)',
+      );
+    }
+
+    if (!config.endpoint) {
+      throw new Error('MinIO endpoint is required');
+    }
+
+    // Strip protocol and trailing slashes from endpoint
+    const cleanEndpoint = config.endpoint
+      .replace(/^https?:\/\//, '') // Remove http:// or https://
+      .replace(/\/$/, ''); // Remove trailing slash
+
+    const protocol = config.useSSL ? 'https' : 'http';
+    const endpoint = `${protocol}://${cleanEndpoint}`;
+
+    // eslint-disable-next-line no-console
+    console.log('[MinIO Backend] Creating MinIO client with config:', {
+      originalEndpoint: config.endpoint,
+      cleanEndpoint,
+      finalEndpoint: endpoint,
+      useSSL: config.useSSL,
+      region: config.region || 'us-east-1',
+      accessKeyId: config.accessKeyId,
+      hasSecretKey: !!config.secretAccessKey,
+    });
+
+    return new S3Client({
+      endpoint,
+      region: config.region || 'us-east-1',
+      credentials: {
+        accessKeyId: config.accessKeyId,
+        secretAccessKey: config.secretAccessKey,
+      },
+      forcePathStyle: true, // Required for MinIO
+    });
+  }
+
+  static async listMinIOBuckets(config: MinIOConfig): Promise<Bucket[]> {
+    const client = CloudExplorerService.createMinIOClient(config);
+    try {
+      const data = await client.send(new ListBucketsCommand({}));
+      return (data.Buckets || []).map((bucket) => ({
+        name: bucket.Name!,
+        created: bucket.CreationDate!,
+        location: config.region || 'us-east-1',
+      }));
+    } catch (error) {
+      throw new Error(`Error listing MinIO buckets: ${error}`);
+    }
+  }
+
+  static async listMinIOObjects(
+    config: MinIOConfig,
+    bucketName: string,
+    continuationToken?: string,
+    prefix = '',
+  ): Promise<CloudListResult> {
+    const client = CloudExplorerService.createMinIOClient(config);
+    try {
+      const result = await client.send(
+        new ListObjectsV2Command({
+          Bucket: bucketName,
+          Prefix: prefix || undefined,
+          Delimiter: '/',
+          ContinuationToken: continuationToken,
+          MaxKeys: 100,
+        }),
+      );
+
+      const folders = (result.CommonPrefixes || []).map((folderPrefix) => ({
+        name: folderPrefix.Prefix!,
+        size: 0,
+        updated: new Date(),
+        isDirectory: true,
+      }));
+
+      const files = (result.Contents || [])
+        .filter((obj) => obj.Key !== prefix)
+        .map((obj) => ({
+          name: obj.Key!,
+          size: obj.Size || 0,
+          updated: obj.LastModified || new Date(),
+          contentType: undefined,
+          isDirectory: false,
+        }));
+
+      return {
+        objects: [...folders, ...files],
+        nextPageToken: result.IsTruncated
+          ? result.NextContinuationToken
+          : undefined,
+      };
+    } catch (error) {
+      throw new Error(`Error listing MinIO objects: ${error}`);
+    }
+  }
+
+  static async getMinIODownloadUrl(
+    config: MinIOConfig,
+    bucketName: string,
+    objectKey: string,
+  ): Promise<string> {
+    const client = CloudExplorerService.createMinIOClient(config);
+    try {
+      const command = new GetObjectCommand({
+        Bucket: bucketName,
+        Key: objectKey,
+      });
+      return await getSignedUrl(client, command, { expiresIn: 3600 });
+    } catch (error) {
+      throw new Error(`Error generating MinIO signed URL: ${error}`);
+    }
+  }
+
+  static async testMinIOConnection(config: MinIOConfig): Promise<boolean> {
+    const client = CloudExplorerService.createMinIOClient(config);
+    try {
+      await client.send(new ListBucketsCommand({}));
+      return true;
+    } catch (error) {
+      // eslint-disable-next-line no-console
+      console.error('MinIO connection test failed:', error);
+      // Re-throw with user-friendly message
+      const errorMessage = (error as Error).message;
+      const errorName = (error as any).name;
+
+      if (
+        errorName === 'InvalidAccessKeyId' ||
+        errorMessage.includes('InvalidAccessKeyId')
+      ) {
+        throw new Error(
+          'Invalid MinIO Access Key ID. Please check your credentials in MinIO console.',
+        );
+      } else if (
+        errorName === 'SignatureDoesNotMatch' ||
+        errorMessage.includes('SignatureDoesNotMatch')
+      ) {
+        throw new Error(
+          'Invalid MinIO Secret Access Key. Please verify your credentials.',
+        );
+      } else if (
+        errorMessage.includes('ENOTFOUND') ||
+        errorMessage.includes('getaddrinfo')
+      ) {
+        throw new Error(
+          'Cannot resolve MinIO endpoint. Check your endpoint address.',
+        );
+      } else if (errorMessage.includes('ECONNREFUSED')) {
+        throw new Error(
+          'Cannot connect to MinIO server. Ensure the server is running at the specified endpoint.',
+        );
+      } else if (errorMessage.includes('ETIMEDOUT')) {
+        throw new Error(
+          'Connection to MinIO server timed out. Check your endpoint and network.',
+        );
+      } else if (
+        errorMessage.includes('PermanentRedirect') ||
+        errorName === 'PermanentRedirect'
+      ) {
+        throw new Error(
+          'Bucket region mismatch. Check your region configuration.',
+        );
+      } else if (
+        errorMessage.includes('AccessDenied') ||
+        errorName === 'AccessDenied'
+      ) {
+        throw new Error(
+          'MinIO credentials are valid but lack permissions to list buckets.',
+        );
+      } else if (
+        errorMessage.includes('certificate') ||
+        errorMessage.includes('SSL')
+      ) {
+        throw new Error(
+          'SSL/TLS certificate error. Try disabling SSL or check your certificate configuration.',
+        );
+      }
+      throw new Error(`MinIO connection failed: ${errorMessage}`);
+    }
+  }
+
   // Generic methods for different cloud providers
   static async listBuckets(
-    provider: 'aws' | 'azure' | 'gcs',
+    provider: 'aws' | 'azure' | 'gcs' | 'minio',
     config: CloudStorageConfig,
   ): Promise<Bucket[]> {
     switch (provider) {
@@ -515,13 +703,15 @@ class CloudExplorerService {
         return CloudExplorerService.listAzureContainers(config as AzureConfig);
       case 'gcs':
         return CloudExplorerService.listGCSBuckets(config as GCSConfig);
+      case 'minio':
+        return CloudExplorerService.listMinIOBuckets(config as MinIOConfig);
       default:
         throw new Error(`Unsupported provider: ${provider}`);
     }
   }
 
   static async listObjects(
-    provider: 'aws' | 'azure' | 'gcs',
+    provider: 'aws' | 'azure' | 'gcs' | 'minio',
     config: CloudStorageConfig,
     bucketName: string,
     continuationToken?: string,
@@ -549,13 +739,20 @@ class CloudExplorerService {
           continuationToken,
           prefix,
         );
+      case 'minio':
+        return CloudExplorerService.listMinIOObjects(
+          config as MinIOConfig,
+          bucketName,
+          continuationToken,
+          prefix,
+        );
       default:
         throw new Error(`Unsupported provider: ${provider}`);
     }
   }
 
   static async getDownloadUrl(
-    provider: 'aws' | 'azure' | 'gcs',
+    provider: 'aws' | 'azure' | 'gcs' | 'minio',
     config: CloudStorageConfig,
     bucketName: string,
     objectName: string,
@@ -579,13 +776,19 @@ class CloudExplorerService {
           bucketName,
           objectName,
         );
+      case 'minio':
+        return CloudExplorerService.getMinIODownloadUrl(
+          config as MinIOConfig,
+          bucketName,
+          objectName,
+        );
       default:
         throw new Error(`Unsupported provider: ${provider}`);
     }
   }
 
   static async testConnection(
-    provider: 'aws' | 'azure' | 'gcs',
+    provider: 'aws' | 'azure' | 'gcs' | 'minio',
     config: CloudStorageConfig,
   ): Promise<boolean> {
     switch (provider) {
@@ -595,6 +798,8 @@ class CloudExplorerService {
         return CloudExplorerService.testAzureConnection(config as AzureConfig);
       case 'gcs':
         return CloudExplorerService.testGCSConnection(config as GCSConfig);
+      case 'minio':
+        return CloudExplorerService.testMinIOConnection(config as MinIOConfig);
       default:
         throw new Error(`Unsupported provider: ${provider}`);
     }

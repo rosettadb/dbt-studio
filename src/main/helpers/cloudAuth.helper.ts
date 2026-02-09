@@ -5,6 +5,7 @@ import type {
   S3Config,
   AzureConfig,
   GCSConfig,
+  MinIOConfig,
 } from '../../types/frontend';
 
 /**
@@ -102,6 +103,7 @@ export async function buildCloudSecretQuery(
     DROP SECRET IF EXISTS s3_secret;
     DROP SECRET IF EXISTS gcs_secret;
     DROP SECRET IF EXISTS azure_secret;
+    DROP SECRET IF EXISTS minio_secret;
   `;
 
   switch (provider) {
@@ -115,6 +117,39 @@ export async function buildCloudSecretQuery(
           KEY_ID '${awsConfig.accessKeyId}',
           SECRET '${awsConfig.secretAccessKey}',
           REGION '${awsConfig.region}'
+        );
+      `;
+    }
+    case 'minio': {
+      const minioConfig = config as MinIOConfig;
+
+      // Strip protocol and trailing slashes from endpoint (in case it wasn't cleaned before storage)
+      const cleanEndpoint = minioConfig.endpoint
+        .replace(/^https?:\/\//, '') // Remove http:// or https://
+        .replace(/\/$/, ''); // Remove trailing slash
+
+      // For DuckDB S3 secrets, the ENDPOINT should NOT include the protocol
+      // DuckDB will add it based on USE_SSL setting
+
+      // eslint-disable-next-line no-console
+      console.log('[DuckDB MinIO Secret] Building secret with:', {
+        originalEndpoint: minioConfig.endpoint,
+        cleanEndpoint,
+        useSSL: minioConfig.useSSL,
+        region: minioConfig.region || 'us-east-1',
+      });
+
+      return `
+        ${dropSecretsQuery}
+        CREATE OR REPLACE SECRET minio_secret (
+          TYPE s3,
+          PROVIDER config,
+          KEY_ID '${minioConfig.accessKeyId}',
+          SECRET '${minioConfig.secretAccessKey}',
+          REGION '${minioConfig.region || 'us-east-1'}',
+          ENDPOINT '${cleanEndpoint}',
+          USE_SSL ${minioConfig.useSSL ? 'true' : 'false'},
+          URL_STYLE 'path'
         );
       `;
     }
@@ -205,6 +240,8 @@ export function getCloudUrl(
 ): string {
   switch (provider) {
     case 'aws':
+      return `s3://${bucketName}/${objectName}`;
+    case 'minio':
       return `s3://${bucketName}/${objectName}`;
     case 'gcs':
       // Use HTTPS URL for GCS since native gcs:// might not be supported

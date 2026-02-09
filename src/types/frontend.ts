@@ -58,6 +58,7 @@ export type SecureStorageAccount =
   | `cloud-gcs-${string}`
   | `cloud-aws-${string}`
   | `cloud-azure-${string}`
+  | `cloud-minio-${string}`
   | `db-bigquery-${string}`
   | 'cloud-api-key';
 
@@ -98,9 +99,17 @@ export interface GCSConfig {
   credentials?: any;
 }
 
-export type CloudStorageConfig = S3Config | AzureConfig | GCSConfig;
+export interface MinIOConfig {
+  endpoint: string;
+  accessKeyId: string;
+  secretAccessKey: string;
+  useSSL?: boolean;
+  region?: string;
+}
 
-export type CloudProvider = 'aws' | 'azure' | 'gcs';
+export type CloudStorageConfig = S3Config | AzureConfig | GCSConfig | MinIOConfig;
+
+export type CloudProvider = 'aws' | 'azure' | 'gcs' | 'minio';
 
 export type CloudConnection = {
   id: string;

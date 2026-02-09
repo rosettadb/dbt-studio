@@ -125,6 +125,26 @@ const useSecureStorage = () => {
     await secureStorageService.delete(`cloud-azure-${connectionName}`);
   };
 
+  // MinIO credential storage
+  const setCloudMinioSecret = async (
+    secret: string,
+    connectionName: string,
+  ): Promise<void> => {
+    await secureStorageService.set(`cloud-minio-${connectionName}`, secret);
+  };
+
+  const getCloudMinioSecret = async (
+    connectionName: string,
+  ): Promise<string | null> => {
+    return secureStorageService.get(`cloud-minio-${connectionName}`);
+  };
+
+  const deleteCloudMinioSecret = async (
+    connectionName: string,
+  ): Promise<void> => {
+    await secureStorageService.delete(`cloud-minio-${connectionName}`);
+  };
+
   // BigQuery service account key storage
   const setBigQueryServiceAccountKey = async (
     key: string,
@@ -179,6 +199,9 @@ const useSecureStorage = () => {
     setCloudAzureKey,
     getCloudAzureKey,
     deleteCloudAzureKey,
+    setCloudMinioSecret,
+    getCloudMinioSecret,
+    deleteCloudMinioSecret,
     setBigQueryServiceAccountKey,
     getBigQueryServiceAccountKey,
     deleteBigQueryServiceAccountKey,

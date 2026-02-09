@@ -27,6 +27,15 @@ class CloudPreviewService {
   }: PreviewOptions): Promise<PreviewResult> {
     let connection: any = null;
     try {
+      // eslint-disable-next-line no-console
+      console.log('[CloudPreview] Starting preview with:', {
+        provider,
+        objectPath,
+        previewType,
+        limit,
+        configEndpoint: (cloudConfig as any).endpoint,
+      });
+
       // Get connection from persistent pool
       connection = await DuckDBBootstrap.getConnection('cloud-preview');
 
@@ -35,6 +44,10 @@ class CloudPreviewService {
 
       // Configure cloud access secrets
       const secretQuery = await buildCloudSecretQuery(provider, cloudConfig);
+      
+      // eslint-disable-next-line no-console
+      console.log('[CloudPreview] Executing secret query:', secretQuery);
+      
       await connection.run(secretQuery);
 
       // Execute preview query
@@ -44,6 +57,9 @@ class CloudPreviewService {
         previewType,
         limit,
       );
+
+      // eslint-disable-next-line no-console
+      console.log('[CloudPreview] Executing preview query:', query);
 
       const result = await connection.run(query);
       const rows = await result.getRows();

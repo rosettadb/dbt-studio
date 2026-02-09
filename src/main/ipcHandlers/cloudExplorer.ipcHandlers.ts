@@ -27,7 +27,7 @@ const registerCloudExplorerHandlers = () => {
         provider,
         config,
       }: {
-        provider: 'aws' | 'azure' | 'gcs';
+        provider: 'aws' | 'azure' | 'gcs' | 'minio';
         config: CloudStorageConfig;
       },
     ) => {
@@ -46,7 +46,7 @@ const registerCloudExplorerHandlers = () => {
         continuationToken,
         prefix = '',
       }: {
-        provider: 'aws' | 'azure' | 'gcs';
+        provider: 'aws' | 'azure' | 'gcs' | 'minio';
         config: CloudStorageConfig;
         bucketName: string;
         continuationToken?: string;
@@ -73,7 +73,7 @@ const registerCloudExplorerHandlers = () => {
         bucketName,
         objectName,
       }: {
-        provider: 'aws' | 'azure' | 'gcs';
+        provider: 'aws' | 'azure' | 'gcs' | 'minio';
         config: CloudStorageConfig;
         bucketName: string;
         objectName: string;
@@ -96,7 +96,7 @@ const registerCloudExplorerHandlers = () => {
         provider,
         config,
       }: {
-        provider: 'aws' | 'azure' | 'gcs';
+        provider: 'aws' | 'azure' | 'gcs' | 'minio';
         config: CloudStorageConfig;
       },
     ) => {
@@ -117,6 +117,17 @@ const registerCloudExplorerHandlers = () => {
             `Invalid AWS config: missing required fields. Received: ${JSON.stringify(s3Config)}`,
           );
         }
+      } else if (provider === 'minio') {
+        const minioConfig = config as any;
+        if (
+          !minioConfig.endpoint ||
+          !minioConfig.accessKeyId ||
+          !minioConfig.secretAccessKey
+        ) {
+          throw new Error(
+            `Invalid MinIO config: missing required fields. Received: ${JSON.stringify(minioConfig)}`,
+          );
+        }
       }
 
       return CloudExplorerService.testConnection(provider, config);
@@ -135,7 +146,7 @@ const registerCloudExplorerHandlers = () => {
         previewType = 'sample',
         limit = 100,
       }: {
-        provider: 'aws' | 'azure' | 'gcs';
+        provider: 'aws' | 'azure' | 'gcs' | 'minio';
         config: CloudStorageConfig;
         bucketName: string;
         objectName: string;

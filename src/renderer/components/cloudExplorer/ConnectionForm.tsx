@@ -30,6 +30,7 @@ import {
   S3Config,
   AzureConfig,
   GCSConfig,
+  MinIOConfig,
 } from '../../../types/frontend';
 import {
   useTestCloudConnection,
@@ -55,6 +56,9 @@ interface FormData {
   accountName: string;
   accountKey: string;
   connectionString: string;
+  // MinIO fields
+  endpoint: string;
+  useSSL: boolean;
 }
 
 export const ConnectionForm: React.FC<ConnectionFormProps> = ({
@@ -72,6 +76,8 @@ export const ConnectionForm: React.FC<ConnectionFormProps> = ({
     getCloudAwsSecret,
     setCloudAzureKey,
     getCloudAzureKey,
+    setCloudMinioSecret,
+    getCloudMinioSecret,
   } = useSecureStorage();
 
   const [testStatus, setTestStatus] = useState<
@@ -89,6 +95,8 @@ export const ConnectionForm: React.FC<ConnectionFormProps> = ({
     accountName: '',
     accountKey: '',
     connectionString: '',
+    endpoint: '',
+    useSSL: false,
   });
 
   const getProviderIcon = (provider: CloudProvider, size: number = 20) => {
@@ -118,12 +126,14 @@ export const ConnectionForm: React.FC<ConnectionFormProps> = ({
         provider: initialValues.provider,
         projectId: (config as GCSConfig).projectId || '',
         credentials: (config as GCSConfig).credentials || '',
-        region: (config as S3Config).region || '',
-        accessKeyId: (config as S3Config).accessKeyId || '',
-        secretAccessKey: (config as S3Config).secretAccessKey || '',
+        region: (config as S3Config).region || (config as MinIOConfig).region || '',
+        accessKeyId: (config as S3Config).accessKeyId || (config as MinIOConfig).accessKeyId || '',
+        secretAccessKey: (config as S3Config).secretAccessKey || (config as MinIOConfig).secretAccessKey || '',
         accountName: (config as AzureConfig).accountName || '',
         accountKey: (config as AzureConfig).accountKey || '',
         connectionString: (config as AzureConfig).connectionString || '',
+        endpoint: (config as MinIOConfig).endpoint || '',
+        useSSL: (config as MinIOConfig).useSSL || false,
       });
     }
   }, [initialValues]);
@@ -142,6 +152,9 @@ export const ConnectionForm: React.FC<ConnectionFormProps> = ({
         } else if (provider === 'azure') {
           const stored = await getCloudAzureKey(id);
           setFormData((prev) => ({ ...prev, accountKey: stored || '' }));
+        } else if (provider === 'minio') {
+          const stored = await getCloudMinioSecret(id);
+          setFormData((prev) => ({ ...prev, secretAccessKey: stored || '' }));
         }
       })();
     }
@@ -165,6 +178,12 @@ export const ConnectionForm: React.FC<ConnectionFormProps> = ({
         );
       case 'azure':
         return !!formData.accountName.trim() && !!formData.accountKey.trim();
+      case 'minio':
+        return (
+          !!formData.endpoint.trim() &&
+          !!formData.accessKeyId.trim() &&
+          !!formData.secretAccessKey.trim()
+        );
       default:
         return false;
     }
@@ -189,6 +208,14 @@ export const ConnectionForm: React.FC<ConnectionFormProps> = ({
           accountKey: formData.accountKey.trim(),
           connectionString: formData.connectionString.trim() || undefined,
         } as AzureConfig;
+      case 'minio':
+        return {
+          endpoint: formData.endpoint.trim(),
+          accessKeyId: formData.accessKeyId.trim(),
+          secretAccessKey: formData.secretAccessKey.trim(),
+          useSSL: formData.useSSL,
+          region: formData.region.trim() || 'us-east-1',
+        } as MinIOConfig;
       default:
         throw new Error(`Unsupported provider: ${formData.provider}`);
     }
@@ -205,6 +232,24 @@ export const ConnectionForm: React.FC<ConnectionFormProps> = ({
     try {
       const rawConfig = createConfigFromFormData();
       const config = rawConfig;
+      
+      // eslint-disable-next-line no-console
+      console.log('[MinIO Frontend] Testing connection with form data:', {
+        provider: formData.provider,
+        name: formData.name,
+        endpoint: formData.endpoint,
+        useSSL: formData.useSSL,
+        region: formData.region,
+        accessKeyId: formData.accessKeyId,
+        hasSecretKey: !!formData.secretAccessKey,
+      });
+      
+      // eslint-disable-next-line no-console
+      console.log('[MinIO Frontend] Created config object:', {
+        ...config,
+        secretAccessKey: config.secretAccessKey ? '***REDACTED***' : undefined,
+      });
+      
       // Validate config before sending
       if (!config) {
         throw new Error('Failed to create configuration object');
@@ -216,6 +261,8 @@ export const ConnectionForm: React.FC<ConnectionFormProps> = ({
       });
       setTestStatus('success');
     } catch (error) {
+      // eslint-disable-next-line no-console
+      console.error('[MinIO Frontend] Test connection failed:', error);
       setTestStatus('error');
       setErrorMessage(
         error instanceof Error ? error.message : 'Unknown error occurred',
@@ -254,6 +301,13 @@ export const ConnectionForm: React.FC<ConnectionFormProps> = ({
         const config = { ...rawConfig };
         if ('accountKey' in config) {
           delete (config as any).accountKey;
+        }
+        finalConfig = config;
+      } else if (formData.provider === 'minio') {
+        await setCloudMinioSecret(formData.secretAccessKey, connId);
+        const config = { ...rawConfig };
+        if ('secretAccessKey' in config) {
+          delete (config as any).secretAccessKey;
         }
         finalConfig = config;
       } else {
@@ -359,6 +413,70 @@ export const ConnectionForm: React.FC<ConnectionFormProps> = ({
             />
           </>
         );
+      case 'minio':
+        return (
+          <>
+            <TextField
+              label="Endpoint"
+              placeholder="localhost:9000"
+              fullWidth
+              margin="normal"
+              value={formData.endpoint}
+              onChange={(e) => handleChange('endpoint', e.target.value)}
+              required
+              helperText="MinIO server endpoint (host:port)"
+            />
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mt: 2 }}>
+              <FormControl component="fieldset">
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                  <input
+                    type="checkbox"
+                    id="useSSL"
+                    checked={formData.useSSL}
+                    onChange={(e) => handleChange('useSSL', e.target.checked as any)}
+                    style={{ cursor: 'pointer' }}
+                  />
+                  <label htmlFor="useSSL" style={{ cursor: 'pointer' }}>
+                    Use SSL/TLS
+                  </label>
+                </Box>
+                <Typography variant="caption" color="text.secondary" sx={{ mt: 0.5 }}>
+                  Enable for HTTPS connections (default: HTTP)
+                </Typography>
+              </FormControl>
+            </Box>
+            <TextField
+              label="Access Key ID"
+              placeholder="minioadmin"
+              fullWidth
+              margin="normal"
+              value={formData.accessKeyId}
+              onChange={(e) => handleChange('accessKeyId', e.target.value)}
+              required
+              helperText="Your MinIO Access Key"
+            />
+            <TextField
+              label="Secret Access Key"
+              placeholder="minioadmin"
+              type="password"
+              fullWidth
+              margin="normal"
+              value={formData.secretAccessKey}
+              onChange={(e) => handleChange('secretAccessKey', e.target.value)}
+              required
+              helperText="Your MinIO Secret Key"
+            />
+            <TextField
+              label="Region (Optional)"
+              placeholder="us-east-1"
+              fullWidth
+              margin="normal"
+              value={formData.region}
+              onChange={(e) => handleChange('region', e.target.value)}
+              helperText="MinIO region (default: us-east-1)"
+            />
+          </>
+        );
       case 'azure':
         return (
           <>
@@ -433,7 +551,7 @@ export const ConnectionForm: React.FC<ConnectionFormProps> = ({
                 Connection Type
               </FormLabel>
               <Grid container spacing={2} sx={{ mt: 1 }}>
-                <Grid item xs={12} sm={4}>
+                <Grid item xs={12} sm={3}>
                   <Card
                     variant={
                       formData.provider === 'gcs' ? 'elevation' : 'outlined'
@@ -480,7 +598,7 @@ export const ConnectionForm: React.FC<ConnectionFormProps> = ({
                     </CardActionArea>
                   </Card>
                 </Grid>
-                <Grid item xs={12} sm={4}>
+                <Grid item xs={12} sm={3}>
                   <Card
                     variant={
                       formData.provider === 'aws' ? 'elevation' : 'outlined'
@@ -527,7 +645,7 @@ export const ConnectionForm: React.FC<ConnectionFormProps> = ({
                     </CardActionArea>
                   </Card>
                 </Grid>
-                <Grid item xs={12} sm={4}>
+                <Grid item xs={12} sm={3}>
                   <Card
                     variant={
                       formData.provider === 'azure' ? 'elevation' : 'outlined'
@@ -571,6 +689,55 @@ export const ConnectionForm: React.FC<ConnectionFormProps> = ({
                           fontWeight="medium"
                         >
                           Azure Blob Storage
+                        </Typography>
+                      </Box>
+                    </CardActionArea>
+                  </Card>
+                </Grid>
+                <Grid item xs={12} sm={3}>
+                  <Card
+                    variant={
+                      formData.provider === 'minio' ? 'elevation' : 'outlined'
+                    }
+                    sx={{
+                      cursor: 'pointer',
+                      transition: 'all 0.2s',
+                      height: '120px',
+                      border:
+                        formData.provider === 'minio'
+                          ? '2px solid'
+                          : '1px solid',
+                      borderColor:
+                        formData.provider === 'minio'
+                          ? 'primary.main'
+                          : 'divider',
+                      '&:hover': {
+                        elevation: 4,
+                        borderColor: 'primary.main',
+                      },
+                    }}
+                  >
+                    <CardActionArea
+                      onClick={() => handleChange('provider', 'minio')}
+                      sx={{ p: 2, height: '100%' }}
+                    >
+                      <Box
+                        sx={{
+                          display: 'flex',
+                          flexDirection: 'column',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          gap: 1,
+                          height: '100%',
+                        }}
+                      >
+                        {getProviderIcon('minio', 48)}
+                        <Typography
+                          variant="body2"
+                          textAlign="center"
+                          fontWeight="medium"
+                        >
+                          MinIO
                         </Typography>
                       </Box>
                     </CardActionArea>
