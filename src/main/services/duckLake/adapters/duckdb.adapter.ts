@@ -823,33 +823,39 @@ export class DuckDBCatalogAdapter extends CatalogAdapter {
       // Add limit and offset if specified
       if (request.limit) {
         // If pagination is requested, calculate total rows for the base query
-        try {
-          const countQuery = `SELECT COUNT(*) as total FROM (${query})`;
-          const countResult =
-            await this.connectionInfo.connection.run(countQuery);
-          const countRows = await countResult.getRows();
+        // Only run count query for SELECT statements to avoid re-executing DML
+        const isSelectQuery = /^\s*SELECT\b/i.test(query);
 
-          if (countRows && countRows.length > 0) {
-            // Handle different result formats (array or object)
-            const countRow = countRows[0];
-            let countVal;
+        if (isSelectQuery) {
+          try {
+            const countQuery = `SELECT COUNT(*) as total FROM (${query})`;
+            const countResult =
+              await this.connectionInfo.connection.run(countQuery);
+            const countRows = await countResult.getRows();
 
-            if (Array.isArray(countRow)) {
-              [countVal] = countRow;
-            } else if (countRow && typeof countRow === 'object') {
-              countVal = countRow.total || Object.values(countRow)[0];
+            if (countRows && countRows.length > 0) {
+              // Handle different result formats (array or object)
+              const countRow = countRows[0];
+              let countVal;
+
+              if (Array.isArray(countRow)) {
+                [countVal] = countRow;
+              } else if (countRow && typeof countRow === 'object') {
+                // Use nullish coalescing to properly handle zero values
+                countVal = countRow.total ?? Object.values(countRow)[0];
+              }
+
+              if (countVal !== undefined) {
+                totalRows = Number(countVal);
+              }
             }
-
-            if (countVal !== undefined) {
-              totalRows = Number(countVal);
-            }
+          } catch (error) {
+            // eslint-disable-next-line no-console
+            console.warn(
+              '[DuckDB] Failed to fetch total rows for pagination:',
+              error,
+            );
           }
-        } catch (error) {
-          // eslint-disable-next-line no-console
-          console.warn(
-            '[DuckDB] Failed to fetch total rows for pagination:',
-            error,
-          );
         }
 
         query += ` LIMIT ${request.limit}`;
