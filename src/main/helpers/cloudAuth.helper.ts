@@ -8,6 +8,7 @@ import type {
   MinIOConfig,
   CloudflareR2Config,
   BackblazeB2Config,
+  RustfsConfig,
 } from '../../types/frontend';
 
 /**
@@ -108,6 +109,7 @@ export async function buildCloudSecretQuery(
     DROP SECRET IF EXISTS minio_secret;
     DROP SECRET IF EXISTS r2_secret;
     DROP SECRET IF EXISTS b2_secret;
+    DROP SECRET IF EXISTS rustfs_secret;
   `;
 
   switch (provider) {
@@ -205,6 +207,36 @@ export async function buildCloudSecretQuery(
         );
       `;
     }
+    case 'rustfs': {
+      const rustfsConfig = config as RustfsConfig;
+
+      // Strip protocol and trailing slashes from endpoint
+      const cleanEndpoint = rustfsConfig.endpoint
+        .replace(/^https?:\/\//, '')
+        .replace(/\/$/, '');
+
+      // eslint-disable-next-line no-console
+      console.log('[DuckDB rustfs Secret] Building secret with:', {
+        originalEndpoint: rustfsConfig.endpoint,
+        cleanEndpoint,
+        useSSL: rustfsConfig.useSSL,
+        region: rustfsConfig.region || 'us-east-1',
+      });
+
+      return `
+        ${dropSecretsQuery}
+        CREATE OR REPLACE SECRET rustfs_secret (
+          TYPE s3,
+          PROVIDER config,
+          KEY_ID '${rustfsConfig.accessKeyId}',
+          SECRET '${rustfsConfig.secretAccessKey}',
+          REGION '${rustfsConfig.region || 'us-east-1'}',
+          ENDPOINT '${cleanEndpoint}',
+          USE_SSL ${rustfsConfig.useSSL ? 'true' : 'false'},
+          URL_STYLE 'path'
+        );
+      `;
+    }
     case 'gcs': {
       const gcsConfig = config as GCSConfig;
 
@@ -298,6 +330,8 @@ export function getCloudUrl(
     case 'cloudflare-r2':
       return `r2://${bucketName}/${objectName}`;
     case 'backblaze-b2':
+      return `s3://${bucketName}/${objectName}`;
+    case 'rustfs':
       return `s3://${bucketName}/${objectName}`;
     case 'gcs':
       // Use HTTPS URL for GCS since native gcs:// might not be supported

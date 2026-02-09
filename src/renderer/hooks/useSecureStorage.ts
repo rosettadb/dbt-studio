@@ -187,6 +187,26 @@ const useSecureStorage = () => {
     await secureStorageService.delete(`cloud-backblaze-b2-${connectionName}`);
   };
 
+  // rustfs credential storage
+  const setCloudRustfsSecret = async (
+    secret: string,
+    connectionName: string,
+  ): Promise<void> => {
+    await secureStorageService.set(`cloud-rustfs-${connectionName}`, secret);
+  };
+
+  const getCloudRustfsSecret = async (
+    connectionName: string,
+  ): Promise<string | null> => {
+    return secureStorageService.get(`cloud-rustfs-${connectionName}`);
+  };
+
+  const deleteCloudRustfsSecret = async (
+    connectionName: string,
+  ): Promise<void> => {
+    await secureStorageService.delete(`cloud-rustfs-${connectionName}`);
+  };
+
   // BigQuery service account key storage
   const setBigQueryServiceAccountKey = async (
     key: string,
@@ -250,6 +270,9 @@ const useSecureStorage = () => {
     setCloudB2Secret,
     getCloudB2Secret,
     deleteCloudB2Secret,
+    setCloudRustfsSecret,
+    getCloudRustfsSecret,
+    deleteCloudRustfsSecret,
     setBigQueryServiceAccountKey,
     getBigQueryServiceAccountKey,
     deleteBigQueryServiceAccountKey,

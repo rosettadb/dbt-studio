@@ -14,7 +14,8 @@ class CloudExplorerService {
       | 'gcs'
       | 'minio'
       | 'cloudflare-r2'
-      | 'backblaze-b2',
+      | 'backblaze-b2'
+      | 'rustfs',
     config: CloudStorageConfig,
   ): Promise<Bucket[]> {
     const { data } = await client.post<
@@ -25,7 +26,8 @@ class CloudExplorerService {
           | 'gcs'
           | 'minio'
           | 'cloudflare-r2'
-          | 'backblaze-b2';
+          | 'backblaze-b2'
+          | 'rustfs';
         config: CloudStorageConfig;
       },
       Bucket[]
@@ -40,7 +42,8 @@ class CloudExplorerService {
       | 'gcs'
       | 'minio'
       | 'cloudflare-r2'
-      | 'backblaze-b2',
+      | 'backblaze-b2'
+      | 'rustfs',
     config: CloudStorageConfig,
     bucketName: string,
     continuationToken?: string,
@@ -54,7 +57,8 @@ class CloudExplorerService {
           | 'gcs'
           | 'minio'
           | 'cloudflare-r2'
-          | 'backblaze-b2';
+          | 'backblaze-b2'
+          | 'rustfs';
         config: CloudStorageConfig;
         bucketName: string;
         continuationToken?: string;
@@ -78,7 +82,8 @@ class CloudExplorerService {
       | 'gcs'
       | 'minio'
       | 'cloudflare-r2'
-      | 'backblaze-b2',
+      | 'backblaze-b2'
+      | 'rustfs',
     config: CloudStorageConfig,
     bucketName: string,
     objectName: string,
@@ -91,7 +96,8 @@ class CloudExplorerService {
           | 'gcs'
           | 'minio'
           | 'cloudflare-r2'
-          | 'backblaze-b2';
+          | 'backblaze-b2'
+          | 'rustfs';
         config: CloudStorageConfig;
         bucketName: string;
         objectName: string;
@@ -113,7 +119,8 @@ class CloudExplorerService {
       | 'gcs'
       | 'minio'
       | 'cloudflare-r2'
-      | 'backblaze-b2',
+      | 'backblaze-b2'
+      | 'rustfs',
     config: CloudStorageConfig,
   ): Promise<boolean> {
     const { data } = await client.post<
@@ -124,7 +131,8 @@ class CloudExplorerService {
           | 'gcs'
           | 'minio'
           | 'cloudflare-r2'
-          | 'backblaze-b2';
+          | 'backblaze-b2'
+          | 'rustfs';
         config: CloudStorageConfig;
       },
       boolean
@@ -139,7 +147,8 @@ class CloudExplorerService {
       | 'gcs'
       | 'minio'
       | 'cloudflare-r2'
-      | 'backblaze-b2',
+      | 'backblaze-b2'
+      | 'rustfs',
     config: CloudStorageConfig,
     bucketName: string,
     objectName: string,
@@ -155,7 +164,8 @@ class CloudExplorerService {
             | 'gcs'
             | 'minio'
             | 'cloudflare-r2'
-            | 'backblaze-b2';
+            | 'backblaze-b2'
+            | 'rustfs';
           config: CloudStorageConfig;
           bucketName: string;
           objectName: string;

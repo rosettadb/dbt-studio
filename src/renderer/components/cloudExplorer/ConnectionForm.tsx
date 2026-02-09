@@ -15,6 +15,8 @@ import {
   Divider,
   Grid,
   CardActionArea,
+  IconButton,
+  InputAdornment,
 } from '@mui/material';
 import {
   CheckCircle,
@@ -22,6 +24,8 @@ import {
   Cable,
   Add,
   Edit,
+  Visibility,
+  VisibilityOff,
 } from '@mui/icons-material';
 
 import {
@@ -33,6 +37,7 @@ import {
   MinIOConfig,
   CloudflareR2Config,
   BackblazeB2Config,
+  RustfsConfig,
 } from '../../../types/frontend';
 import {
   useTestCloudConnection,
@@ -90,12 +95,15 @@ export const ConnectionForm: React.FC<ConnectionFormProps> = ({
     getCloudR2Secret,
     setCloudB2Secret,
     getCloudB2Secret,
+    setCloudRustfsSecret,
+    getCloudRustfsSecret,
   } = useSecureStorage();
 
   const [testStatus, setTestStatus] = useState<
     'idle' | 'testing' | 'success' | 'error'
   >('idle');
   const [errorMessage, setErrorMessage] = useState<string>('');
+  const [showPassword, setShowPassword] = useState(false);
   const [formData, setFormData] = useState<FormData>({
     name: initialValues?.name || '',
     provider: initialValues?.provider || 'gcs',
@@ -143,23 +151,32 @@ export const ConnectionForm: React.FC<ConnectionFormProps> = ({
         projectId: (config as GCSConfig).projectId || '',
         credentials: (config as GCSConfig).credentials || '',
         region:
-          (config as S3Config).region || (config as MinIOConfig).region || '',
+          (config as S3Config).region || 
+          (config as MinIOConfig).region || 
+          (config as RustfsConfig).region || 
+          '',
         accessKeyId:
           (config as S3Config).accessKeyId ||
           (config as MinIOConfig).accessKeyId ||
           (config as CloudflareR2Config).accessKeyId ||
           (config as BackblazeB2Config).applicationKeyId ||
+          (config as RustfsConfig).accessKeyId ||
           '',
         secretAccessKey:
           (config as S3Config).secretAccessKey ||
           (config as MinIOConfig).secretAccessKey ||
           (config as CloudflareR2Config).secretAccessKey ||
+          (config as RustfsConfig).secretAccessKey ||
           '',
         accountName: (config as AzureConfig).accountName || '',
         accountKey: (config as AzureConfig).accountKey || '',
         connectionString: (config as AzureConfig).connectionString || '',
-        endpoint: (config as MinIOConfig).endpoint || (config as BackblazeB2Config).endpoint || '',
-        useSSL: (config as MinIOConfig).useSSL || false,
+        endpoint: 
+          (config as MinIOConfig).endpoint || 
+          (config as BackblazeB2Config).endpoint || 
+          (config as RustfsConfig).endpoint || 
+          '',
+        useSSL: (config as MinIOConfig).useSSL || (config as RustfsConfig).useSSL || false,
         accountId: (config as CloudflareR2Config).accountId || '',
         jurisdiction: (config as CloudflareR2Config).jurisdiction || '',
         applicationKeyId: (config as BackblazeB2Config).applicationKeyId || '',
@@ -191,6 +208,9 @@ export const ConnectionForm: React.FC<ConnectionFormProps> = ({
         } else if (provider === 'backblaze-b2') {
           const stored = await getCloudB2Secret(id);
           setFormData((prev) => ({ ...prev, applicationKey: stored || '' }));
+        } else if (provider === 'rustfs') {
+          const stored = await getCloudRustfsSecret(id);
+          setFormData((prev) => ({ ...prev, secretAccessKey: stored || '' }));
         }
       })();
     }
@@ -230,6 +250,12 @@ export const ConnectionForm: React.FC<ConnectionFormProps> = ({
         return (
           !!formData.applicationKeyId.trim() &&
           !!formData.applicationKey.trim()
+        );
+      case 'rustfs':
+        return (
+          !!formData.endpoint.trim() &&
+          !!formData.accessKeyId.trim() &&
+          !!formData.secretAccessKey.trim()
         );
       default:
         return false;
@@ -276,6 +302,14 @@ export const ConnectionForm: React.FC<ConnectionFormProps> = ({
           applicationKey: formData.applicationKey.trim(),
           endpoint: formData.endpoint.trim() || 's3.us-west-004.backblazeb2.com',
         } as BackblazeB2Config;
+      case 'rustfs':
+        return {
+          endpoint: formData.endpoint.trim(),
+          accessKeyId: formData.accessKeyId.trim(),
+          secretAccessKey: formData.secretAccessKey.trim(),
+          useSSL: formData.useSSL,
+          region: formData.region.trim() || 'us-east-1',
+        } as RustfsConfig;
       default:
         throw new Error(`Unsupported provider: ${formData.provider}`);
     }
@@ -396,6 +430,13 @@ export const ConnectionForm: React.FC<ConnectionFormProps> = ({
           delete (config as any).applicationKey;
         }
         finalConfig = config;
+      } else if (formData.provider === 'rustfs') {
+        await setCloudRustfsSecret(formData.secretAccessKey, connId);
+        const config = { ...rawConfig };
+        if ('secretAccessKey' in config) {
+          delete (config as any).secretAccessKey;
+        }
+        finalConfig = config;
       } else {
         finalConfig = rawConfig;
       }
@@ -489,13 +530,26 @@ export const ConnectionForm: React.FC<ConnectionFormProps> = ({
             <TextField
               label="Secret Access Key"
               placeholder="wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY"
-              type="password"
+              type={showPassword ? 'text' : 'password'}
               fullWidth
               margin="normal"
               value={formData.secretAccessKey}
               onChange={(e) => handleChange('secretAccessKey', e.target.value)}
               required
               helperText="Your AWS Secret Access Key"
+              InputProps={{
+                endAdornment: (
+                  <InputAdornment position="end">
+                    <IconButton
+                      aria-label="toggle password visibility"
+                      onClick={() => setShowPassword(!showPassword)}
+                      edge="end"
+                    >
+                      {showPassword ? <VisibilityOff /> : <Visibility />}
+                    </IconButton>
+                  </InputAdornment>
+                ),
+              }}
             />
           </>
         );
@@ -550,13 +604,26 @@ export const ConnectionForm: React.FC<ConnectionFormProps> = ({
             <TextField
               label="Secret Access Key"
               placeholder="minioadmin"
-              type="password"
+              type={showPassword ? 'text' : 'password'}
               fullWidth
               margin="normal"
               value={formData.secretAccessKey}
               onChange={(e) => handleChange('secretAccessKey', e.target.value)}
               required
               helperText="Your MinIO Secret Key"
+              InputProps={{
+                endAdornment: (
+                  <InputAdornment position="end">
+                    <IconButton
+                      aria-label="toggle password visibility"
+                      onClick={() => setShowPassword(!showPassword)}
+                      edge="end"
+                    >
+                      {showPassword ? <VisibilityOff /> : <Visibility />}
+                    </IconButton>
+                  </InputAdornment>
+                ),
+              }}
             />
             <TextField
               label="Region (Optional)"
@@ -595,13 +662,26 @@ export const ConnectionForm: React.FC<ConnectionFormProps> = ({
             <TextField
               label="Secret Access Key"
               placeholder="Your R2 API secret"
-              type="password"
+              type={showPassword ? 'text' : 'password'}
               fullWidth
               margin="normal"
               value={formData.secretAccessKey}
               onChange={(e) => handleChange('secretAccessKey', e.target.value)}
               required
               helperText="Your R2 API secret (Secret Access Key)"
+              InputProps={{
+                endAdornment: (
+                  <InputAdornment position="end">
+                    <IconButton
+                      aria-label="toggle password visibility"
+                      onClick={() => setShowPassword(!showPassword)}
+                      edge="end"
+                    >
+                      {showPassword ? <VisibilityOff /> : <Visibility />}
+                    </IconButton>
+                  </InputAdornment>
+                ),
+              }}
             />
             <FormControl fullWidth margin="normal">
               <FormLabel>Jurisdiction (Optional)</FormLabel>
@@ -647,13 +727,26 @@ export const ConnectionForm: React.FC<ConnectionFormProps> = ({
             <TextField
               label="Application Key"
               placeholder="Your B2 Application Key"
-              type="password"
+              type={showPassword ? 'text' : 'password'}
               fullWidth
               margin="normal"
               value={formData.applicationKey}
               onChange={(e) => handleChange('applicationKey', e.target.value)}
               required
               helperText="Your Backblaze B2 Application Key (stored securely)"
+              InputProps={{
+                endAdornment: (
+                  <InputAdornment position="end">
+                    <IconButton
+                      aria-label="toggle password visibility"
+                      onClick={() => setShowPassword(!showPassword)}
+                      edge="end"
+                    >
+                      {showPassword ? <VisibilityOff /> : <Visibility />}
+                    </IconButton>
+                  </InputAdornment>
+                ),
+              }}
             />
             <TextField
               label="Endpoint (Optional)"
@@ -663,6 +756,89 @@ export const ConnectionForm: React.FC<ConnectionFormProps> = ({
               value={formData.endpoint}
               onChange={(e) => handleChange('endpoint', e.target.value)}
               helperText="B2 S3-compatible endpoint. US: s3.us-west-004.backblazeb2.com, EU: s3.eu-central-003.backblazeb2.com"
+            />
+          </>
+        );
+      case 'rustfs':
+        return (
+          <>
+            <TextField
+              label="Endpoint"
+              placeholder="192.168.1.100:9000"
+              fullWidth
+              margin="normal"
+              value={formData.endpoint}
+              onChange={(e) => handleChange('endpoint', e.target.value)}
+              required
+              helperText="rustfs server endpoint (host:port)"
+            />
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mt: 2 }}>
+              <FormControl component="fieldset">
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                  <input
+                    type="checkbox"
+                    id="useSSL-rustfs"
+                    checked={formData.useSSL}
+                    onChange={(e) =>
+                      handleChange('useSSL', e.target.checked as any)
+                    }
+                    style={{ cursor: 'pointer' }}
+                  />
+                  <label htmlFor="useSSL-rustfs" style={{ cursor: 'pointer' }}>
+                    Use SSL/TLS
+                  </label>
+                </Box>
+                <Typography
+                  variant="caption"
+                  color="text.secondary"
+                  sx={{ mt: 0.5 }}
+                >
+                  Enable for HTTPS connections (default: HTTP)
+                </Typography>
+              </FormControl>
+            </Box>
+            <TextField
+              label="Access Key ID"
+              placeholder="rustfsadmin"
+              fullWidth
+              margin="normal"
+              value={formData.accessKeyId}
+              onChange={(e) => handleChange('accessKeyId', e.target.value)}
+              required
+              helperText="Your rustfs Access Key"
+            />
+            <TextField
+              label="Secret Access Key"
+              placeholder="rustfssecret"
+              type={showPassword ? 'text' : 'password'}
+              fullWidth
+              margin="normal"
+              value={formData.secretAccessKey}
+              onChange={(e) => handleChange('secretAccessKey', e.target.value)}
+              required
+              helperText="Your rustfs Secret Key (stored securely)"
+              InputProps={{
+                endAdornment: (
+                  <InputAdornment position="end">
+                    <IconButton
+                      aria-label="toggle password visibility"
+                      onClick={() => setShowPassword(!showPassword)}
+                      edge="end"
+                    >
+                      {showPassword ? <VisibilityOff /> : <Visibility />}
+                    </IconButton>
+                  </InputAdornment>
+                ),
+              }}
+            />
+            <TextField
+              label="Region (Optional)"
+              placeholder="us-east-1"
+              fullWidth
+              margin="normal"
+              value={formData.region}
+              onChange={(e) => handleChange('region', e.target.value)}
+              helperText="rustfs region (default: us-east-1)"
             />
           </>
         );
@@ -682,13 +858,26 @@ export const ConnectionForm: React.FC<ConnectionFormProps> = ({
             <TextField
               label="Storage Account Key"
               placeholder="Your storage account key"
-              type="password"
+              type={showPassword ? 'text' : 'password'}
               fullWidth
               margin="normal"
               value={formData.accountKey}
               onChange={(e) => handleChange('accountKey', e.target.value)}
               required
               helperText="Your Azure Storage Account Key"
+              InputProps={{
+                endAdornment: (
+                  <InputAdornment position="end">
+                    <IconButton
+                      aria-label="toggle password visibility"
+                      onClick={() => setShowPassword(!showPassword)}
+                      edge="end"
+                    >
+                      {showPassword ? <VisibilityOff /> : <Visibility />}
+                    </IconButton>
+                  </InputAdornment>
+                ),
+              }}
             />
             <TextField
               label="Connection String (Optional)"
@@ -1029,6 +1218,57 @@ export const ConnectionForm: React.FC<ConnectionFormProps> = ({
                           fontWeight="medium"
                         >
                           Backblaze B2
+                        </Typography>
+                      </Box>
+                    </CardActionArea>
+                  </Card>
+                </Grid>
+                <Grid item xs={12} sm={3}>
+                  <Card
+                    variant={
+                      formData.provider === 'rustfs'
+                        ? 'elevation'
+                        : 'outlined'
+                    }
+                    sx={{
+                      cursor: 'pointer',
+                      transition: 'all 0.2s',
+                      height: '120px',
+                      border:
+                        formData.provider === 'rustfs'
+                          ? '2px solid'
+                          : '1px solid',
+                      borderColor:
+                        formData.provider === 'rustfs'
+                          ? 'primary.main'
+                          : 'divider',
+                      '&:hover': {
+                        elevation: 4,
+                        borderColor: 'primary.main',
+                      },
+                    }}
+                  >
+                    <CardActionArea
+                      onClick={() => handleChange('provider', 'rustfs')}
+                      sx={{ p: 2, height: '100%' }}
+                    >
+                      <Box
+                        sx={{
+                          display: 'flex',
+                          flexDirection: 'column',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          gap: 1,
+                          height: '100%',
+                        }}
+                      >
+                        {getProviderIcon('rustfs', 48)}
+                        <Typography
+                          variant="body2"
+                          textAlign="center"
+                          fontWeight="medium"
+                        >
+                          rustfs
                         </Typography>
                       </Box>
                     </CardActionArea>

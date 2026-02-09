@@ -23,6 +23,7 @@ import {
   MinIOConfig,
   CloudflareR2Config,
   BackblazeB2Config,
+  RustfsConfig,
   CloudStorageConfig,
 } from '../../types/frontend';
 
@@ -1104,6 +1105,200 @@ class CloudExplorerService {
     }
   }
 
+  // rustfs Methods (S3-compatible)
+  private static createRustfsClient(config: RustfsConfig): S3Client {
+    // Validate credentials are provided
+    if (!config.accessKeyId || !config.secretAccessKey) {
+      throw new Error(
+        'rustfs credentials are required (Access Key ID and Secret Access Key)',
+      );
+    }
+
+    if (!config.endpoint) {
+      throw new Error('rustfs endpoint is required');
+    }
+
+    // Strip protocol and trailing slashes from endpoint
+    const cleanEndpoint = config.endpoint
+      .replace(/^https?:\/\//, '') // Remove http:// or https://
+      .replace(/\/$/, ''); // Remove trailing slash
+
+    const protocol = config.useSSL ? 'https' : 'http';
+    const endpoint = `${protocol}://${cleanEndpoint}`;
+
+    // eslint-disable-next-line no-console
+    console.log('[rustfs Backend] Creating rustfs client with config:', {
+      originalEndpoint: config.endpoint,
+      cleanEndpoint,
+      finalEndpoint: endpoint,
+      useSSL: config.useSSL,
+      region: config.region || 'us-east-1',
+      accessKeyId: config.accessKeyId,
+      hasSecretKey: !!config.secretAccessKey,
+    });
+
+    return new S3Client({
+      endpoint,
+      region: config.region || 'us-east-1',
+      credentials: {
+        accessKeyId: config.accessKeyId,
+        secretAccessKey: config.secretAccessKey,
+      },
+      forcePathStyle: true, // Required for rustfs (S3-compatible with path-style URLs)
+    });
+  }
+
+  static async listRustfsBuckets(config: RustfsConfig): Promise<Bucket[]> {
+    const client = CloudExplorerService.createRustfsClient(config);
+    try {
+      const data = await client.send(new ListBucketsCommand({}));
+      return (data.Buckets || []).map((bucket) => ({
+        name: bucket.Name!,
+        created: bucket.CreationDate!,
+        location: config.region || 'us-east-1',
+      }));
+    } catch (error) {
+      throw new Error(`Error listing rustfs buckets: ${error}`);
+    }
+  }
+
+  static async listRustfsObjects(
+    config: RustfsConfig,
+    bucketName: string,
+    continuationToken?: string,
+    prefix = '',
+  ): Promise<CloudListResult> {
+    const client = CloudExplorerService.createRustfsClient(config);
+    try {
+      const result = await client.send(
+        new ListObjectsV2Command({
+          Bucket: bucketName,
+          Prefix: prefix || undefined,
+          Delimiter: '/',
+          ContinuationToken: continuationToken,
+          MaxKeys: 100,
+        }),
+      );
+
+      const folders = (result.CommonPrefixes || []).map((folderPrefix) => ({
+        name: folderPrefix.Prefix!,
+        size: 0,
+        updated: new Date(),
+        isDirectory: true,
+      }));
+
+      const files = (result.Contents || [])
+        .filter((obj) => obj.Key !== prefix)
+        .map((obj) => ({
+          name: obj.Key!,
+          size: obj.Size || 0,
+          updated: obj.LastModified || new Date(),
+          contentType: undefined,
+          isDirectory: false,
+        }));
+
+      return {
+        objects: [...folders, ...files],
+        nextPageToken: result.IsTruncated
+          ? result.NextContinuationToken
+          : undefined,
+      };
+    } catch (error) {
+      throw new Error(`Error listing rustfs objects: ${error}`);
+    }
+  }
+
+  static async getRustfsDownloadUrl(
+    config: RustfsConfig,
+    bucketName: string,
+    objectKey: string,
+  ): Promise<string> {
+    const client = CloudExplorerService.createRustfsClient(config);
+    try {
+      const command = new GetObjectCommand({
+        Bucket: bucketName,
+        Key: objectKey,
+      });
+      return await getSignedUrl(client, command, { expiresIn: 3600 });
+    } catch (error) {
+      throw new Error(`Error generating rustfs signed URL: ${error}`);
+    }
+  }
+
+  static async testRustfsConnection(config: RustfsConfig): Promise<boolean> {
+    const client = CloudExplorerService.createRustfsClient(config);
+    try {
+      await client.send(new ListBucketsCommand({}));
+      return true;
+    } catch (error) {
+      // eslint-disable-next-line no-console
+      console.error('rustfs connection test failed:', error);
+      // Re-throw with user-friendly message
+      const errorMessage = (error as Error).message;
+      const errorName = (error as any).name;
+
+      if (
+        errorName === 'InvalidAccessKeyId' ||
+        errorMessage.includes('InvalidAccessKeyId')
+      ) {
+        throw new Error(
+          'Invalid rustfs Access Key ID. Please check your credentials.',
+        );
+      } else if (
+        errorName === 'SignatureDoesNotMatch' ||
+        errorMessage.includes('SignatureDoesNotMatch')
+      ) {
+        throw new Error(
+          'Invalid rustfs Secret Access Key. Please verify your credentials.',
+        );
+      } else if (
+        errorMessage.includes('ENOTFOUND') ||
+        errorMessage.includes('getaddrinfo')
+      ) {
+        throw new Error(
+          'Cannot resolve rustfs endpoint. Check your endpoint address.',
+        );
+      } else if (errorMessage.includes('ECONNREFUSED')) {
+        throw new Error(
+          'Cannot connect to rustfs server. Ensure the server is running at the specified endpoint.',
+        );
+      } else if (errorMessage.includes('ETIMEDOUT')) {
+        throw new Error(
+          'Connection to rustfs server timed out. Check your endpoint and network.',
+        );
+      } else if (
+        errorMessage.includes('PermanentRedirect') ||
+        errorName === 'PermanentRedirect'
+      ) {
+        throw new Error(
+          'Bucket region mismatch. Check your region configuration.',
+        );
+      } else if (
+        errorMessage.includes('AccessDenied') ||
+        errorName === 'AccessDenied'
+      ) {
+        throw new Error(
+          'rustfs credentials are valid but lack permissions to list buckets.',
+        );
+      } else if (
+        errorMessage.includes('certificate') ||
+        errorMessage.includes('SSL')
+      ) {
+        throw new Error(
+          'SSL/TLS certificate error. Try disabling SSL or check your certificate configuration.',
+        );
+      } else if (
+        errorMessage.includes('NetworkError') ||
+        errorMessage.includes('network')
+      ) {
+        throw new Error(
+          'Network error connecting to rustfs. Check endpoint URL format (http:// or https://).',
+        );
+      }
+      throw new Error(`rustfs connection failed: ${errorMessage}`);
+    }
+  }
+
   // Generic methods for different cloud providers
   static async listBuckets(
     provider:
@@ -1112,7 +1307,8 @@ class CloudExplorerService {
       | 'gcs'
       | 'minio'
       | 'cloudflare-r2'
-      | 'backblaze-b2',
+      | 'backblaze-b2'
+      | 'rustfs',
     config: CloudStorageConfig,
   ): Promise<Bucket[]> {
     switch (provider) {
@@ -1128,6 +1324,8 @@ class CloudExplorerService {
         return CloudExplorerService.listR2Buckets(config as CloudflareR2Config);
       case 'backblaze-b2':
         return CloudExplorerService.listB2Buckets(config as BackblazeB2Config);
+      case 'rustfs':
+        return CloudExplorerService.listRustfsBuckets(config as RustfsConfig);
       default:
         throw new Error(`Unsupported provider: ${provider}`);
     }
@@ -1140,7 +1338,8 @@ class CloudExplorerService {
       | 'gcs'
       | 'minio'
       | 'cloudflare-r2'
-      | 'backblaze-b2',
+      | 'backblaze-b2'
+      | 'rustfs',
     config: CloudStorageConfig,
     bucketName: string,
     continuationToken?: string,
@@ -1189,6 +1388,13 @@ class CloudExplorerService {
           continuationToken,
           prefix,
         );
+      case 'rustfs':
+        return CloudExplorerService.listRustfsObjects(
+          config as RustfsConfig,
+          bucketName,
+          continuationToken,
+          prefix,
+        );
       default:
         throw new Error(`Unsupported provider: ${provider}`);
     }
@@ -1201,7 +1407,8 @@ class CloudExplorerService {
       | 'gcs'
       | 'minio'
       | 'cloudflare-r2'
-      | 'backblaze-b2',
+      | 'backblaze-b2'
+      | 'rustfs',
     config: CloudStorageConfig,
     bucketName: string,
     objectName: string,
@@ -1243,6 +1450,12 @@ class CloudExplorerService {
           bucketName,
           objectName,
         );
+      case 'rustfs':
+        return CloudExplorerService.getRustfsDownloadUrl(
+          config as RustfsConfig,
+          bucketName,
+          objectName,
+        );
       default:
         throw new Error(`Unsupported provider: ${provider}`);
     }
@@ -1255,7 +1468,8 @@ class CloudExplorerService {
       | 'gcs'
       | 'minio'
       | 'cloudflare-r2'
-      | 'backblaze-b2',
+      | 'backblaze-b2'
+      | 'rustfs',
     config: CloudStorageConfig,
   ): Promise<boolean> {
     switch (provider) {
@@ -1274,6 +1488,10 @@ class CloudExplorerService {
       case 'backblaze-b2':
         return CloudExplorerService.testB2Connection(
           config as BackblazeB2Config,
+        );
+      case 'rustfs':
+        return CloudExplorerService.testRustfsConnection(
+          config as RustfsConfig,
         );
       default:
         throw new Error(`Unsupported provider: ${provider}`);

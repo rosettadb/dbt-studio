@@ -90,6 +90,7 @@ export const ExplorerBucketContent: React.FC<ExplorerBucketContentProps> = ({
     getCloudMinioSecret,
     getCloudR2Secret,
     getCloudB2Secret,
+    getCloudRustfsSecret,
   } = useSecureStorage();
 
   useEffect(() => {
@@ -121,6 +122,10 @@ export const ExplorerBucketContent: React.FC<ExplorerBucketContentProps> = ({
         } else if (connection.provider === 'backblaze-b2') {
           const secret = await getCloudB2Secret(connection.id);
           (config as { applicationKey?: string }).applicationKey =
+            secret || '';
+        } else if (connection.provider === 'rustfs') {
+          const secret = await getCloudRustfsSecret(connection.id);
+          (config as { secretAccessKey?: string }).secretAccessKey =
             secret || '';
         }
       } catch (e) {

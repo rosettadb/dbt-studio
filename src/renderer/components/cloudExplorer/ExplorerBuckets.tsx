@@ -50,6 +50,7 @@ export const ExplorerBuckets: React.FC<ExplorerBucketsProps> = ({
     getCloudMinioSecret,
     getCloudR2Secret,
     getCloudB2Secret,
+    getCloudRustfsSecret,
   } = useSecureStorage();
   const [secureConfig, setSecureConfig] = useState<any | null>(null);
   const [credentialsMissing, setCredentialsMissing] = useState(false);
@@ -105,6 +106,13 @@ export const ExplorerBuckets: React.FC<ExplorerBucketsProps> = ({
             missing = true;
           } else {
             (config as { applicationKey?: string }).applicationKey = secret;
+          }
+        } else if (connection.provider === 'rustfs') {
+          const secret = await getCloudRustfsSecret(connection.id);
+          if (secret === null) {
+            missing = true;
+          } else {
+            (config as { secretAccessKey?: string }).secretAccessKey = secret;
           }
         }
       } catch (e) {
