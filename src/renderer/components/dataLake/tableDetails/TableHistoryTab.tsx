@@ -79,6 +79,8 @@ export const TableHistoryTab: React.FC<TableHistoryTabProps> = ({
                     <TableCell>Snapshot ID</TableCell>
                     <TableCell>Time</TableCell>
                     <TableCell>Schema Version</TableCell>
+                    <TableCell>Author</TableCell>
+                    <TableCell>Message</TableCell>
                     <TableCell>Changes</TableCell>
                     <TableCell align="right">Actions</TableCell>
                   </TableRow>
@@ -109,6 +111,8 @@ export const TableHistoryTab: React.FC<TableHistoryTabProps> = ({
                         <TableCell>
                           {safeToString(snapshot.schemaVersion)}
                         </TableCell>
+                        <TableCell>{snapshot.author || '-'}</TableCell>
+                        <TableCell>{snapshot.commitMessage || '-'}</TableCell>
                         <TableCell>{snapshot.changesMade || '-'}</TableCell>
                         <TableCell align="right">
                           <Tooltip title="Restore this snapshot">

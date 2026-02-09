@@ -915,6 +915,8 @@ export const DataLakeInstanceDetails: React.FC<
                             <TableCell>Snapshot ID</TableCell>
                             <TableCell>Time</TableCell>
                             <TableCell>Schema Version</TableCell>
+                            <TableCell>Author</TableCell>
+                            <TableCell>Message</TableCell>
                             <TableCell>Changes</TableCell>
                           </TableRow>
                         </TableHead>
@@ -943,6 +945,10 @@ export const DataLakeInstanceDetails: React.FC<
                                 </TableCell>
                                 <TableCell>
                                   {safeToString(snapshot.schemaVersion)}
+                                </TableCell>
+                                <TableCell>{snapshot.author || '-'}</TableCell>
+                                <TableCell>
+                                  {snapshot.commitMessage || '-'}
                                 </TableCell>
                                 <TableCell>
                                   {snapshot.changesMade || '-'}

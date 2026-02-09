@@ -132,6 +132,20 @@ export default class DuckLakeService {
         throw DuckLakeError.validation('Column type is required');
       }
 
+      const typePattern = /^[A-Za-z_][A-Za-z0-9_() ,[]]*$/;
+      if (!typePattern.test(columnType.trim())) {
+        throw DuckLakeError.validation('Invalid column type format');
+      }
+
+      if (defaultValue) {
+        // Conservative pattern for literals: numbers, quoted strings, booleans, NULL
+        const defaultPattern =
+          /^(-?\d+(\.\d+)?|'([^']|'')*'|NULL|TRUE|FALSE)$/i;
+        if (!defaultPattern.test(defaultValue.trim())) {
+          throw DuckLakeError.validation('Invalid default value format');
+        }
+      }
+
       const tables = await adapter.listTables();
       const tableExists = tables.some((t) => t.name === tableName);
       if (!tableExists) {
@@ -307,6 +321,11 @@ export default class DuckLakeService {
 
       if (!newType || newType.trim() === '') {
         throw DuckLakeError.validation('New column type is required');
+      }
+
+      const typePattern = /^[A-Za-z_][A-Za-z0-9_() ,[]]*$/;
+      if (!typePattern.test(newType.trim())) {
+        throw DuckLakeError.validation('Invalid column type format');
       }
 
       const tables = await adapter.listTables();

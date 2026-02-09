@@ -121,6 +121,9 @@ export interface DuckLakeSnapshotDetail {
   nextCatalogId: number;
   nextFileId: number;
   changesMade?: string;
+  author?: string;
+  commitMessage?: string;
+  commitExtraInfo?: string;
 }
 
 export type DuckLakeChangeOperation = 'INSERT' | 'UPDATE' | 'DELETE';
@@ -329,6 +332,8 @@ export interface DuckLakeSnapshotInfo {
   operation: DuckLakeOperation;
   summary: DuckLakeSnapshotSummary;
   parentSnapshotId?: string;
+  author?: string;
+  commitMessage?: string;
 }
 
 // Table and Schema Types

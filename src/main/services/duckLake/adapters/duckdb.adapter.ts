@@ -354,6 +354,48 @@ export class DuckDBCatalogAdapter extends CatalogAdapter {
     await this.cleanup();
   }
 
+  private async getAvailableSnapshotColumns(metadataDatabase: string): Promise<{
+    hasAuthor: boolean;
+    hasCommitMessage: boolean;
+    hasCommitExtraInfo: boolean;
+  }> {
+    try {
+      // Check available columns in ducklake_snapshot_changes
+      // We use the database name directly in the PRAGMA string
+      if (!this.connectionInfo) {
+        return {
+          hasAuthor: false,
+          hasCommitMessage: false,
+          hasCommitExtraInfo: false,
+        };
+      }
+      const tableInfoQuery = `PRAGMA table_info('${metadataDatabase}.main.ducklake_snapshot_changes')`;
+      const result = await this.connectionInfo.connection.run(tableInfoQuery);
+      const rows = await result.getRows();
+
+      const columnNames = rows
+        .map((row: any) => (Array.isArray(row) ? row[1] : row.name))
+        .map((name: string) => name.toLowerCase());
+
+      return {
+        hasAuthor: columnNames.includes('author'),
+        hasCommitMessage: columnNames.includes('commit_message'),
+        hasCommitExtraInfo: columnNames.includes('commit_extra_info'),
+      };
+    } catch (error) {
+      // eslint-disable-next-line no-console
+      console.warn(
+        'Failed to check table info for ducklake_snapshot_changes',
+        error,
+      );
+      return {
+        hasAuthor: false,
+        hasCommitMessage: false,
+        hasCommitExtraInfo: false,
+      };
+    }
+  }
+
   // eslint-disable-next-line class-methods-use-this
   async validateConfig(
     config: DuckLakeCatalogConfig,
@@ -852,35 +894,160 @@ export class DuckDBCatalogAdapter extends CatalogAdapter {
         throw new Error('No active connection');
       }
 
-      // Escape single quotes in table name for SQL safety
+      // Find the DuckLake metadata database
+      const databasesQuery = `
+        SELECT database_name
+        FROM duckdb_databases()
+        WHERE database_name LIKE '__ducklake_metadata_%'
+        LIMIT 1
+      `;
+
+      const databasesResult =
+        await this.connectionInfo.connection.run(databasesQuery);
+      const databaseRows = await databasesResult.getRows();
+
+      if (databaseRows.length === 0) {
+        throw new Error('DuckLake metadata database not found');
+      }
+
+      const metadataDatabase = Array.isArray(databaseRows[0])
+        ? databaseRows[0][0]
+        : (databaseRows[0] as any).database_name;
+
+      const quotedMetadataDatabase = `"${metadataDatabase}"`;
       const escapedTableName = tableName.replace(/'/g, "''");
 
+      // 1. Get Table ID
+      const tableIdQuery = `
+        SELECT table_id
+        FROM ${quotedMetadataDatabase}.main.ducklake_table
+        WHERE table_name = '${escapedTableName}'
+        ORDER BY begin_snapshot DESC
+        LIMIT 1
+      `;
+      const tableIdResult =
+        await this.connectionInfo.connection.run(tableIdQuery);
+      const tableIdRows = await tableIdResult.getRows();
+
+      if (tableIdRows.length === 0) {
+        throw new Error(`Table not found: ${tableName}`);
+      }
+
+      const tableId = Array.isArray(tableIdRows[0])
+        ? tableIdRows[0][0]
+        : (tableIdRows[0] as any).table_id;
+
+      const { hasAuthor, hasCommitMessage } =
+        await this.getAvailableSnapshotColumns(metadataDatabase);
+
+      const authorCol = hasAuthor ? 'sc.author' : 'NULL as author';
+      const messageCol = hasCommitMessage
+        ? 'sc.commit_message'
+        : 'NULL as commit_message';
+
+      // 2. Query Snapshots with Stats
       const query = `
-        SELECT
-          snapshot_id,
-          table_id,
-          timestamp_ms,
-          operation,
-          summary,
-          parent_snapshot_id
-        FROM ducklake_snapshot
-        WHERE table_id = (
-          SELECT table_id FROM ducklake_table WHERE table_name = '${escapedTableName}'
+        WITH table_snapshots AS (
+          SELECT t.begin_snapshot as snapshot_id
+          FROM ${quotedMetadataDatabase}.main.ducklake_table t
+          WHERE t.table_id = ${tableId}
+          UNION
+          SELECT t.end_snapshot as snapshot_id
+          FROM ${quotedMetadataDatabase}.main.ducklake_table t
+          WHERE t.table_id = ${tableId} AND t.end_snapshot IS NOT NULL
+          UNION
+          SELECT df.begin_snapshot as snapshot_id
+          FROM ${quotedMetadataDatabase}.main.ducklake_data_file df
+          WHERE df.table_id = ${tableId}
+          UNION
+          SELECT df.end_snapshot as snapshot_id
+          FROM ${quotedMetadataDatabase}.main.ducklake_data_file df
+          WHERE df.table_id = ${tableId} AND df.end_snapshot IS NOT NULL
         )
-        ORDER BY timestamp_ms DESC
+        SELECT
+          s.snapshot_id,
+          s.snapshot_time,
+          sc.changes_made,
+          ${authorCol},
+          ${messageCol},
+          (SELECT COUNT(*) FROM ${quotedMetadataDatabase}.main.ducklake_data_file WHERE table_id = ${tableId} AND begin_snapshot = s.snapshot_id) as added_files,
+          (SELECT COUNT(*) FROM ${quotedMetadataDatabase}.main.ducklake_data_file WHERE table_id = ${tableId} AND end_snapshot = s.snapshot_id) as deleted_files,
+          (SELECT SUM(record_count) FROM ${quotedMetadataDatabase}.main.ducklake_data_file WHERE table_id = ${tableId} AND begin_snapshot = s.snapshot_id) as added_rows
+        FROM ${quotedMetadataDatabase}.main.ducklake_snapshot s
+        INNER JOIN table_snapshots ts ON s.snapshot_id = ts.snapshot_id
+        LEFT JOIN ${quotedMetadataDatabase}.main.ducklake_snapshot_changes sc
+          ON s.snapshot_id = sc.snapshot_id
+        ORDER BY s.snapshot_id DESC
       `;
 
       const result = await this.connectionInfo.connection.run(query);
       const rows = await result.getRows();
 
-      return rows.map((row: any) => ({
-        id: row.snapshot_id,
-        tableId: row.table_id,
-        timestamp: new Date(row.timestamp_ms),
-        operation: row.operation,
-        summary: JSON.parse(row.summary || '{}'),
-        parentSnapshotId: row.parent_snapshot_id,
-      }));
+      return rows.map((row: any) => {
+        let snapshotId;
+        let snapshotTime;
+        let changesMade;
+        let author;
+        let commitMessage;
+        let addedFiles;
+        let deletedFiles;
+        let addedRows;
+
+        if (Array.isArray(row)) {
+          [
+            snapshotId,
+            snapshotTime,
+            changesMade,
+            author,
+            commitMessage,
+            addedFiles,
+            deletedFiles,
+            addedRows,
+          ] = row;
+        } else {
+          ({
+            snapshot_id: snapshotId,
+            snapshot_time: snapshotTime,
+            changes_made: changesMade,
+            author,
+            commit_message: commitMessage,
+            added_files: addedFiles,
+            deleted_files: deletedFiles,
+            added_rows: addedRows,
+          } = row);
+        }
+
+        // Infer operation type
+        let operation: any = 'append';
+        if (changesMade && changesMade.toLowerCase().includes('delete')) {
+          operation = 'delete';
+        } else if (
+          changesMade &&
+          changesMade.toLowerCase().includes('update')
+        ) {
+          operation = 'update';
+        } else if (deletedFiles > 0 && addedFiles > 0) {
+          operation = 'replace'; // Likely compaction or overwrite
+        }
+
+        return {
+          id: String(snapshotId),
+          tableId: String(tableId),
+          timestamp: new Date(snapshotTime),
+          operation,
+          author,
+          commitMessage,
+          summary: {
+            addedFiles: Number(addedFiles) || 0,
+            deletedFiles: Number(deletedFiles) || 0,
+            addedRows: Number(addedRows) || 0,
+            deletedRows: 0, // Not easily tracked without scanning delete files
+            totalFiles: 0, // Would require window function or separate query
+            totalRows: 0,
+            totalSize: 0,
+          },
+        };
+      });
     } catch (error) {
       // eslint-disable-next-line no-console
       console.error(`Failed to list snapshots for table ${tableName}:`, error);
@@ -923,6 +1090,7 @@ export class DuckDBCatalogAdapter extends CatalogAdapter {
       const quotedMetadataDatabase = `"${metadataDatabase}"`;
 
       // Build WHERE clause
+      // Build WHERE clause
       let whereClause = '';
       if (filter) {
         // Sanitize filter for simple SQL injection prevention
@@ -937,6 +1105,17 @@ export class DuckDBCatalogAdapter extends CatalogAdapter {
              OR sc.changes_made LIKE '%${safeFilter}%' ESCAPE '\\'
         `;
       }
+
+      const { hasAuthor, hasCommitMessage, hasCommitExtraInfo } =
+        await this.getAvailableSnapshotColumns(metadataDatabase);
+
+      const authorCol = hasAuthor ? 'sc.author' : 'NULL as author';
+      const messageCol = hasCommitMessage
+        ? 'sc.commit_message'
+        : 'NULL as commit_message';
+      const extraInfoCol = hasCommitExtraInfo
+        ? 'sc.commit_extra_info'
+        : 'NULL as commit_extra_info';
 
       // 1. Get Total Count
       const countQuery = `
@@ -963,7 +1142,10 @@ export class DuckDBCatalogAdapter extends CatalogAdapter {
           s.schema_version,
           s.next_catalog_id,
           s.next_file_id,
-          sc.changes_made
+          sc.changes_made,
+          ${authorCol},
+          ${messageCol},
+          ${extraInfoCol}
         FROM ${quotedMetadataDatabase}.main.ducklake_snapshot s
         LEFT JOIN ${quotedMetadataDatabase}.main.ducklake_snapshot_changes sc
           ON s.snapshot_id = sc.snapshot_id
@@ -985,6 +1167,9 @@ export class DuckDBCatalogAdapter extends CatalogAdapter {
             nextCatalogId: row[3],
             nextFileId: row[4],
             changesMade: row[5],
+            author: row[6],
+            commitMessage: row[7],
+            commitExtraInfo: row[8],
           };
         }
         return {
@@ -994,6 +1179,9 @@ export class DuckDBCatalogAdapter extends CatalogAdapter {
           nextCatalogId: row.next_catalog_id,
           nextFileId: row.next_file_id,
           changesMade: row.changes_made,
+          author: row.author,
+          commitMessage: row.commit_message,
+          commitExtraInfo: row.commit_extra_info,
         };
       });
 
@@ -1415,6 +1603,17 @@ export class DuckDBCatalogAdapter extends CatalogAdapter {
       }
 
       // 7. Get table-specific snapshots using CTE
+      const { hasAuthor, hasCommitMessage, hasCommitExtraInfo } =
+        await this.getAvailableSnapshotColumns(metadataDatabase);
+
+      const authorCol = hasAuthor ? 'sc.author' : 'NULL as author';
+      const messageCol = hasCommitMessage
+        ? 'sc.commit_message'
+        : 'NULL as commit_message';
+      const extraInfoCol = hasCommitExtraInfo
+        ? 'sc.commit_extra_info'
+        : 'NULL as commit_extra_info';
+
       const snapshotsQuery = `
         WITH table_snapshots AS (
           -- Snapshot when table was created
@@ -1463,7 +1662,10 @@ export class DuckDBCatalogAdapter extends CatalogAdapter {
           s.schema_version,
           s.next_catalog_id,
           s.next_file_id,
-          sc.changes_made
+          sc.changes_made,
+          ${authorCol},
+          ${messageCol},
+          ${extraInfoCol}
         FROM ${quotedMetadataDatabase}.main.ducklake_snapshot s
         INNER JOIN table_snapshots ts ON s.snapshot_id = ts.snapshot_id
         LEFT JOIN ${quotedMetadataDatabase}.main.ducklake_snapshot_changes sc
@@ -1484,6 +1686,9 @@ export class DuckDBCatalogAdapter extends CatalogAdapter {
             nextCatalogId: row[3],
             nextFileId: row[4],
             changesMade: row[5],
+            author: row[6],
+            commitMessage: row[7],
+            commitExtraInfo: row[8],
           };
         }
         return {
@@ -1493,6 +1698,9 @@ export class DuckDBCatalogAdapter extends CatalogAdapter {
           nextCatalogId: row.next_catalog_id,
           nextFileId: row.next_file_id,
           changesMade: row.changes_made,
+          author: row.author,
+          commitMessage: row.commit_message,
+          commitExtraInfo: row.commit_extra_info,
         };
       });
 
