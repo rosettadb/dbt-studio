@@ -25,6 +25,7 @@ import {
   BackblazeB2Config,
   RustfsConfig,
   CloudStorageConfig,
+  CloudProvider,
 } from '../../types/frontend';
 
 // Cloud storage service class
@@ -697,17 +698,14 @@ class CloudExplorerService {
     }
 
     // Validate account ID format
-    // Cloudflare Account IDs are typically 32 characters, hexadecimal (lowercase)
-    // But can vary in length, so we'll be more flexible
+    // Cloudflare Account IDs are exactly 32 characters, alphanumeric
     if (!config.accountId || config.accountId.trim().length === 0) {
       throw new Error('Cloudflare R2 Account ID is required');
     }
 
-    // Basic validation: should be alphanumeric and reasonable length (16-64 chars)
-    if (!/^[a-zA-Z0-9]{16,64}$/.test(config.accountId)) {
-      throw new Error(
-        'Invalid Cloudflare R2 Account ID format. Must be an alphanumeric string (16-64 characters).',
-      );
+    // Validation: must be exactly 32 alphanumeric characters
+    if (!/^[a-zA-Z0-9]{32}$/.test(config.accountId)) {
+      throw new Error('Account ID must be exactly 32 alphanumeric characters');
     }
 
     // Build R2 endpoint from account ID
@@ -1255,14 +1253,7 @@ class CloudExplorerService {
 
   // Generic methods for different cloud providers
   static async listBuckets(
-    provider:
-      | 'aws'
-      | 'azure'
-      | 'gcs'
-      | 'minio'
-      | 'cloudflare-r2'
-      | 'backblaze-b2'
-      | 'rustfs',
+    provider: CloudProvider,
     config: CloudStorageConfig,
   ): Promise<Bucket[]> {
     switch (provider) {
@@ -1286,14 +1277,7 @@ class CloudExplorerService {
   }
 
   static async listObjects(
-    provider:
-      | 'aws'
-      | 'azure'
-      | 'gcs'
-      | 'minio'
-      | 'cloudflare-r2'
-      | 'backblaze-b2'
-      | 'rustfs',
+    provider: CloudProvider,
     config: CloudStorageConfig,
     bucketName: string,
     continuationToken?: string,
@@ -1355,14 +1339,7 @@ class CloudExplorerService {
   }
 
   static async getDownloadUrl(
-    provider:
-      | 'aws'
-      | 'azure'
-      | 'gcs'
-      | 'minio'
-      | 'cloudflare-r2'
-      | 'backblaze-b2'
-      | 'rustfs',
+    provider: CloudProvider,
     config: CloudStorageConfig,
     bucketName: string,
     objectName: string,
@@ -1416,14 +1393,7 @@ class CloudExplorerService {
   }
 
   static async testConnection(
-    provider:
-      | 'aws'
-      | 'azure'
-      | 'gcs'
-      | 'minio'
-      | 'cloudflare-r2'
-      | 'backblaze-b2'
-      | 'rustfs',
+    provider: CloudProvider,
     config: CloudStorageConfig,
   ): Promise<boolean> {
     switch (provider) {

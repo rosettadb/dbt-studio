@@ -1072,7 +1072,7 @@ or "Object Read & Write" permissions...
 **Alternative Test**:
 If you continue to have issues, verify your token works with the AWS CLI:
 ```bash
-aws s3 ls --endpoint-url https://1317e314d442cf798184588f7ba4866a.r2.cloudflarestorage.com \
+aws s3 ls --endpoint-url https://<R2_ACCOUNT_ID>.r2.cloudflarestorage.com \
   --profile r2
 ```
 

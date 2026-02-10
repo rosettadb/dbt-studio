@@ -17,6 +17,20 @@ import type {
  */
 
 /**
+ * Escape single quotes in SQL strings to prevent SQL injection
+ * Replaces ' with '' (SQL standard for escaping single quotes)
+ */
+function escapeSqlString(value: string | undefined): string {
+  if (value === undefined || value === null) {
+    return '';
+  }
+  if (typeof value !== 'string') {
+    return String(value);
+  }
+  return value.replace(/'/g, "''");
+}
+
+/**
  * Generate GCS Bearer token from service account credentials
  */
 export async function generateGCSBearerToken(
@@ -120,9 +134,9 @@ export async function buildCloudSecretQuery(
         CREATE OR REPLACE SECRET s3_secret (
           TYPE s3,
           PROVIDER config,
-          KEY_ID '${awsConfig.accessKeyId}',
-          SECRET '${awsConfig.secretAccessKey}',
-          REGION '${awsConfig.region}'
+          KEY_ID '${escapeSqlString(awsConfig.accessKeyId)}',
+          SECRET '${escapeSqlString(awsConfig.secretAccessKey)}',
+          REGION '${escapeSqlString(awsConfig.region)}'
         );
       `;
     }
@@ -142,10 +156,10 @@ export async function buildCloudSecretQuery(
         CREATE OR REPLACE SECRET minio_secret (
           TYPE s3,
           PROVIDER config,
-          KEY_ID '${minioConfig.accessKeyId}',
-          SECRET '${minioConfig.secretAccessKey}',
-          REGION '${minioConfig.region || 'us-east-1'}',
-          ENDPOINT '${cleanEndpoint}',
+          KEY_ID '${escapeSqlString(minioConfig.accessKeyId)}',
+          SECRET '${escapeSqlString(minioConfig.secretAccessKey)}',
+          REGION '${escapeSqlString(minioConfig.region || 'us-east-1')}',
+          ENDPOINT '${escapeSqlString(cleanEndpoint)}',
           USE_SSL ${minioConfig.useSSL ? 'true' : 'false'},
           URL_STYLE 'path'
         );
@@ -158,9 +172,9 @@ export async function buildCloudSecretQuery(
         ${dropSecretsQuery}
         CREATE OR REPLACE SECRET r2_secret (
           TYPE R2,
-          KEY_ID '${r2Config.accessKeyId}',
-          SECRET '${r2Config.secretAccessKey}',
-          ACCOUNT_ID '${r2Config.accountId}'
+          KEY_ID '${escapeSqlString(r2Config.accessKeyId)}',
+          SECRET '${escapeSqlString(r2Config.secretAccessKey)}',
+          ACCOUNT_ID '${escapeSqlString(r2Config.accountId)}'
         );
       `;
     }
@@ -177,10 +191,10 @@ export async function buildCloudSecretQuery(
         CREATE OR REPLACE SECRET b2_secret (
           TYPE s3,
           PROVIDER config,
-          KEY_ID '${b2Config.applicationKeyId}',
-          SECRET '${b2Config.applicationKey}',
-          REGION '${region}',
-          ENDPOINT '${endpoint}',
+          KEY_ID '${escapeSqlString(b2Config.applicationKeyId)}',
+          SECRET '${escapeSqlString(b2Config.applicationKey)}',
+          REGION '${escapeSqlString(region)}',
+          ENDPOINT '${escapeSqlString(endpoint)}',
           USE_SSL true
         );
       `;
@@ -198,10 +212,10 @@ export async function buildCloudSecretQuery(
         CREATE OR REPLACE SECRET rustfs_secret (
           TYPE s3,
           PROVIDER config,
-          KEY_ID '${rustfsConfig.accessKeyId}',
-          SECRET '${rustfsConfig.secretAccessKey}',
-          REGION '${rustfsConfig.region || 'us-east-1'}',
-          ENDPOINT '${cleanEndpoint}',
+          KEY_ID '${escapeSqlString(rustfsConfig.accessKeyId)}',
+          SECRET '${escapeSqlString(rustfsConfig.secretAccessKey)}',
+          REGION '${escapeSqlString(rustfsConfig.region || 'us-east-1')}',
+          ENDPOINT '${escapeSqlString(cleanEndpoint)}',
           USE_SSL ${rustfsConfig.useSSL ? 'true' : 'false'},
           URL_STYLE 'path'
         );
@@ -221,7 +235,7 @@ export async function buildCloudSecretQuery(
             ${dropSecretsQuery}
             CREATE OR REPLACE SECRET gcs_secret (
               TYPE http,
-              EXTRA_HTTP_HEADERS MAP {'Authorization': 'Bearer ${token}'}
+              EXTRA_HTTP_HEADERS MAP {'Authorization': 'Bearer ${escapeSqlString(token)}'}
             );
           `;
         } catch (error) {
@@ -241,13 +255,13 @@ export async function buildCloudSecretQuery(
       // Check if we have account name and key to build connection string
       if (azureConfig.accountName && azureConfig.accountKey) {
         // Build proper Azure connection string format
-        const connectionString = `DefaultEndpointsProtocol=https;AccountName=${azureConfig.accountName};AccountKey=${azureConfig.accountKey};EndpointSuffix=core.windows.net`;
+        const connectionString = `DefaultEndpointsProtocol=https;AccountName=${escapeSqlString(azureConfig.accountName)};AccountKey=${escapeSqlString(azureConfig.accountKey)};EndpointSuffix=core.windows.net`;
 
         return `
           ${dropSecretsQuery}
           CREATE OR REPLACE SECRET azure_secret (
             TYPE azure,
-            CONNECTION_STRING '${connectionString}'
+            CONNECTION_STRING '${escapeSqlString(connectionString)}'
           );
         `;
       }
@@ -258,7 +272,7 @@ export async function buildCloudSecretQuery(
           ${dropSecretsQuery}
           CREATE OR REPLACE SECRET azure_secret (
             TYPE azure,
-            CONNECTION_STRING '${azureConfig.connectionString}'
+            CONNECTION_STRING '${escapeSqlString(azureConfig.connectionString)}'
           );
         `;
       }
@@ -270,7 +284,7 @@ export async function buildCloudSecretQuery(
           CREATE OR REPLACE SECRET azure_secret (
             TYPE azure,
             PROVIDER config,
-            ACCOUNT_NAME '${azureConfig.accountName}'
+            ACCOUNT_NAME '${escapeSqlString(azureConfig.accountName)}'
           );
         `;
       }
