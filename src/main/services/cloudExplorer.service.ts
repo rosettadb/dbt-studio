@@ -528,17 +528,6 @@ class CloudExplorerService {
     const protocol = config.useSSL ? 'https' : 'http';
     const endpoint = `${protocol}://${cleanEndpoint}`;
 
-    // eslint-disable-next-line no-console
-    console.log('[MinIO Backend] Creating MinIO client with config:', {
-      originalEndpoint: config.endpoint,
-      cleanEndpoint,
-      finalEndpoint: endpoint,
-      useSSL: config.useSSL,
-      region: config.region || 'us-east-1',
-      accessKeyId: config.accessKeyId,
-      hasSecretKey: !!config.secretAccessKey,
-    });
-
     return new S3Client({
       endpoint,
       region: config.region || 'us-east-1',
@@ -725,15 +714,6 @@ class CloudExplorerService {
     const jurisdiction = config.jurisdiction === 'eu' ? '.eu' : '';
     const endpoint = `https://${config.accountId}.r2.cloudflarestorage.com${jurisdiction}`;
 
-    // eslint-disable-next-line no-console
-    console.log('[Cloudflare R2 Backend] Creating R2 client with config:', {
-      accountId: config.accountId,
-      jurisdiction: config.jurisdiction,
-      endpoint,
-      accessKeyId: config.accessKeyId,
-      hasSecretKey: !!config.secretAccessKey,
-    });
-
     return new S3Client({
       endpoint,
       region: 'auto', // R2 uses 'auto' region
@@ -841,19 +821,6 @@ class CloudExplorerService {
         errorName === 'AccessDenied' ||
         (error as any).Code === 'AccessDenied'
       ) {
-        // eslint-disable-next-line no-console
-        console.log(
-          'ListBuckets denied. This might be expected with "Object Read & Write" permissions.',
-        );
-        // eslint-disable-next-line no-console
-        console.log(
-          'Connection credentials appear valid (endpoint resolved, authentication accepted).',
-        );
-        // eslint-disable-next-line no-console
-        console.log(
-          'You may need "Admin Read & Write" permissions to list all buckets.',
-        );
-
         throw new Error(
           'R2 API token authenticated successfully, but lacks permission to list buckets. ' +
             'This token has "Object Read & Write" permissions but needs "Admin Read & Write" to list all buckets. ' +
@@ -927,14 +894,6 @@ class CloudExplorerService {
     // or 's3.eu-central-003.backblazeb2.com' -> 'eu-central-003'
     const regionMatch = endpoint.match(/s3\.([^.]+-.+-\d+)\./);
     const region = regionMatch ? regionMatch[1] : 'us-west-004';
-
-    // eslint-disable-next-line no-console
-    console.log('[Backblaze B2 Backend] Creating B2 client with config:', {
-      endpoint,
-      region,
-      applicationKeyId: config.applicationKeyId,
-      hasApplicationKey: !!config.applicationKey,
-    });
 
     return new S3Client({
       region,
@@ -1131,17 +1090,6 @@ class CloudExplorerService {
 
     const protocol = config.useSSL ? 'https' : 'http';
     const endpoint = `${protocol}://${cleanEndpoint}`;
-
-    // eslint-disable-next-line no-console
-    console.log('[rustfs Backend] Creating rustfs client with config:', {
-      originalEndpoint: config.endpoint,
-      cleanEndpoint,
-      finalEndpoint: endpoint,
-      useSSL: config.useSSL,
-      region: config.region || 'us-east-1',
-      accessKeyId: config.accessKeyId,
-      hasSecretKey: !!config.secretAccessKey,
-    });
 
     return new S3Client({
       endpoint,

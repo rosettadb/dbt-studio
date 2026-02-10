@@ -137,14 +137,6 @@ export async function buildCloudSecretQuery(
       // For DuckDB S3 secrets, the ENDPOINT should NOT include the protocol
       // DuckDB will add it based on USE_SSL setting
 
-      // eslint-disable-next-line no-console
-      console.log('[DuckDB MinIO Secret] Building secret with:', {
-        originalEndpoint: minioConfig.endpoint,
-        cleanEndpoint,
-        useSSL: minioConfig.useSSL,
-        region: minioConfig.region || 'us-east-1',
-      });
-
       return `
         ${dropSecretsQuery}
         CREATE OR REPLACE SECRET minio_secret (
@@ -161,13 +153,6 @@ export async function buildCloudSecretQuery(
     }
     case 'cloudflare-r2': {
       const r2Config = config as CloudflareR2Config;
-
-      // eslint-disable-next-line no-console
-      console.log('[DuckDB R2 Secret] Building secret with:', {
-        accountId: r2Config.accountId,
-        jurisdiction: r2Config.jurisdiction,
-        accessKeyId: r2Config.accessKeyId,
-      });
 
       return `
         ${dropSecretsQuery}
@@ -186,13 +171,6 @@ export async function buildCloudSecretQuery(
       // Extract region from endpoint (e.g., 's3.us-west-004.backblazeb2.com' -> 'us-west-004')
       const regionMatch = endpoint.match(/s3\.([^.]+[-][^.]+[-]\d+)\./);
       const region = regionMatch ? regionMatch[1] : 'us-west-004';
-
-      // eslint-disable-next-line no-console
-      console.log('[DuckDB B2 Secret] Building secret with:', {
-        endpoint,
-        region,
-        applicationKeyId: b2Config.applicationKeyId,
-      });
 
       return `
         ${dropSecretsQuery}
@@ -214,14 +192,6 @@ export async function buildCloudSecretQuery(
       const cleanEndpoint = rustfsConfig.endpoint
         .replace(/^https?:\/\//, '')
         .replace(/\/$/, '');
-
-      // eslint-disable-next-line no-console
-      console.log('[DuckDB rustfs Secret] Building secret with:', {
-        originalEndpoint: rustfsConfig.endpoint,
-        cleanEndpoint,
-        useSSL: rustfsConfig.useSSL,
-        region: rustfsConfig.region || 'us-east-1',
-      });
 
       return `
         ${dropSecretsQuery}

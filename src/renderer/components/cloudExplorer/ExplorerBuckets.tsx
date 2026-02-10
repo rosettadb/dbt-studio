@@ -169,19 +169,6 @@ export const ExplorerBuckets: React.FC<ExplorerBucketsProps> = ({
 
   const buckets = bucketsQuery.data || [];
 
-  // Log the buckets data
-  useEffect(() => {
-    if (buckets.length > 0) {
-      // eslint-disable-next-line no-console
-      console.log('[Frontend] Buckets received:', buckets);
-      // eslint-disable-next-line no-console
-      console.log(
-        '[Frontend] First bucket details:',
-        JSON.stringify(buckets[0], null, 2),
-      );
-    }
-  }, [buckets]);
-
   // Filter, search, and sort buckets
   const filteredAndSortedBuckets = useMemo(() => {
     let result = [...buckets];

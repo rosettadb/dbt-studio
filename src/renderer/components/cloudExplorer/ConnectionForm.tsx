@@ -330,35 +330,6 @@ export const ConnectionForm: React.FC<ConnectionFormProps> = ({
       const rawConfig = createConfigFromFormData();
       const config = rawConfig;
 
-      // eslint-disable-next-line no-console
-      console.log('[Cloud Frontend] Testing connection with form data:', {
-        provider: formData.provider,
-        name: formData.name,
-        endpoint: formData.endpoint,
-        useSSL: formData.useSSL,
-        region: formData.region,
-        accessKeyId: formData.accessKeyId,
-        accountId: formData.accountId,
-        hasSecretKey: !!formData.secretAccessKey,
-      });
-
-      // eslint-disable-next-line no-console
-      console.log('[Cloud Frontend] Created config object:', {
-        ...config,
-        secretAccessKey:
-          'secretAccessKey' in config && config.secretAccessKey
-            ? '***REDACTED***'
-            : undefined,
-        accountKey:
-          'accountKey' in config && config.accountKey
-            ? '***REDACTED***'
-            : undefined,
-        credentials:
-          'credentials' in config && config.credentials
-            ? '***REDACTED***'
-            : undefined,
-      });
-
       // Validate config before sending
       if (!config) {
         throw new Error('Failed to create configuration object');
