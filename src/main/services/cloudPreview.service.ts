@@ -44,10 +44,10 @@ class CloudPreviewService {
 
       // Configure cloud access secrets
       const secretQuery = await buildCloudSecretQuery(provider, cloudConfig);
-      
+
       // eslint-disable-next-line no-console
       console.log('[CloudPreview] Executing secret query:', secretQuery);
-      
+
       await connection.run(secretQuery);
 
       // Execute preview query

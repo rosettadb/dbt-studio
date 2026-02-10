@@ -70,6 +70,8 @@ export interface Bucket {
   name: string;
   created?: Date;
   location?: string;
+  objectCount?: number;
+  size?: number;
 }
 
 export interface StorageObject {

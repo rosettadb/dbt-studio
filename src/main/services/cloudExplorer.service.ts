@@ -707,11 +707,17 @@ class CloudExplorerService {
       throw new Error('Cloudflare R2 Account ID is required');
     }
 
-    // Validate account ID format (32-character alphanumeric string)
-    // Cloudflare Account IDs are typically 32 characters, alphanumeric (case-insensitive)
-    if (!/^[a-zA-Z0-9]{32}$/.test(config.accountId)) {
+    // Validate account ID format
+    // Cloudflare Account IDs are typically 32 characters, hexadecimal (lowercase)
+    // But can vary in length, so we'll be more flexible
+    if (!config.accountId || config.accountId.trim().length === 0) {
+      throw new Error('Cloudflare R2 Account ID is required');
+    }
+
+    // Basic validation: should be alphanumeric and reasonable length (16-64 chars)
+    if (!/^[a-zA-Z0-9]{16,64}$/.test(config.accountId)) {
       throw new Error(
-        'Invalid Cloudflare R2 Account ID format. Must be a 32-character alphanumeric string.',
+        'Invalid Cloudflare R2 Account ID format. Must be an alphanumeric string (16-64 characters).',
       );
     }
 

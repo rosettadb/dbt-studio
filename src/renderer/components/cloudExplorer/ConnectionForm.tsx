@@ -151,9 +151,9 @@ export const ConnectionForm: React.FC<ConnectionFormProps> = ({
         projectId: (config as GCSConfig).projectId || '',
         credentials: (config as GCSConfig).credentials || '',
         region:
-          (config as S3Config).region || 
-          (config as MinIOConfig).region || 
-          (config as RustfsConfig).region || 
+          (config as S3Config).region ||
+          (config as MinIOConfig).region ||
+          (config as RustfsConfig).region ||
           '',
         accessKeyId:
           (config as S3Config).accessKeyId ||
@@ -171,12 +171,15 @@ export const ConnectionForm: React.FC<ConnectionFormProps> = ({
         accountName: (config as AzureConfig).accountName || '',
         accountKey: (config as AzureConfig).accountKey || '',
         connectionString: (config as AzureConfig).connectionString || '',
-        endpoint: 
-          (config as MinIOConfig).endpoint || 
-          (config as BackblazeB2Config).endpoint || 
-          (config as RustfsConfig).endpoint || 
+        endpoint:
+          (config as MinIOConfig).endpoint ||
+          (config as BackblazeB2Config).endpoint ||
+          (config as RustfsConfig).endpoint ||
           '',
-        useSSL: (config as MinIOConfig).useSSL || (config as RustfsConfig).useSSL || false,
+        useSSL:
+          (config as MinIOConfig).useSSL ||
+          (config as RustfsConfig).useSSL ||
+          false,
         accountId: (config as CloudflareR2Config).accountId || '',
         jurisdiction: (config as CloudflareR2Config).jurisdiction || '',
         applicationKeyId: (config as BackblazeB2Config).applicationKeyId || '',
@@ -248,8 +251,7 @@ export const ConnectionForm: React.FC<ConnectionFormProps> = ({
         );
       case 'backblaze-b2':
         return (
-          !!formData.applicationKeyId.trim() &&
-          !!formData.applicationKey.trim()
+          !!formData.applicationKeyId.trim() && !!formData.applicationKey.trim()
         );
       case 'rustfs':
         return (
@@ -300,7 +302,8 @@ export const ConnectionForm: React.FC<ConnectionFormProps> = ({
         return {
           applicationKeyId: formData.applicationKeyId.trim(),
           applicationKey: formData.applicationKey.trim(),
-          endpoint: formData.endpoint.trim() || 's3.us-west-004.backblazeb2.com',
+          endpoint:
+            formData.endpoint.trim() || 's3.us-west-004.backblazeb2.com',
         } as BackblazeB2Config;
       case 'rustfs':
         return {
@@ -647,7 +650,7 @@ export const ConnectionForm: React.FC<ConnectionFormProps> = ({
               value={formData.accountId}
               onChange={(e) => handleChange('accountId', e.target.value)}
               required
-              helperText="Your Cloudflare Account ID (32-character alphanumeric string)"
+              helperText="Your Cloudflare Account ID (alphanumeric string, typically 32 characters)"
             />
             <TextField
               label="Access Key ID"
@@ -1226,9 +1229,7 @@ export const ConnectionForm: React.FC<ConnectionFormProps> = ({
                 <Grid item xs={12} sm={3}>
                   <Card
                     variant={
-                      formData.provider === 'rustfs'
-                        ? 'elevation'
-                        : 'outlined'
+                      formData.provider === 'rustfs' ? 'elevation' : 'outlined'
                     }
                     sx={{
                       cursor: 'pointer',

@@ -182,9 +182,9 @@ export async function buildCloudSecretQuery(
     case 'backblaze-b2': {
       const b2Config = config as BackblazeB2Config;
       const endpoint = b2Config.endpoint || 's3.us-west-004.backblazeb2.com';
-      
+
       // Extract region from endpoint (e.g., 's3.us-west-004.backblazeb2.com' -> 'us-west-004')
-      const regionMatch = endpoint.match(/s3\.([^.]+\-[^.]+\-\d+)\./);
+      const regionMatch = endpoint.match(/s3\.([^.]+[-][^.]+[-]\d+)\./);
       const region = regionMatch ? regionMatch[1] : 'us-west-004';
 
       // eslint-disable-next-line no-console

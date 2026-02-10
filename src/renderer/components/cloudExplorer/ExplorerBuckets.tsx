@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Box,
@@ -12,6 +12,16 @@ import {
   CircularProgress,
   Alert,
   Skeleton,
+  Table,
+  TableBody,
+  TableCell,
+  TableContainer,
+  TableHead,
+  TableRow,
+  Paper,
+  IconButton,
+  InputBase,
+  TableSortLabel,
 } from '@mui/material';
 import {
   FolderOpen,
@@ -19,6 +29,8 @@ import {
   Refresh,
   OpenInNew,
   Archive,
+  Search,
+  Clear,
 } from '@mui/icons-material';
 import {
   useConnection,
@@ -30,6 +42,8 @@ import type {
 } from '../../../types/frontend';
 import { cloudStorageImages } from '../../../../assets/connectionIcons';
 import useSecureStorage from '../../hooks/useSecureStorage';
+import { ViewToggle } from './ViewToggle';
+import bucketIcon from '../../../../assets/icons/bucket-blue.png';
 
 interface ExplorerBucketsProps {
   connectionId: string;
@@ -41,6 +55,28 @@ export const ExplorerBuckets: React.FC<ExplorerBucketsProps> = ({
   const navigate = useNavigate();
   const connectionQuery = useConnection(connectionId);
   const connection = connectionQuery.data;
+
+  // View state management
+  const [view, setView] = useState<'list' | 'card'>('list');
+
+  // Search, filter, and sort state
+  const [searchTerm, setSearchTerm] = useState('');
+  const [sortBy, setSortBy] = useState<'name' | 'size' | 'created'>('name');
+  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
+
+  // Load view preference from localStorage
+  useEffect(() => {
+    const savedView = localStorage.getItem('cloudExplorer.bucketsView');
+    if (savedView === 'list' || savedView === 'card') {
+      setView(savedView);
+    }
+  }, []);
+
+  // Save view preference to localStorage
+  const handleViewChange = (newView: 'list' | 'card') => {
+    setView(newView);
+    localStorage.setItem('cloudExplorer.bucketsView', newView);
+  };
 
   // Secure storage logic
   const {
@@ -133,6 +169,58 @@ export const ExplorerBuckets: React.FC<ExplorerBucketsProps> = ({
 
   const buckets = bucketsQuery.data || [];
 
+  // Log the buckets data
+  useEffect(() => {
+    if (buckets.length > 0) {
+      // eslint-disable-next-line no-console
+      console.log('[Frontend] Buckets received:', buckets);
+      // eslint-disable-next-line no-console
+      console.log(
+        '[Frontend] First bucket details:',
+        JSON.stringify(buckets[0], null, 2),
+      );
+    }
+  }, [buckets]);
+
+  // Filter, search, and sort buckets
+  const filteredAndSortedBuckets = useMemo(() => {
+    let result = [...buckets];
+
+    // Apply search filter
+    if (searchTerm) {
+      result = result.filter((bucket) =>
+        bucket.name.toLowerCase().includes(searchTerm.toLowerCase()),
+      );
+    }
+
+    // Apply sorting
+    result.sort((a, b) => {
+      let comparison = 0;
+
+      switch (sortBy) {
+        case 'name':
+          comparison = a.name.localeCompare(b.name);
+          break;
+        case 'size':
+          // Size not available, keep original order
+          comparison = 0;
+          break;
+        case 'created': {
+          const dateA = a.created ? new Date(a.created).getTime() : 0;
+          const dateB = b.created ? new Date(b.created).getTime() : 0;
+          comparison = dateA - dateB;
+          break;
+        }
+        default:
+          break;
+      }
+
+      return sortOrder === 'asc' ? comparison : -comparison;
+    });
+
+    return result;
+  }, [buckets, searchTerm, sortBy, sortOrder]);
+
   const getProviderIcon = (provider: CloudProvider) => {
     const iconSrc = cloudStorageImages[provider];
     if (iconSrc) {
@@ -158,6 +246,145 @@ export const ExplorerBuckets: React.FC<ExplorerBucketsProps> = ({
   const handleBackToConnections = () => {
     navigate('/app/cloud-explorer/connections');
   };
+
+  const handleSort = (column: 'name' | 'size' | 'created') => {
+    if (sortBy === column) {
+      setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc');
+    } else {
+      setSortBy(column);
+      setSortOrder('asc');
+    }
+  };
+
+  const renderListView = () => (
+    <TableContainer component={Paper}>
+      <Table>
+        <TableHead>
+          <TableRow>
+            <TableCell>
+              <TableSortLabel
+                active={sortBy === 'name'}
+                direction={sortBy === 'name' ? sortOrder : 'asc'}
+                onClick={() => handleSort('name')}
+              >
+                Name
+              </TableSortLabel>
+            </TableCell>
+            <TableCell>Objects</TableCell>
+            <TableCell>
+              <TableSortLabel
+                active={sortBy === 'size'}
+                direction={sortBy === 'size' ? sortOrder : 'asc'}
+                onClick={() => handleSort('size')}
+              >
+                Size
+              </TableSortLabel>
+            </TableCell>
+            <TableCell>Access</TableCell>
+            <TableCell>
+              <TableSortLabel
+                active={sortBy === 'created'}
+                direction={sortBy === 'created' ? sortOrder : 'asc'}
+                onClick={() => handleSort('created')}
+              >
+                Created
+              </TableSortLabel>
+            </TableCell>
+          </TableRow>
+        </TableHead>
+        <TableBody>
+          {filteredAndSortedBuckets.map((bucket) => (
+            <TableRow
+              key={bucket.name}
+              hover
+              sx={{ cursor: 'pointer' }}
+              onClick={() => handleBucketClick(bucket.name)}
+            >
+              <TableCell>
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                  <img
+                    src={bucketIcon}
+                    alt="bucket"
+                    style={{ width: 24, height: 24, objectFit: 'contain' }}
+                  />
+                  <Typography variant="body2" sx={{ fontWeight: 500 }}>
+                    {bucket.name}
+                  </Typography>
+                </Box>
+              </TableCell>
+              <TableCell>
+                <Typography variant="body2" color="text.secondary">
+                  {bucket.objectCount !== undefined ? bucket.objectCount : '-'}
+                </Typography>
+              </TableCell>
+              <TableCell>
+                <Typography variant="body2" color="text.secondary">
+                  {bucket.size !== undefined
+                    ? `${(bucket.size / (1024 * 1024)).toFixed(2)} MiB`
+                    : '-'}
+                </Typography>
+              </TableCell>
+              <TableCell>
+                <Typography variant="body2" color="text.secondary">
+                  R/W
+                </Typography>
+              </TableCell>
+              <TableCell>
+                <Typography variant="body2" color="text.secondary">
+                  {bucket.created
+                    ? new Date(bucket.created).toLocaleDateString()
+                    : '-'}
+                </Typography>
+              </TableCell>
+            </TableRow>
+          ))}
+        </TableBody>
+      </Table>
+    </TableContainer>
+  );
+
+  const renderCardView = () => (
+    <Grid container spacing={2}>
+      {filteredAndSortedBuckets.map((bucket) => (
+        <Grid item xs={12} md={6} lg={4} key={bucket.name}>
+          <Card sx={{ boxShadow: 3, '&:hover': { boxShadow: 6 } }}>
+            <CardHeader
+              avatar={<Archive sx={{ color: 'text.secondary' }} />}
+              title={bucket.name}
+              titleTypographyProps={{
+                variant: 'h6',
+                noWrap: true,
+                title: bucket.name,
+              }}
+            />
+            <CardContent>
+              {bucket.location && (
+                <Typography variant="body2" color="text.secondary">
+                  Location: {bucket.location}
+                </Typography>
+              )}
+              {bucket.created && (
+                <Typography variant="body2" color="text.secondary">
+                  Created: {new Date(bucket.created).toLocaleDateString()}
+                </Typography>
+              )}
+            </CardContent>
+            <CardActions>
+              <Button
+                variant="contained"
+                size="small"
+                startIcon={<OpenInNew />}
+                onClick={() => handleBucketClick(bucket.name)}
+                fullWidth
+              >
+                Browse
+              </Button>
+            </CardActions>
+          </Card>
+        </Grid>
+      ))}
+    </Grid>
+  );
 
   if (connectionQuery.isLoading) {
     return (
@@ -190,72 +417,133 @@ export const ExplorerBuckets: React.FC<ExplorerBucketsProps> = ({
         sx={{
           display: 'flex',
           alignItems: 'center',
-          gap: 2,
-          mb: 3,
+          justifyContent: 'space-between',
+          mb: 2,
           borderBottom: 1,
           borderColor: 'divider',
-          pb: 2,
-        }}
-      >
-        {getProviderIcon(connection.provider)}
-        <Typography variant="h4" component="h1">
-          {connection.name}
-        </Typography>
-      </Box>
-
-      <Box
-        sx={{
-          display: 'flex',
-          justifyContent: 'space-between',
-          alignItems: 'center',
-          mb: 3,
+          pb: 1.5,
         }}
       >
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-          <Button
-            variant="outlined"
-            startIcon={<ArrowBack />}
+          <IconButton
             onClick={handleBackToConnections}
+            sx={{ color: 'text.secondary' }}
           >
-            Back to Connections
-          </Button>
+            <ArrowBack />
+          </IconButton>
+          {getProviderIcon(connection.provider)}
+          <Typography variant="h4" component="h1">
+            {connection.name}
+          </Typography>
         </Box>
-        <Button
-          variant="outlined"
-          startIcon={<Refresh />}
-          onClick={() => bucketsQuery.refetch()}
-          disabled={bucketsQuery.isFetching}
-        >
-          Refresh
-        </Button>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+          <ViewToggle view={view} onViewChange={handleViewChange} />
+          <IconButton
+            onClick={() => bucketsQuery.refetch()}
+            disabled={bucketsQuery.isFetching}
+            sx={{ color: 'text.secondary' }}
+          >
+            <Refresh />
+          </IconButton>
+        </Box>
       </Box>
 
-      {/* Section Header */}
-      <Box sx={{ mb: 3 }}>
-        <Typography variant="body2" color="text.secondary">
-          Select a bucket to browse its contents
+      {/* Search and Filter Bar */}
+      <Box
+        sx={{
+          display: 'flex',
+          gap: 2,
+          mb: 2,
+          flexWrap: 'wrap',
+          alignItems: 'center',
+        }}
+      >
+        <Box
+          sx={{
+            display: 'flex',
+            alignItems: 'center',
+            flex: 1,
+            minWidth: 250,
+          }}
+        >
+          <InputBase
+            placeholder="Search buckets..."
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            startAdornment={
+              <Search sx={{ color: 'text.secondary', mr: 0.5, fontSize: 18 }} />
+            }
+            endAdornment={
+              searchTerm ? (
+                <IconButton
+                  size="small"
+                  onClick={() => setSearchTerm('')}
+                  sx={{ p: 0.5 }}
+                >
+                  <Clear fontSize="small" />
+                </IconButton>
+              ) : null
+            }
+            sx={{
+              flex: 1,
+              border: 1,
+              borderColor: 'divider',
+              borderRadius: 1,
+              px: 1,
+              py: 0.25,
+              fontSize: '0.875rem',
+              height: 32,
+            }}
+          />
+        </Box>
+
+        <Typography
+          variant="body2"
+          color="text.secondary"
+          sx={{ fontSize: '0.75rem' }}
+        >
+          {filteredAndSortedBuckets.length} of {buckets.length} bucket(s)
         </Typography>
       </Box>
 
       {bucketsQuery.isLoading && (
-        <Grid container spacing={2}>
-          {Array.from({ length: 6 }).map((_, i) => (
-            <Grid item xs={12} md={6} lg={4} key={i}>
-              <Card sx={{ boxShadow: 3 }}>
-                <CardHeader>
-                  <Skeleton variant="text" width="75%" />
-                </CardHeader>
-                <CardContent>
-                  <Skeleton variant="text" width="50%" />
-                  <Skeleton variant="text" width="60%" />
-                </CardContent>
-                <CardActions>
-                  <Skeleton variant="rectangular" width={80} height={36} />
-                </CardActions>
-              </Card>
-            </Grid>
-          ))}
-        </Grid>
+        <TableContainer component={Paper}>
+          <Table>
+            <TableHead>
+              <TableRow>
+                <TableCell>Name</TableCell>
+                <TableCell>Objects</TableCell>
+                <TableCell>Size</TableCell>
+                <TableCell>Access</TableCell>
+                <TableCell>Created</TableCell>
+              </TableRow>
+            </TableHead>
+            <TableBody>
+              {Array.from({ length: 5 }).map((_, i) => (
+                <TableRow key={i}>
+                  <TableCell>
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                      <Skeleton variant="circular" width={24} height={24} />
+                      <Skeleton variant="text" width={150} />
+                    </Box>
+                  </TableCell>
+                  <TableCell>
+                    <Skeleton variant="text" width={40} />
+                  </TableCell>
+                  <TableCell>
+                    <Skeleton variant="text" width={60} />
+                  </TableCell>
+                  <TableCell>
+                    <Skeleton variant="text" width={40} />
+                  </TableCell>
+                  <TableCell>
+                    <Skeleton variant="text" width={100} />
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </TableContainer>
       )}
       {bucketsQuery.isError && (
         <Alert severity="error">
@@ -268,6 +556,17 @@ export const ExplorerBuckets: React.FC<ExplorerBucketsProps> = ({
         buckets.length === 0 && (
           <Box sx={{ textAlign: 'center', p: 4 }}>
             <Typography color="text.secondary">No buckets found</Typography>
+          </Box>
+        )}
+
+      {!bucketsQuery.isLoading &&
+        !bucketsQuery.isError &&
+        buckets.length > 0 &&
+        filteredAndSortedBuckets.length === 0 && (
+          <Box sx={{ textAlign: 'center', p: 4 }}>
+            <Typography color="text.secondary">
+              No buckets match your search or filter criteria
+            </Typography>
           </Box>
         )}
 
@@ -293,48 +592,8 @@ export const ExplorerBuckets: React.FC<ExplorerBucketsProps> = ({
       )}
       {!bucketsQuery.isLoading &&
         !bucketsQuery.isError &&
-        buckets.length > 0 && (
-          <Grid container spacing={2}>
-            {buckets.map((bucket) => (
-              <Grid item xs={12} md={6} lg={4} key={bucket.name}>
-                <Card sx={{ boxShadow: 3, '&:hover': { boxShadow: 6 } }}>
-                  <CardHeader
-                    avatar={<Archive sx={{ color: 'text.secondary' }} />}
-                    title={bucket.name}
-                    titleTypographyProps={{
-                      variant: 'h6',
-                      noWrap: true,
-                      title: bucket.name,
-                    }}
-                  />
-                  <CardContent>
-                    {bucket.location && (
-                      <Typography variant="body2" color="text.secondary">
-                        Location: {bucket.location}
-                      </Typography>
-                    )}
-                    {bucket.created && (
-                      <Typography variant="body2" color="text.secondary">
-                        Created: {new Date(bucket.created).toLocaleDateString()}
-                      </Typography>
-                    )}
-                  </CardContent>
-                  <CardActions>
-                    <Button
-                      variant="contained"
-                      size="small"
-                      startIcon={<OpenInNew />}
-                      onClick={() => handleBucketClick(bucket.name)}
-                      fullWidth
-                    >
-                      Browse
-                    </Button>
-                  </CardActions>
-                </Card>
-              </Grid>
-            ))}
-          </Grid>
-        )}
+        filteredAndSortedBuckets.length > 0 &&
+        (view === 'list' ? renderListView() : renderCardView())}
     </Box>
   );
 };
