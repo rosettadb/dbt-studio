@@ -254,8 +254,8 @@ export async function buildCloudSecretQuery(
 
       // Check if we have account name and key to build connection string
       if (azureConfig.accountName && azureConfig.accountKey) {
-        // Build proper Azure connection string format
-        const connectionString = `DefaultEndpointsProtocol=https;AccountName=${escapeSqlString(azureConfig.accountName)};AccountKey=${escapeSqlString(azureConfig.accountKey)};EndpointSuffix=core.windows.net`;
+        // Build proper Azure connection string format using raw values
+        const connectionString = `DefaultEndpointsProtocol=https;AccountName=${azureConfig.accountName};AccountKey=${azureConfig.accountKey};EndpointSuffix=core.windows.net`;
 
         return `
           ${dropSecretsQuery}

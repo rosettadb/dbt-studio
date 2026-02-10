@@ -885,7 +885,7 @@ class CloudExplorerService {
 
   // ==================== Backblaze B2 Methods ====================
 
-  static createB2Client(config: BackblazeB2Config): S3Client {
+  private static createB2Client(config: BackblazeB2Config): S3Client {
     const endpoint = config.endpoint || 's3.us-west-004.backblazeb2.com';
 
     // Extract region from endpoint (e.g., 's3.us-west-004.backblazeb2.com' -> 'us-west-004')
