@@ -242,22 +242,6 @@ export const TableDataRowsTab: React.FC<TableDataRowsTabProps> = ({
     fetchData();
   }, [fetchData]);
 
-  // Refresh data when table operations succeed
-  React.useEffect(() => {
-    if (
-      updateRowsMutation.isSuccess ||
-      deleteRowsMutation.isSuccess ||
-      upsertRowsMutation.isSuccess
-    ) {
-      fetchData();
-    }
-  }, [
-    updateRowsMutation.isSuccess,
-    deleteRowsMutation.isSuccess,
-    upsertRowsMutation.isSuccess,
-    fetchData,
-  ]);
-
   const handleChangePage = (_event: unknown, newPage: number) => {
     setPage(newPage);
   };
@@ -408,6 +392,7 @@ FROM "${escapeIdentifier(tableName)}";`;
         onSuccess: () => {
           setUpdateRowsDialogOpen(false);
           fetchData(); // Refresh data after successful update
+          updateRowsMutation.reset();
         },
         onError: () => {
           setUpdateRowsDialogOpen(false);
@@ -475,6 +460,7 @@ WHERE ${whereClause};`;
         onSuccess: () => {
           setDeleteRowsDialogOpen(false);
           fetchData(); // Refresh data after successful delete
+          deleteRowsMutation.reset();
         },
         onError: () => {
           setDeleteRowsDialogOpen(false);
@@ -506,6 +492,7 @@ WHERE ${whereClause};`;
         onSuccess: () => {
           setUpsertRowsDialogOpen(false);
           fetchData(); // Refresh data after successful upsert
+          upsertRowsMutation.reset();
         },
         onError: () => {
           setUpsertRowsDialogOpen(false);

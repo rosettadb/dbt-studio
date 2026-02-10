@@ -545,33 +545,35 @@ CREATE OR REPLACE SECRET ${secretName} (
    */
   // eslint-disable-next-line class-methods-use-this
   protected sanitizeDefaultValue(defaultValue: string): string {
-    // Check for dangerous SQL patterns
+    const trimmedValue = defaultValue.trim();
+
+    // Check for dangerous SQL injection markers that shouldn't appear even in strings if we are being very strict,
+    // although standard SQL string escaping should handle them.
+    // We kept these minimal checks to avoid obvious injection attempts in what should be a simple value.
     if (
-      defaultValue.includes(';') ||
-      defaultValue.includes('--') ||
-      defaultValue.includes('/*') ||
-      defaultValue.includes('*/') ||
-      defaultValue.includes('DROP') ||
-      defaultValue.includes('DELETE') ||
-      defaultValue.includes('INSERT') ||
-      defaultValue.includes('UPDATE') ||
-      defaultValue.includes('CREATE') ||
-      defaultValue.includes('ALTER')
+      trimmedValue.includes(';') ||
+      trimmedValue.includes('--') ||
+      trimmedValue.includes('/*') ||
+      trimmedValue.includes('*/')
     ) {
       throw new Error(
         'Invalid default value: contains potentially dangerous SQL patterns',
       );
     }
 
-    // Check if it's a simple literal (number, boolean, NULL)
+    // Check if it's a simple literal (number, boolean, NULL) or standard SQL function
+    // This allows unquoted values for these specific safe types/keywords
     const simpleLiteralPattern =
       /^(NULL|TRUE|FALSE|-?\d+(\.\d+)?|CURRENT_TIMESTAMP|CURRENT_DATE|CURRENT_TIME)$/i;
-    if (simpleLiteralPattern.test(defaultValue.trim())) {
-      return defaultValue.trim();
+
+    if (simpleLiteralPattern.test(trimmedValue)) {
+      return trimmedValue;
     }
 
-    // Treat as string literal: escape single quotes and wrap in quotes
-    const escapedValue = defaultValue.replace(/'/g, "''");
+    // Treat everything else as a string literal: escape single quotes and wrap in quotes
+    // This safely handles values that might contain keywords like "CREATE" or "DROP"
+    // e.g. default value "CREATE_DATE" becomes "'CREATE_DATE'"
+    const escapedValue = trimmedValue.replace(/'/g, "''");
     return `'${escapedValue}'`;
   }
 

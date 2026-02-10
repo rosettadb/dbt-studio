@@ -546,11 +546,54 @@ export interface DuckLakeIpcChannels {
     tableName: string,
     schema: DuckLakeColumnInfo[],
   ) => Promise<void>;
+  'ducklake:table:rename': (
+    instanceId: string,
+    oldName: string,
+    newName: string,
+  ) => Promise<void>;
+  'ducklake:table:addColumn': (
+    instanceId: string,
+    tableName: string,
+    columnDef: any,
+  ) => Promise<void>;
+  'ducklake:table:dropColumn': (
+    instanceId: string,
+    tableName: string,
+    columnName: string,
+  ) => Promise<void>;
+  'ducklake:table:renameColumn': (
+    instanceId: string,
+    tableName: string,
+    oldName: string,
+    newName: string,
+  ) => Promise<void>;
+  'ducklake:table:alterColumnType': (
+    instanceId: string,
+    tableName: string,
+    columnName: string,
+    newType: string,
+  ) => Promise<void>;
   'ducklake:table:setPartitionedBy': (
     instanceId: string,
     tableName: string,
     columnNames: string[],
   ) => Promise<void>;
+  'ducklake:table:updateRows': (
+    instanceId: string,
+    tableName: string,
+    filter: any,
+    updates: any,
+  ) => Promise<number>;
+  'ducklake:table:deleteRows': (
+    instanceId: string,
+    tableName: string,
+    filter: any,
+  ) => Promise<number>;
+  'ducklake:table:upsertRows': (
+    instanceId: string,
+    tableName: string,
+    rows: any[],
+  ) => Promise<number>;
   'ducklake:table:delete': (
     instanceId: string,
     tableName: string,

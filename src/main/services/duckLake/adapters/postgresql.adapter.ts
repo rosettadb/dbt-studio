@@ -93,9 +93,28 @@ export class PostgreSQLCatalogAdapter extends CatalogAdapter {
       }
 
       const escapedName = tableName.replace(/"/g, '""');
-      await this.connectionInfo.connection.run(
-        `CREATE OR REPLACE TABLE "${escapedName}" AS SELECT * FROM "${escapedName}" FOR SYSTEM_VERSION AS OF ${snapshotId}`,
-      );
+
+      // Correct DuckLake restore pattern:
+      // 1. Delete all current rows (keeps table lineage/schema)
+      // 2. Insert rows from the specific snapshot version
+      await this.connectionInfo.connection.run('BEGIN TRANSACTION');
+
+      try {
+        // Truncate current data (logically retains history in DuckLake)
+        await this.connectionInfo.connection.run(
+          `DELETE FROM "${escapedName}"`,
+        );
+
+        // Restore data from snapshot
+        await this.connectionInfo.connection.run(
+          `INSERT INTO "${escapedName}" SELECT * FROM "${escapedName}" AT (VERSION => ${snapshotId})`,
+        );
+
+        await this.connectionInfo.connection.run('COMMIT');
+      } catch (innerError) {
+        await this.connectionInfo.connection.run('ROLLBACK');
+        throw innerError;
+      }
     } catch (error) {
       // eslint-disable-next-line no-console
       console.error(

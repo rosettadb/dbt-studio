@@ -48,10 +48,18 @@ function validateSingleStatement(
     throw DuckLakeError.validation('Query cannot be empty');
   }
 
-  // Remove trailing semicolon if present (single terminal semicolon is acceptable)
-  const queryWithoutTerminalSemicolon = trimmedQuery.endsWith(';')
-    ? trimmedQuery.slice(0, -1).trim()
-    : trimmedQuery;
+  // Strip comments (both -- and /* ... */) to properly validate the query structure
+  // This ensures that comments cannot be used to hide malicious syntax like statement chaining
+  const queryWithoutComments = trimmedQuery.replace(
+    /(--[^\n]*)|(\/\*[\s\S]*?\*\/)/g,
+    '',
+  );
+
+  // Remove trailing semicolon from cleaned query
+  const queryStructure = queryWithoutComments.trim();
+  const queryWithoutTerminalSemicolon = queryStructure.endsWith(';')
+    ? queryStructure.slice(0, -1).trim()
+    : queryStructure;
 
   // Check for multiple statements (semicolons in the middle of the query)
   if (queryWithoutTerminalSemicolon.includes(';')) {
@@ -73,10 +81,17 @@ function validateSingleStatement(
   }
 
   // Additional check: ensure no suspicious patterns that could indicate injection
-  // Check for common SQL injection patterns after semicolon removal
+  // We check the CLEANED query. If comments were stripped, we are checking the actual executable code.
+  // This means standard injection patterns will be visible.
   const suspiciousPatterns = [
-    /--\s*$/m, // SQL comments at the end
-    /\/\*.*\*\//s, // Multi-line comments
+    /;\s*--/, // Semicolon followed by comment marker (classic injection artifact)
+    /;\s*\/\*/, // Semicolon followed by block comment
+    /'\s*OR\s*'/i, // Tautologies
+    /"\s*OR\s*"/i,
+    /;\s*DROP\s+TABLE/i, // Explicit destructive commands after semicolon
+    /;\s*DELETE\s+FROM/i,
+    /;\s*UPDATE\s+/i,
+    /;\s*INSERT\s+INTO/i,
   ];
 
   suspiciousPatterns.forEach((pattern) => {

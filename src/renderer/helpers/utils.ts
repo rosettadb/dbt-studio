@@ -421,11 +421,19 @@ export const generateFilename = (prefix = 'file', extension = 'txt') => {
 };
 
 export const formatBytes = (bytes: number) => {
-  if (bytes === 0) return '0 Bytes';
+  if (!Number.isFinite(bytes)) return '0 Bytes';
   const k = 1024;
   const sizes = ['Bytes', 'KB', 'MB', 'GB', 'TB'];
-  const i = Math.floor(Math.log(bytes) / Math.log(k));
-  return `${Math.round((bytes / k ** i) * 100) / 100} ${sizes[i]}`;
+  const absBytes = Math.abs(bytes);
+
+  if (absBytes === 0) return '0 Bytes';
+
+  const i = Math.min(
+    Math.floor(Math.log(absBytes) / Math.log(k)),
+    sizes.length - 1,
+  );
+
+  return `${bytes < 0 ? '-' : ''}${Math.round((absBytes / k ** i) * 100) / 100} ${sizes[i]}`;
 };
 
 export const formatNumber = (num: number) => {

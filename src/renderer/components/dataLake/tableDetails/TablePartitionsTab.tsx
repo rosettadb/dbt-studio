@@ -34,7 +34,8 @@ export const TablePartitionsTab: React.FC<TablePartitionsTabProps> = ({
         {tableDetails.partitionInfo ? (
           <Box>
             <Typography variant="subtitle1" gutterBottom>
-              Partition Columns ({tableDetails.partitionInfo.columns.length})
+              Partition Columns (
+              {(tableDetails.partitionInfo.columns ?? []).length})
             </Typography>
             <TableContainer sx={{ mb: 3 }}>
               <Table>
@@ -46,10 +47,12 @@ export const TablePartitionsTab: React.FC<TablePartitionsTabProps> = ({
                   </TableRow>
                 </TableHead>
                 <TableBody>
-                  {tableDetails.partitionInfo.columns.map(
+                  {(tableDetails.partitionInfo.columns ?? []).map(
                     (col: DuckLakePartitionColumn) => (
                       <TableRow
-                        key={`${col.partitionId}-${safeToString(col.partitionKeyIndex)}`}
+                        key={`${col.partitionId}-${safeToString(
+                          col.partitionKeyIndex,
+                        )}`}
                       >
                         <TableCell>
                           {safeToString(col.partitionKeyIndex)}
@@ -67,7 +70,7 @@ export const TablePartitionsTab: React.FC<TablePartitionsTabProps> = ({
 
             <Typography variant="subtitle1" gutterBottom>
               File Partition Values (
-              {tableDetails.partitionInfo.filePartitionValues.length})
+              {(tableDetails.partitionInfo.filePartitionValues ?? []).length})
             </Typography>
             <TableContainer>
               <Table>
@@ -79,7 +82,7 @@ export const TablePartitionsTab: React.FC<TablePartitionsTabProps> = ({
                   </TableRow>
                 </TableHead>
                 <TableBody>
-                  {tableDetails.partitionInfo.filePartitionValues.map(
+                  {(tableDetails.partitionInfo.filePartitionValues ?? []).map(
                     (val: DuckLakeFilePartitionValue, idx: number) => (
                       <TableRow key={idx}>
                         <TableCell>{safeToString(val.dataFileId)}</TableCell>
