@@ -369,7 +369,7 @@ export class DuckDBCatalogAdapter extends CatalogAdapter {
   }> {
     try {
       // Check available columns in ducklake_snapshot_changes
-      // We use the database name directly in the PRAGMA string
+      // We use safe identifier quoting for the database name
       if (!this.connectionInfo) {
         return {
           hasAuthor: false,
@@ -377,7 +377,9 @@ export class DuckDBCatalogAdapter extends CatalogAdapter {
           hasCommitExtraInfo: false,
         };
       }
-      const tableInfoQuery = `PRAGMA table_info('${metadataDatabase}.main.ducklake_snapshot_changes')`;
+
+      const safeMetadataDb = `"${metadataDatabase.replace(/"/g, '""')}"`;
+      const tableInfoQuery = `PRAGMA table_info(${safeMetadataDb}.main.ducklake_snapshot_changes)`;
       const result = await this.connectionInfo.connection.run(tableInfoQuery);
       const rows = await result.getRows();
 

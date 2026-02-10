@@ -205,11 +205,7 @@ export const DataLakeTableDetails: React.FC = () => {
       </TabPanel>
 
       <TabPanel value={currentTab} index={6}>
-        <TableHistoryTab
-          tableDetails={tableDetails}
-          instanceId={instanceId || ''}
-          tableName={tableName || ''}
-        />
+        <TableHistoryTab tableDetails={tableDetails} />
       </TabPanel>
 
       <TabPanel value={currentTab} index={7}>
