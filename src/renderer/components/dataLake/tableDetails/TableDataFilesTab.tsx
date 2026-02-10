@@ -20,7 +20,9 @@ import {
 } from '../../../helpers/utils';
 
 interface TableDataFilesTabProps {
-  tableDetails: any;
+  tableDetails: {
+    dataFiles?: DuckLakeDataFileInfo[];
+  };
 }
 
 export const TableDataFilesTab: React.FC<TableDataFilesTabProps> = ({
@@ -30,9 +32,9 @@ export const TableDataFilesTab: React.FC<TableDataFilesTabProps> = ({
     <Card>
       <CardContent>
         <Typography variant="h6" gutterBottom>
-          Data Files ({tableDetails.dataFiles.length} files)
+          Data Files ({(tableDetails.dataFiles ?? []).length} files)
         </Typography>
-        {tableDetails.dataFiles.length > 0 ? (
+        {(tableDetails.dataFiles ?? []).length > 0 ? (
           <TableContainer>
             <Table>
               <TableHead>
@@ -47,42 +49,48 @@ export const TableDataFilesTab: React.FC<TableDataFilesTabProps> = ({
                 </TableRow>
               </TableHead>
               <TableBody>
-                {tableDetails.dataFiles.map((file: DuckLakeDataFileInfo) => (
-                  <TableRow key={file.dataFileId}>
-                    <TableCell>{safeToString(file.fileOrder)}</TableCell>
-                    <TableCell>
-                      <Typography
-                        variant="body2"
-                        sx={{
-                          fontFamily: 'monospace',
-                          wordBreak: 'break-all',
-                          overflowWrap: 'anywhere',
-                        }}
-                      >
-                        {file.path}
-                      </Typography>
-                      {file.pathIsRelative && (
-                        <Chip label="Relative" size="small" sx={{ mt: 0.5 }} />
-                      )}
-                    </TableCell>
-                    <TableCell>
-                      <Chip
-                        label={file.fileFormat}
-                        size="small"
-                        color="primary"
-                      />
-                    </TableCell>
-                    <TableCell>{formatNumber(file.recordCount)}</TableCell>
-                    <TableCell>{formatBytes(file.fileSizeBytes)}</TableCell>
-                    <TableCell>{formatNumber(file.rowIdStart)}</TableCell>
-                    <TableCell>
-                      {safeToString(file.beginSnapshot)}
-                      {file.endSnapshot
-                        ? ` - ${safeToString(file.endSnapshot)}`
-                        : ' (current)'}
-                    </TableCell>
-                  </TableRow>
-                ))}
+                {(tableDetails.dataFiles ?? []).map(
+                  (file: DuckLakeDataFileInfo) => (
+                    <TableRow key={file.dataFileId}>
+                      <TableCell>{safeToString(file.fileOrder)}</TableCell>
+                      <TableCell>
+                        <Typography
+                          variant="body2"
+                          sx={{
+                            fontFamily: 'monospace',
+                            wordBreak: 'break-all',
+                            overflowWrap: 'anywhere',
+                          }}
+                        >
+                          {file.path}
+                        </Typography>
+                        {file.pathIsRelative && (
+                          <Chip
+                            label="Relative"
+                            size="small"
+                            sx={{ mt: 0.5 }}
+                          />
+                        )}
+                      </TableCell>
+                      <TableCell>
+                        <Chip
+                          label={file.fileFormat}
+                          size="small"
+                          color="primary"
+                        />
+                      </TableCell>
+                      <TableCell>{formatNumber(file.recordCount)}</TableCell>
+                      <TableCell>{formatBytes(file.fileSizeBytes)}</TableCell>
+                      <TableCell>{formatNumber(file.rowIdStart)}</TableCell>
+                      <TableCell>
+                        {safeToString(file.beginSnapshot)}
+                        {file.endSnapshot
+                          ? ` - ${safeToString(file.endSnapshot)}`
+                          : ' (current)'}
+                      </TableCell>
+                    </TableRow>
+                  ),
+                )}
               </TableBody>
             </Table>
           </TableContainer>

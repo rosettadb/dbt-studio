@@ -61,6 +61,10 @@ export const TableDataRowsTab: React.FC<TableDataRowsTabProps> = ({
   instanceId,
   tableName,
 }) => {
+  // Helper function to escape double quotes in SQL identifiers
+  const escapeIdentifier = (identifier: string): string => {
+    return identifier.replace(/"/g, '""');
+  };
   const [updateRowsDialogOpen, setUpdateRowsDialogOpen] = useState(false);
   // Form state for structured update
   const [whereConditions, setWhereConditions] = useState<
@@ -136,7 +140,7 @@ export const TableDataRowsTab: React.FC<TableDataRowsTabProps> = ({
       }
 
       // Use DuckDB's COPY TO command
-      const exportQuery = `COPY (SELECT * FROM "${tableName}") TO '${result.filePath.replace(/'/g, "''")}' (FORMAT ${format}${options ? `, ${options}` : ''})`;
+      const exportQuery = `COPY (SELECT * FROM "${escapeIdentifier(tableName)}") TO '${result.filePath.replace(/'/g, "''")}' (FORMAT ${format}${options ? `, ${options}` : ''})`;
 
       executeQuery(
         {
@@ -204,7 +208,7 @@ export const TableDataRowsTab: React.FC<TableDataRowsTabProps> = ({
     // Note: We use * to get all columns. Pagination is handled by the backend if supported,
     // or we can append LIMIT/OFFSET to the SQL if needed.
     // The executeQuery API supports limit/offset params.
-    const sql = `SELECT * FROM "${tableName}"`;
+    const sql = `SELECT * FROM "${escapeIdentifier(tableName)}"`;
 
     executeQuery(
       {
@@ -295,6 +299,35 @@ export const TableDataRowsTab: React.FC<TableDataRowsTabProps> = ({
     );
   };
 
+  // Helper to validate and format values for SQL interpolation to prevent injection
+  const validateAndFormatValue = (
+    colName: string,
+    value: string,
+  ): string | null => {
+    if (needsQuotes(colName)) {
+      return `'${value.replace(/'/g, "''")}'`;
+    }
+    // Unquoted types (Numeric/Boolean)
+    if (!value) return 'NULL';
+
+    const col = tableDetails?.columns.find(
+      (c: DuckLakeColumnDetail) => c.columnName === colName,
+    );
+    const type = col?.columnType.toUpperCase() || '';
+
+    if (type.includes('BOOL')) {
+      const lower = value.toLowerCase();
+      if (lower === 'true' || lower === 'false') return lower;
+      return null;
+    }
+
+    // Numeric check
+    if (!Number.isNaN(Number(value)) && value.trim() !== '') {
+      return value;
+    }
+    return null;
+  };
+
   // Effect to update the generated query whenever form state changes
   React.useEffect(() => {
     if (!updateRowsDialogOpen) return;
@@ -308,12 +341,24 @@ export const TableDataRowsTab: React.FC<TableDataRowsTabProps> = ({
       return;
     }
 
+    // Validate inputs
+    const inputsValid =
+      whereConditions.every(
+        (c) => !c.column || validateAndFormatValue(c.column, c.value) !== null,
+      ) &&
+      updateFields.every(
+        (f) => !f.column || validateAndFormatValue(f.column, f.value) !== null,
+      );
+
+    if (!inputsValid) {
+      setGeneratedUpdateQuery(''); // Invalid input
+      return;
+    }
+
     const whereClauses = whereConditions
       .filter((c) => c.column)
       .map((c) => {
-        const val = needsQuotes(c.column)
-          ? `'${c.value.replace(/'/g, "''")}'`
-          : c.value || 'NULL';
+        const val = validateAndFormatValue(c.column, c.value) as string;
         return `${c.column} ${c.operator} ${val}`;
       });
 
@@ -321,7 +366,6 @@ export const TableDataRowsTab: React.FC<TableDataRowsTabProps> = ({
       whereClauses.length > 0 ? whereClauses.join(' AND ') : '1=1';
 
     // Lakehouse Rewrite Pattern (CTAS)
-    // This is the only safe way to handle updates in DuckLake without Primary Keys
     const updatedCols = updateFields
       .filter((f) => f.column)
       .map((f) => f.column);
@@ -329,22 +373,15 @@ export const TableDataRowsTab: React.FC<TableDataRowsTabProps> = ({
     const caseStatements = updateFields
       .filter((f) => f.column)
       .map((f) => {
-        let val: string;
-        if (needsQuotes(f.column)) {
-          // String/text type - wrap in quotes and escape internal quotes
-          val = `'${f.value.replace(/'/g, "''")}'`;
-        } else {
-          // Numeric/boolean type - use raw value
-          val = f.value || 'NULL';
-        }
+        const val = validateAndFormatValue(f.column, f.value) as string;
         return `CASE WHEN ${whereClause} THEN ${val} ELSE ${f.column} END AS ${f.column}`;
       });
 
-    const query = `CREATE OR REPLACE TABLE "${tableName}" AS
+    const query = `CREATE OR REPLACE TABLE "${escapeIdentifier(tableName)}" AS
 SELECT
   * EXCLUDE (${updatedCols.join(', ')}),
   ${caseStatements.join(',\n  ')}
-FROM "${tableName}";`;
+FROM "${escapeIdentifier(tableName)}";`;
 
     setGeneratedUpdateQuery(query);
   }, [
@@ -397,19 +434,27 @@ FROM "${tableName}";`;
       return;
     }
 
+    // Validate inputs
+    const inputsValid = deleteConditions.every(
+      (c) => !c.column || validateAndFormatValue(c.column, c.value) !== null,
+    );
+
+    if (!inputsValid) {
+      setGeneratedDeleteQuery(''); // Invalid input
+      return;
+    }
+
     const whereClauses = deleteConditions
       .filter((c) => c.column)
       .map((c) => {
-        const val = needsQuotes(c.column)
-          ? `'${c.value.replace(/'/g, "''")}'`
-          : c.value || 'NULL';
+        const val = validateAndFormatValue(c.column, c.value) as string;
         return `${c.column} ${c.operator} ${val}`;
       });
 
     const whereClause =
       whereClauses.length > 0 ? whereClauses.join(' AND ') : '1=1';
 
-    const query = `DELETE FROM "${tableName}"
+    const query = `DELETE FROM "${escapeIdentifier(tableName)}"
 WHERE ${whereClause};`;
     setGeneratedDeleteQuery(query);
   }, [deleteRowsDialogOpen, tableName, deleteConditions, tableDetails]);
@@ -440,7 +485,7 @@ WHERE ${whereClause};`;
 
   const handleOpenUpsertRowsDialog = () => {
     setUpsertRowsQuery(
-      `INSERT INTO ${tableName} (/* cols */) VALUES (/* values */) /* upsert clause */;`,
+      `INSERT INTO "${escapeIdentifier(tableName)}" (/* cols */) VALUES (/* values */) /* upsert clause */;`,
     );
     setUpsertRowsDialogOpen(true);
   };

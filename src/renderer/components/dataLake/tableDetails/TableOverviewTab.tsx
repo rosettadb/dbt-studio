@@ -14,9 +14,10 @@ import {
   formatNumber,
   safeToString,
 } from '../../../helpers/utils';
+import { DuckLakeTableDetails } from '../../../../types/duckLake';
 
 interface TableOverviewTabProps {
-  tableDetails: any;
+  tableDetails: DuckLakeTableDetails;
 }
 
 export const TableOverviewTab: React.FC<TableOverviewTabProps> = ({
@@ -100,7 +101,7 @@ export const TableOverviewTab: React.FC<TableOverviewTabProps> = ({
                     <strong>Record Count</strong>
                   </TableCell>
                   <TableCell>
-                    {formatNumber(tableDetails.stats.recordCount)}
+                    {formatNumber(tableDetails.stats?.recordCount ?? 0)}
                   </TableCell>
                 </TableRow>
                 <TableRow>
@@ -108,7 +109,7 @@ export const TableOverviewTab: React.FC<TableOverviewTabProps> = ({
                     <strong>File Size</strong>
                   </TableCell>
                   <TableCell>
-                    {formatBytes(tableDetails.stats.fileSizeBytes)}
+                    {formatBytes(tableDetails.stats?.fileSizeBytes ?? 0)}
                   </TableCell>
                 </TableRow>
                 <TableRow>
@@ -116,20 +117,20 @@ export const TableOverviewTab: React.FC<TableOverviewTabProps> = ({
                     <strong>Next Row ID</strong>
                   </TableCell>
                   <TableCell>
-                    {formatNumber(tableDetails.stats.nextRowId)}
+                    {formatNumber(tableDetails.stats?.nextRowId ?? 0)}
                   </TableCell>
                 </TableRow>
                 <TableRow>
                   <TableCell>
                     <strong>Columns</strong>
                   </TableCell>
-                  <TableCell>{tableDetails.columns.length}</TableCell>
+                  <TableCell>{tableDetails.columns?.length ?? 0}</TableCell>
                 </TableRow>
                 <TableRow>
                   <TableCell>
                     <strong>Data Files</strong>
                   </TableCell>
-                  <TableCell>{tableDetails.dataFiles.length}</TableCell>
+                  <TableCell>{tableDetails.dataFiles?.length ?? 0}</TableCell>
                 </TableRow>
               </TableBody>
             </Table>

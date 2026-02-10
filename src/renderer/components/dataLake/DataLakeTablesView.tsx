@@ -54,6 +54,10 @@ export const DataLakeTablesView: React.FC<DataLakeTablesViewProps> = ({
                   setImportWizardOpen(false);
                   invalidateTables(instanceId);
                 },
+                onError: () => {
+                  setImportWizardOpen(false);
+                  invalidateTables(instanceId);
+                },
               },
             );
             return;
