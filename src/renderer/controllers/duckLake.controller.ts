@@ -418,22 +418,12 @@ export function useDuckLakeTables(instanceId: string) {
   return useQuery({
     queryKey: duckLakeKeys.tables(instanceId),
     queryFn: async () => {
-      // eslint-disable-next-line no-console
-      console.log(
-        '[useDuckLakeTables] Fetching tables for instanceId:',
-        instanceId,
-      );
       const result = await DuckLakeService.listTables(instanceId);
-      // eslint-disable-next-line no-console
-      console.log('[useDuckLakeTables] Received result:', result);
       return result;
     },
     enabled: !!instanceId,
     staleTime: 60000, // 1 minute
-    onSuccess: (data) => {
-      // eslint-disable-next-line no-console
-      console.log('[useDuckLakeTables] onSuccess - data:', data);
-    },
+    onSuccess: () => {},
     onError: () => {
       // Error is already logged by the service layer
     },
@@ -577,17 +567,10 @@ export function useDuckLakeTableDetails(
   return useQuery({
     queryKey: duckLakeKeys.tableDetails(instanceId, tableName),
     queryFn: async () => {
-      // eslint-disable-next-line no-console
-      console.log('[useDuckLakeTableDetails] Fetching details for:', {
-        instanceId,
-        tableName,
-      });
       const result = await DuckLakeService.getTableDetails(
         instanceId,
         tableName,
       );
-      // eslint-disable-next-line no-console
-      console.log('[useDuckLakeTableDetails] Received result:', result);
       return result;
     },
     enabled: enabled && !!instanceId && !!tableName,

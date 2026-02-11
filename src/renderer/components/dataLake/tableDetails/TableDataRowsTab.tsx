@@ -151,10 +151,6 @@ export const TableDataRowsTab: React.FC<TableDataRowsTabProps> = ({
         },
         {
           onSuccess: () => {
-            // eslint-disable-next-line no-console
-            console.log(
-              `Successfully exported to ${format}: ${result.filePath}`,
-            );
             handleExportMenuClose();
           },
           onError: (error: Error) => {
@@ -221,8 +217,6 @@ export const TableDataRowsTab: React.FC<TableDataRowsTabProps> = ({
       },
       {
         onSuccess: (data) => {
-          // eslint-disable-next-line no-console
-          console.log('[fetchData] Query success, rows:', data.rows?.length);
           setQueryResult(data);
           if (data.totalRows !== undefined) {
             setActualRowCount(data.totalRows);
@@ -345,7 +339,7 @@ export const TableDataRowsTab: React.FC<TableDataRowsTabProps> = ({
       .filter((c) => c.column)
       .map((c) => {
         const val = validateAndFormatValue(c.column, c.value) as string;
-        return `${c.column} ${c.operator} ${val}`;
+        return `"${escapeIdentifier(c.column)}" ${c.operator} ${val}`;
       });
 
     const whereClause =
@@ -360,12 +354,12 @@ export const TableDataRowsTab: React.FC<TableDataRowsTabProps> = ({
       .filter((f) => f.column)
       .map((f) => {
         const val = validateAndFormatValue(f.column, f.value) as string;
-        return `CASE WHEN ${whereClause} THEN ${val} ELSE ${f.column} END AS ${f.column}`;
+        return `CASE WHEN ${whereClause} THEN ${val} ELSE "${escapeIdentifier(f.column)}" END AS "${escapeIdentifier(f.column)}"`;
       });
 
     const query = `CREATE OR REPLACE TABLE "${escapeIdentifier(tableName)}" AS
 SELECT
-  * EXCLUDE (${updatedCols.join(', ')}),
+  * EXCLUDE (${updatedCols.map((c) => `"${escapeIdentifier(c)}"`).join(', ')}),
   ${caseStatements.join(',\n  ')}
 FROM "${escapeIdentifier(tableName)}";`;
 
@@ -435,7 +429,7 @@ FROM "${escapeIdentifier(tableName)}";`;
       .filter((c) => c.column)
       .map((c) => {
         const val = validateAndFormatValue(c.column, c.value) as string;
-        return `${c.column} ${c.operator} ${val}`;
+        return `"${escapeIdentifier(c.column)}" ${c.operator} ${val}`;
       });
 
     const whereClause =

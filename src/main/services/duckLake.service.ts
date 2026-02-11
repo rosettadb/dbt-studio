@@ -149,6 +149,7 @@ export default class DuckLakeService {
 
       // Allow standard SQL types including arrays (VARCHAR[]), decimals (DECIMAL(10,2)), etc.
       // Pattern: starts with letter/underscore, then letters, numbers, underscores, parens, spaces, commas, brackets
+      // eslint-disable-next-line no-useless-escape
       const typePattern = /^[A-Za-z_][A-Za-z0-9_() ,\[\]]*$/;
       if (!typePattern.test(columnType.trim())) {
         throw DuckLakeError.validation('Invalid column type format');
@@ -341,6 +342,7 @@ export default class DuckLakeService {
       }
 
       // Allow standard SQL types including arrays (VARCHAR[]), decimals (DECIMAL(10,2)), etc.
+      // eslint-disable-next-line no-useless-escape
       const typePattern = /^[A-Za-z_][A-Za-z0-9_() ,\[\]]*$/;
       if (!typePattern.test(newType.trim())) {
         throw DuckLakeError.validation('Invalid column type format');
@@ -868,16 +870,6 @@ export default class DuckLakeService {
         );
       }
 
-      // eslint-disable-next-line no-console
-      console.debug(
-        '[DuckLakeService.connectToCatalog] Establishing lazy connection',
-        {
-          instanceId,
-          name: instance.name,
-          dataPath: instance.dataPath,
-        },
-      );
-
       // Use connection manager to get connection
       await DuckLakeConnectionManager.getConnection(
         instanceId,
@@ -903,11 +895,6 @@ export default class DuckLakeService {
     try {
       // Use connection manager to disconnect
       await DuckLakeConnectionManager.disconnect(instanceId);
-
-      // eslint-disable-next-line no-console
-      console.debug('[DuckLakeService.disconnectFromCatalog] Disconnected', {
-        instanceId,
-      });
     } catch (error) {
       // eslint-disable-next-line no-console
       console.error('[DuckLakeService.disconnectFromCatalog] Error:', error);
@@ -983,13 +970,6 @@ export default class DuckLakeService {
     sourceQuery: string,
   ): Promise<void> {
     try {
-      // eslint-disable-next-line no-console
-      console.log('DuckLakeService.importTable called with:', {
-        instanceId,
-        tableName,
-        sourceQuery,
-      });
-
       await this.ensureConnected(instanceId);
       const adapter = await this.getAdapter(instanceId);
 
@@ -1014,11 +994,6 @@ export default class DuckLakeService {
         instanceId,
         sql: sourceQuery,
       });
-
-      // eslint-disable-next-line no-console
-      console.log(
-        `Table ${tableName} imported successfully in instance ${instanceId}`,
-      );
     } catch (error) {
       // eslint-disable-next-line no-console
       console.error(`Failed to import table ${tableName}:`, error);
@@ -1061,30 +1036,10 @@ export default class DuckLakeService {
     tableName: string,
   ): Promise<any> {
     try {
-      // eslint-disable-next-line no-console
-      console.log('[DuckLakeService.getTableDetails] Starting for:', {
-        instanceId,
-        tableName,
-      });
-
       await this.ensureConnected(instanceId);
       const adapter = await this.getAdapter(instanceId);
 
-      // eslint-disable-next-line no-console
-      console.log(
-        '[DuckLakeService.getTableDetails] Adapter obtained:',
-        adapter.constructor.name,
-      );
-
       const details = await adapter.getTableDetails(tableName);
-
-      // eslint-disable-next-line no-console
-      console.log('[DuckLakeService.getTableDetails] Details retrieved:', {
-        tableName: details.tableName,
-        columnsCount: details.columns?.length,
-        dataFilesCount: details.dataFiles?.length,
-        snapshotsCount: details.snapshots?.length,
-      });
 
       return details;
     } catch (error) {
