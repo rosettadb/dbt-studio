@@ -161,3 +161,6 @@ Use `tests/integration/utils/ipc-mock.ts` to mock `ipcMain` and test that handle
 - [ ] **Phase 5** - Git Service Integration Tests
 - [ ] **Phase 6** - AI Provider Integration Tests
 - [ ] **Phase 7** - CI/CD Pipeline Integration
+
+
+Testing github actions pipeline?
