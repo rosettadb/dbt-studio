@@ -88,6 +88,133 @@ const registerDuckLakeHandlers = () => {
     },
   );
 
+  ipcMain.handle(
+    'ducklake:table:rename',
+    async (_event, instanceId: string, oldName: string, newName: string) => {
+      return DuckLakeService.renameTable(instanceId, oldName, newName);
+    },
+  );
+
+  ipcMain.handle(
+    'ducklake:table:addColumn',
+    async (
+      _event,
+      instanceId: string,
+      tableName: string,
+      columnName: string,
+      columnType: string,
+      defaultValue?: string,
+    ) => {
+      return DuckLakeService.addColumn(
+        instanceId,
+        tableName,
+        columnName,
+        columnType,
+        defaultValue,
+      );
+    },
+  );
+
+  ipcMain.handle(
+    'ducklake:table:dropColumn',
+    async (
+      _event,
+      instanceId: string,
+      tableName: string,
+      columnName: string,
+    ) => {
+      return DuckLakeService.dropColumn(instanceId, tableName, columnName);
+    },
+  );
+
+  ipcMain.handle(
+    'ducklake:table:renameColumn',
+    async (
+      _event,
+      instanceId: string,
+      tableName: string,
+      oldColumnName: string,
+      newColumnName: string,
+    ) => {
+      return DuckLakeService.renameColumn(
+        instanceId,
+        tableName,
+        oldColumnName,
+        newColumnName,
+      );
+    },
+  );
+
+  ipcMain.handle(
+    'ducklake:table:alterColumnType',
+    async (
+      _event,
+      instanceId: string,
+      tableName: string,
+      columnName: string,
+      newType: string,
+    ) => {
+      return DuckLakeService.alterColumnType(
+        instanceId,
+        tableName,
+        columnName,
+        newType,
+      );
+    },
+  );
+
+  ipcMain.handle(
+    'ducklake:table:setPartitionedBy',
+    async (
+      _event,
+      instanceId: string,
+      tableName: string,
+      columnNames: string[],
+    ) => {
+      return DuckLakeService.setPartitionedBy(
+        instanceId,
+        tableName,
+        columnNames,
+      );
+    },
+  );
+
+  ipcMain.handle(
+    'ducklake:table:updateRows',
+    async (
+      _event,
+      instanceId: string,
+      tableName: string,
+      updateQuery: string,
+    ) => {
+      return DuckLakeService.updateRows(instanceId, tableName, updateQuery);
+    },
+  );
+
+  ipcMain.handle(
+    'ducklake:table:deleteRows',
+    async (
+      _event,
+      instanceId: string,
+      tableName: string,
+      deleteQuery: string,
+    ) => {
+      return DuckLakeService.deleteRows(instanceId, tableName, deleteQuery);
+    },
+  );
+
+  ipcMain.handle(
+    'ducklake:table:upsertRows',
+    async (
+      _event,
+      instanceId: string,
+      tableName: string,
+      upsertQuery: string,
+    ) => {
+      return DuckLakeService.upsertRows(instanceId, tableName, upsertQuery);
+    },
+  );
+
   // Phase 8b: Table Details Handler
   ipcMain.handle(
     'ducklake:table:getDetails',

@@ -132,17 +132,6 @@ const DataLake: React.FC = () => {
     margin: 0 auto;
   `;
 
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  const handleTablePreview = (tableId: string) => {
-    // In real implementation, this would open a preview modal
-  };
-
-  const handleTableQuery = (tableId: string) => {
-    // eslint-disable-next-line no-console
-    console.log(tableId);
-    // In real implementation, this would navigate to SQL editor with table query
-  };
-
   // Get current instance ID from params or path
   const currentInstanceId =
     instanceId || pathSegments[pathSegments.indexOf('instance') + 1];
@@ -166,24 +155,12 @@ const DataLake: React.FC = () => {
 
       case 'instance-tables':
         // Show tables for a specific instance from route: /instances/:id/tables
-        return (
-          <DataLakeTablesView
-            instanceId={currentInstanceId || ''}
-            onPreview={handleTablePreview}
-            onQuery={handleTableQuery}
-          />
-        );
+        return <DataLakeTablesView instanceId={currentInstanceId || ''} />;
 
       case 'tables':
         // Show tables for a specific instance if instanceId is in URL
         if (instanceId) {
-          return (
-            <DataLakeTablesView
-              instanceId={instanceId}
-              onPreview={handleTablePreview}
-              onQuery={handleTableQuery}
-            />
-          );
+          return <DataLakeTablesView instanceId={instanceId} />;
         }
         // Otherwise show message to select an instance
         return (

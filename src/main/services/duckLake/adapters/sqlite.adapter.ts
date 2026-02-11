@@ -85,6 +85,276 @@ export class SQLiteCatalogAdapter extends CatalogAdapter {
     }
   }
 
+  async restoreSnapshot(tableName: string, snapshotId: number): Promise<void> {
+    try {
+      if (!this.connectionInfo) {
+        throw new Error('No active connection');
+      }
+
+      const escapedName = tableName.replace(/"/g, '""');
+      await this.connectionInfo.connection.run(
+        `CREATE OR REPLACE TABLE "${escapedName}" AS SELECT * FROM "${escapedName}" FOR SYSTEM_VERSION AS OF ${snapshotId}`,
+      );
+    } catch (error) {
+      // eslint-disable-next-line no-console
+      console.error(
+        `Failed to restore SQLite table ${tableName} to snapshot ${snapshotId}:`,
+        error,
+      );
+      throw error;
+    }
+  }
+
+  async addColumn(
+    tableName: string,
+    columnName: string,
+    columnType: string,
+    defaultValue?: string,
+  ): Promise<void> {
+    try {
+      if (!this.connectionInfo) {
+        throw new Error('No active connection');
+      }
+
+      const escapedTableName = tableName.replace(/"/g, '""');
+      const escapedColumnName = columnName.replace(/"/g, '""');
+
+      // Validate column type to prevent SQL injection
+      const validatedType = this.validateColumnType(columnType);
+
+      let defaultClause = '';
+      if (defaultValue && defaultValue.trim() !== '') {
+        // Sanitize default value to prevent SQL injection
+        const sanitizedDefault = this.sanitizeDefaultValue(defaultValue);
+        defaultClause = ` DEFAULT ${sanitizedDefault}`;
+      }
+
+      await this.connectionInfo.connection.run(
+        `ALTER TABLE "${escapedTableName}" ADD COLUMN "${escapedColumnName}" ${validatedType}${defaultClause}`,
+      );
+    } catch (error) {
+      // eslint-disable-next-line no-console
+      console.error(
+        `Failed to add column ${columnName} to SQLite table ${tableName}:`,
+        error,
+      );
+      throw error;
+    }
+  }
+
+  async dropColumn(tableName: string, columnName: string): Promise<void> {
+    try {
+      if (!this.connectionInfo) {
+        throw new Error('No active connection');
+      }
+
+      const escapedTableName = tableName.replace(/"/g, '""');
+      const escapedColumnName = columnName.replace(/"/g, '""');
+
+      await this.connectionInfo.connection.run(
+        `ALTER TABLE "${escapedTableName}" DROP COLUMN "${escapedColumnName}"`,
+      );
+    } catch (error) {
+      // eslint-disable-next-line no-console
+      console.error(
+        `Failed to drop column ${columnName} from SQLite table ${tableName}:`,
+        error,
+      );
+      throw error;
+    }
+  }
+
+  async renameColumn(
+    tableName: string,
+    oldColumnName: string,
+    newColumnName: string,
+  ): Promise<void> {
+    try {
+      if (!this.connectionInfo) {
+        throw new Error('No active connection');
+      }
+
+      const escapedTableName = tableName.replace(/"/g, '""');
+      const escapedOldColumnName = oldColumnName.replace(/"/g, '""');
+      const escapedNewColumnName = newColumnName.replace(/"/g, '""');
+
+      await this.connectionInfo.connection.run(
+        `ALTER TABLE "${escapedTableName}" RENAME COLUMN "${escapedOldColumnName}" TO "${escapedNewColumnName}"`,
+      );
+    } catch (error) {
+      // eslint-disable-next-line no-console
+      console.error(
+        `Failed to rename column ${oldColumnName} to ${newColumnName} on SQLite table ${tableName}:`,
+        error,
+      );
+      throw error;
+    }
+  }
+
+  async alterColumnType(
+    tableName: string,
+    columnName: string,
+    newType: string,
+  ): Promise<void> {
+    try {
+      if (!this.connectionInfo) {
+        throw new Error('No active connection');
+      }
+
+      const escapedTableName = tableName.replace(/"/g, '""');
+      const escapedColumnName = columnName.replace(/"/g, '""');
+
+      // Validate column type to prevent SQL injection
+      const validatedType = this.validateColumnType(newType);
+
+      await this.connectionInfo.connection.run(
+        `ALTER TABLE "${escapedTableName}" ALTER COLUMN "${escapedColumnName}" TYPE ${validatedType}`,
+      );
+    } catch (error) {
+      // eslint-disable-next-line no-console
+      console.error(
+        `Failed to alter column ${columnName} type to ${newType} on SQLite table ${tableName}:`,
+        error,
+      );
+      throw error;
+    }
+  }
+
+  async setPartitionedBy(
+    tableName: string,
+    columnNames: string[],
+  ): Promise<void> {
+    try {
+      if (!this.connectionInfo) {
+        throw new Error('No active connection');
+      }
+
+      const escapedTableName = tableName.replace(/"/g, '""');
+      const escapedColumns = columnNames.map(
+        (c) => `"${c.replace(/"/g, '""')}"`,
+      );
+
+      await this.connectionInfo.connection.run(
+        `ALTER TABLE "${escapedTableName}" SET PARTITIONED BY (${escapedColumns.join(
+          ', ',
+        )})`,
+      );
+    } catch (error) {
+      // eslint-disable-next-line no-console
+      console.error(
+        `Failed to set partition columns (${columnNames.join(', ')}) on SQLite table ${tableName}:`,
+        error,
+      );
+      throw error;
+    }
+  }
+
+  async renameTable(oldName: string, newName: string): Promise<void> {
+    try {
+      if (!this.connectionInfo) {
+        throw new Error('No active connection');
+      }
+
+      const escapedOldName = oldName.replace(/"/g, '""');
+      const escapedNewName = newName.replace(/"/g, '""');
+
+      await this.connectionInfo.connection.run(
+        `ALTER TABLE "${escapedOldName}" RENAME TO "${escapedNewName}"`,
+      );
+    } catch (error) {
+      // eslint-disable-next-line no-console
+      console.error(
+        `Failed to rename SQLite table ${oldName} to ${newName}:`,
+        error,
+      );
+      throw error;
+    }
+  }
+
+  async updateRows(
+    _tableName: string,
+    updateQuery: string,
+  ): Promise<{ rowsAffected: number }> {
+    try {
+      if (!this.connectionInfo) {
+        throw new Error('No active connection');
+      }
+
+      await this.connectionInfo.connection.run(updateQuery);
+      const changesResult = await this.connectionInfo.connection.run(
+        'SELECT changes() as changes',
+      );
+      const rows = await changesResult.getRows();
+      const value = rows?.[0]?.[0] ?? 0;
+      const numeric =
+        typeof value === 'object' && value?.hugeint !== undefined
+          ? Number(value.hugeint)
+          : Number(value);
+
+      return { rowsAffected: Number.isFinite(numeric) ? numeric : 0 };
+    } catch (error) {
+      // eslint-disable-next-line no-console
+      console.error('Failed to update rows:', error);
+      throw error;
+    }
+  }
+
+  async deleteRows(
+    _tableName: string,
+    deleteQuery: string,
+  ): Promise<{ rowsAffected: number }> {
+    try {
+      if (!this.connectionInfo) {
+        throw new Error('No active connection');
+      }
+
+      await this.connectionInfo.connection.run(deleteQuery);
+      const changesResult = await this.connectionInfo.connection.run(
+        'SELECT changes() as changes',
+      );
+      const rows = await changesResult.getRows();
+      const value = rows?.[0]?.[0] ?? 0;
+      const numeric =
+        typeof value === 'object' && value?.hugeint !== undefined
+          ? Number(value.hugeint)
+          : Number(value);
+
+      return { rowsAffected: Number.isFinite(numeric) ? numeric : 0 };
+    } catch (error) {
+      // eslint-disable-next-line no-console
+      console.error('Failed to delete rows:', error);
+      throw error;
+    }
+  }
+
+  async upsertRows(
+    _tableName: string,
+    upsertQuery: string,
+  ): Promise<{ rowsAffected: number }> {
+    try {
+      if (!this.connectionInfo) {
+        throw new Error('No active connection');
+      }
+
+      await this.connectionInfo.connection.run(upsertQuery);
+      const changesResult = await this.connectionInfo.connection.run(
+        'SELECT changes() as changes',
+      );
+      const rows = await changesResult.getRows();
+      const value = rows?.[0]?.[0] ?? 0;
+      const numeric =
+        typeof value === 'object' && value?.hugeint !== undefined
+          ? Number(value.hugeint)
+          : Number(value);
+
+      return { rowsAffected: Number.isFinite(numeric) ? numeric : 0 };
+    } catch (error) {
+      // eslint-disable-next-line no-console
+      console.error('Failed to upsert rows:', error);
+      throw error;
+    }
+  }
+
   async disconnect(): Promise<void> {
     await this.cleanup();
   }
@@ -418,6 +688,23 @@ export class SQLiteCatalogAdapter extends CatalogAdapter {
     } catch (error) {
       // eslint-disable-next-line no-console
       console.error(`Failed to get SQLite table ${tableName}:`, error);
+      throw error;
+    }
+  }
+
+  async deleteTable(tableName: string): Promise<void> {
+    try {
+      if (!this.connectionInfo) {
+        throw new Error('No active connection');
+      }
+
+      const escapedName = tableName.replace(/"/g, '""');
+      await this.connectionInfo.connection.run(
+        `DROP TABLE IF EXISTS "${escapedName}"`,
+      );
+    } catch (error) {
+      // eslint-disable-next-line no-console
+      console.error(`Failed to delete SQLite table ${tableName}:`, error);
       throw error;
     }
   }
@@ -828,8 +1115,8 @@ export class SQLiteCatalogAdapter extends CatalogAdapter {
           cs.min_value,
           cs.max_value
         FROM ${quotedMetadataDatabase}.main.ducklake_table_column_stats cs
-        JOIN ${quotedMetadataDatabase}.main.ducklake_column c 
-          ON cs.column_id = c.column_id 
+        JOIN ${quotedMetadataDatabase}.main.ducklake_column c
+          ON cs.column_id = c.column_id
           AND cs.table_id = c.table_id
           AND ${currentSnapshot} >= c.begin_snapshot
           AND (${currentSnapshot} < c.end_snapshot OR c.end_snapshot IS NULL)
@@ -961,7 +1248,7 @@ export class SQLiteCatalogAdapter extends CatalogAdapter {
               c.column_name,
               pc.transform
             FROM ${quotedMetadataDatabase}.main.ducklake_partition_column pc
-            JOIN ${quotedMetadataDatabase}.main.ducklake_column c 
+            JOIN ${quotedMetadataDatabase}.main.ducklake_column c
               ON pc.column_id = c.column_id
               AND pc.table_id = c.table_id
               AND ${currentSnapshot} >= c.begin_snapshot
@@ -1050,37 +1337,37 @@ export class SQLiteCatalogAdapter extends CatalogAdapter {
           SELECT t.begin_snapshot as snapshot_id
           FROM ${quotedMetadataDatabase}.main.ducklake_table t
           WHERE t.table_id = ${tableId}
-          
+
           UNION
-          
+
           -- Snapshot when table was deleted (if applicable)
           SELECT t.end_snapshot as snapshot_id
           FROM ${quotedMetadataDatabase}.main.ducklake_table t
           WHERE t.table_id = ${tableId} AND t.end_snapshot IS NOT NULL
-          
+
           UNION
-          
+
           -- Snapshots when columns were added/modified
           SELECT c.begin_snapshot as snapshot_id
           FROM ${quotedMetadataDatabase}.main.ducklake_column c
           WHERE c.table_id = ${tableId}
-          
+
           UNION
-          
+
           -- Snapshots when columns were dropped
           SELECT c.end_snapshot as snapshot_id
           FROM ${quotedMetadataDatabase}.main.ducklake_column c
           WHERE c.table_id = ${tableId} AND c.end_snapshot IS NOT NULL
-          
+
           UNION
-          
+
           -- Snapshots when data files were added
           SELECT df.begin_snapshot as snapshot_id
           FROM ${quotedMetadataDatabase}.main.ducklake_data_file df
           WHERE df.table_id = ${tableId}
-          
+
           UNION
-          
+
           -- Snapshots when data files were deleted
           SELECT df.end_snapshot as snapshot_id
           FROM ${quotedMetadataDatabase}.main.ducklake_data_file df
@@ -1170,7 +1457,7 @@ export class SQLiteCatalogAdapter extends CatalogAdapter {
           ct.begin_snapshot,
           ct.end_snapshot
         FROM ${quotedMetadataDatabase}.main.ducklake_column_tag ct
-        JOIN ${quotedMetadataDatabase}.main.ducklake_column c 
+        JOIN ${quotedMetadataDatabase}.main.ducklake_column c
           ON ct.column_id = c.column_id
           AND ct.table_id = c.table_id
           AND ${currentSnapshot} >= c.begin_snapshot
