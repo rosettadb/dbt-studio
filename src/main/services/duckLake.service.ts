@@ -871,7 +871,13 @@ export default class DuckLakeService {
         const secretAccessKey = await SecureStorageService.getCredential(
           `cloud-aws-${id}`,
         );
-        return { secretAccessKey };
+        const sessionToken = await SecureStorageService.getCredential(
+          `cloud-aws-session-${id}`,
+        );
+        return {
+          secretAccessKey,
+          ...(sessionToken && { sessionToken }),
+        };
       }
 
       if (provider === 'azure') {

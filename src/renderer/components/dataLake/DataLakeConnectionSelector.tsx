@@ -88,8 +88,12 @@ export const DataLakeConnectionSelector: React.FC<
   const { data: connections, isLoading, refetch } = useCloudConnections();
   const createConnection = useCreateCloudConnection();
   const testConnection = useTestDuckLakeConnection();
-  const { setCloudAwsSecret, setCloudAzureKey, setCloudGcsCredential } =
-    useSecureStorage();
+  const {
+    setCloudAwsSecret,
+    setCloudAwsSessionToken,
+    setCloudAzureKey,
+    setCloudGcsCredential,
+  } = useSecureStorage();
 
   // Filter connections by selected provider
   const filteredConnections =
@@ -261,12 +265,17 @@ export const DataLakeConnectionSelector: React.FC<
         const region = newConnectionConfig.region?.trim();
         const accessKeyId = newConnectionConfig.accessKeyId?.trim();
         const secretAccessKey = newConnectionConfig.secretAccessKey?.trim();
+        const sessionToken = newConnectionConfig.sessionToken?.trim();
 
         await setCloudAwsSecret(secretAccessKey, connectionId);
+        if (sessionToken) {
+          await setCloudAwsSessionToken(sessionToken, connectionId);
+        }
 
         providerConfig = {
           region,
           accessKeyId,
+          sessionToken: sessionToken || undefined,
         } as S3Config;
       } else if (selectedProvider === 'azure') {
         const accountName = newConnectionConfig.accountName?.trim();
@@ -387,6 +396,21 @@ export const DataLakeConnectionSelector: React.FC<
               }
               required
               helperText="Your AWS Secret Access Key"
+            />
+            <TextField
+              label="Session Token (Optional)"
+              placeholder="Temporary session token for temporary credentials"
+              type="password"
+              fullWidth
+              margin="normal"
+              value={newConnectionConfig.sessionToken || ''}
+              onChange={(e) =>
+                setNewConnectionConfig({
+                  ...newConnectionConfig,
+                  sessionToken: e.target.value,
+                })
+              }
+              helperText="Optional: Required when using temporary AWS credentials (e.g., from STS AssumeRole)"
             />
           </>
         );

@@ -108,6 +108,25 @@ const useSecureStorage = () => {
     await secureStorageService.delete(`cloud-aws-${connectionName}`);
   };
 
+  const setCloudAwsSessionToken = async (
+    sessionToken: string,
+    connectionName: string,
+  ): Promise<void> => {
+    await secureStorageService.set(`cloud-aws-session-${connectionName}`, sessionToken);
+  };
+
+  const getCloudAwsSessionToken = async (
+    connectionName: string,
+  ): Promise<string | null> => {
+    return secureStorageService.get(`cloud-aws-session-${connectionName}`);
+  };
+
+  const deleteCloudAwsSessionToken = async (
+    connectionName: string,
+  ): Promise<void> => {
+    await secureStorageService.delete(`cloud-aws-session-${connectionName}`);
+  };
+
   const setCloudAzureKey = async (
     key: string,
     connectionName: string,
@@ -176,6 +195,9 @@ const useSecureStorage = () => {
     setCloudAwsSecret,
     getCloudAwsSecret,
     deleteCloudAwsSecret,
+    setCloudAwsSessionToken,
+    getCloudAwsSessionToken,
+    deleteCloudAwsSessionToken,
     setCloudAzureKey,
     getCloudAzureKey,
     deleteCloudAzureKey,

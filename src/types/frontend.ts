@@ -85,6 +85,7 @@ export interface S3Config {
   region: string;
   accessKeyId: string;
   secretAccessKey?: string;
+  sessionToken?: string;
 }
 
 export interface AzureConfig {

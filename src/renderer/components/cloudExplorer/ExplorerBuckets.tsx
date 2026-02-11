@@ -43,8 +43,12 @@ export const ExplorerBuckets: React.FC<ExplorerBucketsProps> = ({
   const connection = connectionQuery.data;
 
   // Secure storage logic
-  const { getCloudAwsSecret, getCloudAzureKey, getCloudGcsCredential } =
-    useSecureStorage();
+  const {
+    getCloudAwsSecret,
+    getCloudAwsSessionToken,
+    getCloudAzureKey,
+    getCloudGcsCredential,
+  } = useSecureStorage();
   const [secureConfig, setSecureConfig] = useState<any | null>(null);
   const [credentialsMissing, setCredentialsMissing] = useState(false);
 
@@ -60,10 +64,17 @@ export const ExplorerBuckets: React.FC<ExplorerBucketsProps> = ({
       try {
         if (connection.provider === 'aws') {
           const secret = await getCloudAwsSecret(connection.id);
+          const sessionToken = await getCloudAwsSessionToken(connection.id);
           if (secret === null) {
             missing = true;
           } else {
-            (config as { secretAccessKey?: string }).secretAccessKey = secret;
+            (config as {
+              secretAccessKey?: string;
+              sessionToken?: string;
+            }).secretAccessKey = secret;
+            if (sessionToken) {
+              (config as { sessionToken?: string }).sessionToken = sessionToken;
+            }
           }
         } else if (connection.provider === 'azure') {
           const key = await getCloudAzureKey(connection.id);

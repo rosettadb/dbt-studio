@@ -107,6 +107,10 @@ export async function buildCloudSecretQuery(
   switch (provider) {
     case 'aws': {
       const awsConfig = config as S3Config;
+      let sessionTokenClause = '';
+      if (awsConfig.sessionToken) {
+        sessionTokenClause = `,\n          SESSION_TOKEN '${awsConfig.sessionToken}'`;
+      }
       return `
         ${dropSecretsQuery}
         CREATE OR REPLACE SECRET s3_secret (
@@ -114,7 +118,7 @@ export async function buildCloudSecretQuery(
           PROVIDER config,
           KEY_ID '${awsConfig.accessKeyId}',
           SECRET '${awsConfig.secretAccessKey}',
-          REGION '${awsConfig.region}'
+          REGION '${awsConfig.region}'${sessionTokenClause}
         );
       `;
     }

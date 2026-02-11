@@ -34,12 +34,22 @@ class CloudExplorerService {
       );
     }
 
+    const credentials: {
+      accessKeyId: string;
+      secretAccessKey: string;
+      sessionToken?: string;
+    } = {
+      accessKeyId: config.accessKeyId,
+      secretAccessKey: config.secretAccessKey,
+    };
+
+    if (config.sessionToken) {
+      credentials.sessionToken = config.sessionToken;
+    }
+
     return new S3Client({
       region: config.region,
-      credentials: {
-        accessKeyId: config.accessKeyId,
-        secretAccessKey: config.secretAccessKey,
-      },
+      credentials,
     });
   }
 

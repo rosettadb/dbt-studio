@@ -52,6 +52,7 @@ interface FormData {
   region: string;
   accessKeyId: string;
   secretAccessKey: string;
+  sessionToken: string;
   accountName: string;
   accountKey: string;
   connectionString: string;
@@ -70,6 +71,8 @@ export const ConnectionForm: React.FC<ConnectionFormProps> = ({
     getCloudGcsCredential,
     setCloudAwsSecret,
     getCloudAwsSecret,
+    setCloudAwsSessionToken,
+    getCloudAwsSessionToken,
     setCloudAzureKey,
     getCloudAzureKey,
   } = useSecureStorage();
@@ -86,6 +89,7 @@ export const ConnectionForm: React.FC<ConnectionFormProps> = ({
     region: '',
     accessKeyId: '',
     secretAccessKey: '',
+    sessionToken: '',
     accountName: '',
     accountKey: '',
     connectionString: '',
@@ -121,6 +125,7 @@ export const ConnectionForm: React.FC<ConnectionFormProps> = ({
         region: (config as S3Config).region || '',
         accessKeyId: (config as S3Config).accessKeyId || '',
         secretAccessKey: (config as S3Config).secretAccessKey || '',
+        sessionToken: (config as S3Config).sessionToken || '',
         accountName: (config as AzureConfig).accountName || '',
         accountKey: (config as AzureConfig).accountKey || '',
         connectionString: (config as AzureConfig).connectionString || '',
@@ -138,7 +143,12 @@ export const ConnectionForm: React.FC<ConnectionFormProps> = ({
           setFormData((prev) => ({ ...prev, credentials: stored || '' }));
         } else if (provider === 'aws') {
           const stored = await getCloudAwsSecret(id);
-          setFormData((prev) => ({ ...prev, secretAccessKey: stored || '' }));
+          const storedSessionToken = await getCloudAwsSessionToken(id);
+          setFormData((prev) => ({
+            ...prev,
+            secretAccessKey: stored || '',
+            sessionToken: storedSessionToken || '',
+          }));
         } else if (provider === 'azure') {
           const stored = await getCloudAzureKey(id);
           setFormData((prev) => ({ ...prev, accountKey: stored || '' }));
@@ -182,6 +192,7 @@ export const ConnectionForm: React.FC<ConnectionFormProps> = ({
           region: formData.region.trim(),
           accessKeyId: formData.accessKeyId.trim(),
           secretAccessKey: formData.secretAccessKey.trim(),
+          sessionToken: formData.sessionToken.trim() || undefined,
         } as S3Config;
       case 'azure':
         return {
@@ -244,9 +255,15 @@ export const ConnectionForm: React.FC<ConnectionFormProps> = ({
         finalConfig = config;
       } else if (formData.provider === 'aws') {
         await setCloudAwsSecret(formData.secretAccessKey, connId);
+        if (formData.sessionToken.trim()) {
+          await setCloudAwsSessionToken(formData.sessionToken, connId);
+        }
         const config = { ...rawConfig };
         if ('secretAccessKey' in config) {
           delete (config as any).secretAccessKey;
+        }
+        if ('sessionToken' in config) {
+          delete (config as any).sessionToken;
         }
         finalConfig = config;
       } else if (formData.provider === 'azure') {
@@ -356,6 +373,16 @@ export const ConnectionForm: React.FC<ConnectionFormProps> = ({
               onChange={(e) => handleChange('secretAccessKey', e.target.value)}
               required
               helperText="Your AWS Secret Access Key"
+            />
+            <TextField
+              label="Session Token (Optional)"
+              placeholder="Temporary session token for temporary credentials"
+              type="password"
+              fullWidth
+              margin="normal"
+              value={formData.sessionToken}
+              onChange={(e) => handleChange('sessionToken', e.target.value)}
+              helperText="Optional: Required when using temporary AWS credentials (e.g., from STS AssumeRole)"
             />
           </>
         );
