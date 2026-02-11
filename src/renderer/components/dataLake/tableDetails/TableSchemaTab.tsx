@@ -192,7 +192,7 @@ export const TableSchemaTab: React.FC<TableSchemaTabProps> = ({
           }}
         >
           <Typography variant="h6">
-            Column Schema ({tableDetails.columns.length} columns)
+            Column Schema ({tableDetails?.columns?.length ?? 0} columns)
           </Typography>
           <Button
             variant="contained"
@@ -222,110 +222,112 @@ export const TableSchemaTab: React.FC<TableSchemaTabProps> = ({
               </TableRow>
             </TableHead>
             <TableBody>
-              {tableDetails.columns.map((column: DuckLakeColumnDetail) => (
-                <TableRow key={column.columnId}>
-                  <TableCell>{safeToString(column.columnOrder)}</TableCell>
-                  <TableCell>
-                    <strong>{column.columnName}</strong>
-                    {column.parentColumn && (
-                      <Chip label="Nested" size="small" sx={{ ml: 1 }} />
-                    )}
-                  </TableCell>
-                  <TableCell>
-                    <Chip
-                      label={column.columnType}
-                      size="small"
-                      variant="outlined"
-                    />
-                  </TableCell>
-                  <TableCell>
-                    {column.nullsAllowed ? (
-                      <Chip label="Yes" size="small" color="default" />
-                    ) : (
-                      <Chip label="No" size="small" color="primary" />
-                    )}
-                  </TableCell>
-                  <TableCell>{column.defaultValue || '-'}</TableCell>
-                  <TableCell>
-                    {safeToString(column.beginSnapshot)}
-                    {column.endSnapshot
-                      ? ` - ${safeToString(column.endSnapshot)}`
-                      : ' (current)'}
-                  </TableCell>
-                  <TableCell align="right">
-                    <Tooltip
-                      title={
-                        isPartitionColumnId(column.columnId)
-                          ? 'Partition columns cannot be renamed'
-                          : 'Rename column'
-                      }
-                    >
-                      <span>
-                        <IconButton
-                          size="small"
-                          onClick={() => handleRequestRenameColumn(column)}
-                          disabled={
-                            renameColumnMutation.isLoading ||
-                            alterColumnTypeMutation.isLoading ||
-                            dropColumnMutation.isLoading ||
-                            addColumnMutation.isLoading ||
-                            isPartitionColumnId(column.columnId)
-                          }
-                        >
-                          <DriveFileRenameOutline fontSize="small" />
-                        </IconButton>
-                      </span>
-                    </Tooltip>
-                    <Tooltip
-                      title={
-                        isPartitionColumnId(column.columnId)
-                          ? 'Partition columns cannot be altered'
-                          : 'Alter column type'
-                      }
-                    >
-                      <span>
-                        <IconButton
-                          size="small"
-                          onClick={() => handleRequestAlterColumnType(column)}
-                          disabled={
-                            alterColumnTypeMutation.isLoading ||
-                            renameColumnMutation.isLoading ||
-                            dropColumnMutation.isLoading ||
-                            addColumnMutation.isLoading ||
-                            isPartitionColumnId(column.columnId)
-                          }
-                        >
-                          <SwapHoriz fontSize="small" />
-                        </IconButton>
-                      </span>
-                    </Tooltip>
-                    <Tooltip
-                      title={
-                        isPartitionColumnId(column.columnId)
-                          ? 'Partition columns cannot be dropped'
-                          : 'Drop column'
-                      }
-                    >
-                      <span>
-                        <IconButton
-                          size="small"
-                          color="error"
-                          onClick={() => handleRequestDropColumn(column)}
-                          disabled={
-                            dropColumnMutation.isLoading ||
-                            addColumnMutation.isLoading ||
-                            renameColumnMutation.isLoading ||
-                            alterColumnTypeMutation.isLoading ||
-                            isPartitionColumnId(column.columnId)
-                          }
-                        >
-                          <Delete fontSize="small" />
-                        </IconButton>
-                      </span>
-                    </Tooltip>
-                  </TableCell>
-                </TableRow>
-              ))}
+              {(tableDetails?.columns || []).map(
+                (column: DuckLakeColumnDetail) => (
+                  <TableRow key={column.columnId}>
+                    <TableCell>{safeToString(column.columnOrder)}</TableCell>
+                    <TableCell>
+                      <strong>{column.columnName}</strong>
+                      {column.parentColumn && (
+                        <Chip label="Nested" size="small" sx={{ ml: 1 }} />
+                      )}
+                    </TableCell>
+                    <TableCell>
+                      <Chip
+                        label={column.columnType}
+                        size="small"
+                        variant="outlined"
+                      />
+                    </TableCell>
+                    <TableCell>
+                      {column.nullsAllowed ? (
+                        <Chip label="Yes" size="small" color="default" />
+                      ) : (
+                        <Chip label="No" size="small" color="primary" />
+                      )}
+                    </TableCell>
+                    <TableCell>{column.defaultValue || '-'}</TableCell>
+                    <TableCell>
+                      {safeToString(column.beginSnapshot)}
+                      {column.endSnapshot
+                        ? ` - ${safeToString(column.endSnapshot)}`
+                        : ' (current)'}
+                    </TableCell>
+                    <TableCell align="right">
+                      <Tooltip
+                        title={
+                          isPartitionColumnId(column.columnId)
+                            ? 'Partition columns cannot be renamed'
+                            : 'Rename column'
+                        }
+                      >
+                        <span>
+                          <IconButton
+                            size="small"
+                            onClick={() => handleRequestRenameColumn(column)}
+                            disabled={
+                              renameColumnMutation.isLoading ||
+                              alterColumnTypeMutation.isLoading ||
+                              dropColumnMutation.isLoading ||
+                              addColumnMutation.isLoading ||
+                              isPartitionColumnId(column.columnId)
+                            }
+                          >
+                            <DriveFileRenameOutline fontSize="small" />
+                          </IconButton>
+                        </span>
+                      </Tooltip>
+                      <Tooltip
+                        title={
+                          isPartitionColumnId(column.columnId)
+                            ? 'Partition columns cannot be altered'
+                            : 'Alter column type'
+                        }
+                      >
+                        <span>
+                          <IconButton
+                            size="small"
+                            onClick={() => handleRequestAlterColumnType(column)}
+                            disabled={
+                              alterColumnTypeMutation.isLoading ||
+                              renameColumnMutation.isLoading ||
+                              dropColumnMutation.isLoading ||
+                              addColumnMutation.isLoading ||
+                              isPartitionColumnId(column.columnId)
+                            }
+                          >
+                            <SwapHoriz fontSize="small" />
+                          </IconButton>
+                        </span>
+                      </Tooltip>
+                      <Tooltip
+                        title={
+                          isPartitionColumnId(column.columnId)
+                            ? 'Partition columns cannot be dropped'
+                            : 'Drop column'
+                        }
+                      >
+                        <span>
+                          <IconButton
+                            size="small"
+                            color="error"
+                            onClick={() => handleRequestDropColumn(column)}
+                            disabled={
+                              dropColumnMutation.isLoading ||
+                              addColumnMutation.isLoading ||
+                              renameColumnMutation.isLoading ||
+                              alterColumnTypeMutation.isLoading ||
+                              isPartitionColumnId(column.columnId)
+                            }
+                          >
+                            <Delete fontSize="small" />
+                          </IconButton>
+                        </span>
+                      </Tooltip>
+                    </TableCell>
+                  </TableRow>
+                ),
+              )}
             </TableBody>
           </Table>
         </TableContainer>

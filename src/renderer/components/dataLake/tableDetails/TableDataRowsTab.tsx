@@ -263,7 +263,7 @@ export const TableDataRowsTab: React.FC<TableDataRowsTabProps> = ({
   // Helper to determine if quotes are needed based on column type
   const needsQuotes = (colName: string) => {
     if (!tableDetails?.columns) return true;
-    const col = tableDetails.columns.find(
+    const col = tableDetails?.columns?.find(
       (c: DuckLakeColumnDetail) => c.columnName === colName,
     );
     if (!col) return true;
@@ -290,7 +290,7 @@ export const TableDataRowsTab: React.FC<TableDataRowsTabProps> = ({
     // Unquoted types (Numeric/Boolean)
     if (!value) return 'NULL';
 
-    const col = tableDetails?.columns.find(
+    const col = tableDetails?.columns?.find(
       (c: DuckLakeColumnDetail) => c.columnName === colName,
     );
     const type = col?.columnType.toUpperCase() || '';
@@ -336,14 +336,20 @@ export const TableDataRowsTab: React.FC<TableDataRowsTabProps> = ({
     }
 
     const whereClauses = whereConditions
-      .filter((c) => c.column)
-      .map((c) => {
+      .filter((c: any) => c.column)
+      .map((c: any) => {
         const val = validateAndFormatValue(c.column, c.value) as string;
         return `"${escapeIdentifier(c.column)}" ${c.operator} ${val}`;
       });
 
-    const whereClause =
-      whereClauses.length > 0 ? whereClauses.join(' AND ') : '1=1';
+    if (whereClauses.length === 0) {
+      setGeneratedUpdateQuery(
+        'Refusing to execute mutation without WHERE conditions',
+      );
+      return;
+    }
+
+    const whereClause = whereClauses.join(' AND ');
 
     // Lakehouse Rewrite Pattern (CTAS)
     const updatedCols = updateFields
@@ -375,6 +381,10 @@ FROM "${escapeIdentifier(tableName)}";`;
   const handleConfirmUpdateRows = () => {
     if (!instanceId || !tableName) {
       setUpdateRowsDialogOpen(false);
+      return;
+    }
+
+    if (!generatedUpdateQuery || generatedUpdateQuery.startsWith('Refusing')) {
       return;
     }
 
@@ -426,23 +436,34 @@ FROM "${escapeIdentifier(tableName)}";`;
     }
 
     const whereClauses = deleteConditions
-      .filter((c) => c.column)
-      .map((c) => {
+      .filter((c: any) => c.column)
+      .map((c: any) => {
         const val = validateAndFormatValue(c.column, c.value) as string;
         return `"${escapeIdentifier(c.column)}" ${c.operator} ${val}`;
       });
 
-    const whereClause =
-      whereClauses.length > 0 ? whereClauses.join(' AND ') : '1=1';
+    if (whereClauses.length === 0) {
+      setGeneratedDeleteQuery(
+        'Refusing to execute mutation without WHERE conditions',
+      );
+      return;
+    }
 
-    const query = `DELETE FROM "${escapeIdentifier(tableName)}"
-WHERE ${whereClause};`;
+    const whereClause = whereClauses.join(' AND ');
+
+    const query = `CREATE OR REPLACE TABLE "${escapeIdentifier(tableName)}" AS
+SELECT * FROM "${escapeIdentifier(tableName)}"
+WHERE NOT (${whereClause});`;
     setGeneratedDeleteQuery(query);
   }, [deleteRowsDialogOpen, tableName, deleteConditions, tableDetails]);
 
   const handleConfirmDeleteRows = () => {
     if (!instanceId || !tableName) {
       setDeleteRowsDialogOpen(false);
+      return;
+    }
+
+    if (!generatedDeleteQuery || generatedDeleteQuery.startsWith('Refusing')) {
       return;
     }
 
@@ -813,7 +834,8 @@ WHERE ${whereClause};`;
               startIcon={<PlayArrow />}
               disabled={
                 updateRowsMutation.isLoading ||
-                generatedUpdateQuery.trim() === ''
+                generatedUpdateQuery.trim() === '' ||
+                generatedUpdateQuery.startsWith('Refusing')
               }
             >
               Run
@@ -830,6 +852,14 @@ WHERE ${whereClause};`;
           <DialogTitle>Delete rows</DialogTitle>
           <DialogContent>
             <Stack spacing={3} sx={{ mt: 1 }}>
+              {/* Lakehouse Strategy Section */}
+              <Alert severity="info" sx={{ mb: 1 }}>
+                DuckLake uses a <strong>Safe Rewrite (CTAS)</strong> pattern to
+                ensure data integrity in an append-only lakehouse.
+              </Alert>
+
+              <Divider />
+
               {/* WHERE Section */}
               <Box>
                 <Typography variant="subtitle2" gutterBottom>
@@ -982,7 +1012,8 @@ WHERE ${whereClause};`;
               onClick={handleConfirmDeleteRows}
               disabled={
                 deleteRowsMutation.isLoading ||
-                generatedDeleteQuery.trim() === ''
+                generatedDeleteQuery.trim() === '' ||
+                generatedDeleteQuery.startsWith('Refusing')
               }
             >
               Run
@@ -1064,7 +1095,7 @@ WHERE ${whereClause};`;
                     color="text.secondary"
                     sx={{ ml: 1 }}
                   >
-                    (~{tableDetails.stats.recordCount.toLocaleString()} rows)
+                    (~{tableDetails?.stats?.recordCount?.toLocaleString()} rows)
                   </Typography>
                 </Tooltip>
               )}
