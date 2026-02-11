@@ -16,6 +16,7 @@ import {
   CardContent,
   CardActionArea,
   IconButton,
+  CircularProgress,
 } from '@mui/material';
 import {
   Link as LinkIcon,
@@ -24,6 +25,7 @@ import {
   Folder,
   FolderOpen,
   Close,
+  CloudDownload,
 } from '@mui/icons-material';
 import { useFilePicker } from '../../controllers';
 
@@ -481,6 +483,9 @@ export const DataLakeTableImportWizard: React.FC<
             variant="contained"
             color="primary"
             disabled={isLoading}
+            startIcon={
+              isLoading ? <CircularProgress size={16} /> : <CloudDownload />
+            }
           >
             {isLoading ? 'Importing...' : 'Import Data'}
           </Button>

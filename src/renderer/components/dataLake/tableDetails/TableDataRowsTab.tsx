@@ -39,6 +39,8 @@ import {
   Add as AddIcon,
   Edit as EditIcon,
   Publish as PublishIcon,
+  Close,
+  PlayArrow,
 } from '@mui/icons-material';
 import {
   useDeleteDuckLakeRows,
@@ -804,14 +806,17 @@ WHERE ${whereClause};`;
           </DialogContent>
           <DialogActions>
             <Button
+              variant="outlined"
               color="inherit"
               onClick={() => setUpdateRowsDialogOpen(false)}
+              startIcon={<Close />}
             >
               Cancel
             </Button>
             <Button
               variant="contained"
               onClick={handleConfirmUpdateRows}
+              startIcon={<PlayArrow />}
               disabled={
                 updateRowsMutation.isLoading ||
                 generatedUpdateQuery.trim() === ''
@@ -969,12 +974,15 @@ WHERE ${whereClause};`;
           </DialogContent>
           <DialogActions>
             <Button
+              variant="outlined"
               color="inherit"
               onClick={() => setDeleteRowsDialogOpen(false)}
+              startIcon={<Close />}
             >
               Cancel
             </Button>
             <Button
+              startIcon={<PlayArrow />}
               color="error"
               variant="contained"
               onClick={handleConfirmDeleteRows}
@@ -1009,14 +1017,17 @@ WHERE ${whereClause};`;
           </DialogContent>
           <DialogActions>
             <Button
+              variant="outlined"
               color="inherit"
               onClick={() => setUpsertRowsDialogOpen(false)}
+              startIcon={<Close />}
             >
               Cancel
             </Button>
             <Button
               variant="contained"
               onClick={handleConfirmUpsertRows}
+              startIcon={<PlayArrow />}
               disabled={
                 upsertRowsMutation.isLoading || upsertRowsQuery.trim() === ''
               }

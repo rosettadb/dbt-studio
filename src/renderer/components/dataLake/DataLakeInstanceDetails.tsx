@@ -48,6 +48,7 @@ import {
   Memory,
   Refresh,
   Search,
+  Close,
 } from '@mui/icons-material';
 import { useNavigate } from 'react-router-dom';
 import moment from 'moment';
@@ -1010,8 +1011,20 @@ export const DataLakeInstanceDetails: React.FC<
           </Typography>
         </DialogContent>
         <DialogActions>
-          <Button onClick={() => setDeleteDialogOpen(false)}>Cancel</Button>
-          <Button onClick={handleDelete} color="error" variant="contained">
+          <Button
+            variant="outlined"
+            onClick={() => setDeleteDialogOpen(false)}
+            color="inherit"
+            startIcon={<Close />}
+          >
+            Cancel
+          </Button>
+          <Button
+            onClick={handleDelete}
+            color="error"
+            variant="contained"
+            startIcon={<Delete />}
+          >
             Delete Instance
           </Button>
         </DialogActions>

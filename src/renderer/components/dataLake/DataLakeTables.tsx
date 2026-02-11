@@ -21,7 +21,13 @@ import {
   Button,
   TextField,
 } from '@mui/material';
-import { TableChart, Delete, Edit } from '@mui/icons-material';
+import {
+  TableChart,
+  Delete,
+  Edit,
+  Close,
+  DriveFileRenameOutline,
+} from '@mui/icons-material';
 import { useNavigate } from 'react-router-dom';
 import moment from 'moment';
 import {
@@ -321,11 +327,13 @@ export const DataLakeTables: React.FC<DuckLakeTablesProps> = ({
         </DialogContent>
         <DialogActions>
           <Button
+            variant="outlined"
             onClick={() => {
               setDeleteDialogOpen(false);
               setTableToDelete(null);
             }}
             color="inherit"
+            startIcon={<Close />}
           >
             Cancel
           </Button>
@@ -333,6 +341,7 @@ export const DataLakeTables: React.FC<DuckLakeTablesProps> = ({
             onClick={handleConfirmDelete}
             color="error"
             variant="contained"
+            startIcon={<Delete />}
             disabled={!tableToDelete || deleteTableMutation.isLoading}
           >
             Delete
@@ -366,18 +375,21 @@ export const DataLakeTables: React.FC<DuckLakeTablesProps> = ({
         </DialogContent>
         <DialogActions>
           <Button
+            variant="outlined"
             onClick={() => {
               setRenameDialogOpen(false);
               setTableToRename(null);
               setNewTableName('');
             }}
             color="inherit"
+            startIcon={<Close />}
           >
             Cancel
           </Button>
           <Button
             onClick={handleConfirmRename}
             variant="contained"
+            startIcon={<DriveFileRenameOutline />}
             disabled={
               !tableToRename ||
               renameTableMutation.isLoading ||

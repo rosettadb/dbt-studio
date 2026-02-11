@@ -147,7 +147,9 @@ export default class DuckLakeService {
         throw DuckLakeError.validation('Column type is required');
       }
 
-      const typePattern = /^[A-Za-z_][A-Za-z0-9_() ,[]]*$/;
+      // Allow standard SQL types including arrays (VARCHAR[]), decimals (DECIMAL(10,2)), etc.
+      // Pattern: starts with letter/underscore, then letters, numbers, underscores, parens, spaces, commas, brackets
+      const typePattern = /^[A-Za-z_][A-Za-z0-9_() ,\[\]]*$/;
       if (!typePattern.test(columnType.trim())) {
         throw DuckLakeError.validation('Invalid column type format');
       }
@@ -338,7 +340,8 @@ export default class DuckLakeService {
         throw DuckLakeError.validation('New column type is required');
       }
 
-      const typePattern = /^[A-Za-z_][A-Za-z0-9_() ,[]]*$/;
+      // Allow standard SQL types including arrays (VARCHAR[]), decimals (DECIMAL(10,2)), etc.
+      const typePattern = /^[A-Za-z_][A-Za-z0-9_() ,\[\]]*$/;
       if (!typePattern.test(newType.trim())) {
         throw DuckLakeError.validation('Invalid column type format');
       }

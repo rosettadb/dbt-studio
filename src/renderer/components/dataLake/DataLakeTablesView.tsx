@@ -6,7 +6,7 @@ import {
   Alert,
   Typography,
 } from '@mui/material';
-import { Add } from '@mui/icons-material';
+import { Add, Refresh } from '@mui/icons-material';
 import { DataLakeTables } from './DataLakeTables';
 import { DataLakeTableImportWizard } from './DataLakeTableImportWizard';
 import {
@@ -122,7 +122,11 @@ export const DataLakeTablesView: React.FC<DataLakeTablesViewProps> = ({
             </Box>
           )}
         </Alert>
-        <Button variant="contained" onClick={handleRefresh}>
+        <Button
+          variant="contained"
+          onClick={handleRefresh}
+          startIcon={<Refresh />}
+        >
           Retry
         </Button>
       </Box>

@@ -23,6 +23,8 @@ import {
   Close,
   CheckCircle,
   Error as ErrorIcon,
+  Save,
+  Speed,
 } from '@mui/icons-material';
 import { v4 as uuidv4 } from 'uuid';
 import {
@@ -637,13 +639,24 @@ export const DataLakeConnectionSelector: React.FC<
           )}
         </DialogContent>
         <DialogActions>
-          <Button onClick={() => setIsModalOpen(false)}>Cancel</Button>
+          <Button
+            variant="outlined"
+            onClick={() => setIsModalOpen(false)}
+            color="inherit"
+            startIcon={<Close />}
+          >
+            Cancel
+          </Button>
           <Button
             variant="outlined"
             onClick={handleTestConnection}
             disabled={testStatus === 'testing' || !newConnectionName}
             startIcon={
-              testStatus === 'testing' ? <CircularProgress size={16} /> : null
+              testStatus === 'testing' ? (
+                <CircularProgress size={16} />
+              ) : (
+                <Speed />
+              )
             }
           >
             {testStatus === 'testing' ? 'Testing...' : 'Test Connection'}
@@ -653,7 +666,11 @@ export const DataLakeConnectionSelector: React.FC<
             variant="contained"
             disabled={!newConnectionName || createConnection.isLoading}
             startIcon={
-              createConnection.isLoading ? <CircularProgress size={16} /> : null
+              createConnection.isLoading ? (
+                <CircularProgress size={16} />
+              ) : (
+                <Save />
+              )
             }
           >
             {createConnection.isLoading ? 'Saving...' : 'Save Connection'}

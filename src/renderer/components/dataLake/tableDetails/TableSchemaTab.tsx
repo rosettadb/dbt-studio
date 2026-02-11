@@ -20,12 +20,14 @@ import {
   TextField,
   Autocomplete,
   DialogActions,
+  Alert,
 } from '@mui/material';
 import {
   Add,
   Delete,
   DriveFileRenameOutline,
   SwapHoriz,
+  Close,
 } from '@mui/icons-material';
 import {
   useAddDuckLakeColumn,
@@ -377,14 +379,17 @@ export const TableSchemaTab: React.FC<TableSchemaTabProps> = ({
           </DialogContent>
           <DialogActions>
             <Button
+              variant="outlined"
               color="inherit"
               onClick={() => setAddColumnDialogOpen(false)}
+              startIcon={<Close />}
             >
               Cancel
             </Button>
             <Button
               variant="contained"
               onClick={handleConfirmAddColumn}
+              startIcon={<Add />}
               disabled={
                 addColumnMutation.isLoading ||
                 newColumnName.trim() === '' ||
@@ -414,11 +419,13 @@ export const TableSchemaTab: React.FC<TableSchemaTabProps> = ({
           </DialogContent>
           <DialogActions>
             <Button
+              variant="outlined"
               color="inherit"
               onClick={() => {
                 setDropColumnDialogOpen(false);
                 setColumnToDrop(null);
               }}
+              startIcon={<Close />}
             >
               Cancel
             </Button>
@@ -426,6 +433,7 @@ export const TableSchemaTab: React.FC<TableSchemaTabProps> = ({
               color="error"
               variant="contained"
               onClick={handleConfirmDropColumn}
+              startIcon={<Delete />}
               disabled={!columnToDrop || dropColumnMutation.isLoading}
             >
               Drop
@@ -458,17 +466,20 @@ export const TableSchemaTab: React.FC<TableSchemaTabProps> = ({
           </DialogContent>
           <DialogActions>
             <Button
+              variant="outlined"
               color="inherit"
               onClick={() => {
                 setRenameColumnDialogOpen(false);
                 setColumnToRename(null);
               }}
+              startIcon={<Close />}
             >
               Cancel
             </Button>
             <Button
               variant="contained"
               onClick={handleConfirmRenameColumn}
+              startIcon={<DriveFileRenameOutline />}
               disabled={
                 !columnToRename ||
                 renameColumnMutation.isLoading ||
@@ -495,6 +506,23 @@ export const TableSchemaTab: React.FC<TableSchemaTabProps> = ({
             <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
               Changing type for <strong>{columnToAlterType?.columnName}</strong>
             </Typography>
+            <Alert severity="info" sx={{ mb: 2 }}>
+              <Typography variant="body2" sx={{ fontWeight: 600, mb: 0.5 }}>
+                DuckLake Type Restrictions
+              </Typography>
+              <Typography variant="body2" sx={{ mb: 1 }}>
+                Only widening promotions within the same type family are
+                allowed:
+              </Typography>
+              <Typography variant="body2" component="div" sx={{ ml: 1 }}>
+                • Integers: TINYINT → SMALLINT → INTEGER → BIGINT → HUGEINT
+                <br />
+                • Floats: REAL/FLOAT4 → DOUBLE/FLOAT8
+                <br />
+                • Strings: VARCHAR(n) → VARCHAR(m) where m &gt; n, or → TEXT
+                <br />• Cross-family conversions need table recreation
+              </Typography>
+            </Alert>
             <Autocomplete
               freeSolo
               options={DUCKLAKE_SUPPORTED_COLUMN_TYPES}
@@ -517,17 +545,20 @@ export const TableSchemaTab: React.FC<TableSchemaTabProps> = ({
           </DialogContent>
           <DialogActions>
             <Button
+              variant="outlined"
               color="inherit"
               onClick={() => {
                 setAlterTypeDialogOpen(false);
                 setColumnToAlterType(null);
               }}
+              startIcon={<Close />}
             >
               Cancel
             </Button>
             <Button
               variant="contained"
               onClick={handleConfirmAlterColumnType}
+              startIcon={<SwapHoriz />}
               disabled={
                 !columnToAlterType ||
                 alterColumnTypeMutation.isLoading ||
