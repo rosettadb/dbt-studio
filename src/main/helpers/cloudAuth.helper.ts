@@ -109,7 +109,9 @@ export async function buildCloudSecretQuery(
       const awsConfig = config as S3Config;
       let sessionTokenClause = '';
       if (awsConfig.sessionToken) {
-        sessionTokenClause = `,\n          SESSION_TOKEN '${awsConfig.sessionToken}'`;
+        // Escape single quotes in session token to prevent SQL injection
+        const escapedSessionToken = awsConfig.sessionToken.replace(/'/g, "''");
+        sessionTokenClause = `,\n          SESSION_TOKEN '${escapedSessionToken}'`;
       }
       return `
         ${dropSecretsQuery}

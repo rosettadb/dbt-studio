@@ -272,10 +272,10 @@ export const DataLakeConnectionSelector: React.FC<
           await setCloudAwsSessionToken(sessionToken, connectionId);
         }
 
+        // Exclude sessionToken from persisted config to prevent storing sensitive temporary tokens
         providerConfig = {
           region,
           accessKeyId,
-          sessionToken: sessionToken || undefined,
         } as S3Config;
       } else if (selectedProvider === 'azure') {
         const accountName = newConnectionConfig.accountName?.trim();
