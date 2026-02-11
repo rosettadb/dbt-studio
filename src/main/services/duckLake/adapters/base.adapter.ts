@@ -346,13 +346,8 @@ export abstract class CatalogAdapter {
             endpoint: storageConfig.s3.endpoint,
           },
         );
-        const {
-          region,
-          accessKeyId,
-          secretAccessKey,
-          sessionToken,
-          endpoint,
-        } = storageConfig.s3;
+        const { region, accessKeyId, secretAccessKey, sessionToken, endpoint } =
+          storageConfig.s3;
         const secretName = `s3_secret_${Date.now()}`;
 
         let secretQuery = `CREATE OR REPLACE SECRET ${secretName} (

@@ -112,7 +112,10 @@ const useSecureStorage = () => {
     sessionToken: string,
     connectionName: string,
   ): Promise<void> => {
-    await secureStorageService.set(`cloud-aws-session-${connectionName}`, sessionToken);
+    await secureStorageService.set(
+      `cloud-aws-session-${connectionName}`,
+      sessionToken,
+    );
   };
 
   const getCloudAwsSessionToken = async (

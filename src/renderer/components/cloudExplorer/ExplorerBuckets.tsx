@@ -68,10 +68,12 @@ export const ExplorerBuckets: React.FC<ExplorerBucketsProps> = ({
           if (secret === null) {
             missing = true;
           } else {
-            (config as {
-              secretAccessKey?: string;
-              sessionToken?: string;
-            }).secretAccessKey = secret;
+            (
+              config as {
+                secretAccessKey?: string;
+                sessionToken?: string;
+              }
+            ).secretAccessKey = secret;
             if (sessionToken) {
               (config as { sessionToken?: string }).sessionToken = sessionToken;
             }

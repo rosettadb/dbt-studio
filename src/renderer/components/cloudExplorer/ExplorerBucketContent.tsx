@@ -101,10 +101,12 @@ export const ExplorerBucketContent: React.FC<ExplorerBucketContentProps> = ({
         if (connection.provider === 'aws') {
           const secret = await getCloudAwsSecret(connection.id);
           const sessionToken = await getCloudAwsSessionToken(connection.id);
-          (config as {
-            secretAccessKey?: string;
-            sessionToken?: string;
-          }).secretAccessKey = secret || '';
+          (
+            config as {
+              secretAccessKey?: string;
+              sessionToken?: string;
+            }
+          ).secretAccessKey = secret || '';
           if (sessionToken) {
             (config as { sessionToken?: string }).sessionToken = sessionToken;
           }
