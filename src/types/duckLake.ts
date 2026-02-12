@@ -210,6 +210,7 @@ export interface DuckLakeStorageConfig {
     region: string;
     accessKeyId: string;
     secretAccessKey: string;
+    sessionToken?: string;
     endpoint?: string;
     prefix?: string;
   };

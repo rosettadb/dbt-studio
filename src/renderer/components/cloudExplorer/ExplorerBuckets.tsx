@@ -32,10 +32,7 @@ import {
   Search,
   Clear,
 } from '@mui/icons-material';
-import {
-  useConnection,
-  useListBuckets,
-} from '../../controllers/cloudExplorer.controller';
+import { useConnection, useListBuckets } from '../../controllers';
 import type {
   CloudProvider,
   CloudStorageConfig,
@@ -81,6 +78,7 @@ export const ExplorerBuckets: React.FC<ExplorerBucketsProps> = ({
   // Secure storage logic
   const {
     getCloudAwsSecret,
+    getCloudAwsSessionToken,
     getCloudAzureKey,
     getCloudGcsCredential,
     getCloudMinioSecret,
@@ -103,10 +101,19 @@ export const ExplorerBuckets: React.FC<ExplorerBucketsProps> = ({
       try {
         if (connection.provider === 'aws') {
           const secret = await getCloudAwsSecret(connection.id);
+          const sessionToken = await getCloudAwsSessionToken(connection.id);
           if (secret === null) {
             missing = true;
           } else {
-            (config as { secretAccessKey?: string }).secretAccessKey = secret;
+            (
+              config as {
+                secretAccessKey?: string;
+                sessionToken?: string;
+              }
+            ).secretAccessKey = secret;
+            if (sessionToken) {
+              (config as { sessionToken?: string }).sessionToken = sessionToken;
+            }
           }
         } else if (connection.provider === 'azure') {
           const key = await getCloudAzureKey(connection.id);

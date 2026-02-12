@@ -129,14 +129,20 @@ export async function buildCloudSecretQuery(
   switch (provider) {
     case 'aws': {
       const awsConfig = config as S3Config;
+      let sessionTokenClause = '';
+      if (awsConfig.sessionToken) {
+        // Escape single quotes in session token to prevent SQL injection
+        const escapedSessionToken = awsConfig.sessionToken.replace(/'/g, "''");
+        sessionTokenClause = `,\n          SESSION_TOKEN '${escapedSessionToken}'`;
+      }
       return `
         ${dropSecretsQuery}
         CREATE OR REPLACE SECRET s3_secret (
           TYPE s3,
           PROVIDER config,
-          KEY_ID '${escapeSqlString(awsConfig.accessKeyId)}',
-          SECRET '${escapeSqlString(awsConfig.secretAccessKey)}',
-          REGION '${escapeSqlString(awsConfig.region)}'
+          KEY_ID '${awsConfig.accessKeyId}',
+          SECRET '${awsConfig.secretAccessKey}',
+          REGION '${awsConfig.region}'${sessionTokenClause}
         );
       `;
     }

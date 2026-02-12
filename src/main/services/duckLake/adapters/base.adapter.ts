@@ -396,7 +396,7 @@ export abstract class CatalogAdapter {
             endpoint: storageConfig.s3.endpoint,
           },
         );
-        const { region, accessKeyId, secretAccessKey, endpoint } =
+        const { region, accessKeyId, secretAccessKey, sessionToken, endpoint } =
           storageConfig.s3;
         const secretName = `s3_secret_${Date.now()}`;
 
@@ -406,6 +406,11 @@ export abstract class CatalogAdapter {
   KEY_ID '${accessKeyId}',
   SECRET '${secretAccessKey}',
   REGION '${region}'`;
+
+        if (sessionToken) {
+          secretQuery += `,
+  SESSION_TOKEN '${sessionToken}'`;
+        }
 
         if (endpoint) {
           secretQuery += `,

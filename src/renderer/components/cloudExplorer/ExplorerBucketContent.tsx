@@ -96,6 +96,7 @@ export const ExplorerBucketContent: React.FC<ExplorerBucketContentProps> = ({
   const connection = connectionQuery.data;
   const {
     getCloudAwsSecret,
+    getCloudAwsSessionToken,
     getCloudAzureKey,
     getCloudGcsCredential,
     getCloudMinioSecret,
@@ -114,8 +115,16 @@ export const ExplorerBucketContent: React.FC<ExplorerBucketContentProps> = ({
       try {
         if (connection.provider === 'aws') {
           const secret = await getCloudAwsSecret(connection.id);
-          (config as { secretAccessKey?: string }).secretAccessKey =
-            secret || '';
+          const sessionToken = await getCloudAwsSessionToken(connection.id);
+          (
+            config as {
+              secretAccessKey?: string;
+              sessionToken?: string;
+            }
+          ).secretAccessKey = secret || '';
+          if (sessionToken) {
+            (config as { sessionToken?: string }).sessionToken = sessionToken;
+          }
         } else if (connection.provider === 'azure') {
           const key = await getCloudAzureKey(connection.id);
           (config as { accountKey?: string }).accountKey = key || '';
