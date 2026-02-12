@@ -90,6 +90,7 @@ export const ConnectionForm: React.FC<ConnectionFormProps> = ({
     getCloudAwsSecret,
     setCloudAwsSessionToken,
     getCloudAwsSessionToken,
+    deleteCloudAwsSessionToken,
     setCloudAzureKey,
     getCloudAzureKey,
     setCloudMinioSecret,
@@ -384,6 +385,8 @@ export const ConnectionForm: React.FC<ConnectionFormProps> = ({
         await setCloudAwsSecret(formData.secretAccessKey, connId);
         if (formData.sessionToken.trim()) {
           await setCloudAwsSessionToken(formData.sessionToken, connId);
+        } else {
+          await deleteCloudAwsSessionToken(connId);
         }
         const config = { ...rawConfig };
         if ('secretAccessKey' in config) {
