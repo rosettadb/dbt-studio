@@ -154,9 +154,6 @@ export const ConnectionForm: React.FC<ConnectionFormProps> = ({
         provider: initialValues.provider,
         projectId: (config as GCSConfig).projectId || '',
         credentials: (config as GCSConfig).credentials || '',
-        region: (config as S3Config).region || '',
-        accessKeyId: (config as S3Config).accessKeyId || '',
-        secretAccessKey: (config as S3Config).secretAccessKey || '',
         sessionToken: (config as S3Config).sessionToken || '',
         region:
           (config as S3Config).region ||

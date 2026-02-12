@@ -32,10 +32,7 @@ import {
   Search,
   Clear,
 } from '@mui/icons-material';
-import {
-  useConnection,
-  useListBuckets,
-} from '../../controllers';
+import { useConnection, useListBuckets } from '../../controllers';
 import type {
   CloudProvider,
   CloudStorageConfig,

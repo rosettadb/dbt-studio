@@ -96,6 +96,7 @@ export const ExplorerBucketContent: React.FC<ExplorerBucketContentProps> = ({
   const connection = connectionQuery.data;
   const {
     getCloudAwsSecret,
+    getCloudAwsSessionToken,
     getCloudAzureKey,
     getCloudGcsCredential,
     getCloudMinioSecret,
