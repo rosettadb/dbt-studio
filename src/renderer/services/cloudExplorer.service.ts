@@ -3,23 +3,27 @@ import type {
   CloudListResult,
   CloudStorageConfig,
   PreviewResult,
+  CloudProvider,
 } from '../../types/frontend';
 import { client } from '../config/client';
 
 class CloudExplorerService {
   static async listBuckets(
-    provider: 'aws' | 'azure' | 'gcs',
+    provider: CloudProvider,
     config: CloudStorageConfig,
   ): Promise<Bucket[]> {
     const { data } = await client.post<
-      { provider: 'aws' | 'azure' | 'gcs'; config: CloudStorageConfig },
+      {
+        provider: CloudProvider;
+        config: CloudStorageConfig;
+      },
       Bucket[]
     >('cloudExplorer:listBuckets', { provider, config });
     return data;
   }
 
   static async listObjects(
-    provider: 'aws' | 'azure' | 'gcs',
+    provider: CloudProvider,
     config: CloudStorageConfig,
     bucketName: string,
     continuationToken?: string,
@@ -27,7 +31,7 @@ class CloudExplorerService {
   ): Promise<CloudListResult> {
     const { data } = await client.post<
       {
-        provider: 'aws' | 'azure' | 'gcs';
+        provider: CloudProvider;
         config: CloudStorageConfig;
         bucketName: string;
         continuationToken?: string;
@@ -45,14 +49,14 @@ class CloudExplorerService {
   }
 
   static async getDownloadUrl(
-    provider: 'aws' | 'azure' | 'gcs',
+    provider: CloudProvider,
     config: CloudStorageConfig,
     bucketName: string,
     objectName: string,
   ): Promise<string> {
     const { data } = await client.post<
       {
-        provider: 'aws' | 'azure' | 'gcs';
+        provider: CloudProvider;
         config: CloudStorageConfig;
         bucketName: string;
         objectName: string;
@@ -68,18 +72,21 @@ class CloudExplorerService {
   }
 
   static async testConnection(
-    provider: 'aws' | 'azure' | 'gcs',
+    provider: CloudProvider,
     config: CloudStorageConfig,
   ): Promise<boolean> {
     const { data } = await client.post<
-      { provider: 'aws' | 'azure' | 'gcs'; config: CloudStorageConfig },
+      {
+        provider: CloudProvider;
+        config: CloudStorageConfig;
+      },
       boolean
     >('cloudExplorer:testConnection', { provider, config });
     return data;
   }
 
   static async previewData(
-    provider: 'aws' | 'azure' | 'gcs',
+    provider: CloudProvider,
     config: CloudStorageConfig,
     bucketName: string,
     objectName: string,
@@ -89,7 +96,7 @@ class CloudExplorerService {
     try {
       const { data } = await client.post<
         {
-          provider: 'aws' | 'azure' | 'gcs';
+          provider: CloudProvider;
           config: CloudStorageConfig;
           bucketName: string;
           objectName: string;

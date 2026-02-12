@@ -121,6 +121,92 @@ export namespace DuckLakeService {
     );
   }
 
+  export async function renameTable(
+    instanceId: string,
+    oldName: string,
+    newName: string,
+  ): Promise<void> {
+    return window.electron.ipcRenderer.invoke(
+      'ducklake:table:rename',
+      instanceId,
+      oldName,
+      newName,
+    );
+  }
+
+  export async function addColumn(
+    instanceId: string,
+    tableName: string,
+    columnName: string,
+    columnType: string,
+    defaultValue?: string,
+  ): Promise<void> {
+    return window.electron.ipcRenderer.invoke(
+      'ducklake:table:addColumn',
+      instanceId,
+      tableName,
+      columnName,
+      columnType,
+      defaultValue,
+    );
+  }
+
+  export async function dropColumn(
+    instanceId: string,
+    tableName: string,
+    columnName: string,
+  ): Promise<void> {
+    return window.electron.ipcRenderer.invoke(
+      'ducklake:table:dropColumn',
+      instanceId,
+      tableName,
+      columnName,
+    );
+  }
+
+  export async function renameColumn(
+    instanceId: string,
+    tableName: string,
+    oldColumnName: string,
+    newColumnName: string,
+  ): Promise<void> {
+    return window.electron.ipcRenderer.invoke(
+      'ducklake:table:renameColumn',
+      instanceId,
+      tableName,
+      oldColumnName,
+      newColumnName,
+    );
+  }
+
+  export async function alterColumnType(
+    instanceId: string,
+    tableName: string,
+    columnName: string,
+    newType: string,
+  ): Promise<void> {
+    return window.electron.ipcRenderer.invoke(
+      'ducklake:table:alterColumnType',
+      instanceId,
+      tableName,
+      columnName,
+      newType,
+    );
+  }
+
+  export async function setPartitionedBy(
+    instanceId: string,
+    tableName: string,
+    columnNames: string[],
+  ): Promise<void> {
+    return window.electron.ipcRenderer.invoke(
+      'ducklake:table:setPartitionedBy',
+      instanceId,
+      tableName,
+      columnNames,
+    );
+  }
+
   /**
    * Get comprehensive table details from DuckLake metadata catalog (Phase 8b)
    */
@@ -128,18 +214,11 @@ export namespace DuckLakeService {
     instanceId: string,
     tableName: string,
   ): Promise<any> {
-    // eslint-disable-next-line no-console
-    console.log('[DuckLakeService.getTableDetails] Calling IPC for:', {
-      instanceId,
-      tableName,
-    });
     const result = await window.electron.ipcRenderer.invoke(
       'ducklake:table:getDetails',
       instanceId,
       tableName,
     );
-    // eslint-disable-next-line no-console
-    console.log('[DuckLakeService.getTableDetails] IPC result:', result);
     return result;
   }
 
@@ -176,6 +255,45 @@ export namespace DuckLakeService {
       instanceId,
       tableName,
       snapshotId,
+    );
+  }
+
+  export async function updateRows(
+    instanceId: string,
+    tableName: string,
+    updateQuery: string,
+  ): Promise<{ rowsAffected: number }> {
+    return window.electron.ipcRenderer.invoke(
+      'ducklake:table:updateRows',
+      instanceId,
+      tableName,
+      updateQuery,
+    );
+  }
+
+  export async function deleteRows(
+    instanceId: string,
+    tableName: string,
+    deleteQuery: string,
+  ): Promise<{ rowsAffected: number }> {
+    return window.electron.ipcRenderer.invoke(
+      'ducklake:table:deleteRows',
+      instanceId,
+      tableName,
+      deleteQuery,
+    );
+  }
+
+  export async function upsertRows(
+    instanceId: string,
+    tableName: string,
+    upsertQuery: string,
+  ): Promise<{ rowsAffected: number }> {
+    return window.electron.ipcRenderer.invoke(
+      'ducklake:table:upsertRows',
+      instanceId,
+      tableName,
+      upsertQuery,
     );
   }
 

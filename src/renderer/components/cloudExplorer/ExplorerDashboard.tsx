@@ -21,21 +21,11 @@ import {
 import {
   useGetCloudConnections,
   useRecentItems,
-  useListBuckets,
 } from '../../controllers/cloudExplorer.controller';
-import type {
-  CloudProvider,
-  CloudStorageConfig,
-} from '../../../types/frontend';
+import type { CloudProvider } from '../../../types/frontend';
 import { cloudStorageImages } from '../../../../assets/connectionIcons';
 
-interface ExplorerDashboardProps {
-  selectedConnectionId?: string;
-}
-
-export const ExplorerDashboard = ({
-  selectedConnectionId,
-}: ExplorerDashboardProps) => {
+export const ExplorerDashboard = () => {
   const navigate = useNavigate();
 
   const connectionsQuery = useGetCloudConnections();
@@ -44,17 +34,13 @@ export const ExplorerDashboard = ({
   const connections = connectionsQuery.data || [];
   const recentItems = recentItemsQuery.data || [];
 
-  // Get selected connection
-  const selectedConnection = selectedConnectionId
-    ? connections.find((c) => c.id === selectedConnectionId)
-    : null;
-
-  // Get buckets for selected connection
-  const bucketsQuery = useListBuckets(
-    selectedConnection?.provider as CloudProvider,
-    selectedConnection?.config as CloudStorageConfig,
-    !!selectedConnection,
-  );
+  // Helper function to truncate long paths
+  const truncatePath = (path: string, maxLength: number = 50) => {
+    if (path.length <= maxLength) return path;
+    const parts = path.split('/');
+    if (parts.length <= 2) return path;
+    return `.../${parts.slice(-2).join('/')}`;
+  };
 
   // Helper function to get provider icons
   const getProviderIcon = (provider: CloudProvider) => {
@@ -85,16 +71,6 @@ export const ExplorerDashboard = ({
       {} as Record<CloudProvider, number>,
     );
   }, [connections]);
-
-  const buckets = bucketsQuery.data || [];
-
-  const recentFiles = useMemo(() => {
-    return recentItems.filter((item) => !item.path.endsWith('/')).slice(0, 5);
-  }, [recentItems]);
-
-  const recentDirectories = useMemo(() => {
-    return recentItems.filter((item) => item.path.endsWith('/')).slice(0, 5);
-  }, [recentItems]);
 
   // Handle navigation to recent items
   const handleRecentItemClick = (item: any) => {
@@ -227,50 +203,9 @@ export const ExplorerDashboard = ({
                 }}
               >
                 <Typography variant="subtitle2" color="text.secondary">
-                  Total Buckets
-                </Typography>
-                <FolderOpen sx={{ color: 'text.secondary', fontSize: 20 }} />
-              </Box>
-            }
-            sx={{ pb: 1 }}
-          />
-          <CardContent sx={{ pt: 0 }}>
-            <Typography
-              variant="h4"
-              component="div"
-              sx={{ fontWeight: 'bold' }}
-            >
-              {buckets.length}
-            </Typography>
-            <Typography variant="body2" color="text.secondary">
-              {buckets.length === 1 ? 'Bucket' : 'Buckets'} available
-            </Typography>
-          </CardContent>
-        </Card>
-
-        <Card
-          sx={{
-            boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
-            transition: 'all 0.3s ease',
-            '&:hover': {
-              boxShadow: '0 4px 16px rgba(0,0,0,0.15)',
-              transform: 'translateY(-2px)',
-            },
-          }}
-        >
-          <CardHeader
-            title={
-              <Box
-                sx={{
-                  display: 'flex',
-                  justifyContent: 'space-between',
-                  alignItems: 'center',
-                }}
-              >
-                <Typography variant="subtitle2" color="text.secondary">
                   Storage Types
                 </Typography>
-                <Storage sx={{ color: 'text.secondary', fontSize: 20 }} />
+                <Cloud sx={{ color: 'text.secondary', fontSize: 20 }} />
               </Box>
             }
             sx={{ pb: 1 }}
@@ -289,17 +224,23 @@ export const ExplorerDashboard = ({
                 display: 'flex',
                 flexDirection: 'column',
                 gap: 0.5,
+                maxHeight: 150,
+                overflowY: 'auto',
+                '&::-webkit-scrollbar': {
+                  width: '6px',
+                },
+                '&::-webkit-scrollbar-track': {
+                  background: 'transparent',
+                },
+                '&::-webkit-scrollbar-thumb': {
+                  background: 'rgba(0,0,0,0.2)',
+                  borderRadius: '3px',
+                },
+                '&::-webkit-scrollbar-thumb:hover': {
+                  background: 'rgba(0,0,0,0.3)',
+                },
               }}
             >
-              {connectionTypes.gcs && (
-                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                  {getProviderIcon('gcs')}
-                  <Typography variant="body2" color="text.secondary">
-                    {connectionTypes.gcs} Google Cloud Storage{' '}
-                    {connectionTypes.gcs === 1 ? 'connection' : 'connections'}
-                  </Typography>
-                </Box>
-              )}
               {connectionTypes.aws && (
                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                   {getProviderIcon('aws')}
@@ -315,6 +256,57 @@ export const ExplorerDashboard = ({
                   <Typography variant="body2" color="text.secondary">
                     {connectionTypes.azure} Azure Blob Storage{' '}
                     {connectionTypes.azure === 1 ? 'connection' : 'connections'}
+                  </Typography>
+                </Box>
+              )}
+              {connectionTypes.gcs && (
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                  {getProviderIcon('gcs')}
+                  <Typography variant="body2" color="text.secondary">
+                    {connectionTypes.gcs} Google Cloud Storage{' '}
+                    {connectionTypes.gcs === 1 ? 'connection' : 'connections'}
+                  </Typography>
+                </Box>
+              )}
+              {connectionTypes.minio && (
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                  {getProviderIcon('minio')}
+                  <Typography variant="body2" color="text.secondary">
+                    {connectionTypes.minio} MinIO{' '}
+                    {connectionTypes.minio === 1 ? 'connection' : 'connections'}
+                  </Typography>
+                </Box>
+              )}
+              {connectionTypes['cloudflare-r2'] && (
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                  {getProviderIcon('cloudflare-r2')}
+                  <Typography variant="body2" color="text.secondary">
+                    {connectionTypes['cloudflare-r2']} Cloudflare R2{' '}
+                    {connectionTypes['cloudflare-r2'] === 1
+                      ? 'connection'
+                      : 'connections'}
+                  </Typography>
+                </Box>
+              )}
+              {connectionTypes['backblaze-b2'] && (
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                  {getProviderIcon('backblaze-b2')}
+                  <Typography variant="body2" color="text.secondary">
+                    {connectionTypes['backblaze-b2']} Backblaze B2{' '}
+                    {connectionTypes['backblaze-b2'] === 1
+                      ? 'connection'
+                      : 'connections'}
+                  </Typography>
+                </Box>
+              )}
+              {connectionTypes.rustfs && (
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                  {getProviderIcon('rustfs')}
+                  <Typography variant="body2" color="text.secondary">
+                    {connectionTypes.rustfs} rustfs{' '}
+                    {connectionTypes.rustfs === 1
+                      ? 'connection'
+                      : 'connections'}
                   </Typography>
                 </Box>
               )}
@@ -366,28 +358,20 @@ export const ExplorerDashboard = ({
                 variant="text"
                 size="small"
                 onClick={() => navigate('/app/cloud-explorer/recent-items')}
-                sx={{ mt: 1, p: 0, minWidth: 'auto' }}
+                sx={{ mt: 1, p: 0, minWidth: 'auto', textTransform: 'none' }}
               >
-                View all recent items
+                View all recent items →
               </Button>
             )}
           </CardContent>
         </Card>
       </Box>
 
-      {/* Recent Files and Directories */}
-      <Box
-        sx={{
-          display: 'grid',
-          gridTemplateColumns: { xs: '1fr', md: 'repeat(2, 1fr)' },
-          gap: 3,
-          mt: 3,
-        }}
-      >
+      {/* Recent Activity Section */}
+      {recentItems.length > 0 && (
         <Card
           sx={{
-            display: 'flex',
-            flexDirection: 'column',
+            mt: 3,
             boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
             transition: 'all 0.3s ease',
             '&:hover': {
@@ -407,177 +391,94 @@ export const ExplorerDashboard = ({
               >
                 <Box>
                   <Typography variant="h6" component="h2">
-                    Recent Files
+                    Recent Activity
                   </Typography>
                   <Typography variant="body2" color="text.secondary">
-                    Recently accessed files
+                    Recently accessed files and directories
                   </Typography>
                 </Box>
-                <Description sx={{ color: 'text.secondary', fontSize: 24 }} />
+                <AccessTime sx={{ color: 'text.secondary', fontSize: 24 }} />
               </Box>
             }
           />
-          <CardContent
-            sx={{ display: 'flex', flexDirection: 'column', height: '100%' }}
-          >
-            <Box sx={{ flex: 1, mb: 2 }}>
-              {recentFiles.length === 0 ? (
-                <Typography variant="body2" color="text.secondary">
-                  No recent files
-                </Typography>
-              ) : (
-                <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-                  {recentFiles.map((item) => (
-                    <Box
-                      key={item.id}
-                      sx={{
-                        display: 'flex',
-                        justifyContent: 'space-between',
-                        alignItems: 'center',
-                        cursor: 'pointer',
-                        p: 1,
-                        borderRadius: 1,
-                        '&:hover': {
-                          backgroundColor: 'action.hover',
-                        },
-                      }}
-                      onClick={() => handleRecentItemClick(item)}
-                    >
-                      <Box
-                        sx={{ display: 'flex', alignItems: 'center', gap: 1 }}
+          <CardContent>
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+              {recentItems.slice(0, 10).map((item) => (
+                <Box
+                  key={item.id}
+                  sx={{
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'center',
+                    cursor: 'pointer',
+                    p: 1,
+                    borderRadius: 1,
+                    '&:hover': {
+                      backgroundColor: 'action.hover',
+                    },
+                  }}
+                  onClick={() => handleRecentItemClick(item)}
+                >
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                    {item.path.endsWith('/') ? (
+                      <FolderOpen
+                        sx={{ fontSize: 16, color: 'text.secondary' }}
+                      />
+                    ) : (
+                      <Description
+                        sx={{ fontSize: 16, color: 'text.secondary' }}
+                      />
+                    )}
+                    <Box>
+                      <Typography
+                        variant="body2"
+                        sx={{
+                          fontWeight: 500,
+                          overflow: 'hidden',
+                          textOverflow: 'ellipsis',
+                          whiteSpace: 'nowrap',
+                          maxWidth: '300px',
+                        }}
+                        title={item.name}
                       >
-                        <Description
-                          sx={{ fontSize: 16, color: 'text.secondary' }}
-                        />
-                        <Box>
-                          <Typography variant="body2" sx={{ fontWeight: 500 }}>
-                            {item.name}
-                          </Typography>
-                          <Typography variant="caption" color="text.secondary">
-                            {item.connectionName} / {item.path}
-                          </Typography>
-                        </Box>
-                      </Box>
-                      <Typography variant="caption" color="text.secondary">
-                        {formatDistanceToNow(new Date(item.accessedAt), {
-                          addSuffix: true,
-                        })}
+                        {item.name}
+                      </Typography>
+                      <Typography
+                        variant="caption"
+                        color="text.secondary"
+                        sx={{
+                          overflow: 'hidden',
+                          textOverflow: 'ellipsis',
+                          whiteSpace: 'nowrap',
+                          display: 'block',
+                          maxWidth: '400px',
+                        }}
+                        title={`${item.connectionName} / ${item.path}`}
+                      >
+                        {item.connectionName} / {truncatePath(item.path)}
                       </Typography>
                     </Box>
-                  ))}
+                  </Box>
+                  <Typography variant="caption" color="text.secondary">
+                    {formatDistanceToNow(new Date(item.accessedAt), {
+                      addSuffix: true,
+                    })}
+                  </Typography>
                 </Box>
-              )}
+              ))}
             </Box>
             <Button
-              variant="outlined"
+              variant="text"
               size="small"
-              onClick={() =>
-                navigate('/app/cloud-explorer/recent-items?filter=files')
-              }
+              onClick={() => navigate('/app/cloud-explorer/recent-items')}
               fullWidth
+              sx={{ mt: 2, textTransform: 'none' }}
             >
-              View All Files
+              View All Recent Items →
             </Button>
           </CardContent>
         </Card>
-
-        <Card
-          sx={{
-            display: 'flex',
-            flexDirection: 'column',
-            boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
-            transition: 'all 0.3s ease',
-            '&:hover': {
-              boxShadow: '0 4px 16px rgba(0,0,0,0.15)',
-              transform: 'translateY(-2px)',
-            },
-          }}
-        >
-          <CardHeader
-            title={
-              <Box
-                sx={{
-                  display: 'flex',
-                  justifyContent: 'space-between',
-                  alignItems: 'center',
-                }}
-              >
-                <Box>
-                  <Typography variant="h6" component="h2">
-                    Recent Directories
-                  </Typography>
-                  <Typography variant="body2" color="text.secondary">
-                    Recently accessed directories
-                  </Typography>
-                </Box>
-                <FolderOpen sx={{ color: 'text.secondary', fontSize: 24 }} />
-              </Box>
-            }
-          />
-          <CardContent
-            sx={{ display: 'flex', flexDirection: 'column', height: '100%' }}
-          >
-            <Box sx={{ flex: 1, mb: 2 }}>
-              {recentDirectories.length === 0 ? (
-                <Typography variant="body2" color="text.secondary">
-                  No recent directories
-                </Typography>
-              ) : (
-                <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-                  {recentDirectories.map((item) => (
-                    <Box
-                      key={item.id}
-                      sx={{
-                        display: 'flex',
-                        justifyContent: 'space-between',
-                        alignItems: 'center',
-                        cursor: 'pointer',
-                        p: 1,
-                        borderRadius: 1,
-                        '&:hover': {
-                          backgroundColor: 'action.hover',
-                        },
-                      }}
-                      onClick={() => handleRecentItemClick(item)}
-                    >
-                      <Box
-                        sx={{ display: 'flex', alignItems: 'center', gap: 1 }}
-                      >
-                        <FolderOpen
-                          sx={{ fontSize: 16, color: 'text.secondary' }}
-                        />
-                        <Box>
-                          <Typography variant="body2" sx={{ fontWeight: 500 }}>
-                            {item.name}
-                          </Typography>
-                          <Typography variant="caption" color="text.secondary">
-                            {item.connectionName} / {item.path}
-                          </Typography>
-                        </Box>
-                      </Box>
-                      <Typography variant="caption" color="text.secondary">
-                        {formatDistanceToNow(new Date(item.accessedAt), {
-                          addSuffix: true,
-                        })}
-                      </Typography>
-                    </Box>
-                  ))}
-                </Box>
-              )}
-            </Box>
-            <Button
-              variant="outlined"
-              size="small"
-              onClick={() =>
-                navigate('/app/cloud-explorer/recent-items?filter=directories')
-              }
-              fullWidth
-            >
-              View All Directories
-            </Button>
-          </CardContent>
-        </Card>
-      </Box>
+      )}
 
       {/* Welcome Card for New Users */}
       {connections.length === 0 && (

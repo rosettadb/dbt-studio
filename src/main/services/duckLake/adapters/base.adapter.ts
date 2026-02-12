@@ -87,6 +87,56 @@ export abstract class CatalogAdapter {
    */
   abstract getTable(tableName: string): Promise<DuckLakeTableInfo>;
 
+  abstract deleteTable(tableName: string): Promise<void>;
+
+  abstract renameTable(oldName: string, newName: string): Promise<void>;
+
+  abstract addColumn(
+    tableName: string,
+    columnName: string,
+    columnType: string,
+    defaultValue?: string,
+  ): Promise<void>;
+
+  abstract dropColumn(tableName: string, columnName: string): Promise<void>;
+
+  abstract renameColumn(
+    tableName: string,
+    oldColumnName: string,
+    newColumnName: string,
+  ): Promise<void>;
+
+  abstract alterColumnType(
+    tableName: string,
+    columnName: string,
+    newType: string,
+  ): Promise<void>;
+
+  abstract setPartitionedBy(
+    tableName: string,
+    columnNames: string[],
+  ): Promise<void>;
+
+  abstract restoreSnapshot(
+    tableName: string,
+    snapshotId: number,
+  ): Promise<void>;
+
+  abstract updateRows(
+    tableName: string,
+    updateQuery: string,
+  ): Promise<{ rowsAffected: number }>;
+
+  abstract deleteRows(
+    tableName: string,
+    deleteQuery: string,
+  ): Promise<{ rowsAffected: number }>;
+
+  abstract upsertRows(
+    tableName: string,
+    upsertQuery: string,
+  ): Promise<{ rowsAffected: number }>;
+
   /**
    * Execute query against the DuckLake instance
    */
@@ -464,5 +514,146 @@ CREATE OR REPLACE SECRET ${secretName} (
       );
       throw error;
     }
+  }
+
+  /**
+   * Resolve the attached DuckLake metadata database name
+   */
+  protected async getMetadataDatabaseName(): Promise<string> {
+    if (!this.connectionInfo) {
+      throw new Error('Not connected to catalog');
+    }
+
+    const databasesQuery = `
+      SELECT database_name
+      FROM duckdb_databases()
+      WHERE database_name LIKE '__ducklake_metadata_%'
+      LIMIT 1
+    `;
+
+    const databasesResult =
+      await this.connectionInfo.connection.run(databasesQuery);
+    const databaseRows = await databasesResult.getRows();
+
+    if (databaseRows.length === 0) {
+      throw new Error('DuckLake metadata database not found');
+    }
+
+    return Array.isArray(databaseRows[0])
+      ? databaseRows[0][0]
+      : (databaseRows[0] as any).database_name;
+  }
+
+  /**
+   * Sanitize default value for SQL injection protection
+   * Validates and escapes default values to prevent SQL injection
+   */
+  // eslint-disable-next-line class-methods-use-this
+  protected sanitizeDefaultValue(defaultValue: string): string {
+    const trimmedValue = defaultValue.trim();
+
+    // Check for dangerous SQL injection markers that shouldn't appear even in strings if we are being very strict,
+    // although standard SQL string escaping should handle them.
+    // We kept these minimal checks to avoid obvious injection attempts in what should be a simple value.
+    if (
+      trimmedValue.includes(';') ||
+      trimmedValue.includes('--') ||
+      trimmedValue.includes('/*') ||
+      trimmedValue.includes('*/')
+    ) {
+      throw new Error(
+        'Invalid default value: contains potentially dangerous SQL patterns',
+      );
+    }
+
+    // Check if it's a simple literal (number, boolean, NULL) or standard SQL function
+    // This allows unquoted values for these specific safe types/keywords
+    const simpleLiteralPattern =
+      /^(NULL|TRUE|FALSE|-?\d+(\.\d+)?|CURRENT_TIMESTAMP|CURRENT_DATE|CURRENT_TIME)$/i;
+
+    if (simpleLiteralPattern.test(trimmedValue)) {
+      return trimmedValue;
+    }
+
+    // Treat everything else as a string literal: escape single quotes and wrap in quotes
+    // This safely handles values that might contain keywords like "CREATE" or "DROP"
+    // e.g. default value "CREATE_DATE" becomes "'CREATE_DATE'"
+    const escapedValue = trimmedValue.replace(/'/g, "''");
+    return `'${escapedValue}'`;
+  }
+
+  /**
+   * Validate column type to prevent SQL injection
+   * Checks type against allowlist of valid DuckDB/PostgreSQL/SQLite types
+   */
+  // eslint-disable-next-line class-methods-use-this
+  protected validateColumnType(columnType: string): string {
+    const trimmedType = columnType.trim();
+
+    // Check for dangerous SQL patterns
+    if (
+      trimmedType.includes(';') ||
+      trimmedType.includes('--') ||
+      trimmedType.includes('/*') ||
+      trimmedType.includes('*/') ||
+      trimmedType.toLowerCase().includes('drop') ||
+      trimmedType.toLowerCase().includes('delete') ||
+      trimmedType.toLowerCase().includes('insert') ||
+      trimmedType.toLowerCase().includes('update') ||
+      trimmedType.toLowerCase().includes('create') ||
+      trimmedType.toLowerCase().includes('alter')
+    ) {
+      throw new Error(
+        'Invalid column type: contains potentially dangerous SQL patterns',
+      );
+    }
+
+    // Comprehensive regex for DuckDB/PostgreSQL/SQLite types
+    // Supports: basic types, sized types, precision types, arrays, structs, maps, etc.
+    // Includes PostgreSQL-style aliases: INT2, INT4, INT8, FLOAT4, FLOAT8
+    const typePattern =
+      /^(TINYINT|SMALLINT|INTEGER|BIGINT|HUGEINT|UTINYINT|USMALLINT|UINTEGER|UBIGINT|UHUGEINT|UINT8|UINT16|UINT32|UINT64|UINT128|INT8|INT16|INT32|INT64|INT|INT2|INT4|DOUBLE\s+PRECISION|DOUBLE|REAL|FLOAT|FLOAT4|FLOAT8|DECIMAL(\(\d+(\s*,\s*\d+)?\))?|NUMERIC(\(\d+(\s*,\s*\d+)?\))?|VARCHAR(\(\d+\))?|CHAR(\(\d+\))?|TEXT|STRING|BLOB|BYTEA|BOOLEAN|BOOL|DATE|TIME|TIMESTAMP|TIMESTAMPTZ|TIMESTAMP\s+WITH\s+TIME\s+ZONE|TIMESTAMP\s+WITHOUT\s+TIME\s+ZONE|TIME\s+WITH\s+TIME\s+ZONE|TIME\s+WITHOUT\s+TIME\s+ZONE|INTERVAL|JSON|JSONB|UUID|BIT(\(\d+\))?|VARBIT(\(\d+\))?|BIT\s+VARYING(\(\d+\))?)(\[\])*$/i;
+
+    // Also support complex types like STRUCT, MAP, LIST, ENUM with parentheses
+    const complexTypePattern = /^(STRUCT|MAP|LIST|ENUM)\s*\(.+\)$/i;
+
+    if (
+      !typePattern.test(trimmedType) &&
+      !complexTypePattern.test(trimmedType)
+    ) {
+      throw new Error(
+        `Invalid column type: "${trimmedType}" is not a recognized SQL type`,
+      );
+    }
+
+    return trimmedType;
+  }
+
+  protected static mapResultRow(
+    schema: any[] | undefined,
+    row: any,
+  ): Record<string, unknown> {
+    if (!Array.isArray(row)) {
+      return (row ?? {}) as Record<string, unknown>;
+    }
+
+    if (!schema || schema.length === 0) {
+      return row.reduce(
+        (acc: Record<string, unknown>, value: unknown, index: number) => {
+          acc[`col_${index}`] = value;
+          return acc;
+        },
+        {},
+      );
+    }
+
+    return schema.reduce(
+      (acc: Record<string, unknown>, column: any, index: number) => {
+        const key = column?.name || `col_${index}`;
+        acc[key] = row[index];
+        return acc;
+      },
+      {},
+    );
   }
 }

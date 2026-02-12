@@ -13,6 +13,10 @@ import kinetica from './kinetica.png';
 import googlecloud from './googlecloud.png';
 import azureBlob from './azure_blob.png';
 import s3Bucket from './s3_bucktet.png';
+import minio from './minio.png';
+import cloudflareR2 from './cloudflare_r2.png';
+import backblazeB2 from './blackbaze.png';
+import rustfs from './rustfs.png';
 import openai from './openai.svg';
 import ollama from './ollama.svg';
 import google from './google.svg';
@@ -28,6 +32,10 @@ export const cloudStorageImages = {
   aws: s3Bucket,
   s3: s3Bucket,
   azure: azureBlob,
+  minio,
+  'cloudflare-r2': cloudflareR2,
+  'backblaze-b2': backblazeB2,
+  rustfs,
 };
 
 // AI provider specific images

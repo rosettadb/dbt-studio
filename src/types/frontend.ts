@@ -58,6 +58,10 @@ export type SecureStorageAccount =
   | `cloud-gcs-${string}`
   | `cloud-aws-${string}`
   | `cloud-azure-${string}`
+  | `cloud-minio-${string}`
+  | `cloud-cloudflare-r2-${string}`
+  | `cloud-backblaze-b2-${string}`
+  | `cloud-rustfs-${string}`
   | `db-bigquery-${string}`
   | 'cloud-api-key';
 
@@ -66,6 +70,8 @@ export interface Bucket {
   name: string;
   created?: Date;
   location?: string;
+  objectCount?: number;
+  size?: number;
 }
 
 export interface StorageObject {
@@ -99,9 +105,52 @@ export interface GCSConfig {
   credentials?: any;
 }
 
-export type CloudStorageConfig = S3Config | AzureConfig | GCSConfig;
+export interface MinIOConfig {
+  endpoint: string;
+  accessKeyId: string;
+  secretAccessKey: string;
+  useSSL?: boolean;
+  region?: string;
+}
 
-export type CloudProvider = 'aws' | 'azure' | 'gcs';
+export interface CloudflareR2Config {
+  accountId: string;
+  accessKeyId: string;
+  secretAccessKey: string;
+  jurisdiction?: 'eu';
+}
+
+export interface BackblazeB2Config {
+  applicationKeyId: string;
+  applicationKey: string;
+  endpoint?: string;
+}
+
+export interface RustfsConfig {
+  endpoint: string;
+  accessKeyId: string;
+  secretAccessKey: string;
+  useSSL?: boolean;
+  region?: string;
+}
+
+export type CloudStorageConfig =
+  | S3Config
+  | AzureConfig
+  | GCSConfig
+  | MinIOConfig
+  | CloudflareR2Config
+  | BackblazeB2Config
+  | RustfsConfig;
+
+export type CloudProvider =
+  | 'aws'
+  | 'azure'
+  | 'gcs'
+  | 'minio'
+  | 'cloudflare-r2'
+  | 'backblaze-b2'
+  | 'rustfs';
 
 export type CloudConnection = {
   id: string;
