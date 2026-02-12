@@ -22,13 +22,13 @@ import {
   IconButton,
   InputBase,
   TableSortLabel,
+  Tooltip,
 } from '@mui/material';
 import {
   FolderOpen,
   ArrowBack,
   Refresh,
   OpenInNew,
-  Archive,
   Search,
   Clear,
 } from '@mui/icons-material';
@@ -336,12 +336,32 @@ export const ExplorerBuckets: React.FC<ExplorerBucketsProps> = ({
         <Grid item xs={12} md={6} lg={4} key={bucket.name}>
           <Card sx={{ boxShadow: 3, '&:hover': { boxShadow: 6 } }}>
             <CardHeader
-              avatar={<Archive sx={{ color: 'text.secondary' }} />}
-              title={bucket.name}
+              avatar={
+                <img
+                  src={bucketIcon}
+                  alt="bucket"
+                  style={{ width: 28, height: 28, objectFit: 'contain' }}
+                />
+              }
+              title={
+                <Tooltip title={bucket.name} arrow>
+                  <span>{bucket.name}</span>
+                </Tooltip>
+              }
               titleTypographyProps={{
                 variant: 'h6',
                 noWrap: true,
-                title: bucket.name,
+                sx: {
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis',
+                  whiteSpace: 'nowrap',
+                },
+              }}
+              sx={{
+                '& .MuiCardHeader-content': {
+                  overflow: 'hidden',
+                  minWidth: 0,
+                },
               }}
             />
             <CardContent>

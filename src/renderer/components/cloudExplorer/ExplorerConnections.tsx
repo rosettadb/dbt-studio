@@ -207,6 +207,9 @@ export const ExplorerConnections: React.FC = () => {
             <Grid item xs={12} md={6} lg={4} key={connection.id}>
               <Card
                 sx={{
+                  height: '100%',
+                  display: 'flex',
+                  flexDirection: 'column',
                   boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
                   transition: 'all 0.3s ease',
                   '&:hover': {
@@ -253,7 +256,9 @@ export const ExplorerConnections: React.FC = () => {
                     </Typography>
                   )}
                 </CardContent>
-                <CardActions sx={{ justifyContent: 'space-between' }}>
+                <CardActions
+                  sx={{ justifyContent: 'space-between', mt: 'auto' }}
+                >
                   <Box sx={{ display: 'flex', gap: 1 }}>
                     <Button
                       size="small"
