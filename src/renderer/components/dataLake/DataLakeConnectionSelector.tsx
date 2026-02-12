@@ -23,6 +23,8 @@ import {
   Close,
   CheckCircle,
   Error as ErrorIcon,
+  Save,
+  Speed,
 } from '@mui/icons-material';
 import { v4 as uuidv4 } from 'uuid';
 import {
@@ -88,8 +90,12 @@ export const DataLakeConnectionSelector: React.FC<
   const { data: connections, isLoading, refetch } = useCloudConnections();
   const createConnection = useCreateCloudConnection();
   const testConnection = useTestDuckLakeConnection();
-  const { setCloudAwsSecret, setCloudAzureKey, setCloudGcsCredential } =
-    useSecureStorage();
+  const {
+    setCloudAwsSecret,
+    setCloudAwsSessionToken,
+    setCloudAzureKey,
+    setCloudGcsCredential,
+  } = useSecureStorage();
 
   // Filter connections by selected provider
   const filteredConnections =
@@ -261,9 +267,14 @@ export const DataLakeConnectionSelector: React.FC<
         const region = newConnectionConfig.region?.trim();
         const accessKeyId = newConnectionConfig.accessKeyId?.trim();
         const secretAccessKey = newConnectionConfig.secretAccessKey?.trim();
+        const sessionToken = newConnectionConfig.sessionToken?.trim();
 
         await setCloudAwsSecret(secretAccessKey, connectionId);
+        if (sessionToken) {
+          await setCloudAwsSessionToken(sessionToken, connectionId);
+        }
 
+        // Exclude sessionToken from persisted config to prevent storing sensitive temporary tokens
         providerConfig = {
           region,
           accessKeyId,
@@ -387,6 +398,21 @@ export const DataLakeConnectionSelector: React.FC<
               }
               required
               helperText="Your AWS Secret Access Key"
+            />
+            <TextField
+              label="Session Token (Optional)"
+              placeholder="Temporary session token for temporary credentials"
+              type="password"
+              fullWidth
+              margin="normal"
+              value={newConnectionConfig.sessionToken || ''}
+              onChange={(e) =>
+                setNewConnectionConfig({
+                  ...newConnectionConfig,
+                  sessionToken: e.target.value,
+                })
+              }
+              helperText="Optional: Required when using temporary AWS credentials (e.g., from STS AssumeRole)"
             />
           </>
         );
@@ -637,13 +663,24 @@ export const DataLakeConnectionSelector: React.FC<
           )}
         </DialogContent>
         <DialogActions>
-          <Button onClick={() => setIsModalOpen(false)}>Cancel</Button>
+          <Button
+            variant="outlined"
+            onClick={() => setIsModalOpen(false)}
+            color="inherit"
+            startIcon={<Close />}
+          >
+            Cancel
+          </Button>
           <Button
             variant="outlined"
             onClick={handleTestConnection}
             disabled={testStatus === 'testing' || !newConnectionName}
             startIcon={
-              testStatus === 'testing' ? <CircularProgress size={16} /> : null
+              testStatus === 'testing' ? (
+                <CircularProgress size={16} />
+              ) : (
+                <Speed />
+              )
             }
           >
             {testStatus === 'testing' ? 'Testing...' : 'Test Connection'}
@@ -653,7 +690,11 @@ export const DataLakeConnectionSelector: React.FC<
             variant="contained"
             disabled={!newConnectionName || createConnection.isLoading}
             startIcon={
-              createConnection.isLoading ? <CircularProgress size={16} /> : null
+              createConnection.isLoading ? (
+                <CircularProgress size={16} />
+              ) : (
+                <Save />
+              )
             }
           >
             {createConnection.isLoading ? 'Saving...' : 'Save Connection'}

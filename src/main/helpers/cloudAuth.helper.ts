@@ -5,12 +5,30 @@ import type {
   S3Config,
   AzureConfig,
   GCSConfig,
+  MinIOConfig,
+  CloudflareR2Config,
+  BackblazeB2Config,
+  RustfsConfig,
 } from '../../types/frontend';
 
 /**
  * Cloud Authentication Helper
  * Contains methods for building cloud authentication secrets and token generation
  */
+
+/**
+ * Escape single quotes in SQL strings to prevent SQL injection
+ * Replaces ' with '' (SQL standard for escaping single quotes)
+ */
+function escapeSqlString(value: string | undefined): string {
+  if (value === undefined || value === null) {
+    return '';
+  }
+  if (typeof value !== 'string') {
+    return String(value);
+  }
+  return value.replace(/'/g, "''");
+}
 
 /**
  * Generate GCS Bearer token from service account credentials
@@ -102,11 +120,21 @@ export async function buildCloudSecretQuery(
     DROP SECRET IF EXISTS s3_secret;
     DROP SECRET IF EXISTS gcs_secret;
     DROP SECRET IF EXISTS azure_secret;
+    DROP SECRET IF EXISTS minio_secret;
+    DROP SECRET IF EXISTS r2_secret;
+    DROP SECRET IF EXISTS b2_secret;
+    DROP SECRET IF EXISTS rustfs_secret;
   `;
 
   switch (provider) {
     case 'aws': {
       const awsConfig = config as S3Config;
+      let sessionTokenClause = '';
+      if (awsConfig.sessionToken) {
+        // Escape single quotes in session token to prevent SQL injection
+        const escapedSessionToken = awsConfig.sessionToken.replace(/'/g, "''");
+        sessionTokenClause = `,\n          SESSION_TOKEN '${escapedSessionToken}'`;
+      }
       return `
         ${dropSecretsQuery}
         CREATE OR REPLACE SECRET s3_secret (
@@ -114,7 +142,88 @@ export async function buildCloudSecretQuery(
           PROVIDER config,
           KEY_ID '${awsConfig.accessKeyId}',
           SECRET '${awsConfig.secretAccessKey}',
-          REGION '${awsConfig.region}'
+          REGION '${awsConfig.region}'${sessionTokenClause}
+        );
+      `;
+    }
+    case 'minio': {
+      const minioConfig = config as MinIOConfig;
+
+      // Strip protocol and trailing slashes from endpoint (in case it wasn't cleaned before storage)
+      const cleanEndpoint = minioConfig.endpoint
+        .replace(/^https?:\/\//, '') // Remove http:// or https://
+        .replace(/\/$/, ''); // Remove trailing slash
+
+      // For DuckDB S3 secrets, the ENDPOINT should NOT include the protocol
+      // DuckDB will add it based on USE_SSL setting
+
+      return `
+        ${dropSecretsQuery}
+        CREATE OR REPLACE SECRET minio_secret (
+          TYPE s3,
+          PROVIDER config,
+          KEY_ID '${escapeSqlString(minioConfig.accessKeyId)}',
+          SECRET '${escapeSqlString(minioConfig.secretAccessKey)}',
+          REGION '${escapeSqlString(minioConfig.region || 'us-east-1')}',
+          ENDPOINT '${escapeSqlString(cleanEndpoint)}',
+          USE_SSL ${minioConfig.useSSL ? 'true' : 'false'},
+          URL_STYLE 'path'
+        );
+      `;
+    }
+    case 'cloudflare-r2': {
+      const r2Config = config as CloudflareR2Config;
+
+      return `
+        ${dropSecretsQuery}
+        CREATE OR REPLACE SECRET r2_secret (
+          TYPE R2,
+          KEY_ID '${escapeSqlString(r2Config.accessKeyId)}',
+          SECRET '${escapeSqlString(r2Config.secretAccessKey)}',
+          ACCOUNT_ID '${escapeSqlString(r2Config.accountId)}'
+        );
+      `;
+    }
+    case 'backblaze-b2': {
+      const b2Config = config as BackblazeB2Config;
+      const endpoint = b2Config.endpoint || 's3.us-west-004.backblazeb2.com';
+
+      // Extract region from endpoint (e.g., 's3.us-west-004.backblazeb2.com' -> 'us-west-004')
+      const regionMatch = endpoint.match(/s3\.([^.]+[-][^.]+[-]\d+)\./);
+      const region = regionMatch ? regionMatch[1] : 'us-west-004';
+
+      return `
+        ${dropSecretsQuery}
+        CREATE OR REPLACE SECRET b2_secret (
+          TYPE s3,
+          PROVIDER config,
+          KEY_ID '${escapeSqlString(b2Config.applicationKeyId)}',
+          SECRET '${escapeSqlString(b2Config.applicationKey)}',
+          REGION '${escapeSqlString(region)}',
+          ENDPOINT '${escapeSqlString(endpoint)}',
+          USE_SSL true
+        );
+      `;
+    }
+    case 'rustfs': {
+      const rustfsConfig = config as RustfsConfig;
+
+      // Strip protocol and trailing slashes from endpoint
+      const cleanEndpoint = rustfsConfig.endpoint
+        .replace(/^https?:\/\//, '')
+        .replace(/\/$/, '');
+
+      return `
+        ${dropSecretsQuery}
+        CREATE OR REPLACE SECRET rustfs_secret (
+          TYPE s3,
+          PROVIDER config,
+          KEY_ID '${escapeSqlString(rustfsConfig.accessKeyId)}',
+          SECRET '${escapeSqlString(rustfsConfig.secretAccessKey)}',
+          REGION '${escapeSqlString(rustfsConfig.region || 'us-east-1')}',
+          ENDPOINT '${escapeSqlString(cleanEndpoint)}',
+          USE_SSL ${rustfsConfig.useSSL ? 'true' : 'false'},
+          URL_STYLE 'path'
         );
       `;
     }
@@ -132,7 +241,7 @@ export async function buildCloudSecretQuery(
             ${dropSecretsQuery}
             CREATE OR REPLACE SECRET gcs_secret (
               TYPE http,
-              EXTRA_HTTP_HEADERS MAP {'Authorization': 'Bearer ${token}'}
+              EXTRA_HTTP_HEADERS MAP {'Authorization': 'Bearer ${escapeSqlString(token)}'}
             );
           `;
         } catch (error) {
@@ -151,14 +260,14 @@ export async function buildCloudSecretQuery(
 
       // Check if we have account name and key to build connection string
       if (azureConfig.accountName && azureConfig.accountKey) {
-        // Build proper Azure connection string format
+        // Build proper Azure connection string format using raw values
         const connectionString = `DefaultEndpointsProtocol=https;AccountName=${azureConfig.accountName};AccountKey=${azureConfig.accountKey};EndpointSuffix=core.windows.net`;
 
         return `
           ${dropSecretsQuery}
           CREATE OR REPLACE SECRET azure_secret (
             TYPE azure,
-            CONNECTION_STRING '${connectionString}'
+            CONNECTION_STRING '${escapeSqlString(connectionString)}'
           );
         `;
       }
@@ -169,7 +278,7 @@ export async function buildCloudSecretQuery(
           ${dropSecretsQuery}
           CREATE OR REPLACE SECRET azure_secret (
             TYPE azure,
-            CONNECTION_STRING '${azureConfig.connectionString}'
+            CONNECTION_STRING '${escapeSqlString(azureConfig.connectionString)}'
           );
         `;
       }
@@ -181,7 +290,7 @@ export async function buildCloudSecretQuery(
           CREATE OR REPLACE SECRET azure_secret (
             TYPE azure,
             PROVIDER config,
-            ACCOUNT_NAME '${azureConfig.accountName}'
+            ACCOUNT_NAME '${escapeSqlString(azureConfig.accountName)}'
           );
         `;
       }
@@ -205,6 +314,14 @@ export function getCloudUrl(
 ): string {
   switch (provider) {
     case 'aws':
+      return `s3://${bucketName}/${objectName}`;
+    case 'minio':
+      return `s3://${bucketName}/${objectName}`;
+    case 'cloudflare-r2':
+      return `r2://${bucketName}/${objectName}`;
+    case 'backblaze-b2':
+      return `s3://${bucketName}/${objectName}`;
+    case 'rustfs':
       return `s3://${bucketName}/${objectName}`;
     case 'gcs':
       // Use HTTPS URL for GCS since native gcs:// might not be supported

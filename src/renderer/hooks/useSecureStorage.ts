@@ -109,6 +109,28 @@ const useSecureStorage = () => {
     await secureStorageService.delete(`cloud-aws-${connectionName}`);
   };
 
+  const setCloudAwsSessionToken = async (
+    sessionToken: string,
+    connectionName: string,
+  ): Promise<void> => {
+    await secureStorageService.set(
+      `cloud-aws-session-${connectionName}`,
+      sessionToken,
+    );
+  };
+
+  const getCloudAwsSessionToken = async (
+    connectionName: string,
+  ): Promise<string | null> => {
+    return secureStorageService.get(`cloud-aws-session-${connectionName}`);
+  };
+
+  const deleteCloudAwsSessionToken = async (
+    connectionName: string,
+  ): Promise<void> => {
+    await secureStorageService.delete(`cloud-aws-session-${connectionName}`);
+  };
+
   const setCloudAzureKey = async (
     key: string,
     connectionName: string,
@@ -124,6 +146,88 @@ const useSecureStorage = () => {
 
   const deleteCloudAzureKey = async (connectionName: string): Promise<void> => {
     await secureStorageService.delete(`cloud-azure-${connectionName}`);
+  };
+
+  // MinIO credential storage
+  const setCloudMinioSecret = async (
+    secret: string,
+    connectionName: string,
+  ): Promise<void> => {
+    await secureStorageService.set(`cloud-minio-${connectionName}`, secret);
+  };
+
+  const getCloudMinioSecret = async (
+    connectionName: string,
+  ): Promise<string | null> => {
+    return secureStorageService.get(`cloud-minio-${connectionName}`);
+  };
+
+  const deleteCloudMinioSecret = async (
+    connectionName: string,
+  ): Promise<void> => {
+    await secureStorageService.delete(`cloud-minio-${connectionName}`);
+  };
+
+  // Cloudflare R2 credential storage
+  const setCloudR2Secret = async (
+    secret: string,
+    connectionName: string,
+  ): Promise<void> => {
+    await secureStorageService.set(
+      `cloud-cloudflare-r2-${connectionName}`,
+      secret,
+    );
+  };
+
+  const getCloudR2Secret = async (
+    connectionName: string,
+  ): Promise<string | null> => {
+    return secureStorageService.get(`cloud-cloudflare-r2-${connectionName}`);
+  };
+
+  const deleteCloudR2Secret = async (connectionName: string): Promise<void> => {
+    await secureStorageService.delete(`cloud-cloudflare-r2-${connectionName}`);
+  };
+
+  // Backblaze B2 credential storage
+  const setCloudB2Secret = async (
+    secret: string,
+    connectionName: string,
+  ): Promise<void> => {
+    await secureStorageService.set(
+      `cloud-backblaze-b2-${connectionName}`,
+      secret,
+    );
+  };
+
+  const getCloudB2Secret = async (
+    connectionName: string,
+  ): Promise<string | null> => {
+    return secureStorageService.get(`cloud-backblaze-b2-${connectionName}`);
+  };
+
+  const deleteCloudB2Secret = async (connectionName: string): Promise<void> => {
+    await secureStorageService.delete(`cloud-backblaze-b2-${connectionName}`);
+  };
+
+  // rustfs credential storage
+  const setCloudRustfsSecret = async (
+    secret: string,
+    connectionName: string,
+  ): Promise<void> => {
+    await secureStorageService.set(`cloud-rustfs-${connectionName}`, secret);
+  };
+
+  const getCloudRustfsSecret = async (
+    connectionName: string,
+  ): Promise<string | null> => {
+    return secureStorageService.get(`cloud-rustfs-${connectionName}`);
+  };
+
+  const deleteCloudRustfsSecret = async (
+    connectionName: string,
+  ): Promise<void> => {
+    await secureStorageService.delete(`cloud-rustfs-${connectionName}`);
   };
 
   // BigQuery service account key storage
@@ -177,9 +281,24 @@ const useSecureStorage = () => {
     setCloudAwsSecret,
     getCloudAwsSecret,
     deleteCloudAwsSecret,
+    setCloudAwsSessionToken,
+    getCloudAwsSessionToken,
+    deleteCloudAwsSessionToken,
     setCloudAzureKey,
     getCloudAzureKey,
     deleteCloudAzureKey,
+    setCloudMinioSecret,
+    getCloudMinioSecret,
+    deleteCloudMinioSecret,
+    setCloudR2Secret,
+    getCloudR2Secret,
+    deleteCloudR2Secret,
+    setCloudB2Secret,
+    getCloudB2Secret,
+    deleteCloudB2Secret,
+    setCloudRustfsSecret,
+    getCloudRustfsSecret,
+    deleteCloudRustfsSecret,
     setBigQueryServiceAccountKey,
     getBigQueryServiceAccountKey,
     deleteBigQueryServiceAccountKey,

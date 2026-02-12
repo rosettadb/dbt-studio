@@ -99,7 +99,11 @@ export const DataLakeInstances: React.FC<DuckLakeInstancesProps> = ({
         <Alert severity="error" sx={{ mb: 2 }}>
           Failed to load DataLake instances: {(error as Error).message}
         </Alert>
-        <Button onClick={() => refetch()} startIcon={<Refresh />}>
+        <Button
+          variant="contained"
+          onClick={() => refetch()}
+          startIcon={<Refresh />}
+        >
           Retry
         </Button>
       </Box>

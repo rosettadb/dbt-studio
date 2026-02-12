@@ -29,6 +29,80 @@ import {
 } from '../../types/duckLake';
 import { DuckLakeError } from '../../types/duckLakeErrors';
 
+/**
+ * Validates a SQL query to prevent statement chaining attacks
+ * @param query The SQL query to validate
+ * @param expectedPrefix The expected SQL statement prefix (e.g., 'UPDATE', 'DELETE', 'INSERT')
+ * @param allowedPrefixes Additional allowed prefixes (e.g., ['CREATE'] for UPDATE statements)
+ * @throws DuckLakeError if the query contains multiple statements or doesn't match expected prefix
+ */
+function validateSingleStatement(
+  query: string,
+  expectedPrefix: string,
+  allowedPrefixes: string[] = [],
+): void {
+  const trimmedQuery = query.trim();
+
+  // Check for empty query
+  if (!trimmedQuery) {
+    throw DuckLakeError.validation('Query cannot be empty');
+  }
+
+  // Strip comments (both -- and /* ... */) to properly validate the query structure
+  // This ensures that comments cannot be used to hide malicious syntax like statement chaining
+  const queryWithoutComments = trimmedQuery.replace(
+    /(--[^\n]*)|(\/\*[\s\S]*?\*\/)/g,
+    '',
+  );
+
+  // Remove trailing semicolon from cleaned query
+  const queryStructure = queryWithoutComments.trim();
+  const queryWithoutTerminalSemicolon = queryStructure.endsWith(';')
+    ? queryStructure.slice(0, -1).trim()
+    : queryStructure;
+
+  // Check for multiple statements (semicolons in the middle of the query)
+  if (queryWithoutTerminalSemicolon.includes(';')) {
+    throw DuckLakeError.validation(
+      'Multiple SQL statements are not allowed. Query contains statement chaining.',
+    );
+  }
+
+  // Validate the query starts with expected prefix
+  const normalizedQuery = trimmedQuery.toUpperCase();
+  const allAllowedPrefixes = [expectedPrefix, ...allowedPrefixes];
+  const startsWithAllowedPrefix = allAllowedPrefixes.some((prefix) =>
+    normalizedQuery.startsWith(prefix.toUpperCase()),
+  );
+
+  if (!startsWithAllowedPrefix) {
+    const prefixList = allAllowedPrefixes.join(' or ');
+    throw DuckLakeError.validation(`Query must be a ${prefixList} statement`);
+  }
+
+  // Additional check: ensure no suspicious patterns that could indicate injection
+  // We check the CLEANED query. If comments were stripped, we are checking the actual executable code.
+  // This means standard injection patterns will be visible.
+  const suspiciousPatterns = [
+    /;\s*--/, // Semicolon followed by comment marker (classic injection artifact)
+    /;\s*\/\*/, // Semicolon followed by block comment
+    /'\s*OR\s*'/i, // Tautologies
+    /"\s*OR\s*"/i,
+    /;\s*DROP\s+TABLE/i, // Explicit destructive commands after semicolon
+    /;\s*DELETE\s+FROM/i,
+    /;\s*UPDATE\s+/i,
+    /;\s*INSERT\s+INTO/i,
+  ];
+
+  suspiciousPatterns.forEach((pattern) => {
+    if (pattern.test(queryWithoutTerminalSemicolon)) {
+      throw DuckLakeError.validation(
+        'Query contains suspicious patterns that may indicate SQL injection',
+      );
+    }
+  });
+}
+
 export default class DuckLakeService {
   private static initialized = false;
 
@@ -46,6 +120,468 @@ export default class DuckLakeService {
     } catch (error) {
       // eslint-disable-next-line no-console
       console.error('Failed to initialize DuckLake service:', error);
+      throw error;
+    }
+  }
+
+  static async addColumn(
+    instanceId: string,
+    tableName: string,
+    columnName: string,
+    columnType: string,
+    defaultValue?: string,
+  ): Promise<void> {
+    try {
+      await this.ensureConnected(instanceId);
+      const adapter = await this.getAdapter(instanceId);
+
+      if (!tableName || tableName.trim() === '') {
+        throw DuckLakeError.validation('Table name is required');
+      }
+
+      if (!columnName || columnName.trim() === '') {
+        throw DuckLakeError.validation('Column name is required');
+      }
+
+      if (!columnType || columnType.trim() === '') {
+        throw DuckLakeError.validation('Column type is required');
+      }
+
+      // Allow standard SQL types including arrays (VARCHAR[]), decimals (DECIMAL(10,2)), etc.
+      // Pattern: starts with letter/underscore, then letters, numbers, underscores, parens, spaces, commas, brackets
+      // eslint-disable-next-line no-useless-escape
+      const typePattern = /^[A-Za-z_][A-Za-z0-9_() ,\[\]]*$/;
+      if (!typePattern.test(columnType.trim())) {
+        throw DuckLakeError.validation('Invalid column type format');
+      }
+
+      if (defaultValue) {
+        // Conservative pattern for literals: numbers, quoted strings, booleans, NULL
+        const defaultPattern =
+          /^(-?\d+(\.\d+)?|'([^']|'')*'|NULL|TRUE|FALSE)$/i;
+        if (!defaultPattern.test(defaultValue.trim())) {
+          throw DuckLakeError.validation('Invalid default value format');
+        }
+      }
+
+      const tables = await adapter.listTables();
+      const tableExists = tables.some((t) => t.name === tableName);
+      if (!tableExists) {
+        throw DuckLakeError.validation(`Table ${tableName} does not exist`);
+      }
+
+      const details = await adapter.getTableDetails(tableName);
+      const existingColumns = Array.isArray(details?.columns)
+        ? details.columns
+        : [];
+      const columnExists = existingColumns.some(
+        (c: any) => c?.columnName === columnName && c?.endSnapshot == null,
+      );
+      if (columnExists) {
+        throw DuckLakeError.validation(
+          `Column ${columnName} already exists on table ${tableName}`,
+        );
+      }
+
+      await adapter.addColumn(tableName, columnName, columnType, defaultValue);
+    } catch (error) {
+      // eslint-disable-next-line no-console
+      console.error(error);
+      throw error;
+    }
+  }
+
+  static async dropColumn(
+    instanceId: string,
+    tableName: string,
+    columnName: string,
+  ): Promise<void> {
+    try {
+      await this.ensureConnected(instanceId);
+      const adapter = await this.getAdapter(instanceId);
+
+      if (!tableName || tableName.trim() === '') {
+        throw DuckLakeError.validation('Table name is required');
+      }
+
+      if (!columnName || columnName.trim() === '') {
+        throw DuckLakeError.validation('Column name is required');
+      }
+
+      const tables = await adapter.listTables();
+      const tableExists = tables.some((t) => t.name === tableName);
+      if (!tableExists) {
+        throw DuckLakeError.validation(`Table ${tableName} does not exist`);
+      }
+
+      const details = await adapter.getTableDetails(tableName);
+      const existingColumns = Array.isArray(details?.columns)
+        ? details.columns
+        : [];
+      const activeColumn = existingColumns.find(
+        (c: any) => c?.columnName === columnName && c?.endSnapshot == null,
+      );
+      if (!activeColumn) {
+        throw DuckLakeError.validation(
+          `Column ${columnName} does not exist on table ${tableName}`,
+        );
+      }
+
+      const partitionColumnIds = new Set<number>(
+        (details?.partitionInfo?.columns || []).map((c: any) =>
+          Number(c.columnId),
+        ),
+      );
+      if (partitionColumnIds.has(Number(activeColumn.columnId))) {
+        throw DuckLakeError.validation(
+          `Column ${columnName} is a partition column and cannot be dropped`,
+        );
+      }
+
+      await adapter.dropColumn(tableName, columnName);
+    } catch (error) {
+      // eslint-disable-next-line no-console
+      console.error(error);
+      throw error;
+    }
+  }
+
+  static async renameColumn(
+    instanceId: string,
+    tableName: string,
+    oldColumnName: string,
+    newColumnName: string,
+  ): Promise<void> {
+    try {
+      await this.ensureConnected(instanceId);
+      const adapter = await this.getAdapter(instanceId);
+
+      if (!tableName || tableName.trim() === '') {
+        throw DuckLakeError.validation('Table name is required');
+      }
+
+      if (!oldColumnName || oldColumnName.trim() === '') {
+        throw DuckLakeError.validation('Old column name is required');
+      }
+
+      if (!newColumnName || newColumnName.trim() === '') {
+        throw DuckLakeError.validation('New column name is required');
+      }
+
+      if (oldColumnName.trim() === newColumnName.trim()) {
+        throw DuckLakeError.validation('New column name must be different');
+      }
+
+      const tables = await adapter.listTables();
+      const tableExists = tables.some((t) => t.name === tableName);
+      if (!tableExists) {
+        throw DuckLakeError.validation(`Table ${tableName} does not exist`);
+      }
+
+      const details = await adapter.getTableDetails(tableName);
+      const existingColumns = Array.isArray(details?.columns)
+        ? details.columns
+        : [];
+      const activeOldColumn = existingColumns.find(
+        (c: any) => c?.columnName === oldColumnName && c?.endSnapshot == null,
+      );
+      if (!activeOldColumn) {
+        throw DuckLakeError.validation(
+          `Column ${oldColumnName} does not exist on table ${tableName}`,
+        );
+      }
+
+      const newColumnExists = existingColumns.some(
+        (c: any) => c?.columnName === newColumnName && c?.endSnapshot == null,
+      );
+      if (newColumnExists) {
+        throw DuckLakeError.validation(
+          `Column ${newColumnName} already exists on table ${tableName}`,
+        );
+      }
+
+      const partitionColumnIds = new Set<number>(
+        (details?.partitionInfo?.columns || []).map((c: any) =>
+          Number(c.columnId),
+        ),
+      );
+      if (partitionColumnIds.has(Number(activeOldColumn.columnId))) {
+        throw DuckLakeError.validation(
+          `Column ${oldColumnName} is a partition column and cannot be renamed`,
+        );
+      }
+
+      await adapter.renameColumn(tableName, oldColumnName, newColumnName);
+    } catch (error) {
+      // eslint-disable-next-line no-console
+      console.error(error);
+      throw error;
+    }
+  }
+
+  static async alterColumnType(
+    instanceId: string,
+    tableName: string,
+    columnName: string,
+    newType: string,
+  ): Promise<void> {
+    try {
+      await this.ensureConnected(instanceId);
+      const adapter = await this.getAdapter(instanceId);
+
+      if (!tableName || tableName.trim() === '') {
+        throw DuckLakeError.validation('Table name is required');
+      }
+
+      if (!columnName || columnName.trim() === '') {
+        throw DuckLakeError.validation('Column name is required');
+      }
+
+      if (!newType || newType.trim() === '') {
+        throw DuckLakeError.validation('New column type is required');
+      }
+
+      // Allow standard SQL types including arrays (VARCHAR[]), decimals (DECIMAL(10,2)), etc.
+      // eslint-disable-next-line no-useless-escape
+      const typePattern = /^[A-Za-z_][A-Za-z0-9_() ,\[\]]*$/;
+      if (!typePattern.test(newType.trim())) {
+        throw DuckLakeError.validation('Invalid column type format');
+      }
+
+      const tables = await adapter.listTables();
+      const tableExists = tables.some((t) => t.name === tableName);
+      if (!tableExists) {
+        throw DuckLakeError.validation(`Table ${tableName} does not exist`);
+      }
+
+      const details = await adapter.getTableDetails(tableName);
+      const existingColumns = Array.isArray(details?.columns)
+        ? details.columns
+        : [];
+      const activeColumn = existingColumns.find(
+        (c: any) => c?.columnName === columnName && c?.endSnapshot == null,
+      );
+      if (!activeColumn) {
+        throw DuckLakeError.validation(
+          `Column ${columnName} does not exist on table ${tableName}`,
+        );
+      }
+
+      const partitionColumnIds = new Set<number>(
+        (details?.partitionInfo?.columns || []).map((c: any) =>
+          Number(c.columnId),
+        ),
+      );
+      if (partitionColumnIds.has(Number(activeColumn.columnId))) {
+        throw DuckLakeError.validation(
+          `Column ${columnName} is a partition column and cannot be altered`,
+        );
+      }
+
+      await adapter.alterColumnType(tableName, columnName, newType);
+    } catch (error) {
+      // eslint-disable-next-line no-console
+      console.error(error);
+      throw error;
+    }
+  }
+
+  static async setPartitionedBy(
+    instanceId: string,
+    tableName: string,
+    columnNames: string[],
+  ): Promise<void> {
+    try {
+      await this.ensureConnected(instanceId);
+      const adapter = await this.getAdapter(instanceId);
+
+      if (!tableName || tableName.trim() === '') {
+        throw DuckLakeError.validation('Table name is required');
+      }
+
+      if (!Array.isArray(columnNames) || columnNames.length === 0) {
+        throw DuckLakeError.validation(
+          'At least one partition column is required',
+        );
+      }
+
+      const normalizedColumns = columnNames
+        .map((c) => c?.trim())
+        .filter((c): c is string => !!c);
+      if (normalizedColumns.length === 0) {
+        throw DuckLakeError.validation(
+          'At least one partition column is required',
+        );
+      }
+
+      const tables = await adapter.listTables();
+      const tableExists = tables.some((t) => t.name === tableName);
+      if (!tableExists) {
+        throw DuckLakeError.validation(`Table ${tableName} does not exist`);
+      }
+
+      const details = await adapter.getTableDetails(tableName);
+      const existingColumns = Array.isArray(details?.columns)
+        ? details.columns
+        : [];
+
+      normalizedColumns.forEach((col) => {
+        const activeColumn = existingColumns.find(
+          (c: any) => c?.columnName === col && c?.endSnapshot == null,
+        );
+        if (!activeColumn) {
+          throw DuckLakeError.validation(
+            `Column ${col} does not exist on table ${tableName}`,
+          );
+        }
+      });
+
+      await adapter.setPartitionedBy(tableName, normalizedColumns);
+    } catch (error) {
+      // eslint-disable-next-line no-console
+      console.error(error);
+      throw error;
+    }
+  }
+
+  static async renameTable(
+    instanceId: string,
+    oldName: string,
+    newName: string,
+  ): Promise<void> {
+    try {
+      await this.ensureConnected(instanceId);
+      const adapter = await this.getAdapter(instanceId);
+
+      if (!oldName || oldName.trim() === '') {
+        throw DuckLakeError.validation('Old table name is required');
+      }
+
+      if (!newName || newName.trim() === '') {
+        throw DuckLakeError.validation('New table name is required');
+      }
+
+      if (oldName.trim() === newName.trim()) {
+        throw DuckLakeError.validation('New table name must be different');
+      }
+
+      const tables = await adapter.listTables();
+      const oldExists = tables.some((t) => t.name === oldName);
+      if (!oldExists) {
+        throw DuckLakeError.validation(`Table ${oldName} does not exist`);
+      }
+
+      const newExists = tables.some((t) => t.name === newName);
+      if (newExists) {
+        throw DuckLakeError.validation(`Table ${newName} already exists`);
+      }
+
+      await adapter.renameTable(oldName, newName);
+    } catch (error) {
+      // eslint-disable-next-line no-console
+      console.error(error);
+      throw error;
+    }
+  }
+
+  static async updateRows(
+    instanceId: string,
+    tableName: string,
+    updateQuery: string,
+  ): Promise<{ rowsAffected: number }> {
+    try {
+      await this.ensureConnected(instanceId);
+      const adapter = await this.getAdapter(instanceId);
+
+      if (!tableName || tableName.trim() === '') {
+        throw DuckLakeError.validation('Table name is required');
+      }
+
+      if (!updateQuery || updateQuery.trim() === '') {
+        throw DuckLakeError.validation('Update query is required');
+      }
+
+      // Validate query to prevent statement chaining
+      validateSingleStatement(updateQuery, 'UPDATE', ['CREATE']);
+
+      const tables = await adapter.listTables();
+      const tableExists = tables.some((t) => t.name === tableName);
+      if (!tableExists) {
+        throw DuckLakeError.validation(`Table ${tableName} does not exist`);
+      }
+
+      return await adapter.updateRows(tableName, updateQuery);
+    } catch (error) {
+      // eslint-disable-next-line no-console
+      console.error(error);
+      throw error;
+    }
+  }
+
+  static async deleteRows(
+    instanceId: string,
+    tableName: string,
+    deleteQuery: string,
+  ): Promise<{ rowsAffected: number }> {
+    try {
+      await this.ensureConnected(instanceId);
+      const adapter = await this.getAdapter(instanceId);
+
+      if (!tableName || tableName.trim() === '') {
+        throw DuckLakeError.validation('Table name is required');
+      }
+
+      if (!deleteQuery || deleteQuery.trim() === '') {
+        throw DuckLakeError.validation('Delete query is required');
+      }
+
+      // Validate query to prevent statement chaining
+      validateSingleStatement(deleteQuery, 'DELETE');
+
+      const tables = await adapter.listTables();
+      const tableExists = tables.some((t) => t.name === tableName);
+      if (!tableExists) {
+        throw DuckLakeError.validation(`Table ${tableName} does not exist`);
+      }
+
+      return await adapter.deleteRows(tableName, deleteQuery);
+    } catch (error) {
+      // eslint-disable-next-line no-console
+      console.error(error);
+      throw error;
+    }
+  }
+
+  static async upsertRows(
+    instanceId: string,
+    tableName: string,
+    upsertQuery: string,
+  ): Promise<{ rowsAffected: number }> {
+    try {
+      await this.ensureConnected(instanceId);
+      const adapter = await this.getAdapter(instanceId);
+
+      if (!tableName || tableName.trim() === '') {
+        throw DuckLakeError.validation('Table name is required');
+      }
+
+      if (!upsertQuery || upsertQuery.trim() === '') {
+        throw DuckLakeError.validation('Upsert query is required');
+      }
+
+      // Validate query to prevent statement chaining
+      validateSingleStatement(upsertQuery, 'INSERT');
+
+      const tables = await adapter.listTables();
+      const tableExists = tables.some((t) => t.name === tableName);
+      if (!tableExists) {
+        throw DuckLakeError.validation(`Table ${tableName} does not exist`);
+      }
+
+      return await adapter.upsertRows(tableName, upsertQuery);
+    } catch (error) {
+      // eslint-disable-next-line no-console
+      console.error(error);
       throw error;
     }
   }
@@ -334,16 +870,6 @@ export default class DuckLakeService {
         );
       }
 
-      // eslint-disable-next-line no-console
-      console.debug(
-        '[DuckLakeService.connectToCatalog] Establishing lazy connection',
-        {
-          instanceId,
-          name: instance.name,
-          dataPath: instance.dataPath,
-        },
-      );
-
       // Use connection manager to get connection
       await DuckLakeConnectionManager.getConnection(
         instanceId,
@@ -369,11 +895,6 @@ export default class DuckLakeService {
     try {
       // Use connection manager to disconnect
       await DuckLakeConnectionManager.disconnect(instanceId);
-
-      // eslint-disable-next-line no-console
-      console.debug('[DuckLakeService.disconnectFromCatalog] Disconnected', {
-        instanceId,
-      });
     } catch (error) {
       // eslint-disable-next-line no-console
       console.error('[DuckLakeService.disconnectFromCatalog] Error:', error);
@@ -449,13 +970,6 @@ export default class DuckLakeService {
     sourceQuery: string,
   ): Promise<void> {
     try {
-      // eslint-disable-next-line no-console
-      console.log('DuckLakeService.importTable called with:', {
-        instanceId,
-        tableName,
-        sourceQuery,
-      });
-
       await this.ensureConnected(instanceId);
       const adapter = await this.getAdapter(instanceId);
 
@@ -480,11 +994,6 @@ export default class DuckLakeService {
         instanceId,
         sql: sourceQuery,
       });
-
-      // eslint-disable-next-line no-console
-      console.log(
-        `Table ${tableName} imported successfully in instance ${instanceId}`,
-      );
     } catch (error) {
       // eslint-disable-next-line no-console
       console.error(`Failed to import table ${tableName}:`, error);
@@ -494,13 +1003,24 @@ export default class DuckLakeService {
 
   static async deleteTable(
     instanceId: string,
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
     tableName: string,
   ): Promise<void> {
     try {
       await this.ensureConnected(instanceId);
 
-      // TODO: Implement table deletion for tableName
+      const adapter = await this.getAdapter(instanceId);
+
+      if (!tableName || tableName.trim() === '') {
+        throw DuckLakeError.validation('Table name is required');
+      }
+
+      const tables = await adapter.listTables();
+      const tableExists = tables.some((t) => t.name === tableName);
+      if (!tableExists) {
+        throw DuckLakeError.validation(`Table ${tableName} does not exist`);
+      }
+
+      await adapter.deleteTable(tableName);
     } catch (error) {
       // eslint-disable-next-line no-console
       console.error(error);
@@ -516,30 +1036,10 @@ export default class DuckLakeService {
     tableName: string,
   ): Promise<any> {
     try {
-      // eslint-disable-next-line no-console
-      console.log('[DuckLakeService.getTableDetails] Starting for:', {
-        instanceId,
-        tableName,
-      });
-
       await this.ensureConnected(instanceId);
       const adapter = await this.getAdapter(instanceId);
 
-      // eslint-disable-next-line no-console
-      console.log(
-        '[DuckLakeService.getTableDetails] Adapter obtained:',
-        adapter.constructor.name,
-      );
-
       const details = await adapter.getTableDetails(tableName);
-
-      // eslint-disable-next-line no-console
-      console.log('[DuckLakeService.getTableDetails] Details retrieved:', {
-        tableName: details.tableName,
-        columnsCount: details.columns?.length,
-        dataFilesCount: details.dataFiles?.length,
-        snapshotsCount: details.snapshots?.length,
-      });
 
       return details;
     } catch (error) {
@@ -586,14 +1086,46 @@ export default class DuckLakeService {
 
   static async restoreSnapshot(
     instanceId: string,
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
     tableName: string,
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
     snapshotId: string,
   ): Promise<void> {
     try {
       await this.ensureConnected(instanceId);
-      // TODO: Implement snapshot restoration for tableName using snapshotId
+
+      const adapter = await this.getAdapter(instanceId);
+
+      if (!tableName || tableName.trim() === '') {
+        throw DuckLakeError.validation('Table name is required');
+      }
+
+      if (!snapshotId || snapshotId.trim() === '') {
+        throw DuckLakeError.validation('Snapshot ID is required');
+      }
+
+      const parsedSnapshotId = Number.parseInt(snapshotId, 10);
+      if (Number.isNaN(parsedSnapshotId)) {
+        throw DuckLakeError.validation('Snapshot ID must be a number');
+      }
+
+      // Validate table exists
+      const tables = await adapter.listTables();
+      const tableExists = tables.some((t) => t.name === tableName);
+      if (!tableExists) {
+        throw DuckLakeError.validation(`Table ${tableName} does not exist`);
+      }
+
+      // Validate snapshot exists for table
+      const snapshots = await adapter.listSnapshots(tableName);
+      const snapshotExists = snapshots.some(
+        (s) => Number.parseInt(String(s.id), 10) === parsedSnapshotId,
+      );
+      if (!snapshotExists) {
+        throw DuckLakeError.validation(
+          `Snapshot ${snapshotId} not found for table ${tableName}`,
+        );
+      }
+
+      await adapter.restoreSnapshot(tableName, parsedSnapshotId);
     } catch (error) {
       // eslint-disable-next-line no-console
       console.error(error);
@@ -871,7 +1403,13 @@ export default class DuckLakeService {
         const secretAccessKey = await SecureStorageService.getCredential(
           `cloud-aws-${id}`,
         );
-        return { secretAccessKey };
+        const sessionToken = await SecureStorageService.getCredential(
+          `cloud-aws-session-${id}`,
+        );
+        return {
+          secretAccessKey,
+          ...(sessionToken && { sessionToken }),
+        };
       }
 
       if (provider === 'azure') {

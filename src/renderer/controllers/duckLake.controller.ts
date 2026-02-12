@@ -17,6 +17,18 @@ export const duckLakeKeys = {
     [...duckLakeKeys.tables(instanceId), tableName] as const,
   tableDetails: (instanceId: string, tableName: string) =>
     [...duckLakeKeys.table(instanceId, tableName), 'details'] as const, // Phase 8b
+  tableChanges: (
+    instanceId: string,
+    tableName: string,
+    fromSnapshotId?: number,
+    toSnapshotId?: number,
+  ) =>
+    [
+      ...duckLakeKeys.table(instanceId, tableName),
+      'changes',
+      fromSnapshotId,
+      toSnapshotId,
+    ] as const,
   snapshots: (instanceId: string, tableName: string) =>
     [...duckLakeKeys.table(instanceId, tableName), 'snapshots'] as const,
   instanceSnapshots: (instanceId: string, params?: DuckLakeSnapshotParams) =>
@@ -36,6 +48,350 @@ export function useDuckLakeInstances() {
     queryFn: DuckLakeService.listInstances,
     staleTime: 30000, // 30 seconds
     refetchInterval: 60000, // 1 minute
+  });
+}
+
+export function useAddDuckLakeColumn() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: ({
+      instanceId,
+      tableName,
+      columnName,
+      columnType,
+      defaultValue,
+    }: {
+      instanceId: string;
+      tableName: string;
+      columnName: string;
+      columnType: string;
+      defaultValue?: string;
+    }) =>
+      DuckLakeService.addColumn(
+        instanceId,
+        tableName,
+        columnName,
+        columnType,
+        defaultValue,
+      ),
+    onSuccess: (_, { instanceId, tableName }) => {
+      queryClient.invalidateQueries(
+        duckLakeKeys.tableDetails(instanceId, tableName),
+      );
+      queryClient.invalidateQueries(
+        duckLakeKeys.snapshots(instanceId, tableName),
+      );
+      queryClient.invalidateQueries(duckLakeKeys.table(instanceId, tableName));
+      queryClient.invalidateQueries(duckLakeKeys.tables(instanceId));
+
+      toast.success('Column added successfully');
+    },
+    onError: (error: Error) => {
+      toast.error(`Failed to add column: ${error.message}`);
+    },
+  });
+}
+
+export function useDropDuckLakeColumn() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: ({
+      instanceId,
+      tableName,
+      columnName,
+    }: {
+      instanceId: string;
+      tableName: string;
+      columnName: string;
+    }) => DuckLakeService.dropColumn(instanceId, tableName, columnName),
+    onSuccess: (_, { instanceId, tableName }) => {
+      queryClient.invalidateQueries(
+        duckLakeKeys.tableDetails(instanceId, tableName),
+      );
+      queryClient.invalidateQueries(
+        duckLakeKeys.snapshots(instanceId, tableName),
+      );
+      queryClient.invalidateQueries(duckLakeKeys.table(instanceId, tableName));
+      queryClient.invalidateQueries(duckLakeKeys.tables(instanceId));
+
+      toast.success('Column dropped successfully');
+    },
+    onError: (error: Error) => {
+      toast.error(`Failed to drop column: ${error.message}`);
+    },
+  });
+}
+
+export function useRenameDuckLakeColumn() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: ({
+      instanceId,
+      tableName,
+      oldColumnName,
+      newColumnName,
+    }: {
+      instanceId: string;
+      tableName: string;
+      oldColumnName: string;
+      newColumnName: string;
+    }) =>
+      DuckLakeService.renameColumn(
+        instanceId,
+        tableName,
+        oldColumnName,
+        newColumnName,
+      ),
+    onSuccess: (_, { instanceId, tableName }) => {
+      queryClient.invalidateQueries(
+        duckLakeKeys.tableDetails(instanceId, tableName),
+      );
+      queryClient.invalidateQueries(
+        duckLakeKeys.snapshots(instanceId, tableName),
+      );
+      queryClient.invalidateQueries(duckLakeKeys.table(instanceId, tableName));
+      queryClient.invalidateQueries(duckLakeKeys.tables(instanceId));
+
+      toast.success('Column renamed successfully');
+    },
+    onError: (error: Error) => {
+      toast.error(`Failed to rename column: ${error.message}`);
+    },
+  });
+}
+
+export function useAlterDuckLakeColumnType() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: ({
+      instanceId,
+      tableName,
+      columnName,
+      newType,
+    }: {
+      instanceId: string;
+      tableName: string;
+      columnName: string;
+      newType: string;
+    }) =>
+      DuckLakeService.alterColumnType(
+        instanceId,
+        tableName,
+        columnName,
+        newType,
+      ),
+    onSuccess: (_, { instanceId, tableName }) => {
+      queryClient.invalidateQueries(
+        duckLakeKeys.tableDetails(instanceId, tableName),
+      );
+      queryClient.invalidateQueries(
+        duckLakeKeys.snapshots(instanceId, tableName),
+      );
+      queryClient.invalidateQueries(duckLakeKeys.table(instanceId, tableName));
+      queryClient.invalidateQueries(duckLakeKeys.tables(instanceId));
+
+      toast.success('Column type updated successfully');
+    },
+    onError: (error: Error) => {
+      toast.error(`Failed to alter column type: ${error.message}`);
+    },
+  });
+}
+
+export function useSetDuckLakeTablePartitionedBy() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: ({
+      instanceId,
+      tableName,
+      columnNames,
+    }: {
+      instanceId: string;
+      tableName: string;
+      columnNames: string[];
+    }) => DuckLakeService.setPartitionedBy(instanceId, tableName, columnNames),
+    onSuccess: (_, { instanceId, tableName }) => {
+      queryClient.invalidateQueries(
+        duckLakeKeys.tableDetails(instanceId, tableName),
+      );
+      queryClient.invalidateQueries(
+        duckLakeKeys.snapshots(instanceId, tableName),
+      );
+      queryClient.invalidateQueries(duckLakeKeys.table(instanceId, tableName));
+      queryClient.invalidateQueries(duckLakeKeys.tables(instanceId));
+
+      toast.success('Partition columns updated successfully');
+    },
+    onError: (error: Error) => {
+      toast.error(`Failed to set partition columns: ${error.message}`);
+    },
+  });
+}
+
+export function useRenameDuckLakeTable() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: ({
+      instanceId,
+      oldName,
+      newName,
+    }: {
+      instanceId: string;
+      oldName: string;
+      newName: string;
+    }) => DuckLakeService.renameTable(instanceId, oldName, newName),
+    onSuccess: (_, { instanceId, oldName, newName }) => {
+      queryClient.invalidateQueries(duckLakeKeys.tables(instanceId));
+      queryClient.invalidateQueries(duckLakeKeys.table(instanceId, oldName));
+      queryClient.invalidateQueries(
+        duckLakeKeys.tableDetails(instanceId, oldName),
+      );
+      queryClient.invalidateQueries(
+        duckLakeKeys.snapshots(instanceId, oldName),
+      );
+      queryClient.invalidateQueries(duckLakeKeys.table(instanceId, newName));
+      queryClient.invalidateQueries(
+        duckLakeKeys.tableDetails(instanceId, newName),
+      );
+      queryClient.invalidateQueries(
+        duckLakeKeys.snapshots(instanceId, newName),
+      );
+
+      toast.success('Table renamed successfully');
+    },
+    onError: (error: Error) => {
+      toast.error(`Failed to rename table: ${error.message}`);
+    },
+  });
+}
+
+export function useUpdateDuckLakeRows() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: ({
+      instanceId,
+      tableName,
+      updateQuery,
+    }: {
+      instanceId: string;
+      tableName: string;
+      updateQuery: string;
+    }) => DuckLakeService.updateRows(instanceId, tableName, updateQuery),
+    onSuccess: (result, { instanceId, tableName }) => {
+      queryClient.invalidateQueries(
+        duckLakeKeys.tableDetails(instanceId, tableName),
+      );
+      queryClient.invalidateQueries(
+        duckLakeKeys.snapshots(instanceId, tableName),
+      );
+      queryClient.invalidateQueries(duckLakeKeys.table(instanceId, tableName));
+      queryClient.invalidateQueries(duckLakeKeys.tables(instanceId));
+
+      toast.success('Update query executed successfully');
+    },
+    onError: (error: Error) => {
+      toast.error(`Failed to update rows: ${error.message}`);
+    },
+  });
+}
+
+export function useDeleteDuckLakeRows() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: ({
+      instanceId,
+      tableName,
+      deleteQuery,
+    }: {
+      instanceId: string;
+      tableName: string;
+      deleteQuery: string;
+    }) => DuckLakeService.deleteRows(instanceId, tableName, deleteQuery),
+    onSuccess: (result, { instanceId, tableName }) => {
+      queryClient.invalidateQueries(
+        duckLakeKeys.tableDetails(instanceId, tableName),
+      );
+      queryClient.invalidateQueries(
+        duckLakeKeys.snapshots(instanceId, tableName),
+      );
+      queryClient.invalidateQueries(duckLakeKeys.table(instanceId, tableName));
+      queryClient.invalidateQueries(duckLakeKeys.tables(instanceId));
+
+      toast.success('Delete query executed successfully');
+    },
+    onError: (error: Error) => {
+      toast.error(`Failed to delete rows: ${error.message}`);
+    },
+  });
+}
+
+export function useUpsertDuckLakeRows() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: ({
+      instanceId,
+      tableName,
+      upsertQuery,
+    }: {
+      instanceId: string;
+      tableName: string;
+      upsertQuery: string;
+    }) => DuckLakeService.upsertRows(instanceId, tableName, upsertQuery),
+    onSuccess: (result, { instanceId, tableName }) => {
+      queryClient.invalidateQueries(
+        duckLakeKeys.tableDetails(instanceId, tableName),
+      );
+      queryClient.invalidateQueries(
+        duckLakeKeys.snapshots(instanceId, tableName),
+      );
+      queryClient.invalidateQueries(duckLakeKeys.table(instanceId, tableName));
+      queryClient.invalidateQueries(duckLakeKeys.tables(instanceId));
+
+      toast.success('Upsert query executed successfully');
+    },
+    onError: (error: Error) => {
+      toast.error(`Failed to upsert rows: ${error.message}`);
+    },
+  });
+}
+
+export function useRestoreDuckLakeSnapshot() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: ({
+      instanceId,
+      tableName,
+      snapshotId,
+    }: {
+      instanceId: string;
+      tableName: string;
+      snapshotId: string;
+    }) => DuckLakeService.restoreSnapshot(instanceId, tableName, snapshotId),
+    onSuccess: (_, { instanceId, tableName }) => {
+      queryClient.invalidateQueries(
+        duckLakeKeys.tableDetails(instanceId, tableName),
+      );
+      queryClient.invalidateQueries(
+        duckLakeKeys.snapshots(instanceId, tableName),
+      );
+      queryClient.invalidateQueries(duckLakeKeys.table(instanceId, tableName));
+      queryClient.invalidateQueries(duckLakeKeys.tables(instanceId));
+
+      toast.success('Snapshot restored successfully');
+    },
+    onError: (error: Error) => {
+      toast.error(`Failed to restore snapshot: ${error.message}`);
+    },
   });
 }
 
@@ -62,22 +418,12 @@ export function useDuckLakeTables(instanceId: string) {
   return useQuery({
     queryKey: duckLakeKeys.tables(instanceId),
     queryFn: async () => {
-      // eslint-disable-next-line no-console
-      console.log(
-        '[useDuckLakeTables] Fetching tables for instanceId:',
-        instanceId,
-      );
       const result = await DuckLakeService.listTables(instanceId);
-      // eslint-disable-next-line no-console
-      console.log('[useDuckLakeTables] Received result:', result);
       return result;
     },
     enabled: !!instanceId,
     staleTime: 60000, // 1 minute
-    onSuccess: (data) => {
-      // eslint-disable-next-line no-console
-      console.log('[useDuckLakeTables] onSuccess - data:', data);
-    },
+    onSuccess: () => {},
     onError: () => {
       // Error is already logged by the service layer
     },
@@ -221,17 +567,10 @@ export function useDuckLakeTableDetails(
   return useQuery({
     queryKey: duckLakeKeys.tableDetails(instanceId, tableName),
     queryFn: async () => {
-      // eslint-disable-next-line no-console
-      console.log('[useDuckLakeTableDetails] Fetching details for:', {
-        instanceId,
-        tableName,
-      });
       const result = await DuckLakeService.getTableDetails(
         instanceId,
         tableName,
       );
-      // eslint-disable-next-line no-console
-      console.log('[useDuckLakeTableDetails] Received result:', result);
       return result;
     },
     enabled: enabled && !!instanceId && !!tableName,

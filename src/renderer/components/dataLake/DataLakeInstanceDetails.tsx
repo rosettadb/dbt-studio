@@ -48,6 +48,7 @@ import {
   Memory,
   Refresh,
   Search,
+  Close,
 } from '@mui/icons-material';
 import { useNavigate } from 'react-router-dom';
 import moment from 'moment';
@@ -915,6 +916,8 @@ export const DataLakeInstanceDetails: React.FC<
                             <TableCell>Snapshot ID</TableCell>
                             <TableCell>Time</TableCell>
                             <TableCell>Schema Version</TableCell>
+                            <TableCell>Author</TableCell>
+                            <TableCell>Message</TableCell>
                             <TableCell>Changes</TableCell>
                           </TableRow>
                         </TableHead>
@@ -943,6 +946,10 @@ export const DataLakeInstanceDetails: React.FC<
                                 </TableCell>
                                 <TableCell>
                                   {safeToString(snapshot.schemaVersion)}
+                                </TableCell>
+                                <TableCell>{snapshot.author || '-'}</TableCell>
+                                <TableCell>
+                                  {snapshot.commitMessage || '-'}
                                 </TableCell>
                                 <TableCell>
                                   {snapshot.changesMade || '-'}
@@ -1004,8 +1011,20 @@ export const DataLakeInstanceDetails: React.FC<
           </Typography>
         </DialogContent>
         <DialogActions>
-          <Button onClick={() => setDeleteDialogOpen(false)}>Cancel</Button>
-          <Button onClick={handleDelete} color="error" variant="contained">
+          <Button
+            variant="outlined"
+            onClick={() => setDeleteDialogOpen(false)}
+            color="inherit"
+            startIcon={<Close />}
+          >
+            Cancel
+          </Button>
+          <Button
+            onClick={handleDelete}
+            color="error"
+            variant="contained"
+            startIcon={<Delete />}
+          >
             Delete Instance
           </Button>
         </DialogActions>

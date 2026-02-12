@@ -6,7 +6,7 @@ import {
   Alert,
   Typography,
 } from '@mui/material';
-import { Add } from '@mui/icons-material';
+import { Add, Refresh } from '@mui/icons-material';
 import { DataLakeTables } from './DataLakeTables';
 import { DataLakeTableImportWizard } from './DataLakeTableImportWizard';
 import {
@@ -14,32 +14,55 @@ import {
   useImportDuckLakeTable,
   useInvalidateDuckLakeCache,
   useDuckLakeInstance,
+  useSetDuckLakeTablePartitionedBy,
 } from '../../controllers/duckLake.controller';
 
 interface DataLakeTablesViewProps {
   instanceId: string;
-  onPreview?: (tableName: string) => void;
-  onQuery?: (tableName: string) => void;
 }
 
 export const DataLakeTablesView: React.FC<DataLakeTablesViewProps> = ({
   instanceId,
-  onPreview,
-  onQuery,
 }) => {
   const [importWizardOpen, setImportWizardOpen] = useState(false);
 
   // React Query hooks
   const tablesQuery = useDuckLakeTables(instanceId);
   const importTableMutation = useImportDuckLakeTable();
+  const setPartitionedByMutation = useSetDuckLakeTablePartitionedBy();
   const { invalidateTables } = useInvalidateDuckLakeCache();
   const instanceQuery = useDuckLakeInstance(instanceId);
 
-  const handleImportTable = (tableName: string, sourceQuery: string) => {
+  const handleImportTable = (
+    tableName: string,
+    sourceQuery: string,
+    partitionColumns?: string[],
+  ) => {
     importTableMutation.mutate(
       { instanceId, tableName, sourceQuery },
       {
         onSuccess: () => {
+          if (partitionColumns && partitionColumns.length > 0) {
+            setPartitionedByMutation.mutate(
+              {
+                instanceId,
+                tableName,
+                columnNames: partitionColumns,
+              },
+              {
+                onSuccess: () => {
+                  setImportWizardOpen(false);
+                  invalidateTables(instanceId);
+                },
+                onError: () => {
+                  setImportWizardOpen(false);
+                  invalidateTables(instanceId);
+                },
+              },
+            );
+            return;
+          }
+
           setImportWizardOpen(false);
           invalidateTables(instanceId);
         },
@@ -99,7 +122,11 @@ export const DataLakeTablesView: React.FC<DataLakeTablesViewProps> = ({
             </Box>
           )}
         </Alert>
-        <Button variant="contained" onClick={handleRefresh}>
+        <Button
+          variant="contained"
+          onClick={handleRefresh}
+          startIcon={<Refresh />}
+        >
           Retry
         </Button>
       </Box>
@@ -134,15 +161,15 @@ export const DataLakeTablesView: React.FC<DataLakeTablesViewProps> = ({
       <DataLakeTables
         tables={formattedTables}
         selectedInstanceId={instanceId}
-        onPreview={onPreview}
-        onQuery={onQuery}
       />
 
       <DataLakeTableImportWizard
         open={importWizardOpen}
         onClose={() => setImportWizardOpen(false)}
         onImport={handleImportTable}
-        isLoading={importTableMutation.isLoading}
+        isLoading={
+          importTableMutation.isLoading || setPartitionedByMutation.isLoading
+        }
         dataPath={instanceQuery.data?.dataPath}
       />
     </Box>
