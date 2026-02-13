@@ -39,8 +39,12 @@ export class DuckLakeError extends Error {
    * Create a catalog connection error
    */
   static catalogConnection(instanceId: string, cause?: Error): DuckLakeError {
+    const message = cause?.message
+      ? `Failed to connect to catalog for instance: ${instanceId}. ${cause.message}`
+      : `Failed to connect to catalog for instance: ${instanceId}`;
+
     return new DuckLakeError(
-      `Failed to connect to catalog for instance: ${instanceId}`,
+      message,
       'CATALOG_CONNECTION_ERROR',
       instanceId,
       cause,

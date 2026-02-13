@@ -143,7 +143,7 @@ export const DataLakeTableImportWizard: React.FC<
     );
   };
 
-  const handleClose = () => {
+  const resetForm = () => {
     setActiveStep(0);
     setSourceType('url');
     setTableName('');
@@ -151,6 +151,9 @@ export const DataLakeTableImportWizard: React.FC<
     setFilePath('');
     setPartitionColumnsText('');
     setError('');
+  };
+
+  const handleClose = () => {
     onClose();
   };
 
@@ -430,7 +433,13 @@ export const DataLakeTableImportWizard: React.FC<
   };
 
   return (
-    <Dialog open={open} onClose={handleClose} maxWidth="md" fullWidth>
+    <Dialog
+      open={open}
+      onClose={handleClose}
+      maxWidth="md"
+      fullWidth
+      TransitionProps={{ onExited: resetForm }}
+    >
       <DialogTitle>Import Data to DuckLake</DialogTitle>
       <DialogContent>
         <Stepper activeStep={activeStep} sx={{ mb: 3 }}>
