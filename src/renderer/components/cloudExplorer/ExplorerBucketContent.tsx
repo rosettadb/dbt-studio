@@ -260,14 +260,23 @@ export const ExplorerBucketContent: React.FC<ExplorerBucketContentProps> = ({
     // Add to recent items for directories
     if (connection && path) {
       const dirName = path.split('/').filter(Boolean).pop() || bucketName;
+      // Ensure path ends with slash for directories
+      const normalizedPath = path.endsWith('/') ? path : `${path}/`;
+
       addRecentItem.mutate({
-        id: `${connectionId}-${bucketName}-${path}`,
+        id: `${connectionId}-${bucketName}-${normalizedPath}`,
         name: dirName,
-        path: `${bucketName}/${path}`,
+        path: `${bucketName}/${normalizedPath}`,
         connectionId,
         connectionName: connection.name,
         provider: connection.provider,
       });
+    } else {
+      // eslint-disable-next-line no-console
+      console.error(
+        'Skipping recent item addition: connection or path missing',
+        { connection, path },
+      );
     }
   };
 
@@ -402,6 +411,16 @@ export const ExplorerBucketContent: React.FC<ExplorerBucketContentProps> = ({
       objectName,
       previewType: 'sample',
       limit: 100,
+    });
+
+    // Add to recent items
+    addRecentItem.mutate({
+      id: `${connectionId}-${bucketName}-${objectName}`,
+      name: fileName,
+      path: `${bucketName}/${objectName}`,
+      connectionId,
+      connectionName: connection.name,
+      provider: connection.provider,
     });
   };
 
