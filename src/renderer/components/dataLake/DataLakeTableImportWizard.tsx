@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Box,
   Button,
@@ -143,14 +143,19 @@ export const DataLakeTableImportWizard: React.FC<
     );
   };
 
+  useEffect(() => {
+    if (!open) {
+      setActiveStep(0);
+      setSourceType('url');
+      setTableName('');
+      setSourceUrl('');
+      setFilePath('');
+      setPartitionColumnsText('');
+      setError('');
+    }
+  }, [open]);
+
   const handleClose = () => {
-    setActiveStep(0);
-    setSourceType('url');
-    setTableName('');
-    setSourceUrl('');
-    setFilePath('');
-    setPartitionColumnsText('');
-    setError('');
     onClose();
   };
 

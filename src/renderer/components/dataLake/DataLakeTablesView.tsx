@@ -92,11 +92,6 @@ export const DataLakeTablesView: React.FC<DataLakeTablesViewProps> = ({
   if (tablesQuery.error) {
     const errorMessage =
       (tablesQuery.error as Error).message || 'Unknown error';
-    const isConnectionError =
-      errorMessage.includes('SSL') ||
-      errorMessage.includes('connection') ||
-      errorMessage.includes('catalog') ||
-      errorMessage.includes('closed');
 
     return (
       <Box sx={{ p: 2 }}>
@@ -107,20 +102,6 @@ export const DataLakeTablesView: React.FC<DataLakeTablesViewProps> = ({
           <Typography variant="body2" sx={{ mb: 2 }}>
             {errorMessage}
           </Typography>
-          {isConnectionError && (
-            <Box sx={{ mt: 2 }}>
-              <Typography variant="body2" sx={{ fontWeight: 'bold', mb: 1 }}>
-                Troubleshooting steps:
-              </Typography>
-              <Typography variant="body2" component="ul" sx={{ pl: 2, m: 0 }}>
-                <li>Check that the instance is attached</li>
-                <li>Verify your catalog database is accessible</li>
-                <li>Check SSL/TLS settings if using PostgreSQL</li>
-                <li>Ensure network connectivity to the catalog database</li>
-                <li>Try detaching and re-attaching the instance</li>
-              </Typography>
-            </Box>
-          )}
         </Alert>
         <Button
           variant="contained"

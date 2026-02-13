@@ -473,8 +473,6 @@ export class SQLiteCatalogAdapter extends CatalogAdapter {
       if (testConnection) {
         try {
           testConnection.closeSync();
-          // eslint-disable-next-line no-console
-          console.log('[SQLite] Closed test connection');
         } catch (error) {
           // eslint-disable-next-line no-console
           console.error('Error closing test connection:', error);
@@ -483,8 +481,6 @@ export class SQLiteCatalogAdapter extends CatalogAdapter {
       if (testInstance && typeof testInstance.close === 'function') {
         try {
           await testInstance.close();
-          // eslint-disable-next-line no-console
-          console.log('[SQLite] Closed test instance');
         } catch (error) {
           // eslint-disable-next-line no-console
           console.error('Error closing test instance:', error);

@@ -528,8 +528,6 @@ export class DuckDBCatalogAdapter extends CatalogAdapter {
       if (testConnection) {
         try {
           testConnection.closeSync();
-          // eslint-disable-next-line no-console
-          console.log('[DuckDB] Closed test connection');
         } catch (error) {
           // eslint-disable-next-line no-console
           console.error('Error closing test connection:', error);
@@ -538,8 +536,6 @@ export class DuckDBCatalogAdapter extends CatalogAdapter {
       if (testInstance && typeof testInstance.close === 'function') {
         try {
           await testInstance.close();
-          // eslint-disable-next-line no-console
-          console.log('[DuckDB] Closed test instance');
         } catch (error) {
           // eslint-disable-next-line no-console
           console.error('Error closing test instance:', error);
