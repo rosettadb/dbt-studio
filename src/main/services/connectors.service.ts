@@ -1493,7 +1493,11 @@ export default class ConnectorsService {
   static async loadRecentItems(): Promise<RecentItem[]> {
     try {
       const db = await loadDatabaseFile();
-      return db.recentItems ?? [];
+      const items = db.recentItems ?? [];
+      return items.sort(
+        (a, b) =>
+          new Date(b.accessedAt).getTime() - new Date(a.accessedAt).getTime(),
+      );
     } catch (error) {
       return [];
     }
@@ -1508,10 +1512,10 @@ export default class ConnectorsService {
     const existingIndex = items.findIndex((i) => i.id === item.id);
 
     if (existingIndex >= 0) {
-      items[existingIndex] = { ...item, accessedAt: new Date() };
-    } else {
-      items.unshift({ ...item, accessedAt: new Date() });
+      items.splice(existingIndex, 1);
     }
+
+    items.unshift({ ...item, accessedAt: new Date() });
 
     const recentItems = items.slice(0, 50);
     await updateDatabase<'recentItems'>('recentItems', recentItems);

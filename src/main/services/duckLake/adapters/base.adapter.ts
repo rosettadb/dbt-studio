@@ -297,9 +297,6 @@ export abstract class CatalogAdapter {
       // Execute DETACH to properly free memory
       const detachQuery = `DETACH "${escapedInstanceName}"`;
       await connection.run(detachQuery);
-
-      // eslint-disable-next-line no-console
-      console.log(`Successfully detached DuckLake instance: ${instanceName}`);
     } catch (error) {
       // eslint-disable-next-line no-console
       console.error('Failed to detach DuckLake catalog:', error);
@@ -329,10 +326,6 @@ export abstract class CatalogAdapter {
         if (this.connectionInfo.connection) {
           try {
             this.connectionInfo.connection.closeSync();
-            // eslint-disable-next-line no-console
-            console.log(
-              `[DuckDB] Closed connection for instance: ${this.connectionInfo.instanceName}`,
-            );
           } catch (error) {
             // eslint-disable-next-line no-console
             console.error('Error closing connection:', error);
@@ -346,10 +339,6 @@ export abstract class CatalogAdapter {
         ) {
           try {
             await this.connectionInfo.instance.close();
-            // eslint-disable-next-line no-console
-            console.log(
-              `[DuckDB] Closed instance: ${this.connectionInfo.instanceName}`,
-            );
           } catch (error) {
             // eslint-disable-next-line no-console
             console.error('Error closing instance:', error);
@@ -377,25 +366,7 @@ export abstract class CatalogAdapter {
     }
 
     try {
-      // eslint-disable-next-line no-console
-      console.debug('[DuckLake][createSecrets] Received storage config', {
-        type: storageConfig.type,
-        hasS3: Boolean(storageConfig.s3),
-        hasAzure: Boolean(storageConfig.azure),
-        hasGcsCredentials: Boolean(storageConfig.gcs?.credentials),
-        bucket: storageConfig.gcs?.bucket,
-        projectId: storageConfig.gcs?.projectId,
-      });
-
       if (storageConfig.type === 's3' && storageConfig.s3) {
-        // eslint-disable-next-line no-console
-        console.debug(
-          '[DuckLake][createSecrets] Creating S3 secret for httpfs',
-          {
-            region: storageConfig.s3.region,
-            endpoint: storageConfig.s3.endpoint,
-          },
-        );
         const { region, accessKeyId, secretAccessKey, sessionToken, endpoint } =
           storageConfig.s3;
         const secretName = `s3_secret_${Date.now()}`;
@@ -420,11 +391,7 @@ export abstract class CatalogAdapter {
         secretQuery += `
 );`;
         await connection.run(secretQuery);
-        // eslint-disable-next-line no-console
-        console.debug('[DuckLake][createSecrets] S3 secret created');
       } else if (storageConfig.type === 'azure' && storageConfig.azure) {
-        // eslint-disable-next-line no-console
-        console.debug('[DuckLake][createSecrets] Creating Azure secret');
         const { connectionString, accountName, accountKey } =
           storageConfig.azure;
         const secretName = `azure_secret_${Date.now()}`;
@@ -458,11 +425,7 @@ export abstract class CatalogAdapter {
             '[DuckLake][createSecrets] Azure credentials missing, secret not created',
           );
         }
-        // eslint-disable-next-line no-console
-        console.debug('[DuckLake][createSecrets] Azure secret created');
       } else if (storageConfig.type === 'gcs' && storageConfig.gcs) {
-        // eslint-disable-next-line no-console
-        console.debug('[DuckLake][createSecrets] Creating GCS secret');
         const { credentials } = storageConfig.gcs;
         const secretName = `gcs_secret_${Date.now()}`;
 
@@ -477,14 +440,6 @@ CREATE OR REPLACE SECRET ${secretName} (
   TYPE http,
   EXTRA_HTTP_HEADERS MAP {'Authorization': 'Bearer ${escapedToken}'}
 );`);
-            // eslint-disable-next-line no-console
-            console.debug(
-              '[DuckLake][createSecrets] GCS secret created with bearer token',
-              {
-                hasCredentials: true,
-                credentialLength: credentials.length,
-              },
-            );
           } catch (tokenError) {
             // eslint-disable-next-line no-console
             console.error(
