@@ -1,4 +1,5 @@
 /* eslint global-require: off, no-console: off, promise/always-return: off, no-restricted-syntax: off, no-await-in-loop: off */
+import path from 'path';
 import { app, ipcMain, protocol } from 'electron';
 import fs from 'fs-extra';
 import { WindowManager } from './windows';
@@ -34,6 +35,39 @@ protocol.registerSchemesAsPrivileged([
 ]);
 
 setupApplicationIcon();
+
+const DEEP_LINK_SCHEME = 'rosetta';
+
+function registerProtocolClient() {
+  if (process.defaultApp && process.argv.length >= 2) {
+    app.setAsDefaultProtocolClient(DEEP_LINK_SCHEME, process.execPath, [
+      path.resolve(process.argv[1]),
+    ]);
+  } else {
+    app.setAsDefaultProtocolClient(DEEP_LINK_SCHEME);
+  }
+}
+
+function extractDeepLinkUrl(commandLine: string[]): string | null {
+  const url = commandLine.find((arg) =>
+    arg.startsWith(`${DEEP_LINK_SCHEME}://`),
+  );
+  return url ?? null;
+}
+
+function sendDeepLinkToWindow(
+  url: string,
+  windowManager: WindowManager | null,
+) {
+  if (!windowManager) return;
+  const mainWindow = windowManager.getMainWindow();
+  if (mainWindow && !mainWindow.isDestroyed() && mainWindow.webContents) {
+    mainWindow.webContents.send('app:deep-link', url);
+  }
+}
+
+// Register as default handler for rosetta:// scheme (required for Linux; also used on Windows/macOS)
+registerProtocolClient();
 
 // Ensure single instance of the app
 const gotTheLock = app.requestSingleInstanceLock();
@@ -112,6 +146,9 @@ if (!gotTheLock) {
             } else {
               await windowManager.showMainWindow();
             }
+            // On Linux (and sometimes Windows), when launched via protocol URL the URL is in process.argv
+            const argvUrl = extractDeepLinkUrl(process.argv);
+            if (argvUrl) sendDeepLinkToWindow(argvUrl, windowManager);
           }
         });
       }
@@ -119,6 +156,13 @@ if (!gotTheLock) {
       protocol.handle('app-asset', (request) => {
         const asset = new AssetUrl(request.url);
         return AssetServer.fromNodeModules(asset.relativeUrl);
+      });
+
+      // macOS: handle rosetta:// when app is already open or opened from link
+      app.on('open-url', (event, url) => {
+        event.preventDefault();
+        if (url.startsWith(`${DEEP_LINK_SCHEME}://`))
+          sendDeepLinkToWindow(url, windowManager);
       });
 
       app.on('activate', () => {
@@ -150,11 +194,11 @@ if (!gotTheLock) {
     })
     .catch(console.log);
 
-  app.on('second-instance', () => {
+  // Windows/Linux: second instance is when user opens a rosetta:// link while app is already running
+  app.on('second-instance', (_event, commandLine) => {
     if (!windowManager) return;
 
     const activeWindow = windowManager.getMainWindow();
-
     if (activeWindow) {
       if (activeWindow.isMinimized()) activeWindow.restore();
       activeWindow.show();
@@ -162,6 +206,8 @@ if (!gotTheLock) {
     } else {
       windowManager.startApplication();
     }
+    const deepLinkUrl = extractDeepLinkUrl(commandLine);
+    if (deepLinkUrl) sendDeepLinkToWindow(deepLinkUrl, windowManager);
   });
 }
 
