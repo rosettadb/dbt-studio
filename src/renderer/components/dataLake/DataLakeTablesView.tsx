@@ -6,7 +6,7 @@ import {
   Alert,
   Typography,
 } from '@mui/material';
-import { Add } from '@mui/icons-material';
+import { Add, Refresh } from '@mui/icons-material';
 import { DataLakeTables } from './DataLakeTables';
 import { DataLakeTableImportWizard } from './DataLakeTableImportWizard';
 import {
@@ -14,32 +14,55 @@ import {
   useImportDuckLakeTable,
   useInvalidateDuckLakeCache,
   useDuckLakeInstance,
+  useSetDuckLakeTablePartitionedBy,
 } from '../../controllers/duckLake.controller';
 
 interface DataLakeTablesViewProps {
   instanceId: string;
-  onPreview?: (tableName: string) => void;
-  onQuery?: (tableName: string) => void;
 }
 
 export const DataLakeTablesView: React.FC<DataLakeTablesViewProps> = ({
   instanceId,
-  onPreview,
-  onQuery,
 }) => {
   const [importWizardOpen, setImportWizardOpen] = useState(false);
 
   // React Query hooks
   const tablesQuery = useDuckLakeTables(instanceId);
   const importTableMutation = useImportDuckLakeTable();
+  const setPartitionedByMutation = useSetDuckLakeTablePartitionedBy();
   const { invalidateTables } = useInvalidateDuckLakeCache();
   const instanceQuery = useDuckLakeInstance(instanceId);
 
-  const handleImportTable = (tableName: string, sourceQuery: string) => {
+  const handleImportTable = (
+    tableName: string,
+    sourceQuery: string,
+    partitionColumns?: string[],
+  ) => {
     importTableMutation.mutate(
       { instanceId, tableName, sourceQuery },
       {
         onSuccess: () => {
+          if (partitionColumns && partitionColumns.length > 0) {
+            setPartitionedByMutation.mutate(
+              {
+                instanceId,
+                tableName,
+                columnNames: partitionColumns,
+              },
+              {
+                onSuccess: () => {
+                  setImportWizardOpen(false);
+                  invalidateTables(instanceId);
+                },
+                onError: () => {
+                  setImportWizardOpen(false);
+                  invalidateTables(instanceId);
+                },
+              },
+            );
+            return;
+          }
+
           setImportWizardOpen(false);
           invalidateTables(instanceId);
         },
@@ -69,11 +92,6 @@ export const DataLakeTablesView: React.FC<DataLakeTablesViewProps> = ({
   if (tablesQuery.error) {
     const errorMessage =
       (tablesQuery.error as Error).message || 'Unknown error';
-    const isConnectionError =
-      errorMessage.includes('SSL') ||
-      errorMessage.includes('connection') ||
-      errorMessage.includes('catalog') ||
-      errorMessage.includes('closed');
 
     return (
       <Box sx={{ p: 2 }}>
@@ -84,22 +102,12 @@ export const DataLakeTablesView: React.FC<DataLakeTablesViewProps> = ({
           <Typography variant="body2" sx={{ mb: 2 }}>
             {errorMessage}
           </Typography>
-          {isConnectionError && (
-            <Box sx={{ mt: 2 }}>
-              <Typography variant="body2" sx={{ fontWeight: 'bold', mb: 1 }}>
-                Troubleshooting steps:
-              </Typography>
-              <Typography variant="body2" component="ul" sx={{ pl: 2, m: 0 }}>
-                <li>Check that the instance is attached</li>
-                <li>Verify your catalog database is accessible</li>
-                <li>Check SSL/TLS settings if using PostgreSQL</li>
-                <li>Ensure network connectivity to the catalog database</li>
-                <li>Try detaching and re-attaching the instance</li>
-              </Typography>
-            </Box>
-          )}
         </Alert>
-        <Button variant="contained" onClick={handleRefresh}>
+        <Button
+          variant="contained"
+          onClick={handleRefresh}
+          startIcon={<Refresh />}
+        >
           Retry
         </Button>
       </Box>
@@ -134,15 +142,15 @@ export const DataLakeTablesView: React.FC<DataLakeTablesViewProps> = ({
       <DataLakeTables
         tables={formattedTables}
         selectedInstanceId={instanceId}
-        onPreview={onPreview}
-        onQuery={onQuery}
       />
 
       <DataLakeTableImportWizard
         open={importWizardOpen}
         onClose={() => setImportWizardOpen(false)}
         onImport={handleImportTable}
-        isLoading={importTableMutation.isLoading}
+        isLoading={
+          importTableMutation.isLoading || setPartitionedByMutation.isLoading
+        }
         dataPath={instanceQuery.data?.dataPath}
       />
     </Box>

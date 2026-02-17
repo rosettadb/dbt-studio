@@ -91,6 +91,7 @@ export const storageConfigSchema = z
         region: z.string().min(1, 'Region is required'),
         accessKeyId: z.string().min(1, 'Access Key ID is required'),
         secretAccessKey: z.string().min(1, 'Secret Access Key is required'),
+        sessionToken: z.string().optional(),
         endpoint: z.string().optional(),
         prefix: z.string().optional(),
       })

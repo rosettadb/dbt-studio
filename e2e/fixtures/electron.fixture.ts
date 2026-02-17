@@ -114,6 +114,7 @@ export const test = base.extend<ElectronFixtures>({
     }
 
     // Launch the Electron app
+    // In CI environments, Electron runs headless automatically via Playwright
     const electronApp = await electron.launch({
       args: [
         mainBundlePath,
@@ -121,6 +122,9 @@ export const test = base.extend<ElectronFixtures>({
         '--disable-gpu',
         '--no-sandbox',
         '--disable-dev-shm-usage',
+        // Additional CI-friendly flags
+        '--disable-software-rasterizer',
+        '--disable-extensions',
       ],
       env: {
         ...process.env,
@@ -131,6 +135,10 @@ export const test = base.extend<ElectronFixtures>({
         ELECTRON_NO_UPDATER: '1',
         // Disable analytics in tests
         DISABLE_ANALYTICS: '1',
+        // Ensure headless operation in CI
+        ...(process.env.CI === 'true' && {
+          ELECTRON_DISABLE_GPU: '1',
+        }),
       },
     });
 

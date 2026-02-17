@@ -251,6 +251,13 @@ export default class DuckLakeInstanceStore {
             key,
             storage.s3.secretAccessKey,
           );
+          if (storage.s3.sessionToken) {
+            const sessionKey = `ducklake-${instanceId}-s3-session-token`;
+            await SecureStorageService.setCredential(
+              sessionKey,
+              storage.s3.sessionToken,
+            );
+          }
         } else if (storage.type === 'azure') {
           if (storage.azure?.accountKey) {
             const key = `ducklake-${instanceId}-azure-key`;
@@ -313,9 +320,17 @@ export default class DuckLakeInstanceStore {
 
         if (storage.type === 's3' && storage.s3) {
           const key = `ducklake-${instanceId}-s3-secret`;
-          const secret = await SecureStorageService.getCredential(key);
+          const sessionKey = `ducklake-${instanceId}-s3-session-token`;
+          const [secret, sessionToken] = await Promise.all([
+            SecureStorageService.getCredential(key),
+            SecureStorageService.getCredential(sessionKey),
+          ]);
           if (secret) {
-            fullStorage.s3 = { ...storage.s3, secretAccessKey: secret };
+            fullStorage.s3 = {
+              ...storage.s3,
+              secretAccessKey: secret,
+              ...(sessionToken && { sessionToken }),
+            };
           }
         } else if (storage.type === 'azure' && storage.azure) {
           const keyKey = `ducklake-${instanceId}-azure-key`;
@@ -370,6 +385,7 @@ export default class DuckLakeInstanceStore {
       if (storage) {
         if (storage.type === 's3') {
           credentialKeys.push(`ducklake-${instanceId}-s3-secret`);
+          credentialKeys.push(`ducklake-${instanceId}-s3-session-token`);
         } else if (storage.type === 'azure') {
           credentialKeys.push(`ducklake-${instanceId}-azure-key`);
           credentialKeys.push(`ducklake-${instanceId}-azure-conn-string`);
