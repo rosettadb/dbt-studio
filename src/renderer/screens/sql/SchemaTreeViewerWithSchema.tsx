@@ -21,6 +21,7 @@ type Props = {
   isLoading: boolean;
   onRefresh: () => void;
   filter?: string;
+  hideSchemaLevel?: boolean;
 };
 
 /**
@@ -29,7 +30,14 @@ type Props = {
  * schema display in the SQL tool.
  */
 export const SchemaTreeViewerWithSchema: React.FC<Props> = React.memo(
-  ({ databaseName, type, schema: tables = [], isLoading, filter = '' }) => {
+  ({
+    databaseName,
+    type,
+    schema: tables = [],
+    isLoading,
+    filter = '',
+    hideSchemaLevel = false,
+  }) => {
     const [expandedItems, setExpandedItems] = React.useState<string[]>([
       databaseName,
     ]);
@@ -99,20 +107,28 @@ export const SchemaTreeViewerWithSchema: React.FC<Props> = React.memo(
                 />
               }
             >
-              {Object.entries(schemaMap).map(([schemaName, schemaTables]) => (
-                <TreeItem
-                  key={`${databaseName}.${schemaName}`}
-                  itemId={`${databaseName}.${schemaName}`}
-                  label={<TreeItems.Schema label={schemaName} />}
-                >
-                  {schemaTables.map((table) => (
-                    <RenderTree
-                      key={`${schemaName}.${table.name}`}
-                      table={table}
-                    />
-                  ))}
-                </TreeItem>
-              ))}
+              {hideSchemaLevel &&
+                filteredTables.map((table) => (
+                  <RenderTree
+                    key={`${table.schema}.${table.name}`}
+                    table={table}
+                  />
+                ))}
+              {!hideSchemaLevel &&
+                Object.entries(schemaMap).map(([schemaName, schemaTables]) => (
+                  <TreeItem
+                    key={`${databaseName}.${schemaName}`}
+                    itemId={`${databaseName}.${schemaName}`}
+                    label={<TreeItems.Schema label={schemaName} />}
+                  >
+                    {schemaTables.map((table) => (
+                      <RenderTree
+                        key={`${schemaName}.${table.name}`}
+                        table={table}
+                      />
+                    ))}
+                  </TreeItem>
+                ))}
             </TreeItem>
           </StyledTreeView>
         )}

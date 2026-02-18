@@ -718,6 +718,17 @@ export default class ConnectorsService {
     projectName: string,
   ): Promise<string> {
     const jdbcUrl = await this.generateJdbcUrl(connection);
+    const isDuckDb = connection.type === 'duckdb';
+    const isDuckLake = connection.type === 'ducklake';
+    let databaseName: string;
+    if (isDuckDb) {
+      databaseName = this.extractDbNameFromPath(connection.short_database_path);
+    } else if (isDuckLake) {
+      databaseName = '';
+    } else {
+      databaseName = connection.database;
+    }
+    const schemaName = isDuckLake ? '' : connection.schema;
     // Removed BigQuery keyfile fetch/validation here
     // USER and PASSWORD only declared here
     const USER = `db-user-${connection.name}`;
@@ -730,13 +741,8 @@ export default class ConnectorsService {
       connections: [
         {
           name: projectName,
-          databaseName:
-            connection.type === 'duckdb'
-              ? this.extractDbNameFromPath(connection.short_database_path)
-              : connection.type === 'ducklake'
-                ? ''
-                : connection.database,
-          schemaName: connection.type === 'ducklake' ? '' : connection.schema,
+          databaseName,
+          schemaName,
           dbType: connection.type,
           url: jdbcUrl,
           // Only add userName/password for non-BigQuery, non-Databricks, non-DuckDB
@@ -878,12 +884,15 @@ export default class ConnectorsService {
     return {
       name: connection.name || project.name,
       dbType: connection.type,
-      databaseName:
-        connection.type === 'duckdb'
-          ? connection.database_path
-          : connection.type === 'ducklake'
-            ? ''
-            : connection.database,
+      databaseName: (() => {
+        if (connection.type === 'duckdb') {
+          return connection.database_path;
+        }
+        if (connection.type === 'ducklake') {
+          return '';
+        }
+        return connection.database;
+      })(),
       schemaName: connection.type === 'ducklake' ? '' : connection.schema,
       url: rosettaJdbcUrl,
       ...(connection.type !== 'databricks' &&

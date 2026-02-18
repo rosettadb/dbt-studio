@@ -750,19 +750,17 @@ const Sql = () => {
               }}
             >
               <SchemaViewGrid>
-                {activeTab &&
-                  connectionInput &&
-                  isDuckLakeConnection &&
-                  duckLakeSchema && (
-                    <SchemaTreeViewerWithSchema
-                      databaseName={connectionInput.name || 'DuckLake Instance'}
-                      type="ducklake"
-                      schema={duckLakeTables}
-                      isLoading={false}
-                      onRefresh={handleRefreshSchema}
-                      filter={filter}
-                    />
-                  )}
+                {activeTab && connectionInput && isDuckLakeConnection && (
+                  <SchemaTreeViewerWithSchema
+                    databaseName={connectionInput.name || 'DuckLake Instance'}
+                    type="ducklake"
+                    schema={duckLakeTables}
+                    isLoading={!duckLakeSchema}
+                    onRefresh={handleRefreshSchema}
+                    filter={filter}
+                    hideSchemaLevel
+                  />
+                )}
                 {activeTab && connectionInput && !isDuckLakeConnection && (
                   <SchemaTreeViewerWithSchema
                     databaseName={String(
