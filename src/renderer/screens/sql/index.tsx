@@ -924,7 +924,18 @@ const Sql = () => {
                     />
                   )}
                   {!isLoading && !hasError && hasResults && (
-                    <QueryResult results={activeTab.results} />
+                    <QueryResult
+                      results={activeTab.results}
+                      exportContext={{
+                        connectionType: connectionInput.type,
+                        connectionId: activeTab.connectionId,
+                        duckLakeInstanceId:
+                          connectionInput.type === 'ducklake'
+                            ? (connectionInput as any).instanceId
+                            : undefined,
+                        originalSql: activeTab.query,
+                      }}
+                    />
                   )}
                 </Box>
               </SplitPane>
