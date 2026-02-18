@@ -708,25 +708,25 @@ export class SQLiteCatalogAdapter extends CatalogAdapter {
   async executeQuery(
     request: DuckLakeQueryRequest,
   ): Promise<DuckLakeQueryResult> {
+    const startTime = Date.now();
     try {
       if (!this.connectionInfo) {
         throw new Error('No active connection');
       }
 
-      const startTime = Date.now();
-
       // Handle time travel queries
-      let query = request.sql;
-      if (request.snapshotId) {
+      const { query: baseQuery, snapshotId, limit, offset } = request;
+      let query = baseQuery;
+      if (snapshotId) {
         // Modify query to use specific snapshot
-        query = `${query} FOR SYSTEM_TIME AS OF SNAPSHOT '${request.snapshotId}'`;
+        query = `${query} FOR SYSTEM_TIME AS OF SNAPSHOT '${snapshotId}'`;
       }
 
       // Add limit and offset if specified
-      if (request.limit) {
-        query += ` LIMIT ${request.limit}`;
-        if (request.offset) {
-          query += ` OFFSET ${request.offset}`;
+      if (limit) {
+        query += ` LIMIT ${limit}`;
+        if (offset) {
+          query += ` OFFSET ${offset}`;
         }
       }
 
@@ -734,25 +734,43 @@ export class SQLiteCatalogAdapter extends CatalogAdapter {
       const rows = await result.getRows();
 
       // Handle DDL statements (CREATE, DROP, etc.) that don't return a schema
-      const columns = result.schema
+      const fields = result.schema
         ? result.schema.map((col: any) => ({
             name: col.name,
             type: col.type,
           }))
         : [];
 
-      const executionTime = Date.now() - startTime;
+      // Normalize data (handle complex types)
+      const data = rows.map((row: any) => {
+        const normalized: any = {};
+        if (typeof row === 'object' && row !== null) {
+          const entries = Object.entries(row);
+          entries.forEach(([key, value]) => {
+            normalized[key] = normalizeNumericValue(value);
+          });
+        }
+        return normalized;
+      });
+
+      const duration = Date.now() - startTime;
 
       return {
-        columns,
-        rows,
-        executionTime,
-        snapshotId: request.snapshotId,
+        success: true,
+        data,
+        fields,
+        rowCount: data.length,
+        duration,
+        snapshotId,
       };
     } catch (error) {
       // eslint-disable-next-line no-console
       console.error('SQLite query execution failed:', error);
-      throw error;
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : String(error),
+        duration: Date.now() - startTime,
+      };
     }
   }
 

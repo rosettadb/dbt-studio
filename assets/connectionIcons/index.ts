@@ -4,6 +4,7 @@ import postgres from './postgresql.png';
 import redshift from './redshift.png';
 import databricks from './databricks.png';
 import duckdb from './duckdb.png';
+import ducklake from './ducklake.png';
 import sqlite from './sqlite.png';
 import mysql from './mysql.png';
 import oracle from './oracle.png';
@@ -64,6 +65,7 @@ const obj: { images: Image } = {
     redshift,
     databricks,
     duckdb,
+    ducklake,
     mysql,
     oracle,
     db2,

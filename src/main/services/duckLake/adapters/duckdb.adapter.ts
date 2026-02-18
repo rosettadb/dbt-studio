@@ -580,6 +580,9 @@ export class DuckDBCatalogAdapter extends CatalogAdapter {
 
   async listTables(): Promise<DuckLakeTableInfo[]> {
     try {
+      // eslint-disable-next-line no-console
+      console.log('[DuckDB Adapter] listTables() called');
+
       if (!this.connectionInfo) {
         throw new Error('No active connection');
       }
@@ -592,21 +595,35 @@ export class DuckDBCatalogAdapter extends CatalogAdapter {
         LIMIT 1
       `;
 
+      // eslint-disable-next-line no-console
+      console.log('[DuckDB Adapter] Searching for metadata database...');
       const databasesResult =
         await this.connectionInfo.connection.run(databasesQuery);
       const databaseRows = await databasesResult.getRows();
 
       if (databaseRows.length === 0) {
+        // eslint-disable-next-line no-console
+        console.log(
+          '[DuckDB Adapter] No metadata database found, listing all databases:',
+        );
         const allDatabasesResult = await this.connectionInfo.connection.run(
           'SELECT database_name FROM duckdb_databases()',
         );
-        await allDatabasesResult.getRows();
+        const allDatabases = await allDatabasesResult.getRows();
+        // eslint-disable-next-line no-console
+        console.log('[DuckDB Adapter] All databases:', allDatabases);
         return [];
       }
 
       const metadataDatabase = Array.isArray(databaseRows[0])
         ? databaseRows[0][0]
         : (databaseRows[0] as any).database_name;
+
+      // eslint-disable-next-line no-console
+      console.log(
+        '[DuckDB Adapter] Found metadata database:',
+        metadataDatabase,
+      );
 
       // Quote the database name to handle special characters (hyphens, etc.)
       const quotedMetadataDatabase = `"${metadataDatabase}"`;
@@ -627,7 +644,7 @@ export class DuckDBCatalogAdapter extends CatalogAdapter {
           snap.snapshot_time
         FROM ${quotedMetadataDatabase}.main.ducklake_table t
         JOIN ${quotedMetadataDatabase}.main.ducklake_schema s ON t.schema_id = s.schema_id
-        LEFT JOIN ${quotedMetadataDatabase}.main.ducklake_table_stats ts 
+        LEFT JOIN ${quotedMetadataDatabase}.main.ducklake_table_stats ts
           ON ts.table_id = t.table_id
         LEFT JOIN ${quotedMetadataDatabase}.main.ducklake_snapshot snap ON snap.snapshot_id = t.begin_snapshot
         CROSS JOIN current_snapshot cs
@@ -638,8 +655,13 @@ export class DuckDBCatalogAdapter extends CatalogAdapter {
         ORDER BY s.schema_name, t.table_name
       `;
 
+      // eslint-disable-next-line no-console
+      console.log('[DuckDB Adapter] Executing query to list tables...');
       const result = await this.connectionInfo.connection.run(query);
       const rows = await result.getRows();
+
+      // eslint-disable-next-line no-console
+      console.log('[DuckDB Adapter] Query returned', rows.length, 'rows');
 
       const tables: DuckLakeTableInfo[] = rows.map((row: any) => {
         if (Array.isArray(row)) {
@@ -683,15 +705,34 @@ export class DuckDBCatalogAdapter extends CatalogAdapter {
         };
       });
 
+      // eslint-disable-next-line no-console
+      console.log(
+        '[DuckDB Adapter] Mapped to',
+        tables.length,
+        'table info objects',
+      );
+      // eslint-disable-next-line no-console
+      console.log(
+        '[DuckDB Adapter] Tables:',
+        tables.map((t) => ({ name: t.name, schema: t.schema })),
+      );
+
       return tables;
     } catch (error: any) {
       const errorMessage = error.message || '';
+
+      // eslint-disable-next-line no-console
+      console.error('[DuckDB Adapter] listTables error:', error);
 
       if (
         errorMessage.includes('ducklake_snapshot does not exist') ||
         errorMessage.includes('ducklake_table does not exist') ||
         errorMessage.includes('Catalog Error')
       ) {
+        // eslint-disable-next-line no-console
+        console.log(
+          '[DuckDB Adapter] Metadata tables do not exist, returning empty array',
+        );
         return [];
       }
 
@@ -826,27 +867,118 @@ export class DuckDBCatalogAdapter extends CatalogAdapter {
     }
   }
 
+  /**
+   * Get the metadata database prefix for qualifying metadata tables
+   * @returns The prefix string (e.g., "__ducklake_metadata_test.main.") or empty string if not found
+   */
+  private async getMetadataPrefix(): Promise<string> {
+    try {
+      if (!this.connectionInfo) {
+        return '';
+      }
+
+      const databasesQuery = `
+        SELECT database_name
+        FROM duckdb_databases()
+        WHERE database_name LIKE '__ducklake_metadata_%'
+        LIMIT 1
+      `;
+
+      const databasesResult =
+        await this.connectionInfo.connection.run(databasesQuery);
+      const databaseRows = await databasesResult.getRows();
+
+      if (databaseRows.length === 0) {
+        return '';
+      }
+
+      const metadataDatabase = Array.isArray(databaseRows[0])
+        ? databaseRows[0][0]
+        : (databaseRows[0] as any).database_name;
+
+      return `"${metadataDatabase}".main.`;
+    } catch (error) {
+      // eslint-disable-next-line no-console
+      console.warn('Could not determine metadata prefix:', error);
+      return '';
+    }
+  }
+
+  /**
+   * Qualify metadata table references in queries
+   * This is needed for DuckDB adapter where metadata tables are in a separate attached database
+   */
+  private async qualifyMetadataTables(query: string): Promise<string> {
+    const metadataPrefix = await this.getMetadataPrefix();
+
+    if (!metadataPrefix) {
+      return query;
+    }
+
+    // List of DuckLake metadata tables that need qualification
+    const metadataTables = [
+      'ducklake_table',
+      'ducklake_column',
+      'ducklake_schema',
+      'ducklake_snapshot',
+      'ducklake_data_file',
+      'ducklake_delete_file',
+      'ducklake_table_stats',
+      'ducklake_table_column_stats',
+      'ducklake_partition_info',
+      'ducklake_partition_column',
+      'ducklake_file_partition_value',
+      'ducklake_tag',
+      'ducklake_column_tag',
+    ];
+
+    // Replace unqualified metadata table references
+    // Pattern: FROM/JOIN metadata_table (not already qualified)
+    const qualifiedQuery = metadataTables.reduce((currentQuery, table) => {
+      // Match FROM/JOIN followed by the table name, but not if already qualified
+      const pattern = new RegExp(
+        `\\b(FROM|JOIN)\\s+(?!"?__ducklake_metadata_)\\b${table}\\b`,
+        'gi',
+      );
+      return currentQuery.replace(pattern, `$1 ${metadataPrefix}${table}`);
+    }, query);
+
+    // eslint-disable-next-line no-console
+    console.log('[DuckDB Adapter] Qualified query:', qualifiedQuery);
+
+    return qualifiedQuery;
+  }
+
   async executeQuery(
     request: DuckLakeQueryRequest,
   ): Promise<DuckLakeQueryResult> {
+    const startTime = Date.now();
     try {
       if (!this.connectionInfo) {
         throw new Error('No active connection');
       }
 
-      const startTime = Date.now();
-
       // Handle time travel queries
-      let query = request.sql;
-      if (request.snapshotId) {
+      const { query: baseQuery, snapshotId, limit, offset } = request;
+
+      // eslint-disable-next-line no-console
+      console.log('[DuckDB Adapter] Original query:', baseQuery);
+
+      // Qualify metadata table references for internal queries
+      let query = await this.qualifyMetadataTables(baseQuery);
+
+      // eslint-disable-next-line no-console
+      console.log('[DuckDB Adapter] After qualification:', query);
+
+      if (snapshotId) {
         // Modify query to use specific snapshot
-        query = `${query} FOR SYSTEM_TIME AS OF SNAPSHOT '${request.snapshotId}'`;
+        query = `${query} FOR SYSTEM_TIME AS OF SNAPSHOT '${snapshotId}'`;
       }
 
       let totalRows: number | undefined;
 
       // Add limit and offset if specified
-      if (request.limit) {
+      if (limit) {
         // If pagination is requested, calculate total rows for the base query
         // Only run count query for SELECT statements to avoid re-executing DML
         const isSelectQuery = /^\s*SELECT\b/i.test(query);
@@ -883,9 +1015,9 @@ export class DuckDBCatalogAdapter extends CatalogAdapter {
           }
         }
 
-        query += ` LIMIT ${request.limit}`;
-        if (request.offset) {
-          query += ` OFFSET ${request.offset}`;
+        query += ` LIMIT ${limit}`;
+        if (offset) {
+          query += ` OFFSET ${offset}`;
         }
       }
 
@@ -895,27 +1027,85 @@ export class DuckDBCatalogAdapter extends CatalogAdapter {
       const columnNames = result.columnNames();
       const columnTypes = result.columnTypes();
 
-      // Map to our column format
-      const columns = columnNames.map((name: string, index: number) => ({
+      // eslint-disable-next-line no-console
+      console.log('[DuckDB Adapter] Query column names:', columnNames);
+      // eslint-disable-next-line no-console
+      console.log('[DuckDB Adapter] Query column types:', columnTypes);
+
+      // Map to our field format
+      const fields = columnNames.map((name: string, index: number) => ({
         name,
         type: columnTypes[index]?.toString() || 'UNKNOWN',
       }));
 
       const rows = await result.getRows();
 
-      const executionTime = Date.now() - startTime;
+      // eslint-disable-next-line no-console
+      console.log('[DuckDB Adapter] Raw rows from DuckDB:', rows);
+
+      // Normalize data (handle HugeInt and other complex types)
+      const data = rows.map((row: any) => {
+        const normalized: any = {};
+        if (Array.isArray(row)) {
+          // If row is an array, map to field names
+          columnNames.forEach((name: string, idx: number) => {
+            const value = row[idx];
+            // Only normalize numeric types (bigint, number, or objects with hugeint)
+            // Preserve strings, booleans, nulls, and other types as-is
+            if (
+              typeof value === 'bigint' ||
+              typeof value === 'number' ||
+              (typeof value === 'object' &&
+                value !== null &&
+                (value as any).hugeint !== undefined)
+            ) {
+              normalized[name] = normalizeNumericValue(value);
+            } else {
+              normalized[name] = value;
+            }
+          });
+        } else if (typeof row === 'object' && row !== null) {
+          // If row is already an object
+          const entries = Object.entries(row);
+          entries.forEach(([key, value]) => {
+            // Only normalize numeric types
+            if (
+              typeof value === 'bigint' ||
+              typeof value === 'number' ||
+              (typeof value === 'object' &&
+                value !== null &&
+                (value as any).hugeint !== undefined)
+            ) {
+              normalized[key] = normalizeNumericValue(value);
+            } else {
+              normalized[key] = value;
+            }
+          });
+        }
+        return normalized;
+      });
+
+      // eslint-disable-next-line no-console
+      console.log('[DuckDB Adapter] Normalized data:', data);
+
+      const duration = Date.now() - startTime;
 
       return {
-        columns,
-        rows,
-        totalRows,
-        executionTime,
-        snapshotId: request.snapshotId,
+        success: true,
+        data,
+        fields,
+        rowCount: totalRows ?? data.length,
+        duration,
+        snapshotId,
       };
     } catch (error) {
       // eslint-disable-next-line no-console
       console.error('Failed to execute DuckDB query:', error);
-      throw error;
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : String(error),
+        duration: Date.now() - startTime,
+      };
     }
   }
 

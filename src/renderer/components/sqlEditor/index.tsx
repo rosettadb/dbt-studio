@@ -3,6 +3,7 @@ import { toast } from 'react-toastify';
 import type * as monacoType from 'monaco-editor';
 import { Inputs, RelativeContainer } from './styles';
 import { connectorsServices, projectsServices } from '../../services';
+import { DuckLakeService } from '../../services/duckLake.service';
 import { QueryHistoryType } from '../../../types/frontend';
 import { ConnectionInput, Project } from '../../../types/backend';
 import { SqlEditorComponent } from './editorComponent';
@@ -50,6 +51,17 @@ export const SqlEditor: React.FC<Props> = ({
 
   // Determine if we're in connection-based mode
   const isConnectionMode = !!connectionId;
+
+  // Detect if this is a DuckLake connection
+  const isDuckLakeConnection =
+    connectionInput?.type === 'ducklake' &&
+    'instanceId' in connectionInput &&
+    !!connectionInput.instanceId;
+
+  // Get instanceId for DuckLake queries
+  const instanceId = isDuckLakeConnection
+    ? (connectionInput as any).instanceId
+    : undefined;
 
   // Helper function to detect DDL operations that modify schema
   const isDDLOperation = (query: string): boolean => {
@@ -111,7 +123,29 @@ export const SqlEditor: React.FC<Props> = ({
     try {
       let result;
 
-      if (isConnectionMode && connectionId) {
+      if (isDuckLakeConnection && instanceId) {
+        // DuckLake execution path
+        const duckLakeResult = await DuckLakeService.executeQuery({
+          instanceId,
+          query: selectedQuery,
+          queryId,
+        });
+
+        // Transform DuckLakeQueryResult to QueryResponseType format
+        // Map fields to ensure type is number (QueryResponseType expects number)
+        const mappedFields = duckLakeResult.fields?.map((field) => ({
+          name: field.name,
+          type: typeof field.type === 'number' ? field.type : 0, // Convert string types to 0 (unknown)
+        }));
+
+        result = {
+          success: duckLakeResult.success,
+          data: duckLakeResult.data,
+          fields: mappedFields,
+          rowCount: duckLakeResult.rowCount,
+          error: duckLakeResult.error,
+        };
+      } else if (isConnectionMode && connectionId) {
         // Connection-based execution
         result = await connectorsServices.executeQueryForConnection({
           connectionId,
@@ -168,6 +202,9 @@ export const SqlEditor: React.FC<Props> = ({
         // Connection-based fields (new)
         connectionId: isConnectionMode ? connectionId : undefined,
         connectionName: isConnectionMode ? connectionInput?.name : undefined,
+        // DuckLake-specific fields
+        isDuckLake: isDuckLakeConnection,
+        instanceId: isDuckLakeConnection ? instanceId : undefined,
       };
 
       // Limit history to last 50 items to prevent storage overflow

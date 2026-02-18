@@ -13,7 +13,8 @@ export type SupportedConnectionTypes =
   | 'mssql'
   | 'kinetica'
   | 'googlecloud'
-  | 'duckdb';
+  | 'duckdb'
+  | 'ducklake';
 
 export type ConnectionBase = {
   type: SupportedConnectionTypes;
@@ -95,6 +96,18 @@ export type KineticaConnection = ConnectionBase & {
   bypassSslCertCheck?: boolean;
 };
 
+export type DuckLakeConnectionConfig = Omit<
+  ConnectionBase,
+  'username' | 'password' | 'database' | 'schema'
+> & {
+  type: 'ducklake';
+  instanceId: string;
+  // Metadata from instance
+  catalogType?: 'duckdb' | 'postgresql' | 'sqlite';
+  dataPath?: string;
+  status?: 'active' | 'inactive' | 'error';
+};
+
 export type ConnectionInput =
   | PostgresConnection
   | SnowflakeConnection
@@ -102,7 +115,8 @@ export type ConnectionInput =
   | RedshiftConnection
   | DatabricksConnection
   | DuckDBConnection
-  | KineticaConnection;
+  | KineticaConnection
+  | DuckLakeConnectionConfig;
 
 export type ConnectionModel = {
   id: string;
