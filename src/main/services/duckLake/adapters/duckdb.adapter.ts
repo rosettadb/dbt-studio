@@ -977,13 +977,24 @@ export class DuckDBCatalogAdapter extends CatalogAdapter {
 
       let totalRows: number | undefined;
 
+      // Strip trailing semicolons so LIMIT/OFFSET can be safely appended.
+      // Queries like "SELECT ... ORDER BY x;" would otherwise become
+      // "SELECT ... ORDER BY x; LIMIT 100" which is a syntax error.
+      query = query.replace(/;\s*$/, '');
+
       // Add limit and offset if specified
       if (limit) {
-        // If pagination is requested, calculate total rows for the base query
-        // Only run count query for SELECT statements to avoid re-executing DML
-        const isSelectQuery = /^\s*SELECT\b/i.test(query);
+        // If pagination is requested, calculate total rows for the base query.
+        // Match SELECT queries and WITH-clause CTEs (WITH ... SELECT ...).
+        // We intentionally exclude DML/DDL to avoid re-executing side-effecting statements.
+        const isSelectQuery =
+          /^\s*SELECT\b/i.test(query) || /^\s*WITH\b/i.test(query);
 
-        if (isSelectQuery) {
+        // Respect user-defined LIMIT in their SQL — don't append another LIMIT
+        // which would produce invalid syntax or override the user's intent.
+        const hasExistingLimit = /\bLIMIT\s+\d+/i.test(query);
+
+        if (isSelectQuery && !hasExistingLimit) {
           try {
             const countQuery = `SELECT COUNT(*) as total FROM (${query})`;
             const countResult =
@@ -1013,12 +1024,19 @@ export class DuckDBCatalogAdapter extends CatalogAdapter {
               error,
             );
           }
-        }
 
-        query += ` LIMIT ${limit}`;
-        if (offset) {
-          query += ` OFFSET ${offset}`;
+          query += ` LIMIT ${limit}`;
+          if (offset) {
+            query += ` OFFSET ${offset}`;
+          }
+        } else if (!hasExistingLimit) {
+          // DML/DDL: still apply limit/offset without count
+          query += ` LIMIT ${limit}`;
+          if (offset) {
+            query += ` OFFSET ${offset}`;
+          }
         }
+        // If hasExistingLimit: skip — the user's LIMIT takes precedence
       }
 
       const result = await this.connectionInfo.connection.run(query);

@@ -83,7 +83,7 @@ export const QueryResult: React.FC<Props> = ({ results, exportContext }) => {
   const [loading, setLoading] = React.useState(false);
 
   const [page, setPage] = React.useState(0);
-  const [perPage, setPerPage] = React.useState(10);
+  const [perPage, setPerPage] = React.useState(100);
   const [order, setOrder] = React.useState<'asc' | 'desc'>('asc');
   const [orderBy, setOrderBy] = React.useState<string | undefined>(undefined);
   const [keyword, setKeyword] = React.useState('');
@@ -210,7 +210,7 @@ export const QueryResult: React.FC<Props> = ({ results, exportContext }) => {
     const escapeCsvValue = (value: unknown): string => {
       if (value === null || value === undefined) return '';
       const str = String(value);
-      if (/[",\n]/.test(str)) {
+      if (/[,"\n]/.test(str)) {
         return `"${str.replace(/"/g, '""')}"`;
       }
       return str;

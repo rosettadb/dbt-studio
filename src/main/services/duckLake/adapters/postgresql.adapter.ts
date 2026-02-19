@@ -772,8 +772,45 @@ export class PostgreSQLCatalogAdapter extends CatalogAdapter {
         query = `${query} FOR SYSTEM_TIME AS OF SNAPSHOT '${snapshotId}'`;
       }
 
-      // Add limit and offset if specified
-      if (limit) {
+      let totalRows: number | undefined;
+
+      // Strip trailing semicolons so LIMIT/OFFSET can be safely appended.
+      query = query.replace(/;\s*$/, '');
+
+      // Add limit and offset if specified — but respect user-defined LIMIT
+      const hasExistingLimit = /\bLIMIT\s+\d+/i.test(query);
+      const isSelectQuery =
+        /^\s*SELECT\b/i.test(query) || /^\s*WITH\b/i.test(query);
+
+      if (limit && !hasExistingLimit) {
+        if (isSelectQuery) {
+          try {
+            const countQuery = `SELECT COUNT(*) as total FROM (${query})`;
+            const countResult =
+              await this.connectionInfo.connection.run(countQuery);
+            const countRows = await countResult.getRows();
+
+            if (countRows && countRows.length > 0) {
+              const countRow = countRows[0];
+              let countVal;
+              if (Array.isArray(countRow)) {
+                [countVal] = countRow;
+              } else if (countRow && typeof countRow === 'object') {
+                countVal = countRow.total ?? Object.values(countRow)[0];
+              }
+              if (countVal !== undefined) {
+                totalRows = Number(countVal);
+              }
+            }
+          } catch (error) {
+            // eslint-disable-next-line no-console
+            console.warn(
+              '[PostgreSQL] Failed to fetch total rows for pagination:',
+              error,
+            );
+          }
+        }
+
         query += ` LIMIT ${limit}`;
         if (offset) {
           query += ` OFFSET ${offset}`;
@@ -809,7 +846,7 @@ export class PostgreSQLCatalogAdapter extends CatalogAdapter {
         success: true,
         data,
         fields,
-        rowCount: data.length,
+        rowCount: totalRows ?? data.length,
         duration,
         snapshotId,
       };
