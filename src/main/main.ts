@@ -126,6 +126,11 @@ if (!gotTheLock) {
 
       if (splash) {
         splash.webContents.once('did-finish-load', async () => {
+          // Verify stored Rosetta Cloud token on startup; clear if invalid
+          RosettaCloudService.checkTokenOnStartup().catch((e) =>
+            console.error('Token check on startup failed:', e),
+          );
+
           const updateMessage = async (msg: string) => {
             await splash.webContents.executeJavaScript(
               `window.updateLoaderMessage(${JSON.stringify(msg)})`,
