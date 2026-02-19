@@ -1168,19 +1168,37 @@ export default class DuckLakeService {
         allowedPrefixes.slice(1),
       );
 
-      // Track query for cancellation
+      // Register real cancel function if adapter provides one
       if (request.queryId) {
-        this.activeQueries.set(request.queryId, () => {
-          // TODO: Implement actual interruption in adapter if possible
-          // For now we just remove it from tracking
-          // eslint-disable-next-line no-console
-          console.log(`Query ${request.queryId} marked for cancellation`);
-        });
+        const cancelFromAdapter =
+          typeof (adapter as any).getCancelFn === 'function'
+            ? (adapter as any).getCancelFn(request.queryId)
+            : undefined;
+        if (typeof cancelFromAdapter === 'function') {
+          this.activeQueries.set(request.queryId, cancelFromAdapter);
+        }
       }
 
       try {
-        // Execute through adapter
-        const result = await adapter.executeQuery(request);
+        // Execute through adapter; support adapters that return { result, cancel }
+        const execResult: any = await adapter.executeQuery(request);
+        let result: DuckLakeQueryResult;
+
+        if (
+          execResult &&
+          typeof execResult === 'object' &&
+          typeof execResult.cancel === 'function'
+        ) {
+          if (request.queryId) {
+            this.activeQueries.set(request.queryId, execResult.cancel);
+          }
+          result =
+            typeof execResult.result === 'object' && execResult.result
+              ? (execResult.result as DuckLakeQueryResult)
+              : (execResult as DuckLakeQueryResult);
+        } else {
+          result = execResult as DuckLakeQueryResult;
+        }
 
         // Determine command type
         const commandType = this.detectCommandType(request.query);

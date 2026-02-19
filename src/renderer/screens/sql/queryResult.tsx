@@ -24,6 +24,7 @@ import {
 } from '../../../types/backend';
 import { CustomTable } from '../../components/customTable';
 import { underscoreToTitleCase } from '../../helpers/utils';
+import { DuckLakeService } from '../../services/duckLake.service';
 
 const SuccessContainer = styled(Box)(({ theme }) => ({
   backgroundColor: theme.palette.background.paper,
@@ -57,15 +58,125 @@ type Props = {
 };
 
 export const QueryResult: React.FC<Props> = ({ results, exportContext }) => {
-  const columns = React.useMemo(() => {
-    return results.fields?.map((field) => field.name) ?? [];
-  }, [results]);
+  const formatNumber = React.useCallback((n: number) => {
+    try {
+      return new Intl.NumberFormat('de-DE').format(n);
+    } catch {
+      return String(n);
+    }
+  }, []);
+  const originalSql =
+    (results as any).originalSql ?? exportContext?.originalSql;
 
-  const rows = React.useMemo(() => {
-    return results.data ?? [];
-  }, [results]);
+  const isDuckLake =
+    exportContext?.connectionType === 'ducklake' &&
+    !!exportContext.duckLakeInstanceId &&
+    !!originalSql;
+
+  const [columns, setColumns] = React.useState<string[]>(
+    results.fields?.map((f) => f.name) ?? [],
+  );
+  const [rows, setRows] = React.useState<any[]>(results.data ?? []);
+  const [totalCount, setTotalCount] = React.useState<number>(
+    results.rowCount ?? (results.data ? results.data.length : 0),
+  );
+  const [loading, setLoading] = React.useState(false);
+
+  const [page, setPage] = React.useState(0);
+  const [perPage, setPerPage] = React.useState(10);
+  const [order, setOrder] = React.useState<'asc' | 'desc'>('asc');
+  const [orderBy, setOrderBy] = React.useState<string | undefined>(undefined);
+  const [keyword, setKeyword] = React.useState('');
+
+  const fetchPage = React.useCallback(
+    async (newPage: number, newPerPage: number) => {
+      if (!isDuckLake) return;
+      if (!exportContext?.duckLakeInstanceId || !originalSql) return;
+      try {
+        setLoading(true);
+        const res = await DuckLakeService.executeQuery({
+          instanceId: exportContext.duckLakeInstanceId,
+          query: originalSql,
+          limit: newPerPage,
+          offset: newPage * newPerPage,
+        });
+        setColumns(res.fields?.map((f) => f.name) ?? []);
+        setRows(res.data ?? []);
+        if (typeof res.rowCount === 'number') {
+          setTotalCount(res.rowCount);
+        }
+      } catch (e) {
+        // eslint-disable-next-line no-console
+        console.error('[QueryResult] DuckLake page fetch failed:', e);
+        setRows([]);
+      } finally {
+        setLoading(false);
+      }
+    },
+    [isDuckLake, exportContext?.duckLakeInstanceId, originalSql],
+  );
+
+  React.useEffect(() => {
+    setColumns(results.fields?.map((f) => f.name) ?? []);
+    const baseTotal =
+      results.rowCount ?? (results.data ? results.data.length : 0);
+
+    if (isDuckLake) {
+      setTotalCount(baseTotal);
+      setPage(0);
+      fetchPage(0, perPage);
+    } else {
+      setRows(results.data ?? []);
+      setTotalCount(baseTotal);
+      setPage(0);
+    }
+    // We intentionally only respond to new results / connection type;
+    // perPage changes are handled via customPagination.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [results, isDuckLake, fetchPage]);
+
+  const customPagination = React.useMemo(() => {
+    if (!isDuckLake) return undefined;
+    return {
+      page,
+      setPage: (p: number) => {
+        setPage(p);
+        fetchPage(p, perPage);
+      },
+      perPage,
+      setPerPage: (n: number) => {
+        setPerPage(n);
+        setPage(0);
+        fetchPage(0, n);
+      },
+      count: totalCount,
+      order,
+      setOrder: (o: 'asc' | 'desc') => setOrder(o),
+      orderBy: orderBy as any,
+      setOrderBy: (ob: any) => setOrderBy(ob as string),
+      keyword,
+      setKeyword: (k: string) => setKeyword(k),
+    };
+  }, [
+    isDuckLake,
+    page,
+    perPage,
+    totalCount,
+    order,
+    orderBy,
+    keyword,
+    fetchPage,
+  ]);
 
   const hasRows = rows.length > 0 && columns.length > 0;
+  const showingInfo =
+    isDuckLake && totalCount > 0
+      ? `Showing ${formatNumber(
+          Math.min(page * perPage + 1, totalCount),
+        )}–${formatNumber(Math.min((page + 1) * perPage, totalCount))} of ${formatNumber(
+          totalCount,
+        )}`
+      : undefined;
 
   const [exportAnchorEl, setExportAnchorEl] =
     React.useState<null | HTMLElement>(null);
@@ -146,7 +257,9 @@ export const QueryResult: React.FC<Props> = ({ results, exportContext }) => {
       }
 
       const escapedPath = result.filePath.replace(/'/g, "''");
-      const exportQuery = `COPY (${exportContext.originalSql}) TO '${escapedPath}' (FORMAT PARQUET)`;
+      const baseSql =
+        (results as any).originalSql ?? exportContext.originalSql ?? '';
+      const exportQuery = `COPY (${baseSql}) TO '${escapedPath}' (FORMAT PARQUET)`;
 
       if (
         exportContext.connectionType === 'ducklake' &&
@@ -233,6 +346,15 @@ export const QueryResult: React.FC<Props> = ({ results, exportContext }) => {
                 {results.duration > 1000
                   ? `${(results.duration / 1000).toFixed(2)}s`
                   : `${results.duration}ms`}
+              </Typography>
+            )}
+            {showingInfo && (
+              <Typography
+                variant="body2"
+                color="text.secondary"
+                sx={{ opacity: 0.7 }}
+              >
+                {showingInfo}
               </Typography>
             )}
             <Tooltip
@@ -334,6 +456,8 @@ export const QueryResult: React.FC<Props> = ({ results, exportContext }) => {
             </div>
           ),
         }))}
+        customPagination={customPagination as any}
+        loading={loading}
       />
     </div>
   );

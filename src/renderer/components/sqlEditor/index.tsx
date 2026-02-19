@@ -124,11 +124,13 @@ export const SqlEditor: React.FC<Props> = ({
       let result;
 
       if (isDuckLakeConnection && instanceId) {
-        // DuckLake execution path
+        const duckLakeQueryLimit = 10;
+
         const duckLakeResult = await DuckLakeService.executeQuery({
           instanceId,
           query: selectedQuery,
           queryId,
+          limit: duckLakeQueryLimit,
         });
 
         // Transform DuckLakeQueryResult to QueryResponseType format
@@ -180,6 +182,7 @@ export const SqlEditor: React.FC<Props> = ({
         ...result,
         isCommand: commandType === 'DDL' || commandType === 'DML',
         commandType,
+        originalSql: selectedQuery,
       };
 
       setQueryResults(enrichedResult);

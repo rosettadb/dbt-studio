@@ -98,8 +98,8 @@ const Sql = () => {
     JSON.stringify([]),
   );
   const [sizes, setSizes] = useState<[number, number]>([
-    window.innerHeight - 410,
-    410,
+    window.innerHeight - 440,
+    440,
   ]);
   const [tabQueryIds, setTabQueryIds] = useState<Record<string, string>>({});
 
@@ -933,7 +933,9 @@ const Sql = () => {
                           connectionInput.type === 'ducklake'
                             ? (connectionInput as any).instanceId
                             : undefined,
-                        originalSql: activeTab.query,
+                        originalSql:
+                          (activeTab.results as any)?.originalSql ??
+                          activeTab.query,
                       }}
                     />
                   )}
