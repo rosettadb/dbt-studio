@@ -127,6 +127,7 @@ if (!gotTheLock) {
       if (splash) {
         splash.webContents.once('did-finish-load', async () => {
           // Verify stored Rosetta Cloud token on startup; clear if invalid
+          // eslint-disable-next-line promise/no-nesting
           RosettaCloudService.checkTokenOnStartup().catch((e) =>
             console.error('Token check on startup failed:', e),
           );
