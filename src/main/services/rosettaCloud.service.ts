@@ -263,6 +263,44 @@ export default class RosettaCloudService {
     return !!apiKey;
   }
 
+  /**
+   * Verifies the stored API key against /api/electron/token/check.
+   * If the token is invalid or expired, clears the stored API key.
+   * Called on app startup when user is logged in to Rosetta Cloud.
+   */
+  static async checkTokenOnStartup(): Promise<void> {
+    try {
+      const apiKey = await this.getApiKey();
+      if (!apiKey) {
+        return;
+      }
+
+      const baseUrl = ROSETTA_CLOUD_BASE_URL.replace(/\/$/, '');
+      const response = await fetch(`${baseUrl}/api/electron/token/check`, {
+        method: 'GET',
+        headers: {
+          Authorization: `Bearer ${apiKey}`,
+          'Content-Type': 'application/json',
+        },
+      });
+
+      let data: { valid?: boolean } = {};
+      try {
+        data = await response.json();
+      } catch {
+        // 401 may not return valid JSON
+      }
+
+      if (!response.ok || data.valid !== true) {
+        await this.clearApiKey();
+      }
+    } catch (error) {
+      // On network error, don't clear - user might be offline
+      // eslint-disable-next-line no-console
+      console.error('Token check on startup failed:', error);
+    }
+  }
+
   static async validateApiKey(
     apiKey: string,
   ): Promise<{ valid: boolean; error?: string }> {

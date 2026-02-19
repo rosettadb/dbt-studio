@@ -191,6 +191,12 @@ const useDbt = (
       args: string = '',
       options: { showToast?: boolean } = { showToast: true },
     ) => {
+      if (env === 'cloud') {
+        setActiveCommand(command);
+        cloudRunCb?.(command);
+        return;
+      }
+
       if (isRunning) {
         if (options.showToast) {
           toast.warning('Another dbt command is currently running');
@@ -223,11 +229,6 @@ const useDbt = (
         }
 
         setActiveCommand(command);
-
-        if (env === 'cloud') {
-          cloudRunCb?.(command);
-          return;
-        }
 
         // Setup environment variables
         await setupConnectionEnv(connection.connection.name);
