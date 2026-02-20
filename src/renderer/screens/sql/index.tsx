@@ -758,7 +758,6 @@ const Sql = () => {
                     isLoading={!duckLakeSchema}
                     onRefresh={handleRefreshSchema}
                     filter={filter}
-                    hideSchemaLevel
                   />
                 )}
                 {activeTab && connectionInput && !isDuckLakeConnection && (

@@ -124,7 +124,7 @@ export const SqlEditor: React.FC<Props> = ({
       let result;
 
       if (isDuckLakeConnection && instanceId) {
-        const duckLakeQueryLimit = 100;
+        const duckLakeQueryLimit = 10;
 
         const duckLakeResult = await DuckLakeService.executeQuery({
           instanceId,
