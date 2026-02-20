@@ -135,35 +135,9 @@ const Sql = () => {
     ? loadingSchemas[activeTab.connectionId]
     : false;
 
-  // Debug: Log loading state changes
-  useEffect(() => {
-    if (activeTab) {
-      // eslint-disable-next-line no-console
-      console.log('[SQL Screen] Loading state for connection:', {
-        connectionId: activeTab.connectionId,
-        isLoadingSchema,
-        hasSchema: !!tabSchemas[activeTab.connectionId],
-        isDuckLake: activeTab.connectionId?.startsWith('ducklake-'),
-      });
-    }
-  }, [activeTab, isLoadingSchema, tabSchemas]);
-
   // Store DuckLake completions and schema
   const [duckLakeCompletions, setDuckLakeCompletions] = useState<any[]>([]);
   const [duckLakeSchema, setDuckLakeSchema] = useState<any>(null);
-
-  // Debug: Log duckLakeSchema changes
-  useEffect(() => {
-    // eslint-disable-next-line no-console
-    console.log('[SQL Screen] duckLakeSchema state updated:', duckLakeSchema);
-    if (duckLakeSchema) {
-      // eslint-disable-next-line no-console
-      console.log(
-        '[SQL Screen] duckLakeSchema.schemas:',
-        duckLakeSchema.schemas,
-      );
-    }
-  }, [duckLakeSchema]);
 
   // Convert DuckLake schema to Table[] format for SchemaTreeViewerWithSchema
   const duckLakeTables = useMemo(() => {
@@ -216,57 +190,20 @@ const Sql = () => {
   // Load DuckLake completions when connection changes
   useEffect(() => {
     const loadDuckLakeCompletions = async () => {
-      // eslint-disable-next-line no-console
-      console.log(
-        '[SQL Screen] loadDuckLakeCompletions called, connectionInput:',
-        connectionInput,
-      );
-
       if (!connectionInput || (connectionInput as any).type !== 'ducklake') {
-        // eslint-disable-next-line no-console
-        console.log(
-          '[SQL Screen] Not a DuckLake connection, clearing completions',
-        );
         setDuckLakeCompletions([]);
         return;
       }
 
       try {
         const { instanceId } = connectionInput as any;
-        // eslint-disable-next-line no-console
-        console.log(
-          '[SQL Screen] DuckLake connection detected, instanceId:',
-          instanceId,
-        );
 
         if (!instanceId) {
-          // eslint-disable-next-line no-console
-          console.warn('[SQL Screen] No instanceId found in connection input');
           return;
         }
 
-        // eslint-disable-next-line no-console
-        console.log('[SQL Screen] Calling DuckLakeService.extractSchema...');
         const schema = await DuckLakeService.extractSchema(instanceId);
-        // eslint-disable-next-line no-console
-        console.log('[SQL Screen] Schema extracted:', schema);
-        // eslint-disable-next-line no-console
-        console.log('[SQL Screen] Schema details:', {
-          schemasCount: schema.schemas?.length || 0,
-          schemas: schema.schemas?.map((s) => ({
-            name: s.name,
-            tablesCount: s.tables?.length || 0,
-            tables: s.tables?.map((t) => t.name),
-          })),
-        });
-
         const duckLakeItems = generateDuckLakeCompletions(schema);
-        // eslint-disable-next-line no-console
-        console.log(
-          '[SQL Screen] Generated',
-          duckLakeItems.length,
-          'completion items',
-        );
 
         setDuckLakeCompletions(duckLakeItems);
         setDuckLakeSchema(schema);
@@ -292,11 +229,6 @@ const Sql = () => {
       // Skip regular schema loading for DuckLake connections
       // DuckLake schema is loaded via extractSchema in loadDuckLakeCompletions
       if (connectionId.startsWith('ducklake-')) {
-        // eslint-disable-next-line no-console
-        console.log(
-          '[SQL Screen] Skipping regular schema load for DuckLake connection:',
-          connectionId,
-        );
         // Mark as loaded (empty schema) to prevent loading state
         setTabSchemas((prev) => ({ ...prev, [connectionId]: [] }));
         setLoadingSchemas((prev) => ({ ...prev, [connectionId]: false }));

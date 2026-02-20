@@ -1143,6 +1143,7 @@ export default class DuckLakeService {
     request: DuckLakeQueryRequest,
   ): Promise<DuckLakeQueryResult> {
     const startTime = Date.now();
+    
     try {
       await this.ensureConnected(request.instanceId);
       const adapter = await this.getAdapter(request.instanceId);
@@ -1182,6 +1183,7 @@ export default class DuckLakeService {
       try {
         // Execute through adapter; support adapters that return { result, cancel }
         const execResult: any = await adapter.executeQuery(request);
+        
         let result: DuckLakeQueryResult;
 
         if (
@@ -1217,7 +1219,9 @@ export default class DuckLakeService {
       }
     } catch (error) {
       // eslint-disable-next-line no-console
-      console.error('DuckLake query execution failed:', error);
+      console.error('[DuckLake Service] Query execution failed:', error);
+      // eslint-disable-next-line no-console
+      console.error('[DuckLake Service] Error stack:', error instanceof Error ? error.stack : 'No stack');
       return {
         success: false,
         error: error instanceof Error ? error.message : String(error),
@@ -1246,9 +1250,6 @@ export default class DuckLakeService {
       await this.ensureConnected(instanceId);
       const adapter = await this.getAdapter(instanceId);
 
-      // eslint-disable-next-line no-console
-      console.log('[DuckLake Service] Querying for schemas...');
-
       // First, check what the current snapshot is
       const snapshotCheckResult = await adapter.executeQuery({
         instanceId,
@@ -1258,12 +1259,6 @@ export default class DuckLakeService {
         `,
         queryId: `snapshot-check-${Date.now()}`,
       });
-
-      // eslint-disable-next-line no-console
-      console.log(
-        '[DuckLake Service] Current snapshot check:',
-        snapshotCheckResult,
-      );
 
       // Check what's in the schema table
       const schemaTableCheck = await adapter.executeQuery({
@@ -1275,12 +1270,6 @@ export default class DuckLakeService {
         `,
         queryId: `schema-table-check-${Date.now()}`,
       });
-
-      // eslint-disable-next-line no-console
-      console.log(
-        '[DuckLake Service] Schema table contents:',
-        schemaTableCheck,
-      );
 
       // Query metadata catalog for schemas using DuckLake v0.3 schema
       // Get current snapshot first
@@ -1301,23 +1290,14 @@ export default class DuckLakeService {
         queryId: `schema-${Date.now()}`,
       });
 
-      // eslint-disable-next-line no-console
-      console.log('[DuckLake Service] Schemas query result:', schemasResult);
-
       const schemaNames: string[] =
         schemasResult.data?.map((row: any) => row.schema_name) || [];
-
-      // eslint-disable-next-line no-console
-      console.log('[DuckLake Service] Found schemas:', schemaNames);
 
       // Fetch tables and columns for all schemas in parallel
       const schemasWithTables = await Promise.all(
         schemaNames.map(async (schemaName) => {
-          // eslint-disable-next-line no-console
-          console.log(
-            '[DuckLake Service] Querying tables for schema:',
-            schemaName,
-          );
+          // Escape single quotes in schema name to prevent SQL injection
+          const escapedSchemaName = schemaName.replace(/'/g, "''");
 
           const tablesResult = await adapter.executeQuery({
             instanceId,
@@ -1335,7 +1315,7 @@ export default class DuckLakeService {
               JOIN ducklake_schema s ON t.schema_id = s.schema_id
               LEFT JOIN ducklake_column c ON t.table_id = c.table_id
               CROSS JOIN current_snapshot cs
-              WHERE s.schema_name = '${schemaName}'
+              WHERE s.schema_name = '${escapedSchemaName}'
                 AND cs.snapshot_id >= t.begin_snapshot
                 AND (cs.snapshot_id < t.end_snapshot OR t.end_snapshot IS NULL)
                 AND cs.snapshot_id >= s.begin_snapshot
@@ -1345,14 +1325,6 @@ export default class DuckLakeService {
             `,
             queryId: `tables-${Date.now()}`,
           });
-
-          // eslint-disable-next-line no-console
-          console.log(
-            '[DuckLake Service] Tables query result for schema',
-            schemaName,
-            ':',
-            tablesResult,
-          );
 
           // Group by table
           const tableMap = new Map<string, DuckLakeSchemaTable>();
@@ -1373,29 +1345,41 @@ export default class DuckLakeService {
             }
           });
 
-          // eslint-disable-next-line no-console
-          console.log(
-            '[DuckLake Service] Mapped tables for schema',
-            schemaName,
-            ':',
-            Array.from(tableMap.keys()),
-          );
-
           return {
             name: schemaName,
             tables: Array.from(tableMap.values()),
           };
         }),
       );
-
-      // eslint-disable-next-line no-console
-      console.log(
-        '[DuckLake Service] Final schema extraction result:',
-        schemasWithTables,
-      );
+      
+      // Sanitize: Ensure no BigInt values remain in the schema structure
+      // This is critical for IPC serialization
+      const sanitizeValue = (obj: any): any => {
+        if (obj === null || obj === undefined) return obj;
+        
+        if (typeof obj === 'bigint') {
+          return Number(obj);
+        }
+        
+        if (Array.isArray(obj)) {
+          return obj.map(sanitizeValue);
+        }
+        
+        if (typeof obj === 'object') {
+          const sanitized: any = {};
+          for (const [key, value] of Object.entries(obj)) {
+            sanitized[key] = sanitizeValue(value);
+          }
+          return sanitized;
+        }
+        
+        return obj;
+      };
+      
+      const sanitizedSchemas = sanitizeValue(schemasWithTables);
 
       return {
-        schemas: schemasWithTables,
+        schemas: sanitizedSchemas,
         // Add DuckLake-specific functions
         functions: [
           'ducklake_snapshots',
@@ -1407,6 +1391,7 @@ export default class DuckLakeService {
         // Add metadata tables
         systemTables: [
           'ducklake_table',
+          'ducklake_schema',
           'ducklake_column',
           'ducklake_snapshot',
           'ducklake_data_file',

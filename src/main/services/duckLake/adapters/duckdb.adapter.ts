@@ -961,14 +961,8 @@ export class DuckDBCatalogAdapter extends CatalogAdapter {
       // Handle time travel queries
       const { query: baseQuery, snapshotId, limit, offset } = request;
 
-      // eslint-disable-next-line no-console
-      console.log('[DuckDB Adapter] Original query:', baseQuery);
-
       // Qualify metadata table references for internal queries
       let query = await this.qualifyMetadataTables(baseQuery);
-
-      // eslint-disable-next-line no-console
-      console.log('[DuckDB Adapter] After qualification:', query);
 
       if (snapshotId) {
         // Modify query to use specific snapshot
@@ -1045,11 +1039,6 @@ export class DuckDBCatalogAdapter extends CatalogAdapter {
       const columnNames = result.columnNames();
       const columnTypes = result.columnTypes();
 
-      // eslint-disable-next-line no-console
-      console.log('[DuckDB Adapter] Query column names:', columnNames);
-      // eslint-disable-next-line no-console
-      console.log('[DuckDB Adapter] Query column types:', columnTypes);
-
       // Map to our field format
       const fields = columnNames.map((name: string, index: number) => ({
         name,
@@ -1057,12 +1046,30 @@ export class DuckDBCatalogAdapter extends CatalogAdapter {
       }));
 
       const rows = await result.getRows();
-
-      // eslint-disable-next-line no-console
-      console.log('[DuckDB Adapter] Raw rows from DuckDB:', rows);
+      
+      // Check for BigInt in raw data (for debugging)
+      if (rows && rows.length > 0) {
+        rows.slice(0, 3).forEach((row: any, rowIndex: number) => {
+          if (Array.isArray(row)) {
+            row.forEach((value: any, colIndex: number) => {
+              if (typeof value === 'bigint') {
+                // eslint-disable-next-line no-console
+                console.warn(`[DuckDB Adapter] Found BigInt in raw row ${rowIndex}, column index ${colIndex} (${columnNames[colIndex]}): ${value}`);
+              }
+            });
+          } else if (typeof row === 'object' && row !== null) {
+            Object.entries(row).forEach(([key, value]) => {
+              if (typeof value === 'bigint') {
+                // eslint-disable-next-line no-console
+                console.warn(`[DuckDB Adapter] Found BigInt in raw row ${rowIndex}, column "${key}": ${value}`);
+              }
+            });
+          }
+        });
+      }
 
       // Normalize data (handle HugeInt and other complex types)
-      const data = rows.map((row: any) => {
+      const data = rows.map((row: any, rowIndex: number) => {
         const normalized: any = {};
         if (Array.isArray(row)) {
           // If row is an array, map to field names
@@ -1102,9 +1109,20 @@ export class DuckDBCatalogAdapter extends CatalogAdapter {
         }
         return normalized;
       });
-
-      // eslint-disable-next-line no-console
-      console.log('[DuckDB Adapter] Normalized data:', data);
+      
+      // Verify no BigInt remains after normalization (for debugging)
+      if (data && data.length > 0) {
+        let bigIntFound = false;
+        data.slice(0, 3).forEach((row: any, rowIndex: number) => {
+          Object.entries(row).forEach(([key, value]) => {
+            if (typeof value === 'bigint') {
+              bigIntFound = true;
+              // eslint-disable-next-line no-console
+              console.error(`[DuckDB Adapter] ERROR: BigInt still present after normalization in row ${rowIndex}, column "${key}": ${value}`);
+            }
+          });
+        });
+      }
 
       const duration = Date.now() - startTime;
 
