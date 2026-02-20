@@ -443,18 +443,40 @@ export const QueryResult: React.FC<Props> = ({ results, exportContext }) => {
         columns={columns.map((column) => ({
           id: column,
           label: underscoreToTitleCase(column),
-          render: (value) => (
-            <div
-              style={{
-                whiteSpace: 'nowrap',
-                minHeight: '24px',
-                display: 'flex',
-                alignItems: 'center',
-              }}
-            >
-              {JSON.stringify(value[column]).replace(/"/g, '')}
-            </div>
-          ),
+          render: (value) => {
+            const cellValue = value[column];
+            // Handle null and undefined
+            if (cellValue === null || cellValue === undefined) {
+              return (
+                <div
+                  style={{
+                    whiteSpace: 'nowrap',
+                    minHeight: '24px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    color: '#999',
+                    fontStyle: 'italic',
+                  }}
+                >
+                  NULL
+                </div>
+              );
+            }
+            // Convert to string and remove quotes from JSON.stringify
+            const stringValue = JSON.stringify(cellValue).replace(/"/g, '');
+            return (
+              <div
+                style={{
+                  whiteSpace: 'nowrap',
+                  minHeight: '24px',
+                  display: 'flex',
+                  alignItems: 'center',
+                }}
+              >
+                {stringValue}
+              </div>
+            );
+          },
         }))}
         customPagination={customPagination as any}
         loading={loading}

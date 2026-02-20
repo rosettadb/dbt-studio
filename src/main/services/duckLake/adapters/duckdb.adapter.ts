@@ -1046,7 +1046,7 @@ export class DuckDBCatalogAdapter extends CatalogAdapter {
       }));
 
       const rows = await result.getRows();
-      
+
       // Check for BigInt in raw data (for debugging)
       if (rows && rows.length > 0) {
         rows.slice(0, 3).forEach((row: any, rowIndex: number) => {
@@ -1054,14 +1054,18 @@ export class DuckDBCatalogAdapter extends CatalogAdapter {
             row.forEach((value: any, colIndex: number) => {
               if (typeof value === 'bigint') {
                 // eslint-disable-next-line no-console
-                console.warn(`[DuckDB Adapter] Found BigInt in raw row ${rowIndex}, column index ${colIndex} (${columnNames[colIndex]}): ${value}`);
+                console.warn(
+                  `[DuckDB Adapter] Found BigInt in raw row ${rowIndex}, column index ${colIndex} (${columnNames[colIndex]}): ${value}`,
+                );
               }
             });
           } else if (typeof row === 'object' && row !== null) {
             Object.entries(row).forEach(([key, value]) => {
               if (typeof value === 'bigint') {
                 // eslint-disable-next-line no-console
-                console.warn(`[DuckDB Adapter] Found BigInt in raw row ${rowIndex}, column "${key}": ${value}`);
+                console.warn(
+                  `[DuckDB Adapter] Found BigInt in raw row ${rowIndex}, column "${key}": ${value}`,
+                );
               }
             });
           }
@@ -1069,7 +1073,7 @@ export class DuckDBCatalogAdapter extends CatalogAdapter {
       }
 
       // Normalize data (handle HugeInt and other complex types)
-      const data = rows.map((row: any, rowIndex: number) => {
+      const data = rows.map((row: any) => {
         const normalized: any = {};
         if (Array.isArray(row)) {
           // If row is an array, map to field names
@@ -1109,16 +1113,16 @@ export class DuckDBCatalogAdapter extends CatalogAdapter {
         }
         return normalized;
       });
-      
+
       // Verify no BigInt remains after normalization (for debugging)
       if (data && data.length > 0) {
-        let bigIntFound = false;
         data.slice(0, 3).forEach((row: any, rowIndex: number) => {
           Object.entries(row).forEach(([key, value]) => {
             if (typeof value === 'bigint') {
-              bigIntFound = true;
               // eslint-disable-next-line no-console
-              console.error(`[DuckDB Adapter] ERROR: BigInt still present after normalization in row ${rowIndex}, column "${key}": ${value}`);
+              console.error(
+                `[DuckDB Adapter] ERROR: BigInt still present after normalization in row ${rowIndex}, column "${key}": ${value}`,
+              );
             }
           });
         });

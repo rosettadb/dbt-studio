@@ -1143,7 +1143,7 @@ export default class DuckLakeService {
     request: DuckLakeQueryRequest,
   ): Promise<DuckLakeQueryResult> {
     const startTime = Date.now();
-    
+
     try {
       await this.ensureConnected(request.instanceId);
       const adapter = await this.getAdapter(request.instanceId);
@@ -1183,7 +1183,7 @@ export default class DuckLakeService {
       try {
         // Execute through adapter; support adapters that return { result, cancel }
         const execResult: any = await adapter.executeQuery(request);
-        
+
         let result: DuckLakeQueryResult;
 
         if (
@@ -1221,7 +1221,10 @@ export default class DuckLakeService {
       // eslint-disable-next-line no-console
       console.error('[DuckLake Service] Query execution failed:', error);
       // eslint-disable-next-line no-console
-      console.error('[DuckLake Service] Error stack:', error instanceof Error ? error.stack : 'No stack');
+      console.error(
+        '[DuckLake Service] Error stack:',
+        error instanceof Error ? error.stack : 'No stack',
+      );
       return {
         success: false,
         error: error instanceof Error ? error.message : String(error),
@@ -1249,27 +1252,6 @@ export default class DuckLakeService {
 
       await this.ensureConnected(instanceId);
       const adapter = await this.getAdapter(instanceId);
-
-      // First, check what the current snapshot is
-      const snapshotCheckResult = await adapter.executeQuery({
-        instanceId,
-        query: `
-          SELECT COALESCE(MAX(snapshot_id), 0) as current_snapshot
-          FROM ducklake_snapshot
-        `,
-        queryId: `snapshot-check-${Date.now()}`,
-      });
-
-      // Check what's in the schema table
-      const schemaTableCheck = await adapter.executeQuery({
-        instanceId,
-        query: `
-          SELECT schema_id, schema_name, begin_snapshot, end_snapshot
-          FROM ducklake_schema
-          ORDER BY schema_id
-        `,
-        queryId: `schema-table-check-${Date.now()}`,
-      });
 
       // Query metadata catalog for schemas using DuckLake v0.3 schema
       // Get current snapshot first
@@ -1351,31 +1333,32 @@ export default class DuckLakeService {
           };
         }),
       );
-      
+
       // Sanitize: Ensure no BigInt values remain in the schema structure
       // This is critical for IPC serialization
       const sanitizeValue = (obj: any): any => {
         if (obj === null || obj === undefined) return obj;
-        
+
         if (typeof obj === 'bigint') {
           return Number(obj);
         }
-        
+
         if (Array.isArray(obj)) {
           return obj.map(sanitizeValue);
         }
-        
+
         if (typeof obj === 'object') {
           const sanitized: any = {};
+          // eslint-disable-next-line no-restricted-syntax
           for (const [key, value] of Object.entries(obj)) {
             sanitized[key] = sanitizeValue(value);
           }
           return sanitized;
         }
-        
+
         return obj;
       };
-      
+
       const sanitizedSchemas = sanitizeValue(schemasWithTables);
 
       return {
