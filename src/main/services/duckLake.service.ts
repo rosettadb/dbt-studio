@@ -1159,6 +1159,8 @@ export default class DuckLakeService {
         'CREATE',
         'DROP',
         'ALTER',
+        'TRUNCATE',
+        'RENAME',
         'DESCRIBE',
         'PRAGMA',
         'SHOW',
@@ -1680,19 +1682,10 @@ export default class DuckLakeService {
   private static detectCommandType(query: string): 'SELECT' | 'DDL' | 'DML' {
     const normalized = query.trim().toUpperCase();
 
-    // DDL operations
-    const ddlKeywords = [
-      'CREATE TABLE',
-      'DROP TABLE',
-      'ALTER TABLE',
-      'CREATE SCHEMA',
-      'DROP SCHEMA',
-      'CREATE VIEW',
-      'DROP VIEW',
-      'RENAME TABLE',
-      'TRUNCATE TABLE',
-    ];
-    if (ddlKeywords.some((kw) => normalized.includes(kw))) {
+    // DDL operations - check statement verb at the beginning only
+    // This prevents false positives from string literals like SELECT 'DROP TABLE users'
+    const ddlKeywords = ['CREATE', 'DROP', 'ALTER', 'TRUNCATE', 'RENAME'];
+    if (ddlKeywords.some((kw) => normalized.startsWith(kw))) {
       return 'DDL';
     }
 
