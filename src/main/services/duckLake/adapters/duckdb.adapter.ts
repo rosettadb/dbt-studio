@@ -1023,14 +1023,8 @@ export class DuckDBCatalogAdapter extends CatalogAdapter {
           if (offset) {
             query += ` OFFSET ${offset}`;
           }
-        } else if (!hasExistingLimit) {
-          // DML/DDL: still apply limit/offset without count
-          query += ` LIMIT ${limit}`;
-          if (offset) {
-            query += ` OFFSET ${offset}`;
-          }
         }
-        // If hasExistingLimit: skip — the user's LIMIT takes precedence
+        // If hasExistingLimit or not a SELECT query: skip — LIMIT is invalid for DDL/DML
       }
 
       const result = await this.connectionInfo.connection.run(query);
