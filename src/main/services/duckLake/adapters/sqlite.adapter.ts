@@ -705,6 +705,82 @@ export class SQLiteCatalogAdapter extends CatalogAdapter {
     }
   }
 
+  /**
+   * Get the metadata database prefix for qualifying metadata tables.
+   * SQLite-backed DuckLake attaches a DuckDB metadata DB using `.main.` schema notation.
+   */
+  private async getMetadataPrefix(): Promise<string> {
+    try {
+      if (!this.connectionInfo) {
+        return '';
+      }
+
+      const databasesQuery = `
+        SELECT database_name
+        FROM duckdb_databases()
+        WHERE database_name LIKE '__ducklake_metadata_%'
+        LIMIT 1
+      `;
+
+      const databasesResult =
+        await this.connectionInfo.connection.run(databasesQuery);
+      const databaseRows = await databasesResult.getRows();
+
+      if (databaseRows.length === 0) {
+        return '';
+      }
+
+      const metadataDatabase = Array.isArray(databaseRows[0])
+        ? databaseRows[0][0]
+        : (databaseRows[0] as any).database_name;
+
+      // SQLite metadata DB uses the `.main.` schema, matching how listTables qualifies tables.
+      return `"${metadataDatabase}".main.`;
+    } catch (error) {
+      // eslint-disable-next-line no-console
+      console.warn(
+        '[SQLite Adapter] Could not determine metadata prefix:',
+        error,
+      );
+      return '';
+    }
+  }
+
+  /**
+   * Qualify unqualified DuckLake metadata table references in a query.
+   */
+  private async qualifyMetadataTables(query: string): Promise<string> {
+    const metadataPrefix = await this.getMetadataPrefix();
+
+    if (!metadataPrefix) {
+      return query;
+    }
+
+    const metadataTables = [
+      'ducklake_table',
+      'ducklake_column',
+      'ducklake_schema',
+      'ducklake_snapshot',
+      'ducklake_data_file',
+      'ducklake_delete_file',
+      'ducklake_table_stats',
+      'ducklake_table_column_stats',
+      'ducklake_partition_info',
+      'ducklake_partition_column',
+      'ducklake_file_partition_value',
+      'ducklake_tag',
+      'ducklake_column_tag',
+    ];
+
+    return metadataTables.reduce((currentQuery, table) => {
+      const pattern = new RegExp(
+        `\\b(FROM|JOIN)\\s+(?!"?__ducklake_metadata_)\\b${table}\\b`,
+        'gi',
+      );
+      return currentQuery.replace(pattern, `$1 ${metadataPrefix}${table}`);
+    }, query);
+  }
+
   async executeQuery(
     request: DuckLakeQueryRequest,
   ): Promise<DuckLakeQueryResult> {
@@ -716,7 +792,8 @@ export class SQLiteCatalogAdapter extends CatalogAdapter {
 
       // Handle time travel queries
       const { query: baseQuery, snapshotId, limit, offset } = request;
-      let query = baseQuery;
+      // Qualify any unqualified metadata table references so DuckDB can resolve them.
+      let query = await this.qualifyMetadataTables(baseQuery);
       if (snapshotId) {
         // Modify query to use specific snapshot
         query = `${query} FOR SYSTEM_TIME AS OF SNAPSHOT '${snapshotId}'`;
@@ -768,23 +845,55 @@ export class SQLiteCatalogAdapter extends CatalogAdapter {
       }
 
       const result = await this.connectionInfo.connection.run(query);
-      const rows = await result.getRows();
 
-      // Handle DDL statements (CREATE, DROP, etc.) that don't return a schema
-      const fields = result.schema
-        ? result.schema.map((col: any) => ({
-            name: col.name,
-            type: col.type,
-          }))
-        : [];
+      // Use the DuckDB Node Neo API (columnNames/columnTypes) — result.schema does not exist
+      // in this version of the driver. Falling back to empty fields caused array rows to be
+      // mapped against an empty field list, producing {} for every row.
+      const columnNames: string[] = result.columnNames?.() ?? [];
+      const columnTypes: any[] = result.columnTypes?.() ?? [];
+      const fields = columnNames.map((name: string, index: number) => ({
+        name,
+        type: columnTypes[index]?.toString() ?? 'UNKNOWN',
+      }));
+
+      const rows = await result.getRows();
 
       // Normalize data (handle complex types)
       const data = rows.map((row: any) => {
         const normalized: any = {};
-        if (typeof row === 'object' && row !== null) {
+        if (Array.isArray(row)) {
+          // If row is an array, map to field names
+          fields.forEach((field: any, idx: number) => {
+            const value = row[idx];
+            // Only normalize numeric types, preserve other types
+            if (
+              typeof value === 'bigint' ||
+              typeof value === 'number' ||
+              (typeof value === 'object' &&
+                value !== null &&
+                (value as any).hugeint !== undefined)
+            ) {
+              normalized[field.name] = normalizeNumericValue(value);
+            } else {
+              normalized[field.name] = value;
+            }
+          });
+        } else if (typeof row === 'object' && row !== null) {
+          // If row is already an object
           const entries = Object.entries(row);
           entries.forEach(([key, value]) => {
-            normalized[key] = normalizeNumericValue(value);
+            // Only normalize numeric types, preserve other types
+            if (
+              typeof value === 'bigint' ||
+              typeof value === 'number' ||
+              (typeof value === 'object' &&
+                value !== null &&
+                (value as any).hugeint !== undefined)
+            ) {
+              normalized[key] = normalizeNumericValue(value);
+            } else {
+              normalized[key] = value;
+            }
           });
         }
         return normalized;

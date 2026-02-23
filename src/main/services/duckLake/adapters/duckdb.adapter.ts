@@ -655,13 +655,8 @@ export class DuckDBCatalogAdapter extends CatalogAdapter {
         ORDER BY s.schema_name, t.table_name
       `;
 
-      // eslint-disable-next-line no-console
-      console.log('[DuckDB Adapter] Executing query to list tables...');
       const result = await this.connectionInfo.connection.run(query);
       const rows = await result.getRows();
-
-      // eslint-disable-next-line no-console
-      console.log('[DuckDB Adapter] Query returned', rows.length, 'rows');
 
       const tables: DuckLakeTableInfo[] = rows.map((row: any) => {
         if (Array.isArray(row)) {
@@ -705,18 +700,6 @@ export class DuckDBCatalogAdapter extends CatalogAdapter {
         };
       });
 
-      // eslint-disable-next-line no-console
-      console.log(
-        '[DuckDB Adapter] Mapped to',
-        tables.length,
-        'table info objects',
-      );
-      // eslint-disable-next-line no-console
-      console.log(
-        '[DuckDB Adapter] Tables:',
-        tables.map((t) => ({ name: t.name, schema: t.schema })),
-      );
-
       return tables;
     } catch (error: any) {
       const errorMessage = error.message || '';
@@ -729,10 +712,6 @@ export class DuckDBCatalogAdapter extends CatalogAdapter {
         errorMessage.includes('ducklake_table does not exist') ||
         errorMessage.includes('Catalog Error')
       ) {
-        // eslint-disable-next-line no-console
-        console.log(
-          '[DuckDB Adapter] Metadata tables do not exist, returning empty array',
-        );
         return [];
       }
 
@@ -943,9 +922,6 @@ export class DuckDBCatalogAdapter extends CatalogAdapter {
       return currentQuery.replace(pattern, `$1 ${metadataPrefix}${table}`);
     }, query);
 
-    // eslint-disable-next-line no-console
-    console.log('[DuckDB Adapter] Qualified query:', qualifiedQuery);
-
     return qualifiedQuery;
   }
 
@@ -1040,31 +1016,6 @@ export class DuckDBCatalogAdapter extends CatalogAdapter {
       }));
 
       const rows = await result.getRows();
-
-      // Check for BigInt in raw data (for debugging)
-      if (rows && rows.length > 0) {
-        rows.slice(0, 3).forEach((row: any, rowIndex: number) => {
-          if (Array.isArray(row)) {
-            row.forEach((value: any, colIndex: number) => {
-              if (typeof value === 'bigint') {
-                // eslint-disable-next-line no-console
-                console.warn(
-                  `[DuckDB Adapter] Found BigInt in raw row ${rowIndex}, column index ${colIndex} (${columnNames[colIndex]}): ${value}`,
-                );
-              }
-            });
-          } else if (typeof row === 'object' && row !== null) {
-            Object.entries(row).forEach(([key, value]) => {
-              if (typeof value === 'bigint') {
-                // eslint-disable-next-line no-console
-                console.warn(
-                  `[DuckDB Adapter] Found BigInt in raw row ${rowIndex}, column "${key}": ${value}`,
-                );
-              }
-            });
-          }
-        });
-      }
 
       // Normalize data (handle HugeInt and other complex types)
       const data = rows.map((row: any) => {

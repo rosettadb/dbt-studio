@@ -1247,16 +1247,12 @@ export default class DuckLakeService {
   static async extractSchema(instanceId: string): Promise<DuckLakeSchemaInfo> {
     try {
       // eslint-disable-next-line no-console
-      console.log(
-        '[DuckLake Service] extractSchema called for instance:',
-        instanceId,
-      );
+      console.log(`[extractSchema] called for instance: ${instanceId}`);
 
       await this.ensureConnected(instanceId);
       const adapter = await this.getAdapter(instanceId);
 
       // Query metadata catalog for schemas using DuckLake v0.3 schema
-      // Get current snapshot first
       const schemasResult = await adapter.executeQuery({
         instanceId,
         query: `
@@ -1274,8 +1270,35 @@ export default class DuckLakeService {
         queryId: `schema-${Date.now()}`,
       });
 
-      const schemaNames: string[] =
-        schemasResult.data?.map((row: any) => row.schema_name) || [];
+      // eslint-disable-next-line no-console
+      console.log(
+        `[extractSchema] schemas query — success: ${schemasResult.success}, rowCount: ${schemasResult.data?.length ?? 0}, error: ${schemasResult.error ?? 'none'}`,
+      );
+      if (schemasResult.data && schemasResult.data.length > 0) {
+        // eslint-disable-next-line no-console
+        console.log(
+          '[extractSchema] first raw schema row:',
+          JSON.stringify(schemasResult.data[0]),
+        );
+      }
+
+      const schemaNames: string[] = (schemasResult.data ?? [])
+        .map((row: any) => {
+          // Rows may be arrays (positional) or objects (named) depending on adapter/DuckDB version
+          if (Array.isArray(row)) {
+            return row[0] as string;
+          }
+          return row.schema_name as string;
+        })
+        .filter(
+          (name: string | undefined): name is string =>
+            typeof name === 'string' && name.length > 0,
+        );
+
+      // eslint-disable-next-line no-console
+      console.log(
+        `[extractSchema] resolved schemaNames: [${schemaNames.join(', ')}]`,
+      );
 
       // Fetch tables and columns for all schemas in parallel
       const schemasWithTables = await Promise.all(
@@ -1310,21 +1333,50 @@ export default class DuckLakeService {
             queryId: `tables-${Date.now()}`,
           });
 
-          // Group by table
+          // eslint-disable-next-line no-console
+          console.log(
+            `[extractSchema] schema "${schemaName}" tables query — success: ${tablesResult.success}, rowCount: ${tablesResult.data?.length ?? 0}, error: ${tablesResult.error ?? 'none'}`,
+          );
+          if (tablesResult.data && tablesResult.data.length > 0) {
+            // eslint-disable-next-line no-console
+            console.log(
+              `[extractSchema] first raw table row for schema "${schemaName}":`,
+              JSON.stringify(tablesResult.data[0]),
+            );
+          }
+
+          // Group by table — handle both array-format and object-format rows
           const tableMap = new Map<string, DuckLakeSchemaTable>();
-          tablesResult.data?.forEach((row: any) => {
-            if (!tableMap.has(row.table_name)) {
-              tableMap.set(row.table_name, {
-                name: row.table_name,
-                type: 'TABLE', // DuckLake v0.3 doesn't have table_type in ducklake_table
+          (tablesResult.data ?? []).forEach((row: any) => {
+            let tableName: string;
+            let columnName: string | undefined;
+            let columnType: string | undefined;
+            let columnOrder: number | undefined;
+
+            if (Array.isArray(row)) {
+              // Positional: table_name, column_name, column_type, column_order
+              [tableName, columnName, columnType, columnOrder] = row;
+            } else {
+              tableName = row.table_name;
+              columnName = row.column_name;
+              columnType = row.column_type;
+              columnOrder = row.column_order;
+            }
+
+            if (!tableName) return;
+
+            if (!tableMap.has(tableName)) {
+              tableMap.set(tableName, {
+                name: tableName,
+                type: 'TABLE',
                 columns: [],
               });
             }
-            if (row.column_name) {
-              tableMap.get(row.table_name)?.columns.push({
-                name: row.column_name,
-                type: row.column_type,
-                position: row.column_order,
+            if (columnName) {
+              tableMap.get(tableName)?.columns.push({
+                name: columnName,
+                type: columnType ?? '',
+                position: columnOrder ?? 0,
               });
             }
           });
@@ -1334,6 +1386,11 @@ export default class DuckLakeService {
             tables: Array.from(tableMap.values()),
           };
         }),
+      );
+
+      // eslint-disable-next-line no-console
+      console.log(
+        `[extractSchema] result: ${schemasWithTables.length} schema(s), tables per schema: [${schemasWithTables.map((s) => `${s.name}:${s.tables.length}`).join(', ')}]`,
       );
 
       // Sanitize: Ensure no BigInt values remain in the schema structure
