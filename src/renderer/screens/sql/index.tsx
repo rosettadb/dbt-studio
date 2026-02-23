@@ -63,7 +63,10 @@ const Sql = () => {
   const { selectedProject } = useContext(AppContext);
   const tabManager = useSqlTabManager();
   const { data: connections = [] } = useGetConnections();
-  const { data: duckLakeInstances = [] } = useDuckLakeInstances();
+  const {
+    data: duckLakeInstances = [],
+    isLoading: isLoadingDuckLakeInstances,
+  } = useDuckLakeInstances();
   const [filter, setFilter] = useState('');
   const {
     tabs,
@@ -119,7 +122,16 @@ const Sql = () => {
           status: instance.status,
         } as any;
       }
-      return undefined;
+      // Even if instance is not found yet (still loading), return a minimal connection object
+      // with the instanceId from the tab to prevent "Connection is still loading" errors
+      // when navigating back to SQL screen
+      return {
+        type: 'ducklake',
+        name: activeTab.connectionName || 'DuckLake Instance',
+        instanceId,
+        catalogType: 'duckdb',
+        status: 'loading',
+      } as any;
     }
 
     // Handle regular database connections
@@ -127,7 +139,12 @@ const Sql = () => {
       return undefined;
     }
     return getConnectionInput(activeConnection);
-  }, [activeConnection, activeTab, duckLakeInstances]);
+  }, [
+    activeConnection,
+    activeTab,
+    duckLakeInstances,
+    isLoadingDuckLakeInstances,
+  ]);
 
   // Get schema for active tab
   const activeSchema = activeTab ? tabSchemas[activeTab.connectionId] : [];
