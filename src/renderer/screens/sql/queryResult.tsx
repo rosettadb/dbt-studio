@@ -3,6 +3,7 @@ import { toast } from 'react-toastify';
 import { styled } from '@mui/material/styles';
 import {
   Box,
+  Backdrop,
   CircularProgress,
   Typography,
   Button,
@@ -342,6 +343,9 @@ export const QueryResult: React.FC<Props> = ({ results, exportContext }) => {
         return;
       }
 
+      handleExportMenuClose();
+      setIsExporting(true);
+
       const escapedPath = result.filePath.replace(/'/g, "''");
       const baseSql =
         (results as any).originalSql ?? exportContext.originalSql ?? '';
@@ -351,25 +355,40 @@ export const QueryResult: React.FC<Props> = ({ results, exportContext }) => {
         exportContext.connectionType === 'ducklake' &&
         exportContext.duckLakeInstanceId
       ) {
-        await window.electron.ipcRenderer.invoke('ducklake:query:execute', {
-          instanceId: exportContext.duckLakeInstanceId,
-          query: exportQuery,
-        });
+        const duckLakeExportResult = await window.electron.ipcRenderer.invoke(
+          'ducklake:query:execute',
+          {
+            instanceId: exportContext.duckLakeInstanceId,
+            query: exportQuery,
+          },
+        );
+        if (duckLakeExportResult?.error) {
+          throw new Error(duckLakeExportResult.error);
+        }
       } else if (
         exportContext.connectionType === 'duckdb' &&
         exportContext.connectionId
       ) {
-        await window.electron.ipcRenderer.invoke('connector:executeQuery', {
-          connectionId: exportContext.connectionId,
-          query: exportQuery,
-        });
+        const duckDbExportResult = await window.electron.ipcRenderer.invoke(
+          'connector:executeQuery',
+          {
+            connectionId: exportContext.connectionId,
+            query: exportQuery,
+          },
+        );
+        if (duckDbExportResult?.error) {
+          throw new Error(duckDbExportResult.error);
+        }
       }
 
-      handleExportMenuClose();
+      toast.success('Parquet export completed successfully');
     } catch (error) {
       // eslint-disable-next-line no-console
       console.error('Parquet export error:', error);
+      toast.error('Parquet export failed');
       handleExportMenuClose();
+    } finally {
+      setIsExporting(false);
     }
   };
 
@@ -585,6 +604,22 @@ export const QueryResult: React.FC<Props> = ({ results, exportContext }) => {
         customPagination={customPagination as any}
         loading={loading}
       />
+
+      <Backdrop
+        sx={{
+          color: '#fff',
+          zIndex: (theme) => theme.zIndex.drawer + 999, // Ensure it's above everything including sidebar
+          display: 'flex',
+          flexDirection: 'column',
+          gap: 2,
+        }}
+        open={isExporting}
+      >
+        <CircularProgress color="inherit" />
+        <Typography variant="h6">
+          Exporting large dataset... Please wait
+        </Typography>
+      </Backdrop>
     </div>
   );
 };
