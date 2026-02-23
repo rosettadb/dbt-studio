@@ -64,20 +64,11 @@ export const SqlEditor: React.FC<Props> = ({
     : undefined;
 
   // Helper function to detect DDL operations that modify schema
+  // Uses startsWith to prevent false positives from string literals like SELECT 'DROP TABLE users'
   const isDDLOperation = (query: string): boolean => {
     const normalizedQuery = query.trim().toUpperCase();
-    const ddlKeywords = [
-      'CREATE TABLE',
-      'DROP TABLE',
-      'ALTER TABLE',
-      'CREATE SCHEMA',
-      'DROP SCHEMA',
-      'CREATE VIEW',
-      'DROP VIEW',
-      'RENAME TABLE',
-      'TRUNCATE TABLE',
-    ];
-    return ddlKeywords.some((keyword) => normalizedQuery.includes(keyword));
+    const ddlKeywords = ['CREATE', 'DROP', 'ALTER', 'TRUNCATE', 'RENAME'];
+    return ddlKeywords.some((keyword) => normalizedQuery.startsWith(keyword));
   };
 
   const getCommandType = (query: string): string => {
@@ -99,12 +90,25 @@ export const SqlEditor: React.FC<Props> = ({
   const handleRunQuery = async (selectedQuery: string) => {
     // Validate we have a connection
     if (isConnectionMode) {
-      if (!connectionId || isLoading) {
+      if (!connectionId) {
+        toast.error('No connection selected');
+        return;
+      }
+      // For DuckLake connections, check if status indicates not ready
+      const duckLakeStatus = (connectionInput as any)?.status;
+      if (
+        isDuckLakeConnection &&
+        (duckLakeStatus === 'connecting' || duckLakeStatus === 'loading')
+      ) {
+        toast.info('Connection is loading, please wait...');
+        return;
+      }
+      if (isLoading && !isDuckLakeConnection) {
         toast.error('Connection is still loading...');
         return;
       }
-    } else if (!connectionInput || !selectedProject || isLoading) {
-      toast.error('Connection is still loading...');
+    } else if (!connectionInput || !selectedProject) {
+      toast.error('No connection or project selected');
       return;
     }
 
@@ -125,12 +129,13 @@ export const SqlEditor: React.FC<Props> = ({
 
       if (isDuckLakeConnection && instanceId) {
         const duckLakeQueryLimit = 10;
+        const commandType = getCommandType(selectedQuery);
 
         const duckLakeResult = await DuckLakeService.executeQuery({
           instanceId,
           query: selectedQuery,
           queryId,
-          limit: duckLakeQueryLimit,
+          limit: commandType === 'SELECT' ? duckLakeQueryLimit : undefined,
         });
 
         // Transform DuckLakeQueryResult to QueryResponseType format
