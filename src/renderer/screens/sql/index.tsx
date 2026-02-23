@@ -66,6 +66,7 @@ const Sql = () => {
   const {
     data: duckLakeInstances = [],
     isLoading: isLoadingDuckLakeInstances,
+    refetch: refetchDuckLakeInstances,
   } = useDuckLakeInstances();
   const [filter, setFilter] = useState('');
   const {
@@ -363,8 +364,13 @@ const Sql = () => {
         return updated;
       });
       fetchSchemaForConnection(activeTab.connectionId);
+
+      // Also refetch DuckLake instances to update connection status
+      if (activeTab.connectionId?.startsWith('ducklake-')) {
+        refetchDuckLakeInstances();
+      }
     }
-  }, [activeTab, fetchSchemaForConnection]);
+  }, [activeTab, fetchSchemaForConnection, refetchDuckLakeInstances]);
 
   const renderSash = () => (
     <Box
@@ -799,6 +805,42 @@ const Sql = () => {
               </Typography>
             </Box>
           )}
+
+          {activeTab &&
+            connectionInput &&
+            isDuckLakeConnection &&
+            (connectionInput as any)?.status === 'loading' &&
+            !isLoadingDuckLakeInstances && (
+              <Box
+                sx={{
+                  display: 'flex',
+                  flexDirection: 'column',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  height: '100%',
+                  color: 'text.secondary',
+                  gap: 2,
+                  p: 3,
+                  textAlign: 'center',
+                }}
+              >
+                <Typography variant="h6" color="text.secondary">
+                  Connection Not Found
+                </Typography>
+                <Typography variant="body2" color="text.secondary">
+                  The DuckLake instance &quot;{activeTab.connectionName}&quot;
+                  could not be found. It may have been deleted or is no longer
+                  available.
+                </Typography>
+                <Button
+                  variant="outlined"
+                  size="small"
+                  onClick={() => refetchDuckLakeInstances()}
+                >
+                  Retry Loading
+                </Button>
+              </Box>
+            )}
 
           {activeTab &&
             connectionInput &&
