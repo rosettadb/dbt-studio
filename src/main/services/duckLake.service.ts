@@ -1150,6 +1150,7 @@ export default class DuckLakeService {
 
       // Validate query (prevent statement chaining)
       // We allow all common prefixes since this is a general query executor
+      // COPY is required for full-dataset exports (Parquet/JSON/CSV)
       const allowedPrefixes = [
         'SELECT',
         'WITH',
@@ -1164,6 +1165,7 @@ export default class DuckLakeService {
         'DESCRIBE',
         'PRAGMA',
         'SHOW',
+        'COPY',
       ];
       validateSingleStatement(
         request.query,

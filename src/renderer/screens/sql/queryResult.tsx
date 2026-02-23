@@ -1,7 +1,9 @@
 import React from 'react';
+import { toast } from 'react-toastify';
 import { styled } from '@mui/material/styles';
 import {
   Box,
+  CircularProgress,
   Typography,
   Button,
   Menu,
@@ -181,6 +183,8 @@ export const QueryResult: React.FC<Props> = ({ results, exportContext }) => {
   const [exportAnchorEl, setExportAnchorEl] =
     React.useState<null | HTMLElement>(null);
   const exportMenuOpen = Boolean(exportAnchorEl);
+  // True while a COPY-to-file export is running on the main process
+  const [isExporting, setIsExporting] = React.useState(false);
 
   const handleExportMenuOpen = (event: React.MouseEvent<HTMLElement>) => {
     setExportAnchorEl(event.currentTarget);
@@ -190,8 +194,50 @@ export const QueryResult: React.FC<Props> = ({ results, exportContext }) => {
     setExportAnchorEl(null);
   };
 
-  const handleDownloadJson = () => {
+  const handleDownloadJson = async () => {
     if (!hasRows) return;
+
+    // DuckLake: stream the full dataset directly to disk via COPY ... TO (FORMAT JSON)
+    // This avoids loading all rows into the renderer (which crashed for 200M-row tables)
+    if (isDuckLake && exportContext?.duckLakeInstanceId && originalSql) {
+      handleExportMenuClose();
+      try {
+        const result = await window.electron.ipcRenderer.invoke(
+          'dialog:showSaveDialog',
+          {
+            title: 'Export to JSON (full dataset)',
+            defaultPath: 'query_results.json',
+            filters: [{ name: 'JSON Files', extensions: ['json'] }],
+          },
+        );
+        if (result.canceled || !result.filePath) return;
+
+        setIsExporting(true);
+        const escapedPath = result.filePath.replace(/'/g, "''");
+        // DuckDB FORMAT JSON writes NDJSON (one JSON object per line)
+        const exportQuery = `COPY (${originalSql}) TO '${escapedPath}' (FORMAT JSON)`;
+        const exportResult = await window.electron.ipcRenderer.invoke(
+          'ducklake:query:execute',
+          {
+            instanceId: exportContext.duckLakeInstanceId,
+            query: exportQuery,
+          },
+        );
+        if (exportResult?.error) {
+          throw new Error(exportResult.error);
+        }
+        toast.success('JSON export completed successfully');
+      } catch (error) {
+        // eslint-disable-next-line no-console
+        console.error('JSON export error:', error);
+        toast.error('JSON export failed');
+      } finally {
+        setIsExporting(false);
+      }
+      return;
+    }
+
+    // Non-DuckLake: in-memory blob (small result sets only)
     const blob = new Blob([JSON.stringify(rows, null, 2)], {
       type: 'application/json',
     });
@@ -204,9 +250,49 @@ export const QueryResult: React.FC<Props> = ({ results, exportContext }) => {
     handleExportMenuClose();
   };
 
-  const handleDownloadCsv = () => {
+  const handleDownloadCsv = async () => {
     if (!hasRows) return;
 
+    // DuckLake: stream the full dataset directly to disk via COPY ... TO (FORMAT CSV)
+    if (isDuckLake && exportContext?.duckLakeInstanceId && originalSql) {
+      handleExportMenuClose();
+      try {
+        const result = await window.electron.ipcRenderer.invoke(
+          'dialog:showSaveDialog',
+          {
+            title: 'Export to CSV (full dataset)',
+            defaultPath: 'query_results.csv',
+            filters: [{ name: 'CSV Files', extensions: ['csv'] }],
+          },
+        );
+        if (result.canceled || !result.filePath) return;
+
+        setIsExporting(true);
+        const escapedPath = result.filePath.replace(/'/g, "''");
+        // HEADER (no value) is the correct DuckDB COPY CSV syntax for including header row
+        const exportQuery = `COPY (${originalSql}) TO '${escapedPath}' (FORMAT CSV, HEADER)`;
+        const exportResult = await window.electron.ipcRenderer.invoke(
+          'ducklake:query:execute',
+          {
+            instanceId: exportContext.duckLakeInstanceId,
+            query: exportQuery,
+          },
+        );
+        if (exportResult?.error) {
+          throw new Error(exportResult.error);
+        }
+        toast.success('CSV export completed successfully');
+      } catch (error) {
+        // eslint-disable-next-line no-console
+        console.error('CSV export error:', error);
+        toast.error('CSV export failed');
+      } finally {
+        setIsExporting(false);
+      }
+      return;
+    }
+
+    // Non-DuckLake: in-memory blob (small result sets only)
     const escapeCsvValue = (value: unknown): string => {
       if (value === null || value === undefined) return '';
       const str = String(value);
@@ -329,6 +415,13 @@ export const QueryResult: React.FC<Props> = ({ results, exportContext }) => {
     );
   }
 
+  let exportTooltipTitle = 'No data to export';
+  if (isExporting) {
+    exportTooltipTitle = 'Export in progress...';
+  } else if (hasRows) {
+    exportTooltipTitle = 'Export query results';
+  }
+
   return (
     <div data-testid="sql-results-pane">
       <CustomTable<Record<string, any>>
@@ -357,19 +450,23 @@ export const QueryResult: React.FC<Props> = ({ results, exportContext }) => {
                 {showingInfo}
               </Typography>
             )}
-            <Tooltip
-              title={hasRows ? 'Export query results' : 'No data to export'}
-            >
+            <Tooltip title={exportTooltipTitle}>
               <span>
                 <Button
                   variant="outlined"
                   size="small"
-                  startIcon={<DownloadIcon />}
+                  startIcon={
+                    isExporting ? (
+                      <CircularProgress size={14} color="inherit" />
+                    ) : (
+                      <DownloadIcon />
+                    )
+                  }
                   endIcon={<ArrowDropDownIcon />}
                   onClick={handleExportMenuOpen}
-                  disabled={!hasRows}
+                  disabled={!hasRows || isExporting}
                 >
-                  Export
+                  {isExporting ? 'Exporting...' : 'Export'}
                 </Button>
               </span>
             </Tooltip>
@@ -388,6 +485,7 @@ export const QueryResult: React.FC<Props> = ({ results, exportContext }) => {
             >
               <MenuItem
                 onClick={handleDownloadJson}
+                disabled={isExporting}
                 dense
                 sx={{ py: 0.5, minHeight: 32 }}
               >
@@ -395,7 +493,9 @@ export const QueryResult: React.FC<Props> = ({ results, exportContext }) => {
                   <JsonIcon sx={{ fontSize: 16 }} />
                 </ListItemIcon>
                 <ListItemText
-                  primary="Download JSON"
+                  primary={
+                    isDuckLake ? 'Export JSON (full dataset)' : 'Download JSON'
+                  }
                   primaryTypographyProps={{
                     variant: 'body2',
                     sx: { fontSize: 12 },
@@ -404,6 +504,7 @@ export const QueryResult: React.FC<Props> = ({ results, exportContext }) => {
               </MenuItem>
               <MenuItem
                 onClick={handleDownloadCsv}
+                disabled={isExporting}
                 dense
                 sx={{ py: 0.5, minHeight: 32 }}
               >
@@ -411,7 +512,9 @@ export const QueryResult: React.FC<Props> = ({ results, exportContext }) => {
                   <CsvIcon sx={{ fontSize: 16 }} />
                 </ListItemIcon>
                 <ListItemText
-                  primary="Download CSV"
+                  primary={
+                    isDuckLake ? 'Export CSV (full dataset)' : 'Download CSV'
+                  }
                   primaryTypographyProps={{
                     variant: 'body2',
                     sx: { fontSize: 12 },
@@ -421,6 +524,7 @@ export const QueryResult: React.FC<Props> = ({ results, exportContext }) => {
               {canExportParquet && (
                 <MenuItem
                   onClick={handleExportParquet}
+                  disabled={isExporting}
                   dense
                   sx={{ py: 0.5, minHeight: 32 }}
                 >
@@ -428,7 +532,7 @@ export const QueryResult: React.FC<Props> = ({ results, exportContext }) => {
                     <ParquetIcon sx={{ fontSize: 16 }} />
                   </ListItemIcon>
                   <ListItemText
-                    primary="Export Parquet (DuckDB/DuckLake)"
+                    primary="Export Parquet (full dataset)"
                     primaryTypographyProps={{
                       variant: 'body2',
                       sx: { fontSize: 12 },
