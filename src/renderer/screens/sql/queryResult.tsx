@@ -585,8 +585,16 @@ export const QueryResult: React.FC<Props> = ({ results, exportContext }) => {
                 </div>
               );
             }
-            // Convert to string and remove quotes from JSON.stringify
-            const stringValue = JSON.stringify(cellValue).replace(/"/g, '');
+            let stringValue: string;
+            if (typeof cellValue === 'object') {
+              try {
+                stringValue = JSON.stringify(cellValue);
+              } catch {
+                stringValue = String(cellValue);
+              }
+            } else {
+              stringValue = String(cellValue);
+            }
             return (
               <div
                 style={{
