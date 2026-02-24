@@ -891,11 +891,11 @@ export class PostgreSQLCatalogAdapter extends CatalogAdapter {
               error,
             );
           }
-        }
 
-        query += ` LIMIT ${limit}`;
-        if (offset) {
-          query += ` OFFSET ${offset}`;
+          query += ` LIMIT ${limit}`;
+          if (offset) {
+            query += ` OFFSET ${offset}`;
+          }
         }
       }
 
