@@ -940,17 +940,17 @@ export class DuckDBCatalogAdapter extends CatalogAdapter {
       // Qualify metadata table references for internal queries
       let query = await this.qualifyMetadataTables(baseQuery);
 
+      // Strip trailing semicolons before appending any suffixes (like SNAPSHOT or LIMIT/OFFSET).
+      // Queries like "SELECT ... ORDER BY x;" would otherwise become
+      // "SELECT ... ORDER BY x FOR SYSTEM_TIME..." which is a syntax error.
+      query = query.replace(/;\s*$/, '');
+
       if (snapshotId) {
         // Modify query to use specific snapshot
         query = `${query} FOR SYSTEM_TIME AS OF SNAPSHOT '${snapshotId}'`;
       }
 
       let totalRows: number | undefined;
-
-      // Strip trailing semicolons so LIMIT/OFFSET can be safely appended.
-      // Queries like "SELECT ... ORDER BY x;" would otherwise become
-      // "SELECT ... ORDER BY x; LIMIT 100" which is a syntax error.
-      query = query.replace(/;\s*$/, '');
 
       // Add limit and offset if specified
       if (limit) {

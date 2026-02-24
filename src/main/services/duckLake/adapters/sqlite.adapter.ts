@@ -794,15 +794,16 @@ export class SQLiteCatalogAdapter extends CatalogAdapter {
       const { query: baseQuery, snapshotId, limit, offset } = request;
       // Qualify any unqualified metadata table references so DuckDB can resolve them.
       let query = await this.qualifyMetadataTables(baseQuery);
+
+      // Strip trailing semicolons before appending any suffixes (like SNAPSHOT or LIMIT/OFFSET).
+      query = query.replace(/;\s*$/, '');
+
       if (snapshotId) {
         // Modify query to use specific snapshot
         query = `${query} FOR SYSTEM_TIME AS OF SNAPSHOT '${snapshotId}'`;
       }
 
       let totalRows: number | undefined;
-
-      // Strip trailing semicolons so LIMIT/OFFSET can be safely appended.
-      query = query.replace(/;\s*$/, '');
 
       // Add limit and offset if specified — but respect user-defined LIMIT
       const hasExistingLimit = /\bLIMIT\s+\d+/i.test(query);
