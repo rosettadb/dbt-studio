@@ -1743,7 +1743,14 @@ export default class DuckLakeService {
 
     // DDL operations - check statement verb at the beginning only
     // This prevents false positives from string literals like SELECT 'DROP TABLE users'
-    const ddlKeywords = ['CREATE', 'DROP', 'ALTER', 'TRUNCATE', 'RENAME'];
+    const ddlKeywords = [
+      'CREATE',
+      'DROP',
+      'ALTER',
+      'TRUNCATE',
+      'RENAME',
+      'COPY',
+    ];
     if (ddlKeywords.some((kw) => normalized.startsWith(kw))) {
       return 'DDL';
     }
