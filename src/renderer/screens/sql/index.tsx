@@ -435,7 +435,9 @@ const Sql = () => {
                     const instance = duckLakeInstances.find(
                       (inst) => inst.id === instanceId,
                     );
-                    if (!instance) return 'Select Connection';
+                    if (!instance) {
+                      return activeTab?.connectionName || 'Select Connection';
+                    }
 
                     return (
                       <Box
