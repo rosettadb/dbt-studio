@@ -130,7 +130,6 @@ const Sql = () => {
         type: 'ducklake',
         name: activeTab.connectionName || 'DuckLake Instance',
         instanceId,
-        catalogType: 'duckdb',
         status: 'loading',
       } as any;
     }
