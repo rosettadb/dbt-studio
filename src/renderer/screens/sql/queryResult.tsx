@@ -90,30 +90,42 @@ export const QueryResult: React.FC<Props> = ({ results, exportContext }) => {
   const [order, setOrder] = React.useState<'asc' | 'desc'>('asc');
   const [orderBy, setOrderBy] = React.useState<string | undefined>(undefined);
   const [keyword, setKeyword] = React.useState('');
+  const [fetchError, setFetchError] = React.useState<string | null>(null);
+
+  const fetchSeqRef = React.useRef(0);
 
   const fetchPage = React.useCallback(
     async (newPage: number, newPerPage: number) => {
       if (!isDuckLake) return;
       if (!exportContext?.duckLakeInstanceId || !originalSql) return;
+
+      fetchSeqRef.current += 1;
+      const seq = fetchSeqRef.current;
+
       try {
         setLoading(true);
+        setFetchError(null);
         const res = await DuckLakeService.executeQuery({
           instanceId: exportContext.duckLakeInstanceId,
           query: originalSql,
           limit: newPerPage,
           offset: newPage * newPerPage,
         });
+        if (seq !== fetchSeqRef.current) return;
         setColumns(res.fields?.map((f) => f.name) ?? []);
         setRows(res.data ?? []);
         if (typeof res.rowCount === 'number') {
           setTotalCount(res.rowCount);
         }
-      } catch (e) {
+      } catch (e: any) {
+        if (seq !== fetchSeqRef.current) return;
         // eslint-disable-next-line no-console
         console.error('[QueryResult] DuckLake page fetch failed:', e);
-        setRows([]);
+        setFetchError(e?.message || 'Failed to fetch page data');
       } finally {
-        setLoading(false);
+        if (seq === fetchSeqRef.current) {
+          setLoading(false);
+        }
       }
     },
     [isDuckLake, exportContext?.duckLakeInstanceId, originalSql],
@@ -431,6 +443,29 @@ export const QueryResult: React.FC<Props> = ({ results, exportContext }) => {
           )}
         </Box>
       </SuccessContainer>
+    );
+  }
+
+  if (fetchError) {
+    return (
+      <Box
+        data-testid="sql-results-pane"
+        sx={{
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          justifyContent: 'center',
+          p: 4,
+          gap: 2,
+        }}
+      >
+        <Typography color="error" variant="body1">
+          {fetchError}
+        </Typography>
+        <Button variant="outlined" onClick={() => fetchPage(page, perPage)}>
+          Retry
+        </Button>
+      </Box>
     );
   }
 
