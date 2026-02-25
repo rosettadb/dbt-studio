@@ -1765,7 +1765,8 @@ export default class DuckLakeService {
       normalized.startsWith('INSERT') ||
       normalized.startsWith('UPDATE') ||
       normalized.startsWith('DELETE') ||
-      normalized.startsWith('UPSERT')
+      normalized.startsWith('UPSERT') ||
+      normalized.startsWith('MERGE')
     ) {
       return 'DML';
     }
