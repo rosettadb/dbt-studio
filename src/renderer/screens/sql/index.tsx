@@ -439,14 +439,16 @@ const Sql = () => {
             bgcolor: theme.palette.mode === 'dark' ? '#1e1e1e' : '#f5f5f5',
           }}
         >
-          {/* Connection Selection & Actions */}
           <Box
             sx={{
-              p: '8px',
+              height: 40,
+              px: '8px',
               display: 'flex',
               gap: '4px',
               alignItems: 'center',
               bgcolor: theme.palette.mode === 'dark' ? '#1e1e1e' : '#f5f5f5',
+              borderBottom: `1px solid ${theme.palette.divider}`,
+              boxSizing: 'border-box',
             }}
           >
             <FormControl fullWidth size="small">
