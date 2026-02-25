@@ -10,6 +10,7 @@ import { CatalogAdapterFactory, CatalogAdapter } from './duckLake/adapters';
 import DuckLakeConnectionManager from './duckLake/connectionManager.service';
 import CloudExplorerService from './cloudExplorer.service';
 import DuckLakeExtensionManager from './duckLake/extensionManager.service';
+import { NotebooksService } from './notebooks.service';
 import {
   DuckLakeInstance,
   DuckLakeInstanceCreateRequest,
@@ -754,6 +755,17 @@ export default class DuckLakeService {
 
       // Disconnect if connected
       await this.disconnectFromCatalog(id);
+
+      // Archive notebooks for this DuckLake instance
+      try {
+        await NotebooksService.archiveConnectionNotebooks(`ducklake-${id}`);
+      } catch (error) {
+        // eslint-disable-next-line no-console
+        console.error(
+          `Failed to archive notebooks for DuckLake instance ${id}:`,
+          error,
+        );
+      }
 
       // Delete from persistent storage (includes credential cleanup)
       await DuckLakeInstanceStore.deleteInstance(id);

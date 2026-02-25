@@ -4,6 +4,7 @@ import path from 'path';
 import fs from 'fs';
 import os from 'os';
 import { v4 as uuidV4 } from 'uuid';
+import { NotebooksService } from './notebooks.service';
 import {
   BigQueryConnection,
   BigQueryTestResponse,
@@ -541,6 +542,17 @@ export default class ConnectorsService {
       // eslint-disable-next-line no-console
       console.error(
         `Failed to cleanup credentials for connection ${connectionToDelete.connection.name}:`,
+        error,
+      );
+    }
+
+    // Archive notebooks for this connection
+    try {
+      await NotebooksService.archiveConnectionNotebooks(connectionToDelete.id);
+    } catch (error) {
+      // eslint-disable-next-line no-console
+      console.error(
+        `Failed to archive notebooks for connection ${connectionToDelete.connection.name}:`,
         error,
       );
     }

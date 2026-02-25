@@ -46,4 +46,5 @@ export const SidebarContent = styled(Box)(({ theme }) => ({
   borderLeft: `2px solid ${theme.palette.background.default}`,
   width: '100%',
   height: '100%',
+  overflow: 'hidden',
 }));

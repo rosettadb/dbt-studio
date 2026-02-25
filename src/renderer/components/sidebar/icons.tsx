@@ -5,6 +5,7 @@ import {
   SnippetFolder,
   Cloud,
   ElectricalServices as ElectricalServicesIcon,
+  LibraryBooks,
 } from '@mui/icons-material';
 import { useTheme } from '@mui/material/styles';
 import { icons } from '../../../../assets';
@@ -129,3 +130,5 @@ export const DataLake: React.FC = () => {
     />
   );
 };
+
+export const NotebooksIcon: React.FC = () => <LibraryBooks color="primary" />;

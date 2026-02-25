@@ -1,0 +1,1863 @@
+import React, { useState, useCallback, useMemo, useContext } from 'react';
+import {
+  Box,
+  FormControl,
+  Select,
+  MenuItem,
+  IconButton,
+  Tooltip,
+  Typography,
+  useTheme,
+  Accordion,
+  AccordionSummary,
+  AccordionDetails,
+  TextField,
+  InputAdornment,
+  CircularProgress,
+  List,
+  ListItem,
+  ListItemText,
+  ListItemIcon,
+  Button,
+  Checkbox,
+  FormControlLabel,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogContentText,
+  DialogActions,
+  Chip,
+} from '@mui/material';
+import {
+  Add,
+  TableChart,
+  Link as LinkIcon,
+  ExpandMore,
+  Refresh,
+  FilterList,
+  Description,
+  Archive,
+  Restore,
+  DeleteForever,
+  Warning,
+  ChevronRight,
+} from '@mui/icons-material';
+import { TreeView, TreeItem } from '@mui/x-tree-view';
+import { useNavigate } from 'react-router-dom';
+import { AppLayout } from '../../layouts';
+import { useGetConnections } from '../../controllers';
+import { useDuckLakeInstances } from '../../controllers/duckLake.controller';
+import {
+  useArchivedNotebooks,
+  useRestoreNotebook,
+  useDeleteArchivedNotebook,
+  useDeleteAllArchivedNotebooks,
+  useCreateNotebook,
+  useNotebooks,
+  useDeleteNotebook,
+} from '../../controllers/notebooks.controller';
+import connectionIcons, {
+  defaultIcon,
+} from '../../../../assets/connectionIcons';
+import { AppContext } from '../../context/AppProvider';
+import { connectorsServices } from '../../services';
+import { DuckLakeService } from '../../services/duckLake.service';
+import { SchemaTreeViewerWithSchema } from '../sql/SchemaTreeViewerWithSchema';
+import { Table, SupportedConnectionTypes } from '../../../types/backend';
+
+const Notebooks = () => {
+  const theme = useTheme();
+  const navigate = useNavigate();
+  const { selectedProject } = useContext(AppContext);
+  const { data: connections = [] } = useGetConnections();
+  const { data: duckLakeInstances = [] } = useDuckLakeInstances();
+
+  // Active connection state
+  const [activeConnectionId, setActiveConnectionId] = useState<string>('');
+  const [filter, setFilter] = useState('');
+
+  // Schema state
+  const [schema, setSchema] = useState<Table[]>([]);
+  const [isLoadingSchema, setIsLoadingSchema] = useState(false);
+
+  // Notebooks state - fetch from backend
+  const { data: notebooks = [], isLoading: isLoadingNotebooks } =
+    useNotebooks(activeConnectionId);
+  const deleteNotebook = useDeleteNotebook();
+
+  // Accordion expansion state
+  const [schemaExpanded, setSchemaExpanded] = useState(true);
+  const [notebooksExpanded, setNotebooksExpanded] = useState(true);
+  const [archivedExpanded, setArchivedExpanded] = useState(false);
+
+  // Archived notebooks state
+  const [showArchived, setShowArchived] = useState(false);
+  const { data: archivedNotebooks = {} } = useArchivedNotebooks();
+  const restoreNotebook = useRestoreNotebook();
+  const deleteArchivedNotebook = useDeleteArchivedNotebook();
+  const deleteAllArchived = useDeleteAllArchivedNotebooks();
+  const createNotebook = useCreateNotebook();
+
+  // Confirmation dialogs state
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
+  const [deleteAllConfirmOpen, setDeleteAllConfirmOpen] = useState(false);
+  const [createNotebookOpen, setCreateNotebookOpen] = useState(false);
+  const [deleteNotebookConfirmOpen, setDeleteNotebookConfirmOpen] =
+    useState(false);
+  const [newNotebookName, setNewNotebookName] = useState('');
+  const [newNotebookDescription, setNewNotebookDescription] = useState('');
+  const [notebookToDelete, setNotebookToDelete] = useState<{
+    connectionKey: string;
+    notebookId: string;
+    notebookName: string;
+  } | null>(null);
+  const [activeNotebookToDelete, setActiveNotebookToDelete] = useState<{
+    notebookId: string;
+    notebookName: string;
+  } | null>(null);
+  const [connectionKeyToDeleteAll, setConnectionKeyToDeleteAll] = useState<
+    string | null
+  >(null);
+
+  // Get active connection details
+  const activeConnection = useMemo(() => {
+    if (activeConnectionId.startsWith('ducklake-')) {
+      const instanceId = activeConnectionId.replace('ducklake-', '');
+      const instance = duckLakeInstances.find((inst) => inst.id === instanceId);
+      if (instance) {
+        return {
+          id: activeConnectionId,
+          connection: {
+            name: instance.name,
+            type: 'ducklake',
+          },
+        };
+      }
+    }
+    return connections.find((c) => c.id === activeConnectionId);
+  }, [connections, duckLakeInstances, activeConnectionId]);
+
+  // Load schema for connection
+  const loadSchema = useCallback(async (connectionId: string) => {
+    setIsLoadingSchema(true);
+    try {
+      if (connectionId.startsWith('ducklake-')) {
+        // DuckLake schema extraction
+        const instanceId = connectionId.replace('ducklake-', '');
+        const duckLakeSchema = await DuckLakeService.extractSchema(instanceId);
+
+        // Convert DuckLake schema to Table[] format
+        const tables: Table[] = [];
+        duckLakeSchema.schemas.forEach((schemaInfo) => {
+          schemaInfo.tables.forEach((table) => {
+            tables.push({
+              name: table.name,
+              type: table.type || 'TABLE',
+              schema: schemaInfo.name,
+              columns:
+                table.columns?.map((col, index) => ({
+                  name: col.name,
+                  typeName: col.type,
+                  type: col.type,
+                  ordinalPosition: index + 1,
+                  primaryKeySequenceId: 0,
+                  columnDisplaySize: 0,
+                  scale: 0,
+                  precision: 0,
+                  columnProperties: [],
+                  autoincrement: false,
+                  nullable: true,
+                  defaultValue: undefined,
+                  primaryKey: false,
+                  foreignKeys: [],
+                })) || [],
+            });
+          });
+        });
+
+        setSchema(tables);
+      } else {
+        // Regular DB connection schema extraction
+        const result =
+          await connectorsServices.extractSchemaFromConnection(connectionId);
+        if (result.error) {
+          // eslint-disable-next-line no-console
+          console.error('Failed to fetch schema:', result.error);
+          setSchema([]);
+        } else {
+          setSchema(result.tables);
+        }
+      }
+    } catch (error: any) {
+      // eslint-disable-next-line no-console
+      console.error('Failed to fetch schema:', error);
+      setSchema([]);
+    } finally {
+      setIsLoadingSchema(false);
+    }
+  }, []);
+
+  // Handle connection selection
+  const handleConnectionSelect = useCallback(
+    (connectionId: string) => {
+      // Clear previous connection state
+      setSchema([]);
+
+      // Set new connection
+      setActiveConnectionId(connectionId);
+
+      // Load schema for new connection
+      if (connectionId) {
+        loadSchema(connectionId);
+      }
+    },
+    [loadSchema],
+  );
+
+  // Handle schema refresh
+  const handleRefreshSchema = useCallback(() => {
+    if (activeConnectionId) {
+      loadSchema(activeConnectionId);
+    }
+  }, [activeConnectionId, loadSchema]);
+
+  // Helper: Check if connection exists
+  const connectionExists = useCallback(
+    (connectionKey: string) => {
+      if (connectionKey.startsWith('ducklake:')) {
+        const instanceId = connectionKey.replace('ducklake:', '');
+        return duckLakeInstances.some((inst) => inst.id === instanceId);
+      }
+      if (connectionKey.startsWith('db:')) {
+        const connId = connectionKey.replace('db:', '');
+        return connections.some((conn) => conn.id === connId);
+      }
+      return false;
+    },
+    [connections, duckLakeInstances],
+  );
+
+  // Helper: Get connection name from connectionKey
+  const getConnectionName = useCallback(
+    (connectionKey: string) => {
+      if (connectionKey.startsWith('ducklake:')) {
+        const instanceId = connectionKey.replace('ducklake:', '');
+        const instance = duckLakeInstances.find(
+          (inst) => inst.id === instanceId,
+        );
+        return instance?.name || 'Unknown DuckLake';
+      }
+      if (connectionKey.startsWith('db:')) {
+        const connId = connectionKey.replace('db:', '');
+        const conn = connections.find((c) => c.id === connId);
+        return conn?.connection.name || 'Unknown Connection';
+      }
+      return 'Unknown';
+    },
+    [connections, duckLakeInstances],
+  );
+
+  // Handle restore archived notebook
+  const handleRestoreNotebook = useCallback(
+    (connectionKey: string, notebookId: string) => {
+      // Determine target connection ID
+      let targetConnectionId: string;
+      if (connectionKey.startsWith('ducklake:')) {
+        const instanceId = connectionKey.replace('ducklake:', '');
+        targetConnectionId = `ducklake-${instanceId}`;
+      } else {
+        targetConnectionId = connectionKey.replace('db:', '');
+      }
+
+      restoreNotebook.mutate({
+        archivedConnectionKey: connectionKey,
+        notebookId,
+        targetConnectionId,
+      });
+    },
+    [restoreNotebook],
+  );
+
+  // Handle delete archived notebook
+  const handleDeleteArchivedNotebook = useCallback(() => {
+    if (!notebookToDelete) return;
+
+    deleteArchivedNotebook.mutate(
+      {
+        connectionKey: notebookToDelete.connectionKey,
+        notebookId: notebookToDelete.notebookId,
+      },
+      {
+        onSuccess: () => {
+          setDeleteConfirmOpen(false);
+          setNotebookToDelete(null);
+        },
+      },
+    );
+  }, [notebookToDelete, deleteArchivedNotebook]);
+
+  // Handle delete all archived notebooks
+  const handleDeleteAllArchived = useCallback(() => {
+    deleteAllArchived.mutate(connectionKeyToDeleteAll || undefined, {
+      onSuccess: () => {
+        setDeleteAllConfirmOpen(false);
+        setConnectionKeyToDeleteAll(null);
+      },
+    });
+  }, [connectionKeyToDeleteAll, deleteAllArchived]);
+
+  // Handle create notebook
+  const handleCreateNotebook = useCallback(() => {
+    if (!activeConnectionId || !newNotebookName.trim()) return;
+
+    createNotebook.mutate(
+      {
+        connectionId: activeConnectionId,
+        name: newNotebookName.trim(),
+        description: newNotebookDescription.trim() || undefined,
+      },
+      {
+        onSuccess: () => {
+          setCreateNotebookOpen(false);
+          setNewNotebookName('');
+          setNewNotebookDescription('');
+        },
+      },
+    );
+  }, [
+    activeConnectionId,
+    newNotebookName,
+    newNotebookDescription,
+    createNotebook,
+  ]);
+
+  // Handle open notebook (placeholder - will navigate to notebook editor)
+  const handleOpenNotebook = useCallback(
+    (notebookId: string) => {
+      // TODO: Navigate to notebook editor
+      // eslint-disable-next-line no-console
+      console.log(
+        'Open notebook:',
+        notebookId,
+        'for connection:',
+        activeConnectionId,
+      );
+    },
+    [activeConnectionId],
+  );
+
+  // Handle delete notebook
+  const handleDeleteNotebook = useCallback(
+    (notebookId: string, notebookName: string) => {
+      setActiveNotebookToDelete({ notebookId, notebookName });
+      setDeleteNotebookConfirmOpen(true);
+    },
+    [],
+  );
+
+  // Confirm delete notebook
+  const confirmDeleteNotebook = useCallback(() => {
+    if (!activeNotebookToDelete) return;
+
+    deleteNotebook.mutate(
+      {
+        connectionId: activeConnectionId,
+        notebookId: activeNotebookToDelete.notebookId,
+      },
+      {
+        onSuccess: () => {
+          setDeleteNotebookConfirmOpen(false);
+          setActiveNotebookToDelete(null);
+        },
+      },
+    );
+  }, [activeNotebookToDelete, activeConnectionId, deleteNotebook]);
+
+  return (
+    <AppLayout
+      data-testid="notebooks-screen"
+      sidebarContent={
+        <Box
+          sx={{
+            display: 'flex',
+            flexDirection: 'column',
+            height: '100%',
+            bgcolor: theme.palette.mode === 'dark' ? '#1e1e1e' : '#f5f5f5',
+          }}
+        >
+          {/* Connection Selection & Actions */}
+          <Box
+            sx={{
+              p: '8px',
+              display: 'flex',
+              gap: '4px',
+              alignItems: 'center',
+              bgcolor: theme.palette.mode === 'dark' ? '#1e1e1e' : '#f5f5f5',
+              borderBottom: `1px solid ${theme.palette.divider}`,
+            }}
+          >
+            <FormControl fullWidth size="small">
+              <Select
+                data-testid="notebooks-connection-select"
+                value={activeConnectionId}
+                onChange={(e) => handleConnectionSelect(e.target.value)}
+                displayEmpty
+                renderValue={(selected) => {
+                  if (!selected) return 'Select Connection';
+                  const conn = connections.find((c) => c.id === selected);
+                  if (conn) {
+                    const icon =
+                      connectionIcons.images[conn.connection.type] ||
+                      defaultIcon;
+                    const isProjectConnection =
+                      conn.id === selectedProject?.connectionId;
+                    return (
+                      <Box
+                        sx={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: 1,
+                          width: '100%',
+                        }}
+                      >
+                        <img
+                          src={icon}
+                          alt=""
+                          style={{
+                            width: 14,
+                            height: 14,
+                            objectFit: 'contain',
+                          }}
+                        />
+                        <span
+                          style={{
+                            whiteSpace: 'nowrap',
+                            overflow: 'hidden',
+                            textOverflow: 'ellipsis',
+                            flex: 1,
+                          }}
+                        >
+                          {conn.connection.name}
+                        </span>
+                        {isProjectConnection && (
+                          <Tooltip title="Project Connection">
+                            <LinkIcon
+                              sx={{
+                                ml: 'auto',
+                                fontSize: 16,
+                                color: 'primary.main',
+                                mr: 2,
+                                transform: 'rotate(-45deg)',
+                              }}
+                            />
+                          </Tooltip>
+                        )}
+                      </Box>
+                    );
+                  }
+
+                  // Check DuckLake instances
+                  if (selected.startsWith('ducklake-')) {
+                    const instanceId = selected.replace('ducklake-', '');
+                    const instance = duckLakeInstances.find(
+                      (inst) => inst.id === instanceId,
+                    );
+                    if (instance) {
+                      return (
+                        <Box
+                          sx={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: 1,
+                            width: '100%',
+                          }}
+                        >
+                          <img
+                            src={connectionIcons.images.ducklake || defaultIcon}
+                            alt=""
+                            style={{
+                              width: 14,
+                              height: 14,
+                              objectFit: 'contain',
+                            }}
+                          />
+                          <span
+                            style={{
+                              whiteSpace: 'nowrap',
+                              overflow: 'hidden',
+                              textOverflow: 'ellipsis',
+                              flex: 1,
+                            }}
+                          >
+                            {instance.name}
+                          </span>
+                        </Box>
+                      );
+                    }
+                  }
+
+                  return 'Select Connection';
+                }}
+                sx={{
+                  height: 28,
+                  bgcolor:
+                    theme.palette.mode === 'dark' ? '#2d2d2d' : '#e0e0e0',
+                  '& .MuiSelect-select': {
+                    py: 0,
+                    px: 1,
+                    fontSize: '0.8rem',
+                    display: 'flex',
+                    alignItems: 'center',
+                  },
+                  '& .MuiOutlinedInput-notchedOutline': { border: 'none' },
+                }}
+              >
+                <MenuItem value="" disabled sx={{ fontSize: '0.8rem' }}>
+                  Select Connection
+                </MenuItem>
+                {connections.map((conn) => {
+                  const isProjectConnection =
+                    conn.id === selectedProject?.connectionId;
+                  return (
+                    <MenuItem
+                      key={conn.id}
+                      value={conn.id}
+                      sx={{
+                        fontSize: '0.8rem',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 1,
+                        justifyContent: 'space-between',
+                      }}
+                    >
+                      <Box
+                        sx={{ display: 'flex', alignItems: 'center', gap: 1 }}
+                      >
+                        <img
+                          src={
+                            connectionIcons.images[conn.connection.type] ||
+                            defaultIcon
+                          }
+                          alt=""
+                          style={{
+                            width: 14,
+                            height: 14,
+                            objectFit: 'contain',
+                          }}
+                        />
+                        {conn.connection.name}
+                      </Box>
+                      {isProjectConnection && (
+                        <Tooltip title="Project Connection">
+                          <LinkIcon
+                            sx={{
+                              fontSize: 16,
+                              color: 'primary.main',
+                              transform: 'rotate(-45deg)',
+                            }}
+                          />
+                        </Tooltip>
+                      )}
+                    </MenuItem>
+                  );
+                })}
+                {/* DuckLake Instances */}
+                {duckLakeInstances.length > 0 && (
+                  <MenuItem
+                    disabled
+                    sx={{ fontSize: '0.75rem', opacity: 0.6, mt: 1 }}
+                  >
+                    <strong>DuckLake Instances</strong>
+                  </MenuItem>
+                )}
+                {duckLakeInstances.map((instance) => (
+                  <MenuItem
+                    key={`ducklake-${instance.id}`}
+                    value={`ducklake-${instance.id}`}
+                    sx={{
+                      fontSize: '0.8rem',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 1,
+                    }}
+                  >
+                    <img
+                      src={connectionIcons.images.ducklake || defaultIcon}
+                      alt=""
+                      style={{ width: 14, height: 14, objectFit: 'contain' }}
+                    />
+                    {instance.name}
+                  </MenuItem>
+                ))}
+              </Select>
+            </FormControl>
+            <IconButton
+              size="small"
+              onClick={handleRefreshSchema}
+              disabled={!activeConnectionId}
+              sx={{
+                width: 28,
+                height: 28,
+                bgcolor: 'transparent',
+                '&:hover': { bgcolor: 'rgba(0,0,0,0.05)' },
+              }}
+            >
+              <Refresh sx={{ fontSize: 18 }} />
+            </IconButton>
+            <IconButton
+              size="small"
+              onClick={() => setCreateNotebookOpen(true)}
+              disabled={!activeConnectionId}
+              sx={{
+                width: 28,
+                height: 28,
+                bgcolor: 'transparent',
+                '&:hover': { bgcolor: 'rgba(0,0,0,0.05)' },
+              }}
+            >
+              <Add sx={{ fontSize: 18 }} />
+            </IconButton>
+          </Box>
+
+          {/* Search Field */}
+          {activeConnectionId && (
+            <Box
+              sx={{
+                p: '8px',
+                bgcolor: theme.palette.mode === 'dark' ? '#1e1e1e' : '#f5f5f5',
+                borderBottom: `1px solid ${theme.palette.divider}`,
+              }}
+            >
+              <TextField
+                fullWidth
+                size="small"
+                placeholder="Filter"
+                value={filter}
+                onChange={(e) => setFilter(e.target.value)}
+                InputProps={{
+                  endAdornment: (
+                    <InputAdornment position="end">
+                      <FilterList
+                        sx={{ fontSize: 16, color: 'text.disabled' }}
+                      />
+                    </InputAdornment>
+                  ),
+                  sx: {
+                    height: 28,
+                    fontSize: '0.8rem',
+                    bgcolor: theme.palette.background.paper,
+                    '& .MuiOutlinedInput-notchedOutline': {
+                      borderColor: theme.palette.divider,
+                    },
+                    '&:hover .MuiOutlinedInput-notchedOutline': {
+                      borderColor: theme.palette.divider,
+                    },
+                    borderRadius: '4px',
+                  },
+                }}
+              />
+            </Box>
+          )}
+
+          {/* Schema and Notebooks TreeViews */}
+          <Box
+            sx={{
+              flex: 1,
+              overflow: 'auto',
+              bgcolor: theme.palette.mode === 'dark' ? '#1e1e1e' : '#f5f5f5',
+            }}
+          >
+            {!activeConnectionId ? (
+              <Box
+                sx={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  p: 2,
+                  height: '100%',
+                }}
+              >
+                <Typography variant="body2" color="text.secondary">
+                  Select a connection to view schema and notebooks
+                </Typography>
+              </Box>
+            ) : (
+              <>
+                {/* Schema TreeView */}
+                {isLoadingSchema && (
+                  <Box
+                    sx={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      p: 2,
+                    }}
+                  >
+                    <CircularProgress size={24} />
+                  </Box>
+                )}
+                {!isLoadingSchema && schema.length > 0 && (
+                  <SchemaTreeViewerWithSchema
+                    databaseName={
+                      activeConnection?.connection.name || 'Database'
+                    }
+                    type={
+                      (activeConnectionId.startsWith('ducklake-')
+                        ? 'ducklake'
+                        : activeConnection?.connection
+                            .type) as SupportedConnectionTypes
+                    }
+                    schema={schema}
+                    isLoading={isLoadingSchema}
+                    filter={filter}
+                  />
+                )}
+                {!isLoadingSchema && schema.length === 0 && (
+                  <Box sx={{ p: 2 }}>
+                    <Typography variant="body2" color="text.secondary">
+                      No schema available
+                    </Typography>
+                  </Box>
+                )}
+
+                {/* Notebooks TreeView */}
+                <Box sx={{ mt: 2, borderTop: `1px solid ${theme.palette.divider}`, pt: 2 }}>
+                  {isLoadingNotebooks && (
+                    <Box
+                      sx={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        p: 2,
+                      }}
+                    >
+                      <CircularProgress size={24} />
+                    </Box>
+                  )}
+                  {!isLoadingNotebooks && notebooks.length === 0 && (
+                    <Box sx={{ p: 2 }}>
+                      <Typography variant="body2" color="text.secondary">
+                        No notebooks yet. Click the + button to create one.
+                      </Typography>
+                    </Box>
+                  )}
+                  {!isLoadingNotebooks && notebooks.length > 0 && (
+                    <Box sx={{ px: 1 }}>
+                      {/* Notebooks TreeView implementation will go here */}
+                      <Typography variant="caption" color="text.secondary">
+                        Notebooks TreeView (implementing...)
+                      </Typography>
+                    </Box>
+                  )}
+                </Box>
+
+                {/* Show Archived Toggle */}
+                <Box
+                  sx={{
+                    px: 1,
+                    py: 0.5,
+                    borderTop: `1px solid ${theme.palette.divider}`,
+                    mt: 2,
+                  }}
+                >
+                  <FormControlLabel
+                    control={
+                      <Checkbox
+                        checked={showArchived}
+                        onChange={(e) => setShowArchived(e.target.checked)}
+                        size="small"
+                        sx={{ py: 0 }}
+                      />
+                    }
+                    label={
+                      <Typography variant="caption" color="text.secondary">
+                        Show archived
+                      </Typography>
+                    }
+                    sx={{ m: 0 }}
+                  />
+                </Box>
+
+                {/* Archived Notebooks (if enabled) */}
+                {showArchived && Object.keys(archivedNotebooks).length > 0 && (
+                  <Box sx={{ px: 1, pb: 2 }}>
+                    <Typography variant="caption" color="text.secondary">
+                      Archived notebooks (implementing...)
+                    </Typography>
+                  </Box>
+                )}
+              </>
+            )}
+          </Box>
+        </Box>
+      }
+    >
+        <Box
+          sx={{
+            display: 'flex',
+            flexDirection: 'column',
+            height: '100%',
+            bgcolor: theme.palette.mode === 'dark' ? '#1e1e1e' : '#f5f5f5',
+          }}
+        >
+          {/* Connection Selection & Actions */}
+          <Box
+            sx={{
+              p: '8px',
+              display: 'flex',
+              gap: '4px',
+              alignItems: 'center',
+              bgcolor: theme.palette.mode === 'dark' ? '#1e1e1e' : '#f5f5f5',
+              borderBottom: `1px solid ${theme.palette.divider}`,
+            }}
+          >
+            <FormControl fullWidth size="small">
+              <Select
+                data-testid="notebooks-connection-select"
+                value={activeConnectionId}
+                onChange={(e) => handleConnectionSelect(e.target.value)}
+                displayEmpty
+                renderValue={(selected) => {
+                  if (!selected) return 'Select Connection';
+                  const conn = connections.find((c) => c.id === selected);
+                  if (conn) {
+                    const icon =
+                      connectionIcons.images[conn.connection.type] ||
+                      defaultIcon;
+                    const isProjectConnection =
+                      conn.id === selectedProject?.connectionId;
+                    return (
+                      <Box
+                        sx={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: 1,
+                          width: '100%',
+                        }}
+                      >
+                        <img
+                          src={icon}
+                          alt=""
+                          style={{
+                            width: 14,
+                            height: 14,
+                            objectFit: 'contain',
+                          }}
+                        />
+                        <span
+                          style={{
+                            whiteSpace: 'nowrap',
+                            overflow: 'hidden',
+                            textOverflow: 'ellipsis',
+                            flex: 1,
+                          }}
+                        >
+                          {conn.connection.name}
+                        </span>
+                        {isProjectConnection && (
+                          <Tooltip title="Project Connection">
+                            <LinkIcon
+                              sx={{
+                                ml: 'auto',
+                                fontSize: 16,
+                                color: 'primary.main',
+                                mr: 2,
+                                transform: 'rotate(-45deg)',
+                              }}
+                            />
+                          </Tooltip>
+                        )}
+                      </Box>
+                    );
+                  }
+
+                  // Check DuckLake instances
+                  if (selected.startsWith('ducklake-')) {
+                    const instanceId = selected.replace('ducklake-', '');
+                    const instance = duckLakeInstances.find(
+                      (inst) => inst.id === instanceId,
+                    );
+                    if (instance) {
+                      return (
+                        <Box
+                          sx={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: 1,
+                            width: '100%',
+                          }}
+                        >
+                          <img
+                            src={connectionIcons.images.ducklake || defaultIcon}
+                            alt=""
+                            style={{
+                              width: 14,
+                              height: 14,
+                              objectFit: 'contain',
+                            }}
+                          />
+                          <span
+                            style={{
+                              whiteSpace: 'nowrap',
+                              overflow: 'hidden',
+                              textOverflow: 'ellipsis',
+                              flex: 1,
+                            }}
+                          >
+                            {instance.name}
+                          </span>
+                        </Box>
+                      );
+                    }
+                  }
+
+                  return 'Select Connection';
+                }}
+                sx={{
+                  height: 28,
+                  bgcolor:
+                    theme.palette.mode === 'dark' ? '#2d2d2d' : '#e0e0e0',
+                  '& .MuiSelect-select': {
+                    py: 0,
+                    px: 1,
+                    fontSize: '0.8rem',
+                    display: 'flex',
+                    alignItems: 'center',
+                  },
+                  '& .MuiOutlinedInput-notchedOutline': { border: 'none' },
+                }}
+              >
+                <MenuItem value="" disabled sx={{ fontSize: '0.8rem' }}>
+                  Select Connection
+                </MenuItem>
+                {connections.map((conn) => {
+                  const isProjectConnection =
+                    conn.id === selectedProject?.connectionId;
+                  return (
+                    <MenuItem
+                      key={conn.id}
+                      value={conn.id}
+                      sx={{
+                        fontSize: '0.8rem',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 1,
+                        justifyContent: 'space-between',
+                      }}
+                    >
+                      <Box
+                        sx={{ display: 'flex', alignItems: 'center', gap: 1 }}
+                      >
+                        <img
+                          src={
+                            connectionIcons.images[conn.connection.type] ||
+                            defaultIcon
+                          }
+                          alt=""
+                          style={{
+                            width: 14,
+                            height: 14,
+                            objectFit: 'contain',
+                          }}
+                        />
+                        {conn.connection.name}
+                      </Box>
+                      {isProjectConnection && (
+                        <Tooltip title="Project Connection">
+                          <LinkIcon
+                            sx={{
+                              fontSize: 16,
+                              color: 'primary.main',
+                              transform: 'rotate(-45deg)',
+                            }}
+                          />
+                        </Tooltip>
+                      )}
+                    </MenuItem>
+                  );
+                })}
+                {/* DuckLake Instances */}
+                {duckLakeInstances.length > 0 && (
+                  <MenuItem
+                    disabled
+                    sx={{ fontSize: '0.75rem', opacity: 0.6, mt: 1 }}
+                  >
+                    <strong>DuckLake Instances</strong>
+                  </MenuItem>
+                )}
+                {duckLakeInstances.map((instance) => (
+                  <MenuItem
+                    key={`ducklake-${instance.id}`}
+                    value={`ducklake-${instance.id}`}
+                    sx={{
+                      fontSize: '0.8rem',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 1,
+                    }}
+                  >
+                    <img
+                      src={connectionIcons.images.ducklake || defaultIcon}
+                      alt=""
+                      style={{ width: 14, height: 14, objectFit: 'contain' }}
+                    />
+                    {instance.name}
+                  </MenuItem>
+                ))}
+              </Select>
+            </FormControl>
+            <IconButton
+              size="small"
+              onClick={handleRefreshSchema}
+              disabled={!activeConnectionId}
+              sx={{
+                width: 28,
+                height: 28,
+                bgcolor: 'transparent',
+                '&:hover': { bgcolor: 'rgba(0,0,0,0.05)' },
+              }}
+            >
+              <Refresh sx={{ fontSize: 18 }} />
+            </IconButton>
+            <IconButton
+              size="small"
+              onClick={() => navigate('/app/add-connection')}
+              sx={{
+                width: 28,
+                height: 28,
+                bgcolor: 'transparent',
+                '&:hover': { bgcolor: 'rgba(0,0,0,0.05)' },
+              }}
+            >
+              <Add sx={{ fontSize: 18 }} />
+            </IconButton>
+          </Box>
+
+          {/* Search Field */}
+          {activeConnectionId && (
+            <Box
+              sx={{
+                p: '8px',
+                bgcolor: theme.palette.mode === 'dark' ? '#1e1e1e' : '#f5f5f5',
+                borderBottom: `1px solid ${theme.palette.divider}`,
+              }}
+            >
+              <TextField
+                fullWidth
+                size="small"
+                placeholder="Filter"
+                value={filter}
+                onChange={(e) => setFilter(e.target.value)}
+                InputProps={{
+                  endAdornment: (
+                    <InputAdornment position="end">
+                      <FilterList
+                        sx={{ fontSize: 16, color: 'text.disabled' }}
+                      />
+                    </InputAdornment>
+                  ),
+                  sx: {
+                    height: 28,
+                    fontSize: '0.8rem',
+                    bgcolor: theme.palette.background.paper,
+                    '& .MuiOutlinedInput-notchedOutline': {
+                      borderColor: theme.palette.divider,
+                    },
+                    '&:hover .MuiOutlinedInput-notchedOutline': {
+                      borderColor: theme.palette.divider,
+                    },
+                    borderRadius: '4px',
+                  },
+                }}
+              />
+            </Box>
+          )}
+
+          {/* Schema & Notebooks Accordions */}
+          <Box
+            sx={{
+              flex: 1,
+              overflow: 'auto',
+              bgcolor: theme.palette.mode === 'dark' ? '#1e1e1e' : '#f5f5f5',
+            }}
+          >
+            {!activeConnectionId ? (
+              <Box
+                sx={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  p: 2,
+                  height: '100%',
+                }}
+              >
+                <Typography variant="body2" color="text.secondary">
+                  Select a connection to view schema and notebooks
+                </Typography>
+              </Box>
+            ) : (
+              <>
+                {/* Schema Accordion */}
+                <Accordion
+                  expanded={schemaExpanded}
+                  onChange={() => setSchemaExpanded(!schemaExpanded)}
+                  sx={{
+                    bgcolor: 'transparent',
+                    boxShadow: 'none',
+                    '&:before': { display: 'none' },
+                    '& .MuiAccordionSummary-root': {
+                      minHeight: 36,
+                      height: 36,
+                      px: 1,
+                      borderBottom: `1px solid ${theme.palette.divider}`,
+                    },
+                    '& .MuiAccordionSummary-content': {
+                      margin: 0,
+                    },
+                    '& .MuiAccordionDetails-root': {
+                      p: 0,
+                    },
+                  }}
+                >
+                  <AccordionSummary
+                    expandIcon={<ExpandMore sx={{ fontSize: 18 }} />}
+                  >
+                    <Box
+                      sx={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 1,
+                      }}
+                    >
+                      <TableChart sx={{ fontSize: 16 }} />
+                      <Typography variant="body2" fontWeight={500}>
+                        Schema
+                      </Typography>
+                    </Box>
+                  </AccordionSummary>
+                  <AccordionDetails>
+                    {isLoadingSchema && (
+                      <Box
+                        sx={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          p: 2,
+                        }}
+                      >
+                        <CircularProgress size={24} />
+                      </Box>
+                    )}
+                    {!isLoadingSchema && schema.length > 0 && (
+                      <SchemaTreeViewerWithSchema
+                        databaseName={
+                          activeConnection?.connection.name || 'Database'
+                        }
+                        type={
+                          (activeConnectionId.startsWith('ducklake-')
+                            ? 'ducklake'
+                            : activeConnection?.connection
+                                .type) as SupportedConnectionTypes
+                        }
+                        schema={schema}
+                        isLoading={isLoadingSchema}
+                        filter={filter}
+                      />
+                    )}
+                    {!isLoadingSchema && schema.length === 0 && (
+                      <Box sx={{ p: 2 }}>
+                        <Typography variant="body2" color="text.secondary">
+                          No schema available
+                        </Typography>
+                      </Box>
+                    )}
+                  </AccordionDetails>
+                </Accordion>
+
+                {/* Notebooks Accordion */}
+                <Accordion
+                  expanded={notebooksExpanded}
+                  onChange={() => setNotebooksExpanded(!notebooksExpanded)}
+                  sx={{
+                    bgcolor: 'transparent',
+                    boxShadow: 'none',
+                    '&:before': { display: 'none' },
+                    '& .MuiAccordionSummary-root': {
+                      minHeight: 36,
+                      height: 36,
+                      px: 1,
+                      borderBottom: `1px solid ${theme.palette.divider}`,
+                    },
+                    '& .MuiAccordionSummary-content': {
+                      margin: 0,
+                    },
+                    '& .MuiAccordionDetails-root': {
+                      p: 0,
+                    },
+                  }}
+                >
+                  <AccordionSummary
+                    expandIcon={<ExpandMore sx={{ fontSize: 18 }} />}
+                  >
+                    <Box
+                      sx={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 1,
+                        width: '100%',
+                      }}
+                    >
+                      <Description sx={{ fontSize: 16 }} />
+                      <Typography variant="body2" fontWeight={500}>
+                        Notebooks
+                      </Typography>
+                      <IconButton
+                        size="small"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setCreateNotebookOpen(true);
+                        }}
+                        disabled={!activeConnectionId}
+                        sx={{
+                          ml: 'auto',
+                          width: 24,
+                          height: 24,
+                          bgcolor: 'transparent',
+                          '&:hover': { bgcolor: 'rgba(0,0,0,0.05)' },
+                        }}
+                      >
+                        <Add sx={{ fontSize: 16 }} />
+                      </IconButton>
+                    </Box>
+                  </AccordionSummary>
+                  <AccordionDetails>
+                    {isLoadingNotebooks && (
+                      <Box
+                        sx={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          p: 2,
+                        }}
+                      >
+                        <CircularProgress size={24} />
+                      </Box>
+                    )}
+                    {!isLoadingNotebooks && notebooks.length === 0 && (
+                      <Box sx={{ p: 2 }}>
+                        <Typography variant="body2" color="text.secondary">
+                          No notebooks yet. Click the + button to create one.
+                        </Typography>
+                      </Box>
+                    )}
+                    {!isLoadingNotebooks && notebooks.length > 0 && (
+                      <TreeView
+                        defaultCollapseIcon={<ExpandMore />}
+                        defaultExpandIcon={<ChevronRight />}
+                        defaultExpanded={['notebooks-root']}
+                        sx={{
+                          flexGrow: 1,
+                          overflowY: 'auto',
+                          '& .MuiTreeItem-root': {
+                            '& .MuiTreeItem-content': {
+                              py: 0.5,
+                              px: 1,
+                              '&:hover': {
+                                bgcolor: theme.palette.action.hover,
+                              },
+                              '&.Mui-selected': {
+                                bgcolor: theme.palette.action.selected,
+                                '&:hover': {
+                                  bgcolor: theme.palette.action.selected,
+                                },
+                              },
+                            },
+                            '& .MuiTreeItem-label': {
+                              fontSize: '0.8rem',
+                              py: 0.5,
+                            },
+                          },
+                        }}
+                      >
+                        <TreeItem
+                          nodeId="notebooks-root"
+                          label={
+                            <Box
+                              sx={{
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: 0.5,
+                              }}
+                            >
+                              <Description sx={{ fontSize: 14 }} />
+                              <Typography variant="body2" fontSize="0.8rem">
+                                Notebooks
+                              </Typography>
+                            </Box>
+                          }
+                        >
+                          {notebooks.map((notebook) => (
+                            <TreeItem
+                              key={notebook.id}
+                              nodeId={notebook.id}
+                              label={
+                                <Box
+                                  sx={{
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'space-between',
+                                    width: '100%',
+                                    pr: 1,
+                                  }}
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleOpenNotebook(notebook.id);
+                                  }}
+                                >
+                                  <Box
+                                    sx={{
+                                      display: 'flex',
+                                      flexDirection: 'column',
+                                      flex: 1,
+                                      minWidth: 0,
+                                    }}
+                                  >
+                                    <Typography
+                                      variant="body2"
+                                      fontSize="0.8rem"
+                                      noWrap
+                                    >
+                                      {notebook.name}
+                                    </Typography>
+                                    <Typography
+                                      variant="caption"
+                                      fontSize="0.7rem"
+                                      color="text.secondary"
+                                      noWrap
+                                    >
+                                      {notebook.cellCount} cells •{' '}
+                                      {new Date(
+                                        notebook.updatedAt,
+                                      ).toLocaleDateString()}
+                                    </Typography>
+                                  </Box>
+                                  <IconButton
+                                    size="small"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      handleDeleteNotebook(
+                                        notebook.id,
+                                        notebook.name,
+                                      );
+                                    }}
+                                    sx={{
+                                      p: 0.5,
+                                      color: 'error.main',
+                                      opacity: 0.7,
+                                      '&:hover': {
+                                        opacity: 1,
+                                      },
+                                    }}
+                                  >
+                                    <DeleteForever sx={{ fontSize: 14 }} />
+                                  </IconButton>
+                                </Box>
+                              }
+                            />
+                          ))}
+                        </TreeItem>
+                      </TreeView>
+                    )}
+                  </AccordionDetails>
+                </Accordion>
+
+                {/* Show Archived Toggle */}
+                <Box
+                  sx={{
+                    px: 1,
+                    py: 0.5,
+                    borderBottom: `1px solid ${theme.palette.divider}`,
+                  }}
+                >
+                  <FormControlLabel
+                    control={
+                      <Checkbox
+                        checked={showArchived}
+                        onChange={(e) => setShowArchived(e.target.checked)}
+                        size="small"
+                        sx={{ py: 0 }}
+                      />
+                    }
+                    label={
+                      <Typography variant="caption" color="text.secondary">
+                        Show archived
+                      </Typography>
+                    }
+                    sx={{ m: 0 }}
+                  />
+                </Box>
+
+                {/* Archived Notebooks Accordion */}
+                {showArchived && (
+                  <Accordion
+                    expanded={archivedExpanded}
+                    onChange={() => setArchivedExpanded(!archivedExpanded)}
+                    sx={{
+                      bgcolor: 'transparent',
+                      boxShadow: 'none',
+                      '&:before': { display: 'none' },
+                      '& .MuiAccordionSummary-root': {
+                        minHeight: 36,
+                        height: 36,
+                        px: 1,
+                        borderBottom: `1px solid ${theme.palette.divider}`,
+                      },
+                      '& .MuiAccordionSummary-content': {
+                        margin: 0,
+                      },
+                      '& .MuiAccordionDetails-root': {
+                        p: 0,
+                      },
+                    }}
+                  >
+                    <AccordionSummary
+                      expandIcon={<ExpandMore sx={{ fontSize: 18 }} />}
+                    >
+                      <Box
+                        sx={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: 1,
+                        }}
+                      >
+                        <Archive sx={{ fontSize: 16 }} />
+                        <Typography variant="body2" fontWeight={500}>
+                          Archived
+                        </Typography>
+                        <Chip
+                          label={Object.keys(archivedNotebooks).length}
+                          size="small"
+                          sx={{
+                            height: 16,
+                            fontSize: '0.65rem',
+                            ml: 'auto',
+                          }}
+                        />
+                      </Box>
+                    </AccordionSummary>
+                    <AccordionDetails>
+                      {Object.keys(archivedNotebooks).length === 0 ? (
+                        <Box sx={{ p: 2 }}>
+                          <Typography variant="body2" color="text.secondary">
+                            No archived notebooks
+                          </Typography>
+                        </Box>
+                      ) : (
+                        <Box>
+                          {/* Delete All Button */}
+                          <Box
+                            sx={{
+                              p: 1,
+                              borderBottom: `1px solid ${theme.palette.divider}`,
+                            }}
+                          >
+                            <Button
+                              size="small"
+                              startIcon={<DeleteForever />}
+                              onClick={() => {
+                                setConnectionKeyToDeleteAll(null);
+                                setDeleteAllConfirmOpen(true);
+                              }}
+                              sx={{
+                                fontSize: '0.75rem',
+                                textTransform: 'none',
+                                color: 'error.main',
+                              }}
+                            >
+                              Delete all archived
+                            </Button>
+                          </Box>
+
+                          {/* Archived Notebooks List */}
+                          <List dense sx={{ py: 0 }}>
+                            {Object.entries(archivedNotebooks).map(
+                              ([connectionKey, archivedNotebooksList]) => {
+                                const connExists =
+                                  connectionExists(connectionKey);
+                                const connName =
+                                  getConnectionName(connectionKey);
+
+                                return (
+                                  <Box key={connectionKey}>
+                                    {/* Connection Group Header */}
+                                    <ListItem
+                                      sx={{
+                                        bgcolor:
+                                          theme.palette.mode === 'dark'
+                                            ? '#2a2a2a'
+                                            : '#e0e0e0',
+                                        py: 0.5,
+                                        px: 1,
+                                      }}
+                                    >
+                                      <Typography
+                                        variant="caption"
+                                        fontWeight={600}
+                                        sx={{
+                                          display: 'flex',
+                                          alignItems: 'center',
+                                          gap: 0.5,
+                                        }}
+                                      >
+                                        {connName}
+                                        {!connExists && (
+                                          <Chip
+                                            label="deleted"
+                                            size="small"
+                                            color="error"
+                                            sx={{
+                                              height: 14,
+                                              fontSize: '0.6rem',
+                                            }}
+                                          />
+                                        )}
+                                      </Typography>
+                                      <Button
+                                        size="small"
+                                        startIcon={<DeleteForever />}
+                                        onClick={() => {
+                                          setConnectionKeyToDeleteAll(
+                                            connectionKey,
+                                          );
+                                          setDeleteAllConfirmOpen(true);
+                                        }}
+                                        sx={{
+                                          ml: 'auto',
+                                          fontSize: '0.65rem',
+                                          textTransform: 'none',
+                                          minWidth: 'auto',
+                                          px: 0.5,
+                                          color: 'error.main',
+                                        }}
+                                      >
+                                        Delete all
+                                      </Button>
+                                    </ListItem>
+
+                                    {/* Notebooks for this connection */}
+                                    {archivedNotebooksList.map((notebook) => (
+                                      <ListItem
+                                        key={notebook.id}
+                                        sx={{
+                                          pl: 2,
+                                          pr: 1,
+                                          py: 0.5,
+                                          borderBottom: `1px solid ${theme.palette.divider}`,
+                                          '&:hover': {
+                                            bgcolor: theme.palette.action.hover,
+                                          },
+                                        }}
+                                      >
+                                        <ListItemIcon sx={{ minWidth: 32 }}>
+                                          <Description
+                                            sx={{
+                                              fontSize: 14,
+                                              color: 'text.secondary',
+                                            }}
+                                          />
+                                        </ListItemIcon>
+                                        <ListItemText
+                                          primary={notebook.name}
+                                          secondary={`${notebook.cellCount} cells • Updated ${new Date(notebook.updatedAt).toLocaleDateString()}`}
+                                          primaryTypographyProps={{
+                                            variant: 'body2',
+                                            fontSize: '0.8rem',
+                                          }}
+                                          secondaryTypographyProps={{
+                                            variant: 'caption',
+                                            fontSize: '0.7rem',
+                                          }}
+                                        />
+                                        <Box
+                                          sx={{
+                                            display: 'flex',
+                                            gap: 0.5,
+                                            ml: 1,
+                                          }}
+                                        >
+                                          <Tooltip
+                                            title={
+                                              connExists
+                                                ? 'Restore notebook'
+                                                : 'Cannot restore: connection no longer exists'
+                                            }
+                                          >
+                                            <span>
+                                              <IconButton
+                                                size="small"
+                                                disabled={!connExists}
+                                                onClick={() =>
+                                                  handleRestoreNotebook(
+                                                    connectionKey,
+                                                    notebook.id,
+                                                  )
+                                                }
+                                                sx={{ p: 0.5 }}
+                                              >
+                                                <Restore
+                                                  sx={{ fontSize: 16 }}
+                                                />
+                                              </IconButton>
+                                            </span>
+                                          </Tooltip>
+                                          <Tooltip title="Delete permanently">
+                                            <IconButton
+                                              size="small"
+                                              onClick={() => {
+                                                setNotebookToDelete({
+                                                  connectionKey,
+                                                  notebookId: notebook.id,
+                                                  notebookName: notebook.name,
+                                                });
+                                                setDeleteConfirmOpen(true);
+                                              }}
+                                              sx={{
+                                                p: 0.5,
+                                                color: 'error.main',
+                                              }}
+                                            >
+                                              <DeleteForever
+                                                sx={{ fontSize: 16 }}
+                                              />
+                                            </IconButton>
+                                          </Tooltip>
+                                        </Box>
+                                      </ListItem>
+                                    ))}
+                                  </Box>
+                                );
+                              },
+                            )}
+                          </List>
+                        </Box>
+                      )}
+                    </AccordionDetails>
+                  </Accordion>
+                )}
+              </>
+            )}
+          </Box>
+        </Box>
+      }
+    >
+      <Box
+        sx={{
+          height: '100%',
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          justifyContent: 'center',
+        }}
+      >
+        {!activeConnectionId ? (
+          <Box
+            sx={{
+              display: 'flex',
+              flexDirection: 'column',
+              alignItems: 'center',
+              justifyContent: 'center',
+              color: 'text.secondary',
+            }}
+          >
+            <TableChart sx={{ fontSize: 64, opacity: 0.3, mb: 2 }} />
+            <Typography variant="h6" color="text.secondary" sx={{ mb: 1 }}>
+              No Connection Selected
+            </Typography>
+            <Typography variant="body2" color="text.secondary">
+              Select a connection from the sidebar to start working with
+              notebooks
+            </Typography>
+          </Box>
+        ) : (
+          <Box
+            sx={{
+              display: 'flex',
+              flexDirection: 'column',
+              alignItems: 'center',
+              justifyContent: 'center',
+              color: 'text.secondary',
+            }}
+          >
+            <TableChart sx={{ fontSize: 64, opacity: 0.3, mb: 2 }} />
+            <Typography variant="h6" color="text.secondary" sx={{ mb: 1 }}>
+              Notebooks Feature
+            </Typography>
+            <Typography variant="body2" color="text.secondary">
+              Connection: {activeConnection?.connection.name}
+            </Typography>
+            <Typography variant="caption" color="text.secondary" sx={{ mt: 2 }}>
+              Notebook tabs and editor will appear here (Phase 3+)
+            </Typography>
+          </Box>
+        )}
+      </Box>
+
+      {/* Delete Notebook Confirmation Dialog */}
+      <Dialog
+        open={deleteConfirmOpen}
+        onClose={() => setDeleteConfirmOpen(false)}
+      >
+        <DialogTitle>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+            <Warning color="error" />
+            Delete Archived Notebook
+          </Box>
+        </DialogTitle>
+        <DialogContent>
+          <DialogContentText>
+            Are you sure you want to permanently delete the notebook &quot;
+            {notebookToDelete?.notebookName}&quot;? This action cannot be
+            undone.
+          </DialogContentText>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setDeleteConfirmOpen(false)}>Cancel</Button>
+          <Button
+            onClick={handleDeleteArchivedNotebook}
+            color="error"
+            variant="contained"
+            disabled={deleteArchivedNotebook.isLoading}
+          >
+            {deleteArchivedNotebook.isLoading ? 'Deleting...' : 'Delete'}
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Delete Active Notebook Confirmation Dialog */}
+      <Dialog
+        open={deleteNotebookConfirmOpen}
+        onClose={() => setDeleteNotebookConfirmOpen(false)}
+      >
+        <DialogTitle>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+            <Warning color="error" />
+            Delete Notebook
+          </Box>
+        </DialogTitle>
+        <DialogContent>
+          <DialogContentText>
+            Are you sure you want to delete the notebook &quot;
+            {activeNotebookToDelete?.notebookName}&quot;? It will be moved to
+            archived notebooks.
+          </DialogContentText>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setDeleteNotebookConfirmOpen(false)}>
+            Cancel
+          </Button>
+          <Button
+            onClick={confirmDeleteNotebook}
+            color="error"
+            variant="contained"
+            disabled={deleteNotebook.isLoading}
+          >
+            {deleteNotebook.isLoading ? 'Deleting...' : 'Delete'}
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Create Notebook Dialog */}
+      <Dialog
+        open={createNotebookOpen}
+        onClose={() => {
+          setCreateNotebookOpen(false);
+          setNewNotebookName('');
+          setNewNotebookDescription('');
+        }}
+        maxWidth="sm"
+        fullWidth
+      >
+        <DialogTitle>Create New Notebook</DialogTitle>
+        <DialogContent>
+          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, pt: 1 }}>
+            <TextField
+              autoFocus
+              label="Notebook Name"
+              fullWidth
+              value={newNotebookName}
+              onChange={(e) => setNewNotebookName(e.target.value)}
+              placeholder="My Notebook"
+              required
+              onKeyPress={(e) => {
+                if (e.key === 'Enter' && newNotebookName.trim()) {
+                  handleCreateNotebook();
+                }
+              }}
+            />
+            <TextField
+              label="Description (optional)"
+              fullWidth
+              multiline
+              rows={3}
+              value={newNotebookDescription}
+              onChange={(e) => setNewNotebookDescription(e.target.value)}
+              placeholder="Describe what this notebook is for..."
+            />
+          </Box>
+        </DialogContent>
+        <DialogActions>
+          <Button
+            onClick={() => {
+              setCreateNotebookOpen(false);
+              setNewNotebookName('');
+              setNewNotebookDescription('');
+            }}
+          >
+            Cancel
+          </Button>
+          <Button
+            onClick={handleCreateNotebook}
+            variant="contained"
+            disabled={!newNotebookName.trim() || createNotebook.isLoading}
+          >
+            {createNotebook.isLoading ? 'Creating...' : 'Create'}
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Delete All Archived Notebooks Confirmation Dialog */}
+      <Dialog
+        open={deleteAllConfirmOpen}
+        onClose={() => setDeleteAllConfirmOpen(false)}
+      >
+        <DialogTitle>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+            <Warning color="error" />
+            Delete All Archived Notebooks
+          </Box>
+        </DialogTitle>
+        <DialogContent>
+          <DialogContentText>
+            {connectionKeyToDeleteAll
+              ? `Are you sure you want to permanently delete all archived notebooks for "${getConnectionName(connectionKeyToDeleteAll)}"?`
+              : 'Are you sure you want to permanently delete ALL archived notebooks?'}{' '}
+            This action cannot be undone.
+          </DialogContentText>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setDeleteAllConfirmOpen(false)}>Cancel</Button>
+          <Button
+            onClick={handleDeleteAllArchived}
+            color="error"
+            variant="contained"
+            disabled={deleteAllArchived.isLoading}
+          >
+            {deleteAllArchived.isLoading ? 'Deleting...' : 'Delete All'}
+          </Button>
+        </DialogActions>
+      </Dialog>
+    </AppLayout>
+  );
+};
+
+export default Notebooks;

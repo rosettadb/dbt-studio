@@ -313,6 +313,21 @@ export type LineageChannels =
   | 'lineage:getCurrentModelId'
   | 'lineage:getColumnLineage';
 
+export type NotebookChannels =
+  | 'notebooks:list'
+  | 'notebooks:get'
+  | 'notebooks:create'
+  | 'notebooks:update'
+  | 'notebooks:rename'
+  | 'notebooks:duplicate'
+  | 'notebooks:delete'
+  | 'notebooks:runCell'
+  | 'notebooks:runAll'
+  | 'notebooks:archived:list'
+  | 'notebooks:archived:restore'
+  | 'notebooks:archived:delete'
+  | 'notebooks:archived:deleteAll';
+
 export type Channels =
   | TestChannels
   | CliChannels
@@ -328,7 +343,8 @@ export type Channels =
   | SourcesChannels
   | AIChannels
   | DuckLakeChannels
-  | LineageChannels;
+  | LineageChannels
+  | NotebookChannels;
 
 export type ConfigureConnectionBody = {
   projectId?: string;
