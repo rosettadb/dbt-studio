@@ -132,14 +132,30 @@ export function mergeCompletions(
     Omit<Monaco.languages.CompletionItem, 'range'>
   >();
 
+  const getCompletionKey = (
+    completion: Omit<Monaco.languages.CompletionItem, 'range'>,
+  ): string => {
+    const labelPart =
+      typeof completion.label === 'string'
+        ? completion.label
+        : `${completion.label.label}|${completion.label.detail ?? ''}|${completion.label.description ?? ''}`;
+
+    const kindPart = completion.kind ?? '';
+    const detailPart = completion.detail ?? '';
+    const insertTextPart =
+      typeof completion.insertText === 'string' ? completion.insertText : '';
+
+    return `${labelPart}::${kindPart}::${detailPart}::${insertTextPart}`;
+  };
+
   // Add existing completions first
   existingCompletions.forEach((completion) => {
-    completionMap.set(completion.label as string, completion);
+    completionMap.set(getCompletionKey(completion), completion);
   });
 
   // Add/override with DuckLake completions
   duckLakeCompletions.forEach((completion) => {
-    completionMap.set(completion.label as string, completion);
+    completionMap.set(getCompletionKey(completion), completion);
   });
 
   return Array.from(completionMap.values());

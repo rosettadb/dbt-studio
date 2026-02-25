@@ -4,6 +4,7 @@ import React, {
   useMemo,
   useEffect,
   useContext,
+  useRef,
 } from 'react';
 import SplitPane from 'split-pane-react';
 import {
@@ -174,6 +175,17 @@ const Sql = () => {
     null,
   );
 
+  const duckLakeCompletionsRequestSeq = useRef(0);
+  const activeDuckLakeInstanceIdRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (connectionInput && (connectionInput as any).type === 'ducklake') {
+      activeDuckLakeInstanceIdRef.current = (connectionInput as any).instanceId;
+    } else {
+      activeDuckLakeInstanceIdRef.current = null;
+    }
+  }, [connectionInput]);
+
   // Convert DuckLake schema to Table[] format for SchemaTreeViewerWithSchema
   const duckLakeTables = useMemo(() => {
     if (!duckLakeSchema || !duckLakeSchema.schemas) return [];
@@ -223,6 +235,9 @@ const Sql = () => {
   }, [activeSchema, duckLakeCompletions]);
 
   const loadDuckLakeCompletions = useCallback(async () => {
+    const requestSeq = duckLakeCompletionsRequestSeq.current + 1;
+    duckLakeCompletionsRequestSeq.current = requestSeq;
+
     if (!connectionInput || (connectionInput as any).type !== 'ducklake') {
       setDuckLakeCompletions([]);
       setDuckLakeSchema(null);
@@ -232,6 +247,11 @@ const Sql = () => {
     }
 
     const { instanceId } = connectionInput as any;
+    const requestedInstanceId = instanceId as string;
+
+    const isStale = () =>
+      requestSeq !== duckLakeCompletionsRequestSeq.current ||
+      activeDuckLakeInstanceIdRef.current !== requestedInstanceId;
 
     if (!instanceId) {
       setDuckLakeCompletions([]);
@@ -245,18 +265,30 @@ const Sql = () => {
     setDuckLakeSchemaError(null);
     try {
       const schema = await DuckLakeService.extractSchema(instanceId);
+      if (isStale()) {
+        return;
+      }
+
       const duckLakeItems = generateDuckLakeCompletions(schema);
+      if (isStale()) {
+        return;
+      }
 
       setDuckLakeCompletions(duckLakeItems);
       setDuckLakeSchema(schema);
     } catch (error) {
       // eslint-disable-next-line no-console
       console.error('[SQL Screen] Failed to load DuckLake completions:', error);
-      setDuckLakeCompletions([]);
-      setDuckLakeSchema(null);
-      setDuckLakeSchemaError('Failed to load DuckLake schema');
+
+      if (!isStale()) {
+        setDuckLakeCompletions([]);
+        setDuckLakeSchema(null);
+        setDuckLakeSchemaError('Failed to load DuckLake schema');
+      }
     } finally {
-      setDuckLakeSchemaLoading(false);
+      if (!isStale()) {
+        setDuckLakeSchemaLoading(false);
+      }
     }
   }, [connectionInput]);
 
@@ -991,6 +1023,11 @@ const Sql = () => {
                         duckLakeInstanceId:
                           connectionInput.type === 'ducklake'
                             ? (connectionInput as any).instanceId
+                            : undefined,
+                        duckLakeReady:
+                          connectionInput.type === 'ducklake'
+                            ? (connectionInput as any).status !== 'loading' &&
+                              (connectionInput as any).status !== 'connecting'
                             : undefined,
                         originalSql:
                           (activeTab.results as any)?.originalSql ??

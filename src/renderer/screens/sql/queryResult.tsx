@@ -56,6 +56,7 @@ type Props = {
     connectionType: SupportedConnectionTypes;
     connectionId?: string;
     duckLakeInstanceId?: string;
+    duckLakeReady?: boolean;
     originalSql?: string;
   };
 };
@@ -75,6 +76,8 @@ export const QueryResult: React.FC<Props> = ({ results, exportContext }) => {
     exportContext?.connectionType === 'ducklake' &&
     !!exportContext.duckLakeInstanceId &&
     !!originalSql;
+
+  const isDuckLakeReady = !isDuckLake || exportContext?.duckLakeReady !== false;
 
   const [columns, setColumns] = React.useState<string[]>(
     results.fields?.map((f) => f.name) ?? [],
@@ -112,6 +115,14 @@ export const QueryResult: React.FC<Props> = ({ results, exportContext }) => {
           offset: newPage * newPerPage,
         });
         if (seq !== fetchSeqRef.current) return;
+        if (!res?.success) {
+          const message = res?.error || 'Failed to fetch page data';
+          // eslint-disable-next-line no-console
+          console.error('[QueryResult] DuckLake page fetch failed:', message);
+          toast.error(message);
+          setFetchError(message);
+          return;
+        }
         setColumns(res.fields?.map((f) => f.name) ?? []);
         setRows(res.data ?? []);
         if (typeof res.rowCount === 'number') {
@@ -139,7 +150,9 @@ export const QueryResult: React.FC<Props> = ({ results, exportContext }) => {
     if (isDuckLake) {
       setTotalCount(baseTotal);
       setPage(0);
-      fetchPage(0, perPage);
+      if (isDuckLakeReady) {
+        fetchPage(0, perPage);
+      }
     } else {
       setRows(results.data ?? []);
       setTotalCount(baseTotal);
@@ -148,7 +161,7 @@ export const QueryResult: React.FC<Props> = ({ results, exportContext }) => {
     // We intentionally only respond to new results / connection type;
     // perPage changes are handled via customPagination.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [results, isDuckLake, fetchPage]);
+  }, [results, isDuckLake, isDuckLakeReady, fetchPage]);
 
   const customPagination = React.useMemo(() => {
     if (!isDuckLake) return undefined;
@@ -156,13 +169,17 @@ export const QueryResult: React.FC<Props> = ({ results, exportContext }) => {
       page,
       setPage: (p: number) => {
         setPage(p);
-        fetchPage(p, perPage);
+        if (isDuckLakeReady) {
+          fetchPage(p, perPage);
+        }
       },
       perPage,
       setPerPage: (n: number) => {
         setPerPage(n);
         setPage(0);
-        fetchPage(0, n);
+        if (isDuckLakeReady) {
+          fetchPage(0, n);
+        }
       },
       count: totalCount,
       order,
@@ -174,6 +191,7 @@ export const QueryResult: React.FC<Props> = ({ results, exportContext }) => {
     };
   }, [
     isDuckLake,
+    isDuckLakeReady,
     page,
     perPage,
     totalCount,
