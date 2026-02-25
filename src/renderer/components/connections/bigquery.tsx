@@ -128,19 +128,31 @@ export const BigQuery: React.FC<Props> = ({
 
   React.useEffect(() => {
     // On edit or duplicate, load the service account key from secure storage
+    let isMounted = true;
     const fetchKey = async () => {
       const sourceConnection = existingConnection || duplicateConnection;
       if (sourceConnection?.name) {
-        const storedKey = await getBigQueryServiceAccountKey(
-          sourceConnection.name,
-        );
-        setFormState((prev) => ({ ...prev, keyfile: storedKey || 'wtf' }));
+        try {
+          const storedKey = await getBigQueryServiceAccountKey(
+            sourceConnection.name,
+          );
+          if (isMounted) {
+            setFormState((prev) => ({ ...prev, keyfile: storedKey || '' }));
+          }
+        } catch (error) {
+          if (isMounted) {
+            setFormState((prev) => ({ ...prev, keyfile: '' }));
+          }
+        }
       }
     };
     if (existingConnection || duplicateConnection) {
       fetchKey();
     }
-  }, [existingConnection, duplicateConnection]);
+    return () => {
+      isMounted = false;
+    };
+  }, [existingConnection, duplicateConnection, getBigQueryServiceAccountKey]);
 
   // Get existing connections for name validation
   const { data: existingConnections = [] } = useGetConnections();

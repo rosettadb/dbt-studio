@@ -231,22 +231,47 @@ export const Redshift: React.FC<Props> = ({
   };
 
   React.useEffect(() => {
+    let isMounted = true;
     const fetchCredentials = async () => {
       const sourceConnection = existingConnection || duplicateConnection;
       if (sourceConnection) {
-        const storedUsername = await getDatabaseUsername(sourceConnection.name);
-        const storedPassword = await getDatabasePassword(sourceConnection.name);
-        setFormState((prev) => ({
-          ...prev,
-          username: storedUsername || '',
-          password: storedPassword || '',
-        }));
+        try {
+          const storedUsername = await getDatabaseUsername(
+            sourceConnection.name,
+          );
+          const storedPassword = await getDatabasePassword(
+            sourceConnection.name,
+          );
+          if (isMounted) {
+            setFormState((prev) => ({
+              ...prev,
+              username: storedUsername || '',
+              password: storedPassword || '',
+            }));
+          }
+        } catch {
+          if (isMounted) {
+            setFormState((prev) => ({
+              ...prev,
+              username: '',
+              password: '',
+            }));
+          }
+        }
       }
     };
     if (existingConnection || duplicateConnection) {
       fetchCredentials();
     }
-  }, [existingConnection, duplicateConnection]);
+    return () => {
+      isMounted = false;
+    };
+  }, [
+    existingConnection,
+    duplicateConnection,
+    getDatabaseUsername,
+    getDatabasePassword,
+  ]);
 
   return (
     <Box

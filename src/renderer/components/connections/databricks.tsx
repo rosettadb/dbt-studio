@@ -123,20 +123,35 @@ export const Databricks: React.FC<Props> = ({
   const nameValidation = validateName(formState.name);
 
   React.useEffect(() => {
+    let isMounted = true;
     const fetchCredentials = async () => {
       const sourceConnection = existingConnection || duplicateConnection;
       if (sourceConnection) {
-        const storedToken = await getDatabaseToken(sourceConnection.name);
-        setFormState((prev) => ({
-          ...prev,
-          token: storedToken || '',
-        }));
+        try {
+          const storedToken = await getDatabaseToken(sourceConnection.name);
+          if (isMounted) {
+            setFormState((prev) => ({
+              ...prev,
+              token: storedToken || '',
+            }));
+          }
+        } catch (error) {
+          if (isMounted) {
+            setFormState((prev) => ({
+              ...prev,
+              token: '',
+            }));
+          }
+        }
       }
     };
     if (existingConnection || duplicateConnection) {
       fetchCredentials();
     }
-  }, [existingConnection, duplicateConnection]);
+    return () => {
+      isMounted = false;
+    };
+  }, [existingConnection, duplicateConnection, getDatabaseToken]);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;

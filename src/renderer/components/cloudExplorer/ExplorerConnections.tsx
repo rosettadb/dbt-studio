@@ -29,7 +29,13 @@ import {
   ContentCopy,
 } from '@mui/icons-material';
 
-import { CloudProvider } from '../../../types/frontend';
+import {
+  CloudProvider,
+  CloudConnection,
+  GCSConfig,
+  S3Config,
+  AzureConfig,
+} from '../../../types/frontend';
 import {
   useGetCloudConnections,
   useDeleteBucketConnection,
@@ -103,7 +109,7 @@ export const ExplorerConnections: React.FC = () => {
     }
   };
 
-  const handleDuplicateConnection = (connection: any) => {
+  const handleDuplicateConnection = (connection: CloudConnection) => {
     const existingNames = (connectionsQuery.data || []).map((c) => c.name);
     const newName = generateDuplicateConnectionName(
       connection.name,
@@ -118,26 +124,26 @@ export const ExplorerConnections: React.FC = () => {
     });
   };
 
-  const renderConnectionDetails = (connection: any) => {
+  const renderConnectionDetails = (connection: CloudConnection) => {
     const { provider, config } = connection;
 
     switch (provider) {
       case 'gcs':
         return (
           <Typography variant="body2" color="text.secondary">
-            Project ID: {config.projectId}
+            Project ID: {(config as GCSConfig).projectId}
           </Typography>
         );
       case 'aws':
         return (
           <Typography variant="body2" color="text.secondary">
-            Region: {config.region}
+            Region: {(config as S3Config).region}
           </Typography>
         );
       case 'azure':
         return (
           <Typography variant="body2" color="text.secondary">
-            Account: {config.accountName}
+            Account: {(config as AzureConfig).accountName}
           </Typography>
         );
       default:

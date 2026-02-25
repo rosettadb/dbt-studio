@@ -201,40 +201,85 @@ export const ConnectionForm: React.FC<ConnectionFormProps> = ({
 
   // On edit or duplicate, fetch credentials from secure storage
   useEffect(() => {
+    let isMounted = true;
     const sourceConnection = initialValues || duplicateFrom;
     if (sourceConnection) {
       const { id, provider } = sourceConnection;
       (async () => {
-        if (provider === 'gcs') {
-          const stored = await getCloudGcsCredential(id);
-          setFormData((prev) => ({ ...prev, credentials: stored || '' }));
-        } else if (provider === 'aws') {
-          const stored = await getCloudAwsSecret(id);
-          const storedSessionToken = await getCloudAwsSessionToken(id);
-          setFormData((prev) => ({
-            ...prev,
-            secretAccessKey: stored || '',
-            sessionToken: storedSessionToken || '',
-          }));
-        } else if (provider === 'azure') {
-          const stored = await getCloudAzureKey(id);
-          setFormData((prev) => ({ ...prev, accountKey: stored || '' }));
-        } else if (provider === 'minio') {
-          const stored = await getCloudMinioSecret(id);
-          setFormData((prev) => ({ ...prev, secretAccessKey: stored || '' }));
-        } else if (provider === 'cloudflare-r2') {
-          const stored = await getCloudR2Secret(id);
-          setFormData((prev) => ({ ...prev, secretAccessKey: stored || '' }));
-        } else if (provider === 'backblaze-b2') {
-          const stored = await getCloudB2Secret(id);
-          setFormData((prev) => ({ ...prev, applicationKey: stored || '' }));
-        } else if (provider === 'rustfs') {
-          const stored = await getCloudRustfsSecret(id);
-          setFormData((prev) => ({ ...prev, secretAccessKey: stored || '' }));
+        try {
+          if (provider === 'gcs') {
+            const stored = await getCloudGcsCredential(id);
+            if (isMounted) {
+              setFormData((prev) => ({ ...prev, credentials: stored || '' }));
+            }
+          } else if (provider === 'aws') {
+            const stored = await getCloudAwsSecret(id);
+            const storedSessionToken = await getCloudAwsSessionToken(id);
+            if (isMounted) {
+              setFormData((prev) => ({
+                ...prev,
+                secretAccessKey: stored || '',
+                sessionToken: storedSessionToken || '',
+              }));
+            }
+          } else if (provider === 'azure') {
+            const stored = await getCloudAzureKey(id);
+            if (isMounted) {
+              setFormData((prev) => ({ ...prev, accountKey: stored || '' }));
+            }
+          } else if (provider === 'minio') {
+            const stored = await getCloudMinioSecret(id);
+            if (isMounted) {
+              setFormData((prev) => ({
+                ...prev,
+                secretAccessKey: stored || '',
+              }));
+            }
+          } else if (provider === 'cloudflare-r2') {
+            const stored = await getCloudR2Secret(id);
+            if (isMounted) {
+              setFormData((prev) => ({
+                ...prev,
+                secretAccessKey: stored || '',
+              }));
+            }
+          } else if (provider === 'backblaze-b2') {
+            const stored = await getCloudB2Secret(id);
+            if (isMounted) {
+              setFormData((prev) => ({
+                ...prev,
+                applicationKey: stored || '',
+              }));
+            }
+          } else if (provider === 'rustfs') {
+            const stored = await getCloudRustfsSecret(id);
+            if (isMounted) {
+              setFormData((prev) => ({
+                ...prev,
+                secretAccessKey: stored || '',
+              }));
+            }
+          }
+        } catch {
+          /* empty */
         }
       })();
     }
-  }, [initialValues, duplicateFrom]);
+    return () => {
+      isMounted = false;
+    };
+  }, [
+    initialValues,
+    duplicateFrom,
+    getCloudGcsCredential,
+    getCloudAwsSecret,
+    getCloudAwsSessionToken,
+    getCloudAzureKey,
+    getCloudMinioSecret,
+    getCloudR2Secret,
+    getCloudB2Secret,
+    getCloudRustfsSecret,
+  ]);
 
   const handleChange = (field: keyof FormData, value: string) => {
     setFormData((prev) => ({ ...prev, [field]: value }));
