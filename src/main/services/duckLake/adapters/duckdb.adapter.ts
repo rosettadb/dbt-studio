@@ -5,6 +5,7 @@
 
 import * as fs from 'fs';
 import * as path from 'path';
+import log from 'electron-log';
 import {
   CatalogAdapter,
   ValidationResult,
@@ -1065,8 +1066,8 @@ export class DuckDBCatalogAdapter extends CatalogAdapter {
           Object.entries(row).forEach(([key, value]) => {
             if (typeof value === 'bigint') {
               // eslint-disable-next-line no-console
-              console.error(
-                `[DuckDB Adapter] ERROR: BigInt still present after normalization in row ${rowIndex}, column "${key}": ${value}`,
+              log.error(
+                `[DuckDB Adapter] ERROR: BigInt still present after normalization in row ${rowIndex}, column "${key}" (value omitted)`,
               );
             }
           });
