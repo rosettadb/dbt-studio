@@ -853,8 +853,15 @@ export class PostgreSQLCatalogAdapter extends CatalogAdapter {
       query = query.replace(/;\s*$/, '');
 
       if (snapshotId) {
-        // Modify query to use specific snapshot
-        query = `${query} FOR SYSTEM_TIME AS OF SNAPSHOT '${snapshotId}'`;
+        const sanitizedSnapshotId = String(snapshotId).trim();
+        if (!/^\d+$/.test(sanitizedSnapshotId)) {
+          throw DuckLakeError.validation(
+            'Snapshot ID must be a numeric value',
+            'snapshotId',
+          );
+        }
+
+        query = `${query} FOR SYSTEM_TIME AS OF SNAPSHOT '${sanitizedSnapshotId}'`;
       }
 
       let totalRows: number | undefined;
