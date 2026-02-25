@@ -30,12 +30,16 @@ type Props = {
   onCancel: () => void;
   connection?: ConnectionModel;
   projectId?: string;
+  duplicateFrom?: ConnectionModel;
+  suggestedName?: string;
 };
 
 export const Kinetica: React.FC<Props> = ({
   onCancel,
   connection,
   projectId,
+  duplicateFrom,
+  suggestedName,
 }) => {
   const theme = useTheme();
   const navigate = useNavigate();
@@ -51,18 +55,28 @@ export const Kinetica: React.FC<Props> = ({
     [connection],
   );
 
+  const duplicateConnection = React.useMemo(
+    () => duplicateFrom?.connection as KineticaConnection,
+    [duplicateFrom],
+  );
+
   const [formState, setFormState] = React.useState<KineticaConnection>({
     type: 'kinetica',
-    name: existingConnection?.name ?? '',
-    host: existingConnection?.host ?? '',
-    port: existingConnection?.port ?? 9191,
-    database: existingConnection?.database ?? 'public', // Default schema/db concept can be vague in Kinetica/GPUdb but 'public' is safe placeholder or user input
-    schema: existingConnection?.schema ?? '',
+    name: existingConnection?.name ?? suggestedName ?? '',
+    host: existingConnection?.host ?? duplicateConnection?.host ?? '',
+    port: existingConnection?.port ?? duplicateConnection?.port ?? 9191,
+    database:
+      existingConnection?.database ?? duplicateConnection?.database ?? 'public',
+    schema: existingConnection?.schema ?? duplicateConnection?.schema ?? '',
     username: '',
     password: '',
-    useSSL: existingConnection?.useSSL ?? false,
-    bypassSslCertCheck: existingConnection?.bypassSslCertCheck ?? false,
-    timeout: existingConnection?.timeout ?? 30000,
+    useSSL: existingConnection?.useSSL ?? duplicateConnection?.useSSL ?? false,
+    bypassSslCertCheck:
+      existingConnection?.bypassSslCertCheck ??
+      duplicateConnection?.bypassSslCertCheck ??
+      false,
+    timeout:
+      existingConnection?.timeout ?? duplicateConnection?.timeout ?? 30000,
   });
 
   const [showPassword, setShowPassword] = React.useState(false);
@@ -121,22 +135,21 @@ export const Kinetica: React.FC<Props> = ({
 
   React.useEffect(() => {
     const fetchCredentials = async () => {
-      const storedUsername = await getDatabaseUsername(
-        existingConnection?.name,
-      );
-      const storedPassword = await getDatabasePassword(
-        existingConnection?.name,
-      );
-      setFormState((prev) => ({
-        ...prev,
-        username: storedUsername || '',
-        password: storedPassword || '',
-      }));
+      const sourceConnection = existingConnection || duplicateConnection;
+      if (sourceConnection) {
+        const storedUsername = await getDatabaseUsername(sourceConnection.name);
+        const storedPassword = await getDatabasePassword(sourceConnection.name);
+        setFormState((prev) => ({
+          ...prev,
+          username: storedUsername || '',
+          password: storedPassword || '',
+        }));
+      }
     };
-    if (existingConnection) {
+    if (existingConnection || duplicateConnection) {
       fetchCredentials();
     }
-  }, [existingConnection]);
+  }, [existingConnection, duplicateConnection]);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value, checked, type } = e.target;

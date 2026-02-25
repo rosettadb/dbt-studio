@@ -26,6 +26,7 @@ import {
   Refresh,
   Visibility,
   DeleteOutline,
+  ContentCopy,
 } from '@mui/icons-material';
 
 import { CloudProvider } from '../../../types/frontend';
@@ -34,6 +35,7 @@ import {
   useDeleteBucketConnection,
 } from '../../controllers';
 import { cloudStorageImages } from '../../../../assets/connectionIcons';
+import { generateDuplicateConnectionName } from '../../utils/connectionNaming';
 
 export const ExplorerConnections: React.FC = () => {
   const navigate = useNavigate();
@@ -99,6 +101,21 @@ export const ExplorerConnections: React.FC = () => {
         console.error('Failed to delete connection:', error);
       }
     }
+  };
+
+  const handleDuplicateConnection = (connection: any) => {
+    const existingNames = (connectionsQuery.data || []).map((c) => c.name);
+    const newName = generateDuplicateConnectionName(
+      connection.name,
+      existingNames,
+    );
+
+    navigate('/app/cloud-explorer/new-connection', {
+      state: {
+        duplicateFrom: connection,
+        suggestedName: newName,
+      },
+    });
   };
 
   const renderConnectionDetails = (connection: any) => {
@@ -281,6 +298,14 @@ export const ExplorerConnections: React.FC = () => {
                       }
                     >
                       Edit
+                    </Button>
+                    <Button
+                      size="small"
+                      variant="outlined"
+                      startIcon={<ContentCopy />}
+                      onClick={() => handleDuplicateConnection(connection)}
+                    >
+                      Duplicate
                     </Button>
                   </Box>
                   <Box sx={{ display: 'flex', gap: 1 }}>

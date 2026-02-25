@@ -50,6 +50,8 @@ interface ConnectionFormProps {
   initialValues?: CloudConnection;
   isEditing?: boolean;
   connectionId?: string;
+  duplicateFrom?: CloudConnection;
+  suggestedName?: string;
 }
 
 interface FormData {
@@ -79,6 +81,8 @@ export const ConnectionForm: React.FC<ConnectionFormProps> = ({
   initialValues,
   isEditing = false,
   connectionId,
+  duplicateFrom,
+  suggestedName,
 }) => {
   const navigate = useNavigate();
   const saveConnection = useSaveConnection();
@@ -109,8 +113,8 @@ export const ConnectionForm: React.FC<ConnectionFormProps> = ({
   const [errorMessage, setErrorMessage] = useState<string>('');
   const [showPassword, setShowPassword] = useState(false);
   const [formData, setFormData] = useState<FormData>({
-    name: initialValues?.name || '',
-    provider: initialValues?.provider || 'gcs',
+    name: initialValues?.name || suggestedName || '',
+    provider: initialValues?.provider || duplicateFrom?.provider || 'gcs',
     projectId: '',
     credentials: '',
     region: '',
@@ -146,13 +150,14 @@ export const ConnectionForm: React.FC<ConnectionFormProps> = ({
     return null;
   };
 
-  // Initialize form data from initial values
+  // Initialize form data from initial values or duplicate
   useEffect(() => {
-    if (initialValues) {
-      const { config } = initialValues;
+    const sourceConnection = initialValues || duplicateFrom;
+    if (sourceConnection) {
+      const { config } = sourceConnection;
       setFormData({
-        name: initialValues.name,
-        provider: initialValues.provider,
+        name: initialValues?.name || suggestedName || '',
+        provider: sourceConnection.provider,
         projectId: (config as GCSConfig).projectId || '',
         credentials: (config as GCSConfig).credentials || '',
         sessionToken: (config as S3Config).sessionToken || '',
@@ -192,12 +197,13 @@ export const ConnectionForm: React.FC<ConnectionFormProps> = ({
         applicationKey: (config as BackblazeB2Config).applicationKey || '',
       });
     }
-  }, [initialValues]);
+  }, [initialValues, duplicateFrom, suggestedName]);
 
-  // On edit, fetch credentials from secure storage
+  // On edit or duplicate, fetch credentials from secure storage
   useEffect(() => {
-    if (initialValues) {
-      const { id, provider } = initialValues;
+    const sourceConnection = initialValues || duplicateFrom;
+    if (sourceConnection) {
+      const { id, provider } = sourceConnection;
       (async () => {
         if (provider === 'gcs') {
           const stored = await getCloudGcsCredential(id);
@@ -228,7 +234,7 @@ export const ConnectionForm: React.FC<ConnectionFormProps> = ({
         }
       })();
     }
-  }, [initialValues]);
+  }, [initialValues, duplicateFrom]);
 
   const handleChange = (field: keyof FormData, value: string) => {
     setFormData((prev) => ({ ...prev, [field]: value }));

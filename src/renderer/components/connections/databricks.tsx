@@ -27,12 +27,16 @@ type Props = {
   onCancel: () => void;
   connection?: ConnectionModel;
   projectId?: string;
+  duplicateFrom?: ConnectionModel;
+  suggestedName?: string;
 };
 
 export const Databricks: React.FC<Props> = ({
   onCancel,
   connection,
   projectId,
+  duplicateFrom,
+  suggestedName,
 }) => {
   const navigate = useNavigate();
   const theme = useTheme();
@@ -43,14 +47,21 @@ export const Databricks: React.FC<Props> = ({
     [connection],
   );
 
+  const duplicateConnection = React.useMemo(
+    () => duplicateFrom?.connection as DatabricksConnection,
+    [duplicateFrom],
+  );
+
   const [formState, setFormState] = React.useState<DatabricksConnection>({
-    type: existingConnection?.type ?? 'databricks',
-    name: existingConnection?.name ?? '',
-    host: existingConnection?.host ?? '',
-    port: existingConnection?.port ?? 443,
-    httpPath: existingConnection?.httpPath ?? '',
-    database: existingConnection?.database ?? '',
-    schema: existingConnection?.schema ?? '',
+    type: existingConnection?.type ?? duplicateConnection?.type ?? 'databricks',
+    name: existingConnection?.name ?? suggestedName ?? '',
+    host: existingConnection?.host ?? duplicateConnection?.host ?? '',
+    port: existingConnection?.port ?? duplicateConnection?.port ?? 443,
+    httpPath:
+      existingConnection?.httpPath ?? duplicateConnection?.httpPath ?? '',
+    database:
+      existingConnection?.database ?? duplicateConnection?.database ?? '',
+    schema: existingConnection?.schema ?? duplicateConnection?.schema ?? '',
     token: '',
   });
 
@@ -113,16 +124,19 @@ export const Databricks: React.FC<Props> = ({
 
   React.useEffect(() => {
     const fetchCredentials = async () => {
-      const storedToken = await getDatabaseToken(existingConnection.name);
-      setFormState((prev) => ({
-        ...prev,
-        token: storedToken || '',
-      }));
+      const sourceConnection = existingConnection || duplicateConnection;
+      if (sourceConnection) {
+        const storedToken = await getDatabaseToken(sourceConnection.name);
+        setFormState((prev) => ({
+          ...prev,
+          token: storedToken || '',
+        }));
+      }
     };
-    if (existingConnection) {
+    if (existingConnection || duplicateConnection) {
       fetchCredentials();
     }
-  }, [existingConnection]);
+  }, [existingConnection, duplicateConnection]);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;

@@ -41,12 +41,16 @@ type Props = {
   onCancel: () => void;
   connection?: ConnectionModel;
   projectId?: string;
+  duplicateFrom?: ConnectionModel;
+  suggestedName?: string;
 };
 
 export const Redshift: React.FC<Props> = ({
   onCancel,
   connection,
   projectId,
+  duplicateFrom,
+  suggestedName,
 }) => {
   const navigate = useNavigate();
   const theme = useTheme();
@@ -64,17 +68,25 @@ export const Redshift: React.FC<Props> = ({
     [connection],
   );
 
+  const duplicateConnection = React.useMemo(
+    () => duplicateFrom?.connection as RedshiftConnection,
+    [duplicateFrom],
+  );
+
   const [formState, setFormState] = React.useState<RedshiftConnection>({
-    type: existingConnection?.type ?? 'redshift',
-    name: existingConnection?.name || 'Redshift Connection',
-    host: existingConnection?.host ?? '',
-    port: existingConnection?.port ?? 5439,
-    database: existingConnection?.database ?? '',
-    schema: existingConnection?.schema ?? 'public',
+    type: existingConnection?.type ?? duplicateConnection?.type ?? 'redshift',
+    name: existingConnection?.name ?? suggestedName ?? 'Redshift Connection',
+    host: existingConnection?.host ?? duplicateConnection?.host ?? '',
+    port: existingConnection?.port ?? duplicateConnection?.port ?? 5439,
+    database:
+      existingConnection?.database ?? duplicateConnection?.database ?? '',
+    schema:
+      existingConnection?.schema ?? duplicateConnection?.schema ?? 'public',
     username: '',
     password: '',
-    ssl: existingConnection?.ssl ?? true,
-    sslrootcert: existingConnection?.sslrootcert ?? '',
+    ssl: existingConnection?.ssl ?? duplicateConnection?.ssl ?? true,
+    sslrootcert:
+      existingConnection?.sslrootcert ?? duplicateConnection?.sslrootcert ?? '',
   });
 
   const [showPassword, setShowPassword] = React.useState(false);
@@ -220,18 +232,21 @@ export const Redshift: React.FC<Props> = ({
 
   React.useEffect(() => {
     const fetchCredentials = async () => {
-      const storedUsername = await getDatabaseUsername(existingConnection.name);
-      const storedPassword = await getDatabasePassword(existingConnection.name);
-      setFormState((prev) => ({
-        ...prev,
-        username: storedUsername || '',
-        password: storedPassword || '',
-      }));
+      const sourceConnection = existingConnection || duplicateConnection;
+      if (sourceConnection) {
+        const storedUsername = await getDatabaseUsername(sourceConnection.name);
+        const storedPassword = await getDatabasePassword(sourceConnection.name);
+        setFormState((prev) => ({
+          ...prev,
+          username: storedUsername || '',
+          password: storedPassword || '',
+        }));
+      }
     };
-    if (existingConnection) {
+    if (existingConnection || duplicateConnection) {
       fetchCredentials();
     }
-  }, [existingConnection]);
+  }, [existingConnection, duplicateConnection]);
 
   return (
     <Box
