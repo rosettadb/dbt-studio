@@ -1272,6 +1272,11 @@ export default class DuckLakeService {
         queryId: `schema-${Date.now()}`,
       });
 
+      const safeStringify = (value: unknown): string =>
+        JSON.stringify(value, (_key, v) =>
+          typeof v === 'bigint' ? v.toString() : v,
+        );
+
       // eslint-disable-next-line no-console
       console.log(
         `[extractSchema] schemas query — success: ${schemasResult.success}, rowCount: ${schemasResult.data?.length ?? 0}, error: ${schemasResult.error ?? 'none'}`,
@@ -1280,7 +1285,7 @@ export default class DuckLakeService {
         // eslint-disable-next-line no-console
         console.log(
           '[extractSchema] first raw schema row:',
-          JSON.stringify(schemasResult.data[0]),
+          safeStringify(schemasResult.data[0]),
         );
       }
 
@@ -1343,7 +1348,7 @@ export default class DuckLakeService {
             // eslint-disable-next-line no-console
             console.log(
               `[extractSchema] first raw table row for schema "${schemaName}":`,
-              JSON.stringify(tablesResult.data[0]),
+              safeStringify(tablesResult.data[0]),
             );
           }
 
