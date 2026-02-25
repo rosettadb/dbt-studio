@@ -447,7 +447,6 @@ const Sql = () => {
               gap: '4px',
               alignItems: 'center',
               bgcolor: theme.palette.mode === 'dark' ? '#1e1e1e' : '#f5f5f5',
-              borderBottom: `1px solid ${theme.palette.divider}`,
             }}
           >
             <FormControl fullWidth size="small">
