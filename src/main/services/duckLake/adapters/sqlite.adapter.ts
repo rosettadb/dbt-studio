@@ -800,7 +800,13 @@ export class SQLiteCatalogAdapter extends CatalogAdapter {
 
       if (snapshotId) {
         // Modify query to use specific snapshot
-        query = `${query} FOR SYSTEM_TIME AS OF SNAPSHOT '${snapshotId}'`;
+        const snapshotIdStr = String(snapshotId).trim();
+        if (!/^\d+$/.test(snapshotIdStr)) {
+          throw DuckLakeError.validation(
+            'Invalid snapshotId. Expected digits only.',
+          );
+        }
+        query = `${query} FOR SYSTEM_TIME AS OF SNAPSHOT '${snapshotIdStr}'`;
       }
 
       let totalRows: number | undefined;
