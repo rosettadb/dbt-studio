@@ -72,6 +72,8 @@ export const QueryResult: React.FC<Props> = ({ results, exportContext }) => {
   const originalSql =
     (results as any).originalSql ?? exportContext?.originalSql;
 
+  const resolvedOriginalSql = originalSql ?? (results as any).sql;
+
   const isDuckLake =
     exportContext?.connectionType === 'ducklake' &&
     !!exportContext.duckLakeInstanceId &&
@@ -351,12 +353,12 @@ export const QueryResult: React.FC<Props> = ({ results, exportContext }) => {
 
   const canExportParquet =
     !!exportContext &&
-    !!exportContext.originalSql &&
+    !!resolvedOriginalSql &&
     (exportContext.connectionType === 'duckdb' ||
       exportContext.connectionType === 'ducklake');
 
   const handleExportParquet = async () => {
-    if (!canExportParquet || !exportContext?.originalSql) return;
+    if (!canExportParquet || !resolvedOriginalSql) return;
 
     try {
       const result = await window.electron.ipcRenderer.invoke(
@@ -377,8 +379,7 @@ export const QueryResult: React.FC<Props> = ({ results, exportContext }) => {
       setIsExporting(true);
 
       const escapedPath = result.filePath.replace(/'/g, "''");
-      const baseSql =
-        (results as any).originalSql ?? exportContext.originalSql ?? '';
+      const baseSql = resolvedOriginalSql;
       const exportQuery = `COPY (${baseSql}) TO '${escapedPath}' (FORMAT PARQUET)`;
 
       if (

@@ -947,8 +947,24 @@ export class DuckDBCatalogAdapter extends CatalogAdapter {
       query = query.replace(/;\s*$/, '');
 
       if (snapshotId) {
+        const snapshotIdStr = String(snapshotId).trim();
+        if (!/^\d+$/.test(snapshotIdStr)) {
+          throw DuckLakeError.validation(
+            'Snapshot ID must be a numeric value',
+            'snapshotId',
+          );
+        }
+
+        const validatedSnapshotId = Number.parseInt(snapshotIdStr, 10);
+        if (!Number.isSafeInteger(validatedSnapshotId)) {
+          throw DuckLakeError.validation(
+            'Snapshot ID must be a safe integer',
+            'snapshotId',
+          );
+        }
+
         // Modify query to use specific snapshot
-        query = `${query} FOR SYSTEM_TIME AS OF SNAPSHOT '${snapshotId}'`;
+        query = `${query} FOR SYSTEM_TIME AS OF SNAPSHOT '${validatedSnapshotId}'`;
       }
 
       let totalRows: number | undefined;

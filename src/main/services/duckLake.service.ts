@@ -1154,6 +1154,7 @@ export default class DuckLakeService {
       const allowedPrefixes = [
         'SELECT',
         'WITH',
+        'EXPLAIN',
         'INSERT',
         'UPDATE',
         'DELETE',
@@ -1166,6 +1167,7 @@ export default class DuckLakeService {
         'PRAGMA',
         'SHOW',
         'COPY',
+        'VACUUM',
       ];
       validateSingleStatement(
         request.query,

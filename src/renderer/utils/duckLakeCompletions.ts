@@ -4,7 +4,7 @@
  * Includes system tables, functions, and user-defined tables/columns
  */
 
-import type * as Monaco from 'monaco-editor';
+import * as Monaco from 'monaco-editor';
 import { DuckLakeSchemaInfo } from '../../types/duckLake';
 
 /**
@@ -21,7 +21,7 @@ export function generateDuckLakeCompletions(
   schema.systemTables.forEach((tableName) => {
     completions.push({
       label: tableName,
-      kind: 17, // Monaco.languages.CompletionItemKind.Struct (Table)
+      kind: Monaco.languages.CompletionItemKind.Struct,
       insertText: tableName,
       detail: 'DuckLake System Table',
       documentation: `System metadata table: ${tableName}`,
@@ -74,7 +74,7 @@ export function generateDuckLakeCompletions(
       // Add table completion
       completions.push({
         label: table.name,
-        kind: 17, // Monaco.languages.CompletionItemKind.Struct (Table)
+        kind: Monaco.languages.CompletionItemKind.Struct,
         insertText: table.name,
         detail: `Table (${schemaObj.name}.${table.name})`,
         documentation: `Table: ${table.name}\nType: ${table.type}\nColumns: ${table.columns.length}`,
@@ -84,7 +84,7 @@ export function generateDuckLakeCompletions(
       table.columns.forEach((column) => {
         completions.push({
           label: column.name,
-          kind: 4, // Monaco.languages.CompletionItemKind.Field (Column)
+          kind: Monaco.languages.CompletionItemKind.Field,
           insertText: column.name,
           detail: `${table.name}.${column.name} (${column.type})`,
           documentation: `Column: ${column.name}\nType: ${column.type}\nTable: ${table.name}`,
@@ -106,7 +106,7 @@ export function generateDuckLakeCompletions(
   duckLakeKeywords.forEach((keyword) => {
     completions.push({
       label: keyword.label,
-      kind: 14, // Monaco.languages.CompletionItemKind.Keyword
+      kind: Monaco.languages.CompletionItemKind.Keyword,
       insertText: keyword.label,
       detail: keyword.detail,
       documentation: `DuckLake keyword: ${keyword.label}`,
