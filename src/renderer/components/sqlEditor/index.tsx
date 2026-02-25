@@ -243,8 +243,9 @@ export const SqlEditor: React.FC<Props> = ({
   // Load query based on mode
   React.useEffect(() => {
     if (isConnectionMode) {
-      // Connection-based mode: use initialQuery prop
-      setQueryContent(initialQuery || '');
+      // Connection-based mode: initialQuery is already loaded via useState.
+      // We do not sync it here on changes because doing so causes cursor jumps
+      // when the parent component reflects our own debounced changes back to us.
     } else if (selectedProject?.id) {
       // Project-based mode: load from backend
       const loadQuery = async () => {
@@ -257,7 +258,7 @@ export const SqlEditor: React.FC<Props> = ({
       };
       loadQuery();
     }
-  }, [isConnectionMode, initialQuery, selectedProject?.id, selectedProject]);
+  }, [isConnectionMode, selectedProject?.id, selectedProject]);
 
   React.useEffect(() => {
     return () => {

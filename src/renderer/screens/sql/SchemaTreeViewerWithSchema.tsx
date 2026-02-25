@@ -19,7 +19,6 @@ type Props = {
   type: SupportedConnectionTypes;
   schema: Table[];
   isLoading: boolean;
-  onRefresh: () => void;
   filter?: string;
   hideSchemaLevel?: boolean;
 };

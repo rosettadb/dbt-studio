@@ -56,6 +56,7 @@ import {
 } from '../../utils/duckLakeCompletions';
 
 const QUERY_HISTORY_KEY = 'query_history_key';
+const EMPTY_ARRAY: Table[] = [];
 
 const Sql = () => {
   const theme = useTheme();
@@ -83,13 +84,20 @@ const Sql = () => {
     reorderTabs,
   } = tabManager;
 
+  // Extract only stable connection-identity fields from the active tab.
+  // Using the whole `activeTab` object as a dependency would cause connectionInput
+  // to be recalculated on every keystroke (query text) and every query run
+  // (isLoading / results), which cascades into schema re-loading and sidebar spinner flashes.
+  const activeConnectionId = activeTab?.connectionId;
+  const activeConnectionName = activeTab?.connectionName;
+
   // Check if active connection is DuckLake
   const isDuckLakeConnection =
-    activeTab?.connectionId?.startsWith('ducklake-') || false;
+    activeConnectionId?.startsWith('ducklake-') || false;
 
   // Get active connection
   const { data: activeConnection, isLoading: isLoadingConnection } =
-    useGetConnectionById(activeTab?.connectionId);
+    useGetConnectionById(activeConnectionId);
 
   // Schema state for active tab
   const [tabSchemas, setTabSchemas] = useState<Record<string, Table[]>>({});
@@ -107,11 +115,13 @@ const Sql = () => {
   ]);
   const [tabQueryIds, setTabQueryIds] = useState<Record<string, string>>({});
 
-  // Get connection input for active tab
+  // Get connection input for active tab.
+  // Depends only on stable connection-identity primitives, NOT the whole activeTab object,
+  // to avoid re-running every time the query text or loading/result state changes.
   const connectionInput = useMemo(() => {
     // Handle DuckLake instances
-    if (activeTab?.connectionId?.startsWith('ducklake-')) {
-      const instanceId = activeTab.connectionId.replace('ducklake-', '');
+    if (activeConnectionId?.startsWith('ducklake-')) {
+      const instanceId = activeConnectionId.replace('ducklake-', '');
       const instance = duckLakeInstances.find((inst) => inst.id === instanceId);
       if (instance) {
         return {
@@ -128,33 +138,41 @@ const Sql = () => {
       // when navigating back to SQL screen
       return {
         type: 'ducklake',
-        name: activeTab.connectionName || 'DuckLake Instance',
+        name: activeConnectionName || 'DuckLake Instance',
         instanceId,
         status: 'loading',
       } as any;
     }
 
     // Handle regular database connections
-    if (!activeConnection || activeConnection.id !== activeTab?.connectionId) {
+    if (!activeConnection || activeConnection.id !== activeConnectionId) {
       return undefined;
     }
     return getConnectionInput(activeConnection);
   }, [
     activeConnection,
-    activeTab,
+    activeConnectionId,
+    activeConnectionName,
     duckLakeInstances,
     isLoadingDuckLakeInstances,
   ]);
 
-  // Get schema for active tab
-  const activeSchema = activeTab ? tabSchemas[activeTab.connectionId] : [];
-  const isLoadingSchema = activeTab
-    ? loadingSchemas[activeTab.connectionId]
+  // Get schema for active tab — use stable id primitive, not whole tab object
+  const activeSchema =
+    (activeConnectionId ? tabSchemas[activeConnectionId] : undefined) ||
+    EMPTY_ARRAY;
+  const isLoadingSchema = activeConnectionId
+    ? (loadingSchemas[activeConnectionId] ?? false)
     : false;
 
   // Store DuckLake completions and schema
   const [duckLakeCompletions, setDuckLakeCompletions] = useState<any[]>([]);
   const [duckLakeSchema, setDuckLakeSchema] = useState<any>(null);
+  const [duckLakeSchemaLoading, setDuckLakeSchemaLoading] =
+    useState<boolean>(false);
+  const [duckLakeSchemaError, setDuckLakeSchemaError] = useState<string | null>(
+    null,
+  );
 
   // Convert DuckLake schema to Table[] format for SchemaTreeViewerWithSchema
   const duckLakeTables = useMemo(() => {
@@ -204,39 +222,48 @@ const Sql = () => {
     return baseCompletions;
   }, [activeSchema, duckLakeCompletions]);
 
+  const loadDuckLakeCompletions = useCallback(async () => {
+    if (!connectionInput || (connectionInput as any).type !== 'ducklake') {
+      setDuckLakeCompletions([]);
+      setDuckLakeSchema(null);
+      setDuckLakeSchemaLoading(false);
+      setDuckLakeSchemaError(null);
+      return;
+    }
+
+    const { instanceId } = connectionInput as any;
+
+    if (!instanceId) {
+      setDuckLakeCompletions([]);
+      setDuckLakeSchema(null);
+      setDuckLakeSchemaLoading(false);
+      setDuckLakeSchemaError('Missing DuckLake instance id');
+      return;
+    }
+
+    setDuckLakeSchemaLoading(true);
+    setDuckLakeSchemaError(null);
+    try {
+      const schema = await DuckLakeService.extractSchema(instanceId);
+      const duckLakeItems = generateDuckLakeCompletions(schema);
+
+      setDuckLakeCompletions(duckLakeItems);
+      setDuckLakeSchema(schema);
+    } catch (error) {
+      // eslint-disable-next-line no-console
+      console.error('[SQL Screen] Failed to load DuckLake completions:', error);
+      setDuckLakeCompletions([]);
+      setDuckLakeSchema(null);
+      setDuckLakeSchemaError('Failed to load DuckLake schema');
+    } finally {
+      setDuckLakeSchemaLoading(false);
+    }
+  }, [connectionInput]);
+
   // Load DuckLake completions when connection changes
   useEffect(() => {
-    const loadDuckLakeCompletions = async () => {
-      if (!connectionInput || (connectionInput as any).type !== 'ducklake') {
-        setDuckLakeCompletions([]);
-        return;
-      }
-
-      try {
-        const { instanceId } = connectionInput as any;
-
-        if (!instanceId) {
-          return;
-        }
-
-        const schema = await DuckLakeService.extractSchema(instanceId);
-        const duckLakeItems = generateDuckLakeCompletions(schema);
-
-        setDuckLakeCompletions(duckLakeItems);
-        setDuckLakeSchema(schema);
-      } catch (error) {
-        // eslint-disable-next-line no-console
-        console.error(
-          '[SQL Screen] Failed to load DuckLake completions:',
-          error,
-        );
-        setDuckLakeCompletions([]);
-        setDuckLakeSchema(null);
-      }
-    };
-
     loadDuckLakeCompletions();
-  }, [connectionInput]);
+  }, [loadDuckLakeCompletions]);
 
   // Fetch schema for a connection
   const fetchSchemaForConnection = useCallback(
@@ -274,16 +301,23 @@ const Sql = () => {
     [loadingSchemas],
   );
 
-  // Fetch schema when active tab changes
+  // Fetch schema when the active connection changes.
+  // Uses activeConnectionId (stable primitive) instead of activeTab (whole object)
+  // so this effect doesn't run on every keystroke or query result update.
   useEffect(() => {
     if (
-      activeTab &&
-      !tabSchemas[activeTab.connectionId] &&
-      !loadingSchemas[activeTab.connectionId]
+      activeConnectionId &&
+      !tabSchemas[activeConnectionId] &&
+      !loadingSchemas[activeConnectionId]
     ) {
-      fetchSchemaForConnection(activeTab.connectionId);
+      fetchSchemaForConnection(activeConnectionId);
     }
-  }, [activeTab, tabSchemas, loadingSchemas, fetchSchemaForConnection]);
+  }, [
+    activeConnectionId,
+    tabSchemas,
+    loadingSchemas,
+    fetchSchemaForConnection,
+  ]);
 
   // Handle connection selection from sidebar
   const handleConnectionSelect = useCallback(
@@ -355,21 +389,27 @@ const Sql = () => {
   };
 
   const handleRefreshSchema = useCallback(() => {
-    if (activeTab) {
+    if (activeConnectionId) {
       // Clear cached schema and refetch
       setTabSchemas((prev) => {
         const updated = { ...prev };
-        delete updated[activeTab.connectionId];
+        delete updated[activeConnectionId];
         return updated;
       });
-      fetchSchemaForConnection(activeTab.connectionId);
+      fetchSchemaForConnection(activeConnectionId);
 
-      // Also refetch DuckLake instances to update connection status
-      if (activeTab.connectionId?.startsWith('ducklake-')) {
+      if (isDuckLakeConnection) {
+        loadDuckLakeCompletions();
         refetchDuckLakeInstances();
       }
     }
-  }, [activeTab, fetchSchemaForConnection, refetchDuckLakeInstances]);
+  }, [
+    activeConnectionId,
+    isDuckLakeConnection,
+    fetchSchemaForConnection,
+    loadDuckLakeCompletions,
+    refetchDuckLakeInstances,
+  ]);
 
   const renderSash = () => (
     <Box
@@ -706,16 +746,44 @@ const Sql = () => {
               }}
             >
               <SchemaViewGrid>
-                {activeTab && connectionInput && isDuckLakeConnection && (
-                  <SchemaTreeViewerWithSchema
-                    databaseName={connectionInput.name || 'DuckLake Instance'}
-                    type="ducklake"
-                    schema={duckLakeTables}
-                    isLoading={!duckLakeSchema}
-                    onRefresh={handleRefreshSchema}
-                    filter={filter}
-                  />
-                )}
+                {activeTab &&
+                  connectionInput &&
+                  isDuckLakeConnection &&
+                  (!duckLakeSchemaLoading && duckLakeSchema === null ? (
+                    <Box
+                      sx={{
+                        display: 'flex',
+                        flexDirection: 'column',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        height: '100%',
+                        color: 'text.secondary',
+                        p: 2,
+                        textAlign: 'center',
+                      }}
+                    >
+                      <Typography variant="body2" color="text.secondary">
+                        {duckLakeSchemaError || 'No Schema available'}
+                      </Typography>
+                      <Button
+                        size="small"
+                        variant="outlined"
+                        startIcon={<Refresh />}
+                        onClick={handleRefreshSchema}
+                        sx={{ mt: 2 }}
+                      >
+                        Retry
+                      </Button>
+                    </Box>
+                  ) : (
+                    <SchemaTreeViewerWithSchema
+                      databaseName={connectionInput.name || 'DuckLake Instance'}
+                      type="ducklake"
+                      schema={duckLakeTables}
+                      isLoading={duckLakeSchemaLoading}
+                      filter={filter}
+                    />
+                  ))}
                 {activeTab && connectionInput && !isDuckLakeConnection && (
                   <SchemaTreeViewerWithSchema
                     databaseName={String(
@@ -724,9 +792,8 @@ const Sql = () => {
                         'Database',
                     )}
                     type={connectionInput.type}
-                    schema={activeSchema || []}
+                    schema={activeSchema}
                     isLoading={isLoadingSchema}
-                    onRefresh={handleRefreshSchema}
                     filter={filter}
                   />
                 )}
