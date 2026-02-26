@@ -26,6 +26,8 @@ import {
   DuckLakeStorageConfig,
   DuckLakeSnapshotParams,
   DuckLakePaginatedResult,
+  DuckLakeSchemaInfo,
+  DuckLakeSchemaTable,
 } from '../../types/duckLake';
 import { DuckLakeError } from '../../types/duckLakeErrors';
 
@@ -105,6 +107,9 @@ function validateSingleStatement(
 
 export default class DuckLakeService {
   private static initialized = false;
+
+  // Track active queries for cancellation
+  private static activeQueries = new Map<string, () => void>();
 
   // Service Initialization
   static async initialize(): Promise<void> {
@@ -992,7 +997,7 @@ export default class DuckLakeService {
       // 5. Create initial snapshot
       await adapter.executeQuery({
         instanceId,
-        sql: sourceQuery,
+        query: sourceQuery,
       });
     } catch (error) {
       // eslint-disable-next-line no-console
@@ -1137,14 +1142,320 @@ export default class DuckLakeService {
   static async executeQuery(
     request: DuckLakeQueryRequest,
   ): Promise<DuckLakeQueryResult> {
+    const startTime = Date.now();
+
     try {
       await this.ensureConnected(request.instanceId);
       const adapter = await this.getAdapter(request.instanceId);
 
-      return await adapter.executeQuery(request);
+      // Validate query (prevent statement chaining)
+      // We allow all common prefixes since this is a general query executor
+      // COPY is required for full-dataset exports (Parquet/JSON/CSV)
+      const allowedPrefixes = [
+        'SELECT',
+        'WITH',
+        'EXPLAIN',
+        'INSERT',
+        'UPDATE',
+        'DELETE',
+        'CREATE',
+        'DROP',
+        'ALTER',
+        'TRUNCATE',
+        'RENAME',
+        'DESCRIBE',
+        'PRAGMA',
+        'SHOW',
+        'COPY',
+        'VACUUM',
+      ];
+      validateSingleStatement(
+        request.query,
+        allowedPrefixes[0],
+        allowedPrefixes.slice(1),
+      );
+
+      // Register real cancel function if adapter provides one
+      if (request.queryId) {
+        const cancelFromAdapter =
+          typeof (adapter as any).getCancelFn === 'function'
+            ? (adapter as any).getCancelFn(request.queryId)
+            : undefined;
+        if (typeof cancelFromAdapter === 'function') {
+          this.activeQueries.set(request.queryId, cancelFromAdapter);
+        }
+      }
+
+      try {
+        // Execute through adapter; support adapters that return { result, cancel }
+        const execResult: any = await adapter.executeQuery(request);
+
+        let result: DuckLakeQueryResult;
+
+        if (
+          execResult &&
+          typeof execResult === 'object' &&
+          typeof execResult.cancel === 'function'
+        ) {
+          if (request.queryId) {
+            this.activeQueries.set(request.queryId, execResult.cancel);
+          }
+          result =
+            typeof execResult.result === 'object' && execResult.result
+              ? (execResult.result as DuckLakeQueryResult)
+              : (execResult as DuckLakeQueryResult);
+        } else {
+          result = execResult as DuckLakeQueryResult;
+        }
+
+        // Determine command type
+        const commandType = this.detectCommandType(request.query);
+
+        return {
+          ...result,
+          duration: Date.now() - startTime,
+          isCommand: commandType !== 'SELECT',
+          commandType,
+        };
+      } finally {
+        // Cleanup active query tracking
+        if (request.queryId) {
+          this.activeQueries.delete(request.queryId);
+        }
+      }
     } catch (error) {
       // eslint-disable-next-line no-console
-      console.error(error);
+      console.error('[DuckLake Service] Query execution failed:', error);
+      // eslint-disable-next-line no-console
+      console.error(
+        '[DuckLake Service] Error stack:',
+        error instanceof Error ? error.stack : 'No stack',
+      );
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : String(error),
+        duration: Date.now() - startTime,
+      };
+    }
+  }
+
+  static async cancelQuery(queryId: string): Promise<void> {
+    const cancelFn = this.activeQueries.get(queryId);
+    if (cancelFn) {
+      cancelFn();
+      this.activeQueries.delete(queryId);
+    }
+  }
+
+  // Schema Extraction (Phase 6)
+  static async extractSchema(instanceId: string): Promise<DuckLakeSchemaInfo> {
+    try {
+      // eslint-disable-next-line no-console
+      console.log(`[extractSchema] called for instance: ${instanceId}`);
+
+      await this.ensureConnected(instanceId);
+      const adapter = await this.getAdapter(instanceId);
+
+      // Query metadata catalog for schemas using DuckLake v0.3 schema
+      const schemasResult = await adapter.executeQuery({
+        instanceId,
+        query: `
+          WITH current_snapshot AS (
+            SELECT COALESCE(MAX(snapshot_id), 0) as snapshot_id
+            FROM ducklake_snapshot
+          )
+          SELECT DISTINCT s.schema_name
+          FROM ducklake_schema s
+          CROSS JOIN current_snapshot cs
+          WHERE cs.snapshot_id >= s.begin_snapshot
+            AND (cs.snapshot_id < s.end_snapshot OR s.end_snapshot IS NULL)
+          ORDER BY s.schema_name
+        `,
+        queryId: `schema-${Date.now()}`,
+      });
+
+      const safeStringify = (value: unknown): string =>
+        JSON.stringify(value, (_key, v) =>
+          typeof v === 'bigint' ? v.toString() : v,
+        );
+
+      // eslint-disable-next-line no-console
+      console.log(
+        `[extractSchema] schemas query — success: ${schemasResult.success}, rowCount: ${schemasResult.data?.length ?? 0}, error: ${schemasResult.error ?? 'none'}`,
+      );
+      if (schemasResult.data && schemasResult.data.length > 0) {
+        // eslint-disable-next-line no-console
+        console.log(
+          '[extractSchema] first raw schema row:',
+          safeStringify(schemasResult.data[0]),
+        );
+      }
+
+      const schemaNames: string[] = (schemasResult.data ?? [])
+        .map((row: any) => {
+          // Rows may be arrays (positional) or objects (named) depending on adapter/DuckDB version
+          if (Array.isArray(row)) {
+            return row[0] as string;
+          }
+          return row.schema_name as string;
+        })
+        .filter(
+          (name: string | undefined): name is string =>
+            typeof name === 'string' && name.length > 0,
+        );
+
+      // eslint-disable-next-line no-console
+      console.log(
+        `[extractSchema] resolved schemaNames: [${schemaNames.join(', ')}]`,
+      );
+
+      // Fetch tables and columns for all schemas in parallel
+      const schemasWithTables = await Promise.all(
+        schemaNames.map(async (schemaName) => {
+          // Escape single quotes in schema name to prevent SQL injection
+          const escapedSchemaName = schemaName.replace(/'/g, "''");
+
+          const tablesResult = await adapter.executeQuery({
+            instanceId,
+            query: `
+              WITH current_snapshot AS (
+                SELECT COALESCE(MAX(snapshot_id), 0) as snapshot_id
+                FROM ducklake_snapshot
+              )
+              SELECT
+                t.table_name,
+                c.column_name,
+                c.column_type,
+                c.column_order
+              FROM ducklake_table t
+              JOIN ducklake_schema s ON t.schema_id = s.schema_id
+              LEFT JOIN ducklake_column c ON t.table_id = c.table_id
+              CROSS JOIN current_snapshot cs
+              WHERE s.schema_name = '${escapedSchemaName}'
+                AND cs.snapshot_id >= t.begin_snapshot
+                AND (cs.snapshot_id < t.end_snapshot OR t.end_snapshot IS NULL)
+                AND cs.snapshot_id >= s.begin_snapshot
+                AND (cs.snapshot_id < s.end_snapshot OR s.end_snapshot IS NULL)
+                AND (c.column_id IS NULL OR (cs.snapshot_id >= c.begin_snapshot AND (cs.snapshot_id < c.end_snapshot OR c.end_snapshot IS NULL)))
+              ORDER BY t.table_name, c.column_order
+            `,
+            queryId: `tables-${Date.now()}`,
+          });
+
+          // eslint-disable-next-line no-console
+          console.log(
+            `[extractSchema] schema "${schemaName}" tables query — success: ${tablesResult.success}, rowCount: ${tablesResult.data?.length ?? 0}, error: ${tablesResult.error ?? 'none'}`,
+          );
+          if (tablesResult.data && tablesResult.data.length > 0) {
+            // eslint-disable-next-line no-console
+            console.log(
+              `[extractSchema] first raw table row for schema "${schemaName}":`,
+              safeStringify(tablesResult.data[0]),
+            );
+          }
+
+          // Group by table — handle both array-format and object-format rows
+          const tableMap = new Map<string, DuckLakeSchemaTable>();
+          (tablesResult.data ?? []).forEach((row: any) => {
+            let tableName: string;
+            let columnName: string | undefined;
+            let columnType: string | undefined;
+            let columnOrder: number | undefined;
+
+            if (Array.isArray(row)) {
+              // Positional: table_name, column_name, column_type, column_order
+              [tableName, columnName, columnType, columnOrder] = row;
+            } else {
+              tableName = row.table_name;
+              columnName = row.column_name;
+              columnType = row.column_type;
+              columnOrder = row.column_order;
+            }
+
+            if (!tableName) return;
+
+            if (!tableMap.has(tableName)) {
+              tableMap.set(tableName, {
+                name: tableName,
+                type: 'TABLE',
+                columns: [],
+              });
+            }
+            if (columnName) {
+              tableMap.get(tableName)?.columns.push({
+                name: columnName,
+                type: columnType ?? '',
+                position: columnOrder ?? 0,
+              });
+            }
+          });
+
+          return {
+            name: schemaName,
+            tables: Array.from(tableMap.values()),
+          };
+        }),
+      );
+
+      // eslint-disable-next-line no-console
+      console.log(
+        `[extractSchema] result: ${schemasWithTables.length} schema(s), tables per schema: [${schemasWithTables.map((s) => `${s.name}:${s.tables.length}`).join(', ')}]`,
+      );
+
+      // Sanitize: Ensure no BigInt values remain in the schema structure
+      // This is critical for IPC serialization
+      const sanitizeValue = (obj: any): any => {
+        if (obj === null || obj === undefined) return obj;
+
+        if (typeof obj === 'bigint') {
+          return Number(obj);
+        }
+
+        if (Array.isArray(obj)) {
+          return obj.map(sanitizeValue);
+        }
+
+        if (typeof obj === 'object') {
+          const sanitized: any = {};
+          // eslint-disable-next-line no-restricted-syntax
+          for (const [key, value] of Object.entries(obj)) {
+            sanitized[key] = sanitizeValue(value);
+          }
+          return sanitized;
+        }
+
+        return obj;
+      };
+
+      const sanitizedSchemas = sanitizeValue(schemasWithTables);
+
+      return {
+        schemas: sanitizedSchemas,
+        // Add DuckLake-specific functions
+        functions: [
+          'ducklake_snapshots',
+          'ducklake_table_info',
+          'ducklake_table_insertions',
+          'ducklake_table_deletions',
+          'ducklake_table_changes',
+        ],
+        // Add metadata tables
+        systemTables: [
+          'ducklake_table',
+          'ducklake_schema',
+          'ducklake_column',
+          'ducklake_snapshot',
+          'ducklake_data_file',
+          'ducklake_table_stats',
+          'ducklake_table_column_stats',
+          'ducklake_partition_info',
+          'ducklake_partition_column',
+          'ducklake_tag',
+        ],
+      };
+    } catch (error) {
+      // eslint-disable-next-line no-console
+      console.error('DuckLake schema extraction failed:', error);
       throw error;
     }
   }
@@ -1432,6 +1743,38 @@ export default class DuckLakeService {
       console.error('Failed to get connection credentials:', error);
       throw error;
     }
+  }
+
+  private static detectCommandType(query: string): 'SELECT' | 'DDL' | 'DML' {
+    const normalized = query.trim().toUpperCase();
+
+    // DDL operations - check statement verb at the beginning only
+    // This prevents false positives from string literals like SELECT 'DROP TABLE users'
+    const ddlKeywords = [
+      'CREATE',
+      'DROP',
+      'ALTER',
+      'TRUNCATE',
+      'RENAME',
+      'COPY',
+    ];
+    if (ddlKeywords.some((kw) => normalized.startsWith(kw))) {
+      return 'DDL';
+    }
+
+    // DML operations
+    if (
+      normalized.startsWith('INSERT') ||
+      normalized.startsWith('UPDATE') ||
+      normalized.startsWith('DELETE') ||
+      normalized.startsWith('UPSERT') ||
+      normalized.startsWith('MERGE')
+    ) {
+      return 'DML';
+    }
+
+    // Default to SELECT (includes WITH, SHOW, DESCRIBE, PRAGMA, etc.)
+    return 'SELECT';
   }
 
   private static storageConfigNeedsResolution(

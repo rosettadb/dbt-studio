@@ -27,12 +27,16 @@ type Props = {
   onCancel: () => void;
   connection?: ConnectionModel;
   projectId?: string;
+  duplicateFrom?: ConnectionModel;
+  suggestedName?: string;
 };
 
 export const Snowflake: React.FC<Props> = ({
   onCancel,
   connection,
   projectId,
+  duplicateFrom,
+  suggestedName,
 }) => {
   const navigate = useNavigate();
   const theme = useTheme();
@@ -48,6 +52,11 @@ export const Snowflake: React.FC<Props> = ({
     [connection],
   );
 
+  const duplicateConnection = React.useMemo(
+    () => duplicateFrom?.connection as SnowflakeConnection,
+    [duplicateFrom],
+  );
+
   const [connectionStatus, setConnectionStatus] = React.useState<
     'idle' | 'success' | 'failed'
   >('idle');
@@ -56,14 +65,16 @@ export const Snowflake: React.FC<Props> = ({
 
   const [formState, setFormState] = React.useState<SnowflakeConnection>({
     type: 'snowflake',
-    name: existingConnection?.name || 'Snowflake Connection',
-    account: existingConnection?.account ?? '',
-    warehouse: existingConnection?.warehouse ?? '',
-    database: existingConnection?.database ?? '',
-    schema: existingConnection?.schema ?? '',
+    name: existingConnection?.name ?? suggestedName ?? 'Snowflake Connection',
+    account: existingConnection?.account ?? duplicateConnection?.account ?? '',
+    warehouse:
+      existingConnection?.warehouse ?? duplicateConnection?.warehouse ?? '',
+    database:
+      existingConnection?.database ?? duplicateConnection?.database ?? '',
+    schema: existingConnection?.schema ?? duplicateConnection?.schema ?? '',
     username: '',
     password: '',
-    role: 'SYSADMIN',
+    role: existingConnection?.role ?? duplicateConnection?.role ?? 'SYSADMIN',
   });
 
   const { mutate: testConnection, isLoading: isTesting } = useTestConnection({
@@ -115,19 +126,47 @@ export const Snowflake: React.FC<Props> = ({
   );
 
   React.useEffect(() => {
+    let isMounted = true;
     const fetchCredentials = async () => {
-      const storedUsername = await getDatabaseUsername(existingConnection.name);
-      const storedPassword = await getDatabasePassword(existingConnection.name);
-      setFormState((prev) => ({
-        ...prev,
-        username: storedUsername || '',
-        password: storedPassword || '',
-      }));
+      const sourceConnection = existingConnection || duplicateConnection;
+      if (sourceConnection) {
+        try {
+          const storedUsername = await getDatabaseUsername(
+            sourceConnection.name,
+          );
+          const storedPassword = await getDatabasePassword(
+            sourceConnection.name,
+          );
+          if (isMounted) {
+            setFormState((prev) => ({
+              ...prev,
+              username: storedUsername || '',
+              password: storedPassword || '',
+            }));
+          }
+        } catch (error) {
+          if (isMounted) {
+            setFormState((prev) => ({
+              ...prev,
+              username: '',
+              password: '',
+            }));
+          }
+        }
+      }
     };
-    if (existingConnection) {
+    if (existingConnection || duplicateConnection) {
       fetchCredentials();
     }
-  }, [existingConnection]);
+    return () => {
+      isMounted = false;
+    };
+  }, [
+    existingConnection,
+    duplicateConnection,
+    getDatabaseUsername,
+    getDatabasePassword,
+  ]);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;

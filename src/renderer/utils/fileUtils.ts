@@ -138,34 +138,29 @@ export const normalizeNumericValue = (
     return undefined;
   }
 
+  // Handle BigInt FIRST before any JSON.stringify operations
+  if (typeof value === 'bigint') {
+    return Number(value);
+  }
+
+  // Handle regular numbers
+  if (typeof value === 'number') {
+    return value;
+  }
+
   // Handle DuckDB hugeint objects
   if (typeof value === 'object' && value.hugeint !== undefined) {
-    // eslint-disable-next-line no-console
-    console.log(
-      '[normalizeNumericValue] Converting hugeint:',
-      JSON.stringify(value),
-    );
     try {
       // Don't access value.hugeint directly - it might cause a crash
       // Instead, convert the whole object to string first
       const strValue = String(value.hugeint);
       const converted = Number(strValue);
-      // eslint-disable-next-line no-console
-      console.log('[normalizeNumericValue] Converted to number:', converted);
       return converted;
     } catch (error) {
       // eslint-disable-next-line no-console
       console.error('[normalizeNumericValue] Error converting hugeint:', error);
       return undefined;
     }
-  }
-
-  if (typeof value === 'bigint') {
-    return Number(value);
-  }
-
-  if (typeof value === 'number') {
-    return value;
   }
 
   // Try to convert to number

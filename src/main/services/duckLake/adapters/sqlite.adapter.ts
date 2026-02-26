@@ -705,54 +705,223 @@ export class SQLiteCatalogAdapter extends CatalogAdapter {
     }
   }
 
+  /**
+   * Get the metadata database prefix for qualifying metadata tables.
+   * SQLite-backed DuckLake attaches a DuckDB metadata DB using `.main.` schema notation.
+   */
+  private async getMetadataPrefix(): Promise<string> {
+    try {
+      if (!this.connectionInfo) {
+        return '';
+      }
+
+      const databasesQuery = `
+        SELECT database_name
+        FROM duckdb_databases()
+        WHERE database_name LIKE '__ducklake_metadata_%'
+        LIMIT 1
+      `;
+
+      const databasesResult =
+        await this.connectionInfo.connection.run(databasesQuery);
+      const databaseRows = await databasesResult.getRows();
+
+      if (databaseRows.length === 0) {
+        return '';
+      }
+
+      const metadataDatabase = Array.isArray(databaseRows[0])
+        ? databaseRows[0][0]
+        : (databaseRows[0] as any).database_name;
+
+      // SQLite metadata DB uses the `.main.` schema, matching how listTables qualifies tables.
+      return `"${metadataDatabase}".main.`;
+    } catch (error) {
+      // eslint-disable-next-line no-console
+      console.warn(
+        '[SQLite Adapter] Could not determine metadata prefix:',
+        error,
+      );
+      return '';
+    }
+  }
+
+  /**
+   * Qualify unqualified DuckLake metadata table references in a query.
+   */
+  private async qualifyMetadataTables(query: string): Promise<string> {
+    const metadataPrefix = await this.getMetadataPrefix();
+
+    if (!metadataPrefix) {
+      return query;
+    }
+
+    const metadataTables = [
+      'ducklake_table',
+      'ducklake_column',
+      'ducklake_schema',
+      'ducklake_snapshot',
+      'ducklake_data_file',
+      'ducklake_delete_file',
+      'ducklake_table_stats',
+      'ducklake_table_column_stats',
+      'ducklake_partition_info',
+      'ducklake_partition_column',
+      'ducklake_file_partition_value',
+      'ducklake_tag',
+      'ducklake_column_tag',
+    ];
+
+    return metadataTables.reduce((currentQuery, table) => {
+      const pattern = new RegExp(
+        `\\b(FROM|JOIN)\\s+(?!"?__ducklake_metadata_)\\b${table}\\b`,
+        'gi',
+      );
+      return currentQuery.replace(pattern, `$1 ${metadataPrefix}${table}`);
+    }, query);
+  }
+
   async executeQuery(
     request: DuckLakeQueryRequest,
   ): Promise<DuckLakeQueryResult> {
+    const startTime = Date.now();
     try {
       if (!this.connectionInfo) {
         throw new Error('No active connection');
       }
 
-      const startTime = Date.now();
-
       // Handle time travel queries
-      let query = request.sql;
-      if (request.snapshotId) {
+      const { query: baseQuery, snapshotId, limit, offset } = request;
+      // Qualify any unqualified metadata table references so DuckDB can resolve them.
+      let query = await this.qualifyMetadataTables(baseQuery);
+
+      // Strip trailing semicolons before appending any suffixes (like SNAPSHOT or LIMIT/OFFSET).
+      query = query.replace(/;\s*$/, '');
+
+      if (snapshotId) {
         // Modify query to use specific snapshot
-        query = `${query} FOR SYSTEM_TIME AS OF SNAPSHOT '${request.snapshotId}'`;
+        const snapshotIdStr = String(snapshotId).trim();
+        if (!/^\d+$/.test(snapshotIdStr)) {
+          throw DuckLakeError.validation(
+            'Invalid snapshotId. Expected digits only.',
+          );
+        }
+        query = `${query} FOR SYSTEM_TIME AS OF SNAPSHOT '${snapshotIdStr}'`;
       }
 
-      // Add limit and offset if specified
-      if (request.limit) {
-        query += ` LIMIT ${request.limit}`;
-        if (request.offset) {
-          query += ` OFFSET ${request.offset}`;
+      let totalRows: number | undefined;
+
+      // Add limit and offset if specified — but respect user-defined LIMIT
+      const hasExistingLimit = /\bLIMIT\s+\d+/i.test(query);
+      const isSelectQuery =
+        /^\s*SELECT\b/i.test(query) || /^\s*WITH\b/i.test(query);
+
+      if (limit && !hasExistingLimit && isSelectQuery) {
+        try {
+          const countQuery = `SELECT COUNT(*) as total FROM (${query}) AS _sub`;
+          const countResult =
+            await this.connectionInfo.connection.run(countQuery);
+          const countRows = await countResult.getRows();
+
+          if (countRows && countRows.length > 0) {
+            const countRow = countRows[0];
+            let countVal;
+            if (Array.isArray(countRow)) {
+              [countVal] = countRow;
+            } else if (countRow && typeof countRow === 'object') {
+              countVal = countRow.total ?? Object.values(countRow)[0];
+            }
+            if (countVal !== undefined) {
+              totalRows = Number(countVal);
+            }
+          }
+        } catch (error) {
+          // eslint-disable-next-line no-console
+          console.warn(
+            '[SQLite] Failed to fetch total rows for pagination:',
+            error,
+          );
+        }
+
+        query += ` LIMIT ${limit}`;
+        if (offset) {
+          query += ` OFFSET ${offset}`;
         }
       }
 
       const result = await this.connectionInfo.connection.run(query);
+
+      // Use the DuckDB Node Neo API (columnNames/columnTypes) — result.schema does not exist
+      // in this version of the driver. Falling back to empty fields caused array rows to be
+      // mapped against an empty field list, producing {} for every row.
+      const columnNames: string[] = result.columnNames?.() ?? [];
+      const columnTypes: any[] = result.columnTypes?.() ?? [];
+      const fields = columnNames.map((name: string, index: number) => ({
+        name,
+        type: columnTypes[index]?.toString() ?? 'UNKNOWN',
+      }));
+
       const rows = await result.getRows();
 
-      // Handle DDL statements (CREATE, DROP, etc.) that don't return a schema
-      const columns = result.schema
-        ? result.schema.map((col: any) => ({
-            name: col.name,
-            type: col.type,
-          }))
-        : [];
+      // Normalize data (handle complex types)
+      const data = rows.map((row: any) => {
+        const normalized: any = {};
+        if (Array.isArray(row)) {
+          // If row is an array, map to field names
+          fields.forEach((field: any, idx: number) => {
+            const value = row[idx];
+            // Only normalize numeric types, preserve other types
+            if (
+              typeof value === 'bigint' ||
+              typeof value === 'number' ||
+              (typeof value === 'object' &&
+                value !== null &&
+                (value as any).hugeint !== undefined)
+            ) {
+              normalized[field.name] = normalizeNumericValue(value);
+            } else {
+              normalized[field.name] = value;
+            }
+          });
+        } else if (typeof row === 'object' && row !== null) {
+          // If row is already an object
+          const entries = Object.entries(row);
+          entries.forEach(([key, value]) => {
+            // Only normalize numeric types, preserve other types
+            if (
+              typeof value === 'bigint' ||
+              typeof value === 'number' ||
+              (typeof value === 'object' &&
+                value !== null &&
+                (value as any).hugeint !== undefined)
+            ) {
+              normalized[key] = normalizeNumericValue(value);
+            } else {
+              normalized[key] = value;
+            }
+          });
+        }
+        return normalized;
+      });
 
-      const executionTime = Date.now() - startTime;
+      const duration = Date.now() - startTime;
 
       return {
-        columns,
-        rows,
-        executionTime,
-        snapshotId: request.snapshotId,
+        success: true,
+        data,
+        fields,
+        rowCount: totalRows ?? data.length,
+        duration,
+        snapshotId,
       };
     } catch (error) {
       // eslint-disable-next-line no-console
       console.error('SQLite query execution failed:', error);
-      throw error;
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : String(error),
+        duration: Date.now() - startTime,
+      };
     }
   }
 
