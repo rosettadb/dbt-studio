@@ -26,14 +26,22 @@ import {
   Refresh,
   Visibility,
   DeleteOutline,
+  ContentCopy,
 } from '@mui/icons-material';
 
-import { CloudProvider } from '../../../types/frontend';
+import {
+  CloudProvider,
+  CloudConnection,
+  GCSConfig,
+  S3Config,
+  AzureConfig,
+} from '../../../types/frontend';
 import {
   useGetCloudConnections,
   useDeleteBucketConnection,
 } from '../../controllers';
 import { cloudStorageImages } from '../../../../assets/connectionIcons';
+import { generateDuplicateConnectionName } from '../../utils/connectionNaming';
 
 export const ExplorerConnections: React.FC = () => {
   const navigate = useNavigate();
@@ -101,26 +109,41 @@ export const ExplorerConnections: React.FC = () => {
     }
   };
 
-  const renderConnectionDetails = (connection: any) => {
+  const handleDuplicateConnection = (connection: CloudConnection) => {
+    const existingNames = (connectionsQuery.data || []).map((c) => c.name);
+    const newName = generateDuplicateConnectionName(
+      connection.name,
+      existingNames,
+    );
+
+    navigate('/app/cloud-explorer/new-connection', {
+      state: {
+        duplicateFrom: connection,
+        suggestedName: newName,
+      },
+    });
+  };
+
+  const renderConnectionDetails = (connection: CloudConnection) => {
     const { provider, config } = connection;
 
     switch (provider) {
       case 'gcs':
         return (
           <Typography variant="body2" color="text.secondary">
-            Project ID: {config.projectId}
+            Project ID: {(config as GCSConfig).projectId}
           </Typography>
         );
       case 'aws':
         return (
           <Typography variant="body2" color="text.secondary">
-            Region: {config.region}
+            Region: {(config as S3Config).region}
           </Typography>
         );
       case 'azure':
         return (
           <Typography variant="body2" color="text.secondary">
-            Account: {config.accountName}
+            Account: {(config as AzureConfig).accountName}
           </Typography>
         );
       default:
@@ -281,6 +304,14 @@ export const ExplorerConnections: React.FC = () => {
                       }
                     >
                       Edit
+                    </Button>
+                    <Button
+                      size="small"
+                      variant="outlined"
+                      startIcon={<ContentCopy />}
+                      onClick={() => handleDuplicateConnection(connection)}
+                    >
+                      Duplicate
                     </Button>
                   </Box>
                   <Box sx={{ display: 'flex', gap: 1 }}>
