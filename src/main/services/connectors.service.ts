@@ -12,6 +12,7 @@ import {
   DatabricksConnection,
   DBTConnection,
   DuckDBConnection,
+  DuckLakeConnectionConfig,
   ExecuteStatementType,
   KineticaConnection,
   PostgresConnection,
@@ -88,63 +89,97 @@ export default class ConnectorsService {
       case 'duckdb':
         return (
           conn1.database_path === (conn2 as DuckDBConnection).database_path &&
-          conn1.database === conn2.database &&
-          conn1.schema === conn2.schema
+          conn1.schema === (conn2 as DuckDBConnection).schema
+        );
+
+      case 'ducklake':
+        return (
+          conn1.instanceId === (conn2 as DuckLakeConnectionConfig).instanceId
         );
 
       case 'postgres':
         return (
-          conn1.host === (conn2 as PostgresConnection).host &&
-          conn1.port === (conn2 as PostgresConnection).port &&
-          conn1.database === conn2.database &&
-          conn1.username === (conn2 as PostgresConnection).username &&
-          conn1.schema === conn2.schema
+          (conn1 as PostgresConnection).host ===
+            (conn2 as PostgresConnection).host &&
+          (conn1 as PostgresConnection).port ===
+            (conn2 as PostgresConnection).port &&
+          (conn1 as PostgresConnection).database ===
+            (conn2 as PostgresConnection).database &&
+          (conn1 as PostgresConnection).username ===
+            (conn2 as PostgresConnection).username &&
+          (conn1 as PostgresConnection).schema ===
+            (conn2 as PostgresConnection).schema
         );
 
       case 'snowflake':
         return (
-          conn1.account === (conn2 as SnowflakeConnection).account &&
-          conn1.database === conn2.database &&
-          conn1.username === (conn2 as SnowflakeConnection).username &&
-          conn1.warehouse === (conn2 as SnowflakeConnection).warehouse &&
-          conn1.schema === conn2.schema
+          (conn1 as SnowflakeConnection).account ===
+            (conn2 as SnowflakeConnection).account &&
+          (conn1 as SnowflakeConnection).database ===
+            (conn2 as SnowflakeConnection).database &&
+          (conn1 as SnowflakeConnection).username ===
+            (conn2 as SnowflakeConnection).username &&
+          (conn1 as SnowflakeConnection).warehouse ===
+            (conn2 as SnowflakeConnection).warehouse &&
+          (conn1 as SnowflakeConnection).schema ===
+            (conn2 as SnowflakeConnection).schema
         );
 
       case 'bigquery':
         return (
-          conn1.project === (conn2 as BigQueryConnection).project &&
-          conn1.database === conn2.database &&
-          conn1.schema === conn2.schema &&
-          conn1.keyfile === (conn2 as BigQueryConnection).keyfile
+          (conn1 as BigQueryConnection).project ===
+            (conn2 as BigQueryConnection).project &&
+          (conn1 as BigQueryConnection).database ===
+            (conn2 as BigQueryConnection).database &&
+          (conn1 as BigQueryConnection).schema ===
+            (conn2 as BigQueryConnection).schema &&
+          (conn1 as BigQueryConnection).keyfile ===
+            (conn2 as BigQueryConnection).keyfile
         );
 
       case 'redshift':
         return (
-          conn1.host === (conn2 as RedshiftConnection).host &&
-          conn1.port === (conn2 as RedshiftConnection).port &&
-          conn1.database === conn2.database &&
-          conn1.username === (conn2 as RedshiftConnection).username &&
-          conn1.schema === conn2.schema
+          (conn1 as RedshiftConnection).host ===
+            (conn2 as RedshiftConnection).host &&
+          (conn1 as RedshiftConnection).port ===
+            (conn2 as RedshiftConnection).port &&
+          (conn1 as RedshiftConnection).database ===
+            (conn2 as RedshiftConnection).database &&
+          (conn1 as RedshiftConnection).username ===
+            (conn2 as RedshiftConnection).username &&
+          (conn1 as RedshiftConnection).schema ===
+            (conn2 as RedshiftConnection).schema
         );
 
       case 'databricks':
         return (
-          conn1.host === (conn2 as DatabricksConnection).host &&
-          conn1.httpPath === (conn2 as DatabricksConnection).httpPath &&
-          conn1.database === conn2.database &&
-          conn1.schema === conn2.schema
+          (conn1 as DatabricksConnection).host ===
+            (conn2 as DatabricksConnection).host &&
+          (conn1 as DatabricksConnection).httpPath ===
+            (conn2 as DatabricksConnection).httpPath &&
+          (conn1 as DatabricksConnection).database ===
+            (conn2 as DatabricksConnection).database &&
+          (conn1 as DatabricksConnection).schema ===
+            (conn2 as DatabricksConnection).schema
         );
 
       case 'kinetica':
         return (
-          conn1.host === (conn2 as KineticaConnection).host &&
-          conn1.port === (conn2 as KineticaConnection).port &&
-          conn1.useSSL === (conn2 as KineticaConnection).useSSL &&
-          conn1.database === conn2.database &&
-          conn1.username === (conn2 as KineticaConnection).username &&
-          conn1.schema === conn2.schema &&
-          conn1.timeout === (conn2 as KineticaConnection).timeout &&
-          conn1.bypassSslCertCheck ===
+          (conn1 as KineticaConnection).host ===
+            (conn2 as KineticaConnection).host &&
+          (conn1 as KineticaConnection).port ===
+            (conn2 as KineticaConnection).port &&
+          (conn1 as KineticaConnection).useSSL ===
+            (conn2 as KineticaConnection).useSSL &&
+          (conn1 as KineticaConnection).database ===
+            (conn2 as KineticaConnection).database &&
+          (conn1 as KineticaConnection).username ===
+            (conn2 as KineticaConnection).username &&
+          (conn1 as KineticaConnection).schema ===
+            (conn2 as KineticaConnection).schema &&
+          (conn1 as KineticaConnection).timeout ===
+            (conn2 as KineticaConnection).timeout &&
+          (conn1 as KineticaConnection).bypassSslCertCheck ===
             (conn2 as KineticaConnection).bypassSslCertCheck
         );
 
@@ -169,9 +204,8 @@ export default class ConnectorsService {
       case 'duckdb': {
         const duckConn = connection as DuckDBConnection;
         // Extract filename from path if available
-        const pathParts = duckConn.database_path.split('/');
-        const fileName = pathParts[pathParts.length - 1].replace('.duckdb', '');
-        baseName = fileName || duckConn.database;
+        const fileName = path.basename(duckConn.database_path, '.duckdb');
+        baseName = fileName || duckConn.name;
         break;
       }
       case 'postgres':
@@ -683,6 +717,17 @@ export default class ConnectorsService {
     projectName: string,
   ): Promise<string> {
     const jdbcUrl = await this.generateJdbcUrl(connection);
+    const isDuckDb = connection.type === 'duckdb';
+    const isDuckLake = connection.type === 'ducklake';
+    let databaseName: string;
+    if (isDuckDb) {
+      databaseName = this.extractDbNameFromPath(connection.short_database_path);
+    } else if (isDuckLake) {
+      databaseName = '';
+    } else {
+      databaseName = connection.database;
+    }
+    const schemaName = isDuckLake ? '' : connection.schema;
     // Removed BigQuery keyfile fetch/validation here
     // USER and PASSWORD only declared here
     const USER = `db-user-${connection.name}`;
@@ -695,11 +740,8 @@ export default class ConnectorsService {
       connections: [
         {
           name: projectName,
-          databaseName:
-            connection.type === 'duckdb'
-              ? this.extractDbNameFromPath(connection.short_database_path)
-              : connection.database,
-          schemaName: connection.schema,
+          databaseName,
+          schemaName,
           dbType: connection.type,
           url: jdbcUrl,
           // Only add userName/password for non-BigQuery, non-Databricks, non-DuckDB
@@ -841,11 +883,16 @@ export default class ConnectorsService {
     return {
       name: connection.name || project.name,
       dbType: connection.type,
-      databaseName:
-        connection.type === 'duckdb'
-          ? connection.database_path
-          : connection.database,
-      schemaName: connection.schema,
+      databaseName: (() => {
+        if (connection.type === 'duckdb') {
+          return connection.database_path;
+        }
+        if (connection.type === 'ducklake') {
+          return '';
+        }
+        return connection.database;
+      })(),
+      schemaName: connection.type === 'ducklake' ? '' : connection.schema,
       url: rosettaJdbcUrl,
       ...(connection.type !== 'databricks' &&
         connection.type !== 'duckdb' &&

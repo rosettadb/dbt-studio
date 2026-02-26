@@ -18,6 +18,7 @@ import {
   DuckLakeStorageConfig,
   DuckLakeSnapshotParams,
   DuckLakePaginatedResult,
+  DuckLakeSchemaInfo,
 } from '../../types/duckLake';
 
 export namespace DuckLakeService {
@@ -304,6 +305,19 @@ export namespace DuckLakeService {
     return window.electron.ipcRenderer.invoke(
       'ducklake:query:execute',
       request,
+    );
+  }
+
+  export async function cancelQuery(queryId: string): Promise<void> {
+    return window.electron.ipcRenderer.invoke('ducklake:query:cancel', queryId);
+  }
+
+  export async function extractSchema(
+    instanceId: string,
+  ): Promise<DuckLakeSchemaInfo> {
+    return window.electron.ipcRenderer.invoke(
+      'ducklake:schema:extract',
+      instanceId,
     );
   }
 

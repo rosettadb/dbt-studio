@@ -240,6 +240,9 @@ export async function updateMainConf(
   projectName: string,
   connection: ConnectionInput,
 ): Promise<void> {
+  if (connection.type === 'ducklake') {
+    return;
+  }
   const mainConfPath = path.join(projectPath, 'rosetta', 'main.conf');
 
   // Check if file exists
@@ -342,6 +345,9 @@ export async function updateProjectConfigFiles(
   projectName: string,
   connection: ConnectionInput,
 ): Promise<{ success: boolean; errors: string[] }> {
+  if (connection.type === 'ducklake') {
+    return { success: true, errors: [] };
+  }
   const errors: string[] = [];
 
   // Update profiles.yml

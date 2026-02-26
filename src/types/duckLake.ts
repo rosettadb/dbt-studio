@@ -406,18 +406,48 @@ export interface DuckLakeMaintenanceTask {
 // Query and Data Access Types
 export interface DuckLakeQueryRequest {
   instanceId: string;
-  sql: string;
+  query: string; // Changed from 'sql' to match SQL Editor convention
+  queryId?: string; // For query cancellation tracking
   snapshotId?: string; // For time travel queries
   limit?: number;
   offset?: number;
 }
 
 export interface DuckLakeQueryResult {
-  columns: Array<{ name: string; type: string }>;
-  rows: any[][];
-  totalRows?: number;
-  executionTime: number;
-  snapshotId?: string;
+  success: boolean;
+  data?: any[]; // Changed from 'rows' to match QueryResponseType
+  fields?: Array<{ name: string; type: string | number }>; // Changed from 'columns', support both string and number types
+  rowCount?: number; // Changed from 'totalRows' to match QueryResponseType
+  duration?: number; // Changed from 'executionTime' to match QueryResponseType
+  error?: string;
+  // Additional metadata
+  isCommand?: boolean; // For DDL/DML operations
+  commandType?: 'SELECT' | 'DDL' | 'DML';
+  snapshotId?: string; // For time travel queries
+}
+
+// Schema Extraction Types (Phase 6)
+export interface DuckLakeSchemaColumn {
+  name: string;
+  type: string;
+  position: number;
+}
+
+export interface DuckLakeSchemaTable {
+  name: string;
+  type: string;
+  columns: DuckLakeSchemaColumn[];
+}
+
+export interface DuckLakeSchema {
+  name: string;
+  tables: DuckLakeSchemaTable[];
+}
+
+export interface DuckLakeSchemaInfo {
+  schemas: DuckLakeSchema[];
+  functions: string[];
+  systemTables: string[];
 }
 
 // Configuration and Settings Types

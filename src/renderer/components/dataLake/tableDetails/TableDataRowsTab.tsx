@@ -124,7 +124,7 @@ export const TableDataRowsTab: React.FC<TableDataRowsTabProps> = ({
     fileFilters: { name: string; extensions: string[] }[],
     options: string = '',
   ) => {
-    if (!queryResult || !queryResult.rows.length) return;
+    if (!queryResult || !queryResult.data?.length) return;
 
     try {
       const result = await window.electron.ipcRenderer.invoke(
@@ -147,7 +147,7 @@ export const TableDataRowsTab: React.FC<TableDataRowsTabProps> = ({
       executeQuery(
         {
           instanceId,
-          sql: exportQuery,
+          query: exportQuery,
         },
         {
           onSuccess: () => {
@@ -211,15 +211,15 @@ export const TableDataRowsTab: React.FC<TableDataRowsTabProps> = ({
     executeQuery(
       {
         instanceId,
-        sql,
+        query: sql,
         limit: rowsPerPage,
         offset: page * rowsPerPage,
       },
       {
         onSuccess: (data) => {
           setQueryResult(data);
-          if (data.totalRows !== undefined) {
-            setActualRowCount(data.totalRows);
+          if (data.rowCount !== undefined) {
+            setActualRowCount(data.rowCount);
           }
           setLoadingData(false);
         },
@@ -1107,7 +1107,7 @@ WHERE NOT (${whereClause});`;
               startIcon={<DownloadIcon />}
               endIcon={<ArrowDropDownIcon />}
               onClick={handleExportMenuOpen}
-              disabled={!queryResult || queryResult.rows.length === 0}
+              disabled={!queryResult || !queryResult.data?.length}
             >
               Export
             </Button>
@@ -1174,7 +1174,7 @@ WHERE NOT (${whereClause});`;
             <Table stickyHeader size="small">
               <TableHead>
                 <TableRow>
-                  {queryResult?.columns.map((col) => (
+                  {queryResult?.fields?.map((col) => (
                     <TableCell
                       key={col.name}
                       sx={{
@@ -1231,7 +1231,7 @@ WHERE NOT (${whereClause});`;
                 </TableRow>
               </TableHead>
               <TableBody>
-                {queryResult?.rows.map((row, rowIndex) => (
+                {queryResult?.data?.map((row, rowIndex) => (
                   <TableRow
                     key={rowIndex}
                     hover
@@ -1241,7 +1241,7 @@ WHERE NOT (${whereClause});`;
                       },
                     }}
                   >
-                    {row.map((cell: any, cellIndex: number) => (
+                    {Object.values(row).map((cell: any, cellIndex: number) => (
                       <TableCell
                         key={cellIndex}
                         sx={{
@@ -1270,10 +1270,10 @@ WHERE NOT (${whereClause});`;
                   </TableRow>
                 ))}
                 {!loadingData &&
-                  (!queryResult || queryResult.rows.length === 0) && (
+                  (!queryResult || !queryResult.data?.length) && (
                     <TableRow>
                       <TableCell
-                        colSpan={queryResult ? queryResult.columns.length : 1}
+                        colSpan={queryResult?.fields?.length ?? 1}
                         align="center"
                         sx={{ py: 4 }}
                       >

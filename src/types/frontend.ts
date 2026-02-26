@@ -46,6 +46,9 @@ export type QueryHistoryType = {
   // Connection-based fields (new)
   connectionId?: string;
   connectionName?: string;
+  // DuckLake-specific fields (new)
+  isDuckLake?: boolean;
+  instanceId?: string;
 };
 
 export type CompletionItem = Monaco.languages.CompletionItem;
