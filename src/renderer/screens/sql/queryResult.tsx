@@ -501,6 +501,7 @@ export const QueryResult: React.FC<Props> = ({ results, exportContext }) => {
         id="query-result"
         dataTestId="sql-results-table"
         name=""
+        showSearch={false}
         toolbarContent={
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
             {results.duration !== undefined && (
