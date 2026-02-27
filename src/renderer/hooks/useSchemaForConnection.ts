@@ -35,10 +35,20 @@ export function useSchemaForConnection(connectionId: string | undefined) {
             tables.push({
               name: table.name,
               schema: schema.name,
+              type: 'TABLE',
               columns: table.columns.map((col) => ({
                 name: col.name,
+                typeName: col.type,
                 type: col.type,
                 nullable: true,
+                ordinalPosition: 0,
+                primaryKeySequenceId: 0,
+                columnDisplaySize: 0,
+                scale: 0,
+                precision: 0,
+                columnProperties: [],
+                autoincrement: false,
+                primaryKey: false,
               })),
             });
           });

@@ -9,7 +9,7 @@ import React, { useRef, useEffect, useState } from 'react';
 import { Box, CircularProgress, Typography } from '@mui/material';
 import Editor, { OnMount, loader } from '@monaco-editor/react';
 import { editor } from 'monaco-editor';
-import { NotebookCell } from '../../../../types/notebooks';
+import { NotebookCell } from '../../../types/notebooks';
 import { useSchemaForConnection, useMonacoAutocomplete } from '../../hooks';
 
 // Configure Monaco loader for Electron

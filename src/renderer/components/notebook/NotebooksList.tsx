@@ -40,7 +40,7 @@ import {
   useDeleteNotebook,
   useUpdateNotebook,
 } from '../../controllers/notebooks.controller';
-import { NotebookCell } from '../../../../types/notebooks';
+import { NotebookCell } from '../../../types/notebooks';
 
 interface NotebooksListProps {
   instanceId: string;
@@ -70,7 +70,7 @@ export const NotebooksList: React.FC<NotebooksListProps> = ({
 
     try {
       await createNotebook.mutateAsync({
-        instanceId,
+        connectionId: instanceId,
         name: newNotebookName.trim(),
         description: newNotebookDescription.trim() || undefined,
       });
@@ -91,7 +91,7 @@ export const NotebooksList: React.FC<NotebooksListProps> = ({
     try {
       // Create notebook
       const notebook = await createNotebook.mutateAsync({
-        instanceId,
+        connectionId: instanceId,
         name: 'Example Notebook',
         description: 'Basic DuckDB commands and queries',
       });
@@ -151,7 +151,7 @@ export const NotebooksList: React.FC<NotebooksListProps> = ({
 
       // Update notebook with cells
       await updateNotebook.mutateAsync({
-        instanceId,
+        connectionId: instanceId,
         notebookId: notebook.id,
         cells: exampleCells,
       });
@@ -173,7 +173,7 @@ export const NotebooksList: React.FC<NotebooksListProps> = ({
 
     try {
       await deleteNotebook.mutateAsync({
-        instanceId,
+        connectionId: instanceId,
         notebookId: menuAnchor.notebookId,
       });
       setMenuAnchor(null);
@@ -204,7 +204,9 @@ export const NotebooksList: React.FC<NotebooksListProps> = ({
 
   if (error) {
     return (
-      <Alert severity="error">Failed to load notebooks: {error.message}</Alert>
+      <Alert severity="error">
+        Failed to load notebooks: {(error as Error).message}
+      </Alert>
     );
   }
 

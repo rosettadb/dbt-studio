@@ -111,7 +111,7 @@ export const OutputPanel: React.FC<OutputPanelProps> = ({
   const queryResponse: QueryResponseType = {
     success: true,
     data: output.data || [],
-    fields: output.columns?.map((col) => ({ name: col, type: 'text' })) || [],
+    fields: output.columns?.map((col) => ({ name: col, type: 0 })) || [],
     rowCount: output.rowCount || output.data?.length || 0,
     duration: output.executionTime,
     isCommand: false,

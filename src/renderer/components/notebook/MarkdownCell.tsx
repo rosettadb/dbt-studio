@@ -9,7 +9,7 @@ import {
   Edit as EditIcon,
   Visibility as PreviewIcon,
 } from '@mui/icons-material';
-import { NotebookCell } from '../../../../types/notebooks';
+import { NotebookCell } from '../../../types/notebooks';
 
 interface MarkdownCellProps {
   cell: NotebookCell;
@@ -102,7 +102,7 @@ export const MarkdownCell: React.FC<MarkdownCellProps> = ({
               }}
             >
               {/* Simple markdown rendering - can be enhanced with a proper markdown library */}
-              {cell.content.split('\n').map((line, index) => {
+              {cell.content.split('\n').map((line: string, index: number) => {
                 // Headers
                 if (line.startsWith('### ')) {
                   return (
