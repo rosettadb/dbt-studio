@@ -1,4 +1,10 @@
-import React, { useState, useCallback, useMemo, useContext } from 'react';
+import React, {
+  useState,
+  useCallback,
+  useMemo,
+  useContext,
+  useEffect,
+} from 'react';
 import {
   Box,
   FormControl,
@@ -15,6 +21,7 @@ import {
   DialogActions,
   TextField,
   IconButton,
+  CircularProgress,
 } from '@mui/material';
 import {
   Add,
@@ -48,6 +55,10 @@ import { NotebookTabManager } from '../../components/notebook/NotebookTabManager
 import { NotebookEditor } from '../../components/notebook/NotebookEditor';
 import { Table, SupportedConnectionTypes } from '../../../types/backend';
 import useNotebookTabManager from '../../hooks/useNotebookTabManager';
+import {
+  useNotebookConnectionState,
+  useNotebookSidebarState,
+} from '../../hooks';
 
 const Notebooks = () => {
   const theme = useTheme();
@@ -58,12 +69,30 @@ const Notebooks = () => {
   const { data: connections = [] } = useGetConnections();
   const { data: duckLakeInstances = [] } = useDuckLakeInstances();
 
-  // Active connection state
-  const [activeConnectionId, setActiveConnectionId] = useState<string>('');
+  // Use persistence hooks
+  const {
+    activeConnectionId,
+    setActiveConnectionId,
+    isHydrated: isConnectionHydrated,
+  } = useNotebookConnectionState();
 
-  // Schema state
-  const [schema, setSchema] = useState<Table[]>([]);
-  const [isLoadingSchema, setIsLoadingSchema] = useState(false);
+  const {
+    showArchived,
+    setShowArchived,
+    isHydrated: isSidebarHydrated,
+  } = useNotebookSidebarState();
+
+  const notebookTabManager = useNotebookTabManager();
+
+  // Wait for all hydration to complete
+  const isFullyHydrated =
+    isConnectionHydrated && isSidebarHydrated && notebookTabManager.isHydrated;
+
+  // Schema state - cached per connection (SQL Editor pattern)
+  const [tabSchemas, setTabSchemas] = useState<Record<string, Table[]>>({});
+  const [loadingSchemas, setLoadingSchemas] = useState<Record<string, boolean>>(
+    {},
+  );
 
   // Notebooks state - fetch from backend
   const { data: notebooks = [], isLoading: isLoadingNotebooks } =
@@ -73,7 +102,6 @@ const Notebooks = () => {
   const duplicateNotebook = useDuplicateNotebook();
 
   // Archived notebooks state
-  const [showArchived, setShowArchived] = useState(false);
   const { data: archivedNotebooks = {} } = useArchivedNotebooks();
   const restoreNotebook = useRestoreNotebook();
   const deleteArchivedNotebook = useDeleteArchivedNotebook();
@@ -109,9 +137,6 @@ const Notebooks = () => {
     string | null
   >(null);
 
-  // Notebook tab manager
-  const notebookTabManager = useNotebookTabManager();
-
   // Get active connection details
   const activeConnection = useMemo(() => {
     if (activeConnectionId.startsWith('ducklake-')) {
@@ -130,94 +155,133 @@ const Notebooks = () => {
     return connections.find((c) => c.id === activeConnectionId);
   }, [connections, duckLakeInstances, activeConnectionId]);
 
-  // Load schema for connection
-  const loadSchema = useCallback(async (connectionId: string) => {
-    setIsLoadingSchema(true);
-    try {
-      if (connectionId.startsWith('ducklake-')) {
-        // DuckLake schema extraction
-        const instanceId = connectionId.replace('ducklake-', '');
-        const duckLakeSchema = await DuckLakeService.extractSchema(instanceId);
+  // Get schema for active connection from cache
+  const activeSchema = activeConnectionId
+    ? tabSchemas[activeConnectionId] || []
+    : [];
+  const isLoadingSchema = activeConnectionId
+    ? (loadingSchemas[activeConnectionId] ?? false)
+    : false;
 
-        // Convert DuckLake schema to Table[] format
-        const tables: Table[] = [];
-        duckLakeSchema.schemas.forEach((schemaInfo) => {
-          schemaInfo.tables.forEach((table) => {
-            tables.push({
-              name: table.name,
-              type: table.type || 'TABLE',
-              schema: schemaInfo.name,
-              columns:
-                table.columns?.map((col, index) => ({
-                  name: col.name,
-                  typeName: col.type,
-                  type: col.type,
-                  ordinalPosition: index + 1,
-                  primaryKeySequenceId: 0,
-                  columnDisplaySize: 0,
-                  scale: 0,
-                  precision: 0,
-                  columnProperties: [],
-                  autoincrement: false,
-                  nullable: true,
-                  defaultValue: undefined,
-                  primaryKey: false,
-                  foreignKeys: [],
-                })) || [],
+  // Fetch schema for a connection (with caching)
+  const fetchSchemaForConnection = useCallback(
+    async (connectionId: string) => {
+      // Skip if already loading
+      if (loadingSchemas[connectionId]) return;
+
+      // Skip if already cached
+      if (tabSchemas[connectionId]) return;
+
+      setLoadingSchemas((prev) => ({ ...prev, [connectionId]: true }));
+
+      try {
+        if (connectionId.startsWith('ducklake-')) {
+          // DuckLake schema extraction
+          const instanceId = connectionId.replace('ducklake-', '');
+          const duckLakeSchema =
+            await DuckLakeService.extractSchema(instanceId);
+
+          // Convert DuckLake schema to Table[] format
+          const tables: Table[] = [];
+          duckLakeSchema.schemas.forEach((schemaInfo) => {
+            schemaInfo.tables.forEach((table) => {
+              tables.push({
+                name: table.name,
+                type: table.type || 'TABLE',
+                schema: schemaInfo.name,
+                columns:
+                  table.columns?.map((col, index) => ({
+                    name: col.name,
+                    typeName: col.type,
+                    type: col.type,
+                    ordinalPosition: index + 1,
+                    primaryKeySequenceId: 0,
+                    columnDisplaySize: 0,
+                    scale: 0,
+                    precision: 0,
+                    columnProperties: [],
+                    autoincrement: false,
+                    nullable: true,
+                    defaultValue: undefined,
+                    primaryKey: false,
+                    foreignKeys: [],
+                  })) || [],
+              });
             });
           });
-        });
 
-        setSchema(tables);
-      } else {
-        // Regular DB connection schema extraction
-        const result =
-          await connectorsServices.extractSchemaFromConnection(connectionId);
-        if (result.error) {
-          // eslint-disable-next-line no-console
-          console.error('Failed to fetch schema:', result.error);
-          setSchema([]);
+          setTabSchemas((prev) => ({ ...prev, [connectionId]: tables }));
         } else {
-          setSchema(result.tables);
+          // Regular DB connection schema extraction
+          const result =
+            await connectorsServices.extractSchemaFromConnection(connectionId);
+          if (result.error) {
+            // eslint-disable-next-line no-console
+            console.error('Failed to fetch schema:', result.error);
+            setTabSchemas((prev) => ({ ...prev, [connectionId]: [] }));
+          } else {
+            setTabSchemas((prev) => ({
+              ...prev,
+              [connectionId]: result.tables,
+            }));
+          }
         }
+      } catch (error: any) {
+        // eslint-disable-next-line no-console
+        console.error('Failed to fetch schema:', error);
+        setTabSchemas((prev) => ({ ...prev, [connectionId]: [] }));
+      } finally {
+        setLoadingSchemas((prev) => ({ ...prev, [connectionId]: false }));
       }
-    } catch (error: any) {
-      // eslint-disable-next-line no-console
-      console.error('Failed to fetch schema:', error);
-      setSchema([]);
-    } finally {
-      setIsLoadingSchema(false);
+    },
+    [loadingSchemas, tabSchemas],
+  );
+
+  // Auto-fetch schema when connection changes
+  useEffect(() => {
+    if (
+      activeConnectionId &&
+      !tabSchemas[activeConnectionId] &&
+      !loadingSchemas[activeConnectionId]
+    ) {
+      fetchSchemaForConnection(activeConnectionId);
     }
-  }, []);
+  }, [
+    activeConnectionId,
+    tabSchemas,
+    loadingSchemas,
+    fetchSchemaForConnection,
+  ]);
 
   // Handle connection selection
   const handleConnectionSelect = useCallback(
     (connectionId: string) => {
-      // Close all tabs from previous connection
-      if (activeConnectionId) {
+      // Close all tabs when manually switching connections
+      // (Notebooks are connection-specific, unlike SQL Editor where tabs are independent queries)
+      if (activeConnectionId && activeConnectionId !== connectionId) {
         notebookTabManager.closeTabsByConnection(activeConnectionId);
       }
-
-      // Clear previous connection state
-      setSchema([]);
 
       // Set new connection
       setActiveConnectionId(connectionId);
 
-      // Load schema for new connection
-      if (connectionId) {
-        loadSchema(connectionId);
-      }
+      // Schema will auto-load via useEffect if not cached
     },
-    [loadSchema, activeConnectionId, notebookTabManager],
+    [setActiveConnectionId, activeConnectionId, notebookTabManager],
   );
 
   // Handle schema refresh
   const handleRefreshSchema = useCallback(() => {
     if (activeConnectionId) {
-      loadSchema(activeConnectionId);
+      // Clear cached schema and refetch
+      setTabSchemas((prev) => {
+        const updated = { ...prev };
+        delete updated[activeConnectionId];
+        return updated;
+      });
+      fetchSchemaForConnection(activeConnectionId);
     }
-  }, [activeConnectionId, loadSchema]);
+  }, [activeConnectionId, fetchSchemaForConnection]);
 
   // Helper: Check if connection exists
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
@@ -497,6 +561,24 @@ const Notebooks = () => {
     console.log('Exported', notebooks.length, 'notebooks');
   }, [notebooks, activeConnectionId, activeConnection]);
 
+  // Show loading state while hydrating
+  if (!isFullyHydrated) {
+    return (
+      <AppLayout data-testid="notebooks-screen">
+        <Box
+          sx={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            height: '100%',
+          }}
+        >
+          <CircularProgress />
+        </Box>
+      </AppLayout>
+    );
+  }
+
   return (
     <AppLayout
       data-testid="notebooks-screen"
@@ -764,7 +846,7 @@ const Notebooks = () => {
                   : activeConnection?.connection
                       .type) as SupportedConnectionTypes
               }
-              schema={schema}
+              schema={activeSchema}
               isLoadingSchema={isLoadingSchema}
               notebooks={notebooks}
               isLoadingNotebooks={isLoadingNotebooks}
