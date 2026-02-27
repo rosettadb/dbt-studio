@@ -19,7 +19,7 @@ import {
   Clear,
   DragIndicator,
 } from '@mui/icons-material';
-import { NotebookCell as NotebookCellType } from '../../../../types/notebooks';
+import { NotebookCell as NotebookCellType } from '../../../types/notebooks';
 import { SQLCell } from './SQLCell';
 import { MarkdownCell } from './MarkdownCell';
 import { OutputPanel } from './OutputPanel';
@@ -27,7 +27,7 @@ import { OutputPanel } from './OutputPanel';
 interface NotebookCellProps {
   cell: NotebookCellType;
   index: number;
-  instanceId: string; // Added for schema autocomplete (Phase 4)
+  connectionId: string; // Changed from instanceId to connectionId for consistency
   isExecuting: boolean;
   onRun: () => void;
   onDelete: () => void;
@@ -42,7 +42,7 @@ type SectionFilter = 'all' | 'code' | 'output';
 export const NotebookCell: React.FC<NotebookCellProps> = ({
   cell,
   index,
-  instanceId,
+  connectionId,
   isExecuting,
   onRun,
   onDelete,
@@ -202,6 +202,19 @@ export const NotebookCell: React.FC<NotebookCellProps> = ({
           )}
         </IconButton>
 
+        {/* Run Button - Moved to beginning */}
+        {!collapsed && cell.type === 'sql' && (
+          <IconButton
+            size="small"
+            onClick={onRun}
+            disabled={isExecuting}
+            color="primary"
+            sx={{ p: 0.25 }}
+          >
+            <PlayArrow sx={{ fontSize: 18 }} />
+          </IconButton>
+        )}
+
         {/* Cell Type Badge */}
         <Chip
           label={cell.type.toUpperCase()}
@@ -286,19 +299,6 @@ export const NotebookCell: React.FC<NotebookCellProps> = ({
 
         <Box sx={{ flex: 1 }} />
 
-        {/* Run Button */}
-        {!collapsed && cell.type === 'sql' && (
-          <IconButton
-            size="small"
-            onClick={onRun}
-            disabled={isExecuting}
-            color="primary"
-            sx={{ p: 0.25 }}
-          >
-            <PlayArrow sx={{ fontSize: 18 }} />
-          </IconButton>
-        )}
-
         {/* More Menu */}
         <IconButton
           size="small"
@@ -339,7 +339,7 @@ export const NotebookCell: React.FC<NotebookCellProps> = ({
               {cell.type === 'sql' ? (
                 <SQLCell
                   cell={cell}
-                  instanceId={instanceId}
+                  connectionId={connectionId}
                   isExecuting={isExecuting}
                   onRun={onRun}
                   onUpdate={onUpdate}
@@ -357,15 +357,23 @@ export const NotebookCell: React.FC<NotebookCellProps> = ({
               <Box
                 onMouseEnter={() => setIsHoveringOutput(true)}
                 onMouseLeave={() => setIsHoveringOutput(false)}
-                sx={{ position: 'relative' }}
+                sx={{
+                  position: 'relative',
+                  width: '100%',
+                  overflow: 'hidden',
+                }}
               >
                 <Box
                   sx={{
                     height: outputHeight ? `${outputHeight}px` : 'auto',
-                    overflow: outputHeight ? 'auto' : 'visible',
+                    overflowY: outputHeight ? 'auto' : 'visible',
+                    width: '100%',
                   }}
                 >
-                  <OutputPanel output={cell.output} cellId={cell.id} />
+                  <OutputPanel
+                    output={cell.output}
+                    connectionId={connectionId}
+                  />
                 </Box>
 
                 {/* Output Resize Handle - Only visible on hover or while dragging */}

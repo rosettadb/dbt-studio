@@ -45,7 +45,7 @@ const CustomTable = <T,>({
   }, [page, perPage, filteredRows]);
 
   return (
-    <div style={{ position: 'relative' }}>
+    <div style={{ position: 'relative', width: '100%', overflow: 'hidden' }}>
       {loading && (
         <div
           style={{
@@ -74,6 +74,8 @@ const CustomTable = <T,>({
           ...(containerStyle ?? {}),
           opacity: loading ? 0.4 : 1,
           pointerEvents: loading ? 'none' : 'auto',
+          overflowX: 'auto',
+          width: '100%',
         }}
       >
         <Table data-testid={dataTestId} stickyHeader size="small">

@@ -3,7 +3,7 @@
  * Main container for notebook editing with cells and toolbar
  */
 
-import React, { useState, useCallback, useEffect } from 'react';
+import React, { useState, useCallback, useEffect, useRef } from 'react';
 import {
   Box,
   Button,
@@ -62,6 +62,26 @@ export const NotebookEditor: React.FC<NotebookEditorProps> = ({
   const [renameDialogOpen, setRenameDialogOpen] = useState(false);
   const [newNotebookName, setNewNotebookName] = useState('');
 
+  // Local state for cells to enable immediate UI updates
+  const [localCells, setLocalCells] = useState<NotebookCellType[]>([]);
+  const updateTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Sync local cells with notebook data
+  useEffect(() => {
+    if (notebook?.cells) {
+      setLocalCells(notebook.cells);
+    }
+  }, [notebook?.cells]);
+
+  // Cleanup timeout on unmount
+  useEffect(() => {
+    return () => {
+      if (updateTimeoutRef.current) {
+        clearTimeout(updateTimeoutRef.current);
+      }
+    };
+  }, []);
+
   const handleSave = useCallback(() => {
     // Notebook is auto-saved on every change, so this is just a visual confirmation
     // eslint-disable-next-line no-console
@@ -112,30 +132,49 @@ export const NotebookEditor: React.FC<NotebookEditorProps> = ({
         id: uuidv4(),
         type,
         content: '',
-        order: notebook.cells.length,
+        order: localCells.length,
       };
 
+      const updatedCells = [...localCells, newCell];
+
+      // Update local state immediately
+      setLocalCells(updatedCells);
+
+      // Update backend
       updateNotebook.mutate({
         connectionId,
         notebookId,
-        cells: [...notebook.cells, newCell],
+        cells: updatedCells,
       });
     },
-    [notebook, connectionId, notebookId, updateNotebook],
+    [notebook, localCells, connectionId, notebookId, updateNotebook],
   );
 
   const handleUpdateCell = useCallback(
     (cellId: string, content: string) => {
       if (!notebook) return;
 
-      const updatedCells = notebook.cells.map((cell) =>
-        cell.id === cellId ? { ...cell, content } : cell,
-      );
+      // Update local state immediately for responsive UI
+      setLocalCells((prevCells) => {
+        const updatedCells = prevCells.map((cell) =>
+          cell.id === cellId ? { ...cell, content } : cell,
+        );
 
-      updateNotebook.mutate({
-        connectionId,
-        notebookId,
-        cells: updatedCells,
+        // Clear existing timeout
+        if (updateTimeoutRef.current) {
+          clearTimeout(updateTimeoutRef.current);
+        }
+
+        // Debounce the API call (500ms delay)
+        updateTimeoutRef.current = setTimeout(() => {
+          updateNotebook.mutate({
+            connectionId,
+            notebookId,
+            cells: updatedCells,
+          });
+        }, 500);
+
+        return updatedCells;
       });
     },
     [connectionId, notebook, notebookId, updateNotebook],
@@ -145,24 +184,28 @@ export const NotebookEditor: React.FC<NotebookEditorProps> = ({
     (cellId: string) => {
       if (!notebook) return;
 
-      const updatedCells = notebook.cells
+      const updatedCells = localCells
         .filter((cell) => cell.id !== cellId)
         .map((cell, index) => ({ ...cell, order: index }));
 
+      // Update local state immediately
+      setLocalCells(updatedCells);
+
+      // Update backend
       updateNotebook.mutate({
         connectionId,
         notebookId,
         cells: updatedCells,
       });
     },
-    [connectionId, notebook, notebookId, updateNotebook],
+    [connectionId, notebook, notebookId, updateNotebook, localCells],
   );
 
   const handleDuplicateCell = useCallback(
     (cellId: string) => {
       if (!notebook) return;
 
-      const cellToDuplicate = notebook.cells.find((c) => c.id === cellId);
+      const cellToDuplicate = localCells.find((c) => c.id === cellId);
       if (!cellToDuplicate) return;
 
       const newCell: NotebookCellType = {
@@ -173,18 +216,22 @@ export const NotebookEditor: React.FC<NotebookEditorProps> = ({
       };
 
       const updatedCells = [
-        ...notebook.cells.slice(0, cellToDuplicate.order + 1),
+        ...localCells.slice(0, cellToDuplicate.order + 1),
         newCell,
-        ...notebook.cells.slice(cellToDuplicate.order + 1),
+        ...localCells.slice(cellToDuplicate.order + 1),
       ].map((cell, index) => ({ ...cell, order: index }));
 
+      // Update local state immediately
+      setLocalCells(updatedCells);
+
+      // Update backend
       updateNotebook.mutate({
         connectionId,
         notebookId,
         cells: updatedCells,
       });
     },
-    [connectionId, notebook, notebookId, updateNotebook],
+    [connectionId, notebook, notebookId, updateNotebook, localCells],
   );
 
   // Drag-and-drop cell reordering
@@ -196,7 +243,7 @@ export const NotebookEditor: React.FC<NotebookEditorProps> = ({
       if (source.index === destination.index) return;
 
       // Reorder cells
-      const reorderedCells = Array.from(notebook.cells);
+      const reorderedCells = Array.from(localCells);
       const [movedCell] = reorderedCells.splice(source.index, 1);
       reorderedCells.splice(destination.index, 0, movedCell);
 
@@ -206,6 +253,9 @@ export const NotebookEditor: React.FC<NotebookEditorProps> = ({
         order: index,
       }));
 
+      // Update local state immediately
+      setLocalCells(updatedCells);
+
       // Save to backend
       updateNotebook.mutate({
         connectionId,
@@ -213,24 +263,28 @@ export const NotebookEditor: React.FC<NotebookEditorProps> = ({
         cells: updatedCells,
       });
     },
-    [connectionId, notebook, notebookId, updateNotebook],
+    [connectionId, notebook, notebookId, updateNotebook, localCells],
   );
 
   const handleClearOutput = useCallback(
     (cellId: string) => {
       if (!notebook) return;
 
-      const updatedCells = notebook.cells.map((cell) =>
+      const updatedCells = localCells.map((cell) =>
         cell.id === cellId ? { ...cell, output: undefined } : cell,
       );
 
+      // Update local state immediately
+      setLocalCells(updatedCells);
+
+      // Update backend
       updateNotebook.mutate({
         connectionId,
         notebookId,
         cells: updatedCells,
       });
     },
-    [connectionId, notebook, notebookId, updateNotebook],
+    [connectionId, notebook, notebookId, updateNotebook, localCells],
   );
 
   const handleRunCell = useCallback(
@@ -383,7 +437,7 @@ export const NotebookEditor: React.FC<NotebookEditorProps> = ({
   }
 
   return (
-    <Box sx={{ height: '100vh', display: 'flex', flexDirection: 'column' }}>
+    <Box sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
       {/* Toolbar */}
       <NotebookToolbar
         notebook={notebook}
@@ -394,11 +448,24 @@ export const NotebookEditor: React.FC<NotebookEditorProps> = ({
         onClone={handleClone}
         onDeleteAllCells={handleDeleteAllCells}
         onDeleteNotebook={handleDeleteNotebook}
+        onAddCell={() => handleAddCell('sql')}
+        onClearOutputs={() => {
+          const updatedCells = localCells.map((cell) => ({
+            ...cell,
+            output: undefined,
+          }));
+          setLocalCells(updatedCells);
+          updateNotebook.mutate({
+            connectionId,
+            notebookId,
+            cells: updatedCells,
+          });
+        }}
       />
 
       {/* Cells */}
-      <Box sx={{ flex: 1, overflow: 'auto', p: 3 }}>
-        {notebook.cells.length === 0 ? (
+      <Box sx={{ flex: 1, overflow: 'hidden' }}>
+        {localCells.length === 0 ? (
           <Box
             sx={{
               display: 'flex',
@@ -407,6 +474,7 @@ export const NotebookEditor: React.FC<NotebookEditorProps> = ({
               justifyContent: 'center',
               height: '100%',
               gap: 2,
+              p: 3,
             }}
           >
             <Typography variant="h6" color="text.secondary">
@@ -433,76 +501,80 @@ export const NotebookEditor: React.FC<NotebookEditorProps> = ({
             </Box>
           </Box>
         ) : (
-          <>
-            <DragDropContext onDragEnd={handleDragEnd}>
-              <Droppable droppableId="notebook-cells">
-                {(droppableProvided) => (
-                  <Box
-                    ref={droppableProvided.innerRef}
-                    // eslint-disable-next-line react/jsx-props-no-spreading
-                    {...droppableProvided.droppableProps}
-                  >
-                    {notebook.cells
-                      .sort((a, b) => a.order - b.order)
-                      .map((cell, index) => (
-                        <Draggable
-                          key={cell.id}
-                          draggableId={cell.id}
-                          index={index}
-                        >
-                          {(draggableProvided, snapshot) => (
-                            <Box
-                              ref={draggableProvided.innerRef}
-                              // eslint-disable-next-line react/jsx-props-no-spreading
-                              {...draggableProvided.draggableProps}
-                              sx={{
-                                opacity: snapshot.isDragging ? 0.8 : 1,
-                                transform: snapshot.isDragging
-                                  ? 'rotate(2deg)'
-                                  : 'none',
-                              }}
-                            >
-                              <NotebookCell
-                                cell={cell}
-                                index={index}
-                                instanceId={connectionId}
-                                isExecuting={
-                                  executingCells.has(cell.id) || isRunningAll
-                                }
-                                onRun={() =>
-                                  handleRunCell(cell.id, cell.content)
-                                }
-                                onUpdate={(content: string) =>
-                                  handleUpdateCell(cell.id, content)
-                                }
-                                onDelete={() => handleDeleteCell(cell.id)}
-                                onDuplicate={() => handleDuplicateCell(cell.id)}
-                                onClearOutput={() => handleClearOutput(cell.id)}
-                                dragHandleProps={
-                                  draggableProvided.dragHandleProps
-                                }
-                              />
-                            </Box>
-                          )}
-                        </Draggable>
-                      ))}
-                    {droppableProvided.placeholder}
-                  </Box>
-                )}
-              </Droppable>
-            </DragDropContext>
+          <DragDropContext onDragEnd={handleDragEnd}>
+            <Droppable droppableId="notebook-cells">
+              {(droppableProvided) => (
+                <Box
+                  ref={droppableProvided.innerRef}
+                  // eslint-disable-next-line react/jsx-props-no-spreading
+                  {...droppableProvided.droppableProps}
+                  sx={{ overflowY: 'auto', flex: 1, p: 3 }}
+                >
+                  {localCells
+                    .sort((a, b) => a.order - b.order)
+                    .map((cell, index) => (
+                      <Draggable
+                        key={cell.id}
+                        draggableId={cell.id}
+                        index={index}
+                      >
+                        {(draggableProvided, snapshot) => (
+                          <Box
+                            ref={draggableProvided.innerRef}
+                            // eslint-disable-next-line react/jsx-props-no-spreading
+                            {...draggableProvided.draggableProps}
+                            sx={{
+                              opacity: snapshot.isDragging ? 0.8 : 1,
+                              transform: snapshot.isDragging
+                                ? 'rotate(2deg)'
+                                : 'none',
+                            }}
+                          >
+                            <NotebookCell
+                              cell={cell}
+                              index={index}
+                              connectionId={connectionId}
+                              isExecuting={
+                                executingCells.has(cell.id) || isRunningAll
+                              }
+                              onRun={() => handleRunCell(cell.id, cell.content)}
+                              onUpdate={(content: string) =>
+                                handleUpdateCell(cell.id, content)
+                              }
+                              onDelete={() => handleDeleteCell(cell.id)}
+                              onDuplicate={() => handleDuplicateCell(cell.id)}
+                              onClearOutput={() => handleClearOutput(cell.id)}
+                              dragHandleProps={
+                                draggableProvided.dragHandleProps
+                              }
+                            />
+                          </Box>
+                        )}
+                      </Draggable>
+                    ))}
+                  {droppableProvided.placeholder}
 
-            {/* Add Cell Button */}
-            <Box sx={{ display: 'flex', justifyContent: 'center', mt: 2 }}>
-              <Button
-                variant="outlined"
-                startIcon={<AddIcon />}
-                onClick={() => handleAddCell('sql')}
-              >
-                Add Cell
-              </Button>
-            </Box>
-          </>
+                  {/* Add Cell Button - inside scrollable area */}
+                  <Box
+                    sx={{
+                      display: 'flex',
+                      justifyContent: 'center',
+                      mt: 2,
+                      pb: 4,
+                    }}
+                  >
+                    <Button
+                      variant="outlined"
+                      startIcon={<AddIcon />}
+                      onClick={() => handleAddCell('sql')}
+                    >
+                      Add Cell
+                    </Button>
+                  </Box>
+                </Box>
+              )}
+            </Droppable>
+          </DragDropContext>
         )}
       </Box>
 

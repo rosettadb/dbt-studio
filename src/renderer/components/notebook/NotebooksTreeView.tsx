@@ -213,6 +213,7 @@ export const NotebooksTreeView: React.FC<NotebooksTreeViewProps> = ({
     <Box sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
       <Box sx={{ flex: 1, overflow: 'auto' }}>
         <SimpleTreeView
+          defaultExpandedItems={['notebooks-root', 'archived-root']}
           sx={{
             '& .MuiTreeItem-root': {
               '& .MuiTreeItem-content': {

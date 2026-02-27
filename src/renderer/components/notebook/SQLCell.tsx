@@ -2,17 +2,15 @@
  * SQL Cell Component
  * Monaco editor for SQL with execution and output display
  * Enhanced with custom SQL syntax highlighting theme and schema autocomplete (Phase 4)
+ * Updated to use shared hooks from SQL Editor (Phase 2)
  */
 
 import React, { useRef, useEffect, useState } from 'react';
 import { Box, CircularProgress, Typography } from '@mui/material';
 import Editor, { OnMount, loader } from '@monaco-editor/react';
 import { editor } from 'monaco-editor';
-import { NotebookCell, CompletionItem } from '../../../../types/notebooks';
-import {
-  useSchema,
-  useRefreshSchema,
-} from '../../controllers/notebooks.controller';
+import { NotebookCell } from '../../../../types/notebooks';
+import { useSchemaForConnection, useMonacoAutocomplete } from '../../hooks';
 
 // Configure Monaco loader for Electron
 loader.config({
@@ -375,7 +373,7 @@ const configureSQLLanguage = (monaco: any) => {
 
 interface SQLCellProps {
   cell: NotebookCell;
-  instanceId: string; // Added for schema autocomplete
+  connectionId: string; // Changed from instanceId to connectionId for consistency
   isExecuting: boolean;
   onRun: (content: string) => void;
   onUpdate: (content: string) => void;
@@ -383,7 +381,7 @@ interface SQLCellProps {
 
 export const SQLCell: React.FC<SQLCellProps> = ({
   cell,
-  instanceId,
+  connectionId,
   isExecuting,
   onRun,
   onUpdate,
@@ -397,97 +395,15 @@ export const SQLCell: React.FC<SQLCellProps> = ({
   const [isHovering, setIsHovering] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
 
-  // Fetch schema for autocomplete (Phase 4)
-  const { data: schemaInfo } = useSchema(instanceId);
-  const { refreshSchema } = useRefreshSchema();
+  // Fetch schema using shared hook (Phase 2)
+  const { data: schemaData, refetch: refetchSchema } =
+    useSchemaForConnection(connectionId);
 
-  // Convert schema to Monaco completion items
-  const completions = React.useMemo((): CompletionItem[] => {
-    if (!schemaInfo) return [];
-
-    const items: CompletionItem[] = [];
-
-    // Add schema completions
-    schemaInfo.schemas.forEach((s) => {
-      items.push({
-        label: s.schema_name,
-        kind: 9, // Module
-        detail: `Schema (${s.schema_id})`,
-        insertText: s.schema_name,
-        sortText: `0_${s.schema_name}`,
-      });
-    });
-
-    // Add table completions (simple and qualified)
-    schemaInfo.tables.forEach((t) => {
-      const recordInfo = t.record_count
-        ? `${t.record_count.toLocaleString()} rows`
-        : 'No data';
-
-      // Simple: table
-      items.push({
-        label: t.table_name,
-        kind: 7, // Class
-        detail: `Table in ${t.schema_name}`,
-        documentation: `${recordInfo}\nPath: ${t.path || 'N/A'}`,
-        insertText: t.table_name,
-        sortText: `1_${t.schema_name}_${t.table_name}`,
-      });
-
-      // Qualified: schema.table
-      items.push({
-        label: `${t.schema_name}.${t.table_name}`,
-        kind: 7, // Class
-        detail: 'Table (qualified)',
-        documentation: recordInfo,
-        insertText: `${t.schema_name}.${t.table_name}`,
-        sortText: `1_${t.schema_name}_${t.table_name}_q`,
-      });
-    });
-
-    // Add column completions (simple, qualified, nested)
-    schemaInfo.columns.forEach((c) => {
-      const nullInfo = c.nulls_allowed ? 'nullable' : 'not null';
-      const statsInfo =
-        c.min_value && c.max_value
-          ? `Range: ${c.min_value} - ${c.max_value}`
-          : '';
-
-      // Simple: column
-      items.push({
-        label: c.column_name,
-        kind: 5, // Field
-        detail: `${c.column_type} (${nullInfo})`,
-        documentation: `Table: ${c.schema_name}.${c.table_name}\n${statsInfo}`,
-        insertText: c.column_name,
-        sortText: `2_${c.column_name}`,
-      });
-
-      // Qualified: table.column
-      items.push({
-        label: `${c.table_name}.${c.column_name}`,
-        kind: 5, // Field
-        detail: `${c.column_type} (${nullInfo})`,
-        documentation: statsInfo,
-        insertText: `${c.table_name}.${c.column_name}`,
-        sortText: `2_${c.table_name}_${c.column_name}`,
-      });
-
-      // Nested columns: parent.field
-      if (c.parent_column && c.parent_column_name) {
-        items.push({
-          label: `${c.parent_column_name}.${c.column_name}`,
-          kind: 5, // Field
-          detail: `${c.column_type} (nested)`,
-          documentation: `Parent: ${c.parent_column_name}`,
-          insertText: `${c.parent_column_name}.${c.column_name}`,
-          sortText: `3_${c.parent_column_name}_${c.column_name}`,
-        });
-      }
-    });
-
-    return items;
-  }, [schemaInfo]);
+  // Generate completions using shared hook (Phase 2)
+  const completions = useMonacoAutocomplete(
+    schemaData?.tables || null,
+    schemaData?.duckLakeSchema || null,
+  );
 
   // Register completion provider (Phase 4)
   const registerCompletionProvider = React.useCallback(() => {
@@ -548,11 +464,11 @@ export const SQLCell: React.FC<SQLCellProps> = ({
       // Refresh schema if DDL operation
       if (isDDLOperation(content)) {
         setTimeout(() => {
-          refreshSchema(instanceId);
+          refetchSchema();
         }, 1000); // Wait 1s for DDL to complete
       }
     },
-    [onRun, instanceId, refreshSchema],
+    [onRun, refetchSchema],
   );
 
   // Configure Monaco theme and language on mount

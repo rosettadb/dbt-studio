@@ -27,4 +27,5 @@ export * from './sidebarConnections';
 export * from './newProject';
 export * from './dbtModelButtons';
 export * from './sourceControl';
+export * from './queryResult';
 export { ScrollbarStyles } from './scrollbarStyles';

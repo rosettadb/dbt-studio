@@ -219,16 +219,16 @@ export const NotebooksSidebar: React.FC<NotebooksSidebarProps> = ({
           }}
         >
           <Tab
-            icon={<TableChart sx={{ fontSize: 16 }} />}
+            icon={<LibraryBooks sx={{ fontSize: 16 }} />}
             iconPosition="start"
-            label="Data"
+            label="Notebooks"
             id="notebooks-tab-0"
             aria-controls="notebooks-tabpanel-0"
           />
           <Tab
-            icon={<LibraryBooks sx={{ fontSize: 16 }} />}
+            icon={<TableChart sx={{ fontSize: 16 }} />}
             iconPosition="start"
-            label="Notebooks"
+            label="Data"
             id="notebooks-tab-1"
             aria-controls="notebooks-tabpanel-1"
           />
@@ -251,8 +251,8 @@ export const NotebooksSidebar: React.FC<NotebooksSidebarProps> = ({
           size="small"
           placeholder={
             activeTab === 0
-              ? 'Search tables, columns...'
-              : 'Search notebooks...'
+              ? 'Search notebooks...'
+              : 'Search tables, columns...'
           }
           value={searchQuery}
           onChange={handleSearchChange}
@@ -300,7 +300,7 @@ export const NotebooksSidebar: React.FC<NotebooksSidebarProps> = ({
         </Tooltip>
 
         {/* Notebooks tab specific actions */}
-        {activeTab === 1 && (
+        {activeTab === 0 && (
           <>
             <Tooltip title="Export">
               <IconButton
@@ -404,8 +404,29 @@ export const NotebooksSidebar: React.FC<NotebooksSidebarProps> = ({
 
       {/* Tab Panels */}
       <Box sx={{ flex: 1, overflow: 'hidden' }}>
-        {/* Data Tab */}
+        {/* Notebooks Tab */}
         <TabPanel value={activeTab} index={0}>
+          <Box sx={{ height: '100%', overflow: 'auto' }}>
+            <NotebooksTreeView
+              notebooks={notebooks}
+              isLoading={isLoadingNotebooks}
+              archivedNotebooks={archivedNotebooks}
+              showArchived={showArchived}
+              onOpenNotebook={onOpenNotebook}
+              onRenameNotebook={onRenameNotebook}
+              onDuplicateNotebook={onDuplicateNotebook}
+              onDeleteNotebook={onDeleteNotebook}
+              onRestoreNotebook={onRestoreNotebook}
+              onDeleteArchivedNotebook={onDeleteArchivedNotebook}
+              onToggleArchived={onToggleArchived}
+              getConnectionName={getConnectionName}
+              filter={searchQuery}
+            />
+          </Box>
+        </TabPanel>
+
+        {/* Data Tab */}
+        <TabPanel value={activeTab} index={1}>
           <Box sx={{ height: '100%', overflow: 'auto' }}>
             {isLoadingSchema && (
               <Box
@@ -437,27 +458,6 @@ export const NotebooksSidebar: React.FC<NotebooksSidebarProps> = ({
                 </Typography>
               </Box>
             )}
-          </Box>
-        </TabPanel>
-
-        {/* Notebooks Tab */}
-        <TabPanel value={activeTab} index={1}>
-          <Box sx={{ height: '100%', overflow: 'auto' }}>
-            <NotebooksTreeView
-              notebooks={notebooks}
-              isLoading={isLoadingNotebooks}
-              archivedNotebooks={archivedNotebooks}
-              showArchived={showArchived}
-              onOpenNotebook={onOpenNotebook}
-              onRenameNotebook={onRenameNotebook}
-              onDuplicateNotebook={onDuplicateNotebook}
-              onDeleteNotebook={onDeleteNotebook}
-              onRestoreNotebook={onRestoreNotebook}
-              onDeleteArchivedNotebook={onDeleteArchivedNotebook}
-              onToggleArchived={onToggleArchived}
-              getConnectionName={getConnectionName}
-              filter={searchQuery}
-            />
           </Box>
         </TabPanel>
       </Box>

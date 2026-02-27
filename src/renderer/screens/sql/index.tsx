@@ -32,13 +32,12 @@ import { toast } from 'react-toastify';
 import { useNavigate } from 'react-router-dom';
 import { connectorsServices } from '../../services';
 import { DuckLakeService } from '../../services/duckLake.service';
-import { useLocalStorage } from '../../hooks';
+import { useLocalStorage, useMonacoAutocomplete } from '../../hooks';
 import { QueryHistoryType } from '../../../types/frontend';
 import { AppLayout } from '../../layouts';
-import { utils } from '../../helpers';
 import { SchemaViewContainer, SchemaViewGrid } from './styles';
 import { ErrorMessage, SqlEditor } from '../../components';
-import { QueryResult } from './queryResult';
+import { QueryResult } from '../../components/queryResult';
 import { ConnectionInput, Table } from '../../../types/backend';
 import { getConnectionInput } from '../../helpers/utils';
 import { SqlTabManager } from '../../components/sqlTabs';
@@ -50,10 +49,6 @@ import connectionIcons, {
   defaultIcon,
 } from '../../../../assets/connectionIcons';
 import { AppContext } from '../../context/AppProvider';
-import {
-  generateDuckLakeCompletions,
-  mergeCompletions,
-} from '../../utils/duckLakeCompletions';
 
 const QUERY_HISTORY_KEY = 'query_history_key';
 const EMPTY_ARRAY: Table[] = [];
@@ -165,8 +160,7 @@ const Sql = () => {
     ? (loadingSchemas[activeConnectionId] ?? false)
     : false;
 
-  // Store DuckLake completions and schema
-  const [duckLakeCompletions, setDuckLakeCompletions] = useState<any[]>([]);
+  // Store DuckLake schema
   const [duckLakeSchema, setDuckLakeSchema] = useState<any>(null);
   const [duckLakeSchemaLoading, setDuckLakeSchemaLoading] =
     useState<boolean>(false);
@@ -208,23 +202,11 @@ const Sql = () => {
     return tables;
   }, [duckLakeSchema]);
 
-  // Generate completions from schema
-  const completions = useMemo(() => {
-    const baseCompletions = activeSchema
-      ? utils.generateMonacoCompletions(activeSchema)
-      : [];
-
-    // Merge with DuckLake completions if available
-    if (duckLakeCompletions.length > 0) {
-      return mergeCompletions(baseCompletions, duckLakeCompletions);
-    }
-
-    return baseCompletions;
-  }, [activeSchema, duckLakeCompletions]);
+  // Generate completions using shared hook
+  const completions = useMonacoAutocomplete(activeSchema, duckLakeSchema);
 
   const loadDuckLakeCompletions = useCallback(async () => {
     if (!connectionInput || (connectionInput as any).type !== 'ducklake') {
-      setDuckLakeCompletions([]);
       setDuckLakeSchema(null);
       setDuckLakeSchemaLoading(false);
       setDuckLakeSchemaError(null);
@@ -234,7 +216,6 @@ const Sql = () => {
     const { instanceId } = connectionInput as any;
 
     if (!instanceId) {
-      setDuckLakeCompletions([]);
       setDuckLakeSchema(null);
       setDuckLakeSchemaLoading(false);
       setDuckLakeSchemaError('Missing DuckLake instance id');
@@ -245,14 +226,10 @@ const Sql = () => {
     setDuckLakeSchemaError(null);
     try {
       const schema = await DuckLakeService.extractSchema(instanceId);
-      const duckLakeItems = generateDuckLakeCompletions(schema);
-
-      setDuckLakeCompletions(duckLakeItems);
       setDuckLakeSchema(schema);
     } catch (error) {
       // eslint-disable-next-line no-console
       console.error('[SQL Screen] Failed to load DuckLake completions:', error);
-      setDuckLakeCompletions([]);
       setDuckLakeSchema(null);
       setDuckLakeSchemaError('Failed to load DuckLake schema');
     } finally {

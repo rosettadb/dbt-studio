@@ -169,9 +169,14 @@ export class NotebooksService {
         throw new Error(`Notebook ${notebookId} not found`);
       }
 
+      // Only include defined properties in the update
       const updatedNotebook: Notebook = {
         ...notebook,
-        ...updates,
+        ...(updates.name !== undefined && { name: updates.name }),
+        ...(updates.description !== undefined && {
+          description: updates.description,
+        }),
+        ...(updates.cells !== undefined && { cells: updates.cells }),
         updatedAt: new Date().toISOString(),
         cellCount: updates.cells?.length ?? notebook.cellCount,
       };

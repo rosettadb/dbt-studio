@@ -796,13 +796,7 @@ const Notebooks = () => {
         </Box>
       }
     >
-      <Box
-        sx={{
-          height: '100%',
-          display: 'flex',
-          flexDirection: 'column',
-        }}
-      >
+      <Box sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
         {!activeConnectionId ? (
           <Box
             sx={{
@@ -854,60 +848,60 @@ const Notebooks = () => {
             />
 
             {/* Notebook Content */}
-            {notebookTabManager.activeTabId ? (
-              <Box sx={{ flex: 1, overflow: 'hidden' }}>
+            <Box sx={{ flex: 1, overflow: 'hidden' }}>
+              {notebookTabManager.activeTabId ? (
                 <NotebookEditor
                   instanceId={activeConnectionId}
                   notebookId={notebookTabManager.activeTabId}
                 />
-              </Box>
-            ) : (
-              <Box
-                sx={{
-                  display: 'flex',
-                  flexDirection: 'column',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  flex: 1,
-                  color: 'text.secondary',
-                  p: 2,
-                }}
-              >
-                <TableChart sx={{ fontSize: 64, opacity: 0.3, mb: 2 }} />
-                <Typography
-                  variant="h6"
-                  color="text.secondary"
+              ) : (
+                <Box
                   sx={{
-                    mb: 1,
-                    textAlign: 'center',
-                    wordWrap: 'break-word',
-                    overflowWrap: 'break-word',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    height: '100%',
+                    color: 'text.secondary',
+                    p: 2,
                   }}
                 >
-                  No Notebook Open
-                </Typography>
-                <Typography
-                  variant="body2"
-                  color="text.secondary"
-                  sx={{
-                    mb: 2,
-                    textAlign: 'center',
-                    wordWrap: 'break-word',
-                    overflowWrap: 'break-word',
-                    whiteSpace: 'normal',
-                  }}
-                >
-                  Select a notebook from the sidebar to start editing
-                </Typography>
-                <Button
-                  variant="contained"
-                  startIcon={<Add />}
-                  onClick={() => setCreateNotebookOpen(true)}
-                >
-                  Create New Notebook
-                </Button>
-              </Box>
-            )}
+                  <TableChart sx={{ fontSize: 64, opacity: 0.3, mb: 2 }} />
+                  <Typography
+                    variant="h6"
+                    color="text.secondary"
+                    sx={{
+                      mb: 1,
+                      textAlign: 'center',
+                      wordWrap: 'break-word',
+                      overflowWrap: 'break-word',
+                    }}
+                  >
+                    No Notebook Open
+                  </Typography>
+                  <Typography
+                    variant="body2"
+                    color="text.secondary"
+                    sx={{
+                      mb: 2,
+                      textAlign: 'center',
+                      wordWrap: 'break-word',
+                      overflowWrap: 'break-word',
+                      whiteSpace: 'normal',
+                    }}
+                  >
+                    Select a notebook from the sidebar to start editing
+                  </Typography>
+                  <Button
+                    variant="contained"
+                    startIcon={<Add />}
+                    onClick={() => setCreateNotebookOpen(true)}
+                  >
+                    Create New Notebook
+                  </Button>
+                </Box>
+              )}
+            </Box>
           </>
         )}
       </Box>

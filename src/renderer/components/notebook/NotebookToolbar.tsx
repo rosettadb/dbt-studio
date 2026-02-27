@@ -1,31 +1,30 @@
 /**
  * Notebook Toolbar Component
- * Minimal header with notebook name and actions dropdown
+ * Header with notebook name and action icons
  * Styled similar to MotherDuck UI
  */
 
-import React, { useState } from 'react';
+import React from 'react';
 import {
   Box,
-  Button,
   Typography,
   Chip,
-  Menu,
-  MenuItem,
-  ListItemIcon,
-  ListItemText,
-  Divider,
+  IconButton,
+  Tooltip,
   useTheme,
+  Button,
 } from '@mui/material';
 import {
   PlayArrow as RunAllIcon,
-  MoreVert as MoreIcon,
-  Edit as RenameIcon,
-  ContentCopy as CloneIcon,
-  Delete as DeleteIcon,
+  Add as AddCellIcon,
+  CleaningServices as ClearIcon,
   GetApp as ExportIcon,
+  Delete as DeleteIcon,
+  Edit as EditIcon,
+  ContentCopy as CloneIcon,
+  DeleteSweep as DeleteAllIcon,
 } from '@mui/icons-material';
-import { Notebook } from '../../../../types/notebooks';
+import { Notebook } from '../../../types/notebooks';
 
 interface NotebookToolbarProps {
   notebook: Notebook;
@@ -36,6 +35,8 @@ interface NotebookToolbarProps {
   onClone?: () => void;
   onDeleteAllCells?: () => void;
   onDeleteNotebook?: () => void;
+  onAddCell?: () => void;
+  onClearOutputs?: () => void;
 }
 
 export const NotebookToolbar: React.FC<NotebookToolbarProps> = ({
@@ -47,292 +48,290 @@ export const NotebookToolbar: React.FC<NotebookToolbarProps> = ({
   onClone,
   onDeleteAllCells,
   onDeleteNotebook,
+  onAddCell,
+  onClearOutputs,
 }) => {
   const theme = useTheme();
-  const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
-  const open = Boolean(anchorEl);
-
-  const handleMenuOpen = (event: React.MouseEvent<HTMLElement>) => {
-    setAnchorEl(event.currentTarget);
-  };
-
-  const handleMenuClose = () => {
-    setAnchorEl(null);
-  };
-
-  const handleRename = () => {
-    handleMenuClose();
-    if (onRename) {
-      onRename();
-    }
-  };
-
-  const handleClone = () => {
-    handleMenuClose();
-    if (onClone) {
-      onClone();
-    }
-  };
-
-  const handleDeleteAllCells = () => {
-    handleMenuClose();
-    if (onDeleteAllCells) {
-      onDeleteAllCells();
-    }
-  };
-
-  const handleDeleteNotebook = () => {
-    handleMenuClose();
-    if (onDeleteNotebook) {
-      onDeleteNotebook();
-    }
-  };
-
-  const handleExport = () => {
-    handleMenuClose();
-    onExport();
-  };
 
   return (
-    <>
-      <Box
-        sx={{
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          px: 3,
-          py: 1.5,
-        }}
-      >
-        {/* Left: Notebook Info */}
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-          <Typography
-            variant="h6"
-            noWrap
-            sx={{
-              maxWidth: 400,
-              fontWeight: 500,
-              color: theme.palette.mode === 'dark' ? 'grey.100' : 'grey.900',
-            }}
-          >
-            {notebook.name}
-          </Typography>
-          <Chip
-            label={`${notebook.cells.length} cells`}
-            size="small"
-            sx={{
-              bgcolor: theme.palette.mode === 'dark' ? 'grey.800' : 'grey.200',
-              color: theme.palette.mode === 'dark' ? 'grey.300' : 'grey.700',
-              fontWeight: 500,
-              fontSize: '0.75rem',
-            }}
-          />
-          {notebook.lastExecutedAt && (
-            <Typography
-              variant="caption"
-              sx={{
-                color: theme.palette.mode === 'dark' ? 'grey.500' : 'grey.600',
-              }}
-            >
-              Last run: {new Date(notebook.lastExecutedAt).toLocaleString()}
-            </Typography>
-          )}
-        </Box>
-
-        {/* Right: Actions */}
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
-          {/* Run All Button */}
-          <Button
-            startIcon={<RunAllIcon />}
-            variant="contained"
-            size="small"
-            onClick={onRunAll}
-            disabled={notebook.cells.length === 0 || isExecuting}
-            sx={{
-              textTransform: 'none',
-              bgcolor:
-                theme.palette.mode === 'dark' ? 'primary.dark' : 'primary.main',
-              '&:hover': {
-                bgcolor:
-                  theme.palette.mode === 'dark'
-                    ? 'primary.main'
-                    : 'primary.dark',
-              },
-              '&.Mui-disabled': {
-                bgcolor:
-                  theme.palette.mode === 'dark' ? 'grey.800' : 'grey.300',
-                color: theme.palette.mode === 'dark' ? 'grey.600' : 'grey.500',
-              },
-            }}
-          >
-            Run All
-          </Button>
-
-          {/* More Actions Menu */}
-          <Button
-            variant="outlined"
-            size="small"
-            onClick={handleMenuOpen}
-            sx={{
-              minWidth: 'auto',
-              px: 1,
-              borderColor:
-                theme.palette.mode === 'dark' ? 'grey.700' : 'grey.300',
-              color: theme.palette.mode === 'dark' ? 'grey.300' : 'grey.700',
-              '&:hover': {
-                borderColor:
-                  theme.palette.mode === 'dark' ? 'grey.600' : 'grey.400',
-                bgcolor:
-                  theme.palette.mode === 'dark' ? 'grey.800' : 'grey.100',
-              },
-            }}
-          >
-            <MoreIcon fontSize="small" />
-          </Button>
-
-          <Menu
-            anchorEl={anchorEl}
-            open={open}
-            onClose={handleMenuClose}
-            anchorOrigin={{
-              vertical: 'bottom',
-              horizontal: 'right',
-            }}
-            transformOrigin={{
-              vertical: 'top',
-              horizontal: 'right',
-            }}
-            PaperProps={{
-              sx: {
-                mt: 1,
-                minWidth: 200,
-                bgcolor:
-                  theme.palette.mode === 'dark'
-                    ? 'grey.900'
-                    : 'background.paper',
-                border: '1px solid',
-                borderColor:
-                  theme.palette.mode === 'dark' ? 'grey.800' : 'grey.200',
-              },
-            }}
-          >
-            <MenuItem
-              onClick={handleRename}
-              sx={{
-                color: theme.palette.mode === 'dark' ? 'grey.300' : 'grey.900',
-                '&:hover': {
-                  bgcolor:
-                    theme.palette.mode === 'dark' ? 'grey.800' : 'grey.100',
-                },
-              }}
-            >
-              <ListItemIcon>
-                <RenameIcon
-                  fontSize="small"
-                  sx={{
-                    color:
-                      theme.palette.mode === 'dark' ? 'grey.400' : 'grey.600',
-                  }}
-                />
-              </ListItemIcon>
-              <ListItemText>Rename</ListItemText>
-            </MenuItem>
-
-            <MenuItem
-              onClick={handleClone}
-              sx={{
-                color: theme.palette.mode === 'dark' ? 'grey.300' : 'grey.900',
-                '&:hover': {
-                  bgcolor:
-                    theme.palette.mode === 'dark' ? 'grey.800' : 'grey.100',
-                },
-              }}
-            >
-              <ListItemIcon>
-                <CloneIcon
-                  fontSize="small"
-                  sx={{
-                    color:
-                      theme.palette.mode === 'dark' ? 'grey.400' : 'grey.600',
-                  }}
-                />
-              </ListItemIcon>
-              <ListItemText>Clone</ListItemText>
-            </MenuItem>
-
-            <MenuItem
-              onClick={handleExport}
-              sx={{
-                color: theme.palette.mode === 'dark' ? 'grey.300' : 'grey.900',
-                '&:hover': {
-                  bgcolor:
-                    theme.palette.mode === 'dark' ? 'grey.800' : 'grey.100',
-                },
-              }}
-            >
-              <ListItemIcon>
-                <ExportIcon
-                  fontSize="small"
-                  sx={{
-                    color:
-                      theme.palette.mode === 'dark' ? 'grey.400' : 'grey.600',
-                  }}
-                />
-              </ListItemIcon>
-              <ListItemText>Export</ListItemText>
-            </MenuItem>
-
-            <Divider sx={{ my: 0.5 }} />
-
-            <MenuItem
-              onClick={handleDeleteAllCells}
-              sx={{
-                color: 'error.main',
-                '&:hover': {
-                  bgcolor:
-                    theme.palette.mode === 'dark'
-                      ? 'error.dark'
-                      : 'error.light',
-                  color:
-                    theme.palette.mode === 'dark'
-                      ? 'error.light'
-                      : 'error.dark',
-                },
-              }}
-            >
-              <ListItemIcon>
-                <DeleteIcon fontSize="small" sx={{ color: 'error.main' }} />
-              </ListItemIcon>
-              <ListItemText>Delete all cells</ListItemText>
-            </MenuItem>
-
-            <MenuItem
-              onClick={handleDeleteNotebook}
-              sx={{
-                color: 'error.main',
-                '&:hover': {
-                  bgcolor:
-                    theme.palette.mode === 'dark'
-                      ? 'error.dark'
-                      : 'error.light',
-                  color:
-                    theme.palette.mode === 'dark'
-                      ? 'error.light'
-                      : 'error.dark',
-                },
-              }}
-            >
-              <ListItemIcon>
-                <DeleteIcon fontSize="small" sx={{ color: 'error.main' }} />
-              </ListItemIcon>
-              <ListItemText>Delete notebook</ListItemText>
-            </MenuItem>
-          </Menu>
-        </Box>
+    <Box
+      sx={{
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        px: 2,
+        py: 1,
+      }}
+    >
+      {/* Left: Notebook Info */}
+      <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+        <Typography
+          variant="h6"
+          noWrap
+          sx={{
+            maxWidth: 400,
+            fontWeight: 500,
+            fontSize: '1rem',
+            color: theme.palette.mode === 'dark' ? 'grey.100' : 'grey.900',
+          }}
+        >
+          {notebook.name}
+        </Typography>
+        <Chip
+          label={`${notebook.cells.length} cells`}
+          size="small"
+          sx={{
+            bgcolor: theme.palette.mode === 'dark' ? 'grey.800' : 'grey.200',
+            color: theme.palette.mode === 'dark' ? 'grey.300' : 'grey.700',
+            fontWeight: 500,
+            fontSize: '0.7rem',
+            height: 20,
+          }}
+        />
       </Box>
 
-      {/* Divider */}
-      <Divider />
-    </>
+      {/* Right: Action Icons */}
+      <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+        {/* Add Cell */}
+        <Tooltip title="Add New Cell">
+          <IconButton
+            size="small"
+            onClick={onAddCell}
+            sx={{
+              width: 28,
+              height: 28,
+              color: theme.palette.mode === 'dark' ? 'grey.400' : 'grey.600',
+              border: '1px solid',
+              borderColor:
+                theme.palette.mode === 'dark' ? 'grey.700' : 'grey.300',
+              borderRadius: 1,
+              '&:hover': {
+                bgcolor:
+                  theme.palette.mode === 'dark' ? 'grey.800' : 'grey.100',
+                borderColor:
+                  theme.palette.mode === 'dark' ? 'grey.600' : 'grey.400',
+                color: theme.palette.mode === 'dark' ? 'grey.200' : 'grey.800',
+              },
+            }}
+          >
+            <AddCellIcon sx={{ fontSize: 18 }} />
+          </IconButton>
+        </Tooltip>
+
+        {/* Export Workbook */}
+        <Tooltip title="Export Workbook">
+          <IconButton
+            size="small"
+            onClick={onExport}
+            sx={{
+              width: 28,
+              height: 28,
+              color: theme.palette.mode === 'dark' ? 'grey.400' : 'grey.600',
+              border: '1px solid',
+              borderColor:
+                theme.palette.mode === 'dark' ? 'grey.700' : 'grey.300',
+              borderRadius: 1,
+              '&:hover': {
+                bgcolor:
+                  theme.palette.mode === 'dark' ? 'grey.800' : 'grey.100',
+                borderColor:
+                  theme.palette.mode === 'dark' ? 'grey.600' : 'grey.400',
+                color: theme.palette.mode === 'dark' ? 'grey.200' : 'grey.800',
+              },
+            }}
+          >
+            <ExportIcon sx={{ fontSize: 18 }} />
+          </IconButton>
+        </Tooltip>
+
+        {/* Edit */}
+        <Tooltip title="Edit Workbook">
+          <IconButton
+            size="small"
+            onClick={onRename}
+            sx={{
+              width: 28,
+              height: 28,
+              color: theme.palette.mode === 'dark' ? 'grey.400' : 'grey.600',
+              border: '1px solid',
+              borderColor:
+                theme.palette.mode === 'dark' ? 'grey.700' : 'grey.300',
+              borderRadius: 1,
+              '&:hover': {
+                bgcolor:
+                  theme.palette.mode === 'dark' ? 'grey.800' : 'grey.100',
+                borderColor:
+                  theme.palette.mode === 'dark' ? 'grey.600' : 'grey.400',
+                color: theme.palette.mode === 'dark' ? 'grey.200' : 'grey.800',
+              },
+            }}
+          >
+            <EditIcon sx={{ fontSize: 18 }} />
+          </IconButton>
+        </Tooltip>
+
+        {/* Clone Workbook */}
+        <Tooltip title="Clone Workbook">
+          <IconButton
+            size="small"
+            onClick={onClone}
+            sx={{
+              width: 28,
+              height: 28,
+              color: theme.palette.mode === 'dark' ? 'grey.400' : 'grey.600',
+              border: '1px solid',
+              borderColor:
+                theme.palette.mode === 'dark' ? 'grey.700' : 'grey.300',
+              borderRadius: 1,
+              '&:hover': {
+                bgcolor:
+                  theme.palette.mode === 'dark' ? 'grey.800' : 'grey.100',
+                borderColor:
+                  theme.palette.mode === 'dark' ? 'grey.600' : 'grey.400',
+                color: theme.palette.mode === 'dark' ? 'grey.200' : 'grey.800',
+              },
+            }}
+          >
+            <CloneIcon sx={{ fontSize: 18 }} />
+          </IconButton>
+        </Tooltip>
+
+        {/* Delete All Cells */}
+        <Tooltip title="Delete All Cells">
+          <IconButton
+            size="small"
+            onClick={onDeleteAllCells}
+            disabled={notebook.cells.length === 0}
+            sx={{
+              width: 28,
+              height: 28,
+              color:
+                theme.palette.mode === 'dark'
+                  ? 'warning.light'
+                  : 'warning.main',
+              border: '1px solid',
+              borderColor:
+                theme.palette.mode === 'dark'
+                  ? 'warning.dark'
+                  : 'warning.light',
+              borderRadius: 1,
+              '&:hover': {
+                bgcolor:
+                  theme.palette.mode === 'dark'
+                    ? 'warning.dark'
+                    : 'warning.light',
+                borderColor:
+                  theme.palette.mode === 'dark'
+                    ? 'warning.main'
+                    : 'warning.main',
+              },
+              '&.Mui-disabled': {
+                borderColor:
+                  theme.palette.mode === 'dark' ? 'grey.800' : 'grey.200',
+                color: theme.palette.mode === 'dark' ? 'grey.700' : 'grey.400',
+              },
+            }}
+          >
+            <DeleteAllIcon sx={{ fontSize: 18 }} />
+          </IconButton>
+        </Tooltip>
+
+        {/* Delete Workbook */}
+        <Tooltip title="Delete Workbook">
+          <IconButton
+            size="small"
+            onClick={onDeleteNotebook}
+            sx={{
+              width: 28,
+              height: 28,
+              color:
+                theme.palette.mode === 'dark' ? 'error.light' : 'error.main',
+              border: '1px solid',
+              borderColor:
+                theme.palette.mode === 'dark' ? 'error.dark' : 'error.light',
+              borderRadius: 1,
+              '&:hover': {
+                bgcolor:
+                  theme.palette.mode === 'dark' ? 'error.dark' : 'error.light',
+                borderColor:
+                  theme.palette.mode === 'dark' ? 'error.main' : 'error.main',
+              },
+            }}
+          >
+            <DeleteIcon sx={{ fontSize: 18 }} />
+          </IconButton>
+        </Tooltip>
+
+        {/* Divider */}
+        <Box
+          sx={{
+            width: '0.5px',
+            height: 20,
+            bgcolor: theme.palette.mode === 'dark' ? 'grey.800' : 'grey.200',
+            mx: 0.5,
+            opacity: 0.5,
+          }}
+        />
+
+        {/* Clear Button */}
+        <Button
+          startIcon={<ClearIcon sx={{ fontSize: 14 }} />}
+          variant="outlined"
+          size="small"
+          onClick={onClearOutputs}
+          disabled={notebook.cells.length === 0}
+          sx={{
+            textTransform: 'none',
+            fontSize: '0.8125rem',
+            height: 28,
+            px: 1.5,
+            minWidth: 'auto',
+            borderColor:
+              theme.palette.mode === 'dark' ? 'grey.700' : 'grey.300',
+            color: theme.palette.mode === 'dark' ? 'grey.300' : 'grey.700',
+            '&:hover': {
+              borderColor:
+                theme.palette.mode === 'dark' ? 'grey.600' : 'grey.400',
+              bgcolor: theme.palette.mode === 'dark' ? 'grey.800' : 'grey.100',
+            },
+            '&.Mui-disabled': {
+              borderColor:
+                theme.palette.mode === 'dark' ? 'grey.800' : 'grey.200',
+              color: theme.palette.mode === 'dark' ? 'grey.700' : 'grey.400',
+            },
+          }}
+        >
+          Clear
+        </Button>
+
+        {/* Run All Button */}
+        <Button
+          startIcon={<RunAllIcon sx={{ fontSize: 16 }} />}
+          variant="contained"
+          size="small"
+          onClick={onRunAll}
+          disabled={notebook.cells.length === 0 || isExecuting}
+          sx={{
+            textTransform: 'none',
+            fontSize: '0.8125rem',
+            height: 28,
+            px: 1.5,
+            minWidth: 'auto',
+            bgcolor:
+              theme.palette.mode === 'dark' ? 'primary.dark' : 'primary.main',
+            '&:hover': {
+              bgcolor:
+                theme.palette.mode === 'dark' ? 'primary.main' : 'primary.dark',
+            },
+            '&.Mui-disabled': {
+              bgcolor: theme.palette.mode === 'dark' ? 'grey.800' : 'grey.300',
+              color: theme.palette.mode === 'dark' ? 'grey.600' : 'grey.500',
+            },
+          }}
+        >
+          Run All
+        </Button>
+      </Box>
+    </Box>
   );
 };
