@@ -54,6 +54,7 @@ const Notebooks = () => {
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const navigate = useNavigate();
   const { selectedProject } = useContext(AppContext);
+  const { isSidebarOpen } = useContext(AppContext);
   const { data: connections = [] } = useGetConnections();
   const { data: duckLakeInstances = [] } = useDuckLakeInstances();
 
@@ -796,7 +797,14 @@ const Notebooks = () => {
         </Box>
       }
     >
-      <Box sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
+      <Box
+        sx={{
+          height: '100%',
+          display: 'flex',
+          flexDirection: 'column',
+          overflow: 'hidden',
+        }}
+      >
         {!activeConnectionId ? (
           <Box
             sx={{
@@ -848,7 +856,17 @@ const Notebooks = () => {
             />
 
             {/* Notebook Content */}
-            <Box sx={{ flex: 1, overflow: 'hidden' }}>
+            <Box
+              sx={{
+                flex: 1,
+                overflow: 'hidden',
+                display: 'flex',
+                flexDirection: 'column',
+                maxWidth: isSidebarOpen
+                  ? 'calc(100vw - 366px)'
+                  : 'calc(100vw - 56px)',
+              }}
+            >
               {notebookTabManager.activeTabId ? (
                 <NotebookEditor
                   instanceId={activeConnectionId}
