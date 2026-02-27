@@ -7,11 +7,11 @@ function escapeRegExp(string: string): string {
 
 /**
  * Generates a unique connection name by appending _N suffix
- * @param baseName - The original connection name to duplicate
+ * @param baseName - The original connection name to clone
  * @param existingNames - Array of all existing connection names
  * @returns A unique name with _N suffix (e.g., "MyConnection_2")
  */
-export function generateDuplicateConnectionName(
+export function generateCloneConnectionName(
   baseName: string,
   existingNames: string[],
 ): string {

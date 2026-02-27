@@ -41,7 +41,7 @@ import {
   useDeleteBucketConnection,
 } from '../../controllers';
 import { cloudStorageImages } from '../../../../assets/connectionIcons';
-import { generateDuplicateConnectionName } from '../../utils/connectionNaming';
+import { generateCloneConnectionName } from '../../utils/connectionNaming';
 
 export const ExplorerConnections: React.FC = () => {
   const navigate = useNavigate();
@@ -109,12 +109,9 @@ export const ExplorerConnections: React.FC = () => {
     }
   };
 
-  const handleDuplicateConnection = (connection: CloudConnection) => {
+  const handleCloneConnection = (connection: CloudConnection) => {
     const existingNames = (connectionsQuery.data || []).map((c) => c.name);
-    const newName = generateDuplicateConnectionName(
-      connection.name,
-      existingNames,
-    );
+    const newName = generateCloneConnectionName(connection.name, existingNames);
 
     navigate('/app/cloud-explorer/new-connection', {
       state: {
@@ -309,9 +306,9 @@ export const ExplorerConnections: React.FC = () => {
                       size="small"
                       variant="outlined"
                       startIcon={<ContentCopy />}
-                      onClick={() => handleDuplicateConnection(connection)}
+                      onClick={() => handleCloneConnection(connection)}
                     >
-                      Duplicate
+                      Clone
                     </Button>
                   </Box>
                   <Box sx={{ display: 'flex', gap: 1 }}>

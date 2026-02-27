@@ -45,7 +45,7 @@ import connectionIcons, {
 } from '../../../../assets/connectionIcons';
 import { SupportedConnectionTypes } from '../../../types/backend';
 import { CloudProvider, CloudConnection } from '../../../types/frontend';
-import { generateDuplicateConnectionName } from '../../utils/connectionNaming';
+import { generateCloneConnectionName } from '../../utils/connectionNaming';
 
 const Connections: React.FC = () => {
   const {
@@ -127,22 +127,37 @@ const Connections: React.FC = () => {
     setConnectionToDelete(null);
   };
 
-  const handleDuplicateConnection = (id: string, connectionName: string) => {
-    const connectionToDuplicate = connections.find((c) => c.id === id);
-    if (connectionToDuplicate) {
+  const handleCloneConnection = (id: string, connectionName: string) => {
+    const connectionToClone = connections.find((c) => c.id === id);
+    if (connectionToClone) {
       const existingNames = connections.map((c) => c.connection.name);
-      const newName = generateDuplicateConnectionName(
+      const newName = generateCloneConnectionName(
         connectionName,
         existingNames,
       );
 
       navigate('/app/add-connection', {
         state: {
-          duplicateFrom: connectionToDuplicate,
+          duplicateFrom: connectionToClone,
           suggestedName: newName,
         },
       });
     }
+  };
+
+  const handleCloneCloudConnection = (cloudConnection: CloudConnection) => {
+    const existingNames = cloudConnections.map((c) => c.name);
+    const newName = generateCloneConnectionName(
+      cloudConnection.name,
+      existingNames,
+    );
+
+    navigate('/app/cloud-explorer/new-connection', {
+      state: {
+        duplicateFrom: cloudConnection,
+        suggestedName: newName,
+      },
+    });
   };
 
   // Helper function to get connection icon
@@ -527,10 +542,10 @@ const Connections: React.FC = () => {
                                 variant="outlined"
                                 startIcon={<ContentCopy />}
                                 onClick={() =>
-                                  handleDuplicateConnection(id, connection.name)
+                                  handleCloneConnection(id, connection.name)
                                 }
                               >
-                                Duplicate
+                                Clone
                               </Button>
                             </Box>
                             <Box sx={{ display: 'flex', gap: 1 }}>
@@ -687,6 +702,16 @@ const Connections: React.FC = () => {
                               }
                             >
                               Edit
+                            </Button>
+                            <Button
+                              size="small"
+                              variant="outlined"
+                              startIcon={<ContentCopy />}
+                              onClick={() =>
+                                handleCloneCloudConnection(cloudConnection)
+                              }
+                            >
+                              Clone
                             </Button>
                           </Box>
                           <Box sx={{ display: 'flex', gap: 1 }}>
