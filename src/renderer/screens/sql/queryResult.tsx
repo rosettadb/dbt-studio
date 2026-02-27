@@ -56,6 +56,7 @@ type Props = {
     connectionType: SupportedConnectionTypes;
     connectionId?: string;
     duckLakeInstanceId?: string;
+    duckLakeReady?: boolean;
     originalSql?: string;
   };
 };
@@ -71,10 +72,14 @@ export const QueryResult: React.FC<Props> = ({ results, exportContext }) => {
   const originalSql =
     (results as any).originalSql ?? exportContext?.originalSql;
 
+  const resolvedOriginalSql = originalSql ?? (results as any).sql;
+
   const isDuckLake =
     exportContext?.connectionType === 'ducklake' &&
     !!exportContext.duckLakeInstanceId &&
     !!originalSql;
+
+  const isDuckLakeReady = !isDuckLake || exportContext?.duckLakeReady !== false;
 
   const [columns, setColumns] = React.useState<string[]>(
     results.fields?.map((f) => f.name) ?? [],
@@ -112,6 +117,14 @@ export const QueryResult: React.FC<Props> = ({ results, exportContext }) => {
           offset: newPage * newPerPage,
         });
         if (seq !== fetchSeqRef.current) return;
+        if (!res?.success) {
+          const message = res?.error || 'Failed to fetch page data';
+          // eslint-disable-next-line no-console
+          console.error('[QueryResult] DuckLake page fetch failed:', message);
+          toast.error(message);
+          setFetchError(message);
+          return;
+        }
         setColumns(res.fields?.map((f) => f.name) ?? []);
         setRows(res.data ?? []);
         if (typeof res.rowCount === 'number') {
@@ -139,7 +152,9 @@ export const QueryResult: React.FC<Props> = ({ results, exportContext }) => {
     if (isDuckLake) {
       setTotalCount(baseTotal);
       setPage(0);
-      fetchPage(0, perPage);
+      if (isDuckLakeReady) {
+        fetchPage(0, perPage);
+      }
     } else {
       setRows(results.data ?? []);
       setTotalCount(baseTotal);
@@ -148,7 +163,7 @@ export const QueryResult: React.FC<Props> = ({ results, exportContext }) => {
     // We intentionally only respond to new results / connection type;
     // perPage changes are handled via customPagination.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [results, isDuckLake, fetchPage]);
+  }, [results, isDuckLake, isDuckLakeReady, fetchPage]);
 
   const customPagination = React.useMemo(() => {
     if (!isDuckLake) return undefined;
@@ -156,13 +171,17 @@ export const QueryResult: React.FC<Props> = ({ results, exportContext }) => {
       page,
       setPage: (p: number) => {
         setPage(p);
-        fetchPage(p, perPage);
+        if (isDuckLakeReady) {
+          fetchPage(p, perPage);
+        }
       },
       perPage,
       setPerPage: (n: number) => {
         setPerPage(n);
         setPage(0);
-        fetchPage(0, n);
+        if (isDuckLakeReady) {
+          fetchPage(0, n);
+        }
       },
       count: totalCount,
       order,
@@ -174,6 +193,7 @@ export const QueryResult: React.FC<Props> = ({ results, exportContext }) => {
     };
   }, [
     isDuckLake,
+    isDuckLakeReady,
     page,
     perPage,
     totalCount,
@@ -333,12 +353,12 @@ export const QueryResult: React.FC<Props> = ({ results, exportContext }) => {
 
   const canExportParquet =
     !!exportContext &&
-    !!exportContext.originalSql &&
+    !!resolvedOriginalSql &&
     (exportContext.connectionType === 'duckdb' ||
       exportContext.connectionType === 'ducklake');
 
   const handleExportParquet = async () => {
-    if (!canExportParquet || !exportContext?.originalSql) return;
+    if (!canExportParquet || !resolvedOriginalSql) return;
 
     try {
       const result = await window.electron.ipcRenderer.invoke(
@@ -359,8 +379,7 @@ export const QueryResult: React.FC<Props> = ({ results, exportContext }) => {
       setIsExporting(true);
 
       const escapedPath = result.filePath.replace(/'/g, "''");
-      const baseSql =
-        (results as any).originalSql ?? exportContext.originalSql ?? '';
+      const baseSql = resolvedOriginalSql;
       const exportQuery = `COPY (${baseSql}) TO '${escapedPath}' (FORMAT PARQUET)`;
 
       if (
@@ -482,6 +501,7 @@ export const QueryResult: React.FC<Props> = ({ results, exportContext }) => {
         id="query-result"
         dataTestId="sql-results-table"
         name=""
+        showSearch={false}
         toolbarContent={
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
             {results.duration !== undefined && (

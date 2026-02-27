@@ -5,6 +5,7 @@
 
 import * as fs from 'fs';
 import * as path from 'path';
+import log from 'electron-log';
 import {
   CatalogAdapter,
   ValidationResult,
@@ -946,8 +947,24 @@ export class DuckDBCatalogAdapter extends CatalogAdapter {
       query = query.replace(/;\s*$/, '');
 
       if (snapshotId) {
+        const snapshotIdStr = String(snapshotId).trim();
+        if (!/^\d+$/.test(snapshotIdStr)) {
+          throw DuckLakeError.validation(
+            'Snapshot ID must be a numeric value',
+            'snapshotId',
+          );
+        }
+
+        const validatedSnapshotId = Number.parseInt(snapshotIdStr, 10);
+        if (!Number.isSafeInteger(validatedSnapshotId)) {
+          throw DuckLakeError.validation(
+            'Snapshot ID must be a safe integer',
+            'snapshotId',
+          );
+        }
+
         // Modify query to use specific snapshot
-        query = `${query} FOR SYSTEM_TIME AS OF SNAPSHOT '${snapshotId}'`;
+        query = `${query} FOR SYSTEM_TIME AS OF SNAPSHOT '${validatedSnapshotId}'`;
       }
 
       let totalRows: number | undefined;
@@ -1065,8 +1082,8 @@ export class DuckDBCatalogAdapter extends CatalogAdapter {
           Object.entries(row).forEach(([key, value]) => {
             if (typeof value === 'bigint') {
               // eslint-disable-next-line no-console
-              console.error(
-                `[DuckDB Adapter] ERROR: BigInt still present after normalization in row ${rowIndex}, column "${key}": ${value}`,
+              log.error(
+                `[DuckDB Adapter] ERROR: BigInt still present after normalization in row ${rowIndex}, column "${key}" (value omitted)`,
               );
             }
           });

@@ -4,6 +4,7 @@ import React, {
   useMemo,
   useEffect,
   useContext,
+  useRef,
 } from 'react';
 import SplitPane from 'split-pane-react';
 import {
@@ -32,12 +33,13 @@ import { toast } from 'react-toastify';
 import { useNavigate } from 'react-router-dom';
 import { connectorsServices } from '../../services';
 import { DuckLakeService } from '../../services/duckLake.service';
-import { useLocalStorage, useMonacoAutocomplete } from '../../hooks';
+import { useLocalStorage } from '../../hooks';
 import { QueryHistoryType } from '../../../types/frontend';
 import { AppLayout } from '../../layouts';
+import { utils } from '../../helpers';
 import { SchemaViewContainer, SchemaViewGrid } from './styles';
 import { ErrorMessage, SqlEditor } from '../../components';
-import { QueryResult } from '../../components/queryResult';
+import { QueryResult } from './queryResult';
 import { ConnectionInput, Table } from '../../../types/backend';
 import { getConnectionInput } from '../../helpers/utils';
 import { SqlTabManager } from '../../components/sqlTabs';
@@ -49,6 +51,10 @@ import connectionIcons, {
   defaultIcon,
 } from '../../../../assets/connectionIcons';
 import { AppContext } from '../../context/AppProvider';
+import {
+  generateDuckLakeCompletions,
+  mergeCompletions,
+} from '../../utils/duckLakeCompletions';
 
 const QUERY_HISTORY_KEY = 'query_history_key';
 const EMPTY_ARRAY: Table[] = [];
@@ -160,13 +166,25 @@ const Sql = () => {
     ? (loadingSchemas[activeConnectionId] ?? false)
     : false;
 
-  // Store DuckLake schema
+  // Store DuckLake completions and schema
+  const [duckLakeCompletions, setDuckLakeCompletions] = useState<any[]>([]);
   const [duckLakeSchema, setDuckLakeSchema] = useState<any>(null);
   const [duckLakeSchemaLoading, setDuckLakeSchemaLoading] =
     useState<boolean>(false);
   const [duckLakeSchemaError, setDuckLakeSchemaError] = useState<string | null>(
     null,
   );
+
+  const duckLakeCompletionsRequestSeq = useRef(0);
+  const activeDuckLakeInstanceIdRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (connectionInput && (connectionInput as any).type === 'ducklake') {
+      activeDuckLakeInstanceIdRef.current = (connectionInput as any).instanceId;
+    } else {
+      activeDuckLakeInstanceIdRef.current = null;
+    }
+  }, [connectionInput]);
 
   // Convert DuckLake schema to Table[] format for SchemaTreeViewerWithSchema
   const duckLakeTables = useMemo(() => {
@@ -202,11 +220,26 @@ const Sql = () => {
     return tables;
   }, [duckLakeSchema]);
 
-  // Generate completions using shared hook
-  const completions = useMonacoAutocomplete(activeSchema, duckLakeSchema);
+  // Generate completions from schema
+  const completions = useMemo(() => {
+    const baseCompletions = activeSchema
+      ? utils.generateMonacoCompletions(activeSchema)
+      : [];
+
+    // Merge with DuckLake completions if available
+    if (duckLakeCompletions.length > 0) {
+      return mergeCompletions(baseCompletions, duckLakeCompletions);
+    }
+
+    return baseCompletions;
+  }, [activeSchema, duckLakeCompletions]);
 
   const loadDuckLakeCompletions = useCallback(async () => {
+    const requestSeq = duckLakeCompletionsRequestSeq.current + 1;
+    duckLakeCompletionsRequestSeq.current = requestSeq;
+
     if (!connectionInput || (connectionInput as any).type !== 'ducklake') {
+      setDuckLakeCompletions([]);
       setDuckLakeSchema(null);
       setDuckLakeSchemaLoading(false);
       setDuckLakeSchemaError(null);
@@ -214,8 +247,14 @@ const Sql = () => {
     }
 
     const { instanceId } = connectionInput as any;
+    const requestedInstanceId = instanceId as string;
+
+    const isStale = () =>
+      requestSeq !== duckLakeCompletionsRequestSeq.current ||
+      activeDuckLakeInstanceIdRef.current !== requestedInstanceId;
 
     if (!instanceId) {
+      setDuckLakeCompletions([]);
       setDuckLakeSchema(null);
       setDuckLakeSchemaLoading(false);
       setDuckLakeSchemaError('Missing DuckLake instance id');
@@ -226,14 +265,30 @@ const Sql = () => {
     setDuckLakeSchemaError(null);
     try {
       const schema = await DuckLakeService.extractSchema(instanceId);
+      if (isStale()) {
+        return;
+      }
+
+      const duckLakeItems = generateDuckLakeCompletions(schema);
+      if (isStale()) {
+        return;
+      }
+
+      setDuckLakeCompletions(duckLakeItems);
       setDuckLakeSchema(schema);
     } catch (error) {
       // eslint-disable-next-line no-console
       console.error('[SQL Screen] Failed to load DuckLake completions:', error);
-      setDuckLakeSchema(null);
-      setDuckLakeSchemaError('Failed to load DuckLake schema');
+
+      if (!isStale()) {
+        setDuckLakeCompletions([]);
+        setDuckLakeSchema(null);
+        setDuckLakeSchemaError('Failed to load DuckLake schema');
+      }
     } finally {
-      setDuckLakeSchemaLoading(false);
+      if (!isStale()) {
+        setDuckLakeSchemaLoading(false);
+      }
     }
   }, [connectionInput]);
 
@@ -416,14 +471,16 @@ const Sql = () => {
             bgcolor: theme.palette.mode === 'dark' ? '#1e1e1e' : '#f5f5f5',
           }}
         >
-          {/* Connection Selection & Actions */}
           <Box
             sx={{
-              p: '8px',
+              height: 40,
+              px: '8px',
               display: 'flex',
               gap: '4px',
               alignItems: 'center',
               bgcolor: theme.palette.mode === 'dark' ? '#1e1e1e' : '#f5f5f5',
+              borderBottom: `1px solid ${theme.palette.divider}`,
+              boxSizing: 'border-box',
             }}
           >
             <FormControl fullWidth size="small">
@@ -966,6 +1023,11 @@ const Sql = () => {
                         duckLakeInstanceId:
                           connectionInput.type === 'ducklake'
                             ? (connectionInput as any).instanceId
+                            : undefined,
+                        duckLakeReady:
+                          connectionInput.type === 'ducklake'
+                            ? (connectionInput as any).status !== 'loading' &&
+                              (connectionInput as any).status !== 'connecting'
                             : undefined,
                         originalSql:
                           (activeTab.results as any)?.originalSql ??

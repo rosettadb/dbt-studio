@@ -205,8 +205,7 @@ export default class ConnectorsService {
       case 'duckdb': {
         const duckConn = connection as DuckDBConnection;
         // Extract filename from path if available
-        const pathParts = duckConn.database_path.split('/');
-        const fileName = pathParts[pathParts.length - 1].replace('.duckdb', '');
+        const fileName = path.basename(duckConn.database_path, '.duckdb');
         baseName = fileName || duckConn.name;
         break;
       }

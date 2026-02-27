@@ -29,14 +29,15 @@ export type TableRowAction<T> = {
 export type CustomTableType<T> = {
   id: string;
   name: string;
-  rows: Array<T>;
-  columns: Array<ColumnType<T>>;
+  rows: T[];
+  columns: ColumnType<T>[];
   indexCell?: boolean;
   classes?: Object;
   loading?: boolean;
   customPagination?: CustomTablePagination<T>;
-  rowActions?: Array<TableRowAction<T>>;
+  rowActions?: TableRowAction<T>[];
   containerStyle?: CSSProperties;
   toolbarContent?: ReactNode;
   dataTestId?: string;
+  showSearch?: boolean;
 };

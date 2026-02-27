@@ -28,6 +28,8 @@ type Props = {
   onCancel: () => void;
   connection?: ConnectionModel;
   projectId?: string;
+  duplicateFrom?: ConnectionModel;
+  suggestedName?: string;
 };
 
 function shortDuckdbPath(databasePath: string): string {
@@ -41,6 +43,8 @@ export const DuckDB: React.FC<Props> = ({
   onCancel,
   connection,
   projectId,
+  duplicateFrom,
+  suggestedName,
 }) => {
   const navigate = useNavigate();
   const theme = useTheme();
@@ -52,15 +56,29 @@ export const DuckDB: React.FC<Props> = ({
     [connection],
   );
 
+  const duplicateConnection = React.useMemo(
+    () => duplicateFrom?.connection as DuckDBConnection,
+    [duplicateFrom],
+  );
+
   const [formState, setFormState] = React.useState<DuckDBConnection>({
     type: 'duckdb',
-    name: existingConnection?.name || 'DuckDB Connection',
-    database_path: existingConnection?.database_path || '',
-    database: existingConnection?.database || 'main',
-    schema: existingConnection?.schema || 'main',
-    short_database_path: existingConnection?.database_path
-      ? shortDuckdbPath(existingConnection.database_path)
-      : '',
+    name: existingConnection?.name ?? suggestedName ?? 'DuckDB Connection',
+    database_path:
+      existingConnection?.database_path ??
+      duplicateConnection?.database_path ??
+      '',
+    database:
+      existingConnection?.database ?? duplicateConnection?.database ?? 'main',
+    schema: existingConnection?.schema ?? duplicateConnection?.schema ?? 'main',
+    short_database_path:
+      existingConnection?.database_path || duplicateConnection?.database_path
+        ? shortDuckdbPath(
+            existingConnection?.database_path ||
+              duplicateConnection?.database_path ||
+              '',
+          )
+        : '',
   });
 
   const [connectionStatus, setConnectionStatus] = React.useState<

@@ -800,7 +800,13 @@ export class SQLiteCatalogAdapter extends CatalogAdapter {
 
       if (snapshotId) {
         // Modify query to use specific snapshot
-        query = `${query} FOR SYSTEM_TIME AS OF SNAPSHOT '${snapshotId}'`;
+        const snapshotIdStr = String(snapshotId).trim();
+        if (!/^\d+$/.test(snapshotIdStr)) {
+          throw DuckLakeError.validation(
+            'Invalid snapshotId. Expected digits only.',
+          );
+        }
+        query = `${query} FOR SYSTEM_TIME AS OF SNAPSHOT '${snapshotIdStr}'`;
       }
 
       let totalRows: number | undefined;
@@ -810,33 +816,31 @@ export class SQLiteCatalogAdapter extends CatalogAdapter {
       const isSelectQuery =
         /^\s*SELECT\b/i.test(query) || /^\s*WITH\b/i.test(query);
 
-      if (limit && !hasExistingLimit) {
-        if (isSelectQuery) {
-          try {
-            const countQuery = `SELECT COUNT(*) as total FROM (${query})`;
-            const countResult =
-              await this.connectionInfo.connection.run(countQuery);
-            const countRows = await countResult.getRows();
+      if (limit && !hasExistingLimit && isSelectQuery) {
+        try {
+          const countQuery = `SELECT COUNT(*) as total FROM (${query}) AS _sub`;
+          const countResult =
+            await this.connectionInfo.connection.run(countQuery);
+          const countRows = await countResult.getRows();
 
-            if (countRows && countRows.length > 0) {
-              const countRow = countRows[0];
-              let countVal;
-              if (Array.isArray(countRow)) {
-                [countVal] = countRow;
-              } else if (countRow && typeof countRow === 'object') {
-                countVal = countRow.total ?? Object.values(countRow)[0];
-              }
-              if (countVal !== undefined) {
-                totalRows = Number(countVal);
-              }
+          if (countRows && countRows.length > 0) {
+            const countRow = countRows[0];
+            let countVal;
+            if (Array.isArray(countRow)) {
+              [countVal] = countRow;
+            } else if (countRow && typeof countRow === 'object') {
+              countVal = countRow.total ?? Object.values(countRow)[0];
             }
-          } catch (error) {
-            // eslint-disable-next-line no-console
-            console.warn(
-              '[SQLite] Failed to fetch total rows for pagination:',
-              error,
-            );
+            if (countVal !== undefined) {
+              totalRows = Number(countVal);
+            }
           }
+        } catch (error) {
+          // eslint-disable-next-line no-console
+          console.warn(
+            '[SQLite] Failed to fetch total rows for pagination:',
+            error,
+          );
         }
 
         query += ` LIMIT ${limit}`;
