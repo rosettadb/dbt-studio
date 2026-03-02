@@ -88,12 +88,17 @@ export function useUpdateNotebook() {
         name,
         cells,
       }),
-    onSuccess: (notebook, { connectionId, notebookId }) => {
-      queryClient.setQueryData(
-        notebooksKeys.detail(connectionId, notebookId),
-        notebook,
-      );
-      queryClient.invalidateQueries(notebooksKeys.list(connectionId));
+    onSuccess: (notebook, { connectionId, notebookId, name }) => {
+      // Only update query cache if name changed (affects sidebar display)
+      // For cell updates, we rely on local state management in NotebookEditor
+      if (name !== undefined) {
+        queryClient.setQueryData(
+          notebooksKeys.detail(connectionId, notebookId),
+          notebook,
+        );
+        queryClient.invalidateQueries(notebooksKeys.list(connectionId));
+      }
+      // For cell-only updates, don't touch the cache to avoid re-render loops
     },
     onError: (error: Error) => {
       toast.error(`Failed to update notebook: ${error.message}`);
