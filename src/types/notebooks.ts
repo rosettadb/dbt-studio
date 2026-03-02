@@ -8,6 +8,7 @@ export interface CellOutput {
   data?: any[];
   columns?: string[];
   rowCount?: number;
+  totalRows?: number; // Total rows in full dataset (for pagination)
   executionTime?: number;
   error?: string;
 }

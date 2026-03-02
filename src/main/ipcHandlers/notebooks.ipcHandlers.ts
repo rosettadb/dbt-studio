@@ -88,8 +88,40 @@ export function registerNotebooksHandlers() {
       notebookId: string,
       cellId: string,
       sql: string,
+      limit?: number,
+      offset?: number,
     ) => {
-      return NotebooksService.runCell(connectionId, notebookId, cellId, sql);
+      return NotebooksService.runCell(
+        connectionId,
+        notebookId,
+        cellId,
+        sql,
+        limit,
+        offset,
+      );
+    },
+  );
+
+  // Fetch a specific page of results for a cell (pagination without saving)
+  ipcMain.handle(
+    'notebooks:fetchCellPage',
+    async (
+      _event,
+      connectionId: string,
+      notebookId: string,
+      cellId: string,
+      sql: string,
+      limit: number,
+      offset: number,
+    ) => {
+      return NotebooksService.fetchCellPage(
+        connectionId,
+        notebookId,
+        cellId,
+        sql,
+        limit,
+        offset,
+      );
     },
   );
 

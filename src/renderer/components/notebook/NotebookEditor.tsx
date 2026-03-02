@@ -116,14 +116,10 @@ export const NotebookEditor: React.FC<NotebookEditorProps> = ({
             },
           });
 
-        console.log(
-          '[NotebookEditor] Registered global completion provider with',
-          completionsCount,
-          'items',
-        );
         return undefined;
       })
       .catch((err: any) => {
+        // eslint-disable-next-line no-console
         console.error('[NotebookEditor] Failed to initialize Monaco:', err);
       });
 
@@ -388,6 +384,8 @@ export const NotebookEditor: React.FC<NotebookEditorProps> = ({
           notebookId,
           cellId,
           sql: content,
+          limit: 10, // Default pagination: first 10 rows
+          offset: 0,
         });
       } catch (err) {
         // Error is already handled by React Query and displayed in output
@@ -627,6 +625,7 @@ export const NotebookEditor: React.FC<NotebookEditorProps> = ({
                               cell={cell}
                               index={index}
                               connectionId={connectionId}
+                              notebookId={notebookId}
                               isExecuting={
                                 executingCells.has(cell.id) || isRunningAll
                               }

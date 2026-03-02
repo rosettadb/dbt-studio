@@ -322,6 +322,7 @@ export type NotebookChannels =
   | 'notebooks:duplicate'
   | 'notebooks:delete'
   | 'notebooks:runCell'
+  | 'notebooks:fetchCellPage'
   | 'notebooks:runAll'
   | 'notebooks:archived:list'
   | 'notebooks:archived:restore'

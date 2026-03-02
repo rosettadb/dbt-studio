@@ -15,6 +15,34 @@ import DuckLakeService from './duckLake.service';
 const NOTEBOOKS_DIR = path.join(app.getPath('userData'), 'notebooks');
 const ORPHANED_DIR = path.join(NOTEBOOKS_DIR, '_orphaned');
 
+// Maximum rows to store in notebook output (prevent massive files)
+const MAX_STORED_ROWS = 100;
+
+// Helper function to convert BigInt to string for JSON serialization
+function bigIntReplacer(key: string, value: any): any {
+  if (typeof value === 'bigint') {
+    return value.toString();
+  }
+  return value;
+}
+
+// Helper function to limit data size in cell output
+function limitCellOutputData(output: CellOutput): CellOutput {
+  if (
+    output.type === 'table' &&
+    output.data &&
+    output.data.length > MAX_STORED_ROWS
+  ) {
+    return {
+      ...output,
+      data: output.data.slice(0, MAX_STORED_ROWS),
+      rowCount: MAX_STORED_ROWS,
+      // Keep totalRows to show full count in UI
+    };
+  }
+  return output;
+}
+
 // Ensure directories exist
 async function ensureDirectories() {
   await fs.mkdir(NOTEBOOKS_DIR, { recursive: true });
@@ -139,7 +167,10 @@ export class NotebooksService {
       };
 
       const notebookPath = getNotebookPath(connectionKey, notebook.id);
-      await fs.writeFile(notebookPath, JSON.stringify(notebook, null, 2));
+      await fs.writeFile(
+        notebookPath,
+        JSON.stringify(notebook, bigIntReplacer, 2),
+      );
 
       return notebook;
     } catch (error) {
@@ -184,7 +215,7 @@ export class NotebooksService {
       const notebookPath = getNotebookPath(connectionKey, notebookId);
       await fs.writeFile(
         notebookPath,
-        JSON.stringify(updatedNotebook, null, 2),
+        JSON.stringify(updatedNotebook, bigIntReplacer, 2),
       );
 
       return updatedNotebook;
@@ -252,7 +283,7 @@ export class NotebooksService {
       );
       await fs.writeFile(
         notebookPath,
-        JSON.stringify(duplicatedNotebook, null, 2),
+        JSON.stringify(duplicatedNotebook, bigIntReplacer, 2),
       );
 
       return duplicatedNotebook;
@@ -290,24 +321,100 @@ export class NotebooksService {
     notebookId: string,
     cellId: string,
     sql: string,
+    limit?: number,
+    offset?: number,
   ): Promise<CellOutput> {
     try {
       const startTime = Date.now();
 
+      // Default pagination values
+      const pageLimit = limit ?? 10;
+      const pageOffset = offset ?? 0;
+
+      // Detect query type
+      const isSelectQuery = (query: string): boolean => {
+        const normalized = query.trim().toUpperCase();
+        return normalized.startsWith('SELECT') || normalized.startsWith('WITH');
+      };
+
+      const isSelect = isSelectQuery(sql);
+
       let result: any;
+      let totalRows: number | undefined;
 
       // Execute query based on connection type
       if (connectionId.startsWith('ducklake-')) {
         const instanceId = connectionId.replace('ducklake-', '');
+
+        // DuckLake supports native pagination
         result = await DuckLakeService.executeQuery({
           instanceId,
           query: sql,
+          limit: isSelect ? pageLimit : undefined,
+          offset: isSelect ? pageOffset : undefined,
         });
+
+        // Get total row count for SELECT queries
+        if (
+          isSelect &&
+          result.success &&
+          result.data &&
+          result.data.length > 0
+        ) {
+          try {
+            const countQuery = `SELECT COUNT(*) as count FROM (${sql.trim().replace(/;$/, '')}) as subquery`;
+            const countResult = await DuckLakeService.executeQuery({
+              instanceId,
+              query: countQuery,
+            });
+            const countValue = countResult.data?.[0]?.count;
+            totalRows =
+              typeof countValue === 'bigint'
+                ? Number(countValue)
+                : (countValue ?? result.rowCount);
+          } catch (countError) {
+            // If count fails, use rowCount from result
+            totalRows = result.rowCount;
+          }
+        }
       } else {
+        // Regular DB connection
+        let queryToExecute = sql;
+
+        // Manually append LIMIT/OFFSET for SELECT queries
+        if (isSelect) {
+          queryToExecute = `${sql.trim().replace(/;$/, '')} LIMIT ${pageLimit} OFFSET ${pageOffset}`;
+        }
+
         result = await ConnectorsService.executeQueryForConnection({
           connectionId,
-          query: sql,
+          query: queryToExecute,
         });
+
+        // Get total row count for SELECT queries
+        if (
+          isSelect &&
+          result.success &&
+          result.data &&
+          result.data.length > 0
+        ) {
+          try {
+            const countQuery = `SELECT COUNT(*) as count FROM (${sql.trim().replace(/;$/, '')}) as subquery`;
+            const countResult =
+              await ConnectorsService.executeQueryForConnection({
+                connectionId,
+                query: countQuery,
+              });
+            const countValue = (countResult.data?.[0] as any)?.count;
+            totalRows =
+              typeof countValue === 'bigint'
+                ? Number(countValue)
+                : (countValue ?? result.rowCount);
+          } catch (countError) {
+            // If count fails, use rowCount from result
+            totalRows = result.rowCount;
+          }
+        }
       }
 
       const executionTime = Date.now() - startTime;
@@ -331,6 +438,7 @@ export class NotebooksService {
           type: 'empty',
           executionTime,
           rowCount: 0,
+          totalRows: isSelect ? totalRows : undefined,
         };
 
         await this.updateCellOutput(connectionId, notebookId, cellId, output);
@@ -346,7 +454,8 @@ export class NotebooksService {
         type: 'table',
         data: result.data,
         columns,
-        rowCount: result.rowCount || result.data.length,
+        rowCount: result.data.length,
+        totalRows: isSelect ? totalRows : undefined,
         executionTime,
       };
 
@@ -365,6 +474,145 @@ export class NotebooksService {
 
       await this.updateCellOutput(connectionId, notebookId, cellId, output);
       return output;
+    }
+  }
+
+  /**
+   * Fetch a specific page of results for a cell without updating notebook storage
+   * Used for pagination without re-executing/saving
+   */
+  static async fetchCellPage(
+    connectionId: string,
+    notebookId: string,
+    cellId: string,
+    sql: string,
+    limit: number,
+    offset: number,
+  ): Promise<CellOutput> {
+    try {
+      const startTime = Date.now();
+
+      // Detect query type
+      const isSelectQuery = (query: string): boolean => {
+        const normalized = query.trim().toUpperCase();
+        return normalized.startsWith('SELECT') || normalized.startsWith('WITH');
+      };
+
+      const isSelect = isSelectQuery(sql);
+
+      // Only paginate SELECT queries
+      if (!isSelect) {
+        return {
+          type: 'error',
+          error: 'Pagination is only supported for SELECT queries',
+          executionTime: 0,
+        };
+      }
+
+      let result: any;
+      let totalRows: number | undefined;
+
+      // Execute query based on connection type
+      if (connectionId.startsWith('ducklake-')) {
+        const instanceId = connectionId.replace('ducklake-', '');
+
+        // DuckLake supports native pagination
+        result = await DuckLakeService.executeQuery({
+          instanceId,
+          query: sql,
+          limit,
+          offset,
+        });
+
+        // Get total row count
+        if (result.success && result.data) {
+          try {
+            const countQuery = `SELECT COUNT(*) as count FROM (${sql.trim().replace(/;$/, '')}) as subquery`;
+            const countResult = await DuckLakeService.executeQuery({
+              instanceId,
+              query: countQuery,
+            });
+            const countValue = countResult.data?.[0]?.count;
+            totalRows =
+              typeof countValue === 'bigint'
+                ? Number(countValue)
+                : (countValue ?? result.rowCount);
+          } catch (countError) {
+            totalRows = result.rowCount;
+          }
+        }
+      } else {
+        // Regular DB connection - manually append LIMIT/OFFSET
+        const queryToExecute = `${sql.trim().replace(/;$/, '')} LIMIT ${limit} OFFSET ${offset}`;
+
+        result = await ConnectorsService.executeQueryForConnection({
+          connectionId,
+          query: queryToExecute,
+        });
+
+        // Get total row count
+        if (result.success && result.data) {
+          try {
+            const countQuery = `SELECT COUNT(*) as count FROM (${sql.trim().replace(/;$/, '')}) as subquery`;
+            const countResult =
+              await ConnectorsService.executeQueryForConnection({
+                connectionId,
+                query: countQuery,
+              });
+            const countValue = (countResult.data?.[0] as any)?.count;
+            totalRows =
+              typeof countValue === 'bigint'
+                ? Number(countValue)
+                : (countValue ?? result.rowCount);
+          } catch (countError) {
+            totalRows = result.rowCount;
+          }
+        }
+      }
+
+      const executionTime = Date.now() - startTime;
+
+      // Handle error
+      if (result.error || !result.success) {
+        return {
+          type: 'error',
+          error: result.error || 'Query execution failed',
+          executionTime,
+        };
+      }
+
+      // Handle empty result
+      if (!result.data || result.data.length === 0) {
+        return {
+          type: 'empty',
+          executionTime,
+          rowCount: 0,
+          totalRows,
+        };
+      }
+
+      // Handle table result
+      const columns = result.fields
+        ? result.fields.map((f: any) => f.name)
+        : Object.keys(result.data[0]);
+
+      return {
+        type: 'table',
+        data: result.data,
+        columns,
+        rowCount: result.data.length,
+        totalRows,
+        executionTime,
+      };
+    } catch (error: any) {
+      // eslint-disable-next-line no-console
+      console.error(error);
+
+      return {
+        type: 'error',
+        error: error.message || 'Unknown error',
+        executionTime: 0,
+      };
     }
   }
 
@@ -402,7 +650,7 @@ export class NotebooksService {
         const notebookPath = getNotebookPath(connectionKey, notebookId);
         await fs.writeFile(
           notebookPath,
-          JSON.stringify(updatedNotebook, null, 2),
+          JSON.stringify(updatedNotebook, bigIntReplacer, 2),
         );
       }
     } catch (error) {
@@ -425,8 +673,11 @@ export class NotebooksService {
       const notebook = await this.getNotebook(connectionId, notebookId);
       if (!notebook) return;
 
+      // Limit output data size to prevent massive files
+      const limitedOutput = limitCellOutputData(output);
+
       const updatedCells = notebook.cells.map((cell) =>
-        cell.id === cellId ? { ...cell, output } : cell,
+        cell.id === cellId ? { ...cell, output: limitedOutput } : cell,
       );
 
       await this.updateNotebook(connectionId, notebookId, {
@@ -551,7 +802,10 @@ export class NotebooksService {
 
       // Write to target location
       const targetPath = getNotebookPath(targetConnectionKey, notebookId);
-      await fs.writeFile(targetPath, JSON.stringify(notebook, null, 2));
+      await fs.writeFile(
+        targetPath,
+        JSON.stringify(notebook, bigIntReplacer, 2),
+      );
 
       // Delete from archived location
       await fs.unlink(archivedPath);

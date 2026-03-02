@@ -28,6 +28,7 @@ interface NotebookCellProps {
   cell: NotebookCellType;
   index: number;
   connectionId: string; // Changed from instanceId to connectionId for consistency
+  notebookId: string; // Added for pagination support
   isExecuting: boolean;
   onRun: () => void;
   onDelete: () => void;
@@ -43,6 +44,7 @@ const NotebookCellComponent: React.FC<NotebookCellProps> = ({
   cell,
   index,
   connectionId,
+  notebookId,
   isExecuting,
   onRun,
   onDelete,
@@ -356,10 +358,10 @@ const NotebookCellComponent: React.FC<NotebookCellProps> = ({
 
       {/* Cell Content (collapsible) */}
       <Collapse in={!collapsed}>
-        <Box sx={{ p: 1 }}>
+        <Box sx={{ p: 0.75 }}>
           {/* Code Section - Always show when not filtered to output only */}
           {(section === 'all' || section === 'code') && (
-            <Box sx={{ mb: section === 'all' && cell.output ? 1 : 0 }}>
+            <Box sx={{ mb: section === 'all' && cell.output ? 0.5 : 0 }}>
               {cell.type === 'sql' ? (
                 <SQLCell
                   cell={cell}
@@ -397,6 +399,9 @@ const NotebookCellComponent: React.FC<NotebookCellProps> = ({
                   <OutputPanel
                     output={cell.output}
                     connectionId={connectionId}
+                    notebookId={notebookId}
+                    cellId={cell.id}
+                    sql={cell.content}
                   />
                 </Box>
 

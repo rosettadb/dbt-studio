@@ -117,6 +117,8 @@ export const notebooksService = {
     notebookId: string,
     cellId: string,
     sql: string,
+    limit?: number,
+    offset?: number,
   ): Promise<CellOutput> => {
     return window.electron.ipcRenderer.invoke(
       'notebooks:runCell',
@@ -124,6 +126,30 @@ export const notebooksService = {
       notebookId,
       cellId,
       sql,
+      limit,
+      offset,
+    );
+  },
+
+  /**
+   * Fetch a specific page of results for a cell (pagination without saving)
+   */
+  fetchCellPage: async (
+    connectionId: string,
+    notebookId: string,
+    cellId: string,
+    sql: string,
+    limit: number,
+    offset: number,
+  ): Promise<CellOutput> => {
+    return window.electron.ipcRenderer.invoke(
+      'notebooks:fetchCellPage',
+      connectionId,
+      notebookId,
+      cellId,
+      sql,
+      limit,
+      offset,
     );
   },
 

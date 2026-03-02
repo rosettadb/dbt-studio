@@ -40,7 +40,11 @@ export function useNotebook(connectionId: string, notebookId: string) {
     queryKey: notebooksKeys.detail(connectionId, notebookId),
     queryFn: () => notebooksService.getNotebook(connectionId, notebookId),
     enabled: !!connectionId && !!notebookId,
-    staleTime: 10000,
+    staleTime: 0, // Always fetch fresh data
+    cacheTime: 0, // Don't cache results
+    refetchOnWindowFocus: false, // Don't refetch when window gains focus
+    refetchOnMount: true, // Only fetch on mount
+    refetchOnReconnect: false, // Don't refetch on reconnect
   });
 }
 
@@ -191,19 +195,67 @@ export function useRunCell() {
       notebookId,
       cellId,
       sql,
+      limit,
+      offset,
     }: {
       connectionId: string;
       notebookId: string;
       cellId: string;
       sql: string;
-    }) => notebooksService.runCell(connectionId, notebookId, cellId, sql),
-    onSuccess: (_, { connectionId, notebookId }) => {
-      queryClient.invalidateQueries(
+      limit?: number;
+      offset?: number;
+    }) =>
+      notebooksService.runCell(
+        connectionId,
+        notebookId,
+        cellId,
+        sql,
+        limit,
+        offset,
+      ),
+    onSuccess: async (_, { connectionId, notebookId }) => {
+      // Manually refetch the notebook to get updated cell output
+      await queryClient.refetchQueries(
         notebooksKeys.detail(connectionId, notebookId),
+        { active: true }, // Only refetch if query is currently active
       );
     },
     onError: (error: Error) => {
       toast.error(`Cell execution failed: ${error.message}`);
+    },
+  });
+}
+
+// Fetch a specific page of results for a cell (pagination without saving)
+export function useFetchCellPage() {
+  return useMutation({
+    mutationFn: ({
+      connectionId,
+      notebookId,
+      cellId,
+      sql,
+      limit,
+      offset,
+    }: {
+      connectionId: string;
+      notebookId: string;
+      cellId: string;
+      sql: string;
+      limit: number;
+      offset: number;
+    }) =>
+      notebooksService.fetchCellPage(
+        connectionId,
+        notebookId,
+        cellId,
+        sql,
+        limit,
+        offset,
+      ),
+    // No cache, no retry - just fetch fresh data
+    retry: false,
+    onError: (error: Error) => {
+      toast.error(`Failed to fetch page: ${error.message}`);
     },
   });
 }

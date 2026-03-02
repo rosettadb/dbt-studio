@@ -388,7 +388,7 @@ export const SQLCell: React.FC<SQLCellProps> = ({
 }) => {
   const editorRef = useRef<editor.IStandaloneCodeEditor | null>(null);
   const [monacoConfigured, setMonacoConfigured] = useState(false);
-  const [editorHeight, setEditorHeight] = useState(120); // Reduced default from 150
+  const [editorHeight, setEditorHeight] = useState(80); // Compact default height
   const resizeHandleRef = useRef<HTMLDivElement>(null);
   const [isHovering, setIsHovering] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
@@ -502,7 +502,7 @@ export const SQLCell: React.FC<SQLCellProps> = ({
 
       const handleMouseMove = (moveEvent: MouseEvent) => {
         const deltaY = moveEvent.clientY - startY;
-        const newHeight = Math.max(100, Math.min(800, startHeight + deltaY));
+        const newHeight = Math.max(40, Math.min(800, startHeight + deltaY));
         setEditorHeight(newHeight);
       };
 
@@ -542,7 +542,7 @@ export const SQLCell: React.FC<SQLCellProps> = ({
           borderColor: 'divider',
           borderRadius: 1,
           overflow: 'hidden',
-          minHeight: 100,
+          minHeight: 40,
           position: 'relative',
         }}
       >
@@ -560,7 +560,7 @@ export const SQLCell: React.FC<SQLCellProps> = ({
             fontSize: 12, // Reduced from 14
             tabSize: 2,
             automaticLayout: true,
-            padding: { top: 4, bottom: 4 }, // Reduced from 8
+            padding: { top: 4, bottom: 12 }, // Increased bottom padding to avoid overlap with resize handle
             lineHeight: 18, // Compact line height
             scrollbar: {
               vertical: 'hidden',
@@ -577,7 +577,7 @@ export const SQLCell: React.FC<SQLCellProps> = ({
           theme="sql-enhanced"
         />
 
-        {/* Resize Handle - Only visible on hover or while dragging */}
+        {/* Resize Handle - Always visible, more prominent */}
         <Box
           ref={resizeHandleRef}
           sx={{
@@ -585,12 +585,12 @@ export const SQLCell: React.FC<SQLCellProps> = ({
             bottom: 0,
             left: 0,
             right: 0,
-            height: '8px',
+            height: '10px',
             cursor: 'row-resize',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
-            opacity: isHovering || isDragging ? 1 : 0,
+            opacity: isHovering || isDragging ? 1 : 0.3,
             transition: 'opacity 0.2s ease-in-out',
             backgroundColor: 'transparent',
             zIndex: 10,
