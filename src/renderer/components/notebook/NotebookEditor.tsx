@@ -128,26 +128,28 @@ export const NotebookEditor: React.FC<NotebookEditorProps> = ({
     (type: 'sql' | 'markdown') => {
       if (!notebook) return;
 
-      const newCell: NotebookCellType = {
-        id: uuidv4(),
-        type,
-        content: '',
-        order: localCells.length,
-      };
+      // Use functional update to avoid stale closure
+      setLocalCells((prevCells) => {
+        const newCell: NotebookCellType = {
+          id: uuidv4(),
+          type,
+          content: '',
+          order: prevCells.length,
+        };
 
-      const updatedCells = [...localCells, newCell];
+        const updatedCells = [...prevCells, newCell];
 
-      // Update local state immediately
-      setLocalCells(updatedCells);
+        // Update backend
+        updateNotebook.mutate({
+          connectionId,
+          notebookId,
+          cells: updatedCells,
+        });
 
-      // Update backend
-      updateNotebook.mutate({
-        connectionId,
-        notebookId,
-        cells: updatedCells,
+        return updatedCells;
       });
     },
-    [notebook, localCells, connectionId, notebookId, updateNotebook],
+    [notebook, connectionId, notebookId, updateNotebook], // Removed localCells dependency
   );
 
   const handleUpdateCell = useCallback(
@@ -184,107 +186,120 @@ export const NotebookEditor: React.FC<NotebookEditorProps> = ({
     (cellId: string) => {
       if (!notebook) return;
 
-      const updatedCells = localCells
-        .filter((cell) => cell.id !== cellId)
-        .map((cell, index) => ({ ...cell, order: index }));
+      // Use functional update to avoid stale closure
+      setLocalCells((prevCells) => {
+        const updatedCells = prevCells
+          .filter((cell) => cell.id !== cellId)
+          .map((cell, index) => ({ ...cell, order: index }));
 
-      // Update local state immediately
-      setLocalCells(updatedCells);
+        // Update backend
+        updateNotebook.mutate({
+          connectionId,
+          notebookId,
+          cells: updatedCells,
+        });
 
-      // Update backend
-      updateNotebook.mutate({
-        connectionId,
-        notebookId,
-        cells: updatedCells,
+        return updatedCells;
       });
     },
-    [connectionId, notebook, notebookId, updateNotebook, localCells],
+    [connectionId, notebook, notebookId, updateNotebook], // Removed localCells dependency
   );
 
   const handleDuplicateCell = useCallback(
     (cellId: string) => {
       if (!notebook) return;
 
-      const cellToDuplicate = localCells.find((c) => c.id === cellId);
-      if (!cellToDuplicate) return;
+      // Use functional update to avoid stale closure
+      setLocalCells((prevCells) => {
+        const cellToDuplicate = prevCells.find((c) => c.id === cellId);
+        if (!cellToDuplicate) {
+          return prevCells;
+        }
 
-      const newCell: NotebookCellType = {
-        ...cellToDuplicate,
-        id: uuidv4(),
-        output: undefined,
-        order: cellToDuplicate.order + 1,
-      };
+        const newCell: NotebookCellType = {
+          ...cellToDuplicate,
+          id: uuidv4(),
+          output: undefined,
+          order: cellToDuplicate.order + 1,
+        };
 
-      const updatedCells = [
-        ...localCells.slice(0, cellToDuplicate.order + 1),
-        newCell,
-        ...localCells.slice(cellToDuplicate.order + 1),
-      ].map((cell, index) => ({ ...cell, order: index }));
+        const updatedCells = [
+          ...prevCells.slice(0, cellToDuplicate.order + 1),
+          newCell,
+          ...prevCells.slice(cellToDuplicate.order + 1),
+        ].map((cell, index) => ({ ...cell, order: index }));
 
-      // Update local state immediately
-      setLocalCells(updatedCells);
+        // Update backend
+        updateNotebook.mutate({
+          connectionId,
+          notebookId,
+          cells: updatedCells,
+        });
 
-      // Update backend
-      updateNotebook.mutate({
-        connectionId,
-        notebookId,
-        cells: updatedCells,
+        return updatedCells;
       });
     },
-    [connectionId, notebook, notebookId, updateNotebook, localCells],
+    [connectionId, notebook, notebookId, updateNotebook], // Removed localCells dependency
   );
 
   // Drag-and-drop cell reordering
   const handleDragEnd = useCallback(
     (result: DropResult) => {
-      if (!notebook || !result.destination) return;
+      if (!notebook || !result.destination) {
+        return;
+      }
 
       const { source, destination } = result;
-      if (source.index === destination.index) return;
+      if (source.index === destination.index) {
+        return;
+      }
 
-      // Reorder cells
-      const reorderedCells = Array.from(localCells);
-      const [movedCell] = reorderedCells.splice(source.index, 1);
-      reorderedCells.splice(destination.index, 0, movedCell);
+      // Reorder cells using functional update to avoid stale closure
+      setLocalCells((prevCells) => {
+        const reorderedCells = Array.from(prevCells);
+        const [movedCell] = reorderedCells.splice(source.index, 1);
+        reorderedCells.splice(destination.index, 0, movedCell);
 
-      // Update order property
-      const updatedCells = reorderedCells.map((cell, index) => ({
-        ...cell,
-        order: index,
-      }));
+        // Update order property
+        const updatedCells = reorderedCells.map((cell, index) => ({
+          ...cell,
+          order: index,
+        }));
 
-      // Update local state immediately
-      setLocalCells(updatedCells);
+        // Save to backend
+        updateNotebook.mutate({
+          connectionId,
+          notebookId,
+          cells: updatedCells,
+        });
 
-      // Save to backend
-      updateNotebook.mutate({
-        connectionId,
-        notebookId,
-        cells: updatedCells,
+        return updatedCells;
       });
     },
-    [connectionId, notebook, notebookId, updateNotebook, localCells],
+    [connectionId, notebook, notebookId, updateNotebook], // Removed localCells dependency
   );
 
   const handleClearOutput = useCallback(
     (cellId: string) => {
       if (!notebook) return;
 
-      const updatedCells = localCells.map((cell) =>
-        cell.id === cellId ? { ...cell, output: undefined } : cell,
-      );
+      // Use functional update to avoid stale closure
+      setLocalCells((prevCells) => {
+        const updatedCells = prevCells.map((cell) =>
+          cell.id === cellId ? { ...cell, output: undefined } : cell,
+        );
 
-      // Update local state immediately
-      setLocalCells(updatedCells);
+        // Update backend
+        updateNotebook.mutate({
+          connectionId,
+          notebookId,
+          cells: updatedCells,
+        });
 
-      // Update backend
-      updateNotebook.mutate({
-        connectionId,
-        notebookId,
-        cells: updatedCells,
+        return updatedCells;
       });
     },
-    [connectionId, notebook, notebookId, updateNotebook, localCells],
+    [connectionId, notebook, notebookId, updateNotebook], // Removed localCells dependency
   );
 
   const handleRunCell = useCallback(
@@ -464,7 +479,9 @@ export const NotebookEditor: React.FC<NotebookEditorProps> = ({
       />
 
       {/* Cells */}
-      <Box sx={{ flex: 1, overflow: 'hidden' }}>
+      <Box
+        sx={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0 }}
+      >
         {localCells.length === 0 ? (
           <Box
             sx={{
@@ -508,7 +525,7 @@ export const NotebookEditor: React.FC<NotebookEditorProps> = ({
                   ref={droppableProvided.innerRef}
                   // eslint-disable-next-line react/jsx-props-no-spreading
                   {...droppableProvided.droppableProps}
-                  sx={{ overflowY: 'auto', flex: 1, p: 3 }}
+                  sx={{ overflowY: 'auto', height: '100%', p: 3 }}
                 >
                   {localCells
                     .sort((a, b) => a.order - b.order)

@@ -884,7 +884,6 @@ const Notebooks = () => {
           height: '100%',
           display: 'flex',
           flexDirection: 'column',
-          overflow: 'hidden',
         }}
       >
         {!activeConnectionId ? (
@@ -941,7 +940,6 @@ const Notebooks = () => {
             <Box
               sx={{
                 flex: 1,
-                overflow: 'hidden',
                 display: 'flex',
                 flexDirection: 'column',
                 maxWidth: isSidebarOpen

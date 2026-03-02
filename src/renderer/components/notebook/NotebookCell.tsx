@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, memo } from 'react';
 import {
   Box,
   IconButton,
@@ -39,7 +39,7 @@ interface NotebookCellProps {
 
 type SectionFilter = 'all' | 'code' | 'output';
 
-export const NotebookCell: React.FC<NotebookCellProps> = ({
+const NotebookCellComponent: React.FC<NotebookCellProps> = ({
   cell,
   index,
   connectionId,
@@ -58,6 +58,13 @@ export const NotebookCell: React.FC<NotebookCellProps> = ({
   const [isHoveringOutput, setIsHoveringOutput] = useState(false);
   const [isDraggingOutput, setIsDraggingOutput] = useState(false);
   const outputResizeHandleRef = useRef<HTMLDivElement>(null);
+  const outputHeightRef = useRef<number | null>(null);
+  const resizeThrottleRef = useRef<number | null>(null);
+
+  // Keep ref in sync with state
+  useEffect(() => {
+    outputHeightRef.current = outputHeight;
+  }, [outputHeight]);
 
   // Generate smart summary for collapsed view
   const getCellSummary = (): string => {
@@ -112,15 +119,32 @@ export const NotebookCell: React.FC<NotebookCellProps> = ({
       e.preventDefault();
       setIsDraggingOutput(true);
       const startY = e.clientY;
-      const startHeight = outputHeight || 300;
+
+      // Get current height from ref at the time of mousedown
+      const startHeight = outputHeightRef.current || 300;
 
       const handleMouseMove = (moveEvent: MouseEvent) => {
         const deltaY = moveEvent.clientY - startY;
         const newHeight = Math.max(150, Math.min(1000, startHeight + deltaY));
-        setOutputHeight(newHeight);
+
+        // Throttle updates to ~60fps (16ms) to reduce re-renders
+        if (resizeThrottleRef.current) {
+          return; // Skip this update, previous one still pending
+        }
+
+        resizeThrottleRef.current = window.requestAnimationFrame(() => {
+          setOutputHeight(newHeight);
+          resizeThrottleRef.current = null;
+        });
       };
 
       const handleMouseUp = () => {
+        // Cancel any pending throttled update
+        if (resizeThrottleRef.current) {
+          window.cancelAnimationFrame(resizeThrottleRef.current);
+          resizeThrottleRef.current = null;
+        }
+
         document.removeEventListener('mousemove', handleMouseMove);
         document.removeEventListener('mouseup', handleMouseUp);
         document.body.style.cursor = '';
@@ -142,7 +166,7 @@ export const NotebookCell: React.FC<NotebookCellProps> = ({
       };
     }
     return undefined;
-  }, [outputHeight]);
+  }, []); // Empty deps - only set up once, use ref to get current height
 
   return (
     <Box
@@ -421,3 +445,23 @@ export const NotebookCell: React.FC<NotebookCellProps> = ({
     </Box>
   );
 };
+
+// Memoize to prevent unnecessary re-renders
+// Only re-render if cell content, index, or execution state changes
+export const NotebookCell = memo(
+  NotebookCellComponent,
+  (prevProps, nextProps) => {
+    // Return true if props are equal (skip re-render)
+    // Return false if props are different (re-render)
+    return (
+      prevProps.cell.id === nextProps.cell.id &&
+      prevProps.cell.content === nextProps.cell.content &&
+      prevProps.cell.output === nextProps.cell.output &&
+      prevProps.index === nextProps.index &&
+      prevProps.isExecuting === nextProps.isExecuting &&
+      prevProps.connectionId === nextProps.connectionId
+    );
+  },
+);
+
+NotebookCell.displayName = 'NotebookCell';
