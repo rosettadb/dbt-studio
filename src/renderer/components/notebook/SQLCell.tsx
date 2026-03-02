@@ -10,7 +10,7 @@ import { Box, CircularProgress, Typography } from '@mui/material';
 import Editor, { OnMount, loader } from '@monaco-editor/react';
 import { editor } from 'monaco-editor';
 import { NotebookCell } from '../../../types/notebooks';
-import { useSchemaForConnection, useMonacoAutocomplete } from '../../hooks';
+import { useSchemaForConnection } from '../../hooks';
 
 // Configure Monaco loader for Electron
 loader.config({
@@ -388,58 +388,13 @@ export const SQLCell: React.FC<SQLCellProps> = ({
 }) => {
   const editorRef = useRef<editor.IStandaloneCodeEditor | null>(null);
   const [monacoConfigured, setMonacoConfigured] = useState(false);
-  const monacoInstanceRef = useRef<any>(null);
-  const completionProviderRef = useRef<any>(null);
   const [editorHeight, setEditorHeight] = useState(120); // Reduced default from 150
   const resizeHandleRef = useRef<HTMLDivElement>(null);
   const [isHovering, setIsHovering] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
 
-  // Fetch schema using shared hook (Phase 2)
-  const { data: schemaData, refetch: refetchSchema } =
-    useSchemaForConnection(connectionId);
-
-  // Generate completions using shared hook (Phase 2)
-  const completions = useMonacoAutocomplete(
-    schemaData?.tables || null,
-    schemaData?.duckLakeSchema || null,
-  );
-
-  // Register completion provider (Phase 4)
-  const registerCompletionProvider = React.useCallback(() => {
-    const monacoInstance = monacoInstanceRef.current;
-    if (!monacoInstance) return;
-
-    // Dispose existing provider
-    if (completionProviderRef.current) {
-      completionProviderRef.current.dispose();
-    }
-
-    // Register new completion provider
-    completionProviderRef.current =
-      monacoInstance.languages.registerCompletionItemProvider('sql', {
-        provideCompletionItems: (model: editor.ITextModel, position: any) => {
-          const word = model.getWordUntilPosition(position);
-          const range = {
-            startLineNumber: position.lineNumber,
-            endLineNumber: position.lineNumber,
-            startColumn: word.startColumn,
-            endColumn: word.endColumn,
-          };
-
-          const suggestions = completions.map((item) => ({
-            ...item,
-            range,
-          }));
-          return { suggestions };
-        },
-      });
-  }, [completions]);
-
-  // Update completion provider when completions change
-  useEffect(() => {
-    registerCompletionProvider();
-  }, [registerCompletionProvider]);
+  // Fetch schema for DDL refresh only (autocomplete is handled by NotebookEditor)
+  const { refetch: refetchSchema } = useSchemaForConnection(connectionId);
 
   // Detect DDL operations and refresh schema (Phase 4)
   const isDDLOperation = (query: string): boolean => {
@@ -505,13 +460,9 @@ export const SQLCell: React.FC<SQLCellProps> = ({
 
   const handleEditorDidMount: OnMount = (editorInstance, monaco) => {
     editorRef.current = editorInstance;
-    monacoInstanceRef.current = monaco;
 
     // Ensure theme is applied
     monaco.editor.setTheme('sql-enhanced');
-
-    // Register initial completion provider after monaco is ready (Phase 4)
-    registerCompletionProvider();
 
     // Add keyboard shortcut: Cmd/Ctrl + Enter to run
     editorInstance.addCommand(
@@ -540,15 +491,6 @@ export const SQLCell: React.FC<SQLCellProps> = ({
       onUpdate(value);
     }
   };
-
-  // Cleanup on unmount
-  useEffect(() => {
-    return () => {
-      if (completionProviderRef.current) {
-        completionProviderRef.current.dispose();
-      }
-    };
-  }, []);
 
   // Handle resize drag
   useEffect(() => {

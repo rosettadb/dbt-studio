@@ -25,6 +25,7 @@ import {
   Draggable,
   DropResult,
 } from '@hello-pangea/dnd';
+import { loader } from '@monaco-editor/react';
 import {
   useNotebook,
   useUpdateNotebook,
@@ -35,6 +36,7 @@ import {
 import { NotebookCell as NotebookCellType } from '../../../types/notebooks';
 import { NotebookToolbar } from './NotebookToolbar';
 import { NotebookCell } from './NotebookCell';
+import { useSchemaForConnection, useMonacoAutocomplete } from '../../hooks';
 
 interface NotebookEditorProps {
   instanceId: string; // This is actually the connectionId
@@ -65,6 +67,80 @@ export const NotebookEditor: React.FC<NotebookEditorProps> = ({
   // Local state for cells to enable immediate UI updates
   const [localCells, setLocalCells] = useState<NotebookCellType[]>([]);
   const updateTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Global completion provider registration (once per notebook/connection)
+  const completionProviderRef = useRef<any>(null);
+  const { data: schemaData } = useSchemaForConnection(connectionId);
+  const completions = useMonacoAutocomplete(
+    schemaData?.tables || null,
+    schemaData?.duckLakeSchema || null,
+  );
+
+  // Store completions in a ref so the provider can access the latest without re-registering
+  const completionsRef = useRef(completions);
+  useEffect(() => {
+    completionsRef.current = completions;
+  }, [completions]);
+
+  // Register global completion provider for all SQL cells in this notebook
+  // Only re-register when completions COUNT changes, not on every render
+  const completionsCount = completions.length;
+  useEffect(() => {
+    loader
+      .init()
+      .then((monaco: any) => {
+        // Dispose existing provider
+        if (completionProviderRef.current) {
+          completionProviderRef.current.dispose();
+        }
+
+        // Register new completion provider
+        completionProviderRef.current =
+          monaco.languages.registerCompletionItemProvider('sql', {
+            provideCompletionItems: (model: any, position: any) => {
+              const word = model.getWordUntilPosition(position);
+              const range = {
+                startLineNumber: position.lineNumber,
+                endLineNumber: position.lineNumber,
+                startColumn: word.startColumn,
+                endColumn: word.endColumn,
+              };
+
+              // Use ref to get latest completions without re-registering
+              const suggestions = completionsRef.current.map((item) => ({
+                ...item,
+                range,
+              }));
+
+              return { suggestions };
+            },
+          });
+
+        console.log(
+          '[NotebookEditor] Registered global completion provider with',
+          completionsCount,
+          'items',
+        );
+        return undefined;
+      })
+      .catch((err: any) => {
+        console.error('[NotebookEditor] Failed to initialize Monaco:', err);
+      });
+
+    // Cleanup on unmount
+    return () => {
+      if (completionProviderRef.current) {
+        completionProviderRef.current.dispose();
+      }
+    };
+  }, [completionsCount, connectionId]); // Only depend on COUNT, not the array
+
+  // Sync local cells with notebook data
+  useEffect(() => {
+    if (notebook?.cells) {
+      setLocalCells(notebook.cells);
+    }
+  }, [notebook?.cells]);
 
   // Sync local cells with notebook data
   useEffect(() => {
