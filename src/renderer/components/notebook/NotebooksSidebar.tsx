@@ -270,7 +270,7 @@ export const NotebooksSidebar: React.FC<NotebooksSidebarProps> = ({
             '& .MuiOutlinedInput-root': {
               height: 32,
               fontSize: '0.8rem',
-              bgcolor: theme.palette.mode === 'dark' ? '#2d2d2d' : '#ffffff',
+              bgcolor: theme.palette.background.default,
             },
           }}
         />

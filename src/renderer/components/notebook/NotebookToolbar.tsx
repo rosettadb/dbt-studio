@@ -61,6 +61,7 @@ export const NotebookToolbar: React.FC<NotebookToolbarProps> = ({
         justifyContent: 'space-between',
         px: 2,
         py: 1,
+        bgcolor: theme.palette.background.default,
       }}
     >
       {/* Left: Notebook Info */}

@@ -274,19 +274,31 @@ export const OutputPanel: React.FC<OutputPanelProps> = ({
         elevation={0}
         sx={{
           bgcolor: (theme) =>
-            theme.palette.mode === 'dark' ? 'error.dark' : 'error.light',
-          p: 0.5,
+            theme.palette.mode === 'dark' ? '#5c1a1a' : '#fdecea',
+          border: (theme) => `1px solid ${theme.palette.error.main}`,
+          p: 1,
           mt: 0.5,
         }}
       >
-        <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 0.5 }}>
-          <ErrorIcon color="error" sx={{ fontSize: 16 }} />
+        <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1 }}>
+          <ErrorIcon
+            sx={{
+              fontSize: 20,
+              color: (theme) => theme.palette.error.main,
+              flexShrink: 0,
+            }}
+          />
           <Box sx={{ flex: 1 }}>
             <Typography
               variant="subtitle2"
-              color="error"
               gutterBottom
-              sx={{ fontSize: 11, mb: 0.25 }}
+              sx={{
+                fontSize: 12,
+                mb: 0.5,
+                fontWeight: 600,
+                color: (theme) =>
+                  theme.palette.mode === 'dark' ? '#ff6b6b' : '#c62828',
+              }}
             >
               Execution Error
             </Typography>
@@ -295,19 +307,26 @@ export const OutputPanel: React.FC<OutputPanelProps> = ({
               component="pre"
               sx={{
                 fontFamily: 'monospace',
-                fontSize: 10,
+                fontSize: 11,
                 whiteSpace: 'pre-wrap',
                 wordBreak: 'break-word',
                 m: 0,
-                lineHeight: 1.3,
+                lineHeight: 1.5,
+                color: (theme) =>
+                  theme.palette.mode === 'dark' ? '#ffcccc' : '#5f2120',
               }}
             >
               {output.error}
             </Typography>
             <Typography
               variant="caption"
-              color="text.secondary"
-              sx={{ mt: 0.25, fontSize: 9 }}
+              sx={{
+                mt: 0.5,
+                fontSize: 10,
+                display: 'block',
+                color: (theme) =>
+                  theme.palette.mode === 'dark' ? '#ff9999' : '#8b3a3a',
+              }}
             >
               Execution time: {output.executionTime}ms
             </Typography>

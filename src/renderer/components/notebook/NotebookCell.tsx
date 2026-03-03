@@ -189,7 +189,8 @@ const NotebookCellComponent: React.FC<NotebookCellProps> = ({
           gap: 0.5, // Reduced from 1
           px: 1, // Reduced padding
           py: 0.5, // Reduced padding
-          bgcolor: 'grey.900',
+          bgcolor: (theme) =>
+            theme.palette.mode === 'dark' ? 'grey.900' : 'grey.100',
           borderBottom: collapsed ? 'none' : '1px solid',
           borderColor: 'divider',
           minHeight: '32px', // Compact header height

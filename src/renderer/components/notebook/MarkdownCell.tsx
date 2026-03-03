@@ -71,7 +71,8 @@ export const MarkdownCell: React.FC<MarkdownCellProps> = ({
           elevation={0}
           sx={{
             p: 1,
-            bgcolor: 'grey.50',
+            bgcolor: (theme) =>
+              theme.palette.mode === 'dark' ? 'grey.900' : 'grey.50',
             border: '1px solid',
             borderColor: 'divider',
             minHeight: 40,
@@ -92,7 +93,8 @@ export const MarkdownCell: React.FC<MarkdownCellProps> = ({
                 '& p': { mb: 0.5 },
                 '& ul, & ol': { pl: 2, mb: 0.5 },
                 '& code': {
-                  bgcolor: 'grey.200',
+                  bgcolor: (theme) =>
+                    theme.palette.mode === 'dark' ? 'grey.800' : 'grey.200',
                   px: 0.5,
                   py: 0.25,
                   borderRadius: 0.5,

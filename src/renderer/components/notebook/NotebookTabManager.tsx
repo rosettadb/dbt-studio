@@ -1,6 +1,6 @@
 import React from 'react';
 import { Box, IconButton, Tooltip, useTheme } from '@mui/material';
-import { Close, Description, FiberManualRecord } from '@mui/icons-material';
+import { Close, Description } from '@mui/icons-material';
 import { NotebookTabState } from '../../hooks/useNotebookTabManager';
 
 interface NotebookTabProps {
@@ -23,14 +23,23 @@ const NotebookTab: React.FC<NotebookTabProps> = ({
     onClose();
   };
 
-  const getBgColor = () => {
-    if (isActive) {
-      return theme.palette.background.paper;
+  const getBaseBackgroundColor = () => {
+    if (!isActive) {
+      return 'transparent';
     }
-    return theme.palette.mode === 'dark' ? '#1e1e1e' : '#f5f5f5';
+    return theme.palette.mode === 'dark'
+      ? 'rgba(255,255,255,0.08)'
+      : 'rgba(0,0,0,0.08)';
   };
 
-  const bgColor = getBgColor();
+  const getHoverBackgroundColor = () => {
+    if (!isActive) {
+      return theme.palette.action.hover;
+    }
+    return theme.palette.mode === 'dark'
+      ? 'rgba(255,255,255,0.12)'
+      : 'rgba(0,0,0,0.12)';
+  };
 
   return (
     <Tooltip
@@ -54,42 +63,61 @@ const NotebookTab: React.FC<NotebookTabProps> = ({
         sx={{
           display: 'flex',
           alignItems: 'center',
-          gap: 0.5,
-          px: 1.5,
-          py: 0.75,
+          gap: 0.75,
+          px: 1.25,
+          py: 0.5,
+          minHeight: 32,
           cursor: 'pointer',
           userSelect: 'none',
-          borderRight: `1px solid ${theme.palette.divider}`,
-          bgcolor: bgColor,
-          borderBottom: isActive
-            ? 'none'
+          borderRadius: 0,
+          bgcolor: getBaseBackgroundColor(),
+          color: isActive ? 'text.primary' : 'text.secondary',
+          borderTop: isActive
+            ? `2px solid ${theme.palette.primary.main}`
             : `1px solid ${theme.palette.divider}`,
+          borderBottom: isActive
+            ? '1px solid transparent'
+            : `1px solid ${theme.palette.divider}`,
+          borderLeft: `1px solid ${theme.palette.divider}`,
+          borderRight: `1px solid ${theme.palette.divider}`,
+          transition:
+            'background-color 120ms ease, border-color 120ms ease, box-shadow 120ms ease',
           '&:hover': {
-            bgcolor: isActive
-              ? theme.palette.background.paper
-              : theme.palette.action.hover,
+            bgcolor: getHoverBackgroundColor(),
+            color: 'text.primary',
           },
-          transition: 'background-color 0.2s',
-          minWidth: 120,
-          maxWidth: 200,
+          '&:not(:first-of-type)': {
+            marginLeft: -1,
+          },
+          '&:first-of-type': {
+            borderLeft: `1px solid ${theme.palette.divider}`,
+            marginLeft: 0,
+          },
+          '&:last-of-type': {
+            borderRight: `1px solid ${theme.palette.divider}`,
+          },
         }}
       >
         {tab.isModified && (
-          <FiberManualRecord
+          <Box
             sx={{
-              fontSize: 8,
-              color: theme.palette.primary.main,
+              width: 8,
+              height: 8,
+              borderRadius: '50%',
+              bgcolor: theme.palette.warning.main,
             }}
           />
         )}
-        <Description sx={{ fontSize: 16, color: 'text.secondary' }} />
+        <Description sx={{ fontSize: 16, color: 'inherit' }} />
         <Box
           sx={{
-            flex: 1,
+            fontSize: 13,
+            lineHeight: 1.2,
+            maxWidth: 160,
             overflow: 'hidden',
             textOverflow: 'ellipsis',
             whiteSpace: 'nowrap',
-            fontSize: '0.8rem',
+            color: 'text.primary',
           }}
         >
           {tab.notebookName}
@@ -99,13 +127,14 @@ const NotebookTab: React.FC<NotebookTabProps> = ({
           onClick={handleClose}
           aria-label={`Close ${tab.notebookName} tab`}
           sx={{
+            ml: 0.5,
             width: 20,
             height: 20,
             color: 'text.secondary',
             '&:hover': { color: 'text.primary' },
           }}
         >
-          <Close sx={{ fontSize: 14 }} />
+          <Close fontSize="inherit" />
         </IconButton>
       </Box>
     </Tooltip>
@@ -216,11 +245,12 @@ export const NotebookTabManager: React.FC<NotebookTabManagerProps> = ({
         {showDropIndicator && (
           <Box
             sx={{
-              width: 2,
-              height: 32,
-              bgcolor: theme.palette.primary.main,
-              mr: -1,
-              zIndex: 1,
+              width: 3,
+              height: 22,
+              borderRadius: 999,
+              bgcolor: theme.palette.mode === 'dark' ? '#2d2d2d' : '#e0e0e0',
+              boxShadow: `0 0 0 1px ${theme.palette.background.paper}`,
+              transition: 'opacity 120ms ease',
             }}
           />
         )}
@@ -275,18 +305,17 @@ export const NotebookTabManager: React.FC<NotebookTabManagerProps> = ({
     }
   }, [activeTabId, tabs]);
 
-  if (tabs.length === 0) {
-    return null;
-  }
-
   return (
     <Box
       sx={{
         display: 'flex',
         alignItems: 'center',
-        borderBottom: `1px solid ${theme.palette.divider}`,
-        bgcolor: theme.palette.mode === 'dark' ? '#1e1e1e' : '#f5f5f5',
-        minHeight: 40,
+        gap: 0.5,
+        bgcolor: theme.palette.background.default,
+        borderBottom: `0.5px solid ${theme.palette.divider}`,
+        px: 1,
+        height: 40,
+        minWidth: 0,
       }}
     >
       <Box
@@ -294,15 +323,15 @@ export const NotebookTabManager: React.FC<NotebookTabManagerProps> = ({
         sx={{
           display: 'flex',
           alignItems: 'center',
+          gap: 0,
+          flex: 1,
+          minWidth: 0,
           overflowX: 'auto',
           overflowY: 'hidden',
-          flex: 1,
+          scrollbarWidth: 'none',
+          msOverflowStyle: 'none',
           '&::-webkit-scrollbar': {
-            height: 6,
-          },
-          '&::-webkit-scrollbar-thumb': {
-            bgcolor: theme.palette.mode === 'dark' ? '#555' : '#ccc',
-            borderRadius: 3,
+            display: 'none',
           },
         }}
       >
@@ -310,11 +339,12 @@ export const NotebookTabManager: React.FC<NotebookTabManagerProps> = ({
         {dragState.overTabId === null && dragState.tabId && (
           <Box
             sx={{
-              width: 2,
-              height: 32,
+              width: 3,
+              height: 22,
+              borderRadius: 999,
               bgcolor: theme.palette.primary.main,
-              ml: -1,
-              zIndex: 1,
+              boxShadow: `0 0 0 1px ${theme.palette.background.paper}`,
+              transition: 'opacity 120ms ease',
             }}
           />
         )}

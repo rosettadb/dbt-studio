@@ -6,7 +6,7 @@
  */
 
 import React, { useRef, useEffect, useState } from 'react';
-import { Box, CircularProgress, Typography } from '@mui/material';
+import { Box, CircularProgress, Typography, useTheme } from '@mui/material';
 import Editor, { OnMount, loader } from '@monaco-editor/react';
 import { editor } from 'monaco-editor';
 import { NotebookCell } from '../../../types/notebooks';
@@ -20,10 +20,12 @@ loader.config({
 });
 
 /**
- * Define custom SQL theme with 9 distinct colors for better readability
+ * Define custom SQL themes with 9 distinct colors for better readability
+ * Supports both dark and light modes
  */
-const defineSQLTheme = (monaco: any) => {
-  monaco.editor.defineTheme('sql-enhanced', {
+const defineSQLThemes = (monaco: any) => {
+  // Dark theme
+  monaco.editor.defineTheme('sql-enhanced-dark', {
     base: 'vs-dark',
     inherit: true,
     rules: [
@@ -55,12 +57,54 @@ const defineSQLTheme = (monaco: any) => {
       { token: 'type.sql', foreground: '4EC9B0' },
     ],
     colors: {
-      'editor.background': '#1E1E1E',
+      'editor.background': '#121212',
       'editor.foreground': '#D4D4D4',
-      'editor.lineHighlightBackground': '#2A2A2A',
+      'editor.lineHighlightBackground': '#1e1e1e',
       'editorCursor.foreground': '#AEAFAD',
       'editor.selectionBackground': '#264F78',
       'editor.inactiveSelectionBackground': '#3A3D41',
+    },
+  });
+
+  // Light theme
+  monaco.editor.defineTheme('sql-enhanced-light', {
+    base: 'vs',
+    inherit: true,
+    rules: [
+      // SQL Keywords (dark blue, bold)
+      { token: 'keyword.sql', foreground: '0000FF', fontStyle: 'bold' },
+
+      // Table names (dark green)
+      { token: 'identifier.table', foreground: '267F99' },
+
+      // Column names (dark blue)
+      { token: 'identifier.column', foreground: '001080' },
+
+      // Functions (dark yellow/brown)
+      { token: 'predefined.sql', foreground: '795E26' },
+
+      // Strings (red)
+      { token: 'string.sql', foreground: 'A31515' },
+
+      // Numbers (green)
+      { token: 'number.sql', foreground: '098658' },
+
+      // Comments (green, italic)
+      { token: 'comment.sql', foreground: '008000', fontStyle: 'italic' },
+
+      // Operators (black)
+      { token: 'operator.sql', foreground: '000000' },
+
+      // Type keywords (teal)
+      { token: 'type.sql', foreground: '267F99' },
+    ],
+    colors: {
+      'editor.background': '#fafafa',
+      'editor.foreground': '#000000',
+      'editor.lineHighlightBackground': '#f5f5f5',
+      'editorCursor.foreground': '#000000',
+      'editor.selectionBackground': '#ADD6FF',
+      'editor.inactiveSelectionBackground': '#E5EBF1',
     },
   });
 };
@@ -386,12 +430,17 @@ export const SQLCell: React.FC<SQLCellProps> = ({
   onRun,
   onUpdate,
 }) => {
+  const theme = useTheme();
   const editorRef = useRef<editor.IStandaloneCodeEditor | null>(null);
   const [monacoConfigured, setMonacoConfigured] = useState(false);
   const [editorHeight, setEditorHeight] = useState(80); // Compact default height
   const resizeHandleRef = useRef<HTMLDivElement>(null);
   const [isHovering, setIsHovering] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
+
+  // Determine Monaco theme based on MUI theme
+  const monacoTheme =
+    theme.palette.mode === 'dark' ? 'sql-enhanced-dark' : 'sql-enhanced-light';
 
   // Fetch schema for DDL refresh only (autocomplete is handled by NotebookEditor)
   const { refetch: refetchSchema } = useSchemaForConnection(connectionId);
@@ -432,7 +481,7 @@ export const SQLCell: React.FC<SQLCellProps> = ({
       .init()
       .then((monaco) => {
         if (!monacoConfigured) {
-          defineSQLTheme(monaco);
+          defineSQLThemes(monaco);
           configureSQLLanguage(monaco);
           setMonacoConfigured(true);
         }
@@ -443,6 +492,22 @@ export const SQLCell: React.FC<SQLCellProps> = ({
         console.error('Failed to initialize Monaco editor:', error);
       });
   }, [monacoConfigured]);
+
+  // Update Monaco theme when MUI theme changes
+  useEffect(() => {
+    if (editorRef.current && monacoConfigured) {
+      loader
+        .init()
+        .then((monaco) => {
+          monaco.editor.setTheme(monacoTheme);
+          return undefined;
+        })
+        .catch((error) => {
+          // eslint-disable-next-line no-console
+          console.error('Failed to update Monaco theme:', error);
+        });
+    }
+  }, [monacoTheme, monacoConfigured]);
 
   // Debug: Log when cell output changes
   useEffect(() => {
@@ -461,8 +526,8 @@ export const SQLCell: React.FC<SQLCellProps> = ({
   const handleEditorDidMount: OnMount = (editorInstance, monaco) => {
     editorRef.current = editorInstance;
 
-    // Ensure theme is applied
-    monaco.editor.setTheme('sql-enhanced');
+    // Ensure theme is applied based on current MUI theme
+    monaco.editor.setTheme(monacoTheme);
 
     // Add keyboard shortcut: Cmd/Ctrl + Enter to run
     editorInstance.addCommand(
@@ -574,7 +639,7 @@ export const SQLCell: React.FC<SQLCellProps> = ({
             fontLigatures: true,
             bracketPairColorization: { enabled: true },
           }}
-          theme="sql-enhanced"
+          theme={monacoTheme}
         />
 
         {/* Resize Handle - Always visible, more prominent */}
