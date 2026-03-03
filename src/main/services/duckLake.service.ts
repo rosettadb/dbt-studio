@@ -757,15 +757,8 @@ export default class DuckLakeService {
       await this.disconnectFromCatalog(id);
 
       // Archive notebooks for this DuckLake instance
-      try {
-        await NotebooksService.archiveConnectionNotebooks(`ducklake-${id}`);
-      } catch (error) {
-        // eslint-disable-next-line no-console
-        console.error(
-          `Failed to archive notebooks for DuckLake instance ${id}:`,
-          error,
-        );
-      }
+      // If archival fails, abort the deletion to prevent orphaned notebooks
+      await NotebooksService.archiveConnectionNotebooks(`ducklake-${id}`);
 
       // Delete from persistent storage (includes credential cleanup)
       await DuckLakeInstanceStore.deleteInstance(id);

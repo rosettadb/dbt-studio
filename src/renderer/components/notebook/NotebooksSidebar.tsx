@@ -392,7 +392,7 @@ export const NotebooksSidebar: React.FC<NotebooksSidebarProps> = ({
       <Box sx={{ flex: 1, overflow: 'hidden' }}>
         {/* Notebooks Tab */}
         <TabPanel value={activeTab} index={0}>
-          <Box sx={{ height: '100%', overflow: 'auto' }}>
+          <Box sx={{ height: '100%', overflow: 'auto', p: 1 }}>
             <NotebooksTreeView
               notebooks={notebooks}
               isLoading={isLoadingNotebooks}
@@ -413,7 +413,7 @@ export const NotebooksSidebar: React.FC<NotebooksSidebarProps> = ({
 
         {/* Data Tab */}
         <TabPanel value={activeTab} index={1}>
-          <Box sx={{ height: '100%', overflow: 'auto' }}>
+          <Box sx={{ height: '100%', overflow: 'auto', p: 1 }}>
             {isLoadingSchema && (
               <Box
                 sx={{

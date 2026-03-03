@@ -217,7 +217,8 @@ export const NotebooksTreeView: React.FC<NotebooksTreeViewProps> = ({
           sx={{
             '& .MuiTreeItem-root': {
               '& .MuiTreeItem-content': {
-                padding: '2px 8px',
+                padding: '0px 2px',
+                minHeight: '26px',
                 borderRadius: '4px',
                 '&:hover': {
                   backgroundColor: 'action.hover',
@@ -233,8 +234,19 @@ export const NotebooksTreeView: React.FC<NotebooksTreeViewProps> = ({
                 },
               },
               '& .MuiTreeItem-label': {
-                fontSize: '0.875rem',
-                padding: '4px 0',
+                fontSize: '0.85rem',
+                padding: '0px',
+              },
+              '& .MuiTreeItem-iconContainer': {
+                width: '12px',
+                marginRight: '2px',
+                '& svg': {
+                  fontSize: '16px',
+                },
+              },
+              '& .MuiTreeItem-groupTransition': {
+                marginLeft: '12px',
+                paddingLeft: '0px',
               },
             },
           }}
@@ -248,18 +260,18 @@ export const NotebooksTreeView: React.FC<NotebooksTreeViewProps> = ({
                   sx={{
                     display: 'flex',
                     alignItems: 'center',
-                    gap: 1,
-                    py: 0.25,
+                    gap: 0.5,
+                    py: 0,
                   }}
                 >
                   <LibraryBooks
-                    sx={{ fontSize: 16, color: 'text.secondary' }}
+                    sx={{ fontSize: 14, color: 'text.secondary' }}
                   />
                   <Typography
                     variant="body2"
                     sx={{
                       fontWeight: 500,
-                      fontSize: '0.875rem',
+                      fontSize: '0.85rem',
                       color: 'text.primary',
                     }}
                   >
@@ -277,8 +289,8 @@ export const NotebooksTreeView: React.FC<NotebooksTreeViewProps> = ({
                       sx={{
                         display: 'flex',
                         alignItems: 'center',
-                        gap: 1,
-                        py: 0.25,
+                        gap: 0.5,
+                        py: 0,
                         pr: 1,
                         width: '100%',
                       }}
@@ -291,7 +303,7 @@ export const NotebooksTreeView: React.FC<NotebooksTreeViewProps> = ({
                       }
                     >
                       <Description
-                        sx={{ fontSize: 16, color: 'text.secondary' }}
+                        sx={{ fontSize: 14, color: 'text.secondary' }}
                       />
                       <Typography
                         variant="body2"
@@ -299,7 +311,7 @@ export const NotebooksTreeView: React.FC<NotebooksTreeViewProps> = ({
                           overflow: 'hidden',
                           textOverflow: 'ellipsis',
                           whiteSpace: 'nowrap',
-                          fontSize: '0.8rem',
+                          fontSize: '0.825rem',
                           flex: 1,
                         }}
                       >
@@ -322,16 +334,16 @@ export const NotebooksTreeView: React.FC<NotebooksTreeViewProps> = ({
                     sx={{
                       display: 'flex',
                       alignItems: 'center',
-                      gap: 1,
-                      py: 0.25,
+                      gap: 0.5,
+                      py: 0,
                     }}
                   >
-                    <Archive sx={{ fontSize: 16, color: 'text.secondary' }} />
+                    <Archive sx={{ fontSize: 14, color: 'text.secondary' }} />
                     <Typography
                       variant="body2"
                       sx={{
                         fontWeight: 500,
-                        fontSize: '0.875rem',
+                        fontSize: '0.85rem',
                         color: 'text.primary',
                       }}
                     >
@@ -348,7 +360,7 @@ export const NotebooksTreeView: React.FC<NotebooksTreeViewProps> = ({
                       label={
                         <Typography
                           variant="body2"
-                          sx={{ fontSize: '0.8rem', color: 'text.secondary' }}
+                          sx={{ fontSize: '0.825rem', color: 'text.secondary' }}
                         >
                           {getConnectionName(connectionKey)} (
                           {archivedList.length})
@@ -364,8 +376,8 @@ export const NotebooksTreeView: React.FC<NotebooksTreeViewProps> = ({
                               sx={{
                                 display: 'flex',
                                 alignItems: 'center',
-                                gap: 1,
-                                py: 0.25,
+                                gap: 0.5,
+                                py: 0,
                                 pr: 1,
                                 width: '100%',
                               }}
@@ -380,7 +392,7 @@ export const NotebooksTreeView: React.FC<NotebooksTreeViewProps> = ({
                               }
                             >
                               <Description
-                                sx={{ fontSize: 16, color: 'text.secondary' }}
+                                sx={{ fontSize: 14, color: 'text.secondary' }}
                               />
                               <Typography
                                 variant="body2"
@@ -388,7 +400,7 @@ export const NotebooksTreeView: React.FC<NotebooksTreeViewProps> = ({
                                   overflow: 'hidden',
                                   textOverflow: 'ellipsis',
                                   whiteSpace: 'nowrap',
-                                  fontSize: '0.8rem',
+                                  fontSize: '0.75rem',
                                   flex: 1,
                                 }}
                               >

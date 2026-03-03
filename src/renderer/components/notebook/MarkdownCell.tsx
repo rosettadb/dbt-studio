@@ -34,7 +34,13 @@ export const MarkdownCell: React.FC<MarkdownCellProps> = ({
     <Box>
       {/* Mode Toggle */}
       <Box sx={{ display: 'flex', justifyContent: 'flex-end', mb: 0.5 }}>
-        <IconButton size="small" onClick={toggleMode} sx={{ p: 0.25 }}>
+        <IconButton
+          size="small"
+          onClick={toggleMode}
+          aria-label={isEditing ? 'Preview markdown' : 'Edit markdown'}
+          aria-pressed={isEditing}
+          sx={{ p: 0.25 }}
+        >
           {isEditing ? (
             <PreviewIcon sx={{ fontSize: 16 }} />
           ) : (

@@ -49,18 +49,52 @@ async function ensureDirectories() {
   await fs.mkdir(ORPHANED_DIR, { recursive: true });
 }
 
-// Get notebook file path
+// Validate and sanitize path segments to prevent path traversal attacks
+function assertSafeSegment(value: string, label: string): string {
+  // Allow alphanumeric, colon, underscore, dash for connection keys
+  // connectionKey format: "db:uuid" or "ducklake:uuid"
+  if (!/^[A-Za-z0-9:_-]+$/.test(value)) {
+    throw new Error(`Invalid ${label}: "${value}" contains unsafe characters`);
+  }
+  return value;
+}
+
+// Get notebook file path with security validation
 function getNotebookPath(connectionKey: string, notebookId: string): string {
-  return path.join(NOTEBOOKS_DIR, connectionKey, `${notebookId}.json`);
+  const safeConnectionKey = assertSafeSegment(connectionKey, 'connection key');
+  const safeNotebookId = assertSafeSegment(notebookId, 'notebook id');
+  const filePath = path.resolve(
+    NOTEBOOKS_DIR,
+    safeConnectionKey,
+    `${safeNotebookId}.json`,
+  );
+  const base = `${path.resolve(NOTEBOOKS_DIR)}${path.sep}`;
+  if (!filePath.startsWith(base)) {
+    throw new Error('Invalid notebook path - path traversal detected');
+  }
+  return filePath;
 }
 
-// Get connection directory path
+// Get connection directory path with security validation
 function getConnectionDir(connectionKey: string): string {
-  return path.join(NOTEBOOKS_DIR, connectionKey);
+  const safeConnectionKey = assertSafeSegment(connectionKey, 'connection key');
+  const dirPath = path.resolve(NOTEBOOKS_DIR, safeConnectionKey);
+  const base = `${path.resolve(NOTEBOOKS_DIR)}${path.sep}`;
+  if (!dirPath.startsWith(base)) {
+    throw new Error('Invalid connection directory - path traversal detected');
+  }
+  return dirPath;
 }
 
-// Normalize connection ID to connectionKey format
+// Normalize connection ID to connectionKey format with input validation
 function normalizeConnectionKey(connectionId: string): string {
+  // Validate input before transformation
+  if (!/^[A-Za-z0-9_-]+$/.test(connectionId)) {
+    throw new Error(
+      `Invalid connection ID: "${connectionId}" contains unsafe characters`,
+    );
+  }
+
   if (connectionId.startsWith('ducklake-')) {
     const instanceId = connectionId.replace('ducklake-', '');
     return `ducklake:${instanceId}`;
@@ -901,14 +935,12 @@ export class NotebooksService {
         }
       }
 
-      // Update lastExecutedAt
-      await this.updateNotebook(connectionId, notebookId, {
-        ...notebook,
-      });
-
+      // Get the current notebook state after all cells have been executed
       const updatedNotebook = await this.getNotebook(connectionId, notebookId);
       if (updatedNotebook) {
-        updatedNotebook.lastExecutedAt = new Date().toISOString();
+        const now = new Date().toISOString();
+        updatedNotebook.lastExecutedAt = now;
+        updatedNotebook.updatedAt = now;
         const connectionKey = normalizeConnectionKey(connectionId);
         const notebookPath = getNotebookPath(connectionKey, notebookId);
         await fs.writeFile(

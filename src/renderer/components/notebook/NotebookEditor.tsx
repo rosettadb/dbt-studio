@@ -80,6 +80,14 @@ export const NotebookEditor: React.FC<NotebookEditorProps> = ({
   const [localCells, setLocalCells] = useState<NotebookCellType[]>([]);
   const updateTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  // Cancel pending debounced save to prevent stale timeouts from overwriting structural edits
+  const cancelPendingCellSave = useCallback(() => {
+    if (updateTimeoutRef.current) {
+      clearTimeout(updateTimeoutRef.current);
+      updateTimeoutRef.current = null;
+    }
+  }, []);
+
   // Global completion provider registration (once per notebook/connection)
   const completionProviderRef = useRef<any>(null);
   const { data: schemaData } = useSchemaForConnection(connectionId);
@@ -256,6 +264,9 @@ export const NotebookEditor: React.FC<NotebookEditorProps> = ({
     (type: 'sql' | 'markdown') => {
       if (!notebook) return;
 
+      // Cancel any pending debounced save to prevent stale timeout
+      cancelPendingCellSave();
+
       // Use functional update to avoid stale closure
       setLocalCells((prevCells) => {
         const newCell: NotebookCellType = {
@@ -267,7 +278,7 @@ export const NotebookEditor: React.FC<NotebookEditorProps> = ({
 
         const updatedCells = [...prevCells, newCell];
 
-        // Update backend
+        // Update backend immediately (no debounce for structural changes)
         updateNotebook.mutate({
           connectionId,
           notebookId,
@@ -277,7 +288,7 @@ export const NotebookEditor: React.FC<NotebookEditorProps> = ({
         return updatedCells;
       });
     },
-    [notebook, connectionId, notebookId, updateNotebook], // Removed localCells dependency
+    [notebook, connectionId, notebookId, updateNotebook, cancelPendingCellSave],
   );
 
   const handleUpdateCell = useCallback(
@@ -314,13 +325,16 @@ export const NotebookEditor: React.FC<NotebookEditorProps> = ({
     (cellId: string) => {
       if (!notebook) return;
 
+      // Cancel any pending debounced save to prevent stale timeout
+      cancelPendingCellSave();
+
       // Use functional update to avoid stale closure
       setLocalCells((prevCells) => {
         const updatedCells = prevCells
           .filter((cell) => cell.id !== cellId)
           .map((cell, index) => ({ ...cell, order: index }));
 
-        // Update backend
+        // Update backend immediately (no debounce for structural changes)
         updateNotebook.mutate({
           connectionId,
           notebookId,
@@ -330,12 +344,15 @@ export const NotebookEditor: React.FC<NotebookEditorProps> = ({
         return updatedCells;
       });
     },
-    [connectionId, notebook, notebookId, updateNotebook], // Removed localCells dependency
+    [connectionId, notebook, notebookId, updateNotebook, cancelPendingCellSave],
   );
 
   const handleDuplicateCell = useCallback(
     (cellId: string) => {
       if (!notebook) return;
+
+      // Cancel any pending debounced save to prevent stale timeout
+      cancelPendingCellSave();
 
       // Use functional update to avoid stale closure
       setLocalCells((prevCells) => {
@@ -357,7 +374,7 @@ export const NotebookEditor: React.FC<NotebookEditorProps> = ({
           ...prevCells.slice(cellToDuplicate.order + 1),
         ].map((cell, index) => ({ ...cell, order: index }));
 
-        // Update backend
+        // Update backend immediately (no debounce for structural changes)
         updateNotebook.mutate({
           connectionId,
           notebookId,
@@ -367,7 +384,7 @@ export const NotebookEditor: React.FC<NotebookEditorProps> = ({
         return updatedCells;
       });
     },
-    [connectionId, notebook, notebookId, updateNotebook], // Removed localCells dependency
+    [connectionId, notebook, notebookId, updateNotebook, cancelPendingCellSave],
   );
 
   // Drag-and-drop cell reordering
@@ -382,6 +399,9 @@ export const NotebookEditor: React.FC<NotebookEditorProps> = ({
         return;
       }
 
+      // Cancel any pending debounced save to prevent stale timeout
+      cancelPendingCellSave();
+
       // Reorder cells using functional update to avoid stale closure
       setLocalCells((prevCells) => {
         const reorderedCells = Array.from(prevCells);
@@ -394,7 +414,7 @@ export const NotebookEditor: React.FC<NotebookEditorProps> = ({
           order: index,
         }));
 
-        // Save to backend
+        // Save to backend immediately (no debounce for structural changes)
         updateNotebook.mutate({
           connectionId,
           notebookId,
@@ -404,12 +424,15 @@ export const NotebookEditor: React.FC<NotebookEditorProps> = ({
         return updatedCells;
       });
     },
-    [connectionId, notebook, notebookId, updateNotebook], // Removed localCells dependency
+    [connectionId, notebook, notebookId, updateNotebook, cancelPendingCellSave],
   );
 
   const handleClearOutput = useCallback(
     (cellId: string) => {
       if (!notebook) return;
+
+      // Cancel any pending debounced save to prevent stale timeout
+      cancelPendingCellSave();
 
       // Use functional update to avoid stale closure
       setLocalCells((prevCells) => {
@@ -417,7 +440,7 @@ export const NotebookEditor: React.FC<NotebookEditorProps> = ({
           cell.id === cellId ? { ...cell, output: undefined } : cell,
         );
 
-        // Update backend
+        // Update backend immediately (no debounce for structural changes)
         updateNotebook.mutate({
           connectionId,
           notebookId,
@@ -427,7 +450,7 @@ export const NotebookEditor: React.FC<NotebookEditorProps> = ({
         return updatedCells;
       });
     },
-    [connectionId, notebook, notebookId, updateNotebook], // Removed localCells dependency
+    [connectionId, notebook, notebookId, updateNotebook, cancelPendingCellSave],
   );
 
   const handleRunCell = useCallback(
@@ -562,10 +585,13 @@ export const NotebookEditor: React.FC<NotebookEditorProps> = ({
   }, [notebook]);
 
   const handleDeleteAllConfirm = useCallback(() => {
+    // Cancel any pending debounced save to prevent stale timeout
+    cancelPendingCellSave();
+
     // Update local state immediately
     setLocalCells([]);
 
-    // Update backend
+    // Update backend immediately (no debounce for structural changes)
     updateNotebook.mutate({
       connectionId,
       notebookId,
@@ -574,7 +600,7 @@ export const NotebookEditor: React.FC<NotebookEditorProps> = ({
 
     setDeleteAllDialogOpen(false);
     toast.success('All cells deleted');
-  }, [connectionId, notebookId, updateNotebook]);
+  }, [connectionId, notebookId, updateNotebook, cancelPendingCellSave]);
 
   const handleDeleteNotebook = useCallback(async () => {
     if (!notebook) return;
@@ -651,6 +677,9 @@ export const NotebookEditor: React.FC<NotebookEditorProps> = ({
         onDeleteNotebook={handleDeleteNotebook}
         onAddCell={() => handleAddCell('sql')}
         onClearOutputs={() => {
+          // Cancel any pending debounced save to prevent stale timeout
+          cancelPendingCellSave();
+
           const updatedCells = localCells.map((cell) => ({
             ...cell,
             output: undefined,

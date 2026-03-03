@@ -546,15 +546,8 @@ export default class ConnectorsService {
     }
 
     // Archive notebooks for this connection
-    try {
-      await NotebooksService.archiveConnectionNotebooks(connectionToDelete.id);
-    } catch (error) {
-      // eslint-disable-next-line no-console
-      console.error(
-        `Failed to archive notebooks for connection ${connectionToDelete.connection.name}:`,
-        error,
-      );
-    }
+    // If archival fails, abort the deletion to prevent orphaned notebooks
+    await NotebooksService.archiveConnectionNotebooks(connectionToDelete.id);
 
     // Remove the connection from the database
     const updatedConnections = connections.filter(
