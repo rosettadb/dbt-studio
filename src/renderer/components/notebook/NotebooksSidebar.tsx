@@ -23,7 +23,6 @@ import {
   Search,
   FileDownload,
   Upload,
-  Folder,
   Close,
 } from '@mui/icons-material';
 import { SchemaTreeViewerWithSchema } from '../../screens/sql/SchemaTreeViewerWithSchema';
@@ -84,8 +83,7 @@ interface NotebooksSidebarProps {
   onToggleArchived: (show: boolean) => void;
   onExportAllNotebooks?: () => void;
   onExportSelected?: () => void;
-  onImportNotebook?: () => void;
-  onCreateFolder?: () => void;
+  onImportAllNotebooks?: () => void;
 
   // Helper functions
   getConnectionName: (connectionKey: string) => string;
@@ -112,8 +110,7 @@ export const NotebooksSidebar: React.FC<NotebooksSidebarProps> = ({
   getConnectionName,
   onExportAllNotebooks,
   onExportSelected,
-  onImportNotebook,
-  onCreateFolder,
+  onImportAllNotebooks,
 }) => {
   const theme = useTheme();
   const [activeTab, setActiveTab] = useState(0);
@@ -167,15 +164,10 @@ export const NotebooksSidebar: React.FC<NotebooksSidebarProps> = ({
     onCreateNotebook();
   }, [handleAddMenuClose, onCreateNotebook]);
 
-  const handleCreateFolder = useCallback(() => {
+  const handleImportAllNotebooks = useCallback(() => {
     handleAddMenuClose();
-    onCreateFolder?.();
-  }, [handleAddMenuClose, onCreateFolder]);
-
-  const handleImportNotebook = useCallback(() => {
-    handleAddMenuClose();
-    onImportNotebook?.();
-  }, [handleAddMenuClose, onImportNotebook]);
+    onImportAllNotebooks?.();
+  }, [handleAddMenuClose, onImportAllNotebooks]);
 
   const handleSearchChange = useCallback(
     (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -388,17 +380,11 @@ export const NotebooksSidebar: React.FC<NotebooksSidebarProps> = ({
           </ListItemIcon>
           <ListItemText>Add New Notebook</ListItemText>
         </MenuItem>
-        <MenuItem onClick={handleCreateFolder} disabled>
-          <ListItemIcon>
-            <Folder fontSize="small" />
-          </ListItemIcon>
-          <ListItemText>Add New Folder</ListItemText>
-        </MenuItem>
-        <MenuItem onClick={handleImportNotebook} disabled>
+        <MenuItem onClick={handleImportAllNotebooks}>
           <ListItemIcon>
             <Upload fontSize="small" />
           </ListItemIcon>
-          <ListItemText>Import Notebook (JSON/SQL)</ListItemText>
+          <ListItemText>Import Notebooks (JSON)</ListItemText>
         </MenuItem>
       </Menu>
 

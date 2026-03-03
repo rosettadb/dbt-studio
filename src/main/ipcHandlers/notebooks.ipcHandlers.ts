@@ -71,6 +71,27 @@ export function registerNotebooksHandlers() {
     },
   );
 
+  // Select file for import
+  ipcMain.handle('notebooks:selectImportFile', async () => {
+    return NotebooksService.selectNotebookFile();
+  });
+
+  // Import notebook
+  ipcMain.handle(
+    'notebooks:import',
+    async (_event, connectionId: string, filePath: string) => {
+      return NotebooksService.importNotebook(connectionId, filePath);
+    },
+  );
+
+  // Import all notebooks from bulk export
+  ipcMain.handle(
+    'notebooks:importAll',
+    async (_event, connectionId: string, filePath: string) => {
+      return NotebooksService.importAllNotebooks(connectionId, filePath);
+    },
+  );
+
   // Delete a notebook
   ipcMain.handle(
     'notebooks:delete',

@@ -15,10 +15,13 @@ import {
   DialogContent,
   DialogActions,
   TextField,
+  DialogContentText,
+  Backdrop,
 } from '@mui/material';
 import { Add as AddIcon } from '@mui/icons-material';
 import { v4 as uuidv4 } from 'uuid';
 import { useNavigate } from 'react-router-dom';
+import { toast } from 'react-toastify';
 import {
   DragDropContext,
   Droppable,
@@ -30,10 +33,13 @@ import {
   useNotebook,
   useUpdateNotebook,
   useRunCell,
-  useRunAllCells,
   useDeleteNotebook,
+  useDuplicateNotebook,
 } from '../../controllers/notebooks.controller';
-import { NotebookCell as NotebookCellType } from '../../../types/notebooks';
+import {
+  NotebookCell as NotebookCellType,
+  Notebook,
+} from '../../../types/notebooks';
 import { NotebookToolbar } from './NotebookToolbar';
 import { NotebookCell } from './NotebookCell';
 import { useSchemaForConnection, useMonacoAutocomplete } from '../../hooks';
@@ -41,11 +47,13 @@ import { useSchemaForConnection, useMonacoAutocomplete } from '../../hooks';
 interface NotebookEditorProps {
   instanceId: string; // This is actually the connectionId
   notebookId: string;
+  onOpenNotebook?: (notebook: Notebook, connectionId: string) => void; // Callback to open notebook in new tab
 }
 
 export const NotebookEditor: React.FC<NotebookEditorProps> = ({
   instanceId, // Rename for clarity: this is the connectionId
   notebookId,
+  onOpenNotebook, // Callback to open notebook in new tab
 }) => {
   const navigate = useNavigate();
   const connectionId = instanceId; // Use connectionId internally for clarity
@@ -56,13 +64,17 @@ export const NotebookEditor: React.FC<NotebookEditorProps> = ({
   } = useNotebook(connectionId, notebookId);
   const updateNotebook = useUpdateNotebook();
   const runCell = useRunCell();
-  const runAllCells = useRunAllCells();
   const deleteNotebook = useDeleteNotebook();
+  const duplicateNotebook = useDuplicateNotebook();
 
   const [executingCells, setExecutingCells] = useState<Set<string>>(new Set());
   const [isRunningAll, setIsRunningAll] = useState(false);
+  const [runningCellIndex, setRunningCellIndex] = useState<number | null>(null);
   const [renameDialogOpen, setRenameDialogOpen] = useState(false);
+  const [deleteAllDialogOpen, setDeleteAllDialogOpen] = useState(false);
+  const [duplicateDialogOpen, setDuplicateDialogOpen] = useState(false);
   const [newNotebookName, setNewNotebookName] = useState('');
+  const [duplicateNotebookName, setDuplicateNotebookName] = useState('');
 
   // Local state for cells to enable immediate UI updates
   const [localCells, setLocalCells] = useState<NotebookCellType[]>([]);
@@ -161,15 +173,59 @@ export const NotebookEditor: React.FC<NotebookEditorProps> = ({
   }, []);
 
   const handleRunAll = useCallback(async () => {
-    if (!notebook) return;
+    if (!notebook || localCells.length === 0) return;
 
     setIsRunningAll(true);
+    setRunningCellIndex(0);
+
     try {
-      await runAllCells.mutateAsync({ connectionId, notebookId });
+      // eslint-disable-next-line no-plusplus
+      for (let i = 0; i < localCells.length; i++) {
+        const cell = localCells[i];
+
+        // Only run SQL cells with content
+        if (cell.type === 'sql' && cell.content.trim()) {
+          setRunningCellIndex(i);
+
+          try {
+            // eslint-disable-next-line no-await-in-loop
+            await runCell.mutateAsync({
+              connectionId,
+              notebookId,
+              cellId: cell.id,
+              sql: cell.content,
+            });
+
+            // Small delay between cells for better UX
+            // eslint-disable-next-line no-await-in-loop, no-promise-executor-return
+            await new Promise((resolve) => setTimeout(resolve, 100));
+          } catch (cellError) {
+            // eslint-disable-next-line no-console
+            console.error(`Failed to execute cell ${i + 1}:`, cellError);
+
+            // Ask user if they want to continue
+            // eslint-disable-next-line no-alert
+            const continueExecution = window.confirm(
+              `Cell ${i + 1} failed to execute. Continue with remaining cells?`,
+            );
+
+            if (!continueExecution) {
+              break;
+            }
+          }
+        }
+      }
+
+      toast.success('All cells executed');
+    } catch (runAllError) {
+      // eslint-disable-next-line no-console
+      console.error('Run all failed:', runAllError);
+      toast.error('Failed to execute all cells');
     } finally {
       setIsRunningAll(false);
+      setRunningCellIndex(null);
     }
-  }, [notebook, connectionId, notebookId, runAllCells]);
+  }, [notebook, localCells, connectionId, notebookId, runCell]);
 
   // Handle keyboard shortcuts
   useEffect(() => {
@@ -406,8 +462,22 @@ export const NotebookEditor: React.FC<NotebookEditorProps> = ({
   const handleExport = useCallback(() => {
     if (!notebook) return;
 
+    // Create export data without cell output data (to keep file size small)
+    const exportData = {
+      ...notebook,
+      cells: notebook.cells.map((cell) => ({
+        ...cell,
+        output: cell.output
+          ? {
+              ...cell.output,
+              data: [], // Remove data array to reduce file size
+            }
+          : undefined,
+      })),
+    };
+
     // Export as JSON
-    const dataStr = JSON.stringify(notebook, null, 2);
+    const dataStr = JSON.stringify(exportData, null, 2);
     const dataBlob = new Blob([dataStr], { type: 'application/json' });
     const url = URL.createObjectURL(dataBlob);
     const link = document.createElement('a');
@@ -446,31 +516,65 @@ export const NotebookEditor: React.FC<NotebookEditorProps> = ({
     setNewNotebookName('');
   }, []);
 
-  const handleClone = useCallback(() => {
+  const handleDuplicate = useCallback(() => {
     if (!notebook) return;
-
-    // TODO: Implement clone functionality
-    // This would require creating a new notebook with the same cells
-    // eslint-disable-next-line no-console
-    console.log('Clone functionality not yet implemented');
+    setDuplicateNotebookName(`${notebook.name} (Copy)`);
+    setDuplicateDialogOpen(true);
   }, [notebook]);
+
+  const handleDuplicateConfirm = useCallback(async () => {
+    if (!notebook || !duplicateNotebookName.trim()) return;
+
+    try {
+      const duplicated = await duplicateNotebook.mutateAsync({
+        connectionId,
+        notebookId,
+        newName: duplicateNotebookName.trim(),
+      });
+
+      // Open the duplicated notebook in a new tab (without navigation/reload)
+      if (onOpenNotebook) {
+        // Pass the duplicated notebook object directly
+        onOpenNotebook(duplicated, connectionId);
+      } else {
+        // Fallback to navigation if callback not provided
+        navigate(`/app/notebooks/${connectionId}/${duplicated.id}`);
+      }
+
+      setDuplicateDialogOpen(false);
+      setDuplicateNotebookName('');
+    } catch (err) {
+      // Error handled by mutation
+    }
+  }, [
+    notebook,
+    connectionId,
+    notebookId,
+    duplicateNotebook,
+    duplicateNotebookName,
+    onOpenNotebook,
+    navigate,
+  ]);
 
   const handleDeleteAllCells = useCallback(() => {
     if (!notebook) return;
+    setDeleteAllDialogOpen(true);
+  }, [notebook]);
 
-    // eslint-disable-next-line no-alert
-    const confirmed = window.confirm(
-      'Are you sure you want to delete all cells? This action cannot be undone.',
-    );
+  const handleDeleteAllConfirm = useCallback(() => {
+    // Update local state immediately
+    setLocalCells([]);
 
-    if (confirmed) {
-      updateNotebook.mutate({
-        connectionId,
-        notebookId,
-        cells: [],
-      });
-    }
-  }, [notebook, connectionId, notebookId, updateNotebook]);
+    // Update backend
+    updateNotebook.mutate({
+      connectionId,
+      notebookId,
+      cells: [],
+    });
+
+    setDeleteAllDialogOpen(false);
+    toast.success('All cells deleted');
+  }, [connectionId, notebookId, updateNotebook]);
 
   const handleDeleteNotebook = useCallback(async () => {
     if (!notebook) return;
@@ -482,15 +586,23 @@ export const NotebookEditor: React.FC<NotebookEditorProps> = ({
 
     if (confirmed) {
       try {
-        await deleteNotebook.mutateAsync({ connectionId, notebookId });
-        // Navigate back to notebooks list
-        navigate(`/app/notebooks`);
+        // Delete the notebook using notebook.id (not notebookId param)
+        await deleteNotebook.mutateAsync({
+          connectionId,
+          notebookId: notebook.id,
+        });
+
+        // Navigate back to notebooks list with replace to prevent back navigation
+        navigate('/app/notebooks', { replace: true });
+
+        toast.success(`Notebook "${notebook.name}" deleted`);
       } catch (err) {
         // eslint-disable-next-line no-console
         console.error('Failed to delete notebook:', err);
+        toast.error('Failed to delete notebook');
       }
     }
-  }, [notebook, connectionId, notebookId, deleteNotebook, navigate]);
+  }, [notebook, connectionId, deleteNotebook, navigate]);
 
   if (isLoading) {
     return (
@@ -534,7 +646,7 @@ export const NotebookEditor: React.FC<NotebookEditorProps> = ({
         onRunAll={handleRunAll}
         onExport={handleExport}
         onRename={handleRename}
-        onClone={handleClone}
+        onDuplicate={handleDuplicate}
         onDeleteAllCells={handleDeleteAllCells}
         onDeleteNotebook={handleDeleteNotebook}
         onAddCell={() => handleAddCell('sql')}
@@ -627,7 +739,8 @@ export const NotebookEditor: React.FC<NotebookEditorProps> = ({
                               connectionId={connectionId}
                               notebookId={notebookId}
                               isExecuting={
-                                executingCells.has(cell.id) || isRunningAll
+                                executingCells.has(cell.id) ||
+                                (isRunningAll && runningCellIndex === index)
                               }
                               onRun={() => handleRunCell(cell.id, cell.content)}
                               onUpdate={(content: string) =>
@@ -709,6 +822,102 @@ export const NotebookEditor: React.FC<NotebookEditorProps> = ({
           </Button>
         </DialogActions>
       </Dialog>
+
+      {/* Delete All Cells Dialog */}
+      <Dialog
+        open={deleteAllDialogOpen}
+        onClose={() => setDeleteAllDialogOpen(false)}
+      >
+        <DialogTitle>Delete All Cells?</DialogTitle>
+        <DialogContent>
+          <DialogContentText>
+            This will permanently delete all {localCells.length} cells in this
+            notebook. This action cannot be undone.
+          </DialogContentText>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setDeleteAllDialogOpen(false)}>Cancel</Button>
+          <Button
+            onClick={handleDeleteAllConfirm}
+            color="error"
+            variant="contained"
+          >
+            Delete All
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Duplicate Notebook Dialog */}
+      <Dialog
+        open={duplicateDialogOpen}
+        onClose={() => {
+          setDuplicateDialogOpen(false);
+          setDuplicateNotebookName('');
+        }}
+        maxWidth="sm"
+        fullWidth
+      >
+        <DialogTitle>Duplicate Notebook</DialogTitle>
+        <DialogContent>
+          <Box sx={{ pt: 1 }}>
+            <TextField
+              autoFocus
+              label="New Notebook Name"
+              fullWidth
+              value={duplicateNotebookName}
+              onChange={(e) => setDuplicateNotebookName(e.target.value)}
+              placeholder="Enter name for duplicate"
+              required
+              onKeyPress={(e) => {
+                if (e.key === 'Enter' && duplicateNotebookName.trim()) {
+                  handleDuplicateConfirm();
+                }
+              }}
+            />
+          </Box>
+        </DialogContent>
+        <DialogActions>
+          <Button
+            onClick={() => {
+              setDuplicateDialogOpen(false);
+              setDuplicateNotebookName('');
+            }}
+          >
+            Cancel
+          </Button>
+          <Button
+            onClick={handleDuplicateConfirm}
+            variant="contained"
+            disabled={
+              !duplicateNotebookName.trim() || duplicateNotebook.isLoading
+            }
+          >
+            {duplicateNotebook.isLoading ? 'Duplicating...' : 'Duplicate'}
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Run All Backdrop */}
+      <Backdrop
+        sx={{
+          color: '#fff',
+          zIndex: (theme) => theme.zIndex.drawer + 999,
+          display: 'flex',
+          flexDirection: 'column',
+          gap: 2,
+        }}
+        open={isRunningAll}
+      >
+        <CircularProgress color="inherit" />
+        <Typography variant="h6">
+          Executing cells...{' '}
+          {runningCellIndex !== null &&
+            `(${runningCellIndex + 1}/${localCells.length})`}
+        </Typography>
+        <Typography variant="body2">
+          Please wait while all cells are executed sequentially
+        </Typography>
+      </Backdrop>
     </Box>
   );
 };

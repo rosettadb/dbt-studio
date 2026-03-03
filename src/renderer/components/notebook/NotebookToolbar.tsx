@@ -21,7 +21,7 @@ import {
   GetApp as ExportIcon,
   Delete as DeleteIcon,
   Edit as EditIcon,
-  ContentCopy as CloneIcon,
+  ContentCopy as DuplicateIcon,
   DeleteSweep as DeleteAllIcon,
 } from '@mui/icons-material';
 import { Notebook } from '../../../types/notebooks';
@@ -32,7 +32,7 @@ interface NotebookToolbarProps {
   onRunAll: () => void;
   onExport: () => void;
   onRename?: () => void;
-  onClone?: () => void;
+  onDuplicate?: () => void;
   onDeleteAllCells?: () => void;
   onDeleteNotebook?: () => void;
   onAddCell?: () => void;
@@ -45,7 +45,7 @@ export const NotebookToolbar: React.FC<NotebookToolbarProps> = ({
   onRunAll,
   onExport,
   onRename,
-  onClone,
+  onDuplicate,
   onDeleteAllCells,
   onDeleteNotebook,
   onAddCell,
@@ -119,7 +119,7 @@ export const NotebookToolbar: React.FC<NotebookToolbarProps> = ({
         </Tooltip>
 
         {/* Export Workbook */}
-        <Tooltip title="Export Workbook">
+        <Tooltip title="Export Notebook">
           <IconButton
             size="small"
             onClick={onExport}
@@ -170,11 +170,11 @@ export const NotebookToolbar: React.FC<NotebookToolbarProps> = ({
           </IconButton>
         </Tooltip>
 
-        {/* Clone Workbook */}
-        <Tooltip title="Clone Workbook">
+        {/* Duplicate Workbook */}
+        <Tooltip title="Duplicate Workbook">
           <IconButton
             size="small"
-            onClick={onClone}
+            onClick={onDuplicate}
             sx={{
               width: 28,
               height: 28,
@@ -192,7 +192,7 @@ export const NotebookToolbar: React.FC<NotebookToolbarProps> = ({
               },
             }}
           >
-            <CloneIcon sx={{ fontSize: 18 }} />
+            <DuplicateIcon sx={{ fontSize: 18 }} />
           </IconButton>
         </Tooltip>
 

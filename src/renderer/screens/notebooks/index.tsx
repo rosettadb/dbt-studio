@@ -41,6 +41,7 @@ import {
   useCreateNotebook,
   useNotebooks,
   useDeleteNotebook,
+  useImportAllNotebooks,
   useRenameNotebook,
   useDuplicateNotebook,
 } from '../../controllers/notebooks.controller';
@@ -98,6 +99,7 @@ const Notebooks = () => {
   const { data: notebooks = [], isLoading: isLoadingNotebooks } =
     useNotebooks(activeConnectionId);
   const deleteNotebook = useDeleteNotebook();
+  const importAllNotebooks = useImportAllNotebooks();
   const renameNotebook = useRenameNotebook();
   const duplicateNotebook = useDuplicateNotebook();
 
@@ -395,6 +397,24 @@ const Notebooks = () => {
     createNotebook,
   ]);
 
+  // Handle import all notebooks
+  const handleImportAllNotebooks = useCallback(async () => {
+    if (!activeConnectionId) return;
+
+    try {
+      const imported = await importAllNotebooks.mutateAsync({
+        connectionId: activeConnectionId,
+      });
+
+      // Open the first imported notebook in a new tab
+      if (imported.length > 0) {
+        notebookTabManager.openNotebook(imported[0], activeConnectionId);
+      }
+    } catch (err) {
+      // Error handled by mutation
+    }
+  }, [activeConnectionId, importAllNotebooks, notebookTabManager]);
+
   // Handle open notebook (placeholder - will navigate to notebook editor)
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const handleOpenNotebook = useCallback(
@@ -529,7 +549,17 @@ const Notebooks = () => {
       return;
     }
 
-    // Create JSON export
+    // Debug: Log notebook cell counts
+    // eslint-disable-next-line no-console
+    console.log(
+      'Exporting notebooks:',
+      notebooks.map((n) => ({
+        name: n.name,
+        cellCount: n.cells?.length || 0,
+      })),
+    );
+
+    // Create JSON export without cell output data (to keep file size small)
     const exportData = {
       exportDate: new Date().toISOString(),
       connectionId: activeConnectionId,
@@ -538,7 +568,23 @@ const Notebooks = () => {
         id: notebook.id,
         name: notebook.name,
         description: notebook.description,
-        cells: notebook.cells,
+        cells: notebook.cells.map((cell) => ({
+          id: cell.id,
+          type: cell.type,
+          content: cell.content,
+          order: cell.order,
+          // Exclude output data to keep file size small
+          output: cell.output
+            ? {
+                type: cell.output.type,
+                columns: cell.output.columns,
+                rowCount: cell.output.rowCount,
+                totalRows: cell.output.totalRows,
+                executionTime: cell.output.executionTime,
+                // Explicitly exclude data array
+              }
+            : undefined,
+        })),
         createdAt: notebook.createdAt,
         updatedAt: notebook.updatedAt,
       })),
@@ -556,9 +602,6 @@ const Notebooks = () => {
     link.click();
     document.body.removeChild(link);
     URL.revokeObjectURL(url);
-
-    // eslint-disable-next-line no-console
-    console.log('Exported', notebooks.length, 'notebooks');
   }, [notebooks, activeConnectionId, activeConnection]);
 
   // Show loading state while hydrating
@@ -874,6 +917,7 @@ const Notebooks = () => {
               onToggleArchived={setShowArchived}
               getConnectionName={getConnectionName}
               onExportAllNotebooks={handleExportAllNotebooks}
+              onImportAllNotebooks={handleImportAllNotebooks}
             />
           )}
         </Box>
@@ -951,6 +995,10 @@ const Notebooks = () => {
                 <NotebookEditor
                   instanceId={activeConnectionId}
                   notebookId={notebookTabManager.activeTabId}
+                  onOpenNotebook={(notebook, connectionId) => {
+                    // Open the notebook in a new tab
+                    notebookTabManager.openNotebook(notebook, connectionId);
+                  }}
                 />
               ) : (
                 <Box

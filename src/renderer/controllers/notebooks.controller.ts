@@ -162,6 +162,64 @@ export function useDuplicateNotebook() {
   });
 }
 
+// Import notebook
+export function useImportNotebook() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async ({ connectionId }: { connectionId: string }) => {
+      // Step 1: Select file
+      const filePath = await notebooksService.selectImportFile();
+      if (!filePath) {
+        throw new Error('No file selected');
+      }
+
+      // Step 2: Import notebook
+      return notebooksService.importNotebook(connectionId, filePath);
+    },
+    onSuccess: (notebook, { connectionId }) => {
+      queryClient.invalidateQueries(notebooksKeys.list(connectionId));
+      toast.success(`Notebook "${notebook.name}" imported successfully`);
+    },
+    onError: (error: Error) => {
+      // Don't show error if user just canceled file selection
+      if (error.message !== 'No file selected') {
+        toast.error(`Failed to import notebook: ${error.message}`);
+      }
+    },
+  });
+}
+
+// Import all notebooks from bulk export
+export function useImportAllNotebooks() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async ({ connectionId }: { connectionId: string }) => {
+      // Step 1: Select file
+      const filePath = await notebooksService.selectImportFile();
+      if (!filePath) {
+        throw new Error('No file selected');
+      }
+
+      // Step 2: Import all notebooks
+      return notebooksService.importAllNotebooks(connectionId, filePath);
+    },
+    onSuccess: (notebooks, { connectionId }) => {
+      queryClient.invalidateQueries(notebooksKeys.list(connectionId));
+      toast.success(
+        `Successfully imported ${notebooks.length} notebook${notebooks.length > 1 ? 's' : ''}`,
+      );
+    },
+    onError: (error: Error) => {
+      // Don't show error if user just canceled file selection
+      if (error.message !== 'No file selected') {
+        toast.error(`Failed to import notebooks: ${error.message}`);
+      }
+    },
+  });
+}
+
 // Delete a notebook
 export function useDeleteNotebook() {
   const queryClient = useQueryClient();

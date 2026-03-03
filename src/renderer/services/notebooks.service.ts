@@ -96,6 +96,41 @@ export const notebooksService = {
   },
 
   /**
+   * Select a notebook file to import
+   */
+  selectImportFile: async (): Promise<string | null> => {
+    return window.electron.ipcRenderer.invoke('notebooks:selectImportFile');
+  },
+
+  /**
+   * Import a notebook from JSON file
+   */
+  importNotebook: async (
+    connectionId: string,
+    filePath: string,
+  ): Promise<Notebook> => {
+    return window.electron.ipcRenderer.invoke(
+      'notebooks:import',
+      connectionId,
+      filePath,
+    );
+  },
+
+  /**
+   * Import all notebooks from bulk export JSON file
+   */
+  importAllNotebooks: async (
+    connectionId: string,
+    filePath: string,
+  ): Promise<Notebook[]> => {
+    return window.electron.ipcRenderer.invoke(
+      'notebooks:importAll',
+      connectionId,
+      filePath,
+    );
+  },
+
+  /**
    * Delete a notebook
    */
   deleteNotebook: async (

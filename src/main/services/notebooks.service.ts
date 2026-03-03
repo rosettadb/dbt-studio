@@ -295,6 +295,269 @@ export class NotebooksService {
   }
 
   /**
+   * Select a notebook file to import
+   */
+  static async selectNotebookFile(): Promise<string | null> {
+    try {
+      // eslint-disable-next-line global-require
+      const { dialog } = require('electron');
+
+      const result = await dialog.showOpenDialog({
+        title: 'Import Notebook',
+        filters: [
+          { name: 'JSON Files', extensions: ['json'] },
+          { name: 'All Files', extensions: ['*'] },
+        ],
+        properties: ['openFile'],
+      });
+
+      if (result.canceled || result.filePaths.length === 0) {
+        return null;
+      }
+
+      return result.filePaths[0];
+    } catch (error) {
+      // eslint-disable-next-line no-console
+      console.error(error);
+      throw error;
+    }
+  }
+
+  /**
+   * Import a notebook from JSON file
+   * Supports both single notebook and bulk export formats
+   */
+  static async importNotebook(
+    connectionId: string,
+    filePath: string,
+  ): Promise<Notebook> {
+    try {
+      // Read file
+      const fileContent = await fs.readFile(filePath, 'utf-8');
+
+      // Check file size
+      const fileSizeInMB =
+        Buffer.byteLength(fileContent, 'utf-8') / (1024 * 1024);
+      if (fileSizeInMB > 50) {
+        throw new Error(
+          `File is too large (${fileSizeInMB.toFixed(1)}MB). Please re-export the notebook to get a smaller file without data.`,
+        );
+      }
+
+      let importedData: any;
+      try {
+        importedData = JSON.parse(fileContent);
+      } catch (parseError) {
+        throw new Error(
+          'Invalid JSON file - unable to parse. The file may be corrupted or too large.',
+        );
+      }
+
+      // Validate structure - be lenient with validation
+      if (!importedData) {
+        throw new Error('Empty JSON file');
+      }
+
+      // Check if it's a bulk export format (multiple notebooks)
+      const isBulkExport =
+        Array.isArray(importedData.notebooks) &&
+        importedData.notebooks.length > 0;
+
+      if (isBulkExport) {
+        // For bulk export, import the first notebook
+        // eslint-disable-next-line no-console
+        console.log(
+          `Bulk export detected with ${importedData.notebooks.length} notebooks. Importing first notebook only.`,
+        );
+
+        if (importedData.notebooks.length > 1) {
+          // eslint-disable-next-line no-console
+          console.warn(
+            `Note: This file contains ${importedData.notebooks.length} notebooks. Only the first one will be imported. Use "Import All Notebooks" for bulk import.`,
+          );
+        }
+
+        [importedData] = importedData.notebooks;
+      }
+
+      // Check if it's a valid notebook structure
+      const hasName =
+        typeof importedData.name === 'string' && importedData.name.trim();
+      const hasCells = Array.isArray(importedData.cells);
+
+      if (!hasName || !hasCells) {
+        // eslint-disable-next-line no-console
+        console.error('Invalid notebook structure:', {
+          hasName,
+          hasCells,
+          keys: Object.keys(importedData),
+        });
+        throw new Error(
+          'Invalid notebook structure - missing name or cells array',
+        );
+      }
+
+      await ensureDirectories();
+      const connectionKey = normalizeConnectionKey(connectionId);
+      const connectionDir = getConnectionDir(connectionKey);
+
+      // Ensure connection directory exists
+      await fs.mkdir(connectionDir, { recursive: true });
+
+      // Generate new IDs and clear outputs
+      const now = new Date().toISOString();
+      const newNotebook: Notebook = {
+        id: uuidv4(), // New notebook ID
+        name: importedData.name.trim(),
+        description: importedData.description || undefined,
+        cells: importedData.cells.map((cell: any, index: number) => ({
+          id: uuidv4(), // New cell ID
+          type: cell.type || 'sql',
+          content: cell.content || '',
+          order: index,
+          // Always clear outputs on import (ignore any data in JSON)
+          output: undefined,
+        })),
+        createdAt: now,
+        updatedAt: now,
+        cellCount: importedData.cells.length,
+      };
+
+      const notebookPath = getNotebookPath(connectionKey, newNotebook.id);
+      await fs.writeFile(
+        notebookPath,
+        JSON.stringify(newNotebook, bigIntReplacer, 2),
+      );
+
+      return newNotebook;
+    } catch (error) {
+      // eslint-disable-next-line no-console
+      console.error('Import error:', error);
+      throw new Error(
+        `Failed to import notebook: ${error instanceof Error ? error.message : 'Unknown error'}`,
+      );
+    }
+  }
+
+  /**
+   * Import all notebooks from a bulk export JSON file
+   */
+  static async importAllNotebooks(
+    connectionId: string,
+    filePath: string,
+  ): Promise<Notebook[]> {
+    try {
+      // Read file
+      const fileContent = await fs.readFile(filePath, 'utf-8');
+
+      // Check file size
+      const fileSizeInMB =
+        Buffer.byteLength(fileContent, 'utf-8') / (1024 * 1024);
+      if (fileSizeInMB > 100) {
+        throw new Error(
+          `File is too large (${fileSizeInMB.toFixed(1)}MB). Maximum size is 100MB.`,
+        );
+      }
+
+      let importedData: any;
+      try {
+        importedData = JSON.parse(fileContent);
+      } catch (parseError) {
+        throw new Error(
+          'Invalid JSON file - unable to parse. The file may be corrupted or too large.',
+        );
+      }
+
+      if (!importedData) {
+        throw new Error('Empty JSON file');
+      }
+
+      // Check if it's a bulk export format
+      const isBulkExport =
+        Array.isArray(importedData.notebooks) &&
+        importedData.notebooks.length > 0;
+
+      if (!isBulkExport) {
+        // Single notebook - import it as an array with one item
+        const singleNotebook = await this.importNotebook(
+          connectionId,
+          filePath,
+        );
+        return [singleNotebook];
+      }
+
+      await ensureDirectories();
+      const connectionKey = normalizeConnectionKey(connectionId);
+      const connectionDir = getConnectionDir(connectionKey);
+
+      // Ensure connection directory exists
+      await fs.mkdir(connectionDir, { recursive: true });
+
+      const now = new Date().toISOString();
+
+      // Import all notebooks
+      const validNotebooks = importedData.notebooks.filter(
+        (notebookData: any) => {
+          const hasName =
+            typeof notebookData.name === 'string' && notebookData.name.trim();
+          const hasCells = Array.isArray(notebookData.cells);
+
+          if (!hasName || !hasCells) {
+            // eslint-disable-next-line no-console
+            console.warn(
+              `Skipping invalid notebook: ${notebookData.name || 'unnamed'}`,
+            );
+            return false;
+          }
+          return true;
+        },
+      );
+
+      const importedNotebooks = await Promise.all(
+        validNotebooks.map(async (notebookData: any) => {
+          // Generate new IDs and clear outputs
+          const newNotebook: Notebook = {
+            id: uuidv4(), // New notebook ID
+            name: notebookData.name.trim(),
+            description: notebookData.description || undefined,
+            cells: notebookData.cells.map((cell: any, index: number) => ({
+              id: uuidv4(), // New cell ID
+              type: cell.type || 'sql',
+              content: cell.content || '',
+              order: index,
+              // Always clear outputs on import
+              output: undefined,
+            })),
+            createdAt: now,
+            updatedAt: now,
+            cellCount: notebookData.cells.length,
+          };
+
+          const notebookPath = getNotebookPath(connectionKey, newNotebook.id);
+          await fs.writeFile(
+            notebookPath,
+            JSON.stringify(newNotebook, bigIntReplacer, 2),
+          );
+
+          return newNotebook;
+        }),
+      );
+
+      if (importedNotebooks.length === 0) {
+        throw new Error('No valid notebooks found in the import file');
+      }
+
+      return importedNotebooks;
+    } catch (error) {
+      // eslint-disable-next-line no-console
+      console.error('Import all error:', error);
+      throw new Error(
+        `Failed to import notebooks: ${error instanceof Error ? error.message : 'Unknown error'}`,
+      );
+    }
+  }
+
+  /**
    * Delete a notebook
    */
   static async deleteNotebook(
