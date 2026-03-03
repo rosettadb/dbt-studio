@@ -996,6 +996,51 @@ export class NotebooksService {
 
       try {
         await fs.access(connectionDir);
+
+        // Read all notebooks and clear their output data before archiving
+        const files = await fs.readdir(connectionDir);
+        const jsonFiles = files.filter((file) => file.endsWith('.json'));
+
+        // Clean all notebooks in parallel
+        await Promise.all(
+          jsonFiles.map(async (file) => {
+            try {
+              const filePath = path.join(connectionDir, file);
+              const content = await fs.readFile(filePath, 'utf-8');
+              const notebook = JSON.parse(content) as Notebook;
+
+              // Clear output data from all cells
+              notebook.cells = notebook.cells.map((cell) => ({
+                ...cell,
+                output: cell.output
+                  ? {
+                      type: cell.output.type,
+                      columns: cell.output.columns,
+                      rowCount: cell.output.rowCount,
+                      totalRows: cell.output.totalRows,
+                      executionTime: cell.output.executionTime,
+                      error: cell.output.error,
+                      // Explicitly exclude 'data' array
+                    }
+                  : undefined,
+              }));
+
+              // Write back the cleaned notebook
+              await fs.writeFile(
+                filePath,
+                JSON.stringify(notebook, bigIntReplacer, 2),
+              );
+            } catch (error) {
+              // eslint-disable-next-line no-console
+              console.error(
+                `Failed to clean notebook ${file} before archiving:`,
+                error,
+              );
+              // Continue with archiving even if cleaning fails
+            }
+          }),
+        );
+
         // Move directory to orphaned
         await fs.rename(connectionDir, orphanedDir);
       } catch {

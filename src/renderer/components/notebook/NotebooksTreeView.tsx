@@ -428,50 +428,87 @@ export const NotebooksTreeView: React.FC<NotebooksTreeViewProps> = ({
             ? { top: contextMenu.mouseY, left: contextMenu.mouseX }
             : undefined
         }
+        slotProps={{
+          paper: {
+            sx: {
+              minWidth: 'auto',
+            },
+          },
+        }}
       >
         {!contextMenu?.isArchived && (
-          <MenuItem onClick={() => handleMenuAction('open')}>
-            <ListItemIcon>
+          <MenuItem
+            onClick={() => handleMenuAction('open')}
+            sx={{ fontSize: '0.75rem', py: 0.5, px: 1 }}
+          >
+            <ListItemIcon sx={{ minWidth: 28 }}>
               <Description fontSize="small" />
             </ListItemIcon>
-            <ListItemText>Open</ListItemText>
+            <ListItemText
+              primary="Open"
+              primaryTypographyProps={{ fontSize: '0.75rem' }}
+            />
           </MenuItem>
         )}
         {!contextMenu?.isArchived && (
-          <MenuItem onClick={() => handleMenuAction('rename')}>
-            <ListItemIcon>
+          <MenuItem
+            onClick={() => handleMenuAction('rename')}
+            sx={{ fontSize: '0.75rem', py: 0.5, px: 1 }}
+          >
+            <ListItemIcon sx={{ minWidth: 28 }}>
               <Edit fontSize="small" />
             </ListItemIcon>
-            <ListItemText>Rename</ListItemText>
+            <ListItemText
+              primary="Rename"
+              primaryTypographyProps={{ fontSize: '0.75rem' }}
+            />
           </MenuItem>
         )}
         {!contextMenu?.isArchived && (
-          <MenuItem onClick={() => handleMenuAction('duplicate')}>
-            <ListItemIcon>
+          <MenuItem
+            onClick={() => handleMenuAction('duplicate')}
+            sx={{ fontSize: '0.75rem', py: 0.5, px: 1 }}
+          >
+            <ListItemIcon sx={{ minWidth: 28 }}>
               <FileCopy fontSize="small" />
             </ListItemIcon>
-            <ListItemText>Duplicate</ListItemText>
+            <ListItemText
+              primary="Duplicate"
+              primaryTypographyProps={{ fontSize: '0.75rem' }}
+            />
           </MenuItem>
         )}
         {contextMenu?.isArchived && (
-          <MenuItem onClick={() => handleMenuAction('restore')}>
-            <ListItemIcon>
+          <MenuItem
+            onClick={() => handleMenuAction('restore')}
+            sx={{ fontSize: '0.75rem', py: 0.5, px: 1 }}
+          >
+            <ListItemIcon sx={{ minWidth: 28 }}>
               <Restore fontSize="small" />
             </ListItemIcon>
-            <ListItemText>Restore</ListItemText>
+            <ListItemText
+              primary="Restore"
+              primaryTypographyProps={{ fontSize: '0.75rem' }}
+            />
           </MenuItem>
         )}
-        <Divider />
+        <Divider sx={{ my: 0.25 }} />
         <MenuItem
           onClick={() => handleMenuAction('delete')}
-          sx={{ color: 'error.main' }}
+          sx={{
+            color: 'error.main',
+            fontSize: '0.75rem',
+            py: 0.5,
+            px: 1,
+          }}
         >
-          <ListItemIcon>
+          <ListItemIcon sx={{ minWidth: 28 }}>
             <Delete fontSize="small" sx={{ color: 'error.main' }} />
           </ListItemIcon>
-          <ListItemText>
-            {contextMenu?.isArchived ? 'Delete Permanently' : 'Delete'}
-          </ListItemText>
+          <ListItemText
+            primary={contextMenu?.isArchived ? 'Delete Permanently' : 'Delete'}
+            primaryTypographyProps={{ fontSize: '0.75rem' }}
+          />
         </MenuItem>
       </Menu>
 

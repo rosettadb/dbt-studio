@@ -30,6 +30,7 @@ import {
   Warning,
 } from '@mui/icons-material';
 import { useNavigate } from 'react-router-dom';
+import { toast } from 'react-toastify';
 import { AppLayout } from '../../layouts';
 import { useGetConnections } from '../../controllers';
 import { useDuckLakeInstances } from '../../controllers/duckLake.controller';
@@ -323,25 +324,21 @@ const Notebooks = () => {
   );
 
   // Handle restore archived notebook
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const handleRestoreNotebook = useCallback(
     (connectionKey: string, notebookId: string) => {
-      // Determine target connection ID
-      let targetConnectionId: string;
-      if (connectionKey.startsWith('ducklake:')) {
-        const instanceId = connectionKey.replace('ducklake:', '');
-        targetConnectionId = `ducklake-${instanceId}`;
-      } else {
-        targetConnectionId = connectionKey.replace('db:', '');
+      // Restore to the currently selected connection
+      if (!activeConnectionId) {
+        toast.error('Please select a connection to restore the notebook to');
+        return;
       }
 
       restoreNotebook.mutate({
         archivedConnectionKey: connectionKey,
         notebookId,
-        targetConnectionId,
+        targetConnectionId: activeConnectionId,
       });
     },
-    [restoreNotebook],
+    [restoreNotebook, activeConnectionId],
   );
 
   // Handle delete archived notebook
@@ -383,7 +380,9 @@ const Notebooks = () => {
         description: newNotebookDescription.trim() || undefined,
       },
       {
-        onSuccess: () => {
+        onSuccess: (newNotebook) => {
+          // Open the newly created notebook in a tab
+          notebookTabManager.openNotebook(newNotebook, activeConnectionId);
           setCreateNotebookOpen(false);
           setNewNotebookName('');
           setNewNotebookDescription('');
@@ -395,6 +394,7 @@ const Notebooks = () => {
     newNotebookName,
     newNotebookDescription,
     createNotebook,
+    notebookTabManager,
   ]);
 
   // Handle import all notebooks

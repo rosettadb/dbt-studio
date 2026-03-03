@@ -723,13 +723,13 @@ export const NotebookEditor: React.FC<NotebookEditorProps> = ({
               >
                 Add SQL Cell
               </Button>
-              <Button
+              {/* <Button
                 variant="outlined"
                 startIcon={<AddIcon />}
                 onClick={() => handleAddCell('markdown')}
               >
                 Add Markdown Cell
-              </Button>
+              </Button> */}
             </Box>
           </Box>
         ) : (
