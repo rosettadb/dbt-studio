@@ -1228,6 +1228,8 @@ export default class ProjectsService {
         return this.extractBigQuerySchema(connection as BigQueryConnection);
       case 'duckdb':
         return this.extractDuckDBSchema(connection as DuckDBConnection);
+      case 'ducklake':
+        return [];
       case 'kinetica':
         return this.extractKineticaSchema(connection as KineticaConnection);
       default:

@@ -16,6 +16,7 @@ const handlerChannels = [
   'connector:query',
   'connector:cancel-query',
   'connector:list',
+  'connector:save',
   'connector:extractSchema',
   'connector:updateQuery',
   'connector:getQuery',
@@ -37,9 +38,12 @@ const registerConnectorsHandlers = () => {
     },
   );
 
-  ipcMain.handle('connector:list', async () => {
-    return ConnectorsService.loadConnections();
-  });
+  ipcMain.handle(
+    'connector:list',
+    async (_event, includeDataLake?: boolean) => {
+      return ConnectorsService.loadConnections(includeDataLake);
+    },
+  );
 
   ipcMain.handle('connector:get', async (_event, connectionId: string) => {
     return ConnectorsService.getConnectionById(connectionId);
@@ -59,6 +63,13 @@ const registerConnectorsHandlers = () => {
   ipcMain.handle('connector:delete', async (_event, connectionId: string) => {
     return ConnectorsService.deleteConnection(connectionId);
   });
+
+  ipcMain.handle(
+    'connector:save',
+    async (_event, connection: ConnectionInput) => {
+      return ConnectorsService.saveNewConnection(connection);
+    },
+  );
 
   ipcMain.handle(
     'connector:validate',

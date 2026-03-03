@@ -122,7 +122,6 @@
     "@mui/x-tree-view": "^7.26.0",
     "@tiptap/react": "^3.2.0",
     "@tiptap/starter-kit": "^3.2.0",
-
     "ace-builds": "^1.37.5",
     "adm-zip": "^0.5.16",
     "ansi-to-html": "^0.7.2",
@@ -162,7 +161,6 @@
     "zod": "^3.25.76"
   },
   "devDependencies": {
-    "@types/dagre": "^0.7.53",
     "@electron/rebuild": "^3.3.0",
     "@playwright/test": "^1.57.0",
     "@pmmmwh/react-refresh-webpack-plugin": "^0.5.11",
@@ -173,6 +171,7 @@
     "@types/adm-zip": "^0.5.7",
     "@types/archiver": "^6.0.3",
     "@types/better-sqlite3": "^7.6.13",
+    "@types/dagre": "^0.7.53",
     "@types/diff": "^7.0.2",
     "@types/jest": "^29.5.5",
     "@types/js-yaml": "^4.0.9",

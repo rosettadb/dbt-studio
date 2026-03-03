@@ -23,7 +23,7 @@ const useRosettaDBT = (successCallback: () => Promise<void>) => {
   const setEnvVariables = useSetConnectionEnvVariable();
   const [isSuccess, setIsSuccess] = React.useState(false);
   const [isRunning, setIsRunning] = React.useState(false);
-  const { data: connections = [] } = useGetConnections();
+  const { data: connections = [] } = useGetConnections(true);
 
   React.useEffect(() => {
     let isCancelled = false;
