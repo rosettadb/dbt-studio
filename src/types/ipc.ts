@@ -304,7 +304,9 @@ export type DuckLakeChannels =
   | 'ducklake:connection:list'
   | 'ducklake:connection:get'
   | 'ducklake:connection:create'
-  | 'ducklake:connection:test';
+  | 'ducklake:connection:test'
+  | 'ducklake:connection:acquire'
+  | 'ducklake:connection:release';
 
 export type LineageChannels =
   | 'lineage:getUpstream'

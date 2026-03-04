@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Typography, Box, Button, styled } from '@mui/material';
 import { useLocation, useParams, useNavigate } from 'react-router-dom';
 import { AppLayout } from '../../layouts';
@@ -18,7 +18,8 @@ import {
   useCreateDuckLakeInstance,
   useDuckLakeInstance,
   useDeleteDuckLakeInstance,
-} from '../../controllers/duckLake.controller';
+} from '../../controllers';
+import { DuckLakeService } from '../../services';
 
 const DataLake: React.FC = () => {
   const location = useLocation();
@@ -141,6 +142,47 @@ const DataLake: React.FC = () => {
     currentSection === 'instance-detail' ? currentInstanceId || '' : '',
   );
   const currentInstance = instanceQuery.data;
+
+  // DuckLake connection lifecycle management
+  // Acquire connection when viewing instance details, tables, or table details
+  // Release connection when navigating away or component unmounts
+  useEffect(() => {
+    let acquiredInstanceId: string | null = null;
+
+    const acquireConnectionForInstance = async () => {
+      // Check if we're viewing any page that uses a DuckLake instance connection
+      const instanceViewingSections = [
+        'instance-detail',
+        'instance-tables',
+        'tables',
+        'table-detail',
+      ];
+
+      if (
+        instanceViewingSections.includes(currentSection) &&
+        (instanceId || currentInstanceId)
+      ) {
+        const targetInstanceId = instanceId || currentInstanceId;
+        if (targetInstanceId) {
+          try {
+            await DuckLakeService.acquireConnection(targetInstanceId);
+            acquiredInstanceId = targetInstanceId;
+          } catch {
+            /* empty */
+          }
+        }
+      }
+    };
+
+    acquireConnectionForInstance();
+
+    // Cleanup: release connection when navigating away or component unmounts
+    return () => {
+      if (acquiredInstanceId) {
+        DuckLakeService.releaseConnection(acquiredInstanceId);
+      }
+    };
+  }, [currentSection, instanceId, currentInstanceId]);
 
   // Tables are now handled by DuckLakeTablesView component
 

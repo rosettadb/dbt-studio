@@ -31,8 +31,7 @@ import {
 } from '@mui/icons-material';
 import { toast } from 'react-toastify';
 import { useNavigate } from 'react-router-dom';
-import { connectorsServices } from '../../services';
-import { DuckLakeService } from '../../services/duckLake.service';
+import { connectorsServices, DuckLakeService } from '../../services';
 import { useLocalStorage } from '../../hooks';
 import { QueryHistoryType } from '../../../types/frontend';
 import { AppLayout } from '../../layouts';
@@ -44,13 +43,16 @@ import { ConnectionInput, Table } from '../../../types/backend';
 import { getConnectionInput } from '../../helpers/utils';
 import { SqlTabManager } from '../../components/sqlTabs';
 import useSqlTabManager from '../../hooks/useSqlTabManager';
-import { useGetConnectionById, useGetConnections } from '../../controllers';
-import { useDuckLakeInstances } from '../../controllers/duckLake.controller';
+import {
+  useGetConnectionById,
+  useGetConnections,
+  useDuckLakeInstances,
+} from '../../controllers';
 import { SchemaTreeViewerWithSchema } from './SchemaTreeViewerWithSchema';
 import connectionIcons, {
   defaultIcon,
 } from '../../../../assets/connectionIcons';
-import { AppContext } from '../../context/AppProvider';
+import { AppContext } from '../../context';
 import {
   generateDuckLakeCompletions,
   mergeCompletions,
@@ -185,6 +187,33 @@ const Sql = () => {
       activeDuckLakeInstanceIdRef.current = null;
     }
   }, [connectionInput]);
+
+  // DuckLake connection lifecycle management
+  // Acquire connection when DuckLake connection becomes active, release on unmount or connection change
+  useEffect(() => {
+    let acquiredInstanceId: string | null = null;
+
+    const acquireConnectionForActiveTab = async () => {
+      if (isDuckLakeConnection && activeConnectionId) {
+        const instanceId = activeConnectionId.replace('ducklake-', '');
+        try {
+          await DuckLakeService.acquireConnection(instanceId);
+          acquiredInstanceId = instanceId;
+        } catch {
+          /* empty */
+        }
+      }
+    };
+
+    acquireConnectionForActiveTab();
+
+    // Cleanup: release connection when component unmounts or connection changes
+    return () => {
+      if (acquiredInstanceId) {
+        DuckLakeService.releaseConnection(acquiredInstanceId);
+      }
+    };
+  }, [isDuckLakeConnection, activeConnectionId]);
 
   // Convert DuckLake schema to Table[] format for SchemaTreeViewerWithSchema
   const duckLakeTables = useMemo(() => {

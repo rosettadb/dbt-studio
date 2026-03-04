@@ -367,6 +367,21 @@ const registerDuckLakeHandlers = () => {
       );
     },
   );
+
+  // Connection Lifecycle Management Handlers
+  ipcMain.handle(
+    'ducklake:connection:acquire',
+    async (_event, instanceId: string) => {
+      return DuckLakeService.acquireConnection(instanceId);
+    },
+  );
+
+  ipcMain.handle(
+    'ducklake:connection:release',
+    async (_event, instanceId: string) => {
+      return DuckLakeService.releaseConnection(instanceId);
+    },
+  );
 };
 
 export default registerDuckLakeHandlers;

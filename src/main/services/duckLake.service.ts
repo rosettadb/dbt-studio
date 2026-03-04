@@ -907,6 +907,43 @@ export default class DuckLakeService {
     }
   }
 
+  /**
+   * Acquire a connection reference (for component lifecycle management)
+   * Components should call this when they mount/start using a connection
+   * This ensures the connection stays alive while in use
+   */
+  static async acquireConnection(instanceId: string): Promise<void> {
+    try {
+      await this.ensureConnected(instanceId);
+      // eslint-disable-next-line no-console
+      console.log(
+        `[DuckLakeService] Connection acquired for instance: ${instanceId}`,
+      );
+    } catch (error) {
+      // eslint-disable-next-line no-console
+      console.error('[DuckLakeService.acquireConnection] Error:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Release a connection reference (for component lifecycle management)
+   * Components should call this when they unmount/stop using a connection
+   * When ref count reaches 0, connection will be cleaned up after a delay
+   */
+  static releaseConnection(instanceId: string): void {
+    try {
+      DuckLakeConnectionManager.releaseConnection(instanceId);
+      // eslint-disable-next-line no-console
+      console.log(
+        `[DuckLakeService] Connection released for instance: ${instanceId}`,
+      );
+    } catch (error) {
+      // eslint-disable-next-line no-console
+      console.error('[DuckLakeService.releaseConnection] Error:', error);
+    }
+  }
+
   static async testCatalogConnection(
     config: DuckLakeCatalogConfig,
   ): Promise<{ success: boolean; error?: string }> {

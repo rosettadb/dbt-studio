@@ -16,6 +16,8 @@ interface ConnectionEntry {
   instance: DuckLakeInstance;
   lastUsed: Date;
   connectionCount: number;
+  // eslint-disable-next-line no-undef
+  cleanupTimer?: NodeJS.Timeout;
 }
 
 export default class DuckLakeConnectionManager {
@@ -24,6 +26,12 @@ export default class DuckLakeConnectionManager {
   private static readonly MAX_IDLE_TIME_MS = 60000; // 1 minute - for manual cleanup calls
 
   private static readonly MAX_CONNECTIONS_PER_INSTANCE = 1; // DuckLake is single-connection per instance
+
+  private static readonly CLEANUP_DELAY_MS = 2000; // 2 seconds delay before cleanup
+
+  // Mutex for connection acquisition to prevent race conditions
+  private static connectionLocks: Map<string, Promise<CatalogAdapter>> =
+    new Map();
 
   /**
    * Initialize the connection manager
@@ -36,6 +44,7 @@ export default class DuckLakeConnectionManager {
 
   /**
    * Get or create a connection for an instance
+   * Uses mutex to prevent race conditions when multiple components request the same connection
    */
   static async getConnection(
     instanceId: string,
@@ -43,37 +52,193 @@ export default class DuckLakeConnectionManager {
     catalogConfig: DuckLakeCatalogConfig,
     storageConfig?: DuckLakeStorageConfig,
   ): Promise<CatalogAdapter> {
+    // Check if there's an ongoing connection attempt (mutex)
+    const existingLock = this.connectionLocks.get(instanceId);
+    if (existingLock) {
+      // eslint-disable-next-line no-console
+      console.log(
+        `[DuckLake] Waiting for existing connection attempt for instance: ${instanceId}`,
+      );
+      return existingLock;
+    }
+
     const existing = this.connections.get(instanceId);
 
     if (existing) {
+      // Cancel any pending cleanup timer
+      if (existing.cleanupTimer) {
+        // eslint-disable-next-line no-console
+        console.log(
+          `[DuckLake] Canceling cleanup timer for instance: ${instanceId}`,
+        );
+        clearTimeout(existing.cleanupTimer);
+        existing.cleanupTimer = undefined;
+      }
+
       // Update last used time and increment connection count
       existing.lastUsed = new Date();
       existing.connectionCount += 1;
+      // eslint-disable-next-line no-console
+      console.log(
+        `[DuckLake] Reusing existing connection for instance: ${instanceId}, ref count: ${existing.connectionCount}`,
+      );
       return existing.adapter;
     }
 
-    // Create new connection
-    const adapter = CatalogAdapterFactory.createAdapter(catalogConfig.type);
-    await adapter.connect(catalogConfig, instance, storageConfig);
-
-    const entry: ConnectionEntry = {
-      adapter,
+    // Create mutex promise for this connection attempt
+    const connectionPromise = this.createConnection(
+      instanceId,
       instance,
-      lastUsed: new Date(),
-      connectionCount: 1,
-    };
+      catalogConfig,
+      storageConfig,
+    );
 
-    this.connections.set(instanceId, entry);
-    return adapter;
+    this.connectionLocks.set(instanceId, connectionPromise);
+
+    try {
+      const adapter = await connectionPromise;
+      return adapter;
+    } finally {
+      // Remove mutex lock
+      this.connectionLocks.delete(instanceId);
+    }
+  }
+
+  /**
+   * Internal method to create a new connection
+   */
+  private static async createConnection(
+    instanceId: string,
+    instance: DuckLakeInstance,
+    catalogConfig: DuckLakeCatalogConfig,
+    storageConfig?: DuckLakeStorageConfig,
+  ): Promise<CatalogAdapter> {
+    // eslint-disable-next-line no-console
+    console.log(
+      `[DuckLake] Creating new connection for instance: ${instanceId}`,
+    );
+
+    try {
+      // Create new connection
+      const adapter = CatalogAdapterFactory.createAdapter(catalogConfig.type);
+      await adapter.connect(catalogConfig, instance, storageConfig);
+
+      const entry: ConnectionEntry = {
+        adapter,
+        instance,
+        lastUsed: new Date(),
+        connectionCount: 1,
+        cleanupTimer: undefined,
+      };
+
+      this.connections.set(instanceId, entry);
+      // eslint-disable-next-line no-console
+      console.log(
+        `[DuckLake] Successfully connected to instance: ${instanceId}, ref count: 1`,
+      );
+      return adapter;
+    } catch (error) {
+      // eslint-disable-next-line no-console
+      console.error(
+        `[DuckLake] Failed to connect to instance: ${instanceId}`,
+        error,
+      );
+
+      // Check if this is a lock error
+      if (
+        error instanceof Error &&
+        error.message.includes('database is locked')
+      ) {
+        // eslint-disable-next-line no-console
+        console.log(
+          `[DuckLake] Detected lock error for instance: ${instanceId}, attempting recovery...`,
+        );
+
+        await this.disconnect(instanceId);
+
+        await new Promise((resolve) => {
+          setTimeout(resolve, 1000);
+        });
+
+        // eslint-disable-next-line no-console
+        console.log(
+          `[DuckLake] Retrying connection for instance: ${instanceId}`,
+        );
+        const adapter = CatalogAdapterFactory.createAdapter(catalogConfig.type);
+        await adapter.connect(catalogConfig, instance, storageConfig);
+
+        const entry: ConnectionEntry = {
+          adapter,
+          instance,
+          lastUsed: new Date(),
+          connectionCount: 1,
+          cleanupTimer: undefined,
+        };
+
+        this.connections.set(instanceId, entry);
+        // eslint-disable-next-line no-console
+        console.log(
+          `[DuckLake] Successfully connected after retry for instance: ${instanceId}`,
+        );
+        return adapter;
+      }
+
+      throw error;
+    }
   }
 
   /**
    * Release a connection (decrement usage count)
+   * If ref count reaches 0, schedules delayed cleanup
    */
   static releaseConnection(instanceId: string): void {
     const entry = this.connections.get(instanceId);
     if (entry && entry.connectionCount > 0) {
       entry.connectionCount -= 1;
+      // eslint-disable-next-line no-console
+      console.log(
+        `[DuckLake] Released connection for instance: ${instanceId}, ref count: ${entry.connectionCount}`,
+      );
+
+      // If no more references, schedule cleanup after delay
+      if (entry.connectionCount === 0) {
+        // Cancel any existing cleanup timer
+        if (entry.cleanupTimer) {
+          clearTimeout(entry.cleanupTimer);
+        }
+
+        // Schedule cleanup after CLEANUP_DELAY_MS
+        // eslint-disable-next-line no-console
+        console.log(
+          `[DuckLake] Scheduling cleanup for instance: ${instanceId} in ${this.CLEANUP_DELAY_MS}ms`,
+        );
+        entry.cleanupTimer = setTimeout(() => {
+          this.performDelayedCleanup(instanceId);
+        }, this.CLEANUP_DELAY_MS);
+      }
+    }
+  }
+
+  /**
+   * Perform delayed cleanup for an instance
+   */
+  private static async performDelayedCleanup(
+    instanceId: string,
+  ): Promise<void> {
+    const entry = this.connections.get(instanceId);
+
+    // Check if connection is still unreferenced
+    if (entry && entry.connectionCount === 0) {
+      // eslint-disable-next-line no-console
+      console.log(
+        `[DuckLake] Executing delayed cleanup for instance: ${instanceId}`,
+      );
+      await this.disconnect(instanceId);
+    } else if (entry) {
+      // eslint-disable-next-line no-console
+      console.log(
+        `[DuckLake] Skipping cleanup for instance: ${instanceId}, ref count is now ${entry.connectionCount}`,
+      );
     }
   }
 
@@ -83,11 +248,26 @@ export default class DuckLakeConnectionManager {
   static async disconnect(instanceId: string): Promise<void> {
     const entry = this.connections.get(instanceId);
     if (entry) {
+      // Clear any pending cleanup timer
+      if (entry.cleanupTimer) {
+        clearTimeout(entry.cleanupTimer);
+        entry.cleanupTimer = undefined;
+      }
+
       try {
+        // eslint-disable-next-line no-console
+        console.log(`[DuckLake] Disconnecting instance: ${instanceId}`);
         await entry.adapter.disconnect();
+        // eslint-disable-next-line no-console
+        console.log(
+          `[DuckLake] Successfully disconnected instance: ${instanceId}`,
+        );
       } catch (error) {
         // eslint-disable-next-line no-console
-        console.error(`Error disconnecting instance ${instanceId}:`, error);
+        console.error(
+          `[DuckLake] Error disconnecting instance ${instanceId}:`,
+          error,
+        );
       } finally {
         this.connections.delete(instanceId);
       }
