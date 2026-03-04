@@ -17,7 +17,7 @@ const useRosettaExtract = () => {
     getBigQueryServiceAccountKey,
   } = useSecureStorage();
   const { data: settings } = useGetSettings();
-  const { data: connections = [] } = useGetConnections();
+  const { data: connections = [] } = useGetConnections(true);
   const { error, runCommand } = useCli();
   const setEnvVariables = useSetConnectionEnvVariable();
   const [isRunning, setIsRunning] = React.useState(false);

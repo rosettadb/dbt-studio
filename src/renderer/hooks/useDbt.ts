@@ -81,7 +81,7 @@ const extractCliErrorDetails = (
 const useDbt = (successCallback?: () => void): UseDbtReturn => {
   const { data: settings } = useGetSettings();
   const { runCommand, stopCommand, isRunning } = useCli();
-  const { data: connections = [] } = useGetConnections();
+  const { data: connections = [] } = useGetConnections(true);
   const {
     getDatabaseUsername,
     getDatabasePassword,

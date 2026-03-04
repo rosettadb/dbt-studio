@@ -4,6 +4,39 @@ import { app } from 'electron';
 import Store from 'electron-store';
 import log from 'electron-log';
 
+const isPrerelease = (version: string) => version.includes('-');
+
+/**
+ * Compare two semantic versions
+ * @returns 1 if v1 > v2, -1 if v1 < v2, 0 if equal
+ */
+function compareVersions(v1: string, v2: string): number {
+  const v1IsPrerelease = isPrerelease(v1);
+  const v2IsPrerelease = isPrerelease(v2);
+
+  if (v1IsPrerelease && !v2IsPrerelease) return -1;
+  if (!v1IsPrerelease && v2IsPrerelease) return 1;
+
+  const cleanV1 = v1.split('-')[0];
+  const cleanV2 = v2.split('-')[0];
+
+  const a = cleanV1.split('.').map(Number);
+  const b = cleanV2.split('.').map(Number);
+
+  for (let i = 0; i < Math.max(a.length, b.length); i += 1) {
+    const num1 = a[i] || 0;
+    const num2 = b[i] || 0;
+    if (num1 > num2) return 1;
+    if (num1 < num2) return -1;
+  }
+
+  if (v1IsPrerelease && v2IsPrerelease) {
+    return v1.localeCompare(v2);
+  }
+
+  return 0;
+}
+
 export default class UpdateService {
   private static store: any = new Store();
 
@@ -46,7 +79,8 @@ export default class UpdateService {
       return null;
     }
 
-    if (currentVersion === newVersion) {
+    const versionComparison = compareVersions(newVersion, currentVersion);
+    if (versionComparison <= 0) {
       return null;
     }
 
@@ -68,9 +102,13 @@ export default class UpdateService {
     const newVersion = result.updateInfo.version;
     const lastInstalledVersion = this.store.get('lastInstalledVersion');
 
+    // Determine which version is actually latest using semantic versioning
+    const versionComparison = compareVersions(currentVersion, newVersion);
+    const latestVersion = versionComparison >= 0 ? currentVersion : newVersion;
+
     return {
       currentVersion,
-      newVersion,
+      newVersion: latestVersion,
       lastInstalledVersion,
       releaseNotes: result.updateInfo.releaseNotes,
     };
