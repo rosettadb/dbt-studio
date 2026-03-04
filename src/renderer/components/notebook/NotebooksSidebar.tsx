@@ -259,6 +259,7 @@ export const NotebooksSidebar: React.FC<NotebooksSidebarProps> = ({
                 <IconButton
                   size="small"
                   onClick={handleClearSearch}
+                  aria-label="Clear search"
                   sx={{ width: 20, height: 20 }}
                 >
                   <Close sx={{ fontSize: 14 }} />

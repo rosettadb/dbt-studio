@@ -27,6 +27,9 @@ import {
   Droppable,
   Draggable,
   DropResult,
+  DroppableProvided,
+  DraggableProvided,
+  DraggableStateSnapshot,
 } from '@hello-pangea/dnd';
 import { loader } from '@monaco-editor/react';
 import {
@@ -158,13 +161,6 @@ export const NotebookEditor: React.FC<NotebookEditorProps> = ({
     }
   }, [notebook?.cells]);
 
-  // Sync local cells with notebook data
-  useEffect(() => {
-    if (notebook?.cells) {
-      setLocalCells(notebook.cells);
-    }
-  }, [notebook?.cells]);
-
   // Cleanup timeout on unmount
   useEffect(() => {
     return () => {
@@ -257,8 +253,7 @@ export const NotebookEditor: React.FC<NotebookEditorProps> = ({
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [notebook]);
+  }, [handleSave, handleRunAll]);
 
   const handleAddCell = useCallback(
     (type: 'sql' | 'markdown') => {
@@ -735,14 +730,14 @@ export const NotebookEditor: React.FC<NotebookEditorProps> = ({
         ) : (
           <DragDropContext onDragEnd={handleDragEnd}>
             <Droppable droppableId="notebook-cells">
-              {(droppableProvided) => (
+              {(droppableProvided: DroppableProvided) => (
                 <Box
                   ref={droppableProvided.innerRef}
                   // eslint-disable-next-line react/jsx-props-no-spreading
                   {...droppableProvided.droppableProps}
                   sx={{ overflowY: 'auto', height: '100%', p: 3 }}
                 >
-                  {localCells
+                  {[...localCells]
                     .sort((a, b) => a.order - b.order)
                     .map((cell, index) => (
                       <Draggable
@@ -750,7 +745,10 @@ export const NotebookEditor: React.FC<NotebookEditorProps> = ({
                         draggableId={cell.id}
                         index={index}
                       >
-                        {(draggableProvided, snapshot) => (
+                        {(
+                          draggableProvided: DraggableProvided,
+                          snapshot: DraggableStateSnapshot,
+                        ) => (
                           <Box
                             ref={draggableProvided.innerRef}
                             // eslint-disable-next-line react/jsx-props-no-spreading

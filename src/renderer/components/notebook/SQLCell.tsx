@@ -419,7 +419,7 @@ interface SQLCellProps {
   cell: NotebookCell;
   connectionId: string; // Changed from instanceId to connectionId for consistency
   isExecuting: boolean;
-  onRun: (content: string) => void;
+  onRun: (content: string) => void | Promise<void>;
   onUpdate: (content: string) => void;
 }
 
@@ -462,14 +462,12 @@ export const SQLCell: React.FC<SQLCellProps> = ({
 
   // Wrap onRun to detect DDL and refresh schema
   const handleRun = React.useCallback(
-    (content: string) => {
-      onRun(content);
+    async (content: string) => {
+      await Promise.resolve(onRun(content));
 
-      // Refresh schema if DDL operation
+      // Refresh schema if DDL operation (after run completes)
       if (isDDLOperation(content)) {
-        setTimeout(() => {
-          refetchSchema();
-        }, 1000); // Wait 1s for DDL to complete
+        refetchSchema();
       }
     },
     [onRun, refetchSchema],
@@ -509,20 +507,6 @@ export const SQLCell: React.FC<SQLCellProps> = ({
     }
   }, [monacoTheme, monacoConfigured]);
 
-  // Debug: Log when cell output changes
-  useEffect(() => {
-    // eslint-disable-next-line no-console
-    console.log('[SQLCell] Cell output updated:', {
-      cellId: cell.id,
-      hasOutput: !!cell.output,
-      output: cell.output,
-      outputType: cell.output?.type,
-      dataLength: cell.output?.data?.length,
-      columns: cell.output?.columns,
-      rowCount: cell.output?.rowCount,
-    });
-  }, [cell.id, cell.output]);
-
   const handleEditorDidMount: OnMount = (editorInstance, monaco) => {
     editorRef.current = editorInstance;
 
@@ -534,6 +518,7 @@ export const SQLCell: React.FC<SQLCellProps> = ({
       // eslint-disable-next-line no-bitwise
       monaco.KeyMod.CtrlCmd | monaco.KeyCode.Enter,
       () => {
+        if (isExecuting) return;
         const content = editorInstance.getValue();
         handleRun(content);
       },
@@ -544,6 +529,7 @@ export const SQLCell: React.FC<SQLCellProps> = ({
       // eslint-disable-next-line no-bitwise
       monaco.KeyMod.Shift | monaco.KeyCode.Enter,
       () => {
+        if (isExecuting) return;
         const content = editorInstance.getValue();
         handleRun(content);
         // TODO: Move to next cell

@@ -69,7 +69,7 @@ export const NotebooksList: React.FC<NotebooksListProps> = ({
     if (!newNotebookName.trim()) return;
 
     try {
-      await createNotebook.mutateAsync({
+      const notebook = await createNotebook.mutateAsync({
         connectionId: instanceId,
         name: newNotebookName.trim(),
         description: newNotebookDescription.trim() || undefined,
@@ -80,7 +80,9 @@ export const NotebooksList: React.FC<NotebooksListProps> = ({
       setNewNotebookDescription('');
 
       // Navigate to the new notebook
-      navigate(`/app/notebooks`);
+      navigate('/app/notebooks', {
+        state: { openNotebookId: notebook.id, connectionId: instanceId },
+      });
     } catch (err) {
       // eslint-disable-next-line no-console
       console.error('Failed to create notebook:', err);
@@ -157,7 +159,9 @@ export const NotebooksList: React.FC<NotebooksListProps> = ({
       });
 
       // Navigate to the new notebook
-      navigate(`/app/notebooks`);
+      navigate('/app/notebooks', {
+        state: { openNotebookId: notebook.id, connectionId: instanceId },
+      });
     } catch (err) {
       // eslint-disable-next-line no-console
       console.error('Failed to create example notebook:', err);
@@ -183,8 +187,10 @@ export const NotebooksList: React.FC<NotebooksListProps> = ({
     }
   };
 
-  const handleOpenNotebook = () => {
-    navigate(`/app/notebooks`);
+  const handleOpenNotebook = (notebookId: string) => {
+    navigate('/app/notebooks', {
+      state: { openNotebookId: notebookId, connectionId: instanceId },
+    });
   };
 
   if (isLoading) {
@@ -268,7 +274,15 @@ export const NotebooksList: React.FC<NotebooksListProps> = ({
                     boxShadow: 4,
                   },
                 }}
-                onClick={() => handleOpenNotebook()}
+                onClick={() => handleOpenNotebook(notebook.id)}
+                role="button"
+                tabIndex={0}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault();
+                    handleOpenNotebook(notebook.id);
+                  }
+                }}
               >
                 <CardContent sx={{ flex: 1 }}>
                   <Box

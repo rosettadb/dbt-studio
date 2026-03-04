@@ -95,172 +95,232 @@ export const NotebookToolbar: React.FC<NotebookToolbarProps> = ({
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
         {/* Add Cell */}
         <Tooltip title="Add New Cell">
-          <IconButton
-            size="small"
-            onClick={onAddCell}
-            sx={{
-              width: 28,
-              height: 28,
-              color: theme.palette.mode === 'dark' ? 'grey.400' : 'grey.600',
-              border: '1px solid',
-              borderColor:
-                theme.palette.mode === 'dark' ? 'grey.700' : 'grey.300',
-              borderRadius: 1,
-              '&:hover': {
-                bgcolor:
-                  theme.palette.mode === 'dark' ? 'grey.800' : 'grey.100',
+          <span>
+            <IconButton
+              size="small"
+              onClick={onAddCell}
+              disabled={!onAddCell}
+              aria-label="Add new cell"
+              sx={{
+                width: 28,
+                height: 28,
+                color: theme.palette.mode === 'dark' ? 'grey.400' : 'grey.600',
+                border: '1px solid',
                 borderColor:
-                  theme.palette.mode === 'dark' ? 'grey.600' : 'grey.400',
-                color: theme.palette.mode === 'dark' ? 'grey.200' : 'grey.800',
-              },
-            }}
-          >
-            <AddCellIcon sx={{ fontSize: 18 }} />
-          </IconButton>
+                  theme.palette.mode === 'dark' ? 'grey.700' : 'grey.300',
+                borderRadius: 1,
+                '&:hover': {
+                  bgcolor:
+                    theme.palette.mode === 'dark' ? 'grey.800' : 'grey.100',
+                  borderColor:
+                    theme.palette.mode === 'dark' ? 'grey.600' : 'grey.400',
+                  color:
+                    theme.palette.mode === 'dark' ? 'grey.200' : 'grey.800',
+                },
+                '&.Mui-disabled': {
+                  borderColor:
+                    theme.palette.mode === 'dark' ? 'grey.800' : 'grey.200',
+                  color:
+                    theme.palette.mode === 'dark' ? 'grey.700' : 'grey.400',
+                },
+              }}
+            >
+              <AddCellIcon sx={{ fontSize: 18 }} />
+            </IconButton>
+          </span>
         </Tooltip>
 
         {/* Export Workbook */}
         <Tooltip title="Export Notebook">
-          <IconButton
-            size="small"
-            onClick={onExport}
-            sx={{
-              width: 28,
-              height: 28,
-              color: theme.palette.mode === 'dark' ? 'grey.400' : 'grey.600',
-              border: '1px solid',
-              borderColor:
-                theme.palette.mode === 'dark' ? 'grey.700' : 'grey.300',
-              borderRadius: 1,
-              '&:hover': {
-                bgcolor:
-                  theme.palette.mode === 'dark' ? 'grey.800' : 'grey.100',
+          <span>
+            <IconButton
+              size="small"
+              onClick={onExport}
+              disabled={!onExport}
+              aria-label="Export notebook"
+              sx={{
+                width: 28,
+                height: 28,
+                color: theme.palette.mode === 'dark' ? 'grey.400' : 'grey.600',
+                border: '1px solid',
                 borderColor:
-                  theme.palette.mode === 'dark' ? 'grey.600' : 'grey.400',
-                color: theme.palette.mode === 'dark' ? 'grey.200' : 'grey.800',
-              },
-            }}
-          >
-            <ExportIcon sx={{ fontSize: 18 }} />
-          </IconButton>
+                  theme.palette.mode === 'dark' ? 'grey.700' : 'grey.300',
+                borderRadius: 1,
+                '&:hover': {
+                  bgcolor:
+                    theme.palette.mode === 'dark' ? 'grey.800' : 'grey.100',
+                  borderColor:
+                    theme.palette.mode === 'dark' ? 'grey.600' : 'grey.400',
+                  color:
+                    theme.palette.mode === 'dark' ? 'grey.200' : 'grey.800',
+                },
+                '&.Mui-disabled': {
+                  borderColor:
+                    theme.palette.mode === 'dark' ? 'grey.800' : 'grey.200',
+                  color:
+                    theme.palette.mode === 'dark' ? 'grey.700' : 'grey.400',
+                },
+              }}
+            >
+              <ExportIcon sx={{ fontSize: 18 }} />
+            </IconButton>
+          </span>
         </Tooltip>
 
         {/* Edit */}
         <Tooltip title="Edit Workbook">
-          <IconButton
-            size="small"
-            onClick={onRename}
-            sx={{
-              width: 28,
-              height: 28,
-              color: theme.palette.mode === 'dark' ? 'grey.400' : 'grey.600',
-              border: '1px solid',
-              borderColor:
-                theme.palette.mode === 'dark' ? 'grey.700' : 'grey.300',
-              borderRadius: 1,
-              '&:hover': {
-                bgcolor:
-                  theme.palette.mode === 'dark' ? 'grey.800' : 'grey.100',
+          <span>
+            <IconButton
+              size="small"
+              onClick={onRename}
+              disabled={!onRename}
+              aria-label="Edit workbook"
+              sx={{
+                width: 28,
+                height: 28,
+                color: theme.palette.mode === 'dark' ? 'grey.400' : 'grey.600',
+                border: '1px solid',
                 borderColor:
-                  theme.palette.mode === 'dark' ? 'grey.600' : 'grey.400',
-                color: theme.palette.mode === 'dark' ? 'grey.200' : 'grey.800',
-              },
-            }}
-          >
-            <EditIcon sx={{ fontSize: 18 }} />
-          </IconButton>
+                  theme.palette.mode === 'dark' ? 'grey.700' : 'grey.300',
+                borderRadius: 1,
+                '&:hover': {
+                  bgcolor:
+                    theme.palette.mode === 'dark' ? 'grey.800' : 'grey.100',
+                  borderColor:
+                    theme.palette.mode === 'dark' ? 'grey.600' : 'grey.400',
+                  color:
+                    theme.palette.mode === 'dark' ? 'grey.200' : 'grey.800',
+                },
+                '&.Mui-disabled': {
+                  borderColor:
+                    theme.palette.mode === 'dark' ? 'grey.800' : 'grey.200',
+                  color:
+                    theme.palette.mode === 'dark' ? 'grey.700' : 'grey.400',
+                },
+              }}
+            >
+              <EditIcon sx={{ fontSize: 18 }} />
+            </IconButton>
+          </span>
         </Tooltip>
 
         {/* Duplicate Workbook */}
         <Tooltip title="Duplicate Workbook">
-          <IconButton
-            size="small"
-            onClick={onDuplicate}
-            sx={{
-              width: 28,
-              height: 28,
-              color: theme.palette.mode === 'dark' ? 'grey.400' : 'grey.600',
-              border: '1px solid',
-              borderColor:
-                theme.palette.mode === 'dark' ? 'grey.700' : 'grey.300',
-              borderRadius: 1,
-              '&:hover': {
-                bgcolor:
-                  theme.palette.mode === 'dark' ? 'grey.800' : 'grey.100',
+          <span>
+            <IconButton
+              size="small"
+              onClick={onDuplicate}
+              disabled={!onDuplicate}
+              aria-label="Duplicate workbook"
+              sx={{
+                width: 28,
+                height: 28,
+                color: theme.palette.mode === 'dark' ? 'grey.400' : 'grey.600',
+                border: '1px solid',
                 borderColor:
-                  theme.palette.mode === 'dark' ? 'grey.600' : 'grey.400',
-                color: theme.palette.mode === 'dark' ? 'grey.200' : 'grey.800',
-              },
-            }}
-          >
-            <DuplicateIcon sx={{ fontSize: 18 }} />
-          </IconButton>
+                  theme.palette.mode === 'dark' ? 'grey.700' : 'grey.300',
+                borderRadius: 1,
+                '&:hover': {
+                  bgcolor:
+                    theme.palette.mode === 'dark' ? 'grey.800' : 'grey.100',
+                  borderColor:
+                    theme.palette.mode === 'dark' ? 'grey.600' : 'grey.400',
+                  color:
+                    theme.palette.mode === 'dark' ? 'grey.200' : 'grey.800',
+                },
+                '&.Mui-disabled': {
+                  borderColor:
+                    theme.palette.mode === 'dark' ? 'grey.800' : 'grey.200',
+                  color:
+                    theme.palette.mode === 'dark' ? 'grey.700' : 'grey.400',
+                },
+              }}
+            >
+              <DuplicateIcon sx={{ fontSize: 18 }} />
+            </IconButton>
+          </span>
         </Tooltip>
 
         {/* Delete All Cells */}
         <Tooltip title="Delete All Cells">
-          <IconButton
-            size="small"
-            onClick={onDeleteAllCells}
-            disabled={notebook.cells.length === 0}
-            sx={{
-              width: 28,
-              height: 28,
-              color:
-                theme.palette.mode === 'dark'
-                  ? 'warning.light'
-                  : 'warning.main',
-              border: '1px solid',
-              borderColor:
-                theme.palette.mode === 'dark'
-                  ? 'warning.dark'
-                  : 'warning.light',
-              borderRadius: 1,
-              '&:hover': {
-                bgcolor:
+          <span>
+            <IconButton
+              size="small"
+              onClick={onDeleteAllCells}
+              disabled={notebook.cells.length === 0 || !onDeleteAllCells}
+              aria-label="Delete all cells"
+              sx={{
+                width: 28,
+                height: 28,
+                color:
+                  theme.palette.mode === 'dark'
+                    ? 'warning.light'
+                    : 'warning.main',
+                border: '1px solid',
+                borderColor:
                   theme.palette.mode === 'dark'
                     ? 'warning.dark'
                     : 'warning.light',
-                borderColor:
-                  theme.palette.mode === 'dark'
-                    ? 'warning.main'
-                    : 'warning.main',
-              },
-              '&.Mui-disabled': {
-                borderColor:
-                  theme.palette.mode === 'dark' ? 'grey.800' : 'grey.200',
-                color: theme.palette.mode === 'dark' ? 'grey.700' : 'grey.400',
-              },
-            }}
-          >
-            <DeleteAllIcon sx={{ fontSize: 18 }} />
-          </IconButton>
+                borderRadius: 1,
+                '&:hover': {
+                  bgcolor:
+                    theme.palette.mode === 'dark'
+                      ? 'warning.dark'
+                      : 'warning.light',
+                  borderColor:
+                    theme.palette.mode === 'dark'
+                      ? 'warning.main'
+                      : 'warning.main',
+                },
+                '&.Mui-disabled': {
+                  borderColor:
+                    theme.palette.mode === 'dark' ? 'grey.800' : 'grey.200',
+                  color:
+                    theme.palette.mode === 'dark' ? 'grey.700' : 'grey.400',
+                },
+              }}
+            >
+              <DeleteAllIcon sx={{ fontSize: 18 }} />
+            </IconButton>
+          </span>
         </Tooltip>
 
         {/* Delete Workbook */}
         <Tooltip title="Delete Workbook">
-          <IconButton
-            size="small"
-            onClick={onDeleteNotebook}
-            sx={{
-              width: 28,
-              height: 28,
-              color:
-                theme.palette.mode === 'dark' ? 'error.light' : 'error.main',
-              border: '1px solid',
-              borderColor:
-                theme.palette.mode === 'dark' ? 'error.dark' : 'error.light',
-              borderRadius: 1,
-              '&:hover': {
-                bgcolor:
-                  theme.palette.mode === 'dark' ? 'error.dark' : 'error.light',
+          <span>
+            <IconButton
+              size="small"
+              onClick={onDeleteNotebook}
+              disabled={!onDeleteNotebook}
+              aria-label="Delete workbook"
+              sx={{
+                width: 28,
+                height: 28,
+                color:
+                  theme.palette.mode === 'dark' ? 'error.light' : 'error.main',
+                border: '1px solid',
                 borderColor:
-                  theme.palette.mode === 'dark' ? 'error.main' : 'error.main',
-              },
-            }}
-          >
-            <DeleteIcon sx={{ fontSize: 18 }} />
-          </IconButton>
+                  theme.palette.mode === 'dark' ? 'error.dark' : 'error.light',
+                borderRadius: 1,
+                '&:hover': {
+                  bgcolor:
+                    theme.palette.mode === 'dark'
+                      ? 'error.dark'
+                      : 'error.light',
+                  borderColor:
+                    theme.palette.mode === 'dark' ? 'error.main' : 'error.main',
+                },
+                '&.Mui-disabled': {
+                  borderColor:
+                    theme.palette.mode === 'dark' ? 'grey.800' : 'grey.200',
+                  color:
+                    theme.palette.mode === 'dark' ? 'grey.700' : 'grey.400',
+                },
+              }}
+            >
+              <DeleteIcon sx={{ fontSize: 18 }} />
+            </IconButton>
+          </span>
         </Tooltip>
 
         {/* Divider */}

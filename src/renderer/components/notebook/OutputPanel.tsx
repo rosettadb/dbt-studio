@@ -4,7 +4,7 @@
  * Updated to support pagination for large datasets (Phase 3)
  */
 
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useRef } from 'react';
 import {
   Box,
   Paper,
@@ -55,9 +55,15 @@ export const OutputPanel: React.FC<OutputPanelProps> = ({
   );
   const [isExporting, setIsExporting] = useState(false);
   const fetchCellPage = useFetchCellPage();
+  const latestRequestId = useRef(0);
 
   const exportMenuOpen = Boolean(exportAnchorEl);
   const isDuckLake = connectionId.startsWith('ducklake-');
+
+  // Helper function to escape SQL literals
+  const escapeSqlLiteral = (value: string) => value.replace(/'/g, "''");
+  const normalizeSqlForCopy = (sqlQuery: string) =>
+    sqlQuery.trim().replace(/;+$/, '');
 
   const handleExportMenuOpen = (event: React.MouseEvent<HTMLElement>) => {
     setExportAnchorEl(event.currentTarget);
@@ -88,6 +94,8 @@ export const OutputPanel: React.FC<OutputPanelProps> = ({
       }
 
       setLoading(true);
+      latestRequestId.current += 1;
+      const requestId = latestRequestId.current;
       try {
         const result = await fetchCellPage.mutateAsync({
           connectionId,
@@ -98,14 +106,22 @@ export const OutputPanel: React.FC<OutputPanelProps> = ({
           offset: newPage * newPerPage,
         });
 
+        // Only update state if this is the latest request
+        if (requestId !== latestRequestId.current) return;
+
         if (result.type === 'table' && result.data) {
           setPaginatedData(result.data);
+        } else if (result.type === 'empty') {
+          setPaginatedData([]);
         }
       } catch (error) {
         // eslint-disable-next-line no-console
         console.error('[OutputPanel] Failed to fetch page:', error);
       } finally {
-        setLoading(false);
+        // Only update loading state if this is the latest request
+        if (requestId === latestRequestId.current) {
+          setLoading(false);
+        }
       }
     },
     [connectionId, notebookId, cellId, sql, fetchCellPage, output.data],
@@ -131,7 +147,9 @@ export const OutputPanel: React.FC<OutputPanelProps> = ({
         if (result.canceled || !result.filePath) return;
 
         setIsExporting(true);
-        const copyQuery = `COPY (${sql.trim().replace(/;$/, '')}) TO '${result.filePath}' (FORMAT JSON)`;
+        const escapedPath = escapeSqlLiteral(result.filePath);
+        const normalizedSql = normalizeSqlForCopy(sql);
+        const copyQuery = `COPY (${normalizedSql}) TO '${escapedPath}' (FORMAT JSON)`;
 
         await window.electron.ipcRenderer.invoke('ducklake:query:execute', {
           instanceId,
@@ -148,7 +166,12 @@ export const OutputPanel: React.FC<OutputPanelProps> = ({
       }
     } else {
       // Regular connection: In-memory export (current page only)
-      const blob = new Blob([JSON.stringify(paginatedData, null, 2)], {
+      const json = JSON.stringify(
+        paginatedData,
+        (_, value) => (typeof value === 'bigint' ? value.toString() : value),
+        2,
+      );
+      const blob = new Blob([json], {
         type: 'application/json',
       });
       const url = window.URL.createObjectURL(blob);
@@ -179,7 +202,9 @@ export const OutputPanel: React.FC<OutputPanelProps> = ({
         if (result.canceled || !result.filePath) return;
 
         setIsExporting(true);
-        const copyQuery = `COPY (${sql.trim().replace(/;$/, '')}) TO '${result.filePath}' (FORMAT CSV, HEADER)`;
+        const escapedPath = escapeSqlLiteral(result.filePath);
+        const normalizedSql = normalizeSqlForCopy(sql);
+        const copyQuery = `COPY (${normalizedSql}) TO '${escapedPath}' (FORMAT CSV, HEADER)`;
 
         await window.electron.ipcRenderer.invoke('ducklake:query:execute', {
           instanceId,
@@ -243,7 +268,9 @@ export const OutputPanel: React.FC<OutputPanelProps> = ({
       if (isDuckLake) {
         // DuckLake: Full dataset export via COPY TO
         const instanceId = connectionId.replace('ducklake-', '');
-        const copyQuery = `COPY (${sql.trim().replace(/;$/, '')}) TO '${result.filePath}' (FORMAT PARQUET)`;
+        const escapedPath = escapeSqlLiteral(result.filePath);
+        const normalizedSql = normalizeSqlForCopy(sql);
+        const copyQuery = `COPY (${normalizedSql}) TO '${escapedPath}' (FORMAT PARQUET)`;
 
         await window.electron.ipcRenderer.invoke('ducklake:query:execute', {
           instanceId,
@@ -253,7 +280,7 @@ export const OutputPanel: React.FC<OutputPanelProps> = ({
         // Regular DB: Use connector export
         await window.electron.ipcRenderer.invoke('connector:executeQuery', {
           connectionId,
-          query: `COPY (${sql.trim().replace(/;$/, '')}) TO '${result.filePath}' (FORMAT PARQUET)`,
+          query: `COPY (${normalizeSqlForCopy(sql)}) TO '${escapeSqlLiteral(result.filePath)}' (FORMAT PARQUET)`,
         });
       }
 

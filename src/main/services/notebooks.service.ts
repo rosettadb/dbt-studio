@@ -43,6 +43,29 @@ function limitCellOutputData(output: CellOutput): CellOutput {
   return output;
 }
 
+// Validate and sanitize pagination inputs
+const MAX_PAGE_LIMIT = 1000;
+
+function sanitizePagination(
+  limit?: number,
+  offset?: number,
+): { pageLimit: number; pageOffset: number } {
+  const rawLimit = limit ?? 10;
+  const rawOffset = offset ?? 0;
+
+  if (!Number.isInteger(rawLimit) || rawLimit <= 0) {
+    throw new Error('Invalid limit: must be a positive integer');
+  }
+  if (!Number.isInteger(rawOffset) || rawOffset < 0) {
+    throw new Error('Invalid offset: must be a non-negative integer');
+  }
+
+  return {
+    pageLimit: Math.min(rawLimit, MAX_PAGE_LIMIT),
+    pageOffset: rawOffset,
+  };
+}
+
 // Ensure directories exist
 async function ensureDirectories() {
   await fs.mkdir(NOTEBOOKS_DIR, { recursive: true });
@@ -624,14 +647,13 @@ export class NotebooksService {
     try {
       const startTime = Date.now();
 
-      // Default pagination values
-      const pageLimit = limit ?? 10;
-      const pageOffset = offset ?? 0;
+      // Validate and sanitize pagination inputs
+      const { pageLimit, pageOffset } = sanitizePagination(limit, offset);
 
       // Detect query type
       const isSelectQuery = (query: string): boolean => {
         const normalized = query.trim().toUpperCase();
-        return normalized.startsWith('SELECT') || normalized.startsWith('WITH');
+        return normalized.startsWith('SELECT');
       };
 
       const isSelect = isSelectQuery(sql);
@@ -792,7 +814,7 @@ export class NotebooksService {
       // Detect query type
       const isSelectQuery = (query: string): boolean => {
         const normalized = query.trim().toUpperCase();
-        return normalized.startsWith('SELECT') || normalized.startsWith('WITH');
+        return normalized.startsWith('SELECT');
       };
 
       const isSelect = isSelectQuery(sql);
@@ -1043,7 +1065,11 @@ export class NotebooksService {
 
         // Move directory to orphaned
         await fs.rename(connectionDir, orphanedDir);
-      } catch {
+      } catch (error: any) {
+        // Only suppress missing directory errors (ENOENT)
+        if (error?.code !== 'ENOENT') {
+          throw error;
+        }
         // Directory doesn't exist, nothing to archive
       }
     } catch (error) {

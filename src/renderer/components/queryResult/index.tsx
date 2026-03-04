@@ -207,6 +207,9 @@ export const QueryResult: React.FC<Props> = ({ results, exportContext }) => {
     setExportAnchorEl(null);
   };
 
+  // Helper function to normalize SQL for COPY statements
+  const normalizeSqlForCopy = (sql: string) => sql.trim().replace(/;+\s*$/, '');
+
   const handleDownloadJson = async () => {
     if (!hasRows) return;
 
@@ -228,7 +231,7 @@ export const QueryResult: React.FC<Props> = ({ results, exportContext }) => {
         setIsExporting(true);
         const escapedPath = result.filePath.replace(/'/g, "''");
         // DuckDB FORMAT JSON writes NDJSON (one JSON object per line)
-        const exportQuery = `COPY (${originalSql}) TO '${escapedPath}' (FORMAT JSON)`;
+        const exportQuery = `COPY (${normalizeSqlForCopy(originalSql)}) TO '${escapedPath}' (FORMAT JSON)`;
         const exportResult = await window.electron.ipcRenderer.invoke(
           'ducklake:query:execute',
           {
@@ -283,7 +286,7 @@ export const QueryResult: React.FC<Props> = ({ results, exportContext }) => {
         setIsExporting(true);
         const escapedPath = result.filePath.replace(/'/g, "''");
         // HEADER (no value) is the correct DuckDB COPY CSV syntax for including header row
-        const exportQuery = `COPY (${originalSql}) TO '${escapedPath}' (FORMAT CSV, HEADER)`;
+        const exportQuery = `COPY (${normalizeSqlForCopy(originalSql)}) TO '${escapedPath}' (FORMAT CSV, HEADER)`;
         const exportResult = await window.electron.ipcRenderer.invoke(
           'ducklake:query:execute',
           {
@@ -332,10 +335,12 @@ export const QueryResult: React.FC<Props> = ({ results, exportContext }) => {
   };
 
   const canExportParquet =
+    !!originalSql &&
     !!exportContext &&
-    !!exportContext.originalSql &&
-    (exportContext.connectionType === 'duckdb' ||
-      exportContext.connectionType === 'ducklake');
+    ((exportContext.connectionType === 'ducklake' &&
+      !!exportContext.duckLakeInstanceId) ||
+      (exportContext.connectionType === 'duckdb' &&
+        !!exportContext.connectionId));
 
   const handleExportParquet = async () => {
     if (!canExportParquet || !exportContext?.originalSql) return;
@@ -361,7 +366,7 @@ export const QueryResult: React.FC<Props> = ({ results, exportContext }) => {
       const escapedPath = result.filePath.replace(/'/g, "''");
       const baseSql =
         (results as any).originalSql ?? exportContext.originalSql ?? '';
-      const exportQuery = `COPY (${baseSql}) TO '${escapedPath}' (FORMAT PARQUET)`;
+      const exportQuery = `COPY (${normalizeSqlForCopy(baseSql)}) TO '${escapedPath}' (FORMAT PARQUET)`;
 
       if (
         exportContext.connectionType === 'ducklake' &&

@@ -189,7 +189,10 @@ export const NotebooksTreeView: React.FC<NotebooksTreeViewProps> = ({
     );
   }
 
-  if (filteredNotebooks.length === 0 && !showArchived) {
+  if (
+    filteredNotebooks.length === 0 &&
+    (!showArchived || Object.keys(filteredArchivedNotebooks).length === 0)
+  ) {
     return (
       <Box sx={{ p: 2 }}>
         <Typography
@@ -298,9 +301,18 @@ export const NotebooksTreeView: React.FC<NotebooksTreeViewProps> = ({
                         e.stopPropagation();
                         onOpenNotebook(notebook.id);
                       }}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' || e.key === ' ') {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          onOpenNotebook(notebook.id);
+                        }
+                      }}
                       onContextMenu={(e) =>
                         handleContextMenu(e, notebook.id, notebook.name, false)
                       }
+                      role="button"
+                      tabIndex={0}
                     >
                       <Description
                         sx={{ fontSize: 14, color: 'text.secondary' }}

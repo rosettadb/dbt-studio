@@ -1096,9 +1096,9 @@ const Notebooks = () => {
         </DialogTitle>
         <DialogContent>
           <DialogContentText>
-            Are you sure you want to delete the notebook &quot;
-            {activeNotebookToDelete?.notebookName}&quot;? It will be moved to
-            archived notebooks.
+            Are you sure you want to permanently delete the notebook &quot;
+            {activeNotebookToDelete?.notebookName}&quot;? This action cannot be
+            undone.
           </DialogContentText>
         </DialogContent>
         <DialogActions>

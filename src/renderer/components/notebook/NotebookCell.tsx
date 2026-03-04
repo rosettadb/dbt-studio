@@ -68,6 +68,13 @@ const NotebookCellComponent: React.FC<NotebookCellProps> = ({
     outputHeightRef.current = outputHeight;
   }, [outputHeight]);
 
+  // Reset section to 'all' when output becomes unavailable
+  useEffect(() => {
+    if (section === 'output' && (!cell.output || cell.type !== 'sql')) {
+      setSection('all');
+    }
+  }, [section, cell.output, cell.type]);
+
   // Generate smart summary for collapsed view
   const getCellSummary = (): string => {
     if (cell.type === 'sql') {
@@ -168,7 +175,7 @@ const NotebookCellComponent: React.FC<NotebookCellProps> = ({
       };
     }
     return undefined;
-  }, []); // Empty deps - only set up once, use ref to get current height
+  }, [cell.output, section]); // Rebind when output/section toggles and handle mounts
 
   return (
     <Box
