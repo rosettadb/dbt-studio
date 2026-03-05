@@ -30,7 +30,7 @@ interface NotebookCellProps {
   connectionId: string; // Changed from instanceId to connectionId for consistency
   notebookId: string; // Added for pagination support
   isExecuting: boolean;
-  onRun: () => void;
+  onRun: (content: string) => void | Promise<void>;
   onDelete: () => void;
   onDuplicate: () => void;
   onClearOutput: () => void;
@@ -240,7 +240,7 @@ const NotebookCellComponent: React.FC<NotebookCellProps> = ({
         {!collapsed && cell.type === 'sql' && (
           <IconButton
             size="small"
-            onClick={onRun}
+            onClick={() => onRun(cell.content)}
             disabled={isExecuting}
             color="primary"
             sx={{ p: 0.25 }}

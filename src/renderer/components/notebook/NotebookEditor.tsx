@@ -47,6 +47,10 @@ import { NotebookToolbar } from './NotebookToolbar';
 import { NotebookCell } from './NotebookCell';
 import { useSchemaForConnection, useMonacoAutocomplete } from '../../hooks';
 
+// Module-level singleton for SQL completion provider
+let sharedCompletionProvider: any = null;
+const completionsRefSingleton = { current: [] as any[] };
+
 interface NotebookEditorProps {
   instanceId: string; // This is actually the connectionId
   notebookId: string;
@@ -103,41 +107,40 @@ export const NotebookEditor: React.FC<NotebookEditorProps> = ({
   const completionsRef = useRef(completions);
   useEffect(() => {
     completionsRef.current = completions;
+    completionsRefSingleton.current = completions;
   }, [completions]);
 
-  // Register global completion provider for all SQL cells in this notebook
-  // Only re-register when completions COUNT changes, not on every render
-  const completionsCount = completions.length;
+  // Register global completion provider once (singleton pattern)
+  // Only update the backing suggestions ref, don't re-register per instance
   useEffect(() => {
     loader
       .init()
       .then((monaco: any) => {
-        // Dispose existing provider
-        if (completionProviderRef.current) {
-          completionProviderRef.current.dispose();
+        // Register provider only once at module level
+        if (!sharedCompletionProvider) {
+          sharedCompletionProvider =
+            monaco.languages.registerCompletionItemProvider('sql', {
+              provideCompletionItems: (model: any, position: any) => {
+                const word = model.getWordUntilPosition(position);
+                const range = {
+                  startLineNumber: position.lineNumber,
+                  endLineNumber: position.lineNumber,
+                  startColumn: word.startColumn,
+                  endColumn: word.endColumn,
+                };
+
+                // Use singleton ref to get latest completions
+                const suggestions = completionsRefSingleton.current.map(
+                  (item) => ({
+                    ...item,
+                    range,
+                  }),
+                );
+
+                return { suggestions };
+              },
+            });
         }
-
-        // Register new completion provider
-        completionProviderRef.current =
-          monaco.languages.registerCompletionItemProvider('sql', {
-            provideCompletionItems: (model: any, position: any) => {
-              const word = model.getWordUntilPosition(position);
-              const range = {
-                startLineNumber: position.lineNumber,
-                endLineNumber: position.lineNumber,
-                startColumn: word.startColumn,
-                endColumn: word.endColumn,
-              };
-
-              // Use ref to get latest completions without re-registering
-              const suggestions = completionsRef.current.map((item) => ({
-                ...item,
-                range,
-              }));
-
-              return { suggestions };
-            },
-          });
 
         return undefined;
       })
@@ -146,13 +149,9 @@ export const NotebookEditor: React.FC<NotebookEditorProps> = ({
         console.error('[NotebookEditor] Failed to initialize Monaco:', err);
       });
 
-    // Cleanup on unmount
-    return () => {
-      if (completionProviderRef.current) {
-        completionProviderRef.current.dispose();
-      }
-    };
-  }, [completionsCount, connectionId]); // Only depend on COUNT, not the array
+    // Don't dispose the shared provider on unmount - it's global
+    // Only dispose on app teardown
+  }, []); // Empty deps - register once at module init
 
   // Sync local cells with notebook data
   useEffect(() => {
@@ -183,9 +182,12 @@ export const NotebookEditor: React.FC<NotebookEditorProps> = ({
     setRunningCellIndex(0);
 
     try {
+      // Sort cells by order to match display order
+      const cellsToRun = [...localCells].sort((a, b) => a.order - b.order);
+
       // eslint-disable-next-line no-plusplus
-      for (let i = 0; i < localCells.length; i++) {
-        const cell = localCells[i];
+      for (let i = 0; i < cellsToRun.length; i++) {
+        const cell = cellsToRun[i];
 
         // Only run SQL cells with content
         if (cell.type === 'sql' && cell.content.trim()) {

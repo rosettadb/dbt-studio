@@ -15,8 +15,14 @@ export const useNotebookSidebarState = () => {
     try {
       const raw = window.localStorage.getItem(STORAGE_KEY);
       if (raw) {
-        const parsed: PersistedSidebarState = JSON.parse(raw);
-        setShowArchived(parsed.showArchived ?? false);
+        const parsed: unknown = JSON.parse(raw);
+        const nextShowArchived =
+          typeof parsed === 'object' &&
+          parsed !== null &&
+          typeof (parsed as PersistedSidebarState).showArchived === 'boolean'
+            ? (parsed as PersistedSidebarState).showArchived
+            : false;
+        setShowArchived(nextShowArchived);
       }
     } catch (error) {
       // eslint-disable-next-line no-console
@@ -29,8 +35,13 @@ export const useNotebookSidebarState = () => {
   useEffect(() => {
     if (!isHydrated) return;
 
-    const payload: PersistedSidebarState = { showArchived };
-    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
+    try {
+      const payload: PersistedSidebarState = { showArchived };
+      window.localStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
+    } catch (error) {
+      // eslint-disable-next-line no-console
+      console.warn('Failed to persist sidebar state', error);
+    }
   }, [showArchived, isHydrated]);
 
   return {

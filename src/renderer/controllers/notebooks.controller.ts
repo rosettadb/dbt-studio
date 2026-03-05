@@ -396,7 +396,11 @@ export function useSchema(connectionId: string) {
         columns: [],
       };
 
-      if (!result.error && result.tables) {
+      if (result.error) {
+        throw new Error(result.error);
+      }
+
+      if (result.tables) {
         // Extract unique schemas
         const uniqueSchemas = new Set(result.tables.map((t) => t.schema));
         schemaInfo.schemas = Array.from(uniqueSchemas).map((s) => ({

@@ -15,8 +15,8 @@ export const useNotebookConnectionState = () => {
     try {
       const raw = window.localStorage.getItem(STORAGE_KEY);
       if (raw) {
-        const parsed: PersistedConnectionState = JSON.parse(raw);
-        if (parsed.activeConnectionId) {
+        const parsed = JSON.parse(raw) as Partial<PersistedConnectionState>;
+        if (typeof parsed.activeConnectionId === 'string') {
           setActiveConnectionId(parsed.activeConnectionId);
         }
       }

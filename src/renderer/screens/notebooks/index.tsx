@@ -168,12 +168,12 @@ const Notebooks = () => {
 
   // Fetch schema for a connection (with caching)
   const fetchSchemaForConnection = useCallback(
-    async (connectionId: string) => {
+    async (connectionId: string, forceRefresh = false) => {
       // Skip if already loading
       if (loadingSchemas[connectionId]) return;
 
-      // Skip if already cached
-      if (tabSchemas[connectionId]) return;
+      // Skip if already cached (unless force refresh)
+      if (!forceRefresh && tabSchemas[connectionId]) return;
 
       setLoadingSchemas((prev) => ({ ...prev, [connectionId]: true }));
 
@@ -276,13 +276,8 @@ const Notebooks = () => {
   // Handle schema refresh
   const handleRefreshSchema = useCallback(() => {
     if (activeConnectionId) {
-      // Clear cached schema and refetch
-      setTabSchemas((prev) => {
-        const updated = { ...prev };
-        delete updated[activeConnectionId];
-        return updated;
-      });
-      fetchSchemaForConnection(activeConnectionId);
+      // Force refresh by passing forceRefresh=true
+      fetchSchemaForConnection(activeConnectionId, true);
     }
   }, [activeConnectionId, fetchSchemaForConnection]);
 

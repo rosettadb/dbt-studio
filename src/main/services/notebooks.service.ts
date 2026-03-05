@@ -66,6 +66,12 @@ function sanitizePagination(
   };
 }
 
+// Detect row-returning queries including WITH...SELECT
+function isRowReturningQuery(query: string): boolean {
+  // Match SELECT or WITH...SELECT patterns
+  return /^\s*(?:WITH\b[\s\S]*?\)\s*)*SELECT\b/i.test(query.trim());
+}
+
 // Ensure directories exist
 async function ensureDirectories() {
   await fs.mkdir(NOTEBOOKS_DIR, { recursive: true });
@@ -107,6 +113,32 @@ function getConnectionDir(connectionKey: string): string {
     throw new Error('Invalid connection directory - path traversal detected');
   }
   return dirPath;
+}
+
+// Get archived connection directory path with security validation
+function getArchivedConnectionDir(connectionKey: string): string {
+  const safeKey = assertSafeSegment(connectionKey, 'archived connection key');
+  const dirPath = path.resolve(ORPHANED_DIR, safeKey);
+  const base = `${path.resolve(ORPHANED_DIR)}${path.sep}`;
+  if (!dirPath.startsWith(base)) {
+    throw new Error('Invalid archived directory path - path traversal detected');
+  }
+  return dirPath;
+}
+
+// Get archived notebook file path with security validation
+function getArchivedNotebookPath(
+  connectionKey: string,
+  notebookId: string,
+): string {
+  const dir = getArchivedConnectionDir(connectionKey);
+  const safeNotebookId = assertSafeSegment(notebookId, 'notebook id');
+  const filePath = path.join(dir, `${safeNotebookId}.json`);
+  const base = `${path.resolve(ORPHANED_DIR)}${path.sep}`;
+  if (!filePath.startsWith(base)) {
+    throw new Error('Invalid archived notebook path - path traversal detected');
+  }
+  return filePath;
 }
 
 // Normalize connection ID to connectionKey format with input validation
@@ -650,13 +682,8 @@ export class NotebooksService {
       // Validate and sanitize pagination inputs
       const { pageLimit, pageOffset } = sanitizePagination(limit, offset);
 
-      // Detect query type
-      const isSelectQuery = (query: string): boolean => {
-        const normalized = query.trim().toUpperCase();
-        return normalized.startsWith('SELECT');
-      };
-
-      const isSelect = isSelectQuery(sql);
+      // Detect query type - includes WITH...SELECT and other row-returning queries
+      const isSelect = isRowReturningQuery(sql);
 
       let result: any;
       let totalRows: number | undefined;
@@ -811,13 +838,11 @@ export class NotebooksService {
     try {
       const startTime = Date.now();
 
-      // Detect query type
-      const isSelectQuery = (query: string): boolean => {
-        const normalized = query.trim().toUpperCase();
-        return normalized.startsWith('SELECT');
-      };
+      // Validate and sanitize pagination inputs
+      const { pageLimit, pageOffset } = sanitizePagination(limit, offset);
 
-      const isSelect = isSelectQuery(sql);
+      // Detect query type - includes WITH...SELECT and other row-returning queries
+      const isSelect = isRowReturningQuery(sql);
 
       // Only paginate SELECT queries
       if (!isSelect) {
@@ -839,8 +864,8 @@ export class NotebooksService {
         result = await DuckLakeService.executeQuery({
           instanceId,
           query: sql,
-          limit,
-          offset,
+          limit: pageLimit,
+          offset: pageOffset,
         });
 
         // Get total row count
@@ -861,8 +886,8 @@ export class NotebooksService {
           }
         }
       } else {
-        // Regular DB connection - manually append LIMIT/OFFSET
-        const queryToExecute = `${sql.trim().replace(/;$/, '')} LIMIT ${limit} OFFSET ${offset}`;
+        // Regular DB connection - manually append LIMIT/OFFSET with sanitized values
+        const queryToExecute = `${sql.trim().replace(/;$/, '')} LIMIT ${pageLimit} OFFSET ${pageOffset}`;
 
         result = await ConnectorsService.executeQueryForConnection({
           connectionId,
@@ -1154,10 +1179,9 @@ export class NotebooksService {
       const targetConnectionKey = normalizeConnectionKey(targetConnectionId);
 
       // Read archived notebook
-      const archivedPath = path.join(
-        ORPHANED_DIR,
+      const archivedPath = getArchivedNotebookPath(
         archivedConnectionKey,
-        `${notebookId}.json`,
+        notebookId,
       );
       const content = await fs.readFile(archivedPath, 'utf-8');
       const notebook = JSON.parse(content) as Notebook;
@@ -1178,7 +1202,7 @@ export class NotebooksService {
 
       // Clean up empty archived connection directory
       try {
-        const archivedDir = path.join(ORPHANED_DIR, archivedConnectionKey);
+        const archivedDir = getArchivedConnectionDir(archivedConnectionKey);
         const remainingFiles = await fs.readdir(archivedDir);
         if (remainingFiles.length === 0) {
           await fs.rmdir(archivedDir);
@@ -1203,16 +1227,12 @@ export class NotebooksService {
     notebookId: string,
   ): Promise<void> {
     try {
-      const archivedPath = path.join(
-        ORPHANED_DIR,
-        connectionKey,
-        `${notebookId}.json`,
-      );
+      const archivedPath = getArchivedNotebookPath(connectionKey, notebookId);
       await fs.unlink(archivedPath);
 
       // Clean up empty archived connection directory
       try {
-        const archivedDir = path.join(ORPHANED_DIR, connectionKey);
+        const archivedDir = getArchivedConnectionDir(connectionKey);
         const remainingFiles = await fs.readdir(archivedDir);
         if (remainingFiles.length === 0) {
           await fs.rmdir(archivedDir);
@@ -1238,7 +1258,7 @@ export class NotebooksService {
 
       if (connectionKey) {
         // Delete all notebooks for specific connection
-        const archivedDir = path.join(ORPHANED_DIR, connectionKey);
+        const archivedDir = getArchivedConnectionDir(connectionKey);
         try {
           await fs.rm(archivedDir, { recursive: true, force: true });
         } catch {
@@ -1250,7 +1270,7 @@ export class NotebooksService {
           const connectionKeys = await fs.readdir(ORPHANED_DIR);
           // eslint-disable-next-line no-restricted-syntax
           for (const key of connectionKeys) {
-            const dir = path.join(ORPHANED_DIR, key);
+            const dir = getArchivedConnectionDir(key);
             // eslint-disable-next-line no-await-in-loop
             await fs.rm(dir, { recursive: true, force: true });
           }
