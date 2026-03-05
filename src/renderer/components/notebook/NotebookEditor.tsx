@@ -95,8 +95,6 @@ export const NotebookEditor: React.FC<NotebookEditorProps> = ({
     }
   }, []);
 
-  // Global completion provider registration (once per notebook/connection)
-  const completionProviderRef = useRef<any>(null);
   const { data: schemaData } = useSchemaForConnection(connectionId);
   const completions = useMonacoAutocomplete(
     schemaData?.tables || null,

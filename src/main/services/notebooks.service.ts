@@ -121,7 +121,9 @@ function getArchivedConnectionDir(connectionKey: string): string {
   const dirPath = path.resolve(ORPHANED_DIR, safeKey);
   const base = `${path.resolve(ORPHANED_DIR)}${path.sep}`;
   if (!dirPath.startsWith(base)) {
-    throw new Error('Invalid archived directory path - path traversal detected');
+    throw new Error(
+      'Invalid archived directory path - path traversal detected',
+    );
   }
   return dirPath;
 }
