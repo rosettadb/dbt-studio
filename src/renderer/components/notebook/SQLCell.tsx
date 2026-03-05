@@ -437,10 +437,21 @@ export const SQLCell: React.FC<SQLCellProps> = ({
   const resizeHandleRef = useRef<HTMLDivElement>(null);
   const [isHovering, setIsHovering] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
+  const isExecutingRef = useRef(isExecuting);
+  const handleRunRef = useRef(onRun);
 
   // Determine Monaco theme based on MUI theme
   const monacoTheme =
     theme.palette.mode === 'dark' ? 'sql-enhanced-dark' : 'sql-enhanced-light';
+
+  // Keep refs in sync with latest values
+  useEffect(() => {
+    isExecutingRef.current = isExecuting;
+  }, [isExecuting]);
+
+  useEffect(() => {
+    handleRunRef.current = onRun;
+  }, [onRun]);
 
   // Fetch schema for DDL refresh only (autocomplete is handled by NotebookEditor)
   const { refetch: refetchSchema } = useSchemaForConnection(connectionId);
@@ -461,7 +472,7 @@ export const SQLCell: React.FC<SQLCellProps> = ({
   };
 
   // Wrap onRun to detect DDL and refresh schema
-  const handleRun = React.useCallback(
+  const handleRunWithDDL = React.useCallback(
     async (content: string) => {
       await Promise.resolve(onRun(content));
 
@@ -472,6 +483,11 @@ export const SQLCell: React.FC<SQLCellProps> = ({
     },
     [onRun, refetchSchema],
   );
+
+  // Update handleRunRef with DDL-aware wrapper
+  useEffect(() => {
+    handleRunRef.current = handleRunWithDDL;
+  }, [handleRunWithDDL]);
 
   // Configure Monaco theme and language on mount
   useEffect(() => {
@@ -518,9 +534,10 @@ export const SQLCell: React.FC<SQLCellProps> = ({
       // eslint-disable-next-line no-bitwise
       monaco.KeyMod.CtrlCmd | monaco.KeyCode.Enter,
       () => {
-        if (isExecuting) return;
+        if (isExecutingRef.current) return;
         const content = editorInstance.getValue();
-        handleRun(content);
+        // eslint-disable-next-line @typescript-eslint/no-floating-promises
+        handleRunRef.current(content);
       },
     );
 
@@ -529,9 +546,10 @@ export const SQLCell: React.FC<SQLCellProps> = ({
       // eslint-disable-next-line no-bitwise
       monaco.KeyMod.Shift | monaco.KeyCode.Enter,
       () => {
-        if (isExecuting) return;
+        if (isExecutingRef.current) return;
         const content = editorInstance.getValue();
-        handleRun(content);
+        // eslint-disable-next-line @typescript-eslint/no-floating-promises
+        handleRunRef.current(content);
         // TODO: Move to next cell
       },
     );

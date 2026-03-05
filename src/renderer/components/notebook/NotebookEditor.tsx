@@ -769,7 +769,9 @@ export const NotebookEditor: React.FC<NotebookEditorProps> = ({
                                 executingCells.has(cell.id) ||
                                 (isRunningAll && runningCellIndex === index)
                               }
-                              onRun={() => handleRunCell(cell.id, cell.content)}
+                              onRun={(content: string) =>
+                                handleRunCell(cell.id, content)
+                              }
                               onUpdate={(content: string) =>
                                 handleUpdateCell(cell.id, content)
                               }
@@ -895,8 +897,9 @@ export const NotebookEditor: React.FC<NotebookEditorProps> = ({
               onChange={(e) => setDuplicateNotebookName(e.target.value)}
               placeholder="Enter name for duplicate"
               required
-              onKeyPress={(e) => {
+              onKeyDown={(e) => {
                 if (e.key === 'Enter' && duplicateNotebookName.trim()) {
+                  e.preventDefault();
                   handleDuplicateConfirm();
                 }
               }}

@@ -75,6 +75,9 @@ export const OutputPanel: React.FC<OutputPanelProps> = ({
 
   // Reset pagination state when output changes (new query execution)
   React.useEffect(() => {
+    // Invalidate any in-flight pagination request from previous output
+    latestRequestId.current += 1;
+    setLoading(false);
     setPage(0);
     setPaginatedData(output.data || []);
   }, [output]);

@@ -90,6 +90,28 @@ const Notebooks = () => {
   const isFullyHydrated =
     isConnectionHydrated && isSidebarHydrated && notebookTabManager.isHydrated;
 
+  // Validate hydrated connection exists, clear if not
+  useEffect(() => {
+    if (!isConnectionHydrated || !activeConnectionId) return;
+
+    const connectionExists =
+      connections.some((c) => c.id === activeConnectionId) ||
+      (activeConnectionId.startsWith('ducklake-') &&
+        duckLakeInstances.some(
+          (i) => `ducklake-${i.id}` === activeConnectionId,
+        ));
+
+    if (!connectionExists) {
+      setActiveConnectionId('');
+    }
+  }, [
+    isConnectionHydrated,
+    activeConnectionId,
+    connections,
+    duckLakeInstances,
+    setActiveConnectionId,
+  ]);
+
   // Schema state - cached per connection (SQL Editor pattern)
   const [tabSchemas, setTabSchemas] = useState<Record<string, Table[]>>({});
   const [loadingSchemas, setLoadingSchemas] = useState<Record<string, boolean>>(
@@ -1133,8 +1155,9 @@ const Notebooks = () => {
               onChange={(e) => setNewNotebookName(e.target.value)}
               placeholder="My Notebook"
               required
-              onKeyPress={(e) => {
+              onKeyDown={(e) => {
                 if (e.key === 'Enter' && newNotebookName.trim()) {
+                  e.preventDefault();
                   handleCreateNotebook();
                 }
               }}

@@ -62,6 +62,7 @@ const NotebookCellComponent: React.FC<NotebookCellProps> = ({
   const outputResizeHandleRef = useRef<HTMLDivElement>(null);
   const outputHeightRef = useRef<number | null>(null);
   const resizeThrottleRef = useRef<number | null>(null);
+  const dragCleanupRef = useRef<(() => void) | null>(null);
 
   // Keep ref in sync with state
   useEffect(() => {
@@ -159,12 +160,17 @@ const NotebookCellComponent: React.FC<NotebookCellProps> = ({
         document.body.style.cursor = '';
         document.body.style.userSelect = '';
         setIsDraggingOutput(false);
+        dragCleanupRef.current = null;
       };
 
       document.addEventListener('mousemove', handleMouseMove);
       document.addEventListener('mouseup', handleMouseUp);
       document.body.style.cursor = 'row-resize';
       document.body.style.userSelect = 'none';
+      dragCleanupRef.current = () => {
+        document.removeEventListener('mousemove', handleMouseMove);
+        document.removeEventListener('mouseup', handleMouseUp);
+      };
     };
 
     const resizeHandle = outputResizeHandleRef.current;
@@ -172,6 +178,7 @@ const NotebookCellComponent: React.FC<NotebookCellProps> = ({
       resizeHandle.addEventListener('mousedown', handleMouseDown);
       return () => {
         resizeHandle.removeEventListener('mousedown', handleMouseDown);
+        dragCleanupRef.current?.();
       };
     }
     return undefined;

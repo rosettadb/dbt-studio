@@ -343,7 +343,7 @@ export const QueryResult: React.FC<Props> = ({ results, exportContext }) => {
         !!exportContext.connectionId));
 
   const handleExportParquet = async () => {
-    if (!canExportParquet || !exportContext?.originalSql) return;
+    if (!canExportParquet || !originalSql) return;
 
     try {
       const result = await window.electron.ipcRenderer.invoke(
@@ -364,9 +364,7 @@ export const QueryResult: React.FC<Props> = ({ results, exportContext }) => {
       setIsExporting(true);
 
       const escapedPath = result.filePath.replace(/'/g, "''");
-      const baseSql =
-        (results as any).originalSql ?? exportContext.originalSql ?? '';
-      const exportQuery = `COPY (${normalizeSqlForCopy(baseSql)}) TO '${escapedPath}' (FORMAT PARQUET)`;
+      const exportQuery = `COPY (${normalizeSqlForCopy(originalSql)}) TO '${escapedPath}' (FORMAT PARQUET)`;
 
       if (
         exportContext.connectionType === 'ducklake' &&
