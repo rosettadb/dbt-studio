@@ -770,6 +770,7 @@ export class SQLiteCatalogAdapter extends CatalogAdapter {
       'ducklake_file_partition_value',
       'ducklake_tag',
       'ducklake_column_tag',
+      'ducklake_view',
     ];
 
     return metadataTables.reduce((currentQuery, table) => {

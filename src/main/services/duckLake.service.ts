@@ -28,6 +28,8 @@ import {
   DuckLakePaginatedResult,
   DuckLakeSchemaInfo,
   DuckLakeSchemaTable,
+  DuckLakeViewInfo,
+  DuckLakeColumnInfo,
 } from '../../types/duckLake';
 import { DuckLakeError } from '../../types/duckLakeErrors';
 
@@ -948,6 +950,162 @@ export default class DuckLakeService {
     }
   }
 
+  static async listViews(instanceId: string): Promise<DuckLakeViewInfo[]> {
+    try {
+      // eslint-disable-next-line no-console
+      console.log(
+        `[DuckLakeService.listViews] Start for instanceId: ${instanceId}`,
+      );
+
+      await this.ensureConnected(instanceId);
+      const adapter = await this.getAdapter(instanceId);
+
+      const result = await adapter.executeQuery({
+        instanceId,
+        query: `
+          WITH current_snapshot AS (
+            SELECT COALESCE(MAX(snapshot_id), 0) as snapshot_id
+            FROM ducklake_snapshot
+          )
+          SELECT
+            v.view_name,
+            s.schema_name,
+            v.sql as view_definition,
+            c.column_name,
+            c.column_type,
+            c.nulls_allowed,
+            c.column_order
+          FROM ducklake_view v
+          JOIN ducklake_schema s ON v.schema_id = s.schema_id
+          LEFT JOIN ducklake_column c ON v.view_id = c.table_id
+          CROSS JOIN current_snapshot cs
+          WHERE cs.snapshot_id >= v.begin_snapshot
+            AND (v.end_snapshot IS NULL OR cs.snapshot_id < v.end_snapshot)
+            AND cs.snapshot_id >= s.begin_snapshot
+            AND (s.end_snapshot IS NULL OR cs.snapshot_id < s.end_snapshot)
+            AND (c.column_id IS NULL OR (
+              cs.snapshot_id >= c.begin_snapshot
+              AND (c.end_snapshot IS NULL OR cs.snapshot_id < c.end_snapshot)
+            ))
+          ORDER BY s.schema_name, v.view_name, c.column_order
+        `,
+        queryId: `view-list-${Date.now()}`,
+      });
+
+      // eslint-disable-next-line no-console
+      console.log(
+        `[DuckLakeService.listViews] Query success: ${result.success}, Rows returned: ${result.data?.length ?? 0}`,
+      );
+      if (!result.success) {
+        // eslint-disable-next-line no-console
+        console.error(
+          `[DuckLakeService.listViews] Query failed:`,
+          result.error,
+        );
+      }
+
+      const viewMap = new Map<string, DuckLakeViewInfo>();
+      (result.data ?? []).forEach((row: any) => {
+        const viewName = Array.isArray(row) ? row[0] : row.view_name;
+        const schemaName = Array.isArray(row) ? row[1] : row.schema_name;
+        const definition = Array.isArray(row) ? row[2] : row.view_definition;
+        const colName = Array.isArray(row) ? row[3] : row.column_name;
+        const colType = Array.isArray(row) ? row[4] : row.column_type;
+        const colNullable = Array.isArray(row) ? row[5] : row.nulls_allowed;
+
+        if (!viewName) return;
+
+        const key = `${schemaName ?? 'main'}.${viewName}`;
+        if (!viewMap.has(key)) {
+          viewMap.set(key, {
+            name: viewName,
+            schema: schemaName ?? 'main',
+            instanceId,
+            definition: definition ?? undefined,
+            columns: [],
+          });
+        }
+        if (colName) {
+          viewMap.get(key)!.columns.push({
+            name: colName,
+            type: colType ?? '',
+            nullable: colNullable ?? true,
+          });
+        }
+      });
+
+      const finalViews = Array.from(viewMap.values());
+      // eslint-disable-next-line no-console
+      console.log(
+        `[DuckLakeService.listViews] Grouped into ${finalViews.length} views`,
+      );
+
+      return finalViews;
+    } catch (error) {
+      // eslint-disable-next-line no-console
+      console.error('[DuckLakeService.listViews] Error:', error);
+      throw error;
+    }
+  }
+
+  static async getViewSchema(
+    instanceId: string,
+    viewName: string,
+  ): Promise<DuckLakeColumnInfo[]> {
+    try {
+      await this.ensureConnected(instanceId);
+      const adapter = await this.getAdapter(instanceId);
+
+      // 1. Get the view SQL from metadata
+      const result = await adapter.executeQuery({
+        instanceId,
+        query: `SELECT sql FROM ducklake_view WHERE view_name = '${viewName}'`,
+        queryId: `view-sql-${viewName}-${Date.now()}`,
+      });
+
+      if (!result.success || !result.data || result.data.length === 0) {
+        throw new Error(
+          result.error || `Failed to find definition for view ${viewName}`,
+        );
+      }
+
+      const viewSql = Array.isArray(result.data[0])
+        ? result.data[0][0]
+        : result.data[0].sql;
+      // eslint-disable-next-line no-console
+      console.log(
+        `[DuckLakeService.getViewSchema] SQL for ${viewName}: ${viewSql}`,
+      );
+
+      // 2. Execute with LIMIT 0 to get schema from fields metadata
+      const schemaResult = await adapter.executeQuery({
+        instanceId,
+        query: `SELECT * FROM (${viewSql}) LIMIT 0`,
+        queryId: `view-schema-exec-${viewName}-${Date.now()}`,
+      });
+
+      if (!schemaResult.success || !schemaResult.fields) {
+        throw new Error(
+          schemaResult.error || `Failed to introspect view ${viewName}`,
+        );
+      }
+
+      // 3. Map fields meta to column info
+      return schemaResult.fields.map((field: any) => ({
+        name: field.name,
+        type: field.type?.toString() || 'VARCHAR',
+        nullable: true, // Views generally allow nulls unless strict
+      }));
+    } catch (error) {
+      // eslint-disable-next-line no-console
+      console.error(
+        `[DuckLakeService.getViewSchema] Error for ${viewName}:`,
+        error,
+      );
+      throw error;
+    }
+  }
+
   static async getTable(
     instanceId: string,
     tableName: string,
@@ -1390,9 +1548,83 @@ export default class DuckLakeService {
             }
           });
 
+          // Fetch views for the same schema — wrapped in try/catch so a missing
+          // ducklake_view table (older catalog versions) never breaks schema loading
+          let viewEntries: DuckLakeSchemaTable[] = [];
+          try {
+            const viewsResult = await adapter.executeQuery({
+              instanceId,
+              query: `
+                WITH current_snapshot AS (
+                  SELECT COALESCE(MAX(snapshot_id), 0) as snapshot_id
+                  FROM ducklake_snapshot
+                )
+                SELECT
+                  v.view_name,
+                  c.column_name,
+                  c.column_type,
+                  c.column_order
+                FROM ducklake_view v
+                JOIN ducklake_schema s ON v.schema_id = s.schema_id
+                LEFT JOIN ducklake_column c ON v.view_id = c.table_id
+                CROSS JOIN current_snapshot cs
+                WHERE s.schema_name = '${escapedSchemaName}'
+                  AND cs.snapshot_id >= v.begin_snapshot
+                  AND (v.end_snapshot IS NULL OR cs.snapshot_id < v.end_snapshot)
+                  AND cs.snapshot_id >= s.begin_snapshot
+                  AND (s.end_snapshot IS NULL OR cs.snapshot_id < s.end_snapshot)
+                  AND (c.column_id IS NULL OR (
+                    cs.snapshot_id >= c.begin_snapshot
+                    AND (c.end_snapshot IS NULL OR cs.snapshot_id < c.end_snapshot)
+                  ))
+                ORDER BY v.view_name, c.column_order
+              `,
+              queryId: `views-${Date.now()}`,
+            });
+
+            if (viewsResult.success && viewsResult.data) {
+              const viewMap = new Map<string, DuckLakeSchemaTable>();
+              (viewsResult.data ?? []).forEach((row: any) => {
+                let viewName: string;
+                let columnName: string | undefined;
+                let columnType: string | undefined;
+                let columnOrder: number | undefined;
+
+                if (Array.isArray(row)) {
+                  [viewName, columnName, columnType, columnOrder] = row;
+                } else {
+                  viewName = row.view_name;
+                  columnName = row.column_name;
+                  columnType = row.column_type;
+                  columnOrder = row.column_order;
+                }
+
+                if (!viewName) return;
+
+                if (!viewMap.has(viewName)) {
+                  viewMap.set(viewName, {
+                    name: viewName,
+                    type: 'VIEW',
+                    columns: [],
+                  });
+                }
+                if (columnName) {
+                  viewMap.get(viewName)?.columns.push({
+                    name: columnName,
+                    type: columnType ?? '',
+                    position: columnOrder ?? 0,
+                  });
+                }
+              });
+              viewEntries = Array.from(viewMap.values());
+            }
+          } catch {
+            // ducklake_view may not exist in older catalog versions — silently skip
+          }
+
           return {
             name: schemaName,
-            tables: Array.from(tableMap.values()),
+            tables: [...Array.from(tableMap.values()), ...viewEntries],
           };
         }),
       );
