@@ -8,6 +8,7 @@ import { DATA_DIR, DB_FILE } from './setupHelpers';
 
 export const getDirectoryStructure = (dirPath: string): FileNode => {
   const result: FileNode = {
+    id: path.basename(dirPath),
     name: path.basename(dirPath),
     path: dirPath,
     type: 'folder',
@@ -23,7 +24,7 @@ export const getDirectoryStructure = (dirPath: string): FileNode => {
     if (stats.isDirectory()) {
       return getDirectoryStructure(filePath);
     }
-    return { name: file, path: filePath, type: 'file' };
+    return { id: filePath, name: file, path: filePath, type: 'file' };
   });
   return result;
 };
@@ -169,7 +170,8 @@ const checkFileConflicts = (srcDir: string, tgtDir: string) => {
 };
 
 const copyFolder = async (source: string, target: string) => {
-  const conflicts = checkFileConflicts(source, target);
+  const targetFolder = path.join(target, path.basename(source));
+  const conflicts = checkFileConflicts(source, targetFolder);
   if (conflicts.length > 0) {
     const result = await dialog.showMessageBox({
       type: 'question',
@@ -184,7 +186,7 @@ const copyFolder = async (source: string, target: string) => {
   }
   fs.cp(
     source,
-    target,
+    targetFolder,
     { recursive: true, force: conflicts.length > 0 },
     (err) => {
       if (err) throw new Error(err.message);
