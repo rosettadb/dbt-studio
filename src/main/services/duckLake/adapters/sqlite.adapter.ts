@@ -584,10 +584,46 @@ export class SQLiteCatalogAdapter extends CatalogAdapter {
       const result = await this.connectionInfo.connection.run(query);
       const rows = await result.getRows();
 
+      // Second isolated query: derive updatedAt from the latest data file written per table.
+      // ducklake_snapshot has NO table_id column — the link is via ducklake_data_file.begin_snapshot.
+      // This query avoids ducklake_table_stats entirely to prevent DuckDB binder ambiguity
+      // when joined tables share the 'table_id' column name in attached SQLite databases.
+      // See coding rule DL-01 in ai-context/04-rules/01-coding-rules.md.
+      const updatedAtQuery = `
+        SELECT df.table_id, MAX(sn.snapshot_time) as updated_at
+        FROM ${quotedMetadataDatabase}.main.ducklake_data_file df
+        JOIN ${quotedMetadataDatabase}.main.ducklake_snapshot sn ON sn.snapshot_id = df.begin_snapshot
+        GROUP BY df.table_id
+      `;
+      const updatedAtMap = new Map<string | number, Date>();
+      try {
+        const updatedAtResult =
+          await this.connectionInfo.connection.run(updatedAtQuery);
+        const updatedAtRows = await updatedAtResult.getRows();
+        updatedAtRows.forEach((uRow: any) => {
+          if (Array.isArray(uRow)) {
+            const [tableId, updatedAt] = uRow;
+            if (tableId != null && updatedAt) {
+              updatedAtMap.set(tableId as string | number, new Date(updatedAt));
+            }
+          } else if (uRow && typeof uRow === 'object') {
+            const r = uRow as any;
+            if (r.table_id != null && r.updated_at) {
+              updatedAtMap.set(
+                r.table_id as string | number,
+                new Date(r.updated_at),
+              );
+            }
+          }
+        });
+      } catch {
+        // Degrade gracefully: updatedAt falls back to createdAt below
+      }
+
       const tables: DuckLakeTableInfo[] = rows.map((row: any) => {
         if (Array.isArray(row)) {
           const [
-            ,
+            tableId,
             tableName,
             schemaName,
             ,
@@ -596,31 +632,35 @@ export class SQLiteCatalogAdapter extends CatalogAdapter {
             fileSizeBytes,
             snapshotTime,
           ] = row;
+          const createdAt = snapshotTime ? new Date(snapshotTime) : new Date();
+          const updatedAt =
+            updatedAtMap.get(tableId as string | number) ?? createdAt;
           return {
             name: tableName,
             schema: schemaName || 'main',
             instanceId: '',
             columns: [],
             snapshots: [],
-            createdAt: snapshotTime ? new Date(snapshotTime) : new Date(),
-            updatedAt: snapshotTime ? new Date(snapshotTime) : new Date(),
+            createdAt,
+            updatedAt,
             rowCount: normalizeNumericValue(recordCount),
             sizeBytes: normalizeNumericValue(fileSizeBytes),
           };
         }
 
+        const createdAt = row.snapshot_time
+          ? new Date(row.snapshot_time)
+          : new Date();
+        const updatedAt =
+          updatedAtMap.get(row.table_id as string | number) ?? createdAt;
         return {
           name: row.table_name,
           schema: row.schema_name || 'main',
           instanceId: '',
           columns: [],
           snapshots: [],
-          createdAt: row.snapshot_time
-            ? new Date(row.snapshot_time)
-            : new Date(),
-          updatedAt: row.snapshot_time
-            ? new Date(row.snapshot_time)
-            : new Date(),
+          createdAt,
+          updatedAt,
           rowCount: normalizeNumericValue(row.record_count),
           sizeBytes: normalizeNumericValue(row.file_size_bytes),
         };
