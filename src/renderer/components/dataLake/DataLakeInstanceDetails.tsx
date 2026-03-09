@@ -29,9 +29,7 @@ import {
   TableRow,
   TextField,
   InputAdornment,
-  CircularProgress,
   TablePagination,
-  IconButton,
 } from '@mui/material';
 import {
   Dataset as Database,
@@ -51,7 +49,6 @@ import {
   Refresh,
   Search,
   Close,
-  Visibility,
 } from '@mui/icons-material';
 import { useNavigate } from 'react-router-dom';
 import moment from 'moment';
@@ -65,13 +62,10 @@ import {
   useDuckLakeInstanceHealth,
   duckLakeKeys,
   useDuckLakeInstanceSnapshots,
-  useDuckLakeViews,
-  useExecuteDuckLakeQuery,
 } from '../../controllers/duckLake.controller';
 import {
   DuckLakeInstance,
   DuckLakeSnapshotDetail,
-  DuckLakeViewInfo,
 } from '../../../types/duckLake';
 
 interface DuckLakeInstanceDetailsProps {
@@ -81,161 +75,6 @@ interface DuckLakeInstanceDetailsProps {
   isLoading?: boolean;
 }
 
-const ViewDataPreview: React.FC<{ instanceId: string; viewName: string }> = ({
-  instanceId,
-  viewName,
-}) => {
-  const [page, setPage] = useState(0);
-  const rowsPerPage = 25; // 4x25 = 100 limit
-  const {
-    mutate: executeQuery,
-    isLoading,
-    data: result,
-    error,
-  } = useExecuteDuckLakeQuery();
-
-  // Fetch only the first 100 rows once
-  React.useEffect(() => {
-    executeQuery({
-      instanceId,
-      query: `SELECT * FROM "${viewName}" LIMIT 100`,
-    });
-  }, [instanceId, viewName, executeQuery]);
-
-  if (isLoading && !result) {
-    return (
-      <Box sx={{ p: 4, display: 'flex', justifyContent: 'center' }}>
-        <CircularProgress />
-      </Box>
-    );
-  }
-
-  if (error) {
-    return (
-      <Box sx={{ p: 2 }}>
-        <Alert severity="error">Error: {(error as Error).message}</Alert>
-      </Box>
-    );
-  }
-
-  const allRows = result?.data || [];
-  const paginatedRows = allRows.slice(
-    page * rowsPerPage,
-    (page + 1) * rowsPerPage,
-  );
-
-  return (
-    <Box>
-      <Box
-        sx={{
-          mb: 1,
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-        }}
-      >
-        <Typography variant="caption" color="text.secondary">
-          Showing up to 100 sample rows
-        </Typography>
-        {isLoading && <CircularProgress size={14} />}
-      </Box>
-      <TableContainer
-        component={Paper}
-        variant="outlined"
-        sx={{ maxHeight: 400 }}
-      >
-        <Table stickyHeader size="small">
-          <TableHead>
-            <TableRow>
-              {result?.fields?.map((f) => (
-                <TableCell key={f.name} sx={{ py: 1.5 }}>
-                  <Typography
-                    variant="subtitle2"
-                    sx={{ fontWeight: 'bold', lineHeight: 1.2 }}
-                  >
-                    {f.name}
-                  </Typography>
-                  <Typography
-                    variant="caption"
-                    sx={{ color: 'text.secondary', fontSize: '0.7rem' }}
-                  >
-                    {f.type}
-                  </Typography>
-                </TableCell>
-              ))}
-            </TableRow>
-          </TableHead>
-          <TableBody>
-            {paginatedRows.map((row, idx) => (
-              <TableRow key={idx}>
-                {Object.values(row).map((val: any, vIdx) => (
-                  <TableCell key={vIdx} sx={{ whiteSpace: 'nowrap' }}>
-                    {val === null ? 'NULL' : String(val)}
-                  </TableCell>
-                ))}
-              </TableRow>
-            ))}
-            {allRows.length === 0 && (
-              <TableRow>
-                <TableCell
-                  colSpan={result?.fields?.length || 1}
-                  align="center"
-                  sx={{ py: 4 }}
-                >
-                  No data
-                </TableCell>
-              </TableRow>
-            )}
-          </TableBody>
-        </Table>
-      </TableContainer>
-      <TablePagination
-        component="div"
-        count={allRows.length}
-        page={page}
-        onPageChange={(_, p) => setPage(p)}
-        rowsPerPage={rowsPerPage}
-        rowsPerPageOptions={[25]}
-      />
-    </Box>
-  );
-};
-
-const ViewPreviewModal: React.FC<{
-  open: boolean;
-  onClose: () => void;
-  instanceId: string;
-  view: DuckLakeViewInfo | null;
-}> = ({ open, onClose, instanceId, view }) => {
-  if (!view) return null;
-
-  return (
-    <Dialog open={open} onClose={onClose} maxWidth="lg" fullWidth>
-      <DialogTitle sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-        <TableChart color="success" />
-        <Typography variant="h6" component="span" sx={{ flexGrow: 1 }}>
-          {view.name}
-        </Typography>
-        <IconButton
-          aria-label="close"
-          onClick={onClose}
-          sx={{ color: (theme) => theme.palette.grey[500] }}
-        >
-          <Close />
-        </IconButton>
-      </DialogTitle>
-      <DialogContent dividers>
-        <ViewDataPreview instanceId={instanceId} viewName={view.name} />
-      </DialogContent>
-      <DialogActions>
-        <Button onClick={onClose} variant="contained" color="inherit">
-          Close
-        </Button>
-      </DialogActions>
-    </Dialog>
-  );
-};
-
 export const DataLakeInstanceDetails: React.FC<
   DuckLakeInstanceDetailsProps
 > = ({ instance, onEdit, onDelete, isLoading = false }) => {
@@ -243,7 +82,6 @@ export const DataLakeInstanceDetails: React.FC<
   const queryClient = useQueryClient();
   const [currentTab, setCurrentTab] = useState(0);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
-  const [previewView, setPreviewView] = useState<DuckLakeViewInfo | null>(null);
 
   // Use the health check mutation for test connection
   const testConnectionMutation = useRefreshDuckLakeInstanceHealth();
@@ -260,7 +98,6 @@ export const DataLakeInstanceDetails: React.FC<
     pageSize: snapshotRowsPerPage,
     filter: snapshotFilter,
   });
-  const viewsQuery = useDuckLakeViews(instance.id, currentTab === 1);
 
   if (!instance) return null;
 
@@ -412,115 +249,6 @@ export const DataLakeInstanceDetails: React.FC<
       );
     }
     return <Folder color="action" />;
-  };
-
-  const renderViewsTab = () => {
-    if (viewsQuery.isLoading) return <LinearProgress />;
-
-    if (viewsQuery.error) {
-      return (
-        <Alert severity="error" sx={{ mt: 2 }}>
-          Failed to load views: {(viewsQuery.error as Error).message}
-        </Alert>
-      );
-    }
-
-    const views = viewsQuery.data ?? [];
-
-    if (views.length === 0) {
-      return (
-        <Box sx={{ textAlign: 'center', py: 6, color: 'text.secondary' }}>
-          <TableChart
-            sx={{ fontSize: 48, opacity: 0.3, mb: 1, color: 'success.main' }}
-          />
-          <Typography variant="body2">
-            No views found in this instance
-          </Typography>
-          <Typography variant="caption" color="text.secondary">
-            Create a view using: CREATE VIEW my_view AS SELECT * FROM my_table
-          </Typography>
-        </Box>
-      );
-    }
-
-    return (
-      <Box sx={{ mt: 1 }}>
-        <Typography
-          variant="h6"
-          sx={{ mb: 2, display: 'flex', alignItems: 'center', gap: 1 }}
-        >
-          <TableChart color="success" />
-          Views ({views.length})
-        </Typography>
-        <TableContainer component={Paper}>
-          <Table size="small">
-            <TableHead>
-              <TableRow>
-                <TableCell>Name</TableCell>
-                <TableCell>Schema</TableCell>
-                <TableCell>Columns</TableCell>
-                <TableCell>Definition</TableCell>
-                <TableCell align="right">Actions</TableCell>
-              </TableRow>
-            </TableHead>
-            <TableBody>
-              {views.map((view) => (
-                <TableRow key={`${view.schema}.${view.name}`} hover>
-                  <TableCell
-                    sx={{
-                      backgroundColor: (theme) =>
-                        theme.palette.mode === 'dark'
-                          ? theme.palette.grey[900]
-                          : theme.palette.grey[50],
-                      fontWeight: 600,
-                    }}
-                  >
-                    {view.name}
-                  </TableCell>
-                  <TableCell>
-                    <Chip label={view.schema} size="small" variant="outlined" />
-                  </TableCell>
-                  <TableCell>
-                    <Typography variant="body2">
-                      {view.columns.length > 0
-                        ? `${view.columns.length} columns`
-                        : 'Dynamic'}
-                    </Typography>
-                  </TableCell>
-                  <TableCell>
-                    <Typography
-                      variant="caption"
-                      sx={{
-                        fontFamily: 'monospace',
-                        color: 'text.secondary',
-                        display: 'block',
-                        maxWidth: 300,
-                      }}
-                      noWrap
-                    >
-                      {view.definition || '—'}
-                    </Typography>
-                  </TableCell>
-                  <TableCell align="right">
-                    <Button
-                      size="small"
-                      variant="outlined"
-                      startIcon={<Visibility />}
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setPreviewView(view);
-                      }}
-                    >
-                      Inspect
-                    </Button>
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </TableContainer>
-      </Box>
-    );
   };
 
   const renderOverviewTab = () => (
@@ -1126,8 +854,7 @@ export const DataLakeInstanceDetails: React.FC<
             value={currentTab}
             onChange={(_, newValue) => setCurrentTab(newValue)}
           >
-            <Tab label="Tables" />
-            <Tab label="Views" />
+            <Tab label="Tables & Views" />
             <Tab label="Overview" />
             <Tab label="History" />
             <Tab label="Activity" />
@@ -1135,9 +862,8 @@ export const DataLakeInstanceDetails: React.FC<
         </Box>
         <CardContent>
           {currentTab === 0 && <DataLakeTablesView instanceId={instance.id} />}
-          {currentTab === 1 && renderViewsTab()}
-          {currentTab === 2 && renderOverviewTab()}
-          {currentTab === 3 && (
+          {currentTab === 1 && renderOverviewTab()}
+          {currentTab === 2 && (
             <Box sx={{ mt: 1 }}>
               <Box sx={{ display: 'flex', justifyContent: 'flex-end', mb: 1 }}>
                 <TextField
@@ -1256,7 +982,7 @@ export const DataLakeInstanceDetails: React.FC<
                 )}
             </Box>
           )}
-          {currentTab === 4 && (
+          {currentTab === 3 && (
             <Box sx={{ mt: 2 }}>
               <Typography variant="body1" color="text.secondary">
                 Activity coming soon...
@@ -1305,13 +1031,6 @@ export const DataLakeInstanceDetails: React.FC<
           </Button>
         </DialogActions>
       </Dialog>
-
-      <ViewPreviewModal
-        open={!!previewView}
-        onClose={() => setPreviewView(null)}
-        instanceId={instance.id}
-        view={previewView}
-      />
     </Box>
   );
 };
