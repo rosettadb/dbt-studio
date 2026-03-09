@@ -437,6 +437,7 @@ export interface DuckLakeSchemaTable {
   name: string;
   type: string;
   columns: DuckLakeSchemaColumn[];
+  metadata?: any;
 }
 
 export interface DuckLakeSchema {

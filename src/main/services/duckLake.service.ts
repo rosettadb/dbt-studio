@@ -1077,10 +1077,10 @@ export default class DuckLakeService {
         `[DuckLakeService.getViewSchema] SQL for ${viewName}: ${viewSql}`,
       );
 
-      // 2. Execute with LIMIT 0 to get schema from fields metadata
+      // 2. Introspect by name instead of subquery to avoid re-executing DDL if sql contains CREATE
       const schemaResult = await adapter.executeQuery({
         instanceId,
-        query: `SELECT * FROM (${viewSql}) LIMIT 0`,
+        query: `SELECT * FROM "${viewName}" LIMIT 0`,
         queryId: `view-schema-exec-${viewName}-${Date.now()}`,
       });
 
@@ -1303,6 +1303,10 @@ export default class DuckLakeService {
     const startTime = Date.now();
 
     try {
+      // eslint-disable-next-line no-console
+      console.log(
+        `[DuckLake Service] executeQuery start for instance ${request.instanceId}, query: ${request.query.substring(0, 100)}${request.query.length > 100 ? '...' : ''}`,
+      );
       await this.ensureConnected(request.instanceId);
       const adapter = await this.getAdapter(request.instanceId);
 
@@ -1368,6 +1372,11 @@ export default class DuckLakeService {
 
         // Determine command type
         const commandType = this.detectCommandType(request.query);
+
+        // eslint-disable-next-line no-console
+        console.log(
+          `[DuckLake Service] Query success: ${result.success}, commandType: ${commandType}, rowCount: ${result.rowCount}`,
+        );
 
         return {
           ...result,
@@ -1561,6 +1570,7 @@ export default class DuckLakeService {
                 )
                 SELECT
                   v.view_name,
+                  v.sql,
                   c.column_name,
                   c.column_type,
                   c.column_order
@@ -1586,14 +1596,17 @@ export default class DuckLakeService {
               const viewMap = new Map<string, DuckLakeSchemaTable>();
               (viewsResult.data ?? []).forEach((row: any) => {
                 let viewName: string;
+                let viewSql: string | undefined;
                 let columnName: string | undefined;
                 let columnType: string | undefined;
                 let columnOrder: number | undefined;
 
                 if (Array.isArray(row)) {
-                  [viewName, columnName, columnType, columnOrder] = row;
+                  [viewName, viewSql, columnName, columnType, columnOrder] =
+                    row;
                 } else {
                   viewName = row.view_name;
+                  viewSql = row.sql;
                   columnName = row.column_name;
                   columnType = row.column_type;
                   columnOrder = row.column_order;
@@ -1606,6 +1619,7 @@ export default class DuckLakeService {
                     name: viewName,
                     type: 'VIEW',
                     columns: [],
+                    metadata: viewSql ? { sql: viewSql } : undefined,
                   });
                 }
                 if (columnName) {
@@ -1616,6 +1630,37 @@ export default class DuckLakeService {
                   });
                 }
               });
+              if (viewMap.size > 0) {
+                // Introspect views that have no columns in metadata
+                await Promise.all(
+                  Array.from(viewMap.values()).map(async (view: any) => {
+                    if (view.columns.length === 0 && view.metadata?.sql) {
+                      try {
+                        const schemaResult = await adapter.executeQuery({
+                          instanceId,
+                          query: `SELECT * FROM "${schemaName}"."${view.name}" LIMIT 0`,
+                          queryId: `view-schema-tree-${view.name}-${Date.now()}`,
+                        });
+                        if (schemaResult.success && schemaResult.fields) {
+                          view.columns = schemaResult.fields.map(
+                            (field: any, idx: number) => ({
+                              name: field.name,
+                              type: field.type?.toString() || 'VARCHAR',
+                              position: idx,
+                            }),
+                          );
+                        }
+                      } catch (err) {
+                        // eslint-disable-next-line no-console
+                        console.warn(
+                          `[extractSchema] Failed to introspect view ${view.name}:`,
+                          err,
+                        );
+                      }
+                    }
+                  }),
+                );
+              }
               viewEntries = Array.from(viewMap.values());
             }
           } catch {
