@@ -953,7 +953,7 @@ export class SQLiteCatalogAdapter extends CatalogAdapter {
         SELECT
           snapshot_id,
           table_id,
-          timestamp_ms,
+          snapshot_time,
           operation,
           summary,
           parent_snapshot_id
@@ -961,7 +961,7 @@ export class SQLiteCatalogAdapter extends CatalogAdapter {
         WHERE table_id = (
           SELECT table_id FROM ducklake_table WHERE table_name = '${escapedTableName}'
         )
-        ORDER BY timestamp_ms DESC
+        ORDER BY snapshot_time DESC
       `;
 
       const result = await this.connectionInfo.connection.run(query);
@@ -970,7 +970,7 @@ export class SQLiteCatalogAdapter extends CatalogAdapter {
       return rows.map((row: any) => ({
         id: row.snapshot_id,
         tableId: row.table_id,
-        timestamp: new Date(row.timestamp_ms),
+        timestamp: new Date(row.snapshot_time),
         operation: row.operation,
         summary: JSON.parse(row.summary || '{}'),
         parentSnapshotId: row.parent_snapshot_id,

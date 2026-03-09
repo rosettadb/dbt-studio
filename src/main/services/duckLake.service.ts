@@ -1065,12 +1065,23 @@ export default class DuckLakeService {
       const result = await adapter.executeQuery({
         instanceId,
         query: `
+          WITH current_snapshot AS (
+            SELECT COALESCE(MAX(snapshot_id), 0) AS snapshot_id
+            FROM ducklake_snapshot
+          )
           SELECT c.column_name, c.column_type, c.nulls_allowed
           FROM ducklake_column c
           JOIN ducklake_view v ON c.table_id = v.view_id
           JOIN ducklake_schema s ON v.schema_id = s.schema_id
+          CROSS JOIN current_snapshot cs
           WHERE v.view_name = '${escapedViewName}'
             AND s.schema_name = '${escapedSchemaName}'
+            AND cs.snapshot_id >= v.begin_snapshot
+            AND (v.end_snapshot IS NULL OR cs.snapshot_id < v.end_snapshot)
+            AND cs.snapshot_id >= s.begin_snapshot
+            AND (s.end_snapshot IS NULL OR cs.snapshot_id < s.end_snapshot)
+            AND cs.snapshot_id >= c.begin_snapshot
+            AND (c.end_snapshot IS NULL OR cs.snapshot_id < c.end_snapshot)
           ORDER BY c.column_order
         `,
         queryId: `view-schema-${viewName}-${Date.now()}`,
@@ -1303,7 +1314,7 @@ export default class DuckLakeService {
     try {
       // eslint-disable-next-line no-console
       console.log(
-        `[DuckLake Service] executeQuery start for instance ${request.instanceId}, query: ${request.query.substring(0, 100)}${request.query.length > 100 ? '...' : ''}`,
+        `[DuckLake Service] executeQuery start for instance ${request.instanceId}, queryId: ${request.queryId ?? 'no-id'}`,
       );
       await this.ensureConnected(request.instanceId);
       const adapter = await this.getAdapter(request.instanceId);
@@ -1650,10 +1661,12 @@ export default class DuckLakeService {
                   Array.from(viewMap.values()).map(async (view: any) => {
                     if (view.columns.length === 0 && view.metadata?.sql) {
                       try {
+                        const escapedSchema = schemaName.replace(/"/g, '""');
+                        const escapedView = view.name.replace(/"/g, '""');
                         const schemaResult = await adapter.executeQuery({
                           instanceId,
-                          query: `SELECT * FROM "${schemaName}"."${view.name}" LIMIT 0`,
-                          queryId: `view-schema-tree-${view.name}-${Date.now()}`,
+                          query: `SELECT * FROM "${escapedSchema}"."${escapedView}" LIMIT 0`,
+                          queryId: `view-schema-tree-${escapedView}-${Date.now()}`,
                         });
                         if (schemaResult.success && schemaResult.fields) {
                           view.columns = schemaResult.fields.map(

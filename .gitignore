@@ -1,6 +1,7 @@
 # Logs
 logs
 *.log
+*.bak
 
 # Runtime data
 pids

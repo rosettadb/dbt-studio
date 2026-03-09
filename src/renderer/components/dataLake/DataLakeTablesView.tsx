@@ -29,7 +29,6 @@ import {
   Add,
   Refresh,
   Delete,
-  Edit,
   Close,
   DriveFileRenameOutline,
   Search,
@@ -56,8 +55,9 @@ import { DuckLakeViewInfo } from '../../../types/duckLake';
 
 const ViewDataPreview: React.FC<{
   instanceId: string;
+  schemaName: string;
   viewName: string;
-}> = ({ instanceId, viewName }) => {
+}> = ({ instanceId, schemaName, viewName }) => {
   const [page, setPage] = useState(0);
   const rowsPerPage = 25;
 
@@ -69,13 +69,15 @@ const ViewDataPreview: React.FC<{
   } = useExecuteDuckLakeQuery();
 
   React.useEffect(() => {
-    // Escape double quotes in view name for safe identifier usage
-    const quotedView = `"${viewName.replace(/"/g, '""')}"`;
+    // Escape double quotes and qualify with schema for safety and disambiguation
+    const escapedSchema = schemaName.replace(/"/g, '""');
+    const escapedView = viewName.replace(/"/g, '""');
+    const quotedPath = `"${escapedSchema}"."${escapedView}"`;
     executeQuery({
       instanceId,
-      query: `SELECT * FROM ${quotedView} LIMIT 100`,
+      query: `SELECT * FROM ${quotedPath} LIMIT 100`,
     });
-  }, [instanceId, viewName, executeQuery]);
+  }, [instanceId, schemaName, viewName, executeQuery]);
 
   if (isLoading && !result) {
     return (
@@ -204,7 +206,11 @@ const ViewPreviewModal: React.FC<{
         </IconButton>
       </DialogTitle>
       <DialogContent dividers>
-        <ViewDataPreview instanceId={instanceId} viewName={view.name} />
+        <ViewDataPreview
+          instanceId={instanceId}
+          schemaName={view.schema}
+          viewName={view.name}
+        />
       </DialogContent>
       <DialogActions>
         <Button onClick={onClose} variant="contained" color="inherit">
@@ -520,7 +526,10 @@ export const DataLakeTablesView: React.FC<DataLakeTablesViewProps> = ({
         </Alert>
         <Button
           variant="contained"
-          onClick={() => invalidateTables(instanceId)}
+          onClick={() => {
+            tablesQuery.refetch();
+            viewsQuery.refetch();
+          }}
           startIcon={<Refresh />}
         >
           Retry
@@ -668,7 +677,7 @@ export const DataLakeTablesView: React.FC<DataLakeTablesViewProps> = ({
                 if (row.kind === 'TABLE') {
                   return (
                     <TableRow
-                      key={`table-${row.name}`}
+                      key={`table-${row.schema}-${row.name}`}
                       hover
                       sx={{ cursor: 'pointer' }}
                       onClick={() =>
@@ -740,6 +749,7 @@ export const DataLakeTablesView: React.FC<DataLakeTablesViewProps> = ({
                               <IconButton
                                 size="small"
                                 color="error"
+                                aria-label="Delete Table"
                                 onClick={(e) => {
                                   e.stopPropagation();
                                   setTableToDelete(row);
@@ -754,6 +764,7 @@ export const DataLakeTablesView: React.FC<DataLakeTablesViewProps> = ({
                             <span>
                               <IconButton
                                 size="small"
+                                aria-label="Rename Table"
                                 onClick={(e) => {
                                   e.stopPropagation();
                                   setTableToRename(row);
@@ -761,7 +772,7 @@ export const DataLakeTablesView: React.FC<DataLakeTablesViewProps> = ({
                                 }}
                                 disabled={renameTableMutation.isLoading}
                               >
-                                <Edit fontSize="small" />
+                                <DriveFileRenameOutline fontSize="small" />
                               </IconButton>
                             </span>
                           </Tooltip>
@@ -773,7 +784,7 @@ export const DataLakeTablesView: React.FC<DataLakeTablesViewProps> = ({
 
                 // VIEW row
                 return (
-                  <TableRow key={`view-${row.name}`} hover>
+                  <TableRow key={`view-${row.schema}-${row.name}`} hover>
                     <TableCell>
                       <Box
                         sx={{ display: 'flex', alignItems: 'center', gap: 1 }}
@@ -824,6 +835,7 @@ export const DataLakeTablesView: React.FC<DataLakeTablesViewProps> = ({
                       <Tooltip title="Inspect View">
                         <IconButton
                           size="small"
+                          aria-label="Inspect View"
                           onClick={(e) => {
                             e.stopPropagation();
                             setPreviewView(row.viewInfo);
