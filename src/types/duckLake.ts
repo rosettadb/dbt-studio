@@ -702,6 +702,7 @@ export interface DuckLakeIpcChannels {
   'ducklake:view:list': (instanceId: string) => Promise<DuckLakeViewInfo[]>;
   'ducklake:view:getSchema': (
     instanceId: string,
+    schemaName: string,
     viewName: string,
   ) => Promise<DuckLakeColumnInfo[]>;
 

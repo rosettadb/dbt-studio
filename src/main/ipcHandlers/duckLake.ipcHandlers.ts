@@ -259,8 +259,13 @@ const registerDuckLakeHandlers = () => {
 
   ipcMain.handle(
     'ducklake:view:getSchema',
-    async (_event, instanceId: string, viewName: string) => {
-      return DuckLakeService.getViewSchema(instanceId, viewName);
+    async (
+      _event,
+      instanceId: string,
+      schemaName: string,
+      viewName: string,
+    ) => {
+      return DuckLakeService.getViewSchema(instanceId, schemaName, viewName);
     },
   );
 

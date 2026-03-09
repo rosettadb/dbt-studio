@@ -270,11 +270,13 @@ export namespace DuckLakeService {
 
   export async function getViewSchema(
     instanceId: string,
+    schemaName: string,
     viewName: string,
   ): Promise<DuckLakeColumnInfo[]> {
     return window.electron.ipcRenderer.invoke(
       'ducklake:view:getSchema',
       instanceId,
+      schemaName,
       viewName,
     );
   }

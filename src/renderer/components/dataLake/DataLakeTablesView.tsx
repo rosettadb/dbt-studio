@@ -69,9 +69,11 @@ const ViewDataPreview: React.FC<{
   } = useExecuteDuckLakeQuery();
 
   React.useEffect(() => {
+    // Escape double quotes in view name for safe identifier usage
+    const quotedView = `"${viewName.replace(/"/g, '""')}"`;
     executeQuery({
       instanceId,
-      query: `SELECT * FROM "${viewName}" LIMIT 100`,
+      query: `SELECT * FROM ${quotedView} LIMIT 100`,
     });
   }, [instanceId, viewName, executeQuery]);
 
@@ -222,7 +224,7 @@ type SortableColumn =
   | 'kind'
   | 'schema'
   | 'rowCount'
-  | 'lastAccessed'
+  | 'updatedAt'
   | 'createdAt';
 
 type DuckLakeTableRow = {
@@ -232,7 +234,7 @@ type DuckLakeTableRow = {
   instanceId: string;
   rowCount?: number;
   sizeBytes?: number;
-  lastAccessed?: string;
+  updatedAt?: string;
   createdAt: string;
 };
 
@@ -274,8 +276,8 @@ const getSortValue = (row: CombinedRow, column: SortableColumn): string => {
       return row.kind === 'TABLE'
         ? String(row.rowCount ?? 0).padStart(20, '0')
         : '';
-    case 'lastAccessed':
-      return row.kind === 'TABLE' ? (row.lastAccessed ?? '') : '';
+    case 'updatedAt':
+      return row.kind === 'TABLE' ? (row.updatedAt ?? '') : '';
     case 'createdAt':
       return row.kind === 'TABLE' ? row.createdAt : '';
     default:
@@ -367,7 +369,7 @@ export const DataLakeTablesView: React.FC<DataLakeTablesViewProps> = ({
       instanceId,
       rowCount: t.rowCount,
       sizeBytes: t.sizeBytes,
-      lastAccessed: t.updatedAt?.toISOString(),
+      updatedAt: t.updatedAt?.toISOString(),
       createdAt: t.createdAt?.toISOString() ?? new Date().toISOString(),
     }));
 
@@ -645,9 +647,9 @@ export const DataLakeTablesView: React.FC<DataLakeTablesViewProps> = ({
                 />
                 <TableCell>Size</TableCell>
                 <SortHeader
-                  column="lastAccessed"
-                  label="Last Accessed"
-                  active={sortColumn === 'lastAccessed'}
+                  column="updatedAt"
+                  label="Updated"
+                  active={sortColumn === 'updatedAt'}
                   direction={sortDirection}
                   onSort={handleSort}
                 />
@@ -715,8 +717,8 @@ export const DataLakeTablesView: React.FC<DataLakeTablesViewProps> = ({
                       </TableCell>
                       <TableCell>
                         <Typography variant="body2" color="text.secondary">
-                          {row.lastAccessed
-                            ? moment(row.lastAccessed).fromNow()
+                          {row.updatedAt
+                            ? moment(row.updatedAt).fromNow()
                             : 'Never'}
                         </Typography>
                       </TableCell>

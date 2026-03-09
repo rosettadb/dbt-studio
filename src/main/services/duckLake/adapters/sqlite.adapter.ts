@@ -555,7 +555,6 @@ export class SQLiteCatalogAdapter extends CatalogAdapter {
 
       const quotedMetadataDatabase = `"${metadataDatabase}"`;
 
-      // List logical DuckLake tables from metadata tables, similar to DuckDB adapter
       const query = `
         WITH current_snapshot AS (
           SELECT COALESCE(max(snapshot_id), 0) as snapshot_id
@@ -568,10 +567,12 @@ export class SQLiteCatalogAdapter extends CatalogAdapter {
           t.table_uuid,
           cs.snapshot_id as current_snapshot,
           ts.record_count,
-          ts.file_size_bytes
+          ts.file_size_bytes,
+          snap.snapshot_time
         FROM ${quotedMetadataDatabase}.main.ducklake_table t
         JOIN ${quotedMetadataDatabase}.main.ducklake_schema s ON t.schema_id = s.schema_id
         LEFT JOIN ${quotedMetadataDatabase}.main.ducklake_table_stats ts ON ts.table_id = t.table_id
+        LEFT JOIN ${quotedMetadataDatabase}.main.ducklake_snapshot snap ON snap.snapshot_id = t.begin_snapshot
         CROSS JOIN current_snapshot cs
         WHERE cs.snapshot_id >= t.begin_snapshot
           AND (cs.snapshot_id < t.end_snapshot OR t.end_snapshot IS NULL)
@@ -585,15 +586,24 @@ export class SQLiteCatalogAdapter extends CatalogAdapter {
 
       const tables: DuckLakeTableInfo[] = rows.map((row: any) => {
         if (Array.isArray(row)) {
-          const [, tableName, schemaName, , , recordCount, fileSizeBytes] = row;
+          const [
+            ,
+            tableName,
+            schemaName,
+            ,
+            ,
+            recordCount,
+            fileSizeBytes,
+            snapshotTime,
+          ] = row;
           return {
             name: tableName,
             schema: schemaName || 'main',
             instanceId: '',
             columns: [],
             snapshots: [],
-            createdAt: new Date(),
-            updatedAt: new Date(),
+            createdAt: snapshotTime ? new Date(snapshotTime) : new Date(),
+            updatedAt: snapshotTime ? new Date(snapshotTime) : new Date(),
             rowCount: normalizeNumericValue(recordCount),
             sizeBytes: normalizeNumericValue(fileSizeBytes),
           };
@@ -605,8 +615,12 @@ export class SQLiteCatalogAdapter extends CatalogAdapter {
           instanceId: '',
           columns: [],
           snapshots: [],
-          createdAt: new Date(),
-          updatedAt: new Date(),
+          createdAt: row.snapshot_time
+            ? new Date(row.snapshot_time)
+            : new Date(),
+          updatedAt: row.snapshot_time
+            ? new Date(row.snapshot_time)
+            : new Date(),
           rowCount: normalizeNumericValue(row.record_count),
           sizeBytes: normalizeNumericValue(row.file_size_bytes),
         };
