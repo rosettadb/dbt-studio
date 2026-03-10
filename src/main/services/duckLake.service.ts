@@ -933,14 +933,17 @@ export default class DuckLakeService {
    */
   static releaseConnection(instanceId: string): void {
     try {
+      if (
+        !instanceId ||
+        typeof instanceId !== 'string' ||
+        instanceId.trim() === ''
+      ) {
+        return;
+      }
+
       DuckLakeConnectionManager.releaseConnection(instanceId);
-      // eslint-disable-next-line no-console
-      console.log(
-        `[DuckLakeService] Connection released for instance: ${instanceId}`,
-      );
-    } catch (error) {
-      // eslint-disable-next-line no-console
-      console.error('[DuckLakeService.releaseConnection] Error:', error);
+    } catch {
+      /* empty */
     }
   }
 
@@ -1542,6 +1545,17 @@ export default class DuckLakeService {
   // Private Helper Methods
 
   private static async ensureConnected(instanceId: string): Promise<void> {
+    // Defensive check for instanceId
+    if (
+      !instanceId ||
+      typeof instanceId !== 'string' ||
+      instanceId.trim() === ''
+    ) {
+      throw DuckLakeError.validation(
+        'Instance ID is required and must be a non-empty string',
+      );
+    }
+
     const connectionStatus =
       DuckLakeConnectionManager.getConnectionStatus(instanceId);
     if (!connectionStatus.connected) {
@@ -1550,6 +1564,17 @@ export default class DuckLakeService {
   }
 
   private static async getAdapter(instanceId: string): Promise<CatalogAdapter> {
+    // Defensive check for instanceId
+    if (
+      !instanceId ||
+      typeof instanceId !== 'string' ||
+      instanceId.trim() === ''
+    ) {
+      throw DuckLakeError.validation(
+        'Instance ID is required and must be a non-empty string',
+      );
+    }
+
     const instance = await this.getInstance(instanceId);
     const { catalog: catalogWithCredentials, storage: persistedStorage } =
       await DuckLakeInstanceStore.retrieveCredentials(

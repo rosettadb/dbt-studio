@@ -11,6 +11,7 @@ import useConnectionInput from './useConnectionInput';
 import useProcess from './useProcessContext';
 import useSecureStorage from './useSecureStorage';
 import useTabManager from './useTabManager';
+import useDuckLakeConnection from './useDuckLakeConnection';
 
 export {
   useIpcPromise,
@@ -26,4 +27,5 @@ export {
   useProcess,
   useSecureStorage,
   useTabManager,
+  useDuckLakeConnection,
 };
