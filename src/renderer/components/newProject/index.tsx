@@ -353,9 +353,12 @@ export const NewProject: React.FC<NewProjectProps> = ({
                       value={datalake.id}
                       disabled={isDisabled}
                       title={
-                        isDisabled
-                          ? `${datalake.storage?.type?.toUpperCase()} storage is not supported for DBT projects`
-                          : ''
+                        // eslint-disable-next-line no-nested-ternary
+                        isDisabled && datalake.storage?.type
+                          ? `${datalake.storage.type.toUpperCase()} storage is not supported for DBT projects`
+                          : isDisabled
+                            ? 'Storage type not supported for DBT projects'
+                            : ''
                       }
                     >
                       <Box

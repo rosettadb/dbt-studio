@@ -1229,7 +1229,9 @@ export default class ProjectsService {
       case 'duckdb':
         return this.extractDuckDBSchema(connection as DuckDBConnection);
       case 'ducklake':
-        return [];
+        throw new Error(
+          'Schema extraction is not supported for DuckLake connections. DuckLake projects use dynamic data lake catalogs.',
+        );
       case 'kinetica':
         return this.extractKineticaSchema(connection as KineticaConnection);
       default:
