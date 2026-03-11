@@ -28,6 +28,7 @@ import {
   ElectricalServices as ElectricalServicesIcon,
   Visibility,
   Cloud,
+  ContentCopy,
 } from '@mui/icons-material';
 import { toast } from 'react-toastify';
 import {
@@ -44,6 +45,7 @@ import connectionIcons, {
 } from '../../../../assets/connectionIcons';
 import { SupportedConnectionTypes } from '../../../types/backend';
 import { CloudProvider, CloudConnection } from '../../../types/frontend';
+import { generateCloneConnectionName } from '../../utils/connectionNaming';
 
 const Connections: React.FC = () => {
   const {
@@ -123,6 +125,39 @@ const Connections: React.FC = () => {
     }
     setDeleteDialogOpen(false);
     setConnectionToDelete(null);
+  };
+
+  const handleCloneConnection = (id: string, connectionName: string) => {
+    const connectionToClone = connections.find((c) => c.id === id);
+    if (connectionToClone) {
+      const existingNames = connections.map((c) => c.connection.name);
+      const newName = generateCloneConnectionName(
+        connectionName,
+        existingNames,
+      );
+
+      navigate('/app/add-connection', {
+        state: {
+          duplicateFrom: connectionToClone,
+          suggestedName: newName,
+        },
+      });
+    }
+  };
+
+  const handleCloneCloudConnection = (cloudConnection: CloudConnection) => {
+    const existingNames = cloudConnections.map((c) => c.name);
+    const newName = generateCloneConnectionName(
+      cloudConnection.name,
+      existingNames,
+    );
+
+    navigate('/app/cloud-explorer/new-connection', {
+      state: {
+        duplicateFrom: cloudConnection,
+        suggestedName: newName,
+      },
+    });
   };
 
   // Helper function to get connection icon
@@ -502,6 +537,16 @@ const Connections: React.FC = () => {
                               >
                                 Edit
                               </Button>
+                              <Button
+                                size="small"
+                                variant="outlined"
+                                startIcon={<ContentCopy />}
+                                onClick={() =>
+                                  handleCloneConnection(id, connection.name)
+                                }
+                              >
+                                Clone
+                              </Button>
                             </Box>
                             <Box sx={{ display: 'flex', gap: 1 }}>
                               <Button
@@ -657,6 +702,16 @@ const Connections: React.FC = () => {
                               }
                             >
                               Edit
+                            </Button>
+                            <Button
+                              size="small"
+                              variant="outlined"
+                              startIcon={<ContentCopy />}
+                              onClick={() =>
+                                handleCloneCloudConnection(cloudConnection)
+                              }
+                            >
+                              Clone
                             </Button>
                           </Box>
                           <Box sx={{ display: 'flex', gap: 1 }}>

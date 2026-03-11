@@ -4,6 +4,7 @@ import React, {
   useMemo,
   useEffect,
   useContext,
+  useRef,
 } from 'react';
 import SplitPane from 'split-pane-react';
 import {
@@ -31,6 +32,7 @@ import {
 import { toast } from 'react-toastify';
 import { useNavigate } from 'react-router-dom';
 import { connectorsServices } from '../../services';
+import { DuckLakeService } from '../../services/duckLake.service';
 import { useLocalStorage } from '../../hooks';
 import { QueryHistoryType } from '../../../types/frontend';
 import { AppLayout } from '../../layouts';
@@ -43,13 +45,19 @@ import { getConnectionInput } from '../../helpers/utils';
 import { SqlTabManager } from '../../components/sqlTabs';
 import useSqlTabManager from '../../hooks/useSqlTabManager';
 import { useGetConnectionById, useGetConnections } from '../../controllers';
+import { useDuckLakeInstances } from '../../controllers/duckLake.controller';
 import { SchemaTreeViewerWithSchema } from './SchemaTreeViewerWithSchema';
 import connectionIcons, {
   defaultIcon,
 } from '../../../../assets/connectionIcons';
 import { AppContext } from '../../context/AppProvider';
+import {
+  generateDuckLakeCompletions,
+  mergeCompletions,
+} from '../../utils/duckLakeCompletions';
 
 const QUERY_HISTORY_KEY = 'query_history_key';
+const EMPTY_ARRAY: Table[] = [];
 
 const Sql = () => {
   const theme = useTheme();
@@ -57,6 +65,11 @@ const Sql = () => {
   const { selectedProject } = useContext(AppContext);
   const tabManager = useSqlTabManager();
   const { data: connections = [] } = useGetConnections();
+  const {
+    data: duckLakeInstances = [],
+    isLoading: isLoadingDuckLakeInstances,
+    refetch: refetchDuckLakeInstances,
+  } = useDuckLakeInstances();
   const [filter, setFilter] = useState('');
   const {
     tabs,
@@ -72,9 +85,20 @@ const Sql = () => {
     reorderTabs,
   } = tabManager;
 
+  // Extract only stable connection-identity fields from the active tab.
+  // Using the whole `activeTab` object as a dependency would cause connectionInput
+  // to be recalculated on every keystroke (query text) and every query run
+  // (isLoading / results), which cascades into schema re-loading and sidebar spinner flashes.
+  const activeConnectionId = activeTab?.connectionId;
+  const activeConnectionName = activeTab?.connectionName;
+
+  // Check if active connection is DuckLake
+  const isDuckLakeConnection =
+    activeConnectionId?.startsWith('ducklake-') || false;
+
   // Get active connection
   const { data: activeConnection, isLoading: isLoadingConnection } =
-    useGetConnectionById(activeTab?.connectionId);
+    useGetConnectionById(activeConnectionId);
 
   // Schema state for active tab
   const [tabSchemas, setTabSchemas] = useState<Record<string, Table[]>>({});
@@ -87,34 +111,205 @@ const Sql = () => {
     JSON.stringify([]),
   );
   const [sizes, setSizes] = useState<[number, number]>([
-    window.innerHeight - 410,
-    410,
+    window.innerHeight - 440,
+    440,
   ]);
   const [tabQueryIds, setTabQueryIds] = useState<Record<string, string>>({});
 
-  // Get connection input for active tab
+  // Get connection input for active tab.
+  // Depends only on stable connection-identity primitives, NOT the whole activeTab object,
+  // to avoid re-running every time the query text or loading/result state changes.
   const connectionInput = useMemo(() => {
-    if (!activeConnection || activeConnection.id !== activeTab?.connectionId) {
+    // Handle DuckLake instances
+    if (activeConnectionId?.startsWith('ducklake-')) {
+      const instanceId = activeConnectionId.replace('ducklake-', '');
+      const instance = duckLakeInstances.find((inst) => inst.id === instanceId);
+      if (instance) {
+        return {
+          type: 'ducklake',
+          name: instance.name,
+          instanceId: instance.id,
+          catalogType: instance.catalog.type,
+          dataPath: instance.dataPath,
+          status: instance.status,
+        } as any;
+      }
+      // Even if instance is not found yet (still loading), return a minimal connection object
+      // with the instanceId from the tab to prevent "Connection is still loading" errors
+      // when navigating back to SQL screen
+      return {
+        type: 'ducklake',
+        name: activeConnectionName || 'DuckLake Instance',
+        instanceId,
+        status: 'loading',
+      } as any;
+    }
+
+    // Handle regular database connections
+    if (!activeConnection || activeConnection.id !== activeConnectionId) {
       return undefined;
     }
     return getConnectionInput(activeConnection);
-  }, [activeConnection, activeTab]);
+  }, [
+    activeConnection,
+    activeConnectionId,
+    activeConnectionName,
+    duckLakeInstances,
+    isLoadingDuckLakeInstances,
+  ]);
 
-  // Get schema for active tab
-  const activeSchema = activeTab ? tabSchemas[activeTab.connectionId] : [];
-  const isLoadingSchema = activeTab
-    ? loadingSchemas[activeTab.connectionId]
+  // Get schema for active tab — use stable id primitive, not whole tab object
+  const activeSchema =
+    (activeConnectionId ? tabSchemas[activeConnectionId] : undefined) ||
+    EMPTY_ARRAY;
+  const isLoadingSchema = activeConnectionId
+    ? (loadingSchemas[activeConnectionId] ?? false)
     : false;
+
+  // Store DuckLake completions and schema
+  const [duckLakeCompletions, setDuckLakeCompletions] = useState<any[]>([]);
+  const [duckLakeSchema, setDuckLakeSchema] = useState<any>(null);
+  const [duckLakeSchemaLoading, setDuckLakeSchemaLoading] =
+    useState<boolean>(false);
+  const [duckLakeSchemaError, setDuckLakeSchemaError] = useState<string | null>(
+    null,
+  );
+
+  const duckLakeCompletionsRequestSeq = useRef(0);
+  const activeDuckLakeInstanceIdRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (connectionInput && (connectionInput as any).type === 'ducklake') {
+      activeDuckLakeInstanceIdRef.current = (connectionInput as any).instanceId;
+    } else {
+      activeDuckLakeInstanceIdRef.current = null;
+    }
+  }, [connectionInput]);
+
+  // Convert DuckLake schema to Table[] format for SchemaTreeViewerWithSchema
+  const duckLakeTables = useMemo(() => {
+    if (!duckLakeSchema || !duckLakeSchema.schemas) return [];
+
+    const tables: Table[] = [];
+    duckLakeSchema.schemas.forEach((schema: any) => {
+      if (schema.tables) {
+        schema.tables.forEach((table: any) => {
+          tables.push({
+            name: table.name,
+            type: table.type || 'TABLE',
+            schema: schema.name || 'main',
+            columns:
+              table.columns?.map((col: any) => ({
+                name: col.name,
+                typeName: col.type || 'UNKNOWN', // Map 'type' to 'typeName'
+                ordinalPosition: col.position || 0,
+                primaryKeySequenceId: 0,
+                columnDisplaySize: 0,
+                scale: 0,
+                precision: 0,
+                columnProperties: [],
+                autoincrement: false,
+                primaryKey: false,
+                foreignKeys: [],
+              })) || [],
+          });
+        });
+      }
+    });
+
+    return tables;
+  }, [duckLakeSchema]);
 
   // Generate completions from schema
   const completions = useMemo(() => {
-    return activeSchema ? utils.generateMonacoCompletions(activeSchema) : [];
-  }, [activeSchema]);
+    const baseCompletions = activeSchema
+      ? utils.generateMonacoCompletions(activeSchema)
+      : [];
+
+    // Merge with DuckLake completions if available
+    if (duckLakeCompletions.length > 0) {
+      return mergeCompletions(baseCompletions, duckLakeCompletions);
+    }
+
+    return baseCompletions;
+  }, [activeSchema, duckLakeCompletions]);
+
+  const loadDuckLakeCompletions = useCallback(async () => {
+    const requestSeq = duckLakeCompletionsRequestSeq.current + 1;
+    duckLakeCompletionsRequestSeq.current = requestSeq;
+
+    if (!connectionInput || (connectionInput as any).type !== 'ducklake') {
+      setDuckLakeCompletions([]);
+      setDuckLakeSchema(null);
+      setDuckLakeSchemaLoading(false);
+      setDuckLakeSchemaError(null);
+      return;
+    }
+
+    const { instanceId } = connectionInput as any;
+    const requestedInstanceId = instanceId as string;
+
+    const isStale = () =>
+      requestSeq !== duckLakeCompletionsRequestSeq.current ||
+      activeDuckLakeInstanceIdRef.current !== requestedInstanceId;
+
+    if (!instanceId) {
+      setDuckLakeCompletions([]);
+      setDuckLakeSchema(null);
+      setDuckLakeSchemaLoading(false);
+      setDuckLakeSchemaError('Missing DuckLake instance id');
+      return;
+    }
+
+    setDuckLakeSchemaLoading(true);
+    setDuckLakeSchemaError(null);
+    try {
+      const schema = await DuckLakeService.extractSchema(instanceId);
+      if (isStale()) {
+        return;
+      }
+
+      const duckLakeItems = generateDuckLakeCompletions(schema);
+      if (isStale()) {
+        return;
+      }
+
+      setDuckLakeCompletions(duckLakeItems);
+      setDuckLakeSchema(schema);
+    } catch (error) {
+      // eslint-disable-next-line no-console
+      console.error('[SQL Screen] Failed to load DuckLake completions:', error);
+
+      if (!isStale()) {
+        setDuckLakeCompletions([]);
+        setDuckLakeSchema(null);
+        setDuckLakeSchemaError('Failed to load DuckLake schema');
+      }
+    } finally {
+      if (!isStale()) {
+        setDuckLakeSchemaLoading(false);
+      }
+    }
+  }, [connectionInput]);
+
+  // Load DuckLake completions when connection changes
+  useEffect(() => {
+    loadDuckLakeCompletions();
+  }, [loadDuckLakeCompletions]);
 
   // Fetch schema for a connection
   const fetchSchemaForConnection = useCallback(
     async (connectionId: string) => {
       if (loadingSchemas[connectionId]) return;
+
+      // Skip regular schema loading for DuckLake connections
+      // DuckLake schema is loaded via extractSchema in loadDuckLakeCompletions
+      if (connectionId.startsWith('ducklake-')) {
+        // Mark as loaded (empty schema) to prevent loading state
+        setTabSchemas((prev) => ({ ...prev, [connectionId]: [] }));
+        setLoadingSchemas((prev) => ({ ...prev, [connectionId]: false }));
+        return;
+      }
 
       setLoadingSchemas((prev) => ({ ...prev, [connectionId]: true }));
       try {
@@ -138,16 +333,23 @@ const Sql = () => {
     [loadingSchemas],
   );
 
-  // Fetch schema when active tab changes
+  // Fetch schema when the active connection changes.
+  // Uses activeConnectionId (stable primitive) instead of activeTab (whole object)
+  // so this effect doesn't run on every keystroke or query result update.
   useEffect(() => {
     if (
-      activeTab &&
-      !tabSchemas[activeTab.connectionId] &&
-      !loadingSchemas[activeTab.connectionId]
+      activeConnectionId &&
+      !tabSchemas[activeConnectionId] &&
+      !loadingSchemas[activeConnectionId]
     ) {
-      fetchSchemaForConnection(activeTab.connectionId);
+      fetchSchemaForConnection(activeConnectionId);
     }
-  }, [activeTab, tabSchemas, loadingSchemas, fetchSchemaForConnection]);
+  }, [
+    activeConnectionId,
+    tabSchemas,
+    loadingSchemas,
+    fetchSchemaForConnection,
+  ]);
 
   // Handle connection selection from sidebar
   const handleConnectionSelect = useCallback(
@@ -219,16 +421,27 @@ const Sql = () => {
   };
 
   const handleRefreshSchema = useCallback(() => {
-    if (activeTab) {
+    if (activeConnectionId) {
       // Clear cached schema and refetch
       setTabSchemas((prev) => {
         const updated = { ...prev };
-        delete updated[activeTab.connectionId];
+        delete updated[activeConnectionId];
         return updated;
       });
-      fetchSchemaForConnection(activeTab.connectionId);
+      fetchSchemaForConnection(activeConnectionId);
+
+      if (isDuckLakeConnection) {
+        loadDuckLakeCompletions();
+        refetchDuckLakeInstances();
+      }
     }
-  }, [activeTab, fetchSchemaForConnection]);
+  }, [
+    activeConnectionId,
+    isDuckLakeConnection,
+    fetchSchemaForConnection,
+    loadDuckLakeCompletions,
+    refetchDuckLakeInstances,
+  ]);
 
   const renderSash = () => (
     <Box
@@ -258,15 +471,16 @@ const Sql = () => {
             bgcolor: theme.palette.mode === 'dark' ? '#1e1e1e' : '#f5f5f5',
           }}
         >
-          {/* Connection Selection & Actions */}
           <Box
             sx={{
-              p: '8px',
+              height: 40,
+              px: '8px',
               display: 'flex',
               gap: '4px',
               alignItems: 'center',
               bgcolor: theme.palette.mode === 'dark' ? '#1e1e1e' : '#f5f5f5',
               borderBottom: `1px solid ${theme.palette.divider}`,
+              boxSizing: 'border-box',
             }}
           >
             <FormControl fullWidth size="small">
@@ -286,6 +500,50 @@ const Sql = () => {
                 displayEmpty
                 renderValue={(selected) => {
                   if (!selected) return 'Select Connection';
+
+                  // Check if it's a DuckLake instance
+                  if (selected.startsWith('ducklake-')) {
+                    const instanceId = selected.replace('ducklake-', '');
+                    const instance = duckLakeInstances.find(
+                      (inst) => inst.id === instanceId,
+                    );
+                    if (!instance) {
+                      return activeTab?.connectionName || 'Select Connection';
+                    }
+
+                    return (
+                      <Box
+                        sx={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: 1,
+                          width: '100%',
+                        }}
+                      >
+                        <img
+                          src={connectionIcons.images.ducklake || defaultIcon}
+                          alt=""
+                          style={{
+                            width: 14,
+                            height: 14,
+                            objectFit: 'contain',
+                          }}
+                        />
+                        <span
+                          style={{
+                            whiteSpace: 'nowrap',
+                            overflow: 'hidden',
+                            textOverflow: 'ellipsis',
+                            flex: 1,
+                          }}
+                        >
+                          {instance.name}
+                        </span>
+                      </Box>
+                    );
+                  }
+
+                  // Handle regular database connections
                   const conn = connections.find((c) => c.id === selected);
                   if (!conn) return 'Select Connection';
                   const icon =
@@ -349,6 +607,12 @@ const Sql = () => {
                 <MenuItem value="" disabled sx={{ fontSize: '0.8rem' }}>
                   Select Connection
                 </MenuItem>
+                {/* Database Connections */}
+                {connections.length > 0 && (
+                  <MenuItem disabled sx={{ fontSize: '0.75rem', opacity: 0.6 }}>
+                    <strong>Database Connections</strong>
+                  </MenuItem>
+                )}
                 {connections.map((conn) => {
                   const isProjectConnection =
                     conn.id === selectedProject?.connectionId;
@@ -395,6 +659,47 @@ const Sql = () => {
                     </MenuItem>
                   );
                 })}
+                {/* DuckLake Instances */}
+                {duckLakeInstances.length > 0 && (
+                  <MenuItem
+                    disabled
+                    sx={{ fontSize: '0.75rem', opacity: 0.6, mt: 1 }}
+                  >
+                    <strong>DuckLake Instances</strong>
+                  </MenuItem>
+                )}
+                {duckLakeInstances.map((instance) => (
+                  <MenuItem
+                    key={`ducklake-${instance.id}`}
+                    value={`ducklake-${instance.id}`}
+                    onClick={() => {
+                      handleConnectionSelect({
+                        id: `ducklake-${instance.id}`,
+                        name: instance.name,
+                        type: 'ducklake',
+                      });
+                    }}
+                    sx={{
+                      fontSize: '0.8rem',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 1,
+                    }}
+                  >
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                      <img
+                        src={connectionIcons.images.duckdb || defaultIcon}
+                        alt=""
+                        style={{
+                          width: 14,
+                          height: 14,
+                          objectFit: 'contain',
+                        }}
+                      />
+                      {instance.name}
+                    </Box>
+                  </MenuItem>
+                ))}
               </Select>
             </FormControl>
             <IconButton
@@ -474,7 +779,45 @@ const Sql = () => {
               }}
             >
               <SchemaViewGrid>
-                {activeTab && connectionInput ? (
+                {activeTab &&
+                  connectionInput &&
+                  isDuckLakeConnection &&
+                  (!duckLakeSchemaLoading && duckLakeSchema === null ? (
+                    <Box
+                      sx={{
+                        display: 'flex',
+                        flexDirection: 'column',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        height: '100%',
+                        color: 'text.secondary',
+                        p: 2,
+                        textAlign: 'center',
+                      }}
+                    >
+                      <Typography variant="body2" color="text.secondary">
+                        {duckLakeSchemaError || 'No Schema available'}
+                      </Typography>
+                      <Button
+                        size="small"
+                        variant="outlined"
+                        startIcon={<Refresh />}
+                        onClick={handleRefreshSchema}
+                        sx={{ mt: 2 }}
+                      >
+                        Retry
+                      </Button>
+                    </Box>
+                  ) : (
+                    <SchemaTreeViewerWithSchema
+                      databaseName={connectionInput.name || 'DuckLake Instance'}
+                      type="ducklake"
+                      schema={duckLakeTables}
+                      isLoading={duckLakeSchemaLoading}
+                      filter={filter}
+                    />
+                  ))}
+                {activeTab && connectionInput && !isDuckLakeConnection && (
                   <SchemaTreeViewerWithSchema
                     databaseName={String(
                       (connectionInput as any)?.database ??
@@ -482,12 +825,12 @@ const Sql = () => {
                         'Database',
                     )}
                     type={connectionInput.type}
-                    schema={activeSchema || []}
+                    schema={activeSchema}
                     isLoading={isLoadingSchema}
-                    onRefresh={handleRefreshSchema}
                     filter={filter}
                   />
-                ) : (
+                )}
+                {!activeTab && (
                   <Box
                     sx={{
                       display: 'flex',
@@ -566,6 +909,42 @@ const Sql = () => {
 
           {activeTab &&
             connectionInput &&
+            isDuckLakeConnection &&
+            (connectionInput as any)?.status === 'loading' &&
+            !isLoadingDuckLakeInstances && (
+              <Box
+                sx={{
+                  display: 'flex',
+                  flexDirection: 'column',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  height: '100%',
+                  color: 'text.secondary',
+                  gap: 2,
+                  p: 3,
+                  textAlign: 'center',
+                }}
+              >
+                <Typography variant="h6" color="text.secondary">
+                  Connection Not Found
+                </Typography>
+                <Typography variant="body2" color="text.secondary">
+                  The DuckLake instance &quot;{activeTab.connectionName}&quot;
+                  could not be found. It may have been deleted or is no longer
+                  available.
+                </Typography>
+                <Button
+                  variant="outlined"
+                  size="small"
+                  onClick={() => refetchDuckLakeInstances()}
+                >
+                  Retry Loading
+                </Button>
+              </Box>
+            )}
+
+          {activeTab &&
+            connectionInput &&
             (hasResults || hasError || isLoading ? (
               <SplitPane
                 split="horizontal"
@@ -636,7 +1015,25 @@ const Sql = () => {
                     />
                   )}
                   {!isLoading && !hasError && hasResults && (
-                    <QueryResult results={activeTab.results} />
+                    <QueryResult
+                      results={activeTab.results}
+                      exportContext={{
+                        connectionType: connectionInput.type,
+                        connectionId: activeTab.connectionId,
+                        duckLakeInstanceId:
+                          connectionInput.type === 'ducklake'
+                            ? (connectionInput as any).instanceId
+                            : undefined,
+                        duckLakeReady:
+                          connectionInput.type === 'ducklake'
+                            ? (connectionInput as any).status !== 'loading' &&
+                              (connectionInput as any).status !== 'connecting'
+                            : undefined,
+                        originalSql:
+                          (activeTab.results as any)?.originalSql ??
+                          activeTab.query,
+                      }}
+                    />
                   )}
                 </Box>
               </SplitPane>

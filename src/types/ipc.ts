@@ -302,6 +302,10 @@ export type DuckLakeChannels =
 
   // Query Execution
   | 'ducklake:query:execute'
+  | 'ducklake:query:cancel'
+
+  // Schema Extraction
+  | 'ducklake:schema:extract'
 
   // Maintenance Operations
   | 'ducklake:maintenance:optimize'

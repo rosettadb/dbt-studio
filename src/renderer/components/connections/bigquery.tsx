@@ -28,12 +28,16 @@ type Props = {
   onCancel: () => void;
   connection?: ConnectionModel;
   projectId?: string;
+  duplicateFrom?: ConnectionModel;
+  suggestedName?: string;
 };
 
 export const BigQuery: React.FC<Props> = ({
   onCancel,
   connection,
   projectId,
+  duplicateFrom,
+  suggestedName,
 }) => {
   const navigate = useNavigate();
   const theme = useTheme();
@@ -43,19 +47,28 @@ export const BigQuery: React.FC<Props> = ({
     [connection],
   );
 
+  const duplicateConnection = React.useMemo(
+    () => duplicateFrom?.connection as BigQueryConnection,
+    [duplicateFrom],
+  );
+
   const [formState, setFormState] = React.useState<BigQueryConnection>({
     type: 'bigquery',
-    name: existingConnection?.name || '',
+    name: existingConnection?.name ?? suggestedName ?? '',
     method: 'service-account',
-    project: existingConnection?.project || '',
-    dataset: existingConnection?.schema || '',
-    keyfile: existingConnection?.keyfile || '',
-    database: existingConnection?.database || '',
-    schema: existingConnection?.schema || '',
+    project: existingConnection?.project ?? duplicateConnection?.project ?? '',
+    dataset: existingConnection?.schema ?? duplicateConnection?.schema ?? '',
+    keyfile: existingConnection?.keyfile ?? duplicateConnection?.keyfile ?? '',
+    database:
+      existingConnection?.database ?? duplicateConnection?.database ?? '',
+    schema: existingConnection?.schema ?? duplicateConnection?.schema ?? '',
     username: '',
     password: '',
-    location: existingConnection?.location,
-    priority: existingConnection?.priority || 'interactive',
+    location: existingConnection?.location ?? duplicateConnection?.location,
+    priority:
+      existingConnection?.priority ??
+      duplicateConnection?.priority ??
+      'interactive',
   });
 
   const [connectionStatus, setConnectionStatus] = React.useState<
@@ -114,19 +127,32 @@ export const BigQuery: React.FC<Props> = ({
     useSecureStorage();
 
   React.useEffect(() => {
-    // On edit, load the service account key from secure storage
+    // On edit or duplicate, load the service account key from secure storage
+    let isMounted = true;
     const fetchKey = async () => {
-      if (existingConnection?.name) {
-        const storedKey = await getBigQueryServiceAccountKey(
-          existingConnection.name,
-        );
-        setFormState((prev) => ({ ...prev, keyfile: storedKey || 'wtf' }));
+      const sourceConnection = existingConnection || duplicateConnection;
+      if (sourceConnection?.name) {
+        try {
+          const storedKey = await getBigQueryServiceAccountKey(
+            sourceConnection.name,
+          );
+          if (isMounted) {
+            setFormState((prev) => ({ ...prev, keyfile: storedKey || '' }));
+          }
+        } catch (error) {
+          if (isMounted) {
+            setFormState((prev) => ({ ...prev, keyfile: '' }));
+          }
+        }
       }
     };
-    if (existingConnection) {
+    if (existingConnection || duplicateConnection) {
       fetchKey();
     }
-  }, [existingConnection]);
+    return () => {
+      isMounted = false;
+    };
+  }, [existingConnection, duplicateConnection, getBigQueryServiceAccountKey]);
 
   // Get existing connections for name validation
   const { data: existingConnections = [] } = useGetConnections();

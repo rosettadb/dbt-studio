@@ -21,6 +21,7 @@ const CustomTable = <T,>({
   containerStyle,
   toolbarContent,
   dataTestId,
+  showSearch,
 }: CustomTableType<T>) => {
   const [page, setPage] = React.useState(0);
   const [perPage, setPerPage] = useLocalStorage(id, '10');
@@ -68,6 +69,7 @@ const CustomTable = <T,>({
           }
           setKeyword(value);
         }}
+        showSearch={showSearch}
       />
       <TableContainer
         style={{

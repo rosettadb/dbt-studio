@@ -643,6 +643,15 @@ export function useExecuteDuckLakeQuery() {
   });
 }
 
+export function useCancelDuckLakeQuery() {
+  return useMutation({
+    mutationFn: DuckLakeService.cancelQuery,
+    onError: (error: Error) => {
+      toast.error(`Query cancellation failed: ${error.message}`);
+    },
+  });
+}
+
 // Maintenance Operations
 
 export function useOptimizeDuckLakeInstance() {

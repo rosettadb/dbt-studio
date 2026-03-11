@@ -260,6 +260,17 @@ const registerDuckLakeHandlers = () => {
     },
   );
 
+  ipcMain.handle('ducklake:query:cancel', async (_event, queryId: string) => {
+    return DuckLakeService.cancelQuery(queryId);
+  });
+
+  ipcMain.handle(
+    'ducklake:schema:extract',
+    async (_event, instanceId: string) => {
+      return DuckLakeService.extractSchema(instanceId);
+    },
+  );
+
   // Maintenance Operation Handlers
   ipcMain.handle(
     'ducklake:maintenance:optimize',

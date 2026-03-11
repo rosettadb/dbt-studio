@@ -12,6 +12,7 @@ import {
   Numbers as NumbersIcon,
   CheckBox as BooleanIcon,
   QuestionMark as UnknownTypeIcon,
+  Map as GeometryIcon,
 } from '@mui/icons-material';
 import {
   StyledTreeItem,
@@ -54,7 +55,11 @@ const getColumnIcon = (
   if (lowerType.includes('bool')) {
     return <BooleanIcon sx={{ color: '#5f89f4', width: 14, height: 14 }} />;
   }
-  if (lowerType.includes('date') || lowerType.includes('time')) {
+  if (
+    lowerType.includes('date') ||
+    lowerType.includes('time') ||
+    lowerType.includes('interval')
+  ) {
     return <CalendarIcon sx={{ color: '#5f89f4', width: 14, height: 14 }} />;
   }
   if (lowerType.includes('json') || lowerType.includes('xml')) {
@@ -66,6 +71,25 @@ const getColumnIcon = (
     lowerType.includes('float')
   ) {
     return <NumbersIcon sx={{ color: '#5f89f4', width: 14, height: 14 }} />;
+  }
+  if (lowerType.includes('uuid')) {
+    return <NumbersIcon sx={{ color: '#5f89f4', width: 14, height: 14 }} />;
+  }
+  if (
+    lowerType.includes('blob') ||
+    lowerType.includes('list') ||
+    lowerType.includes('struct') ||
+    lowerType.includes('map')
+  ) {
+    return <CodeIcon sx={{ color: '#5f89f4', width: 14, height: 14 }} />;
+  }
+  if (
+    lowerType.includes('point') ||
+    lowerType.includes('polygon') ||
+    lowerType.includes('linestring') ||
+    lowerType.includes('geometry')
+  ) {
+    return <GeometryIcon sx={{ color: '#5f89f4', width: 14, height: 14 }} />;
   }
 
   return <UnknownTypeIcon sx={{ color: '#5f89f4', width: 14, height: 14 }} />;

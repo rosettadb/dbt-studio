@@ -5,6 +5,7 @@
 
 import * as fs from 'fs';
 import * as path from 'path';
+import log from 'electron-log';
 import {
   CatalogAdapter,
   ValidationResult,
@@ -580,6 +581,9 @@ export class DuckDBCatalogAdapter extends CatalogAdapter {
 
   async listTables(): Promise<DuckLakeTableInfo[]> {
     try {
+      // eslint-disable-next-line no-console
+      console.log('[DuckDB Adapter] listTables() called');
+
       if (!this.connectionInfo) {
         throw new Error('No active connection');
       }
@@ -592,21 +596,35 @@ export class DuckDBCatalogAdapter extends CatalogAdapter {
         LIMIT 1
       `;
 
+      // eslint-disable-next-line no-console
+      console.log('[DuckDB Adapter] Searching for metadata database...');
       const databasesResult =
         await this.connectionInfo.connection.run(databasesQuery);
       const databaseRows = await databasesResult.getRows();
 
       if (databaseRows.length === 0) {
+        // eslint-disable-next-line no-console
+        console.log(
+          '[DuckDB Adapter] No metadata database found, listing all databases:',
+        );
         const allDatabasesResult = await this.connectionInfo.connection.run(
           'SELECT database_name FROM duckdb_databases()',
         );
-        await allDatabasesResult.getRows();
+        const allDatabases = await allDatabasesResult.getRows();
+        // eslint-disable-next-line no-console
+        console.log('[DuckDB Adapter] All databases:', allDatabases);
         return [];
       }
 
       const metadataDatabase = Array.isArray(databaseRows[0])
         ? databaseRows[0][0]
         : (databaseRows[0] as any).database_name;
+
+      // eslint-disable-next-line no-console
+      console.log(
+        '[DuckDB Adapter] Found metadata database:',
+        metadataDatabase,
+      );
 
       // Quote the database name to handle special characters (hyphens, etc.)
       const quotedMetadataDatabase = `"${metadataDatabase}"`;
@@ -627,7 +645,7 @@ export class DuckDBCatalogAdapter extends CatalogAdapter {
           snap.snapshot_time
         FROM ${quotedMetadataDatabase}.main.ducklake_table t
         JOIN ${quotedMetadataDatabase}.main.ducklake_schema s ON t.schema_id = s.schema_id
-        LEFT JOIN ${quotedMetadataDatabase}.main.ducklake_table_stats ts 
+        LEFT JOIN ${quotedMetadataDatabase}.main.ducklake_table_stats ts
           ON ts.table_id = t.table_id
         LEFT JOIN ${quotedMetadataDatabase}.main.ducklake_snapshot snap ON snap.snapshot_id = t.begin_snapshot
         CROSS JOIN current_snapshot cs
@@ -686,6 +704,9 @@ export class DuckDBCatalogAdapter extends CatalogAdapter {
       return tables;
     } catch (error: any) {
       const errorMessage = error.message || '';
+
+      // eslint-disable-next-line no-console
+      console.error('[DuckDB Adapter] listTables error:', error);
 
       if (
         errorMessage.includes('ducklake_snapshot does not exist') ||
@@ -826,32 +847,141 @@ export class DuckDBCatalogAdapter extends CatalogAdapter {
     }
   }
 
+  /**
+   * Get the metadata database prefix for qualifying metadata tables
+   * @returns The prefix string (e.g., "__ducklake_metadata_test.main.") or empty string if not found
+   */
+  private async getMetadataPrefix(): Promise<string> {
+    try {
+      if (!this.connectionInfo) {
+        return '';
+      }
+
+      const databasesQuery = `
+        SELECT database_name
+        FROM duckdb_databases()
+        WHERE database_name LIKE '__ducklake_metadata_%'
+        LIMIT 1
+      `;
+
+      const databasesResult =
+        await this.connectionInfo.connection.run(databasesQuery);
+      const databaseRows = await databasesResult.getRows();
+
+      if (databaseRows.length === 0) {
+        return '';
+      }
+
+      const metadataDatabase = Array.isArray(databaseRows[0])
+        ? databaseRows[0][0]
+        : (databaseRows[0] as any).database_name;
+
+      return `"${metadataDatabase}".main.`;
+    } catch (error) {
+      // eslint-disable-next-line no-console
+      console.warn('Could not determine metadata prefix:', error);
+      return '';
+    }
+  }
+
+  /**
+   * Qualify metadata table references in queries
+   * This is needed for DuckDB adapter where metadata tables are in a separate attached database
+   */
+  private async qualifyMetadataTables(query: string): Promise<string> {
+    const metadataPrefix = await this.getMetadataPrefix();
+
+    if (!metadataPrefix) {
+      return query;
+    }
+
+    // List of DuckLake metadata tables that need qualification
+    const metadataTables = [
+      'ducklake_table',
+      'ducklake_column',
+      'ducklake_schema',
+      'ducklake_snapshot',
+      'ducklake_data_file',
+      'ducklake_delete_file',
+      'ducklake_table_stats',
+      'ducklake_table_column_stats',
+      'ducklake_partition_info',
+      'ducklake_partition_column',
+      'ducklake_file_partition_value',
+      'ducklake_tag',
+      'ducklake_column_tag',
+    ];
+
+    // Replace unqualified metadata table references
+    // Pattern: FROM/JOIN metadata_table (not already qualified)
+    const qualifiedQuery = metadataTables.reduce((currentQuery, table) => {
+      // Match FROM/JOIN followed by the table name, but not if already qualified
+      const pattern = new RegExp(
+        `\\b(FROM|JOIN)\\s+(?!"?__ducklake_metadata_)\\b${table}\\b`,
+        'gi',
+      );
+      return currentQuery.replace(pattern, `$1 ${metadataPrefix}${table}`);
+    }, query);
+
+    return qualifiedQuery;
+  }
+
   async executeQuery(
     request: DuckLakeQueryRequest,
   ): Promise<DuckLakeQueryResult> {
+    const startTime = Date.now();
     try {
       if (!this.connectionInfo) {
         throw new Error('No active connection');
       }
 
-      const startTime = Date.now();
-
       // Handle time travel queries
-      let query = request.sql;
-      if (request.snapshotId) {
+      const { query: baseQuery, snapshotId, limit, offset } = request;
+
+      // Qualify metadata table references for internal queries
+      let query = await this.qualifyMetadataTables(baseQuery);
+
+      // Strip trailing semicolons before appending any suffixes (like SNAPSHOT or LIMIT/OFFSET).
+      // Queries like "SELECT ... ORDER BY x;" would otherwise become
+      // "SELECT ... ORDER BY x FOR SYSTEM_TIME..." which is a syntax error.
+      query = query.replace(/;\s*$/, '');
+
+      if (snapshotId) {
+        const snapshotIdStr = String(snapshotId).trim();
+        if (!/^\d+$/.test(snapshotIdStr)) {
+          throw DuckLakeError.validation(
+            'Snapshot ID must be a numeric value',
+            'snapshotId',
+          );
+        }
+
+        const validatedSnapshotId = Number.parseInt(snapshotIdStr, 10);
+        if (!Number.isSafeInteger(validatedSnapshotId)) {
+          throw DuckLakeError.validation(
+            'Snapshot ID must be a safe integer',
+            'snapshotId',
+          );
+        }
+
         // Modify query to use specific snapshot
-        query = `${query} FOR SYSTEM_TIME AS OF SNAPSHOT '${request.snapshotId}'`;
+        query = `${query} FOR SYSTEM_TIME AS OF SNAPSHOT '${validatedSnapshotId}'`;
       }
 
       let totalRows: number | undefined;
 
       // Add limit and offset if specified
-      if (request.limit) {
-        // If pagination is requested, calculate total rows for the base query
-        // Only run count query for SELECT statements to avoid re-executing DML
-        const isSelectQuery = /^\s*SELECT\b/i.test(query);
+      if (limit) {
+        // If pagination is requested, calculate total rows for the base query.
+        // Match SELECT queries and WITH-clause CTEs (WITH ... SELECT ...).
+        // We intentionally exclude DML/DDL to avoid re-executing side-effecting statements.
+        const isSelectQuery =
+          /^\s*SELECT\b/i.test(query) || /^\s*WITH\b/i.test(query);
 
-        if (isSelectQuery) {
+        // Respect user-defined LIMIT in their SQL — don't append another LIMIT
+        // which would produce invalid syntax or override the user's intent.
+        const hasExistingLimit = /\bLIMIT\s+\d+/i.test(query);
+
+        if (isSelectQuery && !hasExistingLimit) {
           try {
             const countQuery = `SELECT COUNT(*) as total FROM (${query})`;
             const countResult =
@@ -881,12 +1011,13 @@ export class DuckDBCatalogAdapter extends CatalogAdapter {
               error,
             );
           }
-        }
 
-        query += ` LIMIT ${request.limit}`;
-        if (request.offset) {
-          query += ` OFFSET ${request.offset}`;
+          query += ` LIMIT ${limit}`;
+          if (offset) {
+            query += ` OFFSET ${offset}`;
+          }
         }
+        // If hasExistingLimit or not a SELECT query: skip — LIMIT is invalid for DDL/DML
       }
 
       const result = await this.connectionInfo.connection.run(query);
@@ -895,27 +1026,88 @@ export class DuckDBCatalogAdapter extends CatalogAdapter {
       const columnNames = result.columnNames();
       const columnTypes = result.columnTypes();
 
-      // Map to our column format
-      const columns = columnNames.map((name: string, index: number) => ({
+      // Map to our field format
+      const fields = columnNames.map((name: string, index: number) => ({
         name,
         type: columnTypes[index]?.toString() || 'UNKNOWN',
       }));
 
       const rows = await result.getRows();
 
-      const executionTime = Date.now() - startTime;
+      // Normalize data (handle HugeInt and other complex types)
+      const data = rows.map((row: any) => {
+        const normalized: any = {};
+        if (Array.isArray(row)) {
+          // If row is an array, map to field names
+          columnNames.forEach((name: string, idx: number) => {
+            const value = row[idx];
+            // Only normalize numeric types (bigint, number, or objects with hugeint)
+            // Preserve strings, booleans, nulls, and other types as-is
+            if (
+              typeof value === 'bigint' ||
+              typeof value === 'number' ||
+              (typeof value === 'object' &&
+                value !== null &&
+                (value as any).hugeint !== undefined)
+            ) {
+              normalized[name] = normalizeNumericValue(value);
+            } else {
+              normalized[name] = value;
+            }
+          });
+        } else if (typeof row === 'object' && row !== null) {
+          // If row is already an object
+          const entries = Object.entries(row);
+          entries.forEach(([key, value]) => {
+            // Only normalize numeric types
+            if (
+              typeof value === 'bigint' ||
+              typeof value === 'number' ||
+              (typeof value === 'object' &&
+                value !== null &&
+                (value as any).hugeint !== undefined)
+            ) {
+              normalized[key] = normalizeNumericValue(value);
+            } else {
+              normalized[key] = value;
+            }
+          });
+        }
+        return normalized;
+      });
+
+      // Verify no BigInt remains after normalization (for debugging)
+      if (data && data.length > 0) {
+        data.slice(0, 3).forEach((row: any, rowIndex: number) => {
+          Object.entries(row).forEach(([key, value]) => {
+            if (typeof value === 'bigint') {
+              // eslint-disable-next-line no-console
+              log.error(
+                `[DuckDB Adapter] ERROR: BigInt still present after normalization in row ${rowIndex}, column "${key}" (value omitted)`,
+              );
+            }
+          });
+        });
+      }
+
+      const duration = Date.now() - startTime;
 
       return {
-        columns,
-        rows,
-        totalRows,
-        executionTime,
-        snapshotId: request.snapshotId,
+        success: true,
+        data,
+        fields,
+        rowCount: totalRows ?? data.length,
+        duration,
+        snapshotId,
       };
     } catch (error) {
       // eslint-disable-next-line no-console
       console.error('Failed to execute DuckDB query:', error);
-      throw error;
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : String(error),
+        duration: Date.now() - startTime,
+      };
     }
   }
 

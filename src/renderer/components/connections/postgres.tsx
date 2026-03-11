@@ -29,12 +29,16 @@ type Props = {
   onCancel: () => void;
   connection?: ConnectionModel;
   projectId?: string;
+  duplicateFrom?: ConnectionModel;
+  suggestedName?: string;
 };
 
 export const Postgres: React.FC<Props> = ({
   onCancel,
   connection,
   projectId,
+  duplicateFrom,
+  suggestedName,
 }) => {
   const theme = useTheme();
   const navigate = useNavigate();
@@ -50,16 +54,23 @@ export const Postgres: React.FC<Props> = ({
     [connection],
   );
 
+  const duplicateConnection = React.useMemo(
+    () => duplicateFrom?.connection as PostgresConnection,
+    [duplicateFrom],
+  );
+
   const [formState, setFormState] = React.useState<PostgresConnection>({
-    type: existingConnection?.type ?? 'postgres',
-    name: existingConnection?.name ?? '',
-    host: existingConnection?.host ?? '',
-    port: existingConnection?.port ?? 5432,
-    database: existingConnection?.database ?? '',
-    schema: existingConnection?.schema ?? 'public',
+    type: existingConnection?.type ?? duplicateConnection?.type ?? 'postgres',
+    name: existingConnection?.name ?? suggestedName ?? '',
+    host: existingConnection?.host ?? duplicateConnection?.host ?? '',
+    port: existingConnection?.port ?? duplicateConnection?.port ?? 5432,
+    database:
+      existingConnection?.database ?? duplicateConnection?.database ?? '',
+    schema:
+      existingConnection?.schema ?? duplicateConnection?.schema ?? 'public',
     username: '',
     password: '',
-    ssl: existingConnection?.ssl ?? false,
+    ssl: existingConnection?.ssl ?? duplicateConnection?.ssl ?? false,
   });
 
   const [showPassword, setShowPassword] = React.useState(false);
@@ -117,19 +128,47 @@ export const Postgres: React.FC<Props> = ({
   });
 
   React.useEffect(() => {
+    let isMounted = true;
     const fetchCredentials = async () => {
-      const storedUsername = await getDatabaseUsername(existingConnection.name);
-      const storedPassword = await getDatabasePassword(existingConnection.name);
-      setFormState((prev) => ({
-        ...prev,
-        username: storedUsername || '',
-        password: storedPassword || '',
-      }));
+      const sourceConnection = existingConnection || duplicateConnection;
+      if (sourceConnection) {
+        try {
+          const storedUsername = await getDatabaseUsername(
+            sourceConnection.name,
+          );
+          const storedPassword = await getDatabasePassword(
+            sourceConnection.name,
+          );
+          if (isMounted) {
+            setFormState((prev) => ({
+              ...prev,
+              username: storedUsername || '',
+              password: storedPassword || '',
+            }));
+          }
+        } catch (error) {
+          if (isMounted) {
+            setFormState((prev) => ({
+              ...prev,
+              username: '',
+              password: '',
+            }));
+          }
+        }
+      }
     };
-    if (existingConnection) {
+    if (existingConnection || duplicateConnection) {
       fetchCredentials();
     }
-  }, [existingConnection]);
+    return () => {
+      isMounted = false;
+    };
+  }, [
+    existingConnection,
+    duplicateConnection,
+    getDatabaseUsername,
+    getDatabasePassword,
+  ]);
 
   const handleChange = (
     e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>,
