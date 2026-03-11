@@ -1,4 +1,5 @@
 import { secureStorageService } from '../services/secureStorage.service';
+import { CLOUD_DASHBOARD_API_KEY } from '../../main/utils/constants';
 
 const useSecureStorage = () => {
   const setOpenAIKey = async (apiKey: string): Promise<void> => {
@@ -250,15 +251,15 @@ const useSecureStorage = () => {
   };
 
   const setCloudApiKey = async (apiKey: string): Promise<void> => {
-    await secureStorageService.set('cloud-api-key', apiKey);
+    await secureStorageService.set(CLOUD_DASHBOARD_API_KEY, apiKey);
   };
 
   const getCloudApiKey = async (): Promise<string | null> => {
-    return secureStorageService.get('cloud-api-key');
+    return secureStorageService.get(CLOUD_DASHBOARD_API_KEY);
   };
 
   const deleteCloudApiKey = async (): Promise<void> => {
-    await secureStorageService.delete('cloud-api-key');
+    await secureStorageService.delete(CLOUD_DASHBOARD_API_KEY);
   };
 
   return {

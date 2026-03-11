@@ -9,6 +9,7 @@ import CloudExplorerService from './cloudExplorer.service';
 import CloudPreviewService from './cloudPreview.service';
 import UtilsService from './utilsService';
 import SelectedFileContextProvider from './selectedFileContextProvider.service';
+import RosettaCloudService from './rosettaCloud.service';
 import DuckLakeService from './duckLake.service';
 import DuckLakeInstanceStore from './duckLake/instanceStore.service';
 import DuckLakeValidationService from './duckLake/validation.service';
@@ -29,6 +30,7 @@ export {
   CloudPreviewService,
   UtilsService,
   SelectedFileContextProvider,
+  RosettaCloudService,
   DuckLakeService,
   DuckLakeInstanceStore,
   DuckLakeValidationService,
