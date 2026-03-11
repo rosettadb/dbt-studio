@@ -4,8 +4,6 @@ on:
   push:
     branches:
       - main
-      - release/dev
-      - feature/authentication
 
 env:
   # This will be set by the first job and used by all others
