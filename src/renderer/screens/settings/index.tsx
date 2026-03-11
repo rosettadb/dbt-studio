@@ -24,6 +24,7 @@ import {
 import { Container, StyledForm, StyledSettingsNavLink, Title } from './styles';
 import {
   GeneralSettings,
+  ProfileSettings,
   DbtSettings,
   RosettaSettings,
   AboutSettings,
@@ -101,6 +102,7 @@ const Settings: React.FC = () => {
   const getSectionTitle = (section: string) => {
     if (section === 'dbt') return 'dbt™ Core';
     if (section === 'ai-providers') return 'AI Providers';
+    if (section === 'profile') return 'Rosetta Cloud';
     if (section === 'duckdb') return 'DuckDB';
     return section.charAt(0).toUpperCase() + section.slice(1).replace('-', ' ');
   };
@@ -122,6 +124,8 @@ const Settings: React.FC = () => {
             onFilePicker={handleFilePicker}
           />
         );
+      case 'profile':
+        return <ProfileSettings />;
       case 'duckdb':
         return <DuckDBSettings />;
       case 'ai-providers':

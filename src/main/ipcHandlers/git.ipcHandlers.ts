@@ -1,7 +1,12 @@
 import { ipcMain } from 'electron';
 import { GitService } from '../services';
 import { AuthError } from '../errors';
-import { FileStatus, GitCredentials } from '../../types/backend';
+import {
+  FileStatus,
+  GitChangesRes,
+  GitCredentials,
+  RepoInfoRes,
+} from '../../types/backend';
 
 const gitService = new GitService();
 
@@ -203,6 +208,26 @@ const registerGitHandlers = () => {
       { repoPath, filePath }: { repoPath: string; filePath: string },
     ): Promise<FileStatus | null> => {
       return gitService.getFileStatus(repoPath, filePath);
+    },
+  );
+
+  ipcMain.handle(
+    'git:getLocalChanges',
+    async (
+      _event,
+      { repoPath }: { repoPath: string },
+    ): Promise<GitChangesRes | null> => {
+      return gitService.getLocalChangesStatus(repoPath);
+    },
+  );
+
+  ipcMain.handle(
+    'git:repoInfo',
+    async (
+      _event,
+      { repoPath }: { repoPath: string },
+    ): Promise<RepoInfoRes | null> => {
+      return gitService.getRepoInfo(repoPath);
     },
   );
 

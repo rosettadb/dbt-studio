@@ -6,7 +6,6 @@ import {
   Project,
   Table,
   EnhanceModelResponseType,
-  CloudDeploymentPayload,
 } from '../../types/backend';
 
 export const getProjects = async (): Promise<Project[]> => {
@@ -300,10 +299,4 @@ export const downloadSeed = async (
     objectUrl,
     project,
   });
-};
-
-export const pushProjectToCloud = async (
-  body: CloudDeploymentPayload,
-): Promise<void> => {
-  await client.post<CloudDeploymentPayload, void>('project:pushToCloud', body);
 };

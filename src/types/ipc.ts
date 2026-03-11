@@ -51,8 +51,24 @@ export type ProjectChannels =
   | 'project:getQuery'
   | 'project:chooseDir'
   | 'project:renamePath'
-  | 'project:downloadSeed'
-  | 'project:pushToCloud';
+  | 'project:downloadSeed';
+
+export type RosettaCloudChannels =
+  | 'rosettaCloud:push'
+  | 'rosettaCloud:getProfile'
+  | 'rosettaCloud:refreshProfile'
+  | 'rosettaCloud:getCachedProfile'
+  | 'rosettaCloud:login'
+  | 'rosettaCloud:logout'
+  | 'rosettaCloud:getApiKey'
+  | 'rosettaCloud:storeApiKey'
+  | 'rosettaCloud:validateApiKey'
+  | 'rosettaCloud:authSuccess'
+  | 'rosettaCloud:authError'
+  | 'rosettaCloud:apiKeyUpdated'
+  | 'rosettaCloud:getSecrets'
+  | 'rosettaCloud:deleteSecret';
+
 export type ConnectorChannels =
   | 'connector:configure'
   | 'connector:remove'
@@ -191,6 +207,8 @@ export type GitChannels =
   | 'git:checkout'
   | 'git:fileDiff'
   | 'git:fileStatusList'
+  | 'git:getLocalChanges'
+  | 'git:repoInfo'
   | 'git:fileStatus'
   | 'git:unstage'
   | 'git:stageAll'
@@ -326,6 +344,7 @@ export type Channels =
   | UpdateChannels
   | CloudExplorerChannels
   | SourcesChannels
+  | RosettaCloudChannels
   | AIChannels
   | DuckLakeChannels
   | LineageChannels;
