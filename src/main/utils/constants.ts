@@ -25,4 +25,4 @@ export const AppUpdateTrackURL =
 
 export const CLOUD_DASHBOARD_API_KEY = 'cloud-api-key';
 
-export const ROSETTA_CLOUD_BASE_URL = 'https://dashboard.rosettalabs.cloud';
+export const ROSETTA_CLOUD_BASE_URL = 'https://cloud.rosettadb.io';
