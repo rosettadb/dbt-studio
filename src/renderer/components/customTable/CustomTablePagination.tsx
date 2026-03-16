@@ -37,6 +37,22 @@ const CustomTablePagination = ({
         };
         return `${fmt(from)}–${fmt(to)} of ${fmt(count === -1 ? to : count)}`;
       }}
+      sx={{
+        '.MuiTablePagination-toolbar': {
+          minHeight: '32px',
+          paddingLeft: '8px',
+          paddingRight: '4px',
+          paddingTop: '2px',
+          paddingBottom: '2px',
+        },
+        '.MuiTablePagination-selectLabel, .MuiTablePagination-displayedRows': {
+          fontSize: '12px',
+          margin: 0,
+        },
+        '.MuiTablePagination-select': {
+          fontSize: '12px',
+        },
+      }}
     />
   );
 };

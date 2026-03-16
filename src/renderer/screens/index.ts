@@ -8,6 +8,7 @@ import Setup from './setup';
 import Connections from './connections';
 import CloudExplorer from './cloudExplorer';
 import DuckLake from './dataLake';
+import Notebooks from './notebooks';
 
 export {
   Settings,
@@ -20,4 +21,5 @@ export {
   Connections,
   CloudExplorer,
   DuckLake,
+  Notebooks,
 };

@@ -35,6 +35,12 @@ const baseSidebarElements: SideBarElementType[] = [
     testId: 'nav-item-sql',
   },
   {
+    path: '/app/notebooks',
+    text: 'Notebooks',
+    icon: Icons.NotebooksIcon,
+    testId: 'nav-item-notebooks',
+  },
+  {
     path: '/app/cloud-explorer',
     text: 'Cloud Object Explorer',
     icon: Icons.CloudIcon,

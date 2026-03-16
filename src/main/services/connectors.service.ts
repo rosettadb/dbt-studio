@@ -4,6 +4,7 @@ import path from 'path';
 import fs from 'fs';
 import os from 'os';
 import { v4 as uuidV4 } from 'uuid';
+import { NotebooksService } from './notebooks.service';
 import {
   BigQueryConnection,
   BigQueryTestResponse,
@@ -543,6 +544,10 @@ export default class ConnectorsService {
         error,
       );
     }
+
+    // Archive notebooks for this connection
+    // If archival fails, abort the deletion to prevent orphaned notebooks
+    await NotebooksService.archiveConnectionNotebooks(connectionToDelete.id);
 
     // Remove the connection from the database
     const updatedConnections = connections.filter(
