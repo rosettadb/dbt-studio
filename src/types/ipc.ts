@@ -300,6 +300,10 @@ export type DuckLakeChannels =
   | 'ducklake:instance:listSnapshots'
   | 'ducklake:snapshot:restore'
 
+  // View Management
+  | 'ducklake:view:list'
+  | 'ducklake:view:getSchema'
+
   // Query Execution
   | 'ducklake:query:execute'
   | 'ducklake:query:cancel'

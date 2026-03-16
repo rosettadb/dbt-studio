@@ -910,6 +910,7 @@ export class DuckDBCatalogAdapter extends CatalogAdapter {
       'ducklake_file_partition_value',
       'ducklake_tag',
       'ducklake_column_tag',
+      'ducklake_view',
     ];
 
     // Replace unqualified metadata table references

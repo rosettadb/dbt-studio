@@ -13,6 +13,15 @@ export const duckLakeKeys = {
     [...duckLakeKeys.instance(id), 'health'] as const,
   tables: (instanceId: string) =>
     [...duckLakeKeys.instance(instanceId), 'tables'] as const,
+  views: (instanceId: string) =>
+    [...duckLakeKeys.instance(instanceId), 'views'] as const, // Plan 25
+  viewSchema: (instanceId: string, schemaName: string, viewName: string) =>
+    [
+      ...duckLakeKeys.views(instanceId),
+      schemaName,
+      viewName,
+      'schema',
+    ] as const,
   table: (instanceId: string, tableName: string) =>
     [...duckLakeKeys.tables(instanceId), tableName] as const,
   tableDetails: (instanceId: string, tableName: string) =>
@@ -427,6 +436,30 @@ export function useDuckLakeTables(instanceId: string) {
     onError: () => {
       // Error is already logged by the service layer
     },
+  });
+}
+
+export function useDuckLakeViews(instanceId: string, enabled = true) {
+  return useQuery({
+    queryKey: duckLakeKeys.views(instanceId),
+    queryFn: () => DuckLakeService.listViews(instanceId),
+    enabled: !!instanceId && enabled,
+    staleTime: 60000, // 1 minute
+  });
+}
+
+export function useDuckLakeViewSchema(
+  instanceId: string,
+  schemaName: string,
+  viewName: string,
+  enabled = true,
+) {
+  return useQuery({
+    queryKey: duckLakeKeys.viewSchema(instanceId, schemaName, viewName),
+    queryFn: () =>
+      DuckLakeService.getViewSchema(instanceId, schemaName, viewName),
+    enabled: enabled && !!instanceId && !!schemaName && !!viewName,
+    staleTime: 60000,
   });
 }
 
