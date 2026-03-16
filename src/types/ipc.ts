@@ -87,7 +87,8 @@ export type ConnectorChannels =
   | 'connector:extractSchema'
   | 'connector:updateQuery'
   | 'connector:getQuery'
-  | 'connector:executeQuery';
+  | 'connector:executeQuery'
+  | 'connector:save';
 
 export type SourcesChannels =
   | 'sources:create'

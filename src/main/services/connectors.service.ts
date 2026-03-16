@@ -45,17 +45,28 @@ import {
 import SecureStorageService from './secureStorage.service';
 import { CloudConnection, RecentItem } from '../../types/frontend';
 import { updateProjectConfigFiles } from '../utils/yamlPartialUpdate';
+import DuckLakeService from './duckLake.service';
+import DuckLakeInstanceStore from './duckLake/instanceStore.service';
 
 export default class ConnectorsService {
-  static async loadConnections(): Promise<ConnectionModel[]> {
+  static async loadConnections(
+    includeDataLake: boolean = false,
+  ): Promise<ConnectionModel[]> {
     const db = await loadDatabaseFile();
-    return db.connections ?? [];
+    const connections = db.connections ?? [];
+
+    // Filter out ducklake connections by default
+    if (includeDataLake) {
+      return connections;
+    }
+
+    return connections.filter((conn) => conn.connection.type !== 'ducklake');
   }
 
   static async getConnectionById(
     connectionId: string,
   ): Promise<ConnectionModel | undefined> {
-    const connections = await this.loadConnections();
+    const connections = await this.loadConnections(true); // Include all connections including ducklake
     return connections.find((connection) => connection.id === connectionId);
   }
 
@@ -65,7 +76,7 @@ export default class ConnectorsService {
   static async findConnectionByName(
     name: string,
   ): Promise<ConnectionModel | undefined> {
-    const connections = await this.loadConnections();
+    const connections = await this.loadConnections(true); // Include all connections including ducklake
     return connections.find(
       (conn) =>
         conn.connection.name.toLowerCase().trim() === name.toLowerCase().trim(),
@@ -237,7 +248,7 @@ export default class ConnectorsService {
     connection: ConnectionInput,
     allowReservedNames: boolean = false,
   ): Promise<string> {
-    const connections = await this.loadConnections();
+    const connections = await this.loadConnections(true); // Include all connections including ducklake
 
     // Validate connection name with optional allowReservedNames flag
     const nameValidation = this.validateConnectionName(
@@ -264,7 +275,7 @@ export default class ConnectorsService {
   }
 
   static async saveNewConnection(connection: ConnectionInput): Promise<string> {
-    const connections = await this.loadConnections();
+    const connections = await this.loadConnections(true); // Include all connections including ducklake
 
     // Validate connection name
     const nameValidation = this.validateConnectionName(
@@ -277,6 +288,39 @@ export default class ConnectorsService {
     }
 
     const connectionId = uuidV4();
+
+    // For ducklake connections, store S3 credentials securely
+    if (connection.type === 'ducklake') {
+      const instance = await DuckLakeService.getInstance(connection.instanceId);
+      const credentials = await DuckLakeInstanceStore.retrieveCredentials(
+        instance.id,
+        instance.catalog as any,
+        instance.storage as any,
+      );
+
+      // Store S3 credentials in secure storage if they exist
+      if (credentials.storage?.type === 's3' && credentials.storage.s3) {
+        await SecureStorageService.setCredential(
+          `db-s3-region-${connection.name}`,
+          credentials.storage.s3.region,
+        );
+        await SecureStorageService.setCredential(
+          `db-s3-access-key-${connection.name}`,
+          credentials.storage.s3.accessKeyId,
+        );
+        await SecureStorageService.setCredential(
+          `db-s3-secret-key-${connection.name}`,
+          credentials.storage.s3.secretAccessKey,
+        );
+        if (credentials.storage.s3.sessionToken) {
+          await SecureStorageService.setCredential(
+            `db-s3-session-token-${connection.name}`,
+            credentials.storage.s3.sessionToken,
+          );
+        }
+      }
+    }
+
     const newConnection: ConnectionModel = {
       id: connectionId,
       connection,
@@ -302,11 +346,43 @@ export default class ConnectorsService {
     if (!project?.connectionId) {
       return project;
     }
-    const connections = await this.loadConnections();
+    const connections = await this.loadConnections(true); // Include all connections including ducklake
     const connection = connections.find((c) => c.id === project.connectionId);
 
     if (!connection) {
       throw new Error('Missing connection');
+    }
+
+    // Load credentials into environment variables for ducklake S3 connections
+    if (connection.connection.type === 'ducklake') {
+      const s3Region = await SecureStorageService.getCredential(
+        `db-s3-region-${connection.connection.name}`,
+      );
+      const s3AccessKey = await SecureStorageService.getCredential(
+        `db-s3-access-key-${connection.connection.name}`,
+      );
+      const s3SecretKey = await SecureStorageService.getCredential(
+        `db-s3-secret-key-${connection.connection.name}`,
+      );
+      const s3SessionToken = await SecureStorageService.getCredential(
+        `db-s3-session-token-${connection.connection.name}`,
+      );
+
+      if (s3Region) {
+        process.env[`db-s3-region-${connection.connection.name}`] = s3Region;
+      }
+      if (s3AccessKey) {
+        process.env[`db-s3-access-key-${connection.connection.name}`] =
+          s3AccessKey;
+      }
+      if (s3SecretKey) {
+        process.env[`db-s3-secret-key-${connection.connection.name}`] =
+          s3SecretKey;
+      }
+      if (s3SessionToken) {
+        process.env[`db-s3-session-token-${connection.connection.name}`] =
+          s3SessionToken;
+      }
     }
 
     const rosettaConnection = await this.mapToRosettaConnection(
@@ -353,7 +429,7 @@ export default class ConnectorsService {
     const projects = await ProjectsService.loadProjects();
     const projectIndex = projects.findIndex((p) => p.id === projectId);
 
-    const connections = await this.loadConnections();
+    const connections = await this.loadConnections(true); // Include all connections including ducklake
     let connectionId = connId;
     const connection =
       conn ?? connections?.find((c) => c.id === connectionId)?.connection;
@@ -429,7 +505,7 @@ export default class ConnectorsService {
   }: UpdateConnectionBody): Promise<void> {
     await this.validateConnection(connection.connection);
 
-    const connections = await this.loadConnections();
+    const connections = await this.loadConnections(true); // Include all connections including ducklake
 
     // Validate connection name (exclude current connection from uniqueness check)
     const nameValidation = this.validateConnectionName(
@@ -506,7 +582,7 @@ export default class ConnectorsService {
    */
   static async deleteConnection(connectionId: string): Promise<void> {
     // Check if the connection exists
-    const connections = await this.loadConnections();
+    const connections = await this.loadConnections(true); // Include all connections including ducklake
     const connectionIndex = connections.findIndex(
       (connection) => connection.id === connectionId,
     );
@@ -579,6 +655,19 @@ export default class ConnectorsService {
         return testDatabricksConnection(connection);
       case 'duckdb':
         return testDuckDBConnection(connection);
+      case 'ducklake':
+        // DuckLake connection test - validate instance exists
+        try {
+          const instance = await DuckLakeService.getInstance(
+            connection.instanceId,
+          );
+          if (!instance || !instance.id) {
+            return false;
+          }
+          return true;
+        } catch (error) {
+          return false;
+        }
       case 'redshift':
         return testRedshiftConnection(connection);
       case 'kinetica':
@@ -690,6 +779,12 @@ export default class ConnectorsService {
             registerCancel,
           );
           break;
+        case 'ducklake':
+          response = {
+            success: false,
+            error: 'DuckLake query execution not yet implemented',
+          };
+          break;
         case 'kinetica':
           response = await executeKineticaQuery(
             connection,
@@ -728,36 +823,75 @@ export default class ConnectorsService {
     if (isDuckDb) {
       databaseName = this.extractDbNameFromPath(connection.short_database_path);
     } else if (isDuckLake) {
-      databaseName = '';
+      databaseName = projectName; // Use project name as database name for ducklake
     } else {
       databaseName = connection.database;
     }
-    const schemaName = isDuckLake ? '' : connection.schema;
+    const schemaName = isDuckLake ? 'main' : connection.schema;
     // Removed BigQuery keyfile fetch/validation here
     // USER and PASSWORD only declared here
     const USER = `db-user-${connection.name}`;
     const PASSWORD = `db-password-${connection.name}`;
+
+    // Base connection config
+    const connectionConfig: any = {
+      name: projectName,
+      databaseName,
+      schemaName,
+      dbType: connection.type,
+      url: jdbcUrl,
+    };
+
+    // Handle ducklake-specific configuration
+    if (isDuckLake) {
+      const instance = await DuckLakeService.getInstance(connection.instanceId);
+
+      // Get credentials if available
+      const credentials = await DuckLakeInstanceStore.retrieveCredentials(
+        instance.id,
+        instance.catalog as any,
+        instance.storage as any,
+      );
+
+      connectionConfig.ducklakeDataPath = instance.dataPath;
+
+      // Metadata DB path (from catalog config)
+      if (
+        instance.catalog.type === 'duckdb' &&
+        instance.catalog.duckdb?.metadataPath
+      ) {
+        connectionConfig.ducklakeMetadataDb =
+          instance.catalog.duckdb.metadataPath;
+      } else if (
+        instance.catalog.type === 'sqlite' &&
+        instance.catalog.sqlite?.metadataPath
+      ) {
+        connectionConfig.ducklakeMetadataDb =
+          instance.catalog.sqlite.metadataPath;
+      }
+
+      // Add S3 credentials if storage is S3 - use env vars for security
+      if (credentials.storage?.type === 's3' && credentials.storage.s3) {
+        connectionConfig.s3Region = `\${db-s3-region-${connection.name}}`;
+        connectionConfig.s3AccessKeyId = `\${db-s3-access-key-${connection.name}}`;
+        connectionConfig.s3SecretAccessKey = `\${db-s3-secret-key-${connection.name}}`;
+      }
+    } else if (
+      connection.type !== 'databricks' &&
+      connection.type !== 'duckdb' &&
+      connection.type !== 'bigquery'
+    ) {
+      // Only add userName/password for non-BigQuery, non-Databricks, non-DuckDB, non-ducklake
+      connectionConfig.userName = `\${${USER}}`;
+      connectionConfig.password = `\${${PASSWORD}}`;
+    }
+
     const yamlData: {
       connections: RosettaConnection[];
       openai_api_key?: string;
     } = {
       openai_api_key: `\${openai-api-key}`,
-      connections: [
-        {
-          name: projectName,
-          databaseName,
-          schemaName,
-          dbType: connection.type,
-          url: jdbcUrl,
-          // Only add userName/password for non-BigQuery, non-Databricks, non-DuckDB
-          ...(connection.type !== 'databricks' &&
-            connection.type !== 'duckdb' &&
-            connection.type !== 'bigquery' && {
-              userName: `\${${USER}}`,
-              password: `\${${PASSWORD}}`,
-            }),
-        },
-      ],
+      connections: [connectionConfig],
     };
     return yaml.dump(yamlData);
   }
@@ -788,6 +922,11 @@ export default class ConnectorsService {
       case 'duckdb':
         // DuckDB specific validations
         if (!conn.database_path) throw new Error('Database path is required');
+        break;
+      case 'ducklake':
+        // DuckLake specific validations
+        if (!conn.instanceId)
+          throw new Error('DuckLake instance ID is required');
         break;
       case 'kinetica':
         if (!conn.host) throw new Error('Host is required');
@@ -834,6 +973,9 @@ export default class ConnectorsService {
       case 'duckdb':
         // DuckDB JDBC URL format
         return `jdbc:duckdb:${conn.database_path}`;
+      case 'ducklake':
+        // DuckLake uses in-memory DuckDB session
+        return `jdbc:duckdb:`;
       case 'kinetica': {
         // Kinetica JDBC URL format: jdbc:kinetica:URL=http://<host>:9191
         // Optional parameters can be appended
@@ -976,6 +1118,14 @@ export default class ConnectorsService {
           path: conn.database_path, // Map database_path to path for DBT connection
           database: conn.database,
           schema: conn.schema,
+        };
+      case 'ducklake':
+        // DuckLake uses DuckDB type for DBT
+        return {
+          type: 'duckdb',
+          path: ':memory:', // In-memory DuckDB
+          database: 'dl',
+          schema: 'main',
         };
       case 'kinetica':
         return {
@@ -1129,6 +1279,56 @@ export default class ConnectorsService {
           schema: conn.schema,
           threads: 4,
         };
+      case 'ducklake': {
+        // For ducklake, we need to generate a DuckDB profile with ducklake extension
+        const instance = await DuckLakeService.getInstance(conn.instanceId);
+
+        const credentials = await DuckLakeInstanceStore.retrieveCredentials(
+          instance.id,
+          instance.catalog as any,
+          instance.storage as any,
+        );
+
+        let metadataPath = '';
+        if (
+          instance.catalog.type === 'duckdb' &&
+          instance.catalog.duckdb?.metadataPath
+        ) {
+          metadataPath = instance.catalog.duckdb.metadataPath;
+        } else if (
+          instance.catalog.type === 'sqlite' &&
+          instance.catalog.sqlite?.metadataPath
+        ) {
+          metadataPath = instance.catalog.sqlite.metadataPath;
+        }
+
+        const duckLakeProfile: any = {
+          type: 'duckdb',
+          threads: 4,
+          extensions: ['httpfs', 'ducklake'],
+          attach: [
+            {
+              path: `ducklake:${metadataPath}`,
+              alias: 'dl',
+              options: {
+                data_path: instance.dataPath,
+              },
+            },
+          ],
+          database: 'dl',
+        };
+
+        // Add S3 settings if storage is S3 - use env vars for security
+        if (credentials.storage?.type === 's3' && credentials.storage.s3) {
+          duckLakeProfile.settings = {
+            s3_region: `{{ env_var("db-s3-region-${conn.name}") }}`,
+            s3_access_key_id: `{{ env_var("db-s3-access-key-${conn.name}") }}`,
+            s3_secret_access_key: `{{ env_var("db-s3-secret-key-${conn.name}") }}`,
+          };
+        }
+
+        return duckLakeProfile;
+      }
       case 'kinetica':
         // Map to a dbt profile. NOTE: dbt-kinetica adapter does not exist natively.
         // This output assumes users might use dbt-trino or have a custom adapter.
@@ -1764,6 +1964,9 @@ export default class ConnectorsService {
         });
         const schema = await extractor.extractSchema();
         return schema;
+      }
+      case 'ducklake': {
+        return { tables: [] };
       }
       case 'kinetica': {
         const kinConn = connection as KineticaConnection;

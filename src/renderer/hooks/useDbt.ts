@@ -86,7 +86,7 @@ const useDbt = (
   const { data: settings } = useGetSettings();
   const { env } = useAppContext();
   const { runCommand, stopCommand, isRunning } = useCli();
-  const { data: connections = [] } = useGetConnections();
+  const { data: connections = [] } = useGetConnections(true);
   const {
     getDatabaseUsername,
     getDatabasePassword,

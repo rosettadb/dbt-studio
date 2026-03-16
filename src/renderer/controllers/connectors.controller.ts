@@ -21,6 +21,7 @@ import { QUERY_KEYS } from '../config/constants';
 import { connectorsServices } from '../services';
 
 export const useGetConnections = (
+  includeDataLake?: boolean,
   customOptions?: UseQueryOptions<
     ConnectionModel[],
     CustomError,
@@ -28,9 +29,9 @@ export const useGetConnections = (
   >,
 ) => {
   return useQuery({
-    queryKey: [QUERY_KEYS.GET_CONNECTIONS],
+    queryKey: [QUERY_KEYS.GET_CONNECTIONS, includeDataLake],
     queryFn: async () => {
-      return connectorsServices.listConnections();
+      return connectorsServices.listConnections(includeDataLake);
     },
     ...customOptions,
   });
