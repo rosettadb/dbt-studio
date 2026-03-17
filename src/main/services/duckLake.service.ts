@@ -921,7 +921,31 @@ export default class DuckLakeService {
    */
   static async acquireConnection(instanceId: string): Promise<void> {
     try {
-      await this.ensureConnected(instanceId);
+      await this.initialize();
+      const instance = await this.getInstance(instanceId);
+
+      // Retrieve credentials (catalog and storage)
+      const { catalog: catalogWithCredentials, storage: persistedStorage } =
+        await DuckLakeInstanceStore.retrieveCredentials(
+          instanceId,
+          instance.catalog as any,
+          instance.storage as any,
+        );
+
+      let storageWithCredentials = persistedStorage;
+      if (this.storageConfigNeedsResolution(persistedStorage)) {
+        storageWithCredentials = await this.getStorageConfigWithCredentials(
+          persistedStorage!,
+        );
+      }
+
+      // Always go through connection manager acquire path to increment ref count
+      await DuckLakeConnectionManager.getConnection(
+        instanceId,
+        instance,
+        catalogWithCredentials,
+        storageWithCredentials,
+      );
       // eslint-disable-next-line no-console
       console.log(
         `[DuckLakeService] Connection acquired for instance: ${instanceId}`,

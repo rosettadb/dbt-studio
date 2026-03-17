@@ -79,34 +79,28 @@ export const useProfileSubscription = () => {
     };
 
     // Subscribe to auth events
-    window.electron.ipcRenderer.on(
+    const unsubscribeAuthSuccess = window.electron.ipcRenderer.on(
       'rosettaCloud:authSuccess',
       handleAuthSuccess,
     );
-    window.electron.ipcRenderer.on('rosettaCloud:authError', handleAuthError);
-    window.electron.ipcRenderer.on(
+    const unsubscribeAuthError = window.electron.ipcRenderer.on(
+      'rosettaCloud:authError',
+      handleAuthError,
+    );
+    const unsubscribeApiKeyUpdated = window.electron.ipcRenderer.on(
       'rosettaCloud:apiKeyUpdated',
       handleApiKeyUpdate,
     );
-    window.electron.ipcRenderer.on('rosettaCloud:logout', handleLogout);
+    const unsubscribeLogout = window.electron.ipcRenderer.on(
+      'rosettaCloud:logout',
+      handleLogout,
+    );
 
     return () => {
-      window.electron.ipcRenderer.removeListener(
-        'rosettaCloud:authSuccess',
-        handleAuthSuccess,
-      );
-      window.electron.ipcRenderer.removeListener(
-        'rosettaCloud:authError',
-        handleAuthError,
-      );
-      window.electron.ipcRenderer.removeListener(
-        'rosettaCloud:apiKeyUpdated',
-        handleApiKeyUpdate,
-      );
-      window.electron.ipcRenderer.removeListener(
-        'rosettaCloud:logout',
-        handleLogout,
-      );
+      unsubscribeAuthSuccess();
+      unsubscribeAuthError();
+      unsubscribeApiKeyUpdated();
+      unsubscribeLogout();
     };
   }, [queryClient]);
 };
