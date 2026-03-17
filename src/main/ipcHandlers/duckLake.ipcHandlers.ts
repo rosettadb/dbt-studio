@@ -12,6 +12,7 @@ import {
   DuckLakeCatalogConfig,
   DuckLakeQueryRequest,
   DuckLakeStorageConfig,
+  DuckLakeSnapshotParams,
 } from '../../types/duckLake';
 
 const registerDuckLakeHandlers = () => {
@@ -286,10 +287,14 @@ const registerDuckLakeHandlers = () => {
 
   ipcMain.handle(
     'ducklake:instance:listSnapshots',
-    async (_event, instanceId: string, params: any) => {
-      // Ensure params has defaults if missing (though Service also defaults)
-      const listParams = params || { page: 1, pageSize: 100 };
-      return DuckLakeService.listInstanceSnapshots(instanceId, listParams);
+    async (
+      _event,
+      {
+        instanceId,
+        params,
+      }: { instanceId: string; params?: DuckLakeSnapshotParams },
+    ) => {
+      return DuckLakeService.listInstanceSnapshots(instanceId, params);
     },
   );
 

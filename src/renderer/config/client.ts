@@ -4,7 +4,7 @@ import { Channels } from '../../types/ipc';
 const client = {
   get: async <R = void>(channel: Channels) => {
     const resolve: R = await window.electron.ipcRenderer.invoke(channel);
-    if (window.electron.app.isDebug) {
+    if (window.electron.app?.isDebug) {
       console.debug('get', channel);
       console.debug('response', resolve);
     }
@@ -12,7 +12,7 @@ const client = {
   },
   post: async <T = undefined, R = void>(channel: Channels, body: T) => {
     const resolve: R = await window.electron.ipcRenderer.invoke(channel, body);
-    if (window.electron.app.isDebug) {
+    if (window.electron.app?.isDebug) {
       console.debug('post', channel, body);
       console.debug('response', resolve);
     }
