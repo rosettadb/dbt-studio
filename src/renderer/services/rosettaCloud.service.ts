@@ -36,7 +36,7 @@ export const validateApiKey = async (
 export const subscribeToAuthSuccess = (
   callback: (payload: AuthSuccessPayload) => void,
 ) => {
-  const listener: (...args: unknown[]) => void = (_event, payload) => {
+  const listener: (...args: unknown[]) => void = (payload) => {
     const data = (payload ?? {}) as Partial<AuthSuccessPayload>;
     if (!data.apiKey) {
       return;
@@ -44,32 +44,18 @@ export const subscribeToAuthSuccess = (
     callback({ apiKey: data.apiKey });
   };
 
-  window.electron.ipcRenderer.on('rosettaCloud:authSuccess', listener);
-
-  return () => {
-    window.electron.ipcRenderer.removeListener(
-      'rosettaCloud:authSuccess',
-      listener,
-    );
-  };
+  return window.electron.ipcRenderer.on('rosettaCloud:authSuccess', listener);
 };
 
 export const subscribeToAuthError = (
   callback: (payload: AuthErrorPayload) => void,
 ) => {
-  const listener: (...args: unknown[]) => void = (_event, payload) => {
+  const listener: (...args: unknown[]) => void = (payload) => {
     const data = (payload ?? {}) as Partial<AuthErrorPayload>;
     callback({ error: data.error ?? 'Authentication failed.' });
   };
 
-  window.electron.ipcRenderer.on('rosettaCloud:authError', listener);
-
-  return () => {
-    window.electron.ipcRenderer.removeListener(
-      'rosettaCloud:authError',
-      listener,
-    );
-  };
+  return window.electron.ipcRenderer.on('rosettaCloud:authError', listener);
 };
 
 export const subscribeToApiKeyUpdate = (callback: () => void) => {
@@ -77,14 +63,7 @@ export const subscribeToApiKeyUpdate = (callback: () => void) => {
     callback();
   };
 
-  window.electron.ipcRenderer.on('rosettaCloud:apiKeyUpdated', listener);
-
-  return () => {
-    window.electron.ipcRenderer.removeListener(
-      'rosettaCloud:apiKeyUpdated',
-      listener,
-    );
-  };
+  return window.electron.ipcRenderer.on('rosettaCloud:apiKeyUpdated', listener);
 };
 
 export const pushProjectToCloud = async (

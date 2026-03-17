@@ -914,6 +914,70 @@ export default class DuckLakeService {
     }
   }
 
+  /**
+   * Acquire a connection reference (for component lifecycle management)
+   * Components should call this when they mount/start using a connection
+   * This ensures the connection stays alive while in use
+   */
+  static async acquireConnection(instanceId: string): Promise<void> {
+    try {
+      await this.initialize();
+      const instance = await this.getInstance(instanceId);
+
+      // Retrieve credentials (catalog and storage)
+      const { catalog: catalogWithCredentials, storage: persistedStorage } =
+        await DuckLakeInstanceStore.retrieveCredentials(
+          instanceId,
+          instance.catalog as any,
+          instance.storage as any,
+        );
+
+      let storageWithCredentials = persistedStorage;
+      if (this.storageConfigNeedsResolution(persistedStorage)) {
+        storageWithCredentials = await this.getStorageConfigWithCredentials(
+          persistedStorage!,
+        );
+      }
+
+      // Always go through connection manager acquire path to increment ref count
+      await DuckLakeConnectionManager.getConnection(
+        instanceId,
+        instance,
+        catalogWithCredentials,
+        storageWithCredentials,
+      );
+      // eslint-disable-next-line no-console
+      console.log(
+        `[DuckLakeService] Connection acquired for instance: ${instanceId}`,
+      );
+    } catch (error) {
+      // eslint-disable-next-line no-console
+      console.error('[DuckLakeService.acquireConnection] Error:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Release a connection reference (for component lifecycle management)
+   * Components should call this when they unmount/stop using a connection
+   * When ref count reaches 0, connection will be cleaned up after a delay
+   */
+  static releaseConnection(instanceId: string): void {
+    try {
+      if (
+        !instanceId ||
+        typeof instanceId !== 'string' ||
+        instanceId.trim() === ''
+      ) {
+        return;
+      }
+
+      DuckLakeConnectionManager.releaseConnection(instanceId);
+    } catch {
+      /* empty */
+    }
+  }
+
   static async testCatalogConnection(
     config: DuckLakeCatalogConfig,
   ): Promise<{ success: boolean; error?: string }> {
@@ -1830,6 +1894,17 @@ export default class DuckLakeService {
   // Private Helper Methods
 
   private static async ensureConnected(instanceId: string): Promise<void> {
+    // Defensive check for instanceId
+    if (
+      !instanceId ||
+      typeof instanceId !== 'string' ||
+      instanceId.trim() === ''
+    ) {
+      throw DuckLakeError.validation(
+        'Instance ID is required and must be a non-empty string',
+      );
+    }
+
     const connectionStatus =
       DuckLakeConnectionManager.getConnectionStatus(instanceId);
     if (!connectionStatus.connected) {
@@ -1838,6 +1913,17 @@ export default class DuckLakeService {
   }
 
   private static async getAdapter(instanceId: string): Promise<CatalogAdapter> {
+    // Defensive check for instanceId
+    if (
+      !instanceId ||
+      typeof instanceId !== 'string' ||
+      instanceId.trim() === ''
+    ) {
+      throw DuckLakeError.validation(
+        'Instance ID is required and must be a non-empty string',
+      );
+    }
+
     const instance = await this.getInstance(instanceId);
     const { catalog: catalogWithCredentials, storage: persistedStorage } =
       await DuckLakeInstanceStore.retrieveCredentials(

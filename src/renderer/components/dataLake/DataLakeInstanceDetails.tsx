@@ -595,6 +595,7 @@ export const DataLakeInstanceDetails: React.FC<
                     color="primary"
                   />
                 }
+                secondaryTypographyProps={{ component: 'div' }}
               />
             </ListItem>
             {instance.catalog.type === 'duckdb' && instance.catalog.duckdb && (
