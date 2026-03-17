@@ -235,15 +235,19 @@ export type Project = {
   incrementalDir?: string;
   businessDir?: string;
   createTemplateFolders?: boolean;
+  externalId?: string;
+  lastRun?: string;
 };
 
 export type CloudDeploymentPayload = {
+  id: string;
   title: string;
   gitUrl: string;
   gitBranch: string;
-  apiKey: string;
   githubUsername?: string;
   githubPassword?: string;
+  secrets: Record<string, string>;
+  CUSTOM_DBT_COMMANDS?: string;
 };
 
 export type DuckDBStatus =
@@ -310,6 +314,8 @@ export type SettingsType = {
   mainDatabaseSize?: string | number;
   sqliteVersion?: string;
   mainDatabaseStatus?: 'connected' | 'disconnected' | 'error';
+
+  env?: 'local' | 'cloud';
   // DuckDB metadata (read-only)
   duckdbPath?: string;
   duckdbSize?: string | number;
@@ -765,3 +771,24 @@ export type Command =
       arguments: Map<string, string | number>;
       options?: Map<string, string | number>;
     };
+
+export type GitChangesRes = {
+  hasUntracked: boolean;
+  hasUncommitted: boolean;
+  hasUnpushed: boolean;
+  untrackedCount: number;
+  uncommittedCount: number;
+  unpushedCount: number;
+};
+
+export type RepoInfoRes = {
+  remoteUrl: string | null;
+  currentBranch: string;
+  branchExistsOnRemote: boolean;
+};
+
+export type Secret = {
+  id: string;
+  name: string;
+  value: string;
+};

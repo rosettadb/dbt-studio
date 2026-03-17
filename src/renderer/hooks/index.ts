@@ -12,6 +12,10 @@ import useProcess from './useProcessContext';
 import useSecureStorage from './useSecureStorage';
 import useTabManager from './useTabManager';
 import useDuckLakeConnection from './useDuckLakeConnection';
+import { useMonacoAutocomplete } from './useMonacoAutocomplete';
+import { useSchemaForConnection } from './useSchemaForConnection';
+import { useNotebookConnectionState } from './useNotebookConnectionState';
+import { useNotebookSidebarState } from './useNotebookSidebarState';
 
 export {
   useIpcPromise,
@@ -28,4 +32,8 @@ export {
   useSecureStorage,
   useTabManager,
   useDuckLakeConnection,
+  useMonacoAutocomplete,
+  useSchemaForConnection,
+  useNotebookConnectionState,
+  useNotebookSidebarState,
 };

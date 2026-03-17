@@ -1,5 +1,5 @@
 {
-  "version": "1.3.2",
+  "version": "1.4.0",
   "name": "rosetta-dbt-studio",
   "description": "Turn Raw Data into Business Insights—Faster with RosettaDB",
   "keywords": [
@@ -114,6 +114,7 @@
     "@google-cloud/bigquery": "^8.0.0",
     "@google-cloud/storage": "^7.16.0",
     "@google/generative-ai": "^0.24.1",
+    "@hello-pangea/dnd": "^18.0.1",
     "@hookform/resolvers": "^5.1.1",
     "@monaco-editor/react": "^4.7.0",
     "@mui/icons-material": "^6.4.5",
@@ -247,6 +248,12 @@
     "productName": "Rosetta DBT Studio",
     "artifactName": "Rosetta-DBT-Studio-${version}-${arch}.${ext}",
     "appId": "org.rosettadb.dbtStudio",
+    "protocols": [
+      {
+        "name": "Rosetta Cloud Auth",
+        "schemes": ["rosetta"]
+      }
+    ],
     "asar": true,
     "asarUnpack": "**\\*.{node,dll}",
     "files": [

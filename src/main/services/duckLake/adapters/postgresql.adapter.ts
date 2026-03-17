@@ -823,6 +823,7 @@ export class PostgreSQLCatalogAdapter extends CatalogAdapter {
       'ducklake_file_partition_value',
       'ducklake_tag',
       'ducklake_column_tag',
+      'ducklake_view',
     ];
 
     // Replace FROM/JOIN <table> that are not already qualified.

@@ -1002,6 +1002,7 @@ const Sql = () => {
                         }));
                       }
                     }}
+                    onQuerySuccess={handleRefreshSchema}
                     isLoading={isLoadingConnection}
                   />
                 </Box>
@@ -1088,6 +1089,7 @@ const Sql = () => {
                       }));
                     }
                   }}
+                  onQuerySuccess={handleRefreshSchema}
                   isLoading={isLoadingConnection}
                 />
               </Box>

@@ -307,6 +307,23 @@ const registerDuckLakeHandlers = () => {
     },
   );
 
+  // View Management Handlers (Plan 25)
+  ipcMain.handle('ducklake:view:list', async (_event, instanceId: string) => {
+    return DuckLakeService.listViews(instanceId);
+  });
+
+  ipcMain.handle(
+    'ducklake:view:getSchema',
+    async (
+      _event,
+      instanceId: string,
+      schemaName: string,
+      viewName: string,
+    ) => {
+      return DuckLakeService.getViewSchema(instanceId, schemaName, viewName);
+    },
+  );
+
   // Query Execution Handlers
   ipcMain.handle(
     'ducklake:query:execute',
