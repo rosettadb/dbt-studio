@@ -82,7 +82,8 @@ export const Editor: React.FC<EditorProps> = ({
   const { mutate: updateFileContent } = useSaveFileContent();
   const theme = useTheme();
   const monacoTheme = theme.palette.mode === 'dark' ? 'vs-dark' : 'light';
-  const language = getLanguageFromExtension(activeFilePath || 'txt');
+  const baseLanguage = getLanguageFromExtension(activeFilePath || 'txt');
+  const language = baseLanguage === 'sql' ? 'jinja-sql' : baseLanguage;
 
   const isFileEditable = !activeTab?.isReadOnly;
   const [showDiffView, setShowDiffView] = React.useState(false);

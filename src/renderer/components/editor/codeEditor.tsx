@@ -16,6 +16,7 @@ import { languageIntelligenceService } from '../../services';
 // to avoid duplicate registrations across tab re-mounts.
 let sqlKeywordProviderDisposable: IDisposable | null = null;
 let yamlProviderDisposable: IDisposable | null = null;
+let currentProjectId: string | undefined;
 
 // Returns partial name typed after ref(' or ref("
 const getRefContext = (line: string) => {
@@ -319,6 +320,8 @@ export const CodeEditor = ({
   projectId?: string;
   onOpenFile?: (filePath: string) => void;
 }) => {
+  currentProjectId = projectId;
+
   const [isMounted, setIsMounted] = React.useState(false);
   const [isDisposed, setIsDisposed] = React.useState(false);
   const editorRef = useRef<IStandaloneCodeEditor | null>(null);
@@ -685,7 +688,8 @@ export const CodeEditor = ({
             });
 
             const rng = makeRange(docCtx.partial);
-            const res = await languageIntelligenceService.listDocs(projectId);
+            const res =
+              await languageIntelligenceService.listDocs(currentProjectId);
             return {
               suggestions: res.docs
                 .filter(

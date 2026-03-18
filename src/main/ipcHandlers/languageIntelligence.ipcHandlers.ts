@@ -1,7 +1,22 @@
 import { ipcMain } from 'electron';
 import LanguageIntelligenceService from '../services/languageIntelligence.service';
 
+const handlerChannels = [
+  'language-intel:manifest:version',
+  'language-intel:models:list',
+  'language-intel:sources:list',
+  'language-intel:macros:list',
+  'language-intel:docs:list',
+  'language-intel:variables:list',
+  'language-intel:env-vars:list',
+] as const;
+
+const removeLanguageIntelligenceHandlers = () => {
+  handlerChannels.forEach((channel) => ipcMain.removeHandler(channel));
+};
+
 const registerLanguageIntelligenceHandlers = () => {
+  removeLanguageIntelligenceHandlers();
   ipcMain.handle('language-intel:manifest:version', (_e, projectId?: string) =>
     LanguageIntelligenceService.getManifestVersion(projectId),
   );

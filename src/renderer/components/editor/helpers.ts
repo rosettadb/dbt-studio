@@ -65,7 +65,7 @@ export const getLanguageFromExtension = (filePath: string): string => {
     case 'conf':
       return 'yaml';
     case 'sql':
-      return 'jinja-sql';
+      return 'sql';
     case 'js':
     case 'jsx':
       return 'javascript';

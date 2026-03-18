@@ -23,8 +23,8 @@ type ProjectIndex = {
   mtimeMs?: number;
   modelsByName: Map<string, DbtModelMeta>;
   sourcesByKey: Map<string, DbtSourceMeta>;
-  macrosByName: Map<string, DbtMacroMeta>;
-  docsByName: Map<string, DbtDocMeta>;
+  macrosByName: Map<string, DbtMacroMeta[]>;
+  docsByName: Map<string, DbtDocMeta[]>;
 };
 
 const MANIFEST_FILE = path.join('target', 'manifest.json');
@@ -65,8 +65,8 @@ class LanguageIntelligenceService {
 
     const modelsByName = new Map<string, DbtModelMeta>();
     const sourcesByKey = new Map<string, DbtSourceMeta>();
-    const macrosByName = new Map<string, DbtMacroMeta>();
-    const docsByName = new Map<string, DbtDocMeta>();
+    const macrosByName = new Map<string, DbtMacroMeta[]>();
+    const docsByName = new Map<string, DbtDocMeta[]>();
 
     Object.entries(manifest.nodes ?? {}).forEach(([uid, node]) => {
       const rt = node.resource_type ?? uid.split('.')[0];
@@ -95,24 +95,28 @@ class LanguageIntelligenceService {
 
     Object.entries(manifest.macros ?? {}).forEach(([uid, m]) => {
       if (!m.name) return;
-      macrosByName.set(m.name, {
+      const bucket = macrosByName.get(m.name) ?? [];
+      bucket.push({
         name: m.name,
         uniqueId: uid,
         packageName: m.package_name,
         description: m.description,
         originalFilePath: m.original_file_path,
       });
+      macrosByName.set(m.name, bucket);
     });
 
     Object.entries(manifest.docs ?? {}).forEach(([uid, d]: [string, any]) => {
       if (!d.name) return;
-      docsByName.set(d.name, {
+      const bucket = docsByName.get(d.name) ?? [];
+      bucket.push({
         name: d.name,
         uniqueId: uid,
         packageName: d.package_name,
         description: d.description,
         originalFilePath: d.original_file_path,
       });
+      docsByName.set(d.name, bucket);
     });
 
     const next: ProjectIndex = {
@@ -176,9 +180,13 @@ class LanguageIntelligenceService {
     const idx = await this.getIndex(projectId);
     return {
       projectId: idx.project.id,
-      macros: [...idx.macrosByName.values()].sort((a, b) =>
-        a.name.localeCompare(b.name),
-      ),
+      macros: [...idx.macrosByName.values()]
+        .flat()
+        .sort((a, b) =>
+          `${a.name}:${a.packageName ?? ''}`.localeCompare(
+            `${b.name}:${b.packageName ?? ''}`,
+          ),
+        ),
     };
   }
 
@@ -188,9 +196,13 @@ class LanguageIntelligenceService {
     const idx = await this.getIndex(projectId);
     return {
       projectId: idx.project.id,
-      docs: [...idx.docsByName.values()].sort((a, b) =>
-        a.name.localeCompare(b.name),
-      ),
+      docs: [...idx.docsByName.values()]
+        .flat()
+        .sort((a, b) =>
+          `${a.name}:${a.packageName ?? ''}`.localeCompare(
+            `${b.name}:${b.packageName ?? ''}`,
+          ),
+        ),
     };
   }
 
