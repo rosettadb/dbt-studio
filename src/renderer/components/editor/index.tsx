@@ -20,6 +20,7 @@ import type {
 } from '../../../types/editor';
 
 type EditorProps = {
+  projectId?: string;
   projectPath: string;
   tabs: EditorTabState[];
   activeTabId: EditorTabId | null;
@@ -33,9 +34,11 @@ type EditorProps = {
   onCancelClose: () => void;
   // Git status refresh after save
   onGitStatusRefresh?: () => void;
+  onOpenFile?: (filePath: string) => void;
 };
 
 export const Editor: React.FC<EditorProps> = ({
+  projectId,
   projectPath,
   tabs,
   activeTabId,
@@ -47,6 +50,7 @@ export const Editor: React.FC<EditorProps> = ({
   onDiscardAndClose,
   onCancelClose,
   onGitStatusRefresh,
+  onOpenFile,
 }) => {
   loader.config({
     paths: {
@@ -236,6 +240,8 @@ export const Editor: React.FC<EditorProps> = ({
             theme={monacoTheme}
             onChange={handleChange}
             readOnly={!isFileEditable || showDiffView}
+            projectId={projectId}
+            onOpenFile={onOpenFile}
           />
         )}
       </EditorViewport>

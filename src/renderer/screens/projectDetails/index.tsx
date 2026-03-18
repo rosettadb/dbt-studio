@@ -947,6 +947,7 @@ const ProjectDetails: React.FC = () => {
                   )}
                   {project.path && (
                     <Editor
+                      projectId={project.id}
                       projectPath={project.path}
                       tabs={tabs}
                       activeTabId={activeTabId}
@@ -966,6 +967,10 @@ const ProjectDetails: React.FC = () => {
                       onDiscardAndClose={onDiscardAndClose}
                       onCancelClose={onCancelClose}
                       onGitStatusRefresh={updateStatuses}
+                      onOpenFile={(filePath: string) => {
+                        setSelectedFilePath(filePath);
+                        openTab(filePath);
+                      }}
                     />
                   )}
                 </EditorContainer>

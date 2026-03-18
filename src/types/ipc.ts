@@ -310,8 +310,15 @@ export type LineageChannels =
   | 'lineage:getDownstream'
   | 'lineage:getFullLineage'
   | 'lineage:getModelMetadata'
+  | 'lineage:getColumnLineage'
   | 'lineage:getCurrentModelId'
-  | 'lineage:getColumnLineage';
+  | 'language-intel:manifest:version'
+  | 'language-intel:models:list'
+  | 'language-intel:sources:list'
+  | 'language-intel:macros:list'
+  | 'language-intel:docs:list'
+  | 'language-intel:variables:list'
+  | 'language-intel:env-vars:list';
 
 export type Channels =
   | TestChannels

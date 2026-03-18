@@ -9,6 +9,7 @@ import cloudExplorerService from './cloudExplorer.service';
 import { connectionStorage } from './connectionStorage.service';
 import { DuckLakeService } from './duckLake.service';
 import * as lineageService from './lineage.service';
+import * as languageIntelligenceService from './languageIntelligence.service';
 
 export {
   settingsServices,
@@ -22,4 +23,5 @@ export {
   utilsService,
   DuckLakeService,
   lineageService,
+  languageIntelligenceService,
 };
