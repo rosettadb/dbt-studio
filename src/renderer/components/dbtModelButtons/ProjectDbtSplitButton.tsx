@@ -4,9 +4,19 @@ import { toast } from 'react-toastify';
 import { SplitButton } from '../splitButton';
 import { icons } from '../../../../assets';
 import { Icon } from '../icon';
-import { Command, CommandType, Project } from '../../../types/backend';
+import {
+  Command,
+  CommandType,
+  DbtCommandType,
+  Project,
+} from '../../../types/backend';
 import { useDbt, useProcess } from '../../hooks';
-import { StagingModal, IncrementalModal, RawLayerModal } from '../modals';
+import {
+  StagingModal,
+  IncrementalModal,
+  RawLayerModal,
+  PushToCloudModal,
+} from '../modals';
 import { pathJoin } from '../../services/settings.services';
 
 interface ProjectDbtSplitButtonProps {
@@ -17,11 +27,10 @@ interface ProjectDbtSplitButtonProps {
   isRunningDbt: boolean;
   isRunningRosettaDbt: boolean;
   connection?: any;
+  environment?: 'local' | 'cloud';
   // Function handlers that are used elsewhere in ProjectDetails
   rosettaDbt: (project: Project, command: Command) => Promise<void>;
   handleBusinessLayerClick: (path: string) => void;
-  // eslint-disable-next-line react/no-unused-prop-types
-  onRunOnCloudClick: () => void;
 }
 
 export const ProjectDbtSplitButton: React.FC<ProjectDbtSplitButtonProps> = ({
@@ -32,10 +41,13 @@ export const ProjectDbtSplitButton: React.FC<ProjectDbtSplitButtonProps> = ({
   isRunningDbt,
   isRunningRosettaDbt,
   connection,
+  environment = 'local',
   rosettaDbt,
   handleBusinessLayerClick,
 }) => {
   // Functions that are only used in this component - moved inside
+  const [runInCloudModal, setRunInCloudModal] =
+    React.useState<DbtCommandType>();
 
   const {
     run: dbtRun,
@@ -47,7 +59,9 @@ export const ProjectDbtSplitButton: React.FC<ProjectDbtSplitButtonProps> = ({
     docsGenerate: dbtDocsGenerate,
     deps: dbtDeps,
     seed: dbtSeed,
-  } = useDbt();
+  } = useDbt(undefined, (command) => {
+    setRunInCloudModal(command);
+  });
   const { start, stop, isRunning } = useProcess();
   const [stagingPath, setStagingPath] = React.useState('');
   const [businessPath, setBusinessPath] = React.useState('');
@@ -87,6 +101,262 @@ export const ProjectDbtSplitButton: React.FC<ProjectDbtSplitButtonProps> = ({
     loadDefaults();
   }, [project.path]);
 
+  // Define all menu items with environment restrictions
+  const allMenuItems = [
+    // Rosetta Layer Generation Commands (Local Only)
+    {
+      name: 'Raw Layer',
+      onClick: () => {
+        if (!rosettaPath) {
+          toast.info('Please configure RosettaDB path in settings');
+          return;
+        }
+        setOpenRawLayerModal(true);
+      },
+      leftIcon: (
+        <img
+          src={icons.rosetta}
+          alt="Rosetta"
+          width={18}
+          height={18}
+          style={{
+            display: 'inline-block',
+            objectFit: 'contain',
+          }}
+        />
+      ),
+      subTitle: 'Generate dbt Raw Layer',
+      localOnly: true,
+    },
+    {
+      name: 'Staging Layer',
+      onClick: () => {
+        if (!rosettaPath) {
+          toast.info('Please configure RosettaDB path in settings');
+          return;
+        }
+        setStagingModal(true);
+      },
+      leftIcon: (
+        <img
+          src={icons.rosetta}
+          alt="Rosetta"
+          width={18}
+          height={18}
+          style={{
+            display: 'inline-block',
+            objectFit: 'contain',
+          }}
+        />
+      ),
+      subTitle: 'Generate dbt Staging Layer (runs extract first)',
+      localOnly: true,
+    },
+    {
+      name: 'Incremental/Enhanced Layer',
+      onClick: () => {
+        if (!rosettaPath) {
+          toast.info('Please configure RosettaDB path in settings');
+          return;
+        }
+        setIncrementalModal(true);
+      },
+      leftIcon: (
+        <img
+          src={icons.rosetta}
+          alt="Rosetta"
+          width={18}
+          height={18}
+          style={{
+            display: 'inline-block',
+            objectFit: 'contain',
+          }}
+        />
+      ),
+      subTitle: 'Generate dbt Incremental Layer',
+      localOnly: true,
+    },
+    {
+      name: 'Business Layer',
+      onClick: () => {
+        if (!rosettaPath) {
+          toast.info('Please configure RosettaDB path in settings');
+          return;
+        }
+        handleBusinessLayerClick(businessPath);
+      },
+      leftIcon: (
+        <img
+          src={icons.rosetta}
+          alt="Rosetta"
+          width={18}
+          height={18}
+          style={{
+            display: 'inline-block',
+            objectFit: 'contain',
+          }}
+        />
+      ),
+      subTitle: 'Generate dbt Business Layer',
+      localOnly: true,
+    },
+    // Production DBT Commands (Available in both environments)
+    {
+      name: 'Run',
+      onClick: () => {
+        if (!isDbtConfigured) {
+          toast.info('Please configure dbt path in settings');
+          return;
+        }
+        dbtRun(project);
+      },
+      leftIcon: <Icon src={icons.dbtTm} width={16} height={16} />,
+      subTitle: 'Run the dbt project',
+      localOnly: false,
+    },
+    {
+      name: 'Test',
+      onClick: () => {
+        if (!isDbtConfigured) {
+          toast.info('Please configure dbt path in settings');
+          return;
+        }
+        dbtTest(project);
+      },
+      leftIcon: <Icon src={icons.dbtTm} width={16} height={16} />,
+      subTitle: 'Run the dbt test',
+      localOnly: false,
+    },
+    {
+      name: 'Build',
+      onClick: () => {
+        if (!isDbtConfigured) {
+          toast.info('Please configure dbt path in settings');
+          return;
+        }
+        dbtBuild(project);
+      },
+      leftIcon: <Icon src={icons.dbtTm} width={16} height={16} />,
+      subTitle: 'Build the dbt project',
+      localOnly: false,
+    },
+    {
+      name: 'Compile',
+      onClick: () => {
+        if (!isDbtConfigured) {
+          toast.info('Please configure dbt path in settings');
+          return;
+        }
+        dbtCompileProject(project);
+      },
+      leftIcon: <Icon src={icons.dbtTm} width={16} height={16} />,
+      subTitle: 'Compile the dbt project',
+      localOnly: false,
+    },
+    {
+      name: 'Debug',
+      onClick: () => {
+        if (!isDbtConfigured) {
+          toast.info('Please configure dbt path in settings');
+          return;
+        }
+        dbtDebug(project);
+      },
+      leftIcon: <Icon src={icons.dbtTm} width={16} height={16} />,
+      subTitle: 'Debug dbt connections and project',
+      localOnly: true, // Debug is for local development
+    },
+    {
+      name: 'Generate Docs',
+      onClick: () => {
+        if (!isDbtConfigured) {
+          toast.info('Please configure dbt path in settings');
+          return;
+        }
+        dbtDocsGenerate(project);
+      },
+      leftIcon: <Icon src={icons.dbtTm} width={16} height={16} />,
+      subTitle: 'Generate documentation for the project',
+      localOnly: true, // Docs generation is typically local
+    },
+    {
+      name: (
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 4,
+          }}
+        >
+          <span>Serve Docs</span>
+          {isRunning ? <StopCircleOutlined /> : <PlayCircleOutline />}
+        </div>
+      ),
+      onClick: () => {
+        if (isRunning) {
+          stop();
+          return;
+        }
+        start(
+          `cd "${project.path}" && "${dbtPath}" docs serve`,
+          connection?.connection?.name ?? '',
+        );
+      },
+      leftIcon: <Icon src={icons.dbtTm} width={16} height={16} />,
+      subTitle: 'Serve the documentation website',
+      localOnly: true, // Serve docs is local development only
+    },
+    {
+      name: 'Clean',
+      onClick: () => {
+        if (!isDbtConfigured) {
+          toast.info('Please configure dbt path in settings');
+          return;
+        }
+        dbtClean(project);
+      },
+      leftIcon: <Icon src={icons.dbtTm} width={16} height={16} />,
+      subTitle: 'Clean the dbt project',
+      localOnly: false,
+    },
+    {
+      name: 'Deps',
+      onClick: () => {
+        if (!isDbtConfigured) {
+          toast.info('Please configure dbt path in settings');
+          return;
+        }
+        dbtDeps(project);
+      },
+      leftIcon: <Icon src={icons.dbtTm} width={16} height={16} />,
+      subTitle: 'Install dbt dependencies',
+      localOnly: false,
+    },
+    {
+      name: 'Seed',
+      onClick: () => {
+        if (!isDbtConfigured) {
+          toast.info('Please configure dbt path in settings');
+          return;
+        }
+        dbtSeed(project);
+      },
+      leftIcon: <Icon src={icons.dbtTm} width={16} height={16} />,
+      subTitle: 'Seed the dbt project',
+      localOnly: false,
+    },
+  ];
+
+  // Filter menu items based on environment
+  // In cloud mode: hide Rosetta layer generation and local development tools
+  // In local mode: show all items
+  const filteredMenuItems = allMenuItems.filter((item) => {
+    if (environment === 'cloud') {
+      return !item.localOnly;
+    }
+    return true; // Show all items in local environment
+  });
+
   return (
     <>
       <SplitButton
@@ -97,242 +367,11 @@ export const ProjectDbtSplitButton: React.FC<ProjectDbtSplitButtonProps> = ({
         disabled={isRunningDbt || isRunningRosettaDbt}
         isLoading={isRunningDbt || isRunningRosettaDbt}
         leftIcon={<PlayCircleOutline />}
-        menuItems={[
-          {
-            name: 'Raw Layer',
-            onClick: () => {
-              if (!rosettaPath) {
-                toast.info('Please configure RosettaDB path in settings');
-                return;
-              }
-              setOpenRawLayerModal(true);
-            },
-            leftIcon: (
-              <img
-                src={icons.rosetta}
-                alt="Rosetta"
-                width={18}
-                height={18}
-                style={{
-                  display: 'inline-block',
-                  objectFit: 'contain',
-                }}
-              />
-            ),
-            subTitle: 'Generate dbt Raw Layer',
-          },
-          {
-            name: 'Staging Layer',
-            onClick: () => {
-              if (!rosettaPath) {
-                toast.info('Please configure RosettaDB path in settings');
-                return;
-              }
-              setStagingModal(true);
-            },
-            leftIcon: (
-              <img
-                src={icons.rosetta}
-                alt="Rosetta"
-                width={18}
-                height={18}
-                style={{
-                  display: 'inline-block',
-                  objectFit: 'contain',
-                }}
-              />
-            ),
-            subTitle: 'Generate dbt Staging Layer (runs extract first)',
-          },
-          {
-            name: 'Incremental/Enhanced Layer',
-            onClick: () => {
-              if (!rosettaPath) {
-                toast.info('Please configure RosettaDB path in settings');
-                return;
-              }
-              setIncrementalModal(true);
-            },
-            leftIcon: (
-              <img
-                src={icons.rosetta}
-                alt="Rosetta"
-                width={18}
-                height={18}
-                style={{
-                  display: 'inline-block',
-                  objectFit: 'contain',
-                }}
-              />
-            ),
-            subTitle: 'Generate dbt Incremental Layer',
-          },
-          {
-            name: 'Business Layer',
-            onClick: () => {
-              if (!rosettaPath) {
-                toast.info('Please configure RosettaDB path in settings');
-                return;
-              }
-              handleBusinessLayerClick(businessPath);
-            },
-            leftIcon: (
-              <img
-                src={icons.rosetta}
-                alt="Rosetta"
-                width={18}
-                height={18}
-                style={{
-                  display: 'inline-block',
-                  objectFit: 'contain',
-                }}
-              />
-            ),
-            subTitle: 'Generate dbt Business Layer',
-          },
-          {
-            name: 'Run',
-            onClick: () => {
-              if (!isDbtConfigured) {
-                toast.info('Please configure dbt path in settings');
-                return;
-              }
-              dbtRun(project);
-            },
-            leftIcon: <Icon src={icons.dbtTm} width={16} height={16} />,
-            subTitle: 'Run the dbt project',
-          },
-          // {
-          //   name: 'Run on cloud',
-          //   onClick: () => {
-          //     onRunOnCloudClick();
-          //   },
-          //   leftIcon: <CloudUploadOutlined />,
-          //   subTitle: 'Run on cloud',
-          // },
-          {
-            name: 'Test',
-            onClick: () => {
-              if (!isDbtConfigured) {
-                toast.info('Please configure dbt path in settings');
-                return;
-              }
-              dbtTest(project);
-            },
-            leftIcon: <Icon src={icons.dbtTm} width={16} height={16} />,
-            subTitle: 'Run the dbt test',
-          },
-          {
-            name: 'Build',
-            onClick: () => {
-              if (!isDbtConfigured) {
-                toast.info('Please configure dbt path in settings');
-                return;
-              }
-              dbtBuild(project);
-            },
-            leftIcon: <Icon src={icons.dbtTm} width={16} height={16} />,
-            subTitle: 'Build the dbt project',
-          },
-          {
-            name: 'Compile',
-            onClick: () => {
-              if (!isDbtConfigured) {
-                toast.info('Please configure dbt path in settings');
-                return;
-              }
-              dbtCompileProject(project);
-            },
-            leftIcon: <Icon src={icons.dbtTm} width={16} height={16} />,
-            subTitle: 'Compile the dbt project',
-          },
-          {
-            name: 'Debug',
-            onClick: () => {
-              if (!isDbtConfigured) {
-                toast.info('Please configure dbt path in settings');
-                return;
-              }
-              dbtDebug(project);
-            },
-            leftIcon: <Icon src={icons.dbtTm} width={16} height={16} />,
-            subTitle: 'Debug dbt connections and project',
-          },
-          {
-            name: 'Generate Docs',
-            onClick: () => {
-              if (!isDbtConfigured) {
-                toast.info('Please configure dbt path in settings');
-                return;
-              }
-              dbtDocsGenerate(project);
-            },
-            leftIcon: <Icon src={icons.dbtTm} width={16} height={16} />,
-            subTitle: 'Generate documentation for the project',
-          },
-          {
-            name: (
-              <div
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 4,
-                }}
-              >
-                <span>Serve Docs</span>
-                {isRunning ? <StopCircleOutlined /> : <PlayCircleOutline />}
-              </div>
-            ),
-            onClick: () => {
-              if (isRunning) {
-                stop();
-                return;
-              }
-              start(
-                `cd "${project.path}" && "${dbtPath}" docs serve`,
-                connection?.connection?.name ?? '',
-              );
-            },
-            leftIcon: <Icon src={icons.dbtTm} width={16} height={16} />,
-            subTitle: 'Serve the documentation website',
-          },
-          {
-            name: 'Clean',
-            onClick: () => {
-              if (!isDbtConfigured) {
-                toast.info('Please configure dbt path in settings');
-                return;
-              }
-              dbtClean(project);
-            },
-            leftIcon: <Icon src={icons.dbtTm} width={16} height={16} />,
-            subTitle: 'Clean the dbt project',
-          },
-          {
-            name: 'Deps',
-            onClick: () => {
-              if (!isDbtConfigured) {
-                toast.info('Please configure dbt path in settings');
-                return;
-              }
-              dbtDeps(project);
-            },
-            leftIcon: <Icon src={icons.dbtTm} width={16} height={16} />,
-            subTitle: 'Clean the dbt project',
-          },
-          {
-            name: 'Seed',
-            onClick: () => {
-              if (!isDbtConfigured) {
-                toast.info('Please configure dbt path in settings');
-                return;
-              }
-              dbtSeed(project);
-            },
-            leftIcon: <Icon src={icons.dbtTm} width={16} height={16} />,
-            subTitle: 'Seed the dbt project',
-          },
-        ]}
+        menuItems={filteredMenuItems.map((item) => {
+          // eslint-disable-next-line @typescript-eslint/no-unused-vars
+          const { localOnly, ...menuItem } = item;
+          return menuItem;
+        })}
       />
       {openRawLayerModal && project?.path && (
         <RawLayerModal
@@ -396,6 +435,14 @@ export const ProjectDbtSplitButton: React.FC<ProjectDbtSplitButtonProps> = ({
             } as Command);
             setIncrementalModal(false);
           }}
+        />
+      )}
+      {runInCloudModal && (
+        <PushToCloudModal
+          isOpen={!!runInCloudModal}
+          onClose={() => setRunInCloudModal(undefined)}
+          project={project}
+          command={runInCloudModal}
         />
       )}
     </>

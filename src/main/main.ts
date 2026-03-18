@@ -10,6 +10,7 @@ import {
   SettingsService,
   AnalyticsService,
   UpdateService,
+  RosettaCloudService,
   DuckLakeConnectionManager,
 } from './services';
 import { copyAssetsToUserData } from './utils/fileHelper';
@@ -31,13 +32,85 @@ protocol.registerSchemesAsPrivileged([
       bypassCSP: true,
     },
   },
+  {
+    scheme: 'rosetta',
+    privileges: {
+      standard: true,
+      secure: true,
+    },
+  },
 ]);
 
 setupApplicationIcon();
 
+let windowManager: WindowManager | null = null;
+async function handleDeepLink(url: string) {
+  try {
+    const parsedUrl = new URL(url);
+    if (
+      parsedUrl.protocol === 'rosetta:' &&
+      (parsedUrl.pathname === '//auth' || parsedUrl.host === 'auth')
+    ) {
+      const apiKey = parsedUrl.searchParams.get('token'); // Still called 'token' in URL for compatibility
+      if (apiKey) {
+        try {
+          await RosettaCloudService.storeApiKey(apiKey);
+
+          windowManager
+            ?.getMainWindow()
+            ?.webContents.send('rosettaCloud:apiKeyUpdated');
+
+          windowManager
+            ?.getMainWindow()
+            ?.webContents.send('rosettaCloud:authSuccess', {
+              apiKey,
+            });
+
+          return;
+        } catch (storageError) {
+          console.error(
+            'Failed to store API key from deep link:',
+            storageError,
+          );
+          windowManager
+            ?.getMainWindow()
+            ?.webContents.send('rosettaCloud:authError', {
+              error: 'Failed to store API key. Please try again.',
+            });
+          return;
+        }
+      }
+
+      windowManager
+        ?.getMainWindow()
+        ?.webContents.send('rosettaCloud:authError', {
+          error: 'Missing API key in deep link response.',
+        });
+    }
+  } catch (error) {
+    console.error('Deep link processing error:', error);
+    windowManager?.getMainWindow()?.webContents.send('rosettaCloud:authError', {
+      error:
+        error instanceof Error
+          ? `Failed to process deep link: ${error.message}`
+          : 'Failed to process deep link.',
+    });
+  }
+}
+
 // Ensure single instance of the app
 const gotTheLock = app.requestSingleInstanceLock();
-let windowManager: WindowManager | null = null;
+
+// Register custom protocol for deep linking
+if (process.defaultApp) {
+  if (process.argv.length >= 2) {
+    app.setAsDefaultProtocolClient('rosetta', process.execPath, [
+      process.argv[1],
+    ]);
+  }
+} else {
+  app.setAsDefaultProtocolClient('rosetta');
+}
 
 if (!gotTheLock) {
   console.log('Another instance is already running. Quitting...');
@@ -53,6 +126,12 @@ if (!gotTheLock) {
 
       if (splash) {
         splash.webContents.once('did-finish-load', async () => {
+          // Verify stored Rosetta Cloud token on startup; clear if invalid
+          // eslint-disable-next-line promise/no-nesting
+          RosettaCloudService.checkTokenOnStartup().catch((e) =>
+            console.error('Token check on startup failed:', e),
+          );
+
           const updateMessage = async (msg: string) => {
             await splash.webContents.executeJavaScript(
               `window.updateLoaderMessage(${JSON.stringify(msg)})`,
@@ -150,8 +229,14 @@ if (!gotTheLock) {
     })
     .catch(console.log);
 
-  app.on('second-instance', () => {
+  app.on('second-instance', (event, commandLine) => {
     if (!windowManager) return;
+
+    // Handle deep link from second instance
+    const url = commandLine.find((arg) => arg.startsWith('rosetta://'));
+    if (url) {
+      handleDeepLink(url);
+    }
 
     const activeWindow = windowManager.getMainWindow();
 
@@ -161,6 +246,21 @@ if (!gotTheLock) {
       activeWindow.focus();
     } else {
       windowManager.startApplication();
+    }
+  });
+
+  // Handle deep links on macOS
+  app.on('open-url', (event, url) => {
+    event.preventDefault();
+    handleDeepLink(url);
+  });
+
+  // Handle deep links on Windows/Linux
+  app.on('ready', () => {
+    // Check if app was opened with a deep link
+    const url = process.argv.find((arg) => arg.startsWith('rosetta://'));
+    if (url) {
+      handleDeepLink(url);
     }
   });
 }

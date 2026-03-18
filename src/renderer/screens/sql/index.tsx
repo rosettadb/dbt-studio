@@ -191,26 +191,38 @@ const Sql = () => {
   // DuckLake connection lifecycle management
   // Acquire connection when DuckLake connection becomes active, release on unmount or connection change
   useEffect(() => {
-    let acquiredInstanceId: string | null = null;
+    if (!isDuckLakeConnection || !activeConnectionId) {
+      return () => {
+        /* empty */
+      };
+    }
 
-    const acquireConnectionForActiveTab = async () => {
-      if (isDuckLakeConnection && activeConnectionId) {
-        const instanceId = activeConnectionId.replace('ducklake-', '');
-        try {
-          await DuckLakeService.acquireConnection(instanceId);
-          acquiredInstanceId = instanceId;
-        } catch {
-          /* empty */
+    const instanceId = activeConnectionId.replace('ducklake-', '');
+    let disposed = false;
+    let acquired = false;
+
+    DuckLakeService.acquireConnection(instanceId)
+      .then(() => {
+        acquired = true;
+        if (disposed) {
+          return DuckLakeService.releaseConnection(instanceId);
         }
-      }
-    };
 
-    acquireConnectionForActiveTab();
+        return undefined;
+      })
+      .catch(() => {
+        /* empty */
+
+        return undefined;
+      });
 
     // Cleanup: release connection when component unmounts or connection changes
     return () => {
-      if (acquiredInstanceId) {
-        DuckLakeService.releaseConnection(acquiredInstanceId);
+      disposed = true;
+      if (acquired) {
+        DuckLakeService.releaseConnection(instanceId).catch(() => {
+          /* empty */
+        });
       }
     };
   }, [isDuckLakeConnection, activeConnectionId]);
@@ -1002,6 +1014,7 @@ const Sql = () => {
                         }));
                       }
                     }}
+                    onQuerySuccess={handleRefreshSchema}
                     isLoading={isLoadingConnection}
                   />
                 </Box>
@@ -1088,6 +1101,7 @@ const Sql = () => {
                       }));
                     }
                   }}
+                  onQuerySuccess={handleRefreshSchema}
                   isLoading={isLoadingConnection}
                 />
               </Box>

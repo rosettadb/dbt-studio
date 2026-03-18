@@ -11,8 +11,10 @@ import {
   registerUpdateHandlers,
   registerCloudExplorerHandlers,
   registerAIHandlers,
+  registerRosettaCloudIpcHandlers,
   registerDuckLakeHandlers,
   registerLineageHandlers,
+  registerNotebooksHandlers,
 } from './ipcHandlers';
 
 const registerHandlers = (mainWindow: BrowserWindow) => {
@@ -27,8 +29,10 @@ const registerHandlers = (mainWindow: BrowserWindow) => {
   registerUpdateHandlers();
   registerCloudExplorerHandlers();
   registerAIHandlers();
+  registerRosettaCloudIpcHandlers();
   registerDuckLakeHandlers();
   registerLineageHandlers();
+  registerNotebooksHandlers();
 };
 
 export default registerHandlers;

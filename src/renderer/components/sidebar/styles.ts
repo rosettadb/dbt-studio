@@ -23,6 +23,10 @@ export const StyledDrawer = styled(Drawer, {
     height: 'calc(100% - 42px)',
     overflowX: 'hidden',
     borderRight: 'none',
+    boxShadow:
+      theme.palette.mode === 'dark'
+        ? '2px 0 4px rgba(0, 0, 0, 0.15)'
+        : '2px 0 4px rgba(0, 0, 0, 0.04)',
     transition: theme.transitions.create('width', {
       easing: theme.transitions.easing.sharp,
       duration: open
@@ -46,4 +50,5 @@ export const SidebarContent = styled(Box)(({ theme }) => ({
   borderLeft: `2px solid ${theme.palette.background.default}`,
   width: '100%',
   height: '100%',
+  overflow: 'hidden',
 }));

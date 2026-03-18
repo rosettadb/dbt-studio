@@ -17,6 +17,7 @@ export const ipcRenderer = {
 
 export const app = {
   getPath: jest.fn(() => '/mock/app/path'),
+  getName: jest.fn(() => 'dbt-studio-test'),
   getVersion: jest.fn(() => '0.0.0-test'),
   whenReady: jest.fn(() => Promise.resolve()),
   on: jest.fn(),

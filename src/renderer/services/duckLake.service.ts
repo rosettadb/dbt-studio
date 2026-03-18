@@ -20,6 +20,8 @@ import {
   DuckLakeSnapshotParams,
   DuckLakePaginatedResult,
   DuckLakeSchemaInfo,
+  DuckLakeViewInfo,
+  DuckLakeColumnInfo,
 } from '../../types/duckLake';
 
 export namespace DuckLakeService {
@@ -307,6 +309,26 @@ export namespace DuckLakeService {
       void
     >('ducklake:snapshot:restore', { instanceId, tableName, snapshotId });
     return data;
+  }
+
+  // View Management (Plan 25)
+  export async function listViews(
+    instanceId: string,
+  ): Promise<DuckLakeViewInfo[]> {
+    return window.electron.ipcRenderer.invoke('ducklake:view:list', instanceId);
+  }
+
+  export async function getViewSchema(
+    instanceId: string,
+    schemaName: string,
+    viewName: string,
+  ): Promise<DuckLakeColumnInfo[]> {
+    return window.electron.ipcRenderer.invoke(
+      'ducklake:view:getSchema',
+      instanceId,
+      schemaName,
+      viewName,
+    );
   }
 
   export async function updateRows(

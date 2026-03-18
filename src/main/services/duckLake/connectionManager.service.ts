@@ -213,7 +213,13 @@ export default class DuckLakeConnectionManager {
           `[DuckLake] Scheduling cleanup for instance: ${instanceId} in ${this.CLEANUP_DELAY_MS}ms`,
         );
         entry.cleanupTimer = setTimeout(() => {
-          this.performDelayedCleanup(instanceId);
+          this.performDelayedCleanup(instanceId).catch((error) => {
+            // eslint-disable-next-line no-console
+            console.error(
+              `[DuckLake] Unhandled error in delayed cleanup for instance ${instanceId}:`,
+              error,
+            );
+          });
         }, this.CLEANUP_DELAY_MS);
       }
     }
@@ -233,7 +239,15 @@ export default class DuckLakeConnectionManager {
       console.log(
         `[DuckLake] Executing delayed cleanup for instance: ${instanceId}`,
       );
-      await this.disconnect(instanceId);
+      try {
+        await this.disconnect(instanceId);
+      } catch (error) {
+        // eslint-disable-next-line no-console
+        console.error(
+          `[DuckLake] Error during delayed cleanup for instance ${instanceId}:`,
+          error,
+        );
+      }
     } else if (entry) {
       // eslint-disable-next-line no-console
       console.log(

@@ -1,6 +1,7 @@
 import FolderIcon from '@mui/icons-material/Folder';
 import PsychologyIcon from '@mui/icons-material/Psychology';
 import ManageAccountsIcon from '@mui/icons-material/ManageAccounts';
+import CloudIcon from '@mui/icons-material/Cloud';
 import InfoIcon from '@mui/icons-material/Info';
 import { SvgIconComponent } from '@mui/icons-material';
 import React from 'react';
@@ -64,6 +65,11 @@ export const settingsSidebarElements: SettingsSidebarElement[] = [
     icon: DuckDBIcon as any,
     text: 'DuckDB',
     path: '/app/settings/duckdb',
+  },
+  {
+    icon: CloudIcon,
+    text: 'Rosetta Cloud',
+    path: '/app/settings/profile',
   },
   {
     icon: InfoIcon,

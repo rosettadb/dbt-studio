@@ -4,6 +4,7 @@ import path from 'path';
 import fs from 'fs';
 import os from 'os';
 import { v4 as uuidV4 } from 'uuid';
+import { NotebooksService } from './notebooks.service';
 import {
   BigQueryConnection,
   BigQueryTestResponse,
@@ -311,6 +312,12 @@ export default class ConnectorsService {
           `db-s3-secret-key-${connection.name}`,
           credentials.storage.s3.secretAccessKey,
         );
+        if (credentials.storage.s3.sessionToken) {
+          await SecureStorageService.setCredential(
+            `db-s3-session-token-${connection.name}`,
+            credentials.storage.s3.sessionToken,
+          );
+        }
       }
     }
 
@@ -357,6 +364,9 @@ export default class ConnectorsService {
       const s3SecretKey = await SecureStorageService.getCredential(
         `db-s3-secret-key-${connection.connection.name}`,
       );
+      const s3SessionToken = await SecureStorageService.getCredential(
+        `db-s3-session-token-${connection.connection.name}`,
+      );
 
       if (s3Region) {
         process.env[`db-s3-region-${connection.connection.name}`] = s3Region;
@@ -368,6 +378,10 @@ export default class ConnectorsService {
       if (s3SecretKey) {
         process.env[`db-s3-secret-key-${connection.connection.name}`] =
           s3SecretKey;
+      }
+      if (s3SessionToken) {
+        process.env[`db-s3-session-token-${connection.connection.name}`] =
+          s3SessionToken;
       }
     }
 
@@ -607,6 +621,10 @@ export default class ConnectorsService {
       );
     }
 
+    // Archive notebooks for this connection
+    // If archival fails, abort the deletion to prevent orphaned notebooks
+    await NotebooksService.archiveConnectionNotebooks(connectionToDelete.id);
+
     // Remove the connection from the database
     const updatedConnections = connections.filter(
       (connection) => connection.id !== connectionId,
@@ -639,7 +657,17 @@ export default class ConnectorsService {
         return testDuckDBConnection(connection);
       case 'ducklake':
         // DuckLake connection test - validate instance exists
-        return true; // For now, assume valid if it has an instanceId
+        try {
+          const instance = await DuckLakeService.getInstance(
+            connection.instanceId,
+          );
+          if (!instance || !instance.id) {
+            return false;
+          }
+          return true;
+        } catch (error) {
+          return false;
+        }
       case 'redshift':
         return testRedshiftConnection(connection);
       case 'kinetica':
@@ -816,28 +844,13 @@ export default class ConnectorsService {
 
     // Handle ducklake-specific configuration
     if (isDuckLake) {
-      // eslint-disable-next-line no-console
-      console.log(
-        '[generateRosettaYml] Processing ducklake connection:',
-        connection,
-      );
       const instance = await DuckLakeService.getInstance(connection.instanceId);
-      // eslint-disable-next-line no-console
-      console.log(
-        '[generateRosettaYml] Retrieved datalake instance:',
-        instance,
-      );
 
       // Get credentials if available
       const credentials = await DuckLakeInstanceStore.retrieveCredentials(
         instance.id,
         instance.catalog as any,
         instance.storage as any,
-      );
-      // eslint-disable-next-line no-console
-      console.log(
-        '[generateRosettaYml] Retrieved credentials, storage type:',
-        credentials.storage?.type,
       );
 
       connectionConfig.ducklakeDataPath = instance.dataPath;
@@ -863,11 +876,6 @@ export default class ConnectorsService {
         connectionConfig.s3AccessKeyId = `\${db-s3-access-key-${connection.name}}`;
         connectionConfig.s3SecretAccessKey = `\${db-s3-secret-key-${connection.name}}`;
       }
-      // eslint-disable-next-line no-console
-      console.log(
-        '[generateRosettaYml] Final ducklake config:',
-        connectionConfig,
-      );
     } else if (
       connection.type !== 'databricks' &&
       connection.type !== 'duckdb' &&

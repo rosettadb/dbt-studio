@@ -12,6 +12,7 @@ import {
   DuckLakeCatalogConfig,
   DuckLakeQueryRequest,
   DuckLakeStorageConfig,
+  DuckLakeSnapshotParams,
 } from '../../types/duckLake';
 
 const registerDuckLakeHandlers = () => {
@@ -64,7 +65,10 @@ const registerDuckLakeHandlers = () => {
 
   ipcMain.handle(
     'ducklake:table:get',
-    async (_event, instanceId: string, tableName: string) => {
+    async (
+      _event,
+      { instanceId, tableName }: { instanceId: string; tableName: string },
+    ) => {
       return DuckLakeService.getTable(instanceId, tableName);
     },
   );
@@ -73,9 +77,11 @@ const registerDuckLakeHandlers = () => {
     'ducklake:table:import',
     async (
       _event,
-      instanceId: string,
-      tableName: string,
-      sourceQuery: string,
+      {
+        instanceId,
+        tableName,
+        sourceQuery,
+      }: { instanceId: string; tableName: string; sourceQuery: string },
     ) => {
       return DuckLakeService.importTable(instanceId, tableName, sourceQuery);
     },
@@ -83,14 +89,24 @@ const registerDuckLakeHandlers = () => {
 
   ipcMain.handle(
     'ducklake:table:delete',
-    async (_event, instanceId: string, tableName: string) => {
+    async (
+      _event,
+      { instanceId, tableName }: { instanceId: string; tableName: string },
+    ) => {
       return DuckLakeService.deleteTable(instanceId, tableName);
     },
   );
 
   ipcMain.handle(
     'ducklake:table:rename',
-    async (_event, instanceId: string, oldName: string, newName: string) => {
+    async (
+      _event,
+      {
+        instanceId,
+        oldName,
+        newName,
+      }: { instanceId: string; oldName: string; newName: string },
+    ) => {
       return DuckLakeService.renameTable(instanceId, oldName, newName);
     },
   );
@@ -99,11 +115,19 @@ const registerDuckLakeHandlers = () => {
     'ducklake:table:addColumn',
     async (
       _event,
-      instanceId: string,
-      tableName: string,
-      columnName: string,
-      columnType: string,
-      defaultValue?: string,
+      {
+        instanceId,
+        tableName,
+        columnName,
+        columnType,
+        defaultValue,
+      }: {
+        instanceId: string;
+        tableName: string;
+        columnName: string;
+        columnType: string;
+        defaultValue?: string;
+      },
     ) => {
       return DuckLakeService.addColumn(
         instanceId,
@@ -119,9 +143,11 @@ const registerDuckLakeHandlers = () => {
     'ducklake:table:dropColumn',
     async (
       _event,
-      instanceId: string,
-      tableName: string,
-      columnName: string,
+      {
+        instanceId,
+        tableName,
+        columnName,
+      }: { instanceId: string; tableName: string; columnName: string },
     ) => {
       return DuckLakeService.dropColumn(instanceId, tableName, columnName);
     },
@@ -131,10 +157,17 @@ const registerDuckLakeHandlers = () => {
     'ducklake:table:renameColumn',
     async (
       _event,
-      instanceId: string,
-      tableName: string,
-      oldColumnName: string,
-      newColumnName: string,
+      {
+        instanceId,
+        tableName,
+        oldColumnName,
+        newColumnName,
+      }: {
+        instanceId: string;
+        tableName: string;
+        oldColumnName: string;
+        newColumnName: string;
+      },
     ) => {
       return DuckLakeService.renameColumn(
         instanceId,
@@ -149,10 +182,17 @@ const registerDuckLakeHandlers = () => {
     'ducklake:table:alterColumnType',
     async (
       _event,
-      instanceId: string,
-      tableName: string,
-      columnName: string,
-      newType: string,
+      {
+        instanceId,
+        tableName,
+        columnName,
+        newType,
+      }: {
+        instanceId: string;
+        tableName: string;
+        columnName: string;
+        newType: string;
+      },
     ) => {
       return DuckLakeService.alterColumnType(
         instanceId,
@@ -167,9 +207,11 @@ const registerDuckLakeHandlers = () => {
     'ducklake:table:setPartitionedBy',
     async (
       _event,
-      instanceId: string,
-      tableName: string,
-      columnNames: string[],
+      {
+        instanceId,
+        tableName,
+        columnNames,
+      }: { instanceId: string; tableName: string; columnNames: string[] },
     ) => {
       return DuckLakeService.setPartitionedBy(
         instanceId,
@@ -183,9 +225,11 @@ const registerDuckLakeHandlers = () => {
     'ducklake:table:updateRows',
     async (
       _event,
-      instanceId: string,
-      tableName: string,
-      updateQuery: string,
+      {
+        instanceId,
+        tableName,
+        updateQuery,
+      }: { instanceId: string; tableName: string; updateQuery: string },
     ) => {
       return DuckLakeService.updateRows(instanceId, tableName, updateQuery);
     },
@@ -195,9 +239,11 @@ const registerDuckLakeHandlers = () => {
     'ducklake:table:deleteRows',
     async (
       _event,
-      instanceId: string,
-      tableName: string,
-      deleteQuery: string,
+      {
+        instanceId,
+        tableName,
+        deleteQuery,
+      }: { instanceId: string; tableName: string; deleteQuery: string },
     ) => {
       return DuckLakeService.deleteRows(instanceId, tableName, deleteQuery);
     },
@@ -207,9 +253,11 @@ const registerDuckLakeHandlers = () => {
     'ducklake:table:upsertRows',
     async (
       _event,
-      instanceId: string,
-      tableName: string,
-      upsertQuery: string,
+      {
+        instanceId,
+        tableName,
+        upsertQuery,
+      }: { instanceId: string; tableName: string; upsertQuery: string },
     ) => {
       return DuckLakeService.upsertRows(instanceId, tableName, upsertQuery);
     },
@@ -218,7 +266,10 @@ const registerDuckLakeHandlers = () => {
   // Phase 8b: Table Details Handler
   ipcMain.handle(
     'ducklake:table:getDetails',
-    async (_event, instanceId: string, tableName: string) => {
+    async (
+      _event,
+      { instanceId, tableName }: { instanceId: string; tableName: string },
+    ) => {
       return DuckLakeService.getTableDetails(instanceId, tableName);
     },
   );
@@ -226,17 +277,24 @@ const registerDuckLakeHandlers = () => {
   // Snapshot Management Handlers
   ipcMain.handle(
     'ducklake:snapshot:list',
-    async (_event, instanceId: string, tableName: string) => {
+    async (
+      _event,
+      { instanceId, tableName }: { instanceId: string; tableName: string },
+    ) => {
       return DuckLakeService.listSnapshots(instanceId, tableName);
     },
   );
 
   ipcMain.handle(
     'ducklake:instance:listSnapshots',
-    async (_event, instanceId: string, params: any) => {
-      // Ensure params has defaults if missing (though Service also defaults)
-      const listParams = params || { page: 1, pageSize: 100 };
-      return DuckLakeService.listInstanceSnapshots(instanceId, listParams);
+    async (
+      _event,
+      {
+        instanceId,
+        params,
+      }: { instanceId: string; params?: DuckLakeSnapshotParams },
+    ) => {
+      return DuckLakeService.listInstanceSnapshots(instanceId, params);
     },
   );
 
@@ -244,11 +302,30 @@ const registerDuckLakeHandlers = () => {
     'ducklake:snapshot:restore',
     async (
       _event,
-      instanceId: string,
-      tableName: string,
-      snapshotId: string,
+      {
+        instanceId,
+        tableName,
+        snapshotId,
+      }: { instanceId: string; tableName: string; snapshotId: string },
     ) => {
       return DuckLakeService.restoreSnapshot(instanceId, tableName, snapshotId);
+    },
+  );
+
+  // View Management Handlers (Plan 25)
+  ipcMain.handle('ducklake:view:list', async (_event, instanceId: string) => {
+    return DuckLakeService.listViews(instanceId);
+  });
+
+  ipcMain.handle(
+    'ducklake:view:getSchema',
+    async (
+      _event,
+      instanceId: string,
+      schemaName: string,
+      viewName: string,
+    ) => {
+      return DuckLakeService.getViewSchema(instanceId, schemaName, viewName);
     },
   );
 

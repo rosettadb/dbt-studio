@@ -149,10 +149,16 @@ export const QueryResult: React.FC<Props> = ({ results, exportContext }) => {
     const baseTotal =
       results.rowCount ?? (results.data ? results.data.length : 0);
 
-    if (isDuckLake) {
+    const isCmd =
+      results.isCommand ||
+      ((!results.fields || results.fields.length === 0) && results.success);
+
+    if (isDuckLake && !isCmd) {
       setTotalCount(baseTotal);
       setPage(0);
       if (isDuckLakeReady) {
+        // eslint-disable-next-line no-console
+        console.log('[QueryResult] Triggering initial fetchPage for SELECT');
         fetchPage(0, perPage);
       }
     } else {

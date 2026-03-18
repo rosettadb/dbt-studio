@@ -268,6 +268,9 @@ const SelectProject: React.FC = () => {
           };
           connectionId =
             await connectorsServices.saveConnection(datalakeConnection);
+        } else {
+          // Datalake instance not found - don't use the raw instance ID
+          connectionId = undefined;
         }
       }
       const project = await projectsServices.addProject({
