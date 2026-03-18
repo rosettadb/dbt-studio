@@ -21,8 +21,8 @@ import type {
 type ProjectIndex = {
   project: Project;
   mtimeMs?: number;
-  modelsByName: Map<string, DbtModelMeta>;
-  sourcesByKey: Map<string, DbtSourceMeta>;
+  modelsByName: Map<string, DbtModelMeta[]>;
+  sourcesByKey: Map<string, DbtSourceMeta[]>;
   macrosByName: Map<string, DbtMacroMeta[]>;
   docsByName: Map<string, DbtDocMeta[]>;
 };
@@ -63,27 +63,30 @@ class LanguageIntelligenceService {
       };
     }
 
-    const modelsByName = new Map<string, DbtModelMeta>();
-    const sourcesByKey = new Map<string, DbtSourceMeta>();
+    const modelsByName = new Map<string, DbtModelMeta[]>();
+    const sourcesByKey = new Map<string, DbtSourceMeta[]>();
     const macrosByName = new Map<string, DbtMacroMeta[]>();
     const docsByName = new Map<string, DbtDocMeta[]>();
 
     Object.entries(manifest.nodes ?? {}).forEach(([uid, node]) => {
       const rt = node.resource_type ?? uid.split('.')[0];
       if (rt !== 'model' || !node.name) return;
-      modelsByName.set(node.name, {
+      const bucket = modelsByName.get(node.name) ?? [];
+      bucket.push({
         name: node.name,
         uniqueId: uid,
         packageName: node.package_name,
         description: node.description,
         originalFilePath: node.original_file_path,
       });
+      modelsByName.set(node.name, bucket);
     });
 
     Object.entries(manifest.sources ?? {}).forEach(([uid, src]) => {
       if (!src.source_name || !src.name) return;
       const key = `${src.source_name}.${src.name}`;
-      sourcesByKey.set(key, {
+      const bucket = sourcesByKey.get(key) ?? [];
+      bucket.push({
         sourceName: src.source_name,
         tableName: src.name,
         uniqueId: uid,
@@ -91,6 +94,7 @@ class LanguageIntelligenceService {
         description: src.description,
         originalFilePath: src.original_file_path,
       });
+      sourcesByKey.set(key, bucket);
     });
 
     Object.entries(manifest.macros ?? {}).forEach(([uid, m]) => {
@@ -154,9 +158,13 @@ class LanguageIntelligenceService {
     const idx = await this.getIndex(projectId);
     return {
       projectId: idx.project.id,
-      models: [...idx.modelsByName.values()].sort((a, b) =>
-        a.name.localeCompare(b.name),
-      ),
+      models: [...idx.modelsByName.values()]
+        .flat()
+        .sort((a, b) =>
+          `${a.name}:${a.packageName ?? ''}`.localeCompare(
+            `${b.name}:${b.packageName ?? ''}`,
+          ),
+        ),
     };
   }
 
@@ -166,11 +174,13 @@ class LanguageIntelligenceService {
     const idx = await this.getIndex(projectId);
     return {
       projectId: idx.project.id,
-      sources: [...idx.sourcesByKey.values()].sort((a, b) =>
-        `${a.sourceName}.${a.tableName}`.localeCompare(
-          `${b.sourceName}.${b.tableName}`,
+      sources: [...idx.sourcesByKey.values()]
+        .flat()
+        .sort((a, b) =>
+          `${a.sourceName}.${a.tableName}:${a.packageName ?? ''}`.localeCompare(
+            `${b.sourceName}.${b.tableName}:${b.packageName ?? ''}`,
+          ),
         ),
-      ),
     };
   }
 

@@ -392,211 +392,224 @@ export const CodeEditor = ({
       monacoInstance.languages.registerCompletionItemProvider('jinja-sql', {
         triggerCharacters: ["'", '"', '(', '.', ','],
         provideCompletionItems: async (model, position) => {
-          const line = model.getValueInRange({
-            startLineNumber: position.lineNumber,
-            startColumn: 1,
-            endLineNumber: position.lineNumber,
-            endColumn: position.column,
-          });
+          try {
+            const line = model.getValueInRange({
+              startLineNumber: position.lineNumber,
+              startColumn: 1,
+              endLineNumber: position.lineNumber,
+              endColumn: position.column,
+            });
 
-          // Helper: build the replacement range starting at the beginning of
-          // the typed partial so Monaco replaces the right text on accept.
-          const makeRange = (partial: string) => ({
-            startLineNumber: position.lineNumber,
-            endLineNumber: position.lineNumber,
-            // go back by partial length so the typed prefix is replaced
-            startColumn: position.column - partial.length,
-            endColumn: position.column,
-          });
+            // Helper: build the replacement range starting at the beginning of
+            // the typed partial so Monaco replaces the right text on accept.
+            const makeRange = (partial: string) => ({
+              startLineNumber: position.lineNumber,
+              endLineNumber: position.lineNumber,
+              // go back by partial length so the typed prefix is replaced
+              startColumn: position.column - partial.length,
+              endColumn: position.column,
+            });
 
-          const kind = monacoInstance.languages.CompletionItemKind;
+            const kind = monacoInstance.languages.CompletionItemKind;
 
-          // ref()
-          const refCtx = getRefContext(line);
-          if (refCtx) {
-            const res = await languageIntelligenceService.listModels(projectId);
-            const rng = makeRange(refCtx.partial);
-            return {
-              suggestions: res.models
-                .filter(
-                  (m) =>
-                    !refCtx.partial ||
-                    m.name
-                      .toLowerCase()
-                      .startsWith(refCtx.partial.toLowerCase()),
-                )
-                .slice(0, 200)
-                .map((m) => ({
-                  label: m.name,
-                  kind: kind.Module,
-                  insertText: m.name,
-                  filterText: m.name,
-                  detail: m.packageName,
-                  documentation: m.description,
-                  range: rng,
-                })),
-            };
+            // ref()
+            const refCtx = getRefContext(line);
+            if (refCtx) {
+              const res =
+                await languageIntelligenceService.listModels(projectId);
+              const rng = makeRange(refCtx.partial);
+              return {
+                suggestions: res.models
+                  .filter(
+                    (m) =>
+                      !refCtx.partial ||
+                      m.name
+                        .toLowerCase()
+                        .startsWith(refCtx.partial.toLowerCase()),
+                  )
+                  .slice(0, 200)
+                  .map((m) => ({
+                    label: m.name,
+                    kind: kind.Module,
+                    insertText: m.name,
+                    filterText: m.name,
+                    detail: m.packageName,
+                    documentation: m.description,
+                    range: rng,
+                  })),
+              };
+            }
+
+            // source() — second arg (table)
+            const srcTableCtx = getSourceTableContext(line);
+            if (srcTableCtx) {
+              const res =
+                await languageIntelligenceService.listSources(projectId);
+              const rng = makeRange(srcTableCtx.partial);
+              return {
+                suggestions: res.sources
+                  .filter((s) => s.sourceName === srcTableCtx.sourceName)
+                  .filter(
+                    (s) =>
+                      !srcTableCtx.partial ||
+                      s.tableName
+                        .toLowerCase()
+                        .startsWith(srcTableCtx.partial.toLowerCase()),
+                  )
+                  .slice(0, 200)
+                  .map((s) => ({
+                    label: s.tableName,
+                    kind: kind.Field,
+                    insertText: s.tableName,
+                    filterText: s.tableName,
+                    documentation: s.description,
+                    range: rng,
+                  })),
+              };
+            }
+
+            // source() — first arg (source name)
+            const srcNameCtx = getSourceNameContext(line);
+            if (srcNameCtx) {
+              const res =
+                await languageIntelligenceService.listSources(projectId);
+              const names = [...new Set(res.sources.map((s) => s.sourceName))];
+              const rng = makeRange(srcNameCtx.partial);
+              return {
+                suggestions: names
+                  .filter(
+                    (n) =>
+                      !srcNameCtx.partial ||
+                      n
+                        .toLowerCase()
+                        .startsWith(srcNameCtx.partial.toLowerCase()),
+                  )
+                  .map((n) => ({
+                    label: n,
+                    kind: kind.Module,
+                    insertText: n,
+                    filterText: n,
+                    range: rng,
+                  })),
+              };
+            }
+
+            // doc()
+            const docCtx = getDocContext(line);
+            if (docCtx) {
+              const res = await languageIntelligenceService.listDocs(projectId);
+              const rng = makeRange(docCtx.partial);
+              return {
+                suggestions: res.docs
+                  .filter(
+                    (d) =>
+                      !docCtx.partial ||
+                      d.name
+                        .toLowerCase()
+                        .startsWith(docCtx.partial.toLowerCase()),
+                  )
+                  .slice(0, 200)
+                  .map((d) => ({
+                    label: d.name,
+                    kind: kind.Value,
+                    insertText: d.name,
+                    filterText: d.name,
+                    documentation: d.description,
+                    range: rng,
+                  })),
+              };
+            }
+
+            // var()
+            const varCtx = getVarContext(line);
+            if (varCtx) {
+              const res =
+                await languageIntelligenceService.listVariables(projectId);
+              const rng = makeRange(varCtx.partial);
+              return {
+                suggestions: res.variables
+                  .filter(
+                    (v) =>
+                      !varCtx.partial ||
+                      v.name
+                        .toLowerCase()
+                        .startsWith(varCtx.partial.toLowerCase()),
+                  )
+                  .map((v) => ({
+                    label: v.name,
+                    kind: kind.Variable,
+                    insertText: v.name,
+                    filterText: v.name,
+                    range: rng,
+                  })),
+              };
+            }
+
+            // env_var()
+            const envCtx = getEnvVarContext(line);
+            if (envCtx) {
+              const res =
+                await languageIntelligenceService.listEnvVars(projectId);
+              const rng = makeRange(envCtx.partial);
+              return {
+                suggestions: res.envVars
+                  .filter(
+                    (e: { name: string }) =>
+                      !envCtx.partial ||
+                      e.name
+                        .toLowerCase()
+                        .startsWith(envCtx.partial.toLowerCase()),
+                  )
+                  .map((e: { name: string }) => ({
+                    label: e.name,
+                    kind: kind.Constant,
+                    insertText: e.name,
+                    filterText: e.name,
+                    range: rng,
+                  })),
+              };
+            }
+
+            // macro — {{ partial
+            const macroCtx = getMacroContext(line);
+            if (macroCtx) {
+              const res =
+                await languageIntelligenceService.listMacros(projectId);
+              const macroNames = [
+                ...new Set([
+                  ...res.macros.map((m) => m.name),
+                  ...DBT_BUILTIN_MACROS,
+                ]),
+              ];
+              const rng = makeRange(macroCtx.partial);
+              return {
+                suggestions: macroNames
+                  .filter(
+                    (n) =>
+                      !macroCtx.partial ||
+                      n
+                        .toLowerCase()
+                        .startsWith(macroCtx.partial.toLowerCase()),
+                  )
+                  .map((n) => ({
+                    label: n,
+                    kind: kind.Function,
+                    insertText: n,
+                    filterText: n,
+                    range: rng,
+                  })),
+              };
+            }
+
+            return { suggestions: [] };
+          } catch (error) {
+            // eslint-disable-next-line no-console
+            console.error(
+              '[LangIntel] jinja-sql completion provider error:',
+              error,
+            );
+            return { suggestions: [] };
           }
-
-          // source() — second arg (table)
-          const srcTableCtx = getSourceTableContext(line);
-          if (srcTableCtx) {
-            const res =
-              await languageIntelligenceService.listSources(projectId);
-            const rng = makeRange(srcTableCtx.partial);
-            return {
-              suggestions: res.sources
-                .filter((s) => s.sourceName === srcTableCtx.sourceName)
-                .filter(
-                  (s) =>
-                    !srcTableCtx.partial ||
-                    s.tableName
-                      .toLowerCase()
-                      .startsWith(srcTableCtx.partial.toLowerCase()),
-                )
-                .slice(0, 200)
-                .map((s) => ({
-                  label: s.tableName,
-                  kind: kind.Field,
-                  insertText: s.tableName,
-                  filterText: s.tableName,
-                  documentation: s.description,
-                  range: rng,
-                })),
-            };
-          }
-
-          // source() — first arg (source name)
-          const srcNameCtx = getSourceNameContext(line);
-          if (srcNameCtx) {
-            const res =
-              await languageIntelligenceService.listSources(projectId);
-            const names = [...new Set(res.sources.map((s) => s.sourceName))];
-            const rng = makeRange(srcNameCtx.partial);
-            return {
-              suggestions: names
-                .filter(
-                  (n) =>
-                    !srcNameCtx.partial ||
-                    n
-                      .toLowerCase()
-                      .startsWith(srcNameCtx.partial.toLowerCase()),
-                )
-                .map((n) => ({
-                  label: n,
-                  kind: kind.Module,
-                  insertText: n,
-                  filterText: n,
-                  range: rng,
-                })),
-            };
-          }
-
-          // doc()
-          const docCtx = getDocContext(line);
-          if (docCtx) {
-            const res = await languageIntelligenceService.listDocs(projectId);
-            const rng = makeRange(docCtx.partial);
-            return {
-              suggestions: res.docs
-                .filter(
-                  (d) =>
-                    !docCtx.partial ||
-                    d.name
-                      .toLowerCase()
-                      .startsWith(docCtx.partial.toLowerCase()),
-                )
-                .slice(0, 200)
-                .map((d) => ({
-                  label: d.name,
-                  kind: kind.Value,
-                  insertText: d.name,
-                  filterText: d.name,
-                  documentation: d.description,
-                  range: rng,
-                })),
-            };
-          }
-
-          // var()
-          const varCtx = getVarContext(line);
-          if (varCtx) {
-            const res =
-              await languageIntelligenceService.listVariables(projectId);
-            const rng = makeRange(varCtx.partial);
-            return {
-              suggestions: res.variables
-                .filter(
-                  (v) =>
-                    !varCtx.partial ||
-                    v.name
-                      .toLowerCase()
-                      .startsWith(varCtx.partial.toLowerCase()),
-                )
-                .map((v) => ({
-                  label: v.name,
-                  kind: kind.Variable,
-                  insertText: v.name,
-                  filterText: v.name,
-                  range: rng,
-                })),
-            };
-          }
-
-          // env_var()
-          const envCtx = getEnvVarContext(line);
-          if (envCtx) {
-            const res =
-              await languageIntelligenceService.listEnvVars(projectId);
-            const rng = makeRange(envCtx.partial);
-            return {
-              suggestions: res.envVars
-                .filter(
-                  (e: { name: string }) =>
-                    !envCtx.partial ||
-                    e.name
-                      .toLowerCase()
-                      .startsWith(envCtx.partial.toLowerCase()),
-                )
-                .map((e: { name: string }) => ({
-                  label: e.name,
-                  kind: kind.Constant,
-                  insertText: e.name,
-                  filterText: e.name,
-                  range: rng,
-                })),
-            };
-          }
-
-          // macro — {{ partial
-          const macroCtx = getMacroContext(line);
-          if (macroCtx) {
-            const res = await languageIntelligenceService.listMacros(projectId);
-            const macroNames = [
-              ...new Set([
-                ...res.macros.map((m) => m.name),
-                ...DBT_BUILTIN_MACROS,
-              ]),
-            ];
-            const rng = makeRange(macroCtx.partial);
-            return {
-              suggestions: macroNames
-                .filter(
-                  (n) =>
-                    !macroCtx.partial ||
-                    n.toLowerCase().startsWith(macroCtx.partial.toLowerCase()),
-                )
-                .map((n) => ({
-                  label: n,
-                  kind: kind.Function,
-                  insertText: n,
-                  filterText: n,
-                  range: rng,
-                })),
-            };
-          }
-
-          return { suggestions: [] };
         },
       });
 
@@ -671,42 +684,53 @@ export const CodeEditor = ({
         monacoInstance.languages.registerCompletionItemProvider('yaml', {
           triggerCharacters: ["'", '"', '('],
           provideCompletionItems: async (model, position) => {
-            const line = model.getValueInRange({
-              startLineNumber: position.lineNumber,
-              startColumn: 1,
-              endLineNumber: position.lineNumber,
-              endColumn: position.column,
-            });
-            const docCtx = getDocContext(line);
-            if (!docCtx) return { suggestions: [] };
+            try {
+              const line = model.getValueInRange({
+                startLineNumber: position.lineNumber,
+                startColumn: 1,
+                endLineNumber: position.lineNumber,
+                endColumn: position.column,
+              });
+              const docCtx = getDocContext(line);
+              if (!docCtx) return { suggestions: [] };
 
-            const makeRange = (partial: string) => ({
-              startLineNumber: position.lineNumber,
-              endLineNumber: position.lineNumber,
-              startColumn: position.column - partial.length,
-              endColumn: position.column,
-            });
+              const makeRange = (partial: string) => ({
+                startLineNumber: position.lineNumber,
+                endLineNumber: position.lineNumber,
+                startColumn: position.column - partial.length,
+                endColumn: position.column,
+              });
 
-            const rng = makeRange(docCtx.partial);
-            const res =
-              await languageIntelligenceService.listDocs(currentProjectId);
-            return {
-              suggestions: res.docs
-                .filter(
-                  (d) =>
-                    !docCtx.partial ||
-                    d.name.toLowerCase().includes(docCtx.partial.toLowerCase()),
-                )
-                .slice(0, 200)
-                .map((d) => ({
-                  label: d.name,
-                  kind: monacoInstance.languages.CompletionItemKind.Value,
-                  insertText: d.name,
-                  filterText: d.name,
-                  documentation: d.description,
-                  range: rng,
-                })),
-            };
+              const rng = makeRange(docCtx.partial);
+              const res =
+                await languageIntelligenceService.listDocs(currentProjectId);
+              return {
+                suggestions: res.docs
+                  .filter(
+                    (d) =>
+                      !docCtx.partial ||
+                      d.name
+                        .toLowerCase()
+                        .includes(docCtx.partial.toLowerCase()),
+                  )
+                  .slice(0, 200)
+                  .map((d) => ({
+                    label: d.name,
+                    kind: monacoInstance.languages.CompletionItemKind.Value,
+                    insertText: d.name,
+                    filterText: d.name,
+                    documentation: d.description,
+                    range: rng,
+                  })),
+              };
+            } catch (error) {
+              // eslint-disable-next-line no-console
+              console.error(
+                '[LangIntel] yaml completion provider error:',
+                error,
+              );
+              return { suggestions: [] };
+            }
           },
         });
     }
