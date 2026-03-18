@@ -1,6 +1,6 @@
 import React from 'react';
 import { OnChange, loader } from '@monaco-editor/react';
-import { useTheme } from '@mui/material';
+import { Box, useTheme } from '@mui/material';
 import {
   useGetFileDiff,
   useGetFileStatus,
@@ -81,10 +81,34 @@ export const Editor: React.FC<EditorProps> = ({
 
   const isFileEditable = !activeTab?.isReadOnly;
   const [showDiffView, setShowDiffView] = React.useState(false);
-  const [isPipelineView, setIsPipelineView] = React.useState(false);
+  const [showPipelinePreview, setShowPipelinePreview] = React.useState(false);
+  const [splitPercent, setSplitPercent] = React.useState(50);
   const [isSaving, setIsSaving] = React.useState(false);
 
-  const showPipelineButton = isPipelineFile(activeFilePath);
+  const isPipeline = isPipelineFile(activeFilePath);
+  const showSplit = isPipeline && showPipelinePreview;
+
+  // Resize handle logic — tracks delta from mousedown position
+  const containerRef = React.useRef<HTMLDivElement>(null);
+  const handleResizeStart = React.useCallback(
+    (startX: number) => {
+      const containerWidth = containerRef.current?.offsetWidth ?? 1;
+      const startPercent = splitPercent;
+
+      const onMove = (e: MouseEvent) => {
+        const delta = e.clientX - startX;
+        const next = startPercent + (delta / containerWidth) * 100;
+        setSplitPercent(Math.max(20, Math.min(80, next)));
+      };
+      const onUp = () => {
+        window.removeEventListener('mousemove', onMove);
+        window.removeEventListener('mouseup', onUp);
+      };
+      window.addEventListener('mousemove', onMove);
+      window.addEventListener('mouseup', onUp);
+    },
+    [splitPercent],
+  );
 
   const originalContent = React.useMemo(() => {
     if (!activeTab) {
@@ -103,8 +127,9 @@ export const Editor: React.FC<EditorProps> = ({
 
   React.useEffect(() => {
     setShowDiffView(false);
-    setIsPipelineView(false);
-  }, [activeTabId]);
+    // Auto-open the preview panel when switching to a pipeline file
+    setShowPipelinePreview(isPipelineFile(activeFilePath));
+  }, [activeTabId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleSave = React.useCallback(() => {
     if (!activeTab || !activeTabId || !activeTab.isModified || isSaving) {
@@ -203,30 +228,67 @@ export const Editor: React.FC<EditorProps> = ({
         showDiffView={showDiffView}
         onSave={handleSave}
         onToggleDiff={() => setShowDiffView((prev) => !prev)}
-        showPipelineButton={showPipelineButton}
-        isPipelineView={isPipelineView}
-        onTogglePipelineView={() => setIsPipelineView((prev) => !prev)}
+        showPipelineButton={isPipeline}
+        isPipelinePreviewOpen={showPipelinePreview}
+        onTogglePipelinePreview={() => setShowPipelinePreview((prev) => !prev)}
       />
 
-      <EditorViewport>
-        {isPipelineView && <PipelineView content={activeContent} />}
-        {!isPipelineView && showDiffView && !isLoadingFileStatus && (
-          <DiffView
-            modified={activeContent}
-            original={originalContent ?? ''}
-            language={language}
-            theme={monacoTheme}
+      {/*
+        Monaco is ALWAYS at the same tree depth: EditorViewport > Box > editor.
+        Only the Box's width changes when the split opens/closes, so React never
+        unmounts and remounts the Monaco instance on tab switch.
+      */}
+      <EditorViewport ref={containerRef} sx={{ flexDirection: 'row' }}>
+        {/* Left pane — code editor, constant tree depth */}
+        <Box
+          sx={{
+            width: showSplit ? `${splitPercent}%` : '100%',
+            height: '100%',
+            minWidth: 0,
+            flexShrink: 0,
+          }}
+        >
+          {showDiffView && !isLoadingFileStatus ? (
+            <DiffView
+              modified={activeContent}
+              original={originalContent ?? ''}
+              language={language}
+              theme={monacoTheme}
+            />
+          ) : (
+            <CodeEditor
+              content={activeContent}
+              originalContent={originalContent}
+              language={language}
+              theme={monacoTheme}
+              onChange={handleChange}
+              readOnly={!isFileEditable || showDiffView}
+            />
+          )}
+        </Box>
+
+        {/* Resize handle */}
+        {showSplit && (
+          <Box
+            onMouseDown={(e) => handleResizeStart(e.clientX)}
+            sx={{
+              width: 4,
+              flexShrink: 0,
+              cursor: 'col-resize',
+              backgroundColor: theme.palette.divider,
+              transition: 'background-color 0.15s',
+              '&:hover': { backgroundColor: theme.palette.primary.main },
+            }}
           />
         )}
-        {!isPipelineView && !showDiffView && !isLoadingFileStatus && (
-          <CodeEditor
-            content={activeContent}
-            originalContent={originalContent}
-            language={language}
-            theme={monacoTheme}
-            onChange={handleChange}
-            readOnly={!isFileEditable || showDiffView}
-          />
+
+        {/* Right pane — live pipeline preview */}
+        {showSplit && (
+          <Box
+            sx={{ flex: 1, height: '100%', minWidth: 0, overflow: 'hidden' }}
+          >
+            <PipelineView content={activeContent} />
+          </Box>
         )}
       </EditorViewport>
 
