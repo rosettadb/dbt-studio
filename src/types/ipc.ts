@@ -51,8 +51,24 @@ export type ProjectChannels =
   | 'project:getQuery'
   | 'project:chooseDir'
   | 'project:renamePath'
-  | 'project:downloadSeed'
-  | 'project:pushToCloud';
+  | 'project:downloadSeed';
+
+export type RosettaCloudChannels =
+  | 'rosettaCloud:push'
+  | 'rosettaCloud:getProfile'
+  | 'rosettaCloud:refreshProfile'
+  | 'rosettaCloud:getCachedProfile'
+  | 'rosettaCloud:login'
+  | 'rosettaCloud:logout'
+  | 'rosettaCloud:getApiKey'
+  | 'rosettaCloud:storeApiKey'
+  | 'rosettaCloud:validateApiKey'
+  | 'rosettaCloud:authSuccess'
+  | 'rosettaCloud:authError'
+  | 'rosettaCloud:apiKeyUpdated'
+  | 'rosettaCloud:getSecrets'
+  | 'rosettaCloud:deleteSecret';
+
 export type ConnectorChannels =
   | 'connector:configure'
   | 'connector:remove'
@@ -71,7 +87,8 @@ export type ConnectorChannels =
   | 'connector:extractSchema'
   | 'connector:updateQuery'
   | 'connector:getQuery'
-  | 'connector:executeQuery';
+  | 'connector:executeQuery'
+  | 'connector:save';
 
 export type SourcesChannels =
   | 'sources:create'
@@ -191,6 +208,8 @@ export type GitChannels =
   | 'git:checkout'
   | 'git:fileDiff'
   | 'git:fileStatusList'
+  | 'git:getLocalChanges'
+  | 'git:repoInfo'
   | 'git:fileStatus'
   | 'git:unstage'
   | 'git:stageAll'
@@ -282,6 +301,10 @@ export type DuckLakeChannels =
   | 'ducklake:instance:listSnapshots'
   | 'ducklake:snapshot:restore'
 
+  // View Management
+  | 'ducklake:view:list'
+  | 'ducklake:view:getSchema'
+
   // Query Execution
   | 'ducklake:query:execute'
   | 'ducklake:query:cancel'
@@ -303,7 +326,9 @@ export type DuckLakeChannels =
   | 'ducklake:connection:list'
   | 'ducklake:connection:get'
   | 'ducklake:connection:create'
-  | 'ducklake:connection:test';
+  | 'ducklake:connection:test'
+  | 'ducklake:connection:acquire'
+  | 'ducklake:connection:release';
 
 export type LineageChannels =
   | 'lineage:getUpstream'
@@ -320,6 +345,25 @@ export type LineageChannels =
   | 'language-intel:variables:list'
   | 'language-intel:env-vars:list';
 
+export type NotebookChannels =
+  | 'notebooks:list'
+  | 'notebooks:get'
+  | 'notebooks:create'
+  | 'notebooks:update'
+  | 'notebooks:rename'
+  | 'notebooks:duplicate'
+  | 'notebooks:selectImportFile'
+  | 'notebooks:import'
+  | 'notebooks:importAll'
+  | 'notebooks:delete'
+  | 'notebooks:runCell'
+  | 'notebooks:fetchCellPage'
+  | 'notebooks:runAll'
+  | 'notebooks:archived:list'
+  | 'notebooks:archived:restore'
+  | 'notebooks:archived:delete'
+  | 'notebooks:archived:deleteAll';
+
 export type Channels =
   | TestChannels
   | CliChannels
@@ -333,9 +377,11 @@ export type Channels =
   | UpdateChannels
   | CloudExplorerChannels
   | SourcesChannels
+  | RosettaCloudChannels
   | AIChannels
   | DuckLakeChannels
-  | LineageChannels;
+  | LineageChannels
+  | NotebookChannels;
 
 export type ConfigureConnectionBody = {
   projectId?: string;

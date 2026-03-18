@@ -555,7 +555,6 @@ export class SQLiteCatalogAdapter extends CatalogAdapter {
 
       const quotedMetadataDatabase = `"${metadataDatabase}"`;
 
-      // List logical DuckLake tables from metadata tables, similar to DuckDB adapter
       const query = `
         WITH current_snapshot AS (
           SELECT COALESCE(max(snapshot_id), 0) as snapshot_id
@@ -568,10 +567,12 @@ export class SQLiteCatalogAdapter extends CatalogAdapter {
           t.table_uuid,
           cs.snapshot_id as current_snapshot,
           ts.record_count,
-          ts.file_size_bytes
+          ts.file_size_bytes,
+          snap.snapshot_time
         FROM ${quotedMetadataDatabase}.main.ducklake_table t
         JOIN ${quotedMetadataDatabase}.main.ducklake_schema s ON t.schema_id = s.schema_id
         LEFT JOIN ${quotedMetadataDatabase}.main.ducklake_table_stats ts ON ts.table_id = t.table_id
+        LEFT JOIN ${quotedMetadataDatabase}.main.ducklake_snapshot snap ON snap.snapshot_id = t.begin_snapshot
         CROSS JOIN current_snapshot cs
         WHERE cs.snapshot_id >= t.begin_snapshot
           AND (cs.snapshot_id < t.end_snapshot OR t.end_snapshot IS NULL)
@@ -583,30 +584,83 @@ export class SQLiteCatalogAdapter extends CatalogAdapter {
       const result = await this.connectionInfo.connection.run(query);
       const rows = await result.getRows();
 
+      // Second isolated query: derive updatedAt from the latest data file written per table.
+      // ducklake_snapshot has NO table_id column — the link is via ducklake_data_file.begin_snapshot.
+      // This query avoids ducklake_table_stats entirely to prevent DuckDB binder ambiguity
+      // when joined tables share the 'table_id' column name in attached SQLite databases.
+      // See coding rule DL-01 in ai-context/04-rules/01-coding-rules.md.
+      const updatedAtQuery = `
+        SELECT df.table_id, MAX(sn.snapshot_time) as updated_at
+        FROM ${quotedMetadataDatabase}.main.ducklake_data_file df
+        JOIN ${quotedMetadataDatabase}.main.ducklake_snapshot sn ON sn.snapshot_id = df.begin_snapshot
+        GROUP BY df.table_id
+      `;
+      const updatedAtMap = new Map<string | number, Date>();
+      try {
+        const updatedAtResult =
+          await this.connectionInfo.connection.run(updatedAtQuery);
+        const updatedAtRows = await updatedAtResult.getRows();
+        updatedAtRows.forEach((uRow: any) => {
+          if (Array.isArray(uRow)) {
+            const [tableId, updatedAt] = uRow;
+            if (tableId != null && updatedAt) {
+              updatedAtMap.set(tableId as string | number, new Date(updatedAt));
+            }
+          } else if (uRow && typeof uRow === 'object') {
+            const r = uRow as any;
+            if (r.table_id != null && r.updated_at) {
+              updatedAtMap.set(
+                r.table_id as string | number,
+                new Date(r.updated_at),
+              );
+            }
+          }
+        });
+      } catch {
+        // Degrade gracefully: updatedAt falls back to createdAt below
+      }
+
       const tables: DuckLakeTableInfo[] = rows.map((row: any) => {
         if (Array.isArray(row)) {
-          const [, tableName, schemaName, , , recordCount, fileSizeBytes] = row;
+          const [
+            tableId,
+            tableName,
+            schemaName,
+            ,
+            ,
+            recordCount,
+            fileSizeBytes,
+            snapshotTime,
+          ] = row;
+          const createdAt = snapshotTime ? new Date(snapshotTime) : new Date();
+          const updatedAt =
+            updatedAtMap.get(tableId as string | number) ?? createdAt;
           return {
             name: tableName,
             schema: schemaName || 'main',
             instanceId: '',
             columns: [],
             snapshots: [],
-            createdAt: new Date(),
-            updatedAt: new Date(),
+            createdAt,
+            updatedAt,
             rowCount: normalizeNumericValue(recordCount),
             sizeBytes: normalizeNumericValue(fileSizeBytes),
           };
         }
 
+        const createdAt = row.snapshot_time
+          ? new Date(row.snapshot_time)
+          : new Date();
+        const updatedAt =
+          updatedAtMap.get(row.table_id as string | number) ?? createdAt;
         return {
           name: row.table_name,
           schema: row.schema_name || 'main',
           instanceId: '',
           columns: [],
           snapshots: [],
-          createdAt: new Date(),
-          updatedAt: new Date(),
+          createdAt,
+          updatedAt,
           rowCount: normalizeNumericValue(row.record_count),
           sizeBytes: normalizeNumericValue(row.file_size_bytes),
         };
@@ -770,6 +824,7 @@ export class SQLiteCatalogAdapter extends CatalogAdapter {
       'ducklake_file_partition_value',
       'ducklake_tag',
       'ducklake_column_tag',
+      'ducklake_view',
     ];
 
     return metadataTables.reduce((currentQuery, table) => {
@@ -938,7 +993,7 @@ export class SQLiteCatalogAdapter extends CatalogAdapter {
         SELECT
           snapshot_id,
           table_id,
-          timestamp_ms,
+          snapshot_time,
           operation,
           summary,
           parent_snapshot_id
@@ -946,7 +1001,7 @@ export class SQLiteCatalogAdapter extends CatalogAdapter {
         WHERE table_id = (
           SELECT table_id FROM ducklake_table WHERE table_name = '${escapedTableName}'
         )
-        ORDER BY timestamp_ms DESC
+        ORDER BY snapshot_time DESC
       `;
 
       const result = await this.connectionInfo.connection.run(query);
@@ -955,7 +1010,7 @@ export class SQLiteCatalogAdapter extends CatalogAdapter {
       return rows.map((row: any) => ({
         id: row.snapshot_id,
         tableId: row.table_id,
-        timestamp: new Date(row.timestamp_ms),
+        timestamp: new Date(row.snapshot_time),
         operation: row.operation,
         summary: JSON.parse(row.summary || '{}'),
         parentSnapshotId: row.parent_snapshot_id,

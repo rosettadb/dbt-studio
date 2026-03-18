@@ -7,6 +7,7 @@ import * as secureStorageService from './secureStorage.service';
 import * as utilsService from './utils.service';
 import cloudExplorerService from './cloudExplorer.service';
 import { connectionStorage } from './connectionStorage.service';
+import * as rosettaCloudServices from './rosettaCloud.service';
 import { DuckLakeService } from './duckLake.service';
 import * as lineageService from './lineage.service';
 import * as languageIntelligenceService from './languageIntelligence.service';
@@ -21,6 +22,7 @@ export {
   cloudExplorerService,
   connectionStorage,
   utilsService,
+  rosettaCloudServices,
   DuckLakeService,
   lineageService,
   languageIntelligenceService,

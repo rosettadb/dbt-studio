@@ -12,6 +12,9 @@ import {
   Divider,
   Switch,
   FormControlLabel,
+  RadioGroup,
+  Radio,
+  FormLabel,
 } from '@mui/material';
 import AddIcon from '@mui/icons-material/Add';
 import { Close, FolderOpen, Save } from '@mui/icons-material';
@@ -51,6 +54,16 @@ type Connection = {
   };
 };
 
+type DatalakeInstance = {
+  id: string;
+  name: string;
+  dataPath: string;
+  storage?: {
+    type: 'local' | 's3' | 'azure' | 'gcs';
+  };
+  status: string;
+};
+
 type NewProjectProps = {
   defaultProjectPath: string;
   setDefaultProjectPath: (path: string) => void;
@@ -58,8 +71,12 @@ type NewProjectProps = {
   setNewProject: (p: { name: string; createTemplateFolders: boolean }) => void;
   selectedConnection: string;
   setSelectedConnection: (id: string) => void;
+  connectionType: 'standard' | 'datalake';
+  setConnectionType: (type: 'standard' | 'datalake') => void;
   isLoadingConnections: boolean;
   connections: Connection[];
+  datalakeInstances: DatalakeInstance[];
+  isLoadingDatalakes: boolean;
   navigate: (to: string) => void;
   getFiles: (
     options: any,
@@ -77,8 +94,12 @@ export const NewProject: React.FC<NewProjectProps> = ({
   setNewProject,
   selectedConnection,
   setSelectedConnection,
+  connectionType,
+  setConnectionType,
   isLoadingConnections,
   connections,
+  datalakeInstances,
+  isLoadingDatalakes,
   navigate,
   getFiles,
   handleAddProject,
@@ -221,54 +242,151 @@ export const NewProject: React.FC<NewProjectProps> = ({
             sx={{ mb: 2 }}
             inputProps={{ 'data-testid': 'project-name-input' }}
           />
-          <FormControl fullWidth sx={{ mb: 2 }}>
-            <InputLabel id="connection-select-label">
-              Connection (Optional)
-            </InputLabel>
-            <Select
-              labelId="connection-select-label"
-              value={selectedConnection}
-              label="Connection (Optional)"
-              onChange={(e) => setSelectedConnection(e.target.value)}
-              disabled={isLoadingConnections}
+
+          <FormControl component="fieldset" sx={{ mb: 2 }}>
+            <FormLabel component="legend">Connection Type</FormLabel>
+            <RadioGroup
+              row
+              value={connectionType}
+              onChange={(e) => {
+                setConnectionType(e.target.value as 'standard' | 'datalake');
+                setSelectedConnection(''); // Reset selection when switching
+              }}
             >
-              <MenuItem value="">
-                <Box
-                  sx={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    width: '100%',
-                    color: 'text.secondary',
-                  }}
-                >
-                  <DatabaseIcon sx={{ fontSize: 20, marginRight: 1 }} />
-                  <Typography>No connection (add later)</Typography>
-                </Box>
-              </MenuItem>
-              <MenuItem onClick={() => navigate('/app/add-connection')}>
-                <Box
-                  sx={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    width: '100%',
-                  }}
-                >
-                  <AddIcon sx={{ fontSize: 20, marginRight: 1 }} />
-                  <Typography>New Connection</Typography>
-                </Box>
-              </MenuItem>
-              {connections.map((connection) => (
-                <MenuItem key={connection.id} value={connection.id}>
-                  <Box sx={{ display: 'flex', alignItems: 'center' }}>
-                    <ConnectionIconContainer>
-                      {renderConnectionIcon(connection.connection.type)}
-                    </ConnectionIconContainer>
-                    {connection.connection.name} - {connection.connection.type}
+              <FormControlLabel
+                value="standard"
+                control={<Radio />}
+                label="Standard Connection"
+              />
+              <FormControlLabel
+                value="datalake"
+                control={<Radio />}
+                label="Datalake Connection"
+              />
+            </RadioGroup>
+          </FormControl>
+
+          {connectionType === 'standard' ? (
+            <FormControl fullWidth sx={{ mb: 2 }}>
+              <InputLabel id="connection-select-label">
+                Connection (Optional)
+              </InputLabel>
+              <Select
+                labelId="connection-select-label"
+                value={selectedConnection}
+                label="Connection (Optional)"
+                onChange={(e) => setSelectedConnection(e.target.value)}
+                disabled={isLoadingConnections}
+              >
+                <MenuItem value="">
+                  <Box
+                    sx={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      width: '100%',
+                      color: 'text.secondary',
+                    }}
+                  >
+                    <DatabaseIcon sx={{ fontSize: 20, marginRight: 1 }} />
+                    <Typography>No connection (add later)</Typography>
                   </Box>
                 </MenuItem>
-              ))}
-            </Select>
-          </FormControl>
+                <MenuItem onClick={() => navigate('/app/add-connection')}>
+                  <Box
+                    sx={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      width: '100%',
+                    }}
+                  >
+                    <AddIcon sx={{ fontSize: 20, marginRight: 1 }} />
+                    <Typography>New Connection</Typography>
+                  </Box>
+                </MenuItem>
+                {connections.map((connection) => (
+                  <MenuItem key={connection.id} value={connection.id}>
+                    <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                      <ConnectionIconContainer>
+                        {renderConnectionIcon(connection.connection.type)}
+                      </ConnectionIconContainer>
+                      {connection.connection.name} -{' '}
+                      {connection.connection.type}
+                    </Box>
+                  </MenuItem>
+                ))}
+              </Select>
+            </FormControl>
+          ) : (
+            <FormControl fullWidth sx={{ mb: 2 }}>
+              <InputLabel id="datalake-select-label">
+                Datalake Connection (Optional)
+              </InputLabel>
+              <Select
+                labelId="datalake-select-label"
+                value={selectedConnection}
+                label="Datalake Connection (Optional)"
+                onChange={(e) => setSelectedConnection(e.target.value)}
+                disabled={isLoadingDatalakes}
+              >
+                <MenuItem value="">
+                  <Box
+                    sx={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      width: '100%',
+                      color: 'text.secondary',
+                    }}
+                  >
+                    <DatabaseIcon sx={{ fontSize: 20, marginRight: 1 }} />
+                    <Typography>No datalake (add later)</Typography>
+                  </Box>
+                </MenuItem>
+                {datalakeInstances.map((datalake) => {
+                  const isSupported =
+                    datalake.storage?.type === 's3' ||
+                    datalake.storage?.type === 'local';
+                  const isDisabled = !isSupported;
+
+                  return (
+                    <MenuItem
+                      key={datalake.id}
+                      value={datalake.id}
+                      disabled={isDisabled}
+                      title={
+                        // eslint-disable-next-line no-nested-ternary
+                        isDisabled && datalake.storage?.type
+                          ? `${datalake.storage.type.toUpperCase()} storage is not supported for DBT projects`
+                          : isDisabled
+                            ? 'Storage type not supported for DBT projects'
+                            : ''
+                      }
+                    >
+                      <Box
+                        sx={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          opacity: isDisabled ? 0.5 : 1,
+                        }}
+                      >
+                        <ConnectionIconContainer>
+                          <DatabaseIcon sx={{ fontSize: 20 }} />
+                        </ConnectionIconContainer>
+                        {datalake.name} - {datalake.storage?.type || 'unknown'}
+                        {isDisabled && (
+                          <Typography
+                            variant="caption"
+                            sx={{ ml: 1, color: 'text.secondary' }}
+                          >
+                            (Not supported)
+                          </Typography>
+                        )}
+                      </Box>
+                    </MenuItem>
+                  );
+                })}
+              </Select>
+            </FormControl>
+          )}
         </Box>
       </AddProjectForm>
     </Box>

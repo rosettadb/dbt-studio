@@ -26,6 +26,7 @@ type Props = {
   setQueryResults: (v: any) => void;
   setError: (v: any) => void;
   onQueryStart?: (queryId: string) => void;
+  onQuerySuccess?: () => void;
   isLoading?: boolean;
 };
 
@@ -42,6 +43,7 @@ export const SqlEditor: React.FC<Props> = ({
   setQueryResults,
   setError,
   onQueryStart,
+  onQuerySuccess,
   isLoading,
 }) => {
   const { fetchSchema } = useAppContext();
@@ -225,9 +227,12 @@ export const SqlEditor: React.FC<Props> = ({
       }
 
       // Refresh schema if DDL operation was executed
-      // Only for project-based mode (connection-based mode handles this differently)
-      if (wasDDL && !isConnectionMode) {
-        fetchSchema();
+      if (wasDDL) {
+        if (!isConnectionMode) {
+          fetchSchema();
+        } else if (onQuerySuccess) {
+          onQuerySuccess();
+        }
       }
     } catch (error) {
       toast.error('An unexpected error occurred while executing the query');

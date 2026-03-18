@@ -8,6 +8,7 @@ import {
   useSetConnectionEnvVariable,
 } from '../controllers';
 import { Project, DbtCommandType } from '../../types/backend';
+import { useAppContext } from './index';
 
 interface UseDbtReturn {
   run: (project: Project, path?: string) => Promise<void>;
@@ -78,10 +79,14 @@ const extractCliErrorDetails = (
   return Array.from(details);
 };
 
-const useDbt = (successCallback?: () => void): UseDbtReturn => {
+const useDbt = (
+  successCallback?: () => void,
+  cloudRunCb?: (command: DbtCommandType) => void,
+): UseDbtReturn => {
   const { data: settings } = useGetSettings();
+  const { env } = useAppContext();
   const { runCommand, stopCommand, isRunning } = useCli();
-  const { data: connections = [] } = useGetConnections();
+  const { data: connections = [] } = useGetConnections(true);
   const {
     getDatabaseUsername,
     getDatabasePassword,
@@ -186,6 +191,12 @@ const useDbt = (successCallback?: () => void): UseDbtReturn => {
       args: string = '',
       options: { showToast?: boolean } = { showToast: true },
     ) => {
+      if (env === 'cloud') {
+        setActiveCommand(command);
+        cloudRunCb?.(command);
+        return;
+      }
+
       if (isRunning) {
         if (options.showToast) {
           toast.warning('Another dbt command is currently running');

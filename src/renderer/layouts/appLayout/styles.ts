@@ -13,5 +13,7 @@ export const Main = styled('div')(() => ({
   paddingLeft: 2,
   marginTop: '38px',
   height: 'calc(100vh - 40px)',
-  overflowY: 'auto',
+  overflow: 'auto',
+  display: 'flex',
+  flexDirection: 'column',
 }));

@@ -22,19 +22,22 @@ export const Sidebar: React.FC<Props> = ({ content }) => {
 
   const activeItem = React.useMemo(() => {
     if (location.pathname.includes('cloud-explorer')) {
-      return 4;
+      return 5;
     }
     if (
       location.pathname.includes('data-lake') ||
       location.pathname.includes('datalake')
     ) {
-      return 5;
+      return 6;
     }
     if (location.pathname.includes('connection')) {
       return 0;
     }
     if (location.pathname.includes('select-project')) {
       return 1;
+    }
+    if (location.pathname.includes('notebooks')) {
+      return 4;
     }
     if (location.pathname.includes('sql')) {
       return 3;

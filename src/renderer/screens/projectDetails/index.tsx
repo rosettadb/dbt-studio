@@ -30,7 +30,6 @@ import {
   TerminalLayout,
   BusinessModal,
   AiPromptModal,
-  PushToCloudModal,
 } from '../../components';
 // import { ProjectSidebar } from '../../components/sidebar/project-sidebar';
 import { ProjectSidebar } from '../../components/sidebar/project-sidebar';
@@ -133,7 +132,6 @@ const ProjectDetails: React.FC = () => {
     React.useState<HTMLElement | null>(null);
   const [aiTransformationResponse, setAitTransformationResponse] =
     React.useState<string>();
-  const [isPushModalOpen, setIsPushModalOpen] = React.useState(false);
   const [isSynchronizing, setIsSynchronizing] = React.useState(false);
 
   const {
@@ -856,6 +854,7 @@ const ProjectDetails: React.FC = () => {
                             fileContent={fileContent}
                             isRunningDbt={isRunningDbt}
                             isRunningRosettaDbt={isRunningRosettaDbt}
+                            environment={settings?.env}
                           />
                         )}
                       <ProjectDbtSplitButton
@@ -866,9 +865,9 @@ const ProjectDetails: React.FC = () => {
                         isRunningDbt={isRunningDbt}
                         isRunningRosettaDbt={isRunningRosettaDbt}
                         connection={connection}
+                        environment={settings?.env}
                         rosettaDbt={rosettaDbt}
                         handleBusinessLayerClick={handleBusinessLayerClick}
-                        onRunOnCloudClick={() => setIsPushModalOpen(true)}
                       />
                       {connection?.id ? (
                         <>
@@ -992,13 +991,6 @@ const ProjectDetails: React.FC = () => {
                 onClose={() => setNoAiSetModal(false)}
               />
             )}
-            <PushToCloudModal
-              isOpen={isPushModalOpen}
-              onClose={() => {
-                setIsPushModalOpen(false);
-              }}
-              project={project}
-            />
             {aiTransformationPrompt && (
               <AiPromptModal
                 isOpen={!!aiTransformationPrompt}

@@ -22,6 +22,7 @@ import {
   CloudExplorer,
   Connections,
   DuckLake as DataLake,
+  Notebooks,
 } from './screens';
 import { SelectProjectLayout } from './layouts';
 import { AppProvider, ProcessProvider } from './context';
@@ -54,12 +55,14 @@ const App: React.FC = () => {
           />
           <Route path="settings/general" element={<Settings />} />
           <Route path="settings/duckdb" element={<Settings />} />
+          <Route path="settings/profile" element={<Settings />} />
           <Route path="settings/ai-providers" element={<Settings />} />
           <Route path="settings/dbt" element={<Settings />} />
           <Route path="settings/rosetta" element={<Settings />} />
           <Route path="settings/installation" element={<Settings />} />
           <Route path="settings/about" element={<Settings />} />
           <Route path="sql" element={<Sql />} />
+          <Route path="notebooks" element={<Notebooks />} />
           <Route
             path="cloud-explorer"
             element={<Navigate to="/app/cloud-explorer/dashboard" />}
