@@ -782,7 +782,6 @@ export default class SettingsService {
       );
       const binaryPath = path.join(fusionBaseDir, 'dbt');
 
-      // Remove old installation if exists
       if (settings.dbtFusionPath && fs.existsSync(settings.dbtFusionPath)) {
         const oldVersionDir = path.dirname(settings.dbtFusionPath);
         await fs.remove(oldVersionDir);
@@ -794,11 +793,62 @@ export default class SettingsService {
       const response = await axios.get(downloadUrl, {
         responseType: 'arraybuffer',
       });
+
+      if (response.status !== 200) {
+        throw new Error(
+          `Failed to download dbt-fusion: HTTP ${response.status}`,
+        );
+      }
+
+      if (!response.data || response.data.byteLength === 0) {
+        throw new Error('Downloaded dbt-fusion archive is empty');
+      }
+
       await fs.writeFile(archivePath, response.data);
 
-      await tar.x({ file: archivePath, cwd: fusionBaseDir, strip: 1 });
-      await fs.chmod(binaryPath, 0o755);
+      const stats = await fs.stat(archivePath);
+      if (stats.size === 0) {
+        throw new Error('Written dbt-fusion archive file is empty');
+      }
+
+      try {
+        await tar.x({
+          file: archivePath,
+          cwd: fusionBaseDir,
+        });
+      } catch (extractError) {
+        throw new Error(
+          `Failed to extract dbt-fusion archive: ${extractError instanceof Error ? extractError.message : String(extractError)}`,
+        );
+      }
+
       await fs.remove(archivePath);
+
+      if (!fs.existsSync(binaryPath)) {
+        const allFiles: string[] = [];
+        const walk = async (dir: string, prefix = '') => {
+          const files = await fs.readdir(dir);
+          for (const file of files) {
+            const filePath = path.join(dir, file);
+            const stat = await fs.stat(filePath);
+            if (stat.isDirectory()) {
+              allFiles.push(`${prefix}${file}/`);
+              await walk(filePath, `${prefix}${file}/`);
+            } else {
+              allFiles.push(`${prefix}${file}`);
+            }
+          }
+        };
+        await walk(fusionBaseDir);
+
+        throw new Error(
+          `dbt binary not found at ${binaryPath} after extraction. ` +
+            `Expected path: ${binaryPath}\n` +
+            `Files in ${fusionBaseDir}:\n${allFiles.join('\n')}`,
+        );
+      }
+
+      await fs.chmod(binaryPath, 0o755);
 
       settings.dbtFusionVersion = targetVersion;
       settings.dbtFusionPath = binaryPath;

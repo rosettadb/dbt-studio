@@ -2,13 +2,10 @@ import { useCallback, useState } from 'react';
 import { toast } from 'react-toastify';
 import useCli from './useCli';
 import useSecureStorage from './useSecureStorage';
-import {
-  useGetConnections,
-  useGetSettings,
-  useSetConnectionEnvVariable,
-} from '../controllers';
+import { useGetConnections, useSetConnectionEnvVariable } from '../controllers';
 import { Project, DbtCommandType } from '../../types/backend';
 import { useAppContext } from './index';
+import { settingsServices } from '../services';
 
 interface UseDbtReturn {
   run: (project: Project, path?: string) => Promise<void>;
@@ -83,7 +80,6 @@ const useDbt = (
   successCallback?: () => void,
   cloudRunCb?: (command: DbtCommandType) => void,
 ): UseDbtReturn => {
-  const { data: settings } = useGetSettings();
   const { env } = useAppContext();
   const { runCommand, stopCommand, isRunning } = useCli();
   const { data: connections = [] } = useGetConnections(true);
@@ -164,23 +160,25 @@ const useDbt = (
 
   // Build command string
   const buildCommand = useCallback(
-    (command: DbtCommandType, project: Project, args: string = '') => {
-      if (!settings?.dbtPath) {
-        // maybe this should be dbt (trademark) core path
-        toast.info('dbt Core™ path not configured in settings');
+    async (command: DbtCommandType, project: Project, args: string = '') => {
+      // Get the correct dbt path based on runtime setting (dbt-core or dbt-fusion)
+      const dbtPath = await settingsServices.getDbtPath();
+
+      if (!dbtPath) {
+        toast.info('dbt path not configured in settings');
         return '';
       }
 
       switch (command) {
         case 'docs:generate':
-          return `cd "${project.path}" && "${settings.dbtPath}" docs generate`;
+          return `cd "${project.path}" && "${dbtPath}" docs generate`;
         case 'docs:serve':
-          return `cd "${project.path}" && "${settings.dbtPath}" docs serve`;
+          return `cd "${project.path}" && "${dbtPath}" docs serve`;
         default:
-          return `cd "${project.path}" && "${settings.dbtPath}" ${command} ${args}`.trim();
+          return `cd "${project.path}" && "${dbtPath}" ${command} ${args}`.trim();
       }
     },
-    [settings?.dbtPath],
+    [],
   );
 
   // Execute DBT command
@@ -205,16 +203,6 @@ const useDbt = (
       }
 
       try {
-        // Check if DBT path is configured
-        if (!settings?.dbtPath) {
-          if (options.showToast) {
-            toast.error(
-              'DBT path not configured in settings. Please configure it in settings.',
-            );
-          }
-          return;
-        }
-
         // Find connection
         const connection = connections.find(
           (c) => c.id === project.connectionId,
@@ -233,8 +221,8 @@ const useDbt = (
         // Setup environment variables
         await setupConnectionEnv(connection.connection.name);
 
-        // Build command string
-        const cmdString = buildCommand(command, project, args);
+        // Build command string (now async, fetches correct dbt path)
+        const cmdString = await buildCommand(command, project, args);
         if (!cmdString) {
           // buildCommand already toasted; nothing to execute
           return;
@@ -274,7 +262,8 @@ const useDbt = (
       buildCommand,
       runCommand,
       successCallback,
-      settings?.dbtPath,
+      env,
+      cloudRunCb,
     ],
   );
 
@@ -319,8 +308,8 @@ const useDbt = (
           // Setup environment variables
           await setupConnectionEnv(connection.connection.name);
 
-          // Build command string
-          const cmdString = buildCommand(
+          // Build command string (now async)
+          const cmdString = await buildCommand(
             'compile',
             project,
             path ? `--select ${path}` : '',
@@ -428,7 +417,7 @@ const useDbt = (
 
           setActiveCommand('list');
           await setupConnectionEnv(connection.connection.name);
-          const cmdString = buildCommand('list', project, '');
+          const cmdString = await buildCommand('list', project, '');
           if (!cmdString) {
             return '';
           }

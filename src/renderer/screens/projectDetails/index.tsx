@@ -35,6 +35,7 @@ import {
 import { ProjectSidebar } from '../../components/sidebar/project-sidebar';
 import { TabManager } from '../../components/editor/tabManager';
 import {
+  useApiKey,
   useGetConnectionById,
   useGetConnections,
   useGetFileContentList,
@@ -85,7 +86,7 @@ const ProjectDetails: React.FC = () => {
     openChatWithMessage,
     registerSyncEditorContent,
   } = useAppContext();
-
+  const { data: apiKey } = useApiKey();
   const { data: project, isLoading, refetch } = useGetSelectedProject();
   const { data: connection } = useGetConnectionById(project?.connectionId);
   const { data: settings } = useGetSettings();
@@ -865,7 +866,7 @@ const ProjectDetails: React.FC = () => {
                         isRunningDbt={isRunningDbt}
                         isRunningRosettaDbt={isRunningRosettaDbt}
                         connection={connection}
-                        environment={settings?.env}
+                        environment={apiKey ? settings?.env : 'local'}
                         rosettaDbt={rosettaDbt}
                         handleBusinessLayerClick={handleBusinessLayerClick}
                       />
