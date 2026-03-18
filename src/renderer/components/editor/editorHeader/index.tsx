@@ -6,7 +6,7 @@ import {
   Tooltip,
   CircularProgress,
 } from '@mui/material';
-import { Save, VerticalSplit } from '@mui/icons-material';
+import { Save, VerticalSplit, AccountTree, Code } from '@mui/icons-material';
 import { Breadcrumbs } from '../breadcrumbs';
 
 interface EditorHeaderProps {
@@ -21,6 +21,10 @@ interface EditorHeaderProps {
   onSave: () => void;
   onToggleDiff: () => void;
   onNavigate?: (path: string) => void;
+  // Pipeline view
+  showPipelineButton?: boolean;
+  isPipelineView?: boolean;
+  onTogglePipelineView?: () => void;
 }
 
 export const EditorHeader: React.FC<EditorHeaderProps> = ({
@@ -35,6 +39,9 @@ export const EditorHeader: React.FC<EditorHeaderProps> = ({
   onSave,
   onToggleDiff,
   onNavigate,
+  showPipelineButton,
+  isPipelineView,
+  onTogglePipelineView,
 }) => {
   const getSaveTooltip = () => {
     if (hasError) return errorMessage || 'Error saving file';
@@ -60,8 +67,34 @@ export const EditorHeader: React.FC<EditorHeaderProps> = ({
 
       {/* Right: Action Buttons */}
       <Box sx={{ display: 'flex', gap: 1, px: 2, py: 0.5 }}>
+        {/* Pipeline View Toggle */}
+        {showPipelineButton && (
+          <Tooltip title={isPipelineView ? 'Code View' : 'Pipeline View'}>
+            <IconButton
+              onClick={onTogglePipelineView}
+              size="small"
+              sx={{
+                color: isPipelineView ? 'primary.main' : 'text.secondary',
+                backgroundColor: isPipelineView
+                  ? 'action.selected'
+                  : 'transparent',
+                '&:hover': {
+                  backgroundColor: isPipelineView
+                    ? 'action.selected'
+                    : 'action.hover',
+                },
+              }}
+            >
+              {isPipelineView ? (
+                <Code fontSize="small" />
+              ) : (
+                <AccountTree fontSize="small" />
+              )}
+            </IconButton>
+          </Tooltip>
+        )}
         {/* Diff Button */}
-        {showDiffButton && (
+        {showDiffButton && !isPipelineView && (
           <Tooltip title={showDiffView ? 'Hide Diff' : 'Compare Changes'}>
             <IconButton
               onClick={onToggleDiff}

@@ -13,6 +13,7 @@ import { EditorHeader } from './editorHeader';
 import { UnsavedChangesDialog } from './unsavedChangesDialog';
 import { getLanguageFromExtension, getVersionsFromDiff } from './helpers';
 import { Container, EditorViewport } from './styles';
+import { PipelineView, isPipelineFile } from '../pipelineView';
 import type {
   EditorTabId,
   EditorTabState,
@@ -26,12 +27,10 @@ type EditorProps = {
   onTabContentChange: (tabId: EditorTabId, content: string) => void;
   onTabSaved?: (tabId: EditorTabId) => void;
   onTabError?: (tabId: EditorTabId, error?: string) => void;
-  // Unsaved changes dialog support
   pendingClose: PendingCloseState | null;
   onSaveAndClose: (tabId: EditorTabId) => Promise<void>;
   onDiscardAndClose: (tabId: EditorTabId) => void;
   onCancelClose: () => void;
-  // Git status refresh after save
   onGitStatusRefresh?: () => void;
 };
 
@@ -82,7 +81,10 @@ export const Editor: React.FC<EditorProps> = ({
 
   const isFileEditable = !activeTab?.isReadOnly;
   const [showDiffView, setShowDiffView] = React.useState(false);
+  const [isPipelineView, setIsPipelineView] = React.useState(false);
   const [isSaving, setIsSaving] = React.useState(false);
+
+  const showPipelineButton = isPipelineFile(activeFilePath);
 
   const originalContent = React.useMemo(() => {
     if (!activeTab) {
@@ -101,9 +103,9 @@ export const Editor: React.FC<EditorProps> = ({
 
   React.useEffect(() => {
     setShowDiffView(false);
+    setIsPipelineView(false);
   }, [activeTabId]);
 
-  // Manual save handler
   const handleSave = React.useCallback(() => {
     if (!activeTab || !activeTabId || !activeTab.isModified || isSaving) {
       return;
@@ -118,8 +120,6 @@ export const Editor: React.FC<EditorProps> = ({
           onTabSaved?.(activeTabId);
           onTabError?.(activeTabId, undefined);
           setIsSaving(false);
-
-          // Refresh git status to update Source Control tab
           onGitStatusRefresh?.();
         },
         onError: (error) => {
@@ -138,7 +138,6 @@ export const Editor: React.FC<EditorProps> = ({
     onGitStatusRefresh,
   ]);
 
-  // Keyboard shortcut (Cmd+S / Ctrl+S)
   React.useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if ((e.metaKey || e.ctrlKey) && e.key === 's') {
@@ -151,42 +150,29 @@ export const Editor: React.FC<EditorProps> = ({
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [handleSave]);
 
-  // Track the active tab ID and expected content using refs to prevent stale closures
-  // This is critical because Monaco fires onChange when content prop changes,
-  // but at that moment the closure might still have the old activeTab
   const activeTabIdRef = React.useRef(activeTabId);
   const expectedContentRef = React.useRef(activeContent);
 
-  // Update refs synchronously before render completes
   activeTabIdRef.current = activeTabId;
   expectedContentRef.current = activeContent;
 
-  // Content change handler (no auto-save)
-  // Only handle ACTUAL user edits, not programmatic content changes from tab switching
   const handleChange: OnChange = React.useCallback(
     (value) => {
-      // Ignore undefined values
       if (value === undefined) {
         return;
       }
 
-      // Get the current active tab ID from the ref (always up-to-date)
       const currentTabId = activeTabIdRef.current;
       if (!currentTabId) {
         return;
       }
 
-      // Get the expected content for the current tab
       const expectedContent = expectedContentRef.current;
 
-      // CRITICAL: If the incoming value matches what we expect for this tab,
-      // it means Monaco is just syncing to our controlled value (tab switch).
-      // Only process changes that are DIFFERENT from what we set.
       if (value === expectedContent) {
         return;
       }
 
-      // This is a genuine user edit - update the tab content
       onTabContentChange(currentTabId, value);
     },
     [onTabContentChange],
@@ -206,7 +192,6 @@ export const Editor: React.FC<EditorProps> = ({
 
   return (
     <Container>
-      {/* Editor Header with Breadcrumbs and Save Button */}
       <EditorHeader
         filePath={activeTab.path}
         projectPath={projectPath}
@@ -218,17 +203,22 @@ export const Editor: React.FC<EditorProps> = ({
         showDiffView={showDiffView}
         onSave={handleSave}
         onToggleDiff={() => setShowDiffView((prev) => !prev)}
+        showPipelineButton={showPipelineButton}
+        isPipelineView={isPipelineView}
+        onTogglePipelineView={() => setIsPipelineView((prev) => !prev)}
       />
 
       <EditorViewport>
-        {showDiffView && !isLoadingFileStatus ? (
+        {isPipelineView && <PipelineView content={activeContent} />}
+        {!isPipelineView && showDiffView && !isLoadingFileStatus && (
           <DiffView
             modified={activeContent}
             original={originalContent ?? ''}
             language={language}
             theme={monacoTheme}
           />
-        ) : (
+        )}
+        {!isPipelineView && !showDiffView && !isLoadingFileStatus && (
           <CodeEditor
             content={activeContent}
             originalContent={originalContent}
@@ -240,7 +230,6 @@ export const Editor: React.FC<EditorProps> = ({
         )}
       </EditorViewport>
 
-      {/* Unsaved Changes Dialog */}
       {pendingClose && (
         <UnsavedChangesDialog
           open={Boolean(pendingClose)}
