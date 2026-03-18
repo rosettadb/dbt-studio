@@ -13,6 +13,11 @@ import {
   FormGroup,
   FormControlLabel,
   Checkbox,
+  Divider,
+  Chip,
+  Tooltip,
+  ToggleButton,
+  ToggleButtonGroup,
 } from '@mui/material';
 import {
   Info,
@@ -29,11 +34,13 @@ import { settingsServices } from '../../services';
 interface DbtSettingsProps {
   settings: SettingsType;
   onInstallDbtSave: (key: string, value: string) => void;
+  onBatchSettingsSave?: (updates: Partial<SettingsType>) => void;
 }
 
 export const DbtSettings: React.FC<DbtSettingsProps> = ({
   settings,
   onInstallDbtSave,
+  onBatchSettingsSave,
 }) => {
   const [isLoadingInstall, setIsLoadingInstall] = React.useState(false);
   const [currentPackage, setCurrentPackage] = React.useState('');
@@ -58,6 +65,12 @@ export const DbtSettings: React.FC<DbtSettingsProps> = ({
     [key: string]: string;
   }>({});
   const [isCheckingPackages, setIsCheckingPackages] = React.useState(false);
+
+  // dbt-fusion state
+  const [isFusionInstalling, setIsFusionInstalling] = React.useState(false);
+  const [isFusionUninstalling, setIsFusionUninstalling] = React.useState(false);
+  const [fusionError, setFusionError] = React.useState<string | null>(null);
+  const [fusionSuccess, setFusionSuccess] = React.useState<string | null>(null);
 
   const packageDescriptions = {
     'dbt-core': 'The core dbt™ package (required)',
@@ -371,6 +384,79 @@ export const DbtSettings: React.FC<DbtSettingsProps> = ({
     }
   };
 
+  const handleInstallDbtFusion = async () => {
+    setIsFusionInstalling(true);
+    setFusionError(null);
+    setFusionSuccess(null);
+    setIsLoadingDialog(true);
+    setLoadingMessage('Downloading dbt-fusion binary...');
+
+    try {
+      const result = await settingsServices.installDbtFusion();
+      if (result.success) {
+        setFusionSuccess(
+          `dbt-fusion v${result.version} installed successfully`,
+        );
+        onBatchSettingsSave?.({
+          dbtFusionPath: result.path,
+          dbtFusionVersion: result.version,
+        });
+      } else {
+        setFusionError(result.error || 'Installation failed');
+      }
+    } catch (err) {
+      setFusionError(
+        err instanceof Error ? err.message : 'Installation failed',
+      );
+    } finally {
+      setIsFusionInstalling(false);
+      setIsLoadingDialog(false);
+      setLoadingMessage('');
+    }
+  };
+
+  const handleUninstallDbtFusion = async () => {
+    setIsFusionUninstalling(true);
+    setFusionError(null);
+    setFusionSuccess(null);
+    setIsLoadingDialog(true);
+    setLoadingMessage('Uninstalling dbt-fusion...');
+
+    try {
+      await settingsServices.uninstallDbtFusion();
+      setFusionSuccess('dbt-fusion uninstalled');
+      onBatchSettingsSave?.({
+        dbtFusionPath: '',
+        dbtFusionVersion: '',
+        dbtRuntime: 'dbt-core',
+      });
+    } catch (err) {
+      setFusionError(err instanceof Error ? err.message : 'Uninstall failed');
+    } finally {
+      setIsFusionUninstalling(false);
+      setIsLoadingDialog(false);
+      setLoadingMessage('');
+    }
+  };
+
+  const handleRuntimeChange = async (
+    _: React.MouseEvent<HTMLElement>,
+    newRuntime: 'dbt-core' | 'dbt-fusion' | null,
+  ) => {
+    if (!newRuntime) return;
+    setFusionError(null);
+    setFusionSuccess(null);
+
+    try {
+      await settingsServices.setDbtRuntime(newRuntime);
+      onInstallDbtSave('dbtRuntime', newRuntime);
+    } catch (err) {
+      setFusionError(
+        err instanceof Error ? err.message : 'Failed to switch runtime',
+      );
+    }
+  };
+
   useEffect(() => {
     const fetchDbtVersion = async () => {
       if (
@@ -421,8 +507,146 @@ export const DbtSettings: React.FC<DbtSettingsProps> = ({
     };
   }, [settings.dbtPath]);
 
+  const activeRuntime = settings.dbtRuntime ?? 'dbt-core';
+  const isFusionInstalled = !!settings.dbtFusionPath;
+
   return (
     <Box sx={{ p: 2 }}>
+      {/* Runtime Selector */}
+      <Typography variant="h6" sx={{ mb: 1 }}>
+        Runtime
+      </Typography>
+      <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+        Choose which dbt engine to use. dbt-fusion is a faster Rust-based
+        rewrite with the same CLI interface as dbt-core.
+      </Typography>
+
+      <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 2 }}>
+        <Tooltip
+          title={
+            !isFusionInstalled && activeRuntime === 'dbt-core'
+              ? 'Install dbt-fusion below before switching'
+              : ''
+          }
+        >
+          <span>
+            <ToggleButtonGroup
+              value={activeRuntime}
+              exclusive
+              onChange={handleRuntimeChange}
+              size="small"
+            >
+              <ToggleButton value="dbt-core">dbt-core</ToggleButton>
+              <ToggleButton value="dbt-fusion" disabled={!isFusionInstalled}>
+                dbt-fusion
+              </ToggleButton>
+            </ToggleButtonGroup>
+          </span>
+        </Tooltip>
+        <Chip
+          label={activeRuntime === 'dbt-fusion' ? 'Rust binary' : 'Python/pip'}
+          size="small"
+          color={activeRuntime === 'dbt-fusion' ? 'success' : 'default'}
+          variant="outlined"
+        />
+      </Box>
+
+      {/* dbt-fusion install section */}
+      <Box
+        sx={{
+          border: 1,
+          borderColor: 'divider',
+          borderRadius: 1,
+          p: 2,
+          mb: 3,
+        }}
+      >
+        <Typography
+          variant="subtitle1"
+          sx={{ mb: 1, display: 'flex', alignItems: 'center', gap: 1 }}
+        >
+          dbt-fusion
+          {isFusionInstalled && (
+            <Chip
+              label={`v${settings.dbtFusionVersion}`}
+              size="small"
+              color="success"
+            />
+          )}
+          {!isFusionInstalled && (
+            <Chip label="Not installed" size="small" color="default" />
+          )}
+        </Typography>
+
+        {isFusionInstalled && (
+          <Typography
+            variant="body2"
+            color="text.secondary"
+            sx={{ mb: 1, fontFamily: 'monospace', fontSize: '0.75rem' }}
+          >
+            {settings.dbtFusionPath}
+          </Typography>
+        )}
+
+        {fusionError && (
+          <Alert
+            severity="error"
+            sx={{ mb: 1 }}
+            onClose={() => setFusionError(null)}
+          >
+            {fusionError}
+          </Alert>
+        )}
+        {fusionSuccess && (
+          <Alert
+            severity="success"
+            sx={{ mb: 1 }}
+            onClose={() => setFusionSuccess(null)}
+          >
+            {fusionSuccess}
+          </Alert>
+        )}
+
+        <Box sx={{ display: 'flex', gap: 1 }}>
+          {!isFusionInstalled ? (
+            <Button
+              variant="contained"
+              size="small"
+              onClick={handleInstallDbtFusion}
+              disabled={isFusionInstalling}
+              startIcon={
+                isFusionInstalling ? (
+                  <CircularProgress size={14} color="inherit" />
+                ) : (
+                  <CloudDownload />
+                )
+              }
+            >
+              {isFusionInstalling ? 'Installing...' : 'Install dbt-fusion'}
+            </Button>
+          ) : (
+            <Button
+              variant="outlined"
+              color="error"
+              size="small"
+              onClick={handleUninstallDbtFusion}
+              disabled={isFusionUninstalling}
+              startIcon={
+                isFusionUninstalling ? (
+                  <CircularProgress size={14} color="inherit" />
+                ) : (
+                  <Delete />
+                )
+              }
+            >
+              {isFusionUninstalling ? 'Uninstalling...' : 'Uninstall'}
+            </Button>
+          )}
+        </Box>
+      </Box>
+
+      <Divider sx={{ mb: 3 }} />
+
       <Box display="flex" alignItems="center" gap={1} sx={{ mb: 2 }}>
         <TextField
           fullWidth

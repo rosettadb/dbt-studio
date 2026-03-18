@@ -3,6 +3,7 @@ import {
   FileDialogProperties,
   SettingsType,
   RosettaVersionInfo,
+  DbtFusionVersionInfo,
   InstallResult,
 } from '../../types/backend';
 import { client } from '../config/client';
@@ -164,4 +165,36 @@ export const diagnoseDuckDb = async (): Promise<any> => {
 
 export const installSqlGlot = async (): Promise<void> => {
   await client.get<void>('settings:installSqlGlot');
+};
+
+// dbt-fusion version management services
+export const checkDbtFusionVersions =
+  async (): Promise<DbtFusionVersionInfo> => {
+    const { data } = await client.get<DbtFusionVersionInfo>(
+      'version:dbt-fusion:check',
+    );
+    return data;
+  };
+
+export const installDbtFusion = async (
+  version?: string,
+): Promise<InstallResult> => {
+  const { data } = await client.post<string | undefined, InstallResult>(
+    'version:dbt-fusion:install',
+    version,
+  );
+  return data;
+};
+
+export const uninstallDbtFusion = async (): Promise<void> => {
+  await client.get<void>('version:dbt-fusion:uninstall');
+};
+
+export const setDbtRuntime = async (
+  runtime: 'dbt-core' | 'dbt-fusion',
+): Promise<void> => {
+  await client.post<'dbt-core' | 'dbt-fusion', void>(
+    'version:dbt-fusion:set-runtime',
+    runtime,
+  );
 };

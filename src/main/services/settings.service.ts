@@ -16,6 +16,7 @@ import {
   CliUpdateResponseType,
   SettingsType,
   RosettaVersionInfo,
+  DbtFusionVersionInfo,
   InstallResult,
   DuckDBMetadataPayload,
   DuckDBDiagnostics,
@@ -125,8 +126,12 @@ export default class SettingsService {
 
   static async getDbtExePath(): Promise<string> {
     const settings = await this.loadSettings();
-    const pythonDir = path.dirname(settings.pythonPath);
 
+    if (settings.dbtRuntime === 'dbt-fusion' && settings.dbtFusionPath) {
+      return settings.dbtFusionPath;
+    }
+
+    const pythonDir = path.dirname(settings.pythonPath);
     if (process.platform === 'win32') {
       return path.join(pythonDir, 'dbt.exe');
     }
@@ -658,6 +663,191 @@ export default class SettingsService {
 
     settings.rosettaVersion = '';
     settings.rosettaPath = '';
+    await this.saveSettings(settings);
+  }
+
+  // dbt-fusion version management
+  // dbt-fusion is distributed via dbt Labs CDN, not GitHub releases.
+  // Version manifest: https://public.cdn.getdbt.com/fs/versions.json
+  // Download pattern: https://public.cdn.getdbt.com/fs/cli/fs-v{version}-{target}.tar.gz
+
+  private static async resolveDbtFusionVersion(
+    version?: string,
+  ): Promise<string> {
+    if (version) return version;
+    const manifest = await axios.get(
+      'https://public.cdn.getdbt.com/fs/versions.json',
+    );
+    const tag: string = manifest.data?.latest?.tag ?? '';
+    return tag.replace(/^v/, '');
+  }
+
+  private static getDbtFusionTarget(): string {
+    const { platform, arch } = process;
+    const targetMap: Record<string, Record<string, string>> = {
+      darwin: {
+        arm64: 'aarch64-apple-darwin',
+        x64: 'x86_64-apple-darwin',
+      },
+      linux: {
+        arm64: 'aarch64-unknown-linux-gnu',
+        x64: 'x86_64-unknown-linux-gnu',
+      },
+    };
+    const target = targetMap[platform]?.[arch];
+    if (!target) {
+      throw new Error(
+        `dbt-fusion does not support ${platform}-${arch} yet. ` +
+          `Windows support is not available. See https://docs.getdbt.com/docs/fusion/install-fusion-cli`,
+      );
+    }
+    return target;
+  }
+
+  static async checkDbtFusionVersions(): Promise<DbtFusionVersionInfo> {
+    const settings = await this.loadSettings();
+    const currentVersion = settings.dbtFusionVersion || null;
+    const currentPath = settings.dbtFusionPath || null;
+
+    try {
+      const manifest = await axios.get(
+        'https://public.cdn.getdbt.com/fs/versions.json',
+      );
+      const latestTag: string = manifest.data?.latest?.tag ?? '';
+      const latestVersion = latestTag.replace(/^v/, '');
+
+      let target = '';
+      try {
+        target = this.getDbtFusionTarget();
+      } catch {
+        // unsupported platform — still return version info
+      }
+
+      const downloadUrl = target
+        ? `https://public.cdn.getdbt.com/fs/cli/fs-v${latestVersion}-${target}.tar.gz`
+        : '';
+
+      const availableVersions = latestVersion
+        ? [
+            {
+              version: latestVersion,
+              releaseDate: '',
+              isPrerelease: false,
+              downloadUrl,
+              isNewer:
+                this.compareVersions(latestVersion, currentVersion || '0.0.0') >
+                0,
+              isOlder:
+                this.compareVersions(latestVersion, currentVersion || '0.0.0') <
+                0,
+            },
+          ]
+        : [];
+
+      return {
+        currentVersion,
+        currentPath,
+        availableVersions,
+        latestStable: latestVersion,
+      };
+    } catch (error) {
+      return {
+        currentVersion,
+        currentPath,
+        availableVersions: [],
+        latestStable: '',
+      };
+    }
+  }
+
+  static async installDbtFusion(version?: string): Promise<InstallResult> {
+    try {
+      const settings = await this.loadSettings();
+
+      const target = this.getDbtFusionTarget(); // throws for unsupported platforms
+      const targetVersion = await this.resolveDbtFusionVersion(version);
+
+      if (!targetVersion) {
+        throw new Error('Could not resolve dbt-fusion version from manifest');
+      }
+
+      const archiveName = `fs-v${targetVersion}-${target}.tar.gz`;
+      const downloadUrl = `https://public.cdn.getdbt.com/fs/cli/${archiveName}`;
+
+      const userDataPath = app.getPath('userData');
+      const fusionBaseDir = path.join(
+        userDataPath,
+        'dbt-fusion',
+        targetVersion,
+      );
+      const binaryPath = path.join(fusionBaseDir, 'dbt');
+
+      // Remove old installation if exists
+      if (settings.dbtFusionPath && fs.existsSync(settings.dbtFusionPath)) {
+        const oldVersionDir = path.dirname(settings.dbtFusionPath);
+        await fs.remove(oldVersionDir);
+      }
+
+      await fs.mkdirp(fusionBaseDir);
+      const archivePath = path.join(fusionBaseDir, archiveName);
+
+      const response = await axios.get(downloadUrl, {
+        responseType: 'arraybuffer',
+      });
+      await fs.writeFile(archivePath, response.data);
+
+      await tar.x({ file: archivePath, cwd: fusionBaseDir, strip: 1 });
+      await fs.chmod(binaryPath, 0o755);
+      await fs.remove(archivePath);
+
+      settings.dbtFusionVersion = targetVersion;
+      settings.dbtFusionPath = binaryPath;
+      await this.saveSettings(settings);
+
+      return {
+        success: true,
+        version: targetVersion,
+        path: binaryPath,
+      };
+    } catch (error) {
+      return {
+        success: false,
+        version: version || '',
+        path: '',
+        error:
+          error instanceof Error ? error.message : 'Unknown error occurred',
+      };
+    }
+  }
+
+  static async uninstallDbtFusion(): Promise<void> {
+    const settings = await this.loadSettings();
+
+    if (settings.dbtFusionPath && fs.existsSync(settings.dbtFusionPath)) {
+      const versionDir = path.dirname(settings.dbtFusionPath);
+      await fs.remove(versionDir);
+    }
+
+    settings.dbtFusionVersion = '';
+    settings.dbtFusionPath = '';
+    if (settings.dbtRuntime === 'dbt-fusion') {
+      settings.dbtRuntime = 'dbt-core';
+    }
+    await this.saveSettings(settings);
+  }
+
+  static async setDbtRuntime(
+    runtime: 'dbt-core' | 'dbt-fusion',
+  ): Promise<void> {
+    const settings = await this.loadSettings();
+
+    if (runtime === 'dbt-fusion' && !settings.dbtFusionPath) {
+      throw new Error(
+        'dbt-fusion is not installed. Please install it first before switching.',
+      );
+    }
+
+    settings.dbtRuntime = runtime;
     await this.saveSettings(settings);
   }
 

@@ -305,6 +305,9 @@ export type SettingsType = {
   sampleRosettaMainConf: string;
   dbtPath: string;
   dbtVersion: string;
+  dbtRuntime?: 'dbt-core' | 'dbt-fusion';
+  dbtFusionPath?: string;
+  dbtFusionVersion?: string;
   pythonVersion: string;
   pythonPath: string;
   pythonBinary: string;
@@ -343,6 +346,22 @@ export type DataBase = {
 
 // Rosetta Version Management Types
 export type RosettaVersionInfo = {
+  currentVersion: string | null;
+  currentPath: string | null;
+  availableVersions: {
+    version: string;
+    releaseDate: string;
+    isPrerelease: boolean;
+    downloadUrl: string;
+    isNewer: boolean;
+    isOlder: boolean;
+    releaseNotes?: string;
+  }[];
+  latestStable: string;
+  latestPrerelease?: string;
+};
+
+export type DbtFusionVersionInfo = {
   currentVersion: string | null;
   currentPath: string | null;
   availableVersions: {

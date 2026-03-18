@@ -14,6 +14,10 @@ const handlerChannels: SettingsChannels[] = [
   'version:rosetta:check',
   'version:rosetta:install',
   'version:rosetta:uninstall',
+  'version:dbt-fusion:check',
+  'version:dbt-fusion:install',
+  'version:dbt-fusion:uninstall',
+  'version:dbt-fusion:set-runtime',
   'settings:reset-factory',
   'settings:restart',
 ];
@@ -121,6 +125,29 @@ const registerSettingsHandlers = (mainWindow: BrowserWindow) => {
   ipcMain.handle('settings:installSqlGlot', async () => {
     return SettingsService.installSqlGlot();
   });
+
+  // dbt-fusion version management handlers
+  ipcMain.handle('version:dbt-fusion:check', async () => {
+    return SettingsService.checkDbtFusionVersions();
+  });
+
+  ipcMain.handle(
+    'version:dbt-fusion:install',
+    async (_event, version?: string) => {
+      return SettingsService.installDbtFusion(version);
+    },
+  );
+
+  ipcMain.handle('version:dbt-fusion:uninstall', async () => {
+    return SettingsService.uninstallDbtFusion();
+  });
+
+  ipcMain.handle(
+    'version:dbt-fusion:set-runtime',
+    async (_event, runtime: 'dbt-core' | 'dbt-fusion') => {
+      return SettingsService.setDbtRuntime(runtime);
+    },
+  );
 };
 
 export default registerSettingsHandlers;

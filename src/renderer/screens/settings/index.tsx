@@ -77,6 +77,14 @@ const Settings: React.FC = () => {
     updateSettings(newSettings);
   };
 
+  const handleBatchChange = (updates: Partial<SettingsType>) => {
+    setLocalSettings((prev) => {
+      const newSettings = { ...prev, ...updates };
+      updateSettings(newSettings);
+      return newSettings;
+    });
+  };
+
   const handleFilePicker = async (
     name: keyof SettingsType,
     isDir: boolean,
@@ -135,6 +143,7 @@ const Settings: React.FC = () => {
           <DbtSettings
             settings={localSettings}
             onInstallDbtSave={handleChangeV2}
+            onBatchSettingsSave={handleBatchChange}
           />
         );
       case 'rosetta':
