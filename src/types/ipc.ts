@@ -21,7 +21,10 @@ export type SettingsChannels =
   | 'settings:duckdb:refresh'
   | 'settings:duckdb:reinitialize'
   | 'settings:duckdb:diagnose'
-  | 'settings:installSqlGlot';
+  | 'settings:installSqlGlot'
+  | 'dbt:versions:list'
+  | 'dbt:packageVersions:list'
+  | 'dbt:packageVersion:install';
 
 export type ProjectChannels =
   | 'project:get'
