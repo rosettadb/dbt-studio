@@ -29,7 +29,7 @@ import DatabaseIcon from '@mui/icons-material/Storage';
 import RocketLaunchIcon from '@mui/icons-material/RocketLaunch';
 import { toast } from 'react-toastify';
 import { Cable } from '@mui/icons-material';
-import { projectsServices } from '../../services';
+import { projectsServices, connectorsServices } from '../../services';
 import {
   useDeleteProject,
   useFilePicker,
@@ -38,6 +38,7 @@ import {
   useGetSettings,
   useSelectProject,
   useUpdateProject,
+  useDuckLakeInstances,
 } from '../../controllers';
 import {
   AddConnectionModal,
@@ -80,6 +81,8 @@ const SelectProject: React.FC = () => {
   const { data: projects = [] } = useGetProjects();
   const { data: connections = [], isLoading: isLoadingConnections } =
     useGetConnections();
+  const { data: datalakeInstances = [], isLoading: isLoadingDatalakes } =
+    useDuckLakeInstances();
   const [selectedConnection, setSelectedConnection] =
     React.useState<string>('');
   const [isCloneModalOpen, setIsCloneModalOpen] = React.useState(false);
@@ -89,6 +92,9 @@ const SelectProject: React.FC = () => {
     name: '',
     createTemplateFolders: true,
   });
+  const [connectionType, setConnectionType] = React.useState<
+    'standard' | 'datalake'
+  >('standard');
   const { mutate: getFiles } = useFilePicker();
 
   const [defaultProjectPath, setDefaultProjectPath] = React.useState<string>(
@@ -121,13 +127,13 @@ const SelectProject: React.FC = () => {
   const { mutate: updateProject } = useUpdateProject();
 
   const getConnectionIcon = (project: Project) => {
-    const connectionType = project?.connection?.type;
+    const connType = project?.connection?.type;
 
-    if (!connectionType) {
+    if (!connType) {
       return null;
     }
 
-    return connectionIcons.images[connectionType as SupportedConnectionTypes];
+    return connectionIcons.images[connType as SupportedConnectionTypes];
   };
 
   const renderProjectIcon = (project: Project) => {
@@ -148,12 +154,11 @@ const SelectProject: React.FC = () => {
     );
   };
 
-  // Helper function to render connection icon for the selector
-  const renderConnectionIcon = (connectionType: string) => {
+  const renderConnectionIcon = (connType: string) => {
     const iconSrc =
-      connectionIcons.images[connectionType as SupportedConnectionTypes];
+      connectionIcons.images[connType as SupportedConnectionTypes];
     if (iconSrc) {
-      return <ConnectionIcon src={iconSrc} alt={connectionType} />;
+      return <ConnectionIcon src={iconSrc} alt={connType} />;
     }
     return <DatabaseIcon sx={{ fontSize: 20, marginRight: 0.75 }} />;
   };
@@ -239,9 +244,38 @@ const SelectProject: React.FC = () => {
     try {
       const path = await pathJoin(defaultProjectPath, newProject.name);
 
+      let connectionId = selectedConnection || undefined;
+
+      if (connectionType === 'datalake' && selectedConnection) {
+        const datalakeInstance = datalakeInstances.find(
+          (dl) => dl.id === selectedConnection,
+        );
+
+        if (datalakeInstance) {
+          const sanitizedName =
+            `${datalakeInstance.name}_${newProject.name}`.replace(
+              /[^a-zA-Z0-9_]/g,
+              '_',
+            );
+          const datalakeConnection = {
+            type: 'ducklake' as const,
+            name: sanitizedName,
+            host: '',
+            port: 0,
+            instanceId: datalakeInstance.id,
+            dataPath: datalakeInstance.dataPath,
+            status: datalakeInstance.status,
+          };
+          connectionId =
+            await connectorsServices.saveConnection(datalakeConnection);
+        } else {
+          // Datalake instance not found - don't use the raw instance ID
+          connectionId = undefined;
+        }
+      }
       const project = await projectsServices.addProject({
         name: path,
-        connectionId: selectedConnection || undefined,
+        connectionId,
         createTemplateFolders: newProject.createTemplateFolders,
       });
 
@@ -251,9 +285,12 @@ const SelectProject: React.FC = () => {
       setIsAddingProject(false);
       setNewProject({ name: '', createTemplateFolders: true });
       setSelectedConnection('');
+      setConnectionType('standard');
       navigate('/app/loading');
     } catch (error) {
-      toast.error('Failed to create project. Please try again.');
+      toast.error(
+        `Failed to create project: ${error instanceof Error ? error.message : 'Unknown error'}`,
+      );
     }
   };
 
@@ -507,8 +544,12 @@ const SelectProject: React.FC = () => {
             setNewProject={setNewProject}
             selectedConnection={selectedConnection}
             setSelectedConnection={setSelectedConnection}
+            connectionType={connectionType}
+            setConnectionType={setConnectionType}
             isLoadingConnections={isLoadingConnections}
             connections={connections}
+            datalakeInstances={datalakeInstances}
+            isLoadingDatalakes={isLoadingDatalakes}
             navigate={navigate}
             getFiles={getFiles}
             handleAddProject={handleAddProject}

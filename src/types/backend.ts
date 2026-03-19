@@ -105,7 +105,7 @@ export type DuckLakeConnectionConfig = Omit<
   // Metadata from instance
   catalogType?: 'duckdb' | 'postgresql' | 'sqlite';
   dataPath?: string;
-  status?: 'active' | 'inactive' | 'error';
+  status?: 'active' | 'inactive' | 'error' | 'connecting';
 };
 
 export type ConnectionInput =

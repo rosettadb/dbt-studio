@@ -1,7 +1,8 @@
 import { DuckLakeService } from '../../../../src/renderer/services/duckLake.service';
 
 describe('renderer/services/duckLake.service', () => {
-  const invokeMock = () => (window as any).electron.ipcRenderer.invoke as jest.Mock;
+  const invokeMock = () =>
+    (window as any).electron.ipcRenderer.invoke as jest.Mock;
 
   beforeEach(() => {
     jest.clearAllMocks();
@@ -49,7 +50,9 @@ describe('renderer/services/duckLake.service', () => {
       const updated = { id: 'i1', name: 'Updated' };
       invokeMock().mockResolvedValue(updated);
 
-      const result = await DuckLakeService.updateInstance('i1', { name: 'Updated' } as any);
+      const result = await DuckLakeService.updateInstance('i1', {
+        name: 'Updated',
+      } as any);
 
       expect(invokeMock()).toHaveBeenCalledWith('ducklake:instance:update', {
         id: 'i1',
@@ -63,9 +66,18 @@ describe('renderer/services/duckLake.service', () => {
       const params = { limit: 10, offset: 0 };
       invokeMock().mockResolvedValue(data);
 
-      const result = await DuckLakeService.listInstanceSnapshots('i1', params as any);
+      const result = await DuckLakeService.listInstanceSnapshots(
+        'i1',
+        params as any,
+      );
 
-      expect(invokeMock()).toHaveBeenCalledWith('ducklake:instance:listSnapshots', 'i1', params);
+      expect(invokeMock()).toHaveBeenCalledWith(
+        'ducklake:instance:listSnapshots',
+        {
+          instanceId: 'i1',
+          params,
+        },
+      );
       expect(result).toEqual(data);
     });
 
@@ -75,7 +87,13 @@ describe('renderer/services/duckLake.service', () => {
 
       await DuckLakeService.listInstanceSnapshots('i1');
 
-      expect(invokeMock()).toHaveBeenCalledWith('ducklake:instance:listSnapshots', 'i1', undefined);
+      expect(invokeMock()).toHaveBeenCalledWith(
+        'ducklake:instance:listSnapshots',
+        {
+          instanceId: 'i1',
+          params: undefined,
+        },
+      );
     });
   });
 
@@ -88,8 +106,10 @@ describe('renderer/services/duckLake.service', () => {
 
       expect(invokeMock()).toHaveBeenCalledWith(
         'ducklake:maintenance:optimize',
-        'i1',
-        'my_table',
+        {
+          instanceId: 'i1',
+          tableName: 'my_table',
+        },
       );
       expect(result).toEqual(task);
     });
@@ -102,8 +122,10 @@ describe('renderer/services/duckLake.service', () => {
 
       expect(invokeMock()).toHaveBeenCalledWith(
         'ducklake:maintenance:optimize',
-        'i1',
-        undefined,
+        {
+          instanceId: 'i1',
+          tableName: undefined,
+        },
       );
     });
   });
@@ -112,7 +134,9 @@ describe('renderer/services/duckLake.service', () => {
     it('testCloudConnection should invoke ducklake:connection:test with provider + config', async () => {
       invokeMock().mockResolvedValue(true);
 
-      const result = await DuckLakeService.testCloudConnection('aws', { region: 'us-east-1' });
+      const result = await DuckLakeService.testCloudConnection('aws', {
+        region: 'us-east-1',
+      });
 
       expect(invokeMock()).toHaveBeenCalledWith('ducklake:connection:test', {
         provider: 'aws',

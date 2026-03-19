@@ -27,9 +27,9 @@ import {
   TableContainer,
   TableHead,
   TableRow,
-  TablePagination,
   TextField,
   InputAdornment,
+  TablePagination,
 } from '@mui/material';
 import {
   Dataset as Database,
@@ -98,6 +98,8 @@ export const DataLakeInstanceDetails: React.FC<
     pageSize: snapshotRowsPerPage,
     filter: snapshotFilter,
   });
+
+  if (!instance) return null;
 
   const handleChangePage = (_event: unknown, newPage: number) => {
     setSnapshotPage(newPage);
@@ -593,6 +595,7 @@ export const DataLakeInstanceDetails: React.FC<
                     color="primary"
                   />
                 }
+                secondaryTypographyProps={{ component: 'div' }}
               />
             </ListItem>
             {instance.catalog.type === 'duckdb' && instance.catalog.duckdb && (
@@ -852,7 +855,7 @@ export const DataLakeInstanceDetails: React.FC<
             value={currentTab}
             onChange={(_, newValue) => setCurrentTab(newValue)}
           >
-            <Tab label="Tables" />
+            <Tab label="Tables & Views" />
             <Tab label="Overview" />
             <Tab label="History" />
             <Tab label="Activity" />

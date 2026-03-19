@@ -28,6 +28,7 @@ import {
 import { useNavigate, useParams } from 'react-router-dom';
 import { useDuckLakeTableDetails } from '../../controllers/duckLake.controller';
 import { safeToString } from '../../helpers/utils';
+import { useDuckLakeConnection } from '../../hooks';
 
 // Import Tab Components
 import { TableOverviewTab } from './tableDetails/TableOverviewTab';
@@ -67,6 +68,9 @@ export const DataLakeTableDetails: React.FC = () => {
     tableName: string;
   }>();
   const [currentTab, setCurrentTab] = useState(0);
+
+  // Acquire connection for this DuckLake instance
+  useDuckLakeConnection(instanceId);
 
   const {
     data: tableDetails,

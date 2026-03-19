@@ -28,6 +28,16 @@ export const deleteConnection = async (body: string): Promise<void> => {
   await client.post<string>('connector:delete', body);
 };
 
+export const saveConnection = async (
+  connection: ConnectionInput,
+): Promise<string> => {
+  const { data } = await client.post<ConnectionInput, string>(
+    'connector:save',
+    connection,
+  );
+  return data;
+};
+
 export const testConnection = async (
   body: ConnectionInput,
 ): Promise<boolean | BigQueryTestResponse> => {
@@ -38,8 +48,13 @@ export const testConnection = async (
   return data;
 };
 
-export const listConnections = async (): Promise<ConnectionModel[]> => {
-  const { data } = await client.get<ConnectionModel[]>('connector:list');
+export const listConnections = async (
+  includeDataLake?: boolean,
+): Promise<ConnectionModel[]> => {
+  const { data } = await client.post<boolean | undefined, ConnectionModel[]>(
+    'connector:list',
+    includeDataLake,
+  );
   return data;
 };
 

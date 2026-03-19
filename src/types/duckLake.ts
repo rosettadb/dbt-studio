@@ -437,6 +437,7 @@ export interface DuckLakeSchemaTable {
   name: string;
   type: string;
   columns: DuckLakeSchemaColumn[];
+  metadata?: any;
 }
 
 export interface DuckLakeSchema {
@@ -448,6 +449,19 @@ export interface DuckLakeSchemaInfo {
   schemas: DuckLakeSchema[];
   functions: string[];
   systemTables: string[];
+}
+
+// View types (Plan 25)
+export interface DuckLakeViewInfo {
+  name: string;
+  schema: string;
+  instanceId: string;
+  definition?: string;
+  columns: Array<{
+    name: string;
+    type: string;
+    nullable?: boolean;
+  }>;
 }
 
 // Configuration and Settings Types
@@ -683,6 +697,14 @@ export interface DuckLakeIpcChannels {
     instanceId: string,
     params: DuckLakeSnapshotParams,
   ) => Promise<DuckLakePaginatedResult<DuckLakeSnapshotDetail>>;
+
+  // View Management (Plan 25)
+  'ducklake:view:list': (instanceId: string) => Promise<DuckLakeViewInfo[]>;
+  'ducklake:view:getSchema': (
+    instanceId: string,
+    schemaName: string,
+    viewName: string,
+  ) => Promise<DuckLakeColumnInfo[]>;
 
   // Cloud Connection Management (Phase: Connection Integration)
   'ducklake:connection:list': () => Promise<any[]>; // Returns CloudConnection[]

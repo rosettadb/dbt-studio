@@ -17,7 +17,14 @@ const CustomTableRow = <T,>({
   rowActions?: Array<TableRowAction<T>>;
 }) => {
   return (
-    <TableRow>
+    <TableRow
+      sx={{
+        '& td': {
+          borderBottom: '1px solid',
+          borderColor: 'divider',
+        },
+      }}
+    >
       {indexCell && <TableCell>{index}</TableCell>}
       {columns.map((column) => (
         <CustomTableColumn
