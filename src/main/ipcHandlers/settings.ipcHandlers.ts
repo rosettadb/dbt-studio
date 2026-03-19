@@ -3,6 +3,7 @@ import { initializeDataStorage } from '../utils/setupHelpers';
 import { FileDialogProperties, SettingsType } from '../../types/backend';
 import { SettingsService } from '../services';
 import { SettingsChannels } from '../../types/ipc';
+import { DbtVersionManagerService } from '../services/dbtVersionManager.service';
 
 const handlerChannels: SettingsChannels[] = [
   'settings:load',
@@ -148,6 +149,18 @@ const registerSettingsHandlers = (mainWindow: BrowserWindow) => {
       return SettingsService.setDbtRuntime(runtime);
     },
   );
+
+  ipcMain.handle('dbt:versions:list', async () => {
+    return DbtVersionManagerService.listDbtCoreVersions();
+  });
+
+  ipcMain.handle('dbt:packageVersions:list', async (_event, req) => {
+    return DbtVersionManagerService.listPackageVersions(req?.packageName);
+  });
+
+  ipcMain.handle('dbt:packageVersion:install', async (_event, req) => {
+    return DbtVersionManagerService.installPackageVersion(req);
+  });
 };
 
 export default registerSettingsHandlers;

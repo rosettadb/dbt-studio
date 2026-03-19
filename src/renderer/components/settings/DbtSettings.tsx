@@ -8,16 +8,22 @@ import {
   CircularProgress,
   Alert,
   LinearProgress,
-  Dialog,
-  DialogContent,
+  Backdrop,
   FormGroup,
   FormControlLabel,
   Checkbox,
   Divider,
   Chip,
+  List,
+  ListItem,
+  ListItemText,
+  ListItemSecondaryAction,
+  Accordion,
+  AccordionSummary,
+  AccordionDetails,
   Tooltip,
-  ToggleButton,
   ToggleButtonGroup,
+  ToggleButton,
 } from '@mui/material';
 import {
   Info,
@@ -26,10 +32,22 @@ import {
   GetApp,
   Description,
   CloudDownload,
+  Download,
+  CheckCircle,
+  ExpandMore,
 } from '@mui/icons-material';
-import { SettingsType } from '../../../types/backend';
+import {
+  DbtVersionListResponse,
+  PythonPackageVersionListResponse,
+  SettingsType,
+} from '../../../types/backend';
 import { useCli } from '../../hooks';
 import { settingsServices } from '../../services';
+import {
+  listDbtCoreVersions,
+  installPackageVersion,
+  listPackageVersions,
+} from '../../services/dbtVersions.service';
 
 interface DbtSettingsProps {
   settings: SettingsType;
@@ -49,6 +67,9 @@ export const DbtSettings: React.FC<DbtSettingsProps> = ({
 
   const [isLoadingDialog, setIsLoadingDialog] = React.useState(false);
   const [loadingMessage, setLoadingMessage] = React.useState('');
+  const [installingPackageKey, setInstallingPackageKey] = React.useState<
+    string | null
+  >(null);
 
   const [selectedPackages, setSelectedPackages] = React.useState({
     'dbt-core': true,
@@ -72,6 +93,20 @@ export const DbtSettings: React.FC<DbtSettingsProps> = ({
   const [fusionError, setFusionError] = React.useState<string | null>(null);
   const [fusionSuccess, setFusionSuccess] = React.useState<string | null>(null);
 
+  const [dbtCoreVersions, setDbtCoreVersions] =
+    React.useState<DbtVersionListResponse | null>(null);
+  const [isCheckingDbtCoreVersions, setIsCheckingDbtCoreVersions] =
+    React.useState(false);
+
+  const [packageVersions, setPackageVersions] = React.useState<
+    Record<string, PythonPackageVersionListResponse | null>
+  >({});
+  const [isCheckingPackageVersions, setIsCheckingPackageVersions] =
+    React.useState<Record<string, boolean>>({});
+  const [expandedPackage, setExpandedPackage] = React.useState<string | false>(
+    false,
+  );
+
   const packageDescriptions = {
     'dbt-core': 'The core dbt™ package (required)',
     'dbt-postgres': 'Adapter for PostgreSQL databases',
@@ -83,6 +118,27 @@ export const DbtSettings: React.FC<DbtSettingsProps> = ({
     sqlglot: 'SQL Parser and Transpiler (Required for Lineage)',
   };
 
+  const compareSimpleVersions = (a: string, b: string): number => {
+    const parse = (v: string): number[] => {
+      return v
+        .replace(/^v/, '')
+        .split('.')
+        .map((x) => Number(x));
+    };
+
+    const aa = parse(a);
+    const bb = parse(b);
+    const maxLen = Math.max(aa.length, bb.length);
+
+    for (let i = 0; i < maxLen; i += 1) {
+      const av = aa[i] ?? 0;
+      const bv = bb[i] ?? 0;
+      if (av > bv) return 1;
+      if (av < bv) return -1;
+    }
+    return 0;
+  };
+
   const handlePackageToggle = (packageName: string) => {
     if (packageName === 'dbt-core') return; // Don't allow unchecking dbt-core
 
@@ -92,7 +148,7 @@ export const DbtSettings: React.FC<DbtSettingsProps> = ({
     }));
   };
 
-  const getDbtVersion = async (): Promise<string | null> => {
+  async function getDbtVersion(): Promise<string | null> {
     setIsLoadingDialog(true);
     setLoadingMessage('Checking dbt version...');
 
@@ -115,7 +171,7 @@ export const DbtSettings: React.FC<DbtSettingsProps> = ({
       setIsLoadingDialog(false);
       setLoadingMessage('');
     }
-  };
+  }
 
   const handleInstallDbt = async () => {
     const allPackages = [
@@ -191,51 +247,6 @@ export const DbtSettings: React.FC<DbtSettingsProps> = ({
     }
   };
 
-  const handleUninstallDbt = async () => {
-    setIsLoadingInstall(true);
-    setCurrentPackage('Uninstalling dbt packages...');
-    setIsLoadingDialog(true);
-
-    try {
-      const allPackages = [
-        'dbt-databricks',
-        'dbt-redshift',
-        'dbt-bigquery',
-        'dbt-snowflake',
-        'dbt-postgres',
-        'dbt-duckdb',
-        'dbt-core',
-      ];
-
-      const packages = allPackages.filter(
-        (pkg) => selectedPackages[pkg as keyof typeof selectedPackages],
-      );
-      const python = settings.pythonPath
-        ? `"${settings.pythonPath}"`
-        : 'python';
-
-      for (let i = 0; i < packages.length; i++) {
-        const pkg = packages[i];
-        setCurrentPackage(`Uninstalling ${pkg}...`);
-        setLoadingMessage(`Uninstalling ${pkg}...`);
-        setInstallProgress((i / packages.length) * 100);
-
-        try {
-          await runCommand(`${python} -m pip uninstall -y ${pkg}`);
-        } catch {
-          /* Continue with next package */
-        }
-      }
-
-      onInstallDbtSave('dbtPath', '');
-    } finally {
-      setIsLoadingInstall(false);
-      setCurrentPackage('');
-      setInstallProgress(0);
-      setIsLoadingDialog(false);
-    }
-  };
-
   const checkPackagesIndividually = async (
     python: string,
     packages: string[],
@@ -264,7 +275,7 @@ export const DbtSettings: React.FC<DbtSettingsProps> = ({
     }
   };
 
-  const checkInstalledPackages = async (): Promise<void> => {
+  async function checkInstalledPackages(): Promise<void> {
     if (isCheckingPackages) return;
 
     setIsCheckingPackages(true);
@@ -325,6 +336,86 @@ export const DbtSettings: React.FC<DbtSettingsProps> = ({
       setInstalledPackages(installed);
       setIsCheckingPackages(false);
     }
+  }
+
+  const refreshDbtCoreVersions = async () => {
+    setIsCheckingDbtCoreVersions(true);
+    try {
+      const data = await listDbtCoreVersions();
+      setDbtCoreVersions(data);
+    } finally {
+      setIsCheckingDbtCoreVersions(false);
+    }
+  };
+
+  const installSinglePackageVersion = async (
+    packageName: string,
+    version: string,
+  ) => {
+    setInstallingPackageKey(`${packageName}@${version}`);
+    setIsLoadingDialog(true);
+    setLoadingMessage(`Installing ${packageName}==${version}...`);
+    try {
+      const res = await installPackageVersion({
+        pythonPath: settings.pythonPath,
+        packageName,
+        version,
+      });
+
+      if (!res.ok) {
+        return;
+      }
+
+      if (packageName === 'dbt-core') {
+        const installedVersion = await getDbtVersion();
+        if (installedVersion) {
+          onInstallDbtSave('dbtVersion', installedVersion);
+        }
+        await refreshDbtCoreVersions();
+      }
+
+      if (settings.dbtPath && settings.dbtPath !== 'dbt') {
+        await checkInstalledPackages();
+      }
+    } finally {
+      setInstallingPackageKey(null);
+      setIsLoadingDialog(false);
+      setLoadingMessage('');
+    }
+  };
+
+  const handleInstallDbtCoreVersionClick = (version: string) => {
+    installSinglePackageVersion('dbt-core', version).catch(() => undefined);
+  };
+
+  const fetchPackageVersions = async (packageName: string) => {
+    setIsCheckingPackageVersions((prev) => ({
+      ...prev,
+      [packageName]: true,
+    }));
+    try {
+      const data = await listPackageVersions({ packageName });
+      setPackageVersions((prev) => ({
+        ...prev,
+        [packageName]: data,
+      }));
+    } finally {
+      setIsCheckingPackageVersions((prev) => ({
+        ...prev,
+        [packageName]: false,
+      }));
+    }
+  };
+
+  const handlePackageAccordionChange = (packageName: string) => {
+    return (_event: React.SyntheticEvent, isExpanded: boolean) => {
+      const next = isExpanded ? packageName : false;
+      setExpandedPackage(next);
+
+      if (isExpanded && !packageVersions[packageName]) {
+        fetchPackageVersions(packageName).catch(() => undefined);
+      }
+    };
   };
 
   const handleUninstallPackage = async (packageName: string) => {
@@ -510,8 +601,20 @@ export const DbtSettings: React.FC<DbtSettingsProps> = ({
   const activeRuntime = settings.dbtRuntime ?? 'dbt-core';
   const isFusionInstalled = !!settings.dbtFusionPath;
 
+  useEffect(() => {
+    refreshDbtCoreVersions().catch(() => undefined);
+  }, []);
+
+  const handleRefreshDbtCoreVersionsClick = () => {
+    refreshDbtCoreVersions().catch(() => undefined);
+  };
+
+  const handleRefreshInstalledPackagesClick = () => {
+    checkInstalledPackages().catch(() => undefined);
+  };
+
   return (
-    <Box sx={{ p: 2 }}>
+    <Box sx={{ p: 2, maxWidth: 800 }}>
       {/* Runtime Selector */}
       <Typography variant="h6" sx={{ mb: 1 }}>
         Runtime
@@ -668,22 +771,7 @@ export const DbtSettings: React.FC<DbtSettingsProps> = ({
 
       {settings.dbtPath && settings.dbtPath !== 'dbt' ? (
         <Box sx={{ mt: 2 }}>
-          <Alert
-            severity="success"
-            sx={{ mb: 2 }}
-            action={
-              <Button
-                color="error"
-                variant="outlined"
-                onClick={handleUninstallDbt}
-                disabled={isLoadingInstall}
-                size="small"
-                startIcon={<Delete />}
-              >
-                Uninstall All
-              </Button>
-            }
-          >
+          <Alert severity="success" sx={{ mb: 2 }}>
             dbt™ is installed at: {settings.dbtPath}
             {settings?.dbtVersion && (
               <Typography variant="body2" sx={{ mt: 1 }}>
@@ -691,7 +779,330 @@ export const DbtSettings: React.FC<DbtSettingsProps> = ({
               </Typography>
             )}
           </Alert>
+        </Box>
+      ) : null}
 
+      <Box sx={{ mb: 3 }}>
+        <Typography
+          variant="h6"
+          sx={{ mb: 2, display: 'flex', alignItems: 'center', gap: 1 }}
+        >
+          Available dbt-core versions (latest 5)
+          {isCheckingDbtCoreVersions && <CircularProgress size={16} />}
+          <Button
+            size="small"
+            onClick={handleRefreshDbtCoreVersionsClick}
+            disabled={isCheckingDbtCoreVersions}
+            startIcon={<Refresh />}
+          >
+            Refresh
+          </Button>
+        </Typography>
+
+        {(dbtCoreVersions?.versions ?? []).length > 0 ? (
+          <List
+            sx={{
+              border: 1,
+              borderColor: 'divider',
+              borderRadius: 1,
+            }}
+          >
+            {(dbtCoreVersions?.versions ?? []).map((item) => {
+              const installed = settings.dbtVersion;
+              const isInstalled = installed === item.version;
+              const isLatest =
+                item.version === (dbtCoreVersions?.latestStable ?? null);
+
+              let actionLabel = 'Downgrade';
+              if (isInstalled) {
+                actionLabel = 'Installed';
+              } else if (
+                installed &&
+                compareSimpleVersions(item.version, installed) > 0
+              ) {
+                actionLabel = 'Upgrade';
+              }
+
+              return (
+                <React.Fragment key={item.version}>
+                  <ListItem>
+                    <ListItemText
+                      primary={
+                        <Box
+                          sx={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: 1,
+                          }}
+                        >
+                          <Typography variant="body1" sx={{ fontWeight: 500 }}>
+                            {item.version}
+                          </Typography>
+
+                          {isInstalled && (
+                            <Box
+                              sx={{
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: 0.5,
+                              }}
+                            >
+                              <CheckCircle color="success" fontSize="small" />
+                              <Chip
+                                label="Installed"
+                                size="small"
+                                color="success"
+                              />
+                            </Box>
+                          )}
+
+                          {isLatest && !item.isPrerelease && (
+                            <Chip label="Latest" size="small" color="primary" />
+                          )}
+                        </Box>
+                      }
+                    />
+                    <ListItemSecondaryAction>
+                      <Button
+                        size="small"
+                        variant="contained"
+                        onClick={() => {
+                          handleInstallDbtCoreVersionClick(item.version);
+                        }}
+                        disabled={
+                          isInstalled || isLoadingDialog || isLoadingInstall
+                        }
+                        startIcon={
+                          installingPackageKey ===
+                          `dbt-core@${item.version}` ? (
+                            <CircularProgress size={16} />
+                          ) : (
+                            <Download />
+                          )
+                        }
+                      >
+                        {actionLabel}
+                      </Button>
+                    </ListItemSecondaryAction>
+                  </ListItem>
+                  <Divider />
+                </React.Fragment>
+              );
+            })}
+          </List>
+        ) : (
+          <Alert severity="info">No versions available.</Alert>
+        )}
+      </Box>
+
+      <Box sx={{ mb: 3 }}>
+        <Typography variant="h6" gutterBottom>
+          Adapter packages
+        </Typography>
+
+        {(
+          [
+            'dbt-postgres',
+            'dbt-snowflake',
+            'dbt-bigquery',
+            'dbt-redshift',
+            'dbt-databricks',
+            'dbt-duckdb',
+          ] as const
+        ).map((pkg) => {
+          const installed = installedPackages[pkg];
+          const versions = packageVersions[pkg]?.versions ?? [];
+          const latestStable = packageVersions[pkg]?.latestStable ?? null;
+          const isLoading = isCheckingPackageVersions[pkg] ?? false;
+
+          return (
+            <Accordion
+              key={pkg}
+              expanded={expandedPackage === pkg}
+              onChange={handlePackageAccordionChange(pkg)}
+              TransitionProps={{ timeout: 500 }}
+              sx={{ mb: 1 }}
+            >
+              <AccordionSummary expandIcon={<ExpandMore />}>
+                <Box>
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                    <Typography variant="body1" sx={{ fontWeight: 500 }}>
+                      {pkg}
+                    </Typography>
+                    {installed && (
+                      <Chip
+                        label={`v${installed}`}
+                        size="small"
+                        color="primary"
+                        sx={{
+                          height: 18,
+                          '& .MuiChip-label': {
+                            px: 0.75,
+                            fontSize: '0.7rem',
+                            lineHeight: 1,
+                          },
+                        }}
+                      />
+                    )}
+                  </Box>
+                  <Typography variant="body2" color="text.secondary">
+                    {packageDescriptions[pkg]}
+                  </Typography>
+                </Box>
+              </AccordionSummary>
+              <AccordionDetails>
+                <Box
+                  sx={{ mb: 2, display: 'flex', alignItems: 'center', gap: 1 }}
+                >
+                  <Button
+                    size="small"
+                    variant="outlined"
+                    onClick={() => {
+                      fetchPackageVersions(pkg).catch(() => undefined);
+                    }}
+                    disabled={isLoading}
+                    startIcon={
+                      isLoading ? <CircularProgress size={16} /> : <Refresh />
+                    }
+                  >
+                    {isLoading ? 'Loading...' : 'Load Versions'}
+                  </Button>
+
+                  {installed && (
+                    <Button
+                      color="error"
+                      variant="outlined"
+                      size="small"
+                      onClick={() => {
+                        handleUninstallPackage(pkg).catch(() => undefined);
+                      }}
+                      disabled={isLoadingInstall || isLoadingDialog}
+                      startIcon={<Delete />}
+                    >
+                      Uninstall
+                    </Button>
+                  )}
+                </Box>
+
+                {versions.length > 0 ? (
+                  <List
+                    sx={{
+                      border: 1,
+                      borderColor: 'divider',
+                      borderRadius: 1,
+                    }}
+                  >
+                    {versions.map((v) => {
+                      const isInstalled = installed === v.version;
+                      const isLatest = v.version === latestStable;
+
+                      let actionLabel = 'Install';
+                      if (isInstalled) {
+                        actionLabel = 'Installed';
+                      } else if (
+                        installed &&
+                        compareSimpleVersions(v.version, installed) > 0
+                      ) {
+                        actionLabel = 'Upgrade';
+                      } else if (installed) {
+                        actionLabel = 'Downgrade';
+                      }
+
+                      return (
+                        <React.Fragment key={v.version}>
+                          <ListItem>
+                            <ListItemText
+                              primary={
+                                <Box
+                                  sx={{
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    gap: 1,
+                                  }}
+                                >
+                                  <Typography
+                                    variant="body1"
+                                    sx={{ fontWeight: 500 }}
+                                  >
+                                    {v.version}
+                                  </Typography>
+
+                                  {isInstalled && (
+                                    <Box
+                                      sx={{
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        gap: 0.5,
+                                      }}
+                                    >
+                                      <CheckCircle
+                                        color="success"
+                                        fontSize="small"
+                                      />
+                                      <Chip
+                                        label="Installed"
+                                        size="small"
+                                        color="success"
+                                      />
+                                    </Box>
+                                  )}
+
+                                  {isLatest && !v.isPrerelease && (
+                                    <Chip
+                                      label="Latest"
+                                      size="small"
+                                      color="primary"
+                                    />
+                                  )}
+                                </Box>
+                              }
+                            />
+                            <ListItemSecondaryAction>
+                              <Button
+                                size="small"
+                                variant="contained"
+                                onClick={() => {
+                                  installSinglePackageVersion(
+                                    pkg,
+                                    v.version,
+                                  ).catch(() => undefined);
+                                }}
+                                disabled={
+                                  isInstalled ||
+                                  isLoadingDialog ||
+                                  isLoadingInstall
+                                }
+                                startIcon={
+                                  installingPackageKey ===
+                                  `${pkg}@${v.version}` ? (
+                                    <CircularProgress size={16} />
+                                  ) : (
+                                    <Download />
+                                  )
+                                }
+                              >
+                                {actionLabel}
+                              </Button>
+                            </ListItemSecondaryAction>
+                          </ListItem>
+                          <Divider />
+                        </React.Fragment>
+                      );
+                    })}
+                  </List>
+                ) : (
+                  <Alert severity="info">
+                    Click &quot;Load Versions&quot; to view versions.
+                  </Alert>
+                )}
+              </AccordionDetails>
+            </Accordion>
+          );
+        })}
+      </Box>
+
+      {settings.dbtPath && settings.dbtPath !== 'dbt' ? (
+        <Box sx={{ mt: 2 }}>
           <Typography
             variant="h6"
             sx={{ mb: 2, display: 'flex', alignItems: 'center', gap: 1 }}
@@ -700,7 +1111,7 @@ export const DbtSettings: React.FC<DbtSettingsProps> = ({
             {isCheckingPackages && <CircularProgress size={16} />}
             <Button
               size="small"
-              onClick={checkInstalledPackages}
+              onClick={handleRefreshInstalledPackagesClick}
               disabled={isCheckingPackages}
               startIcon={<Refresh />}
             >
@@ -711,52 +1122,58 @@ export const DbtSettings: React.FC<DbtSettingsProps> = ({
           {Object.keys(installedPackages).length > 0 ? (
             <Box sx={{ mb: 2 }}>
               {/* Show all packages from packageDescriptions, not just installed ones */}
-              {Object.entries(packageDescriptions).map(([pkg, description]) => {
-                const version = installedPackages[pkg];
-                const isInstalled = !!version;
+              {Object.entries(packageDescriptions)
+                .filter(([pkg]) => pkg === 'sqlglot')
+                .map(([pkg, description]) => {
+                  const version = installedPackages[pkg];
+                  const isInstalled = !!version;
 
-                return (
-                  <Alert
-                    key={pkg}
-                    severity={isInstalled ? 'info' : 'warning'}
-                    sx={{ mb: 1 }}
-                    action={
-                      isInstalled ? (
-                        <Button
-                          color="error"
-                          variant="outlined"
-                          size="small"
-                          onClick={() => handleUninstallPackage(pkg)}
-                          disabled={isLoadingInstall || pkg === 'dbt-core'}
-                          startIcon={<Delete />}
+                  return (
+                    <Alert
+                      key={pkg}
+                      severity={isInstalled ? 'info' : 'warning'}
+                      sx={{ mb: 1 }}
+                      action={
+                        isInstalled ? (
+                          <Button
+                            color="error"
+                            variant="outlined"
+                            size="small"
+                            onClick={() => handleUninstallPackage(pkg)}
+                            disabled={isLoadingInstall}
+                            startIcon={<Delete />}
+                          >
+                            Uninstall
+                          </Button>
+                        ) : (
+                          <Button
+                            color="primary"
+                            variant="contained"
+                            size="small"
+                            onClick={() => handleInstallSinglePackage(pkg)}
+                            disabled={isLoadingInstall}
+                            startIcon={<GetApp />}
+                          >
+                            Install
+                          </Button>
+                        )
+                      }
+                    >
+                      <Box>
+                        <Typography
+                          variant="body2"
+                          sx={{ fontWeight: 'medium' }}
                         >
-                          Uninstall
-                        </Button>
-                      ) : (
-                        <Button
-                          color="primary"
-                          variant="contained"
-                          size="small"
-                          onClick={() => handleInstallSinglePackage(pkg)}
-                          disabled={isLoadingInstall}
-                          startIcon={<GetApp />}
-                        >
-                          Install
-                        </Button>
-                      )
-                    }
-                  >
-                    <Box>
-                      <Typography variant="body2" sx={{ fontWeight: 'medium' }}>
-                        {pkg} {isInstalled ? `v${version}` : '(not installed)'}
-                      </Typography>
-                      <Typography variant="body2" color="text.secondary">
-                        {description}
-                      </Typography>
-                    </Box>
-                  </Alert>
-                );
-              })}
+                          {pkg}{' '}
+                          {isInstalled ? `v${version}` : '(not installed)'}
+                        </Typography>
+                        <Typography variant="body2" color="text.secondary">
+                          {description}
+                        </Typography>
+                      </Box>
+                    </Alert>
+                  );
+                })}
             </Box>
           ) : (
             !isCheckingPackages && (
@@ -878,28 +1295,30 @@ export const DbtSettings: React.FC<DbtSettingsProps> = ({
           </Box>
         </Box>
       )}
-      <Dialog open={isLoadingDialog} fullWidth maxWidth="xs">
-        <DialogContent>
-          <Box
-            display="flex"
-            flexDirection="column"
-            alignItems="center"
-            justifyContent="center"
-            py={3}
+
+      <Backdrop
+        open={isLoadingDialog}
+        sx={{ zIndex: (theme) => theme.zIndex.drawer + 1, color: '#fff' }}
+      >
+        <Box
+          display="flex"
+          flexDirection="column"
+          alignItems="center"
+          justifyContent="center"
+          py={3}
+        >
+          <CircularProgress color="inherit" />
+          <Typography
+            variant="body2"
+            sx={{
+              mt: 2,
+              textAlign: 'center',
+            }}
           >
-            <CircularProgress size={60} />
-            <Typography
-              variant="h6"
-              sx={{
-                mt: 2,
-                textAlign: 'center',
-              }}
-            >
-              {loadingMessage || 'Loading...'}
-            </Typography>
-          </Box>
-        </DialogContent>
-      </Dialog>
+            {loadingMessage || 'Loading...'}
+          </Typography>
+        </Box>
+      </Backdrop>
     </Box>
   );
 };
