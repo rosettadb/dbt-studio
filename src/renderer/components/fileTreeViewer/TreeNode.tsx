@@ -210,6 +210,9 @@ export const TreeNode: React.FC<TreeNodeProps> = ({
             size="small"
             variant="standard"
             fullWidth
+            InputProps={{
+              onKeyDown: handleKeyDown,
+            }}
           />
         ) : (
           <>
