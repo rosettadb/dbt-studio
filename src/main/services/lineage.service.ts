@@ -19,14 +19,14 @@ import ProjectsService from './projects.service';
 
 import SqlParserService from './sqlParser.service';
 
-type ManifestColumn = {
+export type ManifestColumn = {
   name: string;
   description?: string;
   meta?: Record<string, any>;
   data_type?: string;
 };
 
-type ManifestNode = {
+export type ManifestNode = {
   unique_id: string;
   name?: string;
   alias?: string;
@@ -49,7 +49,7 @@ type ManifestNode = {
   raw_sql?: string;
 };
 
-type ManifestSource = {
+export type ManifestSource = {
   unique_id: string;
   name?: string;
   source_name?: string;
@@ -66,10 +66,11 @@ type ManifestSource = {
   config?: { materialized?: string };
 };
 
-type ManifestLike = {
+export type ManifestLike = {
   nodes?: Record<string, ManifestNode>;
   sources?: Record<string, ManifestSource>;
   macros?: Record<string, ManifestNode>;
+  docs?: Record<string, ManifestNode>;
   exposures?: Record<string, ManifestNode>;
   metrics?: Record<string, ManifestNode>;
   child_map?: Record<string, string[]>;
@@ -408,7 +409,7 @@ class LineageService {
     };
   }
 
-  private static async resolveProject(projectId?: string): Promise<Project> {
+  public static async resolveProject(projectId?: string): Promise<Project> {
     if (projectId) {
       // Use loadProjects directly to avoid triggering connection validation/loading
       // which can fail if the connection is missing, but we only need the project path.
@@ -427,7 +428,7 @@ class LineageService {
     return project;
   }
 
-  private static async getManifest(
+  public static async getManifest(
     project: Project,
   ): Promise<ManifestLike | undefined> {
     const manifestPath = path.join(project.path, MANIFEST_FILE);

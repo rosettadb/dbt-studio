@@ -10,6 +10,7 @@ import { connectionStorage } from './connectionStorage.service';
 import * as rosettaCloudServices from './rosettaCloud.service';
 import { DuckLakeService } from './duckLake.service';
 import * as lineageService from './lineage.service';
+import * as languageIntelligenceService from './languageIntelligence.service';
 
 export {
   settingsServices,
@@ -24,4 +25,5 @@ export {
   rosettaCloudServices,
   DuckLakeService,
   lineageService,
+  languageIntelligenceService,
 };
