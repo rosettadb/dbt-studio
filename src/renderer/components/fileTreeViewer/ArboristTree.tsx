@@ -37,12 +37,21 @@ interface ArboristTreeProps {
 }
 
 const buildTreeStructure = (node: FileNode): FileNode => {
+  // Sort children: folders first, then files, each sorted alphabetically by name
+  const sortedChildren = node.children?.map(buildTreeStructure).sort((a, b) => {
+    // First, sort by type (folders before files)
+    if (a.type === 'folder' && b.type === 'file') return -1;
+    if (a.type === 'file' && b.type === 'folder') return 1;
+    // Then, sort alphabetically by name (case-insensitive)
+    return a.name.toLowerCase().localeCompare(b.name.toLowerCase());
+  });
+
   return {
     id: node.path,
     name: node.name,
     path: node.path,
     type: node.type,
-    children: node.children?.map(buildTreeStructure),
+    children: sortedChildren,
   };
 };
 
@@ -313,6 +322,9 @@ export const ArboristTree: React.FC<ArboristTreeProps> = ({
     async (files: File[], targetPath: string) => {
       try {
         let successCount = 0;
+        let folderCount = 0;
+        let fileCount = 0;
+
         for (const file of files) {
           const sourcePath = (file as any).path;
           if (!sourcePath) {
@@ -320,20 +332,39 @@ export const ArboristTree: React.FC<ArboristTreeProps> = ({
             continue;
           }
           try {
+            // In Electron, directories have empty type, while files have MIME types
+            // This is a heuristic to detect if the dropped item is a folder
+            const isDirectory = file.type === '';
+
             await copyPath(sourcePath, targetPath);
             successCount++;
+
+            if (isDirectory) {
+              folderCount++;
+            } else {
+              fileCount++;
+            }
           } catch (copyError) {
             toast.error(`Copy failed: ${file.name}`);
           }
         }
 
         if (successCount > 0) {
-          toast.info(
-            `Imported ${successCount} file${successCount > 1 ? 's' : ''}`,
-          );
+          let message = '';
+          const parts: string[] = [];
+
+          if (folderCount > 0) {
+            parts.push(`${folderCount} folder${folderCount > 1 ? 's' : ''}`);
+          }
+          if (fileCount > 0) {
+            parts.push(`${fileCount} file${fileCount > 1 ? 's' : ''}`);
+          }
+
+          message = `${parts.join(' and ')} copied`;
+          toast.info(message);
           onRefresh();
         } else {
-          toast.error('No files were imported');
+          toast.error('No items were imported');
         }
       } catch (error) {
         toast.error('Import failed');
@@ -430,7 +461,7 @@ export const ArboristTree: React.FC<ArboristTreeProps> = ({
             width="100%"
             height={containerHeight}
             indent={20}
-            rowHeight={32}
+            rowHeight={22}
             overscanCount={10}
             onSelect={handleSelect}
             onMove={handleMove}
