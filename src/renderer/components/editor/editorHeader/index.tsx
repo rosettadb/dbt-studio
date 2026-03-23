@@ -6,7 +6,7 @@ import {
   Tooltip,
   CircularProgress,
 } from '@mui/material';
-import { Save, VerticalSplit, ViewSidebar } from '@mui/icons-material';
+import { Save, VerticalSplit } from '@mui/icons-material';
 import { Breadcrumbs } from '../breadcrumbs';
 
 interface EditorHeaderProps {
@@ -21,10 +21,6 @@ interface EditorHeaderProps {
   onSave: () => void;
   onToggleDiff: () => void;
   onNavigate?: (path: string) => void;
-  // Pipeline preview panel
-  showPipelineButton?: boolean;
-  isPipelinePreviewOpen?: boolean;
-  onTogglePipelinePreview?: () => void;
 }
 
 export const EditorHeader: React.FC<EditorHeaderProps> = ({
@@ -39,9 +35,6 @@ export const EditorHeader: React.FC<EditorHeaderProps> = ({
   onSave,
   onToggleDiff,
   onNavigate,
-  showPipelineButton,
-  isPipelinePreviewOpen,
-  onTogglePipelinePreview,
 }) => {
   const getSaveTooltip = () => {
     if (hasError) return errorMessage || 'Error saving file';
@@ -67,36 +60,6 @@ export const EditorHeader: React.FC<EditorHeaderProps> = ({
 
       {/* Right: Action Buttons */}
       <Box sx={{ display: 'flex', gap: 1, px: 2, py: 0.5 }}>
-        {/* Pipeline preview panel toggle */}
-        {showPipelineButton && (
-          <Tooltip
-            title={
-              isPipelinePreviewOpen
-                ? 'Hide pipeline preview'
-                : 'Show pipeline preview'
-            }
-          >
-            <IconButton
-              onClick={onTogglePipelinePreview}
-              size="small"
-              sx={{
-                color: isPipelinePreviewOpen
-                  ? 'primary.main'
-                  : 'text.secondary',
-                backgroundColor: isPipelinePreviewOpen
-                  ? 'action.selected'
-                  : 'transparent',
-                '&:hover': {
-                  backgroundColor: isPipelinePreviewOpen
-                    ? 'action.selected'
-                    : 'action.hover',
-                },
-              }}
-            >
-              <ViewSidebar fontSize="small" />
-            </IconButton>
-          </Tooltip>
-        )}
         {/* Diff Button */}
         {showDiffButton && (
           <Tooltip title={showDiffView ? 'Hide Diff' : 'Compare Changes'}>
