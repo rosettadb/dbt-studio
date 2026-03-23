@@ -13,6 +13,7 @@ import registerRosettaCloudIpcHandlers from './rosettaCloud.ipcHandlers';
 import registerDuckLakeHandlers from './duckLake.ipcHandlers';
 import registerLineageHandlers from './lineage.ipcHandlers';
 import { registerNotebooksHandlers } from './notebooks.ipcHandlers';
+import registerLanguageIntelligenceHandlers from './languageIntelligence.ipcHandlers';
 
 export {
   registerCliHandlers,
@@ -30,4 +31,5 @@ export {
   registerDuckLakeHandlers,
   registerLineageHandlers,
   registerNotebooksHandlers,
+  registerLanguageIntelligenceHandlers,
 };
