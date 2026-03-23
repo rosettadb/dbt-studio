@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   Dialog,
   DialogTitle,
@@ -7,6 +7,7 @@ import {
   Button,
   Typography,
 } from '@mui/material';
+import { settingsServices } from '../../services';
 
 interface DeleteConfirmDialogProps {
   open: boolean;
@@ -21,17 +22,31 @@ export const DeleteConfirmDialog: React.FC<DeleteConfirmDialogProps> = ({
   onConfirm,
   onCancel,
 }) => {
-  const getFileName = (filePath: string) => {
-    return filePath.split('/').pop() || filePath;
-  };
+  const [fileName, setFileName] = useState<string>('');
+
+  useEffect(() => {
+    const fetchFileName = async () => {
+      if (path) {
+        try {
+          const name = await settingsServices.getBasename(path);
+          setFileName(name);
+        } catch (error) {
+          // Fallback to the path itself if service fails
+          setFileName(path);
+        }
+      }
+    };
+
+    fetchFileName();
+  }, [path]);
 
   return (
     <Dialog open={open} onClose={onCancel} maxWidth="sm" fullWidth>
       <DialogTitle>Confirm Delete</DialogTitle>
       <DialogContent>
         <Typography>
-          Are you sure you want to delete <strong>{getFileName(path)}</strong>?
-          This action cannot be undone.
+          Are you sure you want to delete <strong>{fileName}</strong>? This
+          action cannot be undone.
         </Typography>
       </DialogContent>
       <DialogActions>

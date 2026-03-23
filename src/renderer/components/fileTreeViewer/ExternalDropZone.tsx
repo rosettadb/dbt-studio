@@ -1,5 +1,6 @@
 import React, { useCallback, useRef, useState } from 'react';
 import { styled } from '@mui/material/styles';
+import { settingsServices } from '../../services';
 
 const DropZoneWrapper = styled('div')({
   width: '100%',
@@ -125,9 +126,13 @@ export const ExternalDropZone: React.FC<ExternalDropZoneProps> = ({
           targetPath = nodePath;
         } else if (nodePath) {
           // Dropped on a file, use its parent directory
-          const pathParts = nodePath.split('/');
-          pathParts.pop();
-          targetPath = pathParts.join('/') || projectPath;
+          try {
+            const parentDir = await settingsServices.getDirname(nodePath);
+            targetPath = parentDir || projectPath;
+          } catch (error) {
+            // Fallback to projectPath if dirname fails
+            targetPath = projectPath;
+          }
         }
       }
 

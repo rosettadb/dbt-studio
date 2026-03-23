@@ -240,16 +240,18 @@ export const TreeNode: React.FC<TreeNodeProps> = ({
           >
             <CreateFolderIcon sx={{ fontSize: 16 }} />
           </IconButton>
-          <IconButton
-            size="small"
-            onClick={(e) =>
-              handleActionClick(e, () => onDelete(node.data.path))
-            }
-            title="Delete"
-            sx={{ padding: '4px' }}
-          >
-            <DeleteIcon sx={{ fontSize: 16 }} />
-          </IconButton>
+          {!isRootFolder && (
+            <IconButton
+              size="small"
+              onClick={(e) =>
+                handleActionClick(e, () => onDelete(node.data.path))
+              }
+              title="Delete"
+              sx={{ padding: '4px' }}
+            >
+              <DeleteIcon sx={{ fontSize: 16 }} />
+            </IconButton>
+          )}
         </NodeActions>
       )}
     </NodeContainer>

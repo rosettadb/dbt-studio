@@ -131,7 +131,13 @@ export const createNewFolder = (parentPath: string, folderName: string) => {
 
 // helper functions for file copy
 const copyFile = async (source: string, target: string) => {
-  const targetFile = path.join(target, path.basename(source));
+  // Normalize the destination: check if target already ends with the basename
+  const sourceBasename = path.basename(source);
+  const targetBasename = path.basename(target);
+  const targetFile =
+    sourceBasename === targetBasename
+      ? target
+      : path.join(target, sourceBasename);
   // if exists show replace dialog
   if (fs.existsSync(targetFile)) {
     const result = await dialog.showMessageBox({
@@ -168,7 +174,13 @@ const checkFileConflicts = (srcDir: string, tgtDir: string) => {
 };
 
 const copyFolder = async (source: string, target: string) => {
-  const targetFolder = path.join(target, path.basename(source));
+  // Normalize the destination: check if target already ends with the basename
+  const sourceBasename = path.basename(source);
+  const targetBasename = path.basename(target);
+  const targetFolder =
+    sourceBasename === targetBasename
+      ? target
+      : path.join(target, sourceBasename);
   const conflicts = checkFileConflicts(source, targetFolder);
   if (conflicts.length > 0) {
     const result = await dialog.showMessageBox({

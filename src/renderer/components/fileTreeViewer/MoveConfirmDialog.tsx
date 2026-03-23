@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   Dialog,
   DialogTitle,
@@ -7,6 +7,7 @@ import {
   Button,
   Typography,
 } from '@mui/material';
+import { settingsServices } from '../../services';
 
 interface MoveConfirmDialogProps {
   open: boolean;
@@ -25,22 +26,42 @@ export const MoveConfirmDialog: React.FC<MoveConfirmDialogProps> = ({
   onCopy,
   onCancel,
 }) => {
-  const getFileName = (path: string) => {
-    return path.split('/').pop() || path;
-  };
+  const [fileName, setFileName] = useState<string>('');
+  const [targetFolder, setTargetFolder] = useState<string>('');
 
-  const getTargetFolder = (path: string) => {
-    return path.split('/').pop() || path;
-  };
+  useEffect(() => {
+    const fetchNames = async () => {
+      if (sourcePath) {
+        try {
+          const name = await settingsServices.getBasename(sourcePath);
+          setFileName(name);
+        } catch (error) {
+          // Fallback to the path itself if service fails
+          setFileName(sourcePath);
+        }
+      }
+
+      if (targetPath) {
+        try {
+          const folder = await settingsServices.getBasename(targetPath);
+          setTargetFolder(folder);
+        } catch (error) {
+          // Fallback to the path itself if service fails
+          setTargetFolder(targetPath);
+        }
+      }
+    };
+
+    fetchNames();
+  }, [sourcePath, targetPath]);
 
   return (
     <Dialog open={open} onClose={onCancel} maxWidth="sm" fullWidth>
       <DialogTitle>Move or Copy</DialogTitle>
       <DialogContent>
         <Typography>
-          What would you like to do with{' '}
-          <strong>{getFileName(sourcePath)}</strong> to{' '}
-          <strong>{getTargetFolder(targetPath)}</strong>?
+          What would you like to do with <strong>{fileName}</strong> to{' '}
+          <strong>{targetFolder}</strong>?
         </Typography>
       </DialogContent>
       <DialogActions>

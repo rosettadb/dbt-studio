@@ -84,6 +84,22 @@ export const getFileName = async (...body: string[]): Promise<string> => {
   return data;
 };
 
+export const getBasename = async (filePath: string): Promise<string> => {
+  const { data } = await client.post<string, string>(
+    'settings:getBasename',
+    filePath,
+  );
+  return data;
+};
+
+export const getDirname = async (filePath: string): Promise<string> => {
+  const { data } = await client.post<string, string>(
+    'settings:getDirname',
+    filePath,
+  );
+  return data;
+};
+
 export const setOpenAIKey = async (apiKey: string): Promise<void> => {
   await client.post<{ account: SecureStorageAccount; password: string }, void>(
     'secure-storage:set',

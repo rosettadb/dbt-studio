@@ -347,16 +347,52 @@ export const ArboristTree: React.FC<ArboristTreeProps> = ({
     if (!pendingOperation) return;
 
     try {
+      // First, copy the item to the target location
       await copyPath(pendingOperation.sourcePath, pendingOperation.targetPath);
-      await projectsServices.deleteItem({
-        filePath: pendingOperation.sourcePath,
-      });
-      toast.info('Item moved');
-      onRefresh();
-    } catch (error) {
-      toast.error('Move failed');
-    } finally {
-      setPendingOperation(null);
+
+      // Calculate the actual target path after copy
+      // (copyPath may append basename if not already present)
+      const sourceBasename = pendingOperation.sourcePath.split('/').pop() || '';
+      const targetBasename = pendingOperation.targetPath.split('/').pop() || '';
+      const actualTargetPath =
+        sourceBasename === targetBasename
+          ? pendingOperation.targetPath
+          : `${pendingOperation.targetPath}/${sourceBasename}`;
+
+      // Try to delete the source item
+      try {
+        await projectsServices.deleteItem({
+          filePath: pendingOperation.sourcePath,
+        });
+
+        // Only on success: clear state, show success message, and refresh
+        setPendingOperation(null);
+        toast.info('Item moved');
+        onRefresh();
+      } catch (deleteError) {
+        // Delete failed - attempt rollback by removing the copied item
+        try {
+          await projectsServices.deleteItem({
+            filePath: actualTargetPath,
+          });
+        } catch {
+          /* empty */
+        }
+
+        // Surface detailed error to user
+        const errorMsg =
+          deleteError instanceof Error
+            ? deleteError.message
+            : String(deleteError);
+        toast.error(`Move failed: Could not delete source. ${errorMsg}`);
+
+        // Do NOT clear pendingOperation so user can retry
+      }
+    } catch (copyError) {
+      // Copy failed - show error but also don't clear pendingOperation
+      const errorMsg =
+        copyError instanceof Error ? copyError.message : String(copyError);
+      toast.error(`Move failed: Could not copy to target. ${errorMsg}`);
     }
   }, [pendingOperation, copyPath, onRefresh]);
 
