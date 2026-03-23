@@ -525,6 +525,33 @@ export const TerminalLayout: React.FC<Props> = ({ children, project }) => {
                     bgcolor: 'background.default',
                   }}
                 >
+                  {/* Exit fullscreen button - only shown when fullscreen is active */}
+                  {isPipelineFullscreen && (
+                    <Tooltip title="Exit fullscreen">
+                      <IconButton
+                        onClick={() => setIsPipelineFullscreen(false)}
+                        size="small"
+                        sx={{
+                          position: 'absolute',
+                          top: 16,
+                          right: 16,
+                          zIndex: 10000,
+                          bgcolor: 'background.paper',
+                          '&:hover': {
+                            bgcolor: 'action.hover',
+                          },
+                        }}
+                        aria-label="Exit fullscreen"
+                      >
+                        <FullscreenExitIcon
+                          style={{
+                            color: getTextColor(mode),
+                            fontSize: 20,
+                          }}
+                        />
+                      </IconButton>
+                    </Tooltip>
+                  )}
                   {/* Always read from pipeline.yml file on disk */}
                   <PipelineView content={pipelineFileContent || ''} />
                 </Box>
