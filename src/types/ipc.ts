@@ -17,6 +17,8 @@ export type SettingsChannels =
   | 'settings:reset-factory'
   | 'settings:restart'
   | 'settings:getFileName'
+  | 'settings:getBasename'
+  | 'settings:getDirname'
   | 'settings:duckdb:metadata'
   | 'settings:duckdb:refresh'
   | 'settings:duckdb:reinitialize'

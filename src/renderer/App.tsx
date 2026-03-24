@@ -7,6 +7,7 @@ import {
 } from 'react-router-dom';
 import { ToastContainer } from 'react-toastify';
 import './App.css';
+import './toastStyles.css';
 import { Experimental_CssVarsProvider as CssVarsProvider } from '@mui/material/styles';
 import CssBaseline from '@mui/material/CssBaseline';
 import 'split-pane-react/esm/themes/default.css';
@@ -139,14 +140,15 @@ const AppWithProjectProvider: React.FC = () => {
               <UpdateDialog />
               <ToastContainer
                 position="bottom-right"
-                autoClose={5000}
+                autoClose={3000}
                 hideProgressBar={false}
-                newestOnTop={false}
-                closeOnClick={false}
+                newestOnTop
+                closeOnClick
                 rtl={false}
                 pauseOnFocusLoss
                 pauseOnHover
                 theme={initialMode === 'dark' ? 'dark' : 'light'}
+                limit={3}
               />
             </CssVarsProvider>
           </ProcessProvider>

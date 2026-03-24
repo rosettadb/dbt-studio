@@ -19,6 +19,7 @@ export default class UtilsService {
         // eslint-disable-next-line no-await-in-loop
         const content = await fs.readFile(filePath, 'utf-8');
         results.push({
+          id: filePath,
           name,
           content,
           type: 'file',
@@ -26,6 +27,7 @@ export default class UtilsService {
         });
       } catch (err: any) {
         results.push({
+          id: filePath,
           name,
           type: 'file',
           path: filePath,

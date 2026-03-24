@@ -17,6 +17,8 @@ const handlerChannels: SettingsChannels[] = [
   'version:rosetta:uninstall',
   'settings:reset-factory',
   'settings:restart',
+  'settings:getBasename',
+  'settings:getDirname',
 ];
 
 const removeSettingsIpcHandlers = () => {
@@ -100,6 +102,14 @@ const registerSettingsHandlers = (mainWindow: BrowserWindow) => {
 
   ipcMain.handle('settings:getFileName', async (_event, body: string[]) => {
     return SettingsService.getFileName(body);
+  });
+
+  ipcMain.handle('settings:getBasename', async (_event, filePath: string) => {
+    return SettingsService.getBasename(filePath);
+  });
+
+  ipcMain.handle('settings:getDirname', async (_event, filePath: string) => {
+    return SettingsService.getDirname(filePath);
   });
 
   // DuckDB management handlers

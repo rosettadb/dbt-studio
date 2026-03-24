@@ -142,6 +142,14 @@ export default class SettingsService {
     return path.parse(p).name;
   }
 
+  static async getBasename(filePath: string) {
+    return path.basename(filePath);
+  }
+
+  static async getDirname(filePath: string) {
+    return path.dirname(filePath);
+  }
+
   static async checkCliUpdates(): Promise<CliUpdateResponseType> {
     const settings = await this.loadSettings();
     const results: CliUpdateResponseType = {

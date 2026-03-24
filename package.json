@@ -143,6 +143,7 @@
     "ps-tree": "^1.2.0",
     "react": "^18.2.0",
     "react-ace": "^13.0.0",
+    "react-arborist": "^3.4.3",
     "react-dom": "^18.2.0",
     "react-file-icon": "^1.6.0",
     "react-hook-form": "^7.60.0",
