@@ -17,11 +17,16 @@ export type SettingsChannels =
   | 'settings:reset-factory'
   | 'settings:restart'
   | 'settings:getFileName'
+  | 'settings:getBasename'
+  | 'settings:getDirname'
   | 'settings:duckdb:metadata'
   | 'settings:duckdb:refresh'
   | 'settings:duckdb:reinitialize'
   | 'settings:duckdb:diagnose'
-  | 'settings:installSqlGlot';
+  | 'settings:installSqlGlot'
+  | 'dbt:versions:list'
+  | 'dbt:packageVersions:list'
+  | 'dbt:packageVersion:install';
 
 export type ProjectChannels =
   | 'project:get'
@@ -335,8 +340,15 @@ export type LineageChannels =
   | 'lineage:getDownstream'
   | 'lineage:getFullLineage'
   | 'lineage:getModelMetadata'
+  | 'lineage:getColumnLineage'
   | 'lineage:getCurrentModelId'
-  | 'lineage:getColumnLineage';
+  | 'language-intel:manifest:version'
+  | 'language-intel:models:list'
+  | 'language-intel:sources:list'
+  | 'language-intel:macros:list'
+  | 'language-intel:docs:list'
+  | 'language-intel:variables:list'
+  | 'language-intel:env-vars:list';
 
 export type NotebookChannels =
   | 'notebooks:list'

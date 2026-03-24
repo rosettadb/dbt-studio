@@ -358,6 +358,43 @@ export type RosettaVersionInfo = {
   latestPrerelease?: string;
 };
 
+export type DbtCoreVersionListItem = {
+  version: string;
+  isPrerelease?: boolean;
+};
+
+export type DbtVersionListResponse = {
+  versions: DbtCoreVersionListItem[];
+  latestStable: string | null;
+  currentVersion: string | null;
+};
+
+export type PythonPackageVersionListItem = {
+  version: string;
+  isPrerelease?: boolean;
+};
+
+export type PythonPackageVersionListRequest = {
+  packageName: string;
+};
+
+export type PythonPackageVersionListResponse = {
+  packageName: string;
+  versions: PythonPackageVersionListItem[];
+  latestStable: string | null;
+};
+
+export type PythonPackageInstallVersionRequest = {
+  pythonPath?: string;
+  packageName: string;
+  version: string;
+};
+
+export type PythonPackageInstallVersionResponse = {
+  ok: boolean;
+  error?: string;
+};
+
 export type InstallResult = {
   success: boolean;
   version: string;
@@ -368,6 +405,7 @@ export type InstallResult = {
 };
 
 export type FileNode = {
+  id: string;
   name: string;
   path: string;
   type: 'file' | 'folder';

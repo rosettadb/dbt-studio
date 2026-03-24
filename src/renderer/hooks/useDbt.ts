@@ -1,8 +1,9 @@
-import { useCallback, useState } from 'react';
+import React, { useCallback, useState } from 'react';
 import { toast } from 'react-toastify';
 import useCli from './useCli';
 import useSecureStorage from './useSecureStorage';
 import {
+  useApiKey,
   useGetConnections,
   useGetSettings,
   useSetConnectionEnvVariable,
@@ -84,7 +85,10 @@ const useDbt = (
   cloudRunCb?: (command: DbtCommandType) => void,
 ): UseDbtReturn => {
   const { data: settings } = useGetSettings();
-  const { env } = useAppContext();
+  const { data: apiKey } = useApiKey();
+
+  const { env: environment } = useAppContext();
+
   const { runCommand, stopCommand, isRunning } = useCli();
   const { data: connections = [] } = useGetConnections(true);
   const {
@@ -94,6 +98,10 @@ const useDbt = (
     getBigQueryServiceAccountKey,
   } = useSecureStorage();
   const setEnvVariables = useSetConnectionEnvVariable();
+
+  const env = React.useMemo(() => {
+    return apiKey ? environment : 'local';
+  }, [apiKey, environment]);
 
   const [activeCommand, setActiveCommand] = useState<DbtCommandType | null>(
     null,

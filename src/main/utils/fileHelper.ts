@@ -8,6 +8,7 @@ import { DATA_DIR, DB_FILE } from './setupHelpers';
 
 export const getDirectoryStructure = (dirPath: string): FileNode => {
   const result: FileNode = {
+    id: path.basename(dirPath),
     name: path.basename(dirPath),
     path: dirPath,
     type: 'folder',
@@ -23,7 +24,7 @@ export const getDirectoryStructure = (dirPath: string): FileNode => {
     if (stats.isDirectory()) {
       return getDirectoryStructure(filePath);
     }
-    return { name: file, path: filePath, type: 'file' };
+    return { id: filePath, name: file, path: filePath, type: 'file' };
   });
   return result;
 };
@@ -130,7 +131,13 @@ export const createNewFolder = (parentPath: string, folderName: string) => {
 
 // helper functions for file copy
 const copyFile = async (source: string, target: string) => {
-  const targetFile = path.join(target, path.basename(source));
+  // Normalize the destination: check if target already ends with the basename
+  const sourceBasename = path.basename(source);
+  const targetBasename = path.basename(target);
+  const targetFile =
+    sourceBasename === targetBasename
+      ? target
+      : path.join(target, sourceBasename);
   // if exists show replace dialog
   if (fs.existsSync(targetFile)) {
     const result = await dialog.showMessageBox({
@@ -167,7 +174,14 @@ const checkFileConflicts = (srcDir: string, tgtDir: string) => {
 };
 
 const copyFolder = async (source: string, target: string) => {
-  const conflicts = checkFileConflicts(source, target);
+  // Normalize the destination: check if target already ends with the basename
+  const sourceBasename = path.basename(source);
+  const targetBasename = path.basename(target);
+  const targetFolder =
+    sourceBasename === targetBasename
+      ? target
+      : path.join(target, sourceBasename);
+  const conflicts = checkFileConflicts(source, targetFolder);
   if (conflicts.length > 0) {
     const result = await dialog.showMessageBox({
       type: 'question',
@@ -182,7 +196,7 @@ const copyFolder = async (source: string, target: string) => {
   }
   fs.cp(
     source,
-    target,
+    targetFolder,
     { recursive: true, force: conflicts.length > 0 },
     (err) => {
       if (err) throw new Error(err.message);

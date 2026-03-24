@@ -35,6 +35,7 @@ import {
 import { ProjectSidebar } from '../../components/sidebar/project-sidebar';
 import { TabManager } from '../../components/editor/tabManager';
 import {
+  useApiKey,
   useGetConnectionById,
   useGetConnections,
   useGetFileContentList,
@@ -86,6 +87,7 @@ const ProjectDetails: React.FC = () => {
     registerSyncEditorContent,
   } = useAppContext();
 
+  const { data: apiKey } = useApiKey();
   const { data: project, isLoading, refetch } = useGetSelectedProject();
   const { data: connection } = useGetConnectionById(project?.connectionId);
   const { data: settings } = useGetSettings();
@@ -854,7 +856,7 @@ const ProjectDetails: React.FC = () => {
                             fileContent={fileContent}
                             isRunningDbt={isRunningDbt}
                             isRunningRosettaDbt={isRunningRosettaDbt}
-                            environment={settings?.env}
+                            environment={apiKey ? settings?.env : 'local'}
                           />
                         )}
                       <ProjectDbtSplitButton
@@ -946,6 +948,7 @@ const ProjectDetails: React.FC = () => {
                   )}
                   {project.path && (
                     <Editor
+                      projectId={project.id}
                       projectPath={project.path}
                       tabs={tabs}
                       activeTabId={activeTabId}
@@ -965,6 +968,10 @@ const ProjectDetails: React.FC = () => {
                       onDiscardAndClose={onDiscardAndClose}
                       onCancelClose={onCancelClose}
                       onGitStatusRefresh={updateStatuses}
+                      onOpenFile={(filePath: string) => {
+                        setSelectedFilePath(filePath);
+                        openTab(filePath);
+                      }}
                     />
                   )}
                 </EditorContainer>

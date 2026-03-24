@@ -23,6 +23,8 @@ import {
   PowerOffRounded,
   TimerRounded,
 } from '@mui/icons-material';
+import FullscreenIcon from '@mui/icons-material/Fullscreen';
+import FullscreenExitIcon from '@mui/icons-material/FullscreenExit';
 import { Terminal } from './terminal';
 import {
   Root,
@@ -37,9 +39,12 @@ import { ProcessTerminal } from './processTerminal';
 import { useProcess } from '../../hooks';
 import { useSelectedFileContext } from '../../hooks/useSelectedFileContext';
 import { Project } from '../../../types/backend';
+import { useGetFileContent } from '../../controllers';
 import { LineageModal } from '../lineage/LineageModal';
 import { LineageView } from '../lineage/LineageView';
 import { useCurrentModelId } from '../../controllers/lineage.controller';
+import { PipelineView } from '../pipelineView';
+import { isPipelineFile } from '../pipelineView/parsePipelineConfig';
 
 type Props = {
   project: Project;
@@ -79,7 +84,32 @@ export const TerminalLayout: React.FC<Props> = ({ children, project }) => {
       isLoadingCurrentModel ||
       isErrorCurrentModel);
 
+  // Check if current file is a pipeline.yml file
+  const isPipelineFileActive = React.useMemo(() => {
+    if (!selectedFilePath) return false;
+    return isPipelineFile(selectedFilePath);
+  }, [selectedFilePath]);
+
   const [selectedTab, setSelectedTab] = React.useState(0);
+  const [isPipelineFullscreen, setIsPipelineFullscreen] = React.useState(false);
+  // Track if pipeline tab should be visible (persists after opening pipeline.yml)
+  const [hasPipelineBeenOpened, setHasPipelineBeenOpened] =
+    React.useState(false);
+  // Track the pipeline file path
+  const [pipelineFilePath, setPipelineFilePath] = React.useState<string>('');
+  // Track if user manually clicked on CI/CD tab (vs auto-switched)
+  const [isManualCicdTabSwitch, setIsManualCicdTabSwitch] =
+    React.useState(false);
+
+  // Show CI/CD tab if pipeline file is currently active OR has been opened before
+  const showPipelineTab = isPipelineFileActive || hasPipelineBeenOpened;
+
+  // Read the pipeline.yml file content from disk (not from editor)
+  const { data: pipelineFileContent } = useGetFileContent(pipelineFilePath, {
+    enabled: !!pipelineFilePath && showPipelineTab,
+    refetchInterval: 2000, // Refresh every 2 seconds to stay in sync with file changes
+  });
+
   const [lock, setLock] = React.useState(false);
   const [sizes, setSizes] = React.useState<number[]>([
     window.innerHeight - 300,
@@ -158,6 +188,40 @@ export const TerminalLayout: React.FC<Props> = ({ children, project }) => {
       setSelectedTab(0);
     }
   }, [showLineageTab, selectedTab, isLoadingCurrentModel]);
+
+  // Mark pipeline as opened and save file path when pipeline file becomes active
+  React.useEffect(() => {
+    if (isPipelineFileActive && selectedFilePath) {
+      setHasPipelineBeenOpened(true);
+      setPipelineFilePath(selectedFilePath);
+    }
+  }, [isPipelineFileActive, selectedFilePath]);
+
+  // Auto-switch to CI/CD tab when pipeline.yml file is opened in editor
+  React.useEffect(() => {
+    if (isPipelineFileActive && selectedTab !== 3) {
+      setSelectedTab(3);
+      setIsManualCicdTabSwitch(false); // This is an auto-switch
+      // Restore terminal if minimized
+      if (isMinimized) {
+        handleRestore();
+      }
+    }
+  }, [isPipelineFileActive]);
+
+  // Switch back to Terminal when navigating away from pipeline.yml (if not manually on CI/CD tab)
+  React.useEffect(() => {
+    if (!isPipelineFileActive && selectedTab === 3 && !isManualCicdTabSwitch) {
+      setSelectedTab(0);
+    }
+  }, [isPipelineFileActive, selectedTab, isManualCicdTabSwitch]);
+
+  // If Pipeline tab is hidden but selected, switch back to terminal
+  React.useEffect(() => {
+    if (!showPipelineTab && selectedTab === 3) {
+      setSelectedTab(0);
+    }
+  }, [showPipelineTab, selectedTab]);
 
   const getTextColor = (themeMode: string | undefined) => {
     switch (themeMode) {
@@ -281,6 +345,24 @@ export const TerminalLayout: React.FC<Props> = ({ children, project }) => {
                     </Typography>
                   </Button>
                 )}
+                {/* CI/CD Pipeline Tab */}
+                {showPipelineTab && (
+                  <Button
+                    size="small"
+                    disableRipple
+                    sx={tabButtonSx(selectedTab === 3)}
+                    onClick={() => {
+                      setSelectedTab(3);
+                      setIsManualCicdTabSwitch(true); // User manually clicked
+                    }}
+                  >
+                    <Typography
+                      sx={{ fontWeight: 500, fontSize: 10.5, lineHeight: 1 }}
+                    >
+                      CI/CD
+                    </Typography>
+                  </Button>
+                )}
                 {/* Process Tab - Only show when running */}
                 {hasStartedProcess && (
                   <Box sx={{ display: 'flex', alignItems: 'center' }}>
@@ -370,11 +452,43 @@ export const TerminalLayout: React.FC<Props> = ({ children, project }) => {
                     </Box>
                   </Box>
                 )}
+                {/* Fullscreen Toggle - Only for CI/CD tab */}
+                {selectedTab === 3 && (
+                  <Tooltip
+                    title={
+                      isPipelineFullscreen ? 'Exit fullscreen' : 'Fullscreen'
+                    }
+                  >
+                    <IconButton
+                      onClick={() =>
+                        setIsPipelineFullscreen(!isPipelineFullscreen)
+                      }
+                      size="small"
+                      style={{ marginLeft: 'auto' }}
+                    >
+                      {isPipelineFullscreen ? (
+                        <FullscreenExitIcon
+                          style={{
+                            color: getTextColor(mode),
+                            fontSize: 20,
+                          }}
+                        />
+                      ) : (
+                        <FullscreenIcon
+                          style={{
+                            color: getTextColor(mode),
+                            fontSize: 20,
+                          }}
+                        />
+                      )}
+                    </IconButton>
+                  </Tooltip>
+                )}
                 {/* Minimize Button */}
                 <IconButton
                   onClick={handleMinimize}
                   size="small"
-                  style={{ marginLeft: 'auto' }}
+                  style={{ marginLeft: selectedTab === 3 ? 0 : 'auto' }}
                 >
                   <div style={{ marginTop: -8 }}>
                     <MinimizeRounded
@@ -395,6 +509,52 @@ export const TerminalLayout: React.FC<Props> = ({ children, project }) => {
                   filePath={selectedFilePath}
                   onExpandClick={() => setOpenLineageModal(true)}
                 />
+              )}
+              {selectedTab === 3 && showPipelineTab && (
+                <Box
+                  sx={{
+                    height: '100%',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    position: isPipelineFullscreen ? 'fixed' : 'relative',
+                    top: isPipelineFullscreen ? 0 : 'auto',
+                    left: isPipelineFullscreen ? 0 : 'auto',
+                    right: isPipelineFullscreen ? 0 : 'auto',
+                    bottom: isPipelineFullscreen ? 0 : 'auto',
+                    zIndex: isPipelineFullscreen ? 9999 : 'auto',
+                    bgcolor: 'background.default',
+                  }}
+                >
+                  {/* Exit fullscreen button - only shown when fullscreen is active */}
+                  {isPipelineFullscreen && (
+                    <Tooltip title="Exit fullscreen">
+                      <IconButton
+                        onClick={() => setIsPipelineFullscreen(false)}
+                        size="small"
+                        sx={{
+                          position: 'absolute',
+                          top: 16,
+                          right: 16,
+                          zIndex: 10000,
+                          bgcolor: 'background.paper',
+                          '&:hover': {
+                            bgcolor: 'action.hover',
+                          },
+                        }}
+                        aria-label="Exit fullscreen"
+                      >
+                        <FullscreenExitIcon
+                          style={{
+                            color: getTextColor(mode),
+                            fontSize: 20,
+                          }}
+                        />
+                      </IconButton>
+                    </Tooltip>
+                  )}
+                  {/* Always read from pipeline.yml file on disk */}
+                  <PipelineView content={pipelineFileContent || ''} />
+                </Box>
               )}
             </>
           )}

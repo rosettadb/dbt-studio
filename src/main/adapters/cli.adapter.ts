@@ -17,6 +17,10 @@ class CliAdapter {
       }
       this.process = spawn(command, { shell: true });
 
+      // Drain stdout/stderr to avoid the child process blocking when buffers fill.
+      this.process.stdout.on('data', () => undefined);
+      this.process.stderr.on('data', () => undefined);
+
       this.process.on('close', (code) => {
         this.process = null; // Reset after close
         if (code === 0) {
