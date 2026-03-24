@@ -244,17 +244,19 @@ export const ArboristTree: React.FC<ArboristTreeProps> = ({
       type: contextMenu.node.type,
       name: contextMenu.node.name,
     });
-    toast.info('Copied');
   }, [contextMenu]);
 
   const handlePaste = useCallback(async () => {
     if (!contextMenu || !copiedNode) return;
 
     try {
-      const targetPath = `${contextMenu.node.path}/${copiedNode.name}`;
-      await copyPath(copiedNode.path, targetPath);
-      toast.info('Pasted');
-      onRefresh();
+      // Pass the target directory path (not the full file path)
+      // copyPath will append the source basename automatically
+      await copyPath(copiedNode.path, contextMenu.node.path);
+      // Use a small delay before refresh to ensure the file system operation completes
+      setTimeout(() => {
+        onRefresh();
+      }, 100);
     } catch (error) {
       toast.error('Paste failed');
     }
