@@ -18,6 +18,7 @@ import minio from './minio.png';
 import cloudflareR2 from './cloudflare_r2.png';
 import backblazeB2 from './blackbaze.png';
 import rustfs from './rustfs.png';
+import garage from './garage-logo.png';
 import openai from './openai.svg';
 import ollama from './ollama.svg';
 import google from './google.svg';
@@ -37,6 +38,7 @@ export const cloudStorageImages = {
   'cloudflare-r2': cloudflareR2,
   'backblaze-b2': backblazeB2,
   rustfs,
+  garage,
 };
 
 // AI provider specific images

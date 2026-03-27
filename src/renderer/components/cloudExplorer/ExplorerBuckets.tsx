@@ -85,6 +85,7 @@ export const ExplorerBuckets: React.FC<ExplorerBucketsProps> = ({
     getCloudR2Secret,
     getCloudB2Secret,
     getCloudRustfsSecret,
+    getCloudGarageSecret,
   } = useSecureStorage();
   const [secureConfig, setSecureConfig] = useState<any | null>(null);
   const [credentialsMissing, setCredentialsMissing] = useState(false);
@@ -98,6 +99,12 @@ export const ExplorerBuckets: React.FC<ExplorerBucketsProps> = ({
       }
       const config = { ...connection.config };
       let missing = false;
+
+      if (connection.provider === 'garage') {
+        if (!(config as { endpoint?: string }).endpoint) {
+          missing = true;
+        }
+      }
       try {
         if (connection.provider === 'aws') {
           const secret = await getCloudAwsSecret(connection.id);
@@ -153,6 +160,13 @@ export const ExplorerBuckets: React.FC<ExplorerBucketsProps> = ({
         } else if (connection.provider === 'rustfs') {
           const secret = await getCloudRustfsSecret(connection.id);
           if (secret === null) {
+            missing = true;
+          } else {
+            (config as { secretAccessKey?: string }).secretAccessKey = secret;
+          }
+        } else if (connection.provider === 'garage') {
+          const secret = await getCloudGarageSecret(connection.id);
+          if (secret === null || secret === '') {
             missing = true;
           } else {
             (config as { secretAccessKey?: string }).secretAccessKey = secret;

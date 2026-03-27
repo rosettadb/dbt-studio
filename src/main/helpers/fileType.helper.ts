@@ -40,7 +40,7 @@ export async function getReaderFunction(
     case 'csv': {
       // For CSV files, we need to detect if headers are present
       const hasHeaders = await detectCsvHeaders(connection, filePath);
-      return `read_csv('${filePath}', header=${hasHeaders})`;
+      return `read_csv_auto('${filePath}', header=${hasHeaders}, ignore_errors=true, null_padding=true, nullstr='?')`;
     }
     case 'json':
     case 'jsonl':

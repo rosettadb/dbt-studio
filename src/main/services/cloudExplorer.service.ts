@@ -24,6 +24,7 @@ import {
   CloudflareR2Config,
   BackblazeB2Config,
   RustfsConfig,
+  GarageConfig,
   CloudStorageConfig,
   CloudProvider,
 } from '../../types/frontend';
@@ -1261,6 +1262,192 @@ class CloudExplorerService {
     }
   }
 
+  // Garage Methods (S3-compatible)
+  private static createGarageClient(config: GarageConfig): S3Client {
+    // Validate credentials are provided
+    if (!config.accessKeyId || !config.secretAccessKey) {
+      throw new Error(
+        'Garage credentials are required (Access Key ID and Secret Access Key)',
+      );
+    }
+
+    if (!config.endpoint) {
+      throw new Error('Garage endpoint is required');
+    }
+
+    // Strip protocol and trailing slashes from endpoint
+    const cleanEndpoint = config.endpoint
+      .replace(/^https?:\/\//, '') // Remove http:// or https://
+      .replace(/\/$/, ''); // Remove trailing slash
+
+    const protocol = config.useSSL ? 'https' : 'http';
+    const endpoint = `${protocol}://${cleanEndpoint}`;
+
+    // Default to path-style for broader compatibility with Garage deployments
+    const forcePathStyle = config.urlStyle !== 'virtual-host';
+
+    return new S3Client({
+      endpoint,
+      region: config.region || 'us-east-1',
+      credentials: {
+        accessKeyId: config.accessKeyId,
+        secretAccessKey: config.secretAccessKey,
+      },
+      forcePathStyle,
+    });
+  }
+
+  static async listGarageBuckets(config: GarageConfig): Promise<Bucket[]> {
+    const client = CloudExplorerService.createGarageClient(config);
+    try {
+      const data = await client.send(new ListBucketsCommand({}));
+      return (data.Buckets || []).map((bucket) => ({
+        name: bucket.Name!,
+        created: bucket.CreationDate!,
+        location: config.region || 'us-east-1',
+      }));
+    } catch (error) {
+      throw new Error(`Error listing Garage buckets: ${error}`);
+    }
+  }
+
+  static async listGarageObjects(
+    config: GarageConfig,
+    bucketName: string,
+    continuationToken?: string,
+    prefix = '',
+  ): Promise<CloudListResult> {
+    const client = CloudExplorerService.createGarageClient(config);
+    try {
+      const result = await client.send(
+        new ListObjectsV2Command({
+          Bucket: bucketName,
+          Prefix: prefix || undefined,
+          Delimiter: '/',
+          ContinuationToken: continuationToken,
+          MaxKeys: 100,
+        }),
+      );
+
+      const folders = (result.CommonPrefixes || []).map((folderPrefix) => ({
+        name: folderPrefix.Prefix!,
+        size: 0,
+        updated: new Date(),
+        isDirectory: true,
+      }));
+
+      const files = (result.Contents || [])
+        .filter((obj) => obj.Key !== prefix)
+        .map((obj) => ({
+          name: obj.Key!,
+          size: obj.Size || 0,
+          updated: obj.LastModified || new Date(),
+          contentType: undefined,
+          isDirectory: false,
+        }));
+
+      return {
+        objects: [...folders, ...files],
+        nextPageToken: result.IsTruncated
+          ? result.NextContinuationToken
+          : undefined,
+      };
+    } catch (error) {
+      throw new Error(`Error listing Garage objects: ${error}`);
+    }
+  }
+
+  static async getGarageDownloadUrl(
+    config: GarageConfig,
+    bucketName: string,
+    objectKey: string,
+  ): Promise<string> {
+    const client = CloudExplorerService.createGarageClient(config);
+    try {
+      const command = new GetObjectCommand({
+        Bucket: bucketName,
+        Key: objectKey,
+      });
+      return await getSignedUrl(client, command, { expiresIn: 3600 });
+    } catch (error) {
+      throw new Error(`Error generating Garage signed URL: ${error}`);
+    }
+  }
+
+  static async testGarageConnection(config: GarageConfig): Promise<boolean> {
+    const client = CloudExplorerService.createGarageClient(config);
+    try {
+      await client.send(new ListBucketsCommand({}));
+      return true;
+    } catch (error) {
+      // eslint-disable-next-line no-console
+      console.error('Garage connection test failed:', error);
+      // Re-throw with user-friendly message
+      const errorMessage = (error as Error).message;
+      const errorName = (error as any).name;
+
+      if (
+        errorName === 'InvalidAccessKeyId' ||
+        errorMessage.includes('InvalidAccessKeyId')
+      ) {
+        throw new Error(
+          'Invalid Garage Access Key ID. Please check your credentials.',
+        );
+      } else if (
+        errorName === 'SignatureDoesNotMatch' ||
+        errorMessage.includes('SignatureDoesNotMatch')
+      ) {
+        throw new Error(
+          'Invalid Garage Secret Access Key. Please verify your credentials.',
+        );
+      } else if (
+        errorMessage.includes('ENOTFOUND') ||
+        errorMessage.includes('getaddrinfo')
+      ) {
+        throw new Error(
+          'Cannot resolve Garage endpoint. Check your endpoint address.',
+        );
+      } else if (errorMessage.includes('ECONNREFUSED')) {
+        throw new Error(
+          'Cannot connect to Garage server. Ensure the server is running at the specified endpoint.',
+        );
+      } else if (errorMessage.includes('ETIMEDOUT')) {
+        throw new Error(
+          'Connection to Garage server timed out. Check your endpoint and network.',
+        );
+      } else if (
+        errorMessage.includes('PermanentRedirect') ||
+        errorName === 'PermanentRedirect'
+      ) {
+        throw new Error(
+          'Bucket region mismatch. Check your region configuration.',
+        );
+      } else if (
+        errorMessage.includes('AccessDenied') ||
+        errorName === 'AccessDenied'
+      ) {
+        throw new Error(
+          'Garage credentials are valid but lack permissions to list buckets.',
+        );
+      } else if (
+        errorMessage.includes('certificate') ||
+        errorMessage.includes('SSL')
+      ) {
+        throw new Error(
+          'SSL/TLS certificate error. Try disabling SSL or check your certificate configuration.',
+        );
+      } else if (
+        errorMessage.includes('NetworkError') ||
+        errorMessage.includes('network')
+      ) {
+        throw new Error(
+          'Network error connecting to Garage. Check endpoint URL format (http:// or https://).',
+        );
+      }
+      throw new Error(`Garage connection failed: ${errorMessage}`);
+    }
+  }
+
   // Generic methods for different cloud providers
   static async listBuckets(
     provider: CloudProvider,
@@ -1281,6 +1468,8 @@ class CloudExplorerService {
         return CloudExplorerService.listB2Buckets(config as BackblazeB2Config);
       case 'rustfs':
         return CloudExplorerService.listRustfsBuckets(config as RustfsConfig);
+      case 'garage':
+        return CloudExplorerService.listGarageBuckets(config as GarageConfig);
       default:
         throw new Error(`Unsupported provider: ${provider}`);
     }
@@ -1343,6 +1532,13 @@ class CloudExplorerService {
           continuationToken,
           prefix,
         );
+      case 'garage':
+        return CloudExplorerService.listGarageObjects(
+          config as GarageConfig,
+          bucketName,
+          continuationToken,
+          prefix,
+        );
       default:
         throw new Error(`Unsupported provider: ${provider}`);
     }
@@ -1397,6 +1593,12 @@ class CloudExplorerService {
           bucketName,
           objectName,
         );
+      case 'garage':
+        return CloudExplorerService.getGarageDownloadUrl(
+          config as GarageConfig,
+          bucketName,
+          objectName,
+        );
       default:
         throw new Error(`Unsupported provider: ${provider}`);
     }
@@ -1426,6 +1628,10 @@ class CloudExplorerService {
       case 'rustfs':
         return CloudExplorerService.testRustfsConnection(
           config as RustfsConfig,
+        );
+      case 'garage':
+        return CloudExplorerService.testGarageConnection(
+          config as GarageConfig,
         );
       default:
         throw new Error(`Unsupported provider: ${provider}`);

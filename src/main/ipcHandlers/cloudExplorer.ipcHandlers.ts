@@ -157,6 +157,17 @@ const registerCloudExplorerHandlers = () => {
             `Invalid rustfs config: missing required fields. Received: ${JSON.stringify(rustfsConfig)}`,
           );
         }
+      } else if (provider === 'garage') {
+        const garageConfig = config as any;
+        if (
+          !garageConfig.endpoint ||
+          !garageConfig.accessKeyId ||
+          !garageConfig.secretAccessKey
+        ) {
+          throw new Error(
+            `Invalid Garage config: missing required fields. Received: ${JSON.stringify(garageConfig)}`,
+          );
+        }
       }
 
       return CloudExplorerService.testConnection(provider, config);
