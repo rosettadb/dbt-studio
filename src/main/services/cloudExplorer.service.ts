@@ -4,6 +4,7 @@ import {
   ListBucketsCommand,
   ListObjectsV2Command,
   GetObjectCommand,
+  HeadBucketCommand,
 } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import {
@@ -1377,12 +1378,19 @@ class CloudExplorerService {
   static async testGarageConnection(config: GarageConfig): Promise<boolean> {
     const client = CloudExplorerService.createGarageClient(config);
     try {
-      await client.send(new ListBucketsCommand({}));
+      const data = await client.send(new ListBucketsCommand({}));
+      const firstBucket = data.Buckets?.[0]?.Name;
+
+      // Validate addressing mode (path vs virtual-host) with a bucket-scoped op
+      if (firstBucket) {
+        await client.send(new HeadBucketCommand({ Bucket: firstBucket }));
+      }
+
       return true;
     } catch (error) {
       // eslint-disable-next-line no-console
-      console.error('Garage connection test failed:', error);
-      // Re-throw with user-friendly message
+      console.error('Garage Connection test failed:', error);
+
       const errorMessage = (error as Error).message;
       const errorName = (error as any).name;
 
@@ -1444,6 +1452,7 @@ class CloudExplorerService {
           'Network error connecting to Garage. Check endpoint URL format (http:// or https://).',
         );
       }
+
       throw new Error(`Garage connection failed: ${errorMessage}`);
     }
   }
