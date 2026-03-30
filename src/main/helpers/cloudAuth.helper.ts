@@ -238,7 +238,8 @@ export async function buildCloudSecretQuery(
         .replace(/\/$/, '');
 
       // Default to path-style for broader compatibility
-      const urlStyle = garageConfig.urlStyle === 'virtual-host' ? 'vhost' : 'path';
+      const urlStyle =
+        garageConfig.urlStyle === 'virtual-host' ? 'vhost' : 'path';
 
       return `
         ${dropSecretsQuery}

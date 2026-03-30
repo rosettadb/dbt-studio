@@ -1038,10 +1038,7 @@ export const ConnectionForm: React.FC<ConnectionFormProps> = ({
                   }
                   style={{ cursor: 'pointer' }}
                 />
-                <label
-                  htmlFor="virtualHostStyle"
-                  style={{ cursor: 'pointer' }}
-                >
+                <label htmlFor="virtualHostStyle" style={{ cursor: 'pointer' }}>
                   Use Virtual-Host Style URLs
                 </label>
               </Box>
