@@ -38,7 +38,13 @@ import {
   CloudflareR2Config,
   BackblazeB2Config,
   RustfsConfig,
+  RustfsPersistedConfig,
   GarageConfig,
+  GaragePersistedConfig,
+  MinIOPersistedConfig,
+  CloudflareR2PersistedConfig,
+  BackblazeB2PersistedConfig,
+  CloudStoragePersistedConfig,
 } from '../../../types/frontend';
 import {
   useTestCloudConnection,
@@ -169,17 +175,17 @@ export const ConnectionForm: React.FC<ConnectionFormProps> = ({
         sessionToken: (config as S3Config).sessionToken || '',
         region:
           (config as S3Config).region ||
-          (config as MinIOConfig).region ||
-          (config as RustfsConfig).region ||
-          (config as GarageConfig).region ||
+          (config as MinIOPersistedConfig).region ||
+          (config as RustfsPersistedConfig).region ||
+          (config as GaragePersistedConfig).region ||
           '',
         accessKeyId:
           (config as S3Config).accessKeyId ||
-          (config as MinIOConfig).accessKeyId ||
-          (config as CloudflareR2Config).accessKeyId ||
-          (config as BackblazeB2Config).applicationKeyId ||
-          (config as RustfsConfig).accessKeyId ||
-          (config as GarageConfig).accessKeyId ||
+          (config as MinIOPersistedConfig).accessKeyId ||
+          (config as CloudflareR2PersistedConfig).accessKeyId ||
+          (config as BackblazeB2PersistedConfig).applicationKeyId ||
+          (config as RustfsPersistedConfig).accessKeyId ||
+          (config as GaragePersistedConfig).accessKeyId ||
           '',
         secretAccessKey:
           (config as S3Config).secretAccessKey ||
@@ -192,21 +198,21 @@ export const ConnectionForm: React.FC<ConnectionFormProps> = ({
         accountKey: (config as AzureConfig).accountKey || '',
         connectionString: (config as AzureConfig).connectionString || '',
         endpoint:
-          (config as MinIOConfig).endpoint ||
-          (config as BackblazeB2Config).endpoint ||
-          (config as RustfsConfig).endpoint ||
-          (config as GarageConfig).endpoint ||
+          (config as RustfsPersistedConfig).endpoint ||
+          (config as BackblazeB2PersistedConfig).endpoint ||
+          (config as RustfsPersistedConfig).endpoint ||
+          (config as GaragePersistedConfig).endpoint ||
           '',
         useSSL:
-          (config as MinIOConfig).useSSL ||
-          (config as RustfsConfig).useSSL ||
-          (config as GarageConfig).useSSL ||
+          (config as MinIOPersistedConfig).useSSL ||
+          (config as RustfsPersistedConfig).useSSL ||
+          (config as GaragePersistedConfig).useSSL ||
           false,
-        accountId: (config as CloudflareR2Config).accountId || '',
-        jurisdiction: (config as CloudflareR2Config).jurisdiction || '',
-        applicationKeyId: (config as BackblazeB2Config).applicationKeyId || '',
+        accountId: (config as CloudflareR2PersistedConfig).accountId || '',
+        jurisdiction: (config as CloudflareR2PersistedConfig).jurisdiction || '',
+        applicationKeyId: (config as BackblazeB2PersistedConfig).applicationKeyId || '',
         applicationKey: (config as BackblazeB2Config).applicationKey || '',
-        urlStyle: (config as GarageConfig).urlStyle || 'path',
+        urlStyle: (config as GaragePersistedConfig).urlStyle || 'path',
       });
     }
   }, [initialValues, duplicateFrom, suggestedName]);
@@ -455,7 +461,7 @@ export const ConnectionForm: React.FC<ConnectionFormProps> = ({
 
     try {
       const rawConfig = createConfigFromFormData();
-      let finalConfig: typeof rawConfig;
+      let finalConfig: CloudStoragePersistedConfig;
 
       // Generate connection ID first so we can use it for secure storage
       const connId = connectionId || uuidv4();
@@ -496,35 +502,35 @@ export const ConnectionForm: React.FC<ConnectionFormProps> = ({
         if ('secretAccessKey' in config) {
           delete (config as any).secretAccessKey;
         }
-        finalConfig = config;
+        finalConfig = config as MinIOPersistedConfig;
       } else if (formData.provider === 'cloudflare-r2') {
         await setCloudR2Secret(formData.secretAccessKey, connId);
         const config = { ...rawConfig };
         if ('secretAccessKey' in config) {
           delete (config as any).secretAccessKey;
         }
-        finalConfig = config;
+        finalConfig = config as CloudflareR2PersistedConfig;
       } else if (formData.provider === 'backblaze-b2') {
         await setCloudB2Secret(formData.applicationKey, connId);
         const config = { ...rawConfig };
         if ('applicationKey' in config) {
           delete (config as any).applicationKey;
         }
-        finalConfig = config;
+        finalConfig = config as BackblazeB2PersistedConfig;
       } else if (formData.provider === 'rustfs') {
         await setCloudRustfsSecret(formData.secretAccessKey, connId);
         const config = { ...rawConfig };
         if ('secretAccessKey' in config) {
           delete (config as any).secretAccessKey;
         }
-        finalConfig = config;
+        finalConfig = config as RustfsPersistedConfig;
       } else if (formData.provider === 'garage') {
         await setCloudGarageSecret(formData.secretAccessKey, connId);
         const config = { ...rawConfig };
         if ('secretAccessKey' in config) {
           delete (config as any).secretAccessKey;
         }
-        finalConfig = config;
+        finalConfig = config as GaragePersistedConfig;
       } else {
         finalConfig = rawConfig;
       }
