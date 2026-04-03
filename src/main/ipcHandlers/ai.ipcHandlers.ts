@@ -52,8 +52,6 @@ const aiHandlerChannels: string[] = [
   'ai:provider:get-models',
   'ai:provider:get-all-models',
   'ai:completion:generate',
-  'ai:provider-manager:initialize',
-  'ai:provider:get-status',
   // Enhanced chat/context
   'chat:conversation:get-with-context',
   'chat:message:get-with-context',
@@ -77,8 +75,6 @@ const aiHandlerChannels: string[] = [
   'chat:session:set-metadata',
   'chat:session:get-metadata',
   'chat:session:delete-metadata',
-  // The enriched active provider info channel we'll define below
-  'ai:provider:get-active-info',
 ];
 
 const removeAIHandlers = () => {
@@ -429,27 +425,6 @@ const registerAIHandlers = () => {
       return ProviderManager.generateTypedCompletion<T>(request);
     },
   );
-
-  // Initialize provider manager on first use
-  ipcMain.handle('ai:provider-manager:initialize', async (): Promise<void> => {
-    await ProviderManager.initializeAllProviders();
-  });
-
-  // Get provider status
-  ipcMain.handle(
-    'ai:provider:get-status',
-    async (
-      _,
-      providerId: string,
-    ): Promise<import('../services/ai/types/provider.types').HealthStatus> => {
-      return ProviderManager.getProviderStatus(providerId);
-    },
-  );
-
-  // Get active provider info (enriched). Use a distinct channel to avoid clashing
-  ipcMain.handle('ai:provider:get-active-info', async (): Promise<any> => {
-    return ProviderManager.getActiveProviderInfo();
-  });
 
   // Continue.dev Enhanced Chat Handlers
 

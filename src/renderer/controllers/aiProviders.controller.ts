@@ -314,26 +314,3 @@ export const useGetAllProviderModels = (
     ...customOptions,
   });
 };
-
-// Initialize provider manager
-export const useInitializeProviderManager = (
-  customOptions?: UseMutationOptions<void, CustomError, void>,
-): UseMutationResult<void, CustomError, void> => {
-  const { onSuccess: onCustomSuccess, onError: onCustomError } =
-    customOptions || {};
-  const queryClient = useQueryClient();
-
-  return useMutation({
-    mutationFn: async () => {
-      return aiProvidersService.initializeProviderManager();
-    },
-    onSuccess: async (...args) => {
-      await queryClient.invalidateQueries([QUERY_KEYS.GET_AI_PROVIDERS]);
-      await queryClient.invalidateQueries([QUERY_KEYS.GET_ACTIVE_AI_PROVIDER]);
-      onCustomSuccess?.(...args);
-    },
-    onError: (...args) => {
-      onCustomError?.(...args);
-    },
-  });
-};

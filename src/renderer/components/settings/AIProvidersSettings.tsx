@@ -15,7 +15,6 @@ import { toast } from 'react-toastify';
 import {
   useGetAIProviders,
   useGetActiveAIProvider,
-  useInitializeProviderManager,
 } from '../../controllers/aiProviders.controller';
 import type { AIProvider } from '../../controllers/aiProviders.controller';
 import { CreateProviderDialog, ProviderCard } from '../ai';
@@ -27,15 +26,6 @@ export const AIProvidersSettings: React.FC = () => {
     React.useState<AIProvider | null>(null);
 
   const { data: settingsWithDbInfo } = useGetSettingsWithDatabaseInfo();
-
-  // Initialize provider manager on component mount
-  const { mutate: initializeProviderManager, isLoading: isInitializing } =
-    useInitializeProviderManager({
-      onSuccess: () => {},
-      onError: (error) => {
-        toast.error(`Failed to initialize provider manager, ${error?.message}`);
-      },
-    });
 
   // Queries
   const {
@@ -58,11 +48,6 @@ export const AIProvidersSettings: React.FC = () => {
       toast.error(`Failed to load active AI provider: ${error?.message}`);
     },
   });
-
-  // Initialize on mount
-  React.useEffect(() => {
-    initializeProviderManager();
-  }, [initializeProviderManager]);
 
   const handleRefreshAll = () => {
     refetchProviders();
@@ -102,8 +87,7 @@ export const AIProvidersSettings: React.FC = () => {
     }
   };
 
-  const isLoading =
-    isInitializing || isLoadingProviders || isLoadingActiveProvider;
+  const isLoading = isLoadingProviders || isLoadingActiveProvider;
 
   if (isLoading) {
     return (
@@ -115,9 +99,7 @@ export const AIProvidersSettings: React.FC = () => {
       >
         <CircularProgress />
         <Typography variant="body1" sx={{ ml: 2 }}>
-          {isInitializing
-            ? 'Initializing AI providers...'
-            : 'Loading providers...'}
+          Loading providers...
         </Typography>
       </Box>
     );

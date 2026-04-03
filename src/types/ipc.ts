@@ -118,19 +118,14 @@ export type AIChannels =
   | 'ai:provider:update'
   | 'ai:provider:delete'
   | 'ai:provider:get-active'
-  | 'ai:provider:get-active-info'
   | 'ai:provider:set-active'
   | 'ai:provider:deactivate-all'
   | 'ai:provider:test-connection'
   | 'ai:provider:test-temp-connection'
   | 'ai:provider:get-models'
   | 'ai:provider:get-all-models'
-  | 'ai:provider:get-status'
   | 'ai:provider:get-credential'
   | 'ai:provider:cleanup-api-keys'
-
-  // Provider manager
-  | 'ai:provider-manager:initialize'
 
   // AI completion
   | 'ai:completion:generate'
