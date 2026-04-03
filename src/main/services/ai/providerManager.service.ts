@@ -1,14 +1,10 @@
+import { generateText } from 'ai';
 import MainDatabaseService from '../mainDatabase.service';
 import SecureStorageService, { AIProviderType } from '../secureStorage.service';
 import { AIProvider, NewAIProvider } from '../../schemas/mainDatabase.schema';
-import { OpenAIProvider } from './providers/openai.provider';
-import { OllamaProvider } from './providers/ollama.provider';
-import { GeminiProvider } from './providers/gemini.provider';
-import { AnthropicProvider } from './providers/anthropic.provider';
-import { BaseAIProvider } from './providers/base.provider';
-import { AIProviderConfig, HealthStatus } from './types/provider.types';
+import { getVercelModel } from './agentAdapter';
+import { HealthStatus } from './types/provider.types';
 import {
-  CompletionChunk,
   CompletionRequest,
   CompletionResponse,
   TypedCompletionRequest,
@@ -28,37 +24,14 @@ export class AIProviderManager {
 
   private static activeProvider: any | null = null;
 
-  // Helper method to create provider instance
-  private static createProviderInstance(
-    type: string,
-    config: AIProviderConfig,
-  ): BaseAIProvider | null {
-    switch (type) {
-      case 'openai':
-        return new OpenAIProvider();
-      case 'ollama':
-        return new OllamaProvider();
-      case 'gemini':
-        return new GeminiProvider();
-      case 'anthropic':
-        return new AnthropicProvider();
-      default:
-        // eslint-disable-next-line no-console
-        console.error(
-          `Unknown provider type: ${type}, ${JSON.stringify(config)}`,
-        );
-        return null;
-    }
-  }
-
   /**
-   * Returns an initialized active provider instance and a selected model compatible with it.
-   * This is useful for services that need to directly call provider methods (e.g., streaming).
+   * @deprecated Use getVercelModel() from agentAdapter.ts instead.
+   * This method is kept for backward compatibility only.
+   * Returns the selected model name and provider type.
    */
   static async getInitializedActiveProviderAndModel(
     requestedModel?: string,
   ): Promise<{
-    providerInstance: BaseAIProvider;
     selectedModel: string;
     providerType: string;
   }> {
@@ -68,21 +41,6 @@ export class AIProviderManager {
       throw new Error(
         'No active AI provider configured. Please configure and activate a provider in settings.',
       );
-    }
-
-    // Credentials (if needed)
-    let apiKey: string | undefined;
-    const providersNeedingApiKey = ['openai', 'anthropic', 'gemini'];
-    if (providersNeedingApiKey.includes(activeProvider.type)) {
-      apiKey = (await SecureStorageService.getAIProviderCredential(
-        activeProvider.id!,
-        activeProvider.type as AIProviderType,
-      )) as any;
-      if (!apiKey) {
-        throw new Error(
-          `No API key configured for ${activeProvider.type} provider. Please configure credentials in settings.`,
-        );
-      }
     }
 
     // Parse provider config
@@ -104,19 +62,7 @@ export class AIProviderManager {
         ? requestedModel
         : this.getDefaultModelForProvider(activeProvider.type, config);
 
-    // Create and initialize instance
-    const providerInstance = this.createProviderInstance(
-      activeProvider.type,
-      config,
-    );
-    if (!providerInstance) {
-      throw new Error(`Unsupported provider type: ${activeProvider.type}`);
-    }
-
-    await providerInstance.initialize({ ...config, apiKey });
-
     return {
-      providerInstance,
       selectedModel,
       providerType: activeProvider.type,
     };
@@ -314,41 +260,65 @@ export class AIProviderManager {
           : JSON.stringify(config.config || {});
       const parsedConfig = JSON.parse(configString);
 
-      // Create provider config object
-      const providerConfig: AIProviderConfig = {
-        ...parsedConfig,
-        apiKey: credentials.apiKey,
-      };
+      // Test connection using AI SDK v6
+      try {
+        // Create a temporary provider record to use getVercelModel
+        const tempProvider = {
+          ...config,
+          id: -1, // Temporary ID
+          config: { ...parsedConfig, apiKey: credentials.apiKey },
+        };
 
-      // Create provider instance
-      const provider = this.createProviderInstance(config.type, providerConfig);
-      if (!provider) {
-        // eslint-disable-next-line no-console
-        console.error(
-          `Failed to create provider instance for type: ${config.type}`,
+        // Save temporarily to test
+        const savedProvider = await MainDatabaseService.saveProvider(
+          tempProvider as NewAIProvider,
         );
+
+        // Store API key temporarily
+        if (credentials.apiKey && savedProvider.id) {
+          await SecureStorageService.setAIProviderCredential(
+            savedProvider.id,
+            config.type as AIProviderType,
+            credentials.apiKey,
+          );
+        }
+
+        // Set as active temporarily
+        await MainDatabaseService.setActiveProvider(savedProvider.id!);
+
+        // Test with a simple completion
+        const model = await getVercelModel();
+        await generateText({
+          model: model as any,
+          prompt: 'Say "test successful" if you can read this.',
+        });
+
+        // Clean up temporary provider
+        await MainDatabaseService.deleteProvider(savedProvider.id!);
+        if (credentials.apiKey && savedProvider.id) {
+          await SecureStorageService.deleteAIProviderCredential(
+            savedProvider.id,
+            config.type as AIProviderType,
+          );
+        }
+
+        return {
+          success: true,
+          message: 'Provider test successful',
+          models: [], // Model list not available in test mode
+          modelsAvailable: 0,
+        };
+      } catch (testError) {
+        // eslint-disable-next-line no-console
+        console.error('Provider test failed:', testError);
         return {
           success: false,
-          error: `Unsupported provider type: ${config.type}`,
+          error:
+            testError instanceof Error
+              ? testError.message
+              : 'Unknown error occurred',
         };
       }
-
-      await provider.initialize(providerConfig);
-      const testResult = await provider.testConnection();
-
-      // Get available models if test was successful
-      if (testResult.success) {
-        try {
-          const models = await provider.getAvailableModels();
-          testResult.models = models;
-          testResult.modelsAvailable = models.length;
-        } catch (modelError) {
-          testResult.models = [];
-          testResult.modelsAvailable = 0;
-        }
-      }
-
-      return testResult;
     } catch (error) {
       // eslint-disable-next-line no-console
       console.error('=== Provider test failed ===');
@@ -380,48 +350,31 @@ export class AIProviderManager {
         return [];
       }
 
-      // Parse the provider config
-      const configString =
-        typeof provider.config === 'string'
-          ? provider.config
-          : JSON.stringify(provider.config || {});
-      const parsedConfig = JSON.parse(configString);
-
-      // Get credentials from secure storage
-      let apiKey: string | null = null;
-      if (['openai', 'anthropic', 'gemini'].includes(provider.type)) {
-        apiKey = await SecureStorageService.getAIProviderCredential(
-          provider.id!,
-          provider.type as AIProviderType,
-        );
-      }
-
-      // Create provider config object
-      const providerConfig: AIProviderConfig = {
-        ...parsedConfig,
-        apiKey,
+      // Return hardcoded model lists for now
+      // In a future phase, this could query provider APIs for dynamic model lists
+      const modelsByProvider: Record<string, any[]> = {
+        openai: [
+          { id: 'gpt-4.1', name: 'GPT-4.1' },
+          { id: 'gpt-4o', name: 'GPT-4o' },
+          { id: 'gpt-4o-mini', name: 'GPT-4o Mini' },
+        ],
+        anthropic: [
+          { id: 'claude-sonnet-4-6', name: 'Claude Sonnet 4.6' },
+          { id: 'claude-4.1-sonnet-20250815', name: 'Claude 4.1 Sonnet' },
+          { id: 'claude-3-5-sonnet-20241022', name: 'Claude 3.5 Sonnet' },
+        ],
+        gemini: [
+          { id: 'gemini-1.5-pro', name: 'Gemini 1.5 Pro' },
+          { id: 'gemini-1.5-flash', name: 'Gemini 1.5 Flash' },
+        ],
+        ollama: [
+          { id: 'llama3.2', name: 'Llama 3.2' },
+          { id: 'llama2', name: 'Llama 2' },
+          { id: 'mistral', name: 'Mistral' },
+        ],
       };
 
-      // Create provider instance
-      const providerInstance = this.createProviderInstance(
-        provider.type,
-        providerConfig,
-      );
-      if (!providerInstance) {
-        // eslint-disable-next-line no-console
-        console.error(
-          `Failed to create provider instance for type: ${provider.type}`,
-        );
-        return [];
-      }
-
-      // Initialize the provider
-      await providerInstance.initialize(providerConfig);
-
-      // Get available models
-      const models = await providerInstance.getAvailableModels();
-
-      return models;
+      return modelsByProvider[provider.type] || [];
     } catch (error) {
       // eslint-disable-next-line no-console
       console.error(`=== Failed to get models for provider ${providerId} ===`);
@@ -479,7 +432,7 @@ export class AIProviderManager {
       const providersNeedingApiKey = ['openai', 'anthropic', 'gemini'];
 
       if (providersNeedingApiKey.includes(provider.type)) {
-        // Get credentials from secure storage (now returns null on error instead of throwing)
+        // Get credentials from secure storage
         apiKey = await SecureStorageService.getAIProviderCredential(
           provider.id!,
           provider.type as AIProviderType,
@@ -510,91 +463,50 @@ export class AIProviderManager {
           console.error(
             `[PROVIDER MANAGER] testProvider - No API key found for provider ${provider.type}`,
           );
-          // eslint-disable-next-line no-console
-          console.error(`[PROVIDER MANAGER] testProvider - Debug info:`, {
-            providerId: provider.id,
-            providerType: provider.type,
-            expectedSecureStorageKey: `${provider.type}-${provider.id}-api-key`,
-          });
           return {
             success: false,
             error: `No API key configured for ${provider.type} provider`,
           };
         }
-      } else {
-        // Provider doesn't require API key (like Ollama local)
       }
 
-      // Parse provider config
-      let config;
-      try {
-        config =
-          typeof provider.config === 'string'
-            ? JSON.parse(provider.config)
-            : provider.config;
-      } catch (configError) {
-        // eslint-disable-next-line no-console
-        console.error(
-          `[PROVIDER MANAGER] testProvider - Failed to parse config:`,
-          configError,
-        );
-        return {
-          success: false,
-          error: `Invalid provider configuration: ${configError instanceof Error ? configError.message : 'Unknown error'}`,
-        };
-      }
-
-      // Create provider instance
-      const providerInstance = this.createProviderInstance(
-        provider.type,
-        config,
-      );
-      if (!providerInstance) {
-        // eslint-disable-next-line no-console
-        console.error(
-          `[PROVIDER MANAGER] testProvider - Failed to create provider instance for type: ${provider.type}`,
-        );
-        return {
-          success: false,
-          error: `Unsupported provider type: ${provider.type}`,
-        };
-      }
-
-      // Initialize provider with combined config and credentials
-      try {
-        const providerConfig: AIProviderConfig = {
-          ...config,
-          apiKey,
-        };
-
-        await providerInstance.initialize(providerConfig);
-      } catch (initError) {
-        // eslint-disable-next-line no-console
-        console.error(
-          `[PROVIDER MANAGER] testProvider - Failed to initialize provider:`,
-          initError,
-        );
-        return {
-          success: false,
-          error: `Failed to initialize provider: ${initError instanceof Error ? initError.message : 'Unknown error'}`,
-        };
-      }
-
-      // Test the connection
+      // Test the connection using AI SDK v6
       try {
         const startTime = Date.now();
 
-        const testResult = await providerInstance.testConnection();
-        const latencyMs = Date.now() - startTime;
+        // Temporarily set as active to test
+        const previousActive = await MainDatabaseService.getActiveProvider();
+        await MainDatabaseService.setActiveProvider(provider.id!);
 
-        return {
-          success: testResult.success,
-          error: testResult.error,
-          message: testResult.message || 'Provider test successful',
-          latencyMs,
-          models: testResult.models,
-          modelsAvailable: testResult.models?.length || 0,
-        };
+        try {
+          // Test with a simple completion
+          const model = await getVercelModel();
+          await generateText({
+            model: model as any,
+            prompt: 'Say "test successful" if you can read this.',
+          });
+
+          const latencyMs = Date.now() - startTime;
+
+          // Restore previous active provider
+          if (previousActive) {
+            await MainDatabaseService.setActiveProvider(previousActive.id!);
+          }
+
+          return {
+            success: true,
+            message: 'Provider test successful',
+            latencyMs,
+            models: [],
+            modelsAvailable: 0,
+          };
+        } catch (testError) {
+          // Restore previous active provider
+          if (previousActive) {
+            await MainDatabaseService.setActiveProvider(previousActive.id!);
+          }
+          throw testError;
+        }
       } catch (testError) {
         // eslint-disable-next-line no-console
         console.error(
@@ -603,7 +515,9 @@ export class AIProviderManager {
         );
         return {
           success: false,
-          error: `Connection test failed: ${testError instanceof Error ? testError.message : 'Unknown error'}`,
+          error: `Connection test failed: ${
+            testError instanceof Error ? testError.message : 'Unknown error'
+          }`,
         };
       }
     } catch (error) {
@@ -642,116 +556,37 @@ export class AIProviderManager {
   static async generateCompletion<T = any>(
     request: CompletionRequest<T>,
   ): Promise<CompletionResponse<T>> {
-    // eslint-disable-next-line no-useless-catch
     try {
-      // Get the active provider
-      const activeProvider = await MainDatabaseService.getActiveProvider();
-      if (!activeProvider) {
-        throw new Error(
-          'No active AI provider configured. Please configure and activate a provider in settings.',
-        );
-      }
-
-      // Get provider credentials (if needed)
-      let apiKey;
-      const providersNeedingApiKey = ['openai', 'anthropic', 'gemini'];
-
-      if (providersNeedingApiKey.includes(activeProvider.type)) {
-        apiKey = await SecureStorageService.getAIProviderCredential(
-          activeProvider.id!,
-          activeProvider.type as AIProviderType,
-        );
-
-        if (!apiKey) {
-          throw new Error(
-            `No API key configured for ${activeProvider.type} provider. Please configure credentials in settings.`,
-          );
-        }
-      }
-
-      // Parse provider config
-      let config;
-      try {
-        config =
-          typeof activeProvider.config === 'string'
-            ? JSON.parse(activeProvider.config)
-            : activeProvider.config || {};
-      } catch (configError) {
-        throw new Error(
-          'Invalid provider configuration. Please reconfigure the provider in settings.',
-        );
-      }
-
-      // Select appropriate model for the provider if not specified or if wrong provider model
-      let selectedModel = request.model;
-
-      // If no model specified or if the model doesn't match the provider, use provider's default
-      if (!selectedModel || selectedModel.trim().length === 0) {
-        selectedModel = this.getDefaultModelForProvider(
-          activeProvider.type,
-          config,
-        );
-      }
-
-      // Create and initialize provider instance
-      const providerInstance = this.createProviderInstance(
-        activeProvider.type,
-        config,
+      // Get the active provider info
+      const { selectedModel } = await this.getInitializedActiveProviderAndModel(
+        request.model,
       );
-      if (!providerInstance) {
-        throw new Error(`Unsupported provider type: ${activeProvider.type}`);
-      }
 
-      // Initialize provider with config and credentials
-      const providerConfig: AIProviderConfig = {
-        ...config,
-        apiKey,
-      };
+      // Use AI SDK v6 generateText
+      const model = await getVercelModel(selectedModel);
 
-      try {
-        await providerInstance.initialize(providerConfig);
-      } catch (initError) {
-        throw new Error(
-          `Failed to initialize ${activeProvider.type} provider: ${initError instanceof Error ? initError.message : 'Unknown error'}`,
-        );
-      }
+      // Use prompt from request
+      const prompt = request.prompt || '';
 
-      // Update request with correct model
-      const updatedRequest: CompletionRequest<T> = {
-        ...request,
+      const result = await generateText({
+        model: model as any,
+        prompt,
+        temperature: request.temperature,
+      });
+
+      return {
+        content: result.text,
         model: selectedModel,
-      };
-
-      try {
-        return await providerInstance.generateCompletion<T>(updatedRequest);
-      } catch (completionError) {
-        if (completionError instanceof Error) {
-          if (
-            completionError.message.includes('401') ||
-            completionError.message.includes('Unauthorized')
-          ) {
-            throw new Error(
-              `Authentication failed with ${activeProvider.type}. Please check your API key in settings.`,
-            );
-          } else if (
-            completionError.message.includes('429') ||
-            completionError.message.includes('quota')
-          ) {
-            throw new Error(
-              `API quota exceeded for ${activeProvider.type}. Please check your billing or try again later.`,
-            );
-          } else if (completionError.message.includes('timeout')) {
-            throw new Error(
-              `Request timeout with ${activeProvider.type}. Please try again.`,
-            );
-          }
-        }
-
-        throw new Error(
-          `Failed to generate completion with ${activeProvider.type}: ${completionError instanceof Error ? completionError.message : 'Unknown error'}`,
-        );
-      }
+        providerId: selectedModel,
+        usage: {
+          promptTokens: 0, // AI SDK v6 doesn't provide separate prompt tokens
+          completionTokens: 0, // AI SDK v6 doesn't provide separate completion tokens
+          totalTokens: result.usage.totalTokens || 0,
+        },
+      } as CompletionResponse<T>;
     } catch (error) {
+      // eslint-disable-next-line no-console
+      console.error(error);
       throw error;
     }
   }
@@ -763,18 +598,6 @@ export class AIProviderManager {
     request: TypedCompletionRequest<T>,
   ): Promise<CompletionResponse<T>> {
     return this.generateCompletion<T>(request);
-  }
-
-  /**
-   * Enhanced streaming with generic support
-   */
-  static async *streamCompletion<T = any>(
-    request: CompletionRequest<T>,
-  ): AsyncGenerator<CompletionChunk<T>> {
-    const { providerInstance } =
-      await this.getInitializedActiveProviderAndModel(request.model);
-
-    yield* providerInstance.streamCompletion<T>(request);
   }
 
   // Helper method to get default model for a provider
@@ -844,74 +667,58 @@ export class AIProviderManager {
         }
       }
 
-      // Parse provider config
-      let config;
-      try {
-        config =
-          typeof provider.config === 'string'
-            ? JSON.parse(provider.config)
-            : provider.config || {};
-      } catch (configError) {
-        return {
-          status: 'unhealthy',
-          lastCheck: new Date(),
-          error: 'Invalid provider configuration',
-        };
-      }
-
-      // Create provider instance
-      const providerInstance = this.createProviderInstance(
-        provider.type,
-        config,
-      );
-      if (!providerInstance) {
-        return {
-          status: 'unhealthy',
-          lastCheck: new Date(),
-          error: `Unsupported provider type: ${provider.type}`,
-        };
-      }
-
-      // Initialize provider with combined config and credentials
-      try {
-        const providerConfig: AIProviderConfig = {
-          ...config,
-          apiKey,
-        };
-        await providerInstance.initialize(providerConfig);
-      } catch (initError) {
-        return {
-          status: 'unhealthy',
-          lastCheck: new Date(),
-          error: `Failed to initialize provider: ${initError instanceof Error ? initError.message : 'Unknown error'}`,
-        };
-      }
-
-      // Perform a quick health check
+      // Perform a quick health check using AI SDK v6
       try {
         const startTime = Date.now();
-        const testResult = await providerInstance.testConnection();
-        const responseTimeMs = Date.now() - startTime;
 
-        if (testResult.success) {
+        // Temporarily set as active to test
+        const previousActive = await MainDatabaseService.getActiveProvider();
+        await MainDatabaseService.setActiveProvider(provider.id!);
+
+        try {
+          // Test with a simple completion
+          const model = await getVercelModel();
+          await generateText({
+            model: model as any,
+            prompt: 'Say "test successful" if you can read this.',
+          });
+
+          const responseTimeMs = Date.now() - startTime;
+
+          // Restore previous active provider
+          if (previousActive) {
+            await MainDatabaseService.setActiveProvider(previousActive.id!);
+          }
+
           return {
             status: 'healthy',
             lastCheck: new Date(),
             responseTimeMs,
           };
-        }
+        } catch (testError) {
+          // Restore previous active provider
+          if (previousActive) {
+            await MainDatabaseService.setActiveProvider(previousActive.id!);
+          }
 
-        return {
-          status: 'degraded',
-          lastCheck: new Date(),
-          responseTimeMs,
-          error: testResult.error || 'Connection test failed',
-        };
+          const responseTimeMs = Date.now() - startTime;
+          return {
+            status: 'degraded',
+            lastCheck: new Date(),
+            responseTimeMs,
+            error:
+              testError instanceof Error
+                ? testError.message
+                : 'Connection test failed',
+          };
+        }
       } catch (testError) {
         return {
           status: 'unhealthy',
           lastCheck: new Date(),
-          error: `Health check failed: ${testError instanceof Error ? testError.message : 'Unknown error'}`,
+          error: `Health check failed: ${
+            testError instanceof Error ? testError.message : 'Unknown error'
+          }`,
         };
       }
     } catch (error) {

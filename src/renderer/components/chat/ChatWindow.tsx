@@ -256,6 +256,7 @@ export const ChatWindow: React.FC = () => {
         <ChatInputBox
           sessionId={selectedSessionId}
           contextManager={contextManager}
+          projectPath={project?.path}
         />
       </Box>
     </Paper>

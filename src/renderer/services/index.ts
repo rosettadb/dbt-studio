@@ -11,6 +11,7 @@ import * as rosettaCloudServices from './rosettaCloud.service';
 import { DuckLakeService } from './duckLake.service';
 import * as lineageService from './lineage.service';
 import * as languageIntelligenceService from './languageIntelligence.service';
+import * as agentService from './agent.service';
 
 export {
   settingsServices,
@@ -26,4 +27,5 @@ export {
   DuckLakeService,
   lineageService,
   languageIntelligenceService,
+  agentService,
 };

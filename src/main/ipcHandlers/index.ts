@@ -14,6 +14,7 @@ import registerDuckLakeHandlers from './duckLake.ipcHandlers';
 import registerLineageHandlers from './lineage.ipcHandlers';
 import { registerNotebooksHandlers } from './notebooks.ipcHandlers';
 import registerLanguageIntelligenceHandlers from './languageIntelligence.ipcHandlers';
+import { registerAgentHandlers } from './agent.ipcHandlers';
 
 export {
   registerCliHandlers,
@@ -32,4 +33,5 @@ export {
   registerLineageHandlers,
   registerNotebooksHandlers,
   registerLanguageIntelligenceHandlers,
+  registerAgentHandlers,
 };

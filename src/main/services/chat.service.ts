@@ -1,3 +1,4 @@
+import { streamText } from 'ai';
 import MainDatabaseService from './mainDatabase.service';
 import type {
   NewContextItem,
@@ -5,7 +6,7 @@ import type {
 } from '../schemas/mainDatabase.schema';
 import { AIProviderManager } from './ai/providerManager.service';
 import SelectedFileContextProvider from './selectedFileContextProvider.service';
-import type { CompletionRequest } from './ai/types/completion.types';
+import { getVercelModel } from './ai/agentAdapter';
 
 // Token management interfaces
 interface TokenBudget {
@@ -45,8 +46,8 @@ interface ConversationContext {
 }
 
 class ChatService {
-  // Track active streaming requests by conversationId
-  private static activeStreams: Map<number, { aborted: boolean }> = new Map();
+  // Track active streaming requests by conversationId with AbortController
+  private static activeStreams: Map<number, AbortController> = new Map();
 
   // Token budget configuration
   private static readonly DEFAULT_BUDGET: TokenBudget = {
@@ -61,10 +62,10 @@ class ChatService {
   private static tokenCache = new Map<string, number>();
 
   static cancelAssistantStream(conversationId: number) {
-    const entry = ChatService.activeStreams.get(conversationId);
-    if (entry) {
-      entry.aborted = true;
-      ChatService.activeStreams.set(conversationId, entry);
+    const controller = ChatService.activeStreams.get(conversationId);
+    if (controller) {
+      controller.abort();
+      ChatService.activeStreams.delete(conversationId);
     }
   }
 
@@ -91,8 +92,8 @@ class ChatService {
       contextItems, // Pass context items to conversation context
     );
 
-    // 3) Initialize active provider and model
-    const { providerInstance, selectedModel } =
+    // 3) Get selected model from active provider
+    const { selectedModel } =
       await AIProviderManager.getInitializedActiveProviderAndModel();
 
     // 4) Prepare enhanced completion request with optimized context
@@ -125,50 +126,37 @@ class ChatService {
       }
     }
 
-    // 6) Stream from provider with enhanced context
+    // 6) Stream from provider with enhanced context using AI SDK v6
     let fullContent = '';
-    try {
-      const request: CompletionRequest = {
-        prompt: enhancedPrompt,
-        model: selectedModel,
-        stream: true,
-        type: 'chat',
-        context: {
-          conversationId,
-          tokenCount: totalTokens,
-          budget,
-          // Include conversation metadata for future context providers
-          files:
-            contextItems
-              ?.filter((item) => item.type === 'file')
-              .map((item) => item.name) || [],
-        },
-      };
+    const abortController = new AbortController();
+    ChatService.activeStreams.set(conversationId, abortController);
 
-      // mark this conversation as actively streaming
-      ChatService.activeStreams.set(conversationId, { aborted: false });
+    try {
+      // Get the Vercel AI SDK model instance
+      const model = await getVercelModel(selectedModel);
+
+      // Stream using AI SDK v6
+      const result = streamText({
+        model: model as any, // Type compatibility workaround for LanguageModelV1
+        prompt: enhancedPrompt,
+        abortSignal: abortController.signal,
+      });
 
       /* eslint-disable no-restricted-syntax */
-      for await (const {
-        content: chunk,
-        done,
-        metadata,
-      } of providerInstance.streamCompletion(request)) {
-        const state = ChatService.activeStreams.get(conversationId);
-        if (state?.aborted) {
-          // emit final done and stop streaming
+      for await (const chunk of result.textStream) {
+        if (abortController.signal.aborted) {
           onChunk('', true);
           throw new Error('aborted');
         }
-        if (metadata && typeof metadata.error === 'string') {
-          throw new Error(metadata.error);
-        }
         if (chunk) {
           fullContent += chunk;
-          onChunk(chunk, !!done);
+          onChunk(chunk, false);
         }
       }
       /* eslint-enable no-restricted-syntax */
+
+      // Send final done signal
+      onChunk('', true);
     } catch (err) {
       // If aborted, we've already emitted a final done signal above.
       if (!(err instanceof Error && err.message === 'aborted')) {

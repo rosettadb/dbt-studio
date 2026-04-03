@@ -1,14 +1,27 @@
 import React from 'react';
-import { Box, IconButton, Tooltip } from '@mui/material';
+import {
+  Box,
+  IconButton,
+  Tooltip,
+  Menu,
+  MenuItem,
+  Typography,
+} from '@mui/material';
 import { useTheme } from '@mui/material/styles';
 import ArrowUpwardIcon from '@mui/icons-material/ArrowUpward';
 import StopIcon from '@mui/icons-material/Stop';
+import QuestionAnswerOutlinedIcon from '@mui/icons-material/QuestionAnswerOutlined';
+import CodeOutlinedIcon from '@mui/icons-material/CodeOutlined';
 import { useQueryClient } from 'react-query';
 import { toast } from 'react-toastify';
 import {
   useStreamChatMessage,
   useCancelChatStream,
 } from '../../controllers/chat.controller';
+import {
+  useRunAgent,
+  useCancelAgent,
+} from '../../controllers/agent.controller';
 import { QUERY_KEYS } from '../../config/constants';
 import {
   useGetAIProviders,
@@ -26,18 +39,25 @@ import { useAutoRenameSession } from '../../hooks/useAutoRenameSession';
 import { htmlToPlainText } from '../../utils/chatHelpers';
 import { useAppContext } from '../../hooks';
 import { useContextManager } from '../../hooks/useContextManager';
+import { useAgentMode } from '../../hooks/useAgentMode';
 
 interface ChatInputBoxProps {
   sessionId?: number;
   contextManager?: ReturnType<typeof useContextManager>;
+  projectPath?: string;
 }
 
 export const ChatInputBox: React.FC<ChatInputBoxProps> = ({
   sessionId,
   contextManager,
+  projectPath,
 }) => {
   const theme = useTheme();
   const [input, setInput] = React.useState('');
+  const [modeMenuAnchor, setModeMenuAnchor] =
+    React.useState<null | HTMLElement>(null);
+  const [providerMenuAnchor, setProviderMenuAnchor] =
+    React.useState<null | HTMLElement>(null);
 
   const { pendingMessage, setPendingMessage } = useAppContext();
 
@@ -48,14 +68,27 @@ export const ChatInputBox: React.FC<ChatInputBoxProps> = ({
   const queryClient = useQueryClient();
   const assistantTempIdRef = React.useRef<number | null>(null);
   const userTempIdRef = React.useRef<number | null>(null);
+
+  // Agent mode state
+  const { isAgentMode, setAgentMode } = useAgentMode(sessionId);
+
+  // Chat and agent mutations
   const { mutate: streamMessage, isLoading: isStreaming } =
     useStreamChatMessage();
   const { mutate: cancelStream, isLoading: isCancelling } =
     useCancelChatStream();
+  const { mutate: runAgent, isLoading: isAgentRunning } = useRunAgent();
+  const { mutate: cancelAgent, isLoading: isAgentCancelling } =
+    useCancelAgent();
+
   const { data: providers = [] } = useGetAIProviders();
   const { data: activeProvider } = useGetActiveAIProvider();
   const { mutate: setActiveProvider, isLoading: switching } =
     useSetActiveAIProvider();
+
+  // Combined loading state for both chat and agent modes
+  const isLoading = isStreaming || isAgentRunning;
+  const isCanceling = isCancelling || isAgentCancelling;
 
   // Auto-rename session hook
   const { autoRename } = useAutoRenameSession(sessionId);
@@ -74,181 +107,307 @@ export const ChatInputBox: React.FC<ChatInputBoxProps> = ({
     return aiProviderImages[typeKey] || defaultIcon;
   }, [selectedProvider]);
 
+  const handleSendChatMessage = async (messageContent: string) => {
+    if (!sessionId) return;
+
+    // 1) Optimistically add the user message locally (no server call here)
+    // Must match the key used by useGetChatMessagesWithContext(sessionId) which is
+    // [QUERY_KEYS.GET_CHAT_MESSAGES_WITH_CONTEXT, sessionId, undefined, undefined]
+    const msgKey = [
+      QUERY_KEYS.GET_CHAT_MESSAGES_WITH_CONTEXT,
+      sessionId,
+      undefined,
+      undefined,
+    ] as const;
+    const prev =
+      queryClient.getQueryData<
+        Array<{
+          id: number;
+          role: string;
+          conversationId: number;
+          content: string;
+          createdAt: string;
+          updatedAt: string;
+          [k: string]: any;
+        }>
+      >(msgKey) || [];
+
+    const tempUserId = -Date.now();
+    const tempUser = {
+      id: tempUserId,
+      conversationId: sessionId,
+      role: 'user',
+      content: messageContent,
+      metadata: { temp: true },
+      toolCalls: null as any,
+      contextItems: null as any,
+      thinkingContent: null as any,
+      signature: null as any,
+      isStreaming: false,
+      parentMessageId: null,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    } as any;
+
+    // 2) Track temp IDs and create a temporary assistant message to stream into
+    userTempIdRef.current = tempUserId;
+    const tempId = -Date.now() - 1;
+    assistantTempIdRef.current = tempId;
+    const tempAssistant = {
+      id: tempId,
+      conversationId: sessionId,
+      role: 'assistant',
+      content: 'Generating…',
+      metadata: { temp: true, isStreaming: true },
+      toolCalls: null as any,
+      contextItems: null as any,
+      thinkingContent: null as any,
+      signature: null as any,
+      isStreaming: true,
+      parentMessageId: null,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    } as any;
+    // Push both temp user and temp assistant
+    queryClient.setQueryData(msgKey, [...prev, tempUser, tempAssistant]);
+
+    // Clear input immediately
+    setInput('');
+
+    // 3) Prepare context items using context manager
+    const contextItems =
+      await activeContextManager.getContextItemsWithAdditionalFiles();
+
+    // 4) Start streaming with automatic context; update the temp assistant content on each chunk
+    streamMessage(
+      {
+        sessionId,
+        content: messageContent,
+        contextItems: contextItems.length > 0 ? contextItems : undefined,
+        onChunk: (chunk: string) => {
+          const current =
+            queryClient.getQueryData<
+              Array<{
+                id: number;
+                role: string;
+                conversationId: number;
+                content: string;
+                createdAt: string;
+                updatedAt: string;
+                [k: string]: any;
+              }>
+            >(msgKey) || [];
+          queryClient.setQueryData(
+            msgKey,
+            current.map((m) =>
+              m.id === assistantTempIdRef.current
+                ? {
+                    ...m,
+                    content:
+                      (m.content === 'Generating…' ? '' : m.content) + chunk,
+                    updatedAt: new Date().toISOString(),
+                  }
+                : m,
+            ),
+          );
+        },
+      },
+      {
+        onSuccess: async () => {
+          // Replace temp with persisted messages (use exact same key signature)
+          await queryClient.invalidateQueries(msgKey);
+
+          // Auto-rename session after successful LLM response
+          // Use the user's message content to generate a descriptive title
+          autoRename(messageContent);
+
+          // Clear context after successful send
+          activeContextManager.clearAdditionalFiles();
+
+          assistantTempIdRef.current = null;
+          userTempIdRef.current = null;
+        },
+        onError: async (error: any) => {
+          const current = queryClient.getQueryData<typeof prev>(msgKey) || [];
+          const aId = assistantTempIdRef.current;
+          if (error?.message === 'aborted') {
+            // Cancelled by user: remove only the temp assistant and refresh to reconcile persisted user message
+            queryClient.setQueryData(
+              msgKey,
+              current.filter((m) => m.id !== aId),
+            );
+            assistantTempIdRef.current = null;
+            await queryClient.invalidateQueries(msgKey);
+            // Clear user temp ref after refresh
+            userTempIdRef.current = null;
+            // No toast for user cancellation
+          } else {
+            // Real error: remove both temp assistant and temp user
+            const uId = userTempIdRef.current;
+            queryClient.setQueryData(
+              msgKey,
+              current.filter((m) => m.id !== aId && m.id !== uId),
+            );
+            assistantTempIdRef.current = null;
+            userTempIdRef.current = null;
+
+            // Show appropriate error message
+            if (
+              error?.message?.includes('401') ||
+              error?.message?.includes('unauthorized')
+            ) {
+              toast.error(
+                'Authentication failed. Please check your AI provider credentials.',
+              );
+            } else if (
+              error?.message?.includes('429') ||
+              error?.message?.includes('quota')
+            ) {
+              toast.error('Rate limit exceeded. Please try again later.');
+            } else if (
+              error?.message?.includes('network') ||
+              error?.message?.includes('fetch')
+            ) {
+              toast.error(
+                'Network error. Please check your connection and try again.',
+              );
+            } else {
+              toast.error(
+                `Failed to send message: ${error?.message || 'Unknown error'}`,
+              );
+            }
+          }
+        },
+      },
+    );
+  };
+
+  const handleSendAgentMessage = async (messageContent: string) => {
+    if (!sessionId) return;
+
+    const msgKey = [
+      QUERY_KEYS.GET_CHAT_MESSAGES_WITH_CONTEXT,
+      sessionId,
+      undefined,
+      undefined,
+    ] as const;
+    const prev = queryClient.getQueryData<Array<any>>(msgKey) || [];
+
+    const tempUserId = -Date.now();
+    const tempUser = {
+      id: tempUserId,
+      conversationId: sessionId,
+      role: 'user',
+      content: messageContent,
+      metadata: { temp: true, agentMode: true },
+      toolCalls: null as any,
+      contextItems: null as any,
+      thinkingContent: null as any,
+      signature: null as any,
+      isStreaming: false,
+      parentMessageId: null,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    } as any;
+
+    userTempIdRef.current = tempUserId;
+    const tempId = -Date.now() - 1;
+    assistantTempIdRef.current = tempId;
+    const tempAssistant = {
+      id: tempId,
+      conversationId: sessionId,
+      role: 'assistant',
+      content: '🤖 Agent working…',
+      metadata: { temp: true, isStreaming: true, agentMode: true },
+      toolCalls: null as any,
+      contextItems: null as any,
+      thinkingContent: null as any,
+      signature: null as any,
+      isStreaming: true,
+      parentMessageId: null,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    } as any;
+
+    queryClient.setQueryData(msgKey, [...prev, tempUser, tempAssistant]);
+    setInput('');
+
+    // Set up streaming listener for agent responses (uses same event as chat)
+    const unsubscribe = window.electron.ipcRenderer.on(
+      'chat:message:stream-chunk',
+      (...args: unknown[]) => {
+        const data = args[0] as {
+          conversationId: number;
+          chunk: string;
+          done: boolean;
+        };
+        if (data && data.conversationId === sessionId) {
+          const current = queryClient.getQueryData<Array<any>>(msgKey) || [];
+          queryClient.setQueryData(
+            msgKey,
+            current.map((m) =>
+              m.id === assistantTempIdRef.current
+                ? {
+                    ...m,
+                    content:
+                      (m.content === '🤖 Agent working…' ? '' : m.content) +
+                      data.chunk,
+                    updatedAt: new Date().toISOString(),
+                  }
+                : m,
+            ),
+          );
+        }
+      },
+    );
+
+    const contextItems =
+      await activeContextManager.getContextItemsWithAdditionalFiles();
+
+    runAgent(
+      {
+        conversationId: sessionId,
+        content: messageContent,
+        contextItems: contextItems.length > 0 ? contextItems : undefined,
+        projectPath,
+      },
+      {
+        onSuccess: async () => {
+          unsubscribe();
+          await queryClient.invalidateQueries(msgKey);
+          autoRename(messageContent);
+          activeContextManager.clearAdditionalFiles();
+          assistantTempIdRef.current = null;
+          userTempIdRef.current = null;
+        },
+        onError: async (error: any) => {
+          unsubscribe();
+          const current = queryClient.getQueryData<typeof prev>(msgKey) || [];
+          const aId = assistantTempIdRef.current;
+          const uId = userTempIdRef.current;
+
+          queryClient.setQueryData(
+            msgKey,
+            current.filter((m) => m.id !== aId && m.id !== uId),
+          );
+          assistantTempIdRef.current = null;
+          userTempIdRef.current = null;
+
+          toast.error(`Agent failed: ${error?.message || 'Unknown error'}`);
+        },
+      },
+    );
+  };
+
   const handleSendMessage = async (content?: string) => {
     const messageContent = content || plainText.trim();
     if (sessionId && messageContent && activeProvider) {
-      // 1) Optimistically add the user message locally (no server call here)
-      // Must match the key used by useGetChatMessagesWithContext(sessionId) which is
-      // [QUERY_KEYS.GET_CHAT_MESSAGES_WITH_CONTEXT, sessionId, undefined, undefined]
-      const msgKey = [
-        QUERY_KEYS.GET_CHAT_MESSAGES_WITH_CONTEXT,
-        sessionId,
-        undefined,
-        undefined,
-      ] as const;
-      const prev =
-        queryClient.getQueryData<
-          Array<{
-            id: number;
-            role: string;
-            conversationId: number;
-            content: string;
-            createdAt: string;
-            updatedAt: string;
-            [k: string]: any;
-          }>
-        >(msgKey) || [];
-
-      const tempUserId = -Date.now();
-      const tempUser = {
-        id: tempUserId,
-        conversationId: sessionId,
-        role: 'user',
-        content: messageContent,
-        metadata: { temp: true },
-        toolCalls: null as any,
-        contextItems: null as any,
-        thinkingContent: null as any,
-        signature: null as any,
-        isStreaming: false,
-        parentMessageId: null,
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
-      } as any;
-
-      // 2) Track temp IDs and create a temporary assistant message to stream into
-      userTempIdRef.current = tempUserId;
-      const tempId = -Date.now() - 1;
-      assistantTempIdRef.current = tempId;
-      const tempAssistant = {
-        id: tempId,
-        conversationId: sessionId,
-        role: 'assistant',
-        content: 'Generating…',
-        metadata: { temp: true, isStreaming: true },
-        toolCalls: null as any,
-        contextItems: null as any,
-        thinkingContent: null as any,
-        signature: null as any,
-        isStreaming: true,
-        parentMessageId: null,
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
-      } as any;
-      // Push both temp user and temp assistant
-      queryClient.setQueryData(msgKey, [...prev, tempUser, tempAssistant]);
-
-      // Clear input immediately ONLY if not sending a pending message
-      if (!content) {
-        setInput('');
+      // Use agent mode if enabled, otherwise use regular chat
+      if (isAgentMode) {
+        await handleSendAgentMessage(messageContent);
+      } else {
+        await handleSendChatMessage(messageContent);
       }
-
-      // 3) Prepare context items using context manager
-      const contextItems =
-        await activeContextManager.getContextItemsWithAdditionalFiles();
-
-      // 4) Start streaming with automatic context; update the temp assistant content on each chunk
-      streamMessage(
-        {
-          sessionId,
-          content: messageContent,
-          contextItems: contextItems.length > 0 ? contextItems : undefined,
-          onChunk: (chunk: string) => {
-            const current =
-              queryClient.getQueryData<
-                Array<{
-                  id: number;
-                  role: string;
-                  conversationId: number;
-                  content: string;
-                  createdAt: string;
-                  updatedAt: string;
-                  [k: string]: any;
-                }>
-              >(msgKey) || [];
-            queryClient.setQueryData(
-              msgKey,
-              current.map((m) =>
-                m.id === assistantTempIdRef.current
-                  ? {
-                      ...m,
-                      content:
-                        (m.content === 'Generating…' ? '' : m.content) + chunk,
-                      updatedAt: new Date().toISOString(),
-                    }
-                  : m,
-              ),
-            );
-          },
-        },
-        {
-          onSuccess: async () => {
-            // Replace temp with persisted messages (use exact same key signature)
-            await queryClient.invalidateQueries(msgKey);
-
-            // Auto-rename session after successful LLM response
-            // Use the user's message content to generate a descriptive title
-            autoRename(messageContent);
-
-            // Clear context after successful send
-            activeContextManager.clearAdditionalFiles();
-
-            assistantTempIdRef.current = null;
-            userTempIdRef.current = null;
-          },
-          onError: async (error: any) => {
-            const current = queryClient.getQueryData<typeof prev>(msgKey) || [];
-            const aId = assistantTempIdRef.current;
-            if (error?.message === 'aborted') {
-              // Cancelled by user: remove only the temp assistant and refresh to reconcile persisted user message
-              queryClient.setQueryData(
-                msgKey,
-                current.filter((m) => m.id !== aId),
-              );
-              assistantTempIdRef.current = null;
-              await queryClient.invalidateQueries(msgKey);
-              // Clear user temp ref after refresh
-              userTempIdRef.current = null;
-              // No toast for user cancellation
-            } else {
-              // Real error: remove both temp assistant and temp user
-              const uId = userTempIdRef.current;
-              queryClient.setQueryData(
-                msgKey,
-                current.filter((m) => m.id !== aId && m.id !== uId),
-              );
-              assistantTempIdRef.current = null;
-              userTempIdRef.current = null;
-
-              // Show appropriate error message
-              if (
-                error?.message?.includes('401') ||
-                error?.message?.includes('unauthorized')
-              ) {
-                toast.error(
-                  'Authentication failed. Please check your AI provider credentials.',
-                );
-              } else if (
-                error?.message?.includes('429') ||
-                error?.message?.includes('quota')
-              ) {
-                toast.error('Rate limit exceeded. Please try again later.');
-              } else if (
-                error?.message?.includes('network') ||
-                error?.message?.includes('fetch')
-              ) {
-                toast.error(
-                  'Network error. Please check your connection and try again.',
-                );
-              } else {
-                toast.error(
-                  `Failed to send message: ${error?.message || 'Unknown error'}`,
-                );
-              }
-            }
-          },
-        },
-      );
     }
   };
 
@@ -265,17 +424,10 @@ export const ChatInputBox: React.FC<ChatInputBoxProps> = ({
       undefined,
     ] as const;
 
-    cancelStream(
-      { sessionId },
-      {
+    if (isAgentMode) {
+      cancelAgent(sessionId, {
         onSettled: async () => {
-          const current =
-            queryClient.getQueryData<
-              Array<{
-                id: number;
-                [k: string]: any;
-              }>
-            >(msgKey) || [];
+          const current = queryClient.getQueryData<Array<any>>(msgKey) || [];
           const aId = assistantTempIdRef.current;
           queryClient.setQueryData(
             msgKey,
@@ -283,11 +435,27 @@ export const ChatInputBox: React.FC<ChatInputBoxProps> = ({
           );
           assistantTempIdRef.current = null;
           await queryClient.invalidateQueries(msgKey);
-          // Clear user temp ref after refresh
           userTempIdRef.current = null;
         },
-      },
-    );
+      });
+    } else {
+      cancelStream(
+        { sessionId },
+        {
+          onSettled: async () => {
+            const current = queryClient.getQueryData<Array<any>>(msgKey) || [];
+            const aId = assistantTempIdRef.current;
+            queryClient.setQueryData(
+              msgKey,
+              current.filter((m) => m.id !== aId),
+            );
+            assistantTempIdRef.current = null;
+            await queryClient.invalidateQueries(msgKey);
+            userTempIdRef.current = null;
+          },
+        },
+      );
+    }
   };
 
   React.useEffect(() => {
@@ -333,7 +501,7 @@ export const ChatInputBox: React.FC<ChatInputBoxProps> = ({
             value={input}
             onChange={setInput}
             placeholder="Type a message..."
-            disabled={isStreaming}
+            disabled={isLoading}
             onSubmit={handleSend}
           />
         </Box>
@@ -347,32 +515,260 @@ export const ChatInputBox: React.FC<ChatInputBoxProps> = ({
           gap: 0.75,
         }}
       >
-        <select
-          id="ai-provider-select"
-          value={activeProvider?.id?.toString() ?? ''}
-          onChange={(e) => {
-            const id = e.target.value as string;
-            if (id) setActiveProvider(id);
-          }}
-          disabled={switching || isStreaming}
-          style={{
-            height: 22,
-            fontSize: 11,
-            padding: '1px 6px 1px 26px',
-            borderRadius: 4,
-            border: `1px solid ${theme.palette.divider}`,
-            background: `${theme.palette.background.paper} url(${selectedIcon}) 6px center / 14px 14px no-repeat`,
-            color: theme.palette.text.primary,
-            maxWidth: 220,
+        {/* Agent/Chat Mode Selector - Custom Dropdown */}
+        <Box
+          onClick={(e) => !isLoading && setModeMenuAnchor(e.currentTarget)}
+          sx={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 0.25,
+            position: 'relative',
+            borderRadius: 0.5,
+            px: 0.5,
+            py: 0.25,
+            border: '1px solid',
+            borderColor: 'divider',
+            cursor: isLoading ? 'default' : 'pointer',
+            '&:hover': {
+              bgcolor: isLoading ? 'transparent' : 'action.hover',
+            },
           }}
         >
-          <option value="">No AI Provider</option>
-          {providers.map((p: AIProvider) => (
-            <option key={p.id} value={p.id?.toString() ?? ''}>
-              {p.name}
-            </option>
-          ))}
-        </select>
+          {isAgentMode ? (
+            <CodeOutlinedIcon sx={{ fontSize: 14, color: 'text.secondary' }} />
+          ) : (
+            <QuestionAnswerOutlinedIcon
+              sx={{ fontSize: 14, color: 'text.secondary' }}
+            />
+          )}
+          <Typography
+            variant="caption"
+            sx={{
+              fontSize: 11,
+              color: 'text.primary',
+              userSelect: 'none',
+            }}
+          >
+            {isAgentMode ? 'Code' : 'Ask'}
+          </Typography>
+        </Box>
+
+        <Menu
+          anchorEl={modeMenuAnchor}
+          open={Boolean(modeMenuAnchor)}
+          onClose={() => setModeMenuAnchor(null)}
+          anchorOrigin={{
+            vertical: 'top',
+            horizontal: 'left',
+          }}
+          transformOrigin={{
+            vertical: 'bottom',
+            horizontal: 'left',
+          }}
+          PaperProps={{
+            sx: {
+              mt: -0.5,
+              minWidth: 200,
+            },
+          }}
+          MenuListProps={{
+            sx: {
+              py: 0.5,
+            },
+          }}
+        >
+          <MenuItem
+            selected={!isAgentMode}
+            onClick={() => {
+              setAgentMode(false);
+              setModeMenuAnchor(null);
+            }}
+            sx={{
+              py: 0.5,
+              px: 1.5,
+              minHeight: 'auto',
+            }}
+          >
+            <QuestionAnswerOutlinedIcon
+              sx={{ fontSize: 16, mr: 1, color: 'text.secondary' }}
+            />
+            <Box>
+              <Typography
+                variant="body2"
+                sx={{ fontSize: 12, fontWeight: 500, lineHeight: 1.4 }}
+              >
+                Ask
+              </Typography>
+              <Typography
+                variant="caption"
+                sx={{ fontSize: 10, color: 'text.secondary', lineHeight: 1.2 }}
+              >
+                Reads but won&apos;t edit
+              </Typography>
+            </Box>
+          </MenuItem>
+          <MenuItem
+            selected={isAgentMode}
+            onClick={() => {
+              setAgentMode(true);
+              setModeMenuAnchor(null);
+            }}
+            sx={{
+              py: 0.5,
+              px: 1.5,
+              minHeight: 'auto',
+            }}
+          >
+            <CodeOutlinedIcon
+              sx={{ fontSize: 16, mr: 1, color: 'text.secondary' }}
+            />
+            <Box>
+              <Typography
+                variant="body2"
+                sx={{ fontSize: 12, fontWeight: 500, lineHeight: 1.4 }}
+              >
+                Code
+              </Typography>
+              <Typography
+                variant="caption"
+                sx={{ fontSize: 10, color: 'text.secondary', lineHeight: 1.2 }}
+              >
+                Can write and edit code
+              </Typography>
+            </Box>
+          </MenuItem>
+        </Menu>
+
+        {/* AI Provider Selector - Custom Dropdown */}
+        <Box
+          onClick={(e) =>
+            !switching && !isLoading && setProviderMenuAnchor(e.currentTarget)
+          }
+          sx={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 0.25,
+            position: 'relative',
+            borderRadius: 0.5,
+            px: 0.5,
+            py: 0.25,
+            border: '1px solid',
+            borderColor: 'divider',
+            cursor: switching || isLoading ? 'default' : 'pointer',
+            '&:hover': {
+              bgcolor: switching || isLoading ? 'transparent' : 'action.hover',
+            },
+          }}
+        >
+          <Box
+            component="img"
+            src={selectedIcon}
+            sx={{
+              width: 14,
+              height: 14,
+            }}
+          />
+          <Typography
+            variant="caption"
+            sx={{
+              fontSize: 11,
+              color: 'text.primary',
+              userSelect: 'none',
+              maxWidth: 180,
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+              whiteSpace: 'nowrap',
+            }}
+          >
+            {selectedProvider?.name || 'No AI Provider'}
+          </Typography>
+        </Box>
+
+        <Menu
+          anchorEl={providerMenuAnchor}
+          open={Boolean(providerMenuAnchor)}
+          onClose={() => setProviderMenuAnchor(null)}
+          anchorOrigin={{
+            vertical: 'top',
+            horizontal: 'left',
+          }}
+          transformOrigin={{
+            vertical: 'bottom',
+            horizontal: 'left',
+          }}
+          PaperProps={{
+            sx: {
+              mt: -0.5,
+              minWidth: 220,
+              maxHeight: 300,
+            },
+          }}
+          MenuListProps={{
+            sx: {
+              py: 0.5,
+            },
+          }}
+        >
+          {providers.length === 0 ? (
+            <MenuItem disabled sx={{ py: 0.5, px: 1.5, minHeight: 'auto' }}>
+              <Typography
+                variant="caption"
+                sx={{ fontSize: 11, color: 'text.secondary' }}
+              >
+                No AI providers configured
+              </Typography>
+            </MenuItem>
+          ) : (
+            providers.map((p: AIProvider) => {
+              const providerIcon =
+                aiProviderImages[p.type as keyof typeof aiProviderImages] ||
+                defaultIcon;
+              return (
+                <MenuItem
+                  key={p.id}
+                  selected={p.id === activeProvider?.id}
+                  onClick={() => {
+                    setActiveProvider(p.id?.toString() ?? '');
+                    setProviderMenuAnchor(null);
+                  }}
+                  sx={{
+                    py: 0.5,
+                    px: 1.5,
+                    minHeight: 'auto',
+                  }}
+                >
+                  <Box
+                    component="img"
+                    src={providerIcon}
+                    sx={{
+                      width: 16,
+                      height: 16,
+                      mr: 1,
+                    }}
+                  />
+                  <Box sx={{ flex: 1 }}>
+                    <Typography
+                      variant="body2"
+                      sx={{ fontSize: 12, fontWeight: 500, lineHeight: 1.4 }}
+                    >
+                      {p.name}
+                    </Typography>
+                    <Typography
+                      variant="caption"
+                      sx={{
+                        fontSize: 10,
+                        color: 'text.secondary',
+                        lineHeight: 1.2,
+                      }}
+                    >
+                      {p.type}
+                    </Typography>
+                  </Box>
+                </MenuItem>
+              );
+            })
+          )}
+        </Menu>
 
         <Box sx={{ flex: 1 }} />
         {isStreaming && (
@@ -381,10 +777,10 @@ export const ChatInputBox: React.FC<ChatInputBoxProps> = ({
           </span>
         )}
         {(() => {
-          if (isStreaming) {
+          if (isLoading) {
             return (
               <Tooltip
-                title="Stop generation"
+                title={isAgentMode ? 'Stop code generation' : 'Stop generation'}
                 placement="top"
                 arrow
                 disableInteractive
@@ -394,8 +790,10 @@ export const ChatInputBox: React.FC<ChatInputBoxProps> = ({
                     color="primary"
                     size="small"
                     onClick={handleCancel}
-                    disabled={isCancelling}
-                    aria-label="Stop generation"
+                    disabled={isCanceling}
+                    aria-label={
+                      isAgentMode ? 'Stop code generation' : 'Stop generation'
+                    }
                     sx={{
                       bgcolor: 'primary.main',
                       color: 'primary.contrastText',

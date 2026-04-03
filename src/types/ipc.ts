@@ -369,6 +369,8 @@ export type NotebookChannels =
   | 'notebooks:archived:delete'
   | 'notebooks:archived:deleteAll';
 
+export type AgentChannels = 'agent:run' | 'agent:cancel' | 'agent:tools:list';
+
 export type Channels =
   | TestChannels
   | CliChannels
@@ -386,7 +388,8 @@ export type Channels =
   | AIChannels
   | DuckLakeChannels
   | LineageChannels
-  | NotebookChannels;
+  | NotebookChannels
+  | AgentChannels;
 
 export type ConfigureConnectionBody = {
   projectId?: string;

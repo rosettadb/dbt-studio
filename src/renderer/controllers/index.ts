@@ -9,3 +9,4 @@ export * from './profile.controller';
 export * from './rosettaCloud.controller';
 export * from './duckLake.controller';
 export * from './lineage.controller';
+export * from './agent.controller';

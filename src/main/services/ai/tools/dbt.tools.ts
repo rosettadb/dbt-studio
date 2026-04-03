@@ -1,0 +1,340 @@
+// dbt Tools for AI SDK v6 ToolLoopAgent
+// These tools provide AI agents with safe, controlled access to dbt project operations
+
+import { tool } from 'ai';
+import { z } from 'zod';
+import { execSync } from 'child_process';
+import * as fs from 'fs';
+import * as path from 'path';
+
+// Security constraints
+const ALLOWED_DBT_COMMANDS = [
+  'run',
+  'test',
+  'compile',
+  'docs',
+  'debug',
+  'deps',
+  'source',
+  'snapshot',
+  'seed',
+  'clean',
+];
+const MAX_FILE_SIZE = 500_000; // 500 KB
+const COMMAND_TIMEOUT = 120_000; // 2 minutes
+
+/**
+ * Validates that a file path is within the project root
+ * Prevents directory traversal attacks
+ */
+function assertWithinProject(filePath: string, projectPath: string): void {
+  const resolved = path.resolve(filePath);
+  const projectRoot = path.resolve(projectPath);
+  if (!resolved.startsWith(projectRoot)) {
+    throw new Error(
+      `Access denied: path must be within project root. Attempted: ${resolved}, Root: ${projectRoot}`,
+    );
+  }
+}
+
+/**
+ * Read a dbt model, macro, schema, or config file from the project
+ */
+export const readDbtModel = tool({
+  description:
+    'Read a dbt model, macro, schema.yml, dbt_project.yml, or other configuration file from the project. Use this to understand existing models before making changes.',
+  inputSchema: z.object({
+    filePath: z
+      .string()
+      .describe(
+        'Absolute path to the file to read (e.g., /path/to/project/models/staging/stg_customers.sql)',
+      ),
+    projectPath: z
+      .string()
+      .describe('Absolute path to the dbt project root directory'),
+  }),
+  execute: async ({ filePath, projectPath }) => {
+    try {
+      assertWithinProject(filePath, projectPath);
+
+      if (!fs.existsSync(filePath)) {
+        return { error: `File not found: ${filePath}` };
+      }
+
+      const stat = fs.statSync(filePath);
+      if (stat.size > MAX_FILE_SIZE) {
+        return {
+          error: `File too large to read (${stat.size} bytes). Maximum: ${MAX_FILE_SIZE} bytes`,
+        };
+      }
+
+      const content = fs.readFileSync(filePath, 'utf-8');
+      return {
+        success: true,
+        filePath,
+        content,
+        size: stat.size,
+      };
+    } catch (error) {
+      return {
+        error:
+          error instanceof Error ? error.message : 'Unknown error reading file',
+      };
+    }
+  },
+});
+
+/**
+ * Write or update a dbt model SQL or YAML file
+ */
+export const writeDbtModel = tool({
+  description:
+    'Write or update a dbt model SQL file, schema.yml, or other configuration file. Always read the file first to understand its current state before modifying.',
+  inputSchema: z.object({
+    filePath: z
+      .string()
+      .describe(
+        'Absolute path to the file to write (must end in .sql, .yml, or .yaml)',
+      ),
+    content: z.string().describe('Complete file content to write'),
+    projectPath: z
+      .string()
+      .describe('Absolute path to the dbt project root directory'),
+  }),
+  execute: async ({ filePath, content, projectPath }) => {
+    try {
+      assertWithinProject(filePath, projectPath);
+
+      // Only allow writing SQL and YAML files
+      if (!/\.(sql|yml|yaml)$/i.test(filePath)) {
+        return {
+          error:
+            'Only .sql, .yml, and .yaml files can be written. Other file types are not permitted.',
+        };
+      }
+
+      // Ensure directory exists
+      const dir = path.dirname(filePath);
+      if (!fs.existsSync(dir)) {
+        fs.mkdirSync(dir, { recursive: true });
+      }
+
+      fs.writeFileSync(filePath, content, 'utf-8');
+
+      return {
+        success: true,
+        filePath,
+        bytesWritten: Buffer.byteLength(content, 'utf-8'),
+      };
+    } catch (error) {
+      return {
+        error:
+          error instanceof Error ? error.message : 'Unknown error writing file',
+      };
+    }
+  },
+});
+
+/**
+ * Run a dbt CLI command
+ */
+export const runDbtCommand = tool({
+  description:
+    'Execute a dbt CLI command such as run, test, compile, or docs generate. Use --select to target specific models. Always check logs after running commands to verify success.',
+  inputSchema: z.object({
+    command: z
+      .string()
+      .describe(
+        'dbt subcommand to run (e.g., "run", "test", "compile", "docs generate")',
+      ),
+    select: z
+      .string()
+      .optional()
+      .describe(
+        'Model selector pattern (e.g., "my_model", "my_model+", "tag:daily")',
+      ),
+    projectPath: z
+      .string()
+      .describe('Absolute path to the dbt project root directory'),
+    extraArgs: z
+      .string()
+      .optional()
+      .describe('Additional CLI arguments (e.g., "--full-refresh")'),
+  }),
+  execute: async ({ command, select, projectPath, extraArgs }) => {
+    try {
+      // Validate command is in allowed list
+      const baseCommand = command.split(' ')[0];
+      if (!ALLOWED_DBT_COMMANDS.includes(baseCommand)) {
+        return {
+          error: `Command not permitted: ${baseCommand}. Allowed commands: ${ALLOWED_DBT_COMMANDS.join(', ')}`,
+        };
+      }
+
+      // Build command
+      let fullCmd = `dbt ${command}`;
+      if (select) {
+        fullCmd += ` --select ${select}`;
+      }
+      if (extraArgs) {
+        fullCmd += ` ${extraArgs}`;
+      }
+
+      // Execute with timeout
+      const output = execSync(fullCmd, {
+        cwd: projectPath,
+        encoding: 'utf-8',
+        timeout: COMMAND_TIMEOUT,
+        maxBuffer: 1024 * 1024 * 10, // 10 MB buffer
+      });
+
+      return {
+        success: true,
+        command: fullCmd,
+        output,
+      };
+    } catch (error: any) {
+      return {
+        success: false,
+        command: `dbt ${command}`,
+        error: error.message || 'Command execution failed',
+        stdout: error.stdout || '',
+        stderr: error.stderr || '',
+      };
+    }
+  },
+});
+
+/**
+ * List all dbt models in the project
+ */
+export const listDbtModels = tool({
+  description:
+    'List all dbt model files (.sql) in the project, optionally filtered by name pattern. Useful for discovering available models before reading or modifying them.',
+  inputSchema: z.object({
+    projectPath: z
+      .string()
+      .describe('Absolute path to the dbt project root directory'),
+    filter: z
+      .string()
+      .optional()
+      .describe(
+        'Optional filter pattern to match model names (case-insensitive substring match)',
+      ),
+  }),
+  execute: async ({ projectPath, filter }) => {
+    try {
+      const modelsDir = path.join(projectPath, 'models');
+      if (!fs.existsSync(modelsDir)) {
+        return {
+          error: `Models directory not found: ${modelsDir}`,
+          models: [],
+        };
+      }
+
+      // Recursively find all .sql files
+      const findModels = (dir: string): string[] => {
+        const entries = fs.readdirSync(dir, { withFileTypes: true });
+
+        return entries.flatMap((entry) => {
+          const fullPath = path.join(dir, entry.name);
+          if (entry.isDirectory()) {
+            return findModels(fullPath);
+          }
+          if (entry.name.endsWith('.sql')) {
+            return [fullPath];
+          }
+          return [];
+        });
+      };
+
+      let models = findModels(modelsDir);
+
+      // Apply filter if provided
+      if (filter) {
+        const lowerFilter = filter.toLowerCase();
+        models = models.filter((m) =>
+          path.basename(m).toLowerCase().includes(lowerFilter),
+        );
+      }
+
+      // Convert to relative paths for readability
+      const relativeModels = models.map((m) => path.relative(projectPath, m));
+
+      return {
+        success: true,
+        count: models.length,
+        models: relativeModels,
+      };
+    } catch (error) {
+      return {
+        error:
+          error instanceof Error
+            ? error.message
+            : 'Unknown error listing models',
+        models: [],
+      };
+    }
+  },
+});
+
+/**
+ * Read recent dbt run logs
+ */
+export const getDbtLogs = tool({
+  description:
+    'Read recent dbt run logs to diagnose errors or understand what happened during the last dbt command execution. Essential for debugging failed runs.',
+  inputSchema: z.object({
+    projectPath: z
+      .string()
+      .describe('Absolute path to the dbt project root directory'),
+    lines: z
+      .number()
+      .int()
+      .min(10)
+      .max(500)
+      .default(100)
+      .describe('Number of recent log lines to read (default: 100)'),
+  }),
+  execute: async ({ projectPath, lines }) => {
+    try {
+      const logPath = path.join(projectPath, 'logs', 'dbt.log');
+
+      if (!fs.existsSync(logPath)) {
+        return {
+          error: 'No dbt.log found. Run a dbt command first to generate logs.',
+          content: '',
+        };
+      }
+
+      const content = fs.readFileSync(logPath, 'utf-8');
+      const allLines = content.split('\n');
+      const recentLines = allLines.slice(-lines).join('\n');
+
+      return {
+        success: true,
+        logPath,
+        totalLines: allLines.length,
+        returnedLines: lines,
+        content: recentLines,
+      };
+    } catch (error) {
+      return {
+        error:
+          error instanceof Error ? error.message : 'Unknown error reading logs',
+        content: '',
+      };
+    }
+  },
+});
+
+/**
+ * Export all dbt tools as a single object for easy registration
+ */
+export const dbtTools = {
+  readDbtModel,
+  writeDbtModel,
+  runDbtCommand,
+  listDbtModels,
+  getDbtLogs,
+};
