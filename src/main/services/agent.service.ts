@@ -1,11 +1,78 @@
 /* eslint-disable no-console */
-// Agent Service - Business logic for AI Agent operations
-// Handles agent execution, cancellation, and tool listing
-
-import { IpcMainInvokeEvent } from 'electron';
+import fs from 'fs-extra';
+import path from 'path';
+import { IpcMainInvokeEvent, app } from 'electron';
 import { createDbtAgent } from './ai/dbtAgent';
+import { dbtTools } from './ai/tools/dbt.tools';
+import { filesystemTools } from './ai/tools/filesystem.tools';
 import MainDatabaseService from './mainDatabase.service';
 import type { NewContextItem } from '../schemas/mainDatabase.schema';
+import type { AISettingsConfig } from '../../types/backend';
+
+// ─── AI Settings ─────────────────────────────────────────────────────────────
+
+const AI_SETTINGS_DEFAULTS: AISettingsConfig = {
+  chat: {
+    streamResponses: true,
+    autoIncludeFileContext: true,
+    showTokenCount: false,
+    autoScrollToLatest: true,
+  },
+  tools: {
+    readDbtModel: true,
+    writeDbtModel: true,
+    runDbtCommand: true,
+    listDbtModels: true,
+    getDbtLogs: true,
+    listDirectory: true,
+    readFile: true,
+    writeFile: true,
+    pathExists: true,
+  },
+  configuration: {
+    allowAIInBackground: true,
+    autoExecution: 'allowlist',
+    autoContinue: true,
+    autoGenerateMemories: true,
+  },
+  advanced: { maxWorkspaceFileCount: 5000 },
+};
+
+const aiSettingsFilePath = () =>
+  path.join(app.getPath('userData'), 'ai-settings.json');
+
+export const loadAISettings = async (): Promise<AISettingsConfig> => {
+  try {
+    const fp = aiSettingsFilePath();
+    if (!fs.existsSync(fp)) return AI_SETTINGS_DEFAULTS;
+    const raw = await fs.readJson(fp);
+    return {
+      chat: { ...AI_SETTINGS_DEFAULTS.chat, ...raw.chat },
+      tools: { ...AI_SETTINGS_DEFAULTS.tools, ...raw.tools },
+      configuration: {
+        ...AI_SETTINGS_DEFAULTS.configuration,
+        ...raw.configuration,
+      },
+      advanced: { ...AI_SETTINGS_DEFAULTS.advanced, ...raw.advanced },
+    };
+  } catch (error) {
+    console.error(error);
+    return AI_SETTINGS_DEFAULTS;
+  }
+};
+
+export const saveAISettings = async (
+  config: AISettingsConfig,
+): Promise<void> => {
+  try {
+    await fs.writeJson(aiSettingsFilePath(), config, { spaces: 2 });
+  } catch (error) {
+    console.error(error);
+    throw error;
+  }
+};
+
+export const getAISettingsFilePath = (): string => aiSettingsFilePath();
 
 // Track active agent executions by conversationId
 const activeAgents = new Map<number, AbortController>();
@@ -58,17 +125,18 @@ class AgentService {
     });
 
     try {
-      // 1. Persist user message
+      // 1. Load AI settings
+      const aiSettings = await loadAISettings();
+
+      // 2. Persist user message
       console.log('[AgentService.runAgent] Persisting user message...');
       await MainDatabaseService.addMessageWithContext(
         conversationId,
         { role: 'user', content },
         contextItems,
       );
-      console.log('[AgentService.runAgent] User message persisted');
 
-      // 2. Load conversation history as messages array
-      console.log('[AgentService.runAgent] Loading conversation history...');
+      // 3. Load conversation history
       const history = await MainDatabaseService.getMessages(conversationId, 20);
       const messages = history
         .filter((m) => m.role !== 'system')
@@ -76,19 +144,27 @@ class AgentService {
           role: m.role as 'user' | 'assistant',
           content: m.content,
         }));
-      console.log('[AgentService.runAgent] Loaded history:', {
-        totalMessages: history.length,
-        filteredMessages: messages.length,
-      });
 
-      // 3. Create agent with current provider model
+      // 4. Filter tools by enabled settings
+      const allTools = { ...dbtTools, ...filesystemTools };
+      const enabledTools = Object.fromEntries(
+        Object.entries(allTools).filter(
+          ([name]) => aiSettings.tools[name] !== false,
+        ),
+      );
+
+      // 5. Respect autoContinue
+      const maxSteps = aiSettings.configuration.autoContinue ? 20 : 1;
+
+      // 6. Create agent
       console.log('[AgentService.runAgent] Creating dbt agent...');
       const agent = await createDbtAgent({
         requestedModel,
         projectPath,
+        enabledTools,
+        maxSteps,
       });
       console.log('[AgentService.runAgent] Agent created successfully');
-
       // 4. Stream — agent.stream() is the v6 API
       const abortController = new AbortController();
       activeAgents.set(conversationId, abortController);
@@ -100,76 +176,104 @@ class AgentService {
       let chunkCount = 0;
       let toolCallCount = 0;
 
-      try {
-        const result = await agent.stream({
-          messages,
-          abortSignal: abortController.signal,
-          onStepFinish: async ({ stepNumber, toolCalls }) => {
-            // Notify renderer of tool activity
-            if (toolCalls) {
-              toolCallCount += toolCalls.length;
-              console.log('[AgentService.runAgent] Step finished:', {
-                stepNumber,
-                toolCallsCount: toolCalls.length,
-                totalToolCalls: toolCallCount,
-              });
-
-              toolCalls.forEach((tc) => {
-                console.log('[AgentService.runAgent] Tool call:', {
-                  toolName: tc.toolName,
-                  stepNumber,
-                });
-
-                event.sender.send('agent:tool-call', {
-                  conversationId,
-                  toolName: tc.toolName,
-                  args: 'args' in tc ? tc.args : {},
-                  stepNumber,
-                  status: 'done',
-                });
-              });
-            }
-          },
-        });
-
-        console.log('[AgentService.runAgent] Streaming text chunks...');
-
-        // Stream chunks to renderer via SAME channel as chat
-        /* eslint-disable no-restricted-syntax */
-        for await (const chunk of result.textStream) {
-          if (abortController.signal.aborted) {
-            console.log('[AgentService.runAgent] Stream aborted by user');
-            break;
-          }
-          fullContent += chunk;
-          chunkCount += 1;
-
-          event.sender.send('chat:message:stream-chunk', {
-            conversationId,
-            chunk,
-            done: false,
+      const onStepFinish = async ({
+        stepNumber,
+        toolCalls,
+      }: {
+        stepNumber: number;
+        toolCalls?: Array<{ toolName: string; args?: unknown }>;
+      }) => {
+        if (toolCalls) {
+          toolCallCount += toolCalls.length;
+          toolCalls.forEach((tc) => {
+            event.sender.send('agent:tool-call', {
+              conversationId,
+              toolName: tc.toolName,
+              args: tc.args ?? {},
+              stepNumber,
+              status: 'done',
+            });
           });
         }
-        /* eslint-enable no-restricted-syntax */
+      };
 
-        console.log('[AgentService.runAgent] Streaming complete:', {
+      try {
+        if (aiSettings.chat.streamResponses) {
+          // ── Streaming path ──────────────────────────────────────────────
+          const result = await agent.stream({
+            messages,
+            abortSignal: abortController.signal,
+            onStepFinish,
+          });
+
+          /* eslint-disable no-restricted-syntax */
+          for await (const chunk of result.textStream) {
+            if (abortController.signal.aborted) break;
+            fullContent += chunk;
+            chunkCount += 1;
+            event.sender.send('chat:message:stream-chunk', {
+              conversationId,
+              chunk,
+              done: false,
+            });
+          }
+          /* eslint-enable no-restricted-syntax */
+
+          // Send usage if showTokenCount is enabled
+          const usage = await result.usage;
+          event.sender.send('chat:message:stream-chunk', {
+            conversationId,
+            chunk: '',
+            done: true,
+            usage: aiSettings.chat.showTokenCount
+              ? {
+                  promptTokens: usage?.inputTokens ?? 0,
+                  completionTokens: usage?.outputTokens ?? 0,
+                  totalTokens:
+                    (usage?.inputTokens ?? 0) + (usage?.outputTokens ?? 0),
+                }
+              : undefined,
+          });
+        } else {
+          // ── Non-streaming path ──────────────────────────────────────────
+          const result = await agent.generate({
+            messages,
+            abortSignal: abortController.signal,
+            onStepFinish,
+          });
+          fullContent = result.text;
+          chunkCount = 1;
+          event.sender.send('chat:message:stream-chunk', {
+            conversationId,
+            chunk: fullContent,
+            done: false,
+          });
+          event.sender.send('chat:message:stream-chunk', {
+            conversationId,
+            chunk: '',
+            done: true,
+            usage: aiSettings.chat.showTokenCount
+              ? {
+                  promptTokens: result.usage?.inputTokens ?? 0,
+                  completionTokens: result.usage?.outputTokens ?? 0,
+                  totalTokens:
+                    (result.usage?.inputTokens ?? 0) +
+                    (result.usage?.outputTokens ?? 0),
+                }
+              : undefined,
+          });
+        }
+
+        console.log('[AgentService.runAgent] Complete:', {
           totalChunks: chunkCount,
           totalToolCalls: toolCallCount,
           contentLength: fullContent.length,
         });
-
-        event.sender.send('chat:message:stream-chunk', {
-          conversationId,
-          chunk: '',
-          done: true,
-        });
       } finally {
         activeAgents.delete(conversationId);
-        console.log('[AgentService.runAgent] Agent unregistered');
       }
 
-      // 5. Persist assistant response
-      console.log('[AgentService.runAgent] Persisting assistant response...');
+      // Persist assistant response
       await MainDatabaseService.addMessageWithContext(
         conversationId,
         { role: 'assistant', content: fullContent },

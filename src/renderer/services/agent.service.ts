@@ -3,6 +3,8 @@
 
 import { client } from '../config/client';
 
+import type { AISettingsConfig } from '../../types/backend';
+
 /**
  * Context item for agent requests
  */
@@ -77,3 +79,12 @@ export const listTools = async (): Promise<{
   }>('agent:tools:list');
   return data;
 };
+
+export const loadAISettings = async (): Promise<AISettingsConfig> =>
+  window.electron.ipcRenderer.invoke('ai-settings:load');
+
+export const saveAISettings = async (config: AISettingsConfig): Promise<void> =>
+  window.electron.ipcRenderer.invoke('ai-settings:save', config);
+
+export const getAISettingsFilePath = async (): Promise<string> =>
+  window.electron.ipcRenderer.invoke('ai-settings:file-path');

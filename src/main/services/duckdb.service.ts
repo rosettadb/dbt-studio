@@ -195,6 +195,16 @@ export default class DuckDBBootstrap {
 
     const activeConnections = this.pool.filter((p) => p.inUse).length;
 
+    // Get DuckDB version from package.json — no SQL query needed
+    let duckdbVersion: string | undefined;
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-var-requires
+      const pkg = require('@duckdb/node-api/package.json');
+      duckdbVersion = pkg.version as string;
+    } catch {
+      // not critical
+    }
+
     // Determine lock status
     let lockStatus: DuckDBLockStatus = 'unknown';
     if (this.status === 'ready') {
@@ -216,6 +226,7 @@ export default class DuckDBBootstrap {
       activeConnections,
       maxConnections: MAX_POOL_SIZE,
       fileExists,
+      duckdbVersion,
     };
   }
 

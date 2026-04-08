@@ -2,6 +2,7 @@ import React from 'react';
 import { Box, List, ListItem, ListItemIcon, Tooltip } from '@mui/material';
 import { useTheme } from '@mui/material/styles';
 import { useLocation } from 'react-router-dom';
+import SettingsIcon from '@mui/icons-material/Settings';
 import { getSidebarElements } from './elements';
 import { Menu } from '../menu';
 import { SidebarContent, StyledDrawer, StyledNavLink } from './styles';
@@ -19,6 +20,10 @@ export const Sidebar: React.FC<Props> = ({ content }) => {
   const location = useLocation();
 
   const isProjectSelected = Boolean(selectedProject?.id);
+  const isSettingsActive =
+    location.pathname.includes('/settings') ||
+    location.pathname.includes('add-connection') ||
+    location.pathname.includes('edit-connection');
 
   const activeItem = React.useMemo(() => {
     if (location.pathname.includes('cloud-explorer')) {
@@ -63,78 +68,96 @@ export const Sidebar: React.FC<Props> = ({ content }) => {
         open={content ? isSidebarOpen : false}
         data-testid="sidebar"
       >
-        <Box flexGrow={1} display="flex">
-          <List sx={{ width: 55, marginTop: '-24px' }}>
-            {getSidebarElements(isProjectSelected).map((element, index) => {
-              const isActive = activeItem === index;
-              const isDisabled = element.disabled;
-              const listItem = (
-                <ListItem
-                  sx={{
-                    cursor: isDisabled ? 'not-allowed' : 'pointer',
-                    m: 0,
-                    opacity: isDisabled ? 0.5 : 1,
-                    backgroundColor: isActive
-                      ? theme.palette.divider
-                      : 'transparent',
-                    '&:hover': {
-                      backgroundColor: isDisabled
-                        ? 'transparent'
-                        : theme.palette.action.hover,
-                    },
-                    transition: 'all 0.2s ease',
-                    pointerEvents: isDisabled ? 'none' : 'auto',
-                    '& .MuiListItemIcon-root': {
-                      cursor: isDisabled ? 'not-allowed' : 'pointer',
-                    },
-                  }}
-                >
-                  <ListItemIcon
+        <Box flexGrow={1} display="flex" flexDirection="column">
+          <Box flexGrow={1} display="flex">
+            <List sx={{ width: 55, marginTop: '-24px' }}>
+              {getSidebarElements(isProjectSelected).map((element, index) => {
+                const isActive = activeItem === index;
+                const isDisabled = element.disabled;
+                const listItem = (
+                  <ListItem
                     sx={{
                       cursor: isDisabled ? 'not-allowed' : 'pointer',
+                      m: 0,
                       opacity: isDisabled ? 0.5 : 1,
-                    }}
-                  >
-                    <element.icon />
-                  </ListItemIcon>
-                </ListItem>
-              );
-
-              // if (isDisabled) {
-              //   return (
-              //     <Tooltip
-              //       key={element.text}
-              //       title={element.text}
-              //       placement="right"
-              //       arrow
-              //     >
-              //       <Box>{listItem}</Box>
-              //     </Tooltip>
-              //   );
-              // }
-
-              return (
-                <Tooltip
-                  key={element.text}
-                  title={element.text}
-                  placement="right"
-                  arrow
-                >
-                  <StyledNavLink
-                    to={element.path}
-                    data-testid={element.testId}
-                    style={{
-                      cursor: 'pointer',
+                      backgroundColor: isActive
+                        ? theme.palette.divider
+                        : 'transparent',
+                      '&:hover': {
+                        backgroundColor: isDisabled
+                          ? 'transparent'
+                          : theme.palette.action.hover,
+                      },
+                      transition: 'all 0.2s ease',
                       pointerEvents: isDisabled ? 'none' : 'auto',
+                      '& .MuiListItemIcon-root': {
+                        cursor: isDisabled ? 'not-allowed' : 'pointer',
+                      },
                     }}
                   >
-                    {listItem}
-                  </StyledNavLink>
-                </Tooltip>
-              );
-            })}
-          </List>
-          {isSidebarOpen && <SidebarContent>{content}</SidebarContent>}
+                    <ListItemIcon
+                      sx={{
+                        cursor: isDisabled ? 'not-allowed' : 'pointer',
+                        opacity: isDisabled ? 0.5 : 1,
+                      }}
+                    >
+                      <element.icon />
+                    </ListItemIcon>
+                  </ListItem>
+                );
+
+                return (
+                  <Tooltip
+                    key={element.text}
+                    title={element.text}
+                    placement="right"
+                    arrow
+                  >
+                    <StyledNavLink
+                      to={element.path}
+                      data-testid={element.testId}
+                      style={{
+                        cursor: 'pointer',
+                        pointerEvents: isDisabled ? 'none' : 'auto',
+                      }}
+                    >
+                      {listItem}
+                    </StyledNavLink>
+                  </Tooltip>
+                );
+              })}
+
+              <Tooltip title="Settings" placement="right" arrow>
+                <StyledNavLink
+                  to="/app/settings"
+                  data-testid="nav-item-settings"
+                >
+                  <ListItem
+                    sx={{
+                      cursor: 'pointer',
+                      m: 0,
+                      backgroundColor: isSettingsActive
+                        ? theme.palette.divider
+                        : 'transparent',
+                      '&:hover': {
+                        backgroundColor: theme.palette.action.hover,
+                      },
+                      transition: 'all 0.2s ease',
+                    }}
+                  >
+                    <ListItemIcon
+                      sx={{
+                        minWidth: 'unset',
+                      }}
+                    >
+                      <SettingsIcon sx={{ fontSize: 22 }} />
+                    </ListItemIcon>
+                  </ListItem>
+                </StyledNavLink>
+              </Tooltip>
+            </List>
+            {isSidebarOpen && <SidebarContent>{content}</SidebarContent>}
+          </Box>
         </Box>
       </StyledDrawer>
     </>

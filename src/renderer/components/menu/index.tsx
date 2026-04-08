@@ -8,7 +8,6 @@ import {
   Button,
 } from '@mui/material';
 import {
-  Settings,
   ArrowDownward,
   FormatListNumbered,
   Cloud,
@@ -94,7 +93,6 @@ export const Menu: React.FC = () => {
   const { data: projects = [] } = useGetProjects();
 
   const isProjectSelected = Boolean(project?.id);
-  const isSettingsActive = location.pathname.includes('/settings');
 
   const isOnProjectDetails = location.pathname === '/app';
 
@@ -305,26 +303,6 @@ export const Menu: React.FC = () => {
               </IconButton>
             </Tooltip>
           )}
-          <Tooltip title="Settings">
-            <IconButton
-              aria-label="account of current user"
-              aria-controls="menu-appbar"
-              aria-haspopup="true"
-              onClick={() => navigate('/app/settings')}
-              color="primary"
-              sx={{
-                backgroundColor: isSettingsActive
-                  ? theme.palette.divider
-                  : 'transparent',
-                '&:hover': {
-                  backgroundColor: theme.palette.action.hover,
-                },
-                transition: 'background-color 0.2s ease',
-              }}
-            >
-              <Settings sx={{ fontSize: 22 }} />
-            </IconButton>
-          </Tooltip>
         </IconsContainer>
       </StyledToolbar>
     </AppBar>

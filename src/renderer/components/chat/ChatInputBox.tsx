@@ -12,8 +12,10 @@ import ArrowUpwardIcon from '@mui/icons-material/ArrowUpward';
 import StopIcon from '@mui/icons-material/Stop';
 import QuestionAnswerOutlinedIcon from '@mui/icons-material/QuestionAnswerOutlined';
 import CodeOutlinedIcon from '@mui/icons-material/CodeOutlined';
+import AddIcon from '@mui/icons-material/Add';
 import { useQueryClient } from 'react-query';
 import { toast } from 'react-toastify';
+import { FilePickerModal } from './FilePickerModal';
 import {
   useStreamChatMessage,
   useCancelChatStream,
@@ -22,6 +24,7 @@ import {
   useRunAgent,
   useCancelAgent,
 } from '../../controllers/agent.controller';
+import { useGetAISettings } from '../../controllers/aiSettings.controller';
 import { QUERY_KEYS } from '../../config/constants';
 import {
   useGetAIProviders,
@@ -45,15 +48,22 @@ interface ChatInputBoxProps {
   sessionId?: number;
   contextManager?: ReturnType<typeof useContextManager>;
   projectPath?: string;
+  onUsage?: (usage: {
+    promptTokens: number;
+    completionTokens: number;
+    totalTokens: number;
+  }) => void;
 }
 
 export const ChatInputBox: React.FC<ChatInputBoxProps> = ({
   sessionId,
   contextManager,
   projectPath,
+  onUsage,
 }) => {
   const theme = useTheme();
   const [input, setInput] = React.useState('');
+  const [isFilePickerOpen, setIsFilePickerOpen] = React.useState(false);
   const [modeMenuAnchor, setModeMenuAnchor] =
     React.useState<null | HTMLElement>(null);
   const [providerMenuAnchor, setProviderMenuAnchor] =
@@ -80,6 +90,7 @@ export const ChatInputBox: React.FC<ChatInputBoxProps> = ({
   const { mutate: runAgent, isLoading: isAgentRunning } = useRunAgent();
   const { mutate: cancelAgent, isLoading: isAgentCancelling } =
     useCancelAgent();
+  const { data: aiSettings } = useGetAISettings();
 
   const { data: providers = [] } = useGetAIProviders();
   const { data: activeProvider } = useGetActiveAIProvider();
@@ -175,10 +186,11 @@ export const ChatInputBox: React.FC<ChatInputBoxProps> = ({
     setInput('');
 
     // 3) Prepare context items using context manager
-    const contextItems =
+    const rawContextItems =
       await activeContextManager.getContextItemsWithAdditionalFiles();
+    const contextItems =
+      aiSettings?.chat?.autoIncludeFileContext !== false ? rawContextItems : [];
 
-    // 4) Start streaming with automatic context; update the temp assistant content on each chunk
     streamMessage(
       {
         sessionId,
@@ -210,6 +222,9 @@ export const ChatInputBox: React.FC<ChatInputBoxProps> = ({
                 : m,
             ),
           );
+        },
+        onDone: (usage) => {
+          if (usage && onUsage) onUsage(usage);
         },
       },
       {
@@ -361,14 +376,19 @@ export const ChatInputBox: React.FC<ChatInputBoxProps> = ({
       },
     );
 
-    const contextItems =
+    const rawAgentContextItems =
       await activeContextManager.getContextItemsWithAdditionalFiles();
+    const agentContextItems =
+      aiSettings?.chat?.autoIncludeFileContext !== false
+        ? rawAgentContextItems
+        : [];
 
     runAgent(
       {
         conversationId: sessionId,
         content: messageContent,
-        contextItems: contextItems.length > 0 ? contextItems : undefined,
+        contextItems:
+          agentContextItems.length > 0 ? agentContextItems : undefined,
         projectPath,
       },
       {
@@ -468,15 +488,64 @@ export const ChatInputBox: React.FC<ChatInputBoxProps> = ({
     }
   }, [pendingMessage, sessionId, activeProvider, isStreaming]);
 
+  const [isDragOver, setIsDragOver] = React.useState(false);
+
+  const handleDrop = React.useCallback(
+    (e: React.DragEvent) => {
+      e.preventDefault();
+      setIsDragOver(false);
+      const filePath =
+        e.dataTransfer.getData('application/x-file-path') ||
+        e.dataTransfer.getData('text/plain');
+      if (!filePath) return;
+      const name = filePath.split('/').pop() ?? filePath;
+      const alreadyAdded = activeContextManager.additionalFiles.some(
+        (f) => f.path === filePath,
+      );
+      if (!alreadyAdded) {
+        activeContextManager.addFiles([
+          { path: filePath, name, relativePath: name, fileType: 'other' },
+        ]);
+      }
+    },
+    [activeContextManager],
+  );
+
   return (
-    <Box sx={{ display: 'flex', flexDirection: 'column' }}>
-      {/* Context tabs - GitHub Copilot style */}
-      <ContextTabs
-        contextManager={activeContextManager}
-        onAddSelectedFile={() => {
-          // Optional callback for when selected file is added to context
-        }}
-      />
+    <Box
+      sx={{ display: 'flex', flexDirection: 'column', position: 'relative' }}
+      onDragOver={(e) => {
+        e.preventDefault();
+        setIsDragOver(true);
+      }}
+      onDragLeave={() => setIsDragOver(false)}
+      onDrop={handleDrop}
+    >
+      {isDragOver && (
+        <Box
+          sx={{
+            position: 'absolute',
+            inset: 0,
+            zIndex: 10,
+            border: '2px dashed',
+            borderColor: 'primary.main',
+            borderRadius: 1,
+            bgcolor: 'action.hover',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            pointerEvents: 'none',
+          }}
+        >
+          <Box sx={{ color: 'primary.main', fontSize: 12 }}>
+            Drop to add to context
+          </Box>
+        </Box>
+      )}
+      {/* Context file chips (manually added files only) */}
+      {activeContextManager.additionalFiles.length > 0 && (
+        <ContextTabs contextManager={activeContextManager} />
+      )}
 
       <Box
         sx={{
@@ -515,6 +584,47 @@ export const ChatInputBox: React.FC<ChatInputBoxProps> = ({
           gap: 0.75,
         }}
       >
+        {/* + button to add context files */}
+        <Tooltip title="Add context..." placement="top" arrow enterDelay={500}>
+          <IconButton
+            size="small"
+            onClick={() => setIsFilePickerOpen(true)}
+            sx={{
+              width: 20,
+              height: 20,
+              color: 'text.secondary',
+              border: `1px solid ${theme.palette.divider}`,
+              borderRadius: 0.5,
+              '&:hover': {
+                color: 'text.primary',
+                bgcolor: 'action.hover',
+                borderColor: 'text.secondary',
+              },
+            }}
+          >
+            <AddIcon sx={{ fontSize: '0.8rem' }} />
+          </IconButton>
+        </Tooltip>
+
+        <FilePickerModal
+          open={isFilePickerOpen}
+          onClose={() => setIsFilePickerOpen(false)}
+          onSelect={(selectedFiles) => {
+            const currentPaths = activeContextManager.additionalFiles.map(
+              (f) => f.path,
+            );
+            const toAdd = selectedFiles
+              .filter((f) => !currentPaths.includes(f.path))
+              .map((f) => ({ ...f, fileType: f.fileType ?? 'other' }));
+            if (toAdd.length > 0) activeContextManager.addFiles(toAdd);
+            setIsFilePickerOpen(false);
+          }}
+          selectedFiles={activeContextManager.additionalFiles.map(
+            (f) => f.path,
+          )}
+          excludeFiles={activeContextManager.additionalFiles.map((f) => f.path)}
+        />
+
         {/* Agent/Chat Mode Selector - Custom Dropdown */}
         <Box
           onClick={(e) => !isLoading && setModeMenuAnchor(e.currentTarget)}
@@ -525,7 +635,7 @@ export const ChatInputBox: React.FC<ChatInputBoxProps> = ({
             position: 'relative',
             borderRadius: 0.5,
             px: 0.5,
-            py: 0.25,
+            py: 0.125,
             border: '1px solid',
             borderColor: 'divider',
             cursor: isLoading ? 'default' : 'pointer',
@@ -647,11 +757,11 @@ export const ChatInputBox: React.FC<ChatInputBoxProps> = ({
           sx={{
             display: 'flex',
             alignItems: 'center',
-            gap: 0.25,
+            gap: 0.5,
             position: 'relative',
             borderRadius: 0.5,
             px: 0.5,
-            py: 0.25,
+            py: 0.125,
             border: '1px solid',
             borderColor: 'divider',
             cursor: switching || isLoading ? 'default' : 'pointer',
@@ -664,8 +774,8 @@ export const ChatInputBox: React.FC<ChatInputBoxProps> = ({
             component="img"
             src={selectedIcon}
             sx={{
-              width: 14,
-              height: 14,
+              width: 10,
+              height: 10,
             }}
           />
           <Typography
@@ -797,8 +907,8 @@ export const ChatInputBox: React.FC<ChatInputBoxProps> = ({
                     sx={{
                       bgcolor: 'primary.main',
                       color: 'primary.contrastText',
-                      width: 28,
-                      height: 28,
+                      width: 22,
+                      height: 22,
                       borderRadius: '50%',
                       p: 0,
                       ml: 'auto',
@@ -849,8 +959,8 @@ export const ChatInputBox: React.FC<ChatInputBoxProps> = ({
                   sx={{
                     bgcolor: 'primary.main',
                     color: 'primary.contrastText',
-                    width: 28,
-                    height: 28,
+                    width: 22,
+                    height: 22,
                     borderRadius: '50%',
                     p: 0,
                     ml: 'auto',

@@ -270,6 +270,7 @@ export type DuckDBMetadataPayload = {
   activeConnections: number;
   maxConnections: number;
   fileExists: boolean;
+  duckdbVersion?: string;
 };
 export type DuckDBLeakInfo = {
   id: string;
@@ -320,6 +321,7 @@ export type SettingsType = {
   duckdbPath?: string;
   duckdbSize?: string | number;
   duckdbStatus?: DuckDBStatus;
+  duckdbVersion?: string;
   duckdbLockStatus?: DuckDBLockStatus;
   duckdbLastCheckedAt?: string;
   duckdbActiveConnections?: number;
@@ -760,4 +762,23 @@ export type Secret = {
   id: string;
   name: string;
   value: string;
+};
+
+export type AISettingsConfig = {
+  chat: {
+    streamResponses: boolean;
+    autoIncludeFileContext: boolean;
+    showTokenCount: boolean;
+    autoScrollToLatest: boolean;
+  };
+  tools: Record<string, boolean>;
+  configuration: {
+    allowAIInBackground: boolean;
+    autoExecution: 'disabled' | 'allowlist' | 'auto' | 'turbo';
+    autoContinue: boolean;
+    autoGenerateMemories: boolean;
+  };
+  advanced: {
+    maxWorkspaceFileCount: number;
+  };
 };

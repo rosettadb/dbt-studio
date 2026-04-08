@@ -10,3 +10,4 @@ export * from './rosettaCloud.controller';
 export * from './duckLake.controller';
 export * from './lineage.controller';
 export * from './agent.controller';
+export * from './aiSettings.controller';

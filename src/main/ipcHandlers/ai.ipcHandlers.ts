@@ -3,6 +3,11 @@ import MainDatabaseService from '../services/mainDatabase.service';
 import ChatService from '../services/chat.service';
 import SecureStorageService from '../services/secureStorage.service';
 import {
+  loadAISettings,
+  saveAISettings,
+  getAISettingsFilePath,
+} from '../services/agent.service';
+import {
   AIProvider,
   ChatConversation,
   ChatMessage,
@@ -543,11 +548,12 @@ const registerAIHandlers = () => {
         conversationId,
         content,
         contextItems,
-        (chunk, done) => {
+        (chunk, done, usage) => {
           event.sender.send('chat:message:stream-chunk', {
             conversationId,
             chunk,
             done,
+            usage,
           });
         },
       );
@@ -721,6 +727,10 @@ const registerAIHandlers = () => {
     },
   );
   aiHandlersRegistered = true;
+
+  ipcMain.handle('ai-settings:load', () => loadAISettings());
+  ipcMain.handle('ai-settings:save', (_e, config) => saveAISettings(config));
+  ipcMain.handle('ai-settings:file-path', () => getAISettingsFilePath());
 };
 
 export default registerAIHandlers;

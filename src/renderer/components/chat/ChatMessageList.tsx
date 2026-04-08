@@ -2,31 +2,44 @@ import React from 'react';
 import { Box, Typography, Stack } from '@mui/material';
 import ChatIcon from '@mui/icons-material/Chat';
 import { useGetChatMessagesWithContext } from '../../controllers/chat.controller';
+import { useGetAISettings } from '../../controllers/aiSettings.controller';
 import { MessageRenderer } from './MessageRenderer';
+
+interface TokenUsage {
+  promptTokens: number;
+  completionTokens: number;
+  totalTokens: number;
+}
 
 interface ChatMessageListProps {
   sessionId?: number;
+  lastUsage?: TokenUsage | null;
 }
 
 export const ChatMessageList: React.FC<ChatMessageListProps> = ({
   sessionId,
+  lastUsage,
 }) => {
   const { data: messages = [], isLoading } =
     useGetChatMessagesWithContext(sessionId);
+  const { data: aiSettings } = useGetAISettings();
   const containerRef = React.useRef<HTMLDivElement | null>(null);
   const bottomRef = React.useRef<HTMLDivElement | null>(null);
+
+  const autoScroll = aiSettings?.chat?.autoScrollToLatest ?? true;
 
   // Helper to scroll to bottom
   type ScrollBehaviorType = 'auto' | 'smooth';
   const scrollToBottom = React.useCallback(
     (behavior: ScrollBehaviorType = 'smooth') => {
+      if (!autoScroll) return;
       if (bottomRef.current) {
         bottomRef.current.scrollIntoView({ behavior, block: 'end' });
       } else if (containerRef.current) {
         containerRef.current.scrollTop = containerRef.current.scrollHeight;
       }
     },
-    [],
+    [autoScroll],
   );
 
   // Derive a key that changes when the last message content grows during streaming
@@ -122,6 +135,16 @@ export const ChatMessageList: React.FC<ChatMessageListProps> = ({
             contextItems={m.contextItems}
           />
         ))}
+        {aiSettings?.chat?.showTokenCount && lastUsage && (
+          <Typography
+            variant="caption"
+            color="text.disabled"
+            sx={{ pl: 0.5, pt: 0.25 }}
+          >
+            {lastUsage.totalTokens} tokens ({lastUsage.promptTokens} in /{' '}
+            {lastUsage.completionTokens} out)
+          </Typography>
+        )}
         <div ref={bottomRef} />
       </Stack>
     </Box>

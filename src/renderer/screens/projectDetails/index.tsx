@@ -1,4 +1,6 @@
 import React from 'react';
+import SplitPane from 'split-pane-react';
+import 'split-pane-react/esm/themes/default.css';
 import { Navigate, useNavigate } from 'react-router-dom';
 import {
   AutoAwesome,
@@ -14,7 +16,6 @@ import {
   ListItemText,
   Menu,
   MenuItem,
-  Slide,
   Tooltip,
 } from '@mui/material';
 import { toast } from 'react-toastify';
@@ -76,8 +77,39 @@ import {
 } from '../../helpers/businessModelGenerator';
 import { aiProvidersService } from '../../services/aiProviders.service';
 
+const VerticalSash = (_: number, active: boolean) => (
+  <div
+    style={{
+      width: '4px',
+      height: '100%',
+      cursor: 'col-resize',
+      position: 'relative',
+      backgroundColor: active ? 'rgba(144,202,249,0.4)' : 'transparent',
+      transition: 'background-color 0.15s ease',
+    }}
+  >
+    <div
+      style={{
+        position: 'absolute',
+        left: '50%',
+        top: 0,
+        bottom: 0,
+        width: '2px',
+        transform: 'translateX(-50%)',
+        backgroundColor: active
+          ? 'rgba(144,202,249,0.8)'
+          : 'rgba(255,255,255,0.08)',
+        transition: 'background-color 0.15s ease',
+      }}
+    />
+  </div>
+);
+
 const ProjectDetails: React.FC = () => {
   const navigate = useNavigate();
+  const [verticalSizes, setVerticalSizes] = React.useState<(number | string)[]>(
+    ['auto', 500],
+  );
   const {
     isAiProviderSet,
     isChatOpen,
@@ -821,8 +853,15 @@ const ProjectDetails: React.FC = () => {
         />
       }
     >
-      <Box display="flex" flexDirection="row" width="100%" height="100%">
-        <Box flex={1}>
+      <SplitPane
+        split="vertical"
+        sizes={isChatOpen ? verticalSizes : ['100%', 0]}
+        onChange={(newSizes) => {
+          if (isChatOpen) setVerticalSizes(newSizes);
+        }}
+        sashRender={VerticalSash}
+      >
+        <Box height="100%" overflow="hidden">
           <Container>
             <TerminalLayout project={project}>
               <Content>
@@ -1041,20 +1080,17 @@ const ProjectDetails: React.FC = () => {
         </Box>
         <Box
           sx={{
-            width: isChatOpen ? '400px' : 0,
-            transition: 'width 200ms ease',
-            borderLeft: isChatOpen ? '1px solid' : 'none',
-            borderColor: 'divider',
+            height: '100%',
             overflow: 'hidden',
           }}
         >
-          <Slide in={isChatOpen} direction="left" mountOnEnter unmountOnExit>
+          {isChatOpen && (
             <Box height="100%">
               <ChatScreen />
             </Box>
-          </Slide>
+          )}
         </Box>
-      </Box>
+      </SplitPane>
     </AppLayout>
   );
 };

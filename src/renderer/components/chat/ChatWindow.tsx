@@ -7,8 +7,10 @@ import {
   Typography,
   Button,
   CircularProgress,
+  Menu,
+  MenuItem,
 } from '@mui/material';
-import { Close } from '@mui/icons-material';
+import { Close, MoreHoriz } from '@mui/icons-material';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'react-toastify';
 import { useAppContext } from '../../hooks';
@@ -34,6 +36,40 @@ export const ChatWindow: React.FC = () => {
   const navigate = useNavigate();
 
   const [selectedSessionId, setSelectedSessionId] = React.useState<number>();
+  const [lastUsage, setLastUsage] = React.useState<{
+    promptTokens: number;
+    completionTokens: number;
+    totalTokens: number;
+  } | null>(null);
+
+  // Reset usage when session changes
+  React.useEffect(() => {
+    setLastUsage(null);
+  }, [selectedSessionId]);
+
+  // Listen for usage from agent mode (IPC events)
+  React.useEffect(() => {
+    const handler = (...args: unknown[]) => {
+      const data = args[0] as {
+        done?: boolean;
+        usage?: {
+          promptTokens: number;
+          completionTokens: number;
+          totalTokens: number;
+        };
+      };
+      if (data?.done && data?.usage) {
+        setLastUsage(data.usage);
+      }
+    };
+    window.electron.ipcRenderer.on('chat:message:stream-chunk', handler);
+    return () => {
+      window.electron.ipcRenderer.removeListener(
+        'chat:message:stream-chunk',
+        handler,
+      );
+    };
+  }, []);
 
   // Context management
   const contextManager = useContextManager();
@@ -112,6 +148,17 @@ export const ChatWindow: React.FC = () => {
     });
   };
 
+  const [menuAnchor, setMenuAnchor] = React.useState<null | HTMLElement>(null);
+
+  const handleMenuOpen = (e: React.MouseEvent<HTMLElement>) =>
+    setMenuAnchor(e.currentTarget);
+  const handleMenuClose = () => setMenuAnchor(null);
+
+  const navigateToAISettings = (tab: string) => {
+    handleMenuClose();
+    navigate(`/app/settings/ai-providers?tab=${encodeURIComponent(tab)}`);
+  };
+
   const renderMessages = () => {
     if (isLoadingProviders) {
       return (
@@ -163,7 +210,9 @@ export const ChatWindow: React.FC = () => {
       );
     }
 
-    return <ChatMessageList sessionId={selectedSessionId} />;
+    return (
+      <ChatMessageList sessionId={selectedSessionId} lastUsage={lastUsage} />
+    );
   };
 
   return (
@@ -230,6 +279,52 @@ export const ChatWindow: React.FC = () => {
             disabled={isLoading}
           />
 
+          <Tooltip title="More options">
+            <IconButton
+              size="small"
+              onClick={handleMenuOpen}
+              sx={{ width: 24, height: 24, padding: 0.25 }}
+            >
+              <MoreHoriz sx={{ fontSize: '0.875rem' }} />
+            </IconButton>
+          </Tooltip>
+
+          <Menu
+            anchorEl={menuAnchor}
+            open={Boolean(menuAnchor)}
+            onClose={handleMenuClose}
+            anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
+            transformOrigin={{ vertical: 'top', horizontal: 'right' }}
+            slotProps={{
+              paper: {
+                sx: { minWidth: 120, py: 0.25 },
+              },
+            }}
+          >
+            {(
+              [
+                { label: 'Providers', tab: 'Providers' },
+                { label: 'Settings', tab: 'Settings' },
+                { label: 'MCP Servers', tab: 'MCP Servers' },
+                { label: 'Skills', tab: 'Skills' },
+              ] as const
+            ).map(({ label, tab }) => (
+              <MenuItem
+                key={tab}
+                onClick={() => navigateToAISettings(tab)}
+                dense
+                sx={{
+                  py: 0.5,
+                  px: 1.5,
+                  minHeight: 'unset',
+                  fontSize: '0.8rem',
+                }}
+              >
+                {label}
+              </MenuItem>
+            ))}
+          </Menu>
+
           <Tooltip title="Close">
             <IconButton
               size="small"
@@ -257,6 +352,7 @@ export const ChatWindow: React.FC = () => {
           sessionId={selectedSessionId}
           contextManager={contextManager}
           projectPath={project?.path}
+          onUsage={(usage) => setLastUsage(usage)}
         />
       </Box>
     </Paper>

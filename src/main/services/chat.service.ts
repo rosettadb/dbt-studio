@@ -74,7 +74,15 @@ class ChatService {
     conversationId: number,
     content: string,
     contextItems: Omit<NewContextItem, 'messageId'>[] | undefined,
-    onChunk: (chunk: string, done: boolean) => void,
+    onChunk: (
+      chunk: string,
+      done: boolean,
+      usage?: {
+        promptTokens: number;
+        completionTokens: number;
+        totalTokens: number;
+      },
+    ) => void,
     customBudget?: Partial<TokenBudget>,
   ) {
     // 1) Persist USER message
@@ -155,8 +163,13 @@ class ChatService {
       }
       /* eslint-enable no-restricted-syntax */
 
-      // Send final done signal
-      onChunk('', true);
+      // Send final done signal with usage
+      const usage = await result.usage;
+      onChunk('', true, {
+        promptTokens: usage?.inputTokens ?? 0,
+        completionTokens: usage?.outputTokens ?? 0,
+        totalTokens: (usage?.inputTokens ?? 0) + (usage?.outputTokens ?? 0),
+      });
     } catch (err) {
       // If aborted, we've already emitted a final done signal above.
       if (!(err instanceof Error && err.message === 'aborted')) {

@@ -20,7 +20,7 @@ export const StyledDrawer = styled(Drawer, {
   '& .MuiDrawer-paper': {
     width: open ? drawerWidth : theme.spacing(7),
     top: 42,
-    height: 'calc(100% - 42px)',
+    height: 'calc(100% - 66px)', // 42px top bar + 24px status bar
     overflowX: 'hidden',
     borderRight: 'none',
     boxShadow:

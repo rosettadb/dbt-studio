@@ -11,29 +11,11 @@ import { filesystemTools } from './tools/filesystem.tools';
  * Options for creating a dbt agent
  */
 export interface DbtAgentOptions {
-  /**
-   * Injected skills list for system prompt
-   */
   skills?: string;
-
-  /**
-   * Extra tools to merge in (e.g., MCP tools)
-   */
   extraTools?: Record<string, any>;
-
-  /**
-   * Requested model override (optional)
-   */
+  enabledTools?: Record<string, any>; // filtered tool set from AI settings
   requestedModel?: string;
-
-  /**
-   * Maximum number of steps before stopping (default: 20)
-   */
   maxSteps?: number;
-
-  /**
-   * Project path for file operations
-   */
   projectPath?: string;
 }
 
@@ -88,9 +70,14 @@ ${options?.skills ?? ''}
 
 Always confirm before making destructive changes.`;
 
-  const toolCount = Object.keys({
+  // Use enabledTools if provided, otherwise fall back to all tools
+  const baseTools = options?.enabledTools ?? {
     ...dbtTools,
     ...filesystemTools,
+  };
+
+  const toolCount = Object.keys({
+    ...baseTools,
     ...(options?.extraTools ?? {}),
   }).length;
 
@@ -100,16 +87,12 @@ Always confirm before making destructive changes.`;
   });
 
   return new ToolLoopAgent({
-    model: model as any, // Type compatibility workaround
+    model: model as any,
     instructions: systemInstructions,
-
     tools: {
-      ...dbtTools,
-      ...filesystemTools,
+      ...baseTools,
       ...(options?.extraTools ?? {}),
     },
-
-    // Default: 20 steps max (can be overridden)
     stopWhen: stepCountIs(options?.maxSteps ?? 20),
 
     onStepFinish: async ({ stepNumber, usage, finishReason, toolCalls }) => {

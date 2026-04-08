@@ -225,6 +225,7 @@ export type UtilChannels =
   | 'windows:openSelector'
   | 'windows:closeSetup'
   | 'utils:getFileContentList'
+  | 'utils:open-path'
   | 'dialog:showOpenDialog'
   | 'dialog:showSaveDialog';
 
@@ -364,7 +365,13 @@ export type NotebookChannels =
   | 'notebooks:archived:delete'
   | 'notebooks:archived:deleteAll';
 
-export type AgentChannels = 'agent:run' | 'agent:cancel' | 'agent:tools:list';
+export type AgentChannels =
+  | 'agent:run'
+  | 'agent:cancel'
+  | 'agent:tools:list'
+  | 'ai-settings:load'
+  | 'ai-settings:save'
+  | 'ai-settings:file-path';
 
 export type Channels =
   | TestChannels

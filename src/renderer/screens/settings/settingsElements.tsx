@@ -58,7 +58,7 @@ export const settingsSidebarElements: SettingsSidebarElement[] = [
   },
   {
     icon: AutoAwesomeIcon,
-    text: 'AI Providers',
+    text: 'AI Settings',
     path: '/app/settings/ai-providers',
   },
   {
