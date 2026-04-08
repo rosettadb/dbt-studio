@@ -84,12 +84,11 @@ describe('renderer/services/git.service', () => {
     it('should call client.post with git:commit and payload', async () => {
       client.post.mockResolvedValue({ data: undefined });
 
-      await commit('/tmp/repo', 'msg', ['a.sql']);
+      await commit('/tmp/repo', 'msg');
 
       expect(client.post).toHaveBeenCalledWith('git:commit', {
         repoPath: '/tmp/repo',
         message: 'msg',
-        files: ['a.sql'],
       });
     });
   });

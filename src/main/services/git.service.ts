@@ -596,13 +596,12 @@ export default class GitService {
     }
   }
 
-  async commit(repoPath: string, message: string, files: string[] = ['.']) {
+  async commit(repoPath: string, message: string) {
     return this.queueOperation(repoPath, () =>
       this.retryWithLockHandling(repoPath, async () => {
         const git = this.getGitInstance(repoPath);
 
         try {
-          await git.add(files);
           await git.commit(message);
 
           // Check and ensure tracking is set after commit

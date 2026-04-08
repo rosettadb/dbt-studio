@@ -17,12 +17,16 @@ export function parsePipelineConfig(content: string): PipelineConfig | null {
   }
 }
 
-// Filename detection — update this once the real filename is decided
+// Filename detection
 export const PIPELINE_CONFIG_FILENAME = 'pipeline.yml';
+export const PIPELINE_CONFIG_DIR = '.rosetta';
 
 export function isPipelineFile(filePath: string): boolean {
   const parts = filePath.replace(/\\/g, '/').split('/');
-  return parts[parts.length - 1] === PIPELINE_CONFIG_FILENAME;
+  return (
+    parts[parts.length - 1] === PIPELINE_CONFIG_FILENAME &&
+    parts[parts.length - 2] === PIPELINE_CONFIG_DIR
+  );
 }
 
 export const PIPELINE_CONFIG_TEMPLATE = `name: "CI"
