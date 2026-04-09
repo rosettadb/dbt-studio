@@ -38,6 +38,13 @@ import {
   CloudflareR2Config,
   BackblazeB2Config,
   RustfsConfig,
+  RustfsPersistedConfig,
+  GarageConfig,
+  GaragePersistedConfig,
+  MinIOPersistedConfig,
+  CloudflareR2PersistedConfig,
+  BackblazeB2PersistedConfig,
+  CloudStoragePersistedConfig,
 } from '../../../types/frontend';
 import {
   useTestCloudConnection,
@@ -75,6 +82,8 @@ interface FormData {
   // Backblaze B2 fields
   applicationKeyId: string;
   applicationKey: string;
+  // Garage fields
+  urlStyle: 'path' | 'virtual-host';
 }
 
 export const ConnectionForm: React.FC<ConnectionFormProps> = ({
@@ -105,6 +114,8 @@ export const ConnectionForm: React.FC<ConnectionFormProps> = ({
     getCloudB2Secret,
     setCloudRustfsSecret,
     getCloudRustfsSecret,
+    setCloudGarageSecret,
+    getCloudGarageSecret,
   } = useSecureStorage();
 
   const [testStatus, setTestStatus] = useState<
@@ -130,6 +141,7 @@ export const ConnectionForm: React.FC<ConnectionFormProps> = ({
     jurisdiction: '',
     applicationKeyId: '',
     applicationKey: '',
+    urlStyle: 'path',
   });
 
   const getProviderIcon = (provider: CloudProvider, size: number = 20) => {
@@ -163,38 +175,44 @@ export const ConnectionForm: React.FC<ConnectionFormProps> = ({
         sessionToken: (config as S3Config).sessionToken || '',
         region:
           (config as S3Config).region ||
-          (config as MinIOConfig).region ||
-          (config as RustfsConfig).region ||
+          (config as MinIOPersistedConfig).region ||
+          (config as RustfsPersistedConfig).region ||
+          (config as GaragePersistedConfig).region ||
           '',
         accessKeyId:
           (config as S3Config).accessKeyId ||
-          (config as MinIOConfig).accessKeyId ||
-          (config as CloudflareR2Config).accessKeyId ||
-          (config as BackblazeB2Config).applicationKeyId ||
-          (config as RustfsConfig).accessKeyId ||
+          (config as MinIOPersistedConfig).accessKeyId ||
+          (config as CloudflareR2PersistedConfig).accessKeyId ||
+          (config as BackblazeB2PersistedConfig).applicationKeyId ||
+          (config as RustfsPersistedConfig).accessKeyId ||
+          (config as GaragePersistedConfig).accessKeyId ||
           '',
         secretAccessKey:
           (config as S3Config).secretAccessKey ||
           (config as MinIOConfig).secretAccessKey ||
           (config as CloudflareR2Config).secretAccessKey ||
           (config as RustfsConfig).secretAccessKey ||
+          (config as GarageConfig).secretAccessKey ||
           '',
         accountName: (config as AzureConfig).accountName || '',
         accountKey: (config as AzureConfig).accountKey || '',
         connectionString: (config as AzureConfig).connectionString || '',
         endpoint:
-          (config as MinIOConfig).endpoint ||
-          (config as BackblazeB2Config).endpoint ||
-          (config as RustfsConfig).endpoint ||
+          (config as RustfsPersistedConfig).endpoint ||
+          (config as BackblazeB2PersistedConfig).endpoint ||
+          (config as RustfsPersistedConfig).endpoint ||
+          (config as GaragePersistedConfig).endpoint ||
           '',
         useSSL:
-          (config as MinIOConfig).useSSL ||
-          (config as RustfsConfig).useSSL ||
+          (config as MinIOPersistedConfig).useSSL ||
+          (config as RustfsPersistedConfig).useSSL ||
+          (config as GaragePersistedConfig).useSSL ||
           false,
-        accountId: (config as CloudflareR2Config).accountId || '',
-        jurisdiction: (config as CloudflareR2Config).jurisdiction || '',
-        applicationKeyId: (config as BackblazeB2Config).applicationKeyId || '',
+        accountId: (config as CloudflareR2PersistedConfig).accountId || '',
+        jurisdiction: (config as CloudflareR2PersistedConfig).jurisdiction || '',
+        applicationKeyId: (config as BackblazeB2PersistedConfig).applicationKeyId || '',
         applicationKey: (config as BackblazeB2Config).applicationKey || '',
+        urlStyle: (config as GaragePersistedConfig).urlStyle || 'path',
       });
     }
   }, [initialValues, duplicateFrom, suggestedName]);
@@ -259,6 +277,14 @@ export const ConnectionForm: React.FC<ConnectionFormProps> = ({
                 secretAccessKey: stored || '',
               }));
             }
+          } else if (provider === 'garage') {
+            const stored = await getCloudGarageSecret(id);
+            if (isMounted) {
+              setFormData((prev) => ({
+                ...prev,
+                secretAccessKey: stored || '',
+              }));
+            }
           }
         } catch {
           /* empty */
@@ -279,6 +305,7 @@ export const ConnectionForm: React.FC<ConnectionFormProps> = ({
     getCloudR2Secret,
     getCloudB2Secret,
     getCloudRustfsSecret,
+    getCloudGarageSecret,
   ]);
 
   const handleChange = (field: keyof FormData, value: string) => {
@@ -316,6 +343,12 @@ export const ConnectionForm: React.FC<ConnectionFormProps> = ({
           !!formData.applicationKeyId.trim() && !!formData.applicationKey.trim()
         );
       case 'rustfs':
+        return (
+          !!formData.endpoint.trim() &&
+          !!formData.accessKeyId.trim() &&
+          !!formData.secretAccessKey.trim()
+        );
+      case 'garage':
         return (
           !!formData.endpoint.trim() &&
           !!formData.accessKeyId.trim() &&
@@ -376,6 +409,15 @@ export const ConnectionForm: React.FC<ConnectionFormProps> = ({
           useSSL: formData.useSSL,
           region: formData.region.trim() || 'us-east-1',
         } as RustfsConfig;
+      case 'garage':
+        return {
+          endpoint: formData.endpoint.trim(),
+          accessKeyId: formData.accessKeyId.trim(),
+          secretAccessKey: formData.secretAccessKey.trim(),
+          useSSL: formData.useSSL,
+          region: formData.region.trim() || 'us-east-1',
+          urlStyle: formData.urlStyle,
+        } as GarageConfig;
       default:
         throw new Error(`Unsupported provider: ${formData.provider}`);
     }
@@ -419,7 +461,7 @@ export const ConnectionForm: React.FC<ConnectionFormProps> = ({
 
     try {
       const rawConfig = createConfigFromFormData();
-      let finalConfig: typeof rawConfig;
+      let finalConfig: CloudStoragePersistedConfig;
 
       // Generate connection ID first so we can use it for secure storage
       const connId = connectionId || uuidv4();
@@ -460,28 +502,35 @@ export const ConnectionForm: React.FC<ConnectionFormProps> = ({
         if ('secretAccessKey' in config) {
           delete (config as any).secretAccessKey;
         }
-        finalConfig = config;
+        finalConfig = config as MinIOPersistedConfig;
       } else if (formData.provider === 'cloudflare-r2') {
         await setCloudR2Secret(formData.secretAccessKey, connId);
         const config = { ...rawConfig };
         if ('secretAccessKey' in config) {
           delete (config as any).secretAccessKey;
         }
-        finalConfig = config;
+        finalConfig = config as CloudflareR2PersistedConfig;
       } else if (formData.provider === 'backblaze-b2') {
         await setCloudB2Secret(formData.applicationKey, connId);
         const config = { ...rawConfig };
         if ('applicationKey' in config) {
           delete (config as any).applicationKey;
         }
-        finalConfig = config;
+        finalConfig = config as BackblazeB2PersistedConfig;
       } else if (formData.provider === 'rustfs') {
         await setCloudRustfsSecret(formData.secretAccessKey, connId);
         const config = { ...rawConfig };
         if ('secretAccessKey' in config) {
           delete (config as any).secretAccessKey;
         }
-        finalConfig = config;
+        finalConfig = config as RustfsPersistedConfig;
+      } else if (formData.provider === 'garage') {
+        await setCloudGarageSecret(formData.secretAccessKey, connId);
+        const config = { ...rawConfig };
+        if ('secretAccessKey' in config) {
+          delete (config as any).secretAccessKey;
+        }
+        finalConfig = config as GaragePersistedConfig;
       } else {
         finalConfig = rawConfig;
       }
@@ -895,6 +944,119 @@ export const ConnectionForm: React.FC<ConnectionFormProps> = ({
               onChange={(e) => handleChange('region', e.target.value)}
               helperText="rustfs region (default: us-east-1)"
             />
+          </>
+        );
+      case 'garage':
+        return (
+          <>
+            <TextField
+              label="Endpoint"
+              placeholder="localhost:3900"
+              fullWidth
+              margin="normal"
+              value={formData.endpoint}
+              onChange={(e) => handleChange('endpoint', e.target.value)}
+              required
+              helperText="Garage server endpoint (host:port)"
+            />
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mt: 2 }}>
+              <FormControl component="fieldset">
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                  <input
+                    type="checkbox"
+                    id="useSSL-garage"
+                    checked={formData.useSSL}
+                    onChange={(e) =>
+                      handleChange('useSSL', e.target.checked as any)
+                    }
+                    style={{ cursor: 'pointer' }}
+                  />
+                  <label htmlFor="useSSL-garage" style={{ cursor: 'pointer' }}>
+                    Use SSL/TLS
+                  </label>
+                </Box>
+                <Typography
+                  variant="caption"
+                  color="text.secondary"
+                  sx={{ mt: 0.5 }}
+                >
+                  Enable for HTTPS connections (default: HTTP)
+                </Typography>
+              </FormControl>
+            </Box>
+            <TextField
+              label="Access Key ID"
+              placeholder="GK..."
+              fullWidth
+              margin="normal"
+              value={formData.accessKeyId}
+              onChange={(e) => handleChange('accessKeyId', e.target.value)}
+              required
+              helperText="Your Garage Access Key"
+            />
+            <TextField
+              label="Secret Access Key"
+              placeholder="GS..."
+              type={showPassword ? 'text' : 'password'}
+              fullWidth
+              margin="normal"
+              value={formData.secretAccessKey}
+              onChange={(e) => handleChange('secretAccessKey', e.target.value)}
+              required
+              helperText="Your Garage Secret Key (stored securely)"
+              InputProps={{
+                endAdornment: (
+                  <InputAdornment position="end">
+                    <IconButton
+                      aria-label="toggle password visibility"
+                      onClick={() => setShowPassword(!showPassword)}
+                      edge="end"
+                    >
+                      {showPassword ? <VisibilityOff /> : <Visibility />}
+                    </IconButton>
+                  </InputAdornment>
+                ),
+              }}
+            />
+            <TextField
+              label="Region (Optional)"
+              placeholder="garage"
+              fullWidth
+              margin="normal"
+              value={formData.region}
+              onChange={(e) => handleChange('region', e.target.value)}
+              helperText="Garage region (default: us-east-1)"
+            />
+            <FormControl fullWidth margin="normal">
+              <FormLabel>URL Style (Optional)</FormLabel>
+              <Box
+                sx={{ display: 'flex', alignItems: 'center', gap: 2, mt: 1 }}
+              >
+                <input
+                  type="checkbox"
+                  id="virtualHostStyle"
+                  checked={formData.urlStyle === 'virtual-host'}
+                  onChange={(e) =>
+                    handleChange(
+                      'urlStyle',
+                      e.target.checked ? 'virtual-host' : 'path',
+                    )
+                  }
+                  style={{ cursor: 'pointer' }}
+                />
+                <label htmlFor="virtualHostStyle" style={{ cursor: 'pointer' }}>
+                  Use Virtual-Host Style URLs
+                </label>
+              </Box>
+              <Typography
+                variant="caption"
+                color="text.secondary"
+                sx={{ mt: 0.5 }}
+              >
+                Path-style: http://endpoint/bucket/key (default). Virtual-host:
+                http://bucket.endpoint/key
+              </Typography>
+            </FormControl>
           </>
         );
       case 'azure':
@@ -1322,6 +1484,55 @@ export const ConnectionForm: React.FC<ConnectionFormProps> = ({
                           fontWeight="medium"
                         >
                           rustfs
+                        </Typography>
+                      </Box>
+                    </CardActionArea>
+                  </Card>
+                </Grid>
+                <Grid item xs={12} sm={3}>
+                  <Card
+                    variant={
+                      formData.provider === 'garage' ? 'elevation' : 'outlined'
+                    }
+                    sx={{
+                      cursor: 'pointer',
+                      transition: 'all 0.2s',
+                      height: '120px',
+                      border:
+                        formData.provider === 'garage'
+                          ? '2px solid'
+                          : '1px solid',
+                      borderColor:
+                        formData.provider === 'garage'
+                          ? 'primary.main'
+                          : 'divider',
+                      '&:hover': {
+                        elevation: 4,
+                        borderColor: 'primary.main',
+                      },
+                    }}
+                  >
+                    <CardActionArea
+                      onClick={() => handleChange('provider', 'garage')}
+                      sx={{ p: 2, height: '100%' }}
+                    >
+                      <Box
+                        sx={{
+                          display: 'flex',
+                          flexDirection: 'column',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          gap: 1,
+                          height: '100%',
+                        }}
+                      >
+                        {getProviderIcon('garage', 48)}
+                        <Typography
+                          variant="body2"
+                          textAlign="center"
+                          fontWeight="medium"
+                        >
+                          Garage
                         </Typography>
                       </Box>
                     </CardActionArea>

@@ -33,6 +33,10 @@ export function isPreviewSupported(fileName: string): boolean {
 export async function getReaderFunction(
   connection: any,
   filePath: string,
+  options?: {
+    allowIgnoreErrors?: boolean;
+    nullString?: string;
+  },
 ): Promise<string> {
   const extension = filePath.split('.').pop()?.toLowerCase();
 
@@ -40,7 +44,26 @@ export async function getReaderFunction(
     case 'csv': {
       // For CSV files, we need to detect if headers are present
       const hasHeaders = await detectCsvHeaders(connection, filePath);
-      return `read_csv('${filePath}', header=${hasHeaders})`;
+
+      const params: string[] = [
+        `'${filePath}'`,
+        `header=${hasHeaders}`,
+        'null_padding=true',
+      ];
+
+      if (options?.allowIgnoreErrors) {
+        // eslint-disable-next-line no-console
+        console.warn(
+          '[getReaderFunction] CSV parsing: allowIgnoreErrors enabled; malformed rows may be skipped.',
+        );
+        params.push('ignore_errors=true');
+      }
+
+      if (options?.nullString) {
+        params.push(`nullstr='${options.nullString.replace(/'/g, "''")}'`);
+      }
+
+      return `read_csv_auto(${params.join(', ')})`;
     }
     case 'json':
     case 'jsonl':

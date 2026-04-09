@@ -117,6 +117,7 @@ export const ExplorerBucketContent: React.FC<ExplorerBucketContentProps> = ({
     getCloudR2Secret,
     getCloudB2Secret,
     getCloudRustfsSecret,
+    getCloudGarageSecret,
   } = useSecureStorage();
 
   useEffect(() => {
@@ -158,6 +159,10 @@ export const ExplorerBucketContent: React.FC<ExplorerBucketContentProps> = ({
           (config as { applicationKey?: string }).applicationKey = secret || '';
         } else if (connection.provider === 'rustfs') {
           const secret = await getCloudRustfsSecret(connection.id);
+          (config as { secretAccessKey?: string }).secretAccessKey =
+            secret || '';
+        } else if (connection.provider === 'garage') {
+          const secret = await getCloudGarageSecret(connection.id);
           (config as { secretAccessKey?: string }).secretAccessKey =
             secret || '';
         }

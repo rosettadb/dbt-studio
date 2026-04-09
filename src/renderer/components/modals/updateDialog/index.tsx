@@ -8,6 +8,7 @@ import {
   Typography,
   CircularProgress,
   IconButton,
+  Box,
 } from '@mui/material';
 import CloseIcon from '@mui/icons-material/Close';
 import { toast } from 'react-toastify';
@@ -117,11 +118,36 @@ export const UpdateDialog: React.FC = () => {
           {updateInfo.currentVersion}.
         </Typography>
         {updateInfo.releaseNotes && (
-          <Typography
-            variant="body2"
-            color="textSecondary"
-            dangerouslySetInnerHTML={{ __html: updateInfo.releaseNotes }}
-          />
+          <Box
+            sx={{
+              color: 'text.primary',
+              '& a': {
+                color: 'primary.main',
+                textDecorationColor: 'primary.main',
+              },
+              '& a:visited': {
+                color: 'primary.main',
+              },
+              '& code': {
+                fontFamily: 'Monaco, Menlo, Consolas, "Courier New", monospace',
+              },
+              '& pre': {
+                overflowX: 'auto',
+              },
+              '& h1, & h2, & h3, & h4, & h5, & h6': {
+                color: 'text.primary',
+              },
+              '& p, & li, & span, & div': {
+                color: 'text.primary',
+              },
+            }}
+          >
+            <Typography
+              variant="body2"
+              component="div"
+              dangerouslySetInnerHTML={{ __html: updateInfo.releaseNotes }}
+            />
+          </Box>
         )}
       </DialogContent>
       <DialogActions>
