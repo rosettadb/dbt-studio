@@ -368,10 +368,23 @@ export type NotebookChannels =
 export type AgentChannels =
   | 'agent:run'
   | 'agent:cancel'
+  | 'agent:tool-call'
   | 'agent:tools:list'
   | 'ai-settings:load'
   | 'ai-settings:save'
   | 'ai-settings:file-path';
+
+export type MCPChannels =
+  | 'mcp:servers:list'
+  | 'mcp:server:connect'
+  | 'mcp:server:disconnect'
+  | 'mcp:server:tools'
+  | 'mcp:config:load'
+  | 'mcp:config:save'
+  | 'mcp:server:add'
+  | 'mcp:server:remove'
+  | 'mcp:server:toggle'
+  | 'mcp:config:file-path';
 
 export type Channels =
   | TestChannels
@@ -391,7 +404,8 @@ export type Channels =
   | DuckLakeChannels
   | LineageChannels
   | NotebookChannels
-  | AgentChannels;
+  | AgentChannels
+  | MCPChannels;
 
 export type ConfigureConnectionBody = {
   projectId?: string;

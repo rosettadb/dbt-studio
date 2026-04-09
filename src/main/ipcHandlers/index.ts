@@ -15,6 +15,7 @@ import registerLineageHandlers from './lineage.ipcHandlers';
 import { registerNotebooksHandlers } from './notebooks.ipcHandlers';
 import registerLanguageIntelligenceHandlers from './languageIntelligence.ipcHandlers';
 import { registerAgentHandlers } from './agent.ipcHandlers';
+import { registerMCPHandlers } from './mcp.ipcHandlers';
 
 export {
   registerCliHandlers,
@@ -34,4 +35,5 @@ export {
   registerNotebooksHandlers,
   registerLanguageIntelligenceHandlers,
   registerAgentHandlers,
+  registerMCPHandlers,
 };

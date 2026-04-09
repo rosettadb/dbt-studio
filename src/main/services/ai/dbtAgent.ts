@@ -4,8 +4,11 @@
 
 import { ToolLoopAgent, stepCountIs } from 'ai';
 import { getVercelModel } from './agentAdapter';
-import { dbtTools } from './tools/dbt.tools';
-import { filesystemTools } from './tools/filesystem.tools';
+import { dbtTools, createDbtTools } from './tools/dbt.tools';
+import {
+  filesystemTools,
+  createFilesystemTools,
+} from './tools/filesystem.tools';
 
 /**
  * Options for creating a dbt agent
@@ -13,10 +16,11 @@ import { filesystemTools } from './tools/filesystem.tools';
 export interface DbtAgentOptions {
   skills?: string;
   extraTools?: Record<string, any>;
-  enabledTools?: Record<string, any>; // filtered tool set from AI settings
+  enabledTools?: Record<string, any>;
   requestedModel?: string;
   maxSteps?: number;
   projectPath?: string;
+  onFileWritten?: (filePath: string) => void;
 }
 
 /**
@@ -42,6 +46,7 @@ export async function createDbtAgent(options?: DbtAgentOptions) {
 You help users with dbt model development, debugging, documentation, and data operations.
 You have access to the dbt project filesystem and can read, write, and run dbt commands.
 
+${options?.projectPath ? `## Active dbt Project\n\nProject path: ${options.projectPath}\n\nAll file operations and dbt commands should use this project path as the working directory unless the user specifies otherwise.\n` : ''}
 ${options?.skills ?? ''}
 
 ## Guidelines
@@ -70,11 +75,22 @@ ${options?.skills ?? ''}
 
 Always confirm before making destructive changes.`;
 
-  // Use enabledTools if provided, otherwise fall back to all tools
-  const baseTools = options?.enabledTools ?? {
-    ...dbtTools,
-    ...filesystemTools,
-  };
+  // Use bound tools (projectPath pre-injected) when available — agent never needs to pass it
+  const allBaseTools = options?.projectPath
+    ? {
+        ...createDbtTools(options.projectPath),
+        ...createFilesystemTools(options.projectPath),
+      }
+    : { ...dbtTools, ...filesystemTools };
+
+  // Use enabledTools filter if provided, otherwise use all base tools
+  const baseTools = options?.enabledTools
+    ? Object.fromEntries(
+        Object.entries(allBaseTools).filter(
+          ([name]) => name in options.enabledTools!,
+        ),
+      )
+    : allBaseTools;
 
   const toolCount = Object.keys({
     ...baseTools,

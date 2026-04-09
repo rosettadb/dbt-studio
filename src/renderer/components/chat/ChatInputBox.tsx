@@ -43,6 +43,10 @@ import { htmlToPlainText } from '../../utils/chatHelpers';
 import { useAppContext } from '../../hooks';
 import { useContextManager } from '../../hooks/useContextManager';
 import { useAgentMode } from '../../hooks/useAgentMode';
+import {
+  subscribeToAgentToolCalls,
+  subscribeToChatStreamChunks,
+} from '../../services/agentEvents.service';
 
 interface ChatInputBoxProps {
   sessionId?: number;
@@ -69,7 +73,8 @@ export const ChatInputBox: React.FC<ChatInputBoxProps> = ({
   const [providerMenuAnchor, setProviderMenuAnchor] =
     React.useState<null | HTMLElement>(null);
 
-  const { pendingMessage, setPendingMessage } = useAppContext();
+  const { pendingMessage, setPendingMessage, setEditingFilePath } =
+    useAppContext();
 
   // Use provided context manager or create a fallback
   const fallbackContextManager = useContextManager();
@@ -78,6 +83,9 @@ export const ChatInputBox: React.FC<ChatInputBoxProps> = ({
   const queryClient = useQueryClient();
   const assistantTempIdRef = React.useRef<number | null>(null);
   const userTempIdRef = React.useRef<number | null>(null);
+  const lastAgentWrittenFileRef = React.useRef<string | null>(null);
+  const agentStreamUnsubscribeRef = React.useRef<null | (() => void)>(null);
+  const agentToolCallsUnsubscribeRef = React.useRef<null | (() => void)>(null);
 
   // Agent mode state
   const { isAgentMode, setAgentMode } = useAgentMode(sessionId);
@@ -241,6 +249,7 @@ export const ChatInputBox: React.FC<ChatInputBoxProps> = ({
 
           assistantTempIdRef.current = null;
           userTempIdRef.current = null;
+          lastAgentWrittenFileRef.current = null;
         },
         onError: async (error: any) => {
           const current = queryClient.getQueryData<typeof prev>(msgKey) || [];
@@ -348,33 +357,42 @@ export const ChatInputBox: React.FC<ChatInputBoxProps> = ({
     setInput('');
 
     // Set up streaming listener for agent responses (uses same event as chat)
-    const unsubscribe = window.electron.ipcRenderer.on(
-      'chat:message:stream-chunk',
-      (...args: unknown[]) => {
-        const data = args[0] as {
-          conversationId: number;
-          chunk: string;
-          done: boolean;
-        };
-        if (data && data.conversationId === sessionId) {
-          const current = queryClient.getQueryData<Array<any>>(msgKey) || [];
-          queryClient.setQueryData(
-            msgKey,
-            current.map((m) =>
-              m.id === assistantTempIdRef.current
-                ? {
-                    ...m,
-                    content:
-                      (m.content === '🤖 Agent working…' ? '' : m.content) +
-                      data.chunk,
-                    updatedAt: new Date().toISOString(),
-                  }
-                : m,
-            ),
-          );
-        }
-      },
-    );
+    const unsubscribe = subscribeToChatStreamChunks((data) => {
+      if (data && data.conversationId === sessionId) {
+        const current = queryClient.getQueryData<Array<any>>(msgKey) || [];
+        queryClient.setQueryData(
+          msgKey,
+          current.map((m) =>
+            m.id === assistantTempIdRef.current
+              ? {
+                  ...m,
+                  content:
+                    (m.content === '🤖 Agent working…' ? '' : m.content) +
+                    data.chunk,
+                  updatedAt: new Date().toISOString(),
+                }
+              : m,
+          ),
+        );
+      }
+    });
+    agentStreamUnsubscribeRef.current = unsubscribe;
+
+    const unsubscribeToolCalls = subscribeToAgentToolCalls((data) => {
+      if (!data || data.conversationId !== sessionId) {
+        return;
+      }
+
+      if (data.toolName !== 'writeFile' && data.toolName !== 'writeDbtModel') {
+        return;
+      }
+
+      const filePath = (data.args as any)?.filePath;
+      if (typeof filePath === 'string' && filePath.length > 0) {
+        lastAgentWrittenFileRef.current = filePath;
+      }
+    });
+    agentToolCallsUnsubscribeRef.current = unsubscribeToolCalls;
 
     const rawAgentContextItems =
       await activeContextManager.getContextItemsWithAdditionalFiles();
@@ -394,14 +412,42 @@ export const ChatInputBox: React.FC<ChatInputBoxProps> = ({
       {
         onSuccess: async () => {
           unsubscribe();
+          unsubscribeToolCalls();
+          agentStreamUnsubscribeRef.current = null;
+          agentToolCallsUnsubscribeRef.current = null;
           await queryClient.invalidateQueries(msgKey);
+
+          if (projectPath) {
+            await queryClient.invalidateQueries([
+              QUERY_KEYS.GET_FILE_STRUCTURE,
+              projectPath,
+            ]);
+            await queryClient.invalidateQueries([
+              QUERY_KEYS.GIT_STATUSES,
+              projectPath,
+            ]);
+          } else {
+            await queryClient.invalidateQueries([
+              QUERY_KEYS.GET_FILE_STRUCTURE,
+            ]);
+            await queryClient.invalidateQueries([QUERY_KEYS.GIT_STATUSES]);
+          }
+
+          if (lastAgentWrittenFileRef.current) {
+            setEditingFilePath(lastAgentWrittenFileRef.current);
+          }
+
           autoRename(messageContent);
           activeContextManager.clearAdditionalFiles();
           assistantTempIdRef.current = null;
           userTempIdRef.current = null;
+          lastAgentWrittenFileRef.current = null;
         },
         onError: async (error: any) => {
           unsubscribe();
+          unsubscribeToolCalls();
+          agentStreamUnsubscribeRef.current = null;
+          agentToolCallsUnsubscribeRef.current = null;
           const current = queryClient.getQueryData<typeof prev>(msgKey) || [];
           const aId = assistantTempIdRef.current;
           const uId = userTempIdRef.current;
@@ -412,8 +458,51 @@ export const ChatInputBox: React.FC<ChatInputBoxProps> = ({
           );
           assistantTempIdRef.current = null;
           userTempIdRef.current = null;
+          lastAgentWrittenFileRef.current = null;
 
-          toast.error(`Agent failed: ${error?.message || 'Unknown error'}`);
+          // Extract the real error message from nested AI SDK error chain
+          const extractMessage = (err: any): string => {
+            // RetryError wraps the last real error
+            if (err?.lastError) return extractMessage(err.lastError);
+            // APICallError has the actual API message
+            if (err?.responseBody) {
+              try {
+                const body = JSON.parse(err.responseBody);
+                const msg = body?.error?.message;
+                if (msg) return msg.split('\n')[0]; // first line only
+              } catch {
+                // ignore
+              }
+            }
+            return err?.message || 'Unknown error';
+          };
+
+          const msg = extractMessage(error);
+
+          if (
+            msg.includes('quota') ||
+            msg.includes('429') ||
+            msg.includes('RESOURCE_EXHAUSTED') ||
+            error?.statusCode === 429
+          ) {
+            toast.error(
+              'Rate limit exceeded. Please check your API quota or switch to a different provider.',
+            );
+          } else if (
+            msg.includes('401') ||
+            msg.includes('unauthorized') ||
+            msg.includes('API key')
+          ) {
+            toast.error(
+              'Authentication failed. Please check your AI provider credentials.',
+            );
+          } else if (msg.includes('No output generated')) {
+            toast.error(
+              'Agent failed to generate a response. This may be due to a rate limit or API error. Please try again.',
+            );
+          } else {
+            toast.error(`Agent error: ${msg}`);
+          }
         },
       },
     );
@@ -447,6 +536,10 @@ export const ChatInputBox: React.FC<ChatInputBoxProps> = ({
     if (isAgentMode) {
       cancelAgent(sessionId, {
         onSettled: async () => {
+          agentStreamUnsubscribeRef.current?.();
+          agentToolCallsUnsubscribeRef.current?.();
+          agentStreamUnsubscribeRef.current = null;
+          agentToolCallsUnsubscribeRef.current = null;
           const current = queryClient.getQueryData<Array<any>>(msgKey) || [];
           const aId = assistantTempIdRef.current;
           queryClient.setQueryData(
@@ -456,6 +549,7 @@ export const ChatInputBox: React.FC<ChatInputBoxProps> = ({
           assistantTempIdRef.current = null;
           await queryClient.invalidateQueries(msgKey);
           userTempIdRef.current = null;
+          lastAgentWrittenFileRef.current = null;
         },
       });
     } else {

@@ -198,7 +198,7 @@ export default class DuckDBBootstrap {
     // Get DuckDB version from package.json — no SQL query needed
     let duckdbVersion: string | undefined;
     try {
-      // eslint-disable-next-line @typescript-eslint/no-var-requires
+      // eslint-disable-next-line global-require, @typescript-eslint/no-var-requires
       const pkg = require('@duckdb/node-api/package.json');
       duckdbVersion = pkg.version as string;
     } catch {

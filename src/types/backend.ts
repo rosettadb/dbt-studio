@@ -764,6 +764,34 @@ export type Secret = {
   value: string;
 };
 
+// MCP Config types (mcp.config.json)
+export type MCPTransportType = 'stdio' | 'sse' | 'http';
+
+export interface MCPServerFileEntry {
+  name: string;
+  description?: string;
+  disabled: boolean;
+  transport: MCPTransportType;
+  // stdio
+  command?: string;
+  args?: string[];
+  env?: Record<string, string>;
+  // sse / http
+  url?: string;
+  headers?: Record<string, string>;
+}
+
+export interface MCPFileConfig {
+  mcpServers: Record<string, MCPServerFileEntry>;
+}
+
+export interface MCPServerWithStatus extends MCPServerFileEntry {
+  id: string;
+  connected: boolean;
+  isBuiltIn?: boolean;
+  tools?: { name: string; description: string }[];
+}
+
 export type AISettingsConfig = {
   chat: {
     streamResponses: boolean;

@@ -3,9 +3,11 @@ import fs from 'fs-extra';
 import path from 'path';
 import { IpcMainInvokeEvent, app } from 'electron';
 import { createDbtAgent } from './ai/dbtAgent';
+import { buildMCPToolset } from './ai/mcp/mcpToolAdapter';
 import { dbtTools } from './ai/tools/dbt.tools';
 import { filesystemTools } from './ai/tools/filesystem.tools';
 import MainDatabaseService from './mainDatabase.service';
+import ProjectsService from './projects.service';
 import type { NewContextItem } from '../schemas/mainDatabase.schema';
 import type { AISettingsConfig } from '../../types/backend';
 
@@ -108,13 +110,14 @@ class AgentService {
     event: IpcMainInvokeEvent,
     request: AgentRunRequest,
   ): Promise<{ success: boolean }> {
-    const {
-      conversationId,
-      content,
-      contextItems,
-      requestedModel,
-      projectPath,
-    } = request;
+    const { conversationId, content, contextItems, requestedModel } = request;
+
+    // Resolve projectPath: use what was sent, or fall back to the selected project
+    let { projectPath } = request;
+    if (!projectPath) {
+      const selectedProject = await ProjectsService.getSelectedProject();
+      projectPath = selectedProject?.path;
+    }
 
     console.log('[AgentService.runAgent] Starting agent execution:', {
       conversationId,
@@ -147,11 +150,14 @@ class AgentService {
 
       // 4. Filter tools by enabled settings
       const allTools = { ...dbtTools, ...filesystemTools };
-      const enabledTools = Object.fromEntries(
+      const enabledTools: Record<string, any> = Object.fromEntries(
         Object.entries(allTools).filter(
           ([name]) => aiSettings.tools[name] !== false,
         ),
       );
+
+      // 4b. Get MCP tools (only connected servers)
+      const mcpTools = await buildMCPToolset(['rosetta', 'dbt', 'duckdb']);
 
       // 5. Respect autoContinue
       const maxSteps = aiSettings.configuration.autoContinue ? 20 : 1;
@@ -161,7 +167,7 @@ class AgentService {
       const agent = await createDbtAgent({
         requestedModel,
         projectPath,
-        enabledTools,
+        enabledTools: { ...enabledTools, ...mcpTools },
         maxSteps,
       });
       console.log('[AgentService.runAgent] Agent created successfully');
@@ -269,6 +275,26 @@ class AgentService {
           totalToolCalls: toolCallCount,
           contentLength: fullContent.length,
         });
+
+        // Guard against empty responses (e.g. Gemini Flash Lite silent failures)
+        if (!fullContent.trim() && toolCallCount === 0) {
+          console.warn(
+            '[AgentService.runAgent] Empty response with no tool calls — sending fallback message',
+          );
+          const fallback =
+            "I wasn't able to generate a response. Please try rephrasing your message or switching to a different model.";
+          fullContent = fallback;
+          event.sender.send('chat:message:stream-chunk', {
+            conversationId,
+            chunk: fallback,
+            done: false,
+          });
+          event.sender.send('chat:message:stream-chunk', {
+            conversationId,
+            chunk: '',
+            done: true,
+          });
+        }
       } finally {
         activeAgents.delete(conversationId);
       }

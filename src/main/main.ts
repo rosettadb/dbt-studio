@@ -14,6 +14,7 @@ import {
   DuckLakeConnectionManager,
 } from './services';
 import { copyAssetsToUserData } from './utils/fileHelper';
+import { MCPClientManager } from './services/ai/mcp/mcpClientManager';
 
 const isProd = process.env.NODE_ENV === 'production';
 const isDebug =
@@ -121,6 +122,9 @@ if (!gotTheLock) {
     .then(async () => {
       windowManager = new WindowManager();
       windowManager.startApplication();
+
+      // MCP server configs are loaded from mcp.config.json (userData) on demand
+
       copyAssetsToUserData();
       const splash = windowManager.getSplash();
 
@@ -278,9 +282,12 @@ app.on('before-quit', async (event) => {
   try {
     // Disconnect all DuckLake connections to prevent memory leaks
     await DuckLakeConnectionManager.disconnectAll();
+
+    // Disconnect all MCP servers to preserve system resources
+    await MCPClientManager.disconnectAll();
   } catch (error) {
     // eslint-disable-next-line no-console
-    console.error('[App] Error during DuckLake cleanup:', error);
+    console.error('[App] Error during app cleanup:', error);
   } finally {
     // Allow the app to quit
     app.exit(0);
