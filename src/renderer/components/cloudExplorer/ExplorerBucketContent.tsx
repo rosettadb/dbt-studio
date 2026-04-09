@@ -41,6 +41,8 @@ import {
   Refresh,
   NavigateNext,
   TableView,
+  Delete,
+  CreateNewFolder,
 } from '@mui/icons-material';
 import {
   useConnection,
@@ -49,7 +51,7 @@ import {
   useAddRecentItem,
   usePreviewData,
 } from '../../controllers/cloudExplorer.controller';
-import type { CloudProvider } from '../../../types/frontend';
+import type { CloudProvider, CloudStorageConfig } from '../../../types/frontend';
 import { InlineDataPreview } from './InlineDataPreview';
 import useSecureStorage from '../../hooks/useSecureStorage';
 import { formatFileSize, isPreviewSupported } from '../../utils/fileUtils';
@@ -57,6 +59,9 @@ import { DBTProjects } from '../sidebar/icons';
 import { useGetSelectedProject } from '../../controllers';
 import { projectsServices } from '../../services';
 import bucketIcon from '../../../../assets/icons/bucket-blue.png';
+import UploadFileButton from './UploadFileButton';
+import DeleteConfirmDialog from './DeleteConfirmDialog';
+import CreateFolderDialog from './CreateFolderDialog';
 
 interface ExplorerBucketContentProps {
   connectionId: string;
@@ -91,6 +96,15 @@ export const ExplorerBucketContent: React.FC<ExplorerBucketContentProps> = ({
   const [sortBy, setSortBy] = useState<'name' | 'size' | 'modified'>('name');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
   const [typeFilter, setTypeFilter] = useState<string>('all');
+
+  // Delete dialog state
+  const [deleteTarget, setDeleteTarget] = useState<{
+    objectKey: string;
+    isPrefix: boolean;
+  } | null>(null);
+
+  // Create folder dialog state
+  const [createFolderOpen, setCreateFolderOpen] = useState(false);
 
   const connectionQuery = useConnection(connectionId);
   const connection = connectionQuery.data;
@@ -535,66 +549,59 @@ export const ExplorerBucketContent: React.FC<ExplorerBucketContentProps> = ({
                     : '-'}
                 </TableCell>
                 <TableCell align="right">
-                  {!object.isDirectory && (
-                    <Box
-                      sx={{
-                        display: 'flex',
-                        gap: 1,
-                        justifyContent: 'flex-end',
-                      }}
-                    >
-                      {isPreviewSupported(object.name) && (
-                        <Tooltip title="Preview Data">
-                          <IconButton
-                            size="small"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              handlePreview(object.name);
-                            }}
-                          >
-                            <TableView />
-                          </IconButton>
-                        </Tooltip>
-                      )}
+                  <Box sx={{ display: 'flex', gap: 1, justifyContent: 'flex-end', alignItems: 'center' }}>
+                    {!object.isDirectory && isPreviewSupported(object.name) && (
+                      <Tooltip title="Preview Data">
+                        <IconButton
+                          size="small"
+                          onClick={(e) => { e.stopPropagation(); handlePreview(object.name); }}
+                        >
+                          <TableView fontSize="small" />
+                        </IconButton>
+                      </Tooltip>
+                    )}
+                    {!object.isDirectory && (
                       <Tooltip title="Download">
                         <IconButton
                           size="small"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleDownload(object.name);
-                          }}
+                          onClick={(e) => { e.stopPropagation(); handleDownload(object.name); }}
                           disabled={loadingUrls[object.name]}
                         >
                           {loadingUrls[object.name] ? (
-                            <CircularProgress size={20} />
+                            <CircularProgress size={16} />
                           ) : (
-                            <Download />
+                            <Download fontSize="small" />
                           )}
                         </IconButton>
                       </Tooltip>
-                      {project &&
-                        isCSVFile(
-                          object.name.split('/').pop() || object.name,
-                        ) && (
-                          <Tooltip title="Download as seed (CSV only)">
-                            <IconButton
-                              size="small"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                handleDownloadAsSeed(object.name);
-                              }}
-                              disabled={loadingUrls[object.name]}
-                            >
-                              {loadingUrls[object.name] ? (
-                                <CircularProgress size={20} />
-                              ) : (
-                                <DBTProjects />
-                              )}
-                            </IconButton>
-                          </Tooltip>
-                        )}
-                    </Box>
-                  )}
+                    )}
+                    {!object.isDirectory && project && isCSVFile(object.name.split('/').pop() || object.name) && (
+                      <Tooltip title="Download as seed">
+                        <IconButton
+                          size="small"
+                          onClick={(e) => { e.stopPropagation(); handleDownloadAsSeed(object.name); }}
+                          disabled={loadingUrls[object.name]}
+                        >
+                          {loadingUrls[object.name] ? (
+                            <CircularProgress size={16} />
+                          ) : (
+                            <DBTProjects />
+                          )}
+                        </IconButton>
+                      </Tooltip>
+                    )}
+                    <Tooltip title={`Delete ${object.isDirectory ? 'folder' : 'file'}`}>
+                      <IconButton
+                        size="small"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setDeleteTarget({ objectKey: object.name, isPrefix: object.isDirectory });
+                        }}
+                      >
+                        <Delete fontSize="small" />
+                      </IconButton>
+                    </Tooltip>
+                  </Box>
                 </TableCell>
               </TableRow>
             );
@@ -673,6 +680,25 @@ export const ExplorerBucketContent: React.FC<ExplorerBucketContentProps> = ({
           </Typography>
         </Box>
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+          {secureConfig && connection && (
+            <UploadFileButton
+              provider={connection.provider}
+              config={secureConfig as CloudStorageConfig}
+              bucketName={bucketName}
+              prefix={prefix}
+            />
+          )}
+          {secureConfig && connection && (
+            <Tooltip title="Create folder">
+              <IconButton
+                size="small"
+                aria-label="Create folder"
+                onClick={() => setCreateFolderOpen(true)}
+              >
+                <CreateNewFolder fontSize="small" />
+              </IconButton>
+            </Tooltip>
+          )}
           <IconButton
             onClick={() => objectsQuery.refetch()}
             disabled={objectsQuery.isFetching}
@@ -848,6 +874,36 @@ export const ExplorerBucketContent: React.FC<ExplorerBucketContentProps> = ({
             renderListView()}
         </CardContent>
       </Card>
+
+      {/* Delete Object/Folder Dialog */}
+      {secureConfig && connection && deleteTarget && (
+        <DeleteConfirmDialog
+          open={!!deleteTarget}
+          onClose={() => setDeleteTarget(null)}
+          provider={connection.provider}
+          config={secureConfig as CloudStorageConfig}
+          bucketName={bucketName}
+          objectKey={deleteTarget.objectKey}
+          isPrefix={deleteTarget.isPrefix}
+          onSuccess={() => {
+            setDeleteTarget(null);
+            objectsQuery.refetch();
+          }}
+        />
+      )}
+
+      {/* Create Folder Dialog */}
+      {secureConfig && connection && (
+        <CreateFolderDialog
+          open={createFolderOpen}
+          onClose={() => setCreateFolderOpen(false)}
+          provider={connection.provider}
+          config={secureConfig as CloudStorageConfig}
+          bucketName={bucketName}
+          prefix={prefix}
+          onSuccess={() => objectsQuery.refetch()}
+        />
+      )}
     </Box>
   );
 };

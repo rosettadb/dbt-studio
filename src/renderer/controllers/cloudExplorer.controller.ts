@@ -7,6 +7,16 @@ import type {
   CloudConnection,
   RecentItem,
 } from '../../types/frontend';
+import type {
+  UploadFileRequest,
+  UploadFileResponse,
+  CreateBucketRequest,
+  CreateBucketResponse,
+  DeleteObjectRequest,
+  DeleteObjectResponse,
+  CreateFolderRequest,
+  CreateFolderResponse,
+} from '../../types/ipc';
 
 export const cloudExplorerKeys = {
   all: ['cloudExplorer'] as const,
@@ -293,4 +303,98 @@ export const useClearRecentItems = () => {
       queryClient.invalidateQueries(cloudExplorerKeys.recentItems);
     },
   });
+};
+
+export const useUploadFile = (customOptions?: {
+  onSuccess?: (data: UploadFileResponse, vars: UploadFileRequest) => void;
+  onError?: (error: unknown) => void;
+}) => {
+  const queryClient = useQueryClient();
+
+  return useMutation(
+    (params: UploadFileRequest) => cloudExplorerService.uploadFile(params),
+    {
+      onSuccess: (data, vars) => {
+        queryClient.invalidateQueries(
+          cloudExplorerKeys.objects(
+            vars.provider,
+            vars.config,
+            vars.bucketName,
+            vars.prefix,
+          ),
+        );
+        customOptions?.onSuccess?.(data, vars);
+      },
+      onError: customOptions?.onError,
+    },
+  );
+};
+
+export const useCreateBucket = (customOptions?: {
+  onSuccess?: (data: CreateBucketResponse, vars: CreateBucketRequest) => void;
+  onError?: (error: unknown) => void;
+}) => {
+  const queryClient = useQueryClient();
+
+  return useMutation(
+    (params: CreateBucketRequest) => cloudExplorerService.createBucket(params),
+    {
+      onSuccess: (data, vars) => {
+        queryClient.invalidateQueries(
+          cloudExplorerKeys.buckets(vars.provider, vars.config),
+        );
+        customOptions?.onSuccess?.(data, vars);
+      },
+      onError: customOptions?.onError,
+    },
+  );
+};
+
+export const useDeleteObject = (customOptions?: {
+  onSuccess?: (data: DeleteObjectResponse, vars: DeleteObjectRequest) => void;
+  onError?: (error: unknown) => void;
+}) => {
+  const queryClient = useQueryClient();
+
+  return useMutation(
+    (params: DeleteObjectRequest) => cloudExplorerService.deleteObject(params),
+    {
+      onSuccess: (data, vars) => {
+        queryClient.invalidateQueries(
+          cloudExplorerKeys.objects(
+            vars.provider,
+            vars.config,
+            vars.bucketName,
+          ),
+        );
+        customOptions?.onSuccess?.(data, vars);
+      },
+      onError: customOptions?.onError,
+    },
+  );
+};
+
+export const useCreateFolder = (customOptions?: {
+  onSuccess?: (data: CreateFolderResponse, vars: CreateFolderRequest) => void;
+  onError?: (error: unknown) => void;
+}) => {
+  const queryClient = useQueryClient();
+
+  return useMutation(
+    (params: CreateFolderRequest) => cloudExplorerService.createFolder(params),
+    {
+      onSuccess: (data, vars) => {
+        queryClient.invalidateQueries(
+          cloudExplorerKeys.objects(
+            vars.provider,
+            vars.config,
+            vars.bucketName,
+            vars.prefix,
+          ),
+        );
+        customOptions?.onSuccess?.(data, vars);
+      },
+      onError: customOptions?.onError,
+    },
+  );
 };

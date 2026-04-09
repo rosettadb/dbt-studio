@@ -31,6 +31,8 @@ import {
   OpenInNew,
   Search,
   Clear,
+  CreateNewFolder,
+  Delete,
 } from '@mui/icons-material';
 import { useConnection, useListBuckets } from '../../controllers';
 import type {
@@ -41,6 +43,8 @@ import { cloudStorageImages } from '../../../../assets/connectionIcons';
 import useSecureStorage from '../../hooks/useSecureStorage';
 import { ViewToggle } from './ViewToggle';
 import bucketIcon from '../../../../assets/icons/bucket-blue.png';
+import CreateBucketDialog from './CreateBucketDialog';
+import DeleteConfirmDialog from './DeleteConfirmDialog';
 
 interface ExplorerBucketsProps {
   connectionId: string;
@@ -60,6 +64,10 @@ export const ExplorerBuckets: React.FC<ExplorerBucketsProps> = ({
   const [searchTerm, setSearchTerm] = useState('');
   const [sortBy, setSortBy] = useState<'name' | 'size' | 'created'>('name');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
+
+  // Dialog state
+  const [createBucketOpen, setCreateBucketOpen] = useState(false);
+  const [deleteBucket, setDeleteBucket] = useState<string | null>(null);
 
   // Load view preference from localStorage
   useEffect(() => {
@@ -284,9 +292,9 @@ export const ExplorerBuckets: React.FC<ExplorerBucketsProps> = ({
                 Created
               </TableSortLabel>
             </TableCell>
+            <TableCell align="right">Actions</TableCell>
           </TableRow>
-        </TableHead>
-        <TableBody>
+        </TableHead>        <TableBody>
           {filteredAndSortedBuckets.map((bucket) => (
             <TableRow
               key={bucket.name}
@@ -329,6 +337,17 @@ export const ExplorerBuckets: React.FC<ExplorerBucketsProps> = ({
                     ? new Date(bucket.created).toLocaleDateString()
                     : '-'}
                 </Typography>
+              </TableCell>
+              <TableCell align="right" onClick={(e) => e.stopPropagation()}>
+                <Tooltip title="Delete bucket">
+                  <IconButton
+                    size="small"
+                    aria-label={`Delete bucket ${bucket.name}`}
+                    onClick={() => setDeleteBucket(bucket.name)}
+                  >
+                    <Delete fontSize="small" />
+                  </IconButton>
+                </Tooltip>
               </TableCell>
             </TableRow>
           ))}
@@ -452,6 +471,18 @@ export const ExplorerBuckets: React.FC<ExplorerBucketsProps> = ({
         </Box>
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
           <ViewToggle view={view} onViewChange={handleViewChange} />
+          <Tooltip title="Create bucket">
+            <span>
+              <IconButton
+                onClick={() => setCreateBucketOpen(true)}
+                disabled={!secureConfig}
+                size="small"
+                aria-label="Create bucket"
+              >
+                <CreateNewFolder />
+              </IconButton>
+            </span>
+          </Tooltip>
           <IconButton
             onClick={() => bucketsQuery.refetch()}
             disabled={bucketsQuery.isFetching}
@@ -608,6 +639,34 @@ export const ExplorerBuckets: React.FC<ExplorerBucketsProps> = ({
         !bucketsQuery.isError &&
         filteredAndSortedBuckets.length > 0 &&
         (view === 'list' ? renderListView() : renderCardView())}
+
+      {/* Create Bucket Dialog */}
+      {secureConfig && connection && (
+        <CreateBucketDialog
+          open={createBucketOpen}
+          onClose={() => setCreateBucketOpen(false)}
+          provider={connection.provider}
+          config={secureConfig as CloudStorageConfig}
+          onSuccess={() => bucketsQuery.refetch()}
+        />
+      )}
+
+      {/* Delete Bucket Dialog */}
+      {secureConfig && connection && deleteBucket && (
+        <DeleteConfirmDialog
+          open={!!deleteBucket}
+          onClose={() => setDeleteBucket(null)}
+          provider={connection.provider}
+          config={secureConfig as CloudStorageConfig}
+          bucketName={deleteBucket}
+          objectKey=""
+          isPrefix={false}
+          onSuccess={() => {
+            setDeleteBucket(null);
+            bucketsQuery.refetch();
+          }}
+        />
+      )}
     </Box>
   );
 };

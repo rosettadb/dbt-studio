@@ -1,5 +1,11 @@
 import { ipcMain } from 'electron';
 import type { CloudStorageConfig, CloudProvider } from '../../types/frontend';
+import type {
+  UploadFileRequest,
+  CreateBucketRequest,
+  DeleteObjectRequest,
+  CreateFolderRequest,
+} from '../../types/ipc';
 import { CloudExplorerService, CloudPreviewService } from '../services';
 
 const handlerChannels = [
@@ -8,6 +14,10 @@ const handlerChannels = [
   'cloudExplorer:getDownloadUrl',
   'cloudExplorer:testConnection',
   'cloudExplorer:previewData',
+  'cloudExplorer:uploadFile',
+  'cloudExplorer:createBucket',
+  'cloudExplorer:deleteObject',
+  'cloudExplorer:createFolder',
 ];
 
 const removeCloudExplorerIpcHandlers = () => {
@@ -204,6 +214,34 @@ const registerCloudExplorerHandlers = () => {
         console.error('IPC Handler - Preview error:', error);
         throw error;
       }
+    },
+  );
+
+  ipcMain.handle(
+    'cloudExplorer:uploadFile',
+    async (event, params: UploadFileRequest) => {
+      return CloudExplorerService.uploadFile(params, event.sender);
+    },
+  );
+
+  ipcMain.handle(
+    'cloudExplorer:createBucket',
+    async (_event, params: CreateBucketRequest) => {
+      return CloudExplorerService.createBucket(params);
+    },
+  );
+
+  ipcMain.handle(
+    'cloudExplorer:deleteObject',
+    async (event, params: DeleteObjectRequest) => {
+      return CloudExplorerService.deleteObject(params, event.sender);
+    },
+  );
+
+  ipcMain.handle(
+    'cloudExplorer:createFolder',
+    async (_event, params: CreateFolderRequest) => {
+      return CloudExplorerService.createFolder(params);
     },
   );
 };

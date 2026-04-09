@@ -1,9 +1,19 @@
+import fs from 'fs';
+import path from 'path';
 import { Storage } from '@google-cloud/storage';
 import {
   S3Client,
   ListBucketsCommand,
   ListObjectsV2Command,
   GetObjectCommand,
+  PutObjectCommand,
+  CreateMultipartUploadCommand,
+  UploadPartCommand,
+  CompleteMultipartUploadCommand,
+  AbortMultipartUploadCommand,
+  DeleteObjectCommand,
+  DeleteObjectsCommand,
+  CreateBucketCommand,
 } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import {
@@ -13,6 +23,7 @@ import {
   BlobSASPermissions,
   SASProtocol,
 } from '@azure/storage-blob';
+import type { WebContents } from 'electron';
 import {
   Bucket,
   StorageObject,
@@ -27,6 +38,19 @@ import {
   CloudStorageConfig,
   CloudProvider,
 } from '../../types/frontend';
+import {
+  UploadFileRequest,
+  UploadFileResponse,
+  CreateBucketRequest,
+  CreateBucketResponse,
+  DeleteObjectRequest,
+  DeleteObjectResponse,
+  CreateFolderRequest,
+  CreateFolderResponse,
+  UPLOAD_SIZE_LIMIT_BYTES,
+  MULTIPART_THRESHOLD_BYTES,
+  S3_BATCH_DELETE_LIMIT,
+} from '../../types/ipc';
 
 // Cloud storage service class
 class CloudExplorerService {
@@ -1429,6 +1453,651 @@ class CloudExplorerService {
         );
       default:
         throw new Error(`Unsupported provider: ${provider}`);
+    }
+  }
+
+  static validateBucketName(
+    provider: CloudProvider,
+    name: string,
+  ): { valid: boolean; error?: string } {
+    try {
+      if (!name || name.length === 0) {
+        return { valid: false, error: 'Bucket name must not be empty.' };
+      }
+
+      const ipAddressPattern = /^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$/;
+
+      if (provider === 'aws') {
+        if (name.length < 3 || name.length > 63) {
+          return {
+            valid: false,
+            error: 'Bucket name must be between 3 and 63 characters.',
+          };
+        }
+        if (!/^[a-z0-9][a-z0-9-]*[a-z0-9]$/.test(name)) {
+          return {
+            valid: false,
+            error:
+              'Bucket name may only contain lowercase letters, numbers, and hyphens, and must start and end with a letter or number.',
+          };
+        }
+        if (/--/.test(name)) {
+          return {
+            valid: false,
+            error: 'Bucket name must not contain consecutive hyphens.',
+          };
+        }
+        if (ipAddressPattern.test(name)) {
+          return {
+            valid: false,
+            error: 'Bucket name must not be formatted as an IP address.',
+          };
+        }
+        return { valid: true };
+      }
+
+      if (provider === 'azure') {
+        if (name.length < 3 || name.length > 63) {
+          return {
+            valid: false,
+            error: 'Container name must be between 3 and 63 characters.',
+          };
+        }
+        if (!/^[a-z0-9][a-z0-9-]*$/.test(name)) {
+          return {
+            valid: false,
+            error:
+              'Container name may only contain lowercase letters, numbers, and hyphens, and must start with a letter or number.',
+          };
+        }
+        return { valid: true };
+      }
+
+      if (provider === 'gcs') {
+        if (name.length < 3 || name.length > 63) {
+          return {
+            valid: false,
+            error: 'Bucket name must be between 3 and 63 characters.',
+          };
+        }
+        if (!/^[a-z0-9][a-z0-9\-_.]*[a-z0-9]$/.test(name)) {
+          return {
+            valid: false,
+            error:
+              'Bucket name may only contain lowercase letters, numbers, hyphens, underscores, and dots, and must start and end with a letter or number.',
+          };
+        }
+        if (name.startsWith('.') || name.endsWith('.')) {
+          return {
+            valid: false,
+            error: 'Bucket name must not start or end with a dot.',
+          };
+        }
+        if (name.includes('..')) {
+          return {
+            valid: false,
+            error: 'Bucket name must not contain consecutive dots.',
+          };
+        }
+        if (ipAddressPattern.test(name)) {
+          return {
+            valid: false,
+            error: 'Bucket name must not be formatted as an IP address.',
+          };
+        }
+        return { valid: true };
+      }
+
+      // For other providers (minio, cloudflare-r2, backblaze-b2, rustfs),
+      // apply basic S3-compatible rules
+      if (name.length < 3 || name.length > 63) {
+        return {
+          valid: false,
+          error: 'Bucket name must be between 3 and 63 characters.',
+        };
+      }
+      if (!/^[a-z0-9][a-z0-9-]*[a-z0-9]$/.test(name)) {
+        return {
+          valid: false,
+          error:
+            'Bucket name may only contain lowercase letters, numbers, and hyphens, and must start and end with a letter or number.',
+        };
+      }
+      return { valid: true };
+    } catch {
+      return { valid: false, error: 'Bucket name validation failed.' };
+    }
+  }
+
+  static sanitizeInput(input: string): string {
+    let result = input;
+    // Remove null bytes
+    result = result.replace(/\0/g, '');
+    // Remove path traversal sequences (both forward and back slash variants)
+    // Repeat until no more sequences remain (handles nested patterns like ..../)
+    let prev = '';
+    while (prev !== result) {
+      prev = result;
+      result = result.replace(/\.\.\//g, '').replace(/\.\.\\/g, '');
+    }
+    // Remove leading slashes
+    result = result.replace(/^\/+/, '');
+    return result;
+  }
+
+  // ─── Write Operations ────────────────────────────────────────────────────────
+
+  static async uploadFile(
+    params: UploadFileRequest,
+    webContents: WebContents,
+  ): Promise<UploadFileResponse> {
+    const { provider, config, bucketName, prefix, localFilePath, fileName } =
+      params;
+
+    // Don't sanitize localFilePath — it's an absolute OS path from the native file dialog
+    const safePath = localFilePath;
+    const safeBucket = CloudExplorerService.sanitizeInput(bucketName);
+    const safePrefix = CloudExplorerService.sanitizeInput(prefix);
+    const objectKey = safePrefix + fileName;
+
+    try {
+      const stat = await fs.promises.stat(safePath);
+      if (stat.size >= UPLOAD_SIZE_LIMIT_BYTES) {
+        throw new Error('File exceeds the 5 GB upload limit.');
+      }
+
+      const emitProgress = (loaded: number, total: number) => {
+        const percentage = total > 0 ? Math.round((loaded / total) * 100) : 0;
+        webContents.send('cloudExplorer:uploadProgress', {
+          loaded,
+          total,
+          percentage,
+        });
+      };
+
+      if (provider === 'aws') {
+        const s3Config = config as S3Config;
+        const client = CloudExplorerService.createS3Client(s3Config);
+        const fileBuffer = await fs.promises.readFile(safePath);
+        const fileSize = stat.size;
+
+        if (fileSize > MULTIPART_THRESHOLD_BYTES) {
+          // Multipart upload
+          const createRes = await client.send(
+            new CreateMultipartUploadCommand({
+              Bucket: safeBucket,
+              Key: objectKey,
+            }),
+          );
+          const uploadId = createRes.UploadId!;
+          const partSize = MULTIPART_THRESHOLD_BYTES; // 100 MB parts
+          const parts: { ETag: string; PartNumber: number }[] = [];
+          let uploadedBytes = 0;
+
+          try {
+            let partNumber = 1;
+            for (let offset = 0; offset < fileSize; offset += partSize) {
+              const chunk = fileBuffer.slice(offset, offset + partSize);
+              // eslint-disable-next-line no-await-in-loop
+              const partRes = await client.send(
+                new UploadPartCommand({
+                  Bucket: safeBucket,
+                  Key: objectKey,
+                  UploadId: uploadId,
+                  PartNumber: partNumber,
+                  Body: chunk,
+                }),
+              );
+              parts.push({ ETag: partRes.ETag!, PartNumber: partNumber });
+              uploadedBytes += chunk.length;
+              emitProgress(uploadedBytes, fileSize);
+              partNumber += 1;
+            }
+
+            await client.send(
+              new CompleteMultipartUploadCommand({
+                Bucket: safeBucket,
+                Key: objectKey,
+                UploadId: uploadId,
+                MultipartUpload: { Parts: parts },
+              }),
+            );
+          } catch (partError) {
+            await client
+              .send(
+                new AbortMultipartUploadCommand({
+                  Bucket: safeBucket,
+                  Key: objectKey,
+                  UploadId: uploadId,
+                }),
+              )
+              .catch(() => {});
+            throw partError;
+          }
+        } else {
+          // Single-part upload
+          await client.send(
+            new PutObjectCommand({
+              Bucket: safeBucket,
+              Key: objectKey,
+              Body: fileBuffer,
+              ContentLength: stat.size,
+            }),
+          );
+          emitProgress(stat.size, stat.size);
+        }
+      } else if (provider === 'azure') {
+        const azureConfig = config as AzureConfig;
+        const serviceClient =
+          CloudExplorerService.createBlobServiceClient(azureConfig);
+        const containerClient = serviceClient.getContainerClient(safeBucket);
+        const blockBlobClient = containerClient.getBlockBlobClient(objectKey);
+        await blockBlobClient.uploadFile(safePath, {
+          onProgress: (ev) => emitProgress(ev.loadedBytes, stat.size),
+        });
+      } else if (provider === 'gcs') {
+        const gcsConfig = config as GCSConfig;
+        const storage = CloudExplorerService.getStorageClient(gcsConfig);
+        const bucket = storage.bucket(safeBucket);
+        await bucket.upload(safePath, {
+          destination: objectKey,
+          resumable: stat.size > MULTIPART_THRESHOLD_BYTES,
+        });
+        emitProgress(stat.size, stat.size);
+      } else {
+        // S3-compatible providers (minio, cloudflare-r2, backblaze-b2, rustfs)
+        let s3Client: S3Client;
+        if (provider === 'minio') {
+          s3Client = CloudExplorerService.createMinIOClient(
+            config as MinIOConfig,
+          );
+        } else if (provider === 'cloudflare-r2') {
+          s3Client = CloudExplorerService.createR2Client(
+            config as CloudflareR2Config,
+          );
+        } else if (provider === 'backblaze-b2') {
+          s3Client = CloudExplorerService.createB2Client(
+            config as BackblazeB2Config,
+          );
+        } else {
+          s3Client = CloudExplorerService.createRustfsClient(
+            config as RustfsConfig,
+          );
+        }
+        const fileBuffer = await fs.promises.readFile(safePath);
+        await s3Client.send(
+          new PutObjectCommand({
+            Bucket: safeBucket,
+            Key: objectKey,
+            Body: fileBuffer,
+            ContentLength: stat.size,
+          }),
+        );
+        emitProgress(stat.size, stat.size);
+      }
+
+      return { success: true, objectKey };
+    } catch (error) {
+      // eslint-disable-next-line no-console
+      console.error('CloudExplorerService.uploadFile error:', error);
+      throw error;
+    }
+  }
+
+  static async createBucket(
+    params: CreateBucketRequest,
+  ): Promise<CreateBucketResponse> {
+    const { provider, config, bucketName, region } = params;
+    const safeBucket = CloudExplorerService.sanitizeInput(bucketName);
+
+    try {      if (provider === 'aws') {
+        const s3Config = config as S3Config;
+        const client = CloudExplorerService.createS3Client(s3Config);
+        const createParams: any = { Bucket: safeBucket };
+        const effectiveRegion = region || s3Config.region;
+        if (effectiveRegion && effectiveRegion !== 'us-east-1') {
+          createParams.CreateBucketConfiguration = {
+            LocationConstraint: effectiveRegion,
+          };
+        }
+        await client.send(new CreateBucketCommand(createParams));
+      } else if (provider === 'azure') {
+        const azureConfig = config as AzureConfig;
+        const serviceClient =
+          CloudExplorerService.createBlobServiceClient(azureConfig);
+        const containerClient = serviceClient.getContainerClient(safeBucket);
+        await containerClient.create();
+      } else if (provider === 'gcs') {
+        const gcsConfig = config as GCSConfig;
+        const storage = CloudExplorerService.getStorageClient(gcsConfig);
+        await storage.createBucket(safeBucket, {
+          location: region,
+        });
+      } else {
+        // S3-compatible providers
+        let s3Client: S3Client;
+        if (provider === 'minio') {
+          s3Client = CloudExplorerService.createMinIOClient(
+            config as MinIOConfig,
+          );
+        } else if (provider === 'cloudflare-r2') {
+          s3Client = CloudExplorerService.createR2Client(
+            config as CloudflareR2Config,
+          );
+        } else if (provider === 'backblaze-b2') {
+          s3Client = CloudExplorerService.createB2Client(
+            config as BackblazeB2Config,
+          );
+        } else {
+          s3Client = CloudExplorerService.createRustfsClient(
+            config as RustfsConfig,
+          );
+        }
+        await s3Client.send(new CreateBucketCommand({ Bucket: safeBucket }));
+      }
+
+      return { success: true, bucketName: safeBucket };
+    } catch (error) {
+      // eslint-disable-next-line no-console
+      console.error('CloudExplorerService.createBucket error:', error);
+      throw error;
+    }
+  }
+
+  static async deleteObject(
+    params: DeleteObjectRequest,
+    webContents?: WebContents,
+  ): Promise<DeleteObjectResponse> {
+    const { provider, config, bucketName, objectKey, isPrefix } = params;
+    const safeBucket = CloudExplorerService.sanitizeInput(bucketName);
+    const safeKey = CloudExplorerService.sanitizeInput(objectKey);
+
+    try {
+      if (!isPrefix) {
+        // Single object delete
+        if (provider === 'aws') {
+          const client = CloudExplorerService.createS3Client(config as S3Config);
+          await client.send(
+            new DeleteObjectCommand({ Bucket: safeBucket, Key: safeKey }),
+          );
+        } else if (provider === 'azure') {
+          const serviceClient = CloudExplorerService.createBlobServiceClient(
+            config as AzureConfig,
+          );
+          await serviceClient
+            .getContainerClient(safeBucket)
+            .getBlockBlobClient(safeKey)
+            .delete();
+        } else if (provider === 'gcs') {
+          const storage = CloudExplorerService.getStorageClient(
+            config as GCSConfig,
+          );
+          await storage.bucket(safeBucket).file(safeKey).delete();
+        } else {
+          let s3Client: S3Client;
+          if (provider === 'minio') {
+            s3Client = CloudExplorerService.createMinIOClient(
+              config as MinIOConfig,
+            );
+          } else if (provider === 'cloudflare-r2') {
+            s3Client = CloudExplorerService.createR2Client(
+              config as CloudflareR2Config,
+            );
+          } else if (provider === 'backblaze-b2') {
+            s3Client = CloudExplorerService.createB2Client(
+              config as BackblazeB2Config,
+            );
+          } else {
+            s3Client = CloudExplorerService.createRustfsClient(
+              config as RustfsConfig,
+            );
+          }
+          await s3Client.send(
+            new DeleteObjectCommand({ Bucket: safeBucket, Key: safeKey }),
+          );
+        }
+        return { success: true, deletedCount: 1 };
+      }
+
+      // Prefix (folder) delete — collect all keys then batch-delete
+      const allKeys: string[] = [];
+
+      if (provider === 'aws') {
+        const client = CloudExplorerService.createS3Client(config as S3Config);
+        let continuationToken: string | undefined;
+        do {
+          // eslint-disable-next-line no-await-in-loop
+          const listRes = await client.send(
+            new ListObjectsV2Command({
+              Bucket: safeBucket,
+              Prefix: safeKey,
+              ContinuationToken: continuationToken,
+            }),
+          );
+          (listRes.Contents || []).forEach((obj) => {
+            if (obj.Key) allKeys.push(obj.Key);
+          });
+          continuationToken = listRes.IsTruncated
+            ? listRes.NextContinuationToken
+            : undefined;
+        } while (continuationToken);
+
+        // Batch delete in chunks of S3_BATCH_DELETE_LIMIT
+        let deletedCount = 0;
+        for (
+          let i = 0;
+          i < allKeys.length;
+          i += S3_BATCH_DELETE_LIMIT
+        ) {
+          const batch = allKeys.slice(i, i + S3_BATCH_DELETE_LIMIT);
+          // eslint-disable-next-line no-await-in-loop
+          await client.send(
+            new DeleteObjectsCommand({
+              Bucket: safeBucket,
+              Delete: {
+                Objects: batch.map((k) => ({ Key: k })),
+                Quiet: true,
+              },
+            }),
+          );
+          deletedCount += batch.length;
+          if (webContents) {
+            webContents.send('cloudExplorer:uploadProgress', {
+              loaded: deletedCount,
+              total: allKeys.length,
+              percentage: Math.round((deletedCount / allKeys.length) * 100),
+            });
+          }
+        }
+        return { success: true, deletedCount };
+      }
+
+      if (provider === 'azure') {
+        const serviceClient = CloudExplorerService.createBlobServiceClient(
+          config as AzureConfig,
+        );
+        const containerClient = serviceClient.getContainerClient(safeBucket);
+        const blobIterator = containerClient.listBlobsFlat({ prefix: safeKey });
+        let blobResult = await blobIterator.next();
+        while (!blobResult.done) {
+          allKeys.push(blobResult.value.name);
+          // eslint-disable-next-line no-await-in-loop
+          blobResult = await blobIterator.next();
+        }
+        let deletedCount = 0;
+        for (const key of allKeys) {
+          // eslint-disable-next-line no-await-in-loop
+          await containerClient.getBlockBlobClient(key).delete();
+          deletedCount += 1;
+          if (webContents) {
+            webContents.send('cloudExplorer:uploadProgress', {
+              loaded: deletedCount,
+              total: allKeys.length,
+              percentage: Math.round((deletedCount / allKeys.length) * 100),
+            });
+          }
+        }
+        return { success: true, deletedCount };
+      }
+
+      if (provider === 'gcs') {
+        const storage = CloudExplorerService.getStorageClient(
+          config as GCSConfig,
+        );
+        const bucket = storage.bucket(safeBucket);
+        const [files] = await bucket.getFiles({ prefix: safeKey });
+        let deletedCount = 0;
+        for (const file of files) {
+          // eslint-disable-next-line no-await-in-loop
+          await file.delete();
+          deletedCount += 1;
+          if (webContents) {
+            webContents.send('cloudExplorer:uploadProgress', {
+              loaded: deletedCount,
+              total: files.length,
+              percentage: Math.round((deletedCount / files.length) * 100),
+            });
+          }
+        }
+        return { success: true, deletedCount };
+      }
+
+      // S3-compatible prefix delete
+      let s3Client: S3Client;
+      if (provider === 'minio') {
+        s3Client = CloudExplorerService.createMinIOClient(
+          config as MinIOConfig,
+        );
+      } else if (provider === 'cloudflare-r2') {
+        s3Client = CloudExplorerService.createR2Client(
+          config as CloudflareR2Config,
+        );
+      } else if (provider === 'backblaze-b2') {
+        s3Client = CloudExplorerService.createB2Client(
+          config as BackblazeB2Config,
+        );
+      } else {
+        s3Client = CloudExplorerService.createRustfsClient(
+          config as RustfsConfig,
+        );
+      }
+      let continuationToken: string | undefined;
+      do {
+        // eslint-disable-next-line no-await-in-loop
+        const listRes = await s3Client.send(
+          new ListObjectsV2Command({
+            Bucket: safeBucket,
+            Prefix: safeKey,
+            ContinuationToken: continuationToken,
+          }),
+        );
+        (listRes.Contents || []).forEach((obj) => {
+          if (obj.Key) allKeys.push(obj.Key);
+        });
+        continuationToken = listRes.IsTruncated
+          ? listRes.NextContinuationToken
+          : undefined;
+      } while (continuationToken);
+
+      let deletedCount = 0;
+      for (const key of allKeys) {
+        // eslint-disable-next-line no-await-in-loop
+        await s3Client.send(
+          new DeleteObjectCommand({ Bucket: safeBucket, Key: key }),
+        );
+        deletedCount += 1;
+        if (webContents) {
+          webContents.send('cloudExplorer:uploadProgress', {
+            loaded: deletedCount,
+            total: allKeys.length,
+            percentage: Math.round((deletedCount / allKeys.length) * 100),
+          });
+        }
+      }
+      return { success: true, deletedCount };
+    } catch (error) {
+      // eslint-disable-next-line no-console
+      console.error('CloudExplorerService.deleteObject error:', error);
+      throw error;
+    }
+  }
+
+  static async createFolder(
+    params: CreateFolderRequest,
+  ): Promise<CreateFolderResponse> {
+    const { provider, config, bucketName, prefix, folderName } = params;
+    const safeBucket = CloudExplorerService.sanitizeInput(bucketName);
+    const safePrefix = CloudExplorerService.sanitizeInput(prefix);
+    const safeName = CloudExplorerService.sanitizeInput(folderName);
+    const objectKey = `${safePrefix}${safeName}/`;
+    const emptyBuffer = Buffer.alloc(0);
+
+    try {
+      if (provider === 'aws') {
+        const client = CloudExplorerService.createS3Client(config as S3Config);
+        await client.send(
+          new PutObjectCommand({
+            Bucket: safeBucket,
+            Key: objectKey,
+            Body: emptyBuffer,
+            ContentLength: 0,
+            ContentType: 'application/x-directory',
+          }),
+        );
+      } else if (provider === 'azure') {
+        const serviceClient = CloudExplorerService.createBlobServiceClient(
+          config as AzureConfig,
+        );
+        const blockBlobClient = serviceClient
+          .getContainerClient(safeBucket)
+          .getBlockBlobClient(objectKey);
+        await blockBlobClient.upload('', 0, {
+          blobHTTPHeaders: { blobContentType: 'application/x-directory' },
+        });
+      } else if (provider === 'gcs') {
+        const storage = CloudExplorerService.getStorageClient(
+          config as GCSConfig,
+        );
+        const file = storage.bucket(safeBucket).file(objectKey);
+        await file.save(emptyBuffer, {
+          contentType: 'application/x-directory',
+        });
+      } else {
+        // S3-compatible providers
+        let s3Client: S3Client;
+        if (provider === 'minio') {
+          s3Client = CloudExplorerService.createMinIOClient(
+            config as MinIOConfig,
+          );
+        } else if (provider === 'cloudflare-r2') {
+          s3Client = CloudExplorerService.createR2Client(
+            config as CloudflareR2Config,
+          );
+        } else if (provider === 'backblaze-b2') {
+          s3Client = CloudExplorerService.createB2Client(
+            config as BackblazeB2Config,
+          );
+        } else {
+          s3Client = CloudExplorerService.createRustfsClient(
+            config as RustfsConfig,
+          );
+        }
+        await s3Client.send(
+          new PutObjectCommand({
+            Bucket: safeBucket,
+            Key: objectKey,
+            Body: emptyBuffer,
+            ContentLength: 0,
+            ContentType: 'application/x-directory',
+          }),
+        );
+      }
+
+      return { success: true, objectKey };
+    } catch (error) {
+      // eslint-disable-next-line no-console
+      console.error('CloudExplorerService.createFolder error:', error);
+      throw error;
     }
   }
 }
