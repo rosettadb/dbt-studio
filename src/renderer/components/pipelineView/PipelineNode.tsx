@@ -12,7 +12,12 @@ import {
 import { FolderOpen, Terminal } from '@mui/icons-material';
 import type { PipelineStep } from './types';
 
-export type PipelineNodeData = PipelineStep & { stepIndex: number };
+export type PipelineNodeData = PipelineStep & {
+  stepIndex: number;
+  isCleanup?: boolean;
+};
+
+const CLEANUP_COLOR = '#9E9E9E'; // neutral gray for cleanup jobs
 
 function getPluginColor(plugin: string, palette: Theme['palette']): string {
   const name = plugin.split('@')[0].toLowerCase();
@@ -29,14 +34,15 @@ function getPluginColor(plugin: string, palette: Theme['palette']): string {
 }
 
 function getPluginLabel(plugin: string): string {
-  // Strip version suffix: "dbt@v1" → "dbt"
   return plugin.split('@')[0];
 }
 
 export const PipelineNode = memo(
   ({ data, selected }: NodeProps<PipelineNodeData>) => {
     const theme = useTheme();
-    const pluginColor = getPluginColor(data.plugin, theme.palette);
+    const pluginColor = data.isCleanup
+      ? CLEANUP_COLOR
+      : getPluginColor(data.plugin, theme.palette);
     const borderColor = selected ? theme.palette.primary.main : 'transparent';
 
     return (
@@ -73,7 +79,11 @@ export const PipelineNode = memo(
               variant="subtitle2"
               noWrap
               title={data.name}
-              sx={{ fontWeight: 600, mb: 0.75 }}
+              sx={{
+                fontWeight: 600,
+                mb: 0.75,
+                color: data.isCleanup ? CLEANUP_COLOR : 'text.primary',
+              }}
             >
               {data.name}
             </Typography>

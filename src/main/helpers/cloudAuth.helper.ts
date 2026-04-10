@@ -9,6 +9,7 @@ import type {
   CloudflareR2Config,
   BackblazeB2Config,
   RustfsConfig,
+  GarageConfig,
 } from '../../types/frontend';
 
 /**
@@ -124,6 +125,7 @@ export async function buildCloudSecretQuery(
     DROP SECRET IF EXISTS r2_secret;
     DROP SECRET IF EXISTS b2_secret;
     DROP SECRET IF EXISTS rustfs_secret;
+    DROP SECRET IF EXISTS garage_secret;
   `;
 
   switch (provider) {
@@ -227,6 +229,32 @@ export async function buildCloudSecretQuery(
         );
       `;
     }
+    case 'garage': {
+      const garageConfig = config as GarageConfig;
+
+      // Strip protocol and trailing slashes from endpoint
+      const cleanEndpoint = garageConfig.endpoint
+        .replace(/^https?:\/\//, '')
+        .replace(/\/$/, '');
+
+      // Default to path-style for broader compatibility
+      const urlStyle =
+        garageConfig.urlStyle === 'virtual-host' ? 'vhost' : 'path';
+
+      return `
+        ${dropSecretsQuery}
+        CREATE OR REPLACE SECRET garage_secret (
+          TYPE s3,
+          PROVIDER config,
+          KEY_ID '${escapeSqlString(garageConfig.accessKeyId)}',
+          SECRET '${escapeSqlString(garageConfig.secretAccessKey)}',
+          REGION '${escapeSqlString(garageConfig.region || 'us-east-1')}',
+          ENDPOINT '${escapeSqlString(cleanEndpoint)}',
+          USE_SSL ${garageConfig.useSSL ? 'true' : 'false'},
+          URL_STYLE '${urlStyle}'
+        );
+      `;
+    }
     case 'gcs': {
       const gcsConfig = config as GCSConfig;
 
@@ -322,6 +350,8 @@ export function getCloudUrl(
     case 'backblaze-b2':
       return `s3://${bucketName}/${objectName}`;
     case 'rustfs':
+      return `s3://${bucketName}/${objectName}`;
+    case 'garage':
       return `s3://${bucketName}/${objectName}`;
     case 'gcs':
       // Use HTTPS URL for GCS since native gcs:// might not be supported

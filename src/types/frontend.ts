@@ -26,6 +26,8 @@ export type AppContextType = {
   registerSyncEditorContent?: (
     handler?: (path: string, content: string) => void,
   ) => void;
+  openFile?: (filePath: string) => void;
+  registerOpenFile?: (handler?: (filePath: string) => void) => void;
   authenticatedUser?: UserProfile | null;
   env: 'local' | 'cloud';
 };
@@ -68,6 +70,7 @@ export type SecureStorageAccount =
   | `cloud-cloudflare-r2-${string}`
   | `cloud-backblaze-b2-${string}`
   | `cloud-rustfs-${string}`
+  | `cloud-garage-${string}`
   | `db-bigquery-${string}`
   | 'cloud-api-key';
 
@@ -119,6 +122,13 @@ export interface MinIOConfig {
   region?: string;
 }
 
+export interface MinIOPersistedConfig {
+  endpoint: string;
+  accessKeyId: string;
+  useSSL?: boolean;
+  region?: string;
+}
+
 export interface CloudflareR2Config {
   accountId: string;
   accessKeyId: string;
@@ -126,9 +136,20 @@ export interface CloudflareR2Config {
   jurisdiction?: 'eu';
 }
 
+export interface CloudflareR2PersistedConfig {
+  accountId: string;
+  accessKeyId: string;
+  jurisdiction?: 'eu';
+}
+
 export interface BackblazeB2Config {
   applicationKeyId: string;
   applicationKey: string;
+  endpoint?: string;
+}
+
+export interface BackblazeB2PersistedConfig {
+  applicationKeyId: string;
   endpoint?: string;
 }
 
@@ -140,6 +161,30 @@ export interface RustfsConfig {
   region?: string;
 }
 
+export interface RustfsPersistedConfig {
+  endpoint: string;
+  accessKeyId: string;
+  useSSL?: boolean;
+  region?: string;
+}
+
+export interface GarageConfig {
+  endpoint: string;
+  accessKeyId: string;
+  secretAccessKey: string;
+  useSSL?: boolean;
+  region?: string;
+  urlStyle?: 'path' | 'virtual-host';
+}
+
+export interface GaragePersistedConfig {
+  endpoint: string;
+  accessKeyId: string;
+  useSSL?: boolean;
+  region?: string;
+  urlStyle?: 'path' | 'virtual-host';
+}
+
 export type CloudStorageConfig =
   | S3Config
   | AzureConfig
@@ -147,7 +192,18 @@ export type CloudStorageConfig =
   | MinIOConfig
   | CloudflareR2Config
   | BackblazeB2Config
-  | RustfsConfig;
+  | RustfsConfig
+  | GarageConfig;
+
+export type CloudStoragePersistedConfig =
+  | S3Config
+  | AzureConfig
+  | GCSConfig
+  | MinIOPersistedConfig
+  | CloudflareR2PersistedConfig
+  | BackblazeB2PersistedConfig
+  | RustfsPersistedConfig
+  | GaragePersistedConfig;
 
 export type CloudProvider =
   | 'aws'
@@ -156,13 +212,14 @@ export type CloudProvider =
   | 'minio'
   | 'cloudflare-r2'
   | 'backblaze-b2'
-  | 'rustfs';
+  | 'rustfs'
+  | 'garage';
 
 export type CloudConnection = {
   id: string;
   name: string;
   provider: CloudProvider;
-  config: CloudStorageConfig;
+  config: CloudStoragePersistedConfig;
   created: Date;
   lastUsed?: Date;
 };

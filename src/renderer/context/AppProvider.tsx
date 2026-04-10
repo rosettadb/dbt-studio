@@ -62,6 +62,7 @@ const AppProvider: React.FC<Props> = ({ children }) => {
   );
 
   const syncEditorContentHandlerRef = React.useRef<SyncEditorContentHandler>();
+  const openFileHandlerRef = React.useRef<(filePath: string) => void>();
 
   const isAiProviderSet = !!activeAIProvider;
 
@@ -80,6 +81,17 @@ const AppProvider: React.FC<Props> = ({ children }) => {
   const syncEditorContent = React.useCallback(
     (path: string, content: string) => {
       syncEditorContentHandlerRef.current?.(path, content);
+    },
+    [],
+  );
+
+  const openFile = React.useCallback((filePath: string) => {
+    openFileHandlerRef.current?.(filePath);
+  }, []);
+
+  const registerOpenFile = React.useCallback(
+    (handler?: (filePath: string) => void) => {
+      openFileHandlerRef.current = handler;
     },
     [],
   );
@@ -166,6 +178,8 @@ const AppProvider: React.FC<Props> = ({ children }) => {
       setEditingFilePath,
       syncEditorContent,
       registerSyncEditorContent,
+      openFile,
+      registerOpenFile,
       authenticatedUser: profile,
       env: profile ? (settings?.env ?? 'local') : 'local',
     };

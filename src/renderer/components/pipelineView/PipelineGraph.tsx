@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect } from 'react';
 import ReactFlow, {
   Controls,
+  ControlButton,
   Background,
   useNodesState,
   useEdgesState,
@@ -13,7 +14,8 @@ import ReactFlow, {
 } from 'reactflow';
 import dagre from 'dagre';
 import 'reactflow/dist/style.css';
-import { Box, useTheme } from '@mui/material';
+import { Box, Tooltip, useTheme } from '@mui/material';
+import EditIcon from '@mui/icons-material/Edit';
 import type { PipelineJob } from './types';
 import { PipelineNode } from './PipelineNode';
 
@@ -23,10 +25,14 @@ const NODE_WIDTH = 264;
 const NODE_HEIGHT = 110;
 
 type PipelineGraphProps = {
-  job: PipelineJob;
+  jobs: PipelineJob[];
+  onEdit?: () => void;
 };
 
-export const PipelineGraph: React.FC<PipelineGraphProps> = ({ job }) => {
+export const PipelineGraph: React.FC<PipelineGraphProps> = ({
+  jobs,
+  onEdit,
+}) => {
   const theme = useTheme();
   const [nodes, setNodes] = useNodesState([]);
   const [edges, setEdges] = useEdgesState([]);
@@ -63,28 +69,66 @@ export const PipelineGraph: React.FC<PipelineGraphProps> = ({ job }) => {
   );
 
   useEffect(() => {
-    const steps = job.steps ?? [];
+    const flowNodes: Node[] = [];
+    const flowEdges: Edge[] = [];
 
-    // Each step gets a stable id based on its index within this job
-    const flowNodes: Node[] = steps.map((step, i) => ({
-      id: String(i),
-      type: 'pipelineNode',
-      data: { ...step, stepIndex: i },
-      position: { x: 0, y: 0 },
-    }));
+    // Flatten all jobs into a single node list, connecting jobs sequentially.
+    // Between-job edges use a dashed style to visually separate job boundaries.
+    let prevLastId: string | null = null;
 
-    // Sequential edges: step[i] → step[i+1]
-    const flowEdges: Edge[] = steps.slice(0, -1).map((_, i) => ({
-      id: `e${i}-${i + 1}`,
-      source: String(i),
-      target: String(i + 1),
-      type: 'smoothstep',
-      markerEnd: {
-        type: MarkerType.ArrowClosed,
-        color: theme.palette.text.disabled,
-      },
-      style: { stroke: theme.palette.text.disabled },
-    }));
+    jobs.forEach((job, jobIndex) => {
+      const steps = job.steps ?? [];
+      const isCleanup = job.type?.toLowerCase() === 'cleanup';
+
+      steps.forEach((step, stepIndex) => {
+        const id = `${jobIndex}-${stepIndex}`;
+        flowNodes.push({
+          id,
+          type: 'pipelineNode',
+          data: { ...step, stepIndex, isCleanup },
+          position: { x: 0, y: 0 },
+        });
+
+        // Edge within job: previous step → this step
+        if (stepIndex > 0) {
+          const prevId = `${jobIndex}-${stepIndex - 1}`;
+          flowEdges.push({
+            id: `e-${prevId}-${id}`,
+            source: prevId,
+            target: id,
+            type: 'smoothstep',
+            markerEnd: {
+              type: MarkerType.ArrowClosed,
+              color: theme.palette.text.disabled,
+            },
+            style: { stroke: theme.palette.text.disabled },
+          });
+        }
+      });
+
+      // Edge between jobs: last step of previous job → first step of this job (dashed)
+      const firstId = `${jobIndex}-0`;
+      if (prevLastId !== null && steps.length > 0) {
+        flowEdges.push({
+          id: `e-${prevLastId}-${firstId}`,
+          source: prevLastId,
+          target: firstId,
+          type: 'smoothstep',
+          markerEnd: {
+            type: MarkerType.ArrowClosed,
+            color: theme.palette.text.disabled,
+          },
+          style: {
+            stroke: theme.palette.text.disabled,
+            strokeDasharray: '5 4',
+          },
+        });
+      }
+
+      if (steps.length > 0) {
+        prevLastId = `${jobIndex}-${steps.length - 1}`;
+      }
+    });
 
     const { nodes: laid, edges: laidEdges } = getLayoutedElements(
       flowNodes,
@@ -93,7 +137,7 @@ export const PipelineGraph: React.FC<PipelineGraphProps> = ({ job }) => {
     setNodes(laid);
     setEdges(laidEdges);
   }, [
-    job,
+    jobs,
     getLayoutedElements,
     setNodes,
     setEdges,
@@ -115,7 +159,15 @@ export const PipelineGraph: React.FC<PipelineGraphProps> = ({ job }) => {
         fitView
         fitViewOptions={{ padding: 0.15 }}
       >
-        <Controls />
+        <Controls>
+          {onEdit && (
+            <Tooltip title="Edit pipeline.yml" placement="right">
+              <ControlButton onClick={onEdit}>
+                <EditIcon style={{ maxWidth: 12, maxHeight: 12 }} />
+              </ControlButton>
+            </Tooltip>
+          )}
+        </Controls>
         <Background color={theme.palette.text.disabled} gap={16} />
       </ReactFlow>
     </Box>

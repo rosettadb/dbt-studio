@@ -230,6 +230,26 @@ const useSecureStorage = () => {
     await secureStorageService.delete(`cloud-rustfs-${connectionName}`);
   };
 
+  // Garage credential storage
+  const setCloudGarageSecret = async (
+    secret: string,
+    connectionName: string,
+  ): Promise<void> => {
+    await secureStorageService.set(`cloud-garage-${connectionName}`, secret);
+  };
+
+  const getCloudGarageSecret = async (
+    connectionName: string,
+  ): Promise<string | null> => {
+    return secureStorageService.get(`cloud-garage-${connectionName}`);
+  };
+
+  const deleteCloudGarageSecret = async (
+    connectionName: string,
+  ): Promise<void> => {
+    await secureStorageService.delete(`cloud-garage-${connectionName}`);
+  };
+
   // BigQuery service account key storage
   const setBigQueryServiceAccountKey = async (
     key: string,
@@ -299,6 +319,9 @@ const useSecureStorage = () => {
     setCloudRustfsSecret,
     getCloudRustfsSecret,
     deleteCloudRustfsSecret,
+    setCloudGarageSecret,
+    getCloudGarageSecret,
+    deleteCloudGarageSecret,
     setBigQueryServiceAccountKey,
     getBigQueryServiceAccountKey,
     deleteBigQueryServiceAccountKey,

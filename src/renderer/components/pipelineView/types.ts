@@ -7,6 +7,7 @@ export interface PipelineStep {
 
 export interface PipelineJob {
   name: string;
+  type?: string;
   steps: PipelineStep[];
 }
 

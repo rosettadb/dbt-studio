@@ -230,19 +230,15 @@ export const useGitCommit = (
   customOptions?: UseMutationOptions<
     void,
     CustomError,
-    { path: string; message: string; files: string[] }
+    { path: string; message: string }
   >,
-): UseMutationResult<
-  void,
-  CustomError,
-  { path: string; message: string; files: string[] }
-> => {
+): UseMutationResult<void, CustomError, { path: string; message: string }> => {
   const { onSuccess: onCustomSuccess, onError: onCustomError } =
     customOptions || {};
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: async (data) => {
-      return gitServices.commit(data.path, data.message, data.files);
+      return gitServices.commit(data.path, data.message);
     },
     onSuccess: async (...args) => {
       // Only invalidate queries for this specific path - more targeted

@@ -247,8 +247,9 @@ describe('Git Service Integration', () => {
       // Create and stage a file
       const newFilePath = path.join(testRepoPath, 'to-commit.txt');
       fs.writeFileSync(newFilePath, 'Content to commit');
+      await gitService.add(testRepoPath, [newFilePath]);
 
-      await gitService.commit(testRepoPath, 'Add new file', [newFilePath]);
+      await gitService.commit(testRepoPath, 'Add new file');
 
       // Verify no changes after commit
       const statuses = await gitService.getFileStatusList(testRepoPath);
@@ -263,10 +264,9 @@ describe('Git Service Integration', () => {
     it('should commit with custom message', async () => {
       const newFilePath = path.join(testRepoPath, 'feature.txt');
       fs.writeFileSync(newFilePath, 'Feature content');
+      await gitService.add(testRepoPath, [newFilePath]);
 
-      await gitService.commit(testRepoPath, 'feat: add new feature', [
-        newFilePath,
-      ]);
+      await gitService.commit(testRepoPath, 'feat: add new feature');
 
       const git = simpleGit(testRepoPath);
       const log = await git.log();

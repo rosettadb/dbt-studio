@@ -38,13 +38,19 @@ import {
 import { ProcessTerminal } from './processTerminal';
 import { useProcess } from '../../hooks';
 import { useSelectedFileContext } from '../../hooks/useSelectedFileContext';
+import useAppContext from '../../hooks/useAppContext';
 import { Project } from '../../../types/backend';
 import { useGetFileContent } from '../../controllers';
 import { LineageModal } from '../lineage/LineageModal';
 import { LineageView } from '../lineage/LineageView';
 import { useCurrentModelId } from '../../controllers/lineage.controller';
 import { PipelineView } from '../pipelineView';
-import { isPipelineFile } from '../pipelineView/parsePipelineConfig';
+import {
+  isPipelineFile,
+  PIPELINE_CONFIG_DIR,
+  PIPELINE_CONFIG_FILENAME,
+} from '../pipelineView/parsePipelineConfig';
+import { pathJoin } from '../../services/settings.services';
 
 type Props = {
   project: Project;
@@ -54,6 +60,7 @@ type Props = {
 export const TerminalLayout: React.FC<Props> = ({ children, project }) => {
   const { mode } = useColorScheme();
   const theme = useTheme();
+  const { openFile } = useAppContext();
   const { isRunning, stop, forceStop, pid, duration, status, command } =
     useProcess();
 
@@ -92,23 +99,27 @@ export const TerminalLayout: React.FC<Props> = ({ children, project }) => {
 
   const [selectedTab, setSelectedTab] = React.useState(0);
   const [isPipelineFullscreen, setIsPipelineFullscreen] = React.useState(false);
-  // Track if pipeline tab should be visible (persists after opening pipeline.yml)
-  const [hasPipelineBeenOpened, setHasPipelineBeenOpened] =
-    React.useState(false);
-  // Track the pipeline file path
-  const [pipelineFilePath, setPipelineFilePath] = React.useState<string>('');
   // Track if user manually clicked on CI/CD tab (vs auto-switched)
   const [isManualCicdTabSwitch, setIsManualCicdTabSwitch] =
     React.useState(false);
 
-  // Show CI/CD tab if pipeline file is currently active OR has been opened before
-  const showPipelineTab = isPipelineFileActive || hasPipelineBeenOpened;
+  // Resolve the pipeline file path from the project root
+  const [pipelineFilePath, setPipelineFilePath] = React.useState<string>('');
+  React.useEffect(() => {
+    // eslint-disable-next-line promise/valid-params
+    pathJoin(project.path, PIPELINE_CONFIG_DIR, PIPELINE_CONFIG_FILENAME)
+      .then(setPipelineFilePath)
+      .catch();
+  }, [project.path]);
 
-  // Read the pipeline.yml file content from disk (not from editor)
-  const { data: pipelineFileContent } = useGetFileContent(pipelineFilePath, {
-    enabled: !!pipelineFilePath && showPipelineTab,
-    refetchInterval: 2000, // Refresh every 2 seconds to stay in sync with file changes
-  });
+  // Always poll the pipeline file — tab is visible whenever the file exists on disk
+  const { data: pipelineFileContent, isSuccess: pipelineFileExists } =
+    useGetFileContent(pipelineFilePath, {
+      enabled: !!pipelineFilePath,
+      refetchInterval: 2000, // Refresh every 2 seconds to stay in sync with file changes
+    });
+
+  const showPipelineTab = pipelineFileExists;
 
   const [lock, setLock] = React.useState(false);
   const [sizes, setSizes] = React.useState<number[]>([
@@ -188,14 +199,6 @@ export const TerminalLayout: React.FC<Props> = ({ children, project }) => {
       setSelectedTab(0);
     }
   }, [showLineageTab, selectedTab, isLoadingCurrentModel]);
-
-  // Mark pipeline as opened and save file path when pipeline file becomes active
-  React.useEffect(() => {
-    if (isPipelineFileActive && selectedFilePath) {
-      setHasPipelineBeenOpened(true);
-      setPipelineFilePath(selectedFilePath);
-    }
-  }, [isPipelineFileActive, selectedFilePath]);
 
   // Auto-switch to CI/CD tab when pipeline.yml file is opened in editor
   React.useEffect(() => {
@@ -553,7 +556,10 @@ export const TerminalLayout: React.FC<Props> = ({ children, project }) => {
                     </Tooltip>
                   )}
                   {/* Always read from pipeline.yml file on disk */}
-                  <PipelineView content={pipelineFileContent || ''} />
+                  <PipelineView
+                    content={pipelineFileContent || ''}
+                    onEdit={() => openFile?.(pipelineFilePath)}
+                  />
                 </Box>
               )}
             </>
