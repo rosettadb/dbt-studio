@@ -10,12 +10,16 @@ import type {
 import type {
   UploadFileRequest,
   UploadFileResponse,
+  UploadFolderRequest,
+  UploadFolderResponse,
   CreateBucketRequest,
   CreateBucketResponse,
   DeleteObjectRequest,
   DeleteObjectResponse,
   CreateFolderRequest,
   CreateFolderResponse,
+  DeleteBucketRequest,
+  DeleteBucketResponse,
 } from '../../types/ipc';
 
 export const cloudExplorerKeys = {
@@ -330,6 +334,31 @@ export const useUploadFile = (customOptions?: {
   );
 };
 
+export const useUploadFolder = (customOptions?: {
+  onSuccess?: (data: UploadFolderResponse, vars: UploadFolderRequest) => void;
+  onError?: (error: unknown) => void;
+}) => {
+  const queryClient = useQueryClient();
+
+  return useMutation(
+    (params: UploadFolderRequest) => cloudExplorerService.uploadFolder(params),
+    {
+      onSuccess: (data, vars) => {
+        queryClient.invalidateQueries(
+          cloudExplorerKeys.objects(
+            vars.provider,
+            vars.config,
+            vars.bucketName,
+            vars.prefix,
+          ),
+        );
+        customOptions?.onSuccess?.(data, vars);
+      },
+      onError: customOptions?.onError,
+    },
+  );
+};
+
 export const useCreateBucket = (customOptions?: {
   onSuccess?: (data: CreateBucketResponse, vars: CreateBucketRequest) => void;
   onError?: (error: unknown) => void;
@@ -391,6 +420,26 @@ export const useCreateFolder = (customOptions?: {
             vars.bucketName,
             vars.prefix,
           ),
+        );
+        customOptions?.onSuccess?.(data, vars);
+      },
+      onError: customOptions?.onError,
+    },
+  );
+};
+
+export const useDeleteBucket = (customOptions?: {
+  onSuccess?: (data: DeleteBucketResponse, vars: DeleteBucketRequest) => void;
+  onError?: (error: unknown) => void;
+}) => {
+  const queryClient = useQueryClient();
+
+  return useMutation(
+    (params: DeleteBucketRequest) => cloudExplorerService.deleteBucket(params),
+    {
+      onSuccess: (data, vars) => {
+        queryClient.invalidateQueries(
+          cloudExplorerKeys.buckets(vars.provider, vars.config),
         );
         customOptions?.onSuccess?.(data, vars);
       },

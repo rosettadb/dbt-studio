@@ -13,7 +13,10 @@ import {
 } from '@mui/material';
 import { toast } from 'react-toastify';
 import { useCreateFolder } from '../../controllers/cloudExplorer.controller';
-import type { CloudProvider, CloudStorageConfig } from '../../../types/frontend';
+import type {
+  CloudProvider,
+  CloudStorageConfig,
+} from '../../../types/frontend';
 
 interface CreateFolderDialogProps {
   open: boolean;
@@ -96,7 +99,6 @@ const CreateFolderDialog: React.FC<CreateFolderDialogProps> = ({
             control={control}
             render={({ field }) => (
               <TextField
-                {...field}
                 label="Folder name"
                 required
                 autoFocus
@@ -107,6 +109,11 @@ const CreateFolderDialog: React.FC<CreateFolderDialogProps> = ({
                   `Will be created at: ${prefix || '/'}${field.value || '<name>'}/`
                 }
                 disabled={createMutation.isLoading}
+                name={field.name}
+                value={field.value}
+                onChange={field.onChange}
+                onBlur={field.onBlur}
+                inputRef={field.ref}
               />
             )}
           />

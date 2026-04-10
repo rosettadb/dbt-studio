@@ -1,5 +1,10 @@
 import { ConnectionInput, ConnectionModel } from './backend';
 
+// ─── Cloud Explorer Operations ───────────────────────────────────────────────
+// Requirements: 4.1, 4.6
+
+import { CloudProvider, CloudStorageConfig } from './frontend';
+
 export type TestChannels = 'test:create' | 'test:getAll';
 
 export type SettingsChannels =
@@ -263,10 +268,12 @@ export type CloudExplorerChannels =
   | 'cloudExplorer:testConnection'
   | 'cloudExplorer:previewData'
   | 'cloudExplorer:uploadFile'
+  | 'cloudExplorer:uploadFolder'
   | 'cloudExplorer:createBucket'
   | 'cloudExplorer:deleteObject'
   | 'cloudExplorer:uploadProgress'
-  | 'cloudExplorer:createFolder';
+  | 'cloudExplorer:createFolder'
+  | 'cloudExplorer:deleteBucket';
 
 export type DuckLakeChannels =
   // Extension Management
@@ -403,11 +410,6 @@ export type UpdateConnectionBody = {
   connection: ConnectionModel;
 };
 
-// ─── Cloud Explorer Operations ───────────────────────────────────────────────
-// Requirements: 4.1, 4.6
-
-import { CloudProvider, CloudStorageConfig } from './frontend';
-
 export interface UploadFileRequest {
   provider: CloudProvider;
   config: CloudStorageConfig;
@@ -420,6 +422,20 @@ export interface UploadFileRequest {
 export interface UploadFileResponse {
   success: boolean;
   objectKey: string;
+}
+
+export interface UploadFolderRequest {
+  provider: CloudProvider;
+  config: CloudStorageConfig;
+  bucketName: string;
+  prefix: string;
+  localFolderPath: string;
+}
+
+export interface UploadFolderResponse {
+  success: boolean;
+  uploadedCount: number;
+  failedCount: number;
 }
 
 export interface CreateBucketRequest {
@@ -451,6 +467,10 @@ export interface UploadProgressEvent {
   loaded: number;
   total: number;
   percentage: number;
+  // folder upload extras
+  fileName?: string;
+  fileIndex?: number;
+  fileCount?: number;
 }
 
 export const UPLOAD_SIZE_LIMIT_BYTES = 5 * 1024 * 1024 * 1024; // 5 GB
@@ -468,4 +488,14 @@ export interface CreateFolderRequest {
 export interface CreateFolderResponse {
   success: boolean;
   objectKey: string;
+}
+
+export interface DeleteBucketRequest {
+  provider: CloudProvider;
+  config: CloudStorageConfig;
+  bucketName: string;
+}
+
+export interface DeleteBucketResponse {
+  success: boolean;
 }

@@ -19,7 +19,10 @@ import {
 import { toast } from 'react-toastify';
 import { useCreateBucket } from '../../controllers/cloudExplorer.controller';
 import { AWS_REGIONS, GCS_REGIONS } from '../../config/cloudRegions';
-import type { CloudProvider, CloudStorageConfig } from '../../../types/frontend';
+import type {
+  CloudProvider,
+  CloudStorageConfig,
+} from '../../../types/frontend';
 
 // Inline bucket name validation (mirrors backend CloudExplorerService.validateBucketName)
 function validateBucketName(
@@ -33,37 +36,76 @@ function validateBucketName(
     const ipPattern = /^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$/;
     if (provider === 'aws') {
       if (name.length < 3 || name.length > 63)
-        return { valid: false, error: 'Bucket name must be between 3 and 63 characters.' };
+        return {
+          valid: false,
+          error: 'Bucket name must be between 3 and 63 characters.',
+        };
       if (!/^[a-z0-9][a-z0-9-]*[a-z0-9]$/.test(name))
-        return { valid: false, error: 'Only lowercase letters, numbers, and hyphens. Must start and end with a letter or number.' };
+        return {
+          valid: false,
+          error:
+            'Only lowercase letters, numbers, and hyphens. Must start and end with a letter or number.',
+        };
       if (/--/.test(name))
-        return { valid: false, error: 'Bucket name must not contain consecutive hyphens.' };
+        return {
+          valid: false,
+          error: 'Bucket name must not contain consecutive hyphens.',
+        };
       if (ipPattern.test(name))
-        return { valid: false, error: 'Bucket name must not be formatted as an IP address.' };
+        return {
+          valid: false,
+          error: 'Bucket name must not be formatted as an IP address.',
+        };
       return { valid: true };
     }
     if (provider === 'azure') {
       if (name.length < 3 || name.length > 63)
-        return { valid: false, error: 'Container name must be between 3 and 63 characters.' };
+        return {
+          valid: false,
+          error: 'Container name must be between 3 and 63 characters.',
+        };
       if (!/^[a-z0-9][a-z0-9-]*$/.test(name))
-        return { valid: false, error: 'Only lowercase letters, numbers, and hyphens. Must start with a letter or number.' };
+        return {
+          valid: false,
+          error:
+            'Only lowercase letters, numbers, and hyphens. Must start with a letter or number.',
+        };
       return { valid: true };
     }
     if (provider === 'gcs') {
       if (name.length < 3 || name.length > 63)
-        return { valid: false, error: 'Bucket name must be between 3 and 63 characters.' };
+        return {
+          valid: false,
+          error: 'Bucket name must be between 3 and 63 characters.',
+        };
       if (!/^[a-z0-9][a-z0-9\-_.]*[a-z0-9]$/.test(name))
-        return { valid: false, error: 'Only lowercase letters, numbers, hyphens, underscores, and dots.' };
+        return {
+          valid: false,
+          error:
+            'Only lowercase letters, numbers, hyphens, underscores, and dots.',
+        };
       if (name.includes('..'))
-        return { valid: false, error: 'Bucket name must not contain consecutive dots.' };
+        return {
+          valid: false,
+          error: 'Bucket name must not contain consecutive dots.',
+        };
       if (ipPattern.test(name))
-        return { valid: false, error: 'Bucket name must not be formatted as an IP address.' };
+        return {
+          valid: false,
+          error: 'Bucket name must not be formatted as an IP address.',
+        };
       return { valid: true };
     }
     if (name.length < 3 || name.length > 63)
-      return { valid: false, error: 'Bucket name must be between 3 and 63 characters.' };
+      return {
+        valid: false,
+        error: 'Bucket name must be between 3 and 63 characters.',
+      };
     if (!/^[a-z0-9][a-z0-9-]*[a-z0-9]$/.test(name))
-      return { valid: false, error: 'Only lowercase letters, numbers, and hyphens.' };
+      return {
+        valid: false,
+        error: 'Only lowercase letters, numbers, and hyphens.',
+      };
     return { valid: true };
   } catch {
     return { valid: false, error: 'Bucket name validation failed.' };
@@ -146,13 +188,14 @@ const CreateBucketDialog: React.FC<CreateBucketDialogProps> = ({
     <Dialog open={open} onClose={handleClose} maxWidth="sm" fullWidth>
       <DialogTitle>Create New Bucket</DialogTitle>
       <form onSubmit={handleSubmit(onSubmit)} noValidate>
-        <DialogContent sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+        <DialogContent
+          sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}
+        >
           <Controller
             name="bucketName"
             control={control}
             render={({ field }) => (
               <TextField
-                {...field}
                 label="Bucket name"
                 required
                 autoFocus
@@ -160,6 +203,11 @@ const CreateBucketDialog: React.FC<CreateBucketDialogProps> = ({
                 helperText={errors.bucketName?.message}
                 disabled={createMutation.isLoading}
                 fullWidth
+                name={field.name}
+                value={field.value}
+                onChange={field.onChange}
+                onBlur={field.onBlur}
+                inputRef={field.ref}
               />
             )}
           />
@@ -171,10 +219,14 @@ const CreateBucketDialog: React.FC<CreateBucketDialogProps> = ({
                 <FormControl fullWidth error={!!errors.region}>
                   <InputLabel id="region-label">Region</InputLabel>
                   <Select
-                    {...field}
                     labelId="region-label"
                     label="Region"
                     disabled={createMutation.isLoading}
+                    name={field.name}
+                    value={field.value}
+                    onChange={field.onChange}
+                    onBlur={field.onBlur}
+                    inputRef={field.ref}
                   >
                     <MenuItem value="">
                       <em>Select a region</em>

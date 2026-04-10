@@ -2,9 +2,11 @@ import { ipcMain } from 'electron';
 import type { CloudStorageConfig, CloudProvider } from '../../types/frontend';
 import type {
   UploadFileRequest,
+  UploadFolderRequest,
   CreateBucketRequest,
   DeleteObjectRequest,
   CreateFolderRequest,
+  DeleteBucketRequest,
 } from '../../types/ipc';
 import { CloudExplorerService, CloudPreviewService } from '../services';
 
@@ -18,6 +20,8 @@ const handlerChannels = [
   'cloudExplorer:createBucket',
   'cloudExplorer:deleteObject',
   'cloudExplorer:createFolder',
+  'cloudExplorer:deleteBucket',
+  'cloudExplorer:uploadFolder',
 ];
 
 const removeCloudExplorerIpcHandlers = () => {
@@ -253,6 +257,20 @@ const registerCloudExplorerHandlers = () => {
     'cloudExplorer:createFolder',
     async (_event, params: CreateFolderRequest) => {
       return CloudExplorerService.createFolder(params);
+    },
+  );
+
+  ipcMain.handle(
+    'cloudExplorer:deleteBucket',
+    async (_event, params: DeleteBucketRequest) => {
+      return CloudExplorerService.deleteBucket(params);
+    },
+  );
+
+  ipcMain.handle(
+    'cloudExplorer:uploadFolder',
+    async (event, params: UploadFolderRequest) => {
+      return CloudExplorerService.uploadFolder(params, event.sender);
     },
   );
 };

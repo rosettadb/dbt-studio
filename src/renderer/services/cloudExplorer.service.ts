@@ -8,6 +8,8 @@ import type {
 import type {
   UploadFileRequest,
   UploadFileResponse,
+  UploadFolderRequest,
+  UploadFolderResponse,
   CreateBucketRequest,
   CreateBucketResponse,
   DeleteObjectRequest,
@@ -15,6 +17,8 @@ import type {
   UploadProgressEvent,
   CreateFolderRequest,
   CreateFolderResponse,
+  DeleteBucketRequest,
+  DeleteBucketResponse,
 } from '../../types/ipc';
 import { client } from '../config/client';
 
@@ -142,6 +146,16 @@ class CloudExplorerService {
     return data;
   }
 
+  static async uploadFolder(
+    params: UploadFolderRequest,
+  ): Promise<UploadFolderResponse> {
+    const { data } = await client.post<
+      UploadFolderRequest,
+      UploadFolderResponse
+    >('cloudExplorer:uploadFolder', params);
+    return data;
+  }
+
   static async createBucket(
     params: CreateBucketRequest,
   ): Promise<CreateBucketResponse> {
@@ -174,10 +188,20 @@ class CloudExplorerService {
   static async createFolder(
     params: CreateFolderRequest,
   ): Promise<CreateFolderResponse> {
-    const { data } = await client.post<CreateFolderRequest, CreateFolderResponse>(
-      'cloudExplorer:createFolder',
-      params,
-    );
+    const { data } = await client.post<
+      CreateFolderRequest,
+      CreateFolderResponse
+    >('cloudExplorer:createFolder', params);
+    return data;
+  }
+
+  static async deleteBucket(
+    params: DeleteBucketRequest,
+  ): Promise<DeleteBucketResponse> {
+    const { data } = await client.post<
+      DeleteBucketRequest,
+      DeleteBucketResponse
+    >('cloudExplorer:deleteBucket', params);
     return data;
   }
 }

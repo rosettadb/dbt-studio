@@ -209,8 +209,10 @@ export const ConnectionForm: React.FC<ConnectionFormProps> = ({
           (config as GaragePersistedConfig).useSSL ||
           false,
         accountId: (config as CloudflareR2PersistedConfig).accountId || '',
-        jurisdiction: (config as CloudflareR2PersistedConfig).jurisdiction || '',
-        applicationKeyId: (config as BackblazeB2PersistedConfig).applicationKeyId || '',
+        jurisdiction:
+          (config as CloudflareR2PersistedConfig).jurisdiction || '',
+        applicationKeyId:
+          (config as BackblazeB2PersistedConfig).applicationKeyId || '',
         applicationKey: (config as BackblazeB2Config).applicationKey || '',
         urlStyle: (config as GaragePersistedConfig).urlStyle || 'path',
       });

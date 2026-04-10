@@ -44,7 +44,7 @@ import useSecureStorage from '../../hooks/useSecureStorage';
 import { ViewToggle } from './ViewToggle';
 import bucketIcon from '../../../../assets/icons/bucket-blue.png';
 import CreateBucketDialog from './CreateBucketDialog';
-import DeleteConfirmDialog from './DeleteConfirmDialog';
+import DeleteBucketDialog from './DeleteBucketDialog';
 
 interface ExplorerBucketsProps {
   connectionId: string;
@@ -308,7 +308,8 @@ export const ExplorerBuckets: React.FC<ExplorerBucketsProps> = ({
             </TableCell>
             <TableCell align="right">Actions</TableCell>
           </TableRow>
-        </TableHead>        <TableBody>
+        </TableHead>{' '}
+        <TableBody>
           {filteredAndSortedBuckets.map((bucket) => (
             <TableRow
               key={bucket.name}
@@ -667,14 +668,12 @@ export const ExplorerBuckets: React.FC<ExplorerBucketsProps> = ({
 
       {/* Delete Bucket Dialog */}
       {secureConfig && connection && deleteBucket && (
-        <DeleteConfirmDialog
+        <DeleteBucketDialog
           open={!!deleteBucket}
           onClose={() => setDeleteBucket(null)}
           provider={connection.provider}
           config={secureConfig as CloudStorageConfig}
           bucketName={deleteBucket}
-          objectKey=""
-          isPrefix={false}
           onSuccess={() => {
             setDeleteBucket(null);
             bucketsQuery.refetch();

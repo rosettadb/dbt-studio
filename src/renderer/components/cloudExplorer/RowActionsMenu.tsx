@@ -83,11 +83,7 @@ const RowActionsMenu: React.FC<RowActionsMenuProps> = ({
             dense
           >
             <ListItemIcon sx={{ minWidth: 32 }}>
-              {action.loading ? (
-                <CircularProgress size={16} />
-              ) : (
-                action.icon
-              )}
+              {action.loading ? <CircularProgress size={16} /> : action.icon}
             </ListItemIcon>
             <ListItemText>{action.label}</ListItemText>
           </MenuItem>

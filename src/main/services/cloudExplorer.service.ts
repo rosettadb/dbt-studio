@@ -4,6 +4,7 @@ import {
   S3Client,
   ListBucketsCommand,
   ListObjectsV2Command,
+  ListObjectsCommand,
   GetObjectCommand,
   PutObjectCommand,
   CreateMultipartUploadCommand,
@@ -13,6 +14,8 @@ import {
   DeleteObjectCommand,
   DeleteObjectsCommand,
   CreateBucketCommand,
+  DeleteBucketCommand,
+  ListObjectVersionsCommand,
   HeadBucketCommand,
 } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
@@ -42,12 +45,16 @@ import {
 import {
   UploadFileRequest,
   UploadFileResponse,
+  UploadFolderRequest,
+  UploadFolderResponse,
   CreateBucketRequest,
   CreateBucketResponse,
   DeleteObjectRequest,
   DeleteObjectResponse,
   CreateFolderRequest,
   CreateFolderResponse,
+  DeleteBucketRequest,
+  DeleteBucketResponse,
   UPLOAD_SIZE_LIMIT_BYTES,
   MULTIPART_THRESHOLD_BYTES,
   S3_BATCH_DELETE_LIMIT,
@@ -1132,6 +1139,10 @@ class CloudExplorerService {
         secretAccessKey: config.secretAccessKey,
       },
       forcePathStyle: true, // Required for rustfs (S3-compatible with path-style URLs)
+      // AWS SDK v3.600+ adds CRC32 checksums by default; RustFS rejects them as InvalidArgument.
+      // Only send checksums when the operation explicitly requires it.
+      requestChecksumCalculation: 'WHEN_REQUIRED',
+      responseChecksumValidation: 'WHEN_REQUIRED',
     });
   }
 
@@ -1958,6 +1969,82 @@ class CloudExplorerService {
     }
   }
 
+  static async uploadFolder(
+    params: UploadFolderRequest,
+    webContents: WebContents,
+  ): Promise<UploadFolderResponse> {
+    const { provider, config, bucketName, prefix, localFolderPath } = params;
+    const safeBucket = CloudExplorerService.sanitizeInput(bucketName);
+    const safePrefix = CloudExplorerService.sanitizeInput(prefix);
+    // Strip trailing slashes so split/pop reliably returns the folder name
+    const normalizedFolderPath = localFolderPath.replace(/[\\/]+$/, '');
+
+    // Recursively collect all files under the folder
+    const collectFiles = async (dir: string): Promise<string[]> => {
+      const entries = await fs.promises.readdir(dir, { withFileTypes: true });
+      const nested = await Promise.all(
+        entries.map((entry) => {
+          const fullPath = `${dir}/${entry.name}`;
+          return entry.isDirectory()
+            ? collectFiles(fullPath)
+            : Promise.resolve([fullPath]);
+        }),
+      );
+      return ([] as string[]).concat(...nested);
+    };
+
+    const allFiles = await collectFiles(normalizedFolderPath);
+    const folderName = normalizedFolderPath.split(/[\\/]/).pop() || 'folder';
+    let uploadedCount = 0;
+    let failedCount = 0;
+
+    await allFiles.reduce(async (prev, filePath, i) => {
+      await prev;
+      const relativePath = filePath
+        .slice(normalizedFolderPath.length)
+        .replace(/^[\\/]/, '');
+      const fileName = `${folderName}/${relativePath}`;
+
+      webContents.send('cloudExplorer:uploadProgress', {
+        loaded: i,
+        total: allFiles.length,
+        percentage: Math.round((i / allFiles.length) * 100),
+        fileName: relativePath,
+        fileIndex: i + 1,
+        fileCount: allFiles.length,
+      });
+
+      try {
+        await CloudExplorerService.uploadFile(
+          {
+            provider,
+            config,
+            bucketName: safeBucket,
+            prefix: safePrefix,
+            localFilePath: filePath,
+            fileName,
+          },
+          webContents,
+        );
+        uploadedCount += 1;
+      } catch (fileError) {
+        // eslint-disable-next-line no-console
+        console.error(`uploadFolder: failed to upload ${filePath}:`, fileError);
+        failedCount += 1;
+      }
+    }, Promise.resolve());
+
+    webContents.send('cloudExplorer:uploadProgress', {
+      loaded: allFiles.length,
+      total: allFiles.length,
+      percentage: 100,
+      fileIndex: allFiles.length,
+      fileCount: allFiles.length,
+    });
+
+    return { success: failedCount === 0, uploadedCount, failedCount };
+  }
+
   static async createBucket(
     params: CreateBucketRequest,
   ): Promise<CreateBucketResponse> {
@@ -2017,6 +2104,214 @@ class CloudExplorerService {
       console.error('CloudExplorerService.createBucket error:', error);
       throw error;
     }
+  }
+
+  static async deleteBucket(
+    params: DeleteBucketRequest,
+  ): Promise<DeleteBucketResponse> {
+    const { provider, config, bucketName } = params;
+    const safeBucket = CloudExplorerService.sanitizeInput(bucketName);
+
+    try {
+      if (provider === 'aws') {
+        const client = CloudExplorerService.createS3Client(config as S3Config);
+        // Purge all object versions first (required for versioned buckets)
+        await CloudExplorerService.purgeS3BucketVersions(client, safeBucket);
+        await client.send(new DeleteBucketCommand({ Bucket: safeBucket }));
+      } else if (provider === 'azure') {
+        const serviceClient = CloudExplorerService.createBlobServiceClient(
+          config as AzureConfig,
+        );
+        await serviceClient.getContainerClient(safeBucket).delete();
+      } else if (provider === 'gcs') {
+        const storage = CloudExplorerService.getStorageClient(
+          config as GCSConfig,
+        );
+        const gcsBucket = storage.bucket(safeBucket);
+        // Delete all files first, then the bucket
+        const [files] = await gcsBucket.getFiles();
+        await Promise.all(files.map((f) => f.delete()));
+        await gcsBucket.delete();
+      } else {
+        let s3Client: S3Client;
+        const useVersionPurge =
+          provider !== 'minio' &&
+          provider !== 'garage' &&
+          provider !== 'rustfs';
+
+        if (provider === 'minio') {
+          s3Client = CloudExplorerService.createMinIOClient(
+            config as MinIOConfig,
+          );
+        } else if (provider === 'cloudflare-r2') {
+          s3Client = CloudExplorerService.createR2Client(
+            config as CloudflareR2Config,
+          );
+        } else if (provider === 'backblaze-b2') {
+          s3Client = CloudExplorerService.createB2Client(
+            config as BackblazeB2Config,
+          );
+        } else if (provider === 'garage') {
+          s3Client = CloudExplorerService.createGarageClient(
+            config as GarageConfig,
+          );
+        } else {
+          s3Client = CloudExplorerService.createRustfsClient(
+            config as RustfsConfig,
+          );
+        }
+
+        if (useVersionPurge) {
+          // B2/R2: purge all object versions (handles hidden versions)
+          await CloudExplorerService.purgeS3BucketVersions(
+            s3Client,
+            safeBucket,
+          );
+        } else if (provider === 'rustfs') {
+          // RustFS: use ListObjects v1 (does not support v2)
+          // eslint-disable-next-line no-console
+          console.log('[rustfs] step 1: purging objects...');
+          try {
+            await CloudExplorerService.purgeRustfsBucketObjects(
+              s3Client,
+              safeBucket,
+            );
+            // eslint-disable-next-line no-console
+            console.log('[rustfs] step 2: sending DeleteBucketCommand...');
+          } catch (purgeErr) {
+            // eslint-disable-next-line no-console
+            console.error('[rustfs] purge failed:', purgeErr);
+            throw purgeErr;
+          }
+        } else {
+          // MinIO/Garage: use regular object listing + individual deletes
+          await CloudExplorerService.purgeS3BucketObjects(s3Client, safeBucket);
+        }
+        await s3Client.send(new DeleteBucketCommand({ Bucket: safeBucket }));
+      }
+      return { success: true };
+    } catch (error) {
+      // eslint-disable-next-line no-console
+      console.error('CloudExplorerService.deleteBucket error:', error);
+      throw error;
+    }
+  }
+
+  private static async purgeS3BucketObjects(
+    client: S3Client,
+    bucketName: string,
+  ): Promise<void> {
+    let continuationToken: string | undefined;
+    do {
+      // eslint-disable-next-line no-await-in-loop
+      const listRes = await client.send(
+        new ListObjectsV2Command({
+          Bucket: bucketName,
+          ContinuationToken: continuationToken,
+        }),
+      );
+      const keys = (listRes.Contents || []).map((o) => o.Key!).filter(Boolean);
+      // eslint-disable-next-line no-await-in-loop
+      await keys.reduce(async (prev, key) => {
+        await prev;
+        await client.send(
+          new DeleteObjectCommand({ Bucket: bucketName, Key: key }),
+        );
+      }, Promise.resolve());
+      continuationToken = listRes.IsTruncated
+        ? listRes.NextContinuationToken
+        : undefined;
+    } while (continuationToken);
+  }
+
+  // RustFS does not support ListObjectsV2 — use v1 listing instead.
+  // Uses DeleteObjectsCommand (POST /?delete) instead of individual
+  // DeleteObjectCommand (DELETE) to avoid CRC32 checksum header rejections
+  // introduced in AWS SDK v3.600+ that cause RustFS to return InvalidArgument.
+  private static async purgeRustfsBucketObjects(
+    client: S3Client,
+    bucketName: string,
+  ): Promise<void> {
+    let marker: string | undefined;
+    do {
+      // eslint-disable-next-line no-console
+      console.log(`[rustfs] listing objects with marker: ${marker ?? 'none'}`);
+      // eslint-disable-next-line no-await-in-loop
+      const listRes = await client.send(
+        new ListObjectsCommand({
+          Bucket: bucketName,
+          Marker: marker,
+        }),
+      );
+      const keys = (listRes.Contents || []).map((o) => o.Key!).filter(Boolean);
+      // eslint-disable-next-line no-console
+      console.log(
+        `[rustfs] deleting ${keys.length} objects via batch delete...`,
+      );
+
+      if (keys.length > 0) {
+        // Use batch delete (POST /?delete) — avoids CRC32 header issues on DELETE requests
+        // eslint-disable-next-line no-await-in-loop
+        await client.send(
+          new DeleteObjectsCommand({
+            Bucket: bucketName,
+            Delete: {
+              Objects: keys.map((key) => ({ Key: key })),
+              Quiet: true,
+            },
+          }),
+        );
+      }
+
+      marker = listRes.IsTruncated
+        ? listRes.Contents?.[listRes.Contents.length - 1]?.Key
+        : undefined;
+    } while (marker);
+  }
+
+  private static async purgeS3BucketVersions(
+    client: S3Client,
+    bucketName: string,
+  ): Promise<void> {
+    let keyMarker: string | undefined;
+    let versionIdMarker: string | undefined;
+
+    do {
+      // eslint-disable-next-line no-await-in-loop
+      const listRes = await client.send(
+        new ListObjectVersionsCommand({
+          Bucket: bucketName,
+          KeyMarker: keyMarker,
+          VersionIdMarker: versionIdMarker,
+        }),
+      );
+
+      const objects = [
+        ...(listRes.Versions || []).map((v) => ({
+          Key: v.Key!,
+          VersionId: v.VersionId,
+        })),
+        ...(listRes.DeleteMarkers || []).map((d) => ({
+          Key: d.Key!,
+          VersionId: d.VersionId,
+        })),
+      ];
+
+      if (objects.length > 0) {
+        // eslint-disable-next-line no-await-in-loop
+        await client.send(
+          new DeleteObjectsCommand({
+            Bucket: bucketName,
+            Delete: { Objects: objects, Quiet: true },
+          }),
+        );
+      }
+
+      keyMarker = listRes.IsTruncated ? listRes.NextKeyMarker : undefined;
+      versionIdMarker = listRes.IsTruncated
+        ? listRes.NextVersionIdMarker
+        : undefined;
+    } while (keyMarker);
   }
 
   static async deleteObject(

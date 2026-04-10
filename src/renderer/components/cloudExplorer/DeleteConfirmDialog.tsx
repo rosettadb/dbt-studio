@@ -14,7 +14,10 @@ import WarningAmberIcon from '@mui/icons-material/WarningAmber';
 import { toast } from 'react-toastify';
 import { useDeleteObject } from '../../controllers/cloudExplorer.controller';
 import { cloudExplorerService } from '../../services';
-import type { CloudProvider, CloudStorageConfig } from '../../../types/frontend';
+import type {
+  CloudProvider,
+  CloudStorageConfig,
+} from '../../../types/frontend';
 
 interface DeleteConfirmDialogProps {
   open: boolean;
@@ -50,8 +53,7 @@ const DeleteConfirmDialog: React.FC<DeleteConfirmDialogProps> = ({
     },
     onError: (error: unknown) => {
       setDeleteProgress(null);
-      const message =
-        error instanceof Error ? error.message : 'Delete failed.';
+      const message = error instanceof Error ? error.message : 'Delete failed.';
       toast.error(message);
     },
   });
@@ -87,7 +89,8 @@ const DeleteConfirmDialog: React.FC<DeleteConfirmDialogProps> = ({
   };
 
   // Display name: show just the last segment for readability
-  const displayName = objectKey.replace(/\/$/, '').split('/').pop() || objectKey;
+  const displayName =
+    objectKey.replace(/\/$/, '').split('/').pop() || objectKey;
 
   return (
     <Dialog open={open} onClose={handleClose} maxWidth="sm" fullWidth>
@@ -97,8 +100,7 @@ const DeleteConfirmDialog: React.FC<DeleteConfirmDialogProps> = ({
       </DialogTitle>
       <DialogContent>
         <Typography gutterBottom>
-          Are you sure you want to delete{' '}
-          <strong>{displayName}</strong>
+          Are you sure you want to delete <strong>{displayName}</strong>
           {isPrefix ? ' and all its contents' : ''}?
         </Typography>
         <Typography variant="body2" color="error" sx={{ mt: 1 }}>

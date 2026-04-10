@@ -4,7 +4,10 @@ import UploadFileIcon from '@mui/icons-material/UploadFile';
 import { toast } from 'react-toastify';
 import { useUploadFile } from '../../controllers/cloudExplorer.controller';
 import { cloudExplorerService } from '../../services';
-import type { CloudProvider, CloudStorageConfig } from '../../../types/frontend';
+import type {
+  CloudProvider,
+  CloudStorageConfig,
+} from '../../../types/frontend';
 
 interface UploadFileButtonProps {
   provider: CloudProvider;
@@ -29,8 +32,7 @@ const UploadFileButton: React.FC<UploadFileButtonProps> = ({
     },
     onError: (error: unknown) => {
       setUploadProgress(null);
-      const message =
-        error instanceof Error ? error.message : 'Upload failed.';
+      const message = error instanceof Error ? error.message : 'Upload failed.';
       toast.error(message);
     },
   });
