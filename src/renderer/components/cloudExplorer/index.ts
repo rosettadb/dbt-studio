@@ -11,3 +11,8 @@ export * from './CloudExplorerBuckets';
 export * from './CloudExplorerBucketContent';
 export * from './DataPreviewModal';
 export * from './InlineDataPreview';
+export { default as UploadFileButton } from './UploadFileButton';
+export { default as CreateBucketDialog } from './CreateBucketDialog';
+export { default as DeleteConfirmDialog } from './DeleteConfirmDialog';
+export { default as CreateFolderDialog } from './CreateFolderDialog';
+export { default as RowActionsMenu } from './RowActionsMenu';

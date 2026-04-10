@@ -31,6 +31,8 @@ import {
   OpenInNew,
   Search,
   Clear,
+  CreateNewFolder,
+  Delete,
 } from '@mui/icons-material';
 import { useConnection, useListBuckets } from '../../controllers';
 import type {
@@ -41,6 +43,8 @@ import { cloudStorageImages } from '../../../../assets/connectionIcons';
 import useSecureStorage from '../../hooks/useSecureStorage';
 import { ViewToggle } from './ViewToggle';
 import bucketIcon from '../../../../assets/icons/bucket-blue.png';
+import CreateBucketDialog from './CreateBucketDialog';
+import DeleteBucketDialog from './DeleteBucketDialog';
 
 interface ExplorerBucketsProps {
   connectionId: string;
@@ -60,6 +64,10 @@ export const ExplorerBuckets: React.FC<ExplorerBucketsProps> = ({
   const [searchTerm, setSearchTerm] = useState('');
   const [sortBy, setSortBy] = useState<'name' | 'size' | 'created'>('name');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
+
+  // Dialog state
+  const [createBucketOpen, setCreateBucketOpen] = useState(false);
+  const [deleteBucket, setDeleteBucket] = useState<string | null>(null);
 
   // Load view preference from localStorage
   useEffect(() => {
@@ -85,6 +93,7 @@ export const ExplorerBuckets: React.FC<ExplorerBucketsProps> = ({
     getCloudR2Secret,
     getCloudB2Secret,
     getCloudRustfsSecret,
+    getCloudGarageSecret,
   } = useSecureStorage();
   const [secureConfig, setSecureConfig] = useState<any | null>(null);
   const [credentialsMissing, setCredentialsMissing] = useState(false);
@@ -98,6 +107,12 @@ export const ExplorerBuckets: React.FC<ExplorerBucketsProps> = ({
       }
       const config = { ...connection.config };
       let missing = false;
+
+      if (connection.provider === 'garage') {
+        if (!(config as { endpoint?: string }).endpoint) {
+          missing = true;
+        }
+      }
       try {
         if (connection.provider === 'aws') {
           const secret = await getCloudAwsSecret(connection.id);
@@ -153,6 +168,13 @@ export const ExplorerBuckets: React.FC<ExplorerBucketsProps> = ({
         } else if (connection.provider === 'rustfs') {
           const secret = await getCloudRustfsSecret(connection.id);
           if (secret === null) {
+            missing = true;
+          } else {
+            (config as { secretAccessKey?: string }).secretAccessKey = secret;
+          }
+        } else if (connection.provider === 'garage') {
+          const secret = await getCloudGarageSecret(connection.id);
+          if (secret === null || secret === '') {
             missing = true;
           } else {
             (config as { secretAccessKey?: string }).secretAccessKey = secret;
@@ -284,8 +306,9 @@ export const ExplorerBuckets: React.FC<ExplorerBucketsProps> = ({
                 Created
               </TableSortLabel>
             </TableCell>
+            <TableCell align="right">Actions</TableCell>
           </TableRow>
-        </TableHead>
+        </TableHead>{' '}
         <TableBody>
           {filteredAndSortedBuckets.map((bucket) => (
             <TableRow
@@ -329,6 +352,17 @@ export const ExplorerBuckets: React.FC<ExplorerBucketsProps> = ({
                     ? new Date(bucket.created).toLocaleDateString()
                     : '-'}
                 </Typography>
+              </TableCell>
+              <TableCell align="right" onClick={(e) => e.stopPropagation()}>
+                <Tooltip title="Delete bucket">
+                  <IconButton
+                    size="small"
+                    aria-label={`Delete bucket ${bucket.name}`}
+                    onClick={() => setDeleteBucket(bucket.name)}
+                  >
+                    <Delete fontSize="small" />
+                  </IconButton>
+                </Tooltip>
               </TableCell>
             </TableRow>
           ))}
@@ -452,6 +486,18 @@ export const ExplorerBuckets: React.FC<ExplorerBucketsProps> = ({
         </Box>
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
           <ViewToggle view={view} onViewChange={handleViewChange} />
+          <Tooltip title="Create bucket">
+            <span>
+              <IconButton
+                onClick={() => setCreateBucketOpen(true)}
+                disabled={!secureConfig}
+                size="small"
+                aria-label="Create bucket"
+              >
+                <CreateNewFolder />
+              </IconButton>
+            </span>
+          </Tooltip>
           <IconButton
             onClick={() => bucketsQuery.refetch()}
             disabled={bucketsQuery.isFetching}
@@ -608,6 +654,32 @@ export const ExplorerBuckets: React.FC<ExplorerBucketsProps> = ({
         !bucketsQuery.isError &&
         filteredAndSortedBuckets.length > 0 &&
         (view === 'list' ? renderListView() : renderCardView())}
+
+      {/* Create Bucket Dialog */}
+      {secureConfig && connection && (
+        <CreateBucketDialog
+          open={createBucketOpen}
+          onClose={() => setCreateBucketOpen(false)}
+          provider={connection.provider}
+          config={secureConfig as CloudStorageConfig}
+          onSuccess={() => bucketsQuery.refetch()}
+        />
+      )}
+
+      {/* Delete Bucket Dialog */}
+      {secureConfig && connection && deleteBucket && (
+        <DeleteBucketDialog
+          open={!!deleteBucket}
+          onClose={() => setDeleteBucket(null)}
+          provider={connection.provider}
+          config={secureConfig as CloudStorageConfig}
+          bucketName={deleteBucket}
+          onSuccess={() => {
+            setDeleteBucket(null);
+            bucketsQuery.refetch();
+          }}
+        />
+      )}
     </Box>
   );
 };
