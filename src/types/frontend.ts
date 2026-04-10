@@ -26,6 +26,8 @@ export type AppContextType = {
   registerSyncEditorContent?: (
     handler?: (path: string, content: string) => void,
   ) => void;
+  openFile?: (filePath: string) => void;
+  registerOpenFile?: (handler?: (filePath: string) => void) => void;
   authenticatedUser?: UserProfile | null;
   env: 'local' | 'cloud';
 };

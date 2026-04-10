@@ -140,8 +140,7 @@ export const TipTapCommitInput: React.FC<TipTapCommitInputProps> = ({
       setPendingAction('commit');
       commitFiles({
         path: projectPath,
-        message: message.trim() || 'Update files', // Default message if empty
-        files: ['.'],
+        message: message.trim() || 'Update files',
       });
     }
   };
