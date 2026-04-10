@@ -1930,7 +1930,7 @@ class CloudExplorerService {
         });
         emitProgress(stat.size, stat.size);
       } else {
-        // S3-compatible providers (minio, cloudflare-r2, backblaze-b2, rustfs)
+        // S3-compatible providers (minio, cloudflare-r2, backblaze-b2, garage, rustfs)
         let s3Client: S3Client;
         if (provider === 'minio') {
           s3Client = CloudExplorerService.createMinIOClient(
@@ -1943,6 +1943,10 @@ class CloudExplorerService {
         } else if (provider === 'backblaze-b2') {
           s3Client = CloudExplorerService.createB2Client(
             config as BackblazeB2Config,
+          );
+        } else if (provider === 'garage') {
+          s3Client = CloudExplorerService.createGarageClient(
+            config as GarageConfig,
           );
         } else {
           s3Client = CloudExplorerService.createRustfsClient(
@@ -2089,6 +2093,10 @@ class CloudExplorerService {
         } else if (provider === 'backblaze-b2') {
           s3Client = CloudExplorerService.createB2Client(
             config as BackblazeB2Config,
+          );
+        } else if (provider === 'garage') {
+          s3Client = CloudExplorerService.createGarageClient(
+            config as GarageConfig,
           );
         } else {
           s3Client = CloudExplorerService.createRustfsClient(
@@ -2359,6 +2367,10 @@ class CloudExplorerService {
             s3Client = CloudExplorerService.createB2Client(
               config as BackblazeB2Config,
             );
+          } else if (provider === 'garage') {
+            s3Client = CloudExplorerService.createGarageClient(
+              config as GarageConfig,
+            );
           } else {
             s3Client = CloudExplorerService.createRustfsClient(
               config as RustfsConfig,
@@ -2485,6 +2497,10 @@ class CloudExplorerService {
         s3Client = CloudExplorerService.createB2Client(
           config as BackblazeB2Config,
         );
+      } else if (provider === 'garage') {
+        s3Client = CloudExplorerService.createGarageClient(
+          config as GarageConfig,
+        );
       } else {
         s3Client = CloudExplorerService.createRustfsClient(
           config as RustfsConfig,
@@ -2585,6 +2601,10 @@ class CloudExplorerService {
         } else if (provider === 'backblaze-b2') {
           s3Client = CloudExplorerService.createB2Client(
             config as BackblazeB2Config,
+          );
+        } else if (provider === 'garage') {
+          s3Client = CloudExplorerService.createGarageClient(
+            config as GarageConfig,
           );
         } else {
           s3Client = CloudExplorerService.createRustfsClient(

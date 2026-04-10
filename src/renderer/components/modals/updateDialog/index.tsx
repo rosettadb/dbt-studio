@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
   Dialog,
   DialogTitle,
@@ -19,6 +19,7 @@ import {
   useRejectUpdateVersion,
 } from '../../../controllers';
 import { UpdateInfo } from '../../../../types/backend';
+import { sanitizeHtml } from '../../../utils/sanitizeHtml';
 
 export const UpdateDialog: React.FC = () => {
   const [updateInfo, setUpdateInfo] = useState<UpdateInfo | null>(null);
@@ -81,6 +82,11 @@ export const UpdateDialog: React.FC = () => {
       setUpdateInfo(null);
     }
   };
+
+  const sanitizedReleaseNotes = useMemo(
+    () => sanitizeHtml(updateInfo?.releaseNotes ?? ''),
+    [updateInfo?.releaseNotes],
+  );
 
   if (!updateInfo) return null;
 
@@ -145,7 +151,7 @@ export const UpdateDialog: React.FC = () => {
             <Typography
               variant="body2"
               component="div"
-              dangerouslySetInnerHTML={{ __html: updateInfo.releaseNotes }}
+              dangerouslySetInnerHTML={{ __html: sanitizedReleaseNotes }}
             />
           </Box>
         )}

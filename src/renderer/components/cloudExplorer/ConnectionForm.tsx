@@ -200,7 +200,7 @@ export const ConnectionForm: React.FC<ConnectionFormProps> = ({
         endpoint:
           (config as RustfsPersistedConfig).endpoint ||
           (config as BackblazeB2PersistedConfig).endpoint ||
-          (config as RustfsPersistedConfig).endpoint ||
+          (config as MinIOPersistedConfig).endpoint ||
           (config as GaragePersistedConfig).endpoint ||
           '',
         useSSL:

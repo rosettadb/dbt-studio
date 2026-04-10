@@ -39,6 +39,7 @@ export async function getReaderFunction(
   },
 ): Promise<string> {
   const extension = filePath.split('.').pop()?.toLowerCase();
+  const escapedFilePath = filePath.replace(/'/g, "''");
 
   switch (extension) {
     case 'csv': {
@@ -46,7 +47,7 @@ export async function getReaderFunction(
       const hasHeaders = await detectCsvHeaders(connection, filePath);
 
       const params: string[] = [
-        `'${filePath}'`,
+        `'${escapedFilePath}'`,
         `header=${hasHeaders}`,
         'null_padding=true',
       ];
@@ -67,17 +68,17 @@ export async function getReaderFunction(
     }
     case 'json':
     case 'jsonl':
-      return `read_json_auto('${filePath}')`;
+      return `read_json_auto('${escapedFilePath}')`;
     case 'avro':
-      return `read_avro('${filePath}')`;
+      return `read_avro('${escapedFilePath}')`;
     case 'parquet':
-      return `read_parquet('${filePath}')`;
+      return `read_parquet('${escapedFilePath}')`;
     case 'xlsx':
     case 'xls':
-      return `read_excel('${filePath}')`;
+      return `read_excel('${escapedFilePath}')`;
     default:
       // For other formats, try direct access first
-      return `'${filePath}'`;
+      return `'${escapedFilePath}'`;
   }
 }
 
