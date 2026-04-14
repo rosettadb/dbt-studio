@@ -40,3 +40,4 @@ docs/ai-context/*
 test-results/
 playwright-report/
 .erb/renderer/
+.devtools/

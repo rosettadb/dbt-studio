@@ -170,6 +170,7 @@
     "zod": "^3.25.76"
   },
   "devDependencies": {
+    "@ai-sdk/devtools": "^0.0.15",
     "@electron/rebuild": "^3.3.0",
     "@playwright/test": "^1.57.0",
     "@pmmmwh/react-refresh-webpack-plugin": "^0.5.11",

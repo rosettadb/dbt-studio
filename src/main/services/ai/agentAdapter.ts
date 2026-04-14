@@ -2,12 +2,29 @@
 // This file bridges SecureStorageService (existing credential store) with Vercel AI SDK v6.
 // Nothing else in the credential system changes.
 
+import { wrapLanguageModel } from 'ai';
 import { createOpenAI } from '@ai-sdk/openai';
 import { createAnthropic } from '@ai-sdk/anthropic';
 import { createGoogleGenerativeAI } from '@ai-sdk/google';
 import { createOllama } from 'ollama-ai-provider';
 import MainDatabaseService from '../mainDatabase.service';
 import SecureStorageService, { AIProviderType } from '../secureStorage.service';
+
+async function maybeWrapWithDevtools<TModel>(model: TModel): Promise<TModel> {
+  if (process.env.NODE_ENV === 'production') {
+    return model;
+  }
+
+  try {
+    const { devToolsMiddleware } = await import('@ai-sdk/devtools');
+    return wrapLanguageModel({
+      model: model as any,
+      middleware: devToolsMiddleware(),
+    }) as TModel;
+  } catch {
+    return model;
+  }
+}
 
 /**
  * Gets the default model for a provider by fetching from API.
@@ -205,7 +222,7 @@ export async function getVercelModel(requestedModel?: string) {
     const ollama = createOllama({
       baseURL: config.baseUrl || 'http://localhost:11434/api',
     });
-    return ollama(model);
+    return maybeWrapWithDevtools(ollama(model));
   }
 
   // Cloud providers: API key required
@@ -223,13 +240,13 @@ export async function getVercelModel(requestedModel?: string) {
 
   switch (activeProvider.type) {
     case 'openai':
-      return createOpenAI({ apiKey })(model);
+      return maybeWrapWithDevtools(createOpenAI({ apiKey })(model));
     case 'anthropic':
-      return createAnthropic({ apiKey })(model);
+      return maybeWrapWithDevtools(createAnthropic({ apiKey })(model));
     case 'gemini':
       // eslint-disable-next-line no-console
       console.log('[agentAdapter] Creating Gemini provider with model:', model);
-      return createGoogleGenerativeAI({ apiKey })(model);
+      return maybeWrapWithDevtools(createGoogleGenerativeAI({ apiKey })(model));
     default:
       throw new Error(`Unsupported provider type: ${activeProvider.type}`);
   }
