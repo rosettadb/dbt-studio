@@ -32,11 +32,9 @@ import {
   BusinessModal,
   AiPromptModal,
 } from '../../components';
-// import { ProjectSidebar } from '../../components/sidebar/project-sidebar';
 import { ProjectSidebar } from '../../components/sidebar/project-sidebar';
 import { TabManager } from '../../components/editor/tabManager';
 import {
-  useApiKey,
   useGetConnectionById,
   useGetConnections,
   useGetFileContentList,
@@ -118,9 +116,9 @@ const ProjectDetails: React.FC = () => {
     openChatWithMessage,
     registerSyncEditorContent,
     registerOpenFile,
+    env,
   } = useAppContext();
 
-  const { data: apiKey } = useApiKey();
   const { data: project, isLoading, refetch } = useGetSelectedProject();
   const { data: connection } = useGetConnectionById(project?.connectionId);
   const { data: settings } = useGetSettings();
@@ -896,7 +894,7 @@ const ProjectDetails: React.FC = () => {
                         isRunningDbt={isRunningDbt}
                         isRunningRosettaDbt={isRunningRosettaDbt}
                         connection={connection}
-                        environment={settings?.env}
+                        environment={env}
                         rosettaDbt={rosettaDbt}
                         handleBusinessLayerClick={handleBusinessLayerClick}
                       />
@@ -1021,7 +1019,7 @@ const ProjectDetails: React.FC = () => {
                                 fileContent={fileContent}
                                 isRunningDbt={isRunningDbt}
                                 isRunningRosettaDbt={isRunningRosettaDbt}
-                                environment={apiKey ? settings?.env : 'local'}
+                                environment={env}
                               />
                             )}
                         </>

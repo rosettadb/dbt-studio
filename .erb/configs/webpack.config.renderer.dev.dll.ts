@@ -14,13 +14,6 @@ checkNodeEnv('development');
 
 const dist = webpackPaths.dllPath;
 
-// Packages that are main-process-only and should never be bundled
-// in the renderer DLL (they live in release/app/node_modules, not root)
-const mainProcessOnlyDeps = [
-  '@modelcontextprotocol/sdk',
-  '@ai-sdk/mcp',
-];
-
 const configuration: webpack.Configuration = {
   context: webpackPaths.rootPath,
 
@@ -30,11 +23,7 @@ const configuration: webpack.Configuration = {
 
   target: 'electron-renderer',
 
-  externals: [
-    'fsevents',
-    'crypto-browserify',
-    ...mainProcessOnlyDeps,
-  ],
+  externals: ['fsevents', 'crypto-browserify', '@modelcontextprotocol/sdk'],
 
   /**
    * Use `module` from `webpack.config.renderer.dev.js`
@@ -42,9 +31,7 @@ const configuration: webpack.Configuration = {
   module: require('./webpack.config.renderer.dev').default.module,
 
   entry: {
-    renderer: Object.keys(dependencies || {}).filter(
-      (dep) => !mainProcessOnlyDeps.includes(dep),
-    ),
+    renderer: Object.keys(dependencies || {}),
   },
 
   output: {

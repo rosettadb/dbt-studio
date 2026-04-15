@@ -127,9 +127,6 @@ export const Sidebar: React.FC<Props> = ({ content }) => {
                         title={element.text}
                         placement="right"
                         arrow
-                        sx={{
-                          background: 'red',
-                        }}
                       >
                         <StyledNavLink
                           to={element.path}
@@ -137,7 +134,6 @@ export const Sidebar: React.FC<Props> = ({ content }) => {
                           style={{
                             cursor: 'pointer',
                             pointerEvents: isDisabled ? 'none' : 'auto',
-                            background: 'blue',
                           }}
                         >
                           {listItem}
