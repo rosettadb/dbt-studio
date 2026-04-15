@@ -4,6 +4,9 @@ import path from 'path';
 import { IpcMainInvokeEvent, app, BrowserWindow } from 'electron';
 import { createDbtAgent } from './ai/dbtAgent';
 import { buildMCPToolset } from './ai/mcp/mcpToolAdapter';
+import { discoverSkills } from './ai/skills/skillsDiscovery';
+import { buildSkillsPrompt } from './ai/skills/skillsPrompt';
+import { createLoadSkillTool } from './ai/skills/loadSkillTool';
 import { dbtTools } from './ai/tools/dbt.tools';
 import { filesystemTools } from './ai/tools/filesystem.tools';
 import MainDatabaseService from './mainDatabase.service';
@@ -159,6 +162,10 @@ class AgentService {
       // 4b. Get MCP tools (only connected servers)
       const mcpTools = await buildMCPToolset(['rosetta', 'dbt', 'duckdb']);
 
+      // 4c. Discover skills and create loadSkill tool
+      const skills = await discoverSkills();
+      const loadSkillTool = createLoadSkillTool(skills);
+
       // 5. Respect autoContinue
       const maxSteps = aiSettings.configuration.autoContinue ? 20 : 1;
 
@@ -170,7 +177,8 @@ class AgentService {
         requestedModel,
         projectPath,
         enabledTools,
-        extraTools: mcpTools,
+        extraTools: { ...mcpTools, loadSkill: loadSkillTool },
+        skills: buildSkillsPrompt(skills),
         maxSteps,
         mainWindow,
       });

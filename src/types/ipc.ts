@@ -386,6 +386,13 @@ export type MCPChannels =
   | 'mcp:server:toggle'
   | 'mcp:config:file-path';
 
+export type SkillsChannels =
+  | 'skills:list'
+  | 'skills:get-directory'
+  | 'skills:delete'
+  | 'skills:create'
+  | 'skills:import';
+
 export type Channels =
   | TestChannels
   | CliChannels
@@ -405,7 +412,8 @@ export type Channels =
   | LineageChannels
   | NotebookChannels
   | AgentChannels
-  | MCPChannels;
+  | MCPChannels
+  | SkillsChannels;
 
 export type ConfigureConnectionBody = {
   projectId?: string;
