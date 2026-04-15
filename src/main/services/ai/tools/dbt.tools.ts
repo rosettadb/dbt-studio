@@ -3,7 +3,8 @@
 
 import { tool } from 'ai';
 import { z } from 'zod';
-import { execSync } from 'child_process';
+import { execSync, spawn } from 'child_process';
+import type { BrowserWindow } from 'electron';
 import * as fs from 'fs';
 import * as path from 'path';
 import SettingsService from '../../settings.service';
@@ -350,6 +351,7 @@ export const dbtTools = {
 export function createDbtTools(
   projectPath: string,
   onFileWritten?: (filePath: string) => void,
+  mainWindow?: BrowserWindow,
 ) {
   return {
     readDbtModel: tool({
@@ -454,13 +456,69 @@ export function createDbtTools(
           let fullCmd = `"${dbtExe}" ${command}`;
           if (select) fullCmd += ` --select ${select}`;
           if (extraArgs) fullCmd += ` ${extraArgs}`;
-          const output = execSync(fullCmd, {
-            cwd: projectPath,
-            encoding: 'utf-8',
-            timeout: COMMAND_TIMEOUT,
-            maxBuffer: 1024 * 1024 * 10,
+
+          return new Promise((resolve) => {
+            if (mainWindow && !mainWindow.isDestroyed()) {
+              mainWindow.webContents.send('cli:clear');
+              mainWindow.webContents.send('cli:output', `> ${fullCmd}\n`);
+            }
+
+            const child = spawn(fullCmd, {
+              cwd: projectPath,
+              shell: true,
+            });
+
+            let fullOutput = '';
+
+            const handleData = (data: Buffer) => {
+              const text = data.toString();
+              fullOutput += text;
+              if (mainWindow && !mainWindow.isDestroyed()) {
+                mainWindow.webContents.send('cli:output', text);
+              }
+            };
+
+            child.stdout.on('data', handleData);
+            child.stderr.on('data', handleData);
+
+            child.on('error', (err) => {
+              if (mainWindow && !mainWindow.isDestroyed()) {
+                mainWindow.webContents.send('cli:error', err.message);
+                mainWindow.webContents.send('cli:done');
+              }
+              resolve({
+                success: false,
+                command: fullCmd,
+                error: err.message,
+                stdout: '',
+                stderr: err.message,
+              });
+            });
+
+            child.on('close', (code) => {
+              if (mainWindow && !mainWindow.isDestroyed()) {
+                mainWindow.webContents.send(
+                  'cli:done',
+                  `Process exited with code ${code}`,
+                );
+              }
+              if (code === 0) {
+                resolve({
+                  success: true,
+                  command: fullCmd,
+                  output: fullOutput,
+                });
+              } else {
+                resolve({
+                  success: false,
+                  command: fullCmd,
+                  error: `Command failed with code ${code}`,
+                  stdout: fullOutput,
+                  stderr: '',
+                });
+              }
+            });
           });
-          return { success: true, command: fullCmd, output };
         } catch (error: any) {
           return {
             success: false,

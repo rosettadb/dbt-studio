@@ -3,6 +3,7 @@
 // Factory function that creates a configured ToolLoopAgent for dbt operations
 
 import { ToolLoopAgent, stepCountIs } from 'ai';
+import type { BrowserWindow } from 'electron';
 import { getVercelModel } from './agentAdapter';
 import { dbtTools, createDbtTools } from './tools/dbt.tools';
 import {
@@ -21,6 +22,7 @@ export interface DbtAgentOptions {
   maxSteps?: number;
   projectPath?: string;
   onFileWritten?: (filePath: string) => void;
+  mainWindow?: BrowserWindow;
 }
 
 /**
@@ -41,6 +43,12 @@ export async function createDbtAgent(options?: DbtAgentOptions) {
     modelId: model.modelId,
     provider: model.provider,
   });
+
+  const mcpToolKeys = Object.keys(options?.extraTools || {});
+  const mcpToolsList =
+    mcpToolKeys.length > 0
+      ? `\n### MCP Server Tools\nThe following external tools are currently available:\n${mcpToolKeys.map((k) => `- ${k}`).join('\n')}`
+      : '';
 
   const systemInstructions = `You are an expert dbt Studio AI assistant.
 You help users with dbt model development, debugging, documentation, and data operations.
@@ -72,13 +80,18 @@ ${options?.skills ?? ''}
 - readFile: Read any text file
 - writeFile: Write any text file
 - pathExists: Check if a file or directory exists
+${mcpToolsList}
 
 Always confirm before making destructive changes.`;
 
   // Use bound tools (projectPath pre-injected) when available — agent never needs to pass it
   const allBaseTools = options?.projectPath
     ? {
-        ...createDbtTools(options.projectPath),
+        ...createDbtTools(
+          options.projectPath,
+          options.onFileWritten,
+          options.mainWindow,
+        ),
         ...createFilesystemTools(options.projectPath),
       }
     : { ...dbtTools, ...filesystemTools };

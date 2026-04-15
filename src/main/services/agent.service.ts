@@ -1,7 +1,7 @@
 /* eslint-disable no-console */
 import fs from 'fs-extra';
 import path from 'path';
-import { IpcMainInvokeEvent, app } from 'electron';
+import { IpcMainInvokeEvent, app, BrowserWindow } from 'electron';
 import { createDbtAgent } from './ai/dbtAgent';
 import { buildMCPToolset } from './ai/mcp/mcpToolAdapter';
 import { dbtTools } from './ai/tools/dbt.tools';
@@ -164,11 +164,15 @@ class AgentService {
 
       // 6. Create agent
       console.log('[AgentService.runAgent] Creating dbt agent...');
+      const mainWindow =
+        BrowserWindow.fromWebContents(event.sender) || undefined;
       const agent = await createDbtAgent({
         requestedModel,
         projectPath,
-        enabledTools: { ...enabledTools, ...mcpTools },
+        enabledTools,
+        extraTools: mcpTools,
         maxSteps,
+        mainWindow,
       });
       console.log('[AgentService.runAgent] Agent created successfully');
       // 4. Stream — agent.stream() is the v6 API
