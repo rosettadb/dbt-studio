@@ -33,6 +33,7 @@ type EditorProps = {
   onCancelClose: () => void;
   onGitStatusRefresh?: () => void;
   onOpenFile?: (filePath: string) => void;
+  extraActions?: React.ReactNode;
 };
 
 export const Editor: React.FC<EditorProps> = ({
@@ -49,6 +50,7 @@ export const Editor: React.FC<EditorProps> = ({
   onCancelClose,
   onGitStatusRefresh,
   onOpenFile,
+  extraActions,
 }) => {
   loader.config({
     paths: {
@@ -203,6 +205,7 @@ export const Editor: React.FC<EditorProps> = ({
         showDiffView={showDiffView}
         onSave={handleSave}
         onToggleDiff={() => setShowDiffView((prev) => !prev)}
+        extraActions={extraActions}
       />
 
       <EditorViewport>

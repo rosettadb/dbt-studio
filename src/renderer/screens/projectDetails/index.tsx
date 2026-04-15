@@ -877,27 +877,6 @@ const ProjectDetails: React.FC = () => {
                       />
                     </Box>
                     <ButtonsContainer>
-                      {menuItems.length > 0 && (
-                        <SplitButton
-                          title="AI"
-                          isLoading={isLoadingQuery}
-                          leftIcon={<AutoAwesome />}
-                          menuItems={menuItems}
-                        />
-                      )}
-                      {selectedFilePath?.endsWith('.sql') &&
-                        selectedFilePath?.includes('models') &&
-                        project && (
-                          <ModelSplitButton
-                            modelPath={selectedFilePath}
-                            project={project}
-                            isDbtConfigured={!!settings?.dbtPath}
-                            fileContent={fileContent}
-                            isRunningDbt={isRunningDbt}
-                            isRunningRosettaDbt={isRunningRosettaDbt}
-                            environment={apiKey ? settings?.env : 'local'}
-                          />
-                        )}
                       <ProjectDbtSplitButton
                         rosettaPath={settings?.rosettaPath}
                         dbtPath={settings?.dbtPath}
@@ -1011,6 +990,31 @@ const ProjectDetails: React.FC = () => {
                         setSelectedFilePath(filePath);
                         openTab(filePath);
                       }}
+                      extraActions={
+                        <>
+                          {menuItems.length > 0 && (
+                            <SplitButton
+                              title="AI"
+                              isLoading={isLoadingQuery}
+                              leftIcon={<AutoAwesome />}
+                              menuItems={menuItems}
+                            />
+                          )}
+                          {selectedFilePath?.endsWith('.sql') &&
+                            selectedFilePath?.includes('models') &&
+                            project && (
+                              <ModelSplitButton
+                                modelPath={selectedFilePath}
+                                project={project}
+                                isDbtConfigured={!!settings?.dbtPath}
+                                fileContent={fileContent}
+                                isRunningDbt={isRunningDbt}
+                                isRunningRosettaDbt={isRunningRosettaDbt}
+                                environment={apiKey ? settings?.env : 'local'}
+                              />
+                            )}
+                        </>
+                      }
                     />
                   )}
                 </EditorContainer>
