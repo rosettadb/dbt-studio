@@ -1,9 +1,22 @@
+import fs from 'fs';
 import { Storage } from '@google-cloud/storage';
 import {
   S3Client,
   ListBucketsCommand,
   ListObjectsV2Command,
+  ListObjectsCommand,
   GetObjectCommand,
+  PutObjectCommand,
+  CreateMultipartUploadCommand,
+  UploadPartCommand,
+  CompleteMultipartUploadCommand,
+  AbortMultipartUploadCommand,
+  DeleteObjectCommand,
+  DeleteObjectsCommand,
+  CreateBucketCommand,
+  DeleteBucketCommand,
+  ListObjectVersionsCommand,
+  HeadBucketCommand,
 } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import {
@@ -13,6 +26,7 @@ import {
   BlobSASPermissions,
   SASProtocol,
 } from '@azure/storage-blob';
+import type { WebContents } from 'electron';
 import {
   Bucket,
   StorageObject,
@@ -24,9 +38,27 @@ import {
   CloudflareR2Config,
   BackblazeB2Config,
   RustfsConfig,
+  GarageConfig,
   CloudStorageConfig,
   CloudProvider,
 } from '../../types/frontend';
+import {
+  UploadFileRequest,
+  UploadFileResponse,
+  UploadFolderRequest,
+  UploadFolderResponse,
+  CreateBucketRequest,
+  CreateBucketResponse,
+  DeleteObjectRequest,
+  DeleteObjectResponse,
+  CreateFolderRequest,
+  CreateFolderResponse,
+  DeleteBucketRequest,
+  DeleteBucketResponse,
+  UPLOAD_SIZE_LIMIT_BYTES,
+  MULTIPART_THRESHOLD_BYTES,
+  S3_BATCH_DELETE_LIMIT,
+} from '../../types/ipc';
 
 // Cloud storage service class
 class CloudExplorerService {
@@ -1107,6 +1139,10 @@ class CloudExplorerService {
         secretAccessKey: config.secretAccessKey,
       },
       forcePathStyle: true, // Required for rustfs (S3-compatible with path-style URLs)
+      // AWS SDK v3.600+ adds CRC32 checksums by default; RustFS rejects them as InvalidArgument.
+      // Only send checksums when the operation explicitly requires it.
+      requestChecksumCalculation: 'WHEN_REQUIRED',
+      responseChecksumValidation: 'WHEN_REQUIRED',
     });
   }
 
@@ -1261,6 +1297,200 @@ class CloudExplorerService {
     }
   }
 
+  // Garage Methods (S3-compatible)
+  private static createGarageClient(config: GarageConfig): S3Client {
+    // Validate credentials are provided
+    if (!config.accessKeyId || !config.secretAccessKey) {
+      throw new Error(
+        'Garage credentials are required (Access Key ID and Secret Access Key)',
+      );
+    }
+
+    if (!config.endpoint) {
+      throw new Error('Garage endpoint is required');
+    }
+
+    // Strip protocol and trailing slashes from endpoint
+    const cleanEndpoint = config.endpoint
+      .replace(/^https?:\/\//, '') // Remove http:// or https://
+      .replace(/\/$/, ''); // Remove trailing slash
+
+    const protocol = config.useSSL ? 'https' : 'http';
+    const endpoint = `${protocol}://${cleanEndpoint}`;
+
+    // Default to path-style for broader compatibility with Garage deployments
+    const forcePathStyle = config.urlStyle !== 'virtual-host';
+
+    return new S3Client({
+      endpoint,
+      region: config.region || 'us-east-1',
+      credentials: {
+        accessKeyId: config.accessKeyId,
+        secretAccessKey: config.secretAccessKey,
+      },
+      forcePathStyle,
+    });
+  }
+
+  static async listGarageBuckets(config: GarageConfig): Promise<Bucket[]> {
+    const client = CloudExplorerService.createGarageClient(config);
+    try {
+      const data = await client.send(new ListBucketsCommand({}));
+      return (data.Buckets || []).map((bucket) => ({
+        name: bucket.Name!,
+        created: bucket.CreationDate!,
+        location: config.region || 'us-east-1',
+      }));
+    } catch (error) {
+      throw new Error(`Error listing Garage buckets: ${error}`);
+    }
+  }
+
+  static async listGarageObjects(
+    config: GarageConfig,
+    bucketName: string,
+    continuationToken?: string,
+    prefix = '',
+  ): Promise<CloudListResult> {
+    const client = CloudExplorerService.createGarageClient(config);
+    try {
+      const result = await client.send(
+        new ListObjectsV2Command({
+          Bucket: bucketName,
+          Prefix: prefix || undefined,
+          Delimiter: '/',
+          ContinuationToken: continuationToken,
+          MaxKeys: 100,
+        }),
+      );
+
+      const folders = (result.CommonPrefixes || []).map((folderPrefix) => ({
+        name: folderPrefix.Prefix!,
+        size: 0,
+        updated: new Date(),
+        isDirectory: true,
+      }));
+
+      const files = (result.Contents || [])
+        .filter((obj) => obj.Key !== prefix)
+        .map((obj) => ({
+          name: obj.Key!,
+          size: obj.Size || 0,
+          updated: obj.LastModified || new Date(),
+          contentType: undefined,
+          isDirectory: false,
+        }));
+
+      return {
+        objects: [...folders, ...files],
+        nextPageToken: result.IsTruncated
+          ? result.NextContinuationToken
+          : undefined,
+      };
+    } catch (error) {
+      throw new Error(`Error listing Garage objects: ${error}`);
+    }
+  }
+
+  static async getGarageDownloadUrl(
+    config: GarageConfig,
+    bucketName: string,
+    objectKey: string,
+  ): Promise<string> {
+    const client = CloudExplorerService.createGarageClient(config);
+    try {
+      const command = new GetObjectCommand({
+        Bucket: bucketName,
+        Key: objectKey,
+      });
+      return await getSignedUrl(client, command, { expiresIn: 3600 });
+    } catch (error) {
+      throw new Error(`Error generating Garage signed URL: ${error}`);
+    }
+  }
+
+  static async testGarageConnection(config: GarageConfig): Promise<boolean> {
+    const client = CloudExplorerService.createGarageClient(config);
+    try {
+      const data = await client.send(new ListBucketsCommand({}));
+      const firstBucket = data.Buckets?.[0]?.Name;
+
+      // Validate addressing mode (path vs virtual-host) with a bucket-scoped op
+      if (firstBucket) {
+        await client.send(new HeadBucketCommand({ Bucket: firstBucket }));
+      }
+
+      return true;
+    } catch (error) {
+      // eslint-disable-next-line no-console
+      console.error('Garage Connection test failed:', error);
+
+      const errorMessage = (error as Error).message;
+      const errorName = (error as any).name;
+
+      if (
+        errorName === 'InvalidAccessKeyId' ||
+        errorMessage.includes('InvalidAccessKeyId')
+      ) {
+        throw new Error(
+          'Invalid Garage Access Key ID. Please check your credentials.',
+        );
+      } else if (
+        errorName === 'SignatureDoesNotMatch' ||
+        errorMessage.includes('SignatureDoesNotMatch')
+      ) {
+        throw new Error(
+          'Invalid Garage Secret Access Key. Please verify your credentials.',
+        );
+      } else if (
+        errorMessage.includes('ENOTFOUND') ||
+        errorMessage.includes('getaddrinfo')
+      ) {
+        throw new Error(
+          'Cannot resolve Garage endpoint. Check your endpoint address.',
+        );
+      } else if (errorMessage.includes('ECONNREFUSED')) {
+        throw new Error(
+          'Cannot connect to Garage server. Ensure the server is running at the specified endpoint.',
+        );
+      } else if (errorMessage.includes('ETIMEDOUT')) {
+        throw new Error(
+          'Connection to Garage server timed out. Check your endpoint and network.',
+        );
+      } else if (
+        errorMessage.includes('PermanentRedirect') ||
+        errorName === 'PermanentRedirect'
+      ) {
+        throw new Error(
+          'Bucket region mismatch. Check your region configuration.',
+        );
+      } else if (
+        errorMessage.includes('AccessDenied') ||
+        errorName === 'AccessDenied'
+      ) {
+        throw new Error(
+          'Garage credentials are valid but lack permissions to list buckets.',
+        );
+      } else if (
+        errorMessage.includes('certificate') ||
+        errorMessage.includes('SSL')
+      ) {
+        throw new Error(
+          'SSL/TLS certificate error. Try disabling SSL or check your certificate configuration.',
+        );
+      } else if (
+        errorMessage.includes('NetworkError') ||
+        errorMessage.includes('network')
+      ) {
+        throw new Error(
+          'Network error connecting to Garage. Check endpoint URL format (http:// or https://).',
+        );
+      }
+
+      throw new Error(`Garage connection failed: ${errorMessage}`);
+    }
+  }
+
   // Generic methods for different cloud providers
   static async listBuckets(
     provider: CloudProvider,
@@ -1281,6 +1511,8 @@ class CloudExplorerService {
         return CloudExplorerService.listB2Buckets(config as BackblazeB2Config);
       case 'rustfs':
         return CloudExplorerService.listRustfsBuckets(config as RustfsConfig);
+      case 'garage':
+        return CloudExplorerService.listGarageBuckets(config as GarageConfig);
       default:
         throw new Error(`Unsupported provider: ${provider}`);
     }
@@ -1343,6 +1575,13 @@ class CloudExplorerService {
           continuationToken,
           prefix,
         );
+      case 'garage':
+        return CloudExplorerService.listGarageObjects(
+          config as GarageConfig,
+          bucketName,
+          continuationToken,
+          prefix,
+        );
       default:
         throw new Error(`Unsupported provider: ${provider}`);
     }
@@ -1397,6 +1636,12 @@ class CloudExplorerService {
           bucketName,
           objectName,
         );
+      case 'garage':
+        return CloudExplorerService.getGarageDownloadUrl(
+          config as GarageConfig,
+          bucketName,
+          objectName,
+        );
       default:
         throw new Error(`Unsupported provider: ${provider}`);
     }
@@ -1427,8 +1672,961 @@ class CloudExplorerService {
         return CloudExplorerService.testRustfsConnection(
           config as RustfsConfig,
         );
+      case 'garage':
+        return CloudExplorerService.testGarageConnection(
+          config as GarageConfig,
+        );
       default:
         throw new Error(`Unsupported provider: ${provider}`);
+    }
+  }
+
+  static validateBucketName(
+    provider: CloudProvider,
+    name: string,
+  ): { valid: boolean; error?: string } {
+    try {
+      if (!name || name.length === 0) {
+        return { valid: false, error: 'Bucket name must not be empty.' };
+      }
+
+      const ipAddressPattern = /^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$/;
+
+      if (provider === 'aws') {
+        if (name.length < 3 || name.length > 63) {
+          return {
+            valid: false,
+            error: 'Bucket name must be between 3 and 63 characters.',
+          };
+        }
+        if (!/^[a-z0-9][a-z0-9-]*[a-z0-9]$/.test(name)) {
+          return {
+            valid: false,
+            error:
+              'Bucket name may only contain lowercase letters, numbers, and hyphens, and must start and end with a letter or number.',
+          };
+        }
+        if (/--/.test(name)) {
+          return {
+            valid: false,
+            error: 'Bucket name must not contain consecutive hyphens.',
+          };
+        }
+        if (ipAddressPattern.test(name)) {
+          return {
+            valid: false,
+            error: 'Bucket name must not be formatted as an IP address.',
+          };
+        }
+        return { valid: true };
+      }
+
+      if (provider === 'azure') {
+        if (name.length < 3 || name.length > 63) {
+          return {
+            valid: false,
+            error: 'Container name must be between 3 and 63 characters.',
+          };
+        }
+        if (!/^[a-z0-9][a-z0-9-]*$/.test(name)) {
+          return {
+            valid: false,
+            error:
+              'Container name may only contain lowercase letters, numbers, and hyphens, and must start with a letter or number.',
+          };
+        }
+        return { valid: true };
+      }
+
+      if (provider === 'gcs') {
+        if (name.length < 3 || name.length > 63) {
+          return {
+            valid: false,
+            error: 'Bucket name must be between 3 and 63 characters.',
+          };
+        }
+        if (!/^[a-z0-9][a-z0-9\-_.]*[a-z0-9]$/.test(name)) {
+          return {
+            valid: false,
+            error:
+              'Bucket name may only contain lowercase letters, numbers, hyphens, underscores, and dots, and must start and end with a letter or number.',
+          };
+        }
+        if (name.startsWith('.') || name.endsWith('.')) {
+          return {
+            valid: false,
+            error: 'Bucket name must not start or end with a dot.',
+          };
+        }
+        if (name.includes('..')) {
+          return {
+            valid: false,
+            error: 'Bucket name must not contain consecutive dots.',
+          };
+        }
+        if (ipAddressPattern.test(name)) {
+          return {
+            valid: false,
+            error: 'Bucket name must not be formatted as an IP address.',
+          };
+        }
+        return { valid: true };
+      }
+
+      // For other providers (minio, cloudflare-r2, backblaze-b2, rustfs),
+      // apply basic S3-compatible rules
+      if (name.length < 3 || name.length > 63) {
+        return {
+          valid: false,
+          error: 'Bucket name must be between 3 and 63 characters.',
+        };
+      }
+      if (!/^[a-z0-9][a-z0-9-]*[a-z0-9]$/.test(name)) {
+        return {
+          valid: false,
+          error:
+            'Bucket name may only contain lowercase letters, numbers, and hyphens, and must start and end with a letter or number.',
+        };
+      }
+      return { valid: true };
+    } catch {
+      return { valid: false, error: 'Bucket name validation failed.' };
+    }
+  }
+
+  static sanitizeInput(input: string): string {
+    let result = input;
+    // Remove null bytes
+    result = result.replace(/\0/g, '');
+    // Remove path traversal sequences (both forward and back slash variants)
+    // Repeat until no more sequences remain (handles nested patterns like ..../)
+    let prev = '';
+    while (prev !== result) {
+      prev = result;
+      result = result.replace(/\.\.\//g, '').replace(/\.\.\\/g, '');
+    }
+    // Remove leading slashes
+    result = result.replace(/^\/+/, '');
+    return result;
+  }
+
+  // ─── Write Operations ────────────────────────────────────────────────────────
+
+  static async uploadFile(
+    params: UploadFileRequest,
+    webContents: WebContents,
+  ): Promise<UploadFileResponse> {
+    const { provider, config, bucketName, prefix, localFilePath, fileName } =
+      params;
+
+    // Don't sanitize localFilePath — it's an absolute OS path from the native file dialog
+    const safePath = localFilePath;
+    const safeBucket = CloudExplorerService.sanitizeInput(bucketName);
+    const safePrefix = CloudExplorerService.sanitizeInput(prefix);
+    const objectKey = safePrefix + fileName;
+
+    try {
+      const stat = await fs.promises.stat(safePath);
+      if (stat.size >= UPLOAD_SIZE_LIMIT_BYTES) {
+        throw new Error('File exceeds the 5 GB upload limit.');
+      }
+
+      const emitProgress = (loaded: number, total: number) => {
+        const percentage = total > 0 ? Math.round((loaded / total) * 100) : 0;
+        webContents.send('cloudExplorer:uploadProgress', {
+          loaded,
+          total,
+          percentage,
+        });
+      };
+
+      if (provider === 'aws') {
+        const s3Config = config as S3Config;
+        const client = CloudExplorerService.createS3Client(s3Config);
+        const fileBuffer = await fs.promises.readFile(safePath);
+        const fileSize = stat.size;
+
+        if (fileSize > MULTIPART_THRESHOLD_BYTES) {
+          // Multipart upload
+          const createRes = await client.send(
+            new CreateMultipartUploadCommand({
+              Bucket: safeBucket,
+              Key: objectKey,
+            }),
+          );
+          const uploadId = createRes.UploadId!;
+          const partSize = MULTIPART_THRESHOLD_BYTES; // 100 MB parts
+          const parts: { ETag: string; PartNumber: number }[] = [];
+          let uploadedBytes = 0;
+
+          try {
+            let partNumber = 1;
+            for (let offset = 0; offset < fileSize; offset += partSize) {
+              const chunk = fileBuffer.slice(offset, offset + partSize);
+              // eslint-disable-next-line no-await-in-loop
+              const partRes = await client.send(
+                new UploadPartCommand({
+                  Bucket: safeBucket,
+                  Key: objectKey,
+                  UploadId: uploadId,
+                  PartNumber: partNumber,
+                  Body: chunk,
+                }),
+              );
+              parts.push({ ETag: partRes.ETag!, PartNumber: partNumber });
+              uploadedBytes += chunk.length;
+              emitProgress(uploadedBytes, fileSize);
+              partNumber += 1;
+            }
+
+            await client.send(
+              new CompleteMultipartUploadCommand({
+                Bucket: safeBucket,
+                Key: objectKey,
+                UploadId: uploadId,
+                MultipartUpload: { Parts: parts },
+              }),
+            );
+          } catch (partError) {
+            await client
+              .send(
+                new AbortMultipartUploadCommand({
+                  Bucket: safeBucket,
+                  Key: objectKey,
+                  UploadId: uploadId,
+                }),
+              )
+              .catch(() => {});
+            throw partError;
+          }
+        } else {
+          // Single-part upload
+          await client.send(
+            new PutObjectCommand({
+              Bucket: safeBucket,
+              Key: objectKey,
+              Body: fileBuffer,
+              ContentLength: stat.size,
+            }),
+          );
+          emitProgress(stat.size, stat.size);
+        }
+      } else if (provider === 'azure') {
+        const azureConfig = config as AzureConfig;
+        const serviceClient =
+          CloudExplorerService.createBlobServiceClient(azureConfig);
+        const containerClient = serviceClient.getContainerClient(safeBucket);
+        const blockBlobClient = containerClient.getBlockBlobClient(objectKey);
+        await blockBlobClient.uploadFile(safePath, {
+          onProgress: (ev) => emitProgress(ev.loadedBytes, stat.size),
+        });
+      } else if (provider === 'gcs') {
+        const gcsConfig = config as GCSConfig;
+        const storage = CloudExplorerService.getStorageClient(gcsConfig);
+        const bucket = storage.bucket(safeBucket);
+        await bucket.upload(safePath, {
+          destination: objectKey,
+          resumable: stat.size > MULTIPART_THRESHOLD_BYTES,
+        });
+        emitProgress(stat.size, stat.size);
+      } else {
+        // S3-compatible providers (minio, cloudflare-r2, backblaze-b2, garage, rustfs)
+        let s3Client: S3Client;
+        if (provider === 'minio') {
+          s3Client = CloudExplorerService.createMinIOClient(
+            config as MinIOConfig,
+          );
+        } else if (provider === 'cloudflare-r2') {
+          s3Client = CloudExplorerService.createR2Client(
+            config as CloudflareR2Config,
+          );
+        } else if (provider === 'backblaze-b2') {
+          s3Client = CloudExplorerService.createB2Client(
+            config as BackblazeB2Config,
+          );
+        } else if (provider === 'garage') {
+          s3Client = CloudExplorerService.createGarageClient(
+            config as GarageConfig,
+          );
+        } else {
+          s3Client = CloudExplorerService.createRustfsClient(
+            config as RustfsConfig,
+          );
+        }
+        const fileBuffer = await fs.promises.readFile(safePath);
+        await s3Client.send(
+          new PutObjectCommand({
+            Bucket: safeBucket,
+            Key: objectKey,
+            Body: fileBuffer,
+            ContentLength: stat.size,
+          }),
+        );
+        emitProgress(stat.size, stat.size);
+      }
+
+      return { success: true, objectKey };
+    } catch (error) {
+      // eslint-disable-next-line no-console
+      console.error('CloudExplorerService.uploadFile error:', error);
+      throw error;
+    }
+  }
+
+  static async uploadFolder(
+    params: UploadFolderRequest,
+    webContents: WebContents,
+  ): Promise<UploadFolderResponse> {
+    const { provider, config, bucketName, prefix, localFolderPath } = params;
+    const safeBucket = CloudExplorerService.sanitizeInput(bucketName);
+    const safePrefix = CloudExplorerService.sanitizeInput(prefix);
+    // Strip trailing slashes so split/pop reliably returns the folder name
+    const normalizedFolderPath = localFolderPath.replace(/[\\/]+$/, '');
+
+    // Recursively collect all files under the folder
+    const collectFiles = async (dir: string): Promise<string[]> => {
+      const entries = await fs.promises.readdir(dir, { withFileTypes: true });
+      const nested = await Promise.all(
+        entries.map((entry) => {
+          const fullPath = `${dir}/${entry.name}`;
+          return entry.isDirectory()
+            ? collectFiles(fullPath)
+            : Promise.resolve([fullPath]);
+        }),
+      );
+      return ([] as string[]).concat(...nested);
+    };
+
+    const allFiles = await collectFiles(normalizedFolderPath);
+    const folderName = normalizedFolderPath.split(/[\\/]/).pop() || 'folder';
+    let uploadedCount = 0;
+    let failedCount = 0;
+
+    await allFiles.reduce(async (prev, filePath, i) => {
+      await prev;
+      const relativePath = filePath
+        .slice(normalizedFolderPath.length)
+        .replace(/^[\\/]/, '');
+      const fileName = `${folderName}/${relativePath}`;
+
+      webContents.send('cloudExplorer:uploadProgress', {
+        loaded: i,
+        total: allFiles.length,
+        percentage: Math.round((i / allFiles.length) * 100),
+        fileName: relativePath,
+        fileIndex: i + 1,
+        fileCount: allFiles.length,
+      });
+
+      try {
+        await CloudExplorerService.uploadFile(
+          {
+            provider,
+            config,
+            bucketName: safeBucket,
+            prefix: safePrefix,
+            localFilePath: filePath,
+            fileName,
+          },
+          webContents,
+        );
+        uploadedCount += 1;
+      } catch (fileError) {
+        // eslint-disable-next-line no-console
+        console.error(`uploadFolder: failed to upload ${filePath}:`, fileError);
+        failedCount += 1;
+      }
+    }, Promise.resolve());
+
+    webContents.send('cloudExplorer:uploadProgress', {
+      loaded: allFiles.length,
+      total: allFiles.length,
+      percentage: 100,
+      fileIndex: allFiles.length,
+      fileCount: allFiles.length,
+    });
+
+    return { success: failedCount === 0, uploadedCount, failedCount };
+  }
+
+  static async createBucket(
+    params: CreateBucketRequest,
+  ): Promise<CreateBucketResponse> {
+    const { provider, config, bucketName, region } = params;
+    const safeBucket = CloudExplorerService.sanitizeInput(bucketName);
+
+    try {
+      if (provider === 'aws') {
+        const s3Config = config as S3Config;
+        const client = CloudExplorerService.createS3Client(s3Config);
+        const createParams: any = { Bucket: safeBucket };
+        const effectiveRegion = region || s3Config.region;
+        if (effectiveRegion && effectiveRegion !== 'us-east-1') {
+          createParams.CreateBucketConfiguration = {
+            LocationConstraint: effectiveRegion,
+          };
+        }
+        await client.send(new CreateBucketCommand(createParams));
+      } else if (provider === 'azure') {
+        const azureConfig = config as AzureConfig;
+        const serviceClient =
+          CloudExplorerService.createBlobServiceClient(azureConfig);
+        const containerClient = serviceClient.getContainerClient(safeBucket);
+        await containerClient.create();
+      } else if (provider === 'gcs') {
+        const gcsConfig = config as GCSConfig;
+        const storage = CloudExplorerService.getStorageClient(gcsConfig);
+        await storage.createBucket(safeBucket, {
+          location: region,
+        });
+      } else {
+        // S3-compatible providers
+        let s3Client: S3Client;
+        if (provider === 'minio') {
+          s3Client = CloudExplorerService.createMinIOClient(
+            config as MinIOConfig,
+          );
+        } else if (provider === 'cloudflare-r2') {
+          s3Client = CloudExplorerService.createR2Client(
+            config as CloudflareR2Config,
+          );
+        } else if (provider === 'backblaze-b2') {
+          s3Client = CloudExplorerService.createB2Client(
+            config as BackblazeB2Config,
+          );
+        } else if (provider === 'garage') {
+          s3Client = CloudExplorerService.createGarageClient(
+            config as GarageConfig,
+          );
+        } else {
+          s3Client = CloudExplorerService.createRustfsClient(
+            config as RustfsConfig,
+          );
+        }
+        await s3Client.send(new CreateBucketCommand({ Bucket: safeBucket }));
+      }
+
+      return { success: true, bucketName: safeBucket };
+    } catch (error) {
+      // eslint-disable-next-line no-console
+      console.error('CloudExplorerService.createBucket error:', error);
+      throw error;
+    }
+  }
+
+  static async deleteBucket(
+    params: DeleteBucketRequest,
+  ): Promise<DeleteBucketResponse> {
+    const { provider, config, bucketName } = params;
+    const safeBucket = CloudExplorerService.sanitizeInput(bucketName);
+
+    try {
+      if (provider === 'aws') {
+        const client = CloudExplorerService.createS3Client(config as S3Config);
+        // Purge all object versions first (required for versioned buckets)
+        await CloudExplorerService.purgeS3BucketVersions(client, safeBucket);
+        await client.send(new DeleteBucketCommand({ Bucket: safeBucket }));
+      } else if (provider === 'azure') {
+        const serviceClient = CloudExplorerService.createBlobServiceClient(
+          config as AzureConfig,
+        );
+        await serviceClient.getContainerClient(safeBucket).delete();
+      } else if (provider === 'gcs') {
+        const storage = CloudExplorerService.getStorageClient(
+          config as GCSConfig,
+        );
+        const gcsBucket = storage.bucket(safeBucket);
+        // Delete all files first, then the bucket
+        const [files] = await gcsBucket.getFiles();
+        await Promise.all(files.map((f) => f.delete()));
+        await gcsBucket.delete();
+      } else {
+        let s3Client: S3Client;
+        const useVersionPurge =
+          provider !== 'minio' &&
+          provider !== 'garage' &&
+          provider !== 'rustfs';
+
+        if (provider === 'minio') {
+          s3Client = CloudExplorerService.createMinIOClient(
+            config as MinIOConfig,
+          );
+        } else if (provider === 'cloudflare-r2') {
+          s3Client = CloudExplorerService.createR2Client(
+            config as CloudflareR2Config,
+          );
+        } else if (provider === 'backblaze-b2') {
+          s3Client = CloudExplorerService.createB2Client(
+            config as BackblazeB2Config,
+          );
+        } else if (provider === 'garage') {
+          s3Client = CloudExplorerService.createGarageClient(
+            config as GarageConfig,
+          );
+        } else {
+          s3Client = CloudExplorerService.createRustfsClient(
+            config as RustfsConfig,
+          );
+        }
+
+        if (useVersionPurge) {
+          // B2/R2: purge all object versions (handles hidden versions)
+          await CloudExplorerService.purgeS3BucketVersions(
+            s3Client,
+            safeBucket,
+          );
+        } else if (provider === 'rustfs') {
+          // RustFS: use ListObjects v1 (does not support v2)
+          // eslint-disable-next-line no-console
+          console.log('[rustfs] step 1: purging objects...');
+          try {
+            await CloudExplorerService.purgeRustfsBucketObjects(
+              s3Client,
+              safeBucket,
+            );
+            // eslint-disable-next-line no-console
+            console.log('[rustfs] step 2: sending DeleteBucketCommand...');
+          } catch (purgeErr) {
+            // eslint-disable-next-line no-console
+            console.error('[rustfs] purge failed:', purgeErr);
+            throw purgeErr;
+          }
+        } else {
+          // MinIO/Garage: use regular object listing + individual deletes
+          await CloudExplorerService.purgeS3BucketObjects(s3Client, safeBucket);
+        }
+        await s3Client.send(new DeleteBucketCommand({ Bucket: safeBucket }));
+      }
+      return { success: true };
+    } catch (error) {
+      // eslint-disable-next-line no-console
+      console.error('CloudExplorerService.deleteBucket error:', error);
+      throw error;
+    }
+  }
+
+  private static async purgeS3BucketObjects(
+    client: S3Client,
+    bucketName: string,
+  ): Promise<void> {
+    let continuationToken: string | undefined;
+    do {
+      // eslint-disable-next-line no-await-in-loop
+      const listRes = await client.send(
+        new ListObjectsV2Command({
+          Bucket: bucketName,
+          ContinuationToken: continuationToken,
+        }),
+      );
+      const keys = (listRes.Contents || []).map((o) => o.Key!).filter(Boolean);
+      // eslint-disable-next-line no-await-in-loop
+      await keys.reduce(async (prev, key) => {
+        await prev;
+        await client.send(
+          new DeleteObjectCommand({ Bucket: bucketName, Key: key }),
+        );
+      }, Promise.resolve());
+      continuationToken = listRes.IsTruncated
+        ? listRes.NextContinuationToken
+        : undefined;
+    } while (continuationToken);
+  }
+
+  // RustFS does not support ListObjectsV2 — use v1 listing instead.
+  // Uses DeleteObjectsCommand (POST /?delete) instead of individual
+  // DeleteObjectCommand (DELETE) to avoid CRC32 checksum header rejections
+  // introduced in AWS SDK v3.600+ that cause RustFS to return InvalidArgument.
+  private static async purgeRustfsBucketObjects(
+    client: S3Client,
+    bucketName: string,
+  ): Promise<void> {
+    let marker: string | undefined;
+    do {
+      // eslint-disable-next-line no-console
+      console.log(`[rustfs] listing objects with marker: ${marker ?? 'none'}`);
+      // eslint-disable-next-line no-await-in-loop
+      const listRes = await client.send(
+        new ListObjectsCommand({
+          Bucket: bucketName,
+          Marker: marker,
+        }),
+      );
+      const keys = (listRes.Contents || []).map((o) => o.Key!).filter(Boolean);
+      // eslint-disable-next-line no-console
+      console.log(
+        `[rustfs] deleting ${keys.length} objects via batch delete...`,
+      );
+
+      if (keys.length > 0) {
+        // Use batch delete (POST /?delete) — avoids CRC32 header issues on DELETE requests
+        // eslint-disable-next-line no-await-in-loop
+        await client.send(
+          new DeleteObjectsCommand({
+            Bucket: bucketName,
+            Delete: {
+              Objects: keys.map((key) => ({ Key: key })),
+              Quiet: true,
+            },
+          }),
+        );
+      }
+
+      marker = listRes.IsTruncated
+        ? listRes.Contents?.[listRes.Contents.length - 1]?.Key
+        : undefined;
+    } while (marker);
+  }
+
+  private static async purgeS3BucketVersions(
+    client: S3Client,
+    bucketName: string,
+  ): Promise<void> {
+    let keyMarker: string | undefined;
+    let versionIdMarker: string | undefined;
+
+    do {
+      // eslint-disable-next-line no-await-in-loop
+      const listRes = await client.send(
+        new ListObjectVersionsCommand({
+          Bucket: bucketName,
+          KeyMarker: keyMarker,
+          VersionIdMarker: versionIdMarker,
+        }),
+      );
+
+      const objects = [
+        ...(listRes.Versions || []).map((v) => ({
+          Key: v.Key!,
+          VersionId: v.VersionId,
+        })),
+        ...(listRes.DeleteMarkers || []).map((d) => ({
+          Key: d.Key!,
+          VersionId: d.VersionId,
+        })),
+      ];
+
+      if (objects.length > 0) {
+        // eslint-disable-next-line no-await-in-loop
+        await client.send(
+          new DeleteObjectsCommand({
+            Bucket: bucketName,
+            Delete: { Objects: objects, Quiet: true },
+          }),
+        );
+      }
+
+      keyMarker = listRes.IsTruncated ? listRes.NextKeyMarker : undefined;
+      versionIdMarker = listRes.IsTruncated
+        ? listRes.NextVersionIdMarker
+        : undefined;
+    } while (keyMarker);
+  }
+
+  static async deleteObject(
+    params: DeleteObjectRequest,
+    webContents?: WebContents,
+  ): Promise<DeleteObjectResponse> {
+    const { provider, config, bucketName, objectKey, isPrefix } = params;
+    const safeBucket = CloudExplorerService.sanitizeInput(bucketName);
+    const safeKey = CloudExplorerService.sanitizeInput(objectKey);
+
+    try {
+      if (!isPrefix) {
+        // Single object delete
+        if (provider === 'aws') {
+          const client = CloudExplorerService.createS3Client(
+            config as S3Config,
+          );
+          await client.send(
+            new DeleteObjectCommand({ Bucket: safeBucket, Key: safeKey }),
+          );
+        } else if (provider === 'azure') {
+          const serviceClient = CloudExplorerService.createBlobServiceClient(
+            config as AzureConfig,
+          );
+          await serviceClient
+            .getContainerClient(safeBucket)
+            .getBlockBlobClient(safeKey)
+            .delete();
+        } else if (provider === 'gcs') {
+          const storage = CloudExplorerService.getStorageClient(
+            config as GCSConfig,
+          );
+          await storage.bucket(safeBucket).file(safeKey).delete();
+        } else {
+          let s3Client: S3Client;
+          if (provider === 'minio') {
+            s3Client = CloudExplorerService.createMinIOClient(
+              config as MinIOConfig,
+            );
+          } else if (provider === 'cloudflare-r2') {
+            s3Client = CloudExplorerService.createR2Client(
+              config as CloudflareR2Config,
+            );
+          } else if (provider === 'backblaze-b2') {
+            s3Client = CloudExplorerService.createB2Client(
+              config as BackblazeB2Config,
+            );
+          } else if (provider === 'garage') {
+            s3Client = CloudExplorerService.createGarageClient(
+              config as GarageConfig,
+            );
+          } else {
+            s3Client = CloudExplorerService.createRustfsClient(
+              config as RustfsConfig,
+            );
+          }
+          await s3Client.send(
+            new DeleteObjectCommand({ Bucket: safeBucket, Key: safeKey }),
+          );
+        }
+        return { success: true, deletedCount: 1 };
+      }
+
+      // Prefix (folder) delete — collect all keys then batch-delete
+      const allKeys: string[] = [];
+
+      if (provider === 'aws') {
+        const client = CloudExplorerService.createS3Client(config as S3Config);
+        let continuationToken: string | undefined;
+        do {
+          // eslint-disable-next-line no-await-in-loop
+          const listRes = await client.send(
+            new ListObjectsV2Command({
+              Bucket: safeBucket,
+              Prefix: safeKey,
+              ContinuationToken: continuationToken,
+            }),
+          );
+          (listRes.Contents || []).forEach((obj) => {
+            if (obj.Key) allKeys.push(obj.Key);
+          });
+          continuationToken = listRes.IsTruncated
+            ? listRes.NextContinuationToken
+            : undefined;
+        } while (continuationToken);
+
+        // Batch delete in chunks of S3_BATCH_DELETE_LIMIT
+        let deletedCount = 0;
+        for (let i = 0; i < allKeys.length; i += S3_BATCH_DELETE_LIMIT) {
+          const batch = allKeys.slice(i, i + S3_BATCH_DELETE_LIMIT);
+          // eslint-disable-next-line no-await-in-loop
+          await client.send(
+            new DeleteObjectsCommand({
+              Bucket: safeBucket,
+              Delete: {
+                Objects: batch.map((k) => ({ Key: k })),
+                Quiet: true,
+              },
+            }),
+          );
+          deletedCount += batch.length;
+          if (webContents) {
+            webContents.send('cloudExplorer:uploadProgress', {
+              loaded: deletedCount,
+              total: allKeys.length,
+              percentage: Math.round((deletedCount / allKeys.length) * 100),
+            });
+          }
+        }
+        return { success: true, deletedCount };
+      }
+
+      if (provider === 'azure') {
+        const serviceClient = CloudExplorerService.createBlobServiceClient(
+          config as AzureConfig,
+        );
+        const containerClient = serviceClient.getContainerClient(safeBucket);
+        const blobIterator = containerClient.listBlobsFlat({ prefix: safeKey });
+        let blobResult = await blobIterator.next();
+        while (!blobResult.done) {
+          allKeys.push(blobResult.value.name);
+          // eslint-disable-next-line no-await-in-loop
+          blobResult = await blobIterator.next();
+        }
+        let deletedCount = 0;
+        // eslint-disable-next-line no-restricted-syntax
+        await allKeys.reduce(async (prev, key) => {
+          await prev;
+          await containerClient.getBlockBlobClient(key).delete();
+          deletedCount += 1;
+          if (webContents) {
+            webContents.send('cloudExplorer:uploadProgress', {
+              loaded: deletedCount,
+              total: allKeys.length,
+              percentage: Math.round((deletedCount / allKeys.length) * 100),
+            });
+          }
+        }, Promise.resolve());
+        return { success: true, deletedCount };
+      }
+
+      if (provider === 'gcs') {
+        const storage = CloudExplorerService.getStorageClient(
+          config as GCSConfig,
+        );
+        const bucket = storage.bucket(safeBucket);
+        const [files] = await bucket.getFiles({ prefix: safeKey });
+        let deletedCount = 0;
+        await files.reduce(async (prev, file) => {
+          await prev;
+          await file.delete();
+          deletedCount += 1;
+          if (webContents) {
+            webContents.send('cloudExplorer:uploadProgress', {
+              loaded: deletedCount,
+              total: files.length,
+              percentage: Math.round((deletedCount / files.length) * 100),
+            });
+          }
+        }, Promise.resolve());
+        return { success: true, deletedCount };
+      }
+
+      // S3-compatible prefix delete
+      let s3Client: S3Client;
+      if (provider === 'minio') {
+        s3Client = CloudExplorerService.createMinIOClient(
+          config as MinIOConfig,
+        );
+      } else if (provider === 'cloudflare-r2') {
+        s3Client = CloudExplorerService.createR2Client(
+          config as CloudflareR2Config,
+        );
+      } else if (provider === 'backblaze-b2') {
+        s3Client = CloudExplorerService.createB2Client(
+          config as BackblazeB2Config,
+        );
+      } else if (provider === 'garage') {
+        s3Client = CloudExplorerService.createGarageClient(
+          config as GarageConfig,
+        );
+      } else {
+        s3Client = CloudExplorerService.createRustfsClient(
+          config as RustfsConfig,
+        );
+      }
+      let continuationToken: string | undefined;
+      do {
+        // eslint-disable-next-line no-await-in-loop
+        const listRes = await s3Client.send(
+          new ListObjectsV2Command({
+            Bucket: safeBucket,
+            Prefix: safeKey,
+            ContinuationToken: continuationToken,
+          }),
+        );
+        (listRes.Contents || []).forEach((obj) => {
+          if (obj.Key) allKeys.push(obj.Key);
+        });
+        continuationToken = listRes.IsTruncated
+          ? listRes.NextContinuationToken
+          : undefined;
+      } while (continuationToken);
+
+      let deletedCount = 0;
+      await allKeys.reduce(async (prev, key) => {
+        await prev;
+        await s3Client.send(
+          new DeleteObjectCommand({ Bucket: safeBucket, Key: key }),
+        );
+        deletedCount += 1;
+        if (webContents) {
+          webContents.send('cloudExplorer:uploadProgress', {
+            loaded: deletedCount,
+            total: allKeys.length,
+            percentage: Math.round((deletedCount / allKeys.length) * 100),
+          });
+        }
+      }, Promise.resolve());
+      return { success: true, deletedCount };
+    } catch (error) {
+      // eslint-disable-next-line no-console
+      console.error('CloudExplorerService.deleteObject error:', error);
+      throw error;
+    }
+  }
+
+  static async createFolder(
+    params: CreateFolderRequest,
+  ): Promise<CreateFolderResponse> {
+    const { provider, config, bucketName, prefix, folderName } = params;
+    const safeBucket = CloudExplorerService.sanitizeInput(bucketName);
+    const safePrefix = CloudExplorerService.sanitizeInput(prefix);
+    const safeName = CloudExplorerService.sanitizeInput(folderName);
+    const objectKey = `${safePrefix}${safeName}/`;
+    const emptyBuffer = Buffer.alloc(0);
+
+    try {
+      if (provider === 'aws') {
+        const client = CloudExplorerService.createS3Client(config as S3Config);
+        await client.send(
+          new PutObjectCommand({
+            Bucket: safeBucket,
+            Key: objectKey,
+            Body: emptyBuffer,
+            ContentLength: 0,
+            ContentType: 'application/x-directory',
+          }),
+        );
+      } else if (provider === 'azure') {
+        const serviceClient = CloudExplorerService.createBlobServiceClient(
+          config as AzureConfig,
+        );
+        const blockBlobClient = serviceClient
+          .getContainerClient(safeBucket)
+          .getBlockBlobClient(objectKey);
+        await blockBlobClient.upload('', 0, {
+          blobHTTPHeaders: { blobContentType: 'application/x-directory' },
+        });
+      } else if (provider === 'gcs') {
+        const storage = CloudExplorerService.getStorageClient(
+          config as GCSConfig,
+        );
+        const file = storage.bucket(safeBucket).file(objectKey);
+        await file.save(emptyBuffer, {
+          contentType: 'application/x-directory',
+        });
+      } else {
+        // S3-compatible providers
+        let s3Client: S3Client;
+        if (provider === 'minio') {
+          s3Client = CloudExplorerService.createMinIOClient(
+            config as MinIOConfig,
+          );
+        } else if (provider === 'cloudflare-r2') {
+          s3Client = CloudExplorerService.createR2Client(
+            config as CloudflareR2Config,
+          );
+        } else if (provider === 'backblaze-b2') {
+          s3Client = CloudExplorerService.createB2Client(
+            config as BackblazeB2Config,
+          );
+        } else if (provider === 'garage') {
+          s3Client = CloudExplorerService.createGarageClient(
+            config as GarageConfig,
+          );
+        } else {
+          s3Client = CloudExplorerService.createRustfsClient(
+            config as RustfsConfig,
+          );
+        }
+        await s3Client.send(
+          new PutObjectCommand({
+            Bucket: safeBucket,
+            Key: objectKey,
+            Body: emptyBuffer,
+            ContentLength: 0,
+            ContentType: 'application/x-directory',
+          }),
+        );
+      }
+
+      return { success: true, objectKey };
+    } catch (error) {
+      // eslint-disable-next-line no-console
+      console.error('CloudExplorerService.createFolder error:', error);
+      throw error;
     }
   }
 }

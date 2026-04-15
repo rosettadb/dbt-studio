@@ -119,13 +119,9 @@ const registerGitHandlers = () => {
     'git:commit',
     async (
       _e,
-      {
-        repoPath,
-        message,
-        files,
-      }: { repoPath: string; message: string; files: string[] },
+      { repoPath, message }: { repoPath: string; message: string },
     ) => {
-      return gitService.commit(repoPath, message, files);
+      return gitService.commit(repoPath, message);
     },
   );
 

@@ -117,6 +117,7 @@ const ProjectDetails: React.FC = () => {
     editingFilePath: selectedFilePath,
     openChatWithMessage,
     registerSyncEditorContent,
+    registerOpenFile,
   } = useAppContext();
 
   const { data: apiKey } = useApiKey();
@@ -552,6 +553,16 @@ const ProjectDetails: React.FC = () => {
     getTabByPath,
     registerSyncEditorContent,
   ]);
+
+  React.useEffect(() => {
+    registerOpenFile?.((filePath: string) => {
+      setSelectedFilePath(filePath);
+      openTab(filePath);
+    });
+    return () => {
+      registerOpenFile?.(undefined);
+    };
+  }, [registerOpenFile, setSelectedFilePath, openTab]);
 
   // Auto-refresh tab content when focusing on a tab
   const previousActiveTabIdRef = React.useRef<EditorTabId | null>(null);

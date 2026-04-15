@@ -73,15 +73,11 @@ export const add = async (path: string, files: string[]) => {
   return data;
 };
 
-export const commit = async (
-  path: string,
-  message: string,
-  files: string[],
-) => {
-  await client.post<{ repoPath: string; message: string; files: string[] }>(
-    'git:commit',
-    { repoPath: path, message, files },
-  );
+export const commit = async (path: string, message: string) => {
+  await client.post<{ repoPath: string; message: string }>('git:commit', {
+    repoPath: path,
+    message,
+  });
 };
 
 export const push = async (repoPath: string, credentials?: GitCredentials) => {

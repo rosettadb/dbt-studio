@@ -1,5 +1,10 @@
 import { ConnectionInput, ConnectionModel } from './backend';
 
+// ─── Cloud Explorer Operations ───────────────────────────────────────────────
+// Requirements: 4.1, 4.6
+
+import { CloudProvider, CloudStorageConfig } from './frontend';
+
 export type TestChannels = 'test:create' | 'test:getAll';
 
 export type SettingsChannels =
@@ -257,7 +262,14 @@ export type CloudExplorerChannels =
   | 'cloudExplorer:listObjects'
   | 'cloudExplorer:getDownloadUrl'
   | 'cloudExplorer:testConnection'
-  | 'cloudExplorer:previewData';
+  | 'cloudExplorer:previewData'
+  | 'cloudExplorer:uploadFile'
+  | 'cloudExplorer:uploadFolder'
+  | 'cloudExplorer:createBucket'
+  | 'cloudExplorer:deleteObject'
+  | 'cloudExplorer:uploadProgress'
+  | 'cloudExplorer:createFolder'
+  | 'cloudExplorer:deleteBucket';
 
 export type DuckLakeChannels =
   // Extension Management
@@ -424,3 +436,93 @@ export type ConfigureConnectionBody = {
 export type UpdateConnectionBody = {
   connection: ConnectionModel;
 };
+
+export interface UploadFileRequest {
+  provider: CloudProvider;
+  config: CloudStorageConfig;
+  bucketName: string;
+  prefix: string;
+  localFilePath: string;
+  fileName: string;
+}
+
+export interface UploadFileResponse {
+  success: boolean;
+  objectKey: string;
+}
+
+export interface UploadFolderRequest {
+  provider: CloudProvider;
+  config: CloudStorageConfig;
+  bucketName: string;
+  prefix: string;
+  localFolderPath: string;
+}
+
+export interface UploadFolderResponse {
+  success: boolean;
+  uploadedCount: number;
+  failedCount: number;
+}
+
+export interface CreateBucketRequest {
+  provider: CloudProvider;
+  config: CloudStorageConfig;
+  bucketName: string;
+  region?: string;
+}
+
+export interface CreateBucketResponse {
+  success: boolean;
+  bucketName: string;
+}
+
+export interface DeleteObjectRequest {
+  provider: CloudProvider;
+  config: CloudStorageConfig;
+  bucketName: string;
+  objectKey: string;
+  isPrefix: boolean;
+}
+
+export interface DeleteObjectResponse {
+  success: boolean;
+  deletedCount: number;
+}
+
+export interface UploadProgressEvent {
+  loaded: number;
+  total: number;
+  percentage: number;
+  // folder upload extras
+  fileName?: string;
+  fileIndex?: number;
+  fileCount?: number;
+}
+
+export const UPLOAD_SIZE_LIMIT_BYTES = 5 * 1024 * 1024 * 1024; // 5 GB
+export const MULTIPART_THRESHOLD_BYTES = 100 * 1024 * 1024; // 100 MB
+export const S3_BATCH_DELETE_LIMIT = 1000;
+
+export interface CreateFolderRequest {
+  provider: CloudProvider;
+  config: CloudStorageConfig;
+  bucketName: string;
+  prefix: string;
+  folderName: string;
+}
+
+export interface CreateFolderResponse {
+  success: boolean;
+  objectKey: string;
+}
+
+export interface DeleteBucketRequest {
+  provider: CloudProvider;
+  config: CloudStorageConfig;
+  bucketName: string;
+}
+
+export interface DeleteBucketResponse {
+  success: boolean;
+}

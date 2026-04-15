@@ -27,6 +27,9 @@ import {
   FormControl,
   InputLabel,
   TableSortLabel,
+  Dialog,
+  DialogTitle,
+  DialogContent,
 } from '@mui/material';
 import {
   Folder,
@@ -41,6 +44,9 @@ import {
   Refresh,
   NavigateNext,
   TableView,
+  Delete,
+  CreateNewFolder,
+  CloudUpload,
 } from '@mui/icons-material';
 import {
   useConnection,
@@ -49,7 +55,10 @@ import {
   useAddRecentItem,
   usePreviewData,
 } from '../../controllers/cloudExplorer.controller';
-import type { CloudProvider } from '../../../types/frontend';
+import type {
+  CloudProvider,
+  CloudStorageConfig,
+} from '../../../types/frontend';
 import { InlineDataPreview } from './InlineDataPreview';
 import useSecureStorage from '../../hooks/useSecureStorage';
 import { formatFileSize, isPreviewSupported } from '../../utils/fileUtils';
@@ -57,6 +66,9 @@ import { DBTProjects } from '../sidebar/icons';
 import { useGetSelectedProject } from '../../controllers';
 import { projectsServices } from '../../services';
 import bucketIcon from '../../../../assets/icons/bucket-blue.png';
+import UploadDropzone from './UploadDropzone';
+import DeleteConfirmDialog from './DeleteConfirmDialog';
+import CreateFolderDialog from './CreateFolderDialog';
 
 interface ExplorerBucketContentProps {
   connectionId: string;
@@ -92,6 +104,19 @@ export const ExplorerBucketContent: React.FC<ExplorerBucketContentProps> = ({
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
   const [typeFilter, setTypeFilter] = useState<string>('all');
 
+  // Delete dialog state
+  const [deleteTarget, setDeleteTarget] = useState<{
+    objectKey: string;
+    isPrefix: boolean;
+  } | null>(null);
+
+  // Create folder dialog state
+  const [createFolderOpen, setCreateFolderOpen] = useState(false);
+
+  // Upload dialog state
+  const [uploadOpen, setUploadOpen] = useState(false);
+  const [isUploading, setIsUploading] = useState(false);
+
   const connectionQuery = useConnection(connectionId);
   const connection = connectionQuery.data;
   const {
@@ -103,6 +128,7 @@ export const ExplorerBucketContent: React.FC<ExplorerBucketContentProps> = ({
     getCloudR2Secret,
     getCloudB2Secret,
     getCloudRustfsSecret,
+    getCloudGarageSecret,
   } = useSecureStorage();
 
   useEffect(() => {
@@ -144,6 +170,10 @@ export const ExplorerBucketContent: React.FC<ExplorerBucketContentProps> = ({
           (config as { applicationKey?: string }).applicationKey = secret || '';
         } else if (connection.provider === 'rustfs') {
           const secret = await getCloudRustfsSecret(connection.id);
+          (config as { secretAccessKey?: string }).secretAccessKey =
+            secret || '';
+        } else if (connection.provider === 'garage') {
+          const secret = await getCloudGarageSecret(connection.id);
           (config as { secretAccessKey?: string }).secretAccessKey =
             secret || '';
         }
@@ -479,7 +509,9 @@ export const ExplorerBucketContent: React.FC<ExplorerBucketContentProps> = ({
         </TableHead>
         <TableBody>
           {filteredObjects.map((object) => {
-            const displayName = object.name.split('/').pop() || object.name;
+            const displayName =
+              object.name.replace(/\/$/, '').split('/').pop() ||
+              object.name.replace(/\/$/, '');
             return (
               <TableRow
                 key={object.name}
@@ -535,27 +567,28 @@ export const ExplorerBucketContent: React.FC<ExplorerBucketContentProps> = ({
                     : '-'}
                 </TableCell>
                 <TableCell align="right">
-                  {!object.isDirectory && (
-                    <Box
-                      sx={{
-                        display: 'flex',
-                        gap: 1,
-                        justifyContent: 'flex-end',
-                      }}
-                    >
-                      {isPreviewSupported(object.name) && (
-                        <Tooltip title="Preview Data">
-                          <IconButton
-                            size="small"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              handlePreview(object.name);
-                            }}
-                          >
-                            <TableView />
-                          </IconButton>
-                        </Tooltip>
-                      )}
+                  <Box
+                    sx={{
+                      display: 'flex',
+                      gap: 1,
+                      justifyContent: 'flex-end',
+                      alignItems: 'center',
+                    }}
+                  >
+                    {!object.isDirectory && isPreviewSupported(object.name) && (
+                      <Tooltip title="Preview Data">
+                        <IconButton
+                          size="small"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handlePreview(object.name);
+                          }}
+                        >
+                          <TableView fontSize="small" />
+                        </IconButton>
+                      </Tooltip>
+                    )}
+                    {!object.isDirectory && (
                       <Tooltip title="Download">
                         <IconButton
                           size="small"
@@ -566,35 +599,52 @@ export const ExplorerBucketContent: React.FC<ExplorerBucketContentProps> = ({
                           disabled={loadingUrls[object.name]}
                         >
                           {loadingUrls[object.name] ? (
-                            <CircularProgress size={20} />
+                            <CircularProgress size={16} />
                           ) : (
-                            <Download />
+                            <Download fontSize="small" />
                           )}
                         </IconButton>
                       </Tooltip>
-                      {project &&
-                        isCSVFile(
-                          object.name.split('/').pop() || object.name,
-                        ) && (
-                          <Tooltip title="Download as seed (CSV only)">
-                            <IconButton
-                              size="small"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                handleDownloadAsSeed(object.name);
-                              }}
-                              disabled={loadingUrls[object.name]}
-                            >
-                              {loadingUrls[object.name] ? (
-                                <CircularProgress size={20} />
-                              ) : (
-                                <DBTProjects />
-                              )}
-                            </IconButton>
-                          </Tooltip>
-                        )}
-                    </Box>
-                  )}
+                    )}
+                    {!object.isDirectory &&
+                      project &&
+                      isCSVFile(
+                        object.name.split('/').pop() || object.name,
+                      ) && (
+                        <Tooltip title="Download as seed">
+                          <IconButton
+                            size="small"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleDownloadAsSeed(object.name);
+                            }}
+                            disabled={loadingUrls[object.name]}
+                          >
+                            {loadingUrls[object.name] ? (
+                              <CircularProgress size={16} />
+                            ) : (
+                              <DBTProjects />
+                            )}
+                          </IconButton>
+                        </Tooltip>
+                      )}
+                    <Tooltip
+                      title={`Delete ${object.isDirectory ? 'folder' : 'file'}`}
+                    >
+                      <IconButton
+                        size="small"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setDeleteTarget({
+                            objectKey: object.name,
+                            isPrefix: object.isDirectory,
+                          });
+                        }}
+                      >
+                        <Delete fontSize="small" />
+                      </IconButton>
+                    </Tooltip>
+                  </Box>
                 </TableCell>
               </TableRow>
             );
@@ -673,6 +723,28 @@ export const ExplorerBucketContent: React.FC<ExplorerBucketContentProps> = ({
           </Typography>
         </Box>
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+          {secureConfig && connection && (
+            <Tooltip title="Upload files or folders">
+              <IconButton
+                size="small"
+                aria-label="Upload"
+                onClick={() => setUploadOpen(true)}
+              >
+                <CloudUpload fontSize="small" />
+              </IconButton>
+            </Tooltip>
+          )}
+          {secureConfig && connection && (
+            <Tooltip title="Create folder">
+              <IconButton
+                size="small"
+                aria-label="Create folder"
+                onClick={() => setCreateFolderOpen(true)}
+              >
+                <CreateNewFolder fontSize="small" />
+              </IconButton>
+            </Tooltip>
+          )}
           <IconButton
             onClick={() => objectsQuery.refetch()}
             disabled={objectsQuery.isFetching}
@@ -848,6 +920,75 @@ export const ExplorerBucketContent: React.FC<ExplorerBucketContentProps> = ({
             renderListView()}
         </CardContent>
       </Card>
+
+      {/* Delete Object/Folder Dialog */}
+      {secureConfig && connection && deleteTarget && (
+        <DeleteConfirmDialog
+          open={!!deleteTarget}
+          onClose={() => setDeleteTarget(null)}
+          provider={connection.provider}
+          config={secureConfig as CloudStorageConfig}
+          bucketName={bucketName}
+          objectKey={deleteTarget.objectKey}
+          isPrefix={deleteTarget.isPrefix}
+          onSuccess={() => {
+            setDeleteTarget(null);
+            objectsQuery.refetch();
+          }}
+        />
+      )}
+
+      {/* Create Folder Dialog */}
+      {secureConfig && connection && (
+        <CreateFolderDialog
+          open={createFolderOpen}
+          onClose={() => setCreateFolderOpen(false)}
+          provider={connection.provider}
+          config={secureConfig as CloudStorageConfig}
+          bucketName={bucketName}
+          prefix={prefix}
+          onSuccess={() => objectsQuery.refetch()}
+        />
+      )}
+
+      {/* Upload Dialog */}
+      {secureConfig && connection && (
+        <Dialog
+          open={uploadOpen}
+          onClose={isUploading ? undefined : () => setUploadOpen(false)}
+          disableEscapeKeyDown={isUploading}
+          maxWidth="sm"
+          fullWidth
+        >
+          <DialogTitle
+            sx={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+            }}
+          >
+            Upload to {bucketName}
+            <IconButton
+              size="small"
+              onClick={() => setUploadOpen(false)}
+              aria-label="Close upload dialog"
+              disabled={isUploading}
+            >
+              <Clear fontSize="small" />
+            </IconButton>
+          </DialogTitle>
+          <DialogContent sx={{ pb: 3 }}>
+            <UploadDropzone
+              provider={connection.provider}
+              config={secureConfig as CloudStorageConfig}
+              bucketName={bucketName}
+              prefix={prefix}
+              onUploaded={() => objectsQuery.refetch()}
+              onUploadingChange={setIsUploading}
+            />
+          </DialogContent>
+        </Dialog>
+      )}
     </Box>
   );
 };

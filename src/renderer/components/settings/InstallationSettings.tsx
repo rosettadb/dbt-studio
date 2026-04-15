@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
   Box,
   Typography,
@@ -19,6 +19,7 @@ import {
   useRestartUpdate,
 } from '../../controllers';
 import { UpdateSettingsInfo } from '../../../types/backend';
+import { sanitizeHtml } from '../../utils/sanitizeHtml';
 
 // Error types for better error handling
 interface ErrorInfo {
@@ -364,6 +365,11 @@ const InstallationSettings: React.FC = () => {
     currentVersion &&
     compareVersions(latestVersion, currentVersion) === 1;
 
+  const sanitizedReleaseNotes = useMemo(
+    () => sanitizeHtml(updateInfo?.releaseNotes ?? ''),
+    [updateInfo?.releaseNotes],
+  );
+
   return (
     <Box sx={{ maxWidth: 800, width: '100%' }}>
       <Backdrop
@@ -498,7 +504,7 @@ const InstallationSettings: React.FC = () => {
                         variant="body2"
                         sx={{ mt: 1 }}
                         dangerouslySetInnerHTML={{
-                          __html: updateInfo.releaseNotes,
+                          __html: sanitizedReleaseNotes,
                         }}
                       />
                     </Box>
