@@ -8,6 +8,8 @@ import type { BrowserWindow } from 'electron';
 import * as fs from 'fs';
 import * as path from 'path';
 import SettingsService from '../../settings.service';
+import AgentService from '../../agent.service';
+import { TerminalConfirmGate } from './terminalConfirmGate';
 
 // Security constraints
 const ALLOWED_DBT_COMMANDS = [
@@ -115,6 +117,12 @@ export const writeDbtModel = tool({
         };
       }
 
+      const context = AgentService.currentAgentContext;
+      if (context) {
+        // File writes don't require confirmation — only shell commands do.
+        // The write is shown in the UI via AgentStepBlock and can be reverted.
+      }
+
       // Ensure directory exists
       const dir = path.dirname(filePath);
       if (!fs.existsSync(dir)) {
@@ -183,6 +191,24 @@ export const runDbtCommand = tool({
       }
       if (extraArgs) {
         fullCmd += ` ${extraArgs}`;
+      }
+
+      const context = AgentService.currentAgentContext;
+      if (context) {
+        const allowed = await TerminalConfirmGate.request({
+          event: context.event,
+          conversationId: context.conversationId,
+          toolName: 'runDbtCommand',
+          command: fullCmd,
+          cwd: projectPath,
+        });
+        if (!allowed) {
+          return {
+            success: false,
+            command: fullCmd,
+            error: 'Command denied by user',
+          };
+        }
       }
 
       // Execute with timeout
@@ -407,6 +433,11 @@ export function createDbtTools(
             return {
               error: 'Only .sql, .yml, and .yaml files can be written.',
             };
+
+          const context = AgentService.currentAgentContext;
+          if (context) {
+            // File writes don't require confirmation — only shell commands do.
+          }
           const dir = path.dirname(filePath);
           if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
           fs.writeFileSync(filePath, content, 'utf-8');
@@ -456,6 +487,24 @@ export function createDbtTools(
           let fullCmd = `"${dbtExe}" ${command}`;
           if (select) fullCmd += ` --select ${select}`;
           if (extraArgs) fullCmd += ` ${extraArgs}`;
+
+          const context = AgentService.currentAgentContext;
+          if (context) {
+            const allowed = await TerminalConfirmGate.request({
+              event: context.event,
+              conversationId: context.conversationId,
+              toolName: 'runDbtCommand',
+              command: fullCmd,
+              cwd: projectPath,
+            });
+            if (!allowed) {
+              return {
+                success: false,
+                error: 'Command denied by user',
+                command: fullCmd,
+              };
+            }
+          }
 
           return new Promise((resolve) => {
             if (mainWindow && !mainWindow.isDestroyed()) {

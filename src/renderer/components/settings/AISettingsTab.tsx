@@ -275,6 +275,14 @@ export const AISettingsTab: React.FC = () => {
             checked={cfg.chat.streamResponses}
             onChange={(e) => updateChat('streamResponses', e.target.checked)}
             size="small"
+            sx={{
+              '& .MuiSwitch-switchBase.Mui-checked': {
+                color: '#4caf50',
+              },
+              '& .MuiSwitch-switchBase.Mui-checked + .MuiSwitch-track': {
+                backgroundColor: '#4caf50',
+              },
+            }}
           />
         }
       />
@@ -289,6 +297,14 @@ export const AISettingsTab: React.FC = () => {
               updateChat('autoIncludeFileContext', e.target.checked)
             }
             size="small"
+            sx={{
+              '& .MuiSwitch-switchBase.Mui-checked': {
+                color: '#4caf50',
+              },
+              '& .MuiSwitch-switchBase.Mui-checked + .MuiSwitch-track': {
+                backgroundColor: '#4caf50',
+              },
+            }}
           />
         }
       />
@@ -301,6 +317,14 @@ export const AISettingsTab: React.FC = () => {
             checked={cfg.chat.showTokenCount}
             onChange={(e) => updateChat('showTokenCount', e.target.checked)}
             size="small"
+            sx={{
+              '& .MuiSwitch-switchBase.Mui-checked': {
+                color: '#4caf50',
+              },
+              '& .MuiSwitch-switchBase.Mui-checked + .MuiSwitch-track': {
+                backgroundColor: '#4caf50',
+              },
+            }}
           />
         }
       />
@@ -313,6 +337,14 @@ export const AISettingsTab: React.FC = () => {
             checked={cfg.chat.autoScrollToLatest}
             onChange={(e) => updateChat('autoScrollToLatest', e.target.checked)}
             size="small"
+            sx={{
+              '& .MuiSwitch-switchBase.Mui-checked': {
+                color: '#4caf50',
+              },
+              '& .MuiSwitch-switchBase.Mui-checked + .MuiSwitch-track': {
+                backgroundColor: '#4caf50',
+              },
+            }}
           />
         }
       />

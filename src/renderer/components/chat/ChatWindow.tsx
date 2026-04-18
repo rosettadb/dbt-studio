@@ -20,17 +20,36 @@ import {
   useGetChatSessions,
   useUpdateChatSession,
   useDeleteChatSession,
+  useGetChatMessagesWithContext,
 } from '../../controllers/chat.controller';
-import { useGetAIProviders } from '../../controllers/aiProviders.controller';
+import {
+  useGetAIProviders,
+  useGetActiveAIProvider,
+} from '../../controllers/aiProviders.controller';
 import { NewChatButton } from './NewChatButton';
 import { SessionHistoryButton } from './SessionHistoryButton';
 import { ChatMessageList } from './ChatMessageList';
 import { ChatInputBox } from './ChatInputBox';
+import { FilesChangedBlock } from './FilesChangedBlock';
+import { GradientBorder } from './GradientBorder';
+import type { ContextUsageBreakdown } from './ContextUsageRing';
 
 import { useContextManager } from '../../hooks/useContextManager';
+import { useAgentStream } from '../../hooks/useAgentStream';
+import {
+  useOnStreamChunk,
+  useOnContextUsage,
+} from '../../controllers/agent.controller';
+import { projectsServices } from '../../services';
 
 export const ChatWindow: React.FC = () => {
-  const { setIsChatOpen } = useAppContext();
+  const {
+    setIsChatOpen,
+    openFile,
+    setEditingFilePath,
+    closeFile,
+    refreshFileTree,
+  } = useAppContext();
   const { data: project } = useGetSelectedProject();
   const projectId = project?.id as number | undefined;
   const navigate = useNavigate();
@@ -41,35 +60,79 @@ export const ChatWindow: React.FC = () => {
     completionTokens: number;
     totalTokens: number;
   } | null>(null);
+  const [contextBreakdown, setContextBreakdown] =
+    React.useState<ContextUsageBreakdown | null>(null);
 
-  // Reset usage when session changes
+  // New Agent Stream Hook
+  const {
+    streamState,
+    startStream,
+    cancelStream,
+    confirmTerminal,
+    clearError,
+  } = useAgentStream(selectedSessionId);
+
+  // Load messages for the selected session (used to estimate context usage on session switch)
+  const { data: sessionMessages = [] } =
+    useGetChatMessagesWithContext(selectedSessionId);
+  const { data: activeProvider } = useGetActiveAIProvider();
+
+  // Reset usage + context breakdown when session changes
   React.useEffect(() => {
     setLastUsage(null);
+    setContextBreakdown(null);
   }, [selectedSessionId]);
 
-  // Listen for usage from agent mode (IPC events)
+  // Estimate context usage from loaded history whenever session or messages change.
+  // This keeps the ring meaningful even before the first agent run.
   React.useEffect(() => {
-    const handler = (...args: unknown[]) => {
-      const data = args[0] as {
-        done?: boolean;
-        usage?: {
-          promptTokens: number;
-          completionTokens: number;
-          totalTokens: number;
-        };
-      };
-      if (data?.done && data?.usage) {
-        setLastUsage(data.usage);
-      }
-    };
-    window.electron.ipcRenderer.on('chat:message:stream-chunk', handler);
-    return () => {
-      window.electron.ipcRenderer.removeListener(
-        'chat:message:stream-chunk',
-        handler,
-      );
-    };
-  }, []);
+    if (!selectedSessionId || sessionMessages.length === 0) return;
+
+    // Rough token estimate: ~3 chars per token
+    const historyChars = sessionMessages.reduce(
+      (sum, m) => sum + (m.content?.length ?? 0),
+      0,
+    );
+    const historyTokens = Math.ceil(historyChars / 3);
+
+    // Derive context window from active provider model (fallback 32k)
+    const modelId = (activeProvider as any)?.config?.model ?? '';
+    const contextWindow = (() => {
+      const m = modelId.toLowerCase();
+      if (m.includes('gemini-2.5') || m.includes('gemini-3')) return 1_000_000;
+      if (m.includes('claude') || m.includes('gpt-4')) return 200_000;
+      if (m.includes('gpt-4o') || m.includes('gpt-4.1')) return 128_000;
+      return 32_000;
+    })();
+
+    const percentUsed = Math.min(
+      100,
+      Math.round((historyTokens / contextWindow) * 100),
+    );
+
+    setContextBreakdown({
+      conversation: historyTokens,
+      userFiles: 0,
+      skills: 0,
+      mcpTools: 0,
+      total: historyTokens,
+      contextWindow,
+      percentUsed,
+    });
+  }, [selectedSessionId, sessionMessages.length, activeProvider]);
+
+  // Listen for usage from agent mode (IPC events) — FE-03: via controller hooks, not raw IPC
+  useOnStreamChunk(selectedSessionId, (data) => {
+    if (data.done && data.usage) {
+      setLastUsage(data.usage);
+    }
+  });
+
+  useOnContextUsage(selectedSessionId, (data) => {
+    if (data.breakdown) {
+      setContextBreakdown(data.breakdown as unknown as ContextUsageBreakdown);
+    }
+  });
 
   // Context management
   const contextManager = useContextManager();
@@ -159,6 +222,120 @@ export const ChatWindow: React.FC = () => {
     navigate(`/app/settings/ai-providers?tab=${encodeURIComponent(tab)}`);
   };
 
+  const [dismissedRunKey, setDismissedRunKey] = React.useState<string | null>(
+    null,
+  );
+
+  // Build a stable key for the current run: sessionId + step count fingerprint
+  // Resets to null whenever a new stream starts (steps reset to [])
+  const currentRunKey = React.useMemo(() => {
+    if (!selectedSessionId || streamState.steps.length === 0) return null;
+    // Use the first step's toolCallId as a stable run identifier
+    const firstToolCallId =
+      streamState.steps[0]?.toolCalls[0]?.id ?? String(Date.now());
+    return `${selectedSessionId}:${firstToolCallId}`;
+  }, [selectedSessionId, streamState.steps]);
+
+  // Reset dismissed state when a new stream starts
+  React.useEffect(() => {
+    if (streamState.isStreaming) {
+      // eslint-disable-next-line no-console
+      console.log(
+        '[ChatWindow] New stream started — resetting dismissedRunKey',
+      );
+      setDismissedRunKey(null);
+    }
+  }, [streamState.isStreaming]);
+
+  // Derive changed files from completed stream
+  const changedFiles = React.useMemo(() => {
+    // eslint-disable-next-line no-console
+    console.log('[ChatWindow] changedFiles memo recalculating', {
+      isStreaming: streamState.isStreaming,
+      selectedSessionId,
+      currentRunKey,
+      dismissedRunKey,
+      stepsCount: streamState.steps.length,
+    });
+
+    if (
+      streamState.isStreaming ||
+      !selectedSessionId ||
+      !currentRunKey ||
+      dismissedRunKey === currentRunKey
+    ) {
+      // eslint-disable-next-line no-console
+      console.log('[ChatWindow] changedFiles → returning [] (guard hit)', {
+        isStreaming: streamState.isStreaming,
+        noSession: !selectedSessionId,
+        noRunKey: !currentRunKey,
+        dismissed: dismissedRunKey === currentRunKey,
+      });
+      return [];
+    }
+
+    // Use a Map to keep only the latest update per file
+    const fileMap = new Map<
+      string,
+      { path: string; added: number; removed: number }
+    >();
+
+    streamState.steps.forEach((step) => {
+      step.toolCalls.forEach((tc) => {
+        if (
+          (tc.toolName === 'writeDbtModel' || tc.toolName === 'writeFile') &&
+          tc.status === 'done'
+        ) {
+          const path = (tc.args as any)?.filePath || (tc.args as any)?.path;
+          if (path) {
+            const result = tc.result as any;
+            // eslint-disable-next-line no-console
+            console.log(
+              '[ChatWindow] Found written file in stream steps:',
+              path,
+              { added: result?.linesAdded, removed: result?.linesRemoved },
+            );
+            fileMap.set(path, {
+              path,
+              added: result?.linesAdded ?? 0,
+              removed: result?.linesRemoved ?? 0,
+            });
+          }
+        }
+      });
+    });
+
+    const files = Array.from(fileMap.values());
+    // eslint-disable-next-line no-console
+    console.log(
+      '[ChatWindow] changedFiles result:',
+      files.map((f) => f.path),
+    );
+    return files;
+  }, [
+    streamState.steps,
+    streamState.isStreaming,
+    selectedSessionId,
+    currentRunKey,
+    dismissedRunKey,
+  ]);
+
+  const handleOpenFile = (path: string) => {
+    setEditingFilePath?.(path);
+    openFile?.(path);
+  };
+
+  // Debug: log when changedFiles changes
+  React.useEffect(() => {
+    // eslint-disable-next-line no-console
+    console.log(
+      '[ChatWindow] changedFiles updated:',
+      changedFiles.length,
+      'files:',
+      changedFiles.map((f) => f.path),
+    );
+  }, [changedFiles]);
+
   const renderMessages = () => {
     if (isLoadingProviders) {
       return (
@@ -211,7 +388,62 @@ export const ChatWindow: React.FC = () => {
     }
 
     return (
-      <ChatMessageList sessionId={selectedSessionId} lastUsage={lastUsage} />
+      <Box
+        sx={{
+          flex: 1,
+          display: 'flex',
+          flexDirection: 'column',
+          position: 'relative',
+          minWidth: 0,
+          overflow: 'hidden',
+        }}
+      >
+        <ChatMessageList
+          sessionId={selectedSessionId}
+          lastUsage={lastUsage}
+          streamState={streamState}
+          isAgentRunning={streamState.isStreaming}
+          onConfirmTerminal={confirmTerminal}
+          onClearError={clearError}
+          onOpenFile={handleOpenFile}
+        />
+
+        {changedFiles.length > 0 && (
+          <Box sx={{ px: 2, pb: 2 }}>
+            <FilesChangedBlock
+              files={changedFiles}
+              onOpenFile={handleOpenFile}
+              onDismiss={() => {
+                // eslint-disable-next-line no-console
+                console.log(
+                  '[ChatWindow] FilesChangedBlock dismissed, runKey:',
+                  currentRunKey,
+                );
+                if (currentRunKey) setDismissedRunKey(currentRunKey);
+              }}
+              onDiscard={async () => {
+                // eslint-disable-next-line no-console
+                console.log(
+                  '[ChatWindow] Discarding agent files:',
+                  changedFiles.map((f) => f.path),
+                );
+                // Close tabs for discarded files
+                changedFiles.forEach((f) => closeFile?.(f.path));
+                // Delete files from disk
+                await Promise.allSettled(
+                  changedFiles.map((f) =>
+                    projectsServices.deleteItem({ filePath: f.path }),
+                  ),
+                );
+                // Refresh file tree to remove deleted files
+                await refreshFileTree?.();
+                if (currentRunKey) setDismissedRunKey(currentRunKey);
+                toast.success('Agent-created files discarded.');
+              }}
+            />
+          </Box>
+        )}
+      </Box>
     );
   };
 
@@ -240,21 +472,66 @@ export const ChatWindow: React.FC = () => {
           justifyContent: 'space-between',
           gap: 0.5,
           minHeight: 32,
+          minWidth: 0,
+          overflow: 'hidden',
           position: 'relative',
           zIndex: 1,
         }}
       >
-        <Typography
-          variant="caption"
+        {/* Left side: beta badge + active session title */}
+        <Box
           sx={{
-            flexShrink: 0,
-            fontSize: '0.75rem',
-            fontWeight: 500,
-            color: 'text.secondary',
+            display: 'flex',
+            alignItems: 'center',
+            gap: 0.75,
+            flex: 1,
+            minWidth: 0,
+            overflow: 'hidden',
           }}
         >
-          AI Assistant (beta)
-        </Typography>
+          <Box
+            sx={{
+              flexShrink: 0,
+              fontSize: '0.55rem',
+              fontWeight: 600,
+              lineHeight: 1,
+              px: 0.75,
+              py: 0.25,
+              borderRadius: '4px',
+              bgcolor: 'primary.main',
+              color: 'primary.contrastText',
+              letterSpacing: '0.03em',
+              textTransform: 'uppercase',
+            }}
+          >
+            beta
+          </Box>
+
+          {selectedSessionId &&
+            sessions.length > 0 &&
+            (() => {
+              const activeSession = sessions.find(
+                (s) => (s.id as unknown as number) === selectedSessionId,
+              );
+              return activeSession ? (
+                <Typography
+                  variant="caption"
+                  sx={{
+                    fontSize: '0.875rem',
+                    fontWeight: 500,
+                    color: 'text.secondary',
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis',
+                    whiteSpace: 'nowrap',
+                    minWidth: 0,
+                    lineHeight: 1,
+                  }}
+                >
+                  {activeSession.title}
+                </Typography>
+              ) : null;
+            })()}
+        </Box>
 
         {/* Right side controls - Session Management + Close */}
         <Box
@@ -262,6 +539,7 @@ export const ChatWindow: React.FC = () => {
             display: 'flex',
             alignItems: 'center',
             gap: 0.25,
+            flexShrink: 0,
           }}
         >
           <NewChatButton
@@ -348,12 +626,17 @@ export const ChatWindow: React.FC = () => {
 
       {/* Input Area */}
       <Box sx={{ borderTop: '1px solid', borderColor: 'divider' }}>
-        <ChatInputBox
-          sessionId={selectedSessionId}
-          contextManager={contextManager}
-          projectPath={project?.path}
-          onUsage={(usage) => setLastUsage(usage)}
-        />
+        <GradientBorder loading={streamState.isStreaming}>
+          <ChatInputBox
+            sessionId={selectedSessionId}
+            contextManager={contextManager}
+            onUsage={(usage) => setLastUsage(usage)}
+            isStreaming={streamState.isStreaming}
+            onStartStream={startStream}
+            onCancelStream={cancelStream}
+            contextBreakdown={contextBreakdown}
+          />
+        </GradientBorder>
       </Box>
     </Paper>
   );

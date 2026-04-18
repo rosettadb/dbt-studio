@@ -1,54 +1,58 @@
 import type { Channels } from '../../types/ipc';
+import type {
+  ChatStreamChunkPayload,
+  AgentToolCallPayload,
+  AgentStepStartPayload,
+  AgentTerminalConfirmPayload,
+  AgentContextCompactedPayload,
+} from '../../types/agentEvents';
+
+// Re-export so consumers can import from one place
+export type {
+  ChatStreamChunkPayload as ChatStreamChunkEvent,
+  AgentToolCallPayload as AgentToolCallEvent,
+  AgentStepStartPayload as AgentStepStartEvent,
+  AgentTerminalConfirmPayload as AgentTerminalConfirmEvent,
+  AgentContextCompactedPayload as AgentContextCompactedEvent,
+};
 
 type Unsubscribe = () => void;
 
-export type ChatStreamChunkEvent = {
-  conversationId: number;
-  chunk: string;
-  done: boolean;
-  usage?: {
-    promptTokens: number;
-    completionTokens: number;
-    totalTokens: number;
-  };
-};
-
-export type AgentToolCallEvent = {
-  conversationId: number;
-  toolName: string;
-  args?: unknown;
-  stepNumber?: number;
-  status?: string;
+const subscribe = <T>(
+  channel: Channels,
+  handler: (event: T) => void,
+): Unsubscribe => {
+  const wrapped = (...args: unknown[]) => handler(args[0] as T);
+  window.electron.ipcRenderer.on(channel, wrapped);
+  return () => window.electron.ipcRenderer.removeListener(channel, wrapped);
 };
 
 export const subscribeToChatStreamChunks = (
-  handler: (event: ChatStreamChunkEvent) => void,
-): Unsubscribe => {
-  const channel: Channels = 'chat:message:stream-chunk';
-
-  const wrapped = (...args: unknown[]) => {
-    handler(args[0] as ChatStreamChunkEvent);
-  };
-
-  window.electron.ipcRenderer.on(channel, wrapped);
-
-  return () => {
-    window.electron.ipcRenderer.removeListener(channel, wrapped);
-  };
-};
+  handler: (event: ChatStreamChunkPayload) => void,
+): Unsubscribe => subscribe('chat:message:stream-chunk', handler);
 
 export const subscribeToAgentToolCalls = (
-  handler: (event: AgentToolCallEvent) => void,
-): Unsubscribe => {
-  const channel: Channels = 'agent:tool-call';
+  handler: (event: AgentToolCallPayload) => void,
+): Unsubscribe =>
+  subscribe('agent:tool-call', (event: AgentToolCallPayload) => {
+    // eslint-disable-next-line no-console
+    console.log('[agentEvents] agent:tool-call received', {
+      toolName: event.toolName,
+      status: event.status,
+      conversationId: event.conversationId,
+      args: event.args,
+    });
+    handler(event);
+  });
 
-  const wrapped = (...args: unknown[]) => {
-    handler(args[0] as AgentToolCallEvent);
-  };
+export const subscribeToStepStart = (
+  handler: (event: AgentStepStartPayload) => void,
+): Unsubscribe => subscribe('agent:step-start', handler);
 
-  window.electron.ipcRenderer.on(channel, wrapped);
+export const subscribeToTerminalConfirm = (
+  handler: (event: AgentTerminalConfirmPayload) => void,
+): Unsubscribe => subscribe('agent:terminal-confirm', handler);
 
-  return () => {
-    window.electron.ipcRenderer.removeListener(channel, wrapped);
-  };
-};
+export const subscribeToContextCompacted = (
+  handler: (event: AgentContextCompactedPayload) => void,
+): Unsubscribe => subscribe('agent:context-compacted', handler);

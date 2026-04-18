@@ -10,6 +10,7 @@ import {
   filesystemTools,
   createFilesystemTools,
 } from './tools/filesystem.tools';
+import { truncateToolResult } from './tokenEstimator';
 
 /**
  * Options for creating a dbt agent
@@ -123,6 +124,39 @@ Always confirm before making destructive changes.`;
       ...(options?.extraTools ?? {}),
     },
     stopWhen: stepCountIs(options?.maxSteps ?? 20),
+
+    // Compress oversized tool results before each step to stay within context.
+    // prepareStep belongs on the constructor per the SDK API (not on stream/generate).
+    prepareStep: async ({ messages: stepMessages }) => {
+      const MAX_TOOL_RESULT_TOKENS = 3_000;
+      const compressed = stepMessages.map((msg: any) => {
+        if (msg.role === 'tool' && Array.isArray(msg.content)) {
+          const newContent = msg.content.map((part: any) => {
+            if (
+              part &&
+              part.type === 'tool-result' &&
+              part.result !== undefined
+            ) {
+              const contentStr =
+                typeof part.result === 'string'
+                  ? part.result
+                  : JSON.stringify(part.result);
+              const truncated = truncateToolResult(
+                contentStr,
+                MAX_TOOL_RESULT_TOKENS,
+              );
+              if (truncated !== contentStr) {
+                return { ...part, result: truncated };
+              }
+            }
+            return part;
+          });
+          return { ...msg, content: newContent };
+        }
+        return msg;
+      });
+      return { messages: compressed };
+    },
 
     onStepFinish: async ({ stepNumber, usage, finishReason, toolCalls }) => {
       console.log(`[dbtAgent] Step ${stepNumber} finished:`, {

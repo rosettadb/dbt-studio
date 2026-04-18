@@ -18,6 +18,8 @@ import { useNotebookConnectionState } from './useNotebookConnectionState';
 import { useNotebookSidebarState } from './useNotebookSidebarState';
 import { useAgentMode } from './useAgentMode';
 
+import { useAgentStream } from './useAgentStream';
+
 export {
   useIpcPromise,
   useIpcRenderer,
@@ -38,4 +40,5 @@ export {
   useNotebookConnectionState,
   useNotebookSidebarState,
   useAgentMode,
+  useAgentStream,
 };

@@ -6,12 +6,20 @@ import useLocalStorage from './useLocalStorage';
 /**
  * Hook to manage agent mode state
  * Persists the agent mode preference in localStorage
+ * Default is Agent (Code) mode.
  */
 export const useAgentMode = (sessionId?: number) => {
-  // Store agent mode preference per session, with a global default
+  // Migrate old 'false' default to 'true' (Code mode is now the default)
+  if (
+    typeof window !== 'undefined' &&
+    localStorage.getItem('agentMode:global') === 'false'
+  ) {
+    localStorage.removeItem('agentMode:global');
+  }
+
   const [globalAgentMode, setGlobalAgentMode] = useLocalStorage<boolean>(
     'agentMode:global',
-    'false',
+    'true',
   );
 
   const [sessionAgentMode, setSessionAgentMode] = useLocalStorage<

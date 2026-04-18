@@ -20,10 +20,6 @@ import {
   useStreamChatMessage,
   useCancelChatStream,
 } from '../../controllers/chat.controller';
-import {
-  useRunAgent,
-  useCancelAgent,
-} from '../../controllers/agent.controller';
 import { useGetAISettings } from '../../controllers/aiSettings.controller';
 import { QUERY_KEYS } from '../../config/constants';
 import {
@@ -43,27 +39,31 @@ import { htmlToPlainText } from '../../utils/chatHelpers';
 import { useAppContext } from '../../hooks';
 import { useContextManager } from '../../hooks/useContextManager';
 import { useAgentMode } from '../../hooks/useAgentMode';
-import {
-  subscribeToAgentToolCalls,
-  subscribeToChatStreamChunks,
-} from '../../services/agentEvents.service';
+import { ContextUsageRing } from './ContextUsageRing';
+import type { ContextUsageBreakdown } from './ContextUsageRing';
 
 interface ChatInputBoxProps {
   sessionId?: number;
   contextManager?: ReturnType<typeof useContextManager>;
-  projectPath?: string;
   onUsage?: (usage: {
     promptTokens: number;
     completionTokens: number;
     totalTokens: number;
   }) => void;
+  isStreaming?: boolean;
+  onStartStream?: (content: string, contextItems?: any[]) => Promise<void>;
+  onCancelStream?: () => void;
+  contextBreakdown?: ContextUsageBreakdown | null;
 }
 
 export const ChatInputBox: React.FC<ChatInputBoxProps> = ({
   sessionId,
   contextManager,
-  projectPath,
   onUsage,
+  isStreaming,
+  onStartStream,
+  onCancelStream,
+  contextBreakdown,
 }) => {
   const theme = useTheme();
   const [input, setInput] = React.useState('');
@@ -73,8 +73,7 @@ export const ChatInputBox: React.FC<ChatInputBoxProps> = ({
   const [providerMenuAnchor, setProviderMenuAnchor] =
     React.useState<null | HTMLElement>(null);
 
-  const { pendingMessage, setPendingMessage, setEditingFilePath } =
-    useAppContext();
+  const { pendingMessage, setPendingMessage } = useAppContext();
 
   // Use provided context manager or create a fallback
   const fallbackContextManager = useContextManager();
@@ -84,20 +83,16 @@ export const ChatInputBox: React.FC<ChatInputBoxProps> = ({
   const assistantTempIdRef = React.useRef<number | null>(null);
   const userTempIdRef = React.useRef<number | null>(null);
   const lastAgentWrittenFileRef = React.useRef<string | null>(null);
-  const agentStreamUnsubscribeRef = React.useRef<null | (() => void)>(null);
-  const agentToolCallsUnsubscribeRef = React.useRef<null | (() => void)>(null);
 
   // Agent mode state
   const { isAgentMode, setAgentMode } = useAgentMode(sessionId);
 
-  // Chat and agent mutations
-  const { mutate: streamMessage, isLoading: isStreaming } =
+  // Chat and agent mutations (runAgent and cancelAgent are now handled via props for agent mode)
+  const { mutate: streamMessage, isLoading: isStreamingMode } =
     useStreamChatMessage();
-  const { mutate: cancelStream, isLoading: isCancelling } =
+  const { mutate: cancelStream, isLoading: isCancellingMode } =
     useCancelChatStream();
-  const { mutate: runAgent, isLoading: isAgentRunning } = useRunAgent();
-  const { mutate: cancelAgent, isLoading: isAgentCancelling } =
-    useCancelAgent();
+
   const { data: aiSettings } = useGetAISettings();
 
   const { data: providers = [] } = useGetAIProviders();
@@ -106,8 +101,8 @@ export const ChatInputBox: React.FC<ChatInputBoxProps> = ({
     useSetActiveAIProvider();
 
   // Combined loading state for both chat and agent modes
-  const isLoading = isStreaming || isAgentRunning;
-  const isCanceling = isCancelling || isAgentCancelling;
+  const isLoading = isStreamingMode || isStreaming;
+  const isCanceling = isCancellingMode;
 
   // Auto-rename session hook
   const { autoRename } = useAutoRenameSession(sessionId);
@@ -130,8 +125,6 @@ export const ChatInputBox: React.FC<ChatInputBoxProps> = ({
     if (!sessionId) return;
 
     // 1) Optimistically add the user message locally (no server call here)
-    // Must match the key used by useGetChatMessagesWithContext(sessionId) which is
-    // [QUERY_KEYS.GET_CHAT_MESSAGES_WITH_CONTEXT, sessionId, undefined, undefined]
     const msgKey = [
       QUERY_KEYS.GET_CHAT_MESSAGES_WITH_CONTEXT,
       sessionId,
@@ -241,7 +234,6 @@ export const ChatInputBox: React.FC<ChatInputBoxProps> = ({
           await queryClient.invalidateQueries(msgKey);
 
           // Auto-rename session after successful LLM response
-          // Use the user's message content to generate a descriptive title
           autoRename(messageContent);
 
           // Clear context after successful send
@@ -255,16 +247,14 @@ export const ChatInputBox: React.FC<ChatInputBoxProps> = ({
           const current = queryClient.getQueryData<typeof prev>(msgKey) || [];
           const aId = assistantTempIdRef.current;
           if (error?.message === 'aborted') {
-            // Cancelled by user: remove only the temp assistant and refresh to reconcile persisted user message
+            // Cancelled by user: remove only the temp assistant and refresh
             queryClient.setQueryData(
               msgKey,
               current.filter((m) => m.id !== aId),
             );
             assistantTempIdRef.current = null;
             await queryClient.invalidateQueries(msgKey);
-            // Clear user temp ref after refresh
             userTempIdRef.current = null;
-            // No toast for user cancellation
           } else {
             // Real error: remove both temp assistant and temp user
             const uId = userTempIdRef.current;
@@ -307,92 +297,9 @@ export const ChatInputBox: React.FC<ChatInputBoxProps> = ({
   };
 
   const handleSendAgentMessage = async (messageContent: string) => {
-    if (!sessionId) return;
+    if (!sessionId || !onStartStream) return;
 
-    const msgKey = [
-      QUERY_KEYS.GET_CHAT_MESSAGES_WITH_CONTEXT,
-      sessionId,
-      undefined,
-      undefined,
-    ] as const;
-    const prev = queryClient.getQueryData<Array<any>>(msgKey) || [];
-
-    const tempUserId = -Date.now();
-    const tempUser = {
-      id: tempUserId,
-      conversationId: sessionId,
-      role: 'user',
-      content: messageContent,
-      metadata: { temp: true, agentMode: true },
-      toolCalls: null as any,
-      contextItems: null as any,
-      thinkingContent: null as any,
-      signature: null as any,
-      isStreaming: false,
-      parentMessageId: null,
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-    } as any;
-
-    userTempIdRef.current = tempUserId;
-    const tempId = -Date.now() - 1;
-    assistantTempIdRef.current = tempId;
-    const tempAssistant = {
-      id: tempId,
-      conversationId: sessionId,
-      role: 'assistant',
-      content: '🤖 Agent working…',
-      metadata: { temp: true, isStreaming: true, agentMode: true },
-      toolCalls: null as any,
-      contextItems: null as any,
-      thinkingContent: null as any,
-      signature: null as any,
-      isStreaming: true,
-      parentMessageId: null,
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-    } as any;
-
-    queryClient.setQueryData(msgKey, [...prev, tempUser, tempAssistant]);
     setInput('');
-
-    // Set up streaming listener for agent responses (uses same event as chat)
-    const unsubscribe = subscribeToChatStreamChunks((data) => {
-      if (data && data.conversationId === sessionId) {
-        const current = queryClient.getQueryData<Array<any>>(msgKey) || [];
-        queryClient.setQueryData(
-          msgKey,
-          current.map((m) =>
-            m.id === assistantTempIdRef.current
-              ? {
-                  ...m,
-                  content:
-                    (m.content === '🤖 Agent working…' ? '' : m.content) +
-                    data.chunk,
-                  updatedAt: new Date().toISOString(),
-                }
-              : m,
-          ),
-        );
-      }
-    });
-    agentStreamUnsubscribeRef.current = unsubscribe;
-
-    const unsubscribeToolCalls = subscribeToAgentToolCalls((data) => {
-      if (!data || data.conversationId !== sessionId) {
-        return;
-      }
-
-      if (data.toolName !== 'writeFile' && data.toolName !== 'writeDbtModel') {
-        return;
-      }
-
-      const filePath = (data.args as any)?.filePath;
-      if (typeof filePath === 'string' && filePath.length > 0) {
-        lastAgentWrittenFileRef.current = filePath;
-      }
-    });
-    agentToolCallsUnsubscribeRef.current = unsubscribeToolCalls;
 
     const rawAgentContextItems =
       await activeContextManager.getContextItemsWithAdditionalFiles();
@@ -401,117 +308,19 @@ export const ChatInputBox: React.FC<ChatInputBoxProps> = ({
         ? rawAgentContextItems
         : [];
 
-    runAgent(
-      {
-        conversationId: sessionId,
-        content: messageContent,
-        contextItems:
-          agentContextItems.length > 0 ? agentContextItems : undefined,
-        projectPath,
-      },
-      {
-        onSuccess: async () => {
-          unsubscribe();
-          unsubscribeToolCalls();
-          agentStreamUnsubscribeRef.current = null;
-          agentToolCallsUnsubscribeRef.current = null;
-          await queryClient.invalidateQueries(msgKey);
-
-          if (projectPath) {
-            await queryClient.invalidateQueries([
-              QUERY_KEYS.GET_FILE_STRUCTURE,
-              projectPath,
-            ]);
-            await queryClient.invalidateQueries([
-              QUERY_KEYS.GIT_STATUSES,
-              projectPath,
-            ]);
-          } else {
-            await queryClient.invalidateQueries([
-              QUERY_KEYS.GET_FILE_STRUCTURE,
-            ]);
-            await queryClient.invalidateQueries([QUERY_KEYS.GIT_STATUSES]);
-          }
-
-          if (lastAgentWrittenFileRef.current) {
-            setEditingFilePath(lastAgentWrittenFileRef.current);
-          }
-
-          autoRename(messageContent);
-          activeContextManager.clearAdditionalFiles();
-          assistantTempIdRef.current = null;
-          userTempIdRef.current = null;
-          lastAgentWrittenFileRef.current = null;
-        },
-        onError: async (error: any) => {
-          unsubscribe();
-          unsubscribeToolCalls();
-          agentStreamUnsubscribeRef.current = null;
-          agentToolCallsUnsubscribeRef.current = null;
-          const current = queryClient.getQueryData<typeof prev>(msgKey) || [];
-          const aId = assistantTempIdRef.current;
-          const uId = userTempIdRef.current;
-
-          queryClient.setQueryData(
-            msgKey,
-            current.filter((m) => m.id !== aId && m.id !== uId),
-          );
-          assistantTempIdRef.current = null;
-          userTempIdRef.current = null;
-          lastAgentWrittenFileRef.current = null;
-
-          // Extract the real error message from nested AI SDK error chain
-          const extractMessage = (err: any): string => {
-            // RetryError wraps the last real error
-            if (err?.lastError) return extractMessage(err.lastError);
-            // APICallError has the actual API message
-            if (err?.responseBody) {
-              try {
-                const body = JSON.parse(err.responseBody);
-                const msg = body?.error?.message;
-                if (msg) return msg.split('\n')[0]; // first line only
-              } catch {
-                // ignore
-              }
-            }
-            return err?.message || 'Unknown error';
-          };
-
-          const msg = extractMessage(error);
-
-          if (
-            msg.includes('quota') ||
-            msg.includes('429') ||
-            msg.includes('RESOURCE_EXHAUSTED') ||
-            error?.statusCode === 429
-          ) {
-            toast.error(
-              'Rate limit exceeded. Please check your API quota or switch to a different provider.',
-            );
-          } else if (
-            msg.includes('401') ||
-            msg.includes('unauthorized') ||
-            msg.includes('API key')
-          ) {
-            toast.error(
-              'Authentication failed. Please check your AI provider credentials.',
-            );
-          } else if (msg.includes('No output generated')) {
-            toast.error(
-              'Agent failed to generate a response. This may be due to a rate limit or API error. Please try again.',
-            );
-          } else {
-            toast.error(`Agent error: ${msg}`);
-          }
-        },
-      },
+    await onStartStream(
+      messageContent,
+      agentContextItems.length > 0 ? agentContextItems : undefined,
     );
+
+    // Auto-rename session after successful send (optimistic or actually done depends on hook)
+    autoRename(messageContent);
+    activeContextManager.clearAdditionalFiles();
   };
 
   const handleSendMessage = async (content?: string) => {
     const messageContent = content || plainText.trim();
     if (sessionId && messageContent && activeProvider) {
-      // Use agent mode if enabled, otherwise use regular chat
       if (isAgentMode) {
         await handleSendAgentMessage(messageContent);
       } else {
@@ -526,37 +335,20 @@ export const ChatInputBox: React.FC<ChatInputBoxProps> = ({
 
   const handleCancel = () => {
     if (!sessionId) return;
-    const msgKey = [
-      QUERY_KEYS.GET_CHAT_MESSAGES_WITH_CONTEXT,
-      sessionId,
-      undefined,
-      undefined,
-    ] as const;
 
     if (isAgentMode) {
-      cancelAgent(sessionId, {
-        onSettled: async () => {
-          agentStreamUnsubscribeRef.current?.();
-          agentToolCallsUnsubscribeRef.current?.();
-          agentStreamUnsubscribeRef.current = null;
-          agentToolCallsUnsubscribeRef.current = null;
-          const current = queryClient.getQueryData<Array<any>>(msgKey) || [];
-          const aId = assistantTempIdRef.current;
-          queryClient.setQueryData(
-            msgKey,
-            current.filter((m) => m.id !== aId),
-          );
-          assistantTempIdRef.current = null;
-          await queryClient.invalidateQueries(msgKey);
-          userTempIdRef.current = null;
-          lastAgentWrittenFileRef.current = null;
-        },
-      });
+      if (onCancelStream) onCancelStream();
     } else {
       cancelStream(
         { sessionId },
         {
           onSettled: async () => {
+            const msgKey = [
+              QUERY_KEYS.GET_CHAT_MESSAGES_WITH_CONTEXT,
+              sessionId,
+              undefined,
+              undefined,
+            ] as const;
             const current = queryClient.getQueryData<Array<any>>(msgKey) || [];
             const aId = assistantTempIdRef.current;
             queryClient.setQueryData(
@@ -573,14 +365,14 @@ export const ChatInputBox: React.FC<ChatInputBoxProps> = ({
   };
 
   React.useEffect(() => {
-    if (pendingMessage && sessionId && activeProvider && !isStreaming) {
+    if (pendingMessage && sessionId && activeProvider && !isLoading) {
       setTimeout(() => {
         handleSendMessage(pendingMessage);
         setPendingMessage(null);
         setInput('');
       }, 500);
     }
-  }, [pendingMessage, sessionId, activeProvider, isStreaming]);
+  }, [pendingMessage, sessionId, activeProvider, isLoading]);
 
   const [isDragOver, setIsDragOver] = React.useState(false);
 
@@ -644,7 +436,8 @@ export const ChatInputBox: React.FC<ChatInputBoxProps> = ({
       <Box
         sx={{
           px: 1,
-          py: 0.25,
+          pt: 1,
+          pb: 0.25,
           display: 'flex',
           alignItems: 'center',
           gap: 1,
@@ -658,6 +451,26 @@ export const ChatInputBox: React.FC<ChatInputBoxProps> = ({
             maxHeight: '40vh',
             overflow: 'auto',
             borderRadius: theme.spacing(0.75),
+          }}
+          onDragOver={(e) => {
+            // Allow drop by preventing default (also prevents TipTap from blocking it)
+            const filePath =
+              e.dataTransfer.types.includes('application/x-file-path') ||
+              e.dataTransfer.types.includes('text/plain');
+            if (filePath) {
+              e.preventDefault();
+              e.stopPropagation();
+            }
+          }}
+          onDrop={(e) => {
+            const filePath =
+              e.dataTransfer.getData('application/x-file-path') ||
+              e.dataTransfer.getData('text/plain');
+            if (!filePath) return;
+            // Intercept before TipTap/ProseMirror handles it
+            e.preventDefault();
+            e.stopPropagation();
+            handleDrop(e);
           }}
         >
           <TipTapEditor
@@ -757,6 +570,113 @@ export const ChatInputBox: React.FC<ChatInputBoxProps> = ({
           </Typography>
         </Box>
 
+        {/* AI Provider Selector - Custom Dropdown */}
+        <Box
+          onClick={(e) =>
+            !switching && !isLoading && setProviderMenuAnchor(e.currentTarget)
+          }
+          sx={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 0.5,
+            position: 'relative',
+            borderRadius: 0.5,
+            px: 0.5,
+            py: 0.125,
+            border: '1px solid',
+            borderColor: 'divider',
+            cursor: switching || isLoading ? 'default' : 'pointer',
+            '&:hover': {
+              bgcolor: switching || isLoading ? 'transparent' : 'action.hover',
+            },
+          }}
+        >
+          <Box
+            component="img"
+            src={selectedIcon}
+            sx={{ width: 10, height: 10 }}
+          />
+          <Typography
+            variant="caption"
+            sx={{
+              fontSize: 11,
+              color: 'text.primary',
+              userSelect: 'none',
+              maxWidth: 180,
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+              whiteSpace: 'nowrap',
+            }}
+          >
+            {selectedProvider?.name || 'No AI Provider'}
+          </Typography>
+        </Box>
+
+        {/* Context usage ring — right of provider selector */}
+        <ContextUsageRing breakdown={contextBreakdown ?? null} size={16} />
+
+        <Menu
+          anchorEl={providerMenuAnchor}
+          open={Boolean(providerMenuAnchor)}
+          onClose={() => setProviderMenuAnchor(null)}
+          anchorOrigin={{ vertical: 'top', horizontal: 'left' }}
+          transformOrigin={{ vertical: 'bottom', horizontal: 'left' }}
+          PaperProps={{ sx: { mt: -0.5, minWidth: 200, maxHeight: 300 } }}
+          MenuListProps={{ sx: { py: 0.5 } }}
+        >
+          {providers.length === 0 ? (
+            <MenuItem disabled sx={{ py: 0.5, px: 1.5, minHeight: 'auto' }}>
+              <Typography
+                variant="caption"
+                sx={{ fontSize: 11, color: 'text.secondary' }}
+              >
+                No AI providers configured
+              </Typography>
+            </MenuItem>
+          ) : (
+            providers.map((p: AIProvider) => {
+              const providerIcon =
+                aiProviderImages[p.type as keyof typeof aiProviderImages] ||
+                defaultIcon;
+              return (
+                <MenuItem
+                  key={p.id}
+                  selected={p.id === activeProvider?.id}
+                  onClick={() => {
+                    setActiveProvider(p.id?.toString() ?? '');
+                    setProviderMenuAnchor(null);
+                  }}
+                  sx={{ py: 0.5, px: 1.5, minHeight: 'auto' }}
+                >
+                  <Box
+                    component="img"
+                    src={providerIcon}
+                    sx={{ width: 16, height: 16, mr: 1 }}
+                  />
+                  <Box sx={{ flex: 1 }}>
+                    <Typography
+                      variant="body2"
+                      sx={{ fontSize: 12, fontWeight: 500, lineHeight: 1.4 }}
+                    >
+                      {p.name}
+                    </Typography>
+                    <Typography
+                      variant="caption"
+                      sx={{
+                        fontSize: 10,
+                        color: 'text.secondary',
+                        lineHeight: 1.2,
+                      }}
+                    >
+                      {p.type}
+                    </Typography>
+                  </Box>
+                </MenuItem>
+              );
+            })
+          )}
+        </Menu>
+
         <Menu
           anchorEl={modeMenuAnchor}
           open={Boolean(modeMenuAnchor)}
@@ -799,15 +719,12 @@ export const ChatInputBox: React.FC<ChatInputBoxProps> = ({
             <Box>
               <Typography
                 variant="body2"
-                sx={{ fontSize: 12, fontWeight: 500, lineHeight: 1.4 }}
+                sx={{ fontWeight: !isAgentMode ? 600 : 400 }}
               >
                 Ask
               </Typography>
-              <Typography
-                variant="caption"
-                sx={{ fontSize: 10, color: 'text.secondary', lineHeight: 1.2 }}
-              >
-                Reads but won&apos;t edit
+              <Typography variant="caption" color="text.disabled">
+                Ask questions about your project
               </Typography>
             </Box>
           </MenuItem>
@@ -829,152 +746,19 @@ export const ChatInputBox: React.FC<ChatInputBoxProps> = ({
             <Box>
               <Typography
                 variant="body2"
-                sx={{ fontSize: 12, fontWeight: 500, lineHeight: 1.4 }}
+                sx={{ fontWeight: isAgentMode ? 600 : 400 }}
               >
                 Code
               </Typography>
-              <Typography
-                variant="caption"
-                sx={{ fontSize: 10, color: 'text.secondary', lineHeight: 1.2 }}
-              >
-                Can write and edit code
+              <Typography variant="caption" color="text.disabled">
+                Autonomously explore and edit code
               </Typography>
             </Box>
           </MenuItem>
         </Menu>
 
-        {/* AI Provider Selector - Custom Dropdown */}
-        <Box
-          onClick={(e) =>
-            !switching && !isLoading && setProviderMenuAnchor(e.currentTarget)
-          }
-          sx={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: 0.5,
-            position: 'relative',
-            borderRadius: 0.5,
-            px: 0.5,
-            py: 0.125,
-            border: '1px solid',
-            borderColor: 'divider',
-            cursor: switching || isLoading ? 'default' : 'pointer',
-            '&:hover': {
-              bgcolor: switching || isLoading ? 'transparent' : 'action.hover',
-            },
-          }}
-        >
-          <Box
-            component="img"
-            src={selectedIcon}
-            sx={{
-              width: 10,
-              height: 10,
-            }}
-          />
-          <Typography
-            variant="caption"
-            sx={{
-              fontSize: 11,
-              color: 'text.primary',
-              userSelect: 'none',
-              maxWidth: 180,
-              overflow: 'hidden',
-              textOverflow: 'ellipsis',
-              whiteSpace: 'nowrap',
-            }}
-          >
-            {selectedProvider?.name || 'No AI Provider'}
-          </Typography>
-        </Box>
-
-        <Menu
-          anchorEl={providerMenuAnchor}
-          open={Boolean(providerMenuAnchor)}
-          onClose={() => setProviderMenuAnchor(null)}
-          anchorOrigin={{
-            vertical: 'top',
-            horizontal: 'left',
-          }}
-          transformOrigin={{
-            vertical: 'bottom',
-            horizontal: 'left',
-          }}
-          PaperProps={{
-            sx: {
-              mt: -0.5,
-              minWidth: 220,
-              maxHeight: 300,
-            },
-          }}
-          MenuListProps={{
-            sx: {
-              py: 0.5,
-            },
-          }}
-        >
-          {providers.length === 0 ? (
-            <MenuItem disabled sx={{ py: 0.5, px: 1.5, minHeight: 'auto' }}>
-              <Typography
-                variant="caption"
-                sx={{ fontSize: 11, color: 'text.secondary' }}
-              >
-                No AI providers configured
-              </Typography>
-            </MenuItem>
-          ) : (
-            providers.map((p: AIProvider) => {
-              const providerIcon =
-                aiProviderImages[p.type as keyof typeof aiProviderImages] ||
-                defaultIcon;
-              return (
-                <MenuItem
-                  key={p.id}
-                  selected={p.id === activeProvider?.id}
-                  onClick={() => {
-                    setActiveProvider(p.id?.toString() ?? '');
-                    setProviderMenuAnchor(null);
-                  }}
-                  sx={{
-                    py: 0.5,
-                    px: 1.5,
-                    minHeight: 'auto',
-                  }}
-                >
-                  <Box
-                    component="img"
-                    src={providerIcon}
-                    sx={{
-                      width: 16,
-                      height: 16,
-                      mr: 1,
-                    }}
-                  />
-                  <Box sx={{ flex: 1 }}>
-                    <Typography
-                      variant="body2"
-                      sx={{ fontSize: 12, fontWeight: 500, lineHeight: 1.4 }}
-                    >
-                      {p.name}
-                    </Typography>
-                    <Typography
-                      variant="caption"
-                      sx={{
-                        fontSize: 10,
-                        color: 'text.secondary',
-                        lineHeight: 1.2,
-                      }}
-                    >
-                      {p.type}
-                    </Typography>
-                  </Box>
-                </MenuItem>
-              );
-            })
-          )}
-        </Menu>
-
         <Box sx={{ flex: 1 }} />
+
         {isStreaming && (
           <span style={{ fontSize: 11, color: theme.palette.text.disabled }}>
             Generating…

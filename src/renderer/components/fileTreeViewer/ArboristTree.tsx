@@ -266,7 +266,6 @@ export const ArboristTree: React.FC<ArboristTreeProps> = ({
     if (!contextMenu) return;
 
     navigator.clipboard.writeText(contextMenu.node.path);
-    toast.info('Path copied');
   }, [contextMenu]);
 
   const handleNewFileFromMenu = useCallback(() => {

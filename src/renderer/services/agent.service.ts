@@ -88,3 +88,93 @@ export const saveAISettings = async (config: AISettingsConfig): Promise<void> =>
 
 export const getAISettingsFilePath = async (): Promise<string> =>
   window.electron.ipcRenderer.invoke('ai-settings:file-path');
+
+// ---------------------------------------------------------------------------
+// IPC event subscriptions (FE-03: never subscribe inside components)
+// ---------------------------------------------------------------------------
+
+export interface StreamChunkPayload {
+  conversationId: number;
+  chunk: string;
+  done: boolean;
+  usage?: {
+    promptTokens: number;
+    completionTokens: number;
+    totalTokens: number;
+  };
+}
+
+export interface ToolCallPayload {
+  conversationId: number;
+  toolName: string;
+  args: Record<string, unknown>;
+  stepNumber: number;
+  status: 'running' | 'done' | 'error';
+}
+
+export interface TerminalConfirmPayload {
+  conversationId: number;
+  requestId: string;
+  toolName: string;
+  command: string;
+  cwd: string;
+}
+
+export interface ContextUsagePayload {
+  conversationId: number;
+  breakdown: Record<string, unknown>;
+}
+
+export const onStreamChunk = (
+  handler: (payload: StreamChunkPayload) => void,
+): (() => void) => {
+  const listener = (...args: unknown[]) =>
+    handler(args[0] as StreamChunkPayload);
+  window.electron.ipcRenderer.on('chat:message:stream-chunk', listener);
+  return () =>
+    window.electron.ipcRenderer.removeListener(
+      'chat:message:stream-chunk',
+      listener,
+    );
+};
+
+export const onToolCall = (
+  handler: (payload: ToolCallPayload) => void,
+): (() => void) => {
+  const listener = (...args: unknown[]) => handler(args[0] as ToolCallPayload);
+  window.electron.ipcRenderer.on('agent:tool-call', listener);
+  return () =>
+    window.electron.ipcRenderer.removeListener('agent:tool-call', listener);
+};
+
+export const onTerminalConfirm = (
+  handler: (payload: TerminalConfirmPayload) => void,
+): (() => void) => {
+  const listener = (...args: unknown[]) =>
+    handler(args[0] as TerminalConfirmPayload);
+  window.electron.ipcRenderer.on('agent:terminal-confirm', listener);
+  return () =>
+    window.electron.ipcRenderer.removeListener(
+      'agent:terminal-confirm',
+      listener,
+    );
+};
+
+export const onContextUsage = (
+  handler: (payload: ContextUsagePayload) => void,
+): (() => void) => {
+  const listener = (...args: unknown[]) =>
+    handler(args[0] as ContextUsagePayload);
+  window.electron.ipcRenderer.on('agent:context-usage', listener);
+  return () =>
+    window.electron.ipcRenderer.removeListener('agent:context-usage', listener);
+};
+
+export const resolveTerminalConfirm = async (
+  requestId: string,
+  allow: boolean,
+): Promise<void> =>
+  window.electron.ipcRenderer.invoke('agent:terminal-resolve', {
+    requestId,
+    allow,
+  });

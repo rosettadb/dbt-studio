@@ -602,6 +602,9 @@ export interface ChatMessage {
   metadata?: {
     model?: string;
     tokens?: number;
+    promptTokens?: number;
+    completionTokens?: number;
+    totalTokens?: number;
     cost?: number;
     duration?: number;
     error?: string;

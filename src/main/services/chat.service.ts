@@ -7,6 +7,7 @@ import type {
 import { AIProviderManager } from './ai/providerManager.service';
 import SelectedFileContextProvider from './selectedFileContextProvider.service';
 import { getVercelModel } from './ai/agentAdapter';
+import { getContextWindow } from './ai/tokenEstimator';
 
 // Token management interfaces
 interface TokenBudget {
@@ -58,6 +59,24 @@ class ChatService {
     buffer: 700, // 12% buffer for safety
   };
 
+  /**
+   * Builds a token budget scaled to the active model's context window.
+   * Falls back to the static DEFAULT_BUDGET if modelId is not provided.
+   * Uses 85% of the context window as the effective ceiling (matches agent compaction threshold).
+   */
+  private static buildBudgetForModel(modelId?: string): TokenBudget {
+    if (!modelId) return this.DEFAULT_BUDGET;
+    const contextWindow = getContextWindow(modelId);
+    const maxTotal = Math.floor(contextWindow * 0.85);
+    return {
+      maxTotal,
+      recentMessages: Math.floor(maxTotal * 0.6),
+      summary: Math.floor(maxTotal * 0.15),
+      relevantContext: Math.floor(maxTotal * 0.13),
+      buffer: Math.floor(maxTotal * 0.12),
+    };
+  }
+
   // Token counting cache for performance
   private static tokenCache = new Map<string, number>();
 
@@ -92,17 +111,20 @@ class ChatService {
       contextItems,
     );
 
-    // 2) Get conversation context using hybrid approach with token management
-    const budget = { ...this.DEFAULT_BUDGET, ...customBudget };
+    // 2) Get selected model from active provider (needed to compute dynamic budget)
+    const { selectedModel } =
+      await AIProviderManager.getInitializedActiveProviderAndModel();
+
+    // 3) Build token budget scaled to the model's context window (replaces hardcoded 6K cap)
+    const budget = {
+      ...this.buildBudgetForModel(selectedModel),
+      ...customBudget,
+    };
     const conversationContext = await this.buildConversationContext(
       conversationId,
       budget,
       contextItems, // Pass context items to conversation context
     );
-
-    // 3) Get selected model from active provider
-    const { selectedModel } =
-      await AIProviderManager.getInitializedActiveProviderAndModel();
 
     // 4) Prepare enhanced completion request with optimized context
     const enhancedPrompt = this.formatOptimizedConversationPrompt(
@@ -136,6 +158,9 @@ class ChatService {
 
     // 6) Stream from provider with enhanced context using AI SDK v6
     let fullContent = '';
+    let finalUsage:
+      | { promptTokens: number; completionTokens: number; totalTokens: number }
+      | undefined;
     const abortController = new AbortController();
     ChatService.activeStreams.set(conversationId, abortController);
 
@@ -165,11 +190,13 @@ class ChatService {
 
       // Send final done signal with usage
       const usage = await result.usage;
-      onChunk('', true, {
-        promptTokens: usage?.inputTokens ?? 0,
-        completionTokens: usage?.outputTokens ?? 0,
-        totalTokens: (usage?.inputTokens ?? 0) + (usage?.outputTokens ?? 0),
-      });
+      const totalToks = usage?.totalTokens ?? 0;
+      finalUsage = {
+        promptTokens: 0,
+        completionTokens: totalToks,
+        totalTokens: totalToks,
+      };
+      onChunk('', true, finalUsage);
     } catch (err) {
       // If aborted, we've already emitted a final done signal above.
       if (!(err instanceof Error && err.message === 'aborted')) {
@@ -185,7 +212,17 @@ class ChatService {
     // 7) Persist ASSISTANT message
     const assistantMessage = await MainDatabaseService.addMessageWithContext(
       conversationId,
-      { role: 'assistant', content: fullContent },
+      {
+        role: 'assistant',
+        content: fullContent,
+        metadata: finalUsage
+          ? {
+              promptTokens: finalUsage.promptTokens,
+              completionTokens: finalUsage.completionTokens,
+              totalTokens: finalUsage.totalTokens,
+            }
+          : undefined,
+      },
       undefined,
     );
 

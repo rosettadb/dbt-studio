@@ -467,7 +467,6 @@ const useTabManager = (projectId?: string): UseTabManagerReturn => {
         return null;
       }
 
-      let targetId: EditorTabId | null = null;
       let shouldLoadContent = false;
       let isEditable = false;
       let hasInitialContent = false;
@@ -475,32 +474,33 @@ const useTabManager = (projectId?: string): UseTabManagerReturn => {
       isEditable = isEditableFile(path);
       hasInitialContent = typeof options?.content === 'string';
 
-      setTabs((current) => {
-        const existingTab = current.find((tab) => tab.path === path);
-        if (existingTab) {
-          targetId = existingTab.id;
-          // Update existing tab with new options
-          const updated = current.map((tab) =>
-            tab.path === path
-              ? {
-                  ...tab,
-                  isReadOnly: options?.isReadOnly ?? tab.isReadOnly,
-                }
-              : tab,
-          );
-          tabsRef.current = updated;
-          return updated;
-        }
+      // Read current tabs synchronously from ref to avoid React 18 batching issues
+      // (setTabs callback may be deferred when called from outside React event handlers)
+      const currentTabs = tabsRef.current;
+      const existingTab = currentTabs.find((tab) => tab.path === path);
 
-        const id = ensureUniqueId(path, current);
-        targetId = id;
+      let targetId: EditorTabId;
+
+      if (existingTab) {
+        targetId = existingTab.id;
+        // Update existing tab options if needed
+        setTabs((current) =>
+          current.map((tab) =>
+            tab.path === path
+              ? { ...tab, isReadOnly: options?.isReadOnly ?? tab.isReadOnly }
+              : tab,
+          ),
+        );
+      } else {
+        // Generate ID before setTabs so we have it synchronously
+        targetId = ensureUniqueId(path, currentTabs);
 
         const initialContent =
           options?.content ??
           (isEditable ? '' : getNonEditableFileMessage(path));
 
         const newTab: EditorTabState = {
-          id,
+          id: targetId,
           path,
           title: options?.title ?? deriveTitleFromPath(path),
           content: initialContent,
@@ -513,14 +513,14 @@ const useTabManager = (projectId?: string): UseTabManagerReturn => {
         };
 
         shouldLoadContent = isEditable && !hasInitialContent;
-        const updated = [...current, newTab];
-        tabsRef.current = updated;
-        return updated;
-      });
 
-      // The setTabs callback runs synchronously, so targetId is set before this line
-      if (!targetId) {
-        return null;
+        setTabs((current) => {
+          // Double-check: another call may have added this tab concurrently
+          if (current.find((t) => t.id === targetId)) return current;
+          const updated = [...current, newTab];
+          tabsRef.current = updated;
+          return updated;
+        });
       }
 
       setActiveTabId(targetId);

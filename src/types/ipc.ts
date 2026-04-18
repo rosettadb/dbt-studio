@@ -231,6 +231,7 @@ export type UtilChannels =
   | 'windows:closeSetup'
   | 'utils:getFileContentList'
   | 'utils:open-path'
+  | 'utils:run-in-terminal'
   | 'dialog:showOpenDialog'
   | 'dialog:showSaveDialog';
 
@@ -381,6 +382,12 @@ export type AgentChannels =
   | 'agent:run'
   | 'agent:cancel'
   | 'agent:tool-call'
+  | 'agent:step-start'
+  | 'agent:terminal-confirm'
+  | 'agent:terminal-resolve'
+  | 'agent:terminal:confirm-response'
+  | 'agent:context-usage'
+  | 'agent:context-compacted'
   | 'agent:tools:list'
   | 'ai-settings:load'
   | 'ai-settings:save'

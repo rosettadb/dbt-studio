@@ -178,7 +178,9 @@ export const Sidebar: React.FC<Props> = ({ content }) => {
                           justifyContent: 'center',
                         }}
                       >
-                        <ElectricalServicesIcon sx={{ fontSize: 22 }} />
+                        <ElectricalServicesIcon
+                          sx={{ fontSize: 22, color: 'primary.main' }}
+                        />
                       </ListItemIcon>
                     </ListItem>
                   </StyledNavLink>
@@ -211,7 +213,9 @@ export const Sidebar: React.FC<Props> = ({ content }) => {
                           justifyContent: 'center',
                         }}
                       >
-                        <SettingsIcon sx={{ fontSize: 22 }} />
+                        <SettingsIcon
+                          sx={{ fontSize: 22, color: 'primary.main' }}
+                        />
                       </ListItemIcon>
                     </ListItem>
                   </StyledNavLink>

@@ -4,6 +4,7 @@ import SecureStorageService, { AIProviderType } from '../secureStorage.service';
 import { AIProvider, NewAIProvider } from '../../schemas/mainDatabase.schema';
 import { getVercelModel } from './agentAdapter';
 import { HealthStatus } from './types/provider.types';
+import { fetchAndCacheContextWindows } from './tokenEstimator';
 import {
   CompletionRequest,
   CompletionResponse,
@@ -222,8 +223,29 @@ export class AIProviderManager {
 
   static async setActiveProvider(id: string): Promise<void> {
     try {
-      // Update database
       await MainDatabaseService.setActiveProvider(parseInt(id, 10));
+
+      // Fire-and-forget: refresh context window cache for the newly active provider
+      const provider = await MainDatabaseService.getProvider(parseInt(id, 10));
+      if (provider) {
+        const apiKey =
+          provider.type !== 'ollama'
+            ? await SecureStorageService.getAIProviderCredential(
+                provider.id!,
+                provider.type as AIProviderType,
+              )
+            : undefined;
+        fetchAndCacheContextWindows({
+          providerType: provider.type as
+            | 'openai'
+            | 'anthropic'
+            | 'gemini'
+            | 'ollama',
+          apiKey: apiKey ?? undefined,
+        }).catch(() => {
+          // silently ignored — fallback table is always available
+        });
+      }
     } catch (error) {
       // eslint-disable-next-line no-console
       console.error('Failed to set active provider:', error);

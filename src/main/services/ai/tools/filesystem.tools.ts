@@ -5,6 +5,7 @@ import { tool } from 'ai';
 import { z } from 'zod';
 import * as fs from 'fs';
 import * as path from 'path';
+import AgentService from '../../agent.service';
 
 const MAX_FILE_SIZE = 1_000_000; // 1 MB for general files
 const MAX_DIRECTORY_DEPTH = 5;
@@ -166,6 +167,11 @@ export const writeFile = tool({
   execute: async ({ filePath, content, projectPath }) => {
     try {
       assertWithinProject(filePath, projectPath);
+
+      const context = AgentService.currentAgentContext;
+      if (context) {
+        // File writes don't require confirmation — only shell commands do.
+      }
 
       // Ensure directory exists
       const dir = path.dirname(filePath);
@@ -378,6 +384,12 @@ export function createFilesystemTools(
       execute: async ({ filePath, content }) => {
         try {
           assertWithinProject(filePath, projectPath);
+
+          const context = AgentService.currentAgentContext;
+          if (context) {
+            // File writes don't require confirmation — only shell commands do.
+          }
+
           const dir = path.dirname(filePath);
           if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
           fs.writeFileSync(filePath, content, 'utf-8');
