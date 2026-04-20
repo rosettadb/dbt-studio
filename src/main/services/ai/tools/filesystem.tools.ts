@@ -12,13 +12,31 @@ const MAX_DIRECTORY_DEPTH = 5;
 
 /**
  * Validates that a file path is within the project root
+ * For files that do not exist yet, resolves the nearest existing ancestor.
  */
 function assertWithinProject(filePath: string, projectPath: string): void {
-  const resolved = path.resolve(filePath);
-  const projectRoot = path.resolve(projectPath);
-  if (!resolved.startsWith(projectRoot)) {
+  if (!fs.existsSync(projectPath)) {
+    throw new Error(`Project path does not exist: ${projectPath}`);
+  }
+  const resolvedProjectRealPath = fs.realpathSync(projectPath);
+
+  let currentPath = path.resolve(filePath);
+  while (!fs.existsSync(currentPath)) {
+    const parent = path.dirname(currentPath);
+    if (parent === currentPath) break;
+    currentPath = parent;
+  }
+
+  const resolvedFileRealPath = fs.realpathSync(currentPath);
+  const relative = path.relative(resolvedProjectRealPath, resolvedFileRealPath);
+
+  if (
+    relative === '..' ||
+    relative.startsWith(`..${path.sep}`) ||
+    path.isAbsolute(relative)
+  ) {
     throw new Error(
-      `Access denied: path must be within project root. Attempted: ${resolved}, Root: ${projectRoot}`,
+      `Access denied: path must be within project root. Attempted: ${filePath}, Root: ${projectPath}`,
     );
   }
 }

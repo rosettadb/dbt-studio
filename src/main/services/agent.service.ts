@@ -354,9 +354,6 @@ UPDATED SUMMARY:`,
     };
 
     if (percentUsed > COMPACT_THRESHOLD) {
-      console.log(
-        `[AgentService] Context ${Math.round(percentUsed * 100)}% full — auto-compacting conversation ${conversationId}`,
-      );
       const compactedMessages = await this.autoCompact(
         conversationId,
         allMessages,
@@ -393,14 +390,6 @@ UPDATED SUMMARY:`,
       projectPath = selectedProject?.path;
     }
 
-    console.log('[AgentService.runAgent] Starting agent execution:', {
-      conversationId,
-      contentLength: content.length,
-      contextItemsCount: contextItems?.length || 0,
-      requestedModel,
-      projectPath,
-    });
-
     try {
       // Register per-conversation context (fixes race condition on concurrent runs)
       agentContexts.set(conversationId, { event, conversationId });
@@ -413,7 +402,6 @@ UPDATED SUMMARY:`,
       const aiSettings = await loadAISettings();
 
       // 2. Persist user message
-      console.log('[AgentService.runAgent] Persisting user message...');
       await MainDatabaseService.addMessageWithContext(
         conversationId,
         { role: 'user', content },
@@ -475,7 +463,6 @@ UPDATED SUMMARY:`,
       const maxSteps = aiSettings.configuration.autoContinue ? 20 : 1;
 
       // 6. Create agent
-      console.log('[AgentService.runAgent] Creating dbt agent...');
       const mainWindow =
         BrowserWindow.fromWebContents(event.sender) || undefined;
       const agent = await createDbtAgent({
@@ -487,16 +474,11 @@ UPDATED SUMMARY:`,
         maxSteps,
         mainWindow,
       });
-      console.log('[AgentService.runAgent] Agent created successfully');
 
       const abortController = new AbortController();
       activeAgents.set(conversationId, abortController);
-      console.log(
-        '[AgentService.runAgent] Agent registered, starting stream...',
-      );
 
       let fullContent = '';
-      let chunkCount = 0;
       let toolCallCount = 0;
       let finalUsage:
         | {
@@ -642,7 +624,6 @@ UPDATED SUMMARY:`,
               // Reset timeout on each received chunk — stream is alive
               clearTimeout(timeoutId);
               fullContent += chunk;
-              chunkCount += 1;
               sendChunk({ conversationId, chunk, done: false });
             }
             /* eslint-enable no-restricted-syntax */
@@ -677,7 +658,6 @@ UPDATED SUMMARY:`,
             onStepFinish,
           });
           fullContent = result.text;
-          chunkCount = 1;
           const totalToks = result.usage?.totalTokens ?? 0;
           finalUsage = {
             promptTokens: 0,
@@ -693,17 +673,8 @@ UPDATED SUMMARY:`,
           });
         }
 
-        console.log('[AgentService.runAgent] Complete:', {
-          totalChunks: chunkCount,
-          totalToolCalls: toolCallCount,
-          contentLength: fullContent.length,
-        });
-
         // Guard against empty responses (e.g. Gemini Flash Lite silent failures)
         if (!fullContent.trim() && toolCallCount === 0) {
-          console.warn(
-            '[AgentService.runAgent] Empty response with no tool calls — sending fallback message',
-          );
           const fallback =
             "I wasn't able to generate a response. Please try rephrasing your message or switching to a different model.";
           fullContent = fallback;
@@ -749,13 +720,6 @@ UPDATED SUMMARY:`,
         undefined,
         toolCallsToSave.length > 0 ? toolCallsToSave : undefined,
       );
-      console.log('[AgentService.runAgent] Assistant response persisted', {
-        finalUsage,
-      });
-
-      console.log(
-        '[AgentService.runAgent] Agent execution completed successfully',
-      );
       return { success: true };
     } catch (error) {
       console.error('[AgentService.runAgent] Error:', error);
@@ -775,22 +739,15 @@ UPDATED SUMMARY:`,
     success: boolean;
     message: string;
   }> {
-    console.log('[AgentService.cancelAgent] Attempting to cancel agent:', {
-      conversationId,
-    });
-
     const controller = activeAgents.get(conversationId);
     if (controller) {
-      // Only abort confirmations for THIS conversation, not all conversations (#5)
       TerminalConfirmGate.abortForConversation(conversationId);
       controller.abort();
       activeAgents.delete(conversationId);
       agentContexts.delete(conversationId);
-      console.log('[AgentService.cancelAgent] Agent cancelled successfully');
       return { success: true, message: 'Agent execution cancelled' };
     }
 
-    console.log('[AgentService.cancelAgent] No active agent found');
     return { success: false, message: 'No active agent execution found' };
   }
 
@@ -802,8 +759,6 @@ UPDATED SUMMARY:`,
     tools: AgentTool[];
     error?: string;
   }> {
-    console.log('[AgentService.listTools] Listing available tools...');
-
     try {
       // Return static list of available tools
       // Note: ToolLoopAgent doesn't expose tools directly
@@ -854,11 +809,6 @@ UPDATED SUMMARY:`,
           category: 'filesystem',
         },
       ];
-
-      console.log('[AgentService.listTools] Tools listed:', {
-        totalTools: tools.length,
-        categories: [...new Set(tools.map((t) => t.category))],
-      });
 
       return { success: true, tools };
     } catch (error) {

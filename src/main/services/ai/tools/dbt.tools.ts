@@ -3,7 +3,7 @@
 
 import { tool } from 'ai';
 import { z } from 'zod';
-import { execSync, spawn } from 'child_process';
+import { spawn, execFileSync } from 'child_process';
 import type { BrowserWindow } from 'electron';
 import * as fs from 'fs';
 import * as path from 'path';
@@ -34,7 +34,12 @@ const COMMAND_TIMEOUT = 120_000; // 2 minutes
 function assertWithinProject(filePath: string, projectPath: string): void {
   const resolved = path.resolve(filePath);
   const projectRoot = path.resolve(projectPath);
-  if (!resolved.startsWith(projectRoot)) {
+  const relative = path.relative(projectRoot, resolved);
+  if (
+    relative === '..' ||
+    relative.startsWith(`..${path.sep}`) ||
+    path.isAbsolute(relative)
+  ) {
     throw new Error(
       `Access denied: path must be within project root. Attempted: ${resolved}, Root: ${projectRoot}`,
     );
@@ -184,14 +189,28 @@ export const runDbtCommand = tool({
       // Resolve dbt executable from app-managed venv
       const dbtExe = await SettingsService.getDbtExePath();
 
-      // Build command
-      let fullCmd = `"${dbtExe}" ${command}`;
+      const args: string[] = command.split(' ').filter(Boolean);
       if (select) {
-        fullCmd += ` --select ${select}`;
+        args.push('--select', select);
       }
       if (extraArgs) {
-        fullCmd += ` ${extraArgs}`;
+        const parsed = extraArgs.match(/(?:[^\s"']+|(["'])[^\1]*?\1)+/g);
+        if (parsed) {
+          args.push(
+            ...parsed.map((p) => {
+              if (
+                (p.startsWith('"') && p.endsWith('"')) ||
+                (p.startsWith("'") && p.endsWith("'"))
+              ) {
+                return p.slice(1, -1);
+              }
+              return p;
+            }),
+          );
+        }
       }
+
+      const displayCmd = `"${dbtExe}" ${args.map((a) => (a.includes(' ') ? `"${a}"` : a)).join(' ')}`;
 
       const context = AgentService.currentAgentContext;
       if (context) {
@@ -199,29 +218,30 @@ export const runDbtCommand = tool({
           event: context.event,
           conversationId: context.conversationId,
           toolName: 'runDbtCommand',
-          command: fullCmd,
+          command: displayCmd,
           cwd: projectPath,
         });
         if (!allowed) {
           return {
             success: false,
-            command: fullCmd,
+            command: displayCmd,
             error: 'Command denied by user',
           };
         }
       }
 
       // Execute with timeout
-      const output = execSync(fullCmd, {
+      const output = execFileSync(dbtExe, args, {
         cwd: projectPath,
         encoding: 'utf-8',
         timeout: COMMAND_TIMEOUT,
         maxBuffer: 1024 * 1024 * 10, // 10 MB buffer
+        shell: false,
       });
 
       return {
         success: true,
-        command: fullCmd,
+        command: displayCmd,
         output,
       };
     } catch (error: any) {
@@ -484,9 +504,25 @@ export function createDbtTools(
               error: `Command not permitted: ${baseCommand}. Allowed: ${ALLOWED_DBT_COMMANDS.join(', ')}`,
             };
           const dbtExe = await SettingsService.getDbtExePath();
-          let fullCmd = `"${dbtExe}" ${command}`;
-          if (select) fullCmd += ` --select ${select}`;
-          if (extraArgs) fullCmd += ` ${extraArgs}`;
+          const args = command.split(' ').filter(Boolean);
+          if (select) args.push('--select', select);
+          if (extraArgs) {
+            const parsed = extraArgs.match(/(?:[^\s"']+|(["'])[^\1]*?\1)+/g);
+            if (parsed) {
+              args.push(
+                ...parsed.map((p) => {
+                  if (
+                    (p.startsWith('"') && p.endsWith('"')) ||
+                    (p.startsWith("'") && p.endsWith("'"))
+                  ) {
+                    return p.slice(1, -1);
+                  }
+                  return p;
+                }),
+              );
+            }
+          }
+          const displayCmd = `"${dbtExe}" ${args.map((a) => (a.includes(' ') ? `"${a}"` : a)).join(' ')}`;
 
           const context = AgentService.currentAgentContext;
           if (context) {
@@ -494,14 +530,14 @@ export function createDbtTools(
               event: context.event,
               conversationId: context.conversationId,
               toolName: 'runDbtCommand',
-              command: fullCmd,
+              command: displayCmd,
               cwd: projectPath,
             });
             if (!allowed) {
               return {
                 success: false,
                 error: 'Command denied by user',
-                command: fullCmd,
+                command: displayCmd,
               };
             }
           }
@@ -509,12 +545,12 @@ export function createDbtTools(
           return new Promise((resolve) => {
             if (mainWindow && !mainWindow.isDestroyed()) {
               mainWindow.webContents.send('cli:clear');
-              mainWindow.webContents.send('cli:output', `> ${fullCmd}\n`);
+              mainWindow.webContents.send('cli:output', `> ${displayCmd}\n`);
             }
 
-            const child = spawn(fullCmd, {
+            const child = spawn(dbtExe, args, {
               cwd: projectPath,
-              shell: true,
+              shell: false,
             });
 
             let fullOutput = '';
@@ -537,7 +573,7 @@ export function createDbtTools(
               }
               resolve({
                 success: false,
-                command: fullCmd,
+                command: displayCmd,
                 error: err.message,
                 stdout: '',
                 stderr: err.message,
@@ -554,13 +590,13 @@ export function createDbtTools(
               if (code === 0) {
                 resolve({
                   success: true,
-                  command: fullCmd,
+                  command: displayCmd,
                   output: fullOutput,
                 });
               } else {
                 resolve({
                   success: false,
-                  command: fullCmd,
+                  command: displayCmd,
                   error: `Command failed with code ${code}`,
                   stdout: fullOutput,
                   stderr: '',

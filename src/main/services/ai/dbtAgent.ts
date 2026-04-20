@@ -1,4 +1,3 @@
-/* eslint-disable no-console */
 // dbt Agent - ToolLoopAgent for dbt Studio
 // Factory function that creates a configured ToolLoopAgent for dbt operations
 
@@ -31,19 +30,7 @@ export interface DbtAgentOptions {
  * Called at agent run time to get the current active provider model.
  */
 export async function createDbtAgent(options?: DbtAgentOptions) {
-  console.log('[dbtAgent] Creating dbt agent with options:', {
-    requestedModel: options?.requestedModel,
-    projectPath: options?.projectPath,
-    maxSteps: options?.maxSteps ?? 20,
-    hasExtraTools: !!options?.extraTools,
-    hasSkills: !!options?.skills,
-  });
-
   const model = await getVercelModel(options?.requestedModel);
-  console.log('[dbtAgent] Model resolved:', {
-    modelId: model.modelId,
-    provider: model.provider,
-  });
 
   const mcpToolKeys = Object.keys(options?.extraTools || {});
   const mcpToolsList =
@@ -106,16 +93,6 @@ Always confirm before making destructive changes.`;
       )
     : allBaseTools;
 
-  const toolCount = Object.keys({
-    ...baseTools,
-    ...(options?.extraTools ?? {}),
-  }).length;
-
-  console.log('[dbtAgent] Initializing ToolLoopAgent with:', {
-    toolCount,
-    maxSteps: options?.maxSteps ?? 20,
-  });
-
   return new ToolLoopAgent({
     model: model as any,
     instructions: systemInstructions,
@@ -158,13 +135,8 @@ Always confirm before making destructive changes.`;
       return { messages: compressed };
     },
 
-    onStepFinish: async ({ stepNumber, usage, finishReason, toolCalls }) => {
-      console.log(`[dbtAgent] Step ${stepNumber} finished:`, {
-        finishReason,
-        tokensUsed: usage?.totalTokens,
-        toolsUsed: toolCalls?.map((tc) => tc.toolName),
-        toolCallCount: toolCalls?.length || 0,
-      });
+    onStepFinish: async () => {
+      // Step completion handled by AgentService via IPC events
     },
   });
 }

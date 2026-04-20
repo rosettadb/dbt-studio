@@ -67,7 +67,7 @@ const theme = createTheme({
           main: '#66bb6a',
         },
         text: {
-          primary: '#ffffff',
+          primary: '#e0e0e0',
           secondary: grey[400],
           disabled: grey[600],
         },

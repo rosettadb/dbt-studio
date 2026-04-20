@@ -208,8 +208,14 @@ ${instructions}
     const skillsDir = await ensureSkillsDirectory();
 
     // Security check: Make sure path remains inside the skills directory
+    const skillsRoot = path.resolve(skillsDir);
     const resolvedPath = path.resolve(folderPath);
-    if (!resolvedPath.startsWith(path.resolve(skillsDir))) {
+    const relative = path.relative(skillsRoot, resolvedPath);
+    if (
+      relative === '' ||
+      relative.startsWith('..') ||
+      path.isAbsolute(relative)
+    ) {
       throw new Error('Access denied: Cannot delete outside skills directory');
     }
 

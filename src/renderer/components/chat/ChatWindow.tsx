@@ -96,7 +96,11 @@ export const ChatWindow: React.FC = () => {
     const historyTokens = Math.ceil(historyChars / 3);
 
     // Derive context window from active provider model (fallback 32k)
-    const modelId = (activeProvider as any)?.config?.model ?? '';
+    const cfg =
+      typeof (activeProvider as any)?.config === 'string'
+        ? JSON.parse((activeProvider as any).config)
+        : (activeProvider as any)?.config;
+    const modelId = cfg?.model ?? '';
     const contextWindow = (() => {
       const m = modelId.toLowerCase();
       if (m.includes('gemini-2.5') || m.includes('gemini-3')) return 1_000_000;
@@ -239,38 +243,18 @@ export const ChatWindow: React.FC = () => {
   // Reset dismissed state when a new stream starts
   React.useEffect(() => {
     if (streamState.isStreaming) {
-      // eslint-disable-next-line no-console
-      console.log(
-        '[ChatWindow] New stream started — resetting dismissedRunKey',
-      );
       setDismissedRunKey(null);
     }
   }, [streamState.isStreaming]);
 
   // Derive changed files from completed stream
   const changedFiles = React.useMemo(() => {
-    // eslint-disable-next-line no-console
-    console.log('[ChatWindow] changedFiles memo recalculating', {
-      isStreaming: streamState.isStreaming,
-      selectedSessionId,
-      currentRunKey,
-      dismissedRunKey,
-      stepsCount: streamState.steps.length,
-    });
-
     if (
       streamState.isStreaming ||
       !selectedSessionId ||
       !currentRunKey ||
       dismissedRunKey === currentRunKey
     ) {
-      // eslint-disable-next-line no-console
-      console.log('[ChatWindow] changedFiles → returning [] (guard hit)', {
-        isStreaming: streamState.isStreaming,
-        noSession: !selectedSessionId,
-        noRunKey: !currentRunKey,
-        dismissed: dismissedRunKey === currentRunKey,
-      });
       return [];
     }
 
@@ -289,12 +273,6 @@ export const ChatWindow: React.FC = () => {
           const path = (tc.args as any)?.filePath || (tc.args as any)?.path;
           if (path) {
             const result = tc.result as any;
-            // eslint-disable-next-line no-console
-            console.log(
-              '[ChatWindow] Found written file in stream steps:',
-              path,
-              { added: result?.linesAdded, removed: result?.linesRemoved },
-            );
             fileMap.set(path, {
               path,
               added: result?.linesAdded ?? 0,
@@ -305,13 +283,7 @@ export const ChatWindow: React.FC = () => {
       });
     });
 
-    const files = Array.from(fileMap.values());
-    // eslint-disable-next-line no-console
-    console.log(
-      '[ChatWindow] changedFiles result:',
-      files.map((f) => f.path),
-    );
-    return files;
+    return Array.from(fileMap.values());
   }, [
     streamState.steps,
     streamState.isStreaming,
@@ -324,17 +296,6 @@ export const ChatWindow: React.FC = () => {
     setEditingFilePath?.(path);
     openFile?.(path);
   };
-
-  // Debug: log when changedFiles changes
-  React.useEffect(() => {
-    // eslint-disable-next-line no-console
-    console.log(
-      '[ChatWindow] changedFiles updated:',
-      changedFiles.length,
-      'files:',
-      changedFiles.map((f) => f.path),
-    );
-  }, [changedFiles]);
 
   const renderMessages = () => {
     if (isLoadingProviders) {
@@ -414,19 +375,9 @@ export const ChatWindow: React.FC = () => {
               files={changedFiles}
               onOpenFile={handleOpenFile}
               onDismiss={() => {
-                // eslint-disable-next-line no-console
-                console.log(
-                  '[ChatWindow] FilesChangedBlock dismissed, runKey:',
-                  currentRunKey,
-                );
                 if (currentRunKey) setDismissedRunKey(currentRunKey);
               }}
               onDiscard={async () => {
-                // eslint-disable-next-line no-console
-                console.log(
-                  '[ChatWindow] Discarding agent files:',
-                  changedFiles.map((f) => f.path),
-                );
                 // Close tabs for discarded files
                 changedFiles.forEach((f) => closeFile?.(f.path));
                 // Delete files from disk

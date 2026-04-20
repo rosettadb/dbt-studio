@@ -33,17 +33,7 @@ export const subscribeToChatStreamChunks = (
 
 export const subscribeToAgentToolCalls = (
   handler: (event: AgentToolCallPayload) => void,
-): Unsubscribe =>
-  subscribe('agent:tool-call', (event: AgentToolCallPayload) => {
-    // eslint-disable-next-line no-console
-    console.log('[agentEvents] agent:tool-call received', {
-      toolName: event.toolName,
-      status: event.status,
-      conversationId: event.conversationId,
-      args: event.args,
-    });
-    handler(event);
-  });
+): Unsubscribe => subscribe('agent:tool-call', handler);
 
 export const subscribeToStepStart = (
   handler: (event: AgentStepStartPayload) => void,
