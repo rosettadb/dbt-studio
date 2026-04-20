@@ -1,7 +1,10 @@
 import { Box, styled, Switch, Toolbar } from '@mui/material';
 
 export const StyledToolbar = styled(Toolbar)(({ theme }) => ({
-  background: theme.palette.background.paper,
+  background:
+    theme.palette.mode === 'light'
+      ? theme.palette.primary.main
+      : theme.palette.background.paper,
   minHeight: 40,
   display: 'flex',
   justifyContent: 'space-between',
@@ -10,7 +13,6 @@ export const StyledToolbar = styled(Toolbar)(({ theme }) => ({
 export const IconsContainer = styled('div')(() => ({
   display: 'flex',
   alignItems: 'center',
-  marginBottom: '-4px',
 }));
 
 export const Logo = styled('img')(() => ({
@@ -20,10 +22,14 @@ export const Logo = styled('img')(() => ({
   cursor: 'pointer',
 }));
 
-export const BranchDropdownToggle = styled('div')(() => ({
+export const BranchDropdownToggle = styled('div')(({ theme }) => ({
   display: 'flex',
   alignItems: 'center',
   gap: 10,
+  color:
+    theme.palette.mode === 'light'
+      ? theme.palette.primary.contrastText
+      : theme.palette.text.primary,
 }));
 
 export const EnvironmentSwitchContainer = styled(Box)(() => ({
@@ -43,7 +49,10 @@ export const EnvironmentSwitch = styled(Switch)(({ theme }) => ({
     '&.Mui-checked': {
       transform: 'translateX(18px)',
       '& + .MuiSwitch-track': {
-        backgroundColor: theme.palette.action.selected,
+        backgroundColor:
+          theme.palette.mode === 'light'
+            ? 'rgba(255,255,255,0.3)'
+            : theme.palette.action.selected,
         opacity: 1,
         border: 0,
       },
@@ -53,14 +62,20 @@ export const EnvironmentSwitch = styled(Switch)(({ theme }) => ({
     boxSizing: 'border-box',
     width: 20,
     height: 20,
-    backgroundColor: theme.palette.primary.main,
+    backgroundColor:
+      theme.palette.mode === 'light'
+        ? theme.palette.primary.contrastText
+        : theme.palette.primary.main,
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
   },
   '& .MuiSwitch-track': {
     borderRadius: 24 / 2,
-    backgroundColor: theme.palette.action.selected,
+    backgroundColor:
+      theme.palette.mode === 'light'
+        ? 'rgba(255,255,255,0.3)'
+        : theme.palette.action.selected,
     opacity: 1,
     transition: theme.transitions.create(['background-color'], {
       duration: 500,
@@ -93,7 +108,10 @@ export const AuthButtonContent = styled('div')(({ theme }) => ({
   display: 'flex',
   alignItems: 'center',
   gap: 8,
-  color: theme.palette.text.primary,
+  color:
+    theme.palette.mode === 'light'
+      ? theme.palette.primary.contrastText
+      : theme.palette.text.primary,
 }));
 
 export const AuthIcon = styled('img')(() => ({
@@ -104,5 +122,8 @@ export const AuthIcon = styled('img')(() => ({
 export const AuthLabel = styled('span')(({ theme }) => ({
   fontWeight: 300,
   fontSize: '0.75rem',
-  color: theme.palette.text.primary,
+  color:
+    theme.palette.mode === 'light'
+      ? theme.palette.primary.contrastText
+      : theme.palette.text.primary,
 }));

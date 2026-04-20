@@ -71,7 +71,10 @@ export const StatusBar: React.FC = () => {
         display: 'flex',
         alignItems: 'center',
         px: 1,
-        bgcolor: 'background.paper',
+        bgcolor: (theme) =>
+          theme.palette.mode === 'light'
+            ? '#e8e8e8'
+            : theme.palette.background.paper,
         borderTop: '2px solid',
         borderColor: 'background.default',
         flexShrink: 0,
