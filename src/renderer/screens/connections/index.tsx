@@ -356,7 +356,7 @@ const Connections: React.FC = () => {
   const totalConnections = connections.length + cloudConnections.length;
 
   return (
-    <AppLayout sidebarContent={<ConnectionsSidebar />}>
+    <AppLayout sidebarContent={<ConnectionsSidebar />} panelTitle="Connections">
       <Box sx={{ p: 3 }}>
         {/* Header with title and icon */}
         <Box

@@ -503,6 +503,7 @@ const Sql = () => {
   return (
     <AppLayout
       data-testid="sql-editor-screen"
+      panelTitle="SQL Editor"
       sidebarContent={
         <Box
           sx={{

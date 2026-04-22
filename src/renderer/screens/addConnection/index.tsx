@@ -193,7 +193,7 @@ const AddConnection: React.FC = () => {
   };
 
   return (
-    <AppLayout sidebarContent={<ConnectionsSidebar />}>
+    <AppLayout sidebarContent={<ConnectionsSidebar />} panelTitle="Connections">
       {selectedItem ? (
         <ConnectionContainer>{renderComponent()}</ConnectionContainer>
       ) : (

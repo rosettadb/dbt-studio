@@ -148,6 +148,7 @@ const Settings: React.FC = () => {
 
   return (
     <AppLayout
+      panelTitle="Settings"
       sidebarContent={
         <Box
           sx={{

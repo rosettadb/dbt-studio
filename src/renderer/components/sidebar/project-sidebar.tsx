@@ -1,13 +1,11 @@
-import React, { useState } from 'react';
-import { Box, useTheme, Tooltip } from '@mui/material';
+import React from 'react';
+import { Box } from '@mui/material';
 import { FileTreeViewer } from '../index';
 import { FileTreeContainer } from '../../screens/projectDetails/styles';
 import { FileStatus, FileNode, Project } from '../../../types/backend';
-import { Icon } from '../icon';
-import { icons } from '../../../../assets';
-import { SourceControlView } from '../sourceControl/SourceControlView';
+import { SourceControlView } from '../sourceControl';
 
-type SidebarTab = 'explorer' | 'scm';
+export type SidebarTab = 'explorer' | 'scm';
 
 // Explorer Tab Component - Wraps existing FileTreeViewer
 interface ExplorerTabProps {
@@ -86,6 +84,9 @@ const SourceControlTab: React.FC<SourceControlTabProps> = ({
 };
 
 interface ProjectSidebarProps {
+  // Tab control (lifted to parent)
+  activeTab: SidebarTab;
+
   // File Explorer props (preserve all existing functionality)
   directories?: FileNode;
   statuses: FileStatus[];
@@ -112,6 +113,7 @@ interface ProjectSidebarProps {
 }
 
 export const ProjectSidebar: React.FC<ProjectSidebarProps> = ({
+  activeTab,
   directories,
   statuses,
   isLoadingDirectories,
@@ -129,140 +131,15 @@ export const ProjectSidebar: React.FC<ProjectSidebarProps> = ({
   onSourceControlSynchronize,
   isSourceControlSynchronizing,
 }) => {
-  const [activeTab, setActiveTab] = useState<SidebarTab>('explorer');
-  const theme = useTheme();
-
-  // Calculate number of changed files for badge
-  const changedFilesCount = statuses.length;
-
   return (
     <Box
       sx={{
         height: '100%',
-        width: '300px',
+        width: '100%',
         display: 'flex',
         flexDirection: 'column',
       }}
     >
-      {/* Simple Horizontal Icon List - Clean Flexbox */}
-      <Box
-        sx={{
-          display: 'flex',
-          height: 36,
-          backgroundColor: 'background.paper',
-          alignItems: 'center',
-          justifyContent: 'center',
-          gap: 1,
-          py: 0.5,
-        }}
-      >
-        {/* Explorer Icon */}
-        <Tooltip
-          title="Explorer"
-          placement="bottom"
-          enterDelay={800}
-          enterNextDelay={800}
-        >
-          <Box
-            onClick={() => setActiveTab('explorer')}
-            sx={{
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              width: 28,
-              height: 28,
-              cursor: 'pointer',
-              borderRadius: 0.5,
-              backgroundColor:
-                activeTab === 'explorer' ? 'action.selected' : 'transparent',
-              opacity: activeTab === 'explorer' ? 1 : 0.7,
-              transition: 'all 0.2s ease',
-              '&:hover': {
-                backgroundColor: 'action.hover',
-                opacity: 1,
-              },
-            }}
-          >
-            <Icon
-              src={icons.folder}
-              width={16}
-              height={16}
-              color={
-                activeTab === 'explorer'
-                  ? theme.palette.primary.main
-                  : theme.palette.text.secondary
-              }
-            />
-          </Box>
-        </Tooltip>
-
-        {/* Source Control Icon with Badge */}
-        <Tooltip
-          title="Source Control"
-          placement="bottom"
-          enterDelay={800}
-          enterNextDelay={800}
-        >
-          <Box
-            onClick={() => setActiveTab('scm')}
-            sx={{
-              position: 'relative',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              width: 28,
-              height: 28,
-              cursor: 'pointer',
-              borderRadius: 0.5,
-              backgroundColor:
-                activeTab === 'scm' ? 'action.selected' : 'transparent',
-              opacity: activeTab === 'scm' ? 1 : 0.7,
-              transition: 'all 0.2s ease',
-              '&:hover': {
-                backgroundColor: 'action.hover',
-                opacity: 1,
-              },
-            }}
-          >
-            <Icon
-              src={icons.gitBranch}
-              width={16}
-              height={16}
-              color={
-                activeTab === 'scm'
-                  ? theme.palette.primary.main
-                  : theme.palette.text.secondary
-              }
-            />
-
-            {/* Badge positioned inside icon at top-right */}
-            {changedFilesCount > 0 && (
-              <Box
-                sx={{
-                  position: 'absolute',
-                  top: 2,
-                  right: -2,
-                  backgroundColor: 'primary.main',
-                  color: 'primary.contrastText',
-                  borderRadius: '8px',
-                  fontSize: 9,
-                  fontWeight: 600,
-                  minWidth: 14,
-                  height: 14,
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  padding: '0 3px',
-                  lineHeight: 1,
-                }}
-              >
-                {changedFilesCount > 99 ? '99+' : changedFilesCount}
-              </Box>
-            )}
-          </Box>
-        </Tooltip>
-      </Box>
-
       {/* Tab Content */}
       <Box sx={{ flex: 1, overflow: 'hidden' }}>
         {/* File Explorer Tab - Preserve Existing Functionality Exactly */}
