@@ -81,7 +81,7 @@ export const DiffView: React.FC<Props> = ({
       onMount={handleEditorDidMount}
       options={{
         renderSideBySide: true,
-        fontSize: 14,
+        fontSize: 13,
         minimap: { enabled: false },
         lineNumbers: 'on',
         scrollBeyondLastLine: false,

@@ -159,6 +159,26 @@ export const sessionMetadata = sqliteTable(
   }),
 );
 
+// Chat Compaction Summaries Table - For Phase 8 long-context management
+export const chatCompactionSummaries = sqliteTable(
+  'chat_compaction_summaries',
+  {
+    id: integer('id').primaryKey({ autoIncrement: true }),
+    conversationId: integer('conversation_id')
+      .notNull()
+      .references(() => chatConversations.id, { onDelete: 'cascade' }),
+    content: text('content').notNull(),
+    coversUpToMessageId: integer('covers_up_to_message_id'),
+    createdAt: text('created_at').default(sql`CURRENT_TIMESTAMP`),
+    updatedAt: text('updated_at').default(sql`CURRENT_TIMESTAMP`),
+  },
+  (table: any) => ({
+    conversationIdx: index('chat_compaction_summaries_conversation_idx').on(
+      table.conversationId,
+    ),
+  }),
+);
+
 // Tool Calls Table - For Continue.dev tool execution tracking
 export const toolCalls = sqliteTable(
   'tool_calls',
@@ -230,6 +250,7 @@ export const chatConversationsRelations = relations(
     messages: many(chatMessages),
     usageLogs: many(aiUsageLogs),
     sessionMetadata: many(sessionMetadata),
+    compactionSummaries: many(chatCompactionSummaries),
   }),
 );
 
@@ -273,6 +294,16 @@ export const toolCallsRelations = relations(toolCalls, ({ one }) => ({
   }),
 }));
 
+export const chatCompactionSummariesRelations = relations(
+  chatCompactionSummaries,
+  ({ one }) => ({
+    conversation: one(chatConversations, {
+      fields: [chatCompactionSummaries.conversationId],
+      references: [chatConversations.id],
+    }),
+  }),
+);
+
 export const aiUsageLogsRelations = relations(aiUsageLogs, ({ one }) => ({
   provider: one(aiProviders, {
     fields: [aiUsageLogs.providerId],
@@ -302,6 +333,10 @@ export type NewSessionMetadata = typeof sessionMetadata.$inferInsert;
 
 export type ToolCall = typeof toolCalls.$inferSelect;
 export type NewToolCall = typeof toolCalls.$inferInsert;
+
+export type ChatCompactionSummary = typeof chatCompactionSummaries.$inferSelect;
+export type NewChatCompactionSummary =
+  typeof chatCompactionSummaries.$inferInsert;
 
 export type PromptTemplate = typeof promptTemplates.$inferSelect;
 export type NewPromptTemplate = typeof promptTemplates.$inferInsert;

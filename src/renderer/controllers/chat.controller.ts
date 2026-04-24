@@ -472,6 +472,11 @@ export const useStreamChatMessage = (
       content: string;
       contextItems?: Omit<NewContextItem, 'messageId'>[];
       onChunk?: (chunk: string) => void;
+      onDone?: (usage?: {
+        promptTokens: number;
+        completionTokens: number;
+        totalTokens: number;
+      }) => void;
     }
   >,
 ): UseMutationResult<
@@ -482,6 +487,11 @@ export const useStreamChatMessage = (
     content: string;
     contextItems?: Omit<NewContextItem, 'messageId'>[];
     onChunk?: (chunk: string) => void;
+    onDone?: (usage?: {
+      promptTokens: number;
+      completionTokens: number;
+      totalTokens: number;
+    }) => void;
   }
 > => {
   const { onSuccess: onCustomSuccess, onError: onCustomError } =
@@ -489,12 +499,19 @@ export const useStreamChatMessage = (
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: async ({ sessionId, content, contextItems, onChunk }) => {
+    mutationFn: async ({
+      sessionId,
+      content,
+      contextItems,
+      onChunk,
+      onDone,
+    }) => {
       return chatService.streamMessage(
         sessionId,
         content,
         contextItems,
         onChunk,
+        onDone,
       );
     },
     onSuccess: async (message, variables, ...args) => {

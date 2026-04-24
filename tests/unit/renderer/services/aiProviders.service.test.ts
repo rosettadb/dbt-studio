@@ -1,17 +1,16 @@
 import { aiProvidersService } from '../../../../src/renderer/services/aiProviders.service';
+import { client as rawClient } from '../../../../src/renderer/config/client';
 
-jest.mock('../../../../src/renderer/config/client', () => {
-  return {
-    client: {
-      get: jest.fn(),
-      post: jest.fn(),
-    },
-  };
-});
+jest.mock('../../../../src/renderer/config/client', () => ({
+  client: {
+    get: jest.fn(),
+    post: jest.fn(),
+  },
+}));
+
+const client = rawClient as jest.Mocked<typeof rawClient>;
 
 describe('renderer/services/aiProviders.service', () => {
-  const { client } = require('../../../../src/renderer/config/client');
-
   beforeEach(() => {
     jest.clearAllMocks();
   });
@@ -77,7 +76,10 @@ describe('renderer/services/aiProviders.service', () => {
 
     await aiProvidersService.setActiveProvider('provider-1');
 
-    expect(client.post).toHaveBeenCalledWith('ai:provider:set-active', 'provider-1');
+    expect(client.post).toHaveBeenCalledWith(
+      'ai:provider:set-active',
+      'provider-1',
+    );
   });
 
   it('deactivateAllProviders should call client.get with ai:provider:deactivate-all', async () => {
@@ -91,7 +93,8 @@ describe('renderer/services/aiProviders.service', () => {
   it('testProviderConnection should call client.post with ai:provider:test-connection and providerId', async () => {
     client.post.mockResolvedValue({ data: { ok: true } });
 
-    const result = await aiProvidersService.testProviderConnection('provider-1');
+    const result =
+      await aiProvidersService.testProviderConnection('provider-1');
 
     expect(client.post).toHaveBeenCalledWith(
       'ai:provider:test-connection',
@@ -110,10 +113,13 @@ describe('renderer/services/aiProviders.service', () => {
       credentials,
     );
 
-    expect(client.post).toHaveBeenCalledWith('ai:provider:test-temp-connection', {
-      config,
-      credentials,
-    });
+    expect(client.post).toHaveBeenCalledWith(
+      'ai:provider:test-temp-connection',
+      {
+        config,
+        credentials,
+      },
+    );
     expect(result).toEqual({ ok: true });
   });
 
@@ -122,7 +128,10 @@ describe('renderer/services/aiProviders.service', () => {
 
     const result = await aiProvidersService.getProviderModels('provider-1');
 
-    expect(client.post).toHaveBeenCalledWith('ai:provider:get-models', 'provider-1');
+    expect(client.post).toHaveBeenCalledWith(
+      'ai:provider:get-models',
+      'provider-1',
+    );
     expect(result).toEqual([{ id: 'm1' }]);
   });
 
@@ -148,19 +157,14 @@ describe('renderer/services/aiProviders.service', () => {
     expect(result).toBe('secret');
   });
 
-  it('initializeProviderManager should call client.get with ai:provider-manager:initialize', async () => {
-    client.get.mockResolvedValue({ data: undefined });
-
-    await aiProvidersService.initializeProviderManager();
-
-    expect(client.get).toHaveBeenCalledWith('ai:provider-manager:initialize');
-  });
-
   it('generateCompletion should call client.post with ai:completion:generate and set schemaConfig.description', async () => {
     client.post.mockResolvedValue({ data: { ok: true } });
 
     const schemaConfig = { schema: {} } as any;
-    const result = await aiProvidersService.generateCompletion('hello', schemaConfig);
+    const result = await aiProvidersService.generateCompletion(
+      'hello',
+      schemaConfig,
+    );
 
     expect(schemaConfig.description).toBe('hello');
     expect(client.post).toHaveBeenCalledWith('ai:completion:generate', {

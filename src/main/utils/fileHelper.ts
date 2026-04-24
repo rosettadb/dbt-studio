@@ -30,7 +30,12 @@ export const getDirectoryStructure = (dirPath: string): FileNode => {
 };
 
 export const readFileContent = (filePath: string): string | null => {
-  return fs.readFileSync(filePath, 'utf8');
+  try {
+    return fs.readFileSync(filePath, 'utf8');
+  } catch (error: any) {
+    if (error?.code === 'ENOENT') return null;
+    throw error;
+  }
 };
 
 export const saveFileContent = async (

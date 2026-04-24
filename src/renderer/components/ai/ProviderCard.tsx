@@ -205,7 +205,11 @@ export const ProviderCard: React.FC<ProviderCardProps> = ({
   // Helper function to get model from config
   const getProviderModel = () => {
     try {
-      const config = provider.config ? JSON.parse(provider.config) : {};
+      // Handle both string and object formats
+      const config =
+        typeof provider.config === 'string'
+          ? JSON.parse(provider.config)
+          : provider.config || {};
       return config.model || '';
     } catch (error) {
       // If config is not valid JSON, return empty string

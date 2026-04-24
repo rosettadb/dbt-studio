@@ -28,7 +28,6 @@ import FullscreenExitIcon from '@mui/icons-material/FullscreenExit';
 import { Terminal } from './terminal';
 import {
   Root,
-  Sash,
   EditorWrapper,
   TerminalWrapper,
   TerminalHeader,
@@ -173,7 +172,36 @@ export const TerminalLayout: React.FC<Props> = ({ children, project }) => {
     setSelectedTab(0);
   };
 
-  const renderSash = () => (!isMinimized ? <Sash /> : null);
+  const renderSash = (_: number, active: boolean) => {
+    if (isMinimized) return null;
+    return (
+      <div
+        style={{
+          width: '100%',
+          height: '4px',
+          cursor: 'row-resize',
+          position: 'relative',
+          backgroundColor: active ? 'rgba(144,202,249,0.4)' : 'transparent',
+          transition: 'background-color 0.15s ease',
+        }}
+      >
+        <div
+          style={{
+            position: 'absolute',
+            top: '50%',
+            left: 0,
+            right: 0,
+            height: '2px',
+            transform: 'translateY(-50%)',
+            backgroundColor: active
+              ? 'rgba(144,202,249,0.8)'
+              : 'rgba(255,255,255,0.08)',
+            transition: 'background-color 0.15s ease',
+          }}
+        />
+      </div>
+    );
+  };
 
   // Auto-switch to process tab when a process starts
   React.useEffect(() => {

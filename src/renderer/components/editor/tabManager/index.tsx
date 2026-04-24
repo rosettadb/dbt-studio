@@ -46,6 +46,7 @@ export const TabManager: React.FC<TabManagerProps> = ({
   ) => {
     event.dataTransfer.effectAllowed = 'move';
     event.dataTransfer.setData('text/plain', tabId);
+    event.dataTransfer.setData('application/x-file-path', tabId);
     setDragState({ tabId, overTabId: null });
   };
 

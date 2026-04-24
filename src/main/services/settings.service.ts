@@ -88,6 +88,7 @@ export default class SettingsService {
         duckdbPath: metadata.path,
         duckdbSize: metadata.sizeHumanReadable,
         duckdbStatus: metadata.status,
+        duckdbVersion: metadata.duckdbVersion,
         duckdbLockStatus: metadata.lockStatus,
         duckdbLastCheckedAt: metadata.lastCheckedAt,
         duckdbActiveConnections: metadata.activeConnections,

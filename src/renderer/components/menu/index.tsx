@@ -90,6 +90,14 @@ export const Menu: React.FC = () => {
   const isProjectSelected = Boolean(project?.id);
   const isOnProjectDetails = location.pathname === '/app';
 
+  const isLightMode = theme.palette.mode === 'light';
+  const headerIconColor = isLightMode
+    ? theme.palette.primary.contrastText
+    : theme.palette.primary.main;
+  const headerTextColor = isLightMode
+    ? theme.palette.primary.contrastText
+    : theme.palette.text.secondary;
+
   return (
     <StyledToolbar variant="dense">
       <IconsContainer>
@@ -253,14 +261,18 @@ export const Menu: React.FC = () => {
                     <Cloud
                       sx={{
                         fontSize: 14,
-                        color: theme.palette.primary.contrastText,
+                        color: isLightMode
+                          ? theme.palette.primary.main
+                          : theme.palette.primary.contrastText,
                       }}
                     />
                   ) : (
                     <Computer
                       sx={{
                         fontSize: 14,
-                        color: theme.palette.primary.contrastText,
+                        color: isLightMode
+                          ? theme.palette.primary.main
+                          : theme.palette.primary.contrastText,
                       }}
                     />
                   )}
@@ -270,7 +282,7 @@ export const Menu: React.FC = () => {
             <span
               style={{
                 fontSize: '12px',
-                color: theme.palette.text.secondary,
+                color: headerTextColor,
                 fontWeight: 500,
                 display: 'flex',
                 alignItems: 'center',
@@ -285,14 +297,13 @@ export const Menu: React.FC = () => {
           <Tooltip title="AI Assistant (beta)">
             <IconButton
               onClick={() => setIsChatOpen?.(!isChatOpen)}
-              color="primary"
-              size="small"
+              sx={{ color: headerIconColor }}
             >
               <Icon
                 src={icons.bot}
-                width={18}
-                height={18}
-                color={theme.palette.primary.main}
+                width={22}
+                height={22}
+                color={headerIconColor}
               />
             </IconButton>
           </Tooltip>
