@@ -56,6 +56,10 @@ const registerUtilsHandlers = () => {
       return result;
     },
   );
+
+  ipcMain.handle('utils:open-path', (_event, filePath: string) =>
+    shell.openPath(filePath),
+  );
 };
 
 export default registerUtilsHandlers;

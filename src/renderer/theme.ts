@@ -67,7 +67,7 @@ const theme = createTheme({
           main: '#66bb6a',
         },
         text: {
-          primary: '#ffffff',
+          primary: '#e0e0e0',
           secondary: grey[400],
           disabled: grey[600],
         },
@@ -85,9 +85,6 @@ const theme = createTheme({
         root: {
           boxShadow: '0px 1px 3px 0px rgba(0,0,0,0.08)',
         },
-      },
-      defaultProps: {
-        color: 'default',
       },
     },
     MuiCard: {

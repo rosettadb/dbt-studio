@@ -195,13 +195,15 @@ class ChatService {
     content: string,
     contextItems?: Omit<NewContextItem, 'messageId'>[],
     onChunk?: (chunk: string) => void,
+    onDone?: (usage?: {
+      promptTokens: number;
+      completionTokens: number;
+      totalTokens: number;
+    }) => void,
   ): Promise<ChatMessageWithContext> {
-    // Set up streaming listener if callback provided
     let unsubscribe: (() => void) | null = null;
 
-    if (onChunk) {
-      // The preload `on()` already strips the IpcRendererEvent and passes only args
-      // so our handler receives the payload directly as the first argument.
+    if (onChunk || onDone) {
       unsubscribe = window.electron.ipcRenderer.on(
         'chat:message:stream-chunk',
         (...args: unknown[]) => {
@@ -209,9 +211,15 @@ class ChatService {
             conversationId: number;
             chunk: string;
             done: boolean;
+            usage?: {
+              promptTokens: number;
+              completionTokens: number;
+              totalTokens: number;
+            };
           };
           if (data && data.conversationId === sessionId) {
-            onChunk(data.chunk);
+            if (!data.done && onChunk) onChunk(data.chunk);
+            if (data.done && onDone) onDone(data.usage);
           }
         },
       );

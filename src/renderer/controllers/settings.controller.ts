@@ -23,7 +23,11 @@ export const useGetSettings = (
   return useQuery({
     queryKey: [QUERY_KEYS.GET_SETTINGS],
     queryFn: async () => {
-      return settingsServices.getSettings();
+      const res = await settingsServices.getSettings();
+      return {
+        ...res,
+        env: res.env,
+      };
     },
     ...customOptions,
   });

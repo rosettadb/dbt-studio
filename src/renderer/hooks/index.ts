@@ -16,6 +16,9 @@ import { useMonacoAutocomplete } from './useMonacoAutocomplete';
 import { useSchemaForConnection } from './useSchemaForConnection';
 import { useNotebookConnectionState } from './useNotebookConnectionState';
 import { useNotebookSidebarState } from './useNotebookSidebarState';
+import { useAgentMode } from './useAgentMode';
+
+import { useAgentStream } from './useAgentStream';
 
 export {
   useIpcPromise,
@@ -36,4 +39,6 @@ export {
   useSchemaForConnection,
   useNotebookConnectionState,
   useNotebookSidebarState,
+  useAgentMode,
+  useAgentStream,
 };

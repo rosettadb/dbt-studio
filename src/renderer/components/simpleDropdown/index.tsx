@@ -7,6 +7,7 @@ type Props = {
   onSelect: (value: string) => void;
   selectedItem: string;
   anchorElement?: React.ReactNode;
+  buttonSx?: object;
 };
 
 export const SimpleDropdownMenu: React.FC<Props> = ({
@@ -14,6 +15,7 @@ export const SimpleDropdownMenu: React.FC<Props> = ({
   selectedItem,
   items,
   anchorElement,
+  buttonSx,
 }) => {
   const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
   const open = Boolean(anchorEl);
@@ -39,6 +41,7 @@ export const SimpleDropdownMenu: React.FC<Props> = ({
         aria-haspopup="true"
         aria-expanded={open ? 'true' : undefined}
         onClick={handleClick}
+        sx={buttonSx}
       >
         {anchorElement ?? 'Open'}
       </Button>

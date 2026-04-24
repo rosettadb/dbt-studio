@@ -1,5 +1,5 @@
 import FolderIcon from '@mui/icons-material/Folder';
-import PsychologyIcon from '@mui/icons-material/Psychology';
+import AutoAwesomeIcon from '@mui/icons-material/AutoAwesome';
 import ManageAccountsIcon from '@mui/icons-material/ManageAccounts';
 import CloudIcon from '@mui/icons-material/Cloud';
 import InfoIcon from '@mui/icons-material/Info';
@@ -57,8 +57,8 @@ export const settingsSidebarElements: SettingsSidebarElement[] = [
     path: '/app/settings/rosetta',
   },
   {
-    icon: PsychologyIcon,
-    text: 'AI Providers',
+    icon: AutoAwesomeIcon,
+    text: 'AI Settings',
     path: '/app/settings/ai-providers',
   },
   {

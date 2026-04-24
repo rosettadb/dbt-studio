@@ -797,8 +797,7 @@ export const CodeEditor = ({
       onChange={onChange}
       loading={<Shimmer text="Loading editor..." />}
       options={{
-        fontSize: 14,
-        minimap: { enabled: false },
+        fontSize: 13,
         lineNumbers: 'on',
         scrollBeyondLastLine: false,
         automaticLayout: true,

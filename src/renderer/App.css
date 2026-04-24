@@ -11,7 +11,7 @@ body {
   padding: 0;
 }
 
-li {
+li:not(.markdown-content li) {
   list-style: none;
 }
 

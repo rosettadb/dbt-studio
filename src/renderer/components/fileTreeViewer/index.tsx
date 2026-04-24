@@ -125,7 +125,10 @@ const FileTreeViewer: React.FC<Props> = ({
           placeholder="Search files or folders..."
           onChange={(e) => setSearchKeyword(e.target.value)}
           value={searchKeyword}
-          sx={{ height: '40px' }}
+          sx={{
+            '& .MuiInputBase-root': { height: 36, fontSize: 13 },
+            '& .MuiInputBase-input': { py: 0, px: 1, fontSize: 13 },
+          }}
           InputProps={{
             endAdornment: searchKeyword ? (
               <InputAdornment position="end">

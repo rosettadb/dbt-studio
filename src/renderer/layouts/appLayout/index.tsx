@@ -1,6 +1,7 @@
 import React from 'react';
-import { CssBaseline } from '@mui/material';
+import { Box, CssBaseline } from '@mui/material';
 import { Sidebar } from '../../components';
+import { StatusBar } from '../../components/statusBar';
 import { Content, Main, Root } from './styles';
 
 type Props = {
@@ -12,10 +13,13 @@ export const AppLayout: React.FC<Props> = ({ sidebarContent, children }) => {
   return (
     <Root>
       <CssBaseline />
-      <Sidebar content={sidebarContent} />
-      <Content>
-        <Main>{children}</Main>
-      </Content>
+      <Box sx={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
+        <Sidebar content={sidebarContent} />
+        <Content>
+          <Main>{children}</Main>
+        </Content>
+      </Box>
+      <StatusBar />
     </Root>
   );
 };

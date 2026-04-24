@@ -1,14 +1,11 @@
+import { generateText } from 'ai';
 import MainDatabaseService from '../mainDatabase.service';
 import SecureStorageService, { AIProviderType } from '../secureStorage.service';
 import { AIProvider, NewAIProvider } from '../../schemas/mainDatabase.schema';
-import { OpenAIProvider } from './providers/openai.provider';
-import { OllamaProvider } from './providers/ollama.provider';
-import { GeminiProvider } from './providers/gemini.provider';
-import { AnthropicProvider } from './providers/anthropic.provider';
-import { BaseAIProvider } from './providers/base.provider';
-import { AIProviderConfig, HealthStatus } from './types/provider.types';
+import { getVercelModel } from './agentAdapter';
+import { HealthStatus } from './types/provider.types';
+import { fetchAndCacheContextWindows } from './tokenEstimator';
 import {
-  CompletionChunk,
   CompletionRequest,
   CompletionResponse,
   TypedCompletionRequest,
@@ -26,39 +23,14 @@ export interface ProviderTestResult {
 export class AIProviderManager {
   private static providers: Map<string, any> = new Map();
 
-  private static activeProvider: any | null = null;
-
-  // Helper method to create provider instance
-  private static createProviderInstance(
-    type: string,
-    config: AIProviderConfig,
-  ): BaseAIProvider | null {
-    switch (type) {
-      case 'openai':
-        return new OpenAIProvider();
-      case 'ollama':
-        return new OllamaProvider();
-      case 'gemini':
-        return new GeminiProvider();
-      case 'anthropic':
-        return new AnthropicProvider();
-      default:
-        // eslint-disable-next-line no-console
-        console.error(
-          `Unknown provider type: ${type}, ${JSON.stringify(config)}`,
-        );
-        return null;
-    }
-  }
-
   /**
-   * Returns an initialized active provider instance and a selected model compatible with it.
-   * This is useful for services that need to directly call provider methods (e.g., streaming).
+   * @deprecated Use getVercelModel() from agentAdapter.ts instead.
+   * This method is kept for backward compatibility only.
+   * Returns the selected model name and provider type.
    */
   static async getInitializedActiveProviderAndModel(
     requestedModel?: string,
   ): Promise<{
-    providerInstance: BaseAIProvider;
     selectedModel: string;
     providerType: string;
   }> {
@@ -68,21 +40,6 @@ export class AIProviderManager {
       throw new Error(
         'No active AI provider configured. Please configure and activate a provider in settings.',
       );
-    }
-
-    // Credentials (if needed)
-    let apiKey: string | undefined;
-    const providersNeedingApiKey = ['openai', 'anthropic', 'gemini'];
-    if (providersNeedingApiKey.includes(activeProvider.type)) {
-      apiKey = (await SecureStorageService.getAIProviderCredential(
-        activeProvider.id!,
-        activeProvider.type as AIProviderType,
-      )) as any;
-      if (!apiKey) {
-        throw new Error(
-          `No API key configured for ${activeProvider.type} provider. Please configure credentials in settings.`,
-        );
-      }
     }
 
     // Parse provider config
@@ -104,37 +61,10 @@ export class AIProviderManager {
         ? requestedModel
         : this.getDefaultModelForProvider(activeProvider.type, config);
 
-    // Create and initialize instance
-    const providerInstance = this.createProviderInstance(
-      activeProvider.type,
-      config,
-    );
-    if (!providerInstance) {
-      throw new Error(`Unsupported provider type: ${activeProvider.type}`);
-    }
-
-    await providerInstance.initialize({ ...config, apiKey });
-
     return {
-      providerInstance,
       selectedModel,
       providerType: activeProvider.type,
     };
-  }
-
-  static async initializeAllProviders(): Promise<void> {
-    try {
-      // Set active provider if one exists
-      const activeProvider = await MainDatabaseService.getActiveProvider();
-      // TODO: Implement active provider initialization when provider classes are ready
-      if (activeProvider) {
-        // activeProvider initialization logic will go here
-      }
-    } catch (error) {
-      // eslint-disable-next-line no-console
-      console.error('Failed to initialize AI providers:', error);
-      throw error;
-    }
   }
 
   static async createProvider(
@@ -293,8 +223,29 @@ export class AIProviderManager {
 
   static async setActiveProvider(id: string): Promise<void> {
     try {
-      // Update database
       await MainDatabaseService.setActiveProvider(parseInt(id, 10));
+
+      // Fire-and-forget: refresh context window cache for the newly active provider
+      const provider = await MainDatabaseService.getProvider(parseInt(id, 10));
+      if (provider) {
+        const apiKey =
+          provider.type !== 'ollama'
+            ? await SecureStorageService.getAIProviderCredential(
+                provider.id!,
+                provider.type as AIProviderType,
+              )
+            : undefined;
+        fetchAndCacheContextWindows({
+          providerType: provider.type as
+            | 'openai'
+            | 'anthropic'
+            | 'gemini'
+            | 'ollama',
+          apiKey: apiKey ?? undefined,
+        }).catch(() => {
+          // silently ignored — fallback table is always available
+        });
+      }
     } catch (error) {
       // eslint-disable-next-line no-console
       console.error('Failed to set active provider:', error);
@@ -306,65 +257,158 @@ export class AIProviderManager {
     config: NewAIProvider,
     credentials: Record<string, any>,
   ): Promise<ProviderTestResult> {
+    // eslint-disable-next-line no-console
+    console.log(
+      '[PROVIDER MANAGER] testTemporaryProvider called for type:',
+      config.type,
+    );
+
     try {
+      const startTime = Date.now();
+
       // Parse the provider config
-      const configString =
+      const parsedConfig =
         typeof config.config === 'string'
-          ? config.config
-          : JSON.stringify(config.config || {});
-      const parsedConfig = JSON.parse(configString);
+          ? JSON.parse(config.config)
+          : config.config || {};
 
-      // Create provider config object
-      const providerConfig: AIProviderConfig = {
-        ...parsedConfig,
-        apiKey: credentials.apiKey,
-      };
+      const apiKey = credentials.apiKey || parsedConfig.apiKey;
 
-      // Create provider instance
-      const provider = this.createProviderInstance(config.type, providerConfig);
-      if (!provider) {
-        // eslint-disable-next-line no-console
-        console.error(
-          `Failed to create provider instance for type: ${config.type}`,
-        );
-        return {
-          success: false,
-          error: `Unsupported provider type: ${config.type}`,
-        };
-      }
+      // Test DIRECTLY without touching the database at all
+      let model: any;
 
-      await provider.initialize(providerConfig);
-      const testResult = await provider.testConnection();
+      if (config.type === 'ollama') {
+        const { createOllama } = await import('ollama-ai-provider');
+        const ollama = createOllama({
+          baseURL: parsedConfig.baseUrl || 'http://localhost:11434/api',
+        });
+        const modelId = await this.fetchFirstOllamaModel(parsedConfig.baseUrl);
+        model = ollama(modelId);
+      } else {
+        if (!apiKey) {
+          return {
+            success: false,
+            error: `No API key provided for ${config.type} provider`,
+          };
+        }
 
-      // Get available models if test was successful
-      if (testResult.success) {
-        try {
-          const models = await provider.getAvailableModels();
-          testResult.models = models;
-          testResult.modelsAvailable = models.length;
-        } catch (modelError) {
-          testResult.models = [];
-          testResult.modelsAvailable = 0;
+        switch (config.type) {
+          case 'openai': {
+            const { createOpenAI } = await import('@ai-sdk/openai');
+            const modelId = await this.fetchFirstOpenAIModel(apiKey);
+            model = createOpenAI({ apiKey })(modelId);
+            break;
+          }
+          case 'anthropic': {
+            const { createAnthropic } = await import('@ai-sdk/anthropic');
+            model = createAnthropic({ apiKey })('claude-sonnet-4-6');
+            break;
+          }
+          case 'gemini': {
+            const { createGoogleGenerativeAI } = await import('@ai-sdk/google');
+            const modelId = await this.fetchFirstGeminiModel(apiKey);
+            // eslint-disable-next-line no-console
+            console.log(
+              '[PROVIDER MANAGER] testTemporaryProvider - Using Gemini model:',
+              modelId,
+            );
+            model = createGoogleGenerativeAI({ apiKey })(modelId);
+            break;
+          }
+          default:
+            return {
+              success: false,
+              error: `Unsupported provider type: ${config.type}`,
+            };
         }
       }
 
-      return testResult;
-    } catch (error) {
+      await generateText({
+        model,
+        prompt: 'Say "test successful" if you can read this.',
+      });
+
+      const latencyMs = Date.now() - startTime;
       // eslint-disable-next-line no-console
-      console.error('=== Provider test failed ===');
-      // eslint-disable-next-line no-console
-      console.error('Error details:', error);
-      // eslint-disable-next-line no-console
-      console.error(
-        'Stack trace:',
-        error instanceof Error ? error.stack : 'No stack trace',
+      console.log(
+        '[PROVIDER MANAGER] testTemporaryProvider - Test successful! Latency:',
+        latencyMs,
+        'ms',
       );
 
+      return {
+        success: true,
+        message: 'Provider test successful',
+        latencyMs,
+        models: [],
+        modelsAvailable: 0,
+      };
+    } catch (error) {
+      // eslint-disable-next-line no-console
+      console.error(
+        '[PROVIDER MANAGER] testTemporaryProvider - Test failed:',
+        error,
+      );
       return {
         success: false,
         error:
           error instanceof Error ? error.message : 'Unknown error occurred',
       };
+    }
+  }
+
+  private static async fetchFirstOpenAIModel(apiKey: string): Promise<string> {
+    try {
+      const response = await fetch('https://api.openai.com/v1/models', {
+        headers: { Authorization: `Bearer ${apiKey}` },
+      });
+      if (!response.ok) throw new Error('Failed to fetch models');
+      const data = await response.json();
+      const gptModels = data.data
+        .filter(
+          (m: any) =>
+            m.id.startsWith('gpt-') ||
+            m.id.startsWith('o1-') ||
+            m.id.startsWith('o3-'),
+        )
+        .sort((a: any, b: any) => b.id.localeCompare(a.id));
+      return gptModels[0]?.id || 'gpt-4o';
+    } catch {
+      return 'gpt-4o';
+    }
+  }
+
+  private static async fetchFirstGeminiModel(apiKey: string): Promise<string> {
+    try {
+      const response = await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models?key=${apiKey}`,
+      );
+      if (!response.ok) throw new Error('Failed to fetch models');
+      const data = await response.json();
+      const models = data.models
+        .filter(
+          (m: any) =>
+            m.supportedGenerationMethods?.includes('generateContent') &&
+            m.name.includes('gemini'),
+        )
+        .sort((a: any, b: any) => b.name.localeCompare(a.name));
+      return models[0]?.name.split('/').pop() || 'gemini-2.5-flash';
+    } catch {
+      return 'gemini-2.5-flash';
+    }
+  }
+
+  private static async fetchFirstOllamaModel(
+    baseUrl?: string,
+  ): Promise<string> {
+    try {
+      const url = baseUrl || 'http://localhost:11434';
+      const response = await fetch(`${url}/api/tags`);
+      if (!response.ok) throw new Error('Failed to fetch models');
+      const data = await response.json();
+      return data.models?.[0]?.name || 'llama3.2';
+    } catch {
+      return 'llama3.2';
     }
   }
 
@@ -380,73 +424,201 @@ export class AIProviderManager {
         return [];
       }
 
-      // Parse the provider config
-      const configString =
+      // Parse config
+      const config =
         typeof provider.config === 'string'
-          ? provider.config
-          : JSON.stringify(provider.config || {});
-      const parsedConfig = JSON.parse(configString);
+          ? JSON.parse(provider.config)
+          : provider.config || {};
 
-      // Get credentials from secure storage
+      // Get API key from secure storage
       let apiKey: string | null = null;
-      if (['openai', 'anthropic', 'gemini'].includes(provider.type)) {
+      const providersNeedingApiKey = ['openai', 'anthropic', 'gemini'];
+      if (providersNeedingApiKey.includes(provider.type)) {
         apiKey = await SecureStorageService.getAIProviderCredential(
           provider.id!,
           provider.type as AIProviderType,
         );
       }
 
-      // Create provider config object
-      const providerConfig: AIProviderConfig = {
-        ...parsedConfig,
-        apiKey,
-      };
-
-      // Create provider instance
-      const providerInstance = this.createProviderInstance(
-        provider.type,
-        providerConfig,
-      );
-      if (!providerInstance) {
-        // eslint-disable-next-line no-console
-        console.error(
-          `Failed to create provider instance for type: ${provider.type}`,
-        );
-        return [];
+      // Fetch models from provider APIs
+      switch (provider.type) {
+        case 'openai':
+          return await this.fetchOpenAIModels(apiKey || undefined);
+        case 'anthropic':
+          return await this.fetchAnthropicModels();
+        case 'gemini':
+          return await this.fetchGeminiModels(apiKey || undefined);
+        case 'ollama':
+          return await this.fetchOllamaModels(config.baseUrl);
+        default:
+          return [];
       }
-
-      // Initialize the provider
-      await providerInstance.initialize(providerConfig);
-
-      // Get available models
-      const models = await providerInstance.getAvailableModels();
-
-      return models;
     } catch (error) {
       // eslint-disable-next-line no-console
       console.error(`=== Failed to get models for provider ${providerId} ===`);
       // eslint-disable-next-line no-console
       console.error('Error details:', error);
-      // eslint-disable-next-line no-console
-      console.error(
-        'Stack trace:',
-        error instanceof Error ? error.stack : 'No stack trace',
-      );
       return [];
     }
   }
 
-  static async refreshProvider(id: string): Promise<void> {
+  private static async fetchOpenAIModels(apiKey?: string): Promise<any[]> {
     try {
-      // TODO: Implement provider refresh when provider classes are ready
+      if (!apiKey) return [];
+
+      const response = await fetch('https://api.openai.com/v1/models', {
+        headers: {
+          Authorization: `Bearer ${apiKey}`,
+        },
+      });
+
+      if (!response.ok) {
+        throw new Error(`OpenAI API error: ${response.statusText}`);
+      }
+
+      const data = await response.json();
+
+      // Filter for GPT models and sort by ID
+      const gptModels = data.data
+        .filter(
+          (model: any) =>
+            model.id.startsWith('gpt-') ||
+            model.id.startsWith('o1-') ||
+            model.id.startsWith('o3-'),
+        )
+        .map((model: any) => ({
+          id: model.id,
+          name: model.id,
+          supportsStreaming: true,
+        }))
+        .sort((a: any, b: any) => b.id.localeCompare(a.id));
+
+      return gptModels;
     } catch (error) {
       // eslint-disable-next-line no-console
-      console.error(`Failed to refresh provider ${id}:`, error);
-      throw error;
+      console.error('Failed to fetch OpenAI models:', error);
+      // Return fallback models
+      return [
+        { id: 'gpt-4.1', name: 'GPT-4.1', supportsStreaming: true },
+        { id: 'gpt-4o', name: 'GPT-4o', supportsStreaming: true },
+        { id: 'gpt-4o-mini', name: 'GPT-4o Mini', supportsStreaming: true },
+      ];
+    }
+  }
+
+  private static async fetchAnthropicModels(): Promise<any[]> {
+    // Anthropic doesn't have a public models API endpoint
+    // Return known models
+    return [
+      {
+        id: 'claude-sonnet-4-6',
+        name: 'Claude Sonnet 4.6',
+        supportsStreaming: true,
+      },
+      {
+        id: 'claude-4.1-sonnet-20250815',
+        name: 'Claude 4.1 Sonnet',
+        supportsStreaming: true,
+      },
+      {
+        id: 'claude-3-5-sonnet-20241022',
+        name: 'Claude 3.5 Sonnet',
+        supportsStreaming: true,
+      },
+    ];
+  }
+
+  private static async fetchGeminiModels(apiKey?: string): Promise<any[]> {
+    try {
+      if (!apiKey) return [];
+
+      const response = await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models?key=${apiKey}`,
+      );
+
+      if (!response.ok) {
+        throw new Error(`Gemini API error: ${response.statusText}`);
+      }
+
+      const data = await response.json();
+
+      // Filter for generateContent-capable models
+      const geminiModels = data.models
+        .filter(
+          (model: any) =>
+            model.supportedGenerationMethods?.includes('generateContent') &&
+            model.name.includes('gemini'),
+        )
+        .map((model: any) => {
+          // Extract model ID from name (e.g., "models/gemini-2.5-flash" -> "gemini-2.5-flash")
+          const modelId = model.name.split('/').pop();
+          return {
+            id: modelId,
+            name: model.displayName || modelId,
+            description: model.description,
+            supportsStreaming: true,
+          };
+        })
+        .sort((a: any, b: any) => b.id.localeCompare(a.id));
+
+      return geminiModels;
+    } catch (error) {
+      // eslint-disable-next-line no-console
+      console.error('Failed to fetch Gemini models:', error);
+      // Return fallback models
+      return [
+        {
+          id: 'gemini-2.5-flash',
+          name: 'Gemini 2.5 Flash',
+          supportsStreaming: true,
+        },
+        {
+          id: 'gemini-2.5-pro',
+          name: 'Gemini 2.5 Pro',
+          supportsStreaming: true,
+        },
+        {
+          id: 'gemini-2.0-flash',
+          name: 'Gemini 2.0 Flash',
+          supportsStreaming: true,
+        },
+      ];
+    }
+  }
+
+  private static async fetchOllamaModels(baseUrl?: string): Promise<any[]> {
+    try {
+      const url = baseUrl || 'http://localhost:11434';
+      const response = await fetch(`${url}/api/tags`);
+
+      if (!response.ok) {
+        throw new Error(`Ollama API error: ${response.statusText}`);
+      }
+
+      const data = await response.json();
+
+      return data.models.map((model: any) => ({
+        id: model.name,
+        name: model.name,
+        description: `Size: ${(model.size / 1024 / 1024 / 1024).toFixed(1)}GB`,
+        supportsStreaming: true,
+      }));
+    } catch (error) {
+      // eslint-disable-next-line no-console
+      console.error('Failed to fetch Ollama models:', error);
+      // Return fallback models
+      return [
+        { id: 'llama3.2', name: 'Llama 3.2', supportsStreaming: true },
+        { id: 'llama2', name: 'Llama 2', supportsStreaming: true },
+        { id: 'mistral', name: 'Mistral', supportsStreaming: true },
+      ];
     }
   }
 
   static async testProvider(providerId: string): Promise<ProviderTestResult> {
+    // eslint-disable-next-line no-console
+    console.log('[PROVIDER MANAGER] testProvider called with ID:', providerId);
+
     try {
       // Parse the providerId (it might be a string number)
       const id = parseInt(providerId, 10);
@@ -474,12 +646,24 @@ export class AIProviderManager {
         };
       }
 
+      // eslint-disable-next-line no-console
+      console.log('[PROVIDER MANAGER] testProvider - Provider loaded:', {
+        id: provider.id,
+        name: provider.name,
+        type: provider.type,
+        configType: typeof provider.config,
+        configPreview:
+          typeof provider.config === 'string'
+            ? provider.config.substring(0, 100)
+            : JSON.stringify(provider.config).substring(0, 100),
+      });
+
       // Get provider credentials from secure storage (only for providers that need API keys)
       let apiKey;
       const providersNeedingApiKey = ['openai', 'anthropic', 'gemini'];
 
       if (providersNeedingApiKey.includes(provider.type)) {
-        // Get credentials from secure storage (now returns null on error instead of throwing)
+        // Get credentials from secure storage
         apiKey = await SecureStorageService.getAIProviderCredential(
           provider.id!,
           provider.type as AIProviderType,
@@ -510,91 +694,93 @@ export class AIProviderManager {
           console.error(
             `[PROVIDER MANAGER] testProvider - No API key found for provider ${provider.type}`,
           );
-          // eslint-disable-next-line no-console
-          console.error(`[PROVIDER MANAGER] testProvider - Debug info:`, {
-            providerId: provider.id,
-            providerType: provider.type,
-            expectedSecureStorageKey: `${provider.type}-${provider.id}-api-key`,
-          });
           return {
             success: false,
             error: `No API key configured for ${provider.type} provider`,
           };
         }
-      } else {
-        // Provider doesn't require API key (like Ollama local)
-      }
 
-      // Parse provider config
-      let config;
-      try {
-        config =
-          typeof provider.config === 'string'
-            ? JSON.parse(provider.config)
-            : provider.config;
-      } catch (configError) {
         // eslint-disable-next-line no-console
-        console.error(
-          `[PROVIDER MANAGER] testProvider - Failed to parse config:`,
-          configError,
+        console.log(
+          '[PROVIDER MANAGER] testProvider - API key found, length:',
+          apiKey.length,
         );
-        return {
-          success: false,
-          error: `Invalid provider configuration: ${configError instanceof Error ? configError.message : 'Unknown error'}`,
-        };
       }
 
-      // Create provider instance
-      const providerInstance = this.createProviderInstance(
-        provider.type,
-        config,
-      );
-      if (!providerInstance) {
-        // eslint-disable-next-line no-console
-        console.error(
-          `[PROVIDER MANAGER] testProvider - Failed to create provider instance for type: ${provider.type}`,
-        );
-        return {
-          success: false,
-          error: `Unsupported provider type: ${provider.type}`,
-        };
-      }
-
-      // Initialize provider with combined config and credentials
-      try {
-        const providerConfig: AIProviderConfig = {
-          ...config,
-          apiKey,
-        };
-
-        await providerInstance.initialize(providerConfig);
-      } catch (initError) {
-        // eslint-disable-next-line no-console
-        console.error(
-          `[PROVIDER MANAGER] testProvider - Failed to initialize provider:`,
-          initError,
-        );
-        return {
-          success: false,
-          error: `Failed to initialize provider: ${initError instanceof Error ? initError.message : 'Unknown error'}`,
-        };
-      }
-
-      // Test the connection
+      // Test the connection using AI SDK v6
       try {
         const startTime = Date.now();
 
-        const testResult = await providerInstance.testConnection();
-        const latencyMs = Date.now() - startTime;
+        // Temporarily set as active to test
+        const previousActive = await MainDatabaseService.getActiveProvider();
+        // eslint-disable-next-line no-console
+        console.log(
+          '[PROVIDER MANAGER] testProvider - Previous active provider:',
+          previousActive?.id,
+        );
 
-        return {
-          success: testResult.success,
-          error: testResult.error,
-          message: testResult.message || 'Provider test successful',
-          latencyMs,
-          models: testResult.models,
-          modelsAvailable: testResult.models?.length || 0,
-        };
+        await MainDatabaseService.setActiveProvider(provider.id!);
+        // eslint-disable-next-line no-console
+        console.log(
+          '[PROVIDER MANAGER] testProvider - Set provider as active:',
+          provider.id,
+        );
+
+        try {
+          // Test with a simple completion
+          // eslint-disable-next-line no-console
+          console.log(
+            '[PROVIDER MANAGER] testProvider - Getting Vercel model...',
+          );
+          const model = await getVercelModel();
+          // eslint-disable-next-line no-console
+          console.log(
+            '[PROVIDER MANAGER] testProvider - Model obtained, calling generateText...',
+          );
+
+          await generateText({
+            model: model as any,
+            prompt: 'Say "test successful" if you can read this.',
+          });
+
+          const latencyMs = Date.now() - startTime;
+          // eslint-disable-next-line no-console
+          console.log(
+            '[PROVIDER MANAGER] testProvider - Test successful! Latency:',
+            latencyMs,
+            'ms',
+          );
+
+          // Restore previous active provider
+          if (previousActive) {
+            await MainDatabaseService.setActiveProvider(previousActive.id!);
+            // eslint-disable-next-line no-console
+            console.log(
+              '[PROVIDER MANAGER] testProvider - Restored previous active provider:',
+              previousActive.id,
+            );
+          }
+
+          return {
+            success: true,
+            message: 'Provider test successful',
+            latencyMs,
+            models: [],
+            modelsAvailable: 0,
+          };
+        } catch (testError) {
+          // eslint-disable-next-line no-console
+          console.error(
+            '[PROVIDER MANAGER] testProvider - generateText failed:',
+            testError,
+          );
+
+          // Restore previous active provider
+          if (previousActive) {
+            await MainDatabaseService.setActiveProvider(previousActive.id!);
+          }
+          throw testError;
+        }
       } catch (testError) {
         // eslint-disable-next-line no-console
         console.error(
@@ -603,7 +789,9 @@ export class AIProviderManager {
         );
         return {
           success: false,
-          error: `Connection test failed: ${testError instanceof Error ? testError.message : 'Unknown error'}`,
+          error: `Connection test failed: ${
+            testError instanceof Error ? testError.message : 'Unknown error'
+          }`,
         };
       }
     } catch (error) {
@@ -642,116 +830,37 @@ export class AIProviderManager {
   static async generateCompletion<T = any>(
     request: CompletionRequest<T>,
   ): Promise<CompletionResponse<T>> {
-    // eslint-disable-next-line no-useless-catch
     try {
-      // Get the active provider
-      const activeProvider = await MainDatabaseService.getActiveProvider();
-      if (!activeProvider) {
-        throw new Error(
-          'No active AI provider configured. Please configure and activate a provider in settings.',
-        );
-      }
-
-      // Get provider credentials (if needed)
-      let apiKey;
-      const providersNeedingApiKey = ['openai', 'anthropic', 'gemini'];
-
-      if (providersNeedingApiKey.includes(activeProvider.type)) {
-        apiKey = await SecureStorageService.getAIProviderCredential(
-          activeProvider.id!,
-          activeProvider.type as AIProviderType,
-        );
-
-        if (!apiKey) {
-          throw new Error(
-            `No API key configured for ${activeProvider.type} provider. Please configure credentials in settings.`,
-          );
-        }
-      }
-
-      // Parse provider config
-      let config;
-      try {
-        config =
-          typeof activeProvider.config === 'string'
-            ? JSON.parse(activeProvider.config)
-            : activeProvider.config || {};
-      } catch (configError) {
-        throw new Error(
-          'Invalid provider configuration. Please reconfigure the provider in settings.',
-        );
-      }
-
-      // Select appropriate model for the provider if not specified or if wrong provider model
-      let selectedModel = request.model;
-
-      // If no model specified or if the model doesn't match the provider, use provider's default
-      if (!selectedModel || selectedModel.trim().length === 0) {
-        selectedModel = this.getDefaultModelForProvider(
-          activeProvider.type,
-          config,
-        );
-      }
-
-      // Create and initialize provider instance
-      const providerInstance = this.createProviderInstance(
-        activeProvider.type,
-        config,
+      // Get the active provider info
+      const { selectedModel } = await this.getInitializedActiveProviderAndModel(
+        request.model,
       );
-      if (!providerInstance) {
-        throw new Error(`Unsupported provider type: ${activeProvider.type}`);
-      }
 
-      // Initialize provider with config and credentials
-      const providerConfig: AIProviderConfig = {
-        ...config,
-        apiKey,
-      };
+      // Use AI SDK v6 generateText
+      const model = await getVercelModel(selectedModel);
 
-      try {
-        await providerInstance.initialize(providerConfig);
-      } catch (initError) {
-        throw new Error(
-          `Failed to initialize ${activeProvider.type} provider: ${initError instanceof Error ? initError.message : 'Unknown error'}`,
-        );
-      }
+      // Use prompt from request
+      const prompt = request.prompt || '';
 
-      // Update request with correct model
-      const updatedRequest: CompletionRequest<T> = {
-        ...request,
+      const result = await generateText({
+        model: model as any,
+        prompt,
+        temperature: request.temperature,
+      });
+
+      return {
+        content: result.text,
         model: selectedModel,
-      };
-
-      try {
-        return await providerInstance.generateCompletion<T>(updatedRequest);
-      } catch (completionError) {
-        if (completionError instanceof Error) {
-          if (
-            completionError.message.includes('401') ||
-            completionError.message.includes('Unauthorized')
-          ) {
-            throw new Error(
-              `Authentication failed with ${activeProvider.type}. Please check your API key in settings.`,
-            );
-          } else if (
-            completionError.message.includes('429') ||
-            completionError.message.includes('quota')
-          ) {
-            throw new Error(
-              `API quota exceeded for ${activeProvider.type}. Please check your billing or try again later.`,
-            );
-          } else if (completionError.message.includes('timeout')) {
-            throw new Error(
-              `Request timeout with ${activeProvider.type}. Please try again.`,
-            );
-          }
-        }
-
-        throw new Error(
-          `Failed to generate completion with ${activeProvider.type}: ${completionError instanceof Error ? completionError.message : 'Unknown error'}`,
-        );
-      }
+        providerId: selectedModel,
+        usage: {
+          promptTokens: 0, // AI SDK v6 doesn't provide separate prompt tokens
+          completionTokens: 0, // AI SDK v6 doesn't provide separate completion tokens
+          totalTokens: result.usage.totalTokens || 0,
+        },
+      } as CompletionResponse<T>;
     } catch (error) {
+      // eslint-disable-next-line no-console
+      console.error(error);
       throw error;
     }
   }
@@ -763,18 +872,6 @@ export class AIProviderManager {
     request: TypedCompletionRequest<T>,
   ): Promise<CompletionResponse<T>> {
     return this.generateCompletion<T>(request);
-  }
-
-  /**
-   * Enhanced streaming with generic support
-   */
-  static async *streamCompletion<T = any>(
-    request: CompletionRequest<T>,
-  ): AsyncGenerator<CompletionChunk<T>> {
-    const { providerInstance } =
-      await this.getInitializedActiveProviderAndModel(request.model);
-
-    yield* providerInstance.streamCompletion<T>(request);
   }
 
   // Helper method to get default model for a provider
@@ -791,7 +888,7 @@ export class AIProviderManager {
     const defaultModels: Record<string, string> = {
       openai: 'gpt-4.1',
       anthropic: 'claude-4.1-sonnet-20250815',
-      gemini: 'gemini-1.5-flash',
+      gemini: 'gemini-2.5-flash',
       ollama: 'llama2', // Default fallback for Ollama
     };
 
@@ -844,74 +941,58 @@ export class AIProviderManager {
         }
       }
 
-      // Parse provider config
-      let config;
-      try {
-        config =
-          typeof provider.config === 'string'
-            ? JSON.parse(provider.config)
-            : provider.config || {};
-      } catch (configError) {
-        return {
-          status: 'unhealthy',
-          lastCheck: new Date(),
-          error: 'Invalid provider configuration',
-        };
-      }
-
-      // Create provider instance
-      const providerInstance = this.createProviderInstance(
-        provider.type,
-        config,
-      );
-      if (!providerInstance) {
-        return {
-          status: 'unhealthy',
-          lastCheck: new Date(),
-          error: `Unsupported provider type: ${provider.type}`,
-        };
-      }
-
-      // Initialize provider with combined config and credentials
-      try {
-        const providerConfig: AIProviderConfig = {
-          ...config,
-          apiKey,
-        };
-        await providerInstance.initialize(providerConfig);
-      } catch (initError) {
-        return {
-          status: 'unhealthy',
-          lastCheck: new Date(),
-          error: `Failed to initialize provider: ${initError instanceof Error ? initError.message : 'Unknown error'}`,
-        };
-      }
-
-      // Perform a quick health check
+      // Perform a quick health check using AI SDK v6
       try {
         const startTime = Date.now();
-        const testResult = await providerInstance.testConnection();
-        const responseTimeMs = Date.now() - startTime;
 
-        if (testResult.success) {
+        // Temporarily set as active to test
+        const previousActive = await MainDatabaseService.getActiveProvider();
+        await MainDatabaseService.setActiveProvider(provider.id!);
+
+        try {
+          // Test with a simple completion
+          const model = await getVercelModel();
+          await generateText({
+            model: model as any,
+            prompt: 'Say "test successful" if you can read this.',
+          });
+
+          const responseTimeMs = Date.now() - startTime;
+
+          // Restore previous active provider
+          if (previousActive) {
+            await MainDatabaseService.setActiveProvider(previousActive.id!);
+          }
+
           return {
             status: 'healthy',
             lastCheck: new Date(),
             responseTimeMs,
           };
-        }
+        } catch (testError) {
+          // Restore previous active provider
+          if (previousActive) {
+            await MainDatabaseService.setActiveProvider(previousActive.id!);
+          }
 
-        return {
-          status: 'degraded',
-          lastCheck: new Date(),
-          responseTimeMs,
-          error: testResult.error || 'Connection test failed',
-        };
+          const responseTimeMs = Date.now() - startTime;
+          return {
+            status: 'degraded',
+            lastCheck: new Date(),
+            responseTimeMs,
+            error:
+              testError instanceof Error
+                ? testError.message
+                : 'Connection test failed',
+          };
+        }
       } catch (testError) {
         return {
           status: 'unhealthy',
           lastCheck: new Date(),
-          error: `Health check failed: ${testError instanceof Error ? testError.message : 'Unknown error'}`,
+          error: `Health check failed: ${
+            testError instanceof Error ? testError.message : 'Unknown error'
+          }`,
         };
       }
     } catch (error) {
@@ -925,32 +1006,5 @@ export class AIProviderManager {
       };
     }
   }
-
-  static getActiveProvider(): any | null {
-    // For now, return null
-    // TODO: Implement actual active provider tracking when provider classes are ready
-    return this.activeProvider;
-  }
-
-  // Returns enriched info about the active provider for IPC consumption
-  static getActiveProviderInfo(): {
-    name: string;
-    type: string;
-    capabilities: any;
-    supportedModels: any;
-  } | null {
-    const activeProvider = this.getActiveProvider();
-    if (!activeProvider) {
-      return null;
-    }
-
-    return {
-      name: activeProvider.name,
-      type: activeProvider.type,
-      capabilities: activeProvider.capabilities,
-      supportedModels: activeProvider.supportedModels,
-    };
-  }
 }
-
 export default AIProviderManager;

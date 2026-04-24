@@ -122,11 +122,6 @@ class AIProvidersService {
     return data;
   }
 
-  // Initialize provider manager
-  static async initializeProviderManager(): Promise<void> {
-    await client.get('ai:provider-manager:initialize');
-  }
-
   static async generateCompletion<T>(
     prompt: string,
     schemaConfig: SchemaConfig<T>,
@@ -158,6 +153,5 @@ export const aiProvidersService = {
   getProviderModels: AIProvidersService.getProviderModels,
   getAllProviderModels: AIProvidersService.getAllProviderModels,
   getProviderCredential: AIProvidersService.getProviderCredential,
-  initializeProviderManager: AIProvidersService.initializeProviderManager,
   generateCompletion: AIProvidersService.generateCompletion,
 };

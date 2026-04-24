@@ -3,6 +3,11 @@ import MainDatabaseService from '../services/mainDatabase.service';
 import ChatService from '../services/chat.service';
 import SecureStorageService from '../services/secureStorage.service';
 import {
+  loadAISettings,
+  saveAISettings,
+  getAISettingsFilePath,
+} from '../services/agent.service';
+import {
   AIProvider,
   ChatConversation,
   ChatMessage,
@@ -52,8 +57,6 @@ const aiHandlerChannels: string[] = [
   'ai:provider:get-models',
   'ai:provider:get-all-models',
   'ai:completion:generate',
-  'ai:provider-manager:initialize',
-  'ai:provider:get-status',
   // Enhanced chat/context
   'chat:conversation:get-with-context',
   'chat:message:get-with-context',
@@ -77,8 +80,6 @@ const aiHandlerChannels: string[] = [
   'chat:session:set-metadata',
   'chat:session:get-metadata',
   'chat:session:delete-metadata',
-  // The enriched active provider info channel we'll define below
-  'ai:provider:get-active-info',
 ];
 
 const removeAIHandlers = () => {
@@ -430,27 +431,6 @@ const registerAIHandlers = () => {
     },
   );
 
-  // Initialize provider manager on first use
-  ipcMain.handle('ai:provider-manager:initialize', async (): Promise<void> => {
-    await ProviderManager.initializeAllProviders();
-  });
-
-  // Get provider status
-  ipcMain.handle(
-    'ai:provider:get-status',
-    async (
-      _,
-      providerId: string,
-    ): Promise<import('../services/ai/types/provider.types').HealthStatus> => {
-      return ProviderManager.getProviderStatus(providerId);
-    },
-  );
-
-  // Get active provider info (enriched). Use a distinct channel to avoid clashing
-  ipcMain.handle('ai:provider:get-active-info', async (): Promise<any> => {
-    return ProviderManager.getActiveProviderInfo();
-  });
-
   // Continue.dev Enhanced Chat Handlers
 
   // Enhanced conversation handlers with context
@@ -568,11 +548,12 @@ const registerAIHandlers = () => {
         conversationId,
         content,
         contextItems,
-        (chunk, done) => {
+        (chunk, done, usage) => {
           event.sender.send('chat:message:stream-chunk', {
             conversationId,
             chunk,
             done,
+            usage,
           });
         },
       );
@@ -746,6 +727,10 @@ const registerAIHandlers = () => {
     },
   );
   aiHandlersRegistered = true;
+
+  ipcMain.handle('ai-settings:load', () => loadAISettings());
+  ipcMain.handle('ai-settings:save', (_e, config) => saveAISettings(config));
+  ipcMain.handle('ai-settings:file-path', () => getAISettingsFilePath());
 };
 
 export default registerAIHandlers;

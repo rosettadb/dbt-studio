@@ -8,7 +8,6 @@ import {
   Button,
 } from '@mui/material';
 import {
-  Settings,
   ArrowDownward,
   FormatListNumbered,
   Cloud,
@@ -29,7 +28,7 @@ import {
   AuthIcon,
   AuthLabel,
 } from './styles';
-import { icons, logo, rosettaIcon } from '../../../../assets';
+import { icons, logo, logoLight, rosettaIcon } from '../../../../assets';
 import { utils } from '../../helpers';
 import { ROSETTA_CLOUD_BASE_URL } from '../../../main/utils/constants';
 import {
@@ -94,9 +93,16 @@ export const Menu: React.FC = () => {
   const { data: projects = [] } = useGetProjects();
 
   const isProjectSelected = Boolean(project?.id);
-  const isSettingsActive = location.pathname.includes('/settings');
 
   const isOnProjectDetails = location.pathname === '/app';
+
+  const isLightMode = theme.palette.mode === 'light';
+  const headerIconColor = isLightMode
+    ? theme.palette.primary.contrastText
+    : theme.palette.primary.main;
+  const headerTextColor = isLightMode
+    ? theme.palette.primary.contrastText
+    : theme.palette.text.secondary;
 
   const handleLogoClick = () => {
     navigate('/app');
@@ -107,16 +113,25 @@ export const Menu: React.FC = () => {
       <StyledToolbar variant="dense">
         <IconsContainer>
           <IconButton
-            color="primary"
             aria-label="open drawer"
             onClick={() => setIsSidebarOpen(!isSidebarOpen)}
             edge="start"
+            sx={{ color: headerIconColor }}
           >
             {isSidebarOpen ? <CollapseLeftIcon /> : <ExpandRightIcon />}
           </IconButton>
-          <Logo src={logo} alt="Rosetta Logo" onClick={handleLogoClick} />
+          <Logo
+            src={isLightMode ? logoLight : logo}
+            alt="Rosetta Logo"
+            onClick={handleLogoClick}
+          />
           {isProjectSelected && (
             <SimpleDropdownMenu
+              buttonSx={
+                isLightMode
+                  ? { color: theme.palette.primary.contrastText }
+                  : undefined
+              }
               items={[
                 {
                   value: 'new',
@@ -176,8 +191,11 @@ export const Menu: React.FC = () => {
                   minWidth: 'auto',
                   textTransform: 'none',
                   height: '28px',
+                  borderColor: headerIconColor,
+                  color: headerIconColor,
                   '&:hover': {
-                    borderColor: theme.palette.primary.main,
+                    borderColor: headerIconColor,
+                    bgcolor: 'rgba(255,255,255,0.1)',
                   },
                   transition: 'all 0.2s ease',
                 }}
@@ -216,8 +234,11 @@ export const Menu: React.FC = () => {
                   minWidth: 'auto',
                   textTransform: 'none',
                   height: '28px',
+                  borderColor: headerIconColor,
+                  color: headerIconColor,
                   '&:hover': {
-                    borderColor: theme.palette.primary.main,
+                    borderColor: headerIconColor,
+                    bgcolor: 'rgba(255,255,255,0.1)',
                   },
                   transition: 'all 0.2s ease',
                 }}
@@ -225,7 +246,9 @@ export const Menu: React.FC = () => {
                 <AuthButtonContent>
                   <AuthIcon src={rosettaIcon} alt="Rosetta" />
                   <AuthLabel>Cloud Dashboard</AuthLabel>
-                  <OpenInNew sx={{ fontSize: 14, opacity: 0.8 }} />
+                  <OpenInNew
+                    sx={{ fontSize: 14, opacity: 0.8, color: headerIconColor }}
+                  />
                 </AuthButtonContent>
               </Button>
             </Tooltip>
@@ -261,14 +284,18 @@ export const Menu: React.FC = () => {
                       <Cloud
                         sx={{
                           fontSize: 14,
-                          color: theme.palette.primary.contrastText,
+                          color: isLightMode
+                            ? theme.palette.primary.main
+                            : theme.palette.primary.contrastText,
                         }}
                       />
                     ) : (
                       <Computer
                         sx={{
                           fontSize: 14,
-                          color: theme.palette.primary.contrastText,
+                          color: isLightMode
+                            ? theme.palette.primary.main
+                            : theme.palette.primary.contrastText,
                         }}
                       />
                     )}
@@ -278,7 +305,7 @@ export const Menu: React.FC = () => {
               <span
                 style={{
                   fontSize: '12px',
-                  color: theme.palette.text.secondary,
+                  color: headerTextColor,
                   fontWeight: 500,
                   display: 'flex',
                   alignItems: 'center',
@@ -294,37 +321,17 @@ export const Menu: React.FC = () => {
             <Tooltip title="AI Assistant (beta)">
               <IconButton
                 onClick={() => setIsChatOpen?.(!isChatOpen)}
-                color="primary"
+                sx={{ color: headerIconColor }}
               >
                 <Icon
                   src={icons.bot}
                   width={22}
                   height={22}
-                  color={theme.palette.primary.main}
+                  color={headerIconColor}
                 />
               </IconButton>
             </Tooltip>
           )}
-          <Tooltip title="Settings">
-            <IconButton
-              aria-label="account of current user"
-              aria-controls="menu-appbar"
-              aria-haspopup="true"
-              onClick={() => navigate('/app/settings')}
-              color="primary"
-              sx={{
-                backgroundColor: isSettingsActive
-                  ? theme.palette.divider
-                  : 'transparent',
-                '&:hover': {
-                  backgroundColor: theme.palette.action.hover,
-                },
-                transition: 'background-color 0.2s ease',
-              }}
-            >
-              <Settings sx={{ fontSize: 22 }} />
-            </IconButton>
-          </Tooltip>
         </IconsContainer>
       </StyledToolbar>
     </AppBar>

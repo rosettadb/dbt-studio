@@ -109,7 +109,11 @@ export const CreateProviderDialog: React.FC<CreateProviderDialogProps> = ({
   React.useEffect(() => {
     const loadProviderData = async () => {
       if (provider && isEdit) {
-        const config = provider.config ? JSON.parse(provider.config) : {};
+        // Handle both string and object formats
+        const config =
+          typeof provider.config === 'string'
+            ? JSON.parse(provider.config)
+            : provider.config || {};
 
         // Load API key from secure storage if provider type requires it
         let apiKey = config.apiKey || '';
@@ -218,7 +222,7 @@ export const CreateProviderDialog: React.FC<CreateProviderDialogProps> = ({
           apiKeyLabel: 'Google AI API Key',
           apiKeyPlaceholder: 'AI...',
           requiresBaseUrl: false,
-          modelPlaceholder: 'gemini-pro (optional)',
+          modelPlaceholder: 'gemini-2.5-flash (optional)',
         };
       case 'ollama':
         return {

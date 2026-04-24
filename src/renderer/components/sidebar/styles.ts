@@ -3,11 +3,12 @@ import { Box, Drawer } from '@mui/material';
 import { NavLink } from 'react-router-dom';
 
 const drawerWidth = 366;
+const iconStripWidth = 48;
 
 export const StyledDrawer = styled(Drawer, {
   shouldForwardProp: (prop) => prop !== 'open',
 })<{ open: boolean }>(({ theme, open }) => ({
-  width: open ? drawerWidth : theme.spacing(7),
+  width: open ? drawerWidth : iconStripWidth,
   flexShrink: 0,
   whiteSpace: 'nowrap',
   transition: theme.transitions.create('width', {
@@ -18,10 +19,10 @@ export const StyledDrawer = styled(Drawer, {
   }),
 
   '& .MuiDrawer-paper': {
-    width: open ? drawerWidth : theme.spacing(7),
+    width: open ? drawerWidth : iconStripWidth,
     top: 42,
-    height: 'calc(100% - 42px)',
-    overflowX: 'hidden',
+    height: 'calc(100% - 66px)', // 42px top bar + 24px status bar
+    overflow: 'hidden',
     borderRight: 'none',
     boxShadow:
       theme.palette.mode === 'dark'

@@ -134,11 +134,11 @@ export const SessionHistoryButton: React.FC<SessionHistoryButtonProps> = ({
     return session.title;
   };
 
-  // Sort sessions by most recent first (based on creation date)
+  // Sort sessions by most recently active first (based on last update)
   const sortedSessions = [...sessions].sort((a, b) => {
-    if (!a.createdAt) return 1;
-    if (!b.createdAt) return -1;
-    return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+    if (!a.updatedAt) return 1;
+    if (!b.updatedAt) return -1;
+    return new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime();
   });
 
   return (
