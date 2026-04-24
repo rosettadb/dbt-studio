@@ -45,10 +45,6 @@ export const Sidebar: React.FC<Props> = ({
   const hasPanel = Boolean(content);
   const [isBarExpanded, setIsBarExpanded] = React.useState(!hasPanel);
 
-  React.useEffect(() => {
-    setIsBarExpanded(!hasPanel);
-  }, [hasPanel]);
-
   const isProjectSelected = Boolean(selectedProject?.id);
 
   const activeItemPath = React.useMemo(() => {
@@ -222,7 +218,6 @@ export const Sidebar: React.FC<Props> = ({
         </List>
       </ActivityBar>
 
-      {/* Sidebar content panel */}
       {content && (
         <SidebarContent open={isPanelOpen}>
           <SidebarPanelHeader>

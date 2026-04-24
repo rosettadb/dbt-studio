@@ -124,7 +124,6 @@ export const AuthIcon = styled('img')(() => ({
 }));
 
 export const AuthLabel = styled('span')(({ theme }) => ({
-  color: theme.palette.text.primary,
   fontWeight: 300,
   fontSize: '0.75rem',
   color:
