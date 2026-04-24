@@ -42,7 +42,8 @@ export const ExternalDropZone: React.FC<ExternalDropZoneProps> = ({
   const handleDragOver = useCallback(
     (e: React.DragEvent<HTMLDivElement>) => {
       const types = Array.from(e.dataTransfer.types);
-      const hasFiles = types.includes('Files') || e.dataTransfer.files.length > 0;
+      const hasFiles =
+        types.includes('Files') || e.dataTransfer.files.length > 0;
       const isInternalDrag = types.includes('application/json') && !hasFiles;
 
       if (hasFiles && !isInternalDrag) {
@@ -86,7 +87,8 @@ export const ExternalDropZone: React.FC<ExternalDropZoneProps> = ({
     (e: React.DragEvent<HTMLDivElement>) => {
       // Only handle external OS file drags, not internal react-arborist drags
       const types = Array.from(e.dataTransfer.types);
-      const hasFiles = types.includes('Files') || e.dataTransfer.files.length > 0;
+      const hasFiles =
+        types.includes('Files') || e.dataTransfer.files.length > 0;
       const isInternalDrag = types.includes('application/json') && !hasFiles;
 
       if (hasFiles && !isInternalDrag) {
@@ -106,7 +108,8 @@ export const ExternalDropZone: React.FC<ExternalDropZoneProps> = ({
     async (e: React.DragEvent<HTMLDivElement>) => {
       // Only handle external OS file drags, not internal react-arborist drags
       const types = Array.from(e.dataTransfer.types);
-      const hasFiles = types.includes('Files') || e.dataTransfer.files.length > 0;
+      const hasFiles =
+        types.includes('Files') || e.dataTransfer.files.length > 0;
       const isInternalDrag = types.includes('application/json') && !hasFiles;
 
       if (!hasFiles || isInternalDrag) {

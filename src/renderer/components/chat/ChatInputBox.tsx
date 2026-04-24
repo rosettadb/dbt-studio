@@ -375,7 +375,9 @@ export const ChatInputBox: React.FC<ChatInputBoxProps> = ({
   }, [pendingMessage, sessionId, activeProvider, isLoading]);
 
   return (
-    <Box sx={{ display: 'flex', flexDirection: 'column', position: 'relative' }}>
+    <Box
+      sx={{ display: 'flex', flexDirection: 'column', position: 'relative' }}
+    >
       {/* Context file chips (manually added files only) */}
       {activeContextManager.additionalFiles.length > 0 && (
         <ContextTabs contextManager={activeContextManager} />
