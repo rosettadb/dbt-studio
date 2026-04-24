@@ -374,60 +374,8 @@ export const ChatInputBox: React.FC<ChatInputBoxProps> = ({
     }
   }, [pendingMessage, sessionId, activeProvider, isLoading]);
 
-  const [isDragOver, setIsDragOver] = React.useState(false);
-
-  const handleDrop = React.useCallback(
-    (e: React.DragEvent) => {
-      e.preventDefault();
-      setIsDragOver(false);
-      const filePath =
-        e.dataTransfer.getData('application/x-file-path') ||
-        e.dataTransfer.getData('text/plain');
-      if (!filePath) return;
-      const name = filePath.split('/').pop() ?? filePath;
-      const alreadyAdded = activeContextManager.additionalFiles.some(
-        (f) => f.path === filePath,
-      );
-      if (!alreadyAdded) {
-        activeContextManager.addFiles([
-          { path: filePath, name, relativePath: name, fileType: 'other' },
-        ]);
-      }
-    },
-    [activeContextManager],
-  );
-
   return (
-    <Box
-      sx={{ display: 'flex', flexDirection: 'column', position: 'relative' }}
-      onDragOver={(e) => {
-        e.preventDefault();
-        setIsDragOver(true);
-      }}
-      onDragLeave={() => setIsDragOver(false)}
-      onDrop={handleDrop}
-    >
-      {isDragOver && (
-        <Box
-          sx={{
-            position: 'absolute',
-            inset: 0,
-            zIndex: 10,
-            border: '2px dashed',
-            borderColor: 'primary.main',
-            borderRadius: 1,
-            bgcolor: 'action.hover',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            pointerEvents: 'none',
-          }}
-        >
-          <Box sx={{ color: 'primary.main', fontSize: 12 }}>
-            Drop to add to context
-          </Box>
-        </Box>
-      )}
+    <Box sx={{ display: 'flex', flexDirection: 'column', position: 'relative' }}>
       {/* Context file chips (manually added files only) */}
       {activeContextManager.additionalFiles.length > 0 && (
         <ContextTabs contextManager={activeContextManager} />
@@ -451,26 +399,6 @@ export const ChatInputBox: React.FC<ChatInputBoxProps> = ({
             maxHeight: '40vh',
             overflow: 'auto',
             borderRadius: theme.spacing(0.75),
-          }}
-          onDragOver={(e) => {
-            // Allow drop by preventing default (also prevents TipTap from blocking it)
-            const filePath =
-              e.dataTransfer.types.includes('application/x-file-path') ||
-              e.dataTransfer.types.includes('text/plain');
-            if (filePath) {
-              e.preventDefault();
-              e.stopPropagation();
-            }
-          }}
-          onDrop={(e) => {
-            const filePath =
-              e.dataTransfer.getData('application/x-file-path') ||
-              e.dataTransfer.getData('text/plain');
-            if (!filePath) return;
-            // Intercept before TipTap/ProseMirror handles it
-            e.preventDefault();
-            e.stopPropagation();
-            handleDrop(e);
           }}
         >
           <TipTapEditor

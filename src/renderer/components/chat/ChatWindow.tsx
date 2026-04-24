@@ -10,7 +10,7 @@ import {
   Menu,
   MenuItem,
 } from '@mui/material';
-import { Close, MoreHoriz } from '@mui/icons-material';
+import { Close, MoreHoriz, Add as AddIcon } from '@mui/icons-material';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'react-toastify';
 import { useAppContext } from '../../hooks';
@@ -240,6 +240,64 @@ export const ChatWindow: React.FC = () => {
     return `${selectedSessionId}:${firstToolCallId}`;
   }, [selectedSessionId, streamState.steps]);
 
+  // Drag and drop state for entire ChatWindow
+  const [isDragOver, setIsDragOver] = React.useState(false);
+
+  // Handle file drops on entire ChatWindow
+  const handleDragOver = React.useCallback((e: React.DragEvent) => {
+    // Check if this has file path data (from Monaco tabs or tree files)
+    const hasFilePath =
+      e.dataTransfer.types.includes('application/x-file-path') ||
+      e.dataTransfer.types.includes('text/plain');
+
+    // Handle any drag with file paths (Monaco tabs or tree files)
+    if (hasFilePath) {
+      e.preventDefault();
+      e.stopPropagation();
+      setIsDragOver(true);
+    }
+  }, []);
+
+  const handleDragLeave = React.useCallback((e: React.DragEvent) => {
+    // Only reset if we're leaving the ChatWindow entirely
+    if (e.currentTarget === e.target) {
+      setIsDragOver(false);
+    }
+  }, []);
+
+  const handleDrop = React.useCallback(
+    (e: React.DragEvent) => {
+      const hasFilePath =
+        e.dataTransfer.types.includes('application/x-file-path') ||
+        e.dataTransfer.types.includes('text/plain');
+
+      // Handle any drop with file paths (Monaco tabs or tree files)
+      if (hasFilePath) {
+        e.preventDefault();
+        e.stopPropagation();
+        setIsDragOver(false);
+
+        const filePath =
+          e.dataTransfer.getData('application/x-file-path') ||
+          e.dataTransfer.getData('text/plain');
+
+        if (!filePath) return;
+
+        const name = filePath.split('/').pop() ?? filePath;
+        const alreadyAdded = contextManager.additionalFiles.some(
+          (f) => f.path === filePath,
+        );
+
+        if (!alreadyAdded) {
+          contextManager.addFiles([
+            { path: filePath, name, relativePath: name, fileType: 'other' },
+          ]);
+        }
+      }
+    },
+    [contextManager],
+  );
+
   // Reset dismissed state when a new stream starts
   React.useEffect(() => {
     if (streamState.isStreaming) {
@@ -408,10 +466,53 @@ export const ChatWindow: React.FC = () => {
         flexDirection: 'column',
         borderRadius: 0,
         borderLeft: '1px solid',
-        borderColor: 'divider',
+        borderColor: isDragOver ? 'primary.main' : 'divider',
+        borderWidth: isDragOver ? '2px' : '1px',
         overflow: 'hidden',
+        position: 'relative',
+        transition: 'border-color 0.2s, border-width 0.2s',
       }}
+      onDragOver={handleDragOver}
+      onDragLeave={handleDragLeave}
+      onDrop={handleDrop}
     >
+      {/* Drag overlay indicator */}
+      {isDragOver && (
+        <Box
+          sx={{
+            position: 'absolute',
+            inset: 0,
+            zIndex: 1000,
+            bgcolor: 'rgba(25, 118, 210, 0.08)',
+            border: '2px dashed',
+            borderColor: 'primary.main',
+            borderRadius: 0,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            pointerEvents: 'none',
+          }}
+        >
+          <Box
+            sx={{
+              bgcolor: 'background.paper',
+              px: 3,
+              py: 1.5,
+              borderRadius: 1,
+              boxShadow: 3,
+              display: 'flex',
+              alignItems: 'center',
+              gap: 1,
+            }}
+          >
+            <AddIcon sx={{ color: 'primary.main', fontSize: 20 }} />
+            <Typography variant="body2" color="primary.main" fontWeight={500}>
+              Drop to add to context
+            </Typography>
+          </Box>
+        </Box>
+      )}
+
       {/* Chat Header with Session Management */}
       <Box
         sx={{
@@ -429,6 +530,7 @@ export const ChatWindow: React.FC = () => {
           zIndex: 1,
         }}
       >
+        {/* Left side: beta badge + active session title */}
         {/* Left side: beta badge + active session title */}
         <Box
           sx={{

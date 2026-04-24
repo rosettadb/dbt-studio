@@ -197,11 +197,11 @@ export const TreeNode: React.FC<TreeNodeProps> = ({
       onContextMenu={(e) => onContextMenu(e, node.data)}
       data-node-path={node.data.path}
       data-node-type={node.data.type}
-      draggable={!isFolder}
       onDragStart={
         !isFolder
           ? (e) => {
-              e.dataTransfer.effectAllowed = 'copy';
+              // Add file path data for dropping to ChatWindow
+              // This doesn't interfere with react-arborist's internal drag system
               e.dataTransfer.setData('application/x-file-path', node.data.path);
               e.dataTransfer.setData('text/plain', node.data.path);
             }
