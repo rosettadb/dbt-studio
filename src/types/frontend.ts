@@ -28,6 +28,10 @@ export type AppContextType = {
   ) => void;
   openFile?: (filePath: string) => void;
   registerOpenFile?: (handler?: (filePath: string) => void) => void;
+  closeFile?: (filePath: string) => void;
+  registerCloseFile?: (handler?: (filePath: string) => void) => void;
+  refreshFileTree?: () => Promise<void>;
+  registerRefreshFileTree?: (handler?: () => Promise<void>) => void;
   authenticatedUser?: UserProfile | null;
   env: 'local' | 'cloud';
 };

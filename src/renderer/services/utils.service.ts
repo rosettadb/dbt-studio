@@ -10,3 +10,6 @@ export const getFileContentList = async (
   );
   return data;
 };
+
+export const openPath = (filePath: string): Promise<string> =>
+  window.electron.ipcRenderer.invoke('utils:open-path', filePath);

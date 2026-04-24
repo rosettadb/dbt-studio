@@ -103,7 +103,10 @@ const EditConnection: React.FC = () => {
 
   if (isLoading) {
     return (
-      <AppLayout sidebarContent={<ConnectionsSidebar />}>
+      <AppLayout
+        sidebarContent={<ConnectionsSidebar />}
+        panelTitle="Connections"
+      >
         <Container>
           <Typography variant="h6">Loading connection...</Typography>
         </Container>
@@ -114,7 +117,10 @@ const EditConnection: React.FC = () => {
   // Handle case where connection ID is missing from URL
   if (!id) {
     return (
-      <AppLayout sidebarContent={<ConnectionsSidebar />}>
+      <AppLayout
+        sidebarContent={<ConnectionsSidebar />}
+        panelTitle="Connections"
+      >
         <Container>
           <Typography variant="h6">
             Connection ID is required. Please provide a valid connection ID.
@@ -127,7 +133,10 @@ const EditConnection: React.FC = () => {
   // Handle case where connection is not found or error occurred
   if (error || !connection) {
     return (
-      <AppLayout sidebarContent={<ConnectionsSidebar />}>
+      <AppLayout
+        sidebarContent={<ConnectionsSidebar />}
+        panelTitle="Connections"
+      >
         <Container>
           <Typography variant="h6">
             Connection not found. Please check the connection ID and try again.
@@ -138,7 +147,7 @@ const EditConnection: React.FC = () => {
   }
 
   return (
-    <AppLayout sidebarContent={<ConnectionsSidebar />}>
+    <AppLayout sidebarContent={<ConnectionsSidebar />} panelTitle="Connections">
       <Container>
         {renderComponent(connection.connection.type, connection, id)}
       </Container>

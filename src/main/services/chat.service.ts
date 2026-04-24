@@ -1,3 +1,4 @@
+import { streamText } from 'ai';
 import MainDatabaseService from './mainDatabase.service';
 import type {
   NewContextItem,
@@ -5,7 +6,8 @@ import type {
 } from '../schemas/mainDatabase.schema';
 import { AIProviderManager } from './ai/providerManager.service';
 import SelectedFileContextProvider from './selectedFileContextProvider.service';
-import type { CompletionRequest } from './ai/types/completion.types';
+import { getVercelModel } from './ai/agentAdapter';
+import { getContextWindow } from './ai/tokenEstimator';
 
 // Token management interfaces
 interface TokenBudget {
@@ -45,8 +47,8 @@ interface ConversationContext {
 }
 
 class ChatService {
-  // Track active streaming requests by conversationId
-  private static activeStreams: Map<number, { aborted: boolean }> = new Map();
+  // Track active streaming requests by conversationId with AbortController
+  private static activeStreams: Map<number, AbortController> = new Map();
 
   // Token budget configuration
   private static readonly DEFAULT_BUDGET: TokenBudget = {
@@ -57,14 +59,32 @@ class ChatService {
     buffer: 700, // 12% buffer for safety
   };
 
+  /**
+   * Builds a token budget scaled to the active model's context window.
+   * Falls back to the static DEFAULT_BUDGET if modelId is not provided.
+   * Uses 85% of the context window as the effective ceiling (matches agent compaction threshold).
+   */
+  private static buildBudgetForModel(modelId?: string): TokenBudget {
+    if (!modelId) return this.DEFAULT_BUDGET;
+    const contextWindow = getContextWindow(modelId);
+    const maxTotal = Math.floor(contextWindow * 0.85);
+    return {
+      maxTotal,
+      recentMessages: Math.floor(maxTotal * 0.6),
+      summary: Math.floor(maxTotal * 0.15),
+      relevantContext: Math.floor(maxTotal * 0.13),
+      buffer: Math.floor(maxTotal * 0.12),
+    };
+  }
+
   // Token counting cache for performance
   private static tokenCache = new Map<string, number>();
 
   static cancelAssistantStream(conversationId: number) {
-    const entry = ChatService.activeStreams.get(conversationId);
-    if (entry) {
-      entry.aborted = true;
-      ChatService.activeStreams.set(conversationId, entry);
+    const controller = ChatService.activeStreams.get(conversationId);
+    if (controller) {
+      controller.abort();
+      ChatService.activeStreams.delete(conversationId);
     }
   }
 
@@ -73,7 +93,15 @@ class ChatService {
     conversationId: number,
     content: string,
     contextItems: Omit<NewContextItem, 'messageId'>[] | undefined,
-    onChunk: (chunk: string, done: boolean) => void,
+    onChunk: (
+      chunk: string,
+      done: boolean,
+      usage?: {
+        promptTokens: number;
+        completionTokens: number;
+        totalTokens: number;
+      },
+    ) => void,
     customBudget?: Partial<TokenBudget>,
   ) {
     // 1) Persist USER message
@@ -83,17 +111,20 @@ class ChatService {
       contextItems,
     );
 
-    // 2) Get conversation context using hybrid approach with token management
-    const budget = { ...this.DEFAULT_BUDGET, ...customBudget };
+    // 2) Get selected model from active provider (needed to compute dynamic budget)
+    const { selectedModel } =
+      await AIProviderManager.getInitializedActiveProviderAndModel();
+
+    // 3) Build token budget scaled to the model's context window (replaces hardcoded 6K cap)
+    const budget = {
+      ...this.buildBudgetForModel(selectedModel),
+      ...customBudget,
+    };
     const conversationContext = await this.buildConversationContext(
       conversationId,
       budget,
       contextItems, // Pass context items to conversation context
     );
-
-    // 3) Initialize active provider and model
-    const { providerInstance, selectedModel } =
-      await AIProviderManager.getInitializedActiveProviderAndModel();
 
     // 4) Prepare enhanced completion request with optimized context
     const enhancedPrompt = this.formatOptimizedConversationPrompt(
@@ -125,50 +156,47 @@ class ChatService {
       }
     }
 
-    // 6) Stream from provider with enhanced context
+    // 6) Stream from provider with enhanced context using AI SDK v6
     let fullContent = '';
-    try {
-      const request: CompletionRequest = {
-        prompt: enhancedPrompt,
-        model: selectedModel,
-        stream: true,
-        type: 'chat',
-        context: {
-          conversationId,
-          tokenCount: totalTokens,
-          budget,
-          // Include conversation metadata for future context providers
-          files:
-            contextItems
-              ?.filter((item) => item.type === 'file')
-              .map((item) => item.name) || [],
-        },
-      };
+    let finalUsage:
+      | { promptTokens: number; completionTokens: number; totalTokens: number }
+      | undefined;
+    const abortController = new AbortController();
+    ChatService.activeStreams.set(conversationId, abortController);
 
-      // mark this conversation as actively streaming
-      ChatService.activeStreams.set(conversationId, { aborted: false });
+    try {
+      // Get the Vercel AI SDK model instance
+      const model = await getVercelModel(selectedModel);
+
+      // Stream using AI SDK v6
+      const result = streamText({
+        model: model as any, // Type compatibility workaround for LanguageModelV1
+        prompt: enhancedPrompt,
+        abortSignal: abortController.signal,
+      });
 
       /* eslint-disable no-restricted-syntax */
-      for await (const {
-        content: chunk,
-        done,
-        metadata,
-      } of providerInstance.streamCompletion(request)) {
-        const state = ChatService.activeStreams.get(conversationId);
-        if (state?.aborted) {
-          // emit final done and stop streaming
+      for await (const chunk of result.textStream) {
+        if (abortController.signal.aborted) {
           onChunk('', true);
           throw new Error('aborted');
         }
-        if (metadata && typeof metadata.error === 'string') {
-          throw new Error(metadata.error);
-        }
         if (chunk) {
           fullContent += chunk;
-          onChunk(chunk, !!done);
+          onChunk(chunk, false);
         }
       }
       /* eslint-enable no-restricted-syntax */
+
+      // Send final done signal with usage
+      const usage = await result.usage;
+      const totalToks = usage?.totalTokens ?? 0;
+      finalUsage = {
+        promptTokens: 0,
+        completionTokens: totalToks,
+        totalTokens: totalToks,
+      };
+      onChunk('', true, finalUsage);
     } catch (err) {
       // If aborted, we've already emitted a final done signal above.
       if (!(err instanceof Error && err.message === 'aborted')) {
@@ -184,7 +212,17 @@ class ChatService {
     // 7) Persist ASSISTANT message
     const assistantMessage = await MainDatabaseService.addMessageWithContext(
       conversationId,
-      { role: 'assistant', content: fullContent },
+      {
+        role: 'assistant',
+        content: fullContent,
+        metadata: finalUsage
+          ? {
+              promptTokens: finalUsage.promptTokens,
+              completionTokens: finalUsage.completionTokens,
+              totalTokens: finalUsage.totalTokens,
+            }
+          : undefined,
+      },
       undefined,
     );
 

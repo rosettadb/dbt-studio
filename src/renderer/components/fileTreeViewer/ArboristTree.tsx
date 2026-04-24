@@ -118,6 +118,13 @@ export const ArboristTree: React.FC<ArboristTreeProps> = ({
 
   const handleMove: MoveHandler<FileNode> = useCallback(
     async ({ dragIds, parentId }) => {
+      // eslint-disable-next-line no-console
+      console.log('[ArboristTree] handleMove called', {
+        dragIds,
+        parentId,
+        projectPath,
+      });
+
       const dragId = dragIds[0];
       const targetParent = parentId || projectPath;
       const sourcePath = dragId;
@@ -125,8 +132,18 @@ export const ArboristTree: React.FC<ArboristTreeProps> = ({
       // Get the current parent of the source
       const sourceParent = sourcePath.substring(0, sourcePath.lastIndexOf('/'));
 
+      // eslint-disable-next-line no-console
+      console.log('[ArboristTree] move details', {
+        sourcePath,
+        sourceParent,
+        targetParent,
+        sameFolder: sourceParent === targetParent,
+      });
+
       // If dropping in the same folder, do nothing
       if (sourceParent === targetParent) {
+        // eslint-disable-next-line no-console
+        console.log('[ArboristTree] same folder, ignoring');
         return;
       }
 
@@ -266,7 +283,6 @@ export const ArboristTree: React.FC<ArboristTreeProps> = ({
     if (!contextMenu) return;
 
     navigator.clipboard.writeText(contextMenu.node.path);
-    toast.info('Path copied');
   }, [contextMenu]);
 
   const handleNewFileFromMenu = useCallback(() => {
@@ -398,9 +414,8 @@ export const ArboristTree: React.FC<ArboristTreeProps> = ({
           filePath: pendingOperation.sourcePath,
         });
 
-        // Only on success: clear state, show success message, and refresh
+        // Only on success: clear state and refresh (no toast message)
         setPendingOperation(null);
-        toast.info('Item moved');
         onRefresh();
       } catch (deleteError) {
         // Delete failed - attempt rollback by removing the copied item

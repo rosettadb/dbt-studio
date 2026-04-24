@@ -1,3 +1,4 @@
+import { Settings } from '@mui/icons-material';
 import * as Icons from './icons';
 
 interface SideBarElementType {
@@ -9,13 +10,7 @@ interface SideBarElementType {
   subItems?: Array<{ path: string; text: string; icon?: any }>;
 }
 
-const baseSidebarElements: SideBarElementType[] = [
-  {
-    path: '/app/connections',
-    text: 'Database Connections',
-    icon: Icons.ElectricalServices,
-    testId: 'nav-item-connections',
-  },
+const baseElements: SideBarElementType[] = [
   {
     path: '/app/select-project',
     text: 'Projects',
@@ -42,7 +37,7 @@ const baseSidebarElements: SideBarElementType[] = [
   },
   {
     path: '/app/cloud-explorer',
-    text: 'Cloud Object Explorer',
+    text: 'Object Explorer',
     icon: Icons.CloudIcon,
     testId: 'nav-item-cloud-explorer',
   },
@@ -54,21 +49,40 @@ const baseSidebarElements: SideBarElementType[] = [
   },
 ];
 
-export const getSidebarElements = (
+export const getMainElements = (
   isProjectSelected: boolean,
 ): SideBarElementType[] => {
-  return baseSidebarElements.map((element) => {
-    // Disable project-dependent features when no project is selected
+  return baseElements.map((element) => {
     if (
       !isProjectSelected &&
       (element.path === '/app' || element.path === '/app/sql')
     ) {
-      return {
-        ...element,
-        disabled: true,
-        tooltip: `${element.text}`,
-      };
+      return { ...element, disabled: true };
     }
     return element;
   });
+};
+
+export const getBottomElements = (): SideBarElementType[] => {
+  return [
+    {
+      path: '/app/connections',
+      text: 'Database Connections',
+      icon: Icons.ElectricalServices,
+      testId: 'nav-item-connections',
+    },
+    {
+      path: '/app/settings',
+      text: 'Settings',
+      icon: Settings,
+      testId: 'nav-item-settings',
+    },
+  ];
+};
+
+// Legacy compat: returns all elements in flat array
+export const getSidebarElements = (
+  isProjectSelected: boolean,
+): SideBarElementType[] => {
+  return getMainElements(isProjectSelected);
 };

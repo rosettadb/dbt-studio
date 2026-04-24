@@ -21,6 +21,7 @@ interface EditorHeaderProps {
   onSave: () => void;
   onToggleDiff: () => void;
   onNavigate?: (path: string) => void;
+  extraActions?: React.ReactNode;
 }
 
 export const EditorHeader: React.FC<EditorHeaderProps> = ({
@@ -35,7 +36,14 @@ export const EditorHeader: React.FC<EditorHeaderProps> = ({
   onSave,
   onToggleDiff,
   onNavigate,
+  extraActions,
 }) => {
+  const getDiffTooltip = () => {
+    if (showDiffView) return 'Hide Diff';
+    if (showDiffButton) return 'Compare Changes';
+    return 'No changes to compare';
+  };
+
   const getSaveTooltip = () => {
     if (hasError) return errorMessage || 'Error saving file';
     if (isSaving) return 'Saving...';
@@ -59,12 +67,17 @@ export const EditorHeader: React.FC<EditorHeaderProps> = ({
       />
 
       {/* Right: Action Buttons */}
-      <Box sx={{ display: 'flex', gap: 1, px: 2, py: 0.5 }}>
-        {/* Diff Button */}
-        {showDiffButton && (
-          <Tooltip title={showDiffView ? 'Hide Diff' : 'Compare Changes'}>
+      <Box
+        sx={{ display: 'flex', gap: 1, px: 2, py: 0.5, alignItems: 'center' }}
+      >
+        {/* Extra actions (e.g. AI, Model buttons) */}
+        {extraActions}
+        {/* Diff Button — always visible, disabled when no diff is available */}
+        <Tooltip title={getDiffTooltip()}>
+          <span>
             <IconButton
               onClick={onToggleDiff}
+              disabled={!showDiffButton}
               size="small"
               sx={{
                 color: showDiffView ? 'primary.main' : 'text.secondary',
@@ -76,12 +89,15 @@ export const EditorHeader: React.FC<EditorHeaderProps> = ({
                     ? 'action.selected'
                     : 'action.hover',
                 },
+                '&.Mui-disabled': {
+                  opacity: 0.35,
+                },
               }}
             >
               <VerticalSplit fontSize="small" />
             </IconButton>
-          </Tooltip>
-        )}
+          </span>
+        </Tooltip>
         {/* Save Button */}
         <Tooltip title={getSaveTooltip()}>
           <span>

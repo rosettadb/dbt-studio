@@ -101,7 +101,7 @@ const Settings: React.FC = () => {
 
   const getSectionTitle = (section: string) => {
     if (section === 'dbt') return 'dbt™ Core';
-    if (section === 'ai-providers') return 'AI Providers';
+    if (section === 'ai-providers') return 'AI Settings';
     if (section === 'profile') return 'Rosetta Cloud';
     if (section === 'duckdb') return 'DuckDB';
     return section.charAt(0).toUpperCase() + section.slice(1).replace('-', ' ');
@@ -148,6 +148,7 @@ const Settings: React.FC = () => {
 
   return (
     <AppLayout
+      panelTitle="Settings"
       sidebarContent={
         <Box
           sx={{

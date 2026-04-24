@@ -123,19 +123,14 @@ export type AIChannels =
   | 'ai:provider:update'
   | 'ai:provider:delete'
   | 'ai:provider:get-active'
-  | 'ai:provider:get-active-info'
   | 'ai:provider:set-active'
   | 'ai:provider:deactivate-all'
   | 'ai:provider:test-connection'
   | 'ai:provider:test-temp-connection'
   | 'ai:provider:get-models'
   | 'ai:provider:get-all-models'
-  | 'ai:provider:get-status'
   | 'ai:provider:get-credential'
   | 'ai:provider:cleanup-api-keys'
-
-  // Provider manager
-  | 'ai:provider-manager:initialize'
 
   // AI completion
   | 'ai:completion:generate'
@@ -235,6 +230,8 @@ export type UtilChannels =
   | 'windows:openSelector'
   | 'windows:closeSetup'
   | 'utils:getFileContentList'
+  | 'utils:open-path'
+  | 'utils:run-in-terminal'
   | 'dialog:showOpenDialog'
   | 'dialog:showSaveDialog';
 
@@ -381,6 +378,40 @@ export type NotebookChannels =
   | 'notebooks:archived:delete'
   | 'notebooks:archived:deleteAll';
 
+export type AgentChannels =
+  | 'agent:run'
+  | 'agent:cancel'
+  | 'agent:tool-call'
+  | 'agent:step-start'
+  | 'agent:terminal-confirm'
+  | 'agent:terminal-resolve'
+  | 'agent:terminal:confirm-response'
+  | 'agent:context-usage'
+  | 'agent:context-compacted'
+  | 'agent:tools:list'
+  | 'ai-settings:load'
+  | 'ai-settings:save'
+  | 'ai-settings:file-path';
+
+export type MCPChannels =
+  | 'mcp:servers:list'
+  | 'mcp:server:connect'
+  | 'mcp:server:disconnect'
+  | 'mcp:server:tools'
+  | 'mcp:config:load'
+  | 'mcp:config:save'
+  | 'mcp:server:add'
+  | 'mcp:server:remove'
+  | 'mcp:server:toggle'
+  | 'mcp:config:file-path';
+
+export type SkillsChannels =
+  | 'skills:list'
+  | 'skills:get-directory'
+  | 'skills:delete'
+  | 'skills:create'
+  | 'skills:import';
+
 export type Channels =
   | TestChannels
   | CliChannels
@@ -398,7 +429,10 @@ export type Channels =
   | AIChannels
   | DuckLakeChannels
   | LineageChannels
-  | NotebookChannels;
+  | NotebookChannels
+  | AgentChannels
+  | MCPChannels
+  | SkillsChannels;
 
 export type ConfigureConnectionBody = {
   projectId?: string;
