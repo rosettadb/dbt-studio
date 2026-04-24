@@ -1,16 +1,15 @@
 import { createTheme } from '@mui/material/styles';
 import { grey, red, yellow } from '@mui/material/colors';
 
-// Define theme with both light and dark color schemes
 const theme = createTheme({
   colorSchemes: {
     light: {
       palette: {
         mode: 'light',
         primary: {
-          light: '#4f83cc', // Lighter blue-gray
-          main: '#2c5282', // Attractive blue-gray for light mode (replacing dark gray)
-          dark: '#1a365d', // Deeper blue-gray
+          light: '#4f83cc',
+          main: '#2c5282',
+          dark: '#1a365d',
           contrastText: '#ffffff',
         },
         secondary: {
@@ -31,14 +30,14 @@ const theme = createTheme({
         },
         text: {
           primary: grey[900],
-          secondary: grey[700],
+          secondary: grey[600],
           disabled: grey[400],
         },
         background: {
-          default: '#f5f5f5',
-          paper: '#fafafa',
+          default: '#f0f0f0',
+          paper: '#ffffff',
         },
-        divider: 'rgba(0, 0, 0, 0.12)',
+        divider: 'rgba(0, 0, 0, 0.08)',
       },
     },
     dark: {
@@ -72,10 +71,10 @@ const theme = createTheme({
           disabled: grey[600],
         },
         background: {
-          default: '#121212',
-          paper: '#1e1e1e',
+          default: '#1e1e1e',
+          paper: '#252526',
         },
-        divider: 'rgba(255, 255, 255, 0.12)',
+        divider: 'rgba(255, 255, 255, 0.06)',
       },
     },
   },
@@ -83,7 +82,7 @@ const theme = createTheme({
     MuiAppBar: {
       styleOverrides: {
         root: {
-          boxShadow: '0px 1px 3px 0px rgba(0,0,0,0.08)',
+          boxShadow: 'none',
         },
       },
     },
@@ -91,7 +90,7 @@ const theme = createTheme({
       styleOverrides: {
         root: {
           borderRadius: '6px',
-          boxShadow: '0px 2px 4px rgba(0,0,0,0.05)',
+          boxShadow: '0px 1px 3px rgba(0,0,0,0.08)',
         },
       },
     },
@@ -112,20 +111,31 @@ const theme = createTheme({
     MuiButton: {
       styleOverrides: {
         root: {
-          borderRadius: '6px',
+          borderRadius: '4px',
           textTransform: 'none',
           fontWeight: 500,
         },
         containedPrimary: {
           '&:hover': {
-            boxShadow: '0px 4px 8px rgba(0, 0, 0, 0.15)',
+            boxShadow: '0px 2px 6px rgba(0, 0, 0, 0.12)',
           },
+        },
+      },
+    },
+    MuiTooltip: {
+      styleOverrides: {
+        tooltip: {
+          fontSize: '0.7rem',
+          fontWeight: 400,
+          borderRadius: 3,
         },
       },
     },
   },
   typography: {
-    fontFamily: '"Roboto", "Helvetica", "Arial", sans-serif',
+    fontFamily:
+      '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif',
+    fontSize: 13,
     h1: {
       fontWeight: 500,
     },
@@ -147,9 +157,15 @@ const theme = createTheme({
     button: {
       fontWeight: 500,
     },
+    body1: {
+      fontSize: '0.875rem',
+    },
+    body2: {
+      fontSize: '0.8125rem',
+    },
   },
   shape: {
-    borderRadius: 6,
+    borderRadius: 4,
   },
 });
 

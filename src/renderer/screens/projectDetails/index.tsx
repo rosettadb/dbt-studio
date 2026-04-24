@@ -20,6 +20,7 @@ import {
 } from '@mui/material';
 import { toast } from 'react-toastify';
 import yaml from 'js-yaml';
+import { useTheme } from '@mui/material/styles';
 import {
   AddConnectionModal,
   Editor,
@@ -32,7 +33,12 @@ import {
   BusinessModal,
   AiPromptModal,
 } from '../../components';
-import { ProjectSidebar } from '../../components/sidebar/project-sidebar';
+import {
+  ProjectSidebar,
+  SidebarTab,
+} from '../../components/sidebar/project-sidebar';
+import { Icon } from '../../components/icon';
+import { icons } from '../../../../assets';
 import { TabManager } from '../../components/editor/tabManager';
 import {
   useGetConnectionById,
@@ -171,6 +177,8 @@ const ProjectDetails: React.FC = () => {
   const [aiTransformationResponse, setAitTransformationResponse] =
     React.useState<string>();
   const [isSynchronizing, setIsSynchronizing] = React.useState(false);
+  const [sidebarTab, setSidebarTab] = React.useState<SidebarTab>('explorer');
+  const theme = useTheme();
 
   const {
     data: directories,
@@ -926,8 +934,108 @@ const ProjectDetails: React.FC = () => {
 
   return (
     <AppLayout
+      panelHeaderLeft={
+        <>
+          <Tooltip
+            title="Explorer"
+            placement="bottom"
+            enterDelay={800}
+            enterNextDelay={800}
+          >
+            <Box
+              onClick={() => setSidebarTab('explorer')}
+              sx={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                width: 28,
+                height: 28,
+                cursor: 'pointer',
+                borderRadius: 0.5,
+                backgroundColor:
+                  sidebarTab === 'explorer' ? 'action.selected' : 'transparent',
+                opacity: sidebarTab === 'explorer' ? 1 : 0.7,
+                transition: 'all 0.2s ease',
+                '&:hover': { backgroundColor: 'action.hover', opacity: 1 },
+              }}
+            >
+              <Icon
+                src={icons.folder}
+                width={16}
+                height={16}
+                color={
+                  sidebarTab === 'explorer'
+                    ? theme.palette.primary.main
+                    : theme.palette.text.secondary
+                }
+              />
+            </Box>
+          </Tooltip>
+          <Tooltip
+            title="Source Control"
+            placement="bottom"
+            enterDelay={800}
+            enterNextDelay={800}
+          >
+            <Box
+              onClick={() => setSidebarTab('scm')}
+              sx={{
+                position: 'relative',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                width: 28,
+                height: 28,
+
+                cursor: 'pointer',
+                borderRadius: 0.5,
+                backgroundColor:
+                  sidebarTab === 'scm' ? 'action.selected' : 'transparent',
+                opacity: sidebarTab === 'scm' ? 1 : 0.7,
+                transition: 'all 0.2s ease',
+                '&:hover': { backgroundColor: 'action.hover', opacity: 1 },
+              }}
+            >
+              <Icon
+                src={icons.gitBranch}
+                width={16}
+                height={16}
+                color={
+                  sidebarTab === 'scm'
+                    ? theme.palette.primary.main
+                    : theme.palette.text.secondary
+                }
+              />
+              {statuses.length > 0 && (
+                <Box
+                  sx={{
+                    position: 'absolute',
+                    top: 2,
+                    right: -2,
+                    backgroundColor: 'primary.main',
+                    color: 'primary.contrastText',
+                    borderRadius: '8px',
+                    fontSize: 9,
+                    fontWeight: 600,
+                    minWidth: 14,
+                    height: 14,
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    padding: '0 3px',
+                    lineHeight: 1,
+                  }}
+                >
+                  {statuses.length > 99 ? '99+' : statuses.length}
+                </Box>
+              )}
+            </Box>
+          </Tooltip>
+        </>
+      }
       sidebarContent={
         <ProjectSidebar
+          activeTab={sidebarTab}
           directories={directories}
           statuses={statuses}
           isLoadingDirectories={isLoadingDirectories}

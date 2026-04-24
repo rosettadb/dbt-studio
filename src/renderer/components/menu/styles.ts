@@ -8,11 +8,15 @@ export const StyledToolbar = styled(Toolbar)(({ theme }) => ({
   minHeight: 40,
   display: 'flex',
   justifyContent: 'space-between',
+  paddingLeft: '12px !important',
+  paddingRight: '8px !important',
+  flexShrink: 0,
 }));
 
 export const IconsContainer = styled('div')(() => ({
   display: 'flex',
   alignItems: 'center',
+  gap: 4,
 }));
 
 export const Logo = styled('img')(() => ({
@@ -39,15 +43,15 @@ export const EnvironmentSwitchContainer = styled(Box)(() => ({
 }));
 
 export const EnvironmentSwitch = styled(Switch)(({ theme }) => ({
-  width: 42,
-  height: 24,
+  width: 36,
+  height: 20,
   padding: 0,
   '& .MuiSwitch-switchBase': {
     padding: 0,
     margin: 2,
     transitionDuration: '300ms',
     '&.Mui-checked': {
-      transform: 'translateX(18px)',
+      transform: 'translateX(16px)',
       '& + .MuiSwitch-track': {
         backgroundColor:
           theme.palette.mode === 'light'
@@ -97,10 +101,10 @@ export const SwitchIcon = styled(Box)(({ theme }) => ({
     duration: 300,
   }),
   '&.checked': {
-    left: 'calc(50% + 9px)',
+    left: 'calc(50% + 8px)',
   },
   '&.unchecked': {
-    left: 'calc(50% - 9px)',
+    left: 'calc(50% - 8px)',
   },
 }));
 
@@ -115,8 +119,8 @@ export const AuthButtonContent = styled('div')(({ theme }) => ({
 }));
 
 export const AuthIcon = styled('img')(() => ({
-  width: 18,
-  height: 18,
+  width: 14,
+  height: 14,
 }));
 
 export const AuthLabel = styled('span')(({ theme }) => ({

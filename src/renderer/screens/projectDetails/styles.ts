@@ -32,7 +32,7 @@ export const FileTreeContainer = styled('div')(({ theme }) => ({
   borderRadius: 8,
   padding: '5px',
   height: '100%',
-  width: 310,
+  width: '100%',
 }));
 
 export const EditorContainer = styled('div')(({ theme }) => ({

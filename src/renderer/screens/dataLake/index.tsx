@@ -384,7 +384,10 @@ const DataLake: React.FC = () => {
   };
 
   return (
-    <AppLayout sidebarContent={<DataLakeSidebar instances={instances} />}>
+    <AppLayout
+      sidebarContent={<DataLakeSidebar instances={instances} />}
+      panelTitle="DataLake"
+    >
       <Box sx={{ p: 2 }}>
         <Box>{renderContent()}</Box>
       </Box>

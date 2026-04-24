@@ -32,8 +32,7 @@ import {
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'react-toastify';
 import { AppLayout } from '../../layouts';
-import { useGetConnections } from '../../controllers';
-import { useDuckLakeInstances } from '../../controllers/duckLake.controller';
+import { useGetConnections, useDuckLakeInstances } from '../../controllers';
 import {
   useArchivedNotebooks,
   useRestoreNotebook,
@@ -49,12 +48,11 @@ import {
 import connectionIcons, {
   defaultIcon,
 } from '../../../../assets/connectionIcons';
-import { AppContext } from '../../context/AppProvider';
-import { connectorsServices } from '../../services';
-import { DuckLakeService } from '../../services/duckLake.service';
+import { AppContext } from '../../context';
+import { connectorsServices, DuckLakeService } from '../../services';
 import { NotebooksSidebar } from '../../components/notebook/NotebooksSidebar';
 import { NotebookTabManager } from '../../components/notebook/NotebookTabManager';
-import { NotebookEditor } from '../../components/notebook/NotebookEditor';
+import { NotebookEditor } from '../../components/notebook';
 import { Table, SupportedConnectionTypes } from '../../../types/backend';
 import useNotebookTabManager from '../../hooks/useNotebookTabManager';
 import {
@@ -64,14 +62,12 @@ import {
 
 const Notebooks = () => {
   const theme = useTheme();
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const navigate = useNavigate();
   const { selectedProject } = useContext(AppContext);
   const { isSidebarOpen } = useContext(AppContext);
   const { data: connections = [] } = useGetConnections();
   const { data: duckLakeInstances = [] } = useDuckLakeInstances();
 
-  // Use persistence hooks
   const {
     activeConnectionId,
     setActiveConnectionId,
@@ -558,25 +554,10 @@ const Notebooks = () => {
     notebookTabManager,
   ]);
 
-  // Handle export all notebooks
   const handleExportAllNotebooks = useCallback(() => {
     if (notebooks.length === 0) {
-      // eslint-disable-next-line no-console
-      console.log('No notebooks to export');
       return;
     }
-
-    // Debug: Log notebook cell counts
-    // eslint-disable-next-line no-console
-    console.log(
-      'Exporting notebooks:',
-      notebooks.map((n) => ({
-        name: n.name,
-        cellCount: n.cells?.length || 0,
-      })),
-    );
-
-    // Create JSON export without cell output data (to keep file size small)
     const exportData = {
       exportDate: new Date().toISOString(),
       connectionId: activeConnectionId,
@@ -624,7 +605,11 @@ const Notebooks = () => {
   // Show loading state while hydrating
   if (!isFullyHydrated) {
     return (
-      <AppLayout data-testid="notebooks-screen">
+      <AppLayout
+        data-testid="notebooks-screen"
+        panelTitle="Notebooks"
+        sidebarContent={<Box />}
+      >
         <Box
           sx={{
             display: 'flex',
@@ -642,6 +627,7 @@ const Notebooks = () => {
   return (
     <AppLayout
       data-testid="notebooks-screen"
+      panelTitle="Notebooks"
       sidebarContent={
         <Box
           sx={{
