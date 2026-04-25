@@ -1049,13 +1049,11 @@ UPDATED SUMMARY:`,
                   }
                   break;
                 }
-                case 'reasoning':
                 case 'reasoning-delta': {
                   const delta =
                     (chunk as any).textDelta ||
                     (chunk as any).delta ||
                     (chunk as any).text ||
-                    chunk.text ||
                     '';
                   if (delta) {
                     thinkingContent += delta;
@@ -1095,8 +1093,8 @@ UPDATED SUMMARY:`,
                 }
                 case 'finish':
                   finalUsage = {
-                    promptTokens: chunk.totalUsage?.promptTokens ?? 0,
-                    completionTokens: chunk.totalUsage?.completionTokens ?? 0,
+                    promptTokens: chunk.totalUsage?.inputTokens ?? 0,
+                    completionTokens: chunk.totalUsage?.outputTokens ?? 0,
                     totalTokens: chunk.totalUsage?.totalTokens ?? 0,
                   };
                   break;
@@ -1130,8 +1128,8 @@ UPDATED SUMMARY:`,
           fullContent = result.text;
           const totalToks = result.usage?.totalTokens ?? 0;
           finalUsage = {
-            promptTokens: result.usage?.promptTokens ?? 0,
-            completionTokens: result.usage?.completionTokens ?? totalToks,
+            promptTokens: result.usage?.inputTokens ?? 0,
+            completionTokens: result.usage?.outputTokens ?? totalToks,
             totalTokens: totalToks,
           };
 

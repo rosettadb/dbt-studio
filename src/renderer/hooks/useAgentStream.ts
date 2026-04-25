@@ -253,23 +253,9 @@ export const useAgentStream = (sessionId: number | undefined) => {
           break;
         }
 
-        case 'reasoning':
         case 'reasoning-delta': {
-          const delta =
-            (chunk as any).textDelta ||
-            (chunk as any).delta ||
-            (chunk as any).text ||
-            chunk.text ||
-            '';
-          if (delta) {
-            setStreamState((prev) => ({
-              ...prev,
-              reasoning: {
-                text: (prev.reasoning?.text || '') + delta,
-                durationMs: prev.reasoning?.durationMs,
-              },
-            }));
-          }
+          // Reasoning/thinking deltas are captured by the backend into
+          // thinkingContent and persisted. No dedicated UI state field here.
           break;
         }
 
