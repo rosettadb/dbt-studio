@@ -16,7 +16,7 @@ import { useMonacoAutocomplete } from './useMonacoAutocomplete';
 import { useSchemaForConnection } from './useSchemaForConnection';
 import { useNotebookConnectionState } from './useNotebookConnectionState';
 import { useNotebookSidebarState } from './useNotebookSidebarState';
-import { useAgentMode } from './useAgentMode';
+import { useToolMode } from './useToolMode';
 
 import { useAgentStream } from './useAgentStream';
 
@@ -39,6 +39,6 @@ export {
   useSchemaForConnection,
   useNotebookConnectionState,
   useNotebookSidebarState,
-  useAgentMode,
+  useToolMode,
   useAgentStream,
 };

@@ -36,6 +36,7 @@ import type { ContextUsageBreakdown } from './ContextUsageRing';
 
 import { useContextManager } from '../../hooks/useContextManager';
 import { useAgentStream } from '../../hooks/useAgentStream';
+import { useToolMode } from '../../hooks/useToolMode';
 import {
   useOnStreamChunk,
   useOnContextUsage,
@@ -71,6 +72,9 @@ export const ChatWindow: React.FC = () => {
     confirmTerminal,
     clearError,
   } = useAgentStream(selectedSessionId);
+
+  // Tool mode — drives which tools are available in the backend
+  const { currentMode } = useToolMode(selectedSessionId);
 
   // Load messages for the selected session (used to estimate context usage on session switch)
   const { data: sessionMessages = [] } =
@@ -683,9 +687,10 @@ export const ChatWindow: React.FC = () => {
           <ChatInputBox
             sessionId={selectedSessionId}
             contextManager={contextManager}
-            onUsage={(usage) => setLastUsage(usage)}
             isStreaming={streamState.isStreaming}
-            onStartStream={startStream}
+            onStartStream={(content, contextItems) =>
+              startStream(content, contextItems, undefined, currentMode)
+            }
             onCancelStream={cancelStream}
             contextBreakdown={contextBreakdown}
           />

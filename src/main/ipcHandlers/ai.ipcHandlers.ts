@@ -1,8 +1,7 @@
 import { ipcMain } from 'electron';
 import MainDatabaseService from '../services/mainDatabase.service';
-import ChatService from '../services/chat.service';
 import SecureStorageService from '../services/secureStorage.service';
-import {
+import AgentService, {
   loadAISettings,
   saveAISettings,
   getAISettingsFilePath,
@@ -14,7 +13,6 @@ import {
   NewAIProvider,
   NewAIUsageLog,
   NewChatConversation,
-  NewChatMessage,
   NewPromptTemplate,
   PromptTemplate,
 } from '../schemas/mainDatabase.schema';
@@ -60,10 +58,11 @@ const aiHandlerChannels: string[] = [
   // Enhanced chat/context
   'chat:conversation:get-with-context',
   'chat:message:get-with-context',
-  'chat:message:add-with-context',
   'chat:message:regenerate',
-  'chat:message:stream',
-  'chat:message:cancel',
+  'agent:run',
+  'agent:cancel',
+  'agent:tools:list',
+  'agent:terminal-resolve',
   'chat:context:add-items',
   'chat:context:get-items',
   'chat:context:resolve-file',
@@ -101,18 +100,6 @@ const registerAIHandlers = () => {
     'ai:provider:get',
     async (_, id: number): Promise<AIProvider | null> => {
       return MainDatabaseService.getProvider(id);
-    },
-  );
-
-  // Cancel an active streaming response for a conversation
-  ipcMain.handle(
-    'chat:message:cancel',
-    async (
-      _,
-      { conversationId }: { conversationId: number },
-    ): Promise<{ success: boolean }> => {
-      ChatService.cancelAssistantStream(conversationId);
-      return { success: true };
     },
   );
 
@@ -263,62 +250,6 @@ const registerAIHandlers = () => {
     },
   );
 
-  ipcMain.handle(
-    'chat:message:send',
-    async (
-      _,
-      payload:
-        | {
-            conversationId?: number;
-            sessionId?: number;
-            message: Omit<NewChatMessage, 'conversationId'>;
-          }
-        | number,
-      maybeMessage?: NewChatMessage,
-    ): Promise<ChatMessage> => {
-      // Support both old positional signature and new object payload
-      if (typeof payload === 'number') {
-        if (!maybeMessage) {
-          throw new Error(
-            "chat:message:send missing 'message' argument for positional signature",
-          );
-        }
-        // For backward compatibility, accept NewChatMessage and ignore its conversationId
-        const { role, content, metadata } = maybeMessage;
-        return MainDatabaseService.addMessage(payload, {
-          role,
-          content,
-          metadata,
-        });
-      }
-      const { conversationId, sessionId, message } = payload || ({} as any);
-      const id = conversationId ?? sessionId;
-      if (typeof id !== 'number') {
-        throw new Error(
-          "chat:message:send requires 'conversationId' or 'sessionId' in payload",
-        );
-      }
-      return MainDatabaseService.addMessage(id, message);
-    },
-  );
-
-  ipcMain.handle(
-    'chat:message:update',
-    async (
-      _,
-      { id, content }: { id: number; content: string },
-    ): Promise<void> => {
-      await MainDatabaseService.updateMessage(id, content);
-    },
-  );
-
-  ipcMain.handle(
-    'chat:message:delete',
-    async (_, id: number): Promise<void> => {
-      await MainDatabaseService.deleteMessage(id);
-    },
-  );
-
   // Template Management Handlers
   ipcMain.handle(
     'ai:template:list',
@@ -465,130 +396,13 @@ const registerAIHandlers = () => {
       maybeLimit?: number,
       maybeOffset?: number,
     ) => {
-      return ChatService.getMessagesWithContext(
+      return AgentService.getMessagesWithContext(
         payload,
         maybeLimit,
         maybeOffset,
       );
     },
   );
-
-  ipcMain.handle(
-    'chat:message:add-with-context',
-    async (
-      _,
-      {
-        conversationId,
-        message,
-        contextItems,
-        toolCalls,
-      }: {
-        conversationId: number;
-        message: Omit<NewChatMessage, 'conversationId'>;
-        contextItems?: Omit<
-          import('../schemas/mainDatabase.schema').NewContextItem,
-          'messageId'
-        >[];
-        toolCalls?: Omit<
-          import('../schemas/mainDatabase.schema').NewToolCall,
-          'messageId'
-        >[];
-      },
-    ) => {
-      return MainDatabaseService.addMessageWithContext(
-        conversationId,
-        message,
-        contextItems,
-        toolCalls,
-      );
-    },
-  );
-
-  ipcMain.handle(
-    'chat:message:regenerate',
-    async (
-      _,
-      {
-        originalMessageId,
-        newContent,
-        metadata,
-      }: {
-        originalMessageId: number;
-        newContent: string;
-        metadata?: any;
-      },
-    ) => {
-      return MainDatabaseService.createMessageVariant(
-        originalMessageId,
-        newContent,
-        metadata,
-      );
-    },
-  );
-
-  // Streaming message support
-  ipcMain.handle(
-    'chat:message:stream',
-    async (
-      event,
-      {
-        conversationId,
-        content,
-        contextItems,
-      }: {
-        conversationId: number;
-        content: string;
-        contextItems?: Omit<
-          import('../schemas/mainDatabase.schema').NewContextItem,
-          'messageId'
-        >[];
-      },
-    ) => {
-      return ChatService.streamAssistantReply(
-        conversationId,
-        content,
-        contextItems,
-        (chunk, done, usage) => {
-          event.sender.send('chat:message:stream-chunk', {
-            conversationId,
-            chunk,
-            done,
-            usage,
-          });
-        },
-      );
-    },
-  );
-
-  // Context Items Management
-  ipcMain.handle(
-    'chat:context:add-items',
-    async (
-      _,
-      {
-        messageId,
-        contextItems,
-      }: {
-        messageId: number;
-        contextItems: Omit<
-          import('../schemas/mainDatabase.schema').NewContextItem,
-          'messageId'
-        >[];
-      },
-    ) => {
-      return MainDatabaseService.addContextItems(messageId, contextItems);
-    },
-  );
-
-  ipcMain.handle('chat:context:get-items', async (_, messageId: number) => {
-    return MainDatabaseService.getContextItems(messageId);
-  });
-
-  // Context Resolution Handlers
-  ipcMain.handle('chat:context:resolve-file', async (_, filePath: string) => {
-    return ChatService.resolveFileContext(filePath);
-  });
-
   // Enhanced selected file context with DBT awareness
   ipcMain.handle(
     'chat:context:resolve-selected-file',
@@ -596,7 +410,7 @@ const registerAIHandlers = () => {
       _,
       { filePath, projectPath }: { filePath: string; projectPath?: string },
     ) => {
-      return ChatService.resolveSelectedFileContext(filePath, projectPath);
+      return AgentService.resolveSelectedFileContext(filePath, projectPath);
     },
   );
 
@@ -604,128 +418,10 @@ const registerAIHandlers = () => {
   ipcMain.handle(
     'chat:context:get-file-metadata',
     async (_, filePath: string) => {
-      return ChatService.getFileMetadata(filePath);
+      return AgentService.getFileMetadata(filePath);
     },
   );
 
-  ipcMain.handle(
-    'chat:context:resolve-folder',
-    async (_, folderPath: string) => {
-      return ChatService.resolveFolderContext(folderPath);
-    },
-  );
-
-  ipcMain.handle('chat:context:search-codebase', async (_, query: string) => {
-    return ChatService.searchCodebase(query);
-  });
-
-  ipcMain.handle('chat:context:resolve-url', async (_, url: string) => {
-    return ChatService.resolveUrl(url);
-  });
-
-  // Tool Calls Management
-  ipcMain.handle(
-    'chat:tool:add-calls',
-    async (
-      _,
-      {
-        messageId,
-        toolCalls,
-      }: {
-        messageId: number;
-        toolCalls: Omit<
-          import('../schemas/mainDatabase.schema').NewToolCall,
-          'messageId'
-        >[];
-      },
-    ) => {
-      return MainDatabaseService.addToolCalls(messageId, toolCalls);
-    },
-  );
-
-  ipcMain.handle('chat:tool:get-calls', async (_, messageId: number) => {
-    return MainDatabaseService.getToolCalls(messageId);
-  });
-
-  ipcMain.handle(
-    'chat:tool:update-call',
-    async (
-      _,
-      {
-        id,
-        updates,
-      }: {
-        id: number;
-        updates: Partial<
-          Omit<
-            import('../schemas/mainDatabase.schema').NewToolCall,
-            'messageId'
-          >
-        >;
-      },
-    ) => {
-      return MainDatabaseService.updateToolCall(id, updates);
-    },
-  );
-
-  ipcMain.handle('chat:tool:execute', async (_, toolCallId: number) => {
-    return ChatService.executeToolCall(toolCallId);
-  });
-
-  ipcMain.handle('chat:tool:cancel', async (_, toolCallId: number) => {
-    return ChatService.cancelToolCall(toolCallId);
-  });
-
-  // Session Metadata Management
-  ipcMain.handle(
-    'chat:session:set-metadata',
-    async (
-      _,
-      {
-        conversationId,
-        key,
-        value,
-      }: {
-        conversationId: number;
-        key: string;
-        value: string;
-      },
-    ) => {
-      return MainDatabaseService.setSessionMetadata(conversationId, key, value);
-    },
-  );
-
-  ipcMain.handle(
-    'chat:session:get-metadata',
-    async (
-      _,
-      {
-        conversationId,
-        key,
-      }: {
-        conversationId: number;
-        key?: string;
-      },
-    ) => {
-      return MainDatabaseService.getSessionMetadata(conversationId, key);
-    },
-  );
-
-  ipcMain.handle(
-    'chat:session:delete-metadata',
-    async (
-      _,
-      {
-        conversationId,
-        key,
-      }: {
-        conversationId: number;
-        key?: string;
-      },
-    ) => {
-      return MainDatabaseService.deleteSessionMetadata(conversationId, key);
-    },
-  );
   aiHandlersRegistered = true;
 
   ipcMain.handle('ai-settings:load', () => loadAISettings());

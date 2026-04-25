@@ -24,6 +24,7 @@ export interface AgentRunRequest {
   contextItems?: ContextItem[];
   requestedModel?: string;
   projectPath?: string;
+  toolMode?: 'chat' | 'agent';
 }
 
 /**

@@ -206,7 +206,12 @@ export const useAgentStream = (sessionId: number | undefined) => {
   }, [sessionId]);
 
   const startStream = useCallback(
-    async (content: string, contextItems?: any[], requestedModel?: string) => {
+    async (
+      content: string,
+      contextItems?: any[],
+      requestedModel?: string,
+      toolMode?: 'chat' | 'agent',
+    ) => {
       if (!sessionId) return;
 
       const msgKey = [
@@ -254,6 +259,7 @@ export const useAgentStream = (sessionId: number | undefined) => {
           content,
           contextItems,
           requestedModel,
+          toolMode,
         });
 
         // Agent completed — replace optimistic message with persisted data
