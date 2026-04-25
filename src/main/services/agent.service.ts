@@ -25,8 +25,6 @@ import type {
 } from '../schemas/mainDatabase.schema';
 import type { AISettingsConfig } from '../../types/backend';
 import type {
-  AgentStepStartPayload,
-  AgentToolCallPayload,
   ChatStreamChunkPayload,
   AgentContextUsagePayload,
   AgentContextCompactedPayload,
@@ -957,6 +955,7 @@ UPDATED SUMMARY:`,
       activeAgents.set(conversationId, abortController);
 
       let fullContent = '';
+      let thinkingContent = '';
       let toolCallCount = 0;
       let finalUsage:
         | {
@@ -970,94 +969,12 @@ UPDATED SUMMARY:`,
       const collectedToolCalls: Array<{
         toolName: string;
         toolCallId: string;
-        args: Record<string, unknown>;
-        result: unknown;
+        input: unknown;
+        output: unknown;
         stepNumber: number;
         status: 'done' | 'error';
-        durationMs?: number;
       }> = [];
-
-      // onStepFinish is the ONLY per-call callback supported by ToolLoopAgent.stream/generate.
-      // experimental_onToolCallStart/Finish/onStepStart are generateText/streamText options —
-      // they are NOT forwarded by ToolLoopAgent and are silently dropped when passed via `as any`.
-      //
-      // Strategy: emit agent:step-start at the beginning of each step, and emit agent:tool-call
-      // events for each tool call result from onStepFinish. This gives the frontend step blocks
-      // and completed tool call rows. Running-state tool calls (status:'running') are not
-      // available via this API — the frontend shows a spinner until the step finishes.
-      //
-      // SDK field names: TypedToolCall uses `input` (not `args`),
-      //                  TypedToolResult uses `output` (not `result`).
-      // IPC event field names: we map input→args and output→result for the frontend.
-      const onStepFinish = async ({
-        stepNumber,
-        toolCalls,
-        toolResults,
-        usage,
-      }: {
-        stepNumber: number;
-        toolCalls?: Array<{
-          toolName: string;
-          toolCallId: string;
-          input?: unknown;
-        }>;
-        toolResults?: Array<{
-          toolName: string;
-          toolCallId: string;
-          output: unknown;
-        }>;
-        usage?: { totalTokens?: number };
-      }) => {
-        // Capture final usage from the last step (this is where AI SDK actually provides it)
-        // Don't overwrite if already set by a previous step
-        const stepTokens = usage?.totalTokens ?? 0;
-        if (stepTokens > 0 && !finalUsage?.totalTokens) {
-          finalUsage = {
-            promptTokens: 0,
-            completionTokens: stepTokens,
-            totalTokens: stepTokens,
-          };
-        }
-        // Emit step-start at the beginning of each step (stepNumber is 0-based)
-        const stepStartPayload: AgentStepStartPayload = {
-          conversationId,
-          stepNumber,
-        };
-        event.sender.send('agent:step-start', stepStartPayload);
-
-        if (toolCalls) {
-          toolCallCount += toolCalls.length;
-
-          // Build an output map keyed by toolCallId for quick lookup
-          const outputMap = new Map<string, unknown>();
-          toolResults?.forEach((tr) => outputMap.set(tr.toolCallId, tr.output));
-
-          // Emit a done event for each tool call in this step.
-          // Map SDK field names (input/output) to IPC event field names (args/result).
-          toolCalls.forEach((tc) => {
-            const toolCallPayload: AgentToolCallPayload = {
-              conversationId,
-              toolName: tc.toolName,
-              toolCallId: tc.toolCallId,
-              args: tc.input as Record<string, unknown>, // SDK: input → IPC: args
-              result: outputMap.get(tc.toolCallId), // SDK: output → IPC: result
-              stepNumber,
-              status: 'done',
-            };
-            event.sender.send('agent:tool-call', toolCallPayload);
-
-            // Collect for DB persistence
-            collectedToolCalls.push({
-              toolName: tc.toolName,
-              toolCallId: tc.toolCallId,
-              args: tc.input as Record<string, unknown>,
-              result: outputMap.get(tc.toolCallId),
-              stepNumber,
-              status: 'done',
-            });
-          });
-        }
-      };
+      const collectedParts: any[] = [];
 
       try {
         if (aiSettings.chat.streamResponses) {
@@ -1078,6 +995,7 @@ UPDATED SUMMARY:`,
                 undefined,
               );
             } catch (persistErr) {
+              // eslint-disable-next-line no-console
               console.error(
                 '[AgentService] Failed to persist timeout message:',
                 persistErr,
@@ -1093,29 +1011,105 @@ UPDATED SUMMARY:`,
             const result = await agent.stream({
               messages,
               abortSignal: abortController.signal,
-              onStepFinish,
             });
 
+            let currentStepNumber = -1;
+
             /* eslint-disable no-restricted-syntax */
-            for await (const chunk of result.textStream) {
+            for await (const chunk of result.fullStream) {
               if (abortController.signal.aborted) break;
               // Reset timeout on each received chunk — stream is alive
               clearTimeout(timeoutId);
-              fullContent += chunk;
-              sendChunk({ conversationId, chunk, done: false });
+
+              // Track current step number
+              if (chunk.type === 'start-step') {
+                currentStepNumber += 1;
+                event.sender.send('agent:step-start', {
+                  conversationId,
+                  stepNumber: currentStepNumber,
+                });
+              }
+
+              // Forward the native TextStreamPart chunk to the renderer for real-time tool arguments
+              event.sender.send('chat:message:stream-chunk', {
+                conversationId,
+                chunk,
+                done: false,
+              });
+
+              // Process chunks for backend persistence state
+              switch (chunk.type) {
+                case 'text-delta': {
+                  fullContent += chunk.text;
+                  const lastPart = collectedParts[collectedParts.length - 1];
+                  if (lastPart?.type === 'text') {
+                    lastPart.text += chunk.text;
+                  } else {
+                    collectedParts.push({ type: 'text', text: chunk.text });
+                  }
+                  break;
+                }
+                case 'reasoning':
+                case 'reasoning-delta': {
+                  const delta =
+                    (chunk as any).textDelta ||
+                    (chunk as any).delta ||
+                    (chunk as any).text ||
+                    chunk.text ||
+                    '';
+                  if (delta) {
+                    thinkingContent += delta;
+                  }
+                  break;
+                }
+                case 'tool-call':
+                  toolCallCount += 1;
+                  collectedParts.push({
+                    type: 'tool-call',
+                    toolCallId: chunk.toolCallId,
+                    toolName: chunk.toolName,
+                    args: (chunk as any).input ?? {},
+                    status: 'running',
+                  });
+                  break;
+                case 'tool-result': {
+                  collectedToolCalls.push({
+                    toolName: chunk.toolName,
+                    toolCallId: chunk.toolCallId,
+                    input: (chunk as any).input ?? (chunk as any).args,
+                    output: (chunk as any).output ?? (chunk as any).result,
+                    stepNumber: currentStepNumber >= 0 ? currentStepNumber : 0,
+                    status: 'done',
+                  });
+                  const part = collectedParts.find(
+                    (p) =>
+                      p.type === 'tool-call' &&
+                      p.toolCallId === chunk.toolCallId,
+                  );
+                  if (part) {
+                    part.result =
+                      (chunk as any).output ?? (chunk as any).result;
+                    part.status = 'done';
+                  }
+                  break;
+                }
+                case 'finish':
+                  finalUsage = {
+                    promptTokens: chunk.totalUsage?.promptTokens ?? 0,
+                    completionTokens: chunk.totalUsage?.completionTokens ?? 0,
+                    totalTokens: chunk.totalUsage?.totalTokens ?? 0,
+                  };
+                  break;
+                default:
+                  // Handle any other chunk types silently
+                  break;
+              }
             }
             /* eslint-enable no-restricted-syntax */
 
             clearTimeout(timeoutId);
 
-            // Always capture usage (setting only controls display, not persistence)
-            const usage = await result.usage;
-            const totalToks = usage?.totalTokens ?? 0;
-            finalUsage = {
-              promptTokens: 0, // AI SDK v6 doesn't separate these
-              completionTokens: totalToks,
-              totalTokens: totalToks,
-            };
+            // Always send done:true so the frontend exits streaming state
             sendChunk({
               conversationId,
               chunk: '',
@@ -1124,7 +1118,6 @@ UPDATED SUMMARY:`,
             });
           } catch (streamErr) {
             clearTimeout(timeoutId);
-            // Always send done:true so the frontend exits streaming state
             sendChunk({ conversationId, chunk: '', done: true });
             throw streamErr;
           }
@@ -1133,15 +1126,43 @@ UPDATED SUMMARY:`,
           const result = await agent.generate({
             messages,
             abortSignal: abortController.signal,
-            onStepFinish,
           });
           fullContent = result.text;
           const totalToks = result.usage?.totalTokens ?? 0;
           finalUsage = {
-            promptTokens: 0,
-            completionTokens: totalToks,
+            promptTokens: result.usage?.promptTokens ?? 0,
+            completionTokens: result.usage?.completionTokens ?? totalToks,
             totalTokens: totalToks,
           };
+
+          if (fullContent) {
+            collectedParts.push({ type: 'text', text: fullContent });
+          }
+
+          // Collect tool calls from steps for persistence
+          result.steps?.forEach((step, idx) => {
+            step.toolResults?.forEach((tr) => {
+              collectedToolCalls.push({
+                toolName: tr.toolName,
+                toolCallId: tr.toolCallId,
+                input: (tr as any).input ?? (tr as any).args,
+                output: (tr as any).output ?? (tr as any).result,
+                stepNumber: idx,
+                status: 'done',
+              });
+              collectedParts.push({
+                type: 'tool-call',
+                toolCallId: tr.toolCallId,
+                toolName: tr.toolName,
+                args: (tr as any).input ?? (tr as any).args,
+                result: (tr as any).output ?? (tr as any).result,
+                status: 'done',
+              });
+            });
+          });
+
+          toolCallCount += collectedToolCalls.length;
+
           sendChunk({ conversationId, chunk: fullContent, done: false });
           sendChunk({
             conversationId,
@@ -1171,11 +1192,11 @@ UPDATED SUMMARY:`,
       >[] = collectedToolCalls.map((tc) => ({
         toolName: tc.toolName,
         toolInput: {
-          ...((tc.args as object) || {}),
+          ...((tc.input as object) || {}),
           stepNum: tc.stepNumber,
           tcId: tc.toolCallId,
         },
-        toolOutput: tc.result ?? null,
+        toolOutput: tc.output ?? null,
         status: tc.status === 'done' ? 'completed' : 'failed',
         startedAt: new Date().toISOString(),
         completedAt: new Date().toISOString(),
@@ -1187,20 +1208,27 @@ UPDATED SUMMARY:`,
         {
           role: 'assistant',
           content: fullContent,
-          metadata: finalUsage
-            ? {
-                promptTokens: finalUsage.promptTokens,
-                completionTokens: finalUsage.completionTokens,
-                totalTokens: finalUsage.totalTokens,
-              }
-            : undefined,
+          thinkingContent: thinkingContent || undefined,
+          metadata: {
+            ...(finalUsage
+              ? {
+                  promptTokens: finalUsage.promptTokens,
+                  completionTokens: finalUsage.completionTokens,
+                  totalTokens: finalUsage.totalTokens,
+                }
+              : {}),
+            orderedParts:
+              collectedParts.length > 0 ? collectedParts : undefined,
+          },
         },
         undefined,
         toolCallsToSave.length > 0 ? toolCallsToSave : undefined,
       );
       return { success: true };
     } catch (error) {
+      // eslint-disable-next-line no-console
       console.error('[AgentService.runAgent] Error:', error);
+      // eslint-disable-next-line no-console
       console.error('[AgentService.runAgent] Error details:', {
         conversationId,
         errorMessage: error instanceof Error ? error.message : 'Unknown error',
@@ -1296,6 +1324,31 @@ UPDATED SUMMARY:`,
   }
 
   // ─── Context Resolution (ported from ChatService) ──────────────────────────
+
+  static async getMessages(
+    payload:
+      | {
+          conversationId?: number;
+          sessionId?: number;
+          limit?: number;
+          offset?: number;
+        }
+      | number,
+    maybeLimit?: number,
+    maybeOffset?: number,
+  ) {
+    if (typeof payload === 'number') {
+      return MainDatabaseService.getMessages(payload, maybeLimit, maybeOffset);
+    }
+    const { conversationId, sessionId, limit, offset } = payload || {};
+    const id = conversationId ?? sessionId;
+    if (typeof id !== 'number') {
+      throw new Error(
+        "getMessages requires 'conversationId' or 'sessionId' in payload",
+      );
+    }
+    return MainDatabaseService.getMessages(id, limit, offset);
+  }
 
   static async getMessagesWithContext(
     payload:

@@ -80,7 +80,7 @@ import {
   generateModelsPrompt,
 } from '../../helpers/businessModelGenerator';
 import { aiProvidersService } from '../../services/aiProviders.service';
-import { subscribeToAgentToolCalls } from '../../services/agentEvents.service';
+import { subscribeToToolResult } from '../../services/agentEvents.service';
 
 const VerticalSash = (_: number, active: boolean) => (
   <div
@@ -635,7 +635,7 @@ const ProjectDetails: React.FC = () => {
     // Deduplicate: track files being processed to avoid concurrent duplicate calls
     const inFlight = new Set<string>();
 
-    const unsub = subscribeToAgentToolCalls(async (payload) => {
+    const unsub = subscribeToToolResult(async (payload) => {
       const isFileWrite =
         payload.toolName === 'writeFile' ||
         payload.toolName === 'writeDbtModel';

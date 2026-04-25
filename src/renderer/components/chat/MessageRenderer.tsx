@@ -24,7 +24,13 @@ import { ContextItemRow } from './ContextItemRow';
 import { ThinkingRow } from './ThinkingRow';
 import { ResponseActions } from './ResponseActions';
 import { AgentStepBlock } from './AgentStepBlock';
-import type { AgentStep, ToolCallState } from '../../hooks/useAgentStream';
+import { ToolCallRow } from './ToolCallRow';
+import type {
+  AgentStep,
+  ToolCallState,
+  StreamContentPart,
+  ToolCallContentPart,
+} from '../../hooks/useAgentStream';
 
 interface MessageRendererProps {
   content: string;
@@ -55,6 +61,7 @@ interface MessageRendererProps {
     totalTokens: number;
   } | null;
   showTokenCount?: boolean;
+  orderedParts?: StreamContentPart[];
 }
 
 /**
@@ -127,14 +134,13 @@ const MessageContainer = styled(Box)(({ theme }) => ({
 
 const UserMessage = styled(MessageContainer)(({ theme }) => ({
   backgroundColor:
-    theme.palette.mode === 'dark'
-      ? theme.palette.grey[800]
-      : theme.palette.grey[200],
+    theme.palette.mode === 'dark' ? '#3b3b3f' : theme.palette.grey[200],
   color: theme.palette.text.primary,
-  width: '100%',
-  maxWidth: '100%',
+  width: 'fit-content',
+  maxWidth: '85%',
   boxSizing: 'border-box',
   marginBottom: 8,
+  padding: theme.spacing(1),
 }));
 
 const AssistantMessage = styled(MessageContainer)(({ theme }) => ({
@@ -575,6 +581,7 @@ export const MessageRenderer: React.FC<MessageRendererProps> = ({
   onDelete,
   tokenUsage,
   showTokenCount,
+  orderedParts,
 }) => {
   const Container = role === 'user' ? UserMessage : AssistantMessage;
   const { setEditingFilePath } = useAppContext();
@@ -599,15 +606,7 @@ export const MessageRenderer: React.FC<MessageRendererProps> = ({
   return role === 'user' ? (
     // Full-width row that right-aligns the bubble with symmetric spacing
     <Box sx={{ display: 'flex', justifyContent: 'flex-end' }}>
-      <Container
-        sx={{
-          borderTop: '2px solid',
-          borderColor: 'divider',
-          paddingTop: '8px',
-          px: 1,
-          pb: 1,
-        }}
-      >
+      <Container>
         {/* Show context items for user messages */}
         {contextItems && contextItems.length > 0 && (
           <Box sx={{ mb: 1 }}>
@@ -651,29 +650,84 @@ export const MessageRenderer: React.FC<MessageRendererProps> = ({
         />
       )}
 
-      {/* Persisted agent steps (tool calls from history) */}
-      {persistedSteps.length > 0 && (
-        <Box sx={{ mb: 0.5 }}>
-          {persistedSteps.map((step) => (
-            <AgentStepBlock
-              key={`persisted-${messageId}-step-${step.stepNumber}`}
-              step={step}
-              isActive={false}
-            />
-          ))}
+      {/* Interleaved Rendering (new style) vs Legacy block rendering */}
+      {orderedParts && orderedParts.length > 0 ? (
+        <Box sx={{ mt: 0.25 }}>
+          {orderedParts.map((part, idx) => {
+            if (part.type === 'text') {
+              if (!part.text) return null;
+              // Fallback: if content looks like HTML (legacy TipTap), strip tags for display
+              const looksLikeHtml = /<\/?[a-z][\s\S]*>/i.test(part.text);
+              let partDisplayContent = part.text;
+              if (looksLikeHtml) {
+                const div = document.createElement('div');
+                div.innerHTML = part.text;
+                const text = div.textContent || div.innerText || '';
+                partDisplayContent = text
+                  .replace(/\u00A0/g, ' ')
+                  .replace(/\n{3,}/g, '\n\n');
+              }
+              return (
+                <div
+                  // eslint-disable-next-line react/no-array-index-key
+                  key={`persisted-text-${idx}`}
+                  className="markdown-content"
+                >
+                  <Markdown
+                    remarkPlugins={[remarkGfm]}
+                    rehypePlugins={[rehypeHighlight]}
+                    components={markdownComponents}
+                  >
+                    {partDisplayContent}
+                  </Markdown>
+                </div>
+              );
+            }
+            // tool-call part
+            const tc = part as ToolCallContentPart;
+            return (
+              <ToolCallRow
+                key={tc.toolCallId}
+                toolCall={{
+                  id: tc.toolCallId,
+                  toolName: tc.toolName,
+                  args: tc.args,
+                  result: tc.result,
+                  error: tc.error,
+                  status: tc.status,
+                  durationMs: tc.durationMs,
+                }}
+              />
+            );
+          })}
         </Box>
-      )}
+      ) : (
+        <>
+          {/* Legacy: Persisted agent steps (tool calls from history) */}
+          {persistedSteps.length > 0 && (
+            <Box sx={{ mb: 0.5 }}>
+              {persistedSteps.map((step) => (
+                <AgentStepBlock
+                  key={`persisted-${messageId}-step-${step.stepNumber}`}
+                  step={step}
+                  isActive={false}
+                />
+              ))}
+            </Box>
+          )}
 
-      {/* Message content */}
-      <div className="markdown-content">
-        <Markdown
-          remarkPlugins={[remarkGfm]}
-          rehypePlugins={[rehypeHighlight]}
-          components={markdownComponents}
-        >
-          {displayContent}
-        </Markdown>
-      </div>
+          {/* Legacy: Message content block */}
+          <div className="markdown-content">
+            <Markdown
+              remarkPlugins={[remarkGfm]}
+              rehypePlugins={[rehypeHighlight]}
+              components={markdownComponents}
+            >
+              {displayContent}
+            </Markdown>
+          </div>
+        </>
+      )}
 
       {/* Response Actions */}
       <ResponseActions

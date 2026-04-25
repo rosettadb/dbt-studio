@@ -231,22 +231,7 @@ const registerAIHandlers = () => {
       maybeLimit?: number,
       maybeOffset?: number,
     ): Promise<ChatMessage[]> => {
-      // Support both old positional signature and new object payload
-      if (typeof payload === 'number') {
-        return MainDatabaseService.getMessages(
-          payload,
-          maybeLimit,
-          maybeOffset,
-        );
-      }
-      const { conversationId, sessionId, limit, offset } = payload || {};
-      const id = conversationId ?? sessionId;
-      if (typeof id !== 'number') {
-        throw new Error(
-          "chat:message:list requires 'conversationId' or 'sessionId' in payload",
-        );
-      }
-      return MainDatabaseService.getMessages(id, limit, offset);
+      return AgentService.getMessages(payload, maybeLimit, maybeOffset);
     },
   );
 
