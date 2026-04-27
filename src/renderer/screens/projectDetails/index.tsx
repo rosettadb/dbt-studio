@@ -30,7 +30,6 @@ import {
   ProjectDbtSplitButton,
   SplitButton,
   TerminalLayout,
-  BusinessModal,
   AiPromptModal,
 } from '../../components';
 import {
@@ -43,7 +42,6 @@ import { TabManager } from '../../components/editor/tabManager';
 import {
   useGetConnectionById,
   useGetConnections,
-  useGetFileContentList,
   useGetFileStatuses,
   useGetProjectFiles,
   useGetSelectedProject,
@@ -74,13 +72,7 @@ import { AppLayout } from '../../layouts';
 import ChatScreen from '../chat';
 import { getFileName } from '../../services/settings.services';
 import type { EditorTabId } from '../../../types/editor';
-import {
-  BusinessModelGenerationSchema,
-  BusinessModelGenerationSchemaType,
-  generateModelsPrompt,
-} from '../../helpers/businessModelGenerator';
-import { aiProvidersService } from '../../services/aiProviders.service';
-import { subscribeToAgentToolCalls } from '../../services/agentEvents.service';
+import { subscribeToToolResult } from '../../services/agentEvents.service';
 
 const VerticalSash = (_: number, active: boolean) => (
   <div
@@ -134,7 +126,7 @@ const ProjectDetails: React.FC = () => {
   const { data: connection } = useGetConnectionById(project?.connectionId);
   const { data: settings } = useGetSettings();
   const { mutate: updateFileContent } = useSaveFileContent();
-  const { mutateAsync: getFileContentList } = useGetFileContentList();
+
   const {
     tabs,
     activeTab,
@@ -166,7 +158,6 @@ const ProjectDetails: React.FC = () => {
   const previousProjectPathRef = React.useRef<string | undefined>();
 
   const [isLoadingQuery, setIsLoadingQuery] = React.useState(false);
-  const [businessQueryModal, setBusinessQueryModal] = React.useState<string>();
   const [noAiSetModal, setNoAiSetModal] = React.useState(false);
   const [aiTransformationPrompt, setAiTransformationPrompt] =
     React.useState<string>();
@@ -212,210 +203,6 @@ const ProjectDetails: React.FC = () => {
 
   const { data: connections = [] } = useGetConnections();
   const { mutate: updateProject } = useUpdateProject();
-
-  const buildBusinessFilePath = React.useCallback(
-    (basePath: string, fileName: string) => {
-      const trimmedBase = basePath.replace(/[\\/]+$/, '');
-      const separator = basePath.includes('\\') ? '\\' : '/';
-      return `${trimmedBase}${separator}${fileName}`;
-    },
-    [],
-  );
-
-  const createOrUpdateBusinessFile = React.useCallback(
-    async (basePath: string, fileName: string, content: string) => {
-      let filePath = await projectsServices.createFile({
-        filePath: basePath,
-        name: fileName,
-        content,
-      });
-
-      const fileAlreadyExisted = !filePath;
-      if (!filePath) {
-        filePath = buildBusinessFilePath(basePath, fileName);
-      }
-
-      let tabId: EditorTabId | null = await openTab(filePath, {
-        content,
-      });
-
-      if (!tabId) {
-        const existingTab = getTabByPath(filePath);
-        if (existingTab) {
-          tabId = existingTab.id;
-        }
-      }
-
-      setSelectedFilePath(filePath);
-
-      await fetchDirectories();
-      await updateStatuses();
-
-      if (!tabId) {
-        const refreshedTab = getTabByPath(filePath);
-        if (refreshedTab) {
-          tabId = refreshedTab.id;
-        }
-      }
-
-      if (tabId) {
-        updateTabContent(tabId, content, {
-          markModified: fileAlreadyExisted,
-        });
-        if (!fileAlreadyExisted) {
-          markTabSaved(tabId);
-        }
-        setTabError(tabId, undefined);
-        switchTab(tabId);
-        return true;
-      }
-
-      // eslint-disable-next-line no-console
-      console.warn('Generated file created but tab could not be opened', {
-        filePath,
-      });
-      toast.error(
-        'Generated file created, but the editor tab could not be opened automatically.',
-      );
-      return false;
-    },
-    [
-      buildBusinessFilePath,
-      openTab,
-      getTabByPath,
-      setSelectedFilePath,
-      fetchDirectories,
-      updateStatuses,
-      updateTabContent,
-      markTabSaved,
-      setTabError,
-      switchTab,
-    ],
-  );
-
-  const recoverFromFallbackResponse = React.useCallback(
-    async (rawResponse: string, basePath: string) => {
-      const fenceMatch = rawResponse.match(/```[a-zA-Z]*\n([\s\S]*?)\n```/);
-      const rawBody = fenceMatch ? fenceMatch[1] : rawResponse;
-
-      const filenameMatch = rawBody.match(/--\s*filename:\s*([^\n\r]+)\s*/i);
-      const inferredFileName = filenameMatch
-        ? filenameMatch[1].trim()
-        : 'business_model.sql';
-
-      const cleanedSql = filenameMatch
-        ? rawBody.replace(filenameMatch[0], '').trim()
-        : rawBody.trim();
-
-      if (
-        cleanedSql.toLowerCase().includes('select') ||
-        cleanedSql.includes('{{')
-      ) {
-        return createOrUpdateBusinessFile(
-          basePath,
-          inferredFileName,
-          cleanedSql,
-        );
-      }
-
-      return false;
-    },
-    [createOrUpdateBusinessFile],
-  );
-
-  const processBusinessModelResponse = React.useCallback(
-    async (
-      response: {
-        parsedData?: BusinessModelGenerationSchemaType | null;
-        schemaValidation?: {
-          errors?: string[] | null;
-          originalResponse?: unknown;
-        } | null;
-        content: unknown;
-      },
-      basePath: string,
-    ) => {
-      if (response.parsedData?.fileName && response.parsedData?.content) {
-        return createOrUpdateBusinessFile(
-          basePath,
-          response.parsedData.fileName,
-          response.parsedData.content,
-        );
-      }
-
-      const originalResponse =
-        response.schemaValidation?.originalResponse || response.content;
-
-      if (
-        typeof originalResponse === 'string' &&
-        originalResponse.trim().length > 0
-      ) {
-        const handled = await recoverFromFallbackResponse(
-          originalResponse,
-          basePath,
-        );
-        if (handled) {
-          return true;
-        }
-      }
-
-      const schemaErrors =
-        response.schemaValidation?.errors?.filter(Boolean) || [];
-
-      let detailedMessage: string;
-      if (schemaErrors.length) {
-        detailedMessage = schemaErrors.join('\n');
-      } else if (originalResponse) {
-        detailedMessage = String(originalResponse);
-      } else {
-        detailedMessage = 'Provider returned an empty response.';
-      }
-
-      toast.error(detailedMessage);
-      // eslint-disable-next-line no-console
-      console.error('Business model generation failed', {
-        schemaErrors,
-        originalResponse,
-      });
-
-      return false;
-    },
-    [createOrUpdateBusinessFile, recoverFromFallbackResponse],
-  );
-
-  const handleBusinessModalProcess = React.useCallback(
-    async (updatedPath: string, query: string, selectedFiles: string[]) => {
-      if (selectedFiles.length === 0) {
-        return;
-      }
-
-      try {
-        const files = await getFileContentList(selectedFiles);
-        const prompt = generateModelsPrompt(files, query);
-        const response =
-          await aiProvidersService.generateCompletion<BusinessModelGenerationSchemaType>(
-            prompt,
-            BusinessModelGenerationSchema,
-          );
-
-        const handled = await processBusinessModelResponse(
-          response,
-          updatedPath,
-        );
-
-        if (handled) {
-          setBusinessQueryModal(undefined);
-        }
-      } catch (error) {
-        const message =
-          error instanceof Error && error.message
-            ? error.message
-            : 'Failed to generate business model';
-        toast.error(message);
-      }
-    },
-    [getFileContentList, processBusinessModelResponse, setBusinessQueryModal],
-  );
 
   const handleAddConnection = () => {
     setIsAddConnectionModalOpen(true);
@@ -635,7 +422,7 @@ const ProjectDetails: React.FC = () => {
     // Deduplicate: track files being processed to avoid concurrent duplicate calls
     const inFlight = new Set<string>();
 
-    const unsub = subscribeToAgentToolCalls(async (payload) => {
+    const unsub = subscribeToToolResult(async (payload) => {
       const isFileWrite =
         payload.toolName === 'writeFile' ||
         payload.toolName === 'writeDbtModel';
@@ -924,14 +711,6 @@ const ProjectDetails: React.FC = () => {
     return <Navigate to="/app/select-project" />;
   }
 
-  const handleBusinessLayerClick = (path: string) => {
-    if (isAiProviderSet) {
-      setBusinessQueryModal(path);
-    } else {
-      setNoAiSetModal(true);
-    }
-  };
-
   return (
     <AppLayout
       panelHeaderLeft={
@@ -1139,7 +918,6 @@ const ProjectDetails: React.FC = () => {
                           connection={connection}
                           environment={env}
                           rosettaDbt={rosettaDbt}
-                          handleBusinessLayerClick={handleBusinessLayerClick}
                         />
                         {connection?.id ? (
                           <>
@@ -1273,15 +1051,6 @@ const ProjectDetails: React.FC = () => {
                 </Content>
               </TerminalLayout>
 
-              {businessQueryModal && (
-                <BusinessModal
-                  isOpen={!!businessQueryModal}
-                  project={project}
-                  path={businessQueryModal}
-                  onClose={() => setBusinessQueryModal(undefined)}
-                  processCallback={handleBusinessModalProcess}
-                />
-              )}
               {noAiSetModal && (
                 <NoAiSetModal
                   isOpen={noAiSetModal}

@@ -13,15 +13,11 @@ import StopIcon from '@mui/icons-material/Stop';
 import QuestionAnswerOutlinedIcon from '@mui/icons-material/QuestionAnswerOutlined';
 import CodeOutlinedIcon from '@mui/icons-material/CodeOutlined';
 import AddIcon from '@mui/icons-material/Add';
-import { useQueryClient } from 'react-query';
-import { toast } from 'react-toastify';
+
 import { FilePickerModal } from './FilePickerModal';
-import {
-  useStreamChatMessage,
-  useCancelChatStream,
-} from '../../controllers/chat.controller';
+
 import { useGetAISettings } from '../../controllers/aiSettings.controller';
-import { QUERY_KEYS } from '../../config/constants';
+
 import {
   useGetAIProviders,
   useGetActiveAIProvider,
@@ -38,18 +34,13 @@ import { useAutoRenameSession } from '../../hooks/useAutoRenameSession';
 import { htmlToPlainText } from '../../utils/chatHelpers';
 import { useAppContext } from '../../hooks';
 import { useContextManager } from '../../hooks/useContextManager';
-import { useAgentMode } from '../../hooks/useAgentMode';
+import { useToolMode } from '../../hooks/useToolMode';
 import { ContextUsageRing } from './ContextUsageRing';
 import type { ContextUsageBreakdown } from './ContextUsageRing';
 
 interface ChatInputBoxProps {
   sessionId?: number;
   contextManager?: ReturnType<typeof useContextManager>;
-  onUsage?: (usage: {
-    promptTokens: number;
-    completionTokens: number;
-    totalTokens: number;
-  }) => void;
   isStreaming?: boolean;
   onStartStream?: (content: string, contextItems?: any[]) => Promise<void>;
   onCancelStream?: () => void;
@@ -59,7 +50,6 @@ interface ChatInputBoxProps {
 export const ChatInputBox: React.FC<ChatInputBoxProps> = ({
   sessionId,
   contextManager,
-  onUsage,
   isStreaming,
   onStartStream,
   onCancelStream,
@@ -79,19 +69,8 @@ export const ChatInputBox: React.FC<ChatInputBoxProps> = ({
   const fallbackContextManager = useContextManager();
   const activeContextManager = contextManager || fallbackContextManager;
 
-  const queryClient = useQueryClient();
-  const assistantTempIdRef = React.useRef<number | null>(null);
-  const userTempIdRef = React.useRef<number | null>(null);
-  const lastAgentWrittenFileRef = React.useRef<string | null>(null);
-
-  // Agent mode state
-  const { isAgentMode, setAgentMode } = useAgentMode(sessionId);
-
-  // Chat and agent mutations (runAgent and cancelAgent are now handled via props for agent mode)
-  const { mutate: streamMessage, isLoading: isStreamingMode } =
-    useStreamChatMessage();
-  const { mutate: cancelStream, isLoading: isCancellingMode } =
-    useCancelChatStream();
+  // Tool mode state (replaces useAgentMode)
+  const { isCodeMode, currentMode, setToolMode } = useToolMode(sessionId);
 
   const { data: aiSettings } = useGetAISettings();
 
@@ -100,9 +79,9 @@ export const ChatInputBox: React.FC<ChatInputBoxProps> = ({
   const { mutate: setActiveProvider, isLoading: switching } =
     useSetActiveAIProvider();
 
-  // Combined loading state for both chat and agent modes
-  const isLoading = isStreamingMode || isStreaming;
-  const isCanceling = isCancellingMode;
+  // All messages now route through the agent path
+  const isLoading = isStreaming;
+  const isCanceling = false;
 
   // Auto-rename session hook
   const { autoRename } = useAutoRenameSession(sessionId);
@@ -121,181 +100,7 @@ export const ChatInputBox: React.FC<ChatInputBoxProps> = ({
     return aiProviderImages[typeKey] || defaultIcon;
   }, [selectedProvider]);
 
-  const handleSendChatMessage = async (messageContent: string) => {
-    if (!sessionId) return;
-
-    // 1) Optimistically add the user message locally (no server call here)
-    const msgKey = [
-      QUERY_KEYS.GET_CHAT_MESSAGES_WITH_CONTEXT,
-      sessionId,
-      undefined,
-      undefined,
-    ] as const;
-    const prev =
-      queryClient.getQueryData<
-        Array<{
-          id: number;
-          role: string;
-          conversationId: number;
-          content: string;
-          createdAt: string;
-          updatedAt: string;
-          [k: string]: any;
-        }>
-      >(msgKey) || [];
-
-    const tempUserId = -Date.now();
-    const tempUser = {
-      id: tempUserId,
-      conversationId: sessionId,
-      role: 'user',
-      content: messageContent,
-      metadata: { temp: true },
-      toolCalls: null as any,
-      contextItems: null as any,
-      thinkingContent: null as any,
-      signature: null as any,
-      isStreaming: false,
-      parentMessageId: null,
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-    } as any;
-
-    // 2) Track temp IDs and create a temporary assistant message to stream into
-    userTempIdRef.current = tempUserId;
-    const tempId = -Date.now() - 1;
-    assistantTempIdRef.current = tempId;
-    const tempAssistant = {
-      id: tempId,
-      conversationId: sessionId,
-      role: 'assistant',
-      content: 'Generating…',
-      metadata: { temp: true, isStreaming: true },
-      toolCalls: null as any,
-      contextItems: null as any,
-      thinkingContent: null as any,
-      signature: null as any,
-      isStreaming: true,
-      parentMessageId: null,
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-    } as any;
-    // Push both temp user and temp assistant
-    queryClient.setQueryData(msgKey, [...prev, tempUser, tempAssistant]);
-
-    // Clear input immediately
-    setInput('');
-
-    // 3) Prepare context items using context manager
-    const rawContextItems =
-      await activeContextManager.getContextItemsWithAdditionalFiles();
-    const contextItems =
-      aiSettings?.chat?.autoIncludeFileContext !== false ? rawContextItems : [];
-
-    streamMessage(
-      {
-        sessionId,
-        content: messageContent,
-        contextItems: contextItems.length > 0 ? contextItems : undefined,
-        onChunk: (chunk: string) => {
-          const current =
-            queryClient.getQueryData<
-              Array<{
-                id: number;
-                role: string;
-                conversationId: number;
-                content: string;
-                createdAt: string;
-                updatedAt: string;
-                [k: string]: any;
-              }>
-            >(msgKey) || [];
-          queryClient.setQueryData(
-            msgKey,
-            current.map((m) =>
-              m.id === assistantTempIdRef.current
-                ? {
-                    ...m,
-                    content:
-                      (m.content === 'Generating…' ? '' : m.content) + chunk,
-                    updatedAt: new Date().toISOString(),
-                  }
-                : m,
-            ),
-          );
-        },
-        onDone: (usage) => {
-          if (usage && onUsage) onUsage(usage);
-        },
-      },
-      {
-        onSuccess: async () => {
-          // Replace temp with persisted messages (use exact same key signature)
-          await queryClient.invalidateQueries(msgKey);
-
-          // Auto-rename session after successful LLM response
-          autoRename(messageContent);
-
-          // Clear context after successful send
-          activeContextManager.clearAdditionalFiles();
-
-          assistantTempIdRef.current = null;
-          userTempIdRef.current = null;
-          lastAgentWrittenFileRef.current = null;
-        },
-        onError: async (error: any) => {
-          const current = queryClient.getQueryData<typeof prev>(msgKey) || [];
-          const aId = assistantTempIdRef.current;
-          if (error?.message === 'aborted') {
-            // Cancelled by user: remove only the temp assistant and refresh
-            queryClient.setQueryData(
-              msgKey,
-              current.filter((m) => m.id !== aId),
-            );
-            assistantTempIdRef.current = null;
-            await queryClient.invalidateQueries(msgKey);
-            userTempIdRef.current = null;
-          } else {
-            // Real error: remove both temp assistant and temp user
-            const uId = userTempIdRef.current;
-            queryClient.setQueryData(
-              msgKey,
-              current.filter((m) => m.id !== aId && m.id !== uId),
-            );
-            assistantTempIdRef.current = null;
-            userTempIdRef.current = null;
-
-            // Show appropriate error message
-            if (
-              error?.message?.includes('401') ||
-              error?.message?.includes('unauthorized')
-            ) {
-              toast.error(
-                'Authentication failed. Please check your AI provider credentials.',
-              );
-            } else if (
-              error?.message?.includes('429') ||
-              error?.message?.includes('quota')
-            ) {
-              toast.error('Rate limit exceeded. Please try again later.');
-            } else if (
-              error?.message?.includes('network') ||
-              error?.message?.includes('fetch')
-            ) {
-              toast.error(
-                'Network error. Please check your connection and try again.',
-              );
-            } else {
-              toast.error(
-                `Failed to send message: ${error?.message || 'Unknown error'}`,
-              );
-            }
-          }
-        },
-      },
-    );
-  };
-
+  // All messages now route through the agent path
   const handleSendAgentMessage = async (messageContent: string) => {
     if (!sessionId || !onStartStream) return;
 
@@ -321,11 +126,7 @@ export const ChatInputBox: React.FC<ChatInputBoxProps> = ({
   const handleSendMessage = async (content?: string) => {
     const messageContent = content || plainText.trim();
     if (sessionId && messageContent && activeProvider) {
-      if (isAgentMode) {
-        await handleSendAgentMessage(messageContent);
-      } else {
-        await handleSendChatMessage(messageContent);
-      }
+      await handleSendAgentMessage(messageContent);
     }
   };
 
@@ -335,33 +136,7 @@ export const ChatInputBox: React.FC<ChatInputBoxProps> = ({
 
   const handleCancel = () => {
     if (!sessionId) return;
-
-    if (isAgentMode) {
-      if (onCancelStream) onCancelStream();
-    } else {
-      cancelStream(
-        { sessionId },
-        {
-          onSettled: async () => {
-            const msgKey = [
-              QUERY_KEYS.GET_CHAT_MESSAGES_WITH_CONTEXT,
-              sessionId,
-              undefined,
-              undefined,
-            ] as const;
-            const current = queryClient.getQueryData<Array<any>>(msgKey) || [];
-            const aId = assistantTempIdRef.current;
-            queryClient.setQueryData(
-              msgKey,
-              current.filter((m) => m.id !== aId),
-            );
-            assistantTempIdRef.current = null;
-            await queryClient.invalidateQueries(msgKey);
-            userTempIdRef.current = null;
-          },
-        },
-      );
-    }
+    if (onCancelStream) onCancelStream();
   };
 
   React.useEffect(() => {
@@ -481,7 +256,7 @@ export const ChatInputBox: React.FC<ChatInputBoxProps> = ({
             },
           }}
         >
-          {isAgentMode ? (
+          {isCodeMode ? (
             <CodeOutlinedIcon sx={{ fontSize: 14, color: 'text.secondary' }} />
           ) : (
             <QuestionAnswerOutlinedIcon
@@ -496,7 +271,7 @@ export const ChatInputBox: React.FC<ChatInputBoxProps> = ({
               userSelect: 'none',
             }}
           >
-            {isAgentMode ? 'Code' : 'Ask'}
+            {isCodeMode ? 'Code' : 'Ask'}
           </Typography>
         </Box>
 
@@ -632,9 +407,9 @@ export const ChatInputBox: React.FC<ChatInputBoxProps> = ({
           }}
         >
           <MenuItem
-            selected={!isAgentMode}
+            selected={currentMode === 'chat'}
             onClick={() => {
-              setAgentMode(false);
+              setToolMode('chat');
               setModeMenuAnchor(null);
             }}
             sx={{
@@ -649,7 +424,7 @@ export const ChatInputBox: React.FC<ChatInputBoxProps> = ({
             <Box>
               <Typography
                 variant="body2"
-                sx={{ fontWeight: !isAgentMode ? 600 : 400 }}
+                sx={{ fontWeight: currentMode === 'chat' ? 600 : 400 }}
               >
                 Ask
               </Typography>
@@ -659,9 +434,9 @@ export const ChatInputBox: React.FC<ChatInputBoxProps> = ({
             </Box>
           </MenuItem>
           <MenuItem
-            selected={isAgentMode}
+            selected={currentMode === 'agent'}
             onClick={() => {
-              setAgentMode(true);
+              setToolMode('agent');
               setModeMenuAnchor(null);
             }}
             sx={{
@@ -676,7 +451,7 @@ export const ChatInputBox: React.FC<ChatInputBoxProps> = ({
             <Box>
               <Typography
                 variant="body2"
-                sx={{ fontWeight: isAgentMode ? 600 : 400 }}
+                sx={{ fontWeight: currentMode === 'agent' ? 600 : 400 }}
               >
                 Code
               </Typography>
@@ -698,7 +473,7 @@ export const ChatInputBox: React.FC<ChatInputBoxProps> = ({
           if (isLoading) {
             return (
               <Tooltip
-                title={isAgentMode ? 'Stop code generation' : 'Stop generation'}
+                title={isCodeMode ? 'Stop code generation' : 'Stop generation'}
                 placement="top"
                 arrow
                 disableInteractive
@@ -710,7 +485,7 @@ export const ChatInputBox: React.FC<ChatInputBoxProps> = ({
                     onClick={handleCancel}
                     disabled={isCanceling}
                     aria-label={
-                      isAgentMode ? 'Stop code generation' : 'Stop generation'
+                      isCodeMode ? 'Stop code generation' : 'Stop generation'
                     }
                     sx={{
                       bgcolor: 'primary.main',

@@ -1,7 +1,6 @@
 import type { Channels } from '../../types/ipc';
 import type {
   ChatStreamChunkPayload,
-  AgentToolCallPayload,
   AgentStepStartPayload,
   AgentTerminalConfirmPayload,
   AgentContextCompactedPayload,
@@ -10,7 +9,6 @@ import type {
 // Re-export so consumers can import from one place
 export type {
   ChatStreamChunkPayload as ChatStreamChunkEvent,
-  AgentToolCallPayload as AgentToolCallEvent,
   AgentStepStartPayload as AgentStepStartEvent,
   AgentTerminalConfirmPayload as AgentTerminalConfirmEvent,
   AgentContextCompactedPayload as AgentContextCompactedEvent,
@@ -31,10 +29,6 @@ export const subscribeToChatStreamChunks = (
   handler: (event: ChatStreamChunkPayload) => void,
 ): Unsubscribe => subscribe('chat:message:stream-chunk', handler);
 
-export const subscribeToAgentToolCalls = (
-  handler: (event: AgentToolCallPayload) => void,
-): Unsubscribe => subscribe('agent:tool-call', handler);
-
 export const subscribeToStepStart = (
   handler: (event: AgentStepStartPayload) => void,
 ): Unsubscribe => subscribe('agent:step-start', handler);
@@ -46,3 +40,45 @@ export const subscribeToTerminalConfirm = (
 export const subscribeToContextCompacted = (
   handler: (event: AgentContextCompactedPayload) => void,
 ): Unsubscribe => subscribe('agent:context-compacted', handler);
+
+/**
+ * Subscribe to tool-result events extracted from the fullStream.
+ * This replaces the legacy `subscribeToAgentToolCalls` for the 'done' case.
+ * `handler` receives a normalized payload compatible with AgentToolCallPayload.
+ */
+export const subscribeToToolResult = (
+  handler: (event: {
+    conversationId: number;
+    toolCallId: string;
+    toolName: string;
+    args: Record<string, unknown>;
+    result: unknown;
+    status: 'done';
+  }) => void,
+): Unsubscribe => {
+  const wrapped = (...args: unknown[]) => {
+    const data = args[0] as {
+      conversationId: number;
+      chunk: any;
+      done: boolean;
+    };
+    if (data?.done) return;
+    const { chunk } = data;
+    if (!chunk || typeof chunk === 'string' || chunk.type !== 'tool-result')
+      return;
+    handler({
+      conversationId: data.conversationId,
+      toolCallId: (chunk as any).toolCallId,
+      toolName: (chunk as any).toolName,
+      args: ((chunk as any).input ?? {}) as Record<string, unknown>,
+      result: (chunk as any).output,
+      status: 'done',
+    });
+  };
+  window.electron.ipcRenderer.on('chat:message:stream-chunk', wrapped);
+  return () =>
+    window.electron.ipcRenderer.removeListener(
+      'chat:message:stream-chunk',
+      wrapped,
+    );
+};

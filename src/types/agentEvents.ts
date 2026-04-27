@@ -12,6 +12,7 @@
  * The SDK uses `input`/`output`; we use `args`/`result` in the IPC layer
  * to match the frontend ToolCallState interface in useAgentStream.ts.
  */
+import type { TextStreamPart } from 'ai';
 
 export interface AgentStepStartPayload {
   conversationId: number;
@@ -61,7 +62,12 @@ export interface AgentContextCompactedPayload {
 
 export interface ChatStreamChunkPayload {
   conversationId: number;
-  chunk: string;
+  /**
+   * A native Vercel AI SDK TextStreamPart during fullStream iteration.
+   * A plain string for: timeout messages, fallback messages, non-streaming path.
+   * Omitted (or empty string) when `done: true` is the stream-end sentinel.
+   */
+  chunk: TextStreamPart<any> | string;
   done: boolean;
   usage?: {
     /** Maps to SDK LanguageModelUsage.inputTokens */

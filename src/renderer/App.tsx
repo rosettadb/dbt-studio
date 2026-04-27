@@ -130,12 +130,12 @@ const AppWithProjectProvider: React.FC = () => {
       <AppProvider>
         <CliProvider>
           <ProcessProvider>
-            <CssBaseline />
             <CssVarsProvider
               theme={theme}
               defaultMode={initialMode}
               storageManager={themeStorageManager}
             >
+              <CssBaseline />
               <App />
               <UpdateDialog />
               <ToastContainer

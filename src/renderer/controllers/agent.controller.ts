@@ -6,7 +6,6 @@ import * as agentService from '../services/agent.service';
 import type {
   AgentRunRequest,
   StreamChunkPayload,
-  ToolCallPayload,
   TerminalConfirmPayload,
   ContextUsagePayload,
 } from '../services/agent.service';
@@ -81,22 +80,6 @@ export const useOnStreamChunk = (
   useEffect(() => {
     if (conversationId == null) return undefined;
     return agentService.onStreamChunk((payload) => {
-      if (payload.conversationId === conversationId) stableHandler(payload);
-    });
-  }, [conversationId, stableHandler]);
-};
-
-/**
- * Subscribe to agent tool-call events for a specific conversation.
- */
-export const useOnToolCall = (
-  conversationId: number | undefined,
-  handler: (payload: ToolCallPayload) => void,
-) => {
-  const stableHandler = useCallback(handler, []); // eslint-disable-line react-hooks/exhaustive-deps
-  useEffect(() => {
-    if (conversationId == null) return undefined;
-    return agentService.onToolCall((payload) => {
       if (payload.conversationId === conversationId) stableHandler(payload);
     });
   }, [conversationId, stableHandler]);

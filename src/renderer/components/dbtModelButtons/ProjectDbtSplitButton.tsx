@@ -30,7 +30,6 @@ interface ProjectDbtSplitButtonProps {
   environment?: 'local' | 'cloud';
   // Function handlers that are used elsewhere in ProjectDetails
   rosettaDbt: (project: Project, command: Command) => Promise<void>;
-  handleBusinessLayerClick: (path: string) => void;
 }
 
 export const ProjectDbtSplitButton: React.FC<ProjectDbtSplitButtonProps> = ({
@@ -43,7 +42,6 @@ export const ProjectDbtSplitButton: React.FC<ProjectDbtSplitButtonProps> = ({
   connection,
   environment = 'local',
   rosettaDbt,
-  handleBusinessLayerClick,
 }) => {
   // Functions that are only used in this component - moved inside
   const [runInCloudModal, setRunInCloudModal] =
@@ -64,7 +62,6 @@ export const ProjectDbtSplitButton: React.FC<ProjectDbtSplitButtonProps> = ({
   });
   const { start, stop, isRunning } = useProcess();
   const [stagingPath, setStagingPath] = React.useState('');
-  const [businessPath, setBusinessPath] = React.useState('');
   const [rawPath, setRawPath] = React.useState('');
   const [incrementalPath, setIncrementalPath] = React.useState('');
   const [stagingModal, setStagingModal] = React.useState(false);
@@ -90,12 +87,6 @@ export const ProjectDbtSplitButton: React.FC<ProjectDbtSplitButtonProps> = ({
       } else {
         const p = await pathJoin(project.path, 'models', 'enhanced');
         setIncrementalPath(p);
-      }
-      if (project.businessDir) {
-        setBusinessPath(project.businessDir);
-      } else {
-        const p = await pathJoin(project.path, 'models', 'business');
-        setBusinessPath(p);
       }
     };
     loadDefaults();
@@ -174,30 +165,6 @@ export const ProjectDbtSplitButton: React.FC<ProjectDbtSplitButtonProps> = ({
         />
       ),
       subTitle: 'Generate dbt Incremental Layer',
-      localOnly: true,
-    },
-    {
-      name: 'Business Layer',
-      onClick: () => {
-        if (!rosettaPath) {
-          toast.info('Please configure RosettaDB path in settings');
-          return;
-        }
-        handleBusinessLayerClick(businessPath);
-      },
-      leftIcon: (
-        <img
-          src={icons.rosetta}
-          alt="Rosetta"
-          width={18}
-          height={18}
-          style={{
-            display: 'inline-block',
-            objectFit: 'contain',
-          }}
-        />
-      ),
-      subTitle: 'Generate dbt Business Layer',
       localOnly: true,
     },
     // Production DBT Commands (Available in both environments)

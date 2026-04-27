@@ -34,8 +34,8 @@ const theme = createTheme({
           disabled: grey[400],
         },
         background: {
-          default: '#f0f0f0',
-          paper: '#ffffff',
+          default: '#fafafa',
+          paper: '#f8f8f8',
         },
         divider: 'rgba(0, 0, 0, 0.08)',
       },
@@ -84,6 +84,9 @@ const theme = createTheme({
         root: {
           boxShadow: 'none',
         },
+      },
+      defaultProps: {
+        color: 'default',
       },
     },
     MuiCard: {

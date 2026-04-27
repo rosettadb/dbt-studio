@@ -1,6 +1,7 @@
 // Agent Service - Frontend service for AI Agent operations
 // Handles agent execution, cancellation, and tool listing
 
+import type { TextStreamPart } from 'ai';
 import { client } from '../config/client';
 
 import type { AISettingsConfig } from '../../types/backend';
@@ -24,6 +25,7 @@ export interface AgentRunRequest {
   contextItems?: ContextItem[];
   requestedModel?: string;
   projectPath?: string;
+  toolMode?: 'chat' | 'agent';
 }
 
 /**
@@ -95,34 +97,13 @@ export const getAISettingsFilePath = async (): Promise<string> =>
 
 export interface StreamChunkPayload {
   conversationId: number;
-  chunk: string;
+  chunk: TextStreamPart<any> | string; // TextStreamPart during stream, string when done
   done: boolean;
   usage?: {
     promptTokens: number;
     completionTokens: number;
     totalTokens: number;
   };
-}
-
-export interface ToolCallPayload {
-  conversationId: number;
-  toolName: string;
-  args: Record<string, unknown>;
-  stepNumber: number;
-  status: 'running' | 'done' | 'error';
-}
-
-export interface TerminalConfirmPayload {
-  conversationId: number;
-  requestId: string;
-  toolName: string;
-  command: string;
-  cwd: string;
-}
-
-export interface ContextUsagePayload {
-  conversationId: number;
-  breakdown: Record<string, unknown>;
 }
 
 export const onStreamChunk = (
@@ -138,14 +119,18 @@ export const onStreamChunk = (
     );
 };
 
-export const onToolCall = (
-  handler: (payload: ToolCallPayload) => void,
-): (() => void) => {
-  const listener = (...args: unknown[]) => handler(args[0] as ToolCallPayload);
-  window.electron.ipcRenderer.on('agent:tool-call', listener);
-  return () =>
-    window.electron.ipcRenderer.removeListener('agent:tool-call', listener);
-};
+export interface TerminalConfirmPayload {
+  conversationId: number;
+  requestId: string;
+  toolName: string;
+  command: string;
+  cwd: string;
+}
+
+export interface ContextUsagePayload {
+  conversationId: number;
+  breakdown: Record<string, unknown>;
+}
 
 export const onTerminalConfirm = (
   handler: (payload: TerminalConfirmPayload) => void,

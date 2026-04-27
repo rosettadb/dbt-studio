@@ -145,36 +145,9 @@ export type AIChannels =
   | 'chat:message:list'
   | 'chat:message:list-with-context'
   | 'chat:message:get-with-context'
-  | 'chat:message:send'
-  | 'chat:message:stream'
   | 'chat:message:stream-chunk'
-  | 'chat:message:cancel'
-  | 'chat:message:update'
-  | 'chat:message:delete'
-  | 'chat:message:regenerate'
-  | 'chat:message:add-with-context'
-
-  // Continue.dev context management
-  | 'chat:context:add-items'
-  | 'chat:context:get-items'
-  | 'chat:context:resolve-file'
   | 'chat:context:resolve-selected-file'
   | 'chat:context:get-file-metadata'
-  | 'chat:context:resolve-folder'
-  | 'chat:context:search-codebase'
-  | 'chat:context:resolve-url'
-
-  // Continue.dev tool calls
-  | 'chat:tool:add-calls'
-  | 'chat:tool:get-calls'
-  | 'chat:tool:update-call'
-  | 'chat:tool:execute'
-  | 'chat:tool:cancel'
-
-  // Continue.dev session metadata
-  | 'chat:session:set-metadata'
-  | 'chat:session:get-metadata'
-  | 'chat:session:delete-metadata'
 
   // Modern template functionality (standardized naming)
   | 'ai:template:list'
