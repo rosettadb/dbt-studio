@@ -12,7 +12,6 @@ export * from './CompileModal';
 export * from './resetFactoryModal';
 export * from './stagingModal';
 export * from './incrementalModal';
-export * from './businessModal';
 export * from './aiPromptModal';
 export * from './pushToCloudModal';
 export * from './rawLayerModal';

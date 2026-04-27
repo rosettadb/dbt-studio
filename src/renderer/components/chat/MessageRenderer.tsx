@@ -140,7 +140,7 @@ const UserMessage = styled(MessageContainer)(({ theme }) => ({
   maxWidth: '85%',
   boxSizing: 'border-box',
   marginBottom: 8,
-  padding: theme.spacing(1),
+  padding: theme.spacing(0.75),
 }));
 
 const AssistantMessage = styled(MessageContainer)(({ theme }) => ({
@@ -387,7 +387,7 @@ const MarkdownCodeBlock = ({
       className={`${className || ''} inline-code`}
       style={{
         fontFamily: 'monospace',
-        fontSize: '13px',
+        fontSize: '12px',
         fontWeight: 500,
         fontStyle: 'normal',
         padding: '2px 4px',
@@ -395,7 +395,7 @@ const MarkdownCodeBlock = ({
           muiTheme.palette.mode === 'dark'
             ? 'rgba(255,255,255,0.08)'
             : 'rgba(0,0,0,0.06)',
-        color: muiTheme.palette.text.primary,
+        color: muiTheme.palette.mode === 'dark' ? '#ce9178' : '#d16969',
         borderRadius: '4px',
         wordBreak: 'break-word',
         overflowWrap: 'anywhere',
@@ -413,7 +413,7 @@ const MarkdownParagraph: React.FC<React.PropsWithChildren> = ({ children }) => (
     component="p"
     sx={{
       m: 0,
-      fontSize: '14px',
+      fontSize: '13px',
       lineHeight: 1.4,
       '&:not(:last-child)': { mb: 0.5 },
     }}
@@ -430,7 +430,7 @@ const MarkdownUl: React.FC<React.PropsWithChildren> = ({ children }) => (
       margin: '0.4rem 0',
       paddingLeft: '0.5rem',
       fontSize: '13px',
-      lineHeight: 1.6,
+      lineHeight: 1.5,
       listStyleType: 'disc',
       listStylePosition: 'inside',
       display: 'block',
@@ -445,7 +445,7 @@ const MarkdownOl: React.FC<React.PropsWithChildren> = ({ children }) => (
       margin: '0.4rem 0',
       paddingLeft: '0.5rem',
       fontSize: '13px',
-      lineHeight: 1.6,
+      lineHeight: 1.5,
       listStyleType: 'decimal',
       listStylePosition: 'inside',
       display: 'block',
@@ -459,7 +459,7 @@ const MarkdownLi: React.FC<React.PropsWithChildren> = ({ children }) => (
     style={{
       margin: '0.2rem 0',
       fontSize: '13px',
-      lineHeight: 1.6,
+      lineHeight: 1.5,
       display: 'list-item',
     }}
   >
@@ -469,7 +469,7 @@ const MarkdownLi: React.FC<React.PropsWithChildren> = ({ children }) => (
 const MarkdownH1: React.FC<React.PropsWithChildren> = ({ children }) => (
   <h1
     style={{
-      fontSize: '0.95rem',
+      fontSize: '0.9rem',
       fontWeight: 600,
       margin: '0.4rem 0 0.2rem',
       color: 'inherit',
@@ -481,7 +481,7 @@ const MarkdownH1: React.FC<React.PropsWithChildren> = ({ children }) => (
 const MarkdownH2: React.FC<React.PropsWithChildren> = ({ children }) => (
   <h2
     style={{
-      fontSize: '0.9rem',
+      fontSize: '0.85rem',
       fontWeight: 600,
       margin: '0.4rem 0 0.2rem',
       color: 'inherit',
@@ -493,7 +493,7 @@ const MarkdownH2: React.FC<React.PropsWithChildren> = ({ children }) => (
 const MarkdownH3: React.FC<React.PropsWithChildren> = ({ children }) => (
   <h3
     style={{
-      fontSize: '0.85rem',
+      fontSize: '0.8rem',
       fontWeight: 600,
       margin: '0.4rem 0 0.2rem',
       color: 'inherit',
@@ -505,7 +505,7 @@ const MarkdownH3: React.FC<React.PropsWithChildren> = ({ children }) => (
 const MarkdownH4: React.FC<React.PropsWithChildren> = ({ children }) => (
   <h4
     style={{
-      fontSize: '0.82rem',
+      fontSize: '0.78rem',
       fontWeight: 600,
       margin: '0.3rem 0 0.15rem',
       color: 'inherit',
@@ -517,7 +517,7 @@ const MarkdownH4: React.FC<React.PropsWithChildren> = ({ children }) => (
 const MarkdownH5: React.FC<React.PropsWithChildren> = ({ children }) => (
   <h5
     style={{
-      fontSize: '0.8rem',
+      fontSize: '0.75rem',
       fontWeight: 600,
       margin: '0.3rem 0 0.15rem',
       color: 'inherit',
@@ -529,7 +529,7 @@ const MarkdownH5: React.FC<React.PropsWithChildren> = ({ children }) => (
 const MarkdownH6: React.FC<React.PropsWithChildren> = ({ children }) => (
   <h6
     style={{
-      fontSize: '0.78rem',
+      fontSize: '0.75rem',
       fontWeight: 600,
       margin: '0.3rem 0 0.15rem',
       color: 'inherit',

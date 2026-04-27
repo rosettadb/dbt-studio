@@ -90,12 +90,17 @@ export const ChatMessageList: React.FC<ChatMessageListProps> = ({
   // Derive a key that changes when the last message content grows during streaming
   const lastMessageContentKey = React.useMemo(() => {
     if (isAgentRunning && streamState?.contentParts.length) {
-      return `streaming:${streamState.contentParts.length}`;
+      return `streaming:${streamState.contentParts.length}:${streamState.currentText.length}`;
     }
     if (!messages || messages.length === 0) return '';
     const last = messages[messages.length - 1];
     return `${last.id}:${last.content?.length ?? 0}`;
-  }, [messages, isAgentRunning, streamState?.contentParts.length]);
+  }, [
+    messages,
+    isAgentRunning,
+    streamState?.contentParts.length,
+    streamState?.currentText.length,
+  ]);
 
   // Auto-scroll to bottom on new messages, session changes, and when the last
   // message content updates during streaming
@@ -106,7 +111,6 @@ export const ChatMessageList: React.FC<ChatMessageListProps> = ({
     sessionId,
     lastMessageContentKey,
     scrollToBottom,
-    streamState?.contentParts.length,
     streamState?.pendingConfirm,
   ]);
 
