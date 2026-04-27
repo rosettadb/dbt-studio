@@ -19,14 +19,13 @@ import {
 } from './ai/tokenEstimator';
 import MainDatabaseService from './mainDatabase.service';
 import ProjectsService from './projects.service';
+import SelectedFileContextProvider from './selectedFileContextProvider.service';
 import type {
   NewContextItem,
   ChatMessage,
 } from '../schemas/mainDatabase.schema';
 import type { AISettingsConfig } from '../../types/backend';
 import type {
-  AgentStepStartPayload,
-  AgentToolCallPayload,
   ChatStreamChunkPayload,
   AgentContextUsagePayload,
   AgentContextCompactedPayload,
@@ -107,6 +106,68 @@ const agentContexts = new Map<
   { event: IpcMainInvokeEvent; conversationId: number }
 >();
 
+// ─── Token Management Interfaces ─────────────────────────────────────────────
+
+export interface TokenBudget {
+  maxTotal: number;
+  recentMessages: number;
+  summary: number;
+  relevantContext: number;
+  buffer: number;
+}
+
+export interface ConversationPhase {
+  phase: 'exploration' | 'implementation' | 'debugging' | 'review';
+  recommendedLimit: number;
+}
+
+export interface ScoredMessage {
+  message: ChatMessage;
+  index: number;
+  score: number;
+  isRecent: boolean;
+  tokenCount: number;
+}
+
+// ─── Tool Categorization ─────────────────────────────────────────────────────
+
+const TOOL_CATEGORIES = {
+  analysis: [
+    'readDbtModel',
+    'listDbtModels',
+    'getDbtLogs',
+    'listDirectory',
+    'readFile',
+    'pathExists',
+  ],
+  action: ['writeDbtModel', 'runDbtCommand', 'writeFile'],
+};
+
+export function getToolsForMode(
+  mode: 'chat' | 'agent',
+  aiSettings: AISettingsConfig,
+) {
+  const allTools = { ...dbtTools, ...filesystemTools };
+
+  if (mode === 'chat') {
+    // Chat Mode: only analysis tools
+    return Object.fromEntries(
+      Object.entries(allTools).filter(
+        ([name]) =>
+          TOOL_CATEGORIES.analysis.includes(name) &&
+          aiSettings.tools[name] !== false,
+      ),
+    );
+  }
+
+  // Agent Mode: all enabled tools
+  return Object.fromEntries(
+    Object.entries(allTools).filter(
+      ([name]) => aiSettings.tools[name] !== false,
+    ),
+  );
+}
+
 /**
  * Request payload for agent execution
  */
@@ -116,6 +177,7 @@ export interface AgentRunRequest {
   contextItems?: Omit<NewContextItem, 'messageId'>[];
   requestedModel?: string;
   projectPath?: string;
+  toolMode?: 'chat' | 'agent';
 }
 
 /**
@@ -181,6 +243,337 @@ class AgentService {
   }
 
   // ─── Context Compaction ──────────────────────────────────────────────────────
+
+  /**
+   * Builds a token budget scaled to the active model's context window.
+   */
+  private static buildBudgetForModel(modelId?: string): TokenBudget {
+    const DEFAULT_MAX = 6000;
+    const contextWindow = modelId
+      ? getContextWindow(modelId)
+      : Math.floor(DEFAULT_MAX / 0.85);
+    const maxTotal = Math.floor(contextWindow * 0.85);
+    return {
+      maxTotal,
+      recentMessages: Math.floor(maxTotal * 0.6),
+      summary: Math.floor(maxTotal * 0.15),
+      relevantContext: Math.floor(maxTotal * 0.13),
+      buffer: Math.floor(maxTotal * 0.12),
+    };
+  }
+
+  private static detectConversationPhase(
+    messages: ChatMessage[],
+  ): ConversationPhase {
+    const lastFewMessages = messages.slice(-5);
+    const content = lastFewMessages
+      .map((m) => m.content.toLowerCase())
+      .join(' ');
+
+    if (
+      content.includes('error') ||
+      content.includes('debug') ||
+      content.includes('fix') ||
+      content.includes('issue')
+    ) {
+      return { phase: 'debugging', recommendedLimit: 15 };
+    }
+
+    if (
+      content.includes('implement') ||
+      content.includes('code') ||
+      content.includes('function') ||
+      content.includes('class')
+    ) {
+      return { phase: 'implementation', recommendedLimit: 10 };
+    }
+
+    if (
+      content.includes('review') ||
+      content.includes('summary') ||
+      content.includes('overall') ||
+      content.includes('complete')
+    ) {
+      return { phase: 'review', recommendedLimit: 18 };
+    }
+
+    return { phase: 'exploration', recommendedLimit: 8 };
+  }
+
+  private static scoreMessageImportance(message: ChatMessage): number {
+    let score = 1;
+    const content = message.content.toLowerCase();
+
+    if (
+      content.includes('error') ||
+      content.includes('problem') ||
+      content.includes('issue')
+    )
+      score += 3;
+    if (
+      content.includes('solution') ||
+      content.includes('fixed') ||
+      content.includes('resolved')
+    )
+      score += 3;
+    if (
+      content.includes('important') ||
+      content.includes('key') ||
+      content.includes('critical')
+    )
+      score += 2;
+    if (
+      content.includes('```') ||
+      content.includes('code') ||
+      content.includes('function')
+    )
+      score += 2;
+    if (message.contextItems && message.contextItems.length > 0) score += 2;
+    if (
+      content.includes('decision') ||
+      content.includes('approach') ||
+      content.includes('strategy')
+    )
+      score += 2;
+
+    const contentLength = content.length;
+    if (contentLength > 500 && contentLength < 2000) score += 1;
+    if (contentLength < 50) score -= 1;
+
+    if (message.role === 'assistant' && contentLength > 200) score += 1;
+
+    const ageInHours =
+      (Date.now() - new Date(message.createdAt).getTime()) / (1000 * 60 * 60);
+    const recencyBonus = Math.max(0, 3 - ageInHours / 12);
+    score += recencyBonus;
+
+    return score;
+  }
+
+  private static selectMessagesWithinBudget(
+    scoredMessages: ScoredMessage[],
+    tokenBudget: number,
+    minMessages: number,
+    maxMessages: number,
+  ): ScoredMessage[] {
+    const selected: ScoredMessage[] = [];
+    let usedTokens = 0;
+
+    const guaranteedRecent = scoredMessages
+      .filter((item) => item.isRecent)
+      .slice(-minMessages);
+
+    guaranteedRecent.some((item) => {
+      if (usedTokens + item.tokenCount <= tokenBudget) {
+        selected.push(item);
+        usedTokens += item.tokenCount;
+        return false;
+      }
+      if (selected.length === 0) {
+        const truncated = this.truncateMessage(item, tokenBudget);
+        selected.push(truncated);
+        usedTokens = tokenBudget;
+        return true; // equivalent to break
+      }
+      return false;
+    });
+
+    const remainingMessages = scoredMessages
+      .filter((item) => !item.isRecent)
+      .sort((a, b) => b.score - a.score);
+
+    remainingMessages.forEach((item) => {
+      if (
+        usedTokens + item.tokenCount <= tokenBudget &&
+        selected.length < maxMessages
+      ) {
+        selected.push(item);
+        usedTokens += item.tokenCount;
+      }
+    });
+
+    return selected;
+  }
+
+  private static truncateMessage(
+    scoredMessage: ScoredMessage,
+    maxTokens: number,
+  ): ScoredMessage {
+    const originalContent = scoredMessage.message.content;
+    const truncatedContent = this.truncateText(originalContent, maxTokens - 20);
+
+    return {
+      ...scoredMessage,
+      message: {
+        ...scoredMessage.message,
+        content: `${truncatedContent}... [truncated]`,
+      },
+      tokenCount: maxTokens,
+    };
+  }
+
+  private static truncateText(text: string, maxTokens: number): string {
+    if (estimateTokens(text) <= maxTokens) {
+      return text;
+    }
+
+    let left = 0;
+    let right = text.length;
+    let bestLength = 0;
+
+    while (left <= right) {
+      const mid = Math.floor((left + right) / 2);
+      const substring = text.substring(0, mid);
+      const tokenCount = estimateTokens(substring);
+
+      if (tokenCount <= maxTokens) {
+        bestLength = mid;
+        left = mid + 1;
+      } else {
+        right = mid - 1;
+      }
+    }
+
+    return text.substring(0, bestLength);
+  }
+
+  private static async summarizeConversationHistory(
+    olderMessages: ChatMessage[],
+  ): Promise<string | null> {
+    if (olderMessages.length === 0) return null;
+
+    try {
+      const keyPoints: string[] = [];
+      const topics = new Set<string>();
+      const decisions: string[] = [];
+      const codeElements: string[] = [];
+
+      olderMessages.forEach((message) => {
+        const content = message.content.toLowerCase();
+
+        if (content.includes('database') || content.includes('sql'))
+          topics.add('database work');
+        if (content.includes('react') || content.includes('component'))
+          topics.add('React development');
+        if (content.includes('dbt') || content.includes('model'))
+          topics.add('dbt modeling');
+        if (content.includes('error') || content.includes('debug'))
+          topics.add('troubleshooting');
+
+        if (
+          content.includes('decided') ||
+          content.includes('choose') ||
+          content.includes('prefer')
+        ) {
+          decisions.push(`${message.content.substring(0, 100)}...`);
+        }
+
+        if (
+          content.includes('```') ||
+          content.includes('function') ||
+          content.includes('class')
+        ) {
+          codeElements.push(`${message.role}: discussed code implementation`);
+        }
+      });
+
+      if (topics.size > 0)
+        keyPoints.push(`Previous topics: ${Array.from(topics).join(', ')}`);
+      if (decisions.length > 0)
+        keyPoints.push(`Key decisions: ${decisions.slice(0, 2).join('; ')}`);
+      if (codeElements.length > 0)
+        keyPoints.push(
+          `Technical work: ${codeElements.length} code discussions`,
+        );
+      keyPoints.push(
+        `Conversation span: ${olderMessages.length} earlier messages`,
+      );
+
+      return keyPoints.length > 0 ? keyPoints.join('. ') : null;
+    } catch (error) {
+      return `Earlier conversation with ${olderMessages.length} messages`;
+    }
+  }
+
+  private static async extractRelevantContext(
+    olderMessages: ChatMessage[],
+    currentContent: string,
+  ): Promise<string[]> {
+    if (!currentContent || olderMessages.length === 0) return [];
+
+    try {
+      const relevantSnippets: string[] = [];
+      const currentTopics = this.extractTopicsFromContent(currentContent);
+
+      olderMessages.forEach((message) => {
+        const messageTopics = this.extractTopicsFromContent(message.content);
+        const hasOverlap = currentTopics.some((topic) =>
+          messageTopics.includes(topic),
+        );
+
+        if (hasOverlap && message.content.length < 200) {
+          relevantSnippets.push(`${message.role}: ${message.content}`);
+        } else if (hasOverlap) {
+          const sentences = message.content.split(/[.!?]+/);
+          const relevantSentence = sentences.find((s: string) =>
+            currentTopics.some((topic) => s.toLowerCase().includes(topic)),
+          );
+          if (relevantSentence) {
+            relevantSnippets.push(
+              `${message.role}: ${relevantSentence.trim()}...`,
+            );
+          }
+        }
+      });
+
+      return relevantSnippets.slice(0, 3);
+    } catch (error) {
+      return [];
+    }
+  }
+
+  private static extractTopicsFromContent(content: string): string[] {
+    const topics: string[] = [];
+    const lowerContent = content.toLowerCase();
+
+    const topicKeywords = [
+      'database',
+      'sql',
+      'query',
+      'table',
+      'schema',
+      'react',
+      'component',
+      'hook',
+      'state',
+      'props',
+      'dbt',
+      'model',
+      'transformation',
+      'analytics',
+      'error',
+      'debug',
+      'fix',
+      'issue',
+      'problem',
+      'api',
+      'endpoint',
+      'request',
+      'response',
+      'typescript',
+      'javascript',
+      'function',
+      'class',
+    ];
+
+    topicKeywords.forEach((keyword) => {
+      if (lowerContent.includes(keyword)) {
+        topics.push(keyword);
+      }
+    });
+
+    return topics;
+  }
 
   /**
    * Generates a concise LLM summary of older messages for compaction.
@@ -316,8 +709,7 @@ UPDATED SUMMARY:`,
   }
 
   /**
-   * Builds turn messages with auto-compaction when context window 85% full.
-   * Returns the messages to send to the model plus a context usage breakdown.
+   * Builds turn messages with auto-compaction and dynamic token budgets.
    */
   private static async buildTurnMessages(
     conversationId: number,
@@ -329,48 +721,137 @@ UPDATED SUMMARY:`,
     messages: Array<{ role: 'user' | 'assistant' | 'system'; content: string }>;
     breakdown: ContextUsageBreakdown;
   }> {
-    const contextWindow = getContextWindow(modelId);
-    const RESPONSE_HEADROOM = 8_000;
-    const COMPACT_THRESHOLD = 0.85;
+    // 1. Get dynamic token budget
+    const budget = this.buildBudgetForModel(modelId);
 
+    // 2. Load all messages
     const allMessages = await MainDatabaseService.getMessages(conversationId);
 
-    const historyTokens = estimateMessagesTokens(allMessages);
+    // 3. Detect conversation phase
+    const phase = this.detectConversationPhase(allMessages);
+
+    // 4. Score messages by importance
+    const MIN_RECENT_MESSAGES = 4;
+    const MAX_RECENT_MESSAGES = Math.min(100, phase.recommendedLimit);
+
+    const scoredMessages: ScoredMessage[] = allMessages.map((msg, index) => ({
+      message: msg,
+      index,
+      score: this.scoreMessageImportance(msg),
+      isRecent: index >= allMessages.length - MIN_RECENT_MESSAGES,
+      tokenCount: estimateTokens(msg.content),
+    }));
+
+    // 5. Select messages within budget
+    const selectedMessages = this.selectMessagesWithinBudget(
+      scoredMessages,
+      budget.recentMessages,
+      MIN_RECENT_MESSAGES,
+      MAX_RECENT_MESSAGES,
+    );
+
+    // Re-sort selected messages chronologically
+    const recentMessages = selectedMessages
+      .map((sm) => sm.message)
+      .sort(
+        (a, b) =>
+          new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime(),
+      );
+
+    // 6. Extract relevant context from older messages
+    const selectedIds = new Set(recentMessages.map((m) => m.id));
+    const olderMessages = allMessages.filter((m) => !selectedIds.has(m.id));
+    const relevantContext = await this.extractRelevantContext(
+      olderMessages,
+      newContent,
+    );
+
+    // 7. Decide: LLM compaction or heuristic summarization
+    const historyTokens = estimateMessagesTokens(recentMessages);
     const newMsgTokens = estimateTokens(newContent);
     const ctxItemTokens = estimateTokens(contextItems);
-    const totalEstimate =
-      historyTokens + newMsgTokens + ctxItemTokens + RESPONSE_HEADROOM;
+    const RESPONSE_HEADROOM = 8_000;
 
-    const percentUsed = totalEstimate / contextWindow;
+    const contextWindow = getContextWindow(modelId);
+    const totalTokens =
+      historyTokens + newMsgTokens + ctxItemTokens + RESPONSE_HEADROOM;
+    const percentUsed = totalTokens / contextWindow;
 
     const breakdown: ContextUsageBreakdown = {
       conversation: historyTokens,
       userFiles: ctxItemTokens,
-      skills: 0, // enriched in runAgent after skills are loaded
-      mcpTools: 0, // enriched in runAgent after MCP is loaded
-      total: totalEstimate,
+      skills: 0,
+      mcpTools: 0,
+      total: totalTokens,
       contextWindow,
       percentUsed: Math.min(100, Math.round(percentUsed * 100)),
     };
 
+    const COMPACT_THRESHOLD = 0.85;
+
     if (percentUsed > COMPACT_THRESHOLD) {
-      const compactedMessages = await this.autoCompact(
-        conversationId,
-        allMessages,
-        event,
-      );
-      const compactedTokens = estimateMessagesTokens(compactedMessages);
-      breakdown.conversation = compactedTokens;
-      breakdown.total =
-        compactedTokens + newMsgTokens + ctxItemTokens + RESPONSE_HEADROOM;
-      breakdown.percentUsed = Math.min(
-        100,
-        Math.round((breakdown.total / contextWindow) * 100),
-      );
-      return { messages: compactedMessages, breakdown };
+      // Try LLM compaction first (existing AgentService logic)
+      try {
+        const compactedMessages = await this.autoCompact(
+          conversationId,
+          allMessages,
+          event,
+        );
+        const compactedTokens = estimateMessagesTokens(compactedMessages);
+        breakdown.conversation = compactedTokens;
+        breakdown.total =
+          compactedTokens + newMsgTokens + ctxItemTokens + RESPONSE_HEADROOM;
+        breakdown.percentUsed = Math.min(
+          100,
+          Math.round((breakdown.total / contextWindow) * 100),
+        );
+        return { messages: compactedMessages, breakdown };
+      } catch (error) {
+        // Fallback to heuristic summarization
+        const summary = await this.summarizeConversationHistory(olderMessages);
+
+        let systemPrompt = '';
+        if (summary) {
+          systemPrompt += `## Earlier Conversation (summarized)\n\n${summary}\n\n`;
+        }
+        if (relevantContext.length > 0) {
+          systemPrompt += `## Relevant earlier context:\n${relevantContext.map((ctx) => `• ${ctx}`).join('\n')}\n\n`;
+        }
+
+        const finalMessages = [];
+        if (systemPrompt) {
+          finalMessages.push({
+            role: 'system' as const,
+            content: systemPrompt,
+          });
+        }
+        finalMessages.push(...buildCoreMessages(recentMessages));
+
+        const heuristicTokens = estimateMessagesTokens(finalMessages);
+        breakdown.conversation = heuristicTokens;
+        breakdown.total =
+          heuristicTokens + newMsgTokens + ctxItemTokens + RESPONSE_HEADROOM;
+        breakdown.percentUsed = Math.min(
+          100,
+          Math.round((breakdown.total / contextWindow) * 100),
+        );
+        return { messages: finalMessages as any, breakdown };
+      }
     }
 
-    return { messages: buildCoreMessages(allMessages), breakdown };
+    // 8. Build final message array
+    let systemPrompt = '';
+    if (relevantContext.length > 0) {
+      systemPrompt += `## Relevant earlier context:\n${relevantContext.map((ctx) => `• ${ctx}`).join('\n')}\n\n`;
+    }
+
+    const finalMessages = [];
+    if (systemPrompt) {
+      finalMessages.push({ role: 'system' as const, content: systemPrompt });
+    }
+    finalMessages.push(...buildCoreMessages(recentMessages));
+
+    return { messages: finalMessages as any, breakdown };
   }
 
   /**
@@ -417,6 +898,7 @@ UPDATED SUMMARY:`,
         (model as any).model ||
         requestedModel ||
         'default';
+      const toolMode = request.toolMode || 'agent';
       const { messages, breakdown } = await this.buildTurnMessages(
         conversationId,
         content,
@@ -426,12 +908,7 @@ UPDATED SUMMARY:`,
       );
 
       // 4. Filter tools by enabled settings
-      const allTools = { ...dbtTools, ...filesystemTools };
-      const enabledTools: Record<string, any> = Object.fromEntries(
-        Object.entries(allTools).filter(
-          ([name]) => aiSettings.tools[name] !== false,
-        ),
-      );
+      const enabledTools = getToolsForMode(toolMode, aiSettings);
 
       // 4b. Get MCP tools (only connected servers)
       const mcpTools = await buildMCPToolset(['rosetta', 'dbt', 'duckdb']);
@@ -479,6 +956,7 @@ UPDATED SUMMARY:`,
       activeAgents.set(conversationId, abortController);
 
       let fullContent = '';
+      let thinkingContent = '';
       let toolCallCount = 0;
       let finalUsage:
         | {
@@ -492,94 +970,12 @@ UPDATED SUMMARY:`,
       const collectedToolCalls: Array<{
         toolName: string;
         toolCallId: string;
-        args: Record<string, unknown>;
-        result: unknown;
+        input: unknown;
+        output: unknown;
         stepNumber: number;
         status: 'done' | 'error';
-        durationMs?: number;
       }> = [];
-
-      // onStepFinish is the ONLY per-call callback supported by ToolLoopAgent.stream/generate.
-      // experimental_onToolCallStart/Finish/onStepStart are generateText/streamText options —
-      // they are NOT forwarded by ToolLoopAgent and are silently dropped when passed via `as any`.
-      //
-      // Strategy: emit agent:step-start at the beginning of each step, and emit agent:tool-call
-      // events for each tool call result from onStepFinish. This gives the frontend step blocks
-      // and completed tool call rows. Running-state tool calls (status:'running') are not
-      // available via this API — the frontend shows a spinner until the step finishes.
-      //
-      // SDK field names: TypedToolCall uses `input` (not `args`),
-      //                  TypedToolResult uses `output` (not `result`).
-      // IPC event field names: we map input→args and output→result for the frontend.
-      const onStepFinish = async ({
-        stepNumber,
-        toolCalls,
-        toolResults,
-        usage,
-      }: {
-        stepNumber: number;
-        toolCalls?: Array<{
-          toolName: string;
-          toolCallId: string;
-          input?: unknown;
-        }>;
-        toolResults?: Array<{
-          toolName: string;
-          toolCallId: string;
-          output: unknown;
-        }>;
-        usage?: { totalTokens?: number };
-      }) => {
-        // Capture final usage from the last step (this is where AI SDK actually provides it)
-        // Don't overwrite if already set by a previous step
-        const stepTokens = usage?.totalTokens ?? 0;
-        if (stepTokens > 0 && !finalUsage?.totalTokens) {
-          finalUsage = {
-            promptTokens: 0,
-            completionTokens: stepTokens,
-            totalTokens: stepTokens,
-          };
-        }
-        // Emit step-start at the beginning of each step (stepNumber is 0-based)
-        const stepStartPayload: AgentStepStartPayload = {
-          conversationId,
-          stepNumber,
-        };
-        event.sender.send('agent:step-start', stepStartPayload);
-
-        if (toolCalls) {
-          toolCallCount += toolCalls.length;
-
-          // Build an output map keyed by toolCallId for quick lookup
-          const outputMap = new Map<string, unknown>();
-          toolResults?.forEach((tr) => outputMap.set(tr.toolCallId, tr.output));
-
-          // Emit a done event for each tool call in this step.
-          // Map SDK field names (input/output) to IPC event field names (args/result).
-          toolCalls.forEach((tc) => {
-            const toolCallPayload: AgentToolCallPayload = {
-              conversationId,
-              toolName: tc.toolName,
-              toolCallId: tc.toolCallId,
-              args: tc.input as Record<string, unknown>, // SDK: input → IPC: args
-              result: outputMap.get(tc.toolCallId), // SDK: output → IPC: result
-              stepNumber,
-              status: 'done',
-            };
-            event.sender.send('agent:tool-call', toolCallPayload);
-
-            // Collect for DB persistence
-            collectedToolCalls.push({
-              toolName: tc.toolName,
-              toolCallId: tc.toolCallId,
-              args: tc.input as Record<string, unknown>,
-              result: outputMap.get(tc.toolCallId),
-              stepNumber,
-              status: 'done',
-            });
-          });
-        }
-      };
+      const collectedParts: any[] = [];
 
       try {
         if (aiSettings.chat.streamResponses) {
@@ -600,6 +996,7 @@ UPDATED SUMMARY:`,
                 undefined,
               );
             } catch (persistErr) {
+              // eslint-disable-next-line no-console
               console.error(
                 '[AgentService] Failed to persist timeout message:',
                 persistErr,
@@ -615,29 +1012,99 @@ UPDATED SUMMARY:`,
             const result = await agent.stream({
               messages,
               abortSignal: abortController.signal,
-              onStepFinish,
             });
 
+            let currentStepNumber = -1;
+
             /* eslint-disable no-restricted-syntax */
-            for await (const chunk of result.textStream) {
+            for await (const chunk of result.fullStream) {
               if (abortController.signal.aborted) break;
               // Reset timeout on each received chunk — stream is alive
               clearTimeout(timeoutId);
-              fullContent += chunk;
-              sendChunk({ conversationId, chunk, done: false });
+
+              // Track current step number
+              if (chunk.type === 'start-step') {
+                currentStepNumber += 1;
+                event.sender.send('agent:step-start', {
+                  conversationId,
+                  stepNumber: currentStepNumber,
+                });
+              }
+
+              // Forward the native TextStreamPart chunk to the renderer for real-time tool arguments
+              event.sender.send('chat:message:stream-chunk', {
+                conversationId,
+                chunk,
+                done: false,
+              });
+
+              // Process chunks for backend persistence state
+              switch (chunk.type) {
+                case 'text-delta': {
+                  fullContent += chunk.text;
+                  const lastPart = collectedParts[collectedParts.length - 1];
+                  if (lastPart?.type === 'text') {
+                    lastPart.text += chunk.text;
+                  } else {
+                    collectedParts.push({ type: 'text', text: chunk.text });
+                  }
+                  break;
+                }
+                case 'reasoning-delta': {
+                  const delta = (chunk as any).text || '';
+                  if (delta) {
+                    thinkingContent += delta;
+                  }
+                  break;
+                }
+                case 'tool-call':
+                  toolCallCount += 1;
+                  collectedParts.push({
+                    type: 'tool-call',
+                    toolCallId: chunk.toolCallId,
+                    toolName: chunk.toolName,
+                    args: (chunk as any).input ?? {},
+                    status: 'running',
+                  });
+                  break;
+                case 'tool-result': {
+                  collectedToolCalls.push({
+                    toolName: chunk.toolName,
+                    toolCallId: chunk.toolCallId,
+                    input: (chunk as any).input ?? (chunk as any).args,
+                    output: (chunk as any).output ?? (chunk as any).result,
+                    stepNumber: currentStepNumber >= 0 ? currentStepNumber : 0,
+                    status: 'done',
+                  });
+                  const part = collectedParts.find(
+                    (p) =>
+                      p.type === 'tool-call' &&
+                      p.toolCallId === chunk.toolCallId,
+                  );
+                  if (part) {
+                    part.result =
+                      (chunk as any).output ?? (chunk as any).result;
+                    part.status = 'done';
+                  }
+                  break;
+                }
+                case 'finish':
+                  finalUsage = {
+                    promptTokens: chunk.totalUsage?.inputTokens ?? 0,
+                    completionTokens: chunk.totalUsage?.outputTokens ?? 0,
+                    totalTokens: chunk.totalUsage?.totalTokens ?? 0,
+                  };
+                  break;
+                default:
+                  // Handle any other chunk types silently
+                  break;
+              }
             }
             /* eslint-enable no-restricted-syntax */
 
             clearTimeout(timeoutId);
 
-            // Always capture usage (setting only controls display, not persistence)
-            const usage = await result.usage;
-            const totalToks = usage?.totalTokens ?? 0;
-            finalUsage = {
-              promptTokens: 0, // AI SDK v6 doesn't separate these
-              completionTokens: totalToks,
-              totalTokens: totalToks,
-            };
+            // Always send done:true so the frontend exits streaming state
             sendChunk({
               conversationId,
               chunk: '',
@@ -646,7 +1113,6 @@ UPDATED SUMMARY:`,
             });
           } catch (streamErr) {
             clearTimeout(timeoutId);
-            // Always send done:true so the frontend exits streaming state
             sendChunk({ conversationId, chunk: '', done: true });
             throw streamErr;
           }
@@ -655,15 +1121,48 @@ UPDATED SUMMARY:`,
           const result = await agent.generate({
             messages,
             abortSignal: abortController.signal,
-            onStepFinish,
           });
           fullContent = result.text;
           const totalToks = result.usage?.totalTokens ?? 0;
           finalUsage = {
-            promptTokens: 0,
-            completionTokens: totalToks,
+            promptTokens: result.usage?.inputTokens ?? 0,
+            completionTokens: result.usage?.outputTokens ?? 0,
             totalTokens: totalToks,
           };
+
+          thinkingContent =
+            result.reasoningText ??
+            result.reasoning?.map((p) => p.text).join('') ??
+            '';
+
+          if (fullContent) {
+            collectedParts.push({ type: 'text', text: fullContent });
+          }
+
+          // Collect tool calls from steps for persistence
+          result.steps?.forEach((step, idx) => {
+            step.toolResults?.forEach((tr) => {
+              collectedToolCalls.push({
+                toolName: tr.toolName,
+                toolCallId: tr.toolCallId,
+                input: (tr as any).input ?? (tr as any).args,
+                output: (tr as any).output ?? (tr as any).result,
+                stepNumber: idx,
+                status: 'done',
+              });
+              collectedParts.push({
+                type: 'tool-call',
+                toolCallId: tr.toolCallId,
+                toolName: tr.toolName,
+                args: (tr as any).input ?? (tr as any).args,
+                result: (tr as any).output ?? (tr as any).result,
+                status: 'done',
+              });
+            });
+          });
+
+          toolCallCount += collectedToolCalls.length;
+
           sendChunk({ conversationId, chunk: fullContent, done: false });
           sendChunk({
             conversationId,
@@ -693,11 +1192,11 @@ UPDATED SUMMARY:`,
       >[] = collectedToolCalls.map((tc) => ({
         toolName: tc.toolName,
         toolInput: {
-          ...((tc.args as object) || {}),
+          ...((tc.input as object) || {}),
           stepNum: tc.stepNumber,
           tcId: tc.toolCallId,
         },
-        toolOutput: tc.result ?? null,
+        toolOutput: tc.output ?? null,
         status: tc.status === 'done' ? 'completed' : 'failed',
         startedAt: new Date().toISOString(),
         completedAt: new Date().toISOString(),
@@ -709,20 +1208,27 @@ UPDATED SUMMARY:`,
         {
           role: 'assistant',
           content: fullContent,
-          metadata: finalUsage
-            ? {
-                promptTokens: finalUsage.promptTokens,
-                completionTokens: finalUsage.completionTokens,
-                totalTokens: finalUsage.totalTokens,
-              }
-            : undefined,
+          thinkingContent: thinkingContent || undefined,
+          metadata: {
+            ...(finalUsage
+              ? {
+                  promptTokens: finalUsage.promptTokens,
+                  completionTokens: finalUsage.completionTokens,
+                  totalTokens: finalUsage.totalTokens,
+                }
+              : {}),
+            orderedParts:
+              collectedParts.length > 0 ? collectedParts : undefined,
+          },
         },
         undefined,
         toolCallsToSave.length > 0 ? toolCallsToSave : undefined,
       );
       return { success: true };
     } catch (error) {
+      // eslint-disable-next-line no-console
       console.error('[AgentService.runAgent] Error:', error);
+      // eslint-disable-next-line no-console
       console.error('[AgentService.runAgent] Error details:', {
         conversationId,
         errorMessage: error instanceof Error ? error.message : 'Unknown error',
@@ -815,6 +1321,160 @@ UPDATED SUMMARY:`,
       console.error('[AgentService.listTools] Error:', error);
       return { success: false, tools: [], error: 'Failed to list tools' };
     }
+  }
+
+  // ─── Context Resolution (ported from ChatService) ──────────────────────────
+
+  static async getMessages(
+    payload:
+      | {
+          conversationId?: number;
+          sessionId?: number;
+          limit?: number;
+          offset?: number;
+        }
+      | number,
+    maybeLimit?: number,
+    maybeOffset?: number,
+  ) {
+    if (typeof payload === 'number') {
+      return MainDatabaseService.getMessages(payload, maybeLimit, maybeOffset);
+    }
+    const { conversationId, sessionId, limit, offset } = payload || {};
+    const id = conversationId ?? sessionId;
+    if (typeof id !== 'number') {
+      throw new Error(
+        "getMessages requires 'conversationId' or 'sessionId' in payload",
+      );
+    }
+    return MainDatabaseService.getMessages(id, limit, offset);
+  }
+
+  static async getMessagesWithContext(
+    payload:
+      | {
+          conversationId?: number;
+          sessionId?: number;
+          limit?: number;
+          offset?: number;
+        }
+      | number,
+    maybeLimit?: number,
+    maybeOffset?: number,
+  ) {
+    const id =
+      typeof payload === 'number'
+        ? payload
+        : (payload.conversationId ?? payload.sessionId);
+    if (typeof id !== 'number') {
+      throw new Error(
+        "getMessagesWithContext requires 'conversationId' or 'sessionId'",
+      );
+    }
+    const limit =
+      typeof payload === 'number' ? maybeLimit : (payload as any).limit;
+    const offset =
+      typeof payload === 'number' ? maybeOffset : (payload as any).offset;
+    return MainDatabaseService.getMessagesWithContext(id, limit, offset);
+  }
+
+  static async resolveFileContext(filePath: string) {
+    try {
+      const content = fs.readFileSync(filePath, 'utf8');
+      const name = path.basename(filePath);
+      return {
+        type: 'file',
+        name,
+        path: filePath,
+        content,
+        language: filePath.split('.').pop() ?? 'text',
+        fileType: 'file',
+      };
+    } catch (error) {
+      throw new Error(
+        `Failed to resolve file context: ${(error as Error).message}`,
+      );
+    }
+  }
+
+  static async resolveSelectedFileContext(
+    filePath: string,
+    projectPath?: string,
+  ) {
+    if (projectPath) {
+      return SelectedFileContextProvider.resolveSelectedFileContext(
+        filePath,
+        projectPath,
+      );
+    }
+    return AgentService.resolveFileContext(filePath);
+  }
+
+  static async getFileMetadata(filePath: string) {
+    try {
+      const stat = fs.statSync(filePath);
+      const name = path.basename(filePath);
+      const ext = filePath.split('.').pop() ?? '';
+      return {
+        path: filePath,
+        name,
+        size: stat.size,
+        lastModified: stat.mtime.toISOString(),
+        language: ext,
+        fileType: 'file',
+      };
+    } catch (error) {
+      throw new Error(
+        `Failed to get file metadata: ${(error as Error).message}`,
+      );
+    }
+  }
+
+  static async resolveFolderContext(folderPath: string) {
+    try {
+      const entries = fs.readdirSync(folderPath);
+      return {
+        type: 'folder',
+        name: path.basename(folderPath),
+        path: folderPath,
+        content: entries.join('\n'),
+        fileType: 'folder',
+      };
+    } catch (error) {
+      throw new Error(
+        `Failed to resolve folder context: ${(error as Error).message}`,
+      );
+    }
+  }
+
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  static async searchCodebase(_query: string) {
+    // Lightweight stub — returns empty; full implementation can be added later
+    return [];
+  }
+
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  static async resolveUrl(_url: string) {
+    throw new Error('URL context resolution is not supported in agent mode');
+  }
+
+  // ─── Tool Call Management (delegated to MainDatabaseService) ───────────────
+
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  static async executeToolCall(_toolCallId: number) {
+    // Tool calls are executed inline by the agent — this is a no-op compatibility shim
+    return {
+      success: false,
+      message: 'Tool calls are executed autonomously by the agent',
+    };
+  }
+
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  static async cancelToolCall(_toolCallId: number) {
+    return {
+      success: false,
+      message: 'Tool call cancellation not supported in agent mode',
+    };
   }
 }
 

@@ -10,7 +10,7 @@ import {
   Menu,
   MenuItem,
 } from '@mui/material';
-import { Close, MoreHoriz, Add as AddIcon } from '@mui/icons-material';
+import { Close, MoreHoriz, Add as AddIcon, Tag } from '@mui/icons-material';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'react-toastify';
 import { useAppContext } from '../../hooks';
@@ -36,6 +36,7 @@ import type { ContextUsageBreakdown } from './ContextUsageRing';
 
 import { useContextManager } from '../../hooks/useContextManager';
 import { useAgentStream } from '../../hooks/useAgentStream';
+import { useToolMode } from '../../hooks/useToolMode';
 import {
   useOnStreamChunk,
   useOnContextUsage,
@@ -71,6 +72,9 @@ export const ChatWindow: React.FC = () => {
     confirmTerminal,
     clearError,
   } = useAgentStream(selectedSessionId);
+
+  // Tool mode — drives which tools are available in the backend
+  const { currentMode } = useToolMode(selectedSessionId);
 
   // Load messages for the selected session (used to estimate context usage on session switch)
   const { data: sessionMessages = [] } =
@@ -530,8 +534,7 @@ export const ChatWindow: React.FC = () => {
           zIndex: 1,
         }}
       >
-        {/* Left side: beta badge + active session title */}
-        {/* Left side: beta badge + active session title */}
+        {/* Left side: active session title */}
         <Box
           sx={{
             display: 'flex',
@@ -542,24 +545,6 @@ export const ChatWindow: React.FC = () => {
             overflow: 'hidden',
           }}
         >
-          <Box
-            sx={{
-              flexShrink: 0,
-              fontSize: '0.55rem',
-              fontWeight: 600,
-              lineHeight: 1,
-              px: 0.75,
-              py: 0.25,
-              borderRadius: '4px',
-              bgcolor: 'primary.main',
-              color: 'primary.contrastText',
-              letterSpacing: '0.03em',
-              textTransform: 'uppercase',
-            }}
-          >
-            beta
-          </Box>
-
           {selectedSessionId &&
             sessions.length > 0 &&
             (() => {
@@ -567,21 +552,30 @@ export const ChatWindow: React.FC = () => {
                 (s) => (s.id as unknown as number) === selectedSessionId,
               );
               return activeSession ? (
-                <Typography
-                  variant="caption"
-                  sx={{
-                    fontSize: '0.875rem',
-                    fontWeight: 500,
-                    color: 'text.secondary',
-                    overflow: 'hidden',
-                    textOverflow: 'ellipsis',
-                    whiteSpace: 'nowrap',
-                    minWidth: 0,
-                    lineHeight: 1,
-                  }}
-                >
-                  {activeSession.title}
-                </Typography>
+                <>
+                  <Tag
+                    sx={{
+                      fontSize: '0.75rem',
+                      color: 'text.secondary',
+                      ml: 0.5,
+                    }}
+                  />
+                  <Typography
+                    variant="caption"
+                    sx={{
+                      fontSize: '0.75rem',
+                      fontWeight: 400,
+                      color: 'text.secondary',
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis',
+                      whiteSpace: 'nowrap',
+                      minWidth: 0,
+                      lineHeight: 1,
+                    }}
+                  >
+                    {activeSession.title}
+                  </Typography>
+                </>
               ) : null;
             })()}
         </Box>
@@ -683,9 +677,11 @@ export const ChatWindow: React.FC = () => {
           <ChatInputBox
             sessionId={selectedSessionId}
             contextManager={contextManager}
-            onUsage={(usage) => setLastUsage(usage)}
             isStreaming={streamState.isStreaming}
-            onStartStream={startStream}
+            onStartStream={(content, contextItems) =>
+              // requestedModel is intentionally skipped, currentMode is passed as toolMode
+              startStream(content, contextItems, undefined, currentMode)
+            }
             onCancelStream={cancelStream}
             contextBreakdown={contextBreakdown}
           />

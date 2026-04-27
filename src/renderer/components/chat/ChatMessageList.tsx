@@ -10,11 +10,14 @@ import ChatIcon from '@mui/icons-material/Chat';
 import { useGetChatMessagesWithContext } from '../../controllers/chat.controller';
 import { useGetAISettings } from '../../controllers/aiSettings.controller';
 import { MessageRenderer } from './MessageRenderer';
-import { AgentStepBlock } from './AgentStepBlock';
+import { ToolCallRow } from './ToolCallRow';
 import { TerminalConfirmBanner } from './TerminalConfirmBanner';
 import { AgentErrorAlert } from './AgentErrorAlert';
 import { subscribeToContextCompacted } from '../../services/agentEvents.service';
-import type { AgentStreamState } from '../../hooks/useAgentStream';
+import type {
+  AgentStreamState,
+  ToolCallContentPart,
+} from '../../hooks/useAgentStream';
 
 interface TokenUsage {
   promptTokens: number;
@@ -86,13 +89,18 @@ export const ChatMessageList: React.FC<ChatMessageListProps> = ({
 
   // Derive a key that changes when the last message content grows during streaming
   const lastMessageContentKey = React.useMemo(() => {
-    if (isAgentRunning && streamState?.currentText) {
-      return `streaming:${streamState.currentText.length}`;
+    if (isAgentRunning && streamState?.contentParts.length) {
+      return `streaming:${streamState.contentParts.length}:${streamState.currentText.length}`;
     }
     if (!messages || messages.length === 0) return '';
     const last = messages[messages.length - 1];
     return `${last.id}:${last.content?.length ?? 0}`;
-  }, [messages, isAgentRunning, streamState?.currentText]);
+  }, [
+    messages,
+    isAgentRunning,
+    streamState?.contentParts.length,
+    streamState?.currentText.length,
+  ]);
 
   // Auto-scroll to bottom on new messages, session changes, and when the last
   // message content updates during streaming
@@ -103,7 +111,6 @@ export const ChatMessageList: React.FC<ChatMessageListProps> = ({
     sessionId,
     lastMessageContentKey,
     scrollToBottom,
-    streamState?.steps.length,
     streamState?.pendingConfirm,
   ]);
 
@@ -192,40 +199,23 @@ export const ChatMessageList: React.FC<ChatMessageListProps> = ({
               : null;
           return (
             <React.Fragment key={m.id}>
-              {/* Spinner before the last user message while agent is starting */}
-              {isLastMessage &&
-                m.role === 'user' &&
-                isAgentRunning &&
-                (streamState?.steps?.length ?? 0) === 0 && (
-                  <Box
-                    sx={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: 1,
-                      px: 0.5,
-                      py: 0.5,
-                      color: 'text.disabled',
-                    }}
-                  >
-                    <CircularProgress size={10} color="inherit" />
-                    <Typography variant="caption" color="text.disabled">
-                      Working…
-                    </Typography>
-                  </Box>
-                )}
               <MessageRenderer
                 messageId={m.id}
                 content={m.content || ''}
                 role={m.role}
                 contextItems={m.contextItems}
                 toolCalls={m.toolCalls?.length > 0 ? m.toolCalls : undefined}
-                reasoning={(m as any).reasoning}
+                reasoning={
+                  (m as any).reasoning ||
+                  (m.thinkingContent ? { text: m.thinkingContent } : undefined)
+                }
                 isStreaming={false}
                 tokenUsage={
                   persistedUsage ||
                   (isLastMessage && m.role === 'assistant' ? lastUsage : null)
                 }
                 showTokenCount={aiSettings?.chat?.showTokenCount}
+                orderedParts={m.metadata?.orderedParts}
               />
             </React.Fragment>
           );
@@ -258,44 +248,78 @@ export const ChatMessageList: React.FC<ChatMessageListProps> = ({
           </Box>
         )}
 
-        {/* Live Agent Steps — shown while streaming OR after completion if not yet persisted */}
-        {(streamState?.steps?.length ?? 0) > 0 &&
+        {/* Spinner — shown while streaming starts and no content yet */}
+        {isAgentRunning &&
+          (streamState?.contentParts.length ?? 0) === 0 &&
           (() => {
-            // Hide live steps once the last persisted message is an assistant
-            // message with tool calls — it means the run is fully persisted
+            const lastMsg = messages[messages.length - 1];
+            if (lastMsg?.role !== 'user') return null;
+            return (
+              <Box
+                sx={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 1,
+                  px: 0.5,
+                  py: 0.5,
+                  color: 'text.disabled',
+                }}
+              >
+                <CircularProgress size={10} color="inherit" />
+                <Typography variant="caption" color="text.disabled">
+                  Working…
+                </Typography>
+              </Box>
+            );
+          })()}
+
+        {/* Live interleaved stream — text parts + tool-call parts in arrival order */}
+        {(streamState?.contentParts.length ?? 0) > 0 &&
+          (() => {
+            // Hide once the run is fully persisted (DB message with tool calls loaded)
             const lastMsg = messages[messages.length - 1];
             const alreadyPersisted =
               !isAgentRunning &&
               lastMsg?.role === 'assistant' &&
               lastMsg?.toolCalls?.length > 0;
             if (alreadyPersisted) return null;
+
             return (
               <Box sx={{ mt: 0.25 }}>
-                {streamState?.steps.map((step, i) => (
-                  <AgentStepBlock
-                    key={`live-step-${step.stepNumber}`}
-                    step={step}
-                    isActive={
-                      !!isAgentRunning &&
-                      i === (streamState?.steps.length ?? 0) - 1
-                    }
-                  />
-                ))}
+                {streamState!.contentParts.map((part, idx) => {
+                  if (part.type === 'text') {
+                    // Only render non-empty text parts
+                    if (!part.text) return null;
+                    const assistantRole = 'assistant' as const;
+                    return (
+                      <MessageRenderer
+                        // eslint-disable-next-line react/no-array-index-key
+                        key={`live-text-${idx}`}
+                        messageId={-1}
+                        role={assistantRole}
+                        content={part.text}
+                        isStreaming={!!isAgentRunning}
+                      />
+                    );
+                  }
+                  // tool-call part
+                  const tc = part as ToolCallContentPart;
+                  return (
+                    <ToolCallRow
+                      key={tc.toolCallId}
+                      toolCall={{
+                        id: tc.toolCallId,
+                        toolName: tc.toolName,
+                        args: tc.args,
+                        result: tc.result,
+                        error: tc.error,
+                        status: tc.status,
+                        durationMs: tc.durationMs,
+                      }}
+                    />
+                  );
+                })}
               </Box>
-            );
-          })()}
-
-        {/* Streaming / last-received assistant text — above the confirm banner */}
-        {streamState?.currentText &&
-          (() => {
-            const assistantRole = 'assistant' as const;
-            return (
-              <MessageRenderer
-                messageId={-1}
-                role={assistantRole}
-                content={streamState.currentText}
-                isStreaming={!!isAgentRunning}
-              />
             );
           })()}
 

@@ -90,14 +90,6 @@ export const Menu: React.FC = () => {
   const isProjectSelected = Boolean(project?.id);
   const isOnProjectDetails = location.pathname === '/app';
 
-  const isLightMode = theme.palette.mode === 'light';
-  const headerIconColor = isLightMode
-    ? theme.palette.primary.contrastText
-    : theme.palette.primary.main;
-  const headerTextColor = isLightMode
-    ? theme.palette.primary.contrastText
-    : theme.palette.text.secondary;
-
   return (
     <StyledToolbar variant="dense">
       <IconsContainer>
@@ -227,7 +219,7 @@ export const Menu: React.FC = () => {
               <AuthButtonContent>
                 <AuthIcon src={rosettaIcon} alt="Rosetta" />
                 <AuthLabel>Cloud Dashboard</AuthLabel>
-                <OpenInNew sx={{ fontSize: 12, opacity: 0.7 }} />
+                <OpenInNew sx={{ fontSize: 14, opacity: 0.8 }} />
               </AuthButtonContent>
             </Button>
           </Tooltip>
@@ -260,19 +252,15 @@ export const Menu: React.FC = () => {
                   {settings?.env === 'cloud' ? (
                     <Cloud
                       sx={{
-                        fontSize: 14,
-                        color: isLightMode
-                          ? theme.palette.primary.main
-                          : theme.palette.primary.contrastText,
+                        fontSize: 12,
+                        color: theme.palette.primary.contrastText,
                       }}
                     />
                   ) : (
                     <Computer
                       sx={{
-                        fontSize: 14,
-                        color: isLightMode
-                          ? theme.palette.primary.main
-                          : theme.palette.primary.contrastText,
+                        fontSize: 12,
+                        color: theme.palette.primary.contrastText,
                       }}
                     />
                   )}
@@ -282,7 +270,7 @@ export const Menu: React.FC = () => {
             <span
               style={{
                 fontSize: '12px',
-                color: headerTextColor,
+                color: theme.palette.text.secondary,
                 fontWeight: 500,
                 display: 'flex',
                 alignItems: 'center',
@@ -297,13 +285,13 @@ export const Menu: React.FC = () => {
           <Tooltip title="AI Assistant (beta)">
             <IconButton
               onClick={() => setIsChatOpen?.(!isChatOpen)}
-              sx={{ color: headerIconColor }}
+              color="primary"
             >
               <Icon
                 src={icons.bot}
                 width={22}
                 height={22}
-                color={headerIconColor}
+                color={theme.palette.primary.main}
               />
             </IconButton>
           </Tooltip>
