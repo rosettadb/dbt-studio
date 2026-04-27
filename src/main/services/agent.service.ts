@@ -19,6 +19,7 @@ import {
 } from './ai/tokenEstimator';
 import MainDatabaseService from './mainDatabase.service';
 import ProjectsService from './projects.service';
+import SelectedFileContextProvider from './selectedFileContextProvider.service';
 import type {
   NewContextItem,
   ChatMessage,
@@ -1050,11 +1051,7 @@ UPDATED SUMMARY:`,
                   break;
                 }
                 case 'reasoning-delta': {
-                  const delta =
-                    (chunk as any).textDelta ||
-                    (chunk as any).delta ||
-                    (chunk as any).text ||
-                    '';
+                  const delta = (chunk as any).text || '';
                   if (delta) {
                     thinkingContent += delta;
                   }
@@ -1129,9 +1126,14 @@ UPDATED SUMMARY:`,
           const totalToks = result.usage?.totalTokens ?? 0;
           finalUsage = {
             promptTokens: result.usage?.inputTokens ?? 0,
-            completionTokens: result.usage?.outputTokens ?? totalToks,
+            completionTokens: result.usage?.outputTokens ?? 0,
             totalTokens: totalToks,
           };
+
+          thinkingContent =
+            result.reasoningText ??
+            result.reasoning?.map((p) => p.text).join('') ??
+            '';
 
           if (fullContent) {
             collectedParts.push({ type: 'text', text: fullContent });
@@ -1396,11 +1398,16 @@ UPDATED SUMMARY:`,
   }
 
   static async resolveSelectedFileContext(
-    _filePath: string,
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    _projectPath?: string,
+    filePath: string,
+    projectPath?: string,
   ) {
-    return AgentService.resolveFileContext(_filePath);
+    if (projectPath) {
+      return SelectedFileContextProvider.resolveSelectedFileContext(
+        filePath,
+        projectPath,
+      );
+    }
+    return AgentService.resolveFileContext(filePath);
   }
 
   static async getFileMetadata(filePath: string) {

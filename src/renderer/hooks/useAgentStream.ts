@@ -253,6 +253,21 @@ export const useAgentStream = (sessionId: number | undefined) => {
           break;
         }
 
+        case 'tool-error': {
+          const errorToolCallId = (chunk as any).toolCallId as string;
+          const errorDetail = (chunk as any).error || (chunk as any).message;
+          setStreamState((prev) =>
+            withParts(prev, (parts) =>
+              parts.map((p) =>
+                p.type === 'tool-call' && p.toolCallId === errorToolCallId
+                  ? { ...p, error: errorDetail, status: 'error' as const }
+                  : p,
+              ),
+            ),
+          );
+          break;
+        }
+
         case 'reasoning-delta': {
           // Reasoning/thinking deltas are captured by the backend into
           // thinkingContent and persisted. No dedicated UI state field here.

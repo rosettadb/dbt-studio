@@ -73,7 +73,7 @@ export const StatusBar: React.FC = () => {
         px: 1,
         bgcolor: 'background.paper',
         borderTop: '2px solid',
-        borderColor: 'background.default',
+        borderColor: 'divider',
         flexShrink: 0,
         overflow: 'hidden',
         gap: 0.25,
