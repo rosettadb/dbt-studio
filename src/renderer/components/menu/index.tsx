@@ -49,7 +49,11 @@ import { LetterAvatar } from '../letterAvatar';
 import { useAppContext } from '../../hooks';
 import { ExpandRightIcon } from '../sidebar/collapse-icons';
 
-export const Menu: React.FC = () => {
+type MenuProps = {
+  actions?: React.ReactNode;
+};
+
+export const Menu: React.FC<MenuProps> = ({ actions }) => {
   const navigate = useNavigate();
   const location = useLocation();
   const { mutateAsync: selectProject } = useSelectProject();
@@ -150,6 +154,7 @@ export const Menu: React.FC = () => {
         )}
       </IconsContainer>
       <IconsContainer sx={{ gap: 2 }}>
+        {actions}
         {/* Authentication - Only show when not logged in */}
         {!apiKey && (
           <Tooltip

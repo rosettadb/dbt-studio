@@ -8,12 +8,14 @@ type Props = {
   sidebarContent?: React.ReactNode;
   panelHeaderLeft?: React.ReactNode;
   panelTitle?: string;
+  topMenuActions?: React.ReactNode;
 };
 
 export const AppLayout: React.FC<Props> = ({
   sidebarContent,
   panelHeaderLeft,
   panelTitle,
+  topMenuActions,
   children,
 }) => {
   return (
@@ -26,7 +28,7 @@ export const AppLayout: React.FC<Props> = ({
           panelTitle={panelTitle}
         />
         <ContentColumn>
-          <Menu />
+          <Menu actions={topMenuActions} />
           <Content>
             <Main>{children}</Main>
           </Content>

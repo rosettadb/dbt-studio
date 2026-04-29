@@ -9,6 +9,7 @@ import { LoadingDot, ModifiedDot, TabButton, TabTitle } from './styles';
 interface EditorTabProps {
   tab: EditorTabState;
   isActive: boolean;
+  isLast?: boolean;
   onSelect: () => void;
   onClose: () => void;
 }
@@ -16,6 +17,7 @@ interface EditorTabProps {
 export const EditorTab: React.FC<EditorTabProps> = ({
   tab,
   isActive,
+  isLast,
   onSelect,
   onClose,
 }) => {
@@ -32,7 +34,7 @@ export const EditorTab: React.FC<EditorTabProps> = ({
       enterDelay={600}
       enterNextDelay={600}
     >
-      <TabButton active={isActive} onClick={onSelect}>
+      <TabButton active={isActive} isLast={isLast} onClick={onSelect}>
         {tab.isLoading && <LoadingDot />}
         {!tab.isLoading && tab.isModified && <ModifiedDot />}
         {!tab.isLoading && tab.error && (

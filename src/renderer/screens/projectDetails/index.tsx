@@ -11,7 +11,6 @@ import {
 } from '@mui/icons-material';
 import {
   Box,
-  IconButton,
   ListItemIcon,
   ListItemText,
   Menu,
@@ -52,7 +51,6 @@ import {
 } from '../../controllers';
 import { projectsServices } from '../../services';
 import {
-  ButtonsContainer,
   Container,
   Content,
   EditorContainer,
@@ -284,6 +282,32 @@ const ProjectDetails: React.FC = () => {
     markTabSavedByPath,
     refreshTabContentByPath,
   ]);
+
+  const handleSaveAllTabs = React.useCallback(async () => {
+    const modifiedTabs = tabs.filter((tab) => tab.isModified);
+    if (modifiedTabs.length === 0) {
+      return;
+    }
+    await Promise.all(
+      modifiedTabs.map(async (tab) => {
+        try {
+          await projectsServices.saveFileContent({
+            path: tab.path,
+            content: tab.content,
+          });
+          markTabSavedByPath(tab.path);
+          setTabErrorByPath(tab.path, undefined);
+        } catch (error: any) {
+          setTabErrorByPath(tab.path, error?.message);
+        }
+      }),
+    );
+    await updateStatuses();
+  }, [tabs, markTabSavedByPath, setTabErrorByPath, updateStatuses]);
+
+  const handleCloseAllTabs = React.useCallback(() => {
+    tabs.forEach((tab) => closeTab(tab.id));
+  }, [tabs, closeTab]);
 
   React.useEffect(() => {
     const fetchData = async () => {
@@ -713,6 +737,19 @@ const ProjectDetails: React.FC = () => {
 
   return (
     <AppLayout
+      topMenuActions={
+        <ProjectDbtSplitButton
+          rosettaPath={settings?.rosettaPath}
+          dbtPath={settings?.dbtPath}
+          project={project}
+          isDbtConfigured={!!settings?.dbtPath}
+          isRunningDbt={isRunningDbt}
+          isRunningRosettaDbt={isRunningRosettaDbt}
+          connection={connection}
+          environment={env}
+          rosettaDbt={rosettaDbt}
+        />
+      }
       panelHeaderLeft={
         <>
           <Tooltip
@@ -810,6 +847,47 @@ const ProjectDetails: React.FC = () => {
               )}
             </Box>
           </Tooltip>
+          <Tooltip
+            title={
+              connection?.id
+                ? 'Database connection options'
+                : 'Add database connection'
+            }
+            placement="bottom"
+            enterDelay={800}
+            enterNextDelay={800}
+          >
+            <Box
+              onClick={(e) => {
+                if (connection?.id) {
+                  handleConnectionMenuOpen(e);
+                } else {
+                  handleAddConnection();
+                }
+              }}
+              sx={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                width: 28,
+                height: 28,
+                cursor: 'pointer',
+                borderRadius: 0.5,
+                opacity: 0.7,
+                transition: 'all 0.2s ease',
+                '&:hover': { backgroundColor: 'action.hover', opacity: 1 },
+              }}
+            >
+              <Cable
+                sx={{
+                  fontSize: 16,
+                  color: connection?.id
+                    ? theme.palette.primary.main
+                    : theme.palette.text.secondary,
+                }}
+              />
+            </Box>
+          </Tooltip>
         </>
       }
       sidebarContent={
@@ -904,91 +982,45 @@ const ProjectDetails: React.FC = () => {
                           activeTabId={activeTabId}
                           onSelect={switchTab}
                           onClose={closeTab}
+                          onCloseAll={handleCloseAllTabs}
+                          onSaveAll={handleSaveAllTabs}
                           onReorder={reorderTabs}
                         />
                       </Box>
-                      <ButtonsContainer>
-                        <ProjectDbtSplitButton
-                          rosettaPath={settings?.rosettaPath}
-                          dbtPath={settings?.dbtPath}
-                          project={project}
-                          isDbtConfigured={!!settings?.dbtPath}
-                          isRunningDbt={isRunningDbt}
-                          isRunningRosettaDbt={isRunningRosettaDbt}
-                          connection={connection}
-                          environment={env}
-                          rosettaDbt={rosettaDbt}
-                        />
-                        {connection?.id ? (
-                          <>
-                            <Tooltip
-                              title="Database connection options"
-                              placement="bottom"
-                            >
-                              <IconButton onClick={handleConnectionMenuOpen}>
-                                <Cable color="primary" fontSize="small" />
-                              </IconButton>
-                            </Tooltip>
-                            <Menu
-                              anchorEl={connectionMenuAnchor}
-                              open={Boolean(connectionMenuAnchor)}
-                              onClose={handleConnectionMenuClose}
-                              anchorOrigin={{
-                                vertical: 'bottom',
-                                horizontal: 'right',
-                              }}
-                              transformOrigin={{
-                                vertical: 'top',
-                                horizontal: 'right',
-                              }}
-                            >
-                              <MenuItem
-                                onClick={() => {
-                                  navigate(
-                                    `/app/edit-connection/${connection.id}`,
-                                  );
-                                  handleConnectionMenuClose();
-                                }}
-                              >
-                                <ListItemIcon>
-                                  <Edit fontSize="small" color="primary" />
-                                </ListItemIcon>
-                                <ListItemText>Edit</ListItemText>
-                              </MenuItem>
-                              <MenuItem onClick={handleRemoveConnection}>
-                                <ListItemIcon>
-                                  <Delete fontSize="small" color="error" />
-                                </ListItemIcon>
-                                <ListItemText>Remove</ListItemText>
-                              </MenuItem>
-                            </Menu>
-                          </>
-                        ) : (
-                          <Tooltip
-                            title="Add database connection"
-                            placement="bottom"
-                          >
-                            <IconButton
-                              onClick={handleAddConnection}
-                              sx={{
-                                border: '1px solid',
-                                borderColor: 'divider',
-                                borderRadius: '16px',
-                                padding: '4px 12px',
-                                fontSize: '12px',
-                                color: 'text.secondary',
-                                '&:hover': {
-                                  bgcolor: 'action.hover',
-                                },
-                              }}
-                            >
-                              <Cable fontSize="small" sx={{ mr: 0.5 }} />
-                              No connection
-                            </IconButton>
-                          </Tooltip>
-                        )}
-                      </ButtonsContainer>
                     </Header>
+                    {connection?.id && (
+                      <Menu
+                        anchorEl={connectionMenuAnchor}
+                        open={Boolean(connectionMenuAnchor)}
+                        onClose={handleConnectionMenuClose}
+                        anchorOrigin={{
+                          vertical: 'bottom',
+                          horizontal: 'right',
+                        }}
+                        transformOrigin={{
+                          vertical: 'top',
+                          horizontal: 'right',
+                        }}
+                      >
+                        <MenuItem
+                          onClick={() => {
+                            navigate(`/app/edit-connection/${connection.id}`);
+                            handleConnectionMenuClose();
+                          }}
+                        >
+                          <ListItemIcon>
+                            <Edit fontSize="small" color="primary" />
+                          </ListItemIcon>
+                          <ListItemText>Edit</ListItemText>
+                        </MenuItem>
+                        <MenuItem onClick={handleRemoveConnection}>
+                          <ListItemIcon>
+                            <Delete fontSize="small" color="error" />
+                          </ListItemIcon>
+                          <ListItemText>Remove</ListItemText>
+                        </MenuItem>
+                      </Menu>
+                    )}
                     {!selectedFilePath && (
                       <NoFileSelected>
                         Please select a file from the explorer on the left!

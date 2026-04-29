@@ -44,13 +44,6 @@ export const EditorContainer = styled('div')(({ theme }) => ({
   flex: 1,
 }));
 
-export const ButtonsContainer = styled('div')(() => ({
-  display: 'flex',
-  alignItems: 'center',
-  gap: 8,
-  padding: '0px 0px',
-}));
-
 export const NoFileSelected = styled('div')(({ theme }) => ({
   display: 'flex',
   alignItems: 'center',

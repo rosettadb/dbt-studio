@@ -1,5 +1,14 @@
 import React from 'react';
 import Box from '@mui/material/Box';
+import IconButton from '@mui/material/IconButton';
+import Menu from '@mui/material/Menu';
+import MenuItem from '@mui/material/MenuItem';
+import ListItemIcon from '@mui/material/ListItemIcon';
+import ListItemText from '@mui/material/ListItemText';
+import Tooltip from '@mui/material/Tooltip';
+import MoreHorizIcon from '@mui/icons-material/MoreHoriz';
+import CloseIcon from '@mui/icons-material/Close';
+import SaveIcon from '@mui/icons-material/Save';
 import { EditorTabId, EditorTabState } from '../../../../types/editor';
 import {
   TabBar,
@@ -14,6 +23,8 @@ interface TabManagerProps {
   activeTabId: EditorTabId | null;
   onSelect: (tabId: EditorTabId) => void;
   onClose: (tabId: EditorTabId) => void;
+  onCloseAll?: () => void;
+  onSaveAll?: () => void;
   onReorder: (fromIndex: number, toIndex: number) => void;
 }
 
@@ -27,13 +38,21 @@ export const TabManager: React.FC<TabManagerProps> = ({
   activeTabId,
   onSelect,
   onClose,
+  onCloseAll,
+  onSaveAll,
   onReorder,
 }) => {
   const [dragState, setDragState] = React.useState<DragState>({
     tabId: null,
     overTabId: null,
   });
-  const containerRef = React.useRef<HTMLDivElement | null>(null);
+  const [menuAnchor, setMenuAnchor] = React.useState<HTMLElement | null>(null);
+  const [containerEl, setContainerEl] = React.useState<HTMLDivElement | null>(
+    null,
+  );
+  const containerRef = React.useCallback((node: HTMLDivElement | null) => {
+    setContainerEl(node);
+  }, []);
   const tabRefs = React.useRef<Map<EditorTabId, HTMLDivElement>>(new Map());
 
   const resetDragState = React.useCallback(() => {
@@ -89,8 +108,9 @@ export const TabManager: React.FC<TabManagerProps> = ({
     resetDragState();
   };
 
-  const renderTab = (tab: EditorTabState) => {
+  const renderTab = (tab: EditorTabState, index: number) => {
     const showDropIndicator = dragState.overTabId === tab.id;
+    const isLast = index === tabs.length - 1;
     return (
       <Box
         key={tab.id}
@@ -122,6 +142,7 @@ export const TabManager: React.FC<TabManagerProps> = ({
           <EditorTab
             tab={tab}
             isActive={tab.id === activeTabId}
+            isLast={isLast}
             onSelect={() => onSelect(tab.id)}
             onClose={() => onClose(tab.id)}
           />
@@ -131,10 +152,39 @@ export const TabManager: React.FC<TabManagerProps> = ({
   };
 
   React.useEffect(() => {
+    if (!containerEl) {
+      return undefined;
+    }
+
+    const handleWheel = (event: WheelEvent) => {
+      if (event.ctrlKey || event.metaKey || event.shiftKey) {
+        return;
+      }
+      if (containerEl.scrollWidth <= containerEl.clientWidth) {
+        return;
+      }
+      const delta =
+        Math.abs(event.deltaX) > Math.abs(event.deltaY)
+          ? event.deltaX
+          : event.deltaY;
+      if (delta === 0) {
+        return;
+      }
+      event.preventDefault();
+      containerEl.scrollLeft += delta * 0.5;
+    };
+
+    containerEl.addEventListener('wheel', handleWheel, { passive: false });
+    return () => {
+      containerEl.removeEventListener('wheel', handleWheel);
+    };
+  }, [containerEl]);
+
+  React.useEffect(() => {
     if (!activeTabId) {
       return;
     }
-    const container = containerRef.current;
+    const container = containerEl;
     const activeTabNode = tabRefs.current.get(activeTabId);
     if (!container || !activeTabNode) {
       return;
@@ -160,17 +210,75 @@ export const TabManager: React.FC<TabManagerProps> = ({
         behavior: 'smooth',
       });
     }
-  }, [activeTabId, tabs]);
+  }, [activeTabId, tabs, containerEl]);
+
+  const handleMenuOpen = (event: React.MouseEvent<HTMLElement>) => {
+    setMenuAnchor(event.currentTarget);
+  };
+  const handleMenuClose = () => setMenuAnchor(null);
+  const handleCloseAll = () => {
+    handleMenuClose();
+    if (onCloseAll) {
+      onCloseAll();
+      return;
+    }
+    tabs.forEach((tab) => onClose(tab.id));
+  };
+  const hasUnsaved = tabs.some((tab) => tab.isModified);
+  const handleSaveAll = () => {
+    handleMenuClose();
+    onSaveAll?.();
+  };
 
   return (
     <TabBar>
       {tabs.length === 0 ? (
         <EmptyTabsPlaceholder>No open files</EmptyTabsPlaceholder>
       ) : (
-        <TabsContainer ref={containerRef}>
-          {tabs.map(renderTab)}
-          {dragState.overTabId === null && dragState.tabId && <DropIndicator />}
-        </TabsContainer>
+        <>
+          <TabsContainer ref={containerRef}>
+            {tabs.map(renderTab)}
+            {dragState.overTabId === null && dragState.tabId && (
+              <DropIndicator />
+            )}
+          </TabsContainer>
+          <Tooltip title="More" placement="bottom" arrow>
+            <IconButton
+              size="small"
+              onClick={handleMenuOpen}
+              sx={{
+                ml: 0.5,
+                width: 24,
+                height: 24,
+                flexShrink: 0,
+                color: 'text.secondary',
+                '&:hover': { color: 'text.primary' },
+              }}
+            >
+              <MoreHorizIcon fontSize="small" />
+            </IconButton>
+          </Tooltip>
+          <Menu
+            anchorEl={menuAnchor}
+            open={Boolean(menuAnchor)}
+            onClose={handleMenuClose}
+            anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
+            transformOrigin={{ vertical: 'top', horizontal: 'right' }}
+          >
+            <MenuItem onClick={handleSaveAll} disabled={!hasUnsaved}>
+              <ListItemIcon>
+                <SaveIcon fontSize="small" />
+              </ListItemIcon>
+              <ListItemText>Save all</ListItemText>
+            </MenuItem>
+            <MenuItem onClick={handleCloseAll}>
+              <ListItemIcon>
+                <CloseIcon fontSize="small" />
+              </ListItemIcon>
+              <ListItemText>Close all tabs</ListItemText>
+            </MenuItem>
+          </Menu>
+        </>
       )}
     </TabBar>
   );
