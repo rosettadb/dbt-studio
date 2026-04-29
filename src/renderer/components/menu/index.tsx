@@ -12,7 +12,6 @@ import {
   Cloud,
   Computer,
   FormatListNumbered,
-  Menu as MenuIcon,
   OpenInNew,
 } from '@mui/icons-material';
 import { toast } from 'react-toastify';
@@ -48,6 +47,7 @@ import { SimpleDropdownMenu } from '../simpleDropdown';
 import { Icon } from '../icon';
 import { LetterAvatar } from '../letterAvatar';
 import { useAppContext } from '../../hooks';
+import { ExpandRightIcon } from '../sidebar/collapse-icons';
 
 export const Menu: React.FC = () => {
   const navigate = useNavigate();
@@ -103,7 +103,7 @@ export const Menu: React.FC = () => {
                 '&:hover': { opacity: 1 },
               }}
             >
-              <MenuIcon sx={{ fontSize: 18 }} />
+              <ExpandRightIcon />
             </IconButton>
           </Tooltip>
         )}

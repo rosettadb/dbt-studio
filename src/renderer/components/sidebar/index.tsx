@@ -10,7 +10,7 @@ import {
 } from '@mui/material';
 import { useTheme } from '@mui/material/styles';
 import { useLocation } from 'react-router-dom';
-import { CollapseLeftIcon, ExpandRightIcon } from './collapse-icons';
+import { CollapseLeftIcon } from './collapse-icons';
 import { getMainElements, getBottomElements } from './elements';
 import {
   ACTIVITY_BAR_COLLAPSED_WIDTH,
@@ -197,7 +197,6 @@ export const Sidebar: React.FC<Props> = ({
                 alt="Icon"
                 style={{ width: 20, height: 20 }}
               />
-              <ExpandRightIcon />
             </Box>
           )}
         </ActivityBarHeader>
