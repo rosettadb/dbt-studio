@@ -27,6 +27,7 @@ import {
   ModelSplitButton,
   NoAiSetModal,
   ProjectDbtSplitButton,
+  RemoveConnectionModal,
   SplitButton,
   TerminalLayout,
   AiPromptModal,
@@ -163,6 +164,8 @@ const ProjectDetails: React.FC = () => {
     React.useState(false);
   const [connectionMenuAnchor, setConnectionMenuAnchor] =
     React.useState<HTMLElement | null>(null);
+  const [isRemoveConnectionConfirmOpen, setIsRemoveConnectionConfirmOpen] =
+    React.useState(false);
   const [aiTransformationResponse, setAitTransformationResponse] =
     React.useState<string>();
   const [isSynchronizing, setIsSynchronizing] = React.useState(false);
@@ -210,7 +213,12 @@ const ProjectDetails: React.FC = () => {
     setIsAddConnectionModalOpen(false);
   };
 
-  const handleRemoveConnection = () => {
+  const handleRemoveConnectionClick = () => {
+    setConnectionMenuAnchor(null);
+    setIsRemoveConnectionConfirmOpen(true);
+  };
+
+  const handleConfirmRemoveConnection = () => {
     if (project) {
       updateProject({
         ...project,
@@ -219,7 +227,7 @@ const ProjectDetails: React.FC = () => {
       setSelectedFilePath(undefined);
       toast.success('Connection removed from project successfully!');
     }
-    setConnectionMenuAnchor(null);
+    setIsRemoveConnectionConfirmOpen(false);
   };
 
   const handleConnectionMenuOpen = (event: React.MouseEvent<HTMLElement>) => {
@@ -1013,7 +1021,7 @@ const ProjectDetails: React.FC = () => {
                           </ListItemIcon>
                           <ListItemText>Edit</ListItemText>
                         </MenuItem>
-                        <MenuItem onClick={handleRemoveConnection}>
+                        <MenuItem onClick={handleRemoveConnectionClick}>
                           <ListItemIcon>
                             <Delete fontSize="small" color="error" />
                           </ListItemIcon>
@@ -1132,6 +1140,12 @@ const ProjectDetails: React.FC = () => {
                   refetch();
                 }}
                 onUpdateProject={updateProject}
+              />
+              <RemoveConnectionModal
+                isOpen={isRemoveConnectionConfirmOpen}
+                onClose={() => setIsRemoveConnectionConfirmOpen(false)}
+                onConfirm={handleConfirmRemoveConnection}
+                connectionName={connection?.connection?.name}
               />
             </Container>
           </Box>
