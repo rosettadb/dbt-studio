@@ -225,9 +225,13 @@ export const TabManager: React.FC<TabManagerProps> = ({
     tabs.forEach((tab) => onClose(tab.id));
   };
   const hasUnsaved = tabs.some((tab) => tab.isModified);
+  const canSaveAll = hasUnsaved && typeof onSaveAll === 'function';
   const handleSaveAll = () => {
     handleMenuClose();
-    onSaveAll?.();
+    if (!onSaveAll) {
+      return;
+    }
+    onSaveAll();
   };
 
   return (
@@ -265,7 +269,7 @@ export const TabManager: React.FC<TabManagerProps> = ({
             anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
             transformOrigin={{ vertical: 'top', horizontal: 'right' }}
           >
-            <MenuItem onClick={handleSaveAll} disabled={!hasUnsaved}>
+            <MenuItem onClick={handleSaveAll} disabled={!canSaveAll}>
               <ListItemIcon>
                 <SaveIcon fontSize="small" />
               </ListItemIcon>

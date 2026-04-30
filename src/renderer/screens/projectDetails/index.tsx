@@ -308,7 +308,16 @@ const ProjectDetails: React.FC = () => {
   }, [tabs, markTabSavedByPath, setTabErrorByPath, updateStatuses]);
 
   const handleCloseAllTabs = React.useCallback(() => {
-    tabs.forEach((tab) => closeTab(tab.id));
+    const unmodifiedTabs = tabs.filter((tab) => !tab.isModified);
+    const modifiedCount = tabs.length - unmodifiedTabs.length;
+
+    unmodifiedTabs.forEach((tab) => closeTab(tab.id));
+
+    if (modifiedCount > 0) {
+      toast.info(
+        `${modifiedCount} modified tab${modifiedCount > 1 ? 's are' : ' is'} still open. Save or discard changes before closing.`,
+      );
+    }
   }, [tabs, closeTab]);
 
   React.useEffect(() => {
@@ -1120,7 +1129,9 @@ const ProjectDetails: React.FC = () => {
                 isOpen={isRemoveConnectionConfirmOpen}
                 onClose={() => setIsRemoveConnectionConfirmOpen(false)}
                 onConfirm={handleConfirmRemoveConnection}
-                connectionName={connection?.connection?.name}
+                connectionName={
+                  connection?.connection?.name || (connection as any)?.name
+                }
               />
             </Container>
           </Box>

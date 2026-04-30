@@ -16,6 +16,7 @@ import {
   Storage as DatabaseIcon,
   SwapHoriz,
 } from '@mui/icons-material';
+import { useTheme } from '@mui/material/styles';
 import { FileTreeViewer } from '../index';
 import { FileTreeContainer } from '../../screens/projectDetails/styles';
 import {
@@ -30,7 +31,11 @@ import connectionIcons from '../../../../assets/connectionIcons';
 export type SidebarTab = 'explorer' | 'scm' | 'connections';
 
 // Helper function to get connection type name
-const getConnectionTypeName = (connectionType: string) => {
+const getConnectionTypeName = (connectionType?: string) => {
+  if (!connectionType) {
+    return 'UNKNOWN';
+  }
+
   switch (connectionType) {
     case 'postgres':
       return 'PostgreSQL';
@@ -45,7 +50,7 @@ const getConnectionTypeName = (connectionType: string) => {
     case 'duckdb':
       return 'DuckDB';
     default:
-      return connectionType.toUpperCase();
+      return String(connectionType).toUpperCase();
   }
 };
 
@@ -83,6 +88,8 @@ const ConnectionsTab: React.FC<ConnectionsTabProps> = ({
   onEditConnection,
   onRemoveConnection,
 }) => {
+  const theme = useTheme();
+
   if (!connection) {
     return (
       <Box
@@ -122,6 +129,8 @@ const ConnectionsTab: React.FC<ConnectionsTabProps> = ({
   const connType = connection.connection?.type || connection.type;
   const connName = connection.connection?.name || connection.name;
   const iconSrc = connectionIcons.images[connType as SupportedConnectionTypes];
+  const chipBgColor = getConnectionTypeColor(connType);
+  const chipTextColor = theme.palette.getContrastText(chipBgColor);
 
   return (
     <Box
@@ -181,8 +190,8 @@ const ConnectionsTab: React.FC<ConnectionsTabProps> = ({
                 label={getConnectionTypeName(connType)}
                 size="small"
                 sx={{
-                  bgcolor: getConnectionTypeColor(connType),
-                  color: 'white',
+                  bgcolor: chipBgColor,
+                  color: chipTextColor,
                   fontWeight: 'bold',
                   fontSize: '0.6rem',
                   height: '18px',
