@@ -35,24 +35,41 @@ export const TabBar = styled(Box)(({ theme }) => ({
   minWidth: 0,
 }));
 
-export const TabsContainer = styled(Box)(() => ({
+export const TabsContainer = styled(Box)(({ theme }) => ({
   display: 'flex',
   alignItems: 'center',
   gap: 0,
   flex: 1,
   minWidth: 0,
+  overflow: 'auto',
   overflowX: 'auto',
   overflowY: 'hidden',
+  scrollbarWidth: 'thin',
+  scrollbarColor:
+    theme.palette.mode === 'dark'
+      ? 'rgba(255, 255, 255, 0.28) transparent'
+      : 'rgba(0, 0, 0, 0.28) transparent',
   '&&::-webkit-scrollbar': {
-    display: 'none !important',
-    width: '0 !important',
-    height: '0 !important',
+    WebkitAppearance: 'none !important',
+    height: '2px !important',
+    width: '2px !important',
   },
   '&&::-webkit-scrollbar-track': {
-    display: 'none !important',
+    background: 'transparent !important',
   },
   '&&::-webkit-scrollbar-thumb': {
-    display: 'none !important',
+    WebkitAppearance: 'none !important',
+    background:
+      theme.palette.mode === 'dark'
+        ? 'rgba(255, 255, 255, 0.28) !important'
+        : 'rgba(0, 0, 0, 0.28) !important',
+    borderRadius: '4px !important',
+    '&:hover': {
+      background:
+        theme.palette.mode === 'dark'
+          ? 'rgba(255, 255, 255, 0.4) !important'
+          : 'rgba(0, 0, 0, 0.4) !important',
+    },
   },
 }));
 
