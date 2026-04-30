@@ -1033,9 +1033,7 @@ const ProjectDetails: React.FC = () => {
                         tabs={tabs}
                         activeTabId={activeTabId}
                         onTabContentChange={(tabId, newContent) => {
-                          updateTabContent(tabId, newContent, {
-                            markModified: true,
-                          });
+                          updateTabContent(tabId, newContent);
                         }}
                         onTabSaved={(tabId) => {
                           markTabSaved(tabId);

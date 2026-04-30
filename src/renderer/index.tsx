@@ -1,3 +1,8 @@
+// Bootstrap Monaco synchronously on first import: registers our custom
+// language, completion providers, and shares the bundled monaco instance
+// with @monaco-editor/react. Side-effect-only import.
+import './lib/monaco/bootstrap';
+
 import { createRoot } from 'react-dom/client';
 import App from './App';
 import 'file-icons-js/css/style.css';
