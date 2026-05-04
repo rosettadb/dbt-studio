@@ -123,7 +123,9 @@ export const ChatInputBox: React.FC<ChatInputBoxProps> = ({
   }, []);
 
   const selectedModelLabel =
-    getProviderModel(selectedProvider) || selectedProvider?.name || 'No AI Provider';
+    getProviderModel(selectedProvider) ||
+    selectedProvider?.name ||
+    'No AI Provider';
 
   const selectedIcon = React.useMemo(() => {
     if (!selectedProvider) return defaultIcon;
