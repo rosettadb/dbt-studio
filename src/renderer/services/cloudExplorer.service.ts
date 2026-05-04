@@ -100,40 +100,22 @@ class CloudExplorerService {
     return data;
   }
 
-  static async previewData(
-    provider: CloudProvider,
-    config: CloudStorageConfig,
-    bucketName: string,
-    objectName: string,
-    previewType: 'sample' | 'schema' | 'stats' = 'sample',
-    limit: number = 100,
-  ): Promise<PreviewResult> {
-    try {
-      const { data } = await client.post<
-        {
-          provider: CloudProvider;
-          config: CloudStorageConfig;
-          bucketName: string;
-          objectName: string;
-          previewType?: 'sample' | 'schema' | 'stats';
-          limit?: number;
-        },
-        PreviewResult
-      >('cloudExplorer:previewData', {
-        provider,
-        config,
-        bucketName,
-        objectName,
-        previewType,
-        limit,
-      });
-
-      return data;
-    } catch (error) {
-      // eslint-disable-next-line no-console
-      console.error('previewData error:', error);
-      throw error;
-    }
+  static async previewData(params: {
+    provider: CloudProvider;
+    config: CloudStorageConfig;
+    bucketName: string;
+    objectName: string;
+    previewType?: 'sample' | 'schema' | 'stats';
+    pageSize?: number;
+    page?: number;
+    whereClause?: string;
+    knownTotalRows?: number;
+  }): Promise<PreviewResult> {
+    const { data } = await client.post<typeof params, PreviewResult>(
+      'cloudExplorer:previewData',
+      params,
+    );
+    return data;
   }
 
   static async uploadFile(

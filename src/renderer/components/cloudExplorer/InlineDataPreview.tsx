@@ -1,411 +1,325 @@
-import React, { useState } from 'react';
-import {
-  Box,
-  Typography,
-  Table,
-  TableBody,
-  TableCell,
-  TableContainer,
-  TableHead,
-  TableRow,
-  Paper,
-  Chip,
-  Alert,
-  CircularProgress,
-  Tabs,
-  Tab,
-  TextField,
-  InputAdornment,
-  TablePagination,
-  Button,
-} from '@mui/material';
-import {
-  Search,
-  TableView,
-  Schema,
-  Analytics,
-  ArrowBack,
-  Fullscreen,
-} from '@mui/icons-material';
-import type { PreviewResult } from '../../../types/frontend';
+/**
+ * InlineDataPreview — inline panel that owns all preview state.
+ *
+ * Pagination follows the same server-side LIMIT/OFFSET pattern as the SQL
+ * Editor (queryResult.tsx) and Notebooks (OutputPanel.tsx): only the current
+ * page is held in memory, so 200M-row files never crash the app.
+ *
+ * The "Fullscreen" button opens DataPreviewModal, which is a thin Dialog
+ * wrapper around the same PreviewContent — no state duplication.
+ */
+
+import React, { useState, useCallback, useRef, useEffect } from 'react';
+import { Box, Typography, Chip, Button } from '@mui/material';
+import { TableView, ArrowBack, Fullscreen } from '@mui/icons-material';
+import type {
+  PreviewResult,
+  FilterCondition,
+  ColumnStat,
+  CloudProvider,
+  CloudStorageConfig,
+} from '../../../types/frontend';
+import { PreviewContent } from './PreviewContent';
 import { DataPreviewModal } from './DataPreviewModal';
-import { formatFileSize } from '../../utils/fileUtils';
+import { usePreviewData } from '../../controllers/cloudExplorer.controller';
 
 interface InlineDataPreviewProps {
   fileName: string;
+  /** Initial result from the first page load triggered by ExplorerBucketContent */
   previewResult: PreviewResult | null;
   loading: boolean;
   error?: string;
   onBack: () => void;
-  fileSize?: number; // Size in bytes
+  fileSize?: number;
+  // Cloud context needed for subsequent page fetches
+  provider?: CloudProvider;
+  config?: CloudStorageConfig | null;
+  bucketName?: string;
+  objectName?: string;
 }
-
-/**
- * Sanitize text to remove problematic Unicode characters that might cause display issues
- */
-const sanitizeText = (text: string): string => {
-  if (typeof text !== 'string') return String(text);
-
-  // Remove Unicode combining characters and other problematic characters
-  return text
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '') // Remove combining diacritical marks
-    .replace(/[\u200b-\u200f\u2060-\u206f]/g, '') // Remove zero-width characters
-    .replace(/[\u2000-\u200a]/g, ' ') // Replace various spaces with regular space
-    .replace(/[^\u0020-\u007e]/g, (char) => {
-      // Keep common printable Unicode characters, replace others with �
-      const code = char.charCodeAt(0);
-      if (code >= 0x80 && code <= 0x024f) return char; // Extended Latin
-      if (code >= 0x1e00 && code <= 0x1eff) return char; // Latin Extended Additional
-      return '�';
-    })
-    .trim();
-};
 
 export const InlineDataPreview: React.FC<InlineDataPreviewProps> = ({
   fileName,
-  previewResult,
-  loading,
-  error,
+  previewResult: initialPreviewResult,
+  loading: initialLoading,
+  error: initialError,
   onBack,
   fileSize,
+  provider,
+  config,
+  bucketName,
+  objectName,
 }) => {
-  const [currentTab, setCurrentTab] = useState(0);
-  const [searchTerm, setSearchTerm] = useState('');
-  const [page, setPage] = useState(0);
-  const [rowsPerPage, setRowsPerPage] = useState(25);
+  // ── Fullscreen toggle ──────────────────────────────────────────────────────
   const [fullscreenOpen, setFullscreenOpen] = useState(false);
 
-  const handleTabChange = (_event: React.SyntheticEvent, newValue: number) => {
-    setCurrentTab(newValue);
-  };
+  // ── Server-side pagination state ───────────────────────────────────────────
+  const [serverPage, setServerPage] = useState(0);
+  const [serverPageSize, setServerPageSize] = useState(25);
+  const [activeFilter, setActiveFilter] = useState<FilterCondition[]>([]);
+  const [currentPageData, setCurrentPageData] = useState<PreviewResult | null>(
+    null,
+  );
+  const [pageLoading, setPageLoading] = useState(false);
+  const [pageError, setPageError] = useState<string | undefined>(undefined);
+  const [knownTotalRows, setKnownTotalRows] = useState<number | null>(null);
 
-  const handleSearchChange = (event: React.ChangeEvent<HTMLInputElement>) => {
-    setSearchTerm(event.target.value);
-    setPage(0); // Reset pagination when searching
-  };
+  // ── Column stats state (lazy-loaded on first Statistics tab activation) ────
+  const [statsData, setStatsData] = useState<ColumnStat[] | null>(null);
+  const [statsLoading, setStatsLoading] = useState(false);
+  const [statsError, setStatsError] = useState<string | undefined>(undefined);
+  const statsLoadedRef = useRef(false);
 
-  const handleChangePage = (_event: unknown, newPage: number) => {
-    setPage(newPage);
-  };
+  const previewDataMutation = usePreviewData();
 
-  const handleChangeRowsPerPage = (
-    event: React.ChangeEvent<HTMLInputElement>,
-  ) => {
-    setRowsPerPage(parseInt(event.target.value, 10));
-    setPage(0);
-  };
+  // The displayed result is the latest fetched page, falling back to the
+  // initial result from ExplorerBucketContent on first load.
+  const displayResult = currentPageData ?? initialPreviewResult;
+  const isLoading = pageLoading || initialLoading;
+  const displayError = pageError ?? initialError;
 
-  // Filter data based on search term
-  const filteredData = React.useMemo(() => {
-    if (!previewResult?.data || !searchTerm) return previewResult?.data || [];
+  const hasServerContext = !!(provider && config && bucketName && objectName);
 
-    return previewResult.data.filter((row) => {
-      // Handle both array and object data formats
-      let values: any[];
-      if (Array.isArray(row)) {
-        values = row;
-      } else {
-        values = Object.values(row);
+  useEffect(() => {
+    setKnownTotalRows(initialPreviewResult?.totalRows ?? null);
+  }, [initialPreviewResult?.totalRows, objectName]);
+
+  // ── WHERE clause builder ───────────────────────────────────────────────────
+  const buildWhereClause = useCallback(
+    (conditions: FilterCondition[]): string => {
+      const valid = conditions.filter((c) => c.column && c.value !== '');
+      if (valid.length === 0) return '';
+      return valid
+        .map((c) => {
+          const escapedValue = c.value.replace(/'/g, "''");
+          const escapedCol = `"${c.column.replace(/"/g, '""')}"`;
+          return c.operator === 'LIKE'
+            ? `${escapedCol} LIKE '${escapedValue}'`
+            : `${escapedCol} ${c.operator} '${escapedValue}'`;
+        })
+        .join(' AND ');
+    },
+    [],
+  );
+
+  // ── Page navigation — same pattern as SQL Editor fetchPage / Notebooks fetchCellPage
+  const handlePageChange = useCallback(
+    async (newPage: number, newPageSize?: number) => {
+      if (!hasServerContext) return;
+      const effectivePageSize = newPageSize ?? serverPageSize;
+      setPageLoading(true);
+      setPageError(undefined);
+      const knownRowsForRequest =
+        newPage > 0 ? (knownTotalRows ?? displayResult?.totalRows) : undefined;
+      try {
+        const result = await previewDataMutation.mutateAsync({
+          provider: provider!,
+          config: config!,
+          bucketName: bucketName!,
+          objectName: objectName!,
+          previewType: 'sample',
+          page: newPage,
+          pageSize: effectivePageSize,
+          whereClause: buildWhereClause(activeFilter),
+          knownTotalRows: knownRowsForRequest,
+        });
+        setCurrentPageData(result);
+        if (result.totalRows !== undefined) {
+          setKnownTotalRows(result.totalRows);
+        }
+        setServerPage(newPage);
+        if (newPageSize !== undefined) setServerPageSize(newPageSize);
+      } catch (err) {
+        setPageError(err instanceof Error ? err.message : String(err));
+      } finally {
+        setPageLoading(false);
       }
+    },
+    [
+      hasServerContext,
+      serverPageSize,
+      knownTotalRows,
+      displayResult?.totalRows,
+      activeFilter,
+      buildWhereClause,
+      previewDataMutation,
+      provider,
+      config,
+      bucketName,
+      objectName,
+    ],
+  );
 
-      return values.some((value) =>
-        String(value).toLowerCase().includes(searchTerm.toLowerCase()),
-      );
-    });
-  }, [previewResult?.data, searchTerm]);
-
-  // Paginate filtered data
-  const paginatedData = React.useMemo(() => {
-    const startIndex = page * rowsPerPage;
-    return filteredData.slice(startIndex, startIndex + rowsPerPage);
-  }, [filteredData, page, rowsPerPage]);
-
-  const renderDataTable = () => {
-    if (!previewResult?.data || previewResult.data.length === 0) {
-      return (
-        <Box sx={{ textAlign: 'center', p: 4 }}>
-          <Typography color="text.secondary">No data to display</Typography>
-        </Box>
-      );
+  // ── Refresh — re-fetches page 0 with current filter ───────────────────────
+  const handleRefresh = useCallback(async () => {
+    if (!hasServerContext) return;
+    setPageLoading(true);
+    setPageError(undefined);
+    try {
+      const result = await previewDataMutation.mutateAsync({
+        provider: provider!,
+        config: config!,
+        bucketName: bucketName!,
+        objectName: objectName!,
+        previewType: 'sample',
+        pageSize: serverPageSize,
+        page: 0,
+        whereClause: buildWhereClause(activeFilter),
+      });
+      setCurrentPageData(result);
+      setKnownTotalRows(result.totalRows ?? null);
+      setServerPage(0);
+    } catch (err) {
+      setPageError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setPageLoading(false);
     }
+  }, [
+    hasServerContext,
+    activeFilter,
+    buildWhereClause,
+    previewDataMutation,
+    provider,
+    config,
+    bucketName,
+    objectName,
+    serverPageSize,
+  ]);
 
-    return (
-      <Box sx={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
-        <Box sx={{ mb: 2, display: 'flex', gap: 2, alignItems: 'center' }}>
-          <TextField
-            size="small"
-            placeholder="Search in data..."
-            value={searchTerm}
-            onChange={handleSearchChange}
-            InputProps={{
-              startAdornment: (
-                <InputAdornment position="start">
-                  <Search />
-                </InputAdornment>
-              ),
-            }}
-            sx={{ minWidth: 300 }}
-          />
-          <Typography variant="body2" color="text.secondary">
-            {filteredData.length} rows
-            {searchTerm && ` (filtered from ${previewResult.data.length})`}
-          </Typography>
-        </Box>
+  // ── Filter apply ───────────────────────────────────────────────────────────
+  const handleApplyFilter = useCallback(
+    async (conditions: FilterCondition[]) => {
+      setActiveFilter(conditions);
+      if (!hasServerContext) return;
+      setPageLoading(true);
+      setPageError(undefined);
+      try {
+        const result = await previewDataMutation.mutateAsync({
+          provider: provider!,
+          config: config!,
+          bucketName: bucketName!,
+          objectName: objectName!,
+          previewType: 'sample',
+          pageSize: serverPageSize,
+          page: 0,
+          whereClause: buildWhereClause(conditions),
+        });
+        setCurrentPageData(result);
+        setKnownTotalRows(result.totalRows ?? null);
+        setServerPage(0);
+      } catch (err) {
+        setPageError(err instanceof Error ? err.message : String(err));
+      } finally {
+        setPageLoading(false);
+      }
+    },
+    [
+      hasServerContext,
+      buildWhereClause,
+      previewDataMutation,
+      provider,
+      config,
+      bucketName,
+      objectName,
+      serverPageSize,
+    ],
+  );
 
-        <Box sx={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
-          <TableContainer
-            component={Paper}
-            sx={{
-              flex: 1,
-              minHeight: 300,
-              overflow: 'auto',
-              maxHeight: 'calc(100vh - 430px)',
-              maxWidth: 'calc(100vw - 430px)',
-            }}
-          >
-            <Table
-              stickyHeader
-              size="small"
-              sx={{
-                minWidth: 'max-content',
-              }}
-            >
-              <TableHead>
-                <TableRow>
-                  {previewResult.columns?.map((column) => (
-                    <TableCell
-                      key={column.name}
-                      sx={{
-                        fontWeight: 'bold',
-                        minWidth: 150,
-                        whiteSpace: 'nowrap',
-                        py: 1,
-                      }}
-                    >
-                      <Box>
-                        <Typography variant="body2">{column.name}</Typography>
-                        <Typography variant="caption" color="text.secondary">
-                          {column.type}
-                        </Typography>
-                      </Box>
-                    </TableCell>
-                  ))}
-                </TableRow>
-              </TableHead>
-              <TableBody>
-                {paginatedData.map((row, index) => (
-                  <TableRow
-                    key={index}
-                    hover
-                    sx={{
-                      '& .MuiTableCell-root': {
-                        py: 0.5,
-                      },
-                    }}
-                  >
-                    {previewResult.columns?.map((column, colIndex) => {
-                      // Handle both array and object data formats
-                      let cellValue: any;
-                      if (Array.isArray(row)) {
-                        // Array format - use column index
-                        cellValue = row[colIndex];
-                      } else {
-                        // Object format - use column name
-                        cellValue = row[column.name];
-                      }
+  // ── Filter clear ───────────────────────────────────────────────────────────
+  const handleClearFilter = useCallback(async () => {
+    setActiveFilter([]);
+    if (!hasServerContext) return;
+    setPageLoading(true);
+    setPageError(undefined);
+    try {
+      const result = await previewDataMutation.mutateAsync({
+        provider: provider!,
+        config: config!,
+        bucketName: bucketName!,
+        objectName: objectName!,
+        previewType: 'sample',
+        pageSize: serverPageSize,
+        page: 0,
+        whereClause: '',
+      });
+      setCurrentPageData(result);
+      setKnownTotalRows(result.totalRows ?? null);
+      setServerPage(0);
+    } catch (err) {
+      setPageError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setPageLoading(false);
+    }
+  }, [
+    hasServerContext,
+    previewDataMutation,
+    provider,
+    config,
+    bucketName,
+    objectName,
+    serverPageSize,
+  ]);
 
-                      return (
-                        <TableCell
-                          key={column.name}
-                          sx={{
-                            minWidth: 150,
-                            py: 0.5,
-                          }}
-                        >
-                          <Typography
-                            variant="body2"
-                            sx={{
-                              maxWidth: 200,
-                              overflow: 'hidden',
-                              textOverflow: 'ellipsis',
-                              whiteSpace: 'nowrap',
-                              fontFamily: 'monospace',
-                            }}
-                            title={
-                              cellValue !== null && cellValue !== undefined
-                                ? sanitizeText(String(cellValue))
-                                : '—'
-                            }
-                          >
-                            {cellValue !== null && cellValue !== undefined
-                              ? sanitizeText(String(cellValue))
-                              : '—'}
-                          </Typography>
-                        </TableCell>
-                      );
-                    })}
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </TableContainer>
+  // ── Statistics lazy load — triggered once when the Statistics tab is opened
+  const handleStatsTabActivated = useCallback(() => {
+    if (statsLoadedRef.current || !hasServerContext) return;
+    statsLoadedRef.current = true;
+    setStatsLoading(true);
+    setStatsError(undefined);
+    (async () => {
+      try {
+        const result = await previewDataMutation.mutateAsync({
+          provider: provider!,
+          config: config!,
+          bucketName: bucketName!,
+          objectName: objectName!,
+          previewType: 'stats',
+        });
+        if (result.success) {
+          setStatsData(result.data as unknown as ColumnStat[]);
+        } else {
+          setStatsError(result.error || 'Failed to load statistics');
+        }
+      } catch (err) {
+        setStatsError(err instanceof Error ? err.message : String(err));
+      } finally {
+        setStatsLoading(false);
+      }
+    })();
+  }, [
+    hasServerContext,
+    previewDataMutation,
+    provider,
+    config,
+    bucketName,
+    objectName,
+  ]);
 
-          <Box sx={{ flexShrink: 0, borderTop: 1, borderColor: 'divider' }}>
-            <TablePagination
-              component="div"
-              count={filteredData.length}
-              page={page}
-              onPageChange={handleChangePage}
-              rowsPerPage={rowsPerPage}
-              onRowsPerPageChange={handleChangeRowsPerPage}
-              rowsPerPageOptions={[10, 25, 50, 100]}
-            />
-          </Box>
-        </Box>
-      </Box>
-    );
+  // ── Shared props passed to both PreviewContent and DataPreviewModal ────────
+  const sharedContentProps = {
+    previewResult: displayResult,
+    loading: isLoading,
+    error: displayError,
+    fileSize,
+    serverPage,
+    serverPageSize,
+    activeFilter,
+    statsData,
+    statsLoading,
+    statsError,
+    provider,
+    config,
+    bucketName,
+    objectName,
+    hasServerContext,
+    onPageChange: handlePageChange,
+    onApplyFilter: handleApplyFilter,
+    onClearFilter: handleClearFilter,
+    onRefresh: handleRefresh,
+    onStatsTabActivated: handleStatsTabActivated,
   };
 
-  const renderSchemaTab = () => {
-    if (!previewResult?.columns || previewResult.columns.length === 0) {
-      return (
-        <Box sx={{ textAlign: 'center', p: 4 }}>
-          <Typography color="text.secondary">
-            No schema information available
-          </Typography>
-        </Box>
-      );
-    }
-
-    return (
-      <TableContainer component={Paper}>
-        <Table size="small">
-          <TableHead>
-            <TableRow>
-              <TableCell sx={{ fontWeight: 'bold' }}>Column Name</TableCell>
-              <TableCell sx={{ fontWeight: 'bold' }}>Data Type</TableCell>
-            </TableRow>
-          </TableHead>
-          <TableBody>
-            {previewResult.columns.map((column) => (
-              <TableRow key={column.name}>
-                <TableCell>
-                  <Typography variant="body2" sx={{ fontFamily: 'monospace' }}>
-                    {column.name}
-                  </Typography>
-                </TableCell>
-                <TableCell>
-                  <Typography variant="body2" color="text.secondary">
-                    {column.type}
-                  </Typography>
-                </TableCell>
-              </TableRow>
-            ))}
-          </TableBody>
-        </Table>
-      </TableContainer>
-    );
-  };
-
-  const renderStatsTab = () => {
-    return (
-      <Box sx={{ p: 2 }}>
-        <Typography variant="h6" gutterBottom>
-          Dataset Statistics
-        </Typography>
-        <Box
-          sx={{
-            display: 'grid',
-            gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
-            gap: 2,
-          }}
-        >
-          <Paper sx={{ p: 2 }}>
-            <Typography variant="body2" color="text.secondary">
-              Total Rows
-            </Typography>
-            <Typography variant="h4">
-              {previewResult?.data?.length || 0}
-            </Typography>
-          </Paper>
-          <Paper sx={{ p: 2 }}>
-            <Typography variant="body2" color="text.secondary">
-              Total Columns
-            </Typography>
-            <Typography variant="h4">
-              {previewResult?.columns?.length || 0}
-            </Typography>
-          </Paper>
-          <Paper sx={{ p: 2 }}>
-            <Typography variant="body2" color="text.secondary">
-              File Size
-            </Typography>
-            <Typography variant="h4">{formatFileSize(fileSize)}</Typography>
-          </Paper>
-        </Box>
-      </Box>
-    );
-  };
-
-  const renderContent = () => {
-    if (loading) {
-      return (
-        <Box
-          sx={{
-            display: 'flex',
-            justifyContent: 'center',
-            p: 4,
-            alignItems: 'center',
-          }}
-        >
-          <CircularProgress />
-          <Typography sx={{ ml: 2 }}>Loading data preview...</Typography>
-        </Box>
-      );
-    }
-
-    if (error) {
-      return (
-        <Alert severity="error" sx={{ m: 2 }}>
-          <Typography variant="body2">
-            Failed to load data preview: {error}
-          </Typography>
-        </Alert>
-      );
-    }
-
-    if (!previewResult) {
-      return (
-        <Box sx={{ textAlign: 'center', p: 4 }}>
-          <Typography color="text.secondary">
-            No preview data available
-          </Typography>
-        </Box>
-      );
-    }
-
-    return (
-      <Box sx={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
-        <Tabs
-          value={currentTab}
-          onChange={handleTabChange}
-          sx={{ borderBottom: 1, borderColor: 'divider', flexShrink: 0 }}
-        >
-          <Tab icon={<TableView />} label="Data" />
-          <Tab icon={<Schema />} label="Schema" />
-          <Tab icon={<Analytics />} label="Statistics" />
-        </Tabs>
-
-        <Box sx={{ pt: 2, flex: 1, display: 'flex', flexDirection: 'column' }}>
-          {currentTab === 0 && renderDataTable()}
-          {currentTab === 1 && renderSchemaTab()}
-          {currentTab === 2 && renderStatsTab()}
-        </Box>
-      </Box>
-    );
-  };
-
+  // ── Render ─────────────────────────────────────────────────────────────────
   return (
     <Box
       sx={{
@@ -423,10 +337,8 @@ export const InlineDataPreview: React.FC<InlineDataPreviewProps> = ({
           display: 'flex',
           justifyContent: 'space-between',
           alignItems: 'center',
-          mb: 1,
           borderBottom: 1,
           borderColor: 'divider',
-          pb: 2,
           flexShrink: 0,
         }}
       >
@@ -442,39 +354,61 @@ export const InlineDataPreview: React.FC<InlineDataPreviewProps> = ({
             <Chip label={fileName} size="medium" variant="outlined" />
           </Box>
         </Box>
-        <Box>
-          <Button
-            variant="outlined"
-            startIcon={<Fullscreen />}
-            onClick={() => setFullscreenOpen(true)}
-          >
-            Fullscreen
-          </Button>
-        </Box>
+
+        <Button
+          variant="outlined"
+          startIcon={<Fullscreen />}
+          onClick={() => setFullscreenOpen(true)}
+        >
+          Fullscreen
+        </Button>
       </Box>
 
-      {/* Content */}
+      {/* Inline content */}
       <Box
-        sx={{
-          flex: 1,
-          display: 'flex',
-          flexDirection: 'column',
-          p: 2,
-          pt: 0,
-        }}
+        sx={{ flex: 1, display: 'flex', flexDirection: 'column', p: 2, pt: 1 }}
       >
-        {renderContent()}
+        <PreviewContent
+          previewResult={sharedContentProps.previewResult}
+          loading={sharedContentProps.loading}
+          error={sharedContentProps.error}
+          fileSize={sharedContentProps.fileSize}
+          serverPage={sharedContentProps.serverPage}
+          serverPageSize={sharedContentProps.serverPageSize}
+          activeFilter={sharedContentProps.activeFilter}
+          statsData={sharedContentProps.statsData}
+          statsLoading={sharedContentProps.statsLoading}
+          statsError={sharedContentProps.statsError}
+          hasServerContext={sharedContentProps.hasServerContext}
+          onPageChange={sharedContentProps.onPageChange}
+          onApplyFilter={sharedContentProps.onApplyFilter}
+          onClearFilter={sharedContentProps.onClearFilter}
+          onRefresh={sharedContentProps.onRefresh}
+          onStatsTabActivated={sharedContentProps.onStatsTabActivated}
+        />
       </Box>
 
-      {/* Fullscreen Modal */}
+      {/* Fullscreen modal — same content, larger viewport */}
       <DataPreviewModal
         open={fullscreenOpen}
         onClose={() => setFullscreenOpen(false)}
         fileName={fileName}
-        previewResult={previewResult}
-        loading={loading}
-        error={error}
-        fileSize={fileSize}
+        previewResult={sharedContentProps.previewResult}
+        loading={sharedContentProps.loading}
+        error={sharedContentProps.error}
+        fileSize={sharedContentProps.fileSize}
+        serverPage={sharedContentProps.serverPage}
+        serverPageSize={sharedContentProps.serverPageSize}
+        activeFilter={sharedContentProps.activeFilter}
+        statsData={sharedContentProps.statsData}
+        statsLoading={sharedContentProps.statsLoading}
+        statsError={sharedContentProps.statsError}
+        hasServerContext={sharedContentProps.hasServerContext}
+        onPageChange={sharedContentProps.onPageChange}
+        onApplyFilter={sharedContentProps.onApplyFilter}
+        onClearFilter={sharedContentProps.onClearFilter}
+        onRefresh={sharedContentProps.onRefresh}
+        onStatsTabActivated={sharedContentProps.onStatsTabActivated}
       />
     </Box>
   );
