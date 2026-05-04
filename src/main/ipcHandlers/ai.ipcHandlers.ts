@@ -161,8 +161,11 @@ const registerAIHandlers = () => {
   // Chat Conversation Handlers
   ipcMain.handle(
     'chat:conversation:list',
-    async (_, projectId?: number): Promise<ChatConversation[]> => {
-      return MainDatabaseService.getConversations(projectId);
+    async (
+      _,
+      filter?: { projectId?: number; screenKey?: any; connectionId?: string },
+    ): Promise<ChatConversation[]> => {
+      return MainDatabaseService.getConversations(filter ?? {});
     },
   );
 
@@ -178,16 +181,22 @@ const registerAIHandlers = () => {
         title,
         projectId,
         providerId,
+        screenKey,
+        connectionId,
       }: {
         title: string;
         projectId?: number;
         providerId?: number;
+        screenKey?: any;
+        connectionId?: string;
       },
     ): Promise<ChatConversation> => {
       return MainDatabaseService.createConversation(
         title,
         projectId,
         providerId,
+        screenKey,
+        connectionId,
       );
     },
   );

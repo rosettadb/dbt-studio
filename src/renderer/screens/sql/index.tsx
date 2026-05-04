@@ -6,7 +6,8 @@ import React, {
   useContext,
   useRef,
 } from 'react';
-import SplitPane from 'split-pane-react';
+import SplitPane, { Pane } from 'split-pane-react';
+import 'split-pane-react/esm/themes/default.css';
 import {
   Box,
   Button,
@@ -20,6 +21,8 @@ import {
   InputAdornment,
   IconButton,
   Tooltip,
+  useMediaQuery,
+  Dialog,
 } from '@mui/material';
 import {
   Stop,
@@ -38,6 +41,7 @@ import { AppLayout } from '../../layouts';
 import { utils } from '../../helpers';
 import { SchemaViewContainer, SchemaViewGrid } from './styles';
 import { ErrorMessage, SqlEditor } from '../../components';
+import { ChatWindow } from '../../components/chat';
 import { QueryResult } from './queryResult';
 import { ConnectionInput, Table } from '../../../types/backend';
 import { getConnectionInput } from '../../helpers/utils';
@@ -60,11 +64,41 @@ import {
 
 const QUERY_HISTORY_KEY = 'query_history_key';
 const EMPTY_ARRAY: Table[] = [];
+const CHAT_MIN_WIDTH = 280;
+const CHAT_DEFAULT_WIDTH = 360;
+
+const VerticalSash = (_: number, active: boolean) => (
+  <div
+    style={{
+      width: '4px',
+      height: '100%',
+      cursor: 'col-resize',
+      position: 'relative',
+      backgroundColor: active ? 'rgba(144,202,249,0.4)' : 'transparent',
+      transition: 'background-color 0.15s ease',
+    }}
+  >
+    <div
+      style={{
+        position: 'absolute',
+        left: '50%',
+        top: 0,
+        bottom: 0,
+        width: '2px',
+        transform: 'translateX(-50%)',
+        backgroundColor: active
+          ? 'rgba(144,202,249,0.8)'
+          : 'rgba(255,255,255,0.08)',
+        transition: 'background-color 0.15s ease',
+      }}
+    />
+  </div>
+);
 
 const Sql = () => {
   const theme = useTheme();
   const navigate = useNavigate();
-  const { selectedProject } = useContext(AppContext);
+  const { selectedProject, isChatOpen, setIsChatOpen } = useContext(AppContext);
   const tabManager = useSqlTabManager();
   const { data: connections = [] } = useGetConnections();
   const {
@@ -118,6 +152,26 @@ const Sql = () => {
   ]);
   const [tabQueryIds, setTabQueryIds] = useState<Record<string, string>>({});
 
+  const CHAT_WIDTH_KEY = 'sql-chat-width';
+  const [verticalSizes, setVerticalSizes] = useState<(number | string)[]>(
+    () => {
+      const saved = parseInt(localStorage.getItem(CHAT_WIDTH_KEY) ?? '', 10);
+      const initialWidth = Number.isNaN(saved)
+        ? CHAT_DEFAULT_WIDTH
+        : Math.max(saved, CHAT_MIN_WIDTH);
+      return ['auto', initialWidth];
+    },
+  );
+
+  useEffect(() => {
+    const chatWidth = verticalSizes[1];
+    if (typeof chatWidth === 'number') {
+      localStorage.setItem(CHAT_WIDTH_KEY, String(chatWidth));
+    }
+  }, [verticalSizes]);
+
+  const isNarrow = useMediaQuery('(max-width: 900px)');
+
   // Get connection input for active tab.
   // Depends only on stable connection-identity primitives, NOT the whole activeTab object,
   // to avoid re-running every time the query text or loading/result state changes.
@@ -167,6 +221,12 @@ const Sql = () => {
   const isLoadingSchema = activeConnectionId
     ? (loadingSchemas[activeConnectionId] ?? false)
     : false;
+  const sqlAgentConnectionId = useMemo<string | undefined>(() => {
+    // Return the raw string connection ID — agent tools handle both regular and
+    // DuckLake ("ducklake-{instanceId}") formats. Previously this coerced to a
+    // number which always returned undefined for string UUID IDs.
+    return activeConnectionId ?? undefined;
+  }, [activeConnectionId]);
 
   // Store DuckLake completions and schema
   const [duckLakeCompletions, setDuckLakeCompletions] = useState<any[]>([]);
@@ -897,218 +957,303 @@ const Sql = () => {
         </Box>
       }
     >
-      <Box sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
-        {/* Tab Bar */}
-        <SqlTabManager
-          tabs={tabs}
-          activeTabId={activeTabId}
-          onSelect={switchTab}
-          onClose={closeTab}
-          onReorder={reorderTabs}
-        />
+      <SplitPane
+        split="vertical"
+        sizes={isChatOpen && !isNarrow ? verticalSizes : ['100%', 0]}
+        onChange={(newSizes) => {
+          if (isChatOpen && !isNarrow) {
+            const chatWidth = newSizes[1] as number;
+            if (chatWidth < CHAT_MIN_WIDTH) {
+              setVerticalSizes(['auto', CHAT_MIN_WIDTH]);
+            } else {
+              setVerticalSizes(newSizes);
+            }
+          }
+        }}
+        sashRender={VerticalSash}
+      >
+        <Pane minSize={200}>
+          <Box
+            sx={{
+              height: '100%',
+              width: '100%',
+              minWidth: 0,
+              display: 'flex',
+              flexDirection: 'column',
+              overflow: 'hidden',
+            }}
+          >
+            {/* Tab Bar */}
+            <SqlTabManager
+              tabs={tabs}
+              activeTabId={activeTabId}
+              onSelect={switchTab}
+              onClose={closeTab}
+              onReorder={reorderTabs}
+            />
 
-        {/* Main Content */}
-        <Box sx={{ flex: 1, overflow: 'hidden' }}>
-          {!activeTab && (
-            <Box
-              sx={{
-                display: 'flex',
-                flexDirection: 'column',
-                alignItems: 'center',
-                justifyContent: 'center',
-                height: '100%',
-                color: 'text.secondary',
-              }}
-            >
-              <TableChart sx={{ fontSize: 64, opacity: 0.3, mb: 2 }} />
-              <Typography variant="h6" color="text.secondary" sx={{ mb: 1 }}>
-                No Connection Selected
-              </Typography>
-              <Typography variant="body2" color="text.secondary">
-                Select a connection from the sidebar to start querying
-              </Typography>
-            </Box>
-          )}
-
-          {activeTab && !connectionInput && (
-            <Box
-              sx={{
-                display: 'flex',
-                flexDirection: 'column',
-                alignItems: 'center',
-                justifyContent: 'center',
-                height: '100%',
-                color: 'text.secondary',
-                gap: 1,
-              }}
-            >
-              <CircularProgress size={28} />
-              <Typography variant="body2" color="text.secondary">
-                Loading connection...
-              </Typography>
-            </Box>
-          )}
-
-          {activeTab &&
-            connectionInput &&
-            isDuckLakeConnection &&
-            (connectionInput as any)?.status === 'loading' &&
-            !isLoadingDuckLakeInstances && (
-              <Box
-                sx={{
-                  display: 'flex',
-                  flexDirection: 'column',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  height: '100%',
-                  color: 'text.secondary',
-                  gap: 2,
-                  p: 3,
-                  textAlign: 'center',
-                }}
-              >
-                <Typography variant="h6" color="text.secondary">
-                  Connection Not Found
-                </Typography>
-                <Typography variant="body2" color="text.secondary">
-                  The DuckLake instance &quot;{activeTab.connectionName}&quot;
-                  could not be found. It may have been deleted or is no longer
-                  available.
-                </Typography>
-                <Button
-                  variant="outlined"
-                  size="small"
-                  onClick={() => refetchDuckLakeInstances()}
-                >
-                  Retry Loading
-                </Button>
-              </Box>
-            )}
-
-          {activeTab &&
-            connectionInput &&
-            (hasResults || hasError || isLoading ? (
-              <SplitPane
-                split="horizontal"
-                sizes={sizes}
-                onChange={(newSizes) => setSizes(newSizes as [number, number])}
-                sashRender={renderSash}
-              >
-                <Box data-testid="sql-editor-pane" sx={{ height: '100%' }}>
-                  <SqlEditor
-                    key={activeTabId}
-                    completions={completions}
-                    connectionInput={connectionInput as ConnectionInput}
-                    connectionId={activeTab.connectionId}
-                    initialQuery={activeTab.query}
-                    queryHistory={queryHistory}
-                    setQueryHistory={setQueryHistory}
-                    setLoadingQuery={handleSetLoadingQuery}
-                    setQueryResults={handleQueryResults}
-                    setError={handleSetError}
-                    onQueryChange={handleQueryChange}
-                    onQueryStart={(id) => {
-                      if (activeTabId) {
-                        setTabQueryIds((prev) => ({
-                          ...prev,
-                          [activeTabId]: id,
-                        }));
-                      }
-                    }}
-                    onQuerySuccess={handleRefreshSchema}
-                    isLoading={isLoadingConnection}
-                  />
-                </Box>
-
+            {/* Main Content */}
+            <Box sx={{ flex: 1, overflow: 'hidden' }}>
+              {!activeTab && (
                 <Box
                   sx={{
+                    display: 'flex',
+                    flexDirection: 'column',
+                    alignItems: 'center',
+                    justifyContent: 'center',
                     height: '100%',
-                    padding: 1,
-                    overflowY: 'auto',
-                    background: theme.palette.background.paper,
+                    color: 'text.secondary',
                   }}
                 >
-                  {isLoading && (
+                  <TableChart sx={{ fontSize: 64, opacity: 0.3, mb: 2 }} />
+                  <Typography
+                    variant="h6"
+                    color="text.secondary"
+                    sx={{ mb: 1 }}
+                  >
+                    No Connection Selected
+                  </Typography>
+                  <Typography variant="body2" color="text.secondary">
+                    Select a connection from the sidebar to start querying
+                  </Typography>
+                </Box>
+              )}
+
+              {activeTab && !connectionInput && (
+                <Box
+                  sx={{
+                    display: 'flex',
+                    flexDirection: 'column',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    height: '100%',
+                    color: 'text.secondary',
+                    gap: 1,
+                  }}
+                >
+                  <CircularProgress size={28} />
+                  <Typography variant="body2" color="text.secondary">
+                    Loading connection...
+                  </Typography>
+                </Box>
+              )}
+
+              {activeTab &&
+                connectionInput &&
+                isDuckLakeConnection &&
+                (connectionInput as any)?.status === 'loading' &&
+                !isLoadingDuckLakeInstances && (
+                  <Box
+                    sx={{
+                      display: 'flex',
+                      flexDirection: 'column',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      height: '100%',
+                      color: 'text.secondary',
+                      gap: 2,
+                      p: 3,
+                      textAlign: 'center',
+                    }}
+                  >
+                    <Typography variant="h6" color="text.secondary">
+                      Connection Not Found
+                    </Typography>
+                    <Typography variant="body2" color="text.secondary">
+                      The DuckLake instance &quot;{activeTab.connectionName}
+                      &quot; could not be found. It may have been deleted or is
+                      no longer available.
+                    </Typography>
+                    <Button
+                      variant="outlined"
+                      size="small"
+                      onClick={() => refetchDuckLakeInstances()}
+                    >
+                      Retry Loading
+                    </Button>
+                  </Box>
+                )}
+
+              {activeTab &&
+                connectionInput &&
+                (hasResults || hasError || isLoading ? (
+                  <SplitPane
+                    split="horizontal"
+                    sizes={sizes}
+                    onChange={(newSizes) =>
+                      setSizes(newSizes as [number, number])
+                    }
+                    sashRender={renderSash}
+                  >
+                    <Box data-testid="sql-editor-pane" sx={{ height: '100%' }}>
+                      <SqlEditor
+                        key={activeTabId}
+                        completions={completions}
+                        connectionInput={connectionInput as ConnectionInput}
+                        connectionId={activeTab.connectionId}
+                        initialQuery={activeTab.query}
+                        queryHistory={queryHistory}
+                        setQueryHistory={setQueryHistory}
+                        setLoadingQuery={handleSetLoadingQuery}
+                        setQueryResults={handleQueryResults}
+                        setError={handleSetError}
+                        onQueryChange={handleQueryChange}
+                        onQueryStart={(id) => {
+                          if (activeTabId) {
+                            setTabQueryIds((prev) => ({
+                              ...prev,
+                              [activeTabId]: id,
+                            }));
+                          }
+                        }}
+                        onQuerySuccess={handleRefreshSchema}
+                        isLoading={isLoadingConnection}
+                      />
+                    </Box>
+
                     <Box
                       sx={{
-                        display: 'flex',
-                        flexDirection: 'column',
-                        alignItems: 'center',
-                        justifyContent: 'center',
                         height: '100%',
-                        gap: 2,
+                        padding: 1,
+                        overflowY: 'auto',
+                        background: theme.palette.background.paper,
                       }}
                     >
-                      <Button
-                        variant="contained"
-                        color="primary"
-                        onClick={handleCancelQuery}
-                        size="small"
-                        startIcon={<Stop />}
-                      >
-                        Stop Query
-                      </Button>
-                      <CircularProgress size={50} />
+                      {isLoading && (
+                        <Box
+                          sx={{
+                            display: 'flex',
+                            flexDirection: 'column',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            height: '100%',
+                            gap: 2,
+                          }}
+                        >
+                          <Button
+                            variant="contained"
+                            color="primary"
+                            onClick={handleCancelQuery}
+                            size="small"
+                            startIcon={<Stop />}
+                          >
+                            Stop Query
+                          </Button>
+                          <CircularProgress size={50} />
+                        </Box>
+                      )}
+                      {!isLoading && hasError && (
+                        <ErrorMessage
+                          title="Query Failed"
+                          description={activeTab.error}
+                        />
+                      )}
+                      {!isLoading && !hasError && hasResults && (
+                        <QueryResult
+                          results={activeTab.results}
+                          exportContext={{
+                            connectionType: connectionInput.type,
+                            connectionId: activeTab.connectionId,
+                            duckLakeInstanceId:
+                              connectionInput.type === 'ducklake'
+                                ? (connectionInput as any).instanceId
+                                : undefined,
+                            duckLakeReady:
+                              connectionInput.type === 'ducklake'
+                                ? (connectionInput as any).status !==
+                                    'loading' &&
+                                  (connectionInput as any).status !==
+                                    'connecting'
+                                : undefined,
+                            originalSql:
+                              (activeTab.results as any)?.originalSql ??
+                              activeTab.query,
+                          }}
+                        />
+                      )}
                     </Box>
-                  )}
-                  {!isLoading && hasError && (
-                    <ErrorMessage
-                      title="Query Failed"
-                      description={activeTab.error}
-                    />
-                  )}
-                  {!isLoading && !hasError && hasResults && (
-                    <QueryResult
-                      results={activeTab.results}
-                      exportContext={{
-                        connectionType: connectionInput.type,
-                        connectionId: activeTab.connectionId,
-                        duckLakeInstanceId:
-                          connectionInput.type === 'ducklake'
-                            ? (connectionInput as any).instanceId
-                            : undefined,
-                        duckLakeReady:
-                          connectionInput.type === 'ducklake'
-                            ? (connectionInput as any).status !== 'loading' &&
-                              (connectionInput as any).status !== 'connecting'
-                            : undefined,
-                        originalSql:
-                          (activeTab.results as any)?.originalSql ??
-                          activeTab.query,
+                  </SplitPane>
+                ) : (
+                  <Box data-testid="sql-editor-pane" sx={{ height: '100%' }}>
+                    <SqlEditor
+                      key={activeTabId}
+                      completions={completions}
+                      connectionInput={connectionInput as ConnectionInput}
+                      connectionId={activeTab.connectionId}
+                      initialQuery={activeTab.query}
+                      queryHistory={queryHistory}
+                      setQueryHistory={setQueryHistory}
+                      setLoadingQuery={handleSetLoadingQuery}
+                      setQueryResults={handleQueryResults}
+                      setError={handleSetError}
+                      onQueryChange={handleQueryChange}
+                      onQueryStart={(id) => {
+                        if (activeTabId) {
+                          setTabQueryIds((prev) => ({
+                            ...prev,
+                            [activeTabId]: id,
+                          }));
+                        }
                       }}
+                      onQuerySuccess={handleRefreshSchema}
+                      isLoading={isLoadingConnection}
                     />
-                  )}
-                </Box>
-              </SplitPane>
-            ) : (
-              <Box data-testid="sql-editor-pane" sx={{ height: '100%' }}>
-                <SqlEditor
-                  key={activeTabId}
-                  completions={completions}
-                  connectionInput={connectionInput as ConnectionInput}
-                  connectionId={activeTab.connectionId}
-                  initialQuery={activeTab.query}
-                  queryHistory={queryHistory}
-                  setQueryHistory={setQueryHistory}
-                  setLoadingQuery={handleSetLoadingQuery}
-                  setQueryResults={handleQueryResults}
-                  setError={handleSetError}
-                  onQueryChange={handleQueryChange}
-                  onQueryStart={(id) => {
-                    if (activeTabId) {
-                      setTabQueryIds((prev) => ({
-                        ...prev,
-                        [activeTabId]: id,
-                      }));
-                    }
-                  }}
-                  onQuerySuccess={handleRefreshSchema}
-                  isLoading={isLoadingConnection}
-                />
-              </Box>
-            ))}
-        </Box>
-      </Box>
+                  </Box>
+                ))}
+            </Box>
+          </Box>
+        </Pane>
+        <Pane minSize={CHAT_MIN_WIDTH}>
+          <Box
+            id="sql-ai-chat-panel"
+            sx={{
+              height: '100%',
+              borderLeft: '1px solid',
+              borderColor: 'divider',
+              overflow: 'hidden',
+              display: 'flex',
+              flexDirection: 'column',
+            }}
+          >
+            {isChatOpen && !isNarrow && (
+              <ChatWindow
+                screenKey="sql"
+                connectionId={sqlAgentConnectionId}
+                projectId={
+                  selectedProject?.id ? Number(selectedProject.id) : null
+                }
+                onClose={() => setIsChatOpen?.(false)}
+              />
+            )}
+          </Box>
+        </Pane>
+      </SplitPane>
+
+      {/* Mobile AI Chat Drawer */}
+      {isNarrow && (
+        <Dialog
+          fullScreen
+          open={!!isChatOpen}
+          onClose={() => setIsChatOpen?.(false)}
+        >
+          <Box
+            sx={{
+              height: '100%',
+              display: 'flex',
+              flexDirection: 'column',
+            }}
+          >
+            <ChatWindow
+              screenKey="sql"
+              connectionId={sqlAgentConnectionId}
+              projectId={
+                selectedProject?.id ? Number(selectedProject.id) : null
+              }
+              onClose={() => setIsChatOpen?.(false)}
+            />
+          </Box>
+        </Dialog>
+      )}
     </AppLayout>
   );
 };

@@ -72,6 +72,13 @@ export const ChatMessageList: React.FC<ChatMessageListProps> = ({
   }, [sessionId]);
 
   const autoScroll = aiSettings?.chat?.autoScrollToLatest ?? true;
+  const hasPersistedCompaction = React.useMemo(
+    () =>
+      messages.some(
+        (m) => m.role === 'system' && (m.metadata as any)?.compacted,
+      ),
+    [messages],
+  );
 
   // Helper to scroll to bottom
   type ScrollBehaviorType = 'auto' | 'smooth';
@@ -186,6 +193,38 @@ export const ChatMessageList: React.FC<ChatMessageListProps> = ({
       )}
       <Stack spacing={0.25} sx={{ minWidth: 0, overflowX: 'hidden', px: 1.5 }}>
         {messages.map((m, index) => {
+          if (m.role === 'system' && (m.metadata as any)?.compacted) {
+            const summarizedCount =
+              (m.metadata as any)?.summarizedMessageCount ??
+              compactionInfo?.messagesSummarized;
+            return (
+              <Box
+                key={m.id}
+                sx={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  my: 0.5,
+                  opacity: 0.55,
+                }}
+              >
+                <Divider sx={{ flex: 1 }} />
+                <Typography
+                  variant="caption"
+                  sx={{
+                    mx: 1.5,
+                    color: 'text.disabled',
+                    fontSize: '0.65rem',
+                    whiteSpace: 'nowrap',
+                  }}
+                >
+                  Earlier conversation summarized
+                  {summarizedCount ? ` (${summarizedCount} messages)` : ''}
+                </Typography>
+                <Divider sx={{ flex: 1 }} />
+              </Box>
+            );
+          }
+
           const isLastMessage = index === messages.length - 1;
           const persistedUsage =
             m.metadata?.promptTokens ||
@@ -222,7 +261,7 @@ export const ChatMessageList: React.FC<ChatMessageListProps> = ({
         })}
 
         {/* Compaction divider — shown when auto-compaction fired this session */}
-        {compactionInfo && (
+        {compactionInfo && !hasPersistedCompaction && (
           <Box
             sx={{
               display: 'flex',

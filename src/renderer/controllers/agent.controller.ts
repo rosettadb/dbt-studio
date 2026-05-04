@@ -20,14 +20,22 @@ export const useRunAgent = (options?: {
   const queryClient = useQueryClient();
 
   return useMutation(
-    (request: AgentRunRequest) => agentService.runAgent(request),
+    (request: AgentRunRequest) => {
+      // eslint-disable-next-line no-console
+      console.log('[Controller][Agent] runAgent', request);
+      return agentService.runAgent(request);
+    },
     {
       onSuccess: () => {
+        // eslint-disable-next-line no-console
+        console.log('[Controller][Agent] runAgent success');
         // Invalidate chat messages to refresh the UI
         queryClient.invalidateQueries(['chat', 'messages']);
         options?.onSuccess?.();
       },
       onError: (error: Error) => {
+        // eslint-disable-next-line no-console
+        console.error('[Controller][Agent] runAgent error', error);
         options?.onError?.(error);
       },
     },
@@ -42,12 +50,20 @@ export const useCancelAgent = (options?: {
   onError?: (error: Error) => void;
 }) => {
   return useMutation(
-    (conversationId: number) => agentService.cancelAgent(conversationId),
+    (conversationId: number) => {
+      // eslint-disable-next-line no-console
+      console.log('[Controller][Agent] cancelAgent', { conversationId });
+      return agentService.cancelAgent(conversationId);
+    },
     {
       onSuccess: () => {
+        // eslint-disable-next-line no-console
+        console.log('[Controller][Agent] cancelAgent success');
         options?.onSuccess?.();
       },
       onError: (error: Error) => {
+        // eslint-disable-next-line no-console
+        console.error('[Controller][Agent] cancelAgent error', error);
         options?.onError?.(error);
       },
     },

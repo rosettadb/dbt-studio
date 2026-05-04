@@ -37,14 +37,20 @@ import { useContextManager } from '../../hooks/useContextManager';
 import { useToolMode } from '../../hooks/useToolMode';
 import { ContextUsageRing } from './ContextUsageRing';
 import type { ContextUsageBreakdown } from './ContextUsageRing';
+import { getUserMessageLimitError } from '../../../types/agentEvents';
 
 interface ChatInputBoxProps {
   sessionId?: number;
   contextManager?: ReturnType<typeof useContextManager>;
   isStreaming?: boolean;
-  onStartStream?: (content: string, contextItems?: any[]) => Promise<void>;
+  onStartStream?: (
+    content: string,
+    contextItems?: any[],
+    toolMode?: 'chat' | 'agent',
+  ) => Promise<void>;
   onCancelStream?: () => void;
   contextBreakdown?: ContextUsageBreakdown | null;
+  screenKey?: string;
 }
 
 export const ChatInputBox: React.FC<ChatInputBoxProps> = ({
@@ -54,6 +60,7 @@ export const ChatInputBox: React.FC<ChatInputBoxProps> = ({
   onStartStream,
   onCancelStream,
   contextBreakdown,
+  screenKey,
 }) => {
   const theme = useTheme();
   const [input, setInput] = React.useState('');
@@ -88,11 +95,35 @@ export const ChatInputBox: React.FC<ChatInputBoxProps> = ({
 
   // Use the utility function instead of inline implementation
   const plainText = React.useMemo(() => htmlToPlainText(input), [input]);
+  const messageLimitError = React.useMemo(
+    () =>
+      getUserMessageLimitError(
+        plainText.trim(),
+        contextBreakdown?.contextWindow ?? 32_000,
+      ),
+    [plainText, contextBreakdown?.contextWindow],
+  );
 
   const selectedProvider = React.useMemo(() => {
     const id = activeProvider?.id?.toString();
     return providers.find((p) => p.id?.toString() === id) || null;
   }, [providers, activeProvider]);
+
+  const getProviderModel = React.useCallback((provider?: AIProvider | null) => {
+    if (!provider?.config) return '';
+    try {
+      const config =
+        typeof provider.config === 'string'
+          ? JSON.parse(provider.config)
+          : provider.config;
+      return config?.model || config?.modelId || '';
+    } catch {
+      return '';
+    }
+  }, []);
+
+  const selectedModelLabel =
+    getProviderModel(selectedProvider) || selectedProvider?.name || 'No AI Provider';
 
   const selectedIcon = React.useMemo(() => {
     if (!selectedProvider) return defaultIcon;
@@ -116,6 +147,7 @@ export const ChatInputBox: React.FC<ChatInputBoxProps> = ({
     await onStartStream(
       messageContent,
       agentContextItems.length > 0 ? agentContextItems : undefined,
+      currentMode,
     );
 
     // Auto-rename session after successful send (optimistic or actually done depends on hook)
@@ -125,6 +157,11 @@ export const ChatInputBox: React.FC<ChatInputBoxProps> = ({
 
   const handleSendMessage = async (content?: string) => {
     const messageContent = content || plainText.trim();
+    const limitError = getUserMessageLimitError(
+      messageContent,
+      contextBreakdown?.contextWindow ?? 32_000,
+    );
+    if (limitError) return;
     if (sessionId && messageContent && activeProvider) {
       await handleSendAgentMessage(messageContent);
     }
@@ -197,45 +234,56 @@ export const ChatInputBox: React.FC<ChatInputBoxProps> = ({
         }}
       >
         {/* + button to add context files */}
-        <Tooltip title="Add context..." placement="top" arrow enterDelay={500}>
-          <IconButton
-            size="small"
-            onClick={() => setIsFilePickerOpen(true)}
-            sx={{
-              width: 20,
-              height: 20,
-              color: 'text.secondary',
-              border: `1px solid ${theme.palette.divider}`,
-              borderRadius: 0.5,
-              '&:hover': {
-                color: 'text.primary',
-                bgcolor: 'action.hover',
-                borderColor: 'text.secondary',
-              },
-            }}
-          >
-            <AddIcon sx={{ fontSize: '0.8rem' }} />
-          </IconButton>
-        </Tooltip>
+        {screenKey !== 'sql' && (
+          <>
+            <Tooltip
+              title="Add context..."
+              placement="top"
+              arrow
+              enterDelay={500}
+            >
+              <IconButton
+                size="small"
+                onClick={() => setIsFilePickerOpen(true)}
+                sx={{
+                  width: 20,
+                  height: 20,
+                  color: 'text.secondary',
+                  border: `1px solid ${theme.palette.divider}`,
+                  borderRadius: 0.5,
+                  '&:hover': {
+                    color: 'text.primary',
+                    bgcolor: 'action.hover',
+                    borderColor: 'text.secondary',
+                  },
+                }}
+              >
+                <AddIcon sx={{ fontSize: '0.8rem' }} />
+              </IconButton>
+            </Tooltip>
 
-        <FilePickerModal
-          open={isFilePickerOpen}
-          onClose={() => setIsFilePickerOpen(false)}
-          onSelect={(selectedFiles) => {
-            const currentPaths = activeContextManager.additionalFiles.map(
-              (f) => f.path,
-            );
-            const toAdd = selectedFiles
-              .filter((f) => !currentPaths.includes(f.path))
-              .map((f) => ({ ...f, fileType: f.fileType ?? 'other' }));
-            if (toAdd.length > 0) activeContextManager.addFiles(toAdd);
-            setIsFilePickerOpen(false);
-          }}
-          selectedFiles={activeContextManager.additionalFiles.map(
-            (f) => f.path,
-          )}
-          excludeFiles={activeContextManager.additionalFiles.map((f) => f.path)}
-        />
+            <FilePickerModal
+              open={isFilePickerOpen}
+              onClose={() => setIsFilePickerOpen(false)}
+              onSelect={(selectedFiles) => {
+                const currentPaths = activeContextManager.additionalFiles.map(
+                  (f) => f.path,
+                );
+                const toAdd = selectedFiles
+                  .filter((f) => !currentPaths.includes(f.path))
+                  .map((f) => ({ ...f, fileType: f.fileType ?? 'other' }));
+                if (toAdd.length > 0) activeContextManager.addFiles(toAdd);
+                setIsFilePickerOpen(false);
+              }}
+              selectedFiles={activeContextManager.additionalFiles.map(
+                (f) => f.path,
+              )}
+              excludeFiles={activeContextManager.additionalFiles.map(
+                (f) => f.path,
+              )}
+            />
+          </>
+        )}
 
         {/* Agent/Chat Mode Selector - Custom Dropdown */}
         <Box
@@ -313,7 +361,7 @@ export const ChatInputBox: React.FC<ChatInputBoxProps> = ({
               whiteSpace: 'nowrap',
             }}
           >
-            {selectedProvider?.name || 'No AI Provider'}
+            {selectedModelLabel}
           </Typography>
         </Box>
 
@@ -343,6 +391,7 @@ export const ChatInputBox: React.FC<ChatInputBoxProps> = ({
               const providerIcon =
                 aiProviderImages[p.type as keyof typeof aiProviderImages] ||
                 defaultIcon;
+              const modelLabel = getProviderModel(p) || p.type;
               return (
                 <MenuItem
                   key={p.id}
@@ -373,7 +422,7 @@ export const ChatInputBox: React.FC<ChatInputBoxProps> = ({
                         lineHeight: 1.2,
                       }}
                     >
-                      {p.type}
+                      {modelLabel}
                     </Typography>
                   </Box>
                 </MenuItem>
@@ -512,6 +561,7 @@ export const ChatInputBox: React.FC<ChatInputBoxProps> = ({
           const sendDisabled =
             !sessionId ||
             !plainText.trim() ||
+            !!messageLimitError ||
             !activeProvider ||
             activeContextManager.isResolvingContext;
           let tooltipTitle = 'Send message (Enter)';
@@ -519,6 +569,7 @@ export const ChatInputBox: React.FC<ChatInputBoxProps> = ({
           else if (!sessionId) tooltipTitle = 'Open or create a chat session';
           else if (!plainText.trim())
             tooltipTitle = 'Type a message to enable send';
+          else if (messageLimitError) tooltipTitle = messageLimitError;
           else if (activeContextManager.isResolvingContext)
             tooltipTitle = 'Resolving context files...';
           else if (activeContextManager.hasContext) {

@@ -21,8 +21,10 @@ const subscribe = <T>(
   handler: (event: T) => void,
 ): Unsubscribe => {
   const wrapped = (...args: unknown[]) => handler(args[0] as T);
-  window.electron.ipcRenderer.on(channel, wrapped);
-  return () => window.electron.ipcRenderer.removeListener(channel, wrapped);
+  const unsub = window.electron.ipcRenderer.on(channel, wrapped);
+  return () => {
+    if (typeof unsub === 'function') unsub();
+  };
 };
 
 export const subscribeToChatStreamChunks = (
@@ -75,10 +77,11 @@ export const subscribeToToolResult = (
       status: 'done',
     });
   };
-  window.electron.ipcRenderer.on('chat:message:stream-chunk', wrapped);
-  return () =>
-    window.electron.ipcRenderer.removeListener(
-      'chat:message:stream-chunk',
-      wrapped,
-    );
+  const unsub = window.electron.ipcRenderer.on(
+    'chat:message:stream-chunk',
+    wrapped,
+  );
+  return () => {
+    if (typeof unsub === 'function') unsub();
+  };
 };

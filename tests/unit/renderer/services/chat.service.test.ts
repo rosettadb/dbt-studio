@@ -14,12 +14,31 @@ describe('renderer/services/chat.service', () => {
     jest.clearAllMocks();
   });
 
-  it('getSessions should call client.post with chat:conversation:list and projectId', async () => {
+  it('getSessions should call client.post with chat:conversation:list and projectId filter', async () => {
     (client.post as jest.Mock).mockResolvedValue({ data: [{ id: 1 }] });
 
     const result = await chatService.getSessions(123);
 
-    expect(client.post).toHaveBeenCalledWith('chat:conversation:list', 123);
+    expect(client.post).toHaveBeenCalledWith('chat:conversation:list', {
+      projectId: 123,
+    });
     expect(result).toEqual([{ id: 1 }]);
+  });
+
+  it('getSessions should preserve string connectionId filters for SQL chat scoping', async () => {
+    (client.post as jest.Mock).mockResolvedValue({ data: [{ id: 2 }] });
+
+    const result = await chatService.getSessions({
+      projectId: 123,
+      screenKey: 'sql',
+      connectionId: 'ducklake-instance-1',
+    });
+
+    expect(client.post).toHaveBeenCalledWith('chat:conversation:list', {
+      projectId: 123,
+      screenKey: 'sql',
+      connectionId: 'ducklake-instance-1',
+    });
+    expect(result).toEqual([{ id: 2 }]);
   });
 });

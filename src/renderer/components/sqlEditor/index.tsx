@@ -9,6 +9,7 @@ import { ConnectionInput, Project } from '../../../types/backend';
 import { SqlEditorComponent } from './editorComponent';
 import { QueryHistory } from './queryHistory';
 import { useAppContext } from '../../hooks';
+import { useSqlEditorBridge } from '../../controllers';
 
 type Props = {
   completions: Omit<monacoType.languages.CompletionItem, 'range'>[];
@@ -243,14 +244,80 @@ export const SqlEditor: React.FC<Props> = ({
   };
 
   const [queryContent, setQueryContent] = React.useState(initialQuery || '');
+  const queryContentRef = useRef(queryContent);
   const saveDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const lastNotifiedQueryRef = useRef(initialQuery || '');
+
+  React.useEffect(() => {
+    queryContentRef.current = queryContent;
+  }, [queryContent]);
+
+  const getEditorContent = React.useCallback(
+    () => editorRef.current?.getValue() ?? queryContentRef.current,
+    [],
+  );
+
+  const setEditorContent = React.useCallback(
+    (content: string) => {
+      setQueryContent(content);
+      lastNotifiedQueryRef.current = content;
+      if (onQueryChange) {
+        onQueryChange(content);
+      }
+      if (isConnectionMode && connectionId) {
+        connectorsServices
+          .updateConnectionQuery(connectionId, content)
+          .catch(() => {});
+      } else if (selectedProject?.id) {
+        projectsServices
+          .updateProjectQuery({
+            projectId: selectedProject.id,
+            query: content,
+          })
+          .catch(() => {});
+      }
+    },
+    [isConnectionMode, connectionId, onQueryChange, selectedProject?.id],
+  );
+
+  const runEditorQuery = React.useCallback(
+    (query?: string) => {
+      const content =
+        query || editorRef.current?.getValue() || queryContentRef.current;
+      if (content?.trim()) {
+        // eslint-disable-next-line no-console
+        console.log('[SqlEditor] Agent run-query: executing content', {
+          contentLength: content.length,
+          providedByAgent: !!query,
+        });
+        handleRunQuery(content);
+      }
+    },
+    [handleRunQuery],
+  );
+
+  useSqlEditorBridge({
+    enabled: isConnectionMode && !!connectionId,
+    getContent: getEditorContent,
+    setContent: setEditorContent,
+    setQueryResult: setQueryResults,
+    runQuery: runEditorQuery,
+  });
 
   // Load query based on mode
   React.useEffect(() => {
     if (isConnectionMode) {
       // Connection-based mode: initialQuery is already loaded via useState.
-      // We do not sync it here on changes because doing so causes cursor jumps
-      // when the parent component reflects our own debounced changes back to us.
+      // We only sync if the query changed externally (e.g. from AI Agent),
+      // ignoring echoed updates from our own debounced onQueryChange.
+      if (
+        initialQuery !== undefined &&
+        initialQuery !== queryContentRef.current &&
+        initialQuery !== lastNotifiedQueryRef.current
+      ) {
+        setQueryContent(initialQuery);
+        lastNotifiedQueryRef.current = initialQuery;
+      }
     } else if (selectedProject?.id) {
       // Project-based mode: load from backend
       const loadQuery = async () => {
@@ -263,7 +330,7 @@ export const SqlEditor: React.FC<Props> = ({
       };
       loadQuery();
     }
-  }, [isConnectionMode, selectedProject?.id, selectedProject]);
+  }, [isConnectionMode, selectedProject?.id, selectedProject, initialQuery]);
 
   React.useEffect(() => {
     return () => {
@@ -287,6 +354,7 @@ export const SqlEditor: React.FC<Props> = ({
       saveDebounceRef.current = setTimeout(() => {
         if (isConnectionMode) {
           // Connection-based mode: notify parent and save to backend
+          lastNotifiedQueryRef.current = content;
           if (onQueryChange) {
             onQueryChange(content);
           }

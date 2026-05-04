@@ -267,7 +267,7 @@ export abstract class CatalogAdapter {
   ): Promise<void> {
     try {
       const escapedInstanceName = instanceName.replace(/"/g, '""');
-      const attachQuery = `ATTACH '${attachString}' AS "${escapedInstanceName}" (DATA_PATH '${dataPath.replace(/'/g, "''")}')`;
+      const attachQuery = `ATTACH '${attachString}' AS "${escapedInstanceName}" (DATA_PATH '${dataPath.replace(/'/g, "''")}', AUTOMATIC_MIGRATION TRUE)`;
       await connection.run(attachQuery);
 
       // Switch to the attached DuckLake catalog

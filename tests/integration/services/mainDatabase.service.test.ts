@@ -6,6 +6,21 @@ import * as os from 'os';
 import MainDatabaseService from '../../../src/main/services/mainDatabase.service';
 
 const TEST_DIR_NAME = 'dbt-studio-int-test-static';
+const canRunBetterSqliteIntegration = (() => {
+  try {
+    // Match the Electron runtime module path used in this repository.
+    // eslint-disable-next-line global-require
+    const BetterSqlite3 = require('../../../release/app/node_modules/better-sqlite3');
+    const db = new BetterSqlite3(':memory:');
+    db.close();
+    return true;
+  } catch {
+    return false;
+  }
+})();
+const describeBetterSqlite = canRunBetterSqliteIntegration
+  ? describe
+  : describe.skip;
 
 jest.mock('electron', () => {
   // Use distinct variable names to avoid shadowing if imports are hoisted
@@ -28,7 +43,7 @@ jest.mock('electron', () => {
   };
 });
 
-describe('MainDatabaseService Integration', () => {
+describeBetterSqlite('MainDatabaseService Integration', () => {
   const testUserDataPath = path.join(os.tmpdir(), TEST_DIR_NAME);
 
   beforeAll(() => {
