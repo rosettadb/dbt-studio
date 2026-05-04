@@ -15,3 +15,4 @@ export * from './incrementalModal';
 export * from './aiPromptModal';
 export * from './pushToCloudModal';
 export * from './rawLayerModal';
+export * from './removeConnectionModal';

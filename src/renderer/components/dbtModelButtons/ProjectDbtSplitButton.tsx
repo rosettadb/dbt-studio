@@ -334,6 +334,7 @@ export const ProjectDbtSplitButton: React.FC<ProjectDbtSplitButtonProps> = ({
         disabled={isRunningDbt || isRunningRosettaDbt}
         isLoading={isRunningDbt || isRunningRosettaDbt}
         leftIcon={<PlayCircleOutline />}
+        height={24}
         menuItems={filteredMenuItems.map((item) => {
           // eslint-disable-next-line @typescript-eslint/no-unused-vars
           const { localOnly, ...menuItem } = item;
