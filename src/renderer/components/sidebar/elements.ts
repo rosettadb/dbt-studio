@@ -1,4 +1,3 @@
-import { Settings } from '@mui/icons-material';
 import * as Icons from './icons';
 
 interface SideBarElementType {
@@ -74,7 +73,7 @@ export const getBottomElements = (): SideBarElementType[] => {
     {
       path: '/app/settings',
       text: 'Settings',
-      icon: Settings,
+      icon: Icons.SettingsIcon,
       testId: 'nav-item-settings',
     },
   ];

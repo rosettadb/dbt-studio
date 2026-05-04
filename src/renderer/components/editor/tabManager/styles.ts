@@ -35,18 +35,41 @@ export const TabBar = styled(Box)(({ theme }) => ({
   minWidth: 0,
 }));
 
-export const TabsContainer = styled(Box)(() => ({
+export const TabsContainer = styled(Box)(({ theme }) => ({
   display: 'flex',
   alignItems: 'center',
   gap: 0,
   flex: 1,
   minWidth: 0,
+  overflow: 'auto',
   overflowX: 'auto',
   overflowY: 'hidden',
-  scrollbarWidth: 'none',
-  msOverflowStyle: 'none' as const,
-  '&::-webkit-scrollbar': {
-    display: 'none',
+  scrollbarWidth: 'thin',
+  scrollbarColor:
+    theme.palette.mode === 'dark'
+      ? 'rgba(255, 255, 255, 0.28) transparent'
+      : 'rgba(0, 0, 0, 0.28) transparent',
+  '&&::-webkit-scrollbar': {
+    WebkitAppearance: 'none !important',
+    height: '2px !important',
+    width: '2px !important',
+  },
+  '&&::-webkit-scrollbar-track': {
+    background: 'transparent !important',
+  },
+  '&&::-webkit-scrollbar-thumb': {
+    WebkitAppearance: 'none !important',
+    background:
+      theme.palette.mode === 'dark'
+        ? 'rgba(255, 255, 255, 0.28) !important'
+        : 'rgba(0, 0, 0, 0.28) !important',
+    borderRadius: '4px !important',
+    '&:hover': {
+      background:
+        theme.palette.mode === 'dark'
+          ? 'rgba(255, 255, 255, 0.4) !important'
+          : 'rgba(0, 0, 0, 0.4) !important',
+    },
   },
 }));
 
@@ -60,8 +83,8 @@ export const DropIndicator = styled('div')(({ theme }) => ({
 }));
 
 export const TabButton = styled(Box, {
-  shouldForwardProp: (prop) => prop !== 'active',
-})<{ active: boolean }>(({ theme, active }) => ({
+  shouldForwardProp: (prop) => prop !== 'active' && prop !== 'isLast',
+})<{ active: boolean; isLast?: boolean }>(({ theme, active, isLast }) => ({
   display: 'flex',
   alignItems: 'center',
   gap: theme.spacing(0.75),
@@ -69,32 +92,20 @@ export const TabButton = styled(Box, {
   minHeight: 32,
   borderRadius: 0,
   cursor: 'pointer',
+  position: 'relative',
   backgroundColor: getBaseBackgroundColor(theme, active),
   color: active ? theme.palette.text.primary : theme.palette.text.secondary,
   borderTop: active
     ? `2px solid ${theme.palette.primary.main}`
-    : `1px solid ${theme.palette.divider}`,
-  borderBottom: active
-    ? '1px solid transparent'
-    : `1px solid ${theme.palette.divider}`,
-  borderLeft: `1px solid ${theme.palette.divider}`,
-  borderRight: `1px solid ${theme.palette.divider}`,
+    : '2px solid transparent',
+  borderBottom: 'none',
+  borderLeft: 'none',
+  borderRight: isLast ? 'none' : `1px solid ${theme.palette.divider}`,
   boxShadow: 'none',
-  transition:
-    'background-color 120ms ease, border-color 120ms ease, box-shadow 120ms ease',
+  transition: 'background-color 120ms ease, color 120ms ease',
   '&:hover': {
     backgroundColor: getHoverBackgroundColor(theme, active),
     color: theme.palette.text.primary,
-  },
-  '&:not(:first-of-type)': {
-    marginLeft: -1,
-  },
-  '&:first-of-type': {
-    borderLeft: `1px solid ${theme.palette.divider}`,
-    marginLeft: 0,
-  },
-  '&:last-of-type': {
-    borderRight: `1px solid ${theme.palette.divider}`,
   },
 }));
 
