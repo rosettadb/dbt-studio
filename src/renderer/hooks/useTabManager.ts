@@ -2,6 +2,8 @@ import React from 'react';
 import { projectsServices } from '../services';
 import { getLanguageFromExtension } from '../components/editor/helpers';
 import { getNonEditableFileMessage, isEditableFile } from '../helpers/utils';
+import { disposeModelForPath, renameModel } from '../lib/monaco/modelStore';
+import { clearViewState } from '../lib/monaco/viewStateStore';
 import type {
   EditorTabId,
   EditorTabState,
@@ -204,14 +206,19 @@ const useTabManager = (projectId?: string): UseTabManagerReturn => {
     const persisted = readPersistedState(projectId);
 
     if (persisted) {
-      setTabs(persisted.tabs);
-      const hasValidActiveTab = persisted.tabs.some(
+      // Migrate older persisted tabs that predate savedContent: if the tab
+      // was unmodified, its on-disk baseline equals its current content.
+      const migrated = persisted.tabs.map((tab) =>
+        tab.savedContent === undefined && !tab.isModified
+          ? { ...tab, savedContent: tab.content }
+          : tab,
+      );
+      setTabs(migrated);
+      const hasValidActiveTab = migrated.some(
         (tab) => tab.id === persisted.activeTabId,
       );
       setActiveTabId(
-        hasValidActiveTab
-          ? persisted.activeTabId
-          : (persisted.tabs[0]?.id ?? null),
+        hasValidActiveTab ? persisted.activeTabId : (migrated[0]?.id ?? null),
       );
       setIsHydrated(true);
       return;
@@ -241,6 +248,7 @@ const useTabManager = (projectId?: string): UseTabManagerReturn => {
         if (index === -1) {
           return current;
         }
+        const closing = current[index];
         const updated = [
           ...current.slice(0, index),
           ...current.slice(index + 1),
@@ -249,10 +257,12 @@ const useTabManager = (projectId?: string): UseTabManagerReturn => {
           const nextTab = updated[index] || updated[index - 1];
           setActiveTabId(nextTab ? nextTab.id : null);
         }
+        disposeModelForPath(projectId, closing.path);
+        clearViewState(closing.id);
         return updated;
       });
     },
-    [activeTabId],
+    [activeTabId, projectId],
   );
 
   const closeTab = React.useCallback(
@@ -271,41 +281,42 @@ const useTabManager = (projectId?: string): UseTabManagerReturn => {
     [performClose],
   );
 
-  const closeTabByPath = React.useCallback((path: string) => {
-    const currentTabs = tabsRef.current;
-    const tabsToClose = currentTabs.filter(
-      (tab) =>
-        tab.path === path ||
-        tab.path.startsWith(`${path}/`) ||
-        tab.path.startsWith(`${path}\\`),
-    );
+  const closeTabByPath = React.useCallback(
+    (path: string) => {
+      const currentTabs = tabsRef.current;
+      const tabsToClose = currentTabs.filter(
+        (tab) =>
+          tab.path === path ||
+          tab.path.startsWith(`${path}/`) ||
+          tab.path.startsWith(`${path}\\`),
+      );
 
-    if (tabsToClose.length === 0) {
-      return;
-    }
-
-    const idsToClose = new Set(tabsToClose.map((t) => t.id));
-
-    setTabs((current) => {
-      const nextTabs = current.filter((t) => !idsToClose.has(t.id));
-
-      return nextTabs;
-    });
-
-    setActiveTabId((currentId) => {
-      if (currentId && idsToClose.has(currentId)) {
-        // If the active tab was closed, try to find a neighbor in the remaining tabs.
-        // Since tabs ref might not be updated yet, we derive remaining tabs from current ref.
-        const remaining = tabsRef.current.filter((t) => !idsToClose.has(t.id));
-        if (remaining.length === 0) {
-          return null;
-        }
-        // Fallback to the last available tab, or similar logic to performClose
-        return remaining[remaining.length - 1].id;
+      if (tabsToClose.length === 0) {
+        return;
       }
-      return currentId;
-    });
-  }, []);
+
+      const idsToClose = new Set(tabsToClose.map((t) => t.id));
+
+      setTabs((current) => current.filter((t) => !idsToClose.has(t.id)));
+
+      setActiveTabId((currentId) => {
+        if (currentId && idsToClose.has(currentId)) {
+          const remaining = tabsRef.current.filter(
+            (t) => !idsToClose.has(t.id),
+          );
+          if (remaining.length === 0) return null;
+          return remaining[remaining.length - 1].id;
+        }
+        return currentId;
+      });
+
+      tabsToClose.forEach((tab) => {
+        disposeModelForPath(projectId, tab.path);
+        clearViewState(tab.id);
+      });
+    },
+    [projectId],
+  );
 
   const updateTab = React.useCallback(
     (tabId: EditorTabId, updater: (tab: EditorTabState) => EditorTabState) => {
@@ -325,7 +336,11 @@ const useTabManager = (projectId?: string): UseTabManagerReturn => {
 
   const markTabSaved = React.useCallback(
     (tabId: EditorTabId) => {
-      updateTab(tabId, (tab) => ({ ...tab, isModified: false }));
+      updateTab(tabId, (tab) => ({
+        ...tab,
+        isModified: false,
+        savedContent: tab.content,
+      }));
     },
     [updateTab],
   );
@@ -356,12 +371,24 @@ const useTabManager = (projectId?: string): UseTabManagerReturn => {
       content: string,
       options?: TabContentUpdateOptions,
     ) => {
-      updateTab(tabId, (tab) => ({
-        ...tab,
-        content,
-        isModified: options?.markModified ?? true,
-        error: undefined,
-      }));
+      updateTab(tabId, (tab) => {
+        const explicit = options?.markModified;
+        let isModified: boolean;
+        if (typeof explicit === 'boolean') {
+          isModified = explicit;
+        } else if (tab.savedContent === undefined) {
+          // No baseline yet — assume edits are real changes.
+          isModified = true;
+        } else {
+          isModified = content !== tab.savedContent;
+        }
+        return {
+          ...tab,
+          content,
+          isModified,
+          error: undefined,
+        };
+      });
     },
     [updateTab],
   );
@@ -377,10 +404,15 @@ const useTabManager = (projectId?: string): UseTabManagerReturn => {
           if (tab.id !== target.id) {
             return tab;
           }
+          const isModified = options?.markModified ?? false;
           return {
             ...tab,
             content,
-            isModified: options?.markModified ?? false,
+            isModified,
+            // When the caller asserts the tab is unmodified, the new content
+            // is the disk baseline. When marking modified, leave the previous
+            // baseline in place so undo can still detect the saved state.
+            savedContent: isModified ? tab.savedContent : content,
             error: options?.error,
           };
         }),
@@ -392,38 +424,53 @@ const useTabManager = (projectId?: string): UseTabManagerReturn => {
     [markTabSaved],
   );
 
-  const renameTab = React.useCallback((oldPath: string, newPath: string) => {
-    setTabs((current) =>
-      current.map((tab) => {
-        // Exact match - file rename
-        if (tab.path === oldPath) {
-          return {
-            ...tab,
-            path: newPath,
-            title: deriveTitleFromPath(newPath),
-          };
-        }
+  const renameTab = React.useCallback(
+    (oldPath: string, newPath: string) => {
+      const renames: { from: string; to: string; language: string }[] = [];
+      setTabs((current) =>
+        current.map((tab) => {
+          if (tab.path === oldPath) {
+            renames.push({
+              from: tab.path,
+              to: newPath,
+              language: getLanguageFromExtension(newPath),
+            });
+            return {
+              ...tab,
+              path: newPath,
+              title: deriveTitleFromPath(newPath),
+            };
+          }
 
-        // Check if tab is a child of renamed folder
-        // Normalize paths to ensure proper prefix matching
-        const isChild =
-          tab.path.startsWith(`${oldPath}/`) ||
-          tab.path.startsWith(`${oldPath}\\`);
+          const isChild =
+            tab.path.startsWith(`${oldPath}/`) ||
+            tab.path.startsWith(`${oldPath}\\`);
 
-        if (isChild) {
-          // Replace the old path prefix with the new path
-          const updatedPath = tab.path.replace(oldPath, newPath);
-          return {
-            ...tab,
-            path: updatedPath,
-            title: deriveTitleFromPath(updatedPath),
-          };
-        }
+          if (isChild) {
+            const updatedPath = tab.path.replace(oldPath, newPath);
+            renames.push({
+              from: tab.path,
+              to: updatedPath,
+              language: getLanguageFromExtension(updatedPath),
+            });
+            return {
+              ...tab,
+              path: updatedPath,
+              title: deriveTitleFromPath(updatedPath),
+            };
+          }
 
-        return tab;
-      }),
-    );
-  }, []);
+          return tab;
+        }),
+      );
+      // Models are URI-keyed; mirror the path change so undo history and
+      // the editor's bound model survive the rename.
+      renames.forEach(({ from, to, language }) => {
+        renameModel(projectId, from, to, language);
+      });
+    },
+    [projectId],
+  );
 
   const reorderTabs = React.useCallback(
     (fromIndex: number, toIndex: number) => {
@@ -446,6 +493,10 @@ const useTabManager = (projectId?: string): UseTabManagerReturn => {
   );
 
   const reset = React.useCallback(() => {
+    tabsRef.current.forEach((tab) => {
+      disposeModelForPath(projectId, tab.path);
+      clearViewState(tab.id);
+    });
     setTabs([]);
     setActiveTabId(null);
     if (projectId) {
@@ -504,6 +555,11 @@ const useTabManager = (projectId?: string): UseTabManagerReturn => {
           path,
           title: options?.title ?? deriveTitleFromPath(path),
           content: initialContent,
+          // If we're about to fetch from disk, leave savedContent undefined
+          // until the load completes; otherwise the initial content IS the
+          // baseline.
+          savedContent:
+            isEditable && !hasInitialContent ? undefined : initialContent,
           isModified: false,
           language: getLanguageFromExtension(path),
           isLoading: isEditable && !hasInitialContent,
@@ -537,6 +593,7 @@ const useTabManager = (projectId?: string): UseTabManagerReturn => {
               ? {
                   ...tab,
                   content: data,
+                  savedContent: data,
                   isModified: false,
                   isLoading: false,
                   error: undefined,
@@ -590,6 +647,7 @@ const useTabManager = (projectId?: string): UseTabManagerReturn => {
               ? {
                   ...tab,
                   content: data,
+                  savedContent: data,
                   isModified: false,
                   isLoading: false,
                   error: undefined,

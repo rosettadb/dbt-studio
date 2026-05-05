@@ -31,7 +31,7 @@ import {
   DraggableProvided,
   DraggableStateSnapshot,
 } from '@hello-pangea/dnd';
-import { loader } from '@monaco-editor/react';
+import * as monaco from 'monaco-editor';
 import {
   useNotebook,
   useUpdateNotebook,
@@ -108,48 +108,31 @@ export const NotebookEditor: React.FC<NotebookEditorProps> = ({
     completionsRefSingleton.current = completions;
   }, [completions]);
 
-  // Register global completion provider once (singleton pattern)
-  // Only update the backing suggestions ref, don't re-register per instance
+  // Register global completion provider once (singleton pattern). Monaco is
+  // available synchronously since it's bundled by webpack and bootstrapped
+  // at app startup — no loader.init() ceremony.
   useEffect(() => {
-    loader
-      .init()
-      .then((monaco: any) => {
-        // Register provider only once at module level
-        if (!sharedCompletionProvider) {
-          sharedCompletionProvider =
-            monaco.languages.registerCompletionItemProvider('sql', {
-              provideCompletionItems: (model: any, position: any) => {
-                const word = model.getWordUntilPosition(position);
-                const range = {
-                  startLineNumber: position.lineNumber,
-                  endLineNumber: position.lineNumber,
-                  startColumn: word.startColumn,
-                  endColumn: word.endColumn,
-                };
-
-                // Use singleton ref to get latest completions
-                const suggestions = completionsRefSingleton.current.map(
-                  (item) => ({
-                    ...item,
-                    range,
-                  }),
-                );
-
-                return { suggestions };
-              },
-            });
-        }
-
-        return undefined;
-      })
-      .catch((err: any) => {
-        // eslint-disable-next-line no-console
-        console.error('[NotebookEditor] Failed to initialize Monaco:', err);
-      });
-
-    // Don't dispose the shared provider on unmount - it's global
-    // Only dispose on app teardown
-  }, []); // Empty deps - register once at module init
+    if (!sharedCompletionProvider) {
+      sharedCompletionProvider =
+        monaco.languages.registerCompletionItemProvider('sql', {
+          provideCompletionItems: (model, position) => {
+            const word = model.getWordUntilPosition(position);
+            const range = {
+              startLineNumber: position.lineNumber,
+              endLineNumber: position.lineNumber,
+              startColumn: word.startColumn,
+              endColumn: word.endColumn,
+            };
+            const suggestions = completionsRefSingleton.current.map((item) => ({
+              ...item,
+              range,
+            }));
+            return { suggestions };
+          },
+        });
+    }
+    // Don't dispose the shared provider on unmount — it's global.
+  }, []);
 
   // Sync local cells with notebook data
   useEffect(() => {
