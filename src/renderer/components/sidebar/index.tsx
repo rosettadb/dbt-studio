@@ -42,8 +42,7 @@ export const Sidebar: React.FC<Props> = ({
   const { isSidebarOpen, setIsSidebarOpen } = useAppContext();
   const location = useLocation();
 
-  const hasPanel = Boolean(content);
-  const [isBarExpanded, setIsBarExpanded] = React.useState(!hasPanel);
+  const [isBarExpanded, setIsBarExpanded] = React.useState(false);
 
   const isProjectSelected = Boolean(selectedProject?.id);
 
