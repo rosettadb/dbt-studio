@@ -25,7 +25,7 @@ import {
   DuckLake as DataLake,
   Notebooks,
 } from './screens';
-import { SelectProjectLayout } from './layouts';
+import { SelectProjectLayout, AppShell } from './layouts';
 import { AppProvider, ProcessProvider } from './context';
 import { QueryClientContextProvider } from './context/QueryClientContext';
 import { themeStorageManager, getStoredThemeMode } from './utils/themeStorage';
@@ -43,7 +43,7 @@ const App: React.FC = () => {
           <Route path="/setup" element={<Setup />} />
           <Route path="*" element={<Navigate to="/" />} />
         </Route>
-        <Route path="/app">
+        <Route path="/app" element={<AppShell />}>
           <Route path="" element={<ProjectDetails />} />
           <Route path="connections" element={<Connections />} />
           <Route path="select-project" element={<SelectProject />} />
