@@ -6,6 +6,7 @@ import type {
   CloudListResult,
   CloudConnection,
   RecentItem,
+  FilterCondition,
 } from '../../types/frontend';
 import type {
   UploadFileRequest,
@@ -127,6 +128,7 @@ export const usePreviewData = () => {
       pageSize?: number;
       page?: number;
       whereClause?: string;
+      filterConditions?: FilterCondition[];
       knownTotalRows?: number;
     }) => cloudExplorerService.previewData(params),
   );

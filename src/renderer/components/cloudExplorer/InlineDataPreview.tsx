@@ -120,7 +120,7 @@ export const InlineDataPreview: React.FC<InlineDataPreviewProps> = ({
           previewType: 'sample',
           page: newPage,
           pageSize: effectivePageSize,
-          whereClause: buildWhereClause(activeFilter),
+          filterConditions: activeFilter,
           knownTotalRows: knownRowsForRequest,
         });
         setCurrentPageData(result);
@@ -164,7 +164,7 @@ export const InlineDataPreview: React.FC<InlineDataPreviewProps> = ({
         previewType: 'sample',
         pageSize: serverPageSize,
         page: 0,
-        whereClause: buildWhereClause(activeFilter),
+        filterConditions: activeFilter,
       });
       setCurrentPageData(result);
       setKnownTotalRows(result.totalRows ?? null);
@@ -177,7 +177,6 @@ export const InlineDataPreview: React.FC<InlineDataPreviewProps> = ({
   }, [
     hasServerContext,
     activeFilter,
-    buildWhereClause,
     previewDataMutation,
     provider,
     config,
@@ -202,7 +201,7 @@ export const InlineDataPreview: React.FC<InlineDataPreviewProps> = ({
           previewType: 'sample',
           pageSize: serverPageSize,
           page: 0,
-          whereClause: buildWhereClause(conditions),
+          filterConditions: conditions,
         });
         setCurrentPageData(result);
         setKnownTotalRows(result.totalRows ?? null);
@@ -215,7 +214,6 @@ export const InlineDataPreview: React.FC<InlineDataPreviewProps> = ({
     },
     [
       hasServerContext,
-      buildWhereClause,
       previewDataMutation,
       provider,
       config,
@@ -240,7 +238,7 @@ export const InlineDataPreview: React.FC<InlineDataPreviewProps> = ({
         previewType: 'sample',
         pageSize: serverPageSize,
         page: 0,
-        whereClause: '',
+        filterConditions: [],
       });
       setCurrentPageData(result);
       setKnownTotalRows(result.totalRows ?? null);
@@ -263,7 +261,6 @@ export const InlineDataPreview: React.FC<InlineDataPreviewProps> = ({
   // ── Statistics lazy load — triggered once when the Statistics tab is opened
   const handleStatsTabActivated = useCallback(() => {
     if (statsLoadedRef.current || !hasServerContext) return;
-    statsLoadedRef.current = true;
     setStatsLoading(true);
     setStatsError(undefined);
     (async () => {
@@ -277,11 +274,14 @@ export const InlineDataPreview: React.FC<InlineDataPreviewProps> = ({
         });
         if (result.success) {
           setStatsData(result.data as unknown as ColumnStat[]);
+          statsLoadedRef.current = true;
         } else {
           setStatsError(result.error || 'Failed to load statistics');
+          statsLoadedRef.current = false;
         }
       } catch (err) {
         setStatsError(err instanceof Error ? err.message : String(err));
+        statsLoadedRef.current = false;
       } finally {
         setStatsLoading(false);
       }

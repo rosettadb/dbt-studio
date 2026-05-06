@@ -201,6 +201,7 @@ const registerCloudExplorerHandlers = () => {
         pageSize = 25,
         page = 0,
         whereClause = '',
+        filterConditions = [],
         knownTotalRows,
       }: {
         provider: CloudProvider;
@@ -211,6 +212,7 @@ const registerCloudExplorerHandlers = () => {
         pageSize?: number;
         page?: number;
         whereClause?: string;
+        filterConditions?: any[];
         knownTotalRows?: number;
       },
     ) => {
@@ -227,6 +229,7 @@ const registerCloudExplorerHandlers = () => {
         pageSize,
         page,
         whereClause,
+        filterConditions,
         knownTotalRows,
       });
     },

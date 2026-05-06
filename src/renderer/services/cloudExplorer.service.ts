@@ -4,6 +4,7 @@ import type {
   CloudStorageConfig,
   PreviewResult,
   CloudProvider,
+  FilterCondition,
 } from '../../types/frontend';
 import type {
   UploadFileRequest,
@@ -109,6 +110,7 @@ class CloudExplorerService {
     pageSize?: number;
     page?: number;
     whereClause?: string;
+    filterConditions?: FilterCondition[];
     knownTotalRows?: number;
   }): Promise<PreviewResult> {
     const { data } = await client.post<typeof params, PreviewResult>(

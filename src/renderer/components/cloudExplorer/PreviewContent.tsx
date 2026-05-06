@@ -183,14 +183,6 @@ export const PreviewContent: React.FC<PreviewContentProps> = ({
   // ── Data tab ─────────────────────────────────────────────────────────────────
 
   const renderDataTab = () => {
-    if (!previewResult.data || previewResult.data.length === 0) {
-      return (
-        <Box sx={{ textAlign: 'center', p: 4 }}>
-          <Typography color="text.secondary">No data to display</Typography>
-        </Box>
-      );
-    }
-
     return (
       <Box sx={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
         {/* Toolbar */}
@@ -250,102 +242,106 @@ export const PreviewContent: React.FC<PreviewContentProps> = ({
           </Typography>
         </Box>
 
-        {/* Table */}
-        <Box sx={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
-          <TableContainer
-            component={Paper}
-            sx={{
-              flex: 1,
-              minHeight: 200,
-              overflow: 'auto',
-              maxHeight: tableMaxHeight,
-              maxWidth: '100%',
-            }}
-          >
-            <Table stickyHeader size="small" sx={{ minWidth: 'max-content' }}>
-              <TableHead>
-                <TableRow>
-                  {previewResult.columns?.map((column) => (
-                    <TableCell
-                      key={column.name}
-                      sx={{
-                        fontWeight: 'bold',
-                        minWidth: 150,
-                        whiteSpace: 'nowrap',
-                        py: 1,
-                      }}
-                    >
-                      <Box>
-                        <Typography variant="body2">{column.name}</Typography>
-                        <Typography variant="caption" color="text.secondary">
-                          {column.type}
-                        </Typography>
-                      </Box>
-                    </TableCell>
-                  ))}
-                </TableRow>
-              </TableHead>
-              <TableBody>
-                {previewResult.data.map((row, index) => (
-                  <TableRow
-                    // eslint-disable-next-line react/no-array-index-key
-                    key={`${serverPage}-${index}`}
-                    hover
-                    sx={{ '& .MuiTableCell-root': { py: 0.5 } }}
-                  >
-                    {previewResult.columns?.map((column, colIndex) => {
-                      const cellValue = Array.isArray(row)
-                        ? row[colIndex]
-                        : row[column.name];
-                      return (
-                        <TableCell
-                          key={column.name}
-                          sx={{ minWidth: 150, py: 0.5 }}
-                        >
-                          <Typography
-                            variant="body2"
-                            sx={{
-                              maxWidth: 200,
-                              overflow: 'hidden',
-                              textOverflow: 'ellipsis',
-                              whiteSpace: 'nowrap',
-                              fontFamily: 'monospace',
-                            }}
-                            title={
-                              cellValue !== null && cellValue !== undefined
-                                ? sanitizeText(String(cellValue))
-                                : '—'
-                            }
-                          >
-                            {cellValue !== null && cellValue !== undefined
-                              ? sanitizeText(String(cellValue))
-                              : '—'}
-                          </Typography>
-                        </TableCell>
-                      );
-                    })}
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </TableContainer>
-
-          {/* Pagination — same pattern as SQL Editor / Notebooks */}
-          <Box sx={{ flexShrink: 0, borderTop: 1, borderColor: 'divider' }}>
-            <TablePagination
-              component="div"
-              count={totalRows}
-              page={serverPage}
-              onPageChange={handleChangePage}
-              rowsPerPage={serverPageSize}
-              onRowsPerPageChange={handleChangeRowsPerPage}
-              rowsPerPageOptions={[25, 50, 100, 250]}
-              labelDisplayedRows={({ from, to, count }) =>
-                `${from}–${to} of ${count.toLocaleString()} rows`
-              }
-            />
+        {!previewResult.data || previewResult.data.length === 0 ? (
+          <Box sx={{ textAlign: 'center', p: 4 }}>
+            <Typography color="text.secondary">No data to display</Typography>
           </Box>
-        </Box>
+        ) : (
+          <Box sx={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
+            <TableContainer
+              component={Paper}
+              sx={{
+                flex: 1,
+                minHeight: 200,
+                overflow: 'auto',
+                maxHeight: tableMaxHeight,
+                maxWidth: '100%',
+              }}
+            >
+              <Table stickyHeader size="small" sx={{ minWidth: 'max-content' }}>
+                <TableHead>
+                  <TableRow>
+                    {previewResult.columns?.map((column) => (
+                      <TableCell
+                        key={column.name}
+                        sx={{
+                          fontWeight: 'bold',
+                          minWidth: 150,
+                          whiteSpace: 'nowrap',
+                          py: 1,
+                        }}
+                      >
+                        <Box>
+                          <Typography variant="body2">{column.name}</Typography>
+                          <Typography variant="caption" color="text.secondary">
+                            {column.type}
+                          </Typography>
+                        </Box>
+                      </TableCell>
+                    ))}
+                  </TableRow>
+                </TableHead>
+                <TableBody>
+                  {previewResult.data.map((row, index) => (
+                    <TableRow
+                      // eslint-disable-next-line react/no-array-index-key
+                      key={`${serverPage}-${index}`}
+                      hover
+                      sx={{ '& .MuiTableCell-root': { py: 0.5 } }}
+                    >
+                      {previewResult.columns?.map((column, colIndex) => {
+                        const cellValue = Array.isArray(row)
+                          ? row[colIndex]
+                          : row[column.name];
+                        return (
+                          <TableCell
+                            key={column.name}
+                            sx={{ minWidth: 150, py: 0.5 }}
+                          >
+                            <Typography
+                              variant="body2"
+                              sx={{
+                                maxWidth: 200,
+                                overflow: 'hidden',
+                                textOverflow: 'ellipsis',
+                                whiteSpace: 'nowrap',
+                                fontFamily: 'monospace',
+                              }}
+                              title={
+                                cellValue !== null && cellValue !== undefined
+                                  ? sanitizeText(String(cellValue))
+                                  : '—'
+                              }
+                            >
+                              {cellValue !== null && cellValue !== undefined
+                                ? sanitizeText(String(cellValue))
+                                : '—'}
+                            </Typography>
+                          </TableCell>
+                        );
+                      })}
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </TableContainer>
+
+            <Box sx={{ flexShrink: 0, borderTop: 1, borderColor: 'divider' }}>
+              <TablePagination
+                component="div"
+                count={totalRows}
+                page={serverPage}
+                onPageChange={handleChangePage}
+                rowsPerPage={serverPageSize}
+                onRowsPerPageChange={handleChangeRowsPerPage}
+                rowsPerPageOptions={[25, 50, 100, 250]}
+                labelDisplayedRows={({ from, to, count }) =>
+                  `${from}–${to} of ${count.toLocaleString()} rows`
+                }
+              />
+            </Box>
+          </Box>
+        )}
       </Box>
     );
   };

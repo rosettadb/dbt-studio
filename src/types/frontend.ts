@@ -262,6 +262,13 @@ export type PreviewResult = {
   previewType: 'sample' | 'schema' | 'stats';
 };
 
+export type FilterCondition = {
+  id: string;
+  column: string;
+  operator: '=' | '!=' | '>' | '>=' | '<' | '<=' | 'LIKE';
+  value: string;
+};
+
 export type PreviewOptions = {
   provider: CloudProvider;
   cloudConfig: CloudStorageConfig;
@@ -271,14 +278,8 @@ export type PreviewOptions = {
   page?: number;
   pageSize?: number;
   whereClause?: string;
+  filterConditions?: FilterCondition[];
   knownTotalRows?: number;
-};
-
-export type FilterCondition = {
-  id: string;
-  column: string;
-  operator: '=' | '!=' | '>' | '>=' | '<' | '<=' | 'LIKE';
-  value: string;
 };
 
 export type ColumnStat = {

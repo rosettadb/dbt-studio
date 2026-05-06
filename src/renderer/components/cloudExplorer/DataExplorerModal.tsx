@@ -70,6 +70,17 @@ export const DataExplorerModal: React.FC<DataExplorerModalProps> = ({
       : [{ id: generateId(), column: '', operator: '=', value: '' }],
   );
 
+  // Synchronize state when initialConditions changes (e.g., cleared externally)
+  React.useEffect(() => {
+    if (open) {
+      setConditions(
+        initialConditions && initialConditions.length > 0
+          ? initialConditions
+          : [{ id: generateId(), column: '', operator: '=', value: '' }],
+      );
+    }
+  }, [initialConditions, open]);
+
   const whereClause = useMemo(() => buildWhereClause(conditions), [conditions]);
 
   const handleAddCondition = () => {

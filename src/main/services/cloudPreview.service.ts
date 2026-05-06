@@ -3,6 +3,7 @@ import type {
   PreviewResult,
   PreviewOptions,
   ColumnStat,
+  FilterCondition,
 } from '../../types/frontend';
 import {
   buildCloudSecretQuery,
@@ -24,9 +25,6 @@ type DetectedFormat =
   | 'xlsx'
   | 'xls';
 
-const FORBIDDEN_CREDENTIAL_KEYWORDS =
-  /\b(SECRET|CREDENTIAL|KEY_ID|SECRET_KEY)\b/i;
-
 type PreviewMetadata = {
   detectedFormat?: DetectedFormat;
   columns?: Array<{ name: string; type: string; nullable?: boolean }>;
@@ -34,11 +32,29 @@ type PreviewMetadata = {
   columnStats?: ColumnStat[];
 };
 
+/**
+ * Manual bounded cache using native Map.
+ * Native Maps preserve insertion order, allowing for a simple FIFO/LRU eviction.
+ */
 const metadataCache = new Map<string, PreviewMetadata>();
+const MAX_CACHE_SIZE = 100;
 
 function getMetadataCacheEntry(objectPath: string): PreviewMetadata {
   const existing = metadataCache.get(objectPath);
-  if (existing) return existing;
+  if (existing) {
+    // Move to end of Map to mark as most recently used (LRU logic)
+    metadataCache.delete(objectPath);
+    metadataCache.set(objectPath, existing);
+    return existing;
+  }
+
+  // Evict oldest if full
+  if (metadataCache.size >= MAX_CACHE_SIZE) {
+    const oldestKey = metadataCache.keys().next().value;
+    if (oldestKey !== undefined) {
+      metadataCache.delete(oldestKey);
+    }
+  }
 
   const entry: PreviewMetadata = {
     totalRowsByFilter: new Map<string, number>(),
@@ -47,14 +63,43 @@ function getMetadataCacheEntry(objectPath: string): PreviewMetadata {
   return entry;
 }
 
-function getFilterCacheKey(whereClause: string): string {
-  return whereClause.trim();
+function getFilterCacheKey(filterConditions?: FilterCondition[]): string {
+  if (!filterConditions || filterConditions.length === 0) return 'no-filter';
+  return JSON.stringify(
+    filterConditions
+      .map((c) => ({ c: c.column, o: c.operator, v: c.value }))
+      .sort((a, b) => a.c.localeCompare(b.c)),
+  );
 }
 
-function validateWhereClause(whereClause: string): void {
-  if (FORBIDDEN_CREDENTIAL_KEYWORDS.test(whereClause)) {
-    throw new Error('WHERE clause contains forbidden keywords');
-  }
+/**
+ * Compiles structured filter conditions into a safe SQL predicate.
+ * Strict validation of field names, operators, and value types.
+ */
+function compileFilterConditions(conditions: FilterCondition[]): string {
+  const valid = conditions.filter((c) => c.column && c.value !== '');
+  if (valid.length === 0) return '';
+
+  return valid
+    .map((c) => {
+      // 1. Validate operator
+      const ALLOWED_OPERATORS = ['=', '!=', '>', '>=', '<', '<=', 'LIKE'];
+      if (!ALLOWED_OPERATORS.includes(c.operator)) {
+        throw new Error(`Invalid operator: ${c.operator}`);
+      }
+
+      // 2. Escape column name (double quotes for identifiers)
+      const escapedCol = `"${c.column.replace(/"/g, '""')}"`;
+
+      // 3. Escape value (single quotes for literals)
+      const escapedValue = c.value.replace(/'/g, "''");
+
+      if (c.operator === 'LIKE') {
+        return `${escapedCol} LIKE '${escapedValue}'`;
+      }
+      return `${escapedCol} ${c.operator} '${escapedValue}'`;
+    })
+    .join(' AND ');
 }
 
 function detectFormatFromExtension(objectPath: string): DetectedFormat | null {
@@ -271,7 +316,7 @@ const CONNECTION_TIMEOUT_MS = 5000;
 async function getConnectionWithTimeout(): Promise<any> {
   return Promise.race([
     DuckDBBootstrap.getConnection('cloud-preview'),
-    new Promise<never>((resolve, reject) => {
+    new Promise<never>((_resolve, reject) => {
       setTimeout(() => {
         reject(
           new Error(
@@ -304,6 +349,8 @@ async function dropSecrets(connection: any): Promise<void> {
 
 // ─── Main Service ─────────────────────────────────────────────────────────────
 
+const MAX_PAGE_SIZE = 1000;
+
 class CloudPreviewService {
   static async previewCloudData({
     provider,
@@ -313,13 +360,30 @@ class CloudPreviewService {
     limit,
     page = 0,
     pageSize = 25,
-    whereClause = '',
+    filterConditions = [],
     knownTotalRows,
   }: PreviewOptions): Promise<PreviewResult> {
-    const effectivePageSize = limit ?? pageSize;
+    // Validate and cap pagination
+    const parsedPage = Math.max(0, Math.floor(page));
+    const parsedPageSize = Math.max(
+      1,
+      Math.min(Math.floor(pageSize), MAX_PAGE_SIZE),
+    );
+    const effectivePageSize =
+      limit !== undefined
+        ? Math.min(Math.floor(limit), MAX_PAGE_SIZE)
+        : parsedPageSize;
+
     const startTime = Date.now();
     const metadata = getMetadataCacheEntry(objectPath);
-    const filterCacheKey = getFilterCacheKey(whereClause);
+
+    // Prefer filterConditions over raw whereClause
+    const activeFilterConditions =
+      filterConditions.length > 0 ? filterConditions : [];
+    const filterCacheKey = getFilterCacheKey(activeFilterConditions);
+    const sanitizedWhereClause = compileFilterConditions(
+      activeFilterConditions,
+    );
 
     let connection: any = null;
     try {
@@ -363,9 +427,6 @@ class CloudPreviewService {
 
       // Build reader function
       const readerFn = getReaderFnForFormat(detectedFormat, objectPath);
-
-      // Validate WHERE clause
-      if (whereClause) validateWhereClause(whereClause);
 
       let data: any[] = [];
       let columns: Array<{ name: string; type: string; nullable?: boolean }> =
@@ -411,8 +472,10 @@ class CloudPreviewService {
       }
 
       // Paginated sample query
-      const offset = page * effectivePageSize;
-      const whereClauseSql = whereClause ? `WHERE ${whereClause}` : '';
+      const offset = parsedPage * effectivePageSize;
+      const whereClauseSql = sanitizedWhereClause
+        ? `WHERE ${sanitizedWhereClause}`
+        : '';
       const query = `SELECT * FROM ${readerFn} ${whereClauseSql} LIMIT ${effectivePageSize} OFFSET ${offset}`;
 
       const result = await connection.run(query);
@@ -450,7 +513,7 @@ class CloudPreviewService {
       }
 
       let totalRows =
-        page > 0 && Number.isFinite(knownTotalRows)
+        parsedPage > 0 && Number.isFinite(knownTotalRows)
           ? knownTotalRows
           : undefined;
       if (totalRows === undefined) {
@@ -462,7 +525,7 @@ class CloudPreviewService {
           readerFn,
           detectedFormat,
           objectPath,
-          whereClause,
+          sanitizedWhereClause,
         );
         metadata.totalRowsByFilter.set(filterCacheKey, totalRows);
       }
@@ -489,12 +552,12 @@ class CloudPreviewService {
         columns,
         totalRows,
         isEstimatedCount,
-        page,
+        page: parsedPage,
         pageSize: effectivePageSize,
         objectPath,
         previewType,
         detectedFormat,
-        activeWhereClause: whereClause || undefined,
+        activeWhereClause: sanitizedWhereClause || undefined,
         executionTimeMs: Date.now() - startTime,
       };
     } catch (error) {
