@@ -27,6 +27,15 @@ import { DuckLakeError } from '../../../../types/duckLakeErrors';
 import { normalizeNumericValue } from '../../../../renderer/utils/fileUtils';
 
 export class SQLiteCatalogAdapter extends CatalogAdapter {
+  private isUnsupportedSQLiteMigrationError(error: unknown): boolean {
+    const message = (error as Error)?.message?.toLowerCase?.() || '';
+    return (
+      message.includes('failed to migrate ducklake from v0.1 to v0.2') &&
+      message.includes('unsupported alter table type') &&
+      message.includes('sqlite tables only support')
+    );
+  }
+
   async connect(
     config: DuckLakeCatalogConfig,
     instance: DuckLakeInstance,
@@ -62,12 +71,31 @@ export class SQLiteCatalogAdapter extends CatalogAdapter {
 
       // Attach DuckLake catalog with SQLite backend
       const attachString = `ducklake:sqlite:${config.sqlite.metadataPath}`;
-      await this.attachDuckLakeCatalog(
-        connection,
-        attachString,
-        instance.name,
-        instance.dataPath,
-      );
+      try {
+        await this.attachDuckLakeCatalog(
+          connection,
+          attachString,
+          instance.name,
+          instance.dataPath,
+        );
+      } catch (error) {
+        if (!this.isUnsupportedSQLiteMigrationError(error)) {
+          throw error;
+        }
+
+        // eslint-disable-next-line no-console
+        console.warn(
+          'DuckLake automatic migration failed for SQLite catalog; retrying with AUTOMATIC_MIGRATION FALSE',
+          error,
+        );
+        await this.attachDuckLakeCatalog(
+          connection,
+          attachString,
+          instance.name,
+          instance.dataPath,
+          { automaticMigration: false },
+        );
+      }
 
       this.connectionInfo = {
         instance: duckdbInstance,
