@@ -27,7 +27,7 @@ import { DuckLakeError } from '../../../../types/duckLakeErrors';
 import { normalizeNumericValue } from '../../../../renderer/utils/fileUtils';
 
 export class SQLiteCatalogAdapter extends CatalogAdapter {
-  private isUnsupportedSQLiteMigrationError(error: unknown): boolean {
+  private static isUnsupportedSQLiteMigrationError(error: unknown): boolean {
     const message = (error as Error)?.message?.toLowerCase?.() || '';
     return (
       message.includes('failed to migrate ducklake from v0.1 to v0.2') &&
@@ -79,7 +79,7 @@ export class SQLiteCatalogAdapter extends CatalogAdapter {
           instance.dataPath,
         );
       } catch (error) {
-        if (!this.isUnsupportedSQLiteMigrationError(error)) {
+        if (!SQLiteCatalogAdapter.isUnsupportedSQLiteMigrationError(error)) {
           throw error;
         }
 
