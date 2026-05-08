@@ -191,7 +191,10 @@ export const ChatMessageList: React.FC<ChatMessageListProps> = ({
           No messages yet. Say hello!
         </Typography>
       )}
-      <Stack spacing={0.25} sx={{ minWidth: 0, overflowX: 'hidden', px: 1.5 }}>
+      <Stack
+        spacing={0.25}
+        sx={{ minWidth: 0, overflowX: 'hidden', px: 1.5, pb: '50px' }}
+      >
         {messages.map((m, index) => {
           if (m.role === 'system' && (m.metadata as any)?.compacted) {
             const summarizedCount =
@@ -287,31 +290,6 @@ export const ChatMessageList: React.FC<ChatMessageListProps> = ({
           </Box>
         )}
 
-        {/* Spinner — shown while streaming starts and no content yet */}
-        {isAgentRunning &&
-          (streamState?.contentParts.length ?? 0) === 0 &&
-          (() => {
-            const lastMsg = messages[messages.length - 1];
-            if (lastMsg?.role !== 'user') return null;
-            return (
-              <Box
-                sx={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 1,
-                  px: 0.5,
-                  py: 0.5,
-                  color: 'text.disabled',
-                }}
-              >
-                <CircularProgress size={10} color="inherit" />
-                <Typography variant="caption" color="text.disabled">
-                  Working…
-                </Typography>
-              </Box>
-            );
-          })()}
-
         {/* Live interleaved stream — text parts + tool-call parts in arrival order */}
         {(streamState?.contentParts.length ?? 0) > 0 &&
           (() => {
@@ -371,9 +349,64 @@ export const ChatMessageList: React.FC<ChatMessageListProps> = ({
           />
         )}
 
-        {/* Inline agent error alert */}
+        {/* Agent error alert */}
         {streamState?.error && onClearError && (
           <AgentErrorAlert error={streamState.error} onDismiss={onClearError} />
+        )}
+
+        {/* Global persistent Working... — visible throughout the entire generation cycle.
+            Appears below all tool calls, TerminalGate, and error banners.
+            Disappears only when generation fully stops. */}
+        {isAgentRunning && !streamState?.error && (
+          <Box
+            sx={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 0.75,
+              px: 0.5,
+              py: 0.75,
+              color: 'text.disabled',
+            }}
+          >
+            <CircularProgress size={10} color="inherit" sx={{ opacity: 0.6 }} />
+            <Typography
+              variant="caption"
+              sx={{
+                color: 'text.secondary',
+                fontSize: '0.72rem',
+                fontStyle: 'italic',
+                '@keyframes workingPulse': {
+                  '0%, 100%': { opacity: 0.45 },
+                  '50%': { opacity: 1 },
+                },
+                animation: 'workingPulse 1.6s ease-in-out infinite',
+              }}
+            >
+              {streamState?.pendingConfirm
+                ? 'Waiting for user input'
+                : 'Working'}
+            </Typography>
+            {!streamState?.pendingConfirm &&
+              [0, 1, 2].map((i) => (
+                <Box
+                  key={i}
+                  sx={{
+                    width: 3,
+                    height: 3,
+                    borderRadius: '50%',
+                    bgcolor: 'text.disabled',
+                    '@keyframes workingDot': {
+                      '0%, 80%, 100%': {
+                        transform: 'scale(0.6)',
+                        opacity: 0.35,
+                      },
+                      '40%': { transform: 'scale(1)', opacity: 0.85 },
+                    },
+                    animation: `workingDot 1.2s ease-in-out ${i * 0.2}s infinite`,
+                  }}
+                />
+              ))}
+          </Box>
         )}
 
         <div ref={bottomRef} />

@@ -35,6 +35,9 @@ import {
 import { toast } from 'react-toastify';
 import { useNavigate } from 'react-router-dom';
 import { connectorsServices, DuckLakeService } from '../../services';
+import { QueryResultStore } from './queryResultStore';
+import { registerQueryResultBridge } from '../../services/agentEditorBridge.service';
+import type { QueryResultSnapshot } from '../../../types/backend';
 import { useLocalStorage } from '../../hooks';
 import { QueryHistoryType } from '../../../types/frontend';
 import { AppLayout } from '../../layouts';
@@ -478,14 +481,49 @@ const Sql = () => {
     [activeTabId, updateTabQuery],
   );
 
-  // Handle query results
+  // Handle query results — also captures a snapshot for the AI Agent
   const handleQueryResults = useCallback(
     (results: any) => {
-      if (activeTabId) {
-        updateTabResults(activeTabId, results);
-      }
+      if (!activeTabId) return;
+      updateTabResults(activeTabId, results);
+
+      // Determine if this is a DDL/DML command (no field list, but successful)
+      const isCommand =
+        results?.isCommand ||
+        ((!results?.fields || results.fields.length === 0) && results?.success);
+
+      const snapshot: QueryResultSnapshot = isCommand
+        ? {
+            status: 'command',
+            columns: [],
+            rows: [],
+            totalRowCount: results?.rowCount ?? 0,
+            duration: results?.duration,
+            commandType: results?.commandType,
+            rowsAffected: results?.rowCount,
+            tabId: activeTabId,
+          }
+        : {
+            status:
+              results?.data && results.data.length > 0 ? 'success' : 'empty',
+            columns: results?.fields?.map((f: any) => f.name) ?? [],
+            rows: results?.data ?? [],
+            totalRowCount: results?.rowCount ?? results?.data?.length ?? 0,
+            duration: results?.duration,
+            sql: (results as any)?.originalSql ?? activeTab?.query,
+            tabId: activeTabId,
+          };
+      QueryResultStore.set(activeTabId, snapshot);
+      // Push result to main process so studio_sql_get_agent_run_result can read it.
+      // Include pushedAt so the main process can detect freshness vs. stale pushes.
+      const pushedAt = Date.now();
+      window.electron.ipcRenderer.invoke('agent:editor:query-run-result', {
+        snapshot,
+        pushedAt,
+      });
     },
-    [activeTabId, updateTabResults],
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [activeTabId, updateTabResults, activeTab?.query],
   );
 
   // Handle query loading state
@@ -498,15 +536,45 @@ const Sql = () => {
     [activeTabId, setTabLoading],
   );
 
-  // Handle query error
+  // Handle query error — also captures an error snapshot for the AI Agent
   const handleSetError = useCallback(
     (error: any) => {
-      if (activeTabId) {
-        setTabError(activeTabId, error);
+      if (!activeTabId) return;
+      setTabError(activeTabId, error);
+
+      const errorMessage =
+        typeof error === 'string'
+          ? error
+          : (error?.message ?? String(error ?? 'Unknown error'));
+
+      const errorSnapshot: QueryResultSnapshot = {
+        status: 'error',
+        columns: [],
+        rows: [],
+        totalRowCount: 0,
+        error: errorMessage,
+        tabId: activeTabId,
+      };
+      QueryResultStore.set(activeTabId, errorSnapshot);
+      // Only push genuine errors to main — skip null/undefined clears that would
+      // produce a false 'Unknown error' and race with the real execution result.
+      if (error != null) {
+        const pushedAt = Date.now();
+        window.electron.ipcRenderer.invoke('agent:editor:query-run-result', {
+          snapshot: errorSnapshot,
+          pushedAt,
+        });
       }
     },
     [activeTabId, setTabError],
   );
+
+  // Register the renderer-side IPC bridge so the AI Agent can read results.
+  // The actual ipcRenderer.on lives in the service (rule FE-03).
+  useEffect(() => {
+    const cleanup = registerQueryResultBridge();
+    return cleanup;
+  }, []);
 
   const handleCancelQuery = async () => {
     const activeQueryId = activeTabId ? tabQueryIds[activeTabId] : null;

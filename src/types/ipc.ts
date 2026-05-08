@@ -365,6 +365,9 @@ export type AgentChannels =
   | 'agent:editor:update-response'
   | 'agent:editor:query-result'
   | 'agent:editor:run-query'
+  | 'agent:editor:query-results-request' // main → renderer: request snapshot
+  | 'agent:editor:query-results-response' // renderer → main: send snapshot back
+  | 'agent:editor:query-run-result' // renderer → main: push result after agent-triggered run
   | 'agent:context-usage'
   | 'agent:context-compacted'
   | 'agent:tools:list'

@@ -4,6 +4,7 @@ import { z } from 'zod';
 import AgentService from '../../../agent.service';
 import ConnectorsService from '../../../connectors.service';
 import DuckLakeService from '../../../duckLake.service';
+import { AgentEditorBridgeService } from '../../agentEditorBridge.service';
 import { truncateToolResult } from '../../tokenEstimator';
 import { TerminalConfirmGate } from '../terminalConfirmGate';
 import { isToolEnabled } from '../toolRegistry';
@@ -253,12 +254,17 @@ export function createStudioDuckLakeTools(conversationId: number) {
             }
           }
 
-          // Step 3 — Delegate actual execution to the frontend SQL Editor
+          // Step 3 — Delegate actual execution to the frontend SQL Editor.
+          // recordQueryFired() must be called BEFORE requestSqlEditorRun so the
+          // push timestamp from the renderer is guaranteed to be > lastQueryFiredAt.
+          AgentEditorBridgeService.recordQueryFired();
           AgentService.requestSqlEditorRun(conversationId, sql);
 
           return {
             ok: true,
-            message: `Query written to the SQL editor and execution triggered. Results will appear in the Query Result panel.`,
+            message:
+              'Query written to the SQL editor and execution triggered. ' +
+              'Now call studio_sql_get_agent_run_result to read the outcome (rows returned, rows affected, or error).',
             meta: {
               duration: Date.now() - startedAt,
               instanceId: resolvedInstanceId,
