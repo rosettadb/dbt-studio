@@ -241,12 +241,15 @@ const Sql = () => {
   const activeDuckLakeInstanceIdRef = useRef<string | null>(null);
 
   useEffect(() => {
-    if (connectionInput && (connectionInput as any).type === 'ducklake') {
-      activeDuckLakeInstanceIdRef.current = (connectionInput as any).instanceId;
+    if (activeConnectionId?.startsWith('ducklake-')) {
+      activeDuckLakeInstanceIdRef.current = activeConnectionId.replace(
+        'ducklake-',
+        '',
+      );
     } else {
       activeDuckLakeInstanceIdRef.current = null;
     }
-  }, [connectionInput]);
+  }, [activeConnectionId]);
 
   // DuckLake connection lifecycle management
   // Acquire connection when DuckLake connection becomes active, release on unmount or connection change
@@ -321,6 +324,11 @@ const Sql = () => {
     return tables;
   }, [duckLakeSchema]);
 
+  const duckLakeSchemaNames = useMemo(() => {
+    if (!duckLakeSchema || !duckLakeSchema.schemas) return [];
+    return duckLakeSchema.schemas.map((s: any) => s.name);
+  }, [duckLakeSchema]);
+
   // Generate completions from schema
   const completions = useMemo(() => {
     const baseCompletions = activeSchema
@@ -339,7 +347,7 @@ const Sql = () => {
     const requestSeq = duckLakeCompletionsRequestSeq.current + 1;
     duckLakeCompletionsRequestSeq.current = requestSeq;
 
-    if (!connectionInput || (connectionInput as any).type !== 'ducklake') {
+    if (!activeConnectionId || !activeConnectionId.startsWith('ducklake-')) {
       setDuckLakeCompletions([]);
       setDuckLakeSchema(null);
       setDuckLakeSchemaLoading(false);
@@ -347,8 +355,8 @@ const Sql = () => {
       return;
     }
 
-    const { instanceId } = connectionInput as any;
-    const requestedInstanceId = instanceId as string;
+    const instanceId = activeConnectionId.replace('ducklake-', '');
+    const requestedInstanceId = instanceId;
 
     const isStale = () =>
       requestSeq !== duckLakeCompletionsRequestSeq.current ||
@@ -391,7 +399,7 @@ const Sql = () => {
         setDuckLakeSchemaLoading(false);
       }
     }
-  }, [connectionInput]);
+  }, [activeConnectionId]);
 
   // Load DuckLake completions when connection changes
   useEffect(() => {
@@ -915,6 +923,7 @@ const Sql = () => {
                       databaseName={connectionInput.name || 'DuckLake Instance'}
                       type="ducklake"
                       schema={duckLakeTables}
+                      schemaNames={duckLakeSchemaNames}
                       isLoading={duckLakeSchemaLoading}
                       filter={filter}
                     />
