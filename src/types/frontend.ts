@@ -242,11 +242,31 @@ export type RecentItem = {
 export type PreviewResult = {
   success: boolean;
   data?: any[];
-  columns?: Array<{ name: string; type: string }>;
+  columns?: Array<{ name: string; type: string; nullable?: boolean }>;
   totalRows?: number;
+  isEstimatedCount?: boolean;
+  page?: number;
+  pageSize?: number;
+  executionTimeMs?: number;
+  detectedFormat?:
+    | 'csv'
+    | 'json'
+    | 'jsonl'
+    | 'parquet'
+    | 'avro'
+    | 'xlsx'
+    | 'xls';
+  activeWhereClause?: string;
   error?: string;
   objectPath: string;
   previewType: 'sample' | 'schema' | 'stats';
+};
+
+export type FilterCondition = {
+  id: string;
+  column: string;
+  operator: '=' | '!=' | '>' | '>=' | '<' | '<=' | 'LIKE';
+  value: string;
 };
 
 export type PreviewOptions = {
@@ -255,6 +275,22 @@ export type PreviewOptions = {
   objectPath: string;
   previewType?: 'sample' | 'schema' | 'stats';
   limit?: number;
+  page?: number;
+  pageSize?: number;
+  whereClause?: string;
+  filterConditions?: FilterCondition[];
+  knownTotalRows?: number;
+};
+
+export type ColumnStat = {
+  columnName: string;
+  columnType: string;
+  nullCount: number | null;
+  distinctCount: number | null;
+  min: string | null;
+  max: string | null;
+  mean: string | null;
+  isSampleBased: boolean;
 };
 
 export type DatabaseSources = {

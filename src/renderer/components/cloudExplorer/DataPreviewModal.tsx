@@ -1,4 +1,14 @@
-import React, { useState } from 'react';
+/**
+ * DataPreviewModal — fullscreen "zoom in" wrapper around the same preview
+ * content rendered by InlineDataPreview.
+ *
+ * All state (pagination, filters, data) lives in InlineDataPreview and is
+ * passed down here via props. This component is purely presentational: it
+ * wraps the shared content in a fullscreen MUI Dialog so the user gets the
+ * same tabs, pagination, and filter controls at full viewport size.
+ */
+
+import React from 'react';
 import {
   Dialog,
   DialogTitle,
@@ -7,411 +17,65 @@ import {
   Button,
   Box,
   Typography,
-  Table,
-  TableBody,
-  TableCell,
-  TableContainer,
-  TableHead,
-  TableRow,
-  Paper,
   Chip,
-  Alert,
-  CircularProgress,
-  Tabs,
-  Tab,
   IconButton,
-  TextField,
-  InputAdornment,
-  TablePagination,
 } from '@mui/material';
-import {
-  Close,
-  Search,
-  TableView,
-  Schema,
-  Analytics,
-} from '@mui/icons-material';
-import type { PreviewResult } from '../../../types/frontend';
-import { formatFileSize } from '../../utils/fileUtils';
+import { Close, TableView } from '@mui/icons-material';
+import type {
+  PreviewResult,
+  FilterCondition,
+  ColumnStat,
+} from '../../../types/frontend';
+import { PreviewContent } from './PreviewContent';
 
-interface DataPreviewModalProps {
+export interface DataPreviewModalProps {
   open: boolean;
   onClose: () => void;
   fileName: string;
+  fileSize?: number;
+  // All preview state is owned by InlineDataPreview and passed through
   previewResult: PreviewResult | null;
   loading: boolean;
   error?: string;
-  fileSize?: number; // Size in bytes
+  serverPage: number;
+  serverPageSize: number;
+  activeFilter: FilterCondition[];
+  statsData: ColumnStat[] | null;
+  statsLoading: boolean;
+  statsError?: string;
+  // Callbacks delegated back to InlineDataPreview
+  hasServerContext: boolean;
+  onPageChange: (page: number, pageSize?: number) => Promise<void>;
+  onApplyFilter: (conditions: FilterCondition[]) => Promise<void>;
+  onClearFilter: () => Promise<void>;
+  onRefresh: () => Promise<void>;
+  onStatsTabActivated: () => void;
 }
-
-/**
- * Sanitize text to remove problematic Unicode characters that might cause display issues
- */
-const sanitizeText = (text: string): string => {
-  if (typeof text !== 'string') return String(text);
-
-  // Remove Unicode combining characters and other problematic characters
-  return text
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '') // Remove combining diacritical marks
-    .replace(/[\u200b-\u200f\u2060-\u206f]/g, '') // Remove zero-width characters
-    .replace(/[\u2000-\u200a]/g, ' ') // Replace various spaces with regular space
-    .replace(/[^\u0020-\u007e]/g, (char) => {
-      // Keep common printable Unicode characters, replace others with �
-      const code = char.charCodeAt(0);
-      if (code >= 0x80 && code <= 0x024f) return char; // Extended Latin
-      if (code >= 0x1e00 && code <= 0x1eff) return char; // Latin Extended Additional
-      return '�';
-    })
-    .trim();
-};
 
 export const DataPreviewModal: React.FC<DataPreviewModalProps> = ({
   open,
   onClose,
   fileName,
+  fileSize,
   previewResult,
   loading,
   error,
-  fileSize,
+  serverPage,
+  serverPageSize,
+  activeFilter,
+  statsData,
+  statsLoading,
+  statsError,
+  hasServerContext,
+  onPageChange,
+  onApplyFilter,
+  onClearFilter,
+  onRefresh,
+  onStatsTabActivated,
 }) => {
-  const [currentTab, setCurrentTab] = useState(0);
-  const [searchTerm, setSearchTerm] = useState('');
-  const [page, setPage] = useState(0);
-  const [rowsPerPage, setRowsPerPage] = useState(25);
-
-  const handleTabChange = (_event: React.SyntheticEvent, newValue: number) => {
-    setCurrentTab(newValue);
-  };
-
-  const handleSearchChange = (event: React.ChangeEvent<HTMLInputElement>) => {
-    setSearchTerm(event.target.value);
-    setPage(0); // Reset pagination when searching
-  };
-
-  const handleChangePage = (_event: unknown, newPage: number) => {
-    setPage(newPage);
-  };
-
-  const handleChangeRowsPerPage = (
-    event: React.ChangeEvent<HTMLInputElement>,
-  ) => {
-    setRowsPerPage(parseInt(event.target.value, 10));
-    setPage(0);
-  };
-
-  // Filter data based on search term
-  const filteredData = React.useMemo(() => {
-    if (!previewResult?.data || !searchTerm) return previewResult?.data || [];
-
-    return previewResult.data.filter((row) => {
-      // Handle both array and object data formats
-      let values: any[];
-      if (Array.isArray(row)) {
-        values = row;
-      } else {
-        values = Object.values(row);
-      }
-
-      return values.some((value) =>
-        String(value).toLowerCase().includes(searchTerm.toLowerCase()),
-      );
-    });
-  }, [previewResult?.data, searchTerm]);
-
-  // Paginate filtered data
-  const paginatedData = React.useMemo(() => {
-    const startIndex = page * rowsPerPage;
-    return filteredData.slice(startIndex, startIndex + rowsPerPage);
-  }, [filteredData, page, rowsPerPage]);
-
-  const renderDataTable = () => {
-    if (!previewResult?.data || previewResult.data.length === 0) {
-      return (
-        <Box sx={{ textAlign: 'center', p: 4 }}>
-          <Typography color="text.secondary">No data to display</Typography>
-        </Box>
-      );
-    }
-
-    return (
-      <Box sx={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
-        <Box sx={{ mb: 2, display: 'flex', gap: 2, alignItems: 'center' }}>
-          <TextField
-            size="small"
-            placeholder="Search in data..."
-            value={searchTerm}
-            onChange={handleSearchChange}
-            InputProps={{
-              startAdornment: (
-                <InputAdornment position="start">
-                  <Search />
-                </InputAdornment>
-              ),
-            }}
-            sx={{ minWidth: 300 }}
-          />
-          <Typography variant="body2" color="text.secondary">
-            {filteredData.length} rows
-            {searchTerm && ` (filtered from ${previewResult.data.length})`}
-          </Typography>
-        </Box>
-
-        <TableContainer
-          component={Paper}
-          sx={{
-            height: 'calc(100vh - 320px)',
-            minHeight: 400,
-            maxHeight: 'calc(100vh - 320px)',
-          }}
-        >
-          <Table stickyHeader size="small" sx={{ minWidth: 'max-content' }}>
-            <TableHead>
-              <TableRow>
-                {previewResult.columns?.map((column) => (
-                  <TableCell
-                    key={column.name}
-                    sx={{
-                      fontWeight: 'bold',
-                      minWidth: 150,
-                      whiteSpace: 'nowrap',
-                      py: 1,
-                    }}
-                  >
-                    <Box>
-                      <Typography variant="body2">{column.name}</Typography>
-                      <Typography variant="caption" color="text.secondary">
-                        {column.type}
-                      </Typography>
-                    </Box>
-                  </TableCell>
-                ))}
-              </TableRow>
-            </TableHead>
-            <TableBody>
-              {paginatedData.map((row, index) => (
-                <TableRow
-                  key={index}
-                  hover
-                  sx={{
-                    '& .MuiTableCell-root': {
-                      py: 0.5,
-                    },
-                  }}
-                >
-                  {previewResult.columns?.map((column, colIndex) => {
-                    // Handle both array and object data formats
-                    let cellValue: any;
-                    if (Array.isArray(row)) {
-                      // Array format - use column index
-                      cellValue = row[colIndex];
-                    } else {
-                      // Object format - use column name
-                      cellValue = row[column.name];
-                    }
-
-                    return (
-                      <TableCell
-                        key={column.name}
-                        sx={{
-                          minWidth: 150,
-                          py: 0.5,
-                        }}
-                      >
-                        <Typography
-                          variant="body2"
-                          sx={{
-                            maxWidth: 200,
-                            overflow: 'hidden',
-                            textOverflow: 'ellipsis',
-                            whiteSpace: 'nowrap',
-                            fontFamily: 'monospace',
-                          }}
-                          title={
-                            cellValue !== null && cellValue !== undefined
-                              ? sanitizeText(String(cellValue))
-                              : '—'
-                          }
-                        >
-                          {cellValue !== null && cellValue !== undefined
-                            ? sanitizeText(String(cellValue))
-                            : '—'}
-                        </Typography>
-                      </TableCell>
-                    );
-                  })}
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </TableContainer>
-
-        <TablePagination
-          component="div"
-          count={filteredData.length}
-          page={page}
-          onPageChange={handleChangePage}
-          rowsPerPage={rowsPerPage}
-          onRowsPerPageChange={handleChangeRowsPerPage}
-          rowsPerPageOptions={[10, 25, 50, 100]}
-        />
-      </Box>
-    );
-  };
-
-  const renderSchemaTab = () => {
-    if (!previewResult?.columns || previewResult.columns.length === 0) {
-      return (
-        <Box sx={{ textAlign: 'center', p: 4 }}>
-          <Typography color="text.secondary">
-            No schema information available
-          </Typography>
-        </Box>
-      );
-    }
-
-    return (
-      <TableContainer component={Paper}>
-        <Table size="small">
-          <TableHead>
-            <TableRow>
-              <TableCell sx={{ fontWeight: 'bold' }}>Column Name</TableCell>
-              <TableCell sx={{ fontWeight: 'bold' }}>Data Type</TableCell>
-            </TableRow>
-          </TableHead>
-          <TableBody>
-            {previewResult.columns.map((column) => (
-              <TableRow key={column.name}>
-                <TableCell>
-                  <Typography variant="body2" sx={{ fontFamily: 'monospace' }}>
-                    {column.name}
-                  </Typography>
-                </TableCell>
-                <TableCell>
-                  <Chip
-                    label={column.type}
-                    size="small"
-                    color="primary"
-                    variant="outlined"
-                  />
-                </TableCell>
-              </TableRow>
-            ))}
-          </TableBody>
-        </Table>
-      </TableContainer>
-    );
-  };
-
-  const renderStatsTab = () => {
-    return (
-      <Box sx={{ p: 2 }}>
-        <Typography variant="h6" gutterBottom>
-          Dataset Statistics
-        </Typography>
-        <Box
-          sx={{
-            display: 'grid',
-            gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
-            gap: 2,
-          }}
-        >
-          <Paper sx={{ p: 2 }}>
-            <Typography variant="body2" color="text.secondary">
-              Total Rows
-            </Typography>
-            <Typography variant="h4">
-              {previewResult?.totalRows?.toLocaleString() || '—'}
-            </Typography>
-          </Paper>
-          <Paper sx={{ p: 2 }}>
-            <Typography variant="body2" color="text.secondary">
-              Total Columns
-            </Typography>
-            <Typography variant="h4">
-              {previewResult?.columns?.length || '—'}
-            </Typography>
-          </Paper>
-          <Paper sx={{ p: 2 }}>
-            <Typography variant="body2" color="text.secondary">
-              Preview Type
-            </Typography>
-            <Typography variant="h4">
-              {previewResult?.previewType || '—'}
-            </Typography>
-          </Paper>
-          <Paper sx={{ p: 2 }}>
-            <Typography variant="body2" color="text.secondary">
-              File Size
-            </Typography>
-            <Typography variant="h4">{formatFileSize(fileSize)}</Typography>
-          </Paper>
-        </Box>
-      </Box>
-    );
-  };
-
-  const renderContent = () => {
-    if (loading) {
-      return (
-        <Box
-          sx={{
-            display: 'flex',
-            justifyContent: 'center',
-            alignItems: 'center',
-            p: 4,
-          }}
-        >
-          <CircularProgress />
-          <Typography sx={{ ml: 2 }}>Loading data preview...</Typography>
-        </Box>
-      );
-    }
-
-    if (error) {
-      return (
-        <Alert severity="error" sx={{ m: 2 }}>
-          <Typography variant="body2">
-            Failed to load data preview: {error}
-          </Typography>
-        </Alert>
-      );
-    }
-
-    if (!previewResult) {
-      return (
-        <Box sx={{ textAlign: 'center', p: 4 }}>
-          <Typography color="text.secondary">
-            No preview data available
-          </Typography>
-        </Box>
-      );
-    }
-
-    return (
-      <Box sx={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
-        <Tabs
-          value={currentTab}
-          onChange={handleTabChange}
-          sx={{ borderBottom: 1, borderColor: 'divider', flexShrink: 0 }}
-        >
-          <Tab icon={<TableView />} label="Data" />
-          <Tab icon={<Schema />} label="Schema" />
-          <Tab icon={<Analytics />} label="Statistics" />
-        </Tabs>
-
-        <Box sx={{ pt: 2, flex: 1, display: 'flex', flexDirection: 'column' }}>
-          {currentTab === 0 && renderDataTable()}
-          {currentTab === 1 && renderSchemaTab()}
-          {currentTab === 2 && renderStatsTab()}
-        </Box>
-      </Box>
-    );
-  };
-
   return (
     <Dialog open={open} onClose={onClose} maxWidth="xl" fullWidth fullScreen>
-      <DialogTitle>
+      <DialogTitle sx={{ py: 1.5 }}>
         <Box
           sx={{
             display: 'flex',
@@ -421,10 +85,14 @@ export const DataPreviewModal: React.FC<DataPreviewModalProps> = ({
         >
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
             <TableView />
-            <Typography variant="h6">Data Preview</Typography>
+            <Typography variant="h6">Preview:</Typography>
             <Chip label={fileName} size="small" variant="outlined" />
           </Box>
-          <IconButton onClick={onClose} size="small">
+          <IconButton
+            onClick={onClose}
+            size="small"
+            aria-label="Close fullscreen"
+          >
             <Close />
           </IconButton>
         </Box>
@@ -436,9 +104,29 @@ export const DataPreviewModal: React.FC<DataPreviewModalProps> = ({
           display: 'flex',
           flexDirection: 'column',
           height: '100%',
+          overflow: 'hidden',
         }}
       >
-        {renderContent()}
+        <PreviewContent
+          previewResult={previewResult}
+          loading={loading}
+          error={error}
+          fileSize={fileSize}
+          serverPage={serverPage}
+          serverPageSize={serverPageSize}
+          activeFilter={activeFilter}
+          statsData={statsData}
+          statsLoading={statsLoading}
+          statsError={statsError}
+          hasServerContext={hasServerContext}
+          onPageChange={onPageChange}
+          onApplyFilter={onApplyFilter}
+          onClearFilter={onClearFilter}
+          onRefresh={onRefresh}
+          onStatsTabActivated={onStatsTabActivated}
+          // In fullscreen the table can use more vertical space
+          tableMaxHeight="calc(100vh - 280px)"
+        />
       </DialogContent>
 
       <DialogActions>

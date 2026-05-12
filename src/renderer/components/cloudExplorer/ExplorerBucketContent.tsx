@@ -440,7 +440,8 @@ export const ExplorerBucketContent: React.FC<ExplorerBucketContentProps> = ({
       bucketName,
       objectName,
       previewType: 'sample',
-      limit: 100,
+      pageSize: 25,
+      page: 0,
     });
 
     // Add to recent items
@@ -688,6 +689,10 @@ export const ExplorerBucketContent: React.FC<ExplorerBucketContentProps> = ({
         error={previewData.error ? String(previewData.error) : undefined}
         onBack={handleBackToFiles}
         fileSize={previewFile.fileSize}
+        provider={connection?.provider as CloudProvider}
+        config={secureConfig}
+        bucketName={bucketName}
+        objectName={previewFile.objectName}
       />
     );
   }
