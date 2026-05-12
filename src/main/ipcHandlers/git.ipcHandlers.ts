@@ -1,7 +1,12 @@
 import { ipcMain } from 'electron';
 import { GitService } from '../services';
 import { AuthError } from '../errors';
-import { FileStatus, GitCredentials } from '../../types/backend';
+import {
+  FileStatus,
+  GitChangesRes,
+  GitCredentials,
+  RepoInfoRes,
+} from '../../types/backend';
 
 const gitService = new GitService();
 
@@ -22,6 +27,7 @@ const handlerChannels = [
   'git:pull',
   'git:push',
   'git:fileDiff',
+  'git:fileHeadContent',
   'git:fileStatusList',
   'git:aheadBehind',
   'git:createBranch',
@@ -45,10 +51,18 @@ const registerGitHandlers = () => {
     'git:clone',
     async (
       _event,
-      { url, credentials }: { url: string; credentials?: GitCredentials },
+      {
+        url,
+        credentials,
+        removeGit,
+      }: { url: string; credentials?: GitCredentials; removeGit?: boolean },
     ) => {
       try {
-        const result = await gitService.cloneRepo(url, credentials);
+        const result = await gitService.cloneRepo(
+          url,
+          credentials,
+          removeGit ?? false,
+        );
         return {
           name: result.name,
           path: result.path,
@@ -106,13 +120,9 @@ const registerGitHandlers = () => {
     'git:commit',
     async (
       _e,
-      {
-        repoPath,
-        message,
-        files,
-      }: { repoPath: string; message: string; files: string[] },
+      { repoPath, message }: { repoPath: string; message: string },
     ) => {
-      return gitService.commit(repoPath, message, files);
+      return gitService.commit(repoPath, message);
     },
   );
 
@@ -179,6 +189,16 @@ const registerGitHandlers = () => {
   );
 
   ipcMain.handle(
+    'git:fileHeadContent',
+    async (
+      _e,
+      { repoPath, filePath }: { repoPath: string; filePath: string },
+    ): Promise<string | null> => {
+      return gitService.getFileHeadContent(repoPath, filePath);
+    },
+  );
+
+  ipcMain.handle(
     'git:fileStatusList',
     async (
       _event,
@@ -195,6 +215,26 @@ const registerGitHandlers = () => {
       { repoPath, filePath }: { repoPath: string; filePath: string },
     ): Promise<FileStatus | null> => {
       return gitService.getFileStatus(repoPath, filePath);
+    },
+  );
+
+  ipcMain.handle(
+    'git:getLocalChanges',
+    async (
+      _event,
+      { repoPath }: { repoPath: string },
+    ): Promise<GitChangesRes | null> => {
+      return gitService.getLocalChangesStatus(repoPath);
+    },
+  );
+
+  ipcMain.handle(
+    'git:repoInfo',
+    async (
+      _event,
+      { repoPath }: { repoPath: string },
+    ): Promise<RepoInfoRes | null> => {
+      return gitService.getRepoInfo(repoPath);
     },
   );
 

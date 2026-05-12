@@ -3,6 +3,7 @@ import { toast } from 'react-toastify';
 import type * as monacoType from 'monaco-editor';
 import { Inputs, RelativeContainer } from './styles';
 import { connectorsServices, projectsServices } from '../../services';
+import { DuckLakeService } from '../../services/duckLake.service';
 import { QueryHistoryType } from '../../../types/frontend';
 import { ConnectionInput, Project } from '../../../types/backend';
 import { SqlEditorComponent } from './editorComponent';
@@ -25,6 +26,7 @@ type Props = {
   setQueryResults: (v: any) => void;
   setError: (v: any) => void;
   onQueryStart?: (queryId: string) => void;
+  onQuerySuccess?: () => void;
   isLoading?: boolean;
 };
 
@@ -41,6 +43,7 @@ export const SqlEditor: React.FC<Props> = ({
   setQueryResults,
   setError,
   onQueryStart,
+  onQuerySuccess,
   isLoading,
 }) => {
   const { fetchSchema } = useAppContext();
@@ -51,21 +54,23 @@ export const SqlEditor: React.FC<Props> = ({
   // Determine if we're in connection-based mode
   const isConnectionMode = !!connectionId;
 
+  // Detect if this is a DuckLake connection
+  const isDuckLakeConnection =
+    connectionInput?.type === 'ducklake' &&
+    'instanceId' in connectionInput &&
+    !!connectionInput.instanceId;
+
+  // Get instanceId for DuckLake queries
+  const instanceId = isDuckLakeConnection
+    ? (connectionInput as any).instanceId
+    : undefined;
+
   // Helper function to detect DDL operations that modify schema
+  // Uses startsWith to prevent false positives from string literals like SELECT 'DROP TABLE users'
   const isDDLOperation = (query: string): boolean => {
     const normalizedQuery = query.trim().toUpperCase();
-    const ddlKeywords = [
-      'CREATE TABLE',
-      'DROP TABLE',
-      'ALTER TABLE',
-      'CREATE SCHEMA',
-      'DROP SCHEMA',
-      'CREATE VIEW',
-      'DROP VIEW',
-      'RENAME TABLE',
-      'TRUNCATE TABLE',
-    ];
-    return ddlKeywords.some((keyword) => normalizedQuery.includes(keyword));
+    const ddlKeywords = ['CREATE', 'DROP', 'ALTER', 'TRUNCATE', 'RENAME'];
+    return ddlKeywords.some((keyword) => normalizedQuery.startsWith(keyword));
   };
 
   const getCommandType = (query: string): string => {
@@ -87,12 +92,25 @@ export const SqlEditor: React.FC<Props> = ({
   const handleRunQuery = async (selectedQuery: string) => {
     // Validate we have a connection
     if (isConnectionMode) {
-      if (!connectionId || isLoading) {
+      if (!connectionId) {
+        toast.error('No connection selected');
+        return;
+      }
+      // For DuckLake connections, check if status indicates not ready
+      const duckLakeStatus = (connectionInput as any)?.status;
+      if (
+        isDuckLakeConnection &&
+        (duckLakeStatus === 'connecting' || duckLakeStatus === 'loading')
+      ) {
+        toast.info('Connection is loading, please wait...');
+        return;
+      }
+      if (isLoading && !isDuckLakeConnection) {
         toast.error('Connection is still loading...');
         return;
       }
-    } else if (!connectionInput || !selectedProject || isLoading) {
-      toast.error('Connection is still loading...');
+    } else if (!connectionInput || !selectedProject) {
+      toast.error('No connection or project selected');
       return;
     }
 
@@ -111,7 +129,32 @@ export const SqlEditor: React.FC<Props> = ({
     try {
       let result;
 
-      if (isConnectionMode && connectionId) {
+      if (isDuckLakeConnection && instanceId) {
+        const duckLakeQueryLimit = 10;
+        const commandType = getCommandType(selectedQuery);
+
+        const duckLakeResult = await DuckLakeService.executeQuery({
+          instanceId,
+          query: selectedQuery,
+          queryId,
+          limit: commandType === 'SELECT' ? duckLakeQueryLimit : undefined,
+        });
+
+        // Transform DuckLakeQueryResult to QueryResponseType format
+        // Map fields to ensure type is number (QueryResponseType expects number)
+        const mappedFields = duckLakeResult.fields?.map((field) => ({
+          name: field.name,
+          type: typeof field.type === 'number' ? field.type : 0, // Convert string types to 0 (unknown)
+        }));
+
+        result = {
+          success: duckLakeResult.success,
+          data: duckLakeResult.data,
+          fields: mappedFields,
+          rowCount: duckLakeResult.rowCount,
+          error: duckLakeResult.error,
+        };
+      } else if (isConnectionMode && connectionId) {
         // Connection-based execution
         result = await connectorsServices.executeQueryForConnection({
           connectionId,
@@ -146,6 +189,7 @@ export const SqlEditor: React.FC<Props> = ({
         ...result,
         isCommand: commandType === 'DDL' || commandType === 'DML',
         commandType,
+        originalSql: selectedQuery,
       };
 
       setQueryResults(enrichedResult);
@@ -168,6 +212,9 @@ export const SqlEditor: React.FC<Props> = ({
         // Connection-based fields (new)
         connectionId: isConnectionMode ? connectionId : undefined,
         connectionName: isConnectionMode ? connectionInput?.name : undefined,
+        // DuckLake-specific fields
+        isDuckLake: isDuckLakeConnection,
+        instanceId: isDuckLakeConnection ? instanceId : undefined,
       };
 
       // Limit history to last 50 items to prevent storage overflow
@@ -180,9 +227,12 @@ export const SqlEditor: React.FC<Props> = ({
       }
 
       // Refresh schema if DDL operation was executed
-      // Only for project-based mode (connection-based mode handles this differently)
-      if (wasDDL && !isConnectionMode) {
-        fetchSchema();
+      if (wasDDL) {
+        if (!isConnectionMode) {
+          fetchSchema();
+        } else if (onQuerySuccess) {
+          onQuerySuccess();
+        }
       }
     } catch (error) {
       toast.error('An unexpected error occurred while executing the query');
@@ -198,8 +248,9 @@ export const SqlEditor: React.FC<Props> = ({
   // Load query based on mode
   React.useEffect(() => {
     if (isConnectionMode) {
-      // Connection-based mode: use initialQuery prop
-      setQueryContent(initialQuery || '');
+      // Connection-based mode: initialQuery is already loaded via useState.
+      // We do not sync it here on changes because doing so causes cursor jumps
+      // when the parent component reflects our own debounced changes back to us.
     } else if (selectedProject?.id) {
       // Project-based mode: load from backend
       const loadQuery = async () => {
@@ -212,7 +263,7 @@ export const SqlEditor: React.FC<Props> = ({
       };
       loadQuery();
     }
-  }, [isConnectionMode, initialQuery, selectedProject?.id, selectedProject]);
+  }, [isConnectionMode, selectedProject?.id, selectedProject]);
 
   React.useEffect(() => {
     return () => {

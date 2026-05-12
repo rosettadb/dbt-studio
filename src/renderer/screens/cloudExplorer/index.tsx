@@ -58,7 +58,10 @@ const CloudExplorer: React.FC = () => {
   };
 
   return (
-    <AppLayout sidebarContent={<ExplorerSidebar />}>
+    <AppLayout
+      sidebarContent={<ExplorerSidebar />}
+      panelTitle="Object Explorer"
+    >
       <Box sx={{ p: 2 }}>
         <Box>{renderContent()}</Box>
       </Box>

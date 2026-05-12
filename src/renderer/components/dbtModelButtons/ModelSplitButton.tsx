@@ -9,12 +9,14 @@ import { Icon } from '../icon';
 import { extractModelNameFromPath } from '../../helpers/utils';
 import { CompileModal } from '../modals/CompileModal';
 import { MiniSqlEditorModal } from '../modals/MiniSqlEditorModal';
+import { PushToCloudModal } from '../modals';
 import useDbt from '../../hooks/useDbt';
 import {
   queryData,
   getConnectionById,
 } from '../../services/connectors.service';
 import type { PreviewResult } from '../../../types/frontend';
+import type { DbtCommandType } from '../../../types/backend';
 
 interface ModelSplitButtonProps {
   modelPath: string;
@@ -23,6 +25,7 @@ interface ModelSplitButtonProps {
   fileContent?: string;
   isRunningDbt: boolean;
   isRunningRosettaDbt: boolean;
+  environment?: 'local' | 'cloud';
 }
 
 export const ModelSplitButton: React.FC<ModelSplitButtonProps> = ({
@@ -32,6 +35,7 @@ export const ModelSplitButton: React.FC<ModelSplitButtonProps> = ({
   fileContent,
   isRunningDbt,
   isRunningRosettaDbt,
+  environment = 'local',
 }) => {
   const [isCompiling, setIsCompiling] = useState(false);
   const [showCompileModal, setShowCompileModal] = useState(false);
@@ -46,6 +50,10 @@ export const ModelSplitButton: React.FC<ModelSplitButtonProps> = ({
   );
   const [previewError, setPreviewError] = useState<string | undefined>();
 
+  // Cloud execution state
+  const [runInCloudModal, setRunInCloudModal] = useState<DbtCommandType>();
+  const [cloudDbtArguments, setCloudDbtArguments] = useState<string>('');
+
   const {
     compile: dbtCompileModel,
     run: dbtRunModel,
@@ -53,7 +61,23 @@ export const ModelSplitButton: React.FC<ModelSplitButtonProps> = ({
     isRunning: isRunningDbtModel,
     list: dbtList,
     build: dbtBuildModel,
-  } = useDbt();
+  } = useDbt(undefined, (command) => {
+    setRunInCloudModal(command);
+  });
+
+  // Helper function to handle cloud vs local execution
+  const executeCommand = async (
+    command: DbtCommandType,
+    localHandler: () => Promise<void>,
+    dbtArgs?: string,
+  ) => {
+    if (environment === 'cloud') {
+      setCloudDbtArguments(dbtArgs || '');
+      setRunInCloudModal(command);
+    } else {
+      await localHandler();
+    }
+  };
 
   const handleCompileModel = async () => {
     if (!isDbtConfigured) {
@@ -201,293 +225,482 @@ export const ModelSplitButton: React.FC<ModelSplitButtonProps> = ({
   };
 
   const handleRunModel = async () => {
-    if (!isDbtConfigured) {
+    if (!isDbtConfigured && environment === 'local') {
       toast.info('Please configure dbt path in settings');
       return;
     }
 
-    try {
-      // Extract model name from path for single model execution
-      const modelName = extractModelNameFromPath(modelPath);
-      if (!modelName) {
-        toast.error('Could not extract model name from path');
-        return;
-      }
-
-      // Run the single model using dbt run --select
-      await dbtRunModel(project, modelName);
-    } catch (error) {
-      const errorMessage =
-        error instanceof Error ? error.message : 'Unknown error';
-      toast.error(`Model execution failed: ${errorMessage}`);
+    // Extract model name for both local and cloud execution
+    const modelName = extractModelNameFromPath(modelPath);
+    if (!modelName) {
+      toast.error('Could not extract model name from path');
+      return;
     }
+
+    await executeCommand(
+      'run',
+      async () => {
+        try {
+          // Run the single model using dbt run --select
+          await dbtRunModel(project, modelName);
+        } catch (error) {
+          const errorMessage =
+            error instanceof Error ? error.message : 'Unknown error';
+          toast.error(`Model execution failed: ${errorMessage}`);
+        }
+      },
+      `--select ${modelName}`,
+    );
   };
 
   const handleTestModel = async () => {
-    if (!isDbtConfigured) {
+    if (!isDbtConfigured && environment === 'local') {
       toast.info('Please configure dbt path in settings');
       return;
     }
 
-    try {
-      // Extract model name from path for single model testing
-      const modelName = extractModelNameFromPath(modelPath);
-      if (!modelName) {
-        toast.error('Could not extract model name from path');
-        return;
-      }
-
-      // Run tests on the single model using dbt test --select
-      await dbtTestModel(project, modelName);
-    } catch (error) {
-      const errorMessage =
-        error instanceof Error ? error.message : 'Unknown error';
-      toast.error(`Model tests failed: ${errorMessage}`);
+    // Extract model name for both local and cloud execution
+    const modelName = extractModelNameFromPath(modelPath);
+    if (!modelName) {
+      toast.error('Could not extract model name from path');
+      return;
     }
+
+    await executeCommand(
+      'test',
+      async () => {
+        try {
+          // Run tests on the single model using dbt test --select
+          await dbtTestModel(project, modelName);
+        } catch (error) {
+          const errorMessage =
+            error instanceof Error ? error.message : 'Unknown error';
+          toast.error(`Model tests failed: ${errorMessage}`);
+        }
+      },
+      `--select ${modelName}`,
+    );
   };
 
   const handleRunModelDownstream = async () => {
-    if (!isDbtConfigured) {
+    if (!isDbtConfigured && environment === 'local') {
       toast.info('Please configure dbt path in settings');
       return;
     }
 
-    try {
-      // Extract model name from path for downstream execution
-      const modelName = extractModelNameFromPath(modelPath);
-      if (!modelName) {
-        toast.error('Could not extract model name from path');
-        return;
-      }
-
-      // Run the model and all its downstream dependencies using dbt run --select model_name+
-      // The + suffix tells dbt to include all downstream models
-      await dbtRunModel(project, `${modelName}+`);
-    } catch (error) {
-      const errorMessage =
-        error instanceof Error ? error.message : 'Unknown error';
-      toast.error(`Downstream run failed: ${errorMessage}`);
+    // Extract model name for both local and cloud execution
+    const modelName = extractModelNameFromPath(modelPath);
+    if (!modelName) {
+      toast.error('Could not extract model name from path');
+      return;
     }
+
+    await executeCommand(
+      'run',
+      async () => {
+        try {
+          // Run the model and all its downstream dependencies using dbt run --select model_name+
+          // The + suffix tells dbt to include all downstream models
+          await dbtRunModel(project, `${modelName}+`);
+        } catch (error) {
+          const errorMessage =
+            error instanceof Error ? error.message : 'Unknown error';
+          toast.error(`Downstream run failed: ${errorMessage}`);
+        }
+      },
+      `--select ${modelName}+`,
+    );
   };
 
   const handleRunModelUpstream = async () => {
-    if (!isDbtConfigured) {
+    if (!isDbtConfigured && environment === 'local') {
       toast.info('Please configure dbt path in settings');
       return;
     }
 
-    try {
-      // Extract model name from path for upstream execution
-      const modelName = extractModelNameFromPath(modelPath);
-      if (!modelName) {
-        toast.error('Could not extract model name from path');
-        return;
-      }
-
-      // Run the model and all its upstream dependencies using dbt run --select +model_name
-      // The + prefix tells dbt to include all upstream models (parents)
-      await dbtRunModel(project, `+${modelName}`);
-    } catch (error) {
-      const errorMessage =
-        error instanceof Error ? error.message : 'Unknown error';
-      toast.error(`Upstream run failed: ${errorMessage}`);
+    // Extract model name for both local and cloud execution
+    const modelName = extractModelNameFromPath(modelPath);
+    if (!modelName) {
+      toast.error('Could not extract model name from path');
+      return;
     }
+
+    await executeCommand(
+      'run',
+      async () => {
+        try {
+          // Run the model and all its upstream dependencies using dbt run --select +model_name
+          // The + prefix tells dbt to include all upstream models (parents)
+          await dbtRunModel(project, `+${modelName}`);
+        } catch (error) {
+          const errorMessage =
+            error instanceof Error ? error.message : 'Unknown error';
+          toast.error(`Upstream run failed: ${errorMessage}`);
+        }
+      },
+      `--select +${modelName}`,
+    );
   };
 
   const handleRunModelBothDirections = async () => {
-    if (!isDbtConfigured) {
+    if (!isDbtConfigured && environment === 'local') {
       toast.info('Please configure dbt path in settings');
       return;
     }
 
-    try {
-      // Extract model name from path for both directions execution
-      const modelName = extractModelNameFromPath(modelPath);
-      if (!modelName) {
-        toast.error('Could not extract model name from path');
-        return;
-      }
-
-      // Run the model and all its upstream and downstream dependencies using dbt run --select +model_name+
-      // The + prefix and suffix tells dbt to include both upstream and downstream models
-      await dbtRunModel(project, `+${modelName}+`);
-    } catch (error) {
-      const errorMessage =
-        error instanceof Error ? error.message : 'Unknown error';
-      toast.error(`Full dependency run failed: ${errorMessage}`);
+    // Extract model name for both local and cloud execution
+    const modelName = extractModelNameFromPath(modelPath);
+    if (!modelName) {
+      toast.error('Could not extract model name from path');
+      return;
     }
+
+    await executeCommand(
+      'run',
+      async () => {
+        try {
+          // Run the model and all its upstream and downstream dependencies using dbt run --select +model_name+
+          // The + prefix and suffix tells dbt to include both upstream and downstream models
+          await dbtRunModel(project, `+${modelName}+`);
+        } catch (error) {
+          const errorMessage =
+            error instanceof Error ? error.message : 'Unknown error';
+          toast.error(`Full dependency run failed: ${errorMessage}`);
+        }
+      },
+      `--select +${modelName}+`,
+    );
   };
 
   const handleTestModelDownstream = async () => {
-    if (!isDbtConfigured) {
+    if (!isDbtConfigured && environment === 'local') {
       toast.info('Please configure dbt path in settings');
       return;
     }
 
-    try {
-      // Extract model name from path for downstream testing
-      const modelName = extractModelNameFromPath(modelPath);
-      if (!modelName) {
-        toast.error('Could not extract model name from path');
-        return;
-      }
-
-      // Run tests on the model and all its downstream dependencies using dbt test --select model_name+
-      // The + suffix tells dbt to include all downstream models
-      await dbtTestModel(project, `${modelName}+`);
-    } catch (error) {
-      const errorMessage =
-        error instanceof Error ? error.message : 'Unknown error';
-      toast.error(`Downstream tests failed: ${errorMessage}`);
+    // Extract model name for both local and cloud execution
+    const modelName = extractModelNameFromPath(modelPath);
+    if (!modelName) {
+      toast.error('Could not extract model name from path');
+      return;
     }
+
+    await executeCommand(
+      'test',
+      async () => {
+        try {
+          // Run tests on the model and all its downstream dependencies using dbt test --select model_name+
+          // The + suffix tells dbt to include all downstream models
+          await dbtTestModel(project, `${modelName}+`);
+        } catch (error) {
+          const errorMessage =
+            error instanceof Error ? error.message : 'Unknown error';
+          toast.error(`Downstream tests failed: ${errorMessage}`);
+        }
+      },
+      `--select ${modelName}+`,
+    );
   };
 
   const handleTestModelUpstream = async () => {
-    if (!isDbtConfigured) {
+    if (!isDbtConfigured && environment === 'local') {
       toast.info('Please configure dbt path in settings');
       return;
     }
 
-    try {
-      // Extract model name from path for upstream testing
-      const modelName = extractModelNameFromPath(modelPath);
-      if (!modelName) {
-        toast.error('Could not extract model name from path');
-        return;
-      }
-
-      // Run tests on the model and all its upstream dependencies using dbt test --select +model_name
-      // The + prefix tells dbt to include all upstream models (parents)
-      await dbtTestModel(project, `+${modelName}`);
-    } catch (error) {
-      const errorMessage =
-        error instanceof Error ? error.message : 'Unknown error';
-      toast.error(`Upstream tests failed: ${errorMessage}`);
+    // Extract model name for both local and cloud execution
+    const modelName = extractModelNameFromPath(modelPath);
+    if (!modelName) {
+      toast.error('Could not extract model name from path');
+      return;
     }
+
+    await executeCommand(
+      'test',
+      async () => {
+        try {
+          // Run tests on the model and all its upstream dependencies using dbt test --select +model_name
+          // The + prefix tells dbt to include all upstream models (parents)
+          await dbtTestModel(project, `+${modelName}`);
+        } catch (error) {
+          const errorMessage =
+            error instanceof Error ? error.message : 'Unknown error';
+          toast.error(`Upstream tests failed: ${errorMessage}`);
+        }
+      },
+      `--select +${modelName}`,
+    );
   };
 
   const handleTestModelBothDirections = async () => {
-    if (!isDbtConfigured) {
+    if (!isDbtConfigured && environment === 'local') {
       toast.info('Please configure dbt path in settings');
       return;
     }
 
-    try {
-      // Extract model name from path for both directions testing
-      const modelName = extractModelNameFromPath(modelPath);
-      if (!modelName) {
-        toast.error('Could not extract model name from path');
-        return;
-      }
-
-      // Run tests on the model and all its upstream and downstream dependencies using dbt test --select +model_name+
-      // The + prefix and suffix tells dbt to include both upstream and downstream models
-      await dbtTestModel(project, `+${modelName}+`);
-    } catch (error) {
-      const errorMessage =
-        error instanceof Error ? error.message : 'Unknown error';
-      toast.error(`Full dependency tests failed: ${errorMessage}`);
+    // Extract model name for both local and cloud execution
+    const modelName = extractModelNameFromPath(modelPath);
+    if (!modelName) {
+      toast.error('Could not extract model name from path');
+      return;
     }
+
+    await executeCommand(
+      'test',
+      async () => {
+        try {
+          // Run tests on the model and all its upstream and downstream dependencies using dbt test --select +model_name+
+          // The + prefix and suffix tells dbt to include both upstream and downstream models
+          await dbtTestModel(project, `+${modelName}+`);
+        } catch (error) {
+          const errorMessage =
+            error instanceof Error ? error.message : 'Unknown error';
+          toast.error(`Full dependency tests failed: ${errorMessage}`);
+        }
+      },
+      `--select +${modelName}+`,
+    );
   };
 
   const handleBuildModel = async () => {
-    if (!isDbtConfigured) {
+    if (!isDbtConfigured && environment === 'local') {
       toast.info('Please configure dbt path in settings');
       return;
     }
 
-    try {
-      // Extract model name from path for single model building
-      const modelName = extractModelNameFromPath(modelPath);
-      if (!modelName) {
-        toast.error('Could not extract model name from path');
-        return;
-      }
-
-      // Build the single model using dbt build --select
-      // This will run the model + tests + seeds + snapshots
-      await dbtBuildModel(project, modelName);
-    } catch (error) {
-      const errorMessage =
-        error instanceof Error ? error.message : 'Unknown error';
-      toast.error(`Model build failed: ${errorMessage}`);
+    // Extract model name for both local and cloud execution
+    const modelName = extractModelNameFromPath(modelPath);
+    if (!modelName) {
+      toast.error('Could not extract model name from path');
+      return;
     }
+
+    await executeCommand(
+      'build',
+      async () => {
+        try {
+          // Build the single model using dbt build --select
+          // This will run the model + tests + seeds + snapshots
+          await dbtBuildModel(project, modelName);
+        } catch (error) {
+          const errorMessage =
+            error instanceof Error ? error.message : 'Unknown error';
+          toast.error(`Model build failed: ${errorMessage}`);
+        }
+      },
+      `--select ${modelName}`,
+    );
   };
 
   const handleBuildModelDownstream = async () => {
-    if (!isDbtConfigured) {
+    if (!isDbtConfigured && environment === 'local') {
       toast.info('Please configure dbt path in settings');
       return;
     }
 
-    try {
-      // Extract model name from path for downstream building
-      const modelName = extractModelNameFromPath(modelPath);
-      if (!modelName) {
-        toast.error('Could not extract model name from path');
-        return;
-      }
-
-      // Build the model and all its downstream dependencies using dbt build --select model_name+
-      // The + suffix tells dbt to include all downstream models
-      await dbtBuildModel(project, `${modelName}+`);
-      toast.success(
-        `Model '${modelName}' and downstream models built successfully`,
-      );
-    } catch (error) {
-      const errorMessage =
-        error instanceof Error ? error.message : 'Unknown error';
-      toast.error(`Downstream build failed: ${errorMessage}`);
+    // Extract model name for both local and cloud execution
+    const modelName = extractModelNameFromPath(modelPath);
+    if (!modelName) {
+      toast.error('Could not extract model name from path');
+      return;
     }
+
+    await executeCommand(
+      'build',
+      async () => {
+        try {
+          // Build the model and all its downstream dependencies using dbt build --select model_name+
+          // The + suffix tells dbt to include all downstream models
+          await dbtBuildModel(project, `${modelName}+`);
+          toast.success(
+            `Model '${modelName}' and downstream models built successfully`,
+          );
+        } catch (error) {
+          const errorMessage =
+            error instanceof Error ? error.message : 'Unknown error';
+          toast.error(`Downstream build failed: ${errorMessage}`);
+        }
+      },
+      `--select ${modelName}+`,
+    );
   };
 
   const handleBuildModelUpstream = async () => {
-    if (!isDbtConfigured) {
+    if (!isDbtConfigured && environment === 'local') {
       toast.info('Please configure dbt path in settings');
       return;
     }
 
-    try {
-      // Extract model name from path for upstream building
-      const modelName = extractModelNameFromPath(modelPath);
-      if (!modelName) {
-        toast.error('Could not extract model name from path');
-        return;
-      }
-
-      // Build the model and all its upstream dependencies using dbt build --select +model_name
-      // The + prefix tells dbt to include all upstream models (parents)
-      await dbtBuildModel(project, `+${modelName}`);
-    } catch (error) {
-      const errorMessage =
-        error instanceof Error ? error.message : 'Unknown error';
-      toast.error(`Upstream build failed: ${errorMessage}`);
+    // Extract model name for both local and cloud execution
+    const modelName = extractModelNameFromPath(modelPath);
+    if (!modelName) {
+      toast.error('Could not extract model name from path');
+      return;
     }
+
+    await executeCommand(
+      'build',
+      async () => {
+        try {
+          // Build the model and all its upstream dependencies using dbt build --select +model_name
+          // The + prefix tells dbt to include all upstream models (parents)
+          await dbtBuildModel(project, `+${modelName}`);
+        } catch (error) {
+          const errorMessage =
+            error instanceof Error ? error.message : 'Unknown error';
+          toast.error(`Upstream build failed: ${errorMessage}`);
+        }
+      },
+      `--select +${modelName}`,
+    );
   };
 
   const handleBuildModelBothDirections = async () => {
-    if (!isDbtConfigured) {
+    if (!isDbtConfigured && environment === 'local') {
       toast.info('Please configure dbt path in settings');
       return;
     }
 
-    try {
-      // Extract model name from path for both directions building
-      const modelName = extractModelNameFromPath(modelPath);
-      if (!modelName) {
-        toast.error('Could not extract model name from path');
-        return;
-      }
-
-      // Build the model and all its upstream and downstream dependencies using dbt build --select +model_name+
-      // The + prefix and suffix tells dbt to include both upstream and downstream models
-      await dbtBuildModel(project, `+${modelName}+`);
-    } catch (error) {
-      const errorMessage =
-        error instanceof Error ? error.message : 'Unknown error';
-      toast.error(`Full dependency build failed: ${errorMessage}`);
+    // Extract model name for both local and cloud execution
+    const modelName = extractModelNameFromPath(modelPath);
+    if (!modelName) {
+      toast.error('Could not extract model name from path');
+      return;
     }
+
+    await executeCommand(
+      'build',
+      async () => {
+        try {
+          // Build the model and all its upstream and downstream dependencies using dbt build --select +model_name+
+          // The + prefix and suffix tells dbt to include both upstream and downstream models
+          await dbtBuildModel(project, `+${modelName}+`);
+        } catch (error) {
+          const errorMessage =
+            error instanceof Error ? error.message : 'Unknown error';
+          toast.error(`Full dependency build failed: ${errorMessage}`);
+        }
+      },
+      `--select +${modelName}+`,
+    );
   };
+
+  // Define all menu items with environment restrictions
+  const allMenuItems = [
+    // Production DBT Commands (Available in both environments)
+    {
+      name: 'Run',
+      onClick: handleRunModel,
+      leftIcon: <Icon src={icons.dbtTm} width={16} height={16} />,
+      subTitle: 'Run the dbt model',
+      localOnly: false,
+    },
+    {
+      name: 'Run model+ (Downstream)',
+      onClick: handleRunModelDownstream,
+      leftIcon: <Icon src={icons.dbtTm} width={16} height={16} />,
+      subTitle: 'Run the model and all its downstream dependencies',
+      localOnly: false,
+    },
+    {
+      name: 'Run +model (Upstream)',
+      onClick: handleRunModelUpstream,
+      leftIcon: <Icon src={icons.dbtTm} width={16} height={16} />,
+      subTitle: 'Run the model and all its upstream dependencies',
+      localOnly: false,
+    },
+    {
+      name: 'Run +model+ (Up/downstream)',
+      onClick: handleRunModelBothDirections,
+      leftIcon: <Icon src={icons.dbtTm} width={16} height={16} />,
+      subTitle:
+        'Run the model and all its upstream and downstream dependencies',
+      localOnly: false,
+    },
+    {
+      name: 'Build Model',
+      onClick: handleBuildModel,
+      leftIcon: <Icon src={icons.dbtTm} width={16} height={16} />,
+      subTitle: 'Build model with tests and validation',
+      localOnly: false,
+    },
+    {
+      name: 'Build model+ (Downstream)',
+      onClick: handleBuildModelDownstream,
+      leftIcon: <Icon src={icons.dbtTm} width={16} height={16} />,
+      subTitle: 'Build the model and all its downstream dependencies',
+      localOnly: false,
+    },
+    {
+      name: 'Build +model (Upstream)',
+      onClick: handleBuildModelUpstream,
+      leftIcon: <Icon src={icons.dbtTm} width={16} height={16} />,
+      subTitle: 'Build the model and all its upstream dependencies',
+      localOnly: false,
+    },
+    {
+      name: 'Build +model+ (Up/downstream)',
+      onClick: handleBuildModelBothDirections,
+      leftIcon: <Icon src={icons.dbtTm} width={16} height={16} />,
+      subTitle:
+        'Build the model and all its upstream and downstream dependencies',
+      localOnly: false,
+    },
+    {
+      name: 'Test',
+      onClick: handleTestModel,
+      leftIcon: <Icon src={icons.dbtTm} width={16} height={16} />,
+      subTitle: 'Run the dbt test',
+      localOnly: false,
+    },
+    {
+      name: 'Test model+ (Downstream)',
+      onClick: handleTestModelDownstream,
+      leftIcon: <Icon src={icons.dbtTm} width={16} height={16} />,
+      subTitle: 'Test the model and all its downstream dependencies',
+      localOnly: false,
+    },
+    {
+      name: 'Test +model (Upstream)',
+      onClick: handleTestModelUpstream,
+      leftIcon: <Icon src={icons.dbtTm} width={16} height={16} />,
+      subTitle: 'Test the model and all its upstream dependencies',
+      localOnly: false,
+    },
+    {
+      name: 'Test +model+ (Up/downstream)',
+      onClick: handleTestModelBothDirections,
+      leftIcon: <Icon src={icons.dbtTm} width={16} height={16} />,
+      subTitle:
+        'Test the model and all its upstream and downstream dependencies',
+      localOnly: false,
+    },
+    // Local Development Commands (Local Only)
+    {
+      name: 'Compile',
+      onClick: handleCompileModel,
+      leftIcon: <Icon src={icons.dbtTm} width={16} height={16} />,
+      subTitle: 'Compile the dbt model',
+      localOnly: true, // Compile is for local development/debugging
+    },
+    {
+      name: 'Preview',
+      onClick: handlePreviewModel,
+      leftIcon: <Icon src={icons.dbtTm} width={16} height={16} />,
+      subTitle: 'Preview the dbt model data',
+      localOnly: true, // Preview is for local development/debugging
+    },
+  ];
+
+  // Filter menu items based on environment
+  // In cloud mode: hide local development tools (compile, preview)
+  // In local mode: show all items
+  const filteredMenuItems = allMenuItems.filter((item) => {
+    if (environment === 'cloud') {
+      return !item.localOnly;
+    }
+    return true; // Show all items in local environment
+  });
 
   return (
     <>
@@ -511,95 +724,11 @@ export const ModelSplitButton: React.FC<ModelSplitButtonProps> = ({
           isPreviewing
         }
         leftIcon={<DirectionsRun />}
-        menuItems={[
-          {
-            name: 'Run',
-            onClick: handleRunModel,
-            leftIcon: <Icon src={icons.dbtTm} width={16} height={16} />,
-            subTitle: 'Run the dbt model',
-          },
-          {
-            name: 'Run model+ (Downstream)',
-            onClick: handleRunModelDownstream,
-            leftIcon: <Icon src={icons.dbtTm} width={16} height={16} />,
-            subTitle: 'Run the model and all its downstream dependencies',
-          },
-          {
-            name: 'Run +model (Upstream)',
-            onClick: handleRunModelUpstream,
-            leftIcon: <Icon src={icons.dbtTm} width={16} height={16} />,
-            subTitle: 'Run the model and all its upstream dependencies',
-          },
-          {
-            name: 'Run +model+ (Up/downstream)',
-            onClick: handleRunModelBothDirections,
-            leftIcon: <Icon src={icons.dbtTm} width={16} height={16} />,
-            subTitle:
-              'Run the model and all its upstream and downstream dependencies',
-          },
-          {
-            name: 'Build Model',
-            onClick: handleBuildModel,
-            leftIcon: <Icon src={icons.dbtTm} width={16} height={16} />,
-            subTitle: 'Build model with tests and validation',
-          },
-          {
-            name: 'Build model+ (Downstream)',
-            onClick: handleBuildModelDownstream,
-            leftIcon: <Icon src={icons.dbtTm} width={16} height={16} />,
-            subTitle: 'Build the model and all its downstream dependencies',
-          },
-          {
-            name: 'Build +model (Upstream)',
-            onClick: handleBuildModelUpstream,
-            leftIcon: <Icon src={icons.dbtTm} width={16} height={16} />,
-            subTitle: 'Build the model and all its upstream dependencies',
-          },
-          {
-            name: 'Build +model+ (Up/downstream)',
-            onClick: handleBuildModelBothDirections,
-            leftIcon: <Icon src={icons.dbtTm} width={16} height={16} />,
-            subTitle:
-              'Build the model and all its upstream and downstream dependencies',
-          },
-          {
-            name: 'Test',
-            onClick: handleTestModel,
-            leftIcon: <Icon src={icons.dbtTm} width={16} height={16} />,
-            subTitle: 'Run the dbt test',
-          },
-          {
-            name: 'Test model+ (Downstream)',
-            onClick: handleTestModelDownstream,
-            leftIcon: <Icon src={icons.dbtTm} width={16} height={16} />,
-            subTitle: 'Test the model and all its downstream dependencies',
-          },
-          {
-            name: 'Test +model (Upstream)',
-            onClick: handleTestModelUpstream,
-            leftIcon: <Icon src={icons.dbtTm} width={16} height={16} />,
-            subTitle: 'Test the model and all its upstream dependencies',
-          },
-          {
-            name: 'Test +model+ (Up/downstream)',
-            onClick: handleTestModelBothDirections,
-            leftIcon: <Icon src={icons.dbtTm} width={16} height={16} />,
-            subTitle:
-              'Test the model and all its upstream and downstream dependencies',
-          },
-          {
-            name: 'Compile',
-            onClick: handleCompileModel,
-            leftIcon: <Icon src={icons.dbtTm} width={16} height={16} />,
-            subTitle: 'Compile the dbt model',
-          },
-          {
-            name: 'Preview',
-            onClick: handlePreviewModel,
-            leftIcon: <Icon src={icons.dbtTm} width={16} height={16} />,
-            subTitle: 'Preview the dbt model data',
-          },
-        ]}
+        menuItems={filteredMenuItems.map((item) => {
+          // eslint-disable-next-line @typescript-eslint/no-unused-vars
+          const { localOnly, ...menuItem } = item;
+          return menuItem;
+        })}
       />
 
       <CompileModal
@@ -618,6 +747,19 @@ export const ModelSplitButton: React.FC<ModelSplitButtonProps> = ({
         loading={isPreviewing}
         error={previewError}
       />
+
+      {runInCloudModal && (
+        <PushToCloudModal
+          isOpen={!!runInCloudModal}
+          onClose={() => {
+            setRunInCloudModal(undefined);
+            setCloudDbtArguments('');
+          }}
+          project={project}
+          command={runInCloudModal}
+          initialDbtArguments={cloudDbtArguments}
+        />
+      )}
     </>
   );
 };

@@ -6,7 +6,22 @@ import type {
   CloudListResult,
   CloudConnection,
   RecentItem,
+  FilterCondition,
 } from '../../types/frontend';
+import type {
+  UploadFileRequest,
+  UploadFileResponse,
+  UploadFolderRequest,
+  UploadFolderResponse,
+  CreateBucketRequest,
+  CreateBucketResponse,
+  DeleteObjectRequest,
+  DeleteObjectResponse,
+  CreateFolderRequest,
+  CreateFolderResponse,
+  DeleteBucketRequest,
+  DeleteBucketResponse,
+} from '../../types/ipc';
 
 export const cloudExplorerKeys = {
   all: ['cloudExplorer'] as const,
@@ -104,29 +119,18 @@ export const useGetDownloadUrl = () => {
 // Mutation for previewing data
 export const usePreviewData = () => {
   return useMutation(
-    ({
-      provider,
-      config,
-      bucketName,
-      objectName,
-      previewType = 'sample',
-      limit = 100,
-    }: {
+    (params: {
       provider: CloudProvider;
       config: CloudStorageConfig;
       bucketName: string;
       objectName: string;
       previewType?: 'sample' | 'schema' | 'stats';
-      limit?: number;
-    }) =>
-      cloudExplorerService.previewData(
-        provider,
-        config,
-        bucketName,
-        objectName,
-        previewType,
-        limit,
-      ),
+      pageSize?: number;
+      page?: number;
+      whereClause?: string;
+      filterConditions?: FilterCondition[];
+      knownTotalRows?: number;
+    }) => cloudExplorerService.previewData(params),
   );
 };
 
@@ -293,4 +297,143 @@ export const useClearRecentItems = () => {
       queryClient.invalidateQueries(cloudExplorerKeys.recentItems);
     },
   });
+};
+
+export const useUploadFile = (customOptions?: {
+  onSuccess?: (data: UploadFileResponse, vars: UploadFileRequest) => void;
+  onError?: (error: unknown) => void;
+}) => {
+  const queryClient = useQueryClient();
+
+  return useMutation(
+    (params: UploadFileRequest) => cloudExplorerService.uploadFile(params),
+    {
+      onSuccess: (data, vars) => {
+        queryClient.invalidateQueries(
+          cloudExplorerKeys.objects(
+            vars.provider,
+            vars.config,
+            vars.bucketName,
+            vars.prefix,
+          ),
+        );
+        customOptions?.onSuccess?.(data, vars);
+      },
+      onError: customOptions?.onError,
+    },
+  );
+};
+
+export const useUploadFolder = (customOptions?: {
+  onSuccess?: (data: UploadFolderResponse, vars: UploadFolderRequest) => void;
+  onError?: (error: unknown) => void;
+}) => {
+  const queryClient = useQueryClient();
+
+  return useMutation(
+    (params: UploadFolderRequest) => cloudExplorerService.uploadFolder(params),
+    {
+      onSuccess: (data, vars) => {
+        queryClient.invalidateQueries(
+          cloudExplorerKeys.objects(
+            vars.provider,
+            vars.config,
+            vars.bucketName,
+            vars.prefix,
+          ),
+        );
+        customOptions?.onSuccess?.(data, vars);
+      },
+      onError: customOptions?.onError,
+    },
+  );
+};
+
+export const useCreateBucket = (customOptions?: {
+  onSuccess?: (data: CreateBucketResponse, vars: CreateBucketRequest) => void;
+  onError?: (error: unknown) => void;
+}) => {
+  const queryClient = useQueryClient();
+
+  return useMutation(
+    (params: CreateBucketRequest) => cloudExplorerService.createBucket(params),
+    {
+      onSuccess: (data, vars) => {
+        queryClient.invalidateQueries(
+          cloudExplorerKeys.buckets(vars.provider, vars.config),
+        );
+        customOptions?.onSuccess?.(data, vars);
+      },
+      onError: customOptions?.onError,
+    },
+  );
+};
+
+export const useDeleteObject = (customOptions?: {
+  onSuccess?: (data: DeleteObjectResponse, vars: DeleteObjectRequest) => void;
+  onError?: (error: unknown) => void;
+}) => {
+  const queryClient = useQueryClient();
+
+  return useMutation(
+    (params: DeleteObjectRequest) => cloudExplorerService.deleteObject(params),
+    {
+      onSuccess: (data, vars) => {
+        queryClient.invalidateQueries(
+          cloudExplorerKeys.objects(
+            vars.provider,
+            vars.config,
+            vars.bucketName,
+          ),
+        );
+        customOptions?.onSuccess?.(data, vars);
+      },
+      onError: customOptions?.onError,
+    },
+  );
+};
+
+export const useCreateFolder = (customOptions?: {
+  onSuccess?: (data: CreateFolderResponse, vars: CreateFolderRequest) => void;
+  onError?: (error: unknown) => void;
+}) => {
+  const queryClient = useQueryClient();
+
+  return useMutation(
+    (params: CreateFolderRequest) => cloudExplorerService.createFolder(params),
+    {
+      onSuccess: (data, vars) => {
+        queryClient.invalidateQueries(
+          cloudExplorerKeys.objects(
+            vars.provider,
+            vars.config,
+            vars.bucketName,
+            vars.prefix,
+          ),
+        );
+        customOptions?.onSuccess?.(data, vars);
+      },
+      onError: customOptions?.onError,
+    },
+  );
+};
+
+export const useDeleteBucket = (customOptions?: {
+  onSuccess?: (data: DeleteBucketResponse, vars: DeleteBucketRequest) => void;
+  onError?: (error: unknown) => void;
+}) => {
+  const queryClient = useQueryClient();
+
+  return useMutation(
+    (params: DeleteBucketRequest) => cloudExplorerService.deleteBucket(params),
+    {
+      onSuccess: (data, vars) => {
+        queryClient.invalidateQueries(
+          cloudExplorerKeys.buckets(vars.provider, vars.config),
+        );
+        customOptions?.onSuccess?.(data, vars);
+      },
+      onError: customOptions?.onError,
+    },
+  );
 };

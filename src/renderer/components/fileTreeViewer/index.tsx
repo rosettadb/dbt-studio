@@ -8,12 +8,12 @@ import {
   InputAdornment,
 } from '@mui/material';
 import { Cached, Clear } from '@mui/icons-material';
-import { RenderTree } from './RenderTree';
-import { Container, StyledTreeView } from './styles';
+import { Container } from './styles';
 import { FileNode, FileStatus } from '../../../types/backend';
-import { ConfirmationModal, NewFileModal } from '../modals';
-import { projectsServices } from '../../services';
+import { NewFileModal } from '../modals';
 import { useGetSelectedProject } from '../../controllers';
+import { ArboristTree } from './ArboristTree';
+import { FileStatuses } from './types';
 
 type Props = {
   node: FileNode;
@@ -62,41 +62,6 @@ const filterTreeAndCollectExpanded = (
   };
 };
 
-const pathExistsInTree = (node: FileNode, targetPath: string): boolean => {
-  if (node.path === targetPath) return true;
-
-  if (node.type === 'folder' && node.children) {
-    return node.children.some((child) => pathExistsInTree(child, targetPath));
-  }
-
-  return false;
-};
-
-const findPathToNode = (
-  node: FileNode,
-  targetPath: string,
-): string[] | null => {
-  if (node.path === targetPath) {
-    return [node.path];
-  }
-
-  if (node.type === 'folder' && node.children?.length) {
-    const childPath = node.children.reduce<string[] | null>((found, child) => {
-      if (found) {
-        return found;
-      }
-      const candidate = findPathToNode(child, targetPath);
-      return candidate ?? null;
-    }, null);
-
-    if (childPath) {
-      return [node.path, ...childPath];
-    }
-  }
-
-  return null;
-};
-
 const FileTreeViewer: React.FC<Props> = ({
   node,
   onFileSelect,
@@ -110,82 +75,24 @@ const FileTreeViewer: React.FC<Props> = ({
   onRenameCallback,
 }) => {
   const { data: project } = useGetSelectedProject();
-  const [expandedItems, setExpandedItems] = React.useState<string[]>([]);
   const [fileModal, setFileModal] = React.useState<string>();
   const [folderModal, setFolderModal] = React.useState<string>();
-  const [deleteModal, setDeleteModal] = React.useState<string>();
   const [searchKeyword, setSearchKeyword] = React.useState('');
   const [filteredNode, setFilteredNode] = React.useState<FileNode>(node);
-  const [fileStatuses, setFileStatuses] = React.useState<
-    Record<string, string>
-  >({});
-  const [copyPathData, setCopyPathData] = React.useState<string>('');
+  const [fileStatuses, setFileStatuses] = React.useState<FileStatuses>({});
 
-  const prevExpandedRef = React.useRef<string[]>([]);
   const prevNodeRef = React.useRef<FileNode>();
 
-  const preservedExpandedItems = React.useMemo(() => {
-    if (!node.path) return [];
-
-    const nodeChanged =
-      !prevNodeRef.current || prevNodeRef.current.path !== node.path;
-
-    if (prevExpandedRef.current.length === 0 || nodeChanged) {
-      return [node.path];
-    }
-    const validExpandedPaths = prevExpandedRef.current.filter((path) =>
-      pathExistsInTree(node, path),
-    );
-
-    return validExpandedPaths.includes(node.path)
-      ? validExpandedPaths
-      : [node.path, ...validExpandedPaths];
+  React.useEffect(() => {
+    setFilteredNode(node);
+    prevNodeRef.current = node;
   }, [node]);
 
   React.useEffect(() => {
-    setExpandedItems(preservedExpandedItems);
-    setFilteredNode(node);
-    prevNodeRef.current = node;
-  }, [node, preservedExpandedItems]);
-
-  React.useEffect(() => {
-    prevExpandedRef.current = expandedItems;
-  }, [expandedItems]);
-
-  React.useEffect(() => {
-    if (!selectedPath) {
-      return;
-    }
-
-    const pathToNode = findPathToNode(node, selectedPath);
-    if (!pathToNode) {
-      return;
-    }
-
-    const ancestorFolders = pathToNode.slice(0, -1);
-    if (ancestorFolders.length === 0) {
-      return;
-    }
-
-    setExpandedItems((prev) => {
-      const next = new Set(prev);
-      let changed = false;
-      ancestorFolders.forEach((folderPath) => {
-        if (!next.has(folderPath)) {
-          next.add(folderPath);
-          changed = true;
-        }
-      });
-
-      return changed ? Array.from(next) : prev;
-    });
-  }, [node, selectedPath]);
-
-  React.useEffect(() => {
     if (!project?.path) return;
-    const statusMap: Record<string, string> = {};
+    const statusMap: FileStatuses = {};
     statuses.forEach((status) => {
-      statusMap[status.path] = status.status;
+      statusMap[status.path] = status.status as any;
     });
     setFileStatuses(statusMap);
   }, [project, statuses]);
@@ -193,46 +100,17 @@ const FileTreeViewer: React.FC<Props> = ({
   React.useEffect(() => {
     if (!searchKeyword) {
       setFilteredNode(node);
-      if (prevExpandedRef.current.length > 0) {
-        const validExpandedPaths = prevExpandedRef.current.filter((path) =>
-          pathExistsInTree(node, path),
-        );
-        setExpandedItems(
-          validExpandedPaths.length > 0 ? validExpandedPaths : [node.path],
-        );
-      } else {
-        setExpandedItems([node.path]);
-      }
       return;
     }
 
     const timeout = setTimeout(() => {
-      const { filtered, expanded } = filterTreeAndCollectExpanded(
-        node,
-        searchKeyword,
-      );
+      const { filtered } = filterTreeAndCollectExpanded(node, searchKeyword);
       setFilteredNode(filtered || { ...node, children: [] });
-      setExpandedItems(expanded);
     }, 300);
 
     // eslint-disable-next-line consistent-return
     return () => clearTimeout(timeout);
   }, [searchKeyword, node]);
-
-  const handleExpandedItemsChange = React.useCallback(
-    (newExpanded: string[]) => {
-      setExpandedItems(newExpanded);
-    },
-    [],
-  );
-
-  const selectedItems = React.useMemo(() => {
-    if (!selectedPath) {
-      return [];
-    }
-
-    return pathExistsInTree(filteredNode, selectedPath) ? [selectedPath] : [];
-  }, [filteredNode, selectedPath]);
 
   return (
     <Container>
@@ -247,7 +125,10 @@ const FileTreeViewer: React.FC<Props> = ({
           placeholder="Search files or folders..."
           onChange={(e) => setSearchKeyword(e.target.value)}
           value={searchKeyword}
-          sx={{ height: '40px' }}
+          sx={{
+            '& .MuiInputBase-root': { height: 36, fontSize: 13 },
+            '& .MuiInputBase-input': { py: 0, px: 1, fontSize: 13 },
+          }}
           InputProps={{
             endAdornment: searchKeyword ? (
               <InputAdornment position="end">
@@ -277,28 +158,19 @@ const FileTreeViewer: React.FC<Props> = ({
         </Tooltip>
       </Box>
 
-      <StyledTreeView
-        expandedItems={expandedItems}
-        selectedItems={selectedItems}
-        onExpandedItemsChange={(_, items) => handleExpandedItemsChange(items)}
-      >
-        <RenderTree
-          node={filteredNode}
-          fileStatuses={fileStatuses}
-          onFileSelect={onFileSelect}
-          onDelete={(path) => setDeleteModal(path)}
-          onNewFile={(path) => setFileModal(path)}
-          onNewFolder={(path) => setFolderModal(path)}
-          projectName={project!.name}
-          projectPath={project!.path}
-          onRefresh={() => refreshFiles()}
-          onCopyPath={(path) => setCopyPathData(path)}
-          onPastePath={(source, target) => copyPath(source, target)}
-          copyPathData={copyPathData}
-          selectedPath={selectedPath}
-          onRename={onRenameCallback}
-        />
-      </StyledTreeView>
+      <ArboristTree
+        data={filteredNode}
+        fileStatuses={fileStatuses}
+        onFileSelect={onFileSelect}
+        onRefresh={refreshFiles}
+        onCreateFile={(path) => setFileModal(path)}
+        onCreateFolder={(path) => setFolderModal(path)}
+        onDeleteSuccess={onDeleteFileCallback}
+        onRenameSuccess={onRenameCallback}
+        selectedPath={selectedPath}
+        projectPath={project!.path}
+        copyPath={copyPath}
+      />
       {(fileModal || folderModal) && (
         <NewFileModal
           isOpen={!!folderModal || !!fileModal}
@@ -313,21 +185,6 @@ const FileTreeViewer: React.FC<Props> = ({
             onNewFileCallback(filePath);
             refreshFiles();
           }}
-        />
-      )}
-
-      {deleteModal && (
-        <ConfirmationModal
-          title="Delete Item"
-          isOpen={!!deleteModal}
-          onClose={() => setDeleteModal(undefined)}
-          onConfirm={async () => {
-            await projectsServices.deleteItem({ filePath: deleteModal });
-            setDeleteModal(undefined);
-            onDeleteFileCallback(deleteModal);
-            refreshFiles();
-          }}
-          question="Are you sure you want to delete?"
         />
       )}
     </Container>

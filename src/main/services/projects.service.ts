@@ -8,7 +8,6 @@ import AdmZip from 'adm-zip';
 import * as tar from 'tar';
 import {
   BigQueryConnection,
-  CloudDeploymentPayload,
   DatabricksConnection,
   DuckDBConnection,
   KineticaConnection,
@@ -31,7 +30,6 @@ import {
   saveFileContent,
   updateDatabase,
 } from '../utils/fileHelper';
-import { ROSETTA_CLOUD_BASE_URL } from '../utils/constants';
 import SettingsService from './settings.service';
 import {
   BigQueryExtractor,
@@ -100,84 +98,6 @@ export default class ProjectsService {
       await updateDatabase<'selectedProject'>('selectedProject', undefined);
       return undefined;
     }
-  }
-
-  static async pushProjectToCloud(body: CloudDeploymentPayload): Promise<void> {
-    const settings = await SettingsService.loadSettings();
-    const rosettaCloudUrl =
-      settings.cloudWorkspaceUrl ?? ROSETTA_CLOUD_BASE_URL;
-    const baseUrl = rosettaCloudUrl.replace(/\/$/, '');
-    const createEndpoint = `${baseUrl}/api/projects`;
-
-    if (!body.apiKey) {
-      throw new Error('Cloud API key is required to deploy.');
-    }
-
-    const requestBody = {
-      title: body.title,
-      git_url: body.gitUrl,
-      git_branch: body.gitBranch,
-    };
-
-    const postJson = (url: string, data?: object): Promise<any> => {
-      return new Promise((resolve, reject) => {
-        const request = net.request({
-          method: 'POST',
-          url,
-          headers: {
-            'Content-Type': 'application/json',
-            Accept: 'application/json',
-            Authorization: `Bearer ${body.apiKey}`,
-          },
-        });
-
-        const chunks: Buffer[] = [];
-
-        request.on('response', (response: IncomingMessage) => {
-          response.on('data', (chunk) => {
-            chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
-          });
-
-          response.on('end', () => {
-            const raw = Buffer.concat(chunks).toString('utf8');
-            let parsed: any;
-            try {
-              parsed = raw ? JSON.parse(raw) : {};
-            } catch {
-              parsed = { message: raw };
-            }
-
-            if (
-              response.statusCode &&
-              response.statusCode >= 200 &&
-              response.statusCode < 300
-            ) {
-              resolve(parsed);
-            } else {
-              reject(
-                new Error(
-                  parsed?.message ||
-                    `Rosetta Cloud responded with status ${response.statusCode ?? 'unknown'}.`,
-                ),
-              );
-            }
-          });
-        });
-
-        request.on('error', (err) => reject(err));
-
-        if (data) {
-          request.write(JSON.stringify(data));
-        }
-
-        request.end();
-      });
-    };
-
-    const projectData = await postJson(createEndpoint, requestBody);
-
-    const runEndpoint = `${baseUrl}/api/projects/${projectData.id}/run`;
-    await postJson(runEndpoint);
   }
 
   static async saveProjects(projects: Project[]) {
@@ -1228,6 +1148,10 @@ export default class ProjectsService {
         return this.extractBigQuerySchema(connection as BigQueryConnection);
       case 'duckdb':
         return this.extractDuckDBSchema(connection as DuckDBConnection);
+      case 'ducklake':
+        throw new Error(
+          'Schema extraction is not supported for DuckLake connections. DuckLake projects use dynamic data lake catalogs.',
+        );
       case 'kinetica':
         return this.extractKineticaSchema(connection as KineticaConnection);
       default:

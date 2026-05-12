@@ -2,10 +2,11 @@ import { RemoteWithRefs } from 'simple-git';
 import { client } from '../config/client';
 import {
   DBTConnection,
-  DiffResponse,
   FileStatus,
   GitBranch,
+  GitChangesRes,
   GitCredentials,
+  RepoInfoRes,
   RosettaConnection,
 } from '../../types/backend';
 
@@ -13,9 +14,13 @@ export const gitInit = async (path: string) => {
   await client.post<string>('git:init', path);
 };
 
-export const gitClone = async (url: string, credentials?: GitCredentials) => {
+export const gitClone = async (
+  url: string,
+  credentials?: GitCredentials,
+  removeGit?: boolean,
+) => {
   const { data } = await client.post<
-    { url: string; credentials?: GitCredentials },
+    { url: string; credentials?: GitCredentials; removeGit?: boolean },
     {
       error?: string;
       authRequired?: boolean;
@@ -28,6 +33,7 @@ export const gitClone = async (url: string, credentials?: GitCredentials) => {
   >('git:clone', {
     url,
     credentials,
+    removeGit,
   });
   return data;
 };
@@ -66,15 +72,11 @@ export const add = async (path: string, files: string[]) => {
   return data;
 };
 
-export const commit = async (
-  path: string,
-  message: string,
-  files: string[],
-) => {
-  await client.post<{ repoPath: string; message: string; files: string[] }>(
-    'git:commit',
-    { repoPath: path, message, files },
-  );
+export const commit = async (path: string, message: string) => {
+  await client.post<{ repoPath: string; message: string }>('git:commit', {
+    repoPath: path,
+    message,
+  });
 };
 
 export const push = async (repoPath: string, credentials?: GitCredentials) => {
@@ -108,11 +110,14 @@ export const listBranches = async (path: string): Promise<GitBranch[]> => {
   return data;
 };
 
-export const getFileDiff = async (repoPath: string, filePath: string) => {
+export const getFileHeadContent = async (
+  repoPath: string,
+  filePath: string,
+) => {
   const { data } = await client.post<
-    { filePath: string; repoPath: string },
-    DiffResponse
-  >('git:fileDiff', { filePath, repoPath });
+    { repoPath: string; filePath: string },
+    string | null
+  >('git:fileHeadContent', { repoPath, filePath });
   return data;
 };
 
@@ -129,6 +134,22 @@ export const getFileStatus = async (repoPath: string, filePath: string) => {
     { repoPath: string; filePath: string },
     FileStatus | null
   >('git:fileStatus', { repoPath, filePath });
+  return data;
+};
+
+export const getLocalChanges = async (repoPath: string) => {
+  const { data } = await client.post<
+    { repoPath: string },
+    GitChangesRes | null
+  >('git:getLocalChanges', { repoPath });
+  return data;
+};
+
+export const getRepoInfo = async (repoPath: string) => {
+  const { data } = await client.post<{ repoPath: string }, RepoInfoRes | null>(
+    'git:repoInfo',
+    { repoPath },
+  );
   return data;
 };
 

@@ -85,6 +85,276 @@ export class SQLiteCatalogAdapter extends CatalogAdapter {
     }
   }
 
+  async restoreSnapshot(tableName: string, snapshotId: number): Promise<void> {
+    try {
+      if (!this.connectionInfo) {
+        throw new Error('No active connection');
+      }
+
+      const escapedName = tableName.replace(/"/g, '""');
+      await this.connectionInfo.connection.run(
+        `CREATE OR REPLACE TABLE "${escapedName}" AS SELECT * FROM "${escapedName}" FOR SYSTEM_VERSION AS OF ${snapshotId}`,
+      );
+    } catch (error) {
+      // eslint-disable-next-line no-console
+      console.error(
+        `Failed to restore SQLite table ${tableName} to snapshot ${snapshotId}:`,
+        error,
+      );
+      throw error;
+    }
+  }
+
+  async addColumn(
+    tableName: string,
+    columnName: string,
+    columnType: string,
+    defaultValue?: string,
+  ): Promise<void> {
+    try {
+      if (!this.connectionInfo) {
+        throw new Error('No active connection');
+      }
+
+      const escapedTableName = tableName.replace(/"/g, '""');
+      const escapedColumnName = columnName.replace(/"/g, '""');
+
+      // Validate column type to prevent SQL injection
+      const validatedType = this.validateColumnType(columnType);
+
+      let defaultClause = '';
+      if (defaultValue && defaultValue.trim() !== '') {
+        // Sanitize default value to prevent SQL injection
+        const sanitizedDefault = this.sanitizeDefaultValue(defaultValue);
+        defaultClause = ` DEFAULT ${sanitizedDefault}`;
+      }
+
+      await this.connectionInfo.connection.run(
+        `ALTER TABLE "${escapedTableName}" ADD COLUMN "${escapedColumnName}" ${validatedType}${defaultClause}`,
+      );
+    } catch (error) {
+      // eslint-disable-next-line no-console
+      console.error(
+        `Failed to add column ${columnName} to SQLite table ${tableName}:`,
+        error,
+      );
+      throw error;
+    }
+  }
+
+  async dropColumn(tableName: string, columnName: string): Promise<void> {
+    try {
+      if (!this.connectionInfo) {
+        throw new Error('No active connection');
+      }
+
+      const escapedTableName = tableName.replace(/"/g, '""');
+      const escapedColumnName = columnName.replace(/"/g, '""');
+
+      await this.connectionInfo.connection.run(
+        `ALTER TABLE "${escapedTableName}" DROP COLUMN "${escapedColumnName}"`,
+      );
+    } catch (error) {
+      // eslint-disable-next-line no-console
+      console.error(
+        `Failed to drop column ${columnName} from SQLite table ${tableName}:`,
+        error,
+      );
+      throw error;
+    }
+  }
+
+  async renameColumn(
+    tableName: string,
+    oldColumnName: string,
+    newColumnName: string,
+  ): Promise<void> {
+    try {
+      if (!this.connectionInfo) {
+        throw new Error('No active connection');
+      }
+
+      const escapedTableName = tableName.replace(/"/g, '""');
+      const escapedOldColumnName = oldColumnName.replace(/"/g, '""');
+      const escapedNewColumnName = newColumnName.replace(/"/g, '""');
+
+      await this.connectionInfo.connection.run(
+        `ALTER TABLE "${escapedTableName}" RENAME COLUMN "${escapedOldColumnName}" TO "${escapedNewColumnName}"`,
+      );
+    } catch (error) {
+      // eslint-disable-next-line no-console
+      console.error(
+        `Failed to rename column ${oldColumnName} to ${newColumnName} on SQLite table ${tableName}:`,
+        error,
+      );
+      throw error;
+    }
+  }
+
+  async alterColumnType(
+    tableName: string,
+    columnName: string,
+    newType: string,
+  ): Promise<void> {
+    try {
+      if (!this.connectionInfo) {
+        throw new Error('No active connection');
+      }
+
+      const escapedTableName = tableName.replace(/"/g, '""');
+      const escapedColumnName = columnName.replace(/"/g, '""');
+
+      // Validate column type to prevent SQL injection
+      const validatedType = this.validateColumnType(newType);
+
+      await this.connectionInfo.connection.run(
+        `ALTER TABLE "${escapedTableName}" ALTER COLUMN "${escapedColumnName}" TYPE ${validatedType}`,
+      );
+    } catch (error) {
+      // eslint-disable-next-line no-console
+      console.error(
+        `Failed to alter column ${columnName} type to ${newType} on SQLite table ${tableName}:`,
+        error,
+      );
+      throw error;
+    }
+  }
+
+  async setPartitionedBy(
+    tableName: string,
+    columnNames: string[],
+  ): Promise<void> {
+    try {
+      if (!this.connectionInfo) {
+        throw new Error('No active connection');
+      }
+
+      const escapedTableName = tableName.replace(/"/g, '""');
+      const escapedColumns = columnNames.map(
+        (c) => `"${c.replace(/"/g, '""')}"`,
+      );
+
+      await this.connectionInfo.connection.run(
+        `ALTER TABLE "${escapedTableName}" SET PARTITIONED BY (${escapedColumns.join(
+          ', ',
+        )})`,
+      );
+    } catch (error) {
+      // eslint-disable-next-line no-console
+      console.error(
+        `Failed to set partition columns (${columnNames.join(', ')}) on SQLite table ${tableName}:`,
+        error,
+      );
+      throw error;
+    }
+  }
+
+  async renameTable(oldName: string, newName: string): Promise<void> {
+    try {
+      if (!this.connectionInfo) {
+        throw new Error('No active connection');
+      }
+
+      const escapedOldName = oldName.replace(/"/g, '""');
+      const escapedNewName = newName.replace(/"/g, '""');
+
+      await this.connectionInfo.connection.run(
+        `ALTER TABLE "${escapedOldName}" RENAME TO "${escapedNewName}"`,
+      );
+    } catch (error) {
+      // eslint-disable-next-line no-console
+      console.error(
+        `Failed to rename SQLite table ${oldName} to ${newName}:`,
+        error,
+      );
+      throw error;
+    }
+  }
+
+  async updateRows(
+    _tableName: string,
+    updateQuery: string,
+  ): Promise<{ rowsAffected: number }> {
+    try {
+      if (!this.connectionInfo) {
+        throw new Error('No active connection');
+      }
+
+      await this.connectionInfo.connection.run(updateQuery);
+      const changesResult = await this.connectionInfo.connection.run(
+        'SELECT changes() as changes',
+      );
+      const rows = await changesResult.getRows();
+      const value = rows?.[0]?.[0] ?? 0;
+      const numeric =
+        typeof value === 'object' && value?.hugeint !== undefined
+          ? Number(value.hugeint)
+          : Number(value);
+
+      return { rowsAffected: Number.isFinite(numeric) ? numeric : 0 };
+    } catch (error) {
+      // eslint-disable-next-line no-console
+      console.error('Failed to update rows:', error);
+      throw error;
+    }
+  }
+
+  async deleteRows(
+    _tableName: string,
+    deleteQuery: string,
+  ): Promise<{ rowsAffected: number }> {
+    try {
+      if (!this.connectionInfo) {
+        throw new Error('No active connection');
+      }
+
+      await this.connectionInfo.connection.run(deleteQuery);
+      const changesResult = await this.connectionInfo.connection.run(
+        'SELECT changes() as changes',
+      );
+      const rows = await changesResult.getRows();
+      const value = rows?.[0]?.[0] ?? 0;
+      const numeric =
+        typeof value === 'object' && value?.hugeint !== undefined
+          ? Number(value.hugeint)
+          : Number(value);
+
+      return { rowsAffected: Number.isFinite(numeric) ? numeric : 0 };
+    } catch (error) {
+      // eslint-disable-next-line no-console
+      console.error('Failed to delete rows:', error);
+      throw error;
+    }
+  }
+
+  async upsertRows(
+    _tableName: string,
+    upsertQuery: string,
+  ): Promise<{ rowsAffected: number }> {
+    try {
+      if (!this.connectionInfo) {
+        throw new Error('No active connection');
+      }
+
+      await this.connectionInfo.connection.run(upsertQuery);
+      const changesResult = await this.connectionInfo.connection.run(
+        'SELECT changes() as changes',
+      );
+      const rows = await changesResult.getRows();
+      const value = rows?.[0]?.[0] ?? 0;
+      const numeric =
+        typeof value === 'object' && value?.hugeint !== undefined
+          ? Number(value.hugeint)
+          : Number(value);
+
+      return { rowsAffected: Number.isFinite(numeric) ? numeric : 0 };
+    } catch (error) {
+      // eslint-disable-next-line no-console
+      console.error('Failed to upsert rows:', error);
+      throw error;
+    }
+  }
+
   async disconnect(): Promise<void> {
     await this.cleanup();
   }
@@ -203,8 +473,6 @@ export class SQLiteCatalogAdapter extends CatalogAdapter {
       if (testConnection) {
         try {
           testConnection.closeSync();
-          // eslint-disable-next-line no-console
-          console.log('[SQLite] Closed test connection');
         } catch (error) {
           // eslint-disable-next-line no-console
           console.error('Error closing test connection:', error);
@@ -213,8 +481,6 @@ export class SQLiteCatalogAdapter extends CatalogAdapter {
       if (testInstance && typeof testInstance.close === 'function') {
         try {
           await testInstance.close();
-          // eslint-disable-next-line no-console
-          console.log('[SQLite] Closed test instance');
         } catch (error) {
           // eslint-disable-next-line no-console
           console.error('Error closing test instance:', error);
@@ -289,7 +555,6 @@ export class SQLiteCatalogAdapter extends CatalogAdapter {
 
       const quotedMetadataDatabase = `"${metadataDatabase}"`;
 
-      // List logical DuckLake tables from metadata tables, similar to DuckDB adapter
       const query = `
         WITH current_snapshot AS (
           SELECT COALESCE(max(snapshot_id), 0) as snapshot_id
@@ -302,10 +567,12 @@ export class SQLiteCatalogAdapter extends CatalogAdapter {
           t.table_uuid,
           cs.snapshot_id as current_snapshot,
           ts.record_count,
-          ts.file_size_bytes
+          ts.file_size_bytes,
+          snap.snapshot_time
         FROM ${quotedMetadataDatabase}.main.ducklake_table t
         JOIN ${quotedMetadataDatabase}.main.ducklake_schema s ON t.schema_id = s.schema_id
         LEFT JOIN ${quotedMetadataDatabase}.main.ducklake_table_stats ts ON ts.table_id = t.table_id
+        LEFT JOIN ${quotedMetadataDatabase}.main.ducklake_snapshot snap ON snap.snapshot_id = t.begin_snapshot
         CROSS JOIN current_snapshot cs
         WHERE cs.snapshot_id >= t.begin_snapshot
           AND (cs.snapshot_id < t.end_snapshot OR t.end_snapshot IS NULL)
@@ -317,30 +584,83 @@ export class SQLiteCatalogAdapter extends CatalogAdapter {
       const result = await this.connectionInfo.connection.run(query);
       const rows = await result.getRows();
 
+      // Second isolated query: derive updatedAt from the latest data file written per table.
+      // ducklake_snapshot has NO table_id column — the link is via ducklake_data_file.begin_snapshot.
+      // This query avoids ducklake_table_stats entirely to prevent DuckDB binder ambiguity
+      // when joined tables share the 'table_id' column name in attached SQLite databases.
+      // See coding rule DL-01 in ai-context/04-rules/01-coding-rules.md.
+      const updatedAtQuery = `
+        SELECT df.table_id, MAX(sn.snapshot_time) as updated_at
+        FROM ${quotedMetadataDatabase}.main.ducklake_data_file df
+        JOIN ${quotedMetadataDatabase}.main.ducklake_snapshot sn ON sn.snapshot_id = df.begin_snapshot
+        GROUP BY df.table_id
+      `;
+      const updatedAtMap = new Map<string | number, Date>();
+      try {
+        const updatedAtResult =
+          await this.connectionInfo.connection.run(updatedAtQuery);
+        const updatedAtRows = await updatedAtResult.getRows();
+        updatedAtRows.forEach((uRow: any) => {
+          if (Array.isArray(uRow)) {
+            const [tableId, updatedAt] = uRow;
+            if (tableId != null && updatedAt) {
+              updatedAtMap.set(tableId as string | number, new Date(updatedAt));
+            }
+          } else if (uRow && typeof uRow === 'object') {
+            const r = uRow as any;
+            if (r.table_id != null && r.updated_at) {
+              updatedAtMap.set(
+                r.table_id as string | number,
+                new Date(r.updated_at),
+              );
+            }
+          }
+        });
+      } catch {
+        // Degrade gracefully: updatedAt falls back to createdAt below
+      }
+
       const tables: DuckLakeTableInfo[] = rows.map((row: any) => {
         if (Array.isArray(row)) {
-          const [, tableName, schemaName, , , recordCount, fileSizeBytes] = row;
+          const [
+            tableId,
+            tableName,
+            schemaName,
+            ,
+            ,
+            recordCount,
+            fileSizeBytes,
+            snapshotTime,
+          ] = row;
+          const createdAt = snapshotTime ? new Date(snapshotTime) : new Date();
+          const updatedAt =
+            updatedAtMap.get(tableId as string | number) ?? createdAt;
           return {
             name: tableName,
             schema: schemaName || 'main',
             instanceId: '',
             columns: [],
             snapshots: [],
-            createdAt: new Date(),
-            updatedAt: new Date(),
+            createdAt,
+            updatedAt,
             rowCount: normalizeNumericValue(recordCount),
             sizeBytes: normalizeNumericValue(fileSizeBytes),
           };
         }
 
+        const createdAt = row.snapshot_time
+          ? new Date(row.snapshot_time)
+          : new Date();
+        const updatedAt =
+          updatedAtMap.get(row.table_id as string | number) ?? createdAt;
         return {
           name: row.table_name,
           schema: row.schema_name || 'main',
           instanceId: '',
           columns: [],
           snapshots: [],
-          createdAt: new Date(),
-          updatedAt: new Date(),
+          createdAt,
+          updatedAt,
           rowCount: normalizeNumericValue(row.record_count),
           sizeBytes: normalizeNumericValue(row.file_size_bytes),
         };
@@ -422,54 +742,241 @@ export class SQLiteCatalogAdapter extends CatalogAdapter {
     }
   }
 
-  async executeQuery(
-    request: DuckLakeQueryRequest,
-  ): Promise<DuckLakeQueryResult> {
+  async deleteTable(tableName: string): Promise<void> {
     try {
       if (!this.connectionInfo) {
         throw new Error('No active connection');
       }
 
-      const startTime = Date.now();
+      const escapedName = tableName.replace(/"/g, '""');
+      await this.connectionInfo.connection.run(
+        `DROP TABLE IF EXISTS "${escapedName}"`,
+      );
+    } catch (error) {
+      // eslint-disable-next-line no-console
+      console.error(`Failed to delete SQLite table ${tableName}:`, error);
+      throw error;
+    }
+  }
 
-      // Handle time travel queries
-      let query = request.sql;
-      if (request.snapshotId) {
-        // Modify query to use specific snapshot
-        query = `${query} FOR SYSTEM_TIME AS OF SNAPSHOT '${request.snapshotId}'`;
+  /**
+   * Get the metadata database prefix for qualifying metadata tables.
+   * SQLite-backed DuckLake attaches a DuckDB metadata DB using `.main.` schema notation.
+   */
+  private async getMetadataPrefix(): Promise<string> {
+    try {
+      if (!this.connectionInfo) {
+        return '';
       }
 
-      // Add limit and offset if specified
-      if (request.limit) {
-        query += ` LIMIT ${request.limit}`;
-        if (request.offset) {
-          query += ` OFFSET ${request.offset}`;
+      const databasesQuery = `
+        SELECT database_name
+        FROM duckdb_databases()
+        WHERE database_name LIKE '__ducklake_metadata_%'
+        LIMIT 1
+      `;
+
+      const databasesResult =
+        await this.connectionInfo.connection.run(databasesQuery);
+      const databaseRows = await databasesResult.getRows();
+
+      if (databaseRows.length === 0) {
+        return '';
+      }
+
+      const metadataDatabase = Array.isArray(databaseRows[0])
+        ? databaseRows[0][0]
+        : (databaseRows[0] as any).database_name;
+
+      // SQLite metadata DB uses the `.main.` schema, matching how listTables qualifies tables.
+      return `"${metadataDatabase}".main.`;
+    } catch (error) {
+      // eslint-disable-next-line no-console
+      console.warn(
+        '[SQLite Adapter] Could not determine metadata prefix:',
+        error,
+      );
+      return '';
+    }
+  }
+
+  /**
+   * Qualify unqualified DuckLake metadata table references in a query.
+   */
+  private async qualifyMetadataTables(query: string): Promise<string> {
+    const metadataPrefix = await this.getMetadataPrefix();
+
+    if (!metadataPrefix) {
+      return query;
+    }
+
+    const metadataTables = [
+      'ducklake_table',
+      'ducklake_column',
+      'ducklake_schema',
+      'ducklake_snapshot',
+      'ducklake_data_file',
+      'ducklake_delete_file',
+      'ducklake_table_stats',
+      'ducklake_table_column_stats',
+      'ducklake_partition_info',
+      'ducklake_partition_column',
+      'ducklake_file_partition_value',
+      'ducklake_tag',
+      'ducklake_column_tag',
+      'ducklake_view',
+    ];
+
+    return metadataTables.reduce((currentQuery, table) => {
+      const pattern = new RegExp(
+        `\\b(FROM|JOIN)\\s+(?!"?__ducklake_metadata_)\\b${table}\\b`,
+        'gi',
+      );
+      return currentQuery.replace(pattern, `$1 ${metadataPrefix}${table}`);
+    }, query);
+  }
+
+  async executeQuery(
+    request: DuckLakeQueryRequest,
+  ): Promise<DuckLakeQueryResult> {
+    const startTime = Date.now();
+    try {
+      if (!this.connectionInfo) {
+        throw new Error('No active connection');
+      }
+
+      // Handle time travel queries
+      const { query: baseQuery, snapshotId, limit, offset } = request;
+      // Qualify any unqualified metadata table references so DuckDB can resolve them.
+      let query = await this.qualifyMetadataTables(baseQuery);
+
+      // Strip trailing semicolons before appending any suffixes (like SNAPSHOT or LIMIT/OFFSET).
+      query = query.replace(/;\s*$/, '');
+
+      if (snapshotId) {
+        // Modify query to use specific snapshot
+        const snapshotIdStr = String(snapshotId).trim();
+        if (!/^\d+$/.test(snapshotIdStr)) {
+          throw DuckLakeError.validation(
+            'Invalid snapshotId. Expected digits only.',
+          );
+        }
+        query = `${query} FOR SYSTEM_TIME AS OF SNAPSHOT '${snapshotIdStr}'`;
+      }
+
+      let totalRows: number | undefined;
+
+      // Add limit and offset if specified — but respect user-defined LIMIT
+      const hasExistingLimit = /\bLIMIT\s+\d+/i.test(query);
+      const isSelectQuery =
+        /^\s*SELECT\b/i.test(query) || /^\s*WITH\b/i.test(query);
+
+      if (limit && !hasExistingLimit && isSelectQuery) {
+        try {
+          const countQuery = `SELECT COUNT(*) as total FROM (${query}) AS _sub`;
+          const countResult =
+            await this.connectionInfo.connection.run(countQuery);
+          const countRows = await countResult.getRows();
+
+          if (countRows && countRows.length > 0) {
+            const countRow = countRows[0];
+            let countVal;
+            if (Array.isArray(countRow)) {
+              [countVal] = countRow;
+            } else if (countRow && typeof countRow === 'object') {
+              countVal = countRow.total ?? Object.values(countRow)[0];
+            }
+            if (countVal !== undefined) {
+              totalRows = Number(countVal);
+            }
+          }
+        } catch (error) {
+          // eslint-disable-next-line no-console
+          console.warn(
+            '[SQLite] Failed to fetch total rows for pagination:',
+            error,
+          );
+        }
+
+        query += ` LIMIT ${limit}`;
+        if (offset) {
+          query += ` OFFSET ${offset}`;
         }
       }
 
       const result = await this.connectionInfo.connection.run(query);
+
+      // Use the DuckDB Node Neo API (columnNames/columnTypes) — result.schema does not exist
+      // in this version of the driver. Falling back to empty fields caused array rows to be
+      // mapped against an empty field list, producing {} for every row.
+      const columnNames: string[] = result.columnNames?.() ?? [];
+      const columnTypes: any[] = result.columnTypes?.() ?? [];
+      const fields = columnNames.map((name: string, index: number) => ({
+        name,
+        type: columnTypes[index]?.toString() ?? 'UNKNOWN',
+      }));
+
       const rows = await result.getRows();
 
-      // Handle DDL statements (CREATE, DROP, etc.) that don't return a schema
-      const columns = result.schema
-        ? result.schema.map((col: any) => ({
-            name: col.name,
-            type: col.type,
-          }))
-        : [];
+      // Normalize data (handle complex types)
+      const data = rows.map((row: any) => {
+        const normalized: any = {};
+        if (Array.isArray(row)) {
+          // If row is an array, map to field names
+          fields.forEach((field: any, idx: number) => {
+            const value = row[idx];
+            // Only normalize numeric types, preserve other types
+            if (
+              typeof value === 'bigint' ||
+              typeof value === 'number' ||
+              (typeof value === 'object' &&
+                value !== null &&
+                (value as any).hugeint !== undefined)
+            ) {
+              normalized[field.name] = normalizeNumericValue(value);
+            } else {
+              normalized[field.name] = value;
+            }
+          });
+        } else if (typeof row === 'object' && row !== null) {
+          // If row is already an object
+          const entries = Object.entries(row);
+          entries.forEach(([key, value]) => {
+            // Only normalize numeric types, preserve other types
+            if (
+              typeof value === 'bigint' ||
+              typeof value === 'number' ||
+              (typeof value === 'object' &&
+                value !== null &&
+                (value as any).hugeint !== undefined)
+            ) {
+              normalized[key] = normalizeNumericValue(value);
+            } else {
+              normalized[key] = value;
+            }
+          });
+        }
+        return normalized;
+      });
 
-      const executionTime = Date.now() - startTime;
+      const duration = Date.now() - startTime;
 
       return {
-        columns,
-        rows,
-        executionTime,
-        snapshotId: request.snapshotId,
+        success: true,
+        data,
+        fields,
+        rowCount: totalRows ?? data.length,
+        duration,
+        snapshotId,
       };
     } catch (error) {
       // eslint-disable-next-line no-console
       console.error('SQLite query execution failed:', error);
-      throw error;
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : String(error),
+        duration: Date.now() - startTime,
+      };
     }
   }
 
@@ -486,7 +993,7 @@ export class SQLiteCatalogAdapter extends CatalogAdapter {
         SELECT
           snapshot_id,
           table_id,
-          timestamp_ms,
+          snapshot_time,
           operation,
           summary,
           parent_snapshot_id
@@ -494,7 +1001,7 @@ export class SQLiteCatalogAdapter extends CatalogAdapter {
         WHERE table_id = (
           SELECT table_id FROM ducklake_table WHERE table_name = '${escapedTableName}'
         )
-        ORDER BY timestamp_ms DESC
+        ORDER BY snapshot_time DESC
       `;
 
       const result = await this.connectionInfo.connection.run(query);
@@ -503,7 +1010,7 @@ export class SQLiteCatalogAdapter extends CatalogAdapter {
       return rows.map((row: any) => ({
         id: row.snapshot_id,
         tableId: row.table_id,
-        timestamp: new Date(row.timestamp_ms),
+        timestamp: new Date(row.snapshot_time),
         operation: row.operation,
         summary: JSON.parse(row.summary || '{}'),
         parentSnapshotId: row.parent_snapshot_id,
@@ -828,8 +1335,8 @@ export class SQLiteCatalogAdapter extends CatalogAdapter {
           cs.min_value,
           cs.max_value
         FROM ${quotedMetadataDatabase}.main.ducklake_table_column_stats cs
-        JOIN ${quotedMetadataDatabase}.main.ducklake_column c 
-          ON cs.column_id = c.column_id 
+        JOIN ${quotedMetadataDatabase}.main.ducklake_column c
+          ON cs.column_id = c.column_id
           AND cs.table_id = c.table_id
           AND ${currentSnapshot} >= c.begin_snapshot
           AND (${currentSnapshot} < c.end_snapshot OR c.end_snapshot IS NULL)
@@ -961,7 +1468,7 @@ export class SQLiteCatalogAdapter extends CatalogAdapter {
               c.column_name,
               pc.transform
             FROM ${quotedMetadataDatabase}.main.ducklake_partition_column pc
-            JOIN ${quotedMetadataDatabase}.main.ducklake_column c 
+            JOIN ${quotedMetadataDatabase}.main.ducklake_column c
               ON pc.column_id = c.column_id
               AND pc.table_id = c.table_id
               AND ${currentSnapshot} >= c.begin_snapshot
@@ -1050,37 +1557,37 @@ export class SQLiteCatalogAdapter extends CatalogAdapter {
           SELECT t.begin_snapshot as snapshot_id
           FROM ${quotedMetadataDatabase}.main.ducklake_table t
           WHERE t.table_id = ${tableId}
-          
+
           UNION
-          
+
           -- Snapshot when table was deleted (if applicable)
           SELECT t.end_snapshot as snapshot_id
           FROM ${quotedMetadataDatabase}.main.ducklake_table t
           WHERE t.table_id = ${tableId} AND t.end_snapshot IS NOT NULL
-          
+
           UNION
-          
+
           -- Snapshots when columns were added/modified
           SELECT c.begin_snapshot as snapshot_id
           FROM ${quotedMetadataDatabase}.main.ducklake_column c
           WHERE c.table_id = ${tableId}
-          
+
           UNION
-          
+
           -- Snapshots when columns were dropped
           SELECT c.end_snapshot as snapshot_id
           FROM ${quotedMetadataDatabase}.main.ducklake_column c
           WHERE c.table_id = ${tableId} AND c.end_snapshot IS NOT NULL
-          
+
           UNION
-          
+
           -- Snapshots when data files were added
           SELECT df.begin_snapshot as snapshot_id
           FROM ${quotedMetadataDatabase}.main.ducklake_data_file df
           WHERE df.table_id = ${tableId}
-          
+
           UNION
-          
+
           -- Snapshots when data files were deleted
           SELECT df.end_snapshot as snapshot_id
           FROM ${quotedMetadataDatabase}.main.ducklake_data_file df
@@ -1170,7 +1677,7 @@ export class SQLiteCatalogAdapter extends CatalogAdapter {
           ct.begin_snapshot,
           ct.end_snapshot
         FROM ${quotedMetadataDatabase}.main.ducklake_column_tag ct
-        JOIN ${quotedMetadataDatabase}.main.ducklake_column c 
+        JOIN ${quotedMetadataDatabase}.main.ducklake_column c
           ON ct.column_id = c.column_id
           AND ct.table_id = c.table_id
           AND ${currentSnapshot} >= c.begin_snapshot

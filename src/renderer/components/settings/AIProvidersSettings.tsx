@@ -9,35 +9,46 @@ import {
   Chip,
   Paper,
   TextField,
+  Tabs,
+  Tab,
 } from '@mui/material';
 import { Add, Info, Refresh, Storage } from '@mui/icons-material';
 import { toast } from 'react-toastify';
+import { useSearchParams, useNavigate } from 'react-router-dom';
 import {
   useGetAIProviders,
   useGetActiveAIProvider,
-  useInitializeProviderManager,
 } from '../../controllers/aiProviders.controller';
 import type { AIProvider } from '../../controllers/aiProviders.controller';
 import { CreateProviderDialog, ProviderCard } from '../ai';
 import { useGetSettingsWithDatabaseInfo } from '../../controllers';
+import { AISettingsTab } from './AISettingsTab';
+import { MCPServersTab } from './MCPServersTab';
+import { SkillsTab } from './SkillsTab';
+
+const TABS = ['Providers', 'Settings', 'MCP Servers', 'Skills'] as const;
+type TabLabel = (typeof TABS)[number];
 
 export const AIProvidersSettings: React.FC = () => {
+  const [searchParams] = useSearchParams();
+  const navigate = useNavigate();
+  const tabParam = searchParams.get('tab') as TabLabel | null;
+  const activeTab: TabLabel =
+    tabParam && (TABS as readonly string[]).includes(tabParam)
+      ? tabParam
+      : 'Providers';
+
+  const setActiveTab = (tab: TabLabel) =>
+    navigate(`/app/settings/ai-providers?tab=${encodeURIComponent(tab)}`, {
+      replace: true,
+    });
+
   const [createDialogOpen, setCreateDialogOpen] = React.useState(false);
   const [selectedProvider, setSelectedProvider] =
     React.useState<AIProvider | null>(null);
 
   const { data: settingsWithDbInfo } = useGetSettingsWithDatabaseInfo();
 
-  // Initialize provider manager on component mount
-  const { mutate: initializeProviderManager, isLoading: isInitializing } =
-    useInitializeProviderManager({
-      onSuccess: () => {},
-      onError: (error) => {
-        toast.error(`Failed to initialize provider manager, ${error?.message}`);
-      },
-    });
-
-  // Queries
   const {
     data: providers = [],
     isLoading: isLoadingProviders,
@@ -59,11 +70,6 @@ export const AIProvidersSettings: React.FC = () => {
     },
   });
 
-  // Initialize on mount
-  React.useEffect(() => {
-    initializeProviderManager();
-  }, [initializeProviderManager]);
-
   const handleRefreshAll = () => {
     refetchProviders();
     refetchActiveProvider();
@@ -82,7 +88,6 @@ export const AIProvidersSettings: React.FC = () => {
   const handleDialogClose = () => {
     setCreateDialogOpen(false);
     setSelectedProvider(null);
-    // Refresh data after dialog closes
     setTimeout(() => {
       refetchProviders();
       refetchActiveProvider();
@@ -102,8 +107,7 @@ export const AIProvidersSettings: React.FC = () => {
     }
   };
 
-  const isLoading =
-    isInitializing || isLoadingProviders || isLoadingActiveProvider;
+  const isLoading = isLoadingProviders || isLoadingActiveProvider;
 
   if (isLoading) {
     return (
@@ -115,9 +119,7 @@ export const AIProvidersSettings: React.FC = () => {
       >
         <CircularProgress />
         <Typography variant="body1" sx={{ ml: 2 }}>
-          {isInitializing
-            ? 'Initializing AI providers...'
-            : 'Loading providers...'}
+          Loading providers...
         </Typography>
       </Box>
     );
@@ -136,81 +138,63 @@ export const AIProvidersSettings: React.FC = () => {
 
   return (
     <Box>
-      {/* Header */}
-      <Box
-        display="flex"
-        justifyContent="space-between"
-        alignItems="center"
-        mb={3}
+      {/* Tabs — tight gap below header */}
+      <Tabs
+        value={activeTab}
+        onChange={(_, v) => setActiveTab(v as TabLabel)}
+        sx={{ borderBottom: 1, borderColor: 'divider', mb: 2, mt: -1 }}
       >
-        <Box>
-          <Typography variant="body2" color="text.secondary">
-            Configure and manage AI providers for enhanced dbt functionality
-          </Typography>
-        </Box>
-        <Box display="flex" gap={1}>
-          <Button
-            variant="outlined"
-            startIcon={<Refresh />}
-            onClick={handleRefreshAll}
-          >
-            Refresh
-          </Button>
-          <Button
-            variant="contained"
-            startIcon={<Add />}
-            onClick={handleCreateProvider}
-          >
-            Add Provider
-          </Button>
-        </Box>
-      </Box>
+        {TABS.map((tab) => (
+          <Tab key={tab} label={tab} value={tab} />
+        ))}
+      </Tabs>
 
-      {/* AI Database Information Section */}
-      <Paper elevation={1} sx={{ p: 2, mb: 3, bgcolor: 'primary.50' }}>
-        <Box sx={{ mb: 2 }}>
-          <Box
-            display="flex"
-            justifyContent="start"
-            alignItems="center"
-            gap={4}
-            mb={2}
-          >
+      {/* MCP Servers */}
+      {activeTab === 'MCP Servers' && <MCPServersTab />}
+
+      {/* Skills */}
+      {activeTab === 'Skills' && <SkillsTab />}
+
+      {/* General (was AI Settings) — includes DB info */}
+      {activeTab === 'Settings' && (
+        <Box>
+          {/* AI Database Information */}
+          <Paper elevation={1} sx={{ p: 2, mb: 3 }}>
             <Box
               display="flex"
               justifyContent="start"
               alignItems="center"
-              gap={1}
+              gap={4}
+              mb={2}
             >
-              <Storage />
-              <Typography variant="h6">AI Database Information</Typography>
+              <Box display="flex" alignItems="center" gap={1}>
+                <Storage />
+                <Typography variant="h6">AI Database Information</Typography>
+              </Box>
+              <Box
+                sx={{
+                  display: 'flex',
+                  gap: 2,
+                  flexWrap: 'wrap',
+                  alignItems: 'center',
+                }}
+              >
+                <Chip
+                  icon={<Info />}
+                  label={`SQLite ${settingsWithDbInfo?.sqliteVersion || 'Unknown'}`}
+                  variant="outlined"
+                />
+                <Chip
+                  label={settingsWithDbInfo?.mainDatabaseSize || 'Unknown'}
+                  variant="outlined"
+                />
+                <Chip
+                  label={settingsWithDbInfo?.mainDatabaseStatus || 'Unknown'}
+                  color={getStatusColor(settingsWithDbInfo?.mainDatabaseStatus)}
+                  variant="filled"
+                />
+              </Box>
             </Box>
-            <Box
-              sx={{
-                display: 'flex',
-                gap: 2,
-                flexWrap: 'wrap',
-                alignItems: 'center',
-              }}
-            >
-              <Chip
-                icon={<Info />}
-                label={`SQLite ${settingsWithDbInfo?.sqliteVersion || 'Unknown'}`}
-                variant="outlined"
-              />
-              <Chip
-                label={settingsWithDbInfo?.mainDatabaseSize || 'Unknown'}
-                variant="outlined"
-              />
-              <Chip
-                label={settingsWithDbInfo?.mainDatabaseStatus || 'Unknown'}
-                color={getStatusColor(settingsWithDbInfo?.mainDatabaseStatus)}
-                variant="filled"
-              />
-            </Box>
-          </Box>
-
-          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
             <TextField
               fullWidth
               label="Database Location"
@@ -219,66 +203,91 @@ export const AIProvidersSettings: React.FC = () => {
               disabled
               helperText="SQLite database file storing AI providers, conversations, and templates"
             />
-          </Box>
+          </Paper>
+
+          <AISettingsTab />
         </Box>
-        {/* Active Provider Info */}
-        {activeProvider && (
-          <Box display="flex" alignItems="center" gap={2}>
-            <Typography variant="subtitle1" fontWeight="bold">
-              Active Provider:
-            </Typography>
-            <Chip
-              label={`${activeProvider.name} (${activeProvider.type})`}
-              color="primary"
-              size="small"
-            />
-          </Box>
-        )}
-
-        {/* No Providers State */}
-        {providers.length === 0 && (
-          <Box>
-            <Typography variant="h6" gutterBottom>
-              No AI Providers Configured
-            </Typography>
-            <Typography variant="body2" color="text.secondary" mb={3}>
-              Add your first AI provider to enable enhanced dbt functionality
-              like model generation, query optimization, and intelligent
-              suggestions.
-            </Typography>
-            <Button
-              variant="contained"
-              startIcon={<Add />}
-              onClick={handleCreateProvider}
-            >
-              Add Your First Provider
-            </Button>
-          </Box>
-        )}
-      </Paper>
-
-      {/* Providers Grid */}
-      {providers.length > 0 && (
-        <Grid container spacing={3}>
-          {providers.map((provider) => (
-            <Grid item xs={12} md={6} lg={4} key={provider.id}>
-              <ProviderCard
-                provider={provider}
-                isActive={activeProvider?.id === provider.id}
-                onEdit={handleEditProvider}
-                onRefresh={handleRefreshAll}
-              />
-            </Grid>
-          ))}
-        </Grid>
       )}
 
-      {/* Create/Edit Provider Dialog */}
-      <CreateProviderDialog
-        open={createDialogOpen}
-        onClose={handleDialogClose}
-        provider={selectedProvider}
-      />
+      {/* Providers */}
+      {activeTab === 'Providers' && (
+        <Box>
+          <Box display="flex" justifyContent="flex-end" mb={2}>
+            {' '}
+            <Box display="flex" gap={1}>
+              <Button
+                variant="outlined"
+                startIcon={<Refresh />}
+                onClick={handleRefreshAll}
+              >
+                Refresh
+              </Button>
+              <Button
+                variant="contained"
+                startIcon={<Add />}
+                onClick={handleCreateProvider}
+              >
+                Add Provider
+              </Button>
+            </Box>
+          </Box>
+
+          {/* Active Provider */}
+          {activeProvider && (
+            <Box display="flex" alignItems="center" gap={2} mb={2}>
+              <Typography variant="subtitle2" fontWeight="bold">
+                Active Provider:
+              </Typography>
+              <Chip
+                label={`${activeProvider.name} (${activeProvider.type})`}
+                color="primary"
+                size="small"
+              />
+            </Box>
+          )}
+
+          {/* No Providers */}
+          {providers.length === 0 && (
+            <Box sx={{ mt: 4, textAlign: 'center' }}>
+              <Typography variant="h6" gutterBottom>
+                No AI Providers Configured
+              </Typography>
+              <Typography variant="body2" color="text.secondary" mb={3}>
+                Add your first AI provider to enable enhanced dbt functionality.
+              </Typography>
+              <Button
+                variant="contained"
+                startIcon={<Add />}
+                onClick={handleCreateProvider}
+              >
+                Add Your First Provider
+              </Button>
+            </Box>
+          )}
+
+          {/* Providers Grid */}
+          {providers.length > 0 && (
+            <Grid container spacing={3}>
+              {providers.map((provider) => (
+                <Grid item xs={12} md={6} lg={4} key={provider.id}>
+                  <ProviderCard
+                    provider={provider}
+                    isActive={activeProvider?.id === provider.id}
+                    onEdit={handleEditProvider}
+                    onRefresh={handleRefreshAll}
+                  />
+                </Grid>
+              ))}
+            </Grid>
+          )}
+
+          <CreateProviderDialog
+            open={createDialogOpen}
+            onClose={handleDialogClose}
+            provider={selectedProvider}
+          />
+        </Box>
+      )}
     </Box>
   );
 };

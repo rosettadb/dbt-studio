@@ -20,9 +20,15 @@ type Props = {
   name: string;
   handleSearch: (keyword: string) => void;
   toolbarContent?: ReactNode;
+  showSearch?: boolean;
 };
 
-const CustomTableToolbar = ({ name, handleSearch, toolbarContent }: Props) => {
+const CustomTableToolbar = ({
+  name,
+  handleSearch,
+  toolbarContent,
+  showSearch = true,
+}: Props) => {
   const classes = useStyles();
   return (
     <div>
@@ -45,21 +51,23 @@ const CustomTableToolbar = ({ name, handleSearch, toolbarContent }: Props) => {
 
         {toolbarContent && <Box mr={2}>{toolbarContent}</Box>}
 
-        <Tooltip title="Search by name">
-          <TextField
-            name="search"
-            placeholder="Search..."
-            variant="outlined"
-            size="small"
-            className={classes.searchContainer}
-            onChange={(event) => {
-              handleSearch(event.target.value);
-            }}
-            InputProps={{
-              style: { height: 32, fontSize: '0.875rem' },
-            }}
-          />
-        </Tooltip>
+        {showSearch && (
+          <Tooltip title="Search by name">
+            <TextField
+              name="search"
+              placeholder="Search..."
+              variant="outlined"
+              size="small"
+              className={classes.searchContainer}
+              onChange={(event) => {
+                handleSearch(event.target.value);
+              }}
+              InputProps={{
+                style: { height: 32, fontSize: '0.875rem' },
+              }}
+            />
+          </Tooltip>
+        )}
       </Toolbar>
     </div>
   );

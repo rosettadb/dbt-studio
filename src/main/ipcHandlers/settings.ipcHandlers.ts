@@ -3,6 +3,7 @@ import { initializeDataStorage } from '../utils/setupHelpers';
 import { FileDialogProperties, SettingsType } from '../../types/backend';
 import { SettingsService } from '../services';
 import { SettingsChannels } from '../../types/ipc';
+import { DbtVersionManagerService } from '../services/dbtVersionManager.service';
 
 const handlerChannels: SettingsChannels[] = [
   'settings:load',
@@ -16,6 +17,8 @@ const handlerChannels: SettingsChannels[] = [
   'version:rosetta:uninstall',
   'settings:reset-factory',
   'settings:restart',
+  'settings:getBasename',
+  'settings:getDirname',
 ];
 
 const removeSettingsIpcHandlers = () => {
@@ -101,6 +104,14 @@ const registerSettingsHandlers = (mainWindow: BrowserWindow) => {
     return SettingsService.getFileName(body);
   });
 
+  ipcMain.handle('settings:getBasename', async (_event, filePath: string) => {
+    return SettingsService.getBasename(filePath);
+  });
+
+  ipcMain.handle('settings:getDirname', async (_event, filePath: string) => {
+    return SettingsService.getDirname(filePath);
+  });
+
   // DuckDB management handlers
   ipcMain.handle('settings:duckdb:metadata', async () => {
     return SettingsService.getDuckDbMetadata();
@@ -120,6 +131,18 @@ const registerSettingsHandlers = (mainWindow: BrowserWindow) => {
 
   ipcMain.handle('settings:installSqlGlot', async () => {
     return SettingsService.installSqlGlot();
+  });
+
+  ipcMain.handle('dbt:versions:list', async () => {
+    return DbtVersionManagerService.listDbtCoreVersions();
+  });
+
+  ipcMain.handle('dbt:packageVersions:list', async (_event, req) => {
+    return DbtVersionManagerService.listPackageVersions(req?.packageName);
+  });
+
+  ipcMain.handle('dbt:packageVersion:install', async (_event, req) => {
+    return DbtVersionManagerService.installPackageVersion(req);
   });
 };
 

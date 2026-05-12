@@ -1,5 +1,13 @@
 import { ipcMain } from 'electron';
-import type { CloudStorageConfig } from '../../types/frontend';
+import type { CloudStorageConfig, CloudProvider } from '../../types/frontend';
+import type {
+  UploadFileRequest,
+  UploadFolderRequest,
+  CreateBucketRequest,
+  DeleteObjectRequest,
+  CreateFolderRequest,
+  DeleteBucketRequest,
+} from '../../types/ipc';
 import { CloudExplorerService, CloudPreviewService } from '../services';
 
 const handlerChannels = [
@@ -8,6 +16,12 @@ const handlerChannels = [
   'cloudExplorer:getDownloadUrl',
   'cloudExplorer:testConnection',
   'cloudExplorer:previewData',
+  'cloudExplorer:uploadFile',
+  'cloudExplorer:createBucket',
+  'cloudExplorer:deleteObject',
+  'cloudExplorer:createFolder',
+  'cloudExplorer:deleteBucket',
+  'cloudExplorer:uploadFolder',
 ];
 
 const removeCloudExplorerIpcHandlers = () => {
@@ -27,7 +41,7 @@ const registerCloudExplorerHandlers = () => {
         provider,
         config,
       }: {
-        provider: 'aws' | 'azure' | 'gcs';
+        provider: CloudProvider;
         config: CloudStorageConfig;
       },
     ) => {
@@ -46,7 +60,7 @@ const registerCloudExplorerHandlers = () => {
         continuationToken,
         prefix = '',
       }: {
-        provider: 'aws' | 'azure' | 'gcs';
+        provider: CloudProvider;
         config: CloudStorageConfig;
         bucketName: string;
         continuationToken?: string;
@@ -73,7 +87,7 @@ const registerCloudExplorerHandlers = () => {
         bucketName,
         objectName,
       }: {
-        provider: 'aws' | 'azure' | 'gcs';
+        provider: CloudProvider;
         config: CloudStorageConfig;
         bucketName: string;
         objectName: string;
@@ -96,7 +110,7 @@ const registerCloudExplorerHandlers = () => {
         provider,
         config,
       }: {
-        provider: 'aws' | 'azure' | 'gcs';
+        provider: CloudProvider;
         config: CloudStorageConfig;
       },
     ) => {
@@ -117,6 +131,57 @@ const registerCloudExplorerHandlers = () => {
             `Invalid AWS config: missing required fields. Received: ${JSON.stringify(s3Config)}`,
           );
         }
+      } else if (provider === 'minio') {
+        const minioConfig = config as any;
+        if (
+          !minioConfig.endpoint ||
+          !minioConfig.accessKeyId ||
+          !minioConfig.secretAccessKey
+        ) {
+          throw new Error(
+            `Invalid MinIO config: missing required fields. Received: ${JSON.stringify(minioConfig)}`,
+          );
+        }
+      } else if (provider === 'cloudflare-r2') {
+        const r2Config = config as any;
+        if (
+          !r2Config.accountId ||
+          !r2Config.accessKeyId ||
+          !r2Config.secretAccessKey
+        ) {
+          throw new Error(
+            `Invalid Cloudflare R2 config: missing required fields. Received: ${JSON.stringify(r2Config)}`,
+          );
+        }
+      } else if (provider === 'backblaze-b2') {
+        const b2Config = config as any;
+        if (!b2Config.applicationKeyId || !b2Config.applicationKey) {
+          throw new Error(
+            `Invalid Backblaze B2 config: missing required fields. Received: ${JSON.stringify(b2Config)}`,
+          );
+        }
+      } else if (provider === 'rustfs') {
+        const rustfsConfig = config as any;
+        if (
+          !rustfsConfig.endpoint ||
+          !rustfsConfig.accessKeyId ||
+          !rustfsConfig.secretAccessKey
+        ) {
+          throw new Error(
+            `Invalid rustfs config: missing required fields. Received: ${JSON.stringify(rustfsConfig)}`,
+          );
+        }
+      } else if (provider === 'garage') {
+        const garageConfig = config as any;
+        if (
+          !garageConfig.endpoint ||
+          !garageConfig.accessKeyId ||
+          !garageConfig.secretAccessKey
+        ) {
+          throw new Error(
+            `Invalid Garage config: missing required fields. Received: ${JSON.stringify(garageConfig)}`,
+          );
+        }
       }
 
       return CloudExplorerService.testConnection(provider, config);
@@ -133,14 +198,22 @@ const registerCloudExplorerHandlers = () => {
         bucketName,
         objectName,
         previewType = 'sample',
-        limit = 100,
+        pageSize = 25,
+        page = 0,
+        whereClause = '',
+        filterConditions = [],
+        knownTotalRows,
       }: {
-        provider: 'aws' | 'azure' | 'gcs';
+        provider: CloudProvider;
         config: CloudStorageConfig;
         bucketName: string;
         objectName: string;
         previewType?: 'sample' | 'schema' | 'stats';
-        limit?: number;
+        pageSize?: number;
+        page?: number;
+        whereClause?: string;
+        filterConditions?: any[];
+        knownTotalRows?: number;
       },
     ) => {
       const objectPath = CloudPreviewService.getCloudUrl(
@@ -148,22 +221,59 @@ const registerCloudExplorerHandlers = () => {
         bucketName,
         objectName,
       );
+      return CloudPreviewService.previewCloudData({
+        provider,
+        cloudConfig: config,
+        objectPath,
+        previewType,
+        pageSize,
+        page,
+        whereClause,
+        filterConditions,
+        knownTotalRows,
+      });
+    },
+  );
 
-      try {
-        const result = await CloudPreviewService.previewCloudData({
-          provider,
-          cloudConfig: config,
-          objectPath,
-          previewType,
-          limit,
-        });
+  ipcMain.handle(
+    'cloudExplorer:uploadFile',
+    async (event, params: UploadFileRequest) => {
+      return CloudExplorerService.uploadFile(params, event.sender);
+    },
+  );
 
-        return result;
-      } catch (error) {
-        // eslint-disable-next-line no-console
-        console.error('IPC Handler - Preview error:', error);
-        throw error;
-      }
+  ipcMain.handle(
+    'cloudExplorer:createBucket',
+    async (_event, params: CreateBucketRequest) => {
+      return CloudExplorerService.createBucket(params);
+    },
+  );
+
+  ipcMain.handle(
+    'cloudExplorer:deleteObject',
+    async (event, params: DeleteObjectRequest) => {
+      return CloudExplorerService.deleteObject(params, event.sender);
+    },
+  );
+
+  ipcMain.handle(
+    'cloudExplorer:createFolder',
+    async (_event, params: CreateFolderRequest) => {
+      return CloudExplorerService.createFolder(params);
+    },
+  );
+
+  ipcMain.handle(
+    'cloudExplorer:deleteBucket',
+    async (_event, params: DeleteBucketRequest) => {
+      return CloudExplorerService.deleteBucket(params);
+    },
+  );
+
+  ipcMain.handle(
+    'cloudExplorer:uploadFolder',
+    async (event, params: UploadFolderRequest) => {
+      return CloudExplorerService.uploadFolder(params, event.sender);
     },
   );
 };

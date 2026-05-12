@@ -4,6 +4,7 @@ import postgres from './postgresql.png';
 import redshift from './redshift.png';
 import databricks from './databricks.png';
 import duckdb from './duckdb.png';
+import ducklake from './ducklake.png';
 import sqlite from './sqlite.png';
 import mysql from './mysql.png';
 import oracle from './oracle.png';
@@ -13,6 +14,11 @@ import kinetica from './kinetica.png';
 import googlecloud from './googlecloud.png';
 import azureBlob from './azure_blob.png';
 import s3Bucket from './s3_bucktet.png';
+import minio from './minio.png';
+import cloudflareR2 from './cloudflare_r2.png';
+import backblazeB2 from './blackbaze.png';
+import rustfs from './rustfs.png';
+import garage from './garage-logo.png';
 import openai from './openai.svg';
 import ollama from './ollama.svg';
 import google from './google.svg';
@@ -28,6 +34,11 @@ export const cloudStorageImages = {
   aws: s3Bucket,
   s3: s3Bucket,
   azure: azureBlob,
+  minio,
+  'cloudflare-r2': cloudflareR2,
+  'backblaze-b2': backblazeB2,
+  rustfs,
+  garage,
 };
 
 // AI provider specific images
@@ -56,6 +67,7 @@ const obj: { images: Image } = {
     redshift,
     databricks,
     duckdb,
+    ducklake,
     mysql,
     oracle,
     db2,

@@ -33,6 +33,7 @@ describe('renderer/services/git.service', () => {
       expect(client.post).toHaveBeenCalledWith('git:clone', {
         url: 'https://github.com/org/repo.git',
         credentials: undefined,
+        removeGit: undefined,
       });
       expect(result).toEqual(response);
     });
@@ -44,7 +45,10 @@ describe('renderer/services/git.service', () => {
 
       const result = await isInitialized('/tmp/repo');
 
-      expect(client.post).toHaveBeenCalledWith('git:isInitialized', '/tmp/repo');
+      expect(client.post).toHaveBeenCalledWith(
+        'git:isInitialized',
+        '/tmp/repo',
+      );
       expect(result).toBe(true);
     });
   });
@@ -80,12 +84,11 @@ describe('renderer/services/git.service', () => {
     it('should call client.post with git:commit and payload', async () => {
       client.post.mockResolvedValue({ data: undefined });
 
-      await commit('/tmp/repo', 'msg', ['a.sql']);
+      await commit('/tmp/repo', 'msg');
 
       expect(client.post).toHaveBeenCalledWith('git:commit', {
         repoPath: '/tmp/repo',
         message: 'msg',
-        files: ['a.sql'],
       });
     });
   });

@@ -121,6 +121,17 @@ export interface DuckLakeSnapshotDetail {
   nextCatalogId: number;
   nextFileId: number;
   changesMade?: string;
+  author?: string;
+  commitMessage?: string;
+  commitExtraInfo?: string;
+}
+
+export type DuckLakeChangeOperation = 'INSERT' | 'UPDATE' | 'DELETE';
+
+export interface DuckLakeTableChange {
+  operation: DuckLakeChangeOperation;
+  snapshotId?: number;
+  row: Record<string, unknown>;
 }
 
 /**
@@ -199,6 +210,7 @@ export interface DuckLakeStorageConfig {
     region: string;
     accessKeyId: string;
     secretAccessKey: string;
+    sessionToken?: string;
     endpoint?: string;
     prefix?: string;
   };
@@ -321,6 +333,8 @@ export interface DuckLakeSnapshotInfo {
   operation: DuckLakeOperation;
   summary: DuckLakeSnapshotSummary;
   parentSnapshotId?: string;
+  author?: string;
+  commitMessage?: string;
 }
 
 // Table and Schema Types
@@ -392,18 +406,62 @@ export interface DuckLakeMaintenanceTask {
 // Query and Data Access Types
 export interface DuckLakeQueryRequest {
   instanceId: string;
-  sql: string;
+  query: string; // Changed from 'sql' to match SQL Editor convention
+  queryId?: string; // For query cancellation tracking
   snapshotId?: string; // For time travel queries
   limit?: number;
   offset?: number;
 }
 
 export interface DuckLakeQueryResult {
-  columns: Array<{ name: string; type: string }>;
-  rows: any[][];
-  totalRows?: number;
-  executionTime: number;
-  snapshotId?: string;
+  success: boolean;
+  data?: any[]; // Changed from 'rows' to match QueryResponseType
+  fields?: Array<{ name: string; type: string | number }>; // Changed from 'columns', support both string and number types
+  rowCount?: number; // Changed from 'totalRows' to match QueryResponseType
+  duration?: number; // Changed from 'executionTime' to match QueryResponseType
+  error?: string;
+  // Additional metadata
+  isCommand?: boolean; // For DDL/DML operations
+  commandType?: 'SELECT' | 'DDL' | 'DML';
+  snapshotId?: string; // For time travel queries
+}
+
+// Schema Extraction Types (Phase 6)
+export interface DuckLakeSchemaColumn {
+  name: string;
+  type: string;
+  position: number;
+}
+
+export interface DuckLakeSchemaTable {
+  name: string;
+  type: string;
+  columns: DuckLakeSchemaColumn[];
+  metadata?: any;
+}
+
+export interface DuckLakeSchema {
+  name: string;
+  tables: DuckLakeSchemaTable[];
+}
+
+export interface DuckLakeSchemaInfo {
+  schemas: DuckLakeSchema[];
+  functions: string[];
+  systemTables: string[];
+}
+
+// View types (Plan 25)
+export interface DuckLakeViewInfo {
+  name: string;
+  schema: string;
+  instanceId: string;
+  definition?: string;
+  columns: Array<{
+    name: string;
+    type: string;
+    nullable?: boolean;
+  }>;
 }
 
 // Configuration and Settings Types
@@ -533,6 +591,54 @@ export interface DuckLakeIpcChannels {
     tableName: string,
     schema: DuckLakeColumnInfo[],
   ) => Promise<void>;
+  'ducklake:table:rename': (
+    instanceId: string,
+    oldName: string,
+    newName: string,
+  ) => Promise<void>;
+  'ducklake:table:addColumn': (
+    instanceId: string,
+    tableName: string,
+    columnDef: any,
+  ) => Promise<void>;
+  'ducklake:table:dropColumn': (
+    instanceId: string,
+    tableName: string,
+    columnName: string,
+  ) => Promise<void>;
+  'ducklake:table:renameColumn': (
+    instanceId: string,
+    tableName: string,
+    oldName: string,
+    newName: string,
+  ) => Promise<void>;
+  'ducklake:table:alterColumnType': (
+    instanceId: string,
+    tableName: string,
+    columnName: string,
+    newType: string,
+  ) => Promise<void>;
+  'ducklake:table:setPartitionedBy': (
+    instanceId: string,
+    tableName: string,
+    columnNames: string[],
+  ) => Promise<void>;
+  'ducklake:table:updateRows': (
+    instanceId: string,
+    tableName: string,
+    filter: any,
+    updates: any,
+  ) => Promise<number>;
+  'ducklake:table:deleteRows': (
+    instanceId: string,
+    tableName: string,
+    filter: any,
+  ) => Promise<number>;
+  'ducklake:table:upsertRows': (
+    instanceId: string,
+    tableName: string,
+    rows: any[],
+  ) => Promise<number>;
   'ducklake:table:delete': (
     instanceId: string,
     tableName: string,
@@ -591,6 +697,14 @@ export interface DuckLakeIpcChannels {
     instanceId: string,
     params: DuckLakeSnapshotParams,
   ) => Promise<DuckLakePaginatedResult<DuckLakeSnapshotDetail>>;
+
+  // View Management (Plan 25)
+  'ducklake:view:list': (instanceId: string) => Promise<DuckLakeViewInfo[]>;
+  'ducklake:view:getSchema': (
+    instanceId: string,
+    schemaName: string,
+    viewName: string,
+  ) => Promise<DuckLakeColumnInfo[]>;
 
   // Cloud Connection Management (Phase: Connection Integration)
   'ducklake:connection:list': () => Promise<any[]>; // Returns CloudConnection[]

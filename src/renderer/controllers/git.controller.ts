@@ -9,9 +9,10 @@ import {
 import { RemoteWithRefs } from 'simple-git';
 import {
   CustomError,
-  DiffResponse,
   FileStatus,
   GitBranch,
+  GitChangesRes,
+  RepoInfoRes,
 } from '../../types/backend';
 import { QUERY_KEYS } from '../config/constants';
 import { gitServices } from '../services';
@@ -98,15 +99,58 @@ export const useGetFileStatus = (
   });
 };
 
-export const useGetFileDiff = (
+// HEAD blob content for a file. Cached aggressively so it survives tab
+// unmounts and acts as a project-wide baseline. The gutter diff runs
+// in-memory against this — no git call per keystroke. Invalidate after
+// commit / pull / branch switch via QUERY_KEYS.GIT_HEAD_CONTENT.
+export const useGetFileHeadContent = (
   path: string,
   filePath: string,
-  customOptions?: UseQueryOptions<DiffResponse, CustomError, DiffResponse>,
+  customOptions?: UseQueryOptions<string | null, CustomError, string | null>,
 ) => {
   return useQuery({
-    queryKey: [QUERY_KEYS.GIT_DIFF, filePath],
+    queryKey: [QUERY_KEYS.GIT_HEAD_CONTENT, path, filePath],
     queryFn: async () => {
-      return gitServices.getFileDiff(path, filePath);
+      return gitServices.getFileHeadContent(path, filePath);
+    },
+    staleTime: Infinity,
+    cacheTime: Infinity,
+    refetchOnWindowFocus: false,
+    refetchOnMount: false,
+    refetchOnReconnect: false,
+    ...customOptions,
+  });
+};
+
+export const useGetLocalChanges = (
+  path: string,
+  customOptions?: UseQueryOptions<
+    GitChangesRes | null,
+    CustomError,
+    GitChangesRes | null
+  >,
+) => {
+  return useQuery({
+    queryKey: [QUERY_KEYS.GIT_LOCAL_CHANGES],
+    queryFn: async () => {
+      return gitServices.getLocalChanges(path);
+    },
+    ...customOptions,
+  });
+};
+
+export const useGetRepoInfo = (
+  path: string,
+  customOptions?: UseQueryOptions<
+    RepoInfoRes | null,
+    CustomError,
+    RepoInfoRes | null
+  >,
+) => {
+  return useQuery({
+    queryKey: [QUERY_KEYS.GIT_REPO_INFO],
+    queryFn: async () => {
+      return gitServices.getRepoInfo(path);
     },
     ...customOptions,
   });
@@ -155,6 +199,11 @@ export const useGitCheckout = (
         QUERY_KEYS.GET_FILE_STRUCTURE,
         args[1].path,
       ]);
+      // Branch switch points HEAD elsewhere — refresh cached baselines.
+      await queryClient.invalidateQueries([
+        QUERY_KEYS.GIT_HEAD_CONTENT,
+        args[1].path,
+      ]);
       onCustomSuccess?.(...args);
     },
     onError: (...args) => {
@@ -194,19 +243,15 @@ export const useGitCommit = (
   customOptions?: UseMutationOptions<
     void,
     CustomError,
-    { path: string; message: string; files: string[] }
+    { path: string; message: string }
   >,
-): UseMutationResult<
-  void,
-  CustomError,
-  { path: string; message: string; files: string[] }
-> => {
+): UseMutationResult<void, CustomError, { path: string; message: string }> => {
   const { onSuccess: onCustomSuccess, onError: onCustomError } =
     customOptions || {};
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: async (data) => {
-      return gitServices.commit(data.path, data.message, data.files);
+      return gitServices.commit(data.path, data.message);
     },
     onSuccess: async (...args) => {
       // Only invalidate queries for this specific path - more targeted
@@ -216,6 +261,11 @@ export const useGitCommit = (
       ]);
       await queryClient.invalidateQueries([
         QUERY_KEYS.GIT_AHEAD_BEHIND,
+        args[1].path,
+      ]);
+      // HEAD just moved — drop cached baselines so editor gutters re-fetch.
+      await queryClient.invalidateQueries([
+        QUERY_KEYS.GIT_HEAD_CONTENT,
         args[1].path,
       ]);
 
@@ -266,11 +316,17 @@ export const useGitPull = (
 > => {
   const { onSuccess: onCustomSuccess, onError: onCustomError } =
     customOptions || {};
+  const queryClient = useQueryClient();
   return useMutation({
     mutationFn: async (data) => {
       return gitServices.pull(data.path);
     },
     onSuccess: async (...args) => {
+      // Pull may fast-forward HEAD — refresh cached baselines.
+      await queryClient.invalidateQueries([
+        QUERY_KEYS.GIT_HEAD_CONTENT,
+        args[1].path,
+      ]);
       onCustomSuccess?.(...args);
     },
     onError: (...args) => {

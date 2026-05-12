@@ -430,3 +430,36 @@ export const generateFilename = (prefix = 'file', extension = 'txt') => {
 
   return `${prefix}_${timestamp}.${extension}`;
 };
+
+export const formatBytes = (bytes: number) => {
+  if (!Number.isFinite(bytes)) return '0 Bytes';
+  const k = 1024;
+  const sizes = ['Bytes', 'KB', 'MB', 'GB', 'TB'];
+  const absBytes = Math.abs(bytes);
+
+  if (absBytes === 0) return '0 Bytes';
+
+  const i = Math.min(
+    Math.floor(Math.log(absBytes) / Math.log(k)),
+    sizes.length - 1,
+  );
+
+  return `${bytes < 0 ? '-' : ''}${Math.round((absBytes / k ** i) * 100) / 100} ${sizes[i]}`;
+};
+
+export const formatNumber = (num: number) => {
+  return new Intl.NumberFormat().format(num);
+};
+
+export function safeToString(value: any): string {
+  if (value === null || value === undefined) {
+    return '-';
+  }
+  if (typeof value === 'object') {
+    if (value.hugeint !== undefined) {
+      return String(value.hugeint);
+    }
+    return JSON.stringify(value);
+  }
+  return String(value);
+}

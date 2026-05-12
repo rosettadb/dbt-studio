@@ -26,14 +26,22 @@ import {
   Refresh,
   Visibility,
   DeleteOutline,
+  ContentCopy,
 } from '@mui/icons-material';
 
-import { CloudProvider } from '../../../types/frontend';
+import {
+  CloudProvider,
+  CloudConnection,
+  GCSConfig,
+  S3Config,
+  AzureConfig,
+} from '../../../types/frontend';
 import {
   useGetCloudConnections,
   useDeleteBucketConnection,
 } from '../../controllers';
 import { cloudStorageImages } from '../../../../assets/connectionIcons';
+import { generateCloneConnectionName } from '../../utils/connectionNaming';
 
 export const ExplorerConnections: React.FC = () => {
   const navigate = useNavigate();
@@ -101,26 +109,38 @@ export const ExplorerConnections: React.FC = () => {
     }
   };
 
-  const renderConnectionDetails = (connection: any) => {
+  const handleCloneConnection = (connection: CloudConnection) => {
+    const existingNames = (connectionsQuery.data || []).map((c) => c.name);
+    const newName = generateCloneConnectionName(connection.name, existingNames);
+
+    navigate('/app/cloud-explorer/new-connection', {
+      state: {
+        duplicateFrom: connection,
+        suggestedName: newName,
+      },
+    });
+  };
+
+  const renderConnectionDetails = (connection: CloudConnection) => {
     const { provider, config } = connection;
 
     switch (provider) {
       case 'gcs':
         return (
           <Typography variant="body2" color="text.secondary">
-            Project ID: {config.projectId}
+            Project ID: {(config as GCSConfig).projectId}
           </Typography>
         );
       case 'aws':
         return (
           <Typography variant="body2" color="text.secondary">
-            Region: {config.region}
+            Region: {(config as S3Config).region}
           </Typography>
         );
       case 'azure':
         return (
           <Typography variant="body2" color="text.secondary">
-            Account: {config.accountName}
+            Account: {(config as AzureConfig).accountName}
           </Typography>
         );
       default:
@@ -207,6 +227,9 @@ export const ExplorerConnections: React.FC = () => {
             <Grid item xs={12} md={6} lg={4} key={connection.id}>
               <Card
                 sx={{
+                  height: '100%',
+                  display: 'flex',
+                  flexDirection: 'column',
                   boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
                   transition: 'all 0.3s ease',
                   '&:hover': {
@@ -253,7 +276,9 @@ export const ExplorerConnections: React.FC = () => {
                     </Typography>
                   )}
                 </CardContent>
-                <CardActions sx={{ justifyContent: 'space-between' }}>
+                <CardActions
+                  sx={{ justifyContent: 'space-between', mt: 'auto' }}
+                >
                   <Box sx={{ display: 'flex', gap: 1 }}>
                     <Button
                       size="small"
@@ -276,6 +301,14 @@ export const ExplorerConnections: React.FC = () => {
                       }
                     >
                       Edit
+                    </Button>
+                    <Button
+                      size="small"
+                      variant="outlined"
+                      startIcon={<ContentCopy />}
+                      onClick={() => handleCloneConnection(connection)}
+                    >
+                      Clone
                     </Button>
                   </Box>
                   <Box sx={{ display: 'flex', gap: 1 }}>

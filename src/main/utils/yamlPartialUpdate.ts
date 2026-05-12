@@ -105,6 +105,15 @@ function generateProfileOutputFields(
         schema: connection.schema,
       };
 
+    case 'ducklake':
+      return {
+        ...baseFields,
+        // DuckLake uses DuckDB with extensions
+        // These will be handled by the full generator in generateProfilesYml
+        path: ':memory:',
+        schema: 'main',
+      };
+
     default:
       // @ts-ignore
       throw new Error(`Unsupported connection type: ${connection.type}`);
@@ -138,6 +147,9 @@ function generateJdbcUrl(
 
     case 'duckdb':
       return `jdbc:duckdb:${connection.database_path}`;
+
+    case 'ducklake':
+      return `jdbc:duckdb:`; // In-memory DuckDB
 
     default:
       // @ts-ignore
@@ -240,6 +252,9 @@ export async function updateMainConf(
   projectName: string,
   connection: ConnectionInput,
 ): Promise<void> {
+  if (connection.type === 'ducklake') {
+    return;
+  }
   const mainConfPath = path.join(projectPath, 'rosetta', 'main.conf');
 
   // Check if file exists
@@ -342,6 +357,9 @@ export async function updateProjectConfigFiles(
   projectName: string,
   connection: ConnectionInput,
 ): Promise<{ success: boolean; errors: string[] }> {
+  if (connection.type === 'ducklake') {
+    return { success: true, errors: [] };
+  }
   const errors: string[] = [];
 
   // Update profiles.yml

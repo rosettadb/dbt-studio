@@ -3,9 +3,27 @@ import simpleGit, { SimpleGit } from 'simple-git';
 import path from 'path';
 import fs from 'fs';
 import { AuthError } from '../errors';
-import { FileStatus, GitCredentials } from '../../types/backend';
+import {
+  FileStatus,
+  GitChangesRes,
+  GitCredentials,
+  RepoInfoRes,
+} from '../../types/backend';
 import SettingsService from './settings.service';
 import ConnectorsService from './connectors.service';
+
+// Convert an absolute or relative file path to a git-friendly relative path.
+// Git's index always stores paths with forward slashes regardless of OS, and
+// simple-git's status arrays (status.modified, status.staged, ...) follow
+// the same convention. On Windows, path.relative() returns backslashes, so
+// includes()-style comparisons against those arrays silently fail for any
+// file that lives in a subdirectory. This normalises once at the boundary.
+function toGitRelativePath(repoPath: string, filePath: string): string {
+  if (!path.isAbsolute(filePath)) {
+    return filePath.split(path.sep).join('/');
+  }
+  return path.relative(repoPath, filePath).split(path.sep).join('/');
+}
 
 function getRepoNameFromUrl(url: string): string {
   const parts = url.split('/');
@@ -400,17 +418,12 @@ export default class GitService {
         const git = this.getGitInstance(repoPath);
 
         try {
-          // Convert absolute paths to relative paths for git
-          const relativePaths = files.map((file) => {
-            // If it's already a relative path or '.', use it as is
-            if (file === '.' || !path.isAbsolute(file)) {
-              return file;
-            }
-            // Convert absolute path to relative path
-            return path.relative(repoPath, file);
-          });
+          // Forward-slash relative paths — required for matching against
+          // simple-git's status arrays on Windows.
+          const relativePaths = files.map((file) =>
+            file === '.' ? file : toGitRelativePath(repoPath, file),
+          );
 
-          // Get current git status to check what needs staging
           const status = await git.status();
 
           const filesToAdd: string[] = [];
@@ -469,16 +482,12 @@ export default class GitService {
         const git = this.getGitInstance(repoPath);
 
         try {
-          // Convert absolute paths to relative paths for git
-          const relativePaths = files.map((file) => {
-            if (!path.isAbsolute(file)) {
-              return file;
-            }
-            return path.relative(repoPath, file);
-          });
+          const relativePaths = files.map((file) =>
+            toGitRelativePath(repoPath, file),
+          );
 
-          // For renamed files, git reset HEAD works on the new filename
-          // Git will automatically handle the rename and restore both old and new files
+          // For renamed files, git reset HEAD works on the new filename;
+          // Git automatically handles the rename and restores both old and new.
           await git.reset(['HEAD', ...relativePaths]);
           return { success: true };
         } catch (err: any) {
@@ -525,15 +534,10 @@ export default class GitService {
     const git = this.getGitInstance(repoPath);
 
     try {
-      // Convert absolute paths to relative paths for git
-      const relativePaths = files.map((file) => {
-        if (!path.isAbsolute(file)) {
-          return file;
-        }
-        return path.relative(repoPath, file);
-      });
+      const relativePaths = files.map((file) =>
+        toGitRelativePath(repoPath, file),
+      );
 
-      // Get status to check which files are untracked
       const status = await git.status();
       const untrackedFiles: string[] = [];
       const trackedFiles: string[] = [];
@@ -591,13 +595,12 @@ export default class GitService {
     }
   }
 
-  async commit(repoPath: string, message: string, files: string[] = ['.']) {
+  async commit(repoPath: string, message: string) {
     return this.queueOperation(repoPath, () =>
       this.retryWithLockHandling(repoPath, async () => {
         const git = this.getGitInstance(repoPath);
 
         try {
-          await git.add(files);
           await git.commit(message);
 
           // Check and ensure tracking is set after commit
@@ -691,7 +694,11 @@ export default class GitService {
     }
   }
 
-  async cloneRepo(remoteUrl: string, credentials?: GitCredentials) {
+  async cloneRepo(
+    remoteUrl: string,
+    credentials?: GitCredentials,
+    removeGit: boolean = false,
+  ) {
     const basePath = (await SettingsService.loadSettings()).projectsDirectory;
 
     if (!basePath) {
@@ -710,6 +717,22 @@ export default class GitService {
       }
 
       await git.clone(urlToUse, destinationPath);
+
+      // Remove .git directory if requested (for external repos that users want to make their own)
+      if (removeGit) {
+        const gitDirPath = path.join(destinationPath, '.git');
+        try {
+          if (fs.existsSync(gitDirPath)) {
+            await fs.promises.rm(gitDirPath, { recursive: true, force: true });
+            // eslint-disable-next-line no-console
+            console.log('Removed .git directory from cloned repository');
+          }
+        } catch (removeError) {
+          // eslint-disable-next-line no-console
+          console.error('Failed to remove .git directory:', removeError);
+          // Don't throw - this is not critical, continue with project setup
+        }
+      }
 
       const dbtProjectPath = await this.findDbtProjectPath(destinationPath);
       const projectPath = dbtProjectPath || destinationPath;
@@ -783,17 +806,26 @@ export default class GitService {
     const git = this.getGitInstance(repoPath);
 
     try {
-      // Convert absolute path to relative path for git
-      const relativePath = path.relative(repoPath, filePath);
-
-      // Get diff for the file (working directory vs HEAD)
+      const relativePath = toGitRelativePath(repoPath, filePath);
       const diff = await git.diff(['HEAD', '--', relativePath]);
-
       return { filePath, diff };
     } catch (err: any) {
       // eslint-disable-next-line no-console
       console.error('Git diff error:', err);
       throw new Error(`Failed to get diff: ${err.message}`);
+    }
+  }
+
+  async getFileHeadContent(
+    repoPath: string,
+    filePath: string,
+  ): Promise<string | null> {
+    const git = this.getGitInstance(repoPath);
+    const relativePath = toGitRelativePath(repoPath, filePath);
+    try {
+      return await git.show([`HEAD:${relativePath}`]);
+    } catch {
+      return null;
     }
   }
 
@@ -938,10 +970,10 @@ export default class GitService {
   ): Promise<FileStatus | null> {
     const git = this.getGitInstance(repoPath);
 
-    // Get relative path (how Git reports it)
-    const relativePath = path.relative(repoPath, filePath);
+    // Forward-slash path — matches both how Git's index reports paths and
+    // how simple-git's status arrays index them.
+    const relativePath = toGitRelativePath(repoPath, filePath);
 
-    // Run status for this file
     const status = await git.status([relativePath]);
 
     const fullPath = path.join(repoPath, relativePath);
@@ -966,6 +998,212 @@ export default class GitService {
     }
 
     return null;
+  }
+
+  /**
+   * Check if there are any untracked files in the repository
+   */
+  async hasUntrackedChanges(repoPath: string): Promise<boolean> {
+    try {
+      const git = this.getGitInstance(repoPath);
+      const status = await git.status();
+      return status.not_added.length > 0;
+    } catch (err: any) {
+      throw new Error(`Failed to check untracked changes: ${err.message}`);
+    }
+  }
+
+  /**
+   * Check if there are any uncommitted changes (modified, deleted, or staged files)
+   */
+  async hasUncommittedChanges(repoPath: string): Promise<boolean> {
+    try {
+      const git = this.getGitInstance(repoPath);
+      const status = await git.status();
+
+      return (
+        status.modified.length > 0 ||
+        status.deleted.length > 0 ||
+        status.staged.length > 0 ||
+        status.renamed.length > 0 ||
+        status.conflicted.length > 0
+      );
+    } catch (err: any) {
+      throw new Error(`Failed to check uncommitted changes: ${err.message}`);
+    }
+  }
+
+  /**
+   * Check if there are any unpushed commits on the current branch
+   */
+  async hasUnpushedChanges(repoPath: string): Promise<boolean> {
+    try {
+      const git = this.getGitInstance(repoPath);
+
+      // Get current branch
+      const branchSummary = await git.branch();
+      const currentBranch = branchSummary.current;
+
+      if (!currentBranch) {
+        return false;
+      }
+
+      // Fetch to get latest remote info (without merging)
+      try {
+        await git.fetch();
+      } catch (err) {
+        return false;
+      }
+
+      // Check if remote branch exists
+      const remoteBranches = await git.branch(['-r']);
+      const hasRemoteBranch = remoteBranches.all.includes(
+        `origin/${currentBranch}`,
+      );
+
+      if (!hasRemoteBranch) {
+        // If there's no remote branch, check if there are any commits
+        const log = await git.log();
+        return log.total > 0;
+      }
+
+      // Compare local and remote
+      const result = await git.raw([
+        'rev-list',
+        '--count',
+        `origin/${currentBranch}..HEAD`,
+      ]);
+
+      const unpushedCount = parseInt(result.trim(), 10);
+      return unpushedCount > 0;
+    } catch (err: any) {
+      throw new Error(`Failed to check unpushed changes: ${err.message}`);
+    }
+  }
+
+  /**
+   * Check if there are any local changes (untracked, uncommitted, or unpushed)
+   */
+  async hasLocalChanges(repoPath: string): Promise<boolean> {
+    try {
+      const [hasUntracked, hasUncommitted, hasUnpushed] = await Promise.all([
+        this.hasUntrackedChanges(repoPath),
+        this.hasUncommittedChanges(repoPath),
+        this.hasUnpushedChanges(repoPath),
+      ]);
+
+      return hasUntracked || hasUncommitted || hasUnpushed;
+    } catch (err: any) {
+      throw new Error(`Failed to check local changes: ${err.message}`);
+    }
+  }
+
+  /**
+   * Get detailed information about local changes
+   */
+  async getLocalChangesStatus(repoPath: string): Promise<GitChangesRes | null> {
+    try {
+      const git = this.getGitInstance(repoPath);
+      const status = await git.status();
+
+      const hasUntracked = status.not_added.length > 0;
+      const hasUncommitted =
+        status.modified.length > 0 ||
+        status.deleted.length > 0 ||
+        status.staged.length > 0 ||
+        status.renamed.length > 0 ||
+        status.conflicted.length > 0;
+
+      const uncommittedCount =
+        status.modified.length +
+        status.deleted.length +
+        status.staged.length +
+        status.renamed.length +
+        status.conflicted.length;
+
+      let hasUnpushed = false;
+      let unpushedCount = 0;
+
+      try {
+        const branchSummary = await git.branch();
+        const currentBranch = branchSummary.current;
+
+        if (currentBranch) {
+          await git.fetch();
+          const remoteBranches = await git.branch(['-r']);
+          const hasRemoteBranch = remoteBranches.all.includes(
+            `origin/${currentBranch}`,
+          );
+
+          if (hasRemoteBranch) {
+            const result = await git.raw([
+              'rev-list',
+              '--count',
+              `origin/${currentBranch}..HEAD`,
+            ]);
+            unpushedCount = parseInt(result.trim(), 10);
+            hasUnpushed = unpushedCount > 0;
+          } else {
+            const log = await git.log();
+            unpushedCount = log.total;
+            hasUnpushed = log.total > 0;
+          }
+        }
+      } catch (err) {
+        // If we can't determine unpushed status, just return false
+        hasUnpushed = false;
+        unpushedCount = 0;
+      }
+
+      return {
+        hasUntracked,
+        hasUncommitted,
+        hasUnpushed,
+        untrackedCount: status.not_added.length,
+        uncommittedCount,
+        unpushedCount,
+      };
+    } catch (err: any) {
+      return null;
+    }
+  }
+
+  async getRepoInfo(repoPath: string): Promise<RepoInfoRes | null> {
+    const git = this.getGitInstance(repoPath);
+
+    try {
+      const remotes = await git.getRemotes(true);
+      const origin = remotes.find((r) => r.name === 'origin');
+      let remoteUrl = origin?.refs?.fetch || null;
+
+      if (remoteUrl && !remoteUrl.endsWith('.git')) {
+        remoteUrl = `${remoteUrl}.git`;
+      }
+
+      const branchSummary = await git.branch();
+      const currentBranch = branchSummary.current;
+
+      let branchExistsOnRemote = false;
+      if (currentBranch) {
+        try {
+          await git.fetch();
+          const remoteBranches = await git.branch(['-r']);
+          branchExistsOnRemote = remoteBranches.all.includes(
+            `origin/${currentBranch}`,
+          );
+        } catch (err) {
+          branchExistsOnRemote = false;
+        }
+      }
+
+      return {
+        remoteUrl,
+        currentBranch,
+        branchExistsOnRemote,
+      };
+    } catch (err: any) {
+      return null;
+    }
   }
 
   async getAheadBehindCount(

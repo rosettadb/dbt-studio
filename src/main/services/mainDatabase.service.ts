@@ -211,6 +211,17 @@ export default class MainDatabaseService {
         FOREIGN KEY (conversation_id) REFERENCES chat_conversations(id) ON DELETE SET NULL
       );
 
+      -- Chat Compaction Summaries table
+      CREATE TABLE IF NOT EXISTS chat_compaction_summaries (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        conversation_id INTEGER NOT NULL,
+        content TEXT NOT NULL,
+        covers_up_to_message_id INTEGER,
+        created_at TEXT DEFAULT (datetime('now')),
+        updated_at TEXT DEFAULT (datetime('now')),
+        FOREIGN KEY (conversation_id) REFERENCES chat_conversations(id) ON DELETE CASCADE
+      );
+
       -- Create indexes for performance
       CREATE INDEX IF NOT EXISTS ai_providers_name_idx ON ai_providers(name);
       CREATE INDEX IF NOT EXISTS ai_providers_type_idx ON ai_providers(type);
@@ -248,6 +259,8 @@ export default class MainDatabaseService {
       CREATE INDEX IF NOT EXISTS ai_usage_logs_operation_idx ON ai_usage_logs(operation_type);
       CREATE INDEX IF NOT EXISTS ai_usage_logs_status_idx ON ai_usage_logs(status);
       CREATE INDEX IF NOT EXISTS ai_usage_logs_created_at_idx ON ai_usage_logs(created_at);
+
+      CREATE INDEX IF NOT EXISTS chat_compaction_summaries_conversation_idx ON chat_compaction_summaries(conversation_id);
     `;
 
     this.sqlite.exec(createTablesSQL);
@@ -335,6 +348,22 @@ export default class MainDatabaseService {
           CREATE INDEX IF NOT EXISTS tool_calls_tool_name_idx ON tool_calls(tool_name);
           CREATE INDEX IF NOT EXISTS tool_calls_status_idx ON tool_calls(status);
           CREATE INDEX IF NOT EXISTS tool_calls_started_at_idx ON tool_calls(started_at);
+        `);
+      }
+
+      // chat_compaction_summaries table might be missing
+      if (!tableNames.has('chat_compaction_summaries')) {
+        this.sqlite.exec(`
+          CREATE TABLE IF NOT EXISTS chat_compaction_summaries (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            conversation_id INTEGER NOT NULL,
+            content TEXT NOT NULL,
+            covers_up_to_message_id INTEGER,
+            created_at TEXT DEFAULT (datetime('now')),
+            updated_at TEXT DEFAULT (datetime('now')),
+            FOREIGN KEY (conversation_id) REFERENCES chat_conversations(id) ON DELETE CASCADE
+          );
+          CREATE INDEX IF NOT EXISTS chat_compaction_summaries_conversation_idx ON chat_compaction_summaries(conversation_id);
         `);
       }
     } catch (error) {
@@ -747,7 +776,60 @@ export default class MainDatabaseService {
     }
   }
 
-  // Template Management
+  // ─── Compaction Summary Methods ──────────────────────────────────────────────
+
+  /**
+   * Returns the latest compaction summary for a conversation, if one exists.
+   * Used for incremental compaction — reuses existing summary rather than regenerating.
+   */
+  static async getCompactionSummary(
+    conversationId: number,
+  ): Promise<schema.ChatCompactionSummary | null> {
+    const db = await this.getDatabase();
+    try {
+      const results = await db
+        .select()
+        .from(schema.chatCompactionSummaries)
+        .where(
+          eq(schema.chatCompactionSummaries.conversationId, conversationId),
+        )
+        .orderBy(desc(schema.chatCompactionSummaries.createdAt))
+        .limit(1);
+      return results[0] ?? null;
+    } catch (error) {
+      throw error;
+    }
+  }
+
+  /**
+   * Persists (or replaces) a compaction summary.
+   * Uses atomic delete+insert (SQLite upsert pattern for compound keys).
+   */
+  static async saveCompactionSummary(
+    conversationId: number,
+    content: string,
+    coversUpToMessageId?: number,
+  ): Promise<void> {
+    const db = await this.getDatabase();
+    try {
+      // Delete existing summaries for this conversation (keep only latest)
+      await db
+        .delete(schema.chatCompactionSummaries)
+        .where(
+          eq(schema.chatCompactionSummaries.conversationId, conversationId),
+        );
+
+      await db.insert(schema.chatCompactionSummaries).values({
+        conversationId,
+        content,
+        coversUpToMessageId: coversUpToMessageId ?? null,
+        updatedAt: new Date().toISOString(),
+      });
+    } catch (error) {
+      throw error;
+    }
+  }
+
   static async getPromptTemplates(
     category?: string,
     providerType?: string,

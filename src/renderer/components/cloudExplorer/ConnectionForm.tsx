@@ -15,6 +15,8 @@ import {
   Divider,
   Grid,
   CardActionArea,
+  IconButton,
+  InputAdornment,
 } from '@mui/material';
 import {
   CheckCircle,
@@ -22,6 +24,8 @@ import {
   Cable,
   Add,
   Edit,
+  Visibility,
+  VisibilityOff,
 } from '@mui/icons-material';
 
 import {
@@ -30,6 +34,17 @@ import {
   S3Config,
   AzureConfig,
   GCSConfig,
+  MinIOConfig,
+  CloudflareR2Config,
+  BackblazeB2Config,
+  RustfsConfig,
+  RustfsPersistedConfig,
+  GarageConfig,
+  GaragePersistedConfig,
+  MinIOPersistedConfig,
+  CloudflareR2PersistedConfig,
+  BackblazeB2PersistedConfig,
+  CloudStoragePersistedConfig,
 } from '../../../types/frontend';
 import {
   useTestCloudConnection,
@@ -42,6 +57,8 @@ interface ConnectionFormProps {
   initialValues?: CloudConnection;
   isEditing?: boolean;
   connectionId?: string;
+  duplicateFrom?: CloudConnection;
+  suggestedName?: string;
 }
 
 interface FormData {
@@ -52,15 +69,29 @@ interface FormData {
   region: string;
   accessKeyId: string;
   secretAccessKey: string;
+  sessionToken: string;
   accountName: string;
   accountKey: string;
   connectionString: string;
+  // MinIO fields
+  endpoint: string;
+  useSSL: boolean;
+  // Cloudflare R2 fields
+  accountId: string;
+  jurisdiction: 'eu' | '';
+  // Backblaze B2 fields
+  applicationKeyId: string;
+  applicationKey: string;
+  // Garage fields
+  urlStyle: 'path' | 'virtual-host';
 }
 
 export const ConnectionForm: React.FC<ConnectionFormProps> = ({
   initialValues,
   isEditing = false,
   connectionId,
+  duplicateFrom,
+  suggestedName,
 }) => {
   const navigate = useNavigate();
   const saveConnection = useSaveConnection();
@@ -70,25 +101,47 @@ export const ConnectionForm: React.FC<ConnectionFormProps> = ({
     getCloudGcsCredential,
     setCloudAwsSecret,
     getCloudAwsSecret,
+    setCloudAwsSessionToken,
+    getCloudAwsSessionToken,
+    deleteCloudAwsSessionToken,
     setCloudAzureKey,
     getCloudAzureKey,
+    setCloudMinioSecret,
+    getCloudMinioSecret,
+    setCloudR2Secret,
+    getCloudR2Secret,
+    setCloudB2Secret,
+    getCloudB2Secret,
+    setCloudRustfsSecret,
+    getCloudRustfsSecret,
+    setCloudGarageSecret,
+    getCloudGarageSecret,
   } = useSecureStorage();
 
   const [testStatus, setTestStatus] = useState<
     'idle' | 'testing' | 'success' | 'error'
   >('idle');
   const [errorMessage, setErrorMessage] = useState<string>('');
+  const [showPassword, setShowPassword] = useState(false);
   const [formData, setFormData] = useState<FormData>({
-    name: initialValues?.name || '',
-    provider: initialValues?.provider || 'gcs',
+    name: initialValues?.name || suggestedName || '',
+    provider: initialValues?.provider || duplicateFrom?.provider || 'gcs',
     projectId: '',
     credentials: '',
     region: '',
     accessKeyId: '',
     secretAccessKey: '',
+    sessionToken: '',
     accountName: '',
     accountKey: '',
     connectionString: '',
+    endpoint: '',
+    useSSL: false,
+    accountId: '',
+    jurisdiction: '',
+    applicationKeyId: '',
+    applicationKey: '',
+    urlStyle: 'path',
   });
 
   const getProviderIcon = (provider: CloudProvider, size: number = 20) => {
@@ -109,43 +162,153 @@ export const ConnectionForm: React.FC<ConnectionFormProps> = ({
     return null;
   };
 
-  // Initialize form data from initial values
+  // Initialize form data from initial values or duplicate
   useEffect(() => {
-    if (initialValues) {
-      const { config } = initialValues;
+    const sourceConnection = initialValues || duplicateFrom;
+    if (sourceConnection) {
+      const { config } = sourceConnection;
       setFormData({
-        name: initialValues.name,
-        provider: initialValues.provider,
+        name: initialValues?.name || suggestedName || '',
+        provider: sourceConnection.provider,
         projectId: (config as GCSConfig).projectId || '',
         credentials: (config as GCSConfig).credentials || '',
-        region: (config as S3Config).region || '',
-        accessKeyId: (config as S3Config).accessKeyId || '',
-        secretAccessKey: (config as S3Config).secretAccessKey || '',
+        sessionToken: (config as S3Config).sessionToken || '',
+        region:
+          (config as S3Config).region ||
+          (config as MinIOPersistedConfig).region ||
+          (config as RustfsPersistedConfig).region ||
+          (config as GaragePersistedConfig).region ||
+          '',
+        accessKeyId:
+          (config as S3Config).accessKeyId ||
+          (config as MinIOPersistedConfig).accessKeyId ||
+          (config as CloudflareR2PersistedConfig).accessKeyId ||
+          (config as BackblazeB2PersistedConfig).applicationKeyId ||
+          (config as RustfsPersistedConfig).accessKeyId ||
+          (config as GaragePersistedConfig).accessKeyId ||
+          '',
+        secretAccessKey:
+          (config as S3Config).secretAccessKey ||
+          (config as MinIOConfig).secretAccessKey ||
+          (config as CloudflareR2Config).secretAccessKey ||
+          (config as RustfsConfig).secretAccessKey ||
+          (config as GarageConfig).secretAccessKey ||
+          '',
         accountName: (config as AzureConfig).accountName || '',
         accountKey: (config as AzureConfig).accountKey || '',
         connectionString: (config as AzureConfig).connectionString || '',
+        endpoint:
+          (config as RustfsPersistedConfig).endpoint ||
+          (config as BackblazeB2PersistedConfig).endpoint ||
+          (config as MinIOPersistedConfig).endpoint ||
+          (config as GaragePersistedConfig).endpoint ||
+          '',
+        useSSL:
+          (config as MinIOPersistedConfig).useSSL ||
+          (config as RustfsPersistedConfig).useSSL ||
+          (config as GaragePersistedConfig).useSSL ||
+          false,
+        accountId: (config as CloudflareR2PersistedConfig).accountId || '',
+        jurisdiction:
+          (config as CloudflareR2PersistedConfig).jurisdiction || '',
+        applicationKeyId:
+          (config as BackblazeB2PersistedConfig).applicationKeyId || '',
+        applicationKey: (config as BackblazeB2Config).applicationKey || '',
+        urlStyle: (config as GaragePersistedConfig).urlStyle || 'path',
       });
     }
-  }, [initialValues]);
+  }, [initialValues, duplicateFrom, suggestedName]);
 
-  // On edit, fetch credentials from secure storage
+  // On edit or duplicate, fetch credentials from secure storage
   useEffect(() => {
-    if (initialValues) {
-      const { id, provider } = initialValues;
+    let isMounted = true;
+    const sourceConnection = initialValues || duplicateFrom;
+    if (sourceConnection) {
+      const { id, provider } = sourceConnection;
       (async () => {
-        if (provider === 'gcs') {
-          const stored = await getCloudGcsCredential(id);
-          setFormData((prev) => ({ ...prev, credentials: stored || '' }));
-        } else if (provider === 'aws') {
-          const stored = await getCloudAwsSecret(id);
-          setFormData((prev) => ({ ...prev, secretAccessKey: stored || '' }));
-        } else if (provider === 'azure') {
-          const stored = await getCloudAzureKey(id);
-          setFormData((prev) => ({ ...prev, accountKey: stored || '' }));
+        try {
+          if (provider === 'gcs') {
+            const stored = await getCloudGcsCredential(id);
+            if (isMounted) {
+              setFormData((prev) => ({ ...prev, credentials: stored || '' }));
+            }
+          } else if (provider === 'aws') {
+            const stored = await getCloudAwsSecret(id);
+            const storedSessionToken = await getCloudAwsSessionToken(id);
+            if (isMounted) {
+              setFormData((prev) => ({
+                ...prev,
+                secretAccessKey: stored || '',
+                sessionToken: storedSessionToken || '',
+              }));
+            }
+          } else if (provider === 'azure') {
+            const stored = await getCloudAzureKey(id);
+            if (isMounted) {
+              setFormData((prev) => ({ ...prev, accountKey: stored || '' }));
+            }
+          } else if (provider === 'minio') {
+            const stored = await getCloudMinioSecret(id);
+            if (isMounted) {
+              setFormData((prev) => ({
+                ...prev,
+                secretAccessKey: stored || '',
+              }));
+            }
+          } else if (provider === 'cloudflare-r2') {
+            const stored = await getCloudR2Secret(id);
+            if (isMounted) {
+              setFormData((prev) => ({
+                ...prev,
+                secretAccessKey: stored || '',
+              }));
+            }
+          } else if (provider === 'backblaze-b2') {
+            const stored = await getCloudB2Secret(id);
+            if (isMounted) {
+              setFormData((prev) => ({
+                ...prev,
+                applicationKey: stored || '',
+              }));
+            }
+          } else if (provider === 'rustfs') {
+            const stored = await getCloudRustfsSecret(id);
+            if (isMounted) {
+              setFormData((prev) => ({
+                ...prev,
+                secretAccessKey: stored || '',
+              }));
+            }
+          } else if (provider === 'garage') {
+            const stored = await getCloudGarageSecret(id);
+            if (isMounted) {
+              setFormData((prev) => ({
+                ...prev,
+                secretAccessKey: stored || '',
+              }));
+            }
+          }
+        } catch {
+          /* empty */
         }
       })();
     }
-  }, [initialValues]);
+    return () => {
+      isMounted = false;
+    };
+  }, [
+    initialValues,
+    duplicateFrom,
+    getCloudGcsCredential,
+    getCloudAwsSecret,
+    getCloudAwsSessionToken,
+    getCloudAzureKey,
+    getCloudMinioSecret,
+    getCloudR2Secret,
+    getCloudB2Secret,
+    getCloudRustfsSecret,
+    getCloudGarageSecret,
+  ]);
 
   const handleChange = (field: keyof FormData, value: string) => {
     setFormData((prev) => ({ ...prev, [field]: value }));
@@ -165,6 +328,34 @@ export const ConnectionForm: React.FC<ConnectionFormProps> = ({
         );
       case 'azure':
         return !!formData.accountName.trim() && !!formData.accountKey.trim();
+      case 'minio':
+        return (
+          !!formData.endpoint.trim() &&
+          !!formData.accessKeyId.trim() &&
+          !!formData.secretAccessKey.trim()
+        );
+      case 'cloudflare-r2':
+        return (
+          !!formData.accountId.trim() &&
+          !!formData.accessKeyId.trim() &&
+          !!formData.secretAccessKey.trim()
+        );
+      case 'backblaze-b2':
+        return (
+          !!formData.applicationKeyId.trim() && !!formData.applicationKey.trim()
+        );
+      case 'rustfs':
+        return (
+          !!formData.endpoint.trim() &&
+          !!formData.accessKeyId.trim() &&
+          !!formData.secretAccessKey.trim()
+        );
+      case 'garage':
+        return (
+          !!formData.endpoint.trim() &&
+          !!formData.accessKeyId.trim() &&
+          !!formData.secretAccessKey.trim()
+        );
       default:
         return false;
     }
@@ -182,6 +373,7 @@ export const ConnectionForm: React.FC<ConnectionFormProps> = ({
           region: formData.region.trim(),
           accessKeyId: formData.accessKeyId.trim(),
           secretAccessKey: formData.secretAccessKey.trim(),
+          sessionToken: formData.sessionToken.trim() || undefined,
         } as S3Config;
       case 'azure':
         return {
@@ -189,6 +381,45 @@ export const ConnectionForm: React.FC<ConnectionFormProps> = ({
           accountKey: formData.accountKey.trim(),
           connectionString: formData.connectionString.trim() || undefined,
         } as AzureConfig;
+      case 'minio':
+        return {
+          endpoint: formData.endpoint.trim(),
+          accessKeyId: formData.accessKeyId.trim(),
+          secretAccessKey: formData.secretAccessKey.trim(),
+          useSSL: formData.useSSL,
+          region: formData.region.trim() || 'us-east-1',
+        } as MinIOConfig;
+      case 'cloudflare-r2':
+        return {
+          accountId: formData.accountId.trim(),
+          accessKeyId: formData.accessKeyId.trim(),
+          secretAccessKey: formData.secretAccessKey.trim(),
+          jurisdiction: formData.jurisdiction || undefined,
+        } as CloudflareR2Config;
+      case 'backblaze-b2':
+        return {
+          applicationKeyId: formData.applicationKeyId.trim(),
+          applicationKey: formData.applicationKey.trim(),
+          endpoint:
+            formData.endpoint.trim() || 's3.us-west-004.backblazeb2.com',
+        } as BackblazeB2Config;
+      case 'rustfs':
+        return {
+          endpoint: formData.endpoint.trim(),
+          accessKeyId: formData.accessKeyId.trim(),
+          secretAccessKey: formData.secretAccessKey.trim(),
+          useSSL: formData.useSSL,
+          region: formData.region.trim() || 'us-east-1',
+        } as RustfsConfig;
+      case 'garage':
+        return {
+          endpoint: formData.endpoint.trim(),
+          accessKeyId: formData.accessKeyId.trim(),
+          secretAccessKey: formData.secretAccessKey.trim(),
+          useSSL: formData.useSSL,
+          region: formData.region.trim() || 'us-east-1',
+          urlStyle: formData.urlStyle,
+        } as GarageConfig;
       default:
         throw new Error(`Unsupported provider: ${formData.provider}`);
     }
@@ -205,6 +436,7 @@ export const ConnectionForm: React.FC<ConnectionFormProps> = ({
     try {
       const rawConfig = createConfigFromFormData();
       const config = rawConfig;
+
       // Validate config before sending
       if (!config) {
         throw new Error('Failed to create configuration object');
@@ -216,6 +448,8 @@ export const ConnectionForm: React.FC<ConnectionFormProps> = ({
       });
       setTestStatus('success');
     } catch (error) {
+      // eslint-disable-next-line no-console
+      console.error('[MinIO Frontend] Test connection failed:', error);
       setTestStatus('error');
       setErrorMessage(
         error instanceof Error ? error.message : 'Unknown error occurred',
@@ -229,7 +463,7 @@ export const ConnectionForm: React.FC<ConnectionFormProps> = ({
 
     try {
       const rawConfig = createConfigFromFormData();
-      let finalConfig: typeof rawConfig;
+      let finalConfig: CloudStoragePersistedConfig;
 
       // Generate connection ID first so we can use it for secure storage
       const connId = connectionId || uuidv4();
@@ -244,9 +478,17 @@ export const ConnectionForm: React.FC<ConnectionFormProps> = ({
         finalConfig = config;
       } else if (formData.provider === 'aws') {
         await setCloudAwsSecret(formData.secretAccessKey, connId);
+        if (formData.sessionToken.trim()) {
+          await setCloudAwsSessionToken(formData.sessionToken, connId);
+        } else {
+          await deleteCloudAwsSessionToken(connId);
+        }
         const config = { ...rawConfig };
         if ('secretAccessKey' in config) {
           delete (config as any).secretAccessKey;
+        }
+        if ('sessionToken' in config) {
+          delete (config as any).sessionToken;
         }
         finalConfig = config;
       } else if (formData.provider === 'azure') {
@@ -256,6 +498,41 @@ export const ConnectionForm: React.FC<ConnectionFormProps> = ({
           delete (config as any).accountKey;
         }
         finalConfig = config;
+      } else if (formData.provider === 'minio') {
+        await setCloudMinioSecret(formData.secretAccessKey, connId);
+        const config = { ...rawConfig };
+        if ('secretAccessKey' in config) {
+          delete (config as any).secretAccessKey;
+        }
+        finalConfig = config as MinIOPersistedConfig;
+      } else if (formData.provider === 'cloudflare-r2') {
+        await setCloudR2Secret(formData.secretAccessKey, connId);
+        const config = { ...rawConfig };
+        if ('secretAccessKey' in config) {
+          delete (config as any).secretAccessKey;
+        }
+        finalConfig = config as CloudflareR2PersistedConfig;
+      } else if (formData.provider === 'backblaze-b2') {
+        await setCloudB2Secret(formData.applicationKey, connId);
+        const config = { ...rawConfig };
+        if ('applicationKey' in config) {
+          delete (config as any).applicationKey;
+        }
+        finalConfig = config as BackblazeB2PersistedConfig;
+      } else if (formData.provider === 'rustfs') {
+        await setCloudRustfsSecret(formData.secretAccessKey, connId);
+        const config = { ...rawConfig };
+        if ('secretAccessKey' in config) {
+          delete (config as any).secretAccessKey;
+        }
+        finalConfig = config as RustfsPersistedConfig;
+      } else if (formData.provider === 'garage') {
+        await setCloudGarageSecret(formData.secretAccessKey, connId);
+        const config = { ...rawConfig };
+        if ('secretAccessKey' in config) {
+          delete (config as any).secretAccessKey;
+        }
+        finalConfig = config as GaragePersistedConfig;
       } else {
         finalConfig = rawConfig;
       }
@@ -349,14 +626,439 @@ export const ConnectionForm: React.FC<ConnectionFormProps> = ({
             <TextField
               label="Secret Access Key"
               placeholder="wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY"
-              type="password"
+              type={showPassword ? 'text' : 'password'}
               fullWidth
               margin="normal"
               value={formData.secretAccessKey}
               onChange={(e) => handleChange('secretAccessKey', e.target.value)}
               required
               helperText="Your AWS Secret Access Key"
+              InputProps={{
+                endAdornment: (
+                  <InputAdornment position="end">
+                    <IconButton
+                      aria-label="toggle password visibility"
+                      onClick={() => setShowPassword(!showPassword)}
+                      edge="end"
+                    >
+                      {showPassword ? <VisibilityOff /> : <Visibility />}
+                    </IconButton>
+                  </InputAdornment>
+                ),
+              }}
             />
+            <TextField
+              label="Session Token (Optional)"
+              placeholder="Temporary session token for temporary credentials"
+              type="password"
+              fullWidth
+              margin="normal"
+              value={formData.sessionToken}
+              onChange={(e) => handleChange('sessionToken', e.target.value)}
+              helperText="Optional: Required when using temporary AWS credentials (e.g., from STS AssumeRole)"
+            />
+          </>
+        );
+      case 'minio':
+        return (
+          <>
+            <TextField
+              label="Endpoint"
+              placeholder="localhost:9000"
+              fullWidth
+              margin="normal"
+              value={formData.endpoint}
+              onChange={(e) => handleChange('endpoint', e.target.value)}
+              required
+              helperText="MinIO server endpoint (host:port)"
+            />
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mt: 2 }}>
+              <FormControl component="fieldset">
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                  <input
+                    type="checkbox"
+                    id="useSSL"
+                    checked={formData.useSSL}
+                    onChange={(e) =>
+                      handleChange('useSSL', e.target.checked as any)
+                    }
+                    style={{ cursor: 'pointer' }}
+                  />
+                  <label htmlFor="useSSL" style={{ cursor: 'pointer' }}>
+                    Use SSL/TLS
+                  </label>
+                </Box>
+                <Typography
+                  variant="caption"
+                  color="text.secondary"
+                  sx={{ mt: 0.5 }}
+                >
+                  Enable for HTTPS connections (default: HTTP)
+                </Typography>
+              </FormControl>
+            </Box>
+            <TextField
+              label="Access Key ID"
+              placeholder="minioadmin"
+              fullWidth
+              margin="normal"
+              value={formData.accessKeyId}
+              onChange={(e) => handleChange('accessKeyId', e.target.value)}
+              required
+              helperText="Your MinIO Access Key"
+            />
+            <TextField
+              label="Secret Access Key"
+              placeholder="minioadmin"
+              type={showPassword ? 'text' : 'password'}
+              fullWidth
+              margin="normal"
+              value={formData.secretAccessKey}
+              onChange={(e) => handleChange('secretAccessKey', e.target.value)}
+              required
+              helperText="Your MinIO Secret Key"
+              InputProps={{
+                endAdornment: (
+                  <InputAdornment position="end">
+                    <IconButton
+                      aria-label="toggle password visibility"
+                      onClick={() => setShowPassword(!showPassword)}
+                      edge="end"
+                    >
+                      {showPassword ? <VisibilityOff /> : <Visibility />}
+                    </IconButton>
+                  </InputAdornment>
+                ),
+              }}
+            />
+            <TextField
+              label="Region (Optional)"
+              placeholder="us-east-1"
+              fullWidth
+              margin="normal"
+              value={formData.region}
+              onChange={(e) => handleChange('region', e.target.value)}
+              helperText="MinIO region (default: us-east-1)"
+            />
+          </>
+        );
+      case 'cloudflare-r2':
+        return (
+          <>
+            <TextField
+              label="Account ID"
+              placeholder="a1b2c3d4e5f6g7h8i9j0k1l2m3n4o5p6"
+              fullWidth
+              margin="normal"
+              value={formData.accountId}
+              onChange={(e) => handleChange('accountId', e.target.value)}
+              required
+              helperText="Your Cloudflare Account ID (alphanumeric string, typically 32 characters)"
+            />
+            <TextField
+              label="Access Key ID"
+              placeholder="Your R2 API token"
+              fullWidth
+              margin="normal"
+              value={formData.accessKeyId}
+              onChange={(e) => handleChange('accessKeyId', e.target.value)}
+              required
+              helperText="Your R2 API token (Access Key ID)"
+            />
+            <TextField
+              label="Secret Access Key"
+              placeholder="Your R2 API secret"
+              type={showPassword ? 'text' : 'password'}
+              fullWidth
+              margin="normal"
+              value={formData.secretAccessKey}
+              onChange={(e) => handleChange('secretAccessKey', e.target.value)}
+              required
+              helperText="Your R2 API secret (Secret Access Key)"
+              InputProps={{
+                endAdornment: (
+                  <InputAdornment position="end">
+                    <IconButton
+                      aria-label="toggle password visibility"
+                      onClick={() => setShowPassword(!showPassword)}
+                      edge="end"
+                    >
+                      {showPassword ? <VisibilityOff /> : <Visibility />}
+                    </IconButton>
+                  </InputAdornment>
+                ),
+              }}
+            />
+            <FormControl fullWidth margin="normal">
+              <FormLabel>Jurisdiction (Optional)</FormLabel>
+              <Box
+                sx={{ display: 'flex', alignItems: 'center', gap: 2, mt: 1 }}
+              >
+                <input
+                  type="checkbox"
+                  id="euJurisdiction"
+                  checked={formData.jurisdiction === 'eu'}
+                  onChange={(e) =>
+                    handleChange('jurisdiction', e.target.checked ? 'eu' : '')
+                  }
+                  style={{ cursor: 'pointer' }}
+                />
+                <label htmlFor="euJurisdiction" style={{ cursor: 'pointer' }}>
+                  EU Jurisdiction Only
+                </label>
+              </Box>
+              <Typography
+                variant="caption"
+                color="text.secondary"
+                sx={{ mt: 0.5 }}
+              >
+                Enable to restrict data to EU-only storage (optional)
+              </Typography>
+            </FormControl>
+          </>
+        );
+      case 'backblaze-b2':
+        return (
+          <>
+            <TextField
+              label="Application Key ID"
+              placeholder="Your B2 Application Key ID"
+              fullWidth
+              margin="normal"
+              value={formData.applicationKeyId}
+              onChange={(e) => handleChange('applicationKeyId', e.target.value)}
+              required
+              helperText="Your Backblaze B2 Application Key ID"
+            />
+            <TextField
+              label="Application Key"
+              placeholder="Your B2 Application Key"
+              type={showPassword ? 'text' : 'password'}
+              fullWidth
+              margin="normal"
+              value={formData.applicationKey}
+              onChange={(e) => handleChange('applicationKey', e.target.value)}
+              required
+              helperText="Your Backblaze B2 Application Key (stored securely)"
+              InputProps={{
+                endAdornment: (
+                  <InputAdornment position="end">
+                    <IconButton
+                      aria-label="toggle password visibility"
+                      onClick={() => setShowPassword(!showPassword)}
+                      edge="end"
+                    >
+                      {showPassword ? <VisibilityOff /> : <Visibility />}
+                    </IconButton>
+                  </InputAdornment>
+                ),
+              }}
+            />
+            <TextField
+              label="Endpoint (Optional)"
+              placeholder="s3.us-west-004.backblazeb2.com"
+              fullWidth
+              margin="normal"
+              value={formData.endpoint}
+              onChange={(e) => handleChange('endpoint', e.target.value)}
+              helperText="B2 S3-compatible endpoint. US: s3.us-west-004.backblazeb2.com, EU: s3.eu-central-003.backblazeb2.com"
+            />
+          </>
+        );
+      case 'rustfs':
+        return (
+          <>
+            <TextField
+              label="Endpoint"
+              placeholder="192.168.1.100:9000"
+              fullWidth
+              margin="normal"
+              value={formData.endpoint}
+              onChange={(e) => handleChange('endpoint', e.target.value)}
+              required
+              helperText="rustfs server endpoint (host:port)"
+            />
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mt: 2 }}>
+              <FormControl component="fieldset">
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                  <input
+                    type="checkbox"
+                    id="useSSL-rustfs"
+                    checked={formData.useSSL}
+                    onChange={(e) =>
+                      handleChange('useSSL', e.target.checked as any)
+                    }
+                    style={{ cursor: 'pointer' }}
+                  />
+                  <label htmlFor="useSSL-rustfs" style={{ cursor: 'pointer' }}>
+                    Use SSL/TLS
+                  </label>
+                </Box>
+                <Typography
+                  variant="caption"
+                  color="text.secondary"
+                  sx={{ mt: 0.5 }}
+                >
+                  Enable for HTTPS connections (default: HTTP)
+                </Typography>
+              </FormControl>
+            </Box>
+            <TextField
+              label="Access Key ID"
+              placeholder="rustfsadmin"
+              fullWidth
+              margin="normal"
+              value={formData.accessKeyId}
+              onChange={(e) => handleChange('accessKeyId', e.target.value)}
+              required
+              helperText="Your rustfs Access Key"
+            />
+            <TextField
+              label="Secret Access Key"
+              placeholder="rustfssecret"
+              type={showPassword ? 'text' : 'password'}
+              fullWidth
+              margin="normal"
+              value={formData.secretAccessKey}
+              onChange={(e) => handleChange('secretAccessKey', e.target.value)}
+              required
+              helperText="Your rustfs Secret Key (stored securely)"
+              InputProps={{
+                endAdornment: (
+                  <InputAdornment position="end">
+                    <IconButton
+                      aria-label="toggle password visibility"
+                      onClick={() => setShowPassword(!showPassword)}
+                      edge="end"
+                    >
+                      {showPassword ? <VisibilityOff /> : <Visibility />}
+                    </IconButton>
+                  </InputAdornment>
+                ),
+              }}
+            />
+            <TextField
+              label="Region (Optional)"
+              placeholder="us-east-1"
+              fullWidth
+              margin="normal"
+              value={formData.region}
+              onChange={(e) => handleChange('region', e.target.value)}
+              helperText="rustfs region (default: us-east-1)"
+            />
+          </>
+        );
+      case 'garage':
+        return (
+          <>
+            <TextField
+              label="Endpoint"
+              placeholder="localhost:3900"
+              fullWidth
+              margin="normal"
+              value={formData.endpoint}
+              onChange={(e) => handleChange('endpoint', e.target.value)}
+              required
+              helperText="Garage server endpoint (host:port)"
+            />
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mt: 2 }}>
+              <FormControl component="fieldset">
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                  <input
+                    type="checkbox"
+                    id="useSSL-garage"
+                    checked={formData.useSSL}
+                    onChange={(e) =>
+                      handleChange('useSSL', e.target.checked as any)
+                    }
+                    style={{ cursor: 'pointer' }}
+                  />
+                  <label htmlFor="useSSL-garage" style={{ cursor: 'pointer' }}>
+                    Use SSL/TLS
+                  </label>
+                </Box>
+                <Typography
+                  variant="caption"
+                  color="text.secondary"
+                  sx={{ mt: 0.5 }}
+                >
+                  Enable for HTTPS connections (default: HTTP)
+                </Typography>
+              </FormControl>
+            </Box>
+            <TextField
+              label="Access Key ID"
+              placeholder="GK..."
+              fullWidth
+              margin="normal"
+              value={formData.accessKeyId}
+              onChange={(e) => handleChange('accessKeyId', e.target.value)}
+              required
+              helperText="Your Garage Access Key"
+            />
+            <TextField
+              label="Secret Access Key"
+              placeholder="GS..."
+              type={showPassword ? 'text' : 'password'}
+              fullWidth
+              margin="normal"
+              value={formData.secretAccessKey}
+              onChange={(e) => handleChange('secretAccessKey', e.target.value)}
+              required
+              helperText="Your Garage Secret Key (stored securely)"
+              InputProps={{
+                endAdornment: (
+                  <InputAdornment position="end">
+                    <IconButton
+                      aria-label="toggle password visibility"
+                      onClick={() => setShowPassword(!showPassword)}
+                      edge="end"
+                    >
+                      {showPassword ? <VisibilityOff /> : <Visibility />}
+                    </IconButton>
+                  </InputAdornment>
+                ),
+              }}
+            />
+            <TextField
+              label="Region (Optional)"
+              placeholder="garage"
+              fullWidth
+              margin="normal"
+              value={formData.region}
+              onChange={(e) => handleChange('region', e.target.value)}
+              helperText="Garage region (default: us-east-1)"
+            />
+            <FormControl fullWidth margin="normal">
+              <FormLabel>URL Style (Optional)</FormLabel>
+              <Box
+                sx={{ display: 'flex', alignItems: 'center', gap: 2, mt: 1 }}
+              >
+                <input
+                  type="checkbox"
+                  id="virtualHostStyle"
+                  checked={formData.urlStyle === 'virtual-host'}
+                  onChange={(e) =>
+                    handleChange(
+                      'urlStyle',
+                      e.target.checked ? 'virtual-host' : 'path',
+                    )
+                  }
+                  style={{ cursor: 'pointer' }}
+                />
+                <label htmlFor="virtualHostStyle" style={{ cursor: 'pointer' }}>
+                  Use Virtual-Host Style URLs
+                </label>
+              </Box>
+              <Typography
+                variant="caption"
+                color="text.secondary"
+                sx={{ mt: 0.5 }}
+              >
+                Path-style: http://endpoint/bucket/key (default). Virtual-host:
+                http://bucket.endpoint/key
+              </Typography>
+            </FormControl>
           </>
         );
       case 'azure':
@@ -375,13 +1077,26 @@ export const ConnectionForm: React.FC<ConnectionFormProps> = ({
             <TextField
               label="Storage Account Key"
               placeholder="Your storage account key"
-              type="password"
+              type={showPassword ? 'text' : 'password'}
               fullWidth
               margin="normal"
               value={formData.accountKey}
               onChange={(e) => handleChange('accountKey', e.target.value)}
               required
               helperText="Your Azure Storage Account Key"
+              InputProps={{
+                endAdornment: (
+                  <InputAdornment position="end">
+                    <IconButton
+                      aria-label="toggle password visibility"
+                      onClick={() => setShowPassword(!showPassword)}
+                      edge="end"
+                    >
+                      {showPassword ? <VisibilityOff /> : <Visibility />}
+                    </IconButton>
+                  </InputAdornment>
+                ),
+              }}
             />
             <TextField
               label="Connection String (Optional)"
@@ -433,7 +1148,7 @@ export const ConnectionForm: React.FC<ConnectionFormProps> = ({
                 Connection Type
               </FormLabel>
               <Grid container spacing={2} sx={{ mt: 1 }}>
-                <Grid item xs={12} sm={4}>
+                <Grid item xs={12} sm={3}>
                   <Card
                     variant={
                       formData.provider === 'gcs' ? 'elevation' : 'outlined'
@@ -480,7 +1195,7 @@ export const ConnectionForm: React.FC<ConnectionFormProps> = ({
                     </CardActionArea>
                   </Card>
                 </Grid>
-                <Grid item xs={12} sm={4}>
+                <Grid item xs={12} sm={3}>
                   <Card
                     variant={
                       formData.provider === 'aws' ? 'elevation' : 'outlined'
@@ -527,7 +1242,7 @@ export const ConnectionForm: React.FC<ConnectionFormProps> = ({
                     </CardActionArea>
                   </Card>
                 </Grid>
-                <Grid item xs={12} sm={4}>
+                <Grid item xs={12} sm={3}>
                   <Card
                     variant={
                       formData.provider === 'azure' ? 'elevation' : 'outlined'
@@ -571,6 +1286,255 @@ export const ConnectionForm: React.FC<ConnectionFormProps> = ({
                           fontWeight="medium"
                         >
                           Azure Blob Storage
+                        </Typography>
+                      </Box>
+                    </CardActionArea>
+                  </Card>
+                </Grid>
+                <Grid item xs={12} sm={3}>
+                  <Card
+                    variant={
+                      formData.provider === 'minio' ? 'elevation' : 'outlined'
+                    }
+                    sx={{
+                      cursor: 'pointer',
+                      transition: 'all 0.2s',
+                      height: '120px',
+                      border:
+                        formData.provider === 'minio'
+                          ? '2px solid'
+                          : '1px solid',
+                      borderColor:
+                        formData.provider === 'minio'
+                          ? 'primary.main'
+                          : 'divider',
+                      '&:hover': {
+                        elevation: 4,
+                        borderColor: 'primary.main',
+                      },
+                    }}
+                  >
+                    <CardActionArea
+                      onClick={() => handleChange('provider', 'minio')}
+                      sx={{ p: 2, height: '100%' }}
+                    >
+                      <Box
+                        sx={{
+                          display: 'flex',
+                          flexDirection: 'column',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          gap: 1,
+                          height: '100%',
+                        }}
+                      >
+                        {getProviderIcon('minio', 48)}
+                        <Typography
+                          variant="body2"
+                          textAlign="center"
+                          fontWeight="medium"
+                        >
+                          MinIO
+                        </Typography>
+                      </Box>
+                    </CardActionArea>
+                  </Card>
+                </Grid>
+                <Grid item xs={12} sm={3}>
+                  <Card
+                    variant={
+                      formData.provider === 'cloudflare-r2'
+                        ? 'elevation'
+                        : 'outlined'
+                    }
+                    sx={{
+                      cursor: 'pointer',
+                      transition: 'all 0.2s',
+                      height: '120px',
+                      border:
+                        formData.provider === 'cloudflare-r2'
+                          ? '2px solid'
+                          : '1px solid',
+                      borderColor:
+                        formData.provider === 'cloudflare-r2'
+                          ? 'primary.main'
+                          : 'divider',
+                      '&:hover': {
+                        elevation: 4,
+                        borderColor: 'primary.main',
+                      },
+                    }}
+                  >
+                    <CardActionArea
+                      onClick={() => handleChange('provider', 'cloudflare-r2')}
+                      sx={{ p: 2, height: '100%' }}
+                    >
+                      <Box
+                        sx={{
+                          display: 'flex',
+                          flexDirection: 'column',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          gap: 1,
+                          height: '100%',
+                        }}
+                      >
+                        {getProviderIcon('cloudflare-r2', 48)}
+                        <Typography
+                          variant="body2"
+                          textAlign="center"
+                          fontWeight="medium"
+                        >
+                          Cloudflare R2
+                        </Typography>
+                      </Box>
+                    </CardActionArea>
+                  </Card>
+                </Grid>
+                <Grid item xs={12} sm={3}>
+                  <Card
+                    variant={
+                      formData.provider === 'backblaze-b2'
+                        ? 'elevation'
+                        : 'outlined'
+                    }
+                    sx={{
+                      cursor: 'pointer',
+                      transition: 'all 0.2s',
+                      height: '120px',
+                      border:
+                        formData.provider === 'backblaze-b2'
+                          ? '2px solid'
+                          : '1px solid',
+                      borderColor:
+                        formData.provider === 'backblaze-b2'
+                          ? 'primary.main'
+                          : 'divider',
+                      '&:hover': {
+                        elevation: 4,
+                        borderColor: 'primary.main',
+                      },
+                    }}
+                  >
+                    <CardActionArea
+                      onClick={() => handleChange('provider', 'backblaze-b2')}
+                      sx={{ p: 2, height: '100%' }}
+                    >
+                      <Box
+                        sx={{
+                          display: 'flex',
+                          flexDirection: 'column',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          gap: 1,
+                          height: '100%',
+                        }}
+                      >
+                        {getProviderIcon('backblaze-b2', 48)}
+                        <Typography
+                          variant="body2"
+                          textAlign="center"
+                          fontWeight="medium"
+                        >
+                          Backblaze B2
+                        </Typography>
+                      </Box>
+                    </CardActionArea>
+                  </Card>
+                </Grid>
+                <Grid item xs={12} sm={3}>
+                  <Card
+                    variant={
+                      formData.provider === 'rustfs' ? 'elevation' : 'outlined'
+                    }
+                    sx={{
+                      cursor: 'pointer',
+                      transition: 'all 0.2s',
+                      height: '120px',
+                      border:
+                        formData.provider === 'rustfs'
+                          ? '2px solid'
+                          : '1px solid',
+                      borderColor:
+                        formData.provider === 'rustfs'
+                          ? 'primary.main'
+                          : 'divider',
+                      '&:hover': {
+                        elevation: 4,
+                        borderColor: 'primary.main',
+                      },
+                    }}
+                  >
+                    <CardActionArea
+                      onClick={() => handleChange('provider', 'rustfs')}
+                      sx={{ p: 2, height: '100%' }}
+                    >
+                      <Box
+                        sx={{
+                          display: 'flex',
+                          flexDirection: 'column',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          gap: 1,
+                          height: '100%',
+                        }}
+                      >
+                        {getProviderIcon('rustfs', 48)}
+                        <Typography
+                          variant="body2"
+                          textAlign="center"
+                          fontWeight="medium"
+                        >
+                          rustfs
+                        </Typography>
+                      </Box>
+                    </CardActionArea>
+                  </Card>
+                </Grid>
+                <Grid item xs={12} sm={3}>
+                  <Card
+                    variant={
+                      formData.provider === 'garage' ? 'elevation' : 'outlined'
+                    }
+                    sx={{
+                      cursor: 'pointer',
+                      transition: 'all 0.2s',
+                      height: '120px',
+                      border:
+                        formData.provider === 'garage'
+                          ? '2px solid'
+                          : '1px solid',
+                      borderColor:
+                        formData.provider === 'garage'
+                          ? 'primary.main'
+                          : 'divider',
+                      '&:hover': {
+                        elevation: 4,
+                        borderColor: 'primary.main',
+                      },
+                    }}
+                  >
+                    <CardActionArea
+                      onClick={() => handleChange('provider', 'garage')}
+                      sx={{ p: 2, height: '100%' }}
+                    >
+                      <Box
+                        sx={{
+                          display: 'flex',
+                          flexDirection: 'column',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          gap: 1,
+                          height: '100%',
+                        }}
+                      >
+                        {getProviderIcon('garage', 48)}
+                        <Typography
+                          variant="body2"
+                          textAlign="center"
+                          fontWeight="medium"
+                        >
+                          Garage
                         </Typography>
                       </Box>
                     </CardActionArea>

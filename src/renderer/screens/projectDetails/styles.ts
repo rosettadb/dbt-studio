@@ -32,7 +32,7 @@ export const FileTreeContainer = styled('div')(({ theme }) => ({
   borderRadius: 8,
   padding: '5px',
   height: '100%',
-  width: 310,
+  width: '100%',
 }));
 
 export const EditorContainer = styled('div')(({ theme }) => ({
@@ -42,13 +42,6 @@ export const EditorContainer = styled('div')(({ theme }) => ({
   display: 'flex',
   flexDirection: 'column',
   flex: 1,
-}));
-
-export const ButtonsContainer = styled('div')(() => ({
-  display: 'flex',
-  alignItems: 'center',
-  gap: 8,
-  padding: '0px 0px',
 }));
 
 export const NoFileSelected = styled('div')(({ theme }) => ({

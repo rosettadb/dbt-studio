@@ -16,6 +16,7 @@ import {
   CardContent,
   CardActionArea,
   IconButton,
+  CircularProgress,
 } from '@mui/material';
 import {
   Link as LinkIcon,
@@ -24,20 +25,25 @@ import {
   Folder,
   FolderOpen,
   Close,
+  CloudDownload,
 } from '@mui/icons-material';
 import { useFilePicker } from '../../controllers';
 
 interface DataLakeTableImportWizardProps {
   open: boolean;
   onClose: () => void;
-  onImport: (tableName: string, sourceQuery: string) => void;
+  onImport: (
+    tableName: string,
+    sourceQuery: string,
+    partitionColumns?: string[],
+  ) => void;
   isLoading?: boolean;
   dataPath?: string;
 }
 
 type SourceType = 'url' | 'file';
 
-const steps = ['Select Source', 'Configure Import', 'Review'];
+const steps = ['Select Source', 'Configure Import', 'Partitioning', 'Review'];
 
 export const DataLakeTableImportWizard: React.FC<
   DataLakeTableImportWizardProps
@@ -47,6 +53,7 @@ export const DataLakeTableImportWizard: React.FC<
   const [tableName, setTableName] = useState('');
   const [sourceUrl, setSourceUrl] = useState('');
   const [filePath, setFilePath] = useState('');
+  const [partitionColumnsText, setPartitionColumnsText] = useState('');
 
   const [error, setError] = useState<string>('');
 
@@ -124,16 +131,29 @@ export const DataLakeTableImportWizard: React.FC<
       sourceQuery = `CREATE TABLE ${escapedTableName} AS FROM '${escapedSrc}'`;
     }
 
-    onImport(tableName, sourceQuery);
+    const parsedPartitionColumns = partitionColumnsText
+      .split(',')
+      .map((c) => c.trim())
+      .filter((c) => c.length > 0);
+
+    onImport(
+      tableName,
+      sourceQuery,
+      parsedPartitionColumns.length > 0 ? parsedPartitionColumns : undefined,
+    );
   };
 
-  const handleClose = () => {
+  const resetForm = () => {
     setActiveStep(0);
     setSourceType('url');
     setTableName('');
     setSourceUrl('');
     setFilePath('');
+    setPartitionColumnsText('');
     setError('');
+  };
+
+  const handleClose = () => {
     onClose();
   };
 
@@ -277,8 +297,32 @@ export const DataLakeTableImportWizard: React.FC<
     </Box>
   );
 
+  const renderPartitioning = () => (
+    <Box sx={{ mt: 2 }}>
+      <Typography variant="body1" gutterBottom>
+        Optional: configure partition columns
+      </Typography>
+      <TextField
+        fullWidth
+        label="Partition columns (comma-separated)"
+        value={partitionColumnsText}
+        onChange={(e) => setPartitionColumnsText(e.target.value)}
+        placeholder="e.g., country, event_date"
+        helperText="Applied after import via: ALTER TABLE <table> SET PARTITIONED BY (...)"
+      />
+      <Alert severity="info" sx={{ mt: 2 }}>
+        Partitioning improves query performance by enabling pruning of
+        irrelevant files.
+      </Alert>
+    </Box>
+  );
+
   const renderReview = () => {
     const sourceValue = sourceType === 'url' ? sourceUrl : filePath;
+    const parsedPartitionColumns = partitionColumnsText
+      .split(',')
+      .map((c) => c.trim())
+      .filter((c) => c.length > 0);
 
     return (
       <Box sx={{ mt: 2 }}>
@@ -315,6 +359,15 @@ export const DataLakeTableImportWizard: React.FC<
             }}
           >
             {sourceValue}
+          </Typography>
+
+          <Typography variant="body2" color="text.secondary">
+            Partition Columns
+          </Typography>
+          <Typography variant="body1" sx={{ fontWeight: 'bold', mb: 2 }}>
+            {parsedPartitionColumns.length > 0
+              ? parsedPartitionColumns.join(', ')
+              : 'None'}
           </Typography>
         </Box>
 
@@ -371,6 +424,8 @@ export const DataLakeTableImportWizard: React.FC<
       case 1:
         return renderConfigureImport();
       case 2:
+        return renderPartitioning();
+      case 3:
         return renderReview();
       default:
         return null;
@@ -378,7 +433,13 @@ export const DataLakeTableImportWizard: React.FC<
   };
 
   return (
-    <Dialog open={open} onClose={handleClose} maxWidth="md" fullWidth>
+    <Dialog
+      open={open}
+      onClose={handleClose}
+      maxWidth="md"
+      fullWidth
+      TransitionProps={{ onExited: resetForm }}
+    >
       <DialogTitle>Import Data to DuckLake</DialogTitle>
       <DialogContent>
         <Stepper activeStep={activeStep} sx={{ mb: 3 }}>
@@ -431,6 +492,9 @@ export const DataLakeTableImportWizard: React.FC<
             variant="contained"
             color="primary"
             disabled={isLoading}
+            startIcon={
+              isLoading ? <CircularProgress size={16} /> : <CloudDownload />
+            }
           >
             {isLoading ? 'Importing...' : 'Import Data'}
           </Button>

@@ -18,7 +18,7 @@ const CustomTablePagination = ({
 }: PaginationType) => {
   return (
     <TablePagination
-      rowsPerPageOptions={[5, 10, 25, 100]}
+      rowsPerPageOptions={[10, 25, 100, 500, 1000]}
       component="div"
       count={total}
       rowsPerPage={perPage}
@@ -27,6 +27,32 @@ const CustomTablePagination = ({
       onRowsPerPageChange={(event) =>
         setPerPage(parseInt(event.target.value, 10))
       }
+      labelDisplayedRows={({ from, to, count }) => {
+        const fmt = (n: number) => {
+          try {
+            return new Intl.NumberFormat('de-DE').format(n);
+          } catch {
+            return String(n);
+          }
+        };
+        return `${fmt(from)}–${fmt(to)} of ${fmt(count === -1 ? to : count)}`;
+      }}
+      sx={{
+        '.MuiTablePagination-toolbar': {
+          minHeight: '32px',
+          paddingLeft: '8px',
+          paddingRight: '4px',
+          paddingTop: '2px',
+          paddingBottom: '2px',
+        },
+        '.MuiTablePagination-selectLabel, .MuiTablePagination-displayedRows': {
+          fontSize: '12px',
+          margin: 0,
+        },
+        '.MuiTablePagination-select': {
+          fontSize: '12px',
+        },
+      }}
     />
   );
 };

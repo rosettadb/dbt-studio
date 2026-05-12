@@ -22,6 +22,14 @@ import {
   CircularProgress,
   Alert,
   Tooltip,
+  Select,
+  MenuItem,
+  FormControl,
+  InputLabel,
+  TableSortLabel,
+  Dialog,
+  DialogTitle,
+  DialogContent,
 } from '@mui/material';
 import {
   Folder,
@@ -36,6 +44,9 @@ import {
   Refresh,
   NavigateNext,
   TableView,
+  Delete,
+  CreateNewFolder,
+  CloudUpload,
 } from '@mui/icons-material';
 import {
   useConnection,
@@ -44,13 +55,20 @@ import {
   useAddRecentItem,
   usePreviewData,
 } from '../../controllers/cloudExplorer.controller';
-import type { CloudProvider } from '../../../types/frontend';
+import type {
+  CloudProvider,
+  CloudStorageConfig,
+} from '../../../types/frontend';
 import { InlineDataPreview } from './InlineDataPreview';
 import useSecureStorage from '../../hooks/useSecureStorage';
 import { formatFileSize, isPreviewSupported } from '../../utils/fileUtils';
 import { DBTProjects } from '../sidebar/icons';
 import { useGetSelectedProject } from '../../controllers';
 import { projectsServices } from '../../services';
+import bucketIcon from '../../../../assets/icons/bucket-blue.png';
+import UploadDropzone from './UploadDropzone';
+import DeleteConfirmDialog from './DeleteConfirmDialog';
+import CreateFolderDialog from './CreateFolderDialog';
 
 interface ExplorerBucketContentProps {
   connectionId: string;
@@ -81,10 +99,37 @@ export const ExplorerBucketContent: React.FC<ExplorerBucketContentProps> = ({
   } | null>(null);
   const [secureConfig, setSecureConfig] = useState<any | null>(null);
 
+  // Sort and filter state
+  const [sortBy, setSortBy] = useState<'name' | 'size' | 'modified'>('name');
+  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
+  const [typeFilter, setTypeFilter] = useState<string>('all');
+
+  // Delete dialog state
+  const [deleteTarget, setDeleteTarget] = useState<{
+    objectKey: string;
+    isPrefix: boolean;
+  } | null>(null);
+
+  // Create folder dialog state
+  const [createFolderOpen, setCreateFolderOpen] = useState(false);
+
+  // Upload dialog state
+  const [uploadOpen, setUploadOpen] = useState(false);
+  const [isUploading, setIsUploading] = useState(false);
+
   const connectionQuery = useConnection(connectionId);
   const connection = connectionQuery.data;
-  const { getCloudAwsSecret, getCloudAzureKey, getCloudGcsCredential } =
-    useSecureStorage();
+  const {
+    getCloudAwsSecret,
+    getCloudAwsSessionToken,
+    getCloudAzureKey,
+    getCloudGcsCredential,
+    getCloudMinioSecret,
+    getCloudR2Secret,
+    getCloudB2Secret,
+    getCloudRustfsSecret,
+    getCloudGarageSecret,
+  } = useSecureStorage();
 
   useEffect(() => {
     const fetchSecrets = async () => {
@@ -96,14 +141,41 @@ export const ExplorerBucketContent: React.FC<ExplorerBucketContentProps> = ({
       try {
         if (connection.provider === 'aws') {
           const secret = await getCloudAwsSecret(connection.id);
-          (config as { secretAccessKey?: string }).secretAccessKey =
-            secret || '';
+          const sessionToken = await getCloudAwsSessionToken(connection.id);
+          (
+            config as {
+              secretAccessKey?: string;
+              sessionToken?: string;
+            }
+          ).secretAccessKey = secret || '';
+          if (sessionToken) {
+            (config as { sessionToken?: string }).sessionToken = sessionToken;
+          }
         } else if (connection.provider === 'azure') {
           const key = await getCloudAzureKey(connection.id);
           (config as { accountKey?: string }).accountKey = key || '';
         } else if (connection.provider === 'gcs') {
           const cred = await getCloudGcsCredential(connection.id);
           (config as { credentials?: any }).credentials = cred || '';
+        } else if (connection.provider === 'minio') {
+          const secret = await getCloudMinioSecret(connection.id);
+          (config as { secretAccessKey?: string }).secretAccessKey =
+            secret || '';
+        } else if (connection.provider === 'cloudflare-r2') {
+          const secret = await getCloudR2Secret(connection.id);
+          (config as { secretAccessKey?: string }).secretAccessKey =
+            secret || '';
+        } else if (connection.provider === 'backblaze-b2') {
+          const secret = await getCloudB2Secret(connection.id);
+          (config as { applicationKey?: string }).applicationKey = secret || '';
+        } else if (connection.provider === 'rustfs') {
+          const secret = await getCloudRustfsSecret(connection.id);
+          (config as { secretAccessKey?: string }).secretAccessKey =
+            secret || '';
+        } else if (connection.provider === 'garage') {
+          const secret = await getCloudGarageSecret(connection.id);
+          (config as { secretAccessKey?: string }).secretAccessKey =
+            secret || '';
         }
       } catch (e) {
         // eslint-disable-next-line no-console
@@ -129,16 +201,81 @@ export const ExplorerBucketContent: React.FC<ExplorerBucketContentProps> = ({
 
   const objects = objectsQuery.data?.objects || [];
 
-  // Filter objects based on search term using useMemo to prevent infinite re-renders
+  // Get file extension
+  const getFileExtension = (fileName: string) => {
+    const parts = fileName.split('.');
+    return parts.length > 1 ? parts.pop()?.toLowerCase() : '';
+  };
+
+  // Get unique file types for filter
+  const uniqueFileTypes = useMemo(() => {
+    const types = objects
+      .filter((obj) => !obj.isDirectory)
+      .map((obj) => {
+        const name = obj.name.split('/').pop() || obj.name;
+        return getFileExtension(name);
+      })
+      .filter((ext): ext is string => !!ext);
+    return Array.from(new Set(types));
+  }, [objects]);
+
+  // Filter objects based on search term and type filter using useMemo
   const filteredObjects = useMemo(() => {
+    let result = [...objects];
+
+    // Apply search filter
     if (searchTerm) {
-      return objects.filter((obj) => {
+      result = result.filter((obj) => {
         const name = obj.name.split('/').pop() || obj.name;
         return name.toLowerCase().includes(searchTerm.toLowerCase());
       });
     }
-    return objects;
-  }, [objects, searchTerm]);
+
+    // Apply type filter
+    if (typeFilter !== 'all') {
+      result = result.filter((obj) => {
+        if (typeFilter === 'folders') return obj.isDirectory;
+        if (typeFilter === 'files') return !obj.isDirectory;
+        const name = obj.name.split('/').pop() || obj.name;
+        return getFileExtension(name) === typeFilter;
+      });
+    }
+
+    // Apply sorting
+    result.sort((a, b) => {
+      let comparison = 0;
+
+      switch (sortBy) {
+        case 'name': {
+          const nameA = a.name.split('/').pop() || a.name;
+          const nameB = b.name.split('/').pop() || b.name;
+          // Folders first, then files
+          if (a.isDirectory && !b.isDirectory) return -1;
+          if (!a.isDirectory && b.isDirectory) return 1;
+          comparison = nameA.localeCompare(nameB);
+          break;
+        }
+        case 'size':
+          // Folders first, then sort by size
+          if (a.isDirectory && !b.isDirectory) return -1;
+          if (!a.isDirectory && b.isDirectory) return 1;
+          comparison = (a.size || 0) - (b.size || 0);
+          break;
+        case 'modified': {
+          const dateA = a.updated ? new Date(a.updated).getTime() : 0;
+          const dateB = b.updated ? new Date(b.updated).getTime() : 0;
+          comparison = dateA - dateB;
+          break;
+        }
+        default:
+          break;
+      }
+
+      return sortOrder === 'asc' ? comparison : -comparison;
+    });
+
+    return result;
+  }, [objects, searchTerm, typeFilter, sortBy, sortOrder]);
 
   const pathParts = prefix.split('/').filter(Boolean);
 
@@ -153,14 +290,23 @@ export const ExplorerBucketContent: React.FC<ExplorerBucketContentProps> = ({
     // Add to recent items for directories
     if (connection && path) {
       const dirName = path.split('/').filter(Boolean).pop() || bucketName;
+      // Ensure path ends with slash for directories
+      const normalizedPath = path.endsWith('/') ? path : `${path}/`;
+
       addRecentItem.mutate({
-        id: `${connectionId}-${bucketName}-${path}`,
+        id: `${connectionId}-${bucketName}-${normalizedPath}`,
         name: dirName,
-        path: `${bucketName}/${path}`,
+        path: `${bucketName}/${normalizedPath}`,
         connectionId,
         connectionName: connection.name,
         provider: connection.provider,
       });
+    } else {
+      // eslint-disable-next-line no-console
+      console.error(
+        'Skipping recent item addition: connection or path missing',
+        { connection, path },
+      );
     }
   };
 
@@ -294,7 +440,18 @@ export const ExplorerBucketContent: React.FC<ExplorerBucketContentProps> = ({
       bucketName,
       objectName,
       previewType: 'sample',
-      limit: 100,
+      pageSize: 25,
+      page: 0,
+    });
+
+    // Add to recent items
+    addRecentItem.mutate({
+      id: `${connectionId}-${bucketName}-${objectName}`,
+      name: fileName,
+      path: `${bucketName}/${objectName}`,
+      connectionId,
+      connectionName: connection.name,
+      provider: connection.provider,
     });
   };
 
@@ -306,6 +463,197 @@ export const ExplorerBucketContent: React.FC<ExplorerBucketContentProps> = ({
     setPreviewFile(null);
     previewData.reset();
   };
+
+  const handleSort = (column: 'name' | 'size' | 'modified') => {
+    if (sortBy === column) {
+      setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc');
+    } else {
+      setSortBy(column);
+      setSortOrder('asc');
+    }
+  };
+
+  const renderListView = () => (
+    <TableContainer component={Paper}>
+      <Table>
+        <TableHead>
+          <TableRow>
+            <TableCell>
+              <TableSortLabel
+                active={sortBy === 'name'}
+                direction={sortBy === 'name' ? sortOrder : 'asc'}
+                onClick={() => handleSort('name')}
+              >
+                Name
+              </TableSortLabel>
+            </TableCell>
+            <TableCell align="right">
+              <TableSortLabel
+                active={sortBy === 'size'}
+                direction={sortBy === 'size' ? sortOrder : 'asc'}
+                onClick={() => handleSort('size')}
+              >
+                Size
+              </TableSortLabel>
+            </TableCell>
+            <TableCell align="right">
+              <TableSortLabel
+                active={sortBy === 'modified'}
+                direction={sortBy === 'modified' ? sortOrder : 'asc'}
+                onClick={() => handleSort('modified')}
+              >
+                Modified
+              </TableSortLabel>
+            </TableCell>
+            <TableCell align="right">Actions</TableCell>
+          </TableRow>
+        </TableHead>
+        <TableBody>
+          {filteredObjects.map((object) => {
+            const displayName =
+              object.name.replace(/\/$/, '').split('/').pop() ||
+              object.name.replace(/\/$/, '');
+            return (
+              <TableRow
+                key={object.name}
+                hover
+                sx={{
+                  cursor: object.isDirectory ? 'pointer' : 'default',
+                }}
+                onClick={
+                  object.isDirectory
+                    ? () => handleNavigate(object.name)
+                    : undefined
+                }
+              >
+                <TableCell>
+                  <Box
+                    sx={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 1,
+                      maxWidth: '100%',
+                    }}
+                  >
+                    {getFileIcon(displayName, object.isDirectory)}
+                    <Typography
+                      variant="body2"
+                      sx={{
+                        fontWeight: object.isDirectory ? 'bold' : 'normal',
+                        color: object.isDirectory
+                          ? 'primary.main'
+                          : 'text.primary',
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis',
+                        whiteSpace: 'nowrap',
+                      }}
+                      title={displayName}
+                    >
+                      {displayName}
+                    </Typography>
+                  </Box>
+                </TableCell>
+                <TableCell align="right">
+                  {object.isDirectory
+                    ? '-'
+                    : formatFileSize(object.size, {
+                        showZeroAsNA: false,
+                      })}
+                </TableCell>
+                <TableCell align="right">
+                  {object.updated
+                    ? formatDistanceToNow(new Date(object.updated), {
+                        addSuffix: true,
+                      })
+                    : '-'}
+                </TableCell>
+                <TableCell align="right">
+                  <Box
+                    sx={{
+                      display: 'flex',
+                      gap: 1,
+                      justifyContent: 'flex-end',
+                      alignItems: 'center',
+                    }}
+                  >
+                    {!object.isDirectory && isPreviewSupported(object.name) && (
+                      <Tooltip title="Preview Data">
+                        <IconButton
+                          size="small"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handlePreview(object.name);
+                          }}
+                        >
+                          <TableView fontSize="small" />
+                        </IconButton>
+                      </Tooltip>
+                    )}
+                    {!object.isDirectory && (
+                      <Tooltip title="Download">
+                        <IconButton
+                          size="small"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleDownload(object.name);
+                          }}
+                          disabled={loadingUrls[object.name]}
+                        >
+                          {loadingUrls[object.name] ? (
+                            <CircularProgress size={16} />
+                          ) : (
+                            <Download fontSize="small" />
+                          )}
+                        </IconButton>
+                      </Tooltip>
+                    )}
+                    {!object.isDirectory &&
+                      project &&
+                      isCSVFile(
+                        object.name.split('/').pop() || object.name,
+                      ) && (
+                        <Tooltip title="Download as seed">
+                          <IconButton
+                            size="small"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleDownloadAsSeed(object.name);
+                            }}
+                            disabled={loadingUrls[object.name]}
+                          >
+                            {loadingUrls[object.name] ? (
+                              <CircularProgress size={16} />
+                            ) : (
+                              <DBTProjects />
+                            )}
+                          </IconButton>
+                        </Tooltip>
+                      )}
+                    <Tooltip
+                      title={`Delete ${object.isDirectory ? 'folder' : 'file'}`}
+                    >
+                      <IconButton
+                        size="small"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setDeleteTarget({
+                            objectKey: object.name,
+                            isPrefix: object.isDirectory,
+                          });
+                        }}
+                      >
+                        <Delete fontSize="small" />
+                      </IconButton>
+                    </Tooltip>
+                  </Box>
+                </TableCell>
+              </TableRow>
+            );
+          })}
+        </TableBody>
+      </Table>
+    </TableContainer>
+  );
 
   if (connectionQuery.isLoading) {
     return (
@@ -341,6 +689,10 @@ export const ExplorerBucketContent: React.FC<ExplorerBucketContentProps> = ({
         error={previewData.error ? String(previewData.error) : undefined}
         onBack={handleBackToFiles}
         fileSize={previewFile.fileSize}
+        provider={connection?.provider as CloudProvider}
+        config={secureConfig}
+        bucketName={bucketName}
+        objectName={previewFile.objectName}
       />
     );
   }
@@ -352,50 +704,66 @@ export const ExplorerBucketContent: React.FC<ExplorerBucketContentProps> = ({
         sx={{
           display: 'flex',
           alignItems: 'center',
-          gap: 2,
-          mb: 3,
+          justifyContent: 'space-between',
+          mb: 2,
           borderBottom: 1,
           borderColor: 'divider',
-          pb: 2,
-        }}
-      >
-        <Folder sx={{ fontSize: 28, color: 'primary.main' }} />
-        <Typography variant="h4" component="h1">
-          {bucketName}
-        </Typography>
-      </Box>
-
-      <Box
-        sx={{
-          display: 'flex',
-          justifyContent: 'space-between',
-          alignItems: 'center',
-          mb: 3,
+          pb: 1.5,
         }}
       >
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-          <Button
-            variant="outlined"
-            startIcon={<ArrowBack />}
+          <IconButton
             onClick={handleBackToBuckets}
+            sx={{ color: 'text.secondary' }}
           >
-            Back to Buckets
-          </Button>
+            <ArrowBack />
+          </IconButton>
+          <img
+            src={bucketIcon}
+            alt="bucket"
+            style={{ width: 28, height: 28, objectFit: 'contain' }}
+          />
+          <Typography variant="h4" component="h1">
+            {bucketName}
+          </Typography>
         </Box>
-        <Button
-          variant="outlined"
-          startIcon={<Refresh />}
-          onClick={() => objectsQuery.refetch()}
-          disabled={objectsQuery.isFetching}
-        >
-          Refresh
-        </Button>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+          {secureConfig && connection && (
+            <Tooltip title="Upload files or folders">
+              <IconButton
+                size="small"
+                aria-label="Upload"
+                onClick={() => setUploadOpen(true)}
+              >
+                <CloudUpload fontSize="small" />
+              </IconButton>
+            </Tooltip>
+          )}
+          {secureConfig && connection && (
+            <Tooltip title="Create folder">
+              <IconButton
+                size="small"
+                aria-label="Create folder"
+                onClick={() => setCreateFolderOpen(true)}
+              >
+                <CreateNewFolder fontSize="small" />
+              </IconButton>
+            </Tooltip>
+          )}
+          <IconButton
+            onClick={() => objectsQuery.refetch()}
+            disabled={objectsQuery.isFetching}
+            sx={{ color: 'text.secondary' }}
+          >
+            <Refresh />
+          </IconButton>
+        </Box>
       </Box>
 
       <Card>
         <CardHeader
           title={
-            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
               <Breadcrumbs
                 separator={<NavigateNext fontSize="small" />}
                 aria-label="breadcrumb"
@@ -404,7 +772,12 @@ export const ExplorerBucketContent: React.FC<ExplorerBucketContentProps> = ({
                   variant="text"
                   size="small"
                   onClick={() => handleNavigate('')}
-                  sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}
+                  sx={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 0.5,
+                    fontSize: '0.875rem',
+                  }}
                 >
                   <Home fontSize="small" />
                   Home
@@ -417,28 +790,112 @@ export const ExplorerBucketContent: React.FC<ExplorerBucketContentProps> = ({
                       variant="text"
                       size="small"
                       onClick={() => handleNavigate(path)}
+                      sx={{ fontSize: '0.875rem' }}
                     >
                       {part}
                     </Button>
                   );
                 })}
               </Breadcrumbs>
-              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                <Search color="action" />
-                <InputBase
-                  placeholder="Search in this location..."
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                  sx={{ flex: 1 }}
-                />
-                {searchTerm && (
-                  <IconButton size="small" onClick={() => setSearchTerm('')}>
-                    <Clear />
-                  </IconButton>
-                )}
+
+              {/* Search and Filter Bar */}
+              <Box
+                sx={{
+                  display: 'flex',
+                  gap: 2,
+                  flexWrap: 'wrap',
+                  alignItems: 'center',
+                }}
+              >
+                <Box
+                  sx={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    flex: 1,
+                    minWidth: 250,
+                  }}
+                >
+                  <InputBase
+                    placeholder="Search in this location..."
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                    startAdornment={
+                      <Search
+                        sx={{ color: 'text.secondary', mr: 0.5, fontSize: 18 }}
+                      />
+                    }
+                    endAdornment={
+                      searchTerm ? (
+                        <IconButton
+                          size="small"
+                          onClick={() => setSearchTerm('')}
+                          sx={{ p: 0.5 }}
+                        >
+                          <Clear fontSize="small" />
+                        </IconButton>
+                      ) : null
+                    }
+                    sx={{
+                      flex: 1,
+                      border: 1,
+                      borderColor: 'divider',
+                      borderRadius: 1,
+                      px: 1,
+                      py: 0.25,
+                      fontSize: '0.875rem',
+                      height: 32,
+                    }}
+                  />
+                </Box>
+
+                <FormControl size="small" sx={{ minWidth: 150 }}>
+                  <InputLabel sx={{ fontSize: '0.875rem', top: -4 }}>
+                    Type
+                  </InputLabel>
+                  <Select
+                    value={typeFilter}
+                    label="Type"
+                    onChange={(e) => setTypeFilter(e.target.value)}
+                    sx={{
+                      fontSize: '0.875rem',
+                      height: 32,
+                      '& .MuiSelect-select': {
+                        py: 0.5,
+                      },
+                    }}
+                  >
+                    <MenuItem value="all" sx={{ fontSize: '0.875rem' }}>
+                      All Types
+                    </MenuItem>
+                    <MenuItem value="folders" sx={{ fontSize: '0.875rem' }}>
+                      Folders
+                    </MenuItem>
+                    <MenuItem value="files" sx={{ fontSize: '0.875rem' }}>
+                      Files
+                    </MenuItem>
+                    {uniqueFileTypes.map((type) => (
+                      <MenuItem
+                        key={type}
+                        value={type}
+                        sx={{ fontSize: '0.875rem' }}
+                      >
+                        .{type}
+                      </MenuItem>
+                    ))}
+                  </Select>
+                </FormControl>
+
+                <Typography
+                  variant="body2"
+                  color="text.secondary"
+                  sx={{ fontSize: '0.75rem' }}
+                >
+                  {filteredObjects.length} of {objects.length} item(s)
+                </Typography>
               </Box>
             </Box>
           }
+          sx={{ pb: 1 }}
         />
         <CardContent>
           {objectsQuery.isLoading && (
@@ -464,137 +921,79 @@ export const ExplorerBucketContent: React.FC<ExplorerBucketContentProps> = ({
             )}
           {!objectsQuery.isLoading &&
             !objectsQuery.isError &&
-            filteredObjects.length > 0 && (
-              <TableContainer component={Paper}>
-                <Table>
-                  <TableHead>
-                    <TableRow>
-                      <TableCell>Name</TableCell>
-                      <TableCell align="right">Size</TableCell>
-                      <TableCell align="right">Modified</TableCell>
-                      <TableCell align="right">Actions</TableCell>
-                    </TableRow>
-                  </TableHead>
-                  <TableBody>
-                    {filteredObjects.map((object) => {
-                      const displayName =
-                        object.name.split('/').pop() || object.name;
-                      return (
-                        <TableRow
-                          key={object.name}
-                          hover
-                          sx={{
-                            cursor: object.isDirectory ? 'pointer' : 'default',
-                          }}
-                          onClick={
-                            object.isDirectory
-                              ? () => handleNavigate(object.name)
-                              : undefined
-                          }
-                        >
-                          <TableCell>
-                            <Box
-                              sx={{
-                                display: 'flex',
-                                alignItems: 'center',
-                                gap: 1,
-                              }}
-                            >
-                              {getFileIcon(displayName, object.isDirectory)}
-                              <Typography
-                                variant="body2"
-                                sx={{
-                                  fontWeight: object.isDirectory
-                                    ? 'bold'
-                                    : 'normal',
-                                  color: object.isDirectory
-                                    ? 'primary.main'
-                                    : 'text.primary',
-                                }}
-                              >
-                                {displayName}
-                              </Typography>
-                            </Box>
-                          </TableCell>
-                          <TableCell align="right">
-                            {object.isDirectory
-                              ? '-'
-                              : formatFileSize(object.size, {
-                                  showZeroAsNA: false,
-                                })}
-                          </TableCell>
-                          <TableCell align="right">
-                            {object.updated
-                              ? formatDistanceToNow(new Date(object.updated), {
-                                  addSuffix: true,
-                                })
-                              : '-'}
-                          </TableCell>
-                          <TableCell align="right">
-                            {!object.isDirectory && (
-                              <Box sx={{ display: 'flex', gap: 1 }}>
-                                {isPreviewSupported(object.name) && (
-                                  <Tooltip title="Preview Data">
-                                    <IconButton
-                                      size="small"
-                                      onClick={(e) => {
-                                        e.stopPropagation();
-                                        handlePreview(object.name);
-                                      }}
-                                    >
-                                      <TableView />
-                                    </IconButton>
-                                  </Tooltip>
-                                )}
-                                <Tooltip title="Download">
-                                  <IconButton
-                                    size="small"
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      handleDownload(object.name);
-                                    }}
-                                    disabled={loadingUrls[object.name]}
-                                  >
-                                    {loadingUrls[object.name] ? (
-                                      <CircularProgress size={20} />
-                                    ) : (
-                                      <Download />
-                                    )}
-                                  </IconButton>
-                                </Tooltip>
-                                {project &&
-                                  isCSVFile(
-                                    object.name.split('/').pop() || object.name,
-                                  ) && (
-                                    <Tooltip title="Download as seed (CSV only)">
-                                      <IconButton
-                                        size="small"
-                                        onClick={(e) => {
-                                          e.stopPropagation();
-                                          handleDownloadAsSeed(object.name);
-                                        }}
-                                        disabled={loadingUrls[object.name]}
-                                      >
-                                        {loadingUrls[object.name] ? (
-                                          <CircularProgress size={20} />
-                                        ) : (
-                                          <DBTProjects />
-                                        )}
-                                      </IconButton>
-                                    </Tooltip>
-                                  )}
-                              </Box>
-                            )}
-                          </TableCell>
-                        </TableRow>
-                      );
-                    })}
-                  </TableBody>
-                </Table>
-              </TableContainer>
-            )}
+            filteredObjects.length > 0 &&
+            renderListView()}
         </CardContent>
       </Card>
+
+      {/* Delete Object/Folder Dialog */}
+      {secureConfig && connection && deleteTarget && (
+        <DeleteConfirmDialog
+          open={!!deleteTarget}
+          onClose={() => setDeleteTarget(null)}
+          provider={connection.provider}
+          config={secureConfig as CloudStorageConfig}
+          bucketName={bucketName}
+          objectKey={deleteTarget.objectKey}
+          isPrefix={deleteTarget.isPrefix}
+          onSuccess={() => {
+            setDeleteTarget(null);
+            objectsQuery.refetch();
+          }}
+        />
+      )}
+
+      {/* Create Folder Dialog */}
+      {secureConfig && connection && (
+        <CreateFolderDialog
+          open={createFolderOpen}
+          onClose={() => setCreateFolderOpen(false)}
+          provider={connection.provider}
+          config={secureConfig as CloudStorageConfig}
+          bucketName={bucketName}
+          prefix={prefix}
+          onSuccess={() => objectsQuery.refetch()}
+        />
+      )}
+
+      {/* Upload Dialog */}
+      {secureConfig && connection && (
+        <Dialog
+          open={uploadOpen}
+          onClose={isUploading ? undefined : () => setUploadOpen(false)}
+          disableEscapeKeyDown={isUploading}
+          maxWidth="sm"
+          fullWidth
+        >
+          <DialogTitle
+            sx={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+            }}
+          >
+            Upload to {bucketName}
+            <IconButton
+              size="small"
+              onClick={() => setUploadOpen(false)}
+              aria-label="Close upload dialog"
+              disabled={isUploading}
+            >
+              <Clear fontSize="small" />
+            </IconButton>
+          </DialogTitle>
+          <DialogContent sx={{ pb: 3 }}>
+            <UploadDropzone
+              provider={connection.provider}
+              config={secureConfig as CloudStorageConfig}
+              bucketName={bucketName}
+              prefix={prefix}
+              onUploaded={() => objectsQuery.refetch()}
+              onUploadingChange={setIsUploading}
+            />
+          </DialogContent>
+        </Dialog>
+      )}
     </Box>
   );
 };

@@ -3,7 +3,6 @@ import { app } from 'electron';
 import path from 'path';
 import { URL } from 'url';
 import MainDatabaseService from '../services/mainDatabase.service';
-import { AIProviderManager } from '../services/ai/providerManager.service';
 
 export const DATA_DIR = app.getPath('userData');
 export const DB_FILE = path.join(DATA_DIR, 'database.json');
@@ -20,12 +19,9 @@ export const initializeDataStorage = async () => {
   // Initialize main database for AI and future features
   try {
     await MainDatabaseService.initializeDatabase();
-
-    // Initialize AI provider manager after database is ready
-    await AIProviderManager.initializeAllProviders();
   } catch (error) {
     // eslint-disable-next-line no-console
-    console.error('Failed to initialize main database or AI providers:', error);
+    console.error('Failed to initialize main database:', error);
     // Don't throw error to prevent app startup failure
   }
 };

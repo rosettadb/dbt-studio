@@ -21,6 +21,7 @@ const CustomTable = <T,>({
   containerStyle,
   toolbarContent,
   dataTestId,
+  showSearch,
 }: CustomTableType<T>) => {
   const [page, setPage] = React.useState(0);
   const [perPage, setPerPage] = useLocalStorage(id, '10');
@@ -45,7 +46,7 @@ const CustomTable = <T,>({
   }, [page, perPage, filteredRows]);
 
   return (
-    <div style={{ position: 'relative' }}>
+    <div style={{ position: 'relative', width: '100%', overflow: 'hidden' }}>
       {loading && (
         <div
           style={{
@@ -68,12 +69,15 @@ const CustomTable = <T,>({
           }
           setKeyword(value);
         }}
+        showSearch={showSearch}
       />
       <TableContainer
         style={{
           ...(containerStyle ?? {}),
           opacity: loading ? 0.4 : 1,
           pointerEvents: loading ? 'none' : 'auto',
+          overflowX: 'auto',
+          width: '100%',
         }}
       >
         <Table data-testid={dataTestId} stickyHeader size="small">

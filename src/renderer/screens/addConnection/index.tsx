@@ -2,7 +2,7 @@ import React from 'react';
 import { styled } from '@mui/material/styles';
 import { Typography, Box, Button } from '@mui/material';
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { ConnectionCard } from '../../components/connectionCards';
 import connectionIcons from '../../../../assets/connectionIcons';
 import { Connections } from '../../components';
@@ -88,10 +88,23 @@ const baseItems: ItemType[] = [
 const AddConnection: React.FC = () => {
   const { projectId } = useParams<{ projectId: string }>();
   const navigate = useNavigate();
+  const location = useLocation();
+  const duplicateData = location.state?.duplicateFrom;
+  const suggestedName = location.state?.suggestedName;
   const [selectedItem, setSelectedItem] = React.useState<ItemType>();
 
+  // Auto-select connection type if duplicating
+  React.useEffect(() => {
+    if (duplicateData) {
+      const item = baseItems.find(
+        (item_) => item_.id === duplicateData.connection.type,
+      );
+      if (item) setSelectedItem(item);
+    }
+  }, [duplicateData]);
+
   const handleBack = () => {
-    navigate(-1); // Go back to previous page
+    navigate(-1);
   };
 
   const renderComponent = () => {
@@ -101,6 +114,8 @@ const AddConnection: React.FC = () => {
           <Connections.Postgres
             onCancel={() => setSelectedItem(undefined)}
             projectId={projectId}
+            duplicateFrom={duplicateData}
+            suggestedName={suggestedName}
           />
         );
       }
@@ -109,6 +124,8 @@ const AddConnection: React.FC = () => {
           <Connections.Snowflake
             onCancel={() => setSelectedItem(undefined)}
             projectId={projectId}
+            duplicateFrom={duplicateData}
+            suggestedName={suggestedName}
           />
         );
       }
@@ -117,6 +134,8 @@ const AddConnection: React.FC = () => {
           <Connections.BigQuery
             onCancel={() => setSelectedItem(undefined)}
             projectId={projectId}
+            duplicateFrom={duplicateData}
+            suggestedName={suggestedName}
           />
         );
       }
@@ -125,6 +144,8 @@ const AddConnection: React.FC = () => {
           <Connections.Redshift
             onCancel={() => setSelectedItem(undefined)}
             projectId={projectId}
+            duplicateFrom={duplicateData}
+            suggestedName={suggestedName}
           />
         );
       }
@@ -133,6 +154,8 @@ const AddConnection: React.FC = () => {
           <Connections.Databricks
             onCancel={() => setSelectedItem(undefined)}
             projectId={projectId}
+            duplicateFrom={duplicateData}
+            suggestedName={suggestedName}
           />
         );
       }
@@ -141,6 +164,8 @@ const AddConnection: React.FC = () => {
           <Connections.DuckDB
             onCancel={() => setSelectedItem(undefined)}
             projectId={projectId}
+            duplicateFrom={duplicateData}
+            suggestedName={suggestedName}
           />
         );
       }
@@ -149,6 +174,8 @@ const AddConnection: React.FC = () => {
           <Connections.Kinetica
             onCancel={() => setSelectedItem(undefined)}
             projectId={projectId}
+            duplicateFrom={duplicateData}
+            suggestedName={suggestedName}
           />
         );
       }
@@ -157,6 +184,8 @@ const AddConnection: React.FC = () => {
           <Connections.Postgres
             onCancel={() => setSelectedItem(undefined)}
             projectId={projectId}
+            duplicateFrom={duplicateData}
+            suggestedName={suggestedName}
           />
         );
       }
@@ -164,7 +193,7 @@ const AddConnection: React.FC = () => {
   };
 
   return (
-    <AppLayout sidebarContent={<ConnectionsSidebar />}>
+    <AppLayout sidebarContent={<ConnectionsSidebar />} panelTitle="Connections">
       {selectedItem ? (
         <ConnectionContainer>{renderComponent()}</ConnectionContainer>
       ) : (

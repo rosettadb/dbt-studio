@@ -88,6 +88,7 @@ export default class SettingsService {
         duckdbPath: metadata.path,
         duckdbSize: metadata.sizeHumanReadable,
         duckdbStatus: metadata.status,
+        duckdbVersion: metadata.duckdbVersion,
         duckdbLockStatus: metadata.lockStatus,
         duckdbLastCheckedAt: metadata.lastCheckedAt,
         duckdbActiveConnections: metadata.activeConnections,
@@ -140,6 +141,14 @@ export default class SettingsService {
   static async getFileName(pathChunks: string[]) {
     const p = path.join(...pathChunks);
     return path.parse(p).name;
+  }
+
+  static async getBasename(filePath: string) {
+    return path.basename(filePath);
+  }
+
+  static async getDirname(filePath: string) {
+    return path.dirname(filePath);
   }
 
   static async checkCliUpdates(): Promise<CliUpdateResponseType> {

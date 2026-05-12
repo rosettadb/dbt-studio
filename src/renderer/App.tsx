@@ -7,6 +7,7 @@ import {
 } from 'react-router-dom';
 import { ToastContainer } from 'react-toastify';
 import './App.css';
+import './toastStyles.css';
 import { Experimental_CssVarsProvider as CssVarsProvider } from '@mui/material/styles';
 import CssBaseline from '@mui/material/CssBaseline';
 import 'split-pane-react/esm/themes/default.css';
@@ -22,8 +23,9 @@ import {
   CloudExplorer,
   Connections,
   DuckLake as DataLake,
+  Notebooks,
 } from './screens';
-import { SelectProjectLayout } from './layouts';
+import { SelectProjectLayout, AppShell } from './layouts';
 import { AppProvider, ProcessProvider } from './context';
 import { QueryClientContextProvider } from './context/QueryClientContext';
 import { themeStorageManager, getStoredThemeMode } from './utils/themeStorage';
@@ -41,7 +43,7 @@ const App: React.FC = () => {
           <Route path="/setup" element={<Setup />} />
           <Route path="*" element={<Navigate to="/" />} />
         </Route>
-        <Route path="/app">
+        <Route path="/app" element={<AppShell />}>
           <Route path="" element={<ProjectDetails />} />
           <Route path="connections" element={<Connections />} />
           <Route path="select-project" element={<SelectProject />} />
@@ -54,12 +56,14 @@ const App: React.FC = () => {
           />
           <Route path="settings/general" element={<Settings />} />
           <Route path="settings/duckdb" element={<Settings />} />
+          <Route path="settings/profile" element={<Settings />} />
           <Route path="settings/ai-providers" element={<Settings />} />
           <Route path="settings/dbt" element={<Settings />} />
           <Route path="settings/rosetta" element={<Settings />} />
           <Route path="settings/installation" element={<Settings />} />
           <Route path="settings/about" element={<Settings />} />
           <Route path="sql" element={<Sql />} />
+          <Route path="notebooks" element={<Notebooks />} />
           <Route
             path="cloud-explorer"
             element={<Navigate to="/app/cloud-explorer/dashboard" />}
@@ -126,24 +130,25 @@ const AppWithProjectProvider: React.FC = () => {
       <AppProvider>
         <CliProvider>
           <ProcessProvider>
-            <CssBaseline />
             <CssVarsProvider
               theme={theme}
               defaultMode={initialMode}
               storageManager={themeStorageManager}
             >
+              <CssBaseline />
               <App />
               <UpdateDialog />
               <ToastContainer
                 position="bottom-right"
-                autoClose={5000}
+                autoClose={3000}
                 hideProgressBar={false}
-                newestOnTop={false}
-                closeOnClick={false}
+                newestOnTop
+                closeOnClick
                 rtl={false}
                 pauseOnFocusLoss
                 pauseOnHover
                 theme={initialMode === 'dark' ? 'dark' : 'light'}
+                limit={3}
               />
             </CssVarsProvider>
           </ProcessProvider>

@@ -277,10 +277,6 @@ export default class DuckLakeExtensionManager {
           // Try to verify this extension
           const verified = await this.verifyExtension();
           if (verified) {
-            // eslint-disable-next-line no-console
-            console.log(
-              `Found and verified DuckLake extension from ${source}: ${extensionPath}`,
-            );
             return true;
           }
         }
@@ -311,8 +307,6 @@ export default class DuckLakeExtensionManager {
         verified: true,
       };
 
-      // eslint-disable-next-line no-console
-      console.log('Using DuckDB built-in extension system for DuckLake');
       return;
     } catch (error) {
       // eslint-disable-next-line no-console

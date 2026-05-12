@@ -61,7 +61,7 @@ export const GetStartedModal: React.FC<GetStartedModalProps> = ({
 
     try {
       const { error, authRequired, path, name, connectionId } =
-        await gitServices.gitClone(url);
+        await gitServices.gitClone(url, undefined, true); // removeGit: true for example repo
 
       if (error) {
         toast.error(error);

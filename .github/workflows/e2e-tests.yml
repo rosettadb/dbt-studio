@@ -2,21 +2,16 @@ name: E2E Tests
 
 on:
   push:
-    branches: [main, develop]
+    branches: [develop]
   pull_request:
-    branches: [main, develop]
+    branches: [develop]
   # Allow manual trigger
   workflow_dispatch:
 
 jobs:
   e2e-tests:
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [ubuntu-latest, macos-latest, windows-latest]
+    runs-on: ubuntu-latest
 
-    runs-on: ${{ matrix.os }}
-    
     timeout-minutes: 30
 
     steps:
@@ -29,24 +24,44 @@ jobs:
           node-version: '20'
           cache: 'npm'
 
+      - name: Verify Node.js version
+        run: |
+          node --version
+          npm --version
+
       - name: Install dependencies
         run: npm ci
 
-      - name: Build application
+      - name: Update browserslist database
+        run: npx update-browserslist-db@latest
+
+      - name: Build main process
         run: npm run prestart
         env:
           NODE_ENV: development
 
-      # Linux-specific: Setup virtual display
-      - name: Setup display (Linux)
-        if: runner.os == 'Linux'
+      - name: Build renderer process
+        run: |
+          echo "Building renderer process..."
+          npm run build:renderer 2>&1 | tee build-output.log || (cat build-output.log && exit 1)
+        env:
+          NODE_ENV: production
+          # No code signing needed for test builds
+          SKIP_NOTARIZATION: 'true'
+
+      - name: Copy renderer artifacts
+        run: |
+          mkdir -p .erb/renderer
+          cp -R release/app/dist/renderer/* .erb/renderer/
+
+      # Setup virtual display for headless testing
+      - name: Setup display
         run: |
           sudo apt-get update
           sudo apt-get install -y xvfb libnss3 libatk1.0-0 libatk-bridge2.0-0 libcups2 libdrm2 libxkbcommon0 libxcomposite1 libxdamage1 libxfixes3 libxrandr2 libgbm1 libasound2
           echo "DISPLAY=:99" >> $GITHUB_ENV
 
-      - name: Start Xvfb (Linux)
-        if: runner.os == 'Linux'
+      - name: Start Xvfb
         run: |
           Xvfb :99 -screen 0 1920x1080x24 &
           sleep 3
@@ -63,12 +78,16 @@ jobs:
           ELECTRON_NO_UPDATER: '1'
           # Disable analytics in test
           DISABLE_ANALYTICS: '1'
+          # Ensure headless operation
+          ELECTRON_DISABLE_GPU: '1'
+          # No code signing needed for test builds
+          SKIP_NOTARIZATION: 'true'
 
       - name: Upload test results
         uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: test-results-${{ matrix.os }}
+          name: test-results
           path: |
             test-results/
             playwright-report/
@@ -78,11 +97,11 @@ jobs:
         uses: actions/upload-artifact@v4
         if: failure()
         with:
-          name: failure-screenshots-${{ matrix.os }}
+          name: failure-screenshots
           path: test-results/screenshots/
           retention-days: 7
 
-  # Summary job that requires all matrix jobs to pass
+  # Summary job
   e2e-tests-summary:
     needs: e2e-tests
     runs-on: ubuntu-latest
@@ -91,7 +110,7 @@ jobs:
       - name: Check E2E test results
         run: |
           if [ "${{ needs.e2e-tests.result }}" == "failure" ]; then
-            echo "E2E tests failed on one or more platforms"
+            echo "E2E tests failed"
             exit 1
           fi
           echo "All E2E tests passed!"

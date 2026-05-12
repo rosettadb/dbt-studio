@@ -1,7 +1,12 @@
 import React from 'react';
 import { AppContextType } from '../../types/frontend';
 import { Splash } from '../components';
-import { useGetProjects, useGetSelectedProject } from '../controllers';
+import {
+  useGetProjects,
+  useGetSelectedProject,
+  useGetSettings,
+  useProfile,
+} from '../controllers';
 import { useGetActiveAIProvider } from '../controllers/aiProviders.controller';
 import { Project, Table } from '../../types/backend';
 import { projectsServices } from '../services';
@@ -30,12 +35,15 @@ export const AppContext = React.createContext<AppContextType>({
   setEditingFilePath: () => {},
   syncEditorContent: () => {},
   registerSyncEditorContent: () => {},
+  env: 'local',
 });
 
 const AppProvider: React.FC<Props> = ({ children }) => {
   const { data: projects = [] } = useGetProjects();
+  const { data: settings } = useGetSettings();
   const { data: selectedProject, isLoading } = useGetSelectedProject();
   const { data: activeAIProvider } = useGetActiveAIProvider();
+  const { data: profile } = useProfile();
 
   const [isSidebarOpen, setIsSidebarOpen] = React.useState(true);
   const [isChatOpen, setIsChatOpen] = React.useState(false);
@@ -54,6 +62,9 @@ const AppProvider: React.FC<Props> = ({ children }) => {
   );
 
   const syncEditorContentHandlerRef = React.useRef<SyncEditorContentHandler>();
+  const openFileHandlerRef = React.useRef<(filePath: string) => void>();
+  const closeFileHandlerRef = React.useRef<(filePath: string) => void>();
+  const refreshFileTreeHandlerRef = React.useRef<() => Promise<void>>();
 
   const isAiProviderSet = !!activeAIProvider;
 
@@ -72,6 +83,39 @@ const AppProvider: React.FC<Props> = ({ children }) => {
   const syncEditorContent = React.useCallback(
     (path: string, content: string) => {
       syncEditorContentHandlerRef.current?.(path, content);
+    },
+    [],
+  );
+
+  const openFile = React.useCallback((filePath: string) => {
+    openFileHandlerRef.current?.(filePath);
+  }, []);
+
+  const registerOpenFile = React.useCallback(
+    (handler?: (filePath: string) => void) => {
+      openFileHandlerRef.current = handler;
+    },
+    [],
+  );
+
+  const closeFile = React.useCallback((filePath: string) => {
+    closeFileHandlerRef.current?.(filePath);
+  }, []);
+
+  const registerCloseFile = React.useCallback(
+    (handler?: (filePath: string) => void) => {
+      closeFileHandlerRef.current = handler;
+    },
+    [],
+  );
+
+  const refreshFileTree = React.useCallback(async () => {
+    await refreshFileTreeHandlerRef.current?.();
+  }, []);
+
+  const registerRefreshFileTree = React.useCallback(
+    (handler?: () => Promise<void>) => {
+      refreshFileTreeHandlerRef.current = handler;
     },
     [],
   );
@@ -158,6 +202,14 @@ const AppProvider: React.FC<Props> = ({ children }) => {
       setEditingFilePath,
       syncEditorContent,
       registerSyncEditorContent,
+      openFile,
+      registerOpenFile,
+      closeFile,
+      registerCloseFile,
+      refreshFileTree,
+      registerRefreshFileTree,
+      authenticatedUser: profile,
+      env: profile ? (settings?.env ?? 'local') : 'local',
     };
   }, [
     projects,
@@ -174,6 +226,8 @@ const AppProvider: React.FC<Props> = ({ children }) => {
     editingFilePath,
     syncEditorContent,
     registerSyncEditorContent,
+    profile,
+    settings,
   ]);
 
   if (isLoading) {

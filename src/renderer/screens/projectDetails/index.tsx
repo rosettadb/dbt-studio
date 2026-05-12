@@ -1,4 +1,6 @@
 import React from 'react';
+import SplitPane, { Pane } from 'split-pane-react';
+import 'split-pane-react/esm/themes/default.css';
 import { Navigate, useNavigate } from 'react-router-dom';
 import {
   AutoAwesome,
@@ -8,17 +10,18 @@ import {
   Edit,
 } from '@mui/icons-material';
 import {
+  Badge,
   Box,
-  IconButton,
   ListItemIcon,
   ListItemText,
   Menu,
   MenuItem,
-  Slide,
-  Tooltip,
+  Tab,
+  Tabs,
 } from '@mui/material';
 import { toast } from 'react-toastify';
 import yaml from 'js-yaml';
+import { useTheme } from '@mui/material/styles';
 import {
   AddConnectionModal,
   Editor,
@@ -26,19 +29,21 @@ import {
   ModelSplitButton,
   NoAiSetModal,
   ProjectDbtSplitButton,
+  RemoveConnectionModal,
   SplitButton,
   TerminalLayout,
-  BusinessModal,
   AiPromptModal,
-  PushToCloudModal,
 } from '../../components';
-// import { ProjectSidebar } from '../../components/sidebar/project-sidebar';
-import { ProjectSidebar } from '../../components/sidebar/project-sidebar';
+import {
+  ProjectSidebar,
+  SidebarTab,
+} from '../../components/sidebar/project-sidebar';
+import { Icon } from '../../components/icon';
+import { icons } from '../../../../assets';
 import { TabManager } from '../../components/editor/tabManager';
 import {
   useGetConnectionById,
   useGetConnections,
-  useGetFileContentList,
   useGetFileStatuses,
   useGetProjectFiles,
   useGetSelectedProject,
@@ -49,7 +54,6 @@ import {
 } from '../../controllers';
 import { projectsServices } from '../../services';
 import {
-  ButtonsContainer,
   Container,
   Content,
   EditorContainer,
@@ -69,15 +73,43 @@ import { AppLayout } from '../../layouts';
 import ChatScreen from '../chat';
 import { getFileName } from '../../services/settings.services';
 import type { EditorTabId } from '../../../types/editor';
-import {
-  BusinessModelGenerationSchema,
-  BusinessModelGenerationSchemaType,
-  generateModelsPrompt,
-} from '../../helpers/businessModelGenerator';
-import { aiProvidersService } from '../../services/aiProviders.service';
+import { subscribeToToolResult } from '../../services/agentEvents.service';
+
+const VerticalSash = (_: number, active: boolean) => (
+  <div
+    style={{
+      width: '4px',
+      height: '100%',
+      cursor: 'col-resize',
+      position: 'relative',
+      backgroundColor: active ? 'rgba(144,202,249,0.4)' : 'transparent',
+      transition: 'background-color 0.15s ease',
+    }}
+  >
+    <div
+      style={{
+        position: 'absolute',
+        left: '50%',
+        top: 0,
+        bottom: 0,
+        width: '2px',
+        transform: 'translateX(-50%)',
+        backgroundColor: active
+          ? 'rgba(144,202,249,0.8)'
+          : 'rgba(255,255,255,0.08)',
+        transition: 'background-color 0.15s ease',
+      }}
+    />
+  </div>
+);
 
 const ProjectDetails: React.FC = () => {
   const navigate = useNavigate();
+  const [verticalSizes, setVerticalSizes] = React.useState<(number | string)[]>(
+    ['auto', 500],
+  );
+  // Minimum width for the chat panel — must be wide enough for the chat UI
+  const CHAT_MIN_WIDTH = 280;
   const {
     isAiProviderSet,
     isChatOpen,
@@ -85,13 +117,17 @@ const ProjectDetails: React.FC = () => {
     editingFilePath: selectedFilePath,
     openChatWithMessage,
     registerSyncEditorContent,
+    registerOpenFile,
+    registerCloseFile,
+    registerRefreshFileTree,
+    env,
   } = useAppContext();
 
   const { data: project, isLoading, refetch } = useGetSelectedProject();
   const { data: connection } = useGetConnectionById(project?.connectionId);
   const { data: settings } = useGetSettings();
   const { mutate: updateFileContent } = useSaveFileContent();
-  const { mutateAsync: getFileContentList } = useGetFileContentList();
+
   const {
     tabs,
     activeTab,
@@ -123,7 +159,6 @@ const ProjectDetails: React.FC = () => {
   const previousProjectPathRef = React.useRef<string | undefined>();
 
   const [isLoadingQuery, setIsLoadingQuery] = React.useState(false);
-  const [businessQueryModal, setBusinessQueryModal] = React.useState<string>();
   const [noAiSetModal, setNoAiSetModal] = React.useState(false);
   const [aiTransformationPrompt, setAiTransformationPrompt] =
     React.useState<string>();
@@ -131,10 +166,13 @@ const ProjectDetails: React.FC = () => {
     React.useState(false);
   const [connectionMenuAnchor, setConnectionMenuAnchor] =
     React.useState<HTMLElement | null>(null);
+  const [isRemoveConnectionConfirmOpen, setIsRemoveConnectionConfirmOpen] =
+    React.useState(false);
   const [aiTransformationResponse, setAitTransformationResponse] =
     React.useState<string>();
-  const [isPushModalOpen, setIsPushModalOpen] = React.useState(false);
   const [isSynchronizing, setIsSynchronizing] = React.useState(false);
+  const [sidebarTab, setSidebarTab] = React.useState<SidebarTab>('explorer');
+  const theme = useTheme();
 
   const {
     data: directories,
@@ -169,219 +207,16 @@ const ProjectDetails: React.FC = () => {
   const { data: connections = [] } = useGetConnections();
   const { mutate: updateProject } = useUpdateProject();
 
-  const buildBusinessFilePath = React.useCallback(
-    (basePath: string, fileName: string) => {
-      const trimmedBase = basePath.replace(/[\\/]+$/, '');
-      const separator = basePath.includes('\\') ? '\\' : '/';
-      return `${trimmedBase}${separator}${fileName}`;
-    },
-    [],
-  );
-
-  const createOrUpdateBusinessFile = React.useCallback(
-    async (basePath: string, fileName: string, content: string) => {
-      let filePath = await projectsServices.createFile({
-        filePath: basePath,
-        name: fileName,
-        content,
-      });
-
-      const fileAlreadyExisted = !filePath;
-      if (!filePath) {
-        filePath = buildBusinessFilePath(basePath, fileName);
-      }
-
-      let tabId: EditorTabId | null = await openTab(filePath, {
-        content,
-      });
-
-      if (!tabId) {
-        const existingTab = getTabByPath(filePath);
-        if (existingTab) {
-          tabId = existingTab.id;
-        }
-      }
-
-      setSelectedFilePath(filePath);
-
-      await fetchDirectories();
-      await updateStatuses();
-
-      if (!tabId) {
-        const refreshedTab = getTabByPath(filePath);
-        if (refreshedTab) {
-          tabId = refreshedTab.id;
-        }
-      }
-
-      if (tabId) {
-        updateTabContent(tabId, content, {
-          markModified: fileAlreadyExisted,
-        });
-        if (!fileAlreadyExisted) {
-          markTabSaved(tabId);
-        }
-        setTabError(tabId, undefined);
-        switchTab(tabId);
-        return true;
-      }
-
-      // eslint-disable-next-line no-console
-      console.warn('Generated file created but tab could not be opened', {
-        filePath,
-      });
-      toast.error(
-        'Generated file created, but the editor tab could not be opened automatically.',
-      );
-      return false;
-    },
-    [
-      buildBusinessFilePath,
-      openTab,
-      getTabByPath,
-      setSelectedFilePath,
-      fetchDirectories,
-      updateStatuses,
-      updateTabContent,
-      markTabSaved,
-      setTabError,
-      switchTab,
-    ],
-  );
-
-  const recoverFromFallbackResponse = React.useCallback(
-    async (rawResponse: string, basePath: string) => {
-      const fenceMatch = rawResponse.match(/```[a-zA-Z]*\n([\s\S]*?)\n```/);
-      const rawBody = fenceMatch ? fenceMatch[1] : rawResponse;
-
-      const filenameMatch = rawBody.match(/--\s*filename:\s*([^\n\r]+)\s*/i);
-      const inferredFileName = filenameMatch
-        ? filenameMatch[1].trim()
-        : 'business_model.sql';
-
-      const cleanedSql = filenameMatch
-        ? rawBody.replace(filenameMatch[0], '').trim()
-        : rawBody.trim();
-
-      if (
-        cleanedSql.toLowerCase().includes('select') ||
-        cleanedSql.includes('{{')
-      ) {
-        return createOrUpdateBusinessFile(
-          basePath,
-          inferredFileName,
-          cleanedSql,
-        );
-      }
-
-      return false;
-    },
-    [createOrUpdateBusinessFile],
-  );
-
-  const processBusinessModelResponse = React.useCallback(
-    async (
-      response: {
-        parsedData?: BusinessModelGenerationSchemaType | null;
-        schemaValidation?: {
-          errors?: string[] | null;
-          originalResponse?: unknown;
-        } | null;
-        content: unknown;
-      },
-      basePath: string,
-    ) => {
-      if (response.parsedData?.fileName && response.parsedData?.content) {
-        return createOrUpdateBusinessFile(
-          basePath,
-          response.parsedData.fileName,
-          response.parsedData.content,
-        );
-      }
-
-      const originalResponse =
-        response.schemaValidation?.originalResponse || response.content;
-
-      if (
-        typeof originalResponse === 'string' &&
-        originalResponse.trim().length > 0
-      ) {
-        const handled = await recoverFromFallbackResponse(
-          originalResponse,
-          basePath,
-        );
-        if (handled) {
-          return true;
-        }
-      }
-
-      const schemaErrors =
-        response.schemaValidation?.errors?.filter(Boolean) || [];
-
-      let detailedMessage: string;
-      if (schemaErrors.length) {
-        detailedMessage = schemaErrors.join('\n');
-      } else if (originalResponse) {
-        detailedMessage = String(originalResponse);
-      } else {
-        detailedMessage = 'Provider returned an empty response.';
-      }
-
-      toast.error(detailedMessage);
-      // eslint-disable-next-line no-console
-      console.error('Business model generation failed', {
-        schemaErrors,
-        originalResponse,
-      });
-
-      return false;
-    },
-    [createOrUpdateBusinessFile, recoverFromFallbackResponse],
-  );
-
-  const handleBusinessModalProcess = React.useCallback(
-    async (updatedPath: string, query: string, selectedFiles: string[]) => {
-      if (selectedFiles.length === 0) {
-        return;
-      }
-
-      try {
-        const files = await getFileContentList(selectedFiles);
-        const prompt = generateModelsPrompt(files, query);
-        const response =
-          await aiProvidersService.generateCompletion<BusinessModelGenerationSchemaType>(
-            prompt,
-            BusinessModelGenerationSchema,
-          );
-
-        const handled = await processBusinessModelResponse(
-          response,
-          updatedPath,
-        );
-
-        if (handled) {
-          setBusinessQueryModal(undefined);
-        }
-      } catch (error) {
-        const message =
-          error instanceof Error && error.message
-            ? error.message
-            : 'Failed to generate business model';
-        toast.error(message);
-      }
-    },
-    [getFileContentList, processBusinessModelResponse, setBusinessQueryModal],
-  );
-
-  const handleAddConnection = () => {
-    setIsAddConnectionModalOpen(true);
-  };
-
   const handleConnectionModalClose = () => {
     setIsAddConnectionModalOpen(false);
   };
 
-  const handleRemoveConnection = () => {
+  const handleRemoveConnectionClick = () => {
+    setConnectionMenuAnchor(null);
+    setIsRemoveConnectionConfirmOpen(true);
+  };
+
+  const handleConfirmRemoveConnection = () => {
     if (project) {
       updateProject({
         ...project,
@@ -390,11 +225,7 @@ const ProjectDetails: React.FC = () => {
       setSelectedFilePath(undefined);
       toast.success('Connection removed from project successfully!');
     }
-    setConnectionMenuAnchor(null);
-  };
-
-  const handleConnectionMenuOpen = (event: React.MouseEvent<HTMLElement>) => {
-    setConnectionMenuAnchor(event.currentTarget);
+    setIsRemoveConnectionConfirmOpen(false);
   };
 
   const handleConnectionMenuClose = () => {
@@ -453,6 +284,41 @@ const ProjectDetails: React.FC = () => {
     markTabSavedByPath,
     refreshTabContentByPath,
   ]);
+
+  const handleSaveAllTabs = React.useCallback(async () => {
+    const modifiedTabs = tabs.filter((tab) => tab.isModified);
+    if (modifiedTabs.length === 0) {
+      return;
+    }
+    await Promise.all(
+      modifiedTabs.map(async (tab) => {
+        try {
+          await projectsServices.saveFileContent({
+            path: tab.path,
+            content: tab.content,
+          });
+          markTabSavedByPath(tab.path);
+          setTabErrorByPath(tab.path, undefined);
+        } catch (error: any) {
+          setTabErrorByPath(tab.path, error?.message);
+        }
+      }),
+    );
+    await updateStatuses();
+  }, [tabs, markTabSavedByPath, setTabErrorByPath, updateStatuses]);
+
+  const handleCloseAllTabs = React.useCallback(() => {
+    const unmodifiedTabs = tabs.filter((tab) => !tab.isModified);
+    const modifiedCount = tabs.length - unmodifiedTabs.length;
+
+    unmodifiedTabs.forEach((tab) => closeTab(tab.id));
+
+    if (modifiedCount > 0) {
+      toast.info(
+        `${modifiedCount} modified tab${modifiedCount > 1 ? 's are' : ' is'} still open. Save or discard changes before closing.`,
+      );
+    }
+  }, [tabs, closeTab]);
 
   React.useEffect(() => {
     const fetchData = async () => {
@@ -520,6 +386,137 @@ const ProjectDetails: React.FC = () => {
     getTabByPath,
     registerSyncEditorContent,
   ]);
+
+  React.useEffect(() => {
+    registerOpenFile?.((filePath: string) => {
+      setSelectedFilePath(filePath);
+      openTab(filePath);
+    });
+    return () => {
+      registerOpenFile?.(undefined);
+    };
+  }, [registerOpenFile, setSelectedFilePath, openTab]);
+
+  React.useEffect(() => {
+    registerCloseFile?.((filePath: string) => {
+      closeTabByPath(filePath);
+      if (selectedFilePath === filePath) setSelectedFilePath(undefined);
+    });
+    return () => {
+      registerCloseFile?.(undefined);
+    };
+  }, [
+    registerCloseFile,
+    closeTabByPath,
+    selectedFilePath,
+    setSelectedFilePath,
+  ]);
+
+  React.useEffect(() => {
+    registerRefreshFileTree?.(async () => {
+      await fetchDirectories();
+      await updateStatuses();
+    });
+    return () => {
+      registerRefreshFileTree?.(undefined);
+    };
+  }, [registerRefreshFileTree, fetchDirectories, updateStatuses]);
+
+  // Stable refs for callbacks used in the agent file-write effect
+  // This prevents the effect from re-subscribing on every render
+  const fetchDirectoriesRef = React.useRef(fetchDirectories);
+  const updateStatusesRef = React.useRef(updateStatuses);
+  const getTabByPathRef = React.useRef(getTabByPath);
+  const openTabRef = React.useRef(openTab);
+  const switchTabRef = React.useRef(switchTab);
+  const refreshTabContentByPathRef = React.useRef(refreshTabContentByPath);
+  React.useEffect(() => {
+    fetchDirectoriesRef.current = fetchDirectories;
+  }, [fetchDirectories]);
+  React.useEffect(() => {
+    updateStatusesRef.current = updateStatuses;
+  }, [updateStatuses]);
+  React.useEffect(() => {
+    getTabByPathRef.current = getTabByPath;
+  }, [getTabByPath]);
+  React.useEffect(() => {
+    openTabRef.current = openTab;
+  }, [openTab]);
+  React.useEffect(() => {
+    switchTabRef.current = switchTab;
+  }, [switchTab]);
+  React.useEffect(() => {
+    refreshTabContentByPathRef.current = refreshTabContentByPath;
+  }, [refreshTabContentByPath]);
+
+  // Refresh file tree and open/update tab when agent writes a file
+  // Uses refs so the subscription is created only once per project/hydration change
+  React.useEffect(() => {
+    if (!project?.path || !isHydrated) return undefined;
+
+    // Deduplicate: track files being processed to avoid concurrent duplicate calls
+    const inFlight = new Set<string>();
+
+    const unsub = subscribeToToolResult(async (payload) => {
+      const isFileWrite =
+        payload.toolName === 'writeFile' ||
+        payload.toolName === 'writeDbtModel';
+      if (!isFileWrite || payload.status !== 'done') return;
+
+      const filePath =
+        (payload.args as any)?.filePath || (payload.args as any)?.path;
+      if (!filePath) return;
+
+      // Skip if already processing this file
+      if (inFlight.has(filePath)) {
+        // eslint-disable-next-line no-console
+        console.log('[ProjectDetails] Skipping duplicate event for:', filePath);
+        return;
+      }
+      inFlight.add(filePath);
+
+      try {
+        // eslint-disable-next-line no-console
+        console.log(
+          '[ProjectDetails] Agent wrote file, refreshing tree and opening tab:',
+          filePath,
+        );
+
+        await fetchDirectoriesRef.current();
+        await updateStatusesRef.current();
+
+        // eslint-disable-next-line no-console
+        console.log(
+          '[ProjectDetails] fetchDirectories done, checking for existing tab',
+        );
+
+        const existingTab = getTabByPathRef.current(filePath);
+        // eslint-disable-next-line no-console
+        console.log('[ProjectDetails] existingTab:', existingTab?.id ?? 'none');
+
+        if (existingTab) {
+          // eslint-disable-next-line no-console
+          console.log(
+            '[ProjectDetails] Tab already exists, switching to:',
+            existingTab.id,
+          );
+          await refreshTabContentByPathRef.current(filePath);
+          switchTabRef.current(existingTab.id);
+        } else {
+          // eslint-disable-next-line no-console
+          console.log('[ProjectDetails] Opening new tab for:', filePath);
+          const tabId = await openTabRef.current(filePath);
+          // eslint-disable-next-line no-console
+          console.log('[ProjectDetails] openTab returned tabId:', tabId);
+          if (tabId) switchTabRef.current(tabId);
+        }
+      } finally {
+        inFlight.delete(filePath);
+      }
+    });
+
+    return unsub;
+  }, [project?.path, isHydrated]);
 
   // Auto-refresh tab content when focusing on a tab
   const previousActiveTabIdRef = React.useRef<EditorTabId | null>(null);
@@ -749,313 +746,409 @@ const ProjectDetails: React.FC = () => {
     return <Navigate to="/app/select-project" />;
   }
 
-  const handleBusinessLayerClick = (path: string) => {
-    if (isAiProviderSet) {
-      setBusinessQueryModal(path);
-    } else {
-      setNoAiSetModal(true);
-    }
-  };
-
   return (
     <AppLayout
-      sidebarContent={
-        <ProjectSidebar
-          directories={directories}
-          statuses={statuses}
-          isLoadingDirectories={isLoadingDirectories}
-          selectedFilePath={selectedFilePath}
+      topMenuActions={
+        <ProjectDbtSplitButton
+          rosettaPath={settings?.rosettaPath}
+          dbtPath={settings?.dbtPath}
           project={project}
-          onDeleteFile={(deletedFile: string) => {
-            closeTabByPath(deletedFile);
-            if (selectedFilePath?.includes(deletedFile)) {
-              setSelectedFilePath(undefined);
-            }
-          }}
-          onFileSelect={async (fileNode) => {
-            if (!utils.isEditableFile(fileNode.path)) {
-              setSelectedFilePath(fileNode.path);
-              openTab(fileNode.path, { isReadOnly: true });
-              return;
-            }
-            setSelectedFilePath(fileNode.path);
-            openTab(fileNode.path);
-          }}
-          onRefreshFiles={async () => {
-            await fetchDirectories();
-            await updateStatuses();
-          }}
-          onCopyPath={async (source, target) => {
-            await projectsServices.copyPath({
-              source,
-              target,
-            });
-            await fetchDirectories();
-            await updateStatuses();
-          }}
-          onNewFile={(filePath) => {
-            if (!filePath) {
-              return;
-            }
-            setSelectedFilePath(filePath);
-            openTab(filePath);
-          }}
-          onRenameFile={(oldPath, newPath) => {
-            renameTab(oldPath, newPath);
-            if (activeTab?.path === oldPath || selectedFilePath === oldPath) {
-              setSelectedFilePath(newPath);
-            }
-          }}
-          // Source Control Monaco Editor Integration
-          onSourceControlOpenFile={(filePath: string) => {
-            setSelectedFilePath(filePath);
-            openTab(filePath);
-          }}
-          onSourceControlFileSelect={(filePath: string) => {
-            setSelectedFilePath(filePath);
-          }}
-          onSourceControlRefreshFileContent={refreshTabContentByPath}
-          // Synchronization
-          onSourceControlSynchronize={handleSynchronizeAll}
-          isSourceControlSynchronizing={isSynchronizing}
+          isDbtConfigured={!!settings?.dbtPath}
+          isRunningDbt={isRunningDbt}
+          isRunningRosettaDbt={isRunningRosettaDbt}
+          connection={connection}
+          environment={env}
+          rosettaDbt={rosettaDbt}
         />
       }
-    >
-      <Box display="flex" flexDirection="row" width="100%" height="100%">
-        <Box flex={1}>
-          <Container>
-            <TerminalLayout project={project}>
-              <Content>
-                <EditorContainer>
-                  <Header>
-                    <Box display="flex" flex={1} minWidth={0}>
-                      <TabManager
-                        tabs={tabs}
-                        activeTabId={activeTabId}
-                        onSelect={switchTab}
-                        onClose={closeTab}
-                        onReorder={reorderTabs}
-                      />
-                    </Box>
-                    <ButtonsContainer>
-                      {menuItems.length > 0 && (
-                        <SplitButton
-                          title="AI"
-                          isLoading={isLoadingQuery}
-                          leftIcon={<AutoAwesome />}
-                          menuItems={menuItems}
-                        />
-                      )}
-                      {selectedFilePath?.endsWith('.sql') &&
-                        selectedFilePath?.includes('models') &&
-                        project && (
-                          <ModelSplitButton
-                            modelPath={selectedFilePath}
-                            project={project}
-                            isDbtConfigured={!!settings?.dbtPath}
-                            fileContent={fileContent}
-                            isRunningDbt={isRunningDbt}
-                            isRunningRosettaDbt={isRunningRosettaDbt}
-                          />
-                        )}
-                      <ProjectDbtSplitButton
-                        rosettaPath={settings?.rosettaPath}
-                        dbtPath={settings?.dbtPath}
-                        project={project}
-                        isDbtConfigured={!!settings?.dbtPath}
-                        isRunningDbt={isRunningDbt}
-                        isRunningRosettaDbt={isRunningRosettaDbt}
-                        connection={connection}
-                        rosettaDbt={rosettaDbt}
-                        handleBusinessLayerClick={handleBusinessLayerClick}
-                        onRunOnCloudClick={() => setIsPushModalOpen(true)}
-                      />
-                      {connection?.id ? (
-                        <>
-                          <Tooltip
-                            title="Database connection options"
-                            placement="bottom"
-                          >
-                            <IconButton onClick={handleConnectionMenuOpen}>
-                              <Cable color="primary" fontSize="small" />
-                            </IconButton>
-                          </Tooltip>
-                          <Menu
-                            anchorEl={connectionMenuAnchor}
-                            open={Boolean(connectionMenuAnchor)}
-                            onClose={handleConnectionMenuClose}
-                            anchorOrigin={{
-                              vertical: 'bottom',
-                              horizontal: 'right',
-                            }}
-                            transformOrigin={{
-                              vertical: 'top',
-                              horizontal: 'right',
-                            }}
-                          >
-                            <MenuItem
-                              onClick={() => {
-                                navigate(
-                                  `/app/edit-connection/${connection.id}`,
-                                );
-                                handleConnectionMenuClose();
-                              }}
-                            >
-                              <ListItemIcon>
-                                <Edit fontSize="small" color="primary" />
-                              </ListItemIcon>
-                              <ListItemText>Edit</ListItemText>
-                            </MenuItem>
-                            <MenuItem onClick={handleRemoveConnection}>
-                              <ListItemIcon>
-                                <Delete fontSize="small" color="error" />
-                              </ListItemIcon>
-                              <ListItemText>Remove</ListItemText>
-                            </MenuItem>
-                          </Menu>
-                        </>
-                      ) : (
-                        <Tooltip
-                          title="Add database connection"
-                          placement="bottom"
-                        >
-                          <IconButton
-                            onClick={handleAddConnection}
-                            sx={{
-                              border: '1px solid',
-                              borderColor: 'divider',
-                              borderRadius: '16px',
-                              padding: '4px 12px',
-                              fontSize: '12px',
-                              color: 'text.secondary',
-                              '&:hover': {
-                                bgcolor: 'action.hover',
-                              },
-                            }}
-                          >
-                            <Cable fontSize="small" sx={{ mr: 0.5 }} />
-                            No connection
-                          </IconButton>
-                        </Tooltip>
-                      )}
-                    </ButtonsContainer>
-                  </Header>
-                  {!selectedFilePath && (
-                    <NoFileSelected>
-                      Please select a file from the explorer on the left!
-                    </NoFileSelected>
-                  )}
-                  {project.path && (
-                    <Editor
-                      projectPath={project.path}
-                      tabs={tabs}
-                      activeTabId={activeTabId}
-                      onTabContentChange={(tabId, newContent) => {
-                        updateTabContent(tabId, newContent, {
-                          markModified: true,
-                        });
-                      }}
-                      onTabSaved={(tabId) => {
-                        markTabSaved(tabId);
-                      }}
-                      onTabError={(tabId, errorMessage) => {
-                        setTabError(tabId, errorMessage);
-                      }}
-                      pendingClose={pendingClose}
-                      onSaveAndClose={onSaveAndClose}
-                      onDiscardAndClose={onDiscardAndClose}
-                      onCancelClose={onCancelClose}
-                      onGitStatusRefresh={updateStatuses}
-                    />
-                  )}
-                </EditorContainer>
-              </Content>
-            </TerminalLayout>
-
-            {businessQueryModal && (
-              <BusinessModal
-                isOpen={!!businessQueryModal}
-                project={project}
-                path={businessQueryModal}
-                onClose={() => setBusinessQueryModal(undefined)}
-                processCallback={handleBusinessModalProcess}
-              />
-            )}
-            {noAiSetModal && (
-              <NoAiSetModal
-                isOpen={noAiSetModal}
-                onClose={() => setNoAiSetModal(false)}
-              />
-            )}
-            <PushToCloudModal
-              isOpen={isPushModalOpen}
-              onClose={() => {
-                setIsPushModalOpen(false);
-              }}
-              project={project}
-            />
-            {aiTransformationPrompt && (
-              <AiPromptModal
-                isOpen={!!aiTransformationPrompt}
-                onClose={() => {
-                  setAiTransformationPrompt(undefined);
-                  setAitTransformationResponse(undefined);
-                }}
-                onApply={async (value) => {
-                  if (selectedFilePath) {
-                    updateTabContentByPath(selectedFilePath, value, {
-                      markModified: false,
-                    });
-                    markTabSavedByPath(selectedFilePath);
-                    setTabErrorByPath(selectedFilePath, undefined);
-                  } else {
-                    toast.error('No file selected');
-                  }
-                  updateFileContent({
-                    path: String(selectedFilePath),
-                    content: value,
-                  });
-                  toast.success('Content saved!');
-                }}
-                prompt={aiTransformationPrompt}
-                onPromptChange={(value) => setAiTransformationPrompt(value)}
-                onSubmit={async () => {
-                  openChatWithMessage(aiTransformationPrompt);
-                  setAiTransformationPrompt(undefined);
-                }}
-                response={aiTransformationResponse}
-              />
-            )}
-            <AddConnectionModal
-              isOpen={isAddConnectionModalOpen}
-              onClose={handleConnectionModalClose}
-              project={project || null}
-              connections={connections}
-              onSuccess={() => {
-                // Refresh the project data
-                setSelectedFilePath(undefined);
-                refetch();
-              }}
-              onUpdateProject={updateProject}
-            />
-          </Container>
-        </Box>
+      panelTitle="DBT Studio"
+      sidebarContent={
         <Box
           sx={{
-            width: isChatOpen ? '400px' : 0,
-            transition: 'width 200ms ease',
-            borderLeft: isChatOpen ? '1px solid' : 'none',
-            borderColor: 'divider',
-            overflow: 'hidden',
+            display: 'flex',
+            flexDirection: 'column',
+            height: '100%',
+            bgcolor: 'background.paper',
           }}
         >
-          <Slide in={isChatOpen} direction="left" mountOnEnter unmountOnExit>
-            <Box height="100%">
-              <ChatScreen />
-            </Box>
-          </Slide>
+          <Box
+            sx={{
+              borderBottom: `1px solid ${theme.palette.divider}`,
+            }}
+          >
+            <Tabs
+              value={sidebarTab}
+              onChange={(_e, newValue) => setSidebarTab(newValue)}
+              variant="fullWidth"
+              sx={{
+                minHeight: 34,
+                '& .MuiTab-root': {
+                  minHeight: 34,
+                  fontSize: '0.7rem',
+                  textTransform: 'none',
+                  py: 0,
+                  minWidth: 0,
+                  px: 0.5,
+                },
+                '& .MuiTab-iconWrapper': {
+                  marginRight: '4px !important',
+                  marginBottom: '0 !important',
+                },
+              }}
+            >
+              <Tab
+                value="explorer"
+                icon={
+                  <Icon
+                    src={icons.folder}
+                    width={15}
+                    height={15}
+                    color={
+                      sidebarTab === 'explorer'
+                        ? theme.palette.primary.main
+                        : theme.palette.text.secondary
+                    }
+                  />
+                }
+                iconPosition="start"
+                label="Explorer"
+              />
+              <Tab
+                value="scm"
+                icon={
+                  <Badge
+                    badgeContent={statuses.length}
+                    color="primary"
+                    max={99}
+                    sx={{
+                      '& .MuiBadge-badge': {
+                        fontSize: 8,
+                        height: 14,
+                        minWidth: 14,
+                        padding: '0 2px',
+                        top: -2,
+                        right: -6,
+                      },
+                    }}
+                  >
+                    <Icon
+                      src={icons.gitBranch}
+                      width={15}
+                      height={15}
+                      color={
+                        sidebarTab === 'scm'
+                          ? theme.palette.primary.main
+                          : theme.palette.text.secondary
+                      }
+                    />
+                  </Badge>
+                }
+                iconPosition="start"
+                label="Git"
+              />
+              <Tab
+                value="connections"
+                icon={
+                  <Cable
+                    sx={{
+                      fontSize: 15,
+                      color:
+                        sidebarTab === 'connections'
+                          ? theme.palette.primary.main
+                          : theme.palette.text.secondary,
+                    }}
+                  />
+                }
+                iconPosition="start"
+                label="Database"
+              />
+            </Tabs>
+          </Box>
+          <Box sx={{ flex: 1, overflow: 'hidden' }}>
+            <ProjectSidebar
+              activeTab={sidebarTab}
+              directories={directories}
+              statuses={statuses}
+              isLoadingDirectories={isLoadingDirectories}
+              selectedFilePath={selectedFilePath}
+              project={project}
+              onDeleteFile={(deletedFile: string) => {
+                closeTabByPath(deletedFile);
+                if (selectedFilePath?.includes(deletedFile)) {
+                  setSelectedFilePath(undefined);
+                }
+              }}
+              onFileSelect={async (fileNode) => {
+                if (!utils.isEditableFile(fileNode.path)) {
+                  setSelectedFilePath(fileNode.path);
+                  openTab(fileNode.path, { isReadOnly: true });
+                  return;
+                }
+                setSelectedFilePath(fileNode.path);
+                openTab(fileNode.path);
+              }}
+              onRefreshFiles={async () => {
+                await fetchDirectories();
+                await updateStatuses();
+              }}
+              onCopyPath={async (source, target) => {
+                await projectsServices.copyPath({
+                  source,
+                  target,
+                });
+                await fetchDirectories();
+                await updateStatuses();
+              }}
+              onNewFile={(filePath) => {
+                if (!filePath) {
+                  return;
+                }
+                setSelectedFilePath(filePath);
+                openTab(filePath);
+              }}
+              onRenameFile={(oldPath, newPath) => {
+                renameTab(oldPath, newPath);
+                if (
+                  activeTab?.path === oldPath ||
+                  selectedFilePath === oldPath
+                ) {
+                  setSelectedFilePath(newPath);
+                }
+              }}
+              // Source Control Monaco Editor Integration
+              onSourceControlOpenFile={(filePath: string) => {
+                setSelectedFilePath(filePath);
+                openTab(filePath);
+              }}
+              onSourceControlFileSelect={(filePath: string) => {
+                setSelectedFilePath(filePath);
+              }}
+              onSourceControlRefreshFileContent={refreshTabContentByPath}
+              // Synchronization
+              onSourceControlSynchronize={handleSynchronizeAll}
+              isSourceControlSynchronizing={isSynchronizing}
+              // Connections
+              connection={connection}
+              onAddConnection={() => setIsAddConnectionModalOpen(true)}
+              onEditConnection={() => {
+                if (connection?.id) {
+                  navigate(`/app/edit-connection/${connection.id}`);
+                }
+              }}
+              onRemoveConnection={() => {
+                if (connection?.id) {
+                  setIsRemoveConnectionConfirmOpen(true);
+                }
+              }}
+            />
+          </Box>
         </Box>
-      </Box>
+      }
+    >
+      <SplitPane
+        split="vertical"
+        sizes={isChatOpen ? verticalSizes : ['100%', 0]}
+        onChange={(newSizes) => {
+          if (isChatOpen) {
+            // Enforce minimum chat panel width
+            const chatWidth = newSizes[1] as number;
+            if (chatWidth < CHAT_MIN_WIDTH) {
+              setVerticalSizes(['auto', CHAT_MIN_WIDTH]);
+            } else {
+              setVerticalSizes(newSizes);
+            }
+          }
+        }}
+        sashRender={VerticalSash}
+      >
+        <Pane minSize={200}>
+          <Box height="100%" overflow="hidden">
+            <Container>
+              <TerminalLayout project={project}>
+                <Content>
+                  <EditorContainer>
+                    <Header>
+                      <Box display="flex" flex={1} minWidth={0}>
+                        <TabManager
+                          tabs={tabs}
+                          activeTabId={activeTabId}
+                          onSelect={switchTab}
+                          onClose={closeTab}
+                          onCloseAll={handleCloseAllTabs}
+                          onSaveAll={handleSaveAllTabs}
+                          onReorder={reorderTabs}
+                        />
+                      </Box>
+                    </Header>
+                    {connection?.id && (
+                      <Menu
+                        anchorEl={connectionMenuAnchor}
+                        open={Boolean(connectionMenuAnchor)}
+                        onClose={handleConnectionMenuClose}
+                        anchorOrigin={{
+                          vertical: 'bottom',
+                          horizontal: 'right',
+                        }}
+                        transformOrigin={{
+                          vertical: 'top',
+                          horizontal: 'right',
+                        }}
+                      >
+                        <MenuItem
+                          onClick={() => {
+                            navigate(`/app/edit-connection/${connection.id}`);
+                            handleConnectionMenuClose();
+                          }}
+                        >
+                          <ListItemIcon>
+                            <Edit fontSize="small" color="primary" />
+                          </ListItemIcon>
+                          <ListItemText>Edit</ListItemText>
+                        </MenuItem>
+                        <MenuItem onClick={handleRemoveConnectionClick}>
+                          <ListItemIcon>
+                            <Delete fontSize="small" color="error" />
+                          </ListItemIcon>
+                          <ListItemText>Remove</ListItemText>
+                        </MenuItem>
+                      </Menu>
+                    )}
+                    {!selectedFilePath && (
+                      <NoFileSelected>
+                        Please select a file from the explorer on the left!
+                      </NoFileSelected>
+                    )}
+                    {project.path && (
+                      <Editor
+                        projectId={project.id}
+                        projectPath={project.path}
+                        tabs={tabs}
+                        activeTabId={activeTabId}
+                        onTabContentChange={(tabId, newContent) => {
+                          updateTabContent(tabId, newContent);
+                        }}
+                        onTabSaved={(tabId) => {
+                          markTabSaved(tabId);
+                        }}
+                        onTabError={(tabId, errorMessage) => {
+                          setTabError(tabId, errorMessage);
+                        }}
+                        pendingClose={pendingClose}
+                        onSaveAndClose={onSaveAndClose}
+                        onDiscardAndClose={onDiscardAndClose}
+                        onCancelClose={onCancelClose}
+                        onGitStatusRefresh={updateStatuses}
+                        onOpenFile={(filePath: string) => {
+                          setSelectedFilePath(filePath);
+                          openTab(filePath);
+                        }}
+                        extraActions={
+                          <>
+                            {menuItems.length > 0 && (
+                              <SplitButton
+                                title="AI"
+                                isLoading={isLoadingQuery}
+                                leftIcon={<AutoAwesome />}
+                                menuItems={menuItems}
+                              />
+                            )}
+                            {selectedFilePath?.endsWith('.sql') &&
+                              selectedFilePath?.includes('models') &&
+                              project && (
+                                <ModelSplitButton
+                                  modelPath={selectedFilePath}
+                                  project={project}
+                                  isDbtConfigured={!!settings?.dbtPath}
+                                  fileContent={fileContent}
+                                  isRunningDbt={isRunningDbt}
+                                  isRunningRosettaDbt={isRunningRosettaDbt}
+                                  environment={env}
+                                />
+                              )}
+                          </>
+                        }
+                      />
+                    )}
+                  </EditorContainer>
+                </Content>
+              </TerminalLayout>
+
+              {noAiSetModal && (
+                <NoAiSetModal
+                  isOpen={noAiSetModal}
+                  onClose={() => setNoAiSetModal(false)}
+                />
+              )}
+              {aiTransformationPrompt && (
+                <AiPromptModal
+                  isOpen={!!aiTransformationPrompt}
+                  onClose={() => {
+                    setAiTransformationPrompt(undefined);
+                    setAitTransformationResponse(undefined);
+                  }}
+                  onApply={async (value) => {
+                    if (selectedFilePath) {
+                      updateTabContentByPath(selectedFilePath, value, {
+                        markModified: false,
+                      });
+                      markTabSavedByPath(selectedFilePath);
+                      setTabErrorByPath(selectedFilePath, undefined);
+                    } else {
+                      toast.error('No file selected');
+                    }
+                    updateFileContent({
+                      path: String(selectedFilePath),
+                      content: value,
+                    });
+                    toast.success('Content saved!');
+                  }}
+                  prompt={aiTransformationPrompt}
+                  onPromptChange={(value) => setAiTransformationPrompt(value)}
+                  onSubmit={async () => {
+                    openChatWithMessage(aiTransformationPrompt);
+                    setAiTransformationPrompt(undefined);
+                  }}
+                  response={aiTransformationResponse}
+                />
+              )}
+              <AddConnectionModal
+                isOpen={isAddConnectionModalOpen}
+                onClose={handleConnectionModalClose}
+                project={project || null}
+                connections={connections}
+                onSuccess={() => {
+                  // Refresh the project data
+                  setSelectedFilePath(undefined);
+                  refetch();
+                }}
+                onUpdateProject={updateProject}
+              />
+              <RemoveConnectionModal
+                isOpen={isRemoveConnectionConfirmOpen}
+                onClose={() => setIsRemoveConnectionConfirmOpen(false)}
+                onConfirm={handleConfirmRemoveConnection}
+                connectionName={
+                  connection?.connection?.name || (connection as any)?.name
+                }
+              />
+            </Container>
+          </Box>
+        </Pane>
+        <Pane minSize={CHAT_MIN_WIDTH}>
+          <Box
+            sx={{
+              height: '100%',
+              overflow: 'hidden',
+            }}
+          >
+            {isChatOpen && (
+              <Box height="100%">
+                <ChatScreen />
+              </Box>
+            )}
+          </Box>
+        </Pane>
+      </SplitPane>
     </AppLayout>
   );
 };

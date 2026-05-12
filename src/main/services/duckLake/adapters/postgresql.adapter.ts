@@ -86,6 +86,295 @@ export class PostgreSQLCatalogAdapter extends CatalogAdapter {
     }
   }
 
+  async restoreSnapshot(tableName: string, snapshotId: number): Promise<void> {
+    try {
+      if (!this.connectionInfo) {
+        throw new Error('No active connection');
+      }
+
+      const escapedName = tableName.replace(/"/g, '""');
+
+      // Correct DuckLake restore pattern:
+      // 1. Delete all current rows (keeps table lineage/schema)
+      // 2. Insert rows from the specific snapshot version
+      await this.connectionInfo.connection.run('BEGIN TRANSACTION');
+
+      try {
+        // Truncate current data (logically retains history in DuckLake)
+        await this.connectionInfo.connection.run(
+          `DELETE FROM "${escapedName}"`,
+        );
+
+        // Restore data from snapshot
+        await this.connectionInfo.connection.run(
+          `INSERT INTO "${escapedName}" SELECT * FROM "${escapedName}" AT (VERSION => ${snapshotId})`,
+        );
+
+        await this.connectionInfo.connection.run('COMMIT');
+      } catch (innerError) {
+        await this.connectionInfo.connection.run('ROLLBACK');
+        throw innerError;
+      }
+    } catch (error) {
+      // eslint-disable-next-line no-console
+      console.error(
+        `Failed to restore PostgreSQL table ${tableName} to snapshot ${snapshotId}:`,
+        error,
+      );
+      throw error;
+    }
+  }
+
+  async addColumn(
+    tableName: string,
+    columnName: string,
+    columnType: string,
+    defaultValue?: string,
+  ): Promise<void> {
+    try {
+      if (!this.connectionInfo) {
+        throw new Error('No active connection');
+      }
+
+      const escapedTableName = tableName.replace(/"/g, '""');
+      const escapedColumnName = columnName.replace(/"/g, '""');
+
+      // Validate column type to prevent SQL injection
+      const validatedType = this.validateColumnType(columnType);
+
+      let defaultClause = '';
+      if (defaultValue && defaultValue.trim() !== '') {
+        // Sanitize default value to prevent SQL injection
+        const sanitizedDefault = this.sanitizeDefaultValue(defaultValue);
+        defaultClause = ` DEFAULT ${sanitizedDefault}`;
+      }
+
+      await this.connectionInfo.connection.run(
+        `ALTER TABLE "${escapedTableName}" ADD COLUMN "${escapedColumnName}" ${validatedType}${defaultClause}`,
+      );
+    } catch (error) {
+      // eslint-disable-next-line no-console
+      console.error(
+        `Failed to add column ${columnName} to PostgreSQL table ${tableName}:`,
+        error,
+      );
+      throw error;
+    }
+  }
+
+  async dropColumn(tableName: string, columnName: string): Promise<void> {
+    try {
+      if (!this.connectionInfo) {
+        throw new Error('No active connection');
+      }
+
+      const escapedTableName = tableName.replace(/"/g, '""');
+      const escapedColumnName = columnName.replace(/"/g, '""');
+
+      await this.connectionInfo.connection.run(
+        `ALTER TABLE "${escapedTableName}" DROP COLUMN "${escapedColumnName}"`,
+      );
+    } catch (error) {
+      // eslint-disable-next-line no-console
+      console.error(
+        `Failed to drop column ${columnName} from PostgreSQL table ${tableName}:`,
+        error,
+      );
+      throw error;
+    }
+  }
+
+  async renameColumn(
+    tableName: string,
+    oldColumnName: string,
+    newColumnName: string,
+  ): Promise<void> {
+    try {
+      if (!this.connectionInfo) {
+        throw new Error('No active connection');
+      }
+
+      const escapedTableName = tableName.replace(/"/g, '""');
+      const escapedOldColumnName = oldColumnName.replace(/"/g, '""');
+      const escapedNewColumnName = newColumnName.replace(/"/g, '""');
+
+      await this.connectionInfo.connection.run(
+        `ALTER TABLE "${escapedTableName}" RENAME COLUMN "${escapedOldColumnName}" TO "${escapedNewColumnName}"`,
+      );
+    } catch (error) {
+      // eslint-disable-next-line no-console
+      console.error(
+        `Failed to rename column ${oldColumnName} to ${newColumnName} on PostgreSQL table ${tableName}:`,
+        error,
+      );
+      throw error;
+    }
+  }
+
+  async alterColumnType(
+    tableName: string,
+    columnName: string,
+    newType: string,
+  ): Promise<void> {
+    try {
+      if (!this.connectionInfo) {
+        throw new Error('No active connection');
+      }
+
+      const escapedTableName = tableName.replace(/"/g, '""');
+      const escapedColumnName = columnName.replace(/"/g, '""');
+
+      // Validate column type to prevent SQL injection
+      const validatedType = this.validateColumnType(newType);
+
+      await this.connectionInfo.connection.run(
+        `ALTER TABLE "${escapedTableName}" ALTER COLUMN "${escapedColumnName}" TYPE ${validatedType}`,
+      );
+    } catch (error) {
+      // eslint-disable-next-line no-console
+      console.error(
+        `Failed to alter column ${columnName} type to ${newType} on PostgreSQL table ${tableName}:`,
+        error,
+      );
+      throw error;
+    }
+  }
+
+  async setPartitionedBy(
+    tableName: string,
+    columnNames: string[],
+  ): Promise<void> {
+    try {
+      if (!this.connectionInfo) {
+        throw new Error('No active connection');
+      }
+
+      const escapedTableName = tableName.replace(/"/g, '""');
+      const escapedColumns = columnNames.map(
+        (c) => `"${c.replace(/"/g, '""')}"`,
+      );
+
+      await this.connectionInfo.connection.run(
+        `ALTER TABLE "${escapedTableName}" SET PARTITIONED BY (${escapedColumns.join(
+          ', ',
+        )})`,
+      );
+    } catch (error) {
+      // eslint-disable-next-line no-console
+      console.error(
+        `Failed to set partition columns (${columnNames.join(', ')}) on PostgreSQL table ${tableName}:`,
+        error,
+      );
+      throw error;
+    }
+  }
+
+  async renameTable(oldName: string, newName: string): Promise<void> {
+    try {
+      if (!this.connectionInfo) {
+        throw new Error('No active connection');
+      }
+
+      const escapedOldName = oldName.replace(/"/g, '""');
+      const escapedNewName = newName.replace(/"/g, '""');
+
+      await this.connectionInfo.connection.run(
+        `ALTER TABLE "${escapedOldName}" RENAME TO "${escapedNewName}"`,
+      );
+    } catch (error) {
+      // eslint-disable-next-line no-console
+      console.error(
+        `Failed to rename PostgreSQL table ${oldName} to ${newName}:`,
+        error,
+      );
+      throw error;
+    }
+  }
+
+  async updateRows(
+    _tableName: string,
+    updateQuery: string,
+  ): Promise<{ rowsAffected: number }> {
+    try {
+      if (!this.connectionInfo) {
+        throw new Error('No active connection');
+      }
+
+      await this.connectionInfo.connection.run(updateQuery);
+      const changesResult = await this.connectionInfo.connection.run(
+        'SELECT changes() as changes',
+      );
+      const rows = await changesResult.getRows();
+      const value = rows?.[0]?.[0] ?? 0;
+      const numeric =
+        typeof value === 'object' && value?.hugeint !== undefined
+          ? Number(value.hugeint)
+          : Number(value);
+
+      return { rowsAffected: Number.isFinite(numeric) ? numeric : 0 };
+    } catch (error) {
+      // eslint-disable-next-line no-console
+      console.error('Failed to update rows:', error);
+      throw error;
+    }
+  }
+
+  async deleteRows(
+    _tableName: string,
+    deleteQuery: string,
+  ): Promise<{ rowsAffected: number }> {
+    try {
+      if (!this.connectionInfo) {
+        throw new Error('No active connection');
+      }
+
+      await this.connectionInfo.connection.run(deleteQuery);
+      const changesResult = await this.connectionInfo.connection.run(
+        'SELECT changes() as changes',
+      );
+      const rows = await changesResult.getRows();
+      const value = rows?.[0]?.[0] ?? 0;
+      const numeric =
+        typeof value === 'object' && value?.hugeint !== undefined
+          ? Number(value.hugeint)
+          : Number(value);
+
+      return { rowsAffected: Number.isFinite(numeric) ? numeric : 0 };
+    } catch (error) {
+      // eslint-disable-next-line no-console
+      console.error('Failed to delete rows:', error);
+      throw error;
+    }
+  }
+
+  async upsertRows(
+    _tableName: string,
+    upsertQuery: string,
+  ): Promise<{ rowsAffected: number }> {
+    try {
+      if (!this.connectionInfo) {
+        throw new Error('No active connection');
+      }
+
+      await this.connectionInfo.connection.run(upsertQuery);
+      const changesResult = await this.connectionInfo.connection.run(
+        'SELECT changes() as changes',
+      );
+      const rows = await changesResult.getRows();
+      const value = rows?.[0]?.[0] ?? 0;
+      const numeric =
+        typeof value === 'object' && value?.hugeint !== undefined
+          ? Number(value.hugeint)
+          : Number(value);
+
+      return { rowsAffected: Number.isFinite(numeric) ? numeric : 0 };
+    } catch (error) {
+      // eslint-disable-next-line no-console
+      console.error('Failed to upsert rows:', error);
+      throw error;
+    }
+  }
+
   async disconnect(): Promise<void> {
     await this.cleanup();
   }
@@ -221,8 +510,6 @@ export class PostgreSQLCatalogAdapter extends CatalogAdapter {
       if (testConnection) {
         try {
           testConnection.closeSync();
-          // eslint-disable-next-line no-console
-          console.log('[PostgreSQL] Closed test connection');
         } catch (error) {
           // eslint-disable-next-line no-console
           console.error('Error closing test connection:', error);
@@ -231,8 +518,6 @@ export class PostgreSQLCatalogAdapter extends CatalogAdapter {
       if (testInstance && typeof testInstance.close === 'function') {
         try {
           await testInstance.close();
-          // eslint-disable-next-line no-console
-          console.log('[PostgreSQL] Closed test instance');
         } catch (error) {
           // eslint-disable-next-line no-console
           console.error('Error closing test instance:', error);
@@ -453,54 +738,248 @@ export class PostgreSQLCatalogAdapter extends CatalogAdapter {
     }
   }
 
-  async executeQuery(
-    request: DuckLakeQueryRequest,
-  ): Promise<DuckLakeQueryResult> {
+  async deleteTable(tableName: string): Promise<void> {
     try {
       if (!this.connectionInfo) {
         throw new Error('No active connection');
       }
 
-      const startTime = Date.now();
+      const escapedName = tableName.replace(/"/g, '""');
+      await this.connectionInfo.connection.run(
+        `DROP TABLE IF EXISTS "${escapedName}"`,
+      );
+    } catch (error) {
+      // eslint-disable-next-line no-console
+      console.error(`Failed to delete PostgreSQL table ${tableName}:`, error);
+      throw error;
+    }
+  }
 
-      // Handle time travel queries
-      let query = request.sql;
-      if (request.snapshotId) {
-        // Modify query to use specific snapshot
-        query = `${query} FOR SYSTEM_TIME AS OF SNAPSHOT '${request.snapshotId}'`;
+  /**
+   * Get the metadata database prefix for qualifying metadata tables.
+   * PostgreSQL-backed DuckLake still uses DuckDB with an attached metadata DB,
+   * so unqualified table references (e.g. `ducklake_schema`) must be prefixed
+   * with the attached database name (e.g. `"__ducklake_metadata_postgres".`).
+   */
+  private async getMetadataPrefix(): Promise<string> {
+    try {
+      if (!this.connectionInfo) {
+        return '';
       }
 
-      // Add limit and offset if specified
-      if (request.limit) {
-        query += ` LIMIT ${request.limit}`;
-        if (request.offset) {
-          query += ` OFFSET ${request.offset}`;
+      const databasesQuery = `
+        SELECT database_name
+        FROM duckdb_databases()
+        WHERE database_name LIKE '__ducklake_metadata_%'
+        LIMIT 1
+      `;
+
+      const databasesResult =
+        await this.connectionInfo.connection.run(databasesQuery);
+      const databaseRows = await databasesResult.getRows();
+
+      if (databaseRows.length === 0) {
+        return '';
+      }
+
+      const metadataDatabase = Array.isArray(databaseRows[0])
+        ? databaseRows[0][0]
+        : (databaseRows[0] as any).database_name;
+
+      // PostgreSQL metadata DB does not use a nested `main` schema — use bare db prefix.
+      return `"${metadataDatabase}".`;
+    } catch (error) {
+      // eslint-disable-next-line no-console
+      console.warn(
+        '[PostgreSQL Adapter] Could not determine metadata prefix:',
+        error,
+      );
+      return '';
+    }
+  }
+
+  /**
+   * Qualify unqualified DuckLake metadata table references in a query so that
+   * DuckDB can resolve them from the attached metadata database.
+   */
+  private async qualifyMetadataTables(query: string): Promise<string> {
+    const metadataPrefix = await this.getMetadataPrefix();
+
+    if (!metadataPrefix) {
+      return query;
+    }
+
+    const metadataTables = [
+      'ducklake_table',
+      'ducklake_column',
+      'ducklake_schema',
+      'ducklake_snapshot',
+      'ducklake_data_file',
+      'ducklake_delete_file',
+      'ducklake_table_stats',
+      'ducklake_table_column_stats',
+      'ducklake_partition_info',
+      'ducklake_partition_column',
+      'ducklake_file_partition_value',
+      'ducklake_tag',
+      'ducklake_column_tag',
+      'ducklake_view',
+    ];
+
+    // Replace FROM/JOIN <table> that are not already qualified.
+    return metadataTables.reduce((currentQuery, table) => {
+      const pattern = new RegExp(
+        `\\b(FROM|JOIN)\\s+(?!"?__ducklake_metadata_)\\b${table}\\b`,
+        'gi',
+      );
+      return currentQuery.replace(pattern, `$1 ${metadataPrefix}${table}`);
+    }, query);
+  }
+
+  async executeQuery(
+    request: DuckLakeQueryRequest,
+  ): Promise<DuckLakeQueryResult> {
+    const startTime = Date.now();
+    try {
+      if (!this.connectionInfo) {
+        throw new Error('No active connection');
+      }
+
+      // Handle time travel queries
+      const { query: baseQuery, snapshotId, limit, offset } = request;
+      // Qualify any unqualified metadata table references so DuckDB can resolve them.
+      let query = await this.qualifyMetadataTables(baseQuery);
+
+      // Strip trailing semicolons before appending any suffixes (like SNAPSHOT or LIMIT/OFFSET).
+      query = query.replace(/;\s*$/, '');
+
+      if (snapshotId) {
+        const sanitizedSnapshotId = String(snapshotId).trim();
+        if (!/^\d+$/.test(sanitizedSnapshotId)) {
+          throw DuckLakeError.validation(
+            'Snapshot ID must be a numeric value',
+            'snapshotId',
+          );
+        }
+
+        query = `${query} FOR SYSTEM_TIME AS OF SNAPSHOT '${sanitizedSnapshotId}'`;
+      }
+
+      let totalRows: number | undefined;
+
+      // Add limit and offset if specified — but respect user-defined LIMIT
+      const hasExistingLimit = /\bLIMIT\s+\d+/i.test(query);
+      const isSelectQuery =
+        /^\s*SELECT\b/i.test(query) || /^\s*WITH\b/i.test(query);
+
+      if (limit && !hasExistingLimit) {
+        if (isSelectQuery) {
+          try {
+            const countQuery = `SELECT COUNT(*) as total FROM (${query})`;
+            const countResult =
+              await this.connectionInfo.connection.run(countQuery);
+            const countRows = await countResult.getRows();
+
+            if (countRows && countRows.length > 0) {
+              const countRow = countRows[0];
+              let countVal;
+              if (Array.isArray(countRow)) {
+                [countVal] = countRow;
+              } else if (countRow && typeof countRow === 'object') {
+                countVal = countRow.total ?? Object.values(countRow)[0];
+              }
+              if (countVal !== undefined) {
+                totalRows = Number(countVal);
+              }
+            }
+          } catch (error) {
+            // eslint-disable-next-line no-console
+            console.warn(
+              '[PostgreSQL] Failed to fetch total rows for pagination:',
+              error,
+            );
+          }
+
+          query += ` LIMIT ${limit}`;
+          if (offset) {
+            query += ` OFFSET ${offset}`;
+          }
         }
       }
 
       const result = await this.connectionInfo.connection.run(query);
+
+      // Use the DuckDB Node Neo API (columnNames/columnTypes) — result.schema does not exist
+      // in this version of the driver. Falling back to empty fields caused array rows to be
+      // mapped against an empty field list, producing {} for every row.
+      const columnNames: string[] = result.columnNames?.() ?? [];
+      const columnTypes: any[] = result.columnTypes?.() ?? [];
+      const fields = columnNames.map((name: string, index: number) => ({
+        name,
+        type: columnTypes[index]?.toString() ?? 'UNKNOWN',
+      }));
+
       const rows = await result.getRows();
 
-      // Handle DDL statements (CREATE, DROP, etc.) that don't return a schema
-      const columns = result.schema
-        ? result.schema.map((col: any) => ({
-            name: col.name,
-            type: col.type,
-          }))
-        : [];
+      // Normalize data (handle complex types)
+      const data = rows.map((row: any) => {
+        const normalized: any = {};
+        if (Array.isArray(row)) {
+          // If row is an array, map to field names
+          fields.forEach((field: any, idx: number) => {
+            const value = row[idx];
+            // Only normalize numeric types, preserve other types
+            if (
+              typeof value === 'bigint' ||
+              typeof value === 'number' ||
+              (typeof value === 'object' &&
+                value !== null &&
+                (value as any).hugeint !== undefined)
+            ) {
+              normalized[field.name] = normalizeNumericValue(value);
+            } else {
+              normalized[field.name] = value;
+            }
+          });
+        } else if (typeof row === 'object' && row !== null) {
+          // If row is already an object
+          const entries = Object.entries(row);
+          entries.forEach(([key, value]) => {
+            // Only normalize numeric types, preserve other types
+            if (
+              typeof value === 'bigint' ||
+              typeof value === 'number' ||
+              (typeof value === 'object' &&
+                value !== null &&
+                (value as any).hugeint !== undefined)
+            ) {
+              normalized[key] = normalizeNumericValue(value);
+            } else {
+              normalized[key] = value;
+            }
+          });
+        }
+        return normalized;
+      });
 
-      const executionTime = Date.now() - startTime;
+      const duration = Date.now() - startTime;
 
       return {
-        columns,
-        rows,
-        executionTime,
-        snapshotId: request.snapshotId,
+        success: true,
+        data,
+        fields,
+        rowCount: totalRows ?? data.length,
+        duration,
+        snapshotId,
       };
     } catch (error) {
       // eslint-disable-next-line no-console
       console.error('PostgreSQL query execution failed:', error);
-      throw error;
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : String(error),
+        duration: Date.now() - startTime,
+      };
     }
   }
 
@@ -855,8 +1334,8 @@ export class PostgreSQLCatalogAdapter extends CatalogAdapter {
           cs.min_value,
           cs.max_value
         FROM ${quotedMetadataDatabase}.ducklake_table_column_stats cs
-        JOIN ${quotedMetadataDatabase}.ducklake_column c 
-          ON cs.column_id = c.column_id 
+        JOIN ${quotedMetadataDatabase}.ducklake_column c
+          ON cs.column_id = c.column_id
           AND cs.table_id = c.table_id
           AND ${currentSnapshot} >= c.begin_snapshot
           AND (${currentSnapshot} < c.end_snapshot OR c.end_snapshot IS NULL)
@@ -988,7 +1467,7 @@ export class PostgreSQLCatalogAdapter extends CatalogAdapter {
               c.column_name,
               pc.transform
             FROM ${quotedMetadataDatabase}.ducklake_partition_column pc
-            JOIN ${quotedMetadataDatabase}.ducklake_column c 
+            JOIN ${quotedMetadataDatabase}.ducklake_column c
               ON pc.column_id = c.column_id
               AND pc.table_id = c.table_id
               AND ${currentSnapshot} >= c.begin_snapshot
@@ -1077,37 +1556,37 @@ export class PostgreSQLCatalogAdapter extends CatalogAdapter {
           SELECT t.begin_snapshot as snapshot_id
           FROM ${quotedMetadataDatabase}.ducklake_table t
           WHERE t.table_id = ${tableId}
-          
+
           UNION
-          
+
           -- Snapshot when table was deleted (if applicable)
           SELECT t.end_snapshot as snapshot_id
           FROM ${quotedMetadataDatabase}.ducklake_table t
           WHERE t.table_id = ${tableId} AND t.end_snapshot IS NOT NULL
-          
+
           UNION
-          
+
           -- Snapshots when columns were added/modified
           SELECT c.begin_snapshot as snapshot_id
           FROM ${quotedMetadataDatabase}.ducklake_column c
           WHERE c.table_id = ${tableId}
-          
+
           UNION
-          
+
           -- Snapshots when columns were dropped
           SELECT c.end_snapshot as snapshot_id
           FROM ${quotedMetadataDatabase}.ducklake_column c
           WHERE c.table_id = ${tableId} AND c.end_snapshot IS NOT NULL
-          
+
           UNION
-          
+
           -- Snapshots when data files were added
           SELECT df.begin_snapshot as snapshot_id
           FROM ${quotedMetadataDatabase}.ducklake_data_file df
           WHERE df.table_id = ${tableId}
-          
+
           UNION
-          
+
           -- Snapshots when data files were deleted
           SELECT df.end_snapshot as snapshot_id
           FROM ${quotedMetadataDatabase}.ducklake_data_file df
@@ -1197,7 +1676,7 @@ export class PostgreSQLCatalogAdapter extends CatalogAdapter {
           ct.begin_snapshot,
           ct.end_snapshot
         FROM ${quotedMetadataDatabase}.ducklake_column_tag ct
-        JOIN ${quotedMetadataDatabase}.ducklake_column c 
+        JOIN ${quotedMetadataDatabase}.ducklake_column c
           ON ct.column_id = c.column_id
           AND ct.table_id = c.table_id
           AND ${currentSnapshot} >= c.begin_snapshot

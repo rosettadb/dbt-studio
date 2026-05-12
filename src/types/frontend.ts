@@ -1,6 +1,7 @@
 import { ReactNode } from 'react';
 import type * as Monaco from 'monaco-editor';
 import { Project, QueryResponseType, Table } from './backend';
+import { UserProfile } from './profile';
 
 export type AppContextType = {
   projects: Project[];
@@ -25,6 +26,14 @@ export type AppContextType = {
   registerSyncEditorContent?: (
     handler?: (path: string, content: string) => void,
   ) => void;
+  openFile?: (filePath: string) => void;
+  registerOpenFile?: (handler?: (filePath: string) => void) => void;
+  closeFile?: (filePath: string) => void;
+  registerCloseFile?: (handler?: (filePath: string) => void) => void;
+  refreshFileTree?: () => Promise<void>;
+  registerRefreshFileTree?: (handler?: () => Promise<void>) => void;
+  authenticatedUser?: UserProfile | null;
+  env: 'local' | 'cloud';
 };
 
 export type ItemProps = {
@@ -46,6 +55,9 @@ export type QueryHistoryType = {
   // Connection-based fields (new)
   connectionId?: string;
   connectionName?: string;
+  // DuckLake-specific fields (new)
+  isDuckLake?: boolean;
+  instanceId?: string;
 };
 
 export type CompletionItem = Monaco.languages.CompletionItem;
@@ -58,6 +70,11 @@ export type SecureStorageAccount =
   | `cloud-gcs-${string}`
   | `cloud-aws-${string}`
   | `cloud-azure-${string}`
+  | `cloud-minio-${string}`
+  | `cloud-cloudflare-r2-${string}`
+  | `cloud-backblaze-b2-${string}`
+  | `cloud-rustfs-${string}`
+  | `cloud-garage-${string}`
   | `db-bigquery-${string}`
   | 'cloud-api-key';
 
@@ -66,6 +83,8 @@ export interface Bucket {
   name: string;
   created?: Date;
   location?: string;
+  objectCount?: number;
+  size?: number;
 }
 
 export interface StorageObject {
@@ -85,6 +104,7 @@ export interface S3Config {
   region: string;
   accessKeyId: string;
   secretAccessKey?: string;
+  sessionToken?: string;
 }
 
 export interface AzureConfig {
@@ -98,15 +118,112 @@ export interface GCSConfig {
   credentials?: any;
 }
 
-export type CloudStorageConfig = S3Config | AzureConfig | GCSConfig;
+export interface MinIOConfig {
+  endpoint: string;
+  accessKeyId: string;
+  secretAccessKey: string;
+  useSSL?: boolean;
+  region?: string;
+}
 
-export type CloudProvider = 'aws' | 'azure' | 'gcs';
+export interface MinIOPersistedConfig {
+  endpoint: string;
+  accessKeyId: string;
+  useSSL?: boolean;
+  region?: string;
+}
+
+export interface CloudflareR2Config {
+  accountId: string;
+  accessKeyId: string;
+  secretAccessKey: string;
+  jurisdiction?: 'eu';
+}
+
+export interface CloudflareR2PersistedConfig {
+  accountId: string;
+  accessKeyId: string;
+  jurisdiction?: 'eu';
+}
+
+export interface BackblazeB2Config {
+  applicationKeyId: string;
+  applicationKey: string;
+  endpoint?: string;
+}
+
+export interface BackblazeB2PersistedConfig {
+  applicationKeyId: string;
+  endpoint?: string;
+}
+
+export interface RustfsConfig {
+  endpoint: string;
+  accessKeyId: string;
+  secretAccessKey: string;
+  useSSL?: boolean;
+  region?: string;
+}
+
+export interface RustfsPersistedConfig {
+  endpoint: string;
+  accessKeyId: string;
+  useSSL?: boolean;
+  region?: string;
+}
+
+export interface GarageConfig {
+  endpoint: string;
+  accessKeyId: string;
+  secretAccessKey: string;
+  useSSL?: boolean;
+  region?: string;
+  urlStyle?: 'path' | 'virtual-host';
+}
+
+export interface GaragePersistedConfig {
+  endpoint: string;
+  accessKeyId: string;
+  useSSL?: boolean;
+  region?: string;
+  urlStyle?: 'path' | 'virtual-host';
+}
+
+export type CloudStorageConfig =
+  | S3Config
+  | AzureConfig
+  | GCSConfig
+  | MinIOConfig
+  | CloudflareR2Config
+  | BackblazeB2Config
+  | RustfsConfig
+  | GarageConfig;
+
+export type CloudStoragePersistedConfig =
+  | S3Config
+  | AzureConfig
+  | GCSConfig
+  | MinIOPersistedConfig
+  | CloudflareR2PersistedConfig
+  | BackblazeB2PersistedConfig
+  | RustfsPersistedConfig
+  | GaragePersistedConfig;
+
+export type CloudProvider =
+  | 'aws'
+  | 'azure'
+  | 'gcs'
+  | 'minio'
+  | 'cloudflare-r2'
+  | 'backblaze-b2'
+  | 'rustfs'
+  | 'garage';
 
 export type CloudConnection = {
   id: string;
   name: string;
   provider: CloudProvider;
-  config: CloudStorageConfig;
+  config: CloudStoragePersistedConfig;
   created: Date;
   lastUsed?: Date;
 };
@@ -125,11 +242,31 @@ export type RecentItem = {
 export type PreviewResult = {
   success: boolean;
   data?: any[];
-  columns?: Array<{ name: string; type: string }>;
+  columns?: Array<{ name: string; type: string; nullable?: boolean }>;
   totalRows?: number;
+  isEstimatedCount?: boolean;
+  page?: number;
+  pageSize?: number;
+  executionTimeMs?: number;
+  detectedFormat?:
+    | 'csv'
+    | 'json'
+    | 'jsonl'
+    | 'parquet'
+    | 'avro'
+    | 'xlsx'
+    | 'xls';
+  activeWhereClause?: string;
   error?: string;
   objectPath: string;
   previewType: 'sample' | 'schema' | 'stats';
+};
+
+export type FilterCondition = {
+  id: string;
+  column: string;
+  operator: '=' | '!=' | '>' | '>=' | '<' | '<=' | 'LIKE';
+  value: string;
 };
 
 export type PreviewOptions = {
@@ -138,6 +275,22 @@ export type PreviewOptions = {
   objectPath: string;
   previewType?: 'sample' | 'schema' | 'stats';
   limit?: number;
+  page?: number;
+  pageSize?: number;
+  whereClause?: string;
+  filterConditions?: FilterCondition[];
+  knownTotalRows?: number;
+};
+
+export type ColumnStat = {
+  columnName: string;
+  columnType: string;
+  nullCount: number | null;
+  distinctCount: number | null;
+  min: string | null;
+  max: string | null;
+  mean: string | null;
+  isSampleBased: boolean;
 };
 
 export type DatabaseSources = {

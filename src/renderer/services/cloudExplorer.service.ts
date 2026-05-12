@@ -3,23 +3,43 @@ import type {
   CloudListResult,
   CloudStorageConfig,
   PreviewResult,
+  CloudProvider,
+  FilterCondition,
 } from '../../types/frontend';
+import type {
+  UploadFileRequest,
+  UploadFileResponse,
+  UploadFolderRequest,
+  UploadFolderResponse,
+  CreateBucketRequest,
+  CreateBucketResponse,
+  DeleteObjectRequest,
+  DeleteObjectResponse,
+  UploadProgressEvent,
+  CreateFolderRequest,
+  CreateFolderResponse,
+  DeleteBucketRequest,
+  DeleteBucketResponse,
+} from '../../types/ipc';
 import { client } from '../config/client';
 
 class CloudExplorerService {
   static async listBuckets(
-    provider: 'aws' | 'azure' | 'gcs',
+    provider: CloudProvider,
     config: CloudStorageConfig,
   ): Promise<Bucket[]> {
     const { data } = await client.post<
-      { provider: 'aws' | 'azure' | 'gcs'; config: CloudStorageConfig },
+      {
+        provider: CloudProvider;
+        config: CloudStorageConfig;
+      },
       Bucket[]
     >('cloudExplorer:listBuckets', { provider, config });
     return data;
   }
 
   static async listObjects(
-    provider: 'aws' | 'azure' | 'gcs',
+    provider: CloudProvider,
     config: CloudStorageConfig,
     bucketName: string,
     continuationToken?: string,
@@ -27,7 +47,7 @@ class CloudExplorerService {
   ): Promise<CloudListResult> {
     const { data } = await client.post<
       {
-        provider: 'aws' | 'azure' | 'gcs';
+        provider: CloudProvider;
         config: CloudStorageConfig;
         bucketName: string;
         continuationToken?: string;
@@ -45,14 +65,14 @@ class CloudExplorerService {
   }
 
   static async getDownloadUrl(
-    provider: 'aws' | 'azure' | 'gcs',
+    provider: CloudProvider,
     config: CloudStorageConfig,
     bucketName: string,
     objectName: string,
   ): Promise<string> {
     const { data } = await client.post<
       {
-        provider: 'aws' | 'azure' | 'gcs';
+        provider: CloudProvider;
         config: CloudStorageConfig;
         bucketName: string;
         objectName: string;
@@ -68,50 +88,105 @@ class CloudExplorerService {
   }
 
   static async testConnection(
-    provider: 'aws' | 'azure' | 'gcs',
+    provider: CloudProvider,
     config: CloudStorageConfig,
   ): Promise<boolean> {
     const { data } = await client.post<
-      { provider: 'aws' | 'azure' | 'gcs'; config: CloudStorageConfig },
+      {
+        provider: CloudProvider;
+        config: CloudStorageConfig;
+      },
       boolean
     >('cloudExplorer:testConnection', { provider, config });
     return data;
   }
 
-  static async previewData(
-    provider: 'aws' | 'azure' | 'gcs',
-    config: CloudStorageConfig,
-    bucketName: string,
-    objectName: string,
-    previewType: 'sample' | 'schema' | 'stats' = 'sample',
-    limit: number = 100,
-  ): Promise<PreviewResult> {
-    try {
-      const { data } = await client.post<
-        {
-          provider: 'aws' | 'azure' | 'gcs';
-          config: CloudStorageConfig;
-          bucketName: string;
-          objectName: string;
-          previewType?: 'sample' | 'schema' | 'stats';
-          limit?: number;
-        },
-        PreviewResult
-      >('cloudExplorer:previewData', {
-        provider,
-        config,
-        bucketName,
-        objectName,
-        previewType,
-        limit,
-      });
+  static async previewData(params: {
+    provider: CloudProvider;
+    config: CloudStorageConfig;
+    bucketName: string;
+    objectName: string;
+    previewType?: 'sample' | 'schema' | 'stats';
+    pageSize?: number;
+    page?: number;
+    whereClause?: string;
+    filterConditions?: FilterCondition[];
+    knownTotalRows?: number;
+  }): Promise<PreviewResult> {
+    const { data } = await client.post<typeof params, PreviewResult>(
+      'cloudExplorer:previewData',
+      params,
+    );
+    return data;
+  }
 
-      return data;
-    } catch (error) {
-      // eslint-disable-next-line no-console
-      console.error('previewData error:', error);
-      throw error;
-    }
+  static async uploadFile(
+    params: UploadFileRequest,
+  ): Promise<UploadFileResponse> {
+    const { data } = await client.post<UploadFileRequest, UploadFileResponse>(
+      'cloudExplorer:uploadFile',
+      params,
+    );
+    return data;
+  }
+
+  static async uploadFolder(
+    params: UploadFolderRequest,
+  ): Promise<UploadFolderResponse> {
+    const { data } = await client.post<
+      UploadFolderRequest,
+      UploadFolderResponse
+    >('cloudExplorer:uploadFolder', params);
+    return data;
+  }
+
+  static async createBucket(
+    params: CreateBucketRequest,
+  ): Promise<CreateBucketResponse> {
+    const { data } = await client.post<
+      CreateBucketRequest,
+      CreateBucketResponse
+    >('cloudExplorer:createBucket', params);
+    return data;
+  }
+
+  static async deleteObject(
+    params: DeleteObjectRequest,
+  ): Promise<DeleteObjectResponse> {
+    const { data } = await client.post<
+      DeleteObjectRequest,
+      DeleteObjectResponse
+    >('cloudExplorer:deleteObject', params);
+    return data;
+  }
+
+  static onUploadProgress(
+    handler: (event: UploadProgressEvent) => void,
+  ): () => void {
+    return window.electron.ipcRenderer.on(
+      'cloudExplorer:uploadProgress',
+      handler as (...args: unknown[]) => void,
+    );
+  }
+
+  static async createFolder(
+    params: CreateFolderRequest,
+  ): Promise<CreateFolderResponse> {
+    const { data } = await client.post<
+      CreateFolderRequest,
+      CreateFolderResponse
+    >('cloudExplorer:createFolder', params);
+    return data;
+  }
+
+  static async deleteBucket(
+    params: DeleteBucketRequest,
+  ): Promise<DeleteBucketResponse> {
+    const { data } = await client.post<
+      DeleteBucketRequest,
+      DeleteBucketResponse
+    >('cloudExplorer:deleteBucket', params);
+    return data;
   }
 }
 

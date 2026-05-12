@@ -16,7 +16,7 @@ export const SchemaViewContainer = styled('div')(({ theme }) => ({
   borderRadius: 8,
   padding: '5px',
   height: '100%',
-  width: 310,
+  width: '100%',
 }));
 
 export const SchemaViewGrid = styled('div')(() => ({

@@ -13,7 +13,8 @@ export type SupportedConnectionTypes =
   | 'mssql'
   | 'kinetica'
   | 'googlecloud'
-  | 'duckdb';
+  | 'duckdb'
+  | 'ducklake';
 
 export type ConnectionBase = {
   type: SupportedConnectionTypes;
@@ -95,6 +96,18 @@ export type KineticaConnection = ConnectionBase & {
   bypassSslCertCheck?: boolean;
 };
 
+export type DuckLakeConnectionConfig = Omit<
+  ConnectionBase,
+  'username' | 'password' | 'database' | 'schema'
+> & {
+  type: 'ducklake';
+  instanceId: string;
+  // Metadata from instance
+  catalogType?: 'duckdb' | 'postgresql' | 'sqlite';
+  dataPath?: string;
+  status?: 'active' | 'inactive' | 'error' | 'connecting';
+};
+
 export type ConnectionInput =
   | PostgresConnection
   | SnowflakeConnection
@@ -102,7 +115,8 @@ export type ConnectionInput =
   | RedshiftConnection
   | DatabricksConnection
   | DuckDBConnection
-  | KineticaConnection;
+  | KineticaConnection
+  | DuckLakeConnectionConfig;
 
 export type ConnectionModel = {
   id: string;
@@ -221,15 +235,19 @@ export type Project = {
   incrementalDir?: string;
   businessDir?: string;
   createTemplateFolders?: boolean;
+  externalId?: string;
+  lastRun?: string;
 };
 
 export type CloudDeploymentPayload = {
+  id: string;
   title: string;
   gitUrl: string;
   gitBranch: string;
-  apiKey: string;
   githubUsername?: string;
   githubPassword?: string;
+  secrets: Record<string, string>;
+  CUSTOM_DBT_COMMANDS?: string;
 };
 
 export type DuckDBStatus =
@@ -252,6 +270,7 @@ export type DuckDBMetadataPayload = {
   activeConnections: number;
   maxConnections: number;
   fileExists: boolean;
+  duckdbVersion?: string;
 };
 export type DuckDBLeakInfo = {
   id: string;
@@ -296,10 +315,13 @@ export type SettingsType = {
   mainDatabaseSize?: string | number;
   sqliteVersion?: string;
   mainDatabaseStatus?: 'connected' | 'disconnected' | 'error';
+
+  env?: 'local' | 'cloud';
   // DuckDB metadata (read-only)
   duckdbPath?: string;
   duckdbSize?: string | number;
   duckdbStatus?: DuckDBStatus;
+  duckdbVersion?: string;
   duckdbLockStatus?: DuckDBLockStatus;
   duckdbLastCheckedAt?: string;
   duckdbActiveConnections?: number;
@@ -338,6 +360,43 @@ export type RosettaVersionInfo = {
   latestPrerelease?: string;
 };
 
+export type DbtCoreVersionListItem = {
+  version: string;
+  isPrerelease?: boolean;
+};
+
+export type DbtVersionListResponse = {
+  versions: DbtCoreVersionListItem[];
+  latestStable: string | null;
+  currentVersion: string | null;
+};
+
+export type PythonPackageVersionListItem = {
+  version: string;
+  isPrerelease?: boolean;
+};
+
+export type PythonPackageVersionListRequest = {
+  packageName: string;
+};
+
+export type PythonPackageVersionListResponse = {
+  packageName: string;
+  versions: PythonPackageVersionListItem[];
+  latestStable: string | null;
+};
+
+export type PythonPackageInstallVersionRequest = {
+  pythonPath?: string;
+  packageName: string;
+  version: string;
+};
+
+export type PythonPackageInstallVersionResponse = {
+  ok: boolean;
+  error?: string;
+};
+
 export type InstallResult = {
   success: boolean;
   version: string;
@@ -348,6 +407,7 @@ export type InstallResult = {
 };
 
 export type FileNode = {
+  id: string;
   name: string;
   path: string;
   type: 'file' | 'folder';
@@ -522,75 +582,6 @@ export type ExecuteStatementType = {
 // AI Provider Types
 export type AIProviderType = 'openai' | 'ollama' | 'gemini' | 'anthropic';
 
-export interface BaseProviderConfig {
-  id?: number;
-  name: string;
-  type: AIProviderType;
-  isActive: boolean;
-  settings: any; // Will be refined after provider configs are defined
-  created_at?: string;
-  updated_at?: string;
-}
-// Provider-specific configurations
-export interface OpenAIConfig extends BaseProviderConfig {
-  type: 'openai';
-  settings: {
-    apiKey: string; // Stored in keytar like existing 'openai-api-key'
-    model: string; // 'gpt-4o', 'gpt-3.5-turbo', etc.
-    temperature: number;
-    maxTokens: number;
-    organization?: string;
-  };
-}
-
-export interface OllamaConfig extends BaseProviderConfig {
-  type: 'ollama';
-  settings: {
-    baseUrl: string; // Default: 'http://localhost:11434'
-    model: string; // 'llama2', 'codellama', etc.
-    temperature: number;
-    timeout: number;
-    keepAlive?: string; // '5m', '10m', etc.
-  };
-}
-
-export interface GeminiConfig extends BaseProviderConfig {
-  type: 'gemini';
-  settings: {
-    apiKey: string; // Stored in keytar as 'gemini-api-key'
-    model: string; // 'gemini-pro', 'gemini-pro-vision'
-    temperature: number;
-    maxTokens: number;
-    projectId?: string;
-    location?: string; // 'us-central1', etc.
-  };
-}
-
-export interface AnthropicConfig extends BaseProviderConfig {
-  type: 'anthropic';
-  settings: {
-    apiKey: string; // Stored in keytar as 'anthropic-api-key'
-    model: string; // 'claude-3-opus', 'claude-3-sonnet', etc.
-    temperature: number;
-    maxTokens: number;
-    systemPrompt?: string;
-  };
-}
-
-// Union type for all provider configurations
-export type AIProviderConfig =
-  | OpenAIConfig
-  | OllamaConfig
-  | GeminiConfig
-  | AnthropicConfig;
-
-// Union type for provider settings
-export type ProviderSettings =
-  | OpenAIConfig['settings']
-  | OllamaConfig['settings']
-  | GeminiConfig['settings']
-  | AnthropicConfig['settings'];
-
 // Chat-related types
 export interface ChatConversation {
   id: number;
@@ -611,6 +602,9 @@ export interface ChatMessage {
   metadata?: {
     model?: string;
     tokens?: number;
+    promptTokens?: number;
+    completionTokens?: number;
+    totalTokens?: number;
     cost?: number;
     duration?: number;
     error?: string;
@@ -751,3 +745,71 @@ export type Command =
       arguments: Map<string, string | number>;
       options?: Map<string, string | number>;
     };
+
+export type GitChangesRes = {
+  hasUntracked: boolean;
+  hasUncommitted: boolean;
+  hasUnpushed: boolean;
+  untrackedCount: number;
+  uncommittedCount: number;
+  unpushedCount: number;
+};
+
+export type RepoInfoRes = {
+  remoteUrl: string | null;
+  currentBranch: string;
+  branchExistsOnRemote: boolean;
+};
+
+export type Secret = {
+  id: string;
+  name: string;
+  value: string;
+};
+
+// MCP Config types (mcp.config.json)
+export type MCPTransportType = 'stdio' | 'sse' | 'http';
+
+export interface MCPServerFileEntry {
+  name: string;
+  description?: string;
+  disabled: boolean;
+  transport: MCPTransportType;
+  // stdio
+  command?: string;
+  args?: string[];
+  env?: Record<string, string>;
+  // sse / http
+  url?: string;
+  headers?: Record<string, string>;
+}
+
+export interface MCPFileConfig {
+  mcpServers: Record<string, MCPServerFileEntry>;
+}
+
+export interface MCPServerWithStatus extends MCPServerFileEntry {
+  id: string;
+  connected: boolean;
+  isBuiltIn?: boolean;
+  tools?: { name: string; description: string }[];
+}
+
+export type AISettingsConfig = {
+  chat: {
+    streamResponses: boolean;
+    autoIncludeFileContext: boolean;
+    showTokenCount: boolean;
+    autoScrollToLatest: boolean;
+  };
+  tools: Record<string, boolean>;
+  configuration: {
+    allowAIInBackground: boolean;
+    autoExecution: 'disabled' | 'allowlist' | 'auto' | 'turbo';
+    autoContinue: boolean;
+    autoGenerateMemories: boolean;
+  };
+  advanced: {
+    maxWorkspaceFileCount: number;
+  };
+};

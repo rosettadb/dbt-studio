@@ -17,9 +17,6 @@ export function isPreviewSupported(fileName: string): boolean {
     'jsonl',
     'xlsx',
     'xls',
-    'sqlite',
-    'db',
-    'arrow',
     'avro',
     'delta',
     'iceberg',
@@ -33,28 +30,52 @@ export function isPreviewSupported(fileName: string): boolean {
 export async function getReaderFunction(
   connection: any,
   filePath: string,
+  options?: {
+    allowIgnoreErrors?: boolean;
+    nullString?: string;
+  },
 ): Promise<string> {
   const extension = filePath.split('.').pop()?.toLowerCase();
+  const escapedFilePath = filePath.replace(/'/g, "''");
 
   switch (extension) {
     case 'csv': {
       // For CSV files, we need to detect if headers are present
       const hasHeaders = await detectCsvHeaders(connection, filePath);
-      return `read_csv('${filePath}', header=${hasHeaders})`;
+
+      const params: string[] = [
+        `'${escapedFilePath}'`,
+        `header=${hasHeaders}`,
+        'null_padding=true',
+      ];
+
+      if (options?.allowIgnoreErrors) {
+        // eslint-disable-next-line no-console
+        console.warn(
+          '[getReaderFunction] CSV parsing: allowIgnoreErrors enabled; malformed rows may be skipped.',
+        );
+        params.push('ignore_errors=true');
+      }
+
+      if (options?.nullString) {
+        params.push(`nullstr='${options.nullString.replace(/'/g, "''")}'`);
+      }
+
+      return `read_csv_auto(${params.join(', ')})`;
     }
     case 'json':
     case 'jsonl':
-      return `read_json_auto('${filePath}')`;
+      return `read_json_auto('${escapedFilePath}')`;
     case 'avro':
-      return `read_avro('${filePath}')`;
+      return `read_avro('${escapedFilePath}')`;
     case 'parquet':
-      return `read_parquet('${filePath}')`;
+      return `read_parquet('${escapedFilePath}')`;
     case 'xlsx':
     case 'xls':
-      return `read_excel('${filePath}')`;
+      return `read_excel('${escapedFilePath}')`;
     default:
       // For other formats, try direct access first
-      return `'${filePath}'`;
+      return `'${escapedFilePath}'`;
   }
 }
 
