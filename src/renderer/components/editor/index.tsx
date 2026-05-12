@@ -2,8 +2,7 @@ import React from 'react';
 import { useTheme } from '@mui/material';
 import * as monaco from 'monaco-editor';
 import {
-  useGetFileDiff,
-  useGetFileStatus,
+  useGetFileHeadContent,
   useGitIsInitialized,
   useSaveFileContent,
 } from '../../controllers';
@@ -14,7 +13,7 @@ import { UnsavedChangesDialog } from './unsavedChangesDialog';
 import {
   getDecorations,
   getLanguageFromExtension,
-  getVersionsFromDiff,
+  normalizeEol,
 } from './helpers';
 import { Container, EditorViewport } from './styles';
 import { getOrCreateModel } from '../../lib/monaco/modelStore';
@@ -88,51 +87,40 @@ export const Editor: React.FC<EditorProps> = ({
   const { data: isInitialized } = useGitIsInitialized(projectPath, {
     enabled: Boolean(projectPath),
   });
-  const { data: fileStatus, isLoading: isLoadingFileStatus } = useGetFileStatus(
+  const { data: headContent } = useGetFileHeadContent(
     projectPath,
     activeFilePath,
     {
-      refetchInterval: 20000,
-      enabled: Boolean(isInitialized && activeFilePath),
+      enabled: Boolean(activeFilePath && isInitialized && projectPath),
     },
   );
-  const { data: fileDiff } = useGetFileDiff(projectPath, activeFilePath, {
-    enabled: Boolean(activeFilePath && isInitialized && projectPath),
-  });
   const { mutate: updateFileContent } = useSaveFileContent();
 
   const [showDiffView, setShowDiffView] = React.useState(false);
   const [isSaving, setIsSaving] = React.useState(false);
 
-  // 'untracked' → all lines marked as added (blue glyph).
-  // 'modified'  → diff vs HEAD; per-line green/red markers.
-  // 'clean'     → no markers.
   const decorationMode: DecorationMode = React.useMemo(() => {
     if (!activeTab) return 'clean';
-    if (fileStatus?.status === 'untracked') return 'untracked';
-    if (!fileStatus?.status) return 'clean';
+    if (headContent === undefined) return 'clean';
+    if (headContent === null) return 'untracked';
     return 'modified';
-  }, [activeTab, fileStatus]);
+  }, [activeTab, headContent]);
 
   const originalContent = React.useMemo(() => {
     if (decorationMode === 'untracked') return null;
     if (decorationMode === 'clean') return activeContent;
-    const { oldVersion } = getVersionsFromDiff(
-      activeContent,
-      String(fileDiff?.diff),
-    );
-    return oldVersion;
-  }, [decorationMode, fileDiff, activeContent]);
+    return headContent ?? activeContent;
+  }, [decorationMode, headContent, activeContent]);
+
+  const hasUncommittedChanges = React.useMemo(() => {
+    if (headContent == null) return false;
+    return normalizeEol(headContent) !== normalizeEol(activeContent);
+  }, [headContent, activeContent]);
 
   React.useEffect(() => {
     setShowDiffView(false);
   }, [activeTabId]);
 
-  // One Monaco model per open tab. Created lazily on activation, kept alive
-  // while the tab is open (so undo history survives switches), disposed by
-  // useTabManager when the tab closes. Content updates flow into the model
-  // via the dedicated effect below — not as a useMemo dependency — so we
-  // don't recreate models on every keystroke.
   const activeModel = React.useMemo<monaco.editor.ITextModel | null>(() => {
     if (!activeTab) return null;
     return getOrCreateModel(
@@ -279,7 +267,7 @@ export const Editor: React.FC<EditorProps> = ({
         isSaving={isSaving}
         hasError={Boolean(activeTab.error)}
         errorMessage={activeTab.error}
-        showDiffButton={decorationMode === 'modified'}
+        showDiffButton={hasUncommittedChanges}
         showDiffView={showDiffView}
         onSave={handleSave}
         onToggleDiff={() => setShowDiffView((prev) => !prev)}
@@ -288,7 +276,7 @@ export const Editor: React.FC<EditorProps> = ({
       />
 
       <EditorViewport>
-        {showDiffView && !isLoadingFileStatus ? (
+        {showDiffView ? (
           <DiffView
             modified={activeContent}
             original={originalContent ?? ''}

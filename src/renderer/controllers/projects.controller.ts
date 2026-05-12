@@ -192,10 +192,6 @@ export const useSaveFileContent = (
     onSuccess: async (...args) => {
       await queryClient.invalidateQueries([QUERY_KEYS.GET_FILE_STRUCTURE]);
       await queryClient.invalidateQueries([QUERY_KEYS.GIT_STATUS]);
-      // Diff vs HEAD changes whenever a file is written — invalidate so the
-      // editor's gutter markers update immediately instead of waiting for a
-      // tab switch to refetch.
-      await queryClient.invalidateQueries([QUERY_KEYS.GIT_DIFF]);
       await queryClient.invalidateQueries([QUERY_KEYS.GET_FILE_CONTENT]);
       onCustomSuccess?.(...args);
     },

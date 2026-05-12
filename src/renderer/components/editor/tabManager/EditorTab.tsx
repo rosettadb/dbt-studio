@@ -35,8 +35,15 @@ export const EditorTab: React.FC<EditorTabProps> = ({
       enterNextDelay={600}
     >
       <TabButton active={isActive} isLast={isLast} onClick={onSelect}>
-        {tab.isLoading && <LoadingDot />}
-        {!tab.isLoading && tab.isModified && <ModifiedDot />}
+        {/* Reserve the dot slot at all times so the title doesn't shift
+            left when isLoading flips false on a clean file (the original
+            flicker). LoadingDot/ModifiedDot/hidden ModifiedDot all share
+            the same 8x8 footprint. */}
+        {tab.isLoading ? (
+          <LoadingDot />
+        ) : (
+          <ModifiedDot hidden={!tab.isModified} />
+        )}
         {!tab.isLoading && tab.error && (
           <Tooltip
             title={tab.error}

@@ -816,6 +816,19 @@ export default class GitService {
     }
   }
 
+  async getFileHeadContent(
+    repoPath: string,
+    filePath: string,
+  ): Promise<string | null> {
+    const git = this.getGitInstance(repoPath);
+    const relativePath = toGitRelativePath(repoPath, filePath);
+    try {
+      return await git.show([`HEAD:${relativePath}`]);
+    } catch {
+      return null;
+    }
+  }
+
   async getFileStatusList(repoPath: string): Promise<FileStatus[]> {
     const git = this.getGitInstance(repoPath);
     const results: FileStatus[] = [];
