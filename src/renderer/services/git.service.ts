@@ -2,7 +2,6 @@ import { RemoteWithRefs } from 'simple-git';
 import { client } from '../config/client';
 import {
   DBTConnection,
-  DiffResponse,
   FileStatus,
   GitBranch,
   GitChangesRes,
@@ -111,11 +110,14 @@ export const listBranches = async (path: string): Promise<GitBranch[]> => {
   return data;
 };
 
-export const getFileDiff = async (repoPath: string, filePath: string) => {
+export const getFileHeadContent = async (
+  repoPath: string,
+  filePath: string,
+) => {
   const { data } = await client.post<
-    { filePath: string; repoPath: string },
-    DiffResponse
-  >('git:fileDiff', { filePath, repoPath });
+    { repoPath: string; filePath: string },
+    string | null
+  >('git:fileHeadContent', { repoPath, filePath });
   return data;
 };
 

@@ -118,16 +118,6 @@ export const Sidebar: React.FC<Props> = ({
           cursor: 'pointer',
           pointerEvents: isDisabled ? 'none' : 'auto',
         }}
-        onClick={(e) => {
-          if (isActive) {
-            // Clicking the already-active item toggles the panel closed
-            e.preventDefault();
-            setIsSidebarOpen(!isSidebarOpen);
-          } else {
-            // Navigating to a different page always opens the panel
-            setIsSidebarOpen(true);
-          }
-        }}
       >
         {listItem}
       </StyledNavLink>

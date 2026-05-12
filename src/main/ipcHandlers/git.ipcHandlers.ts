@@ -27,6 +27,7 @@ const handlerChannels = [
   'git:pull',
   'git:push',
   'git:fileDiff',
+  'git:fileHeadContent',
   'git:fileStatusList',
   'git:aheadBehind',
   'git:createBranch',
@@ -184,6 +185,16 @@ const registerGitHandlers = () => {
       } catch (err: any) {
         return { error: err?.message };
       }
+    },
+  );
+
+  ipcMain.handle(
+    'git:fileHeadContent',
+    async (
+      _e,
+      { repoPath, filePath }: { repoPath: string; filePath: string },
+    ): Promise<string | null> => {
+      return gitService.getFileHeadContent(repoPath, filePath);
     },
   );
 
