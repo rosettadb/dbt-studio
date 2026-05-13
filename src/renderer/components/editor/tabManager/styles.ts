@@ -119,6 +119,19 @@ export const TabTitle = styled('span')(({ theme }) => ({
   color: theme.palette.text.primary,
 }));
 
+export const TabIconSlot = styled('span')({
+  display: 'inline-flex',
+  alignItems: 'center',
+  justifyContent: 'center',
+  width: 16,
+  height: 16,
+  flexShrink: 0,
+  lineHeight: 0,
+  '& > *': {
+    marginLeft: 0,
+  },
+});
+
 export const ModifiedDot = styled('span')<{ hidden?: boolean }>(
   ({ theme, hidden }) => ({
     width: 8,

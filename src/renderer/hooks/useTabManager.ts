@@ -629,17 +629,12 @@ const useTabManager = (projectId?: string): UseTabManagerReturn => {
         return;
       }
 
-      // Set loading state
-      setTabs((current) =>
-        current.map((tab) =>
-          tab.path === path
-            ? { ...tab, isLoading: true, error: undefined }
-            : tab,
-        ),
-      );
-
+      // Refresh is a silent background re-read: the tab already shows its
+      // previous content, so we deliberately do NOT flip isLoading. Toggling
+      // it would flash the tab's loading dot on every tab switch (see the
+      // auto-refresh-on-focus effect in screens/projectDetails) for the few
+      // milliseconds the disk read takes.
       try {
-        // Reload file content from disk
         const data = await projectsServices.getFileContent({ path });
         setTabs((current) =>
           current.map((tab) =>
@@ -649,7 +644,6 @@ const useTabManager = (projectId?: string): UseTabManagerReturn => {
                   content: data,
                   savedContent: data,
                   isModified: false,
-                  isLoading: false,
                   error: undefined,
                 }
               : tab,
@@ -661,9 +655,7 @@ const useTabManager = (projectId?: string): UseTabManagerReturn => {
           'Unable to refresh file contents. Please try again.';
         setTabs((current) =>
           current.map((tab) =>
-            tab.path === path
-              ? { ...tab, isLoading: false, error: message }
-              : tab,
+            tab.path === path ? { ...tab, error: message } : tab,
           ),
         );
       }
