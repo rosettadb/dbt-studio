@@ -21,6 +21,7 @@ type Props = {
   isLoading?: boolean;
   leftIcon?: React.ReactNode;
   tooltipTitle?: string;
+  height?: number;
   menuItems: {
     name: React.ReactNode;
     onClick: () => void;
@@ -35,6 +36,7 @@ export const SplitButton: React.FC<Props> = ({
   isLoading = false,
   leftIcon,
   tooltipTitle = '',
+  height = 28,
   menuItems,
 }) => {
   const theme = useTheme();
@@ -91,7 +93,7 @@ export const SplitButton: React.FC<Props> = ({
           size="small"
           ref={anchorRef}
           aria-label="Button group with a nested menu"
-          sx={{ height: '28px', minHeight: '28px' }}
+          sx={{ height: `${height}px`, minHeight: `${height}px` }}
         >
           <Button
             size="small"

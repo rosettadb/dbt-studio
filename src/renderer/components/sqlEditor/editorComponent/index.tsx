@@ -1,6 +1,6 @@
 /* eslint-disable no-plusplus, no-continue */
 import React, { useEffect, useRef } from 'react';
-import MonacoEditor, { OnMount, OnChange, loader } from '@monaco-editor/react';
+import MonacoEditor, { OnMount, OnChange } from '@monaco-editor/react';
 import * as monaco from 'monaco-editor';
 import { useTheme, Box, CircularProgress, Typography } from '@mui/material';
 import { projectsServices } from '../../../services';
@@ -30,12 +30,6 @@ export const SqlEditorComponent: React.FC<Props> = ({
   const theme = useTheme();
   const isDarkMode = theme.palette.mode === 'dark';
   const monacoTheme = isDarkMode ? 'vs-dark' : 'light';
-
-  loader.config({
-    paths: {
-      vs: 'app-asset://zui/node_modules/monaco-editor/min/vs',
-    },
-  });
 
   const saveDebounce = useRef<ReturnType<typeof setTimeout> | null>(null);
   const decorationIdsRef = useRef<string[]>([]);
@@ -217,6 +211,8 @@ export const SqlEditorComponent: React.FC<Props> = ({
           scrollBeyondLastLine: false,
           automaticLayout: true,
           readOnly: isLoading,
+          // WordHighlighter throws "Canceled" during model swap / dispose.
+          occurrencesHighlight: 'off',
         }}
       />
       {isLoading && (

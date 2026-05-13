@@ -198,14 +198,22 @@ const registerCloudExplorerHandlers = () => {
         bucketName,
         objectName,
         previewType = 'sample',
-        limit = 100,
+        pageSize = 25,
+        page = 0,
+        whereClause = '',
+        filterConditions = [],
+        knownTotalRows,
       }: {
         provider: CloudProvider;
         config: CloudStorageConfig;
         bucketName: string;
         objectName: string;
         previewType?: 'sample' | 'schema' | 'stats';
-        limit?: number;
+        pageSize?: number;
+        page?: number;
+        whereClause?: string;
+        filterConditions?: any[];
+        knownTotalRows?: number;
       },
     ) => {
       const objectPath = CloudPreviewService.getCloudUrl(
@@ -213,22 +221,17 @@ const registerCloudExplorerHandlers = () => {
         bucketName,
         objectName,
       );
-
-      try {
-        const result = await CloudPreviewService.previewCloudData({
-          provider,
-          cloudConfig: config,
-          objectPath,
-          previewType,
-          limit,
-        });
-
-        return result;
-      } catch (error) {
-        // eslint-disable-next-line no-console
-        console.error('IPC Handler - Preview error:', error);
-        throw error;
-      }
+      return CloudPreviewService.previewCloudData({
+        provider,
+        cloudConfig: config,
+        objectPath,
+        previewType,
+        pageSize,
+        page,
+        whereClause,
+        filterConditions,
+        knownTotalRows,
+      });
     },
   );
 

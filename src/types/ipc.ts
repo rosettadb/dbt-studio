@@ -185,6 +185,7 @@ export type GitChannels =
   | 'git:commit'
   | 'git:checkout'
   | 'git:fileDiff'
+  | 'git:fileHeadContent'
   | 'git:fileStatusList'
   | 'git:getLocalChanges'
   | 'git:repoInfo'

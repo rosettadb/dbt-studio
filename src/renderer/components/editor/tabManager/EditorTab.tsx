@@ -9,6 +9,7 @@ import { LoadingDot, ModifiedDot, TabButton, TabTitle } from './styles';
 interface EditorTabProps {
   tab: EditorTabState;
   isActive: boolean;
+  isLast?: boolean;
   onSelect: () => void;
   onClose: () => void;
 }
@@ -16,6 +17,7 @@ interface EditorTabProps {
 export const EditorTab: React.FC<EditorTabProps> = ({
   tab,
   isActive,
+  isLast,
   onSelect,
   onClose,
 }) => {
@@ -32,9 +34,16 @@ export const EditorTab: React.FC<EditorTabProps> = ({
       enterDelay={600}
       enterNextDelay={600}
     >
-      <TabButton active={isActive} onClick={onSelect}>
-        {tab.isLoading && <LoadingDot />}
-        {!tab.isLoading && tab.isModified && <ModifiedDot />}
+      <TabButton active={isActive} isLast={isLast} onClick={onSelect}>
+        {/* Reserve the dot slot at all times so the title doesn't shift
+            left when isLoading flips false on a clean file (the original
+            flicker). LoadingDot/ModifiedDot/hidden ModifiedDot all share
+            the same 8x8 footprint. */}
+        {tab.isLoading ? (
+          <LoadingDot />
+        ) : (
+          <ModifiedDot hidden={!tab.isModified} />
+        )}
         {!tab.isLoading && tab.error && (
           <Tooltip
             title={tab.error}

@@ -11,10 +11,13 @@ import {
 } from '@mui/icons-material';
 import { GitStatus } from './types';
 
-const StyledChip = styled(Chip)<{ $status: GitStatus }>(({
-  theme,
-  $status,
-}) => {
+// MUI's `styled` forwards every prop to the underlying component by default
+// — it does not honour the styled-components `$` convention. Filter
+// $status out explicitly so it doesn't end up as a DOM attribute on the
+// rendered <div> (which triggers React's "Invalid attribute name" warning).
+const StyledChip = styled(Chip, {
+  shouldForwardProp: (prop) => prop !== '$status',
+})<{ $status: GitStatus }>(({ theme, $status }) => {
   const getStatusColor = () => {
     switch ($status) {
       case 'modified':

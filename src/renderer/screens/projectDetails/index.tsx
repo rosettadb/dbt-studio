@@ -10,13 +10,14 @@ import {
   Edit,
 } from '@mui/icons-material';
 import {
+  Badge,
   Box,
-  IconButton,
   ListItemIcon,
   ListItemText,
   Menu,
   MenuItem,
-  Tooltip,
+  Tab,
+  Tabs,
 } from '@mui/material';
 import { toast } from 'react-toastify';
 import yaml from 'js-yaml';
@@ -28,6 +29,7 @@ import {
   ModelSplitButton,
   NoAiSetModal,
   ProjectDbtSplitButton,
+  RemoveConnectionModal,
   SplitButton,
   TerminalLayout,
   AiPromptModal,
@@ -52,7 +54,6 @@ import {
 } from '../../controllers';
 import { projectsServices } from '../../services';
 import {
-  ButtonsContainer,
   Container,
   Content,
   EditorContainer,
@@ -165,6 +166,8 @@ const ProjectDetails: React.FC = () => {
     React.useState(false);
   const [connectionMenuAnchor, setConnectionMenuAnchor] =
     React.useState<HTMLElement | null>(null);
+  const [isRemoveConnectionConfirmOpen, setIsRemoveConnectionConfirmOpen] =
+    React.useState(false);
   const [aiTransformationResponse, setAitTransformationResponse] =
     React.useState<string>();
   const [isSynchronizing, setIsSynchronizing] = React.useState(false);
@@ -204,15 +207,16 @@ const ProjectDetails: React.FC = () => {
   const { data: connections = [] } = useGetConnections();
   const { mutate: updateProject } = useUpdateProject();
 
-  const handleAddConnection = () => {
-    setIsAddConnectionModalOpen(true);
-  };
-
   const handleConnectionModalClose = () => {
     setIsAddConnectionModalOpen(false);
   };
 
-  const handleRemoveConnection = () => {
+  const handleRemoveConnectionClick = () => {
+    setConnectionMenuAnchor(null);
+    setIsRemoveConnectionConfirmOpen(true);
+  };
+
+  const handleConfirmRemoveConnection = () => {
     if (project) {
       updateProject({
         ...project,
@@ -221,11 +225,7 @@ const ProjectDetails: React.FC = () => {
       setSelectedFilePath(undefined);
       toast.success('Connection removed from project successfully!');
     }
-    setConnectionMenuAnchor(null);
-  };
-
-  const handleConnectionMenuOpen = (event: React.MouseEvent<HTMLElement>) => {
-    setConnectionMenuAnchor(event.currentTarget);
+    setIsRemoveConnectionConfirmOpen(false);
   };
 
   const handleConnectionMenuClose = () => {
@@ -284,6 +284,41 @@ const ProjectDetails: React.FC = () => {
     markTabSavedByPath,
     refreshTabContentByPath,
   ]);
+
+  const handleSaveAllTabs = React.useCallback(async () => {
+    const modifiedTabs = tabs.filter((tab) => tab.isModified);
+    if (modifiedTabs.length === 0) {
+      return;
+    }
+    await Promise.all(
+      modifiedTabs.map(async (tab) => {
+        try {
+          await projectsServices.saveFileContent({
+            path: tab.path,
+            content: tab.content,
+          });
+          markTabSavedByPath(tab.path);
+          setTabErrorByPath(tab.path, undefined);
+        } catch (error: any) {
+          setTabErrorByPath(tab.path, error?.message);
+        }
+      }),
+    );
+    await updateStatuses();
+  }, [tabs, markTabSavedByPath, setTabErrorByPath, updateStatuses]);
+
+  const handleCloseAllTabs = React.useCallback(() => {
+    const unmodifiedTabs = tabs.filter((tab) => !tab.isModified);
+    const modifiedCount = tabs.length - unmodifiedTabs.length;
+
+    unmodifiedTabs.forEach((tab) => closeTab(tab.id));
+
+    if (modifiedCount > 0) {
+      toast.info(
+        `${modifiedCount} modified tab${modifiedCount > 1 ? 's are' : ' is'} still open. Save or discard changes before closing.`,
+      );
+    }
+  }, [tabs, closeTab]);
 
   React.useEffect(() => {
     const fetchData = async () => {
@@ -713,166 +748,201 @@ const ProjectDetails: React.FC = () => {
 
   return (
     <AppLayout
-      panelHeaderLeft={
-        <>
-          <Tooltip
-            title="Explorer"
-            placement="bottom"
-            enterDelay={800}
-            enterNextDelay={800}
-          >
-            <Box
-              onClick={() => setSidebarTab('explorer')}
-              sx={{
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                width: 28,
-                height: 28,
-                cursor: 'pointer',
-                borderRadius: 0.5,
-                backgroundColor:
-                  sidebarTab === 'explorer' ? 'action.selected' : 'transparent',
-                opacity: sidebarTab === 'explorer' ? 1 : 0.7,
-                transition: 'all 0.2s ease',
-                '&:hover': { backgroundColor: 'action.hover', opacity: 1 },
-              }}
-            >
-              <Icon
-                src={icons.folder}
-                width={16}
-                height={16}
-                color={
-                  sidebarTab === 'explorer'
-                    ? theme.palette.primary.main
-                    : theme.palette.text.secondary
-                }
-              />
-            </Box>
-          </Tooltip>
-          <Tooltip
-            title="Source Control"
-            placement="bottom"
-            enterDelay={800}
-            enterNextDelay={800}
-          >
-            <Box
-              onClick={() => setSidebarTab('scm')}
-              sx={{
-                position: 'relative',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                width: 28,
-                height: 28,
-
-                cursor: 'pointer',
-                borderRadius: 0.5,
-                backgroundColor:
-                  sidebarTab === 'scm' ? 'action.selected' : 'transparent',
-                opacity: sidebarTab === 'scm' ? 1 : 0.7,
-                transition: 'all 0.2s ease',
-                '&:hover': { backgroundColor: 'action.hover', opacity: 1 },
-              }}
-            >
-              <Icon
-                src={icons.gitBranch}
-                width={16}
-                height={16}
-                color={
-                  sidebarTab === 'scm'
-                    ? theme.palette.primary.main
-                    : theme.palette.text.secondary
-                }
-              />
-              {statuses.length > 0 && (
-                <Box
-                  sx={{
-                    position: 'absolute',
-                    top: 2,
-                    right: -2,
-                    backgroundColor: 'primary.main',
-                    color: 'primary.contrastText',
-                    borderRadius: '8px',
-                    fontSize: 9,
-                    fontWeight: 600,
-                    minWidth: 14,
-                    height: 14,
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    padding: '0 3px',
-                    lineHeight: 1,
-                  }}
-                >
-                  {statuses.length > 99 ? '99+' : statuses.length}
-                </Box>
-              )}
-            </Box>
-          </Tooltip>
-        </>
-      }
-      sidebarContent={
-        <ProjectSidebar
-          activeTab={sidebarTab}
-          directories={directories}
-          statuses={statuses}
-          isLoadingDirectories={isLoadingDirectories}
-          selectedFilePath={selectedFilePath}
+      topMenuActions={
+        <ProjectDbtSplitButton
+          rosettaPath={settings?.rosettaPath}
+          dbtPath={settings?.dbtPath}
           project={project}
-          onDeleteFile={(deletedFile: string) => {
-            closeTabByPath(deletedFile);
-            if (selectedFilePath?.includes(deletedFile)) {
-              setSelectedFilePath(undefined);
-            }
-          }}
-          onFileSelect={async (fileNode) => {
-            if (!utils.isEditableFile(fileNode.path)) {
-              setSelectedFilePath(fileNode.path);
-              openTab(fileNode.path, { isReadOnly: true });
-              return;
-            }
-            setSelectedFilePath(fileNode.path);
-            openTab(fileNode.path);
-          }}
-          onRefreshFiles={async () => {
-            await fetchDirectories();
-            await updateStatuses();
-          }}
-          onCopyPath={async (source, target) => {
-            await projectsServices.copyPath({
-              source,
-              target,
-            });
-            await fetchDirectories();
-            await updateStatuses();
-          }}
-          onNewFile={(filePath) => {
-            if (!filePath) {
-              return;
-            }
-            setSelectedFilePath(filePath);
-            openTab(filePath);
-          }}
-          onRenameFile={(oldPath, newPath) => {
-            renameTab(oldPath, newPath);
-            if (activeTab?.path === oldPath || selectedFilePath === oldPath) {
-              setSelectedFilePath(newPath);
-            }
-          }}
-          // Source Control Monaco Editor Integration
-          onSourceControlOpenFile={(filePath: string) => {
-            setSelectedFilePath(filePath);
-            openTab(filePath);
-          }}
-          onSourceControlFileSelect={(filePath: string) => {
-            setSelectedFilePath(filePath);
-          }}
-          onSourceControlRefreshFileContent={refreshTabContentByPath}
-          // Synchronization
-          onSourceControlSynchronize={handleSynchronizeAll}
-          isSourceControlSynchronizing={isSynchronizing}
+          isDbtConfigured={!!settings?.dbtPath}
+          isRunningDbt={isRunningDbt}
+          isRunningRosettaDbt={isRunningRosettaDbt}
+          connection={connection}
+          environment={env}
+          rosettaDbt={rosettaDbt}
         />
+      }
+      panelTitle="DBT Studio"
+      sidebarContent={
+        <Box
+          sx={{
+            display: 'flex',
+            flexDirection: 'column',
+            height: '100%',
+            bgcolor: 'background.paper',
+          }}
+        >
+          <Box
+            sx={{
+              borderBottom: `1px solid ${theme.palette.divider}`,
+            }}
+          >
+            <Tabs
+              value={sidebarTab}
+              onChange={(_e, newValue) => setSidebarTab(newValue)}
+              variant="fullWidth"
+              sx={{
+                minHeight: 34,
+                '& .MuiTab-root': {
+                  minHeight: 34,
+                  fontSize: '0.7rem',
+                  textTransform: 'none',
+                  py: 0,
+                  minWidth: 0,
+                  px: 0.5,
+                },
+                '& .MuiTab-iconWrapper': {
+                  marginRight: '4px !important',
+                  marginBottom: '0 !important',
+                },
+              }}
+            >
+              <Tab
+                value="explorer"
+                icon={
+                  <Icon
+                    src={icons.folder}
+                    width={15}
+                    height={15}
+                    color={
+                      sidebarTab === 'explorer'
+                        ? theme.palette.primary.main
+                        : theme.palette.text.secondary
+                    }
+                  />
+                }
+                iconPosition="start"
+                label="Explorer"
+              />
+              <Tab
+                value="scm"
+                icon={
+                  <Badge
+                    badgeContent={statuses.length}
+                    color="primary"
+                    max={99}
+                    sx={{
+                      '& .MuiBadge-badge': {
+                        fontSize: 8,
+                        height: 14,
+                        minWidth: 14,
+                        padding: '0 2px',
+                        top: -2,
+                        right: -6,
+                      },
+                    }}
+                  >
+                    <Icon
+                      src={icons.gitBranch}
+                      width={15}
+                      height={15}
+                      color={
+                        sidebarTab === 'scm'
+                          ? theme.palette.primary.main
+                          : theme.palette.text.secondary
+                      }
+                    />
+                  </Badge>
+                }
+                iconPosition="start"
+                label="Git"
+              />
+              <Tab
+                value="connections"
+                icon={
+                  <Cable
+                    sx={{
+                      fontSize: 15,
+                      color:
+                        sidebarTab === 'connections'
+                          ? theme.palette.primary.main
+                          : theme.palette.text.secondary,
+                    }}
+                  />
+                }
+                iconPosition="start"
+                label="Database"
+              />
+            </Tabs>
+          </Box>
+          <Box sx={{ flex: 1, overflow: 'hidden' }}>
+            <ProjectSidebar
+              activeTab={sidebarTab}
+              directories={directories}
+              statuses={statuses}
+              isLoadingDirectories={isLoadingDirectories}
+              selectedFilePath={selectedFilePath}
+              project={project}
+              onDeleteFile={(deletedFile: string) => {
+                closeTabByPath(deletedFile);
+                if (selectedFilePath?.includes(deletedFile)) {
+                  setSelectedFilePath(undefined);
+                }
+              }}
+              onFileSelect={async (fileNode) => {
+                if (!utils.isEditableFile(fileNode.path)) {
+                  setSelectedFilePath(fileNode.path);
+                  openTab(fileNode.path, { isReadOnly: true });
+                  return;
+                }
+                setSelectedFilePath(fileNode.path);
+                openTab(fileNode.path);
+              }}
+              onRefreshFiles={async () => {
+                await fetchDirectories();
+                await updateStatuses();
+              }}
+              onCopyPath={async (source, target) => {
+                await projectsServices.copyPath({
+                  source,
+                  target,
+                });
+                await fetchDirectories();
+                await updateStatuses();
+              }}
+              onNewFile={(filePath) => {
+                if (!filePath) {
+                  return;
+                }
+                setSelectedFilePath(filePath);
+                openTab(filePath);
+              }}
+              onRenameFile={(oldPath, newPath) => {
+                renameTab(oldPath, newPath);
+                if (
+                  activeTab?.path === oldPath ||
+                  selectedFilePath === oldPath
+                ) {
+                  setSelectedFilePath(newPath);
+                }
+              }}
+              // Source Control Monaco Editor Integration
+              onSourceControlOpenFile={(filePath: string) => {
+                setSelectedFilePath(filePath);
+                openTab(filePath);
+              }}
+              onSourceControlFileSelect={(filePath: string) => {
+                setSelectedFilePath(filePath);
+              }}
+              onSourceControlRefreshFileContent={refreshTabContentByPath}
+              // Synchronization
+              onSourceControlSynchronize={handleSynchronizeAll}
+              isSourceControlSynchronizing={isSynchronizing}
+              // Connections
+              connection={connection}
+              onAddConnection={() => setIsAddConnectionModalOpen(true)}
+              onEditConnection={() => {
+                if (connection?.id) {
+                  navigate(`/app/edit-connection/${connection.id}`);
+                }
+              }}
+              onRemoveConnection={() => {
+                if (connection?.id) {
+                  setIsRemoveConnectionConfirmOpen(true);
+                }
+              }}
+            />
+          </Box>
+        </Box>
       }
     >
       <SplitPane
@@ -904,91 +974,45 @@ const ProjectDetails: React.FC = () => {
                           activeTabId={activeTabId}
                           onSelect={switchTab}
                           onClose={closeTab}
+                          onCloseAll={handleCloseAllTabs}
+                          onSaveAll={handleSaveAllTabs}
                           onReorder={reorderTabs}
                         />
                       </Box>
-                      <ButtonsContainer>
-                        <ProjectDbtSplitButton
-                          rosettaPath={settings?.rosettaPath}
-                          dbtPath={settings?.dbtPath}
-                          project={project}
-                          isDbtConfigured={!!settings?.dbtPath}
-                          isRunningDbt={isRunningDbt}
-                          isRunningRosettaDbt={isRunningRosettaDbt}
-                          connection={connection}
-                          environment={env}
-                          rosettaDbt={rosettaDbt}
-                        />
-                        {connection?.id ? (
-                          <>
-                            <Tooltip
-                              title="Database connection options"
-                              placement="bottom"
-                            >
-                              <IconButton onClick={handleConnectionMenuOpen}>
-                                <Cable color="primary" fontSize="small" />
-                              </IconButton>
-                            </Tooltip>
-                            <Menu
-                              anchorEl={connectionMenuAnchor}
-                              open={Boolean(connectionMenuAnchor)}
-                              onClose={handleConnectionMenuClose}
-                              anchorOrigin={{
-                                vertical: 'bottom',
-                                horizontal: 'right',
-                              }}
-                              transformOrigin={{
-                                vertical: 'top',
-                                horizontal: 'right',
-                              }}
-                            >
-                              <MenuItem
-                                onClick={() => {
-                                  navigate(
-                                    `/app/edit-connection/${connection.id}`,
-                                  );
-                                  handleConnectionMenuClose();
-                                }}
-                              >
-                                <ListItemIcon>
-                                  <Edit fontSize="small" color="primary" />
-                                </ListItemIcon>
-                                <ListItemText>Edit</ListItemText>
-                              </MenuItem>
-                              <MenuItem onClick={handleRemoveConnection}>
-                                <ListItemIcon>
-                                  <Delete fontSize="small" color="error" />
-                                </ListItemIcon>
-                                <ListItemText>Remove</ListItemText>
-                              </MenuItem>
-                            </Menu>
-                          </>
-                        ) : (
-                          <Tooltip
-                            title="Add database connection"
-                            placement="bottom"
-                          >
-                            <IconButton
-                              onClick={handleAddConnection}
-                              sx={{
-                                border: '1px solid',
-                                borderColor: 'divider',
-                                borderRadius: '16px',
-                                padding: '4px 12px',
-                                fontSize: '12px',
-                                color: 'text.secondary',
-                                '&:hover': {
-                                  bgcolor: 'action.hover',
-                                },
-                              }}
-                            >
-                              <Cable fontSize="small" sx={{ mr: 0.5 }} />
-                              No connection
-                            </IconButton>
-                          </Tooltip>
-                        )}
-                      </ButtonsContainer>
                     </Header>
+                    {connection?.id && (
+                      <Menu
+                        anchorEl={connectionMenuAnchor}
+                        open={Boolean(connectionMenuAnchor)}
+                        onClose={handleConnectionMenuClose}
+                        anchorOrigin={{
+                          vertical: 'bottom',
+                          horizontal: 'right',
+                        }}
+                        transformOrigin={{
+                          vertical: 'top',
+                          horizontal: 'right',
+                        }}
+                      >
+                        <MenuItem
+                          onClick={() => {
+                            navigate(`/app/edit-connection/${connection.id}`);
+                            handleConnectionMenuClose();
+                          }}
+                        >
+                          <ListItemIcon>
+                            <Edit fontSize="small" color="primary" />
+                          </ListItemIcon>
+                          <ListItemText>Edit</ListItemText>
+                        </MenuItem>
+                        <MenuItem onClick={handleRemoveConnectionClick}>
+                          <ListItemIcon>
+                            <Delete fontSize="small" color="error" />
+                          </ListItemIcon>
+                          <ListItemText>Remove</ListItemText>
+                        </MenuItem>
+                      </Menu>
+                    )}
                     {!selectedFilePath && (
                       <NoFileSelected>
                         Please select a file from the explorer on the left!
@@ -1001,9 +1025,7 @@ const ProjectDetails: React.FC = () => {
                         tabs={tabs}
                         activeTabId={activeTabId}
                         onTabContentChange={(tabId, newContent) => {
-                          updateTabContent(tabId, newContent, {
-                            markModified: true,
-                          });
+                          updateTabContent(tabId, newContent);
                         }}
                         onTabSaved={(tabId) => {
                           markTabSaved(tabId);
@@ -1100,6 +1122,14 @@ const ProjectDetails: React.FC = () => {
                   refetch();
                 }}
                 onUpdateProject={updateProject}
+              />
+              <RemoveConnectionModal
+                isOpen={isRemoveConnectionConfirmOpen}
+                onClose={() => setIsRemoveConnectionConfirmOpen(false)}
+                onConfirm={handleConfirmRemoveConnection}
+                connectionName={
+                  connection?.connection?.name || (connection as any)?.name
+                }
               />
             </Container>
           </Box>

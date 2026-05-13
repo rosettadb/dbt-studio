@@ -10,7 +10,7 @@ import {
 } from '@mui/material';
 import { useTheme } from '@mui/material/styles';
 import { useLocation } from 'react-router-dom';
-import { CollapseLeftIcon, ExpandRightIcon } from './collapse-icons';
+import { CollapseLeftIcon } from './collapse-icons';
 import { getMainElements, getBottomElements } from './elements';
 import {
   ACTIVITY_BAR_COLLAPSED_WIDTH,
@@ -42,8 +42,7 @@ export const Sidebar: React.FC<Props> = ({
   const { isSidebarOpen, setIsSidebarOpen } = useAppContext();
   const location = useLocation();
 
-  const hasPanel = Boolean(content);
-  const [isBarExpanded, setIsBarExpanded] = React.useState(!hasPanel);
+  const [isBarExpanded, setIsBarExpanded] = React.useState(false);
 
   const isProjectSelected = Boolean(selectedProject?.id);
 
@@ -119,16 +118,6 @@ export const Sidebar: React.FC<Props> = ({
           cursor: 'pointer',
           pointerEvents: isDisabled ? 'none' : 'auto',
         }}
-        onClick={(e) => {
-          if (isActive) {
-            // Clicking the already-active item toggles the panel closed
-            e.preventDefault();
-            setIsSidebarOpen(!isSidebarOpen);
-          } else {
-            // Navigating to a different page always opens the panel
-            setIsSidebarOpen(true);
-          }
-        }}
       >
         {listItem}
       </StyledNavLink>
@@ -197,7 +186,6 @@ export const Sidebar: React.FC<Props> = ({
                 alt="Icon"
                 style={{ width: 20, height: 20 }}
               />
-              <ExpandRightIcon />
             </Box>
           )}
         </ActivityBarHeader>

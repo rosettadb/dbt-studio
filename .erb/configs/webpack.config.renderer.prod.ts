@@ -10,6 +10,7 @@ import { BundleAnalyzerPlugin } from 'webpack-bundle-analyzer';
 import CssMinimizerPlugin from 'css-minimizer-webpack-plugin';
 import { merge } from 'webpack-merge';
 import TerserPlugin from 'terser-webpack-plugin';
+import MonacoWebpackPlugin from 'monaco-editor-webpack-plugin';
 import baseConfig from './webpack.config.base';
 import webpackPaths from './webpack.paths';
 import checkNodeEnv from '../scripts/check-node-env';
@@ -134,6 +135,21 @@ const configuration: webpack.Configuration = {
 
     new webpack.DefinePlugin({
       'process.type': '"renderer"',
+    }),
+
+    // Bundles Monaco's main module + language workers via webpack so we
+    // can `import * as monaco from 'monaco-editor'` directly. No AMD
+    // loader, no shipped min/vs directory.
+    new MonacoWebpackPlugin({
+      languages: [
+        'sql',
+        'yaml',
+        'json',
+        'javascript',
+        'typescript',
+        'markdown',
+      ],
+      filename: '[name].worker.[contenthash].js',
     }),
   ],
 };

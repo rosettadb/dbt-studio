@@ -6,6 +6,7 @@ import {
   Cloud,
   ElectricalServices as ElectricalServicesIcon,
   LibraryBooks,
+  Settings,
 } from '@mui/icons-material';
 import { useTheme } from '@mui/material/styles';
 import { icons } from '../../../../assets';
@@ -132,3 +133,8 @@ export const DataLake: React.FC = () => {
 };
 
 export const NotebooksIcon: React.FC = () => <LibraryBooks color="primary" />;
+
+export const SettingsIcon: React.FC = () => {
+  const theme = useTheme();
+  return <Settings sx={{ color: theme.palette.primary.main }} />;
+};

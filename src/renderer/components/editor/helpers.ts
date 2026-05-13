@@ -1,9 +1,14 @@
 /* eslint-disable no-plusplus */
-import { diffLines, parsePatch } from 'diff';
+import { diffLines } from 'diff';
 import { Range } from '../../../types/editor';
 
+// Git stores blobs with LF; on Windows the editor buffer may carry CRLF
+// (or vice versa under core.autocrlf=true). Without this, every line shows
+// as changed. No-op on Mac/Linux where both sides are already LF.
+export const normalizeEol = (s: string) => s.replace(/\r\n/g, '\n');
+
 const getChangedLineNumbers = (oldStr: string, newStr: string) => {
-  const changes = diffLines(oldStr, newStr);
+  const changes = diffLines(normalizeEol(oldStr), normalizeEol(newStr));
   let line = 1;
   const added: number[] = [];
   const removed: number[] = [];
@@ -74,61 +79,4 @@ export const getLanguageFromExtension = (filePath: string): string => {
     default:
       return 'plaintext';
   }
-};
-
-export const getVersionsFromDiff = (newContent: string, diffString: string) => {
-  if (!diffString || diffString.trim() === '' || diffString === 'undefined') {
-    return {
-      oldVersion: newContent,
-      newVersion: newContent,
-    };
-  }
-
-  let patch;
-  try {
-    [patch] = parsePatch(diffString);
-  } catch (error) {
-    return {
-      oldVersion: newContent,
-      newVersion: newContent,
-    };
-  }
-
-  if (!patch) {
-    return {
-      oldVersion: newContent,
-      newVersion: newContent,
-    };
-  }
-  const newLines = newContent.split('\n');
-
-  const oldLines = [...newLines];
-  let offset = 0;
-
-  patch.hunks?.forEach((hunk) => {
-    let newIndex = hunk.newStart - 1 + offset;
-    let removedCount = 0;
-
-    hunk.lines.forEach((line) => {
-      const type = line[0];
-      const value = line.slice(1);
-
-      if (type === '+') {
-        oldLines.splice(newIndex, 1);
-        removedCount += 1;
-      } else if (type === '-') {
-        oldLines.splice(newIndex, 0, value);
-        newIndex++;
-      } else {
-        newIndex++;
-      }
-    });
-
-    offset -= removedCount;
-  });
-
-  return {
-    oldVersion: oldLines.join('\n'),
-    newVersion: newContent,
-  };
 };

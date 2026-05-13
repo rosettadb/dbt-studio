@@ -6,6 +6,7 @@ import type {
   CloudListResult,
   CloudConnection,
   RecentItem,
+  FilterCondition,
 } from '../../types/frontend';
 import type {
   UploadFileRequest,
@@ -118,29 +119,18 @@ export const useGetDownloadUrl = () => {
 // Mutation for previewing data
 export const usePreviewData = () => {
   return useMutation(
-    ({
-      provider,
-      config,
-      bucketName,
-      objectName,
-      previewType = 'sample',
-      limit = 100,
-    }: {
+    (params: {
       provider: CloudProvider;
       config: CloudStorageConfig;
       bucketName: string;
       objectName: string;
       previewType?: 'sample' | 'schema' | 'stats';
-      limit?: number;
-    }) =>
-      cloudExplorerService.previewData(
-        provider,
-        config,
-        bucketName,
-        objectName,
-        previewType,
-        limit,
-      ),
+      pageSize?: number;
+      page?: number;
+      whereClause?: string;
+      filterConditions?: FilterCondition[];
+      knownTotalRows?: number;
+    }) => cloudExplorerService.previewData(params),
   );
 };
 

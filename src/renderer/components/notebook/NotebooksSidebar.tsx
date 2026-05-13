@@ -186,14 +186,14 @@ export const NotebooksSidebar: React.FC<NotebooksSidebarProps> = ({
         display: 'flex',
         flexDirection: 'column',
         height: '100%',
-        bgcolor: theme.palette.mode === 'dark' ? '#1e1e1e' : '#f5f5f5',
+        bgcolor: 'background.paper',
       }}
     >
       {/* Tabs */}
       <Box
         sx={{
           borderBottom: `1px solid ${theme.palette.divider}`,
-          bgcolor: theme.palette.mode === 'dark' ? '#1e1e1e' : '#f5f5f5',
+          bgcolor: 'background.paper',
         }}
       >
         <Tabs
@@ -234,7 +234,7 @@ export const NotebooksSidebar: React.FC<NotebooksSidebarProps> = ({
           gap: 0.5,
           p: 1,
           borderBottom: `1px solid ${theme.palette.divider}`,
-          bgcolor: theme.palette.mode === 'dark' ? '#1e1e1e' : '#f5f5f5',
+          bgcolor: 'background.paper',
         }}
       >
         {/* Search Input - always visible */}
