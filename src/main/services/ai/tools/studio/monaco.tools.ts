@@ -86,22 +86,12 @@ export function createStudioMonacoTools(conversationId: number) {
       execute: async ({ content }) => {
         const startedAt = Date.now();
         try {
-          const readRes =
-            await AgentService.requestSqlEditorRead(conversationId);
-          const currentContent = readRes.content || '';
-
-          let newContent = content;
-          if (currentContent && !content.includes(currentContent.trim())) {
-            const trimmedCurrent = currentContent.replace(/;\s*$/, '').trim();
-            const trimmedNew = content.trim();
-            newContent = trimmedCurrent
-              ? `${trimmedCurrent};\n\n${trimmedNew}`
-              : trimmedNew;
-          }
-
+          // Always replace — never silently append. The tool description says
+          // "Update or replace SQL text" and the agent must be able to trust
+          // that the editor contains exactly what it wrote.
           const response = await AgentService.requestSqlEditorUpdate(
             conversationId,
-            newContent,
+            content,
           );
 
           if (!response.success || !response.applied) {

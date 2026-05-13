@@ -163,7 +163,11 @@ const registerAIHandlers = () => {
     'chat:conversation:list',
     async (
       _,
-      filter?: { projectId?: number; screenKey?: any; connectionId?: string },
+      filter?: {
+        projectId?: number;
+        screenKey?: any;
+        connectionId?: string | null;
+      },
     ): Promise<ChatConversation[]> => {
       return MainDatabaseService.getConversations(filter ?? {});
     },

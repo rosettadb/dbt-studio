@@ -100,20 +100,31 @@ export class PostgreSQLCatalogAdapter extends CatalogAdapter {
               ssl: pgConfig.ssl,
             });
 
-            await pgClient.connect();
+            try {
+              await pgClient.connect();
 
-            // Safely drop all ducklake_ prefixed tables using an anonymous DO block
-            const dropScript = `
-              DO $$ DECLARE
-                  r RECORD;
-              BEGIN
-                  FOR r IN (SELECT tablename FROM pg_tables WHERE schemaname = 'public' AND tablename LIKE 'ducklake_%') LOOP
-                      EXECUTE 'DROP TABLE IF EXISTS ' || quote_ident(r.tablename) || ' CASCADE';
-                  END LOOP;
-              END $$;
-            `;
-            await pgClient.query(dropScript);
-            await pgClient.end();
+              // Safely drop all ducklake_ prefixed tables using an anonymous DO block.
+              // Use schemaname || '.' || tablename so the DROP works regardless of
+              // the session's search_path (fixes issue #13 from CodeRabbit review).
+              const dropScript = `
+                DO $$ DECLARE
+                    r RECORD;
+                BEGIN
+                    FOR r IN (SELECT schemaname, tablename FROM pg_tables WHERE schemaname = 'public' AND tablename LIKE 'ducklake_%') LOOP
+                        EXECUTE 'DROP TABLE IF EXISTS ' || quote_ident(r.schemaname) || '.' || quote_ident(r.tablename) || ' CASCADE';
+                    END LOOP;
+                END $$;
+              `;
+              await pgClient.query(dropScript);
+            } finally {
+              // Always close — prevents session leaks on repeated failed migrations.
+              try {
+                await pgClient.end();
+              } catch (endErr) {
+                // eslint-disable-next-line no-console
+                console.error('Failed to close reset pg client:', endErr);
+              }
+            }
           } catch (resetError) {
             // eslint-disable-next-line no-console
             console.error(

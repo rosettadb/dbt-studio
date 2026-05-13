@@ -10,10 +10,11 @@
  *   4. resolveQueryResultsResponse() resolves the pending Promise.
  *
  *  Push channel (studio_sql_get_agent_run_result):
- *   1. Query tool calls recordQueryFired() just before firing the query.
+ *   1. Query tool calls recordQueryFired(conversationId) just before firing the query.
  *   2. Renderer executes query, then invokes 'agent:editor:query-run-result' with { snapshot, pushedAt }.
- *   3. storeRunResult() stores the snapshot with its push timestamp.
- *   4. waitForRunResult() polls until a fresh push (pushedAt > lastQueryFiredAt) arrives.
+ *   3. storeRunResult() stores the snapshot keyed by tabId with its push timestamp.
+ *   4. waitForRunResult(conversationId, tabId?) polls until a fresh push arrives whose
+ *      pushedAt is strictly greater than the fire timestamp for that conversationId.
  *
  * All business logic lives here per rule BE-01.
  * IPC handlers in agent.ipcHandlers.ts are thin one-line wrappers only.
@@ -37,16 +38,18 @@ interface PendingRequest {
 const pendingRequests = new Map<string, PendingRequest>();
 
 // Push channel state — populated by renderer after agent-triggered execution completes.
-// Keyed by tabId for multi-tab safety; lastRunResult is the most recent regardless of tab.
+// Keyed by tabId for multi-tab safety.
 const lastRunResultByTab = new Map<string, QueryResultSnapshot>();
-let lastRunResult: QueryResultSnapshot | null = null;
+const lastRunResultPushedAtByTab = new Map<string, number>();
 
-// Timestamps used to detect freshness.
-// lastQueryFiredAt: set by the query tool just before firing agent:editor:run-query.
-// lastRunResultPushedAt: set when the renderer pushes the result back.
-// waitForRunResult() polls until lastRunResultPushedAt > lastQueryFiredAt.
-let lastQueryFiredAt: number = 0;
+// Per-conversation fire timestamps — keyed by String(conversationId).
+// Prevents cross-tab/cross-conversation races when multiple agents run concurrently.
+const lastQueryFiredAtByConv = new Map<string, number>();
+
+// Global fallback scalars (kept for backward-compat with callers that don't pass a key).
+let lastRunResult: QueryResultSnapshot | null = null;
 let lastRunResultPushedAt: number = 0;
+let lastQueryFiredAt: number = 0;
 
 export class AgentEditorBridgeService {
   // ─── Pull channel ─────────────────────────────────────────────────────────
@@ -111,19 +114,23 @@ export class AgentEditorBridgeService {
 
   /**
    * Called by studio_sql_query / studio_ducklake_query just BEFORE they fire
-   * agent:editor:run-query. Records the fire timestamp so waitForRunResult()
-   * knows to wait for a push that arrived strictly after this moment.
+   * agent:editor:run-query. Records the fire timestamp keyed by conversationId
+   * so waitForRunResult() can detect freshness per-conversation.
+   *
+   * @param conversationId  String representation of the active conversation ID.
    */
-  static recordQueryFired(): void {
-    lastQueryFiredAt = Date.now();
+  static recordQueryFired(conversationId: string): void {
+    const now = Date.now();
+    lastQueryFiredAt = now; // global fallback
+    lastQueryFiredAtByConv.set(conversationId, now);
   }
 
   /**
    * Called by ipcMain.handle('agent:editor:query-run-result') when the renderer
    * pushes the result after agent-triggered execution completes.
    *
-   * Only pushes with a pushedAt >= lastRunResultPushedAt are accepted (guards
-   * against out-of-order IPC delivery).
+   * Only pushes with a pushedAt >= lastRunResultPushedAt (global) are accepted
+   * to guard against out-of-order IPC delivery on the global path.
    *
    * @param snapshot  The execution result snapshot.
    * @param pushedAt  Timestamp (Date.now()) recorded by the renderer at push time.
@@ -134,20 +141,23 @@ export class AgentEditorBridgeService {
     lastRunResultPushedAt = pushedAt;
     if (snapshot.tabId) {
       lastRunResultByTab.set(snapshot.tabId, snapshot);
+      lastRunResultPushedAtByTab.set(snapshot.tabId, pushedAt);
     }
   }
 
   /**
    * Waits until a fresh run-result is available — i.e. a push whose pushedAt
-   * timestamp is strictly greater than lastQueryFiredAt.
+   * timestamp is strictly greater than the fire timestamp for this conversationId.
    *
-   * Solves the race condition where the agent reads after a 1-2 s LLM inference
-   * step but the query itself takes 7+ seconds to complete.
+   * Per-conversation keying prevents cross-tab races when multiple agents run
+   * concurrently (e.g. SQL screen + Notebooks screen or two SQL tabs).
    *
-   * @param tabId    Optional tab ID. Omit to read the most recent result.
-   * @param timeout  Max wait time in ms (default 35 000 ms).
+   * @param conversationId  String representation of the active conversation ID.
+   * @param tabId           Optional tab ID. Omit to accept any tab's fresh result.
+   * @param timeout         Max wait time in ms (default 35 000 ms).
    */
   static async waitForRunResult(
+    conversationId: string,
     tabId?: string,
     timeout = 35_000,
   ): Promise<QueryResultSnapshot | null> {
@@ -155,11 +165,39 @@ export class AgentEditorBridgeService {
     const deadline = Date.now() + timeout;
 
     while (Date.now() < deadline) {
-      if (lastRunResultPushedAt > lastQueryFiredAt) {
-        return tabId
-          ? (lastRunResultByTab.get(tabId) ?? lastRunResult)
-          : lastRunResult;
+      const firedAt =
+        lastQueryFiredAtByConv.get(conversationId) ?? lastQueryFiredAt;
+
+      if (tabId) {
+        // Check the specific tab's push timestamp.
+        const pushedAt = lastRunResultPushedAtByTab.get(tabId) ?? 0;
+        if (pushedAt > firedAt) {
+          return lastRunResultByTab.get(tabId) ?? lastRunResult;
+        }
+      } else {
+        // No tabId — accept the freshest result from ANY tab that arrived after
+        // this conversation's fire time, or fall back to the global scalar.
+        // Array.from().reduce() avoids for...of (iterator protocol banned by ESLint).
+        const freshest = Array.from(
+          lastRunResultPushedAtByTab.entries(),
+        ).reduce<{ snapshot: QueryResultSnapshot | null; pushedAt: number }>(
+          (acc, [tId, pAt]) => {
+            if (pAt > firedAt && pAt > acc.pushedAt) {
+              return {
+                snapshot: lastRunResultByTab.get(tId) ?? null,
+                pushedAt: pAt,
+              };
+            }
+            return acc;
+          },
+          { snapshot: null, pushedAt: 0 },
+        );
+        if (freshest.snapshot) return freshest.snapshot;
+
+        // Global scalar fallback for callers that did not pass conversationId.
+        if (lastRunResultPushedAt > firedAt) return lastRunResult;
       }
+
       // eslint-disable-next-line no-await-in-loop
       await new Promise<void>((resolve) => {
         setTimeout(resolve, POLL_MS);

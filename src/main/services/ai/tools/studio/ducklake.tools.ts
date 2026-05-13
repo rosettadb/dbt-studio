@@ -257,7 +257,7 @@ export function createStudioDuckLakeTools(conversationId: number) {
           // Step 3 — Delegate actual execution to the frontend SQL Editor.
           // recordQueryFired() must be called BEFORE requestSqlEditorRun so the
           // push timestamp from the renderer is guaranteed to be > lastQueryFiredAt.
-          AgentEditorBridgeService.recordQueryFired();
+          AgentEditorBridgeService.recordQueryFired(conversationId.toString());
           AgentService.requestSqlEditorRun(conversationId, sql);
 
           return {

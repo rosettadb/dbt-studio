@@ -487,7 +487,7 @@ export function createStudioConnectionsTools() {
           );
 
           return {
-            ok: success,
+            ok: true,
             data: {
               id: cloudConnection.id,
               name: cloudConnection.name,
