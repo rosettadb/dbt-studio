@@ -522,6 +522,7 @@ export const ChatWindow: React.FC<ChatWindowProps> = ({
           lastUsage={lastUsage}
           streamState={streamState}
           isAgentRunning={streamState.isStreaming}
+          screenKey={screenKey}
           onConfirmTerminal={confirmTerminal}
           onClearError={clearError}
           onOpenFile={handleOpenFile}

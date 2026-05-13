@@ -30,6 +30,7 @@ interface ChatMessageListProps {
   lastUsage?: TokenUsage | null;
   streamState?: AgentStreamState;
   isAgentRunning?: boolean;
+  screenKey?: 'project' | 'sql' | 'notebooks';
   onConfirmTerminal?: (allow: boolean) => void;
   onClearError?: () => void;
   onOpenFile?: (path: string) => void;
@@ -40,6 +41,7 @@ export const ChatMessageList: React.FC<ChatMessageListProps> = ({
   lastUsage,
   streamState,
   isAgentRunning,
+  screenKey = 'project',
   onConfirmTerminal,
   onClearError,
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
@@ -135,6 +137,45 @@ export const ChatMessageList: React.FC<ChatMessageListProps> = ({
     };
   }, [scrollToBottom]);
 
+  const emptyState = React.useMemo(() => {
+    if (screenKey === 'sql') {
+      return {
+        title: 'SQL Agent Ready',
+        subtitle:
+          'Run queries, inspect schema, and iterate faster with connection-aware assistance.',
+        bullets: [
+          'Write and refine SQL for the active connection',
+          'Explain query errors and suggest safe fixes',
+          'Generate quick exploration queries from plain language',
+        ],
+      };
+    }
+
+    if (screenKey === 'notebooks') {
+      return {
+        title: 'Notebook Agent Ready',
+        subtitle:
+          'Build analysis workflows cell by cell with context from your notebook and connection.',
+        bullets: [
+          'Draft SQL cells from analysis goals',
+          'Help debug failing cells and outputs',
+          'Propose next steps for data investigation',
+        ],
+      };
+    }
+
+    return {
+      title: 'dbt Agent Ready',
+      subtitle:
+        'Use the dbt agent to plan, write, and improve models with project context.',
+      bullets: [
+        'Create or refactor dbt models and tests',
+        'Explain lineage and transformation intent',
+        'Suggest best-practice project improvements',
+      ],
+    };
+  }, [screenKey]);
+
   if (!sessionId) {
     return (
       <Box
@@ -187,9 +228,48 @@ export const ChatMessageList: React.FC<ChatMessageListProps> = ({
         </Typography>
       )}
       {!isLoading && messages.length === 0 && !isAgentRunning && (
-        <Typography variant="caption" color="text.disabled">
-          No messages yet. Say hello!
-        </Typography>
+        <Box sx={{ px: 1.5, pt: 1, pb: 1.5 }}>
+          <Box
+            sx={{
+              border: '1px solid',
+              borderColor: 'divider',
+              borderRadius: 0.5,
+              px: 1.5,
+              py: 1.25,
+              background:
+                'linear-gradient(180deg, rgba(144,202,249,0.08) 0%, rgba(144,202,249,0.02) 100%)',
+            }}
+          >
+            <Typography
+              variant="body2"
+              sx={{ fontWeight: 600, color: 'text.primary' }}
+            >
+              {emptyState.title}
+            </Typography>
+            <Typography
+              variant="caption"
+              sx={{
+                color: 'text.secondary',
+                display: 'block',
+                mt: 0.5,
+                lineHeight: 1.5,
+              }}
+            >
+              {emptyState.subtitle}
+            </Typography>
+            <Stack sx={{ mt: 1 }} spacing={0.5}>
+              {emptyState.bullets.map((item) => (
+                <Typography
+                  key={item}
+                  variant="caption"
+                  sx={{ color: 'text.secondary', lineHeight: 1.45 }}
+                >
+                  • {item}
+                </Typography>
+              ))}
+            </Stack>
+          </Box>
+        </Box>
       )}
       <Stack
         spacing={0.25}
