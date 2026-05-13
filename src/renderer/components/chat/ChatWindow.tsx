@@ -80,6 +80,7 @@ export const ChatWindow: React.FC<ChatWindowProps> = ({
   const connectionName = activeConnection?.connection?.name;
 
   const [selectedSessionId, setSelectedSessionId] = React.useState<number>();
+  const previousScopeKeyRef = React.useRef<string | null>(null);
   const [lastUsage, setLastUsage] = React.useState<{
     promptTokens: number;
     completionTokens: number;
@@ -197,6 +198,11 @@ export const ChatWindow: React.FC<ChatWindowProps> = ({
     screenKey,
     connectionId: connectionId ?? null,
   });
+
+  const sessionScopeKey = React.useMemo(
+    () => `${screenKey}|${projectId ?? 'none'}|${connectionId ?? 'none'}`,
+    [screenKey, projectId, connectionId],
+  );
   const { data: providers = [], isLoading: isLoadingProviders } =
     useGetAIProviders();
   const { mutate: createSession, isLoading: isCreating } = useCreateChatSession(
@@ -235,10 +241,31 @@ export const ChatWindow: React.FC<ChatWindowProps> = ({
 
   React.useEffect(() => {
     if (isLoading) return;
+
+    const previousScopeKey = previousScopeKeyRef.current;
+    const hasScopeChanged =
+      previousScopeKey !== null && previousScopeKey !== sessionScopeKey;
+    previousScopeKeyRef.current = sessionScopeKey;
+
     if (sessions.length > 0) {
-      setSelectedSessionId(
-        (prev) => prev ?? (sessions[0].id as unknown as number),
-      );
+      setSelectedSessionId((prev) => {
+        // On connection/screen scope change, always switch to latest session
+        // in the new scope.
+        if (hasScopeChanged) {
+          return sessions[0].id as unknown as number;
+        }
+
+        // Keep current selection only if it still exists in current scope.
+        if (
+          prev &&
+          sessions.some((s) => (s.id as unknown as number) === prev)
+        ) {
+          return prev;
+        }
+
+        // Initial load or stale selection fallback.
+        return sessions[0].id as unknown as number;
+      });
       return;
     }
     if (projectId || connectionId) {
@@ -250,7 +277,15 @@ export const ChatWindow: React.FC<ChatWindowProps> = ({
         connectionId,
       });
     }
-  }, [sessions, isLoading, projectId, connectionId, screenKey]);
+  }, [
+    sessions,
+    isLoading,
+    projectId,
+    connectionId,
+    screenKey,
+    sessionScopeKey,
+    createSession,
+  ]);
 
   const handleCreateNewSession = () => {
     if (projectId || connectionId) {
