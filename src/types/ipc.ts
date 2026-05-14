@@ -395,6 +395,12 @@ export type SkillsChannels =
   | 'skills:create'
   | 'skills:import';
 
+export type SavedQueriesChannels =
+  | 'savedQueries:list'
+  | 'savedQueries:create'
+  | 'savedQueries:update'
+  | 'savedQueries:delete';
+
 export type Channels =
   | TestChannels
   | CliChannels
@@ -415,7 +421,8 @@ export type Channels =
   | NotebookChannels
   | AgentChannels
   | MCPChannels
-  | SkillsChannels;
+  | SkillsChannels
+  | SavedQueriesChannels;
 
 export type ConfigureConnectionBody = {
   projectId?: string;

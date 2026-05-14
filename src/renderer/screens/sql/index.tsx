@@ -23,6 +23,8 @@ import {
   Tooltip,
   useMediaQuery,
   Dialog,
+  Tabs,
+  Tab,
 } from '@mui/material';
 import {
   Stop,
@@ -31,6 +33,7 @@ import {
   Add,
   FilterList,
   Link as LinkIcon,
+  Code as CodeTabIcon,
 } from '@mui/icons-material';
 import { toast } from 'react-toastify';
 import { useNavigate } from 'react-router-dom';
@@ -56,6 +59,7 @@ import {
   useDuckLakeInstances,
 } from '../../controllers';
 import { SchemaTreeViewerWithSchema } from './SchemaTreeViewerWithSchema';
+import { SavedQueriesList } from '../../components/sqlEditor/SavedQueriesList';
 import connectionIcons, {
   defaultIcon,
 } from '../../../../assets/connectionIcons';
@@ -109,6 +113,7 @@ const Sql = () => {
     isLoading: isLoadingDuckLakeInstances,
     refetch: refetchDuckLakeInstances,
   } = useDuckLakeInstances();
+  const [sidebarTab, setSidebarTab] = useState(0);
   const [filter, setFilter] = useState('');
   const {
     tabs,
@@ -880,19 +885,7 @@ const Sql = () => {
                 ))}
               </Select>
             </FormControl>
-            <IconButton
-              size="small"
-              onClick={handleRefreshSchema}
-              disabled={!activeTab}
-              sx={{
-                width: 28,
-                height: 28,
-                bgcolor: 'transparent',
-                '&:hover': { bgcolor: 'rgba(0,0,0,0.05)' },
-              }}
-            >
-              <Refresh sx={{ fontSize: 18 }} />
-            </IconButton>
+
             <IconButton
               size="small"
               onClick={() => navigate('/app/add-connection')}
@@ -907,130 +900,214 @@ const Sql = () => {
             </IconButton>
           </Box>
 
-          {/* Search Field */}
           <Box
             sx={{
-              p: '8px',
+              borderBottom: 1,
+              borderColor: 'divider',
               bgcolor: theme.palette.mode === 'dark' ? '#1e1e1e' : '#f5f5f5',
-              borderBottom: `1px solid ${theme.palette.divider}`,
             }}
           >
-            <TextField
-              fullWidth
-              size="small"
-              placeholder="Filter"
-              value={filter}
-              onChange={(e) => setFilter(e.target.value)}
-              InputProps={{
-                endAdornment: (
-                  <InputAdornment position="end">
-                    <FilterList sx={{ fontSize: 16, color: 'text.disabled' }} />
-                  </InputAdornment>
-                ),
-                sx: {
-                  height: 28,
+            <Tabs
+              value={sidebarTab}
+              onChange={(e: React.SyntheticEvent, newValue: number) =>
+                setSidebarTab(newValue)
+              }
+              variant="fullWidth"
+              sx={{ minHeight: 36 }}
+            >
+              <Tab
+                icon={<TableChart sx={{ fontSize: 16 }} />}
+                iconPosition="start"
+                label="Data"
+                sx={{
+                  minHeight: 36,
+                  textTransform: 'none',
+                  py: 0,
                   fontSize: '0.8rem',
-                  bgcolor: theme.palette.background.paper,
-                  '& .MuiOutlinedInput-notchedOutline': {
-                    borderColor: theme.palette.divider,
-                  },
-                  '&:hover .MuiOutlinedInput-notchedOutline': {
-                    borderColor: theme.palette.divider,
-                  },
-                  borderRadius: '4px',
-                },
-              }}
-            />
+                }}
+              />
+              <Tab
+                icon={<CodeTabIcon sx={{ fontSize: 16 }} />}
+                iconPosition="start"
+                label="Queries"
+                sx={{
+                  minHeight: 36,
+                  textTransform: 'none',
+                  py: 0,
+                  fontSize: '0.8rem',
+                }}
+              />
+            </Tabs>
           </Box>
 
-          <Box
-            sx={{
-              flex: 1,
-              overflow: 'hidden',
-              bgcolor: theme.palette.mode === 'dark' ? '#1e1e1e' : '#f5f5f5',
-            }}
-          >
-            <SchemaViewContainer
-              style={{
-                width: '100%',
-                background: 'transparent',
-              }}
-            >
-              <SchemaViewGrid>
-                {activeTab &&
-                  connectionInput &&
-                  isDuckLakeConnection &&
-                  (!duckLakeSchemaLoading && duckLakeSchema === null ? (
-                    <Box
-                      sx={{
-                        display: 'flex',
-                        flexDirection: 'column',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        height: '100%',
-                        color: 'text.secondary',
-                        p: 2,
-                        textAlign: 'center',
-                      }}
-                    >
-                      <Typography variant="body2" color="text.secondary">
-                        {duckLakeSchemaError || 'No Schema available'}
-                      </Typography>
-                      <Button
-                        size="small"
-                        variant="outlined"
-                        startIcon={<Refresh />}
-                        onClick={handleRefreshSchema}
-                        sx={{ mt: 2 }}
-                      >
-                        Retry
-                      </Button>
-                    </Box>
-                  ) : (
-                    <SchemaTreeViewerWithSchema
-                      databaseName={connectionInput.name || 'DuckLake Instance'}
-                      type="ducklake"
-                      schema={duckLakeTables}
-                      schemaNames={duckLakeSchemaNames}
-                      isLoading={duckLakeSchemaLoading}
-                      filter={filter}
-                    />
-                  ))}
-                {activeTab && connectionInput && !isDuckLakeConnection && (
-                  <SchemaTreeViewerWithSchema
-                    databaseName={String(
-                      (connectionInput as any)?.database ??
-                        activeConnection?.connection.name ??
-                        'Database',
-                    )}
-                    type={connectionInput.type}
-                    schema={activeSchema}
-                    isLoading={isLoadingSchema}
-                    filter={filter}
-                  />
-                )}
-                {!activeTab && (
-                  <Box
+          {sidebarTab === 0 && (
+            <>
+              {/* Search Field */}
+              <Box
+                sx={{
+                  p: '8px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 1,
+                  bgcolor:
+                    theme.palette.mode === 'dark' ? '#1e1e1e' : '#f5f5f5',
+                  borderBottom: `1px solid ${theme.palette.divider}`,
+                }}
+              >
+                <TextField
+                  fullWidth
+                  size="small"
+                  placeholder="Filter"
+                  value={filter}
+                  onChange={(e) => setFilter(e.target.value)}
+                  InputProps={{
+                    endAdornment: (
+                      <InputAdornment position="end">
+                        <FilterList
+                          sx={{ fontSize: 16, color: 'text.disabled' }}
+                        />
+                      </InputAdornment>
+                    ),
+                    sx: {
+                      height: 28,
+                      fontSize: '0.8rem',
+                      bgcolor: theme.palette.background.paper,
+                      '& .MuiOutlinedInput-notchedOutline': {
+                        borderColor: theme.palette.divider,
+                      },
+                      '&:hover .MuiOutlinedInput-notchedOutline': {
+                        borderColor: theme.palette.divider,
+                      },
+                      borderRadius: '4px',
+                    },
+                  }}
+                />
+                <Tooltip title="Refresh Schema">
+                  <IconButton
+                    size="small"
+                    onClick={handleRefreshSchema}
+                    disabled={!activeTab}
                     sx={{
-                      display: 'flex',
-                      flexDirection: 'column',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      height: '100%',
-                      color: 'text.secondary',
-                      p: 2,
-                      textAlign: 'center',
+                      width: 28,
+                      height: 28,
+                      p: 0.5,
+                      bgcolor: 'transparent',
+                      '&:hover': { bgcolor: 'rgba(0,0,0,0.05)' },
                     }}
                   >
-                    <TableChart sx={{ fontSize: 48, opacity: 0.3, mb: 1 }} />
-                    <Typography variant="body2" color="text.secondary">
-                      Select a connection to view schema
-                    </Typography>
-                  </Box>
-                )}
-              </SchemaViewGrid>
-            </SchemaViewContainer>
-          </Box>
+                    <Refresh sx={{ fontSize: 18 }} />
+                  </IconButton>
+                </Tooltip>
+              </Box>
+
+              <Box
+                sx={{
+                  flex: 1,
+                  overflow: 'hidden',
+                  bgcolor:
+                    theme.palette.mode === 'dark' ? '#1e1e1e' : '#f5f5f5',
+                }}
+              >
+                <SchemaViewContainer
+                  style={{
+                    width: '100%',
+                    background: 'transparent',
+                  }}
+                >
+                  <SchemaViewGrid>
+                    {activeTab &&
+                      connectionInput &&
+                      isDuckLakeConnection &&
+                      (!duckLakeSchemaLoading && duckLakeSchema === null ? (
+                        <Box
+                          sx={{
+                            display: 'flex',
+                            flexDirection: 'column',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            height: '100%',
+                            color: 'text.secondary',
+                            p: 2,
+                            textAlign: 'center',
+                          }}
+                        >
+                          <Typography variant="body2" color="text.secondary">
+                            {duckLakeSchemaError || 'No Schema available'}
+                          </Typography>
+                          <Button
+                            size="small"
+                            variant="outlined"
+                            startIcon={<Refresh />}
+                            onClick={handleRefreshSchema}
+                            sx={{ mt: 2 }}
+                          >
+                            Retry
+                          </Button>
+                        </Box>
+                      ) : (
+                        <SchemaTreeViewerWithSchema
+                          databaseName={
+                            connectionInput.name || 'DuckLake Instance'
+                          }
+                          type="ducklake"
+                          schema={duckLakeTables}
+                          schemaNames={duckLakeSchemaNames}
+                          isLoading={duckLakeSchemaLoading}
+                          filter={filter}
+                        />
+                      ))}
+                    {activeTab && connectionInput && !isDuckLakeConnection && (
+                      <SchemaTreeViewerWithSchema
+                        databaseName={String(
+                          (connectionInput as any)?.database ??
+                            activeConnection?.connection.name ??
+                            'Database',
+                        )}
+                        type={connectionInput.type}
+                        schema={activeSchema}
+                        isLoading={isLoadingSchema}
+                        filter={filter}
+                      />
+                    )}
+                    {!activeTab && (
+                      <Box
+                        sx={{
+                          display: 'flex',
+                          flexDirection: 'column',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          height: '100%',
+                          color: 'text.secondary',
+                          p: 2,
+                          textAlign: 'center',
+                        }}
+                      >
+                        <TableChart
+                          sx={{ fontSize: 48, opacity: 0.3, mb: 1 }}
+                        />
+                        <Typography variant="body2" color="text.secondary">
+                          Select a connection to view schema
+                        </Typography>
+                      </Box>
+                    )}
+                  </SchemaViewGrid>
+                </SchemaViewContainer>
+              </Box>
+            </>
+          )}
+
+          {sidebarTab === 1 && (
+            <Box sx={{ flex: 1, overflow: 'hidden', display: 'flex' }}>
+              <SavedQueriesList
+                connectionId={activeConnectionId}
+                onOpenQuery={(query) => {
+                  if (activeTabId) {
+                    updateTabQuery(activeTabId, query);
+                  }
+                }}
+              />
+            </Box>
+          )}
         </Box>
       }
     >

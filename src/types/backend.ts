@@ -333,11 +333,21 @@ export type SettingsType = {
 
 export type FileDialogProperties = 'openFile' | 'openDirectory';
 
+export interface SavedQuery {
+  id: string;
+  name: string;
+  query: string;
+  connectionId: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export type DataBase = {
   projects: Project[];
   settings: SettingsType;
   selectedProject?: Project;
   queries: Record<string, string>;
+  savedQueries?: Record<string, SavedQuery[]>;
   connections: ConnectionModel[];
   sources: CloudConnection[];
   recentItems: RecentItem[];
