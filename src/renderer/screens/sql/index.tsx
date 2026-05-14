@@ -158,7 +158,9 @@ const Sql = () => {
     window.innerHeight - 440,
     440,
   ]);
-  const [tabQueryIds, setTabQueryIds] = useState<Record<string, string>>({});
+  const [tabExecutions, setTabExecutions] = useState<
+    Record<string, { id: string; sql: string }>
+  >({});
 
   const CHAT_WIDTH_KEY = 'sql-chat-width';
   const [verticalSizes, setVerticalSizes] = useState<(number | string)[]>(
@@ -507,6 +509,8 @@ const Sql = () => {
             commandType: results?.commandType,
             rowsAffected: results?.rowCount,
             tabId: activeTabId,
+            sql:
+              (results as any)?.originalSql ?? tabExecutions[activeTabId]?.sql,
           }
         : {
             status:
@@ -515,7 +519,8 @@ const Sql = () => {
             rows: results?.data ?? [],
             totalRowCount: results?.rowCount ?? results?.data?.length ?? 0,
             duration: results?.duration,
-            sql: (results as any)?.originalSql ?? activeTab?.query,
+            sql:
+              (results as any)?.originalSql ?? tabExecutions[activeTabId]?.sql,
             tabId: activeTabId,
           };
       QueryResultStore.set(activeTabId, snapshot);
@@ -528,7 +533,7 @@ const Sql = () => {
       });
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [activeTabId, updateTabResults, activeTab?.query],
+    [activeTabId, updateTabResults, tabExecutions],
   );
 
   // Handle query loading state
@@ -582,16 +587,16 @@ const Sql = () => {
   }, []);
 
   const handleCancelQuery = async () => {
-    const activeQueryId = activeTabId ? tabQueryIds[activeTabId] : null;
-    if (activeQueryId) {
+    const execution = activeTabId ? tabExecutions[activeTabId] : null;
+    if (execution) {
       try {
-        await connectorsServices.cancelQuery(activeQueryId);
+        await connectorsServices.cancelQuery(execution.id);
         toast.info('Query execution cancelled');
       } catch (e) {
         toast.error('Failed to cancel query');
       } finally {
         if (activeTabId) {
-          setTabQueryIds((prev) => {
+          setTabExecutions((prev) => {
             const updated = { ...prev };
             delete updated[activeTabId];
             return updated;
@@ -1254,9 +1259,9 @@ const Sql = () => {
                         onQueryChange={handleQueryChange}
                         onQueryStart={(id) => {
                           if (activeTabId) {
-                            setTabQueryIds((prev) => ({
+                            setTabExecutions((prev) => ({
                               ...prev,
-                              [activeTabId]: id,
+                              [activeTabId]: { id, sql: activeTab.query },
                             }));
                           }
                         }}
@@ -1343,9 +1348,9 @@ const Sql = () => {
                       onQueryChange={handleQueryChange}
                       onQueryStart={(id) => {
                         if (activeTabId) {
-                          setTabQueryIds((prev) => ({
+                          setTabExecutions((prev) => ({
                             ...prev,
-                            [activeTabId]: id,
+                            [activeTabId]: { id, sql: activeTab.query },
                           }));
                         }
                       }}

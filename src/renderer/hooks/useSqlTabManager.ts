@@ -10,6 +10,8 @@ import {
   updateConnectionQuery,
 } from '../services/connectors.service';
 
+import { QueryResultStore } from '../screens/sql/queryResultStore';
+
 const STORAGE_KEY = 'dbt-studio:sql-tabs';
 
 type PersistedSqlTabsState = {
@@ -157,6 +159,9 @@ const useSqlTabManager = (): UseSqlTabManagerReturn => {
 
   const performClose = React.useCallback(
     (tabId: SqlTabId) => {
+      // Clear stored results for this tab to prevent memory leaks
+      QueryResultStore.clear(tabId);
+
       setTabs((current) => {
         const index = current.findIndex((tab) => tab.id === tabId);
         if (index === -1) {

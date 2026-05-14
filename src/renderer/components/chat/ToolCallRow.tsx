@@ -287,19 +287,37 @@ export const ToolCallRow: React.FC<ToolCallRowProps> = ({
 
   const { icon, label, suffix } = getToolDisplayInfo();
   const hasError = toolCall.status === 'error';
+  const safeStringify = (obj: any) => {
+    try {
+      const seen = new WeakSet();
+      return JSON.stringify(
+        obj,
+        (key, value) => {
+          if (typeof value === 'bigint') return value.toString();
+          if (typeof value === 'object' && value !== null) {
+            if (seen.has(value)) return '[Circular]';
+            seen.add(value);
+          }
+          return value;
+        },
+        2,
+      );
+    } catch (e) {
+      return `[Unserializable]: ${String(e)}`;
+    }
+  };
+
   const rawDetails = React.useMemo(
     () =>
-      JSON.stringify(
+      safeStringify(
         toolCall.result ?? {
           tool: toolCall.toolName,
           arguments: toolCall.args ?? {},
           error: toolCall.error ?? null,
           status: toolCall.status,
         },
-        null,
-        2,
       ),
-    [toolCall],
+    [toolCall, safeStringify],
   );
 
   return (

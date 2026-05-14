@@ -23,17 +23,27 @@ export const SaveQueryDialog: React.FC<SaveQueryDialogProps> = ({
   onSave,
 }) => {
   const [name, setName] = useState(initialName);
+  const [isSaving, setIsSaving] = useState(false);
 
   useEffect(() => {
     if (open) {
       setName(initialName);
+      setIsSaving(false);
     }
   }, [open, initialName]);
 
-  const handleSave = () => {
-    if (name.trim()) {
-      onSave(name.trim());
-      onClose();
+  const handleSave = async () => {
+    if (name.trim() && !isSaving) {
+      setIsSaving(true);
+      try {
+        await onSave(name.trim());
+        onClose();
+      } catch (error) {
+        // eslint-disable-next-line no-console
+        console.error('Failed to save query:', error);
+      } finally {
+        setIsSaving(false);
+      }
     }
   };
 
@@ -78,9 +88,9 @@ export const SaveQueryDialog: React.FC<SaveQueryDialogProps> = ({
           color="primary"
           size="small"
           variant="contained"
-          disabled={!name.trim()}
+          disabled={!name.trim() || isSaving}
         >
-          Save
+          {isSaving ? 'Saving...' : 'Save'}
         </Button>
       </DialogActions>
     </Dialog>

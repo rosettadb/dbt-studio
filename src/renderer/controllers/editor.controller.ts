@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import { registerSqlEditorBridge } from '../services/editorBridge.service';
 
 export const useSqlEditorBridge = (params: {
@@ -10,19 +10,38 @@ export const useSqlEditorBridge = (params: {
 }) => {
   const { enabled, getContent, setContent, setQueryResult, runQuery } = params;
 
+  // Use a ref to store the latest versions of unstable function props
+  const callbacksRef = useRef({
+    getContent,
+    setContent,
+    setQueryResult,
+    runQuery,
+  });
+
+  // Update the ref whenever the props change
+  useEffect(() => {
+    callbacksRef.current = { getContent, setContent, setQueryResult, runQuery };
+  }, [getContent, setContent, setQueryResult, runQuery]);
+
   useEffect(() => {
     if (!enabled) return undefined;
+
+    // Register with wrappers that read from the latest ref
     const unregister = registerSqlEditorBridge({
-      getContent,
-      setContent,
+      getContent: () => callbacksRef.current.getContent(),
+      setContent: (content) => callbacksRef.current.setContent(content),
       setQueryResult: setQueryResult
         ? (result) => {
-            setQueryResult(result);
+            if (callbacksRef.current.setQueryResult) {
+              callbacksRef.current.setQueryResult(result);
+            }
           }
         : undefined,
       runQuery: runQuery
         ? (query?: string) => {
-            runQuery(query);
+            if (callbacksRef.current.runQuery) {
+              callbacksRef.current.runQuery(query);
+            }
           }
         : undefined,
     });
@@ -30,5 +49,5 @@ export const useSqlEditorBridge = (params: {
     return () => {
       unregister();
     };
-  }, [enabled, getContent, setContent, setQueryResult, runQuery]);
+  }, [enabled]);
 };

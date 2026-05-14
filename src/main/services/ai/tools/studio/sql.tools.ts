@@ -41,11 +41,62 @@ function filterSchemaTables(tables: any[], tableFilter?: string): any[] {
 }
 
 function getFirstSqlVerb(sql: string): string {
+  // 1. Strip comments
   const withoutComments = sql
     .replace(/\/\*[\s\S]*?\*\//g, ' ')
     .replace(/--.*$/gm, ' ')
     .trim();
-  const match = withoutComments.match(/^([A-Za-z]+)/);
+
+  // 2. Strip leading WITH clauses (CTEs) to find the actual verb
+  let searchSql = withoutComments;
+  if (withoutComments.toUpperCase().startsWith('WITH')) {
+    let depth = 0;
+    let i = 0;
+    const upper = withoutComments.toUpperCase();
+
+    // Skip WITH [RECURSIVE]
+    if (upper.startsWith('WITH RECURSIVE')) i = 14;
+    else i = 4;
+
+    while (i < withoutComments.length) {
+      // Skip whitespace
+      while (i < withoutComments.length && /\s/.test(withoutComments[i]))
+        i += 1;
+      // Expect CTE name
+      while (
+        i < withoutComments.length &&
+        /[A-Za-z0-9_]/.test(withoutComments[i])
+      )
+        i += 1;
+      // Skip whitespace
+      while (i < withoutComments.length && /\s/.test(withoutComments[i]))
+        i += 1;
+      // Expect AS
+      if (withoutComments.substring(i, i + 2).toUpperCase() === 'AS') i += 2;
+      // Skip whitespace
+      while (i < withoutComments.length && /\s/.test(withoutComments[i]))
+        i += 1;
+      // Expect ( ... )
+      if (withoutComments[i] === '(') {
+        i += 1;
+        depth = 1;
+        while (i < withoutComments.length && depth > 0) {
+          if (withoutComments[i] === '(') depth += 1;
+          else if (withoutComments[i] === ')') depth -= 1;
+          i += 1;
+        }
+      }
+      // Skip whitespace
+      while (i < withoutComments.length && /\s/.test(withoutComments[i]))
+        i += 1;
+      // If comma, there's another CTE
+      if (withoutComments[i] === ',') i += 1;
+      else break;
+    }
+    searchSql = withoutComments.substring(i).trim();
+  }
+
+  const match = searchSql.match(/^([A-Za-z]+)/);
   return match?.[1]?.toUpperCase() ?? '';
 }
 
@@ -245,6 +296,17 @@ export function createStudioSqlTools(conversationId: number) {
           const schema = await ConnectorsService.extractSchemaFromConnection(
             context.connectionId.toString(),
           );
+
+          if ((schema as any)?.error) {
+            return {
+              ok: false,
+              error: `Failed to extract schema: ${(schema as any).error}`,
+              meta: {
+                duration: Date.now() - startedAt,
+                connectionId: context.connectionId,
+              },
+            };
+          }
 
           const filteredTables = filterSchemaTables(
             Array.isArray(schema?.tables) ? schema.tables : [],
