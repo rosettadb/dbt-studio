@@ -270,6 +270,7 @@ const useSqlTabManager = (): UseSqlTabManagerReturn => {
   );
 
   const reset = React.useCallback(() => {
+    QueryResultStore.clearAll();
     setTabs([]);
     setActiveTabId(null);
     clearPersistedState();

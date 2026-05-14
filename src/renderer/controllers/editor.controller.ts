@@ -49,5 +49,5 @@ export const useSqlEditorBridge = (params: {
     return () => {
       unregister();
     };
-  }, [enabled]);
+  }, [enabled, !!setQueryResult, !!runQuery]);
 };

@@ -13,7 +13,7 @@ interface SaveQueryDialogProps {
   open: boolean;
   initialName?: string;
   onClose: () => void;
-  onSave: (name: string) => void;
+  onSave: (name: string) => Promise<void>;
 }
 
 export const SaveQueryDialog: React.FC<SaveQueryDialogProps> = ({
