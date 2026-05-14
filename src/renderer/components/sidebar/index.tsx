@@ -42,8 +42,7 @@ export const Sidebar: React.FC<Props> = ({
   const { isSidebarOpen, setIsSidebarOpen } = useAppContext();
   const location = useLocation();
 
-  const hasPanel = Boolean(content);
-  const [isBarExpanded, setIsBarExpanded] = React.useState(!hasPanel);
+  const [isBarExpanded, setIsBarExpanded] = React.useState(false);
 
   const isProjectSelected = Boolean(selectedProject?.id);
 
@@ -118,16 +117,6 @@ export const Sidebar: React.FC<Props> = ({
         style={{
           cursor: 'pointer',
           pointerEvents: isDisabled ? 'none' : 'auto',
-        }}
-        onClick={(e) => {
-          if (isActive) {
-            // Clicking the already-active item toggles the panel closed
-            e.preventDefault();
-            setIsSidebarOpen(!isSidebarOpen);
-          } else {
-            // Navigating to a different page always opens the panel
-            setIsSidebarOpen(true);
-          }
         }}
       >
         {listItem}

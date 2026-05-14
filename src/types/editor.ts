@@ -22,6 +22,9 @@ export interface EditorTabState {
   path: string;
   title: string;
   content: string;
+  // Last known on-disk content. Used to derive isModified by comparison so
+  // that undoing back to the saved version clears the dirty flag.
+  savedContent?: string;
   isModified: boolean;
   language?: string;
   isLoading: boolean;

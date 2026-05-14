@@ -90,21 +90,20 @@ describe('renderer/services/cloudExplorer.service', () => {
     client.post.mockResolvedValue({ data: { rows: [] } });
 
     const config = { key: 'k' } as any;
-    const result = await CloudExplorerService.previewData(
-      'aws',
+    const result = await CloudExplorerService.previewData({
+      provider: 'aws',
       config,
-      'bucket',
-      'obj.csv',
-    );
+      bucketName: 'bucket',
+      objectName: 'obj.csv',
+    });
 
     expect(client.post).toHaveBeenCalledWith('cloudExplorer:previewData', {
       provider: 'aws',
       config,
       bucketName: 'bucket',
       objectName: 'obj.csv',
-      previewType: 'sample',
-      limit: 100,
     });
     expect(result).toEqual({ rows: [] });
   });
+
 });

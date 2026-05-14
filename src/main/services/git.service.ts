@@ -12,6 +12,19 @@ import {
 import SettingsService from './settings.service';
 import ConnectorsService from './connectors.service';
 
+// Convert an absolute or relative file path to a git-friendly relative path.
+// Git's index always stores paths with forward slashes regardless of OS, and
+// simple-git's status arrays (status.modified, status.staged, ...) follow
+// the same convention. On Windows, path.relative() returns backslashes, so
+// includes()-style comparisons against those arrays silently fail for any
+// file that lives in a subdirectory. This normalises once at the boundary.
+function toGitRelativePath(repoPath: string, filePath: string): string {
+  if (!path.isAbsolute(filePath)) {
+    return filePath.split(path.sep).join('/');
+  }
+  return path.relative(repoPath, filePath).split(path.sep).join('/');
+}
+
 function getRepoNameFromUrl(url: string): string {
   const parts = url.split('/');
   let repoNameWithGit = parts[parts.length - 1];
@@ -405,17 +418,12 @@ export default class GitService {
         const git = this.getGitInstance(repoPath);
 
         try {
-          // Convert absolute paths to relative paths for git
-          const relativePaths = files.map((file) => {
-            // If it's already a relative path or '.', use it as is
-            if (file === '.' || !path.isAbsolute(file)) {
-              return file;
-            }
-            // Convert absolute path to relative path
-            return path.relative(repoPath, file);
-          });
+          // Forward-slash relative paths — required for matching against
+          // simple-git's status arrays on Windows.
+          const relativePaths = files.map((file) =>
+            file === '.' ? file : toGitRelativePath(repoPath, file),
+          );
 
-          // Get current git status to check what needs staging
           const status = await git.status();
 
           const filesToAdd: string[] = [];
@@ -474,16 +482,12 @@ export default class GitService {
         const git = this.getGitInstance(repoPath);
 
         try {
-          // Convert absolute paths to relative paths for git
-          const relativePaths = files.map((file) => {
-            if (!path.isAbsolute(file)) {
-              return file;
-            }
-            return path.relative(repoPath, file);
-          });
+          const relativePaths = files.map((file) =>
+            toGitRelativePath(repoPath, file),
+          );
 
-          // For renamed files, git reset HEAD works on the new filename
-          // Git will automatically handle the rename and restore both old and new files
+          // For renamed files, git reset HEAD works on the new filename;
+          // Git automatically handles the rename and restores both old and new.
           await git.reset(['HEAD', ...relativePaths]);
           return { success: true };
         } catch (err: any) {
@@ -530,15 +534,10 @@ export default class GitService {
     const git = this.getGitInstance(repoPath);
 
     try {
-      // Convert absolute paths to relative paths for git
-      const relativePaths = files.map((file) => {
-        if (!path.isAbsolute(file)) {
-          return file;
-        }
-        return path.relative(repoPath, file);
-      });
+      const relativePaths = files.map((file) =>
+        toGitRelativePath(repoPath, file),
+      );
 
-      // Get status to check which files are untracked
       const status = await git.status();
       const untrackedFiles: string[] = [];
       const trackedFiles: string[] = [];
@@ -807,17 +806,26 @@ export default class GitService {
     const git = this.getGitInstance(repoPath);
 
     try {
-      // Convert absolute path to relative path for git
-      const relativePath = path.relative(repoPath, filePath);
-
-      // Get diff for the file (working directory vs HEAD)
+      const relativePath = toGitRelativePath(repoPath, filePath);
       const diff = await git.diff(['HEAD', '--', relativePath]);
-
       return { filePath, diff };
     } catch (err: any) {
       // eslint-disable-next-line no-console
       console.error('Git diff error:', err);
       throw new Error(`Failed to get diff: ${err.message}`);
+    }
+  }
+
+  async getFileHeadContent(
+    repoPath: string,
+    filePath: string,
+  ): Promise<string | null> {
+    const git = this.getGitInstance(repoPath);
+    const relativePath = toGitRelativePath(repoPath, filePath);
+    try {
+      return await git.show([`HEAD:${relativePath}`]);
+    } catch {
+      return null;
     }
   }
 
@@ -962,10 +970,10 @@ export default class GitService {
   ): Promise<FileStatus | null> {
     const git = this.getGitInstance(repoPath);
 
-    // Get relative path (how Git reports it)
-    const relativePath = path.relative(repoPath, filePath);
+    // Forward-slash path — matches both how Git's index reports paths and
+    // how simple-git's status arrays index them.
+    const relativePath = toGitRelativePath(repoPath, filePath);
 
-    // Run status for this file
     const status = await git.status([relativePath]);
 
     const fullPath = path.join(repoPath, relativePath);

@@ -1,18 +1,22 @@
 import React from 'react';
-import { OnChange, loader } from '@monaco-editor/react';
 import { useTheme } from '@mui/material';
+import * as monaco from 'monaco-editor';
 import {
-  useGetFileDiff,
-  useGetFileStatus,
+  useGetFileHeadContent,
   useGitIsInitialized,
   useSaveFileContent,
 } from '../../controllers';
+import { MonacoCodeEditor } from '../monaco/MonacoCodeEditor';
 import { DiffView } from './diffView';
-import { CodeEditor } from './codeEditor';
 import { EditorHeader } from './editorHeader';
 import { UnsavedChangesDialog } from './unsavedChangesDialog';
-import { getLanguageFromExtension, getVersionsFromDiff } from './helpers';
+import {
+  getDecorations,
+  getLanguageFromExtension,
+  normalizeEol,
+} from './helpers';
 import { Container, EditorViewport } from './styles';
+import { getOrCreateModel } from '../../lib/monaco/modelStore';
 import type {
   EditorTabId,
   EditorTabState,
@@ -36,6 +40,22 @@ type EditorProps = {
   extraActions?: React.ReactNode;
 };
 
+type DecorationMode = 'untracked' | 'modified' | 'clean';
+
+const DECORATION_DEBOUNCE_MS = 150;
+
+const computeLanguage = (path: string): string => {
+  const base = getLanguageFromExtension(path || 'txt');
+  return base === 'sql' ? 'jinja-sql' : base;
+};
+
+/**
+ * Top-level file editor. Wires the tab manager state into a single
+ * MonacoCodeEditor instance: one model per open tab, view state preserved
+ * across switches, git diff markers in the gutter, save and unsaved-close
+ * flows. Tab lifecycle (open/close/dispose) is owned by useTabManager —
+ * this component is purely presentational over that state.
+ */
 export const Editor: React.FC<EditorProps> = ({
   projectId,
   projectPath,
@@ -52,69 +72,146 @@ export const Editor: React.FC<EditorProps> = ({
   onOpenFile,
   extraActions,
 }) => {
-  loader.config({
-    paths: {
-      vs: 'app-asset://zui/node_modules/monaco-editor/min/vs',
-    },
-  });
+  const theme = useTheme();
+  const monacoTheme = theme.palette.mode === 'dark' ? 'vs-dark' : 'light';
+
   const activeTab = React.useMemo(
-    () => tabs.find((tab) => tab.id === activeTabId),
+    () => tabs.find((t) => t.id === activeTabId),
     [tabs, activeTabId],
   );
-
   const activeFilePath = activeTab?.path ?? '';
   const activeContent = activeTab?.content ?? '';
+  const language = computeLanguage(activeFilePath);
+  const isFileEditable = !activeTab?.isReadOnly;
+
   const { data: isInitialized } = useGitIsInitialized(projectPath, {
     enabled: Boolean(projectPath),
   });
-
-  const { data: fileStatus, isLoading: isLoadingFileStatus } = useGetFileStatus(
+  const { data: headContent } = useGetFileHeadContent(
     projectPath,
     activeFilePath,
     {
-      refetchInterval: 20000,
-      enabled: Boolean(isInitialized && activeFilePath),
+      enabled: Boolean(activeFilePath && isInitialized && projectPath),
     },
   );
-  const { data: fileDiff } = useGetFileDiff(projectPath, activeFilePath, {
-    enabled: Boolean(activeFilePath && isInitialized && projectPath),
-  });
   const { mutate: updateFileContent } = useSaveFileContent();
-  const theme = useTheme();
-  const monacoTheme = theme.palette.mode === 'dark' ? 'vs-dark' : 'light';
-  const baseLanguage = getLanguageFromExtension(activeFilePath || 'txt');
-  const language = baseLanguage === 'sql' ? 'jinja-sql' : baseLanguage;
 
-  const isFileEditable = !activeTab?.isReadOnly;
   const [showDiffView, setShowDiffView] = React.useState(false);
   const [isSaving, setIsSaving] = React.useState(false);
 
-  const originalContent = React.useMemo(() => {
-    if (!activeTab) {
-      return null;
-    }
-    if (fileStatus?.status === 'untracked' || !fileStatus?.status) {
-      return null;
-    }
+  const decorationMode: DecorationMode = React.useMemo(() => {
+    if (!activeTab) return 'clean';
+    if (headContent === undefined) return 'clean';
+    if (headContent === null) return 'untracked';
+    return 'modified';
+  }, [activeTab, headContent]);
 
-    const { oldVersion } = getVersionsFromDiff(
-      activeContent,
-      String(fileDiff?.diff),
-    );
-    return oldVersion;
-  }, [fileStatus, fileDiff, activeContent, activeTab]);
+  const originalContent = React.useMemo(() => {
+    if (decorationMode === 'untracked') return null;
+    if (decorationMode === 'clean') return activeContent;
+    return headContent ?? activeContent;
+  }, [decorationMode, headContent, activeContent]);
+
+  const hasUncommittedChanges = React.useMemo(() => {
+    if (headContent == null) return false;
+    return normalizeEol(headContent) !== normalizeEol(activeContent);
+  }, [headContent, activeContent]);
 
   React.useEffect(() => {
     setShowDiffView(false);
-  }, [activeTabId]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [activeTabId]);
+
+  const activeModel = React.useMemo<monaco.editor.ITextModel | null>(() => {
+    if (!activeTab) return null;
+    return getOrCreateModel(
+      projectId,
+      activeTab.path,
+      activeTab.content,
+      computeLanguage(activeTab.path),
+    );
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeTab?.id, activeTab?.path, projectId]);
+
+  // External content updates (refresh from disk, AI apply, etc.) push into
+  // the model. Keystrokes already update both sides, so this is a no-op
+  // for typing.
+  const isApplyingExternalContentRef = React.useRef(false);
+  React.useEffect(() => {
+    if (!activeModel) return;
+    if (activeModel.getValue() === activeContent) return;
+    isApplyingExternalContentRef.current = true;
+    activeModel.setValue(activeContent);
+    isApplyingExternalContentRef.current = false;
+  }, [activeModel, activeContent]);
+
+  React.useEffect(() => {
+    if (!activeModel || !activeTabId) return undefined;
+    const subscription = activeModel.onDidChangeContent(() => {
+      if (isApplyingExternalContentRef.current) return;
+      onTabContentChange(activeTabId, activeModel.getValue());
+    });
+    return () => subscription.dispose();
+  }, [activeModel, activeTabId, onTabContentChange]);
+
+  React.useEffect(() => {
+    if (!activeModel) return;
+    if (activeModel.getLanguageId() !== language) {
+      monaco.editor.setModelLanguage(activeModel, language);
+    }
+  }, [activeModel, language]);
+
+  // Git diff line markers. The editor instance lives in state (not a ref)
+  // so the decoration effect can react to its mount.
+  const [editorInstance, setEditorInstance] =
+    React.useState<monaco.editor.IStandaloneCodeEditor | null>(null);
+  const decorationsRef =
+    React.useRef<monaco.editor.IEditorDecorationsCollection | null>(null);
+
+  const handleEditorMount = React.useCallback(
+    (editor: monaco.editor.IStandaloneCodeEditor) => {
+      setEditorInstance(editor);
+      return () => setEditorInstance(null);
+    },
+    [],
+  );
+
+  React.useEffect(() => {
+    if (!editorInstance || !activeModel || decorationMode === 'clean') {
+      decorationsRef.current?.clear();
+      decorationsRef.current = null;
+      return undefined;
+    }
+    // Debounce so per-keystroke `diffLines` calls don't pile up on large
+    // files. The marker visualisation is a hint, not a critical signal.
+    const handle = setTimeout(() => {
+      const model = editorInstance.getModel();
+      if (!model) return;
+      const decorations = getDecorations(
+        originalContent,
+        activeContent,
+        model.getLineCount(),
+        (i: number) => new monaco.Range(i, 1, i, 1),
+      ) as monaco.editor.IModelDeltaDecoration[];
+      if (!decorationsRef.current) {
+        decorationsRef.current =
+          editorInstance.createDecorationsCollection(decorations);
+      } else {
+        decorationsRef.current.set(decorations);
+      }
+    }, DECORATION_DEBOUNCE_MS);
+
+    return () => clearTimeout(handle);
+  }, [
+    editorInstance,
+    activeModel,
+    activeContent,
+    originalContent,
+    decorationMode,
+  ]);
 
   const handleSave = React.useCallback(() => {
-    if (!activeTab || !activeTabId || !activeTab.isModified || isSaving) {
-      return;
-    }
-
+    if (!activeTab || !activeTabId || !activeTab.isModified || isSaving) return;
     setIsSaving(true);
-
     updateFileContent(
       { path: activeTab.path, content: activeTab.content },
       {
@@ -147,38 +244,9 @@ export const Editor: React.FC<EditorProps> = ({
         handleSave();
       }
     };
-
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [handleSave]);
-
-  const activeTabIdRef = React.useRef(activeTabId);
-  const expectedContentRef = React.useRef(activeContent);
-
-  activeTabIdRef.current = activeTabId;
-  expectedContentRef.current = activeContent;
-
-  const handleChange: OnChange = React.useCallback(
-    (value) => {
-      if (value === undefined) {
-        return;
-      }
-
-      const currentTabId = activeTabIdRef.current;
-      if (!currentTabId) {
-        return;
-      }
-
-      const expectedContent = expectedContentRef.current;
-
-      if (value === expectedContent) {
-        return;
-      }
-
-      onTabContentChange(currentTabId, value);
-    },
-    [onTabContentChange],
-  );
 
   if (tabs.length === 0) {
     return (
@@ -188,9 +256,7 @@ export const Editor: React.FC<EditorProps> = ({
     );
   }
 
-  if (!activeTab) {
-    return null;
-  }
+  if (!activeTab) return null;
 
   return (
     <Container>
@@ -201,15 +267,16 @@ export const Editor: React.FC<EditorProps> = ({
         isSaving={isSaving}
         hasError={Boolean(activeTab.error)}
         errorMessage={activeTab.error}
-        showDiffButton={Boolean(originalContent)}
+        showDiffButton={hasUncommittedChanges}
         showDiffView={showDiffView}
         onSave={handleSave}
         onToggleDiff={() => setShowDiffView((prev) => !prev)}
+        onNavigate={onOpenFile}
         extraActions={extraActions}
       />
 
       <EditorViewport>
-        {showDiffView && !isLoadingFileStatus ? (
+        {showDiffView ? (
           <DiffView
             modified={activeContent}
             original={originalContent ?? ''}
@@ -217,15 +284,12 @@ export const Editor: React.FC<EditorProps> = ({
             theme={monacoTheme}
           />
         ) : (
-          <CodeEditor
-            content={activeContent}
-            originalContent={originalContent}
-            language={language}
+          <MonacoCodeEditor
+            model={activeModel}
+            modelKey={activeTabId}
             theme={monacoTheme}
-            onChange={handleChange}
-            readOnly={!isFileEditable || showDiffView}
-            projectId={projectId}
-            onOpenFile={onOpenFile}
+            readOnly={!isFileEditable}
+            onMount={handleEditorMount}
           />
         )}
       </EditorViewport>
