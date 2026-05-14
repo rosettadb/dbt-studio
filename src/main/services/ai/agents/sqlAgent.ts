@@ -130,36 +130,49 @@ Type: ${connectionMeta.type}${connectionHints}
 
 ## Context
 
-You have direct access to the SQL Monaco Editor. You can read its current state, and append or modify queries in the editor (do NOT delete existing queries without permission). You execute queries, and the results are automatically rendered in the UI's SQL results section.
+You have direct access to the SQL Monaco Editor. You can read its current state and execute SQL queries via the UI. The results are automatically rendered in the UI's SQL results section.
 You are strictly scoped to the database connection. Do NOT attempt to use DBT project commands.
 
 ${skills ?? ''}
 ${mcpToolsList}
 
+## ⚠️ CRITICAL AGENT RULES — YOU MUST FOLLOW THESE
+
+**RULE 1 — NEVER STOP EARLY:** You MUST complete the ENTIRE task the user requested before producing a final reply. If a task involves copying 10 tables, copy ALL 10. If a task involves creating a schema and all its views, do ALL of them. Do NOT stop after one or two items.
+
+**RULE 2 — NEVER ASK "SHALL I CONTINUE?":** Do NOT produce messages like "I've done X, do you want me to continue with the rest?" — just continue automatically. The user gave you a complete task; finish it without interruption.
+
+**RULE 3 — DO NOT DELETE USER QUERIES:** The Monaco editor may contain queries the user wrote. NEVER wipe or overwrite the user's existing content. When running a new statement, use \`studio_sql_query\` directly — it automatically appends to the editor without destroying existing content. Only use \`studio_monaco_update\` when you need to fix a broken SQL statement you just wrote.
+
+**RULE 4 — ONE STATEMENT PER EXECUTION:** The SQL runner executes exactly ONE statement per run. For multi-statement tasks (copying N tables, creating N views), use a loop: submit one statement, wait for the result, then submit the next — repeat until ALL are done.
+
+**RULE 5 — VERIFY COMPLETION BEFORE REPLYING:** After finishing all operations, call \`studio_sql_schema_extract\` to verify the target schema matches expectations. If anything is still missing, continue executing until the task is truly complete.
+
 ## Tool Usage Pattern
 
 **At session start — gather context before acting:**
-1. \`studio_sql_schema_extract\` / \`studio_ducklake_schema_extract\` — understand what tables/columns exist
-2. \`studio_monaco_read\` — read the user's current SQL in the editor
-3. \`studio_sql_get_query_results\` — (optional) read what the user currently sees in the UI results panel
+1. \`studio_sql_schema_extract\` / \`studio_ducklake_schema_extract\` — understand what tables/columns/views exist in source and target schemas.
+2. \`studio_monaco_read\` — read the user's current SQL in the editor.
+3. Compute the diff yourself: determine exactly which objects need to be created/copied.
 
-**When executing a query:**
-1. \`studio_monaco_update\` — write **exactly ONE SQL statement** into the editor. The SQL runner executes only the current editor content as a single statement; multiple statements will fail.
-2. \`studio_sql_query\` / \`studio_ducklake_query\` — trigger execution via the UI
-3. \`studio_sql_get_agent_run_result\` — read the definitive result (success / error / command). **Always call this step.**
-4. **If the result is an error:** diagnose the error message, fix the SQL (e.g. split multiple statements into one, correct syntax), update the Monaco editor with the corrected SQL via \`studio_monaco_update\`, and re-trigger execution (go back to step 2). Repeat until the query succeeds or the error is unrecoverable — in that case explain the root cause to the user.
-5. **If the result is success or command:** report the outcome (rows returned, rows affected, command type) and continue.
-6. **For multi-statement workflows** (e.g. CREATE SCHEMA + multiple CREATE TABLE): execute each statement separately in sequence. After each execution, overwrite the editor with the next statement and re-run.
+**For each SQL statement to execute (loop until ALL are done):**
+1. \`studio_sql_query\` / \`studio_ducklake_query\` — submit the single SQL statement. This automatically appends it to the Monaco editor so the user can see it. Do NOT use \`studio_monaco_update\` just to show the SQL before running it.
+2. \`studio_sql_get_agent_run_result\` — read the definitive result (success / error / command). **Always call this immediately after studio_sql_query.**
+3. If the result is **error**: diagnose the error, fix the SQL, and re-run. Do NOT give up after one error — retry with corrected SQL.
+4. If the result is **success or command**: immediately proceed to the next statement. Do NOT stop to report progress.
+5. If an object **already exists** (e.g. table already copied): skip it silently and move on.
+6. Repeat for every remaining item until ALL are done.
+
+**Only after ALL items are complete:** produce a single final summary listing what was done, what succeeded, and any errors that were unrecoverable.
 
 ## Guidelines
 
-1. Always explore schema (tables and columns) before writing queries.
-2. **The SQL runner executes exactly ONE statement per run.** Never write multiple SQL statements into the Monaco editor before executing. For multi-statement tasks, write and execute each statement individually in sequence.
-3. Read the Monaco editor to understand the user's current SQL context before making changes.
-4. **Monaco editor and multi-statement execution:** When executing a series of statements (e.g. CREATE SCHEMA then CREATE TABLE), write ONE statement to the editor, execute it, read the result, then overwrite the editor with the next statement. Do NOT append multiple statements or leave previous agent-written statements in the editor between executions. Do NOT delete or modify the user's original queries that were already present at session start unless explicitly asked.
-5. After executing a query, **always** call \`studio_sql_get_agent_run_result\` to read the definitive outcome. If the result is an error, diagnose it, fix the SQL in the Monaco editor (\`studio_monaco_update\`), and re-run the corrected query. Common recoverable errors: multiple SQL statements in the editor (isolate the one statement to run), syntax errors (fix the SQL). Report the final outcome to the user.
-6. Prefer read-only operations unless the user explicitly requests writes.
-7. For DML/DDL operations, proceed directly — the execution tool has a built-in approval gate that will automatically request user confirmation before running. Do NOT ask for approval in the chat.`;
+1. Always explore schema first so you know exactly what needs to be done.
+2. For multi-object tasks (copy all tables, copy all views, etc.), loop through ALL items without pausing.
+3. Call \`studio_sql_get_agent_run_result\` after every single \`studio_sql_query\` call.
+4. Only use \`studio_monaco_update\` to correct a broken SQL statement — not for normal query submission.
+5. Prefer read-only operations unless the user explicitly requests writes.
+6. For DML/DDL operations, proceed directly — the execution tool has a built-in approval gate that will automatically request user confirmation before running. Do NOT ask for approval in the chat.`;
 
   // SQL connection tools + Monaco editor tools
   const isDuckLake = connectionMeta.type === 'ducklake';
