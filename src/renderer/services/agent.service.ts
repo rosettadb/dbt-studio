@@ -26,6 +26,8 @@ export interface AgentRunRequest {
   requestedModel?: string;
   projectPath?: string;
   toolMode?: 'chat' | 'agent';
+  screenKey?: 'project' | 'sql' | 'notebooks';
+  connectionId?: string;
 }
 
 /**
@@ -111,12 +113,13 @@ export const onStreamChunk = (
 ): (() => void) => {
   const listener = (...args: unknown[]) =>
     handler(args[0] as StreamChunkPayload);
-  window.electron.ipcRenderer.on('chat:message:stream-chunk', listener);
-  return () =>
-    window.electron.ipcRenderer.removeListener(
-      'chat:message:stream-chunk',
-      listener,
-    );
+  const unsub = window.electron.ipcRenderer.on(
+    'chat:message:stream-chunk',
+    listener,
+  );
+  return () => {
+    if (typeof unsub === 'function') unsub();
+  };
 };
 
 export interface TerminalConfirmPayload {
@@ -137,12 +140,13 @@ export const onTerminalConfirm = (
 ): (() => void) => {
   const listener = (...args: unknown[]) =>
     handler(args[0] as TerminalConfirmPayload);
-  window.electron.ipcRenderer.on('agent:terminal-confirm', listener);
-  return () =>
-    window.electron.ipcRenderer.removeListener(
-      'agent:terminal-confirm',
-      listener,
-    );
+  const unsub = window.electron.ipcRenderer.on(
+    'agent:terminal-confirm',
+    listener,
+  );
+  return () => {
+    if (typeof unsub === 'function') unsub();
+  };
 };
 
 export const onContextUsage = (
@@ -150,9 +154,10 @@ export const onContextUsage = (
 ): (() => void) => {
   const listener = (...args: unknown[]) =>
     handler(args[0] as ContextUsagePayload);
-  window.electron.ipcRenderer.on('agent:context-usage', listener);
-  return () =>
-    window.electron.ipcRenderer.removeListener('agent:context-usage', listener);
+  const unsub = window.electron.ipcRenderer.on('agent:context-usage', listener);
+  return () => {
+    if (typeof unsub === 'function') unsub();
+  };
 };
 
 export const resolveTerminalConfirm = async (

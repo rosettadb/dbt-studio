@@ -1408,6 +1408,8 @@ export default class DuckLakeService {
         'SHOW',
         'COPY',
         'VACUUM',
+        'CALL',
+        'CHECKPOINT',
       ];
       validateSingleStatement(
         request.query,
@@ -2168,6 +2170,8 @@ export default class DuckLakeService {
       'TRUNCATE',
       'RENAME',
       'COPY',
+      'CALL',
+      'CHECKPOINT',
     ];
     if (ddlKeywords.some((kw) => normalized.startsWith(kw))) {
       return 'DDL';

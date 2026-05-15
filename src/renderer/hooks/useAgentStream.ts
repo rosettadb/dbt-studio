@@ -274,6 +274,14 @@ export const useAgentStream = (sessionId: number | undefined) => {
           break;
         }
 
+        case 'error': {
+          setStreamState((prev) => ({
+            ...prev,
+            error: parseAgentError((chunk as any).error),
+          }));
+          break;
+        }
+
         default:
           // Other chunk types (source, etc.) are ignored in UI
           break;
@@ -312,6 +320,8 @@ export const useAgentStream = (sessionId: number | undefined) => {
       contextItems?: any[],
       requestedModel?: string,
       toolMode?: 'chat' | 'agent',
+      screenKey?: string,
+      connectionId?: string,
     ) => {
       if (!sessionId) return;
 
@@ -356,6 +366,8 @@ export const useAgentStream = (sessionId: number | undefined) => {
           contextItems,
           requestedModel,
           toolMode,
+          screenKey: screenKey as any,
+          connectionId,
         });
 
         // Agent completed — replace optimistic message with persisted data

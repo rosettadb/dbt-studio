@@ -3,6 +3,7 @@
  * Implements DuckLake integration with PostgreSQL database catalog
  */
 
+import { Client } from 'pg';
 import {
   CatalogAdapter,
   ValidationResult,
@@ -25,6 +26,16 @@ import { DuckLakeError } from '../../../../types/duckLakeErrors';
 import { normalizeNumericValue } from '../../../../renderer/utils/fileUtils';
 
 export class PostgreSQLCatalogAdapter extends CatalogAdapter {
+  static isUnsupportedMigrationError(error: unknown): boolean {
+    const msg = error instanceof Error ? error.message : String(error);
+    return (
+      msg.includes('Unsupported ALTER TABLE type') ||
+      msg.includes('Catalog Error: Table with name') ||
+      msg.includes('catalog version mismatch') ||
+      msg.includes('Failed to migrate DuckLake')
+    );
+  }
+
   async connect(
     config: DuckLakeCatalogConfig,
     instance: DuckLakeInstance,
@@ -63,12 +74,76 @@ export class PostgreSQLCatalogAdapter extends CatalogAdapter {
       const attachString = `ducklake:postgres:${connectionString}`;
       const escapedAttachString = attachString.replace(/'/g, "''");
 
-      await this.attachDuckLakeCatalog(
-        connection,
-        escapedAttachString,
-        instance.name,
-        instance.dataPath,
-      );
+      try {
+        await this.attachDuckLakeCatalog(
+          connection,
+          escapedAttachString,
+          instance.name,
+          instance.dataPath,
+        );
+      } catch (error) {
+        if (PostgreSQLCatalogAdapter.isUnsupportedMigrationError(error)) {
+          // eslint-disable-next-line no-console
+          console.warn(
+            'DuckLake automatic migration failed or is unsupported for Postgres catalog. Resetting catalog...',
+            error,
+          );
+
+          try {
+            // Use native pg client to ensure dropping works perfectly, bypassing DuckDB limitations
+            const pgClient = new Client({
+              host: pgConfig.host,
+              port: pgConfig.port,
+              database: pgConfig.database,
+              user: pgConfig.username,
+              password: pgConfig.password,
+              ssl: pgConfig.ssl,
+            });
+
+            try {
+              await pgClient.connect();
+
+              // Safely drop all ducklake_ prefixed tables using an anonymous DO block.
+              // Use schemaname || '.' || tablename so the DROP works regardless of
+              // the session's search_path (fixes issue #13 from CodeRabbit review).
+              const dropScript = `
+                DO $$ DECLARE
+                    r RECORD;
+                BEGIN
+                    FOR r IN (SELECT schemaname, tablename FROM pg_tables WHERE schemaname = 'public' AND tablename LIKE 'ducklake_%') LOOP
+                        EXECUTE 'DROP TABLE IF EXISTS ' || quote_ident(r.schemaname) || '.' || quote_ident(r.tablename) || ' CASCADE';
+                    END LOOP;
+                END $$;
+              `;
+              await pgClient.query(dropScript);
+            } finally {
+              // Always close — prevents session leaks on repeated failed migrations.
+              try {
+                await pgClient.end();
+              } catch (endErr) {
+                // eslint-disable-next-line no-console
+                console.error('Failed to close reset pg client:', endErr);
+              }
+            }
+          } catch (resetError) {
+            // eslint-disable-next-line no-console
+            console.error(
+              'Failed to reset PostgreSQL catalog tables:',
+              resetError,
+            );
+          }
+
+          // Try attaching again to create a fresh v1.0 catalog
+          await this.attachDuckLakeCatalog(
+            connection,
+            escapedAttachString,
+            instance.name,
+            instance.dataPath,
+          );
+        } else {
+          throw error;
+        }
+      }
 
       this.connectionInfo = {
         instance: duckdbInstance,

@@ -14,6 +14,53 @@
  */
 import type { TextStreamPart } from 'ai';
 
+/**
+ * Identifies which screen the AI agent is loaded in.
+ * Used to scope sessions, system prompts, and tool sets.
+ */
+export type AgentScreenKey =
+  | 'project' // dbt project screen (existing default)
+  | 'sql' // SQL Editor screen
+  | 'notebooks'; // Notebooks screen
+
+export const MAX_USER_MESSAGE_CHARS = 50_000;
+export const MAX_USER_MESSAGE_TOKENS = 8_000;
+export const MAX_USER_MESSAGE_CONTEXT_FRACTION = 0.25;
+
+export function estimateUserMessageTokens(content: string): number {
+  return Math.ceil(content.length / 3);
+}
+
+export function getUserMessageTokenLimit(contextWindow: number): number {
+  return Math.max(
+    1,
+    Math.floor(
+      Math.min(
+        MAX_USER_MESSAGE_TOKENS,
+        contextWindow * MAX_USER_MESSAGE_CONTEXT_FRACTION,
+      ),
+    ),
+  );
+}
+
+export function getUserMessageLimitError(
+  content: string,
+  contextWindow: number,
+): string | null {
+  if (content.length > MAX_USER_MESSAGE_CHARS) {
+    return `Message is too large (${content.length.toLocaleString()} characters). The maximum is ${MAX_USER_MESSAGE_CHARS.toLocaleString()} characters. Attach large content as a file or split it into smaller messages.`;
+  }
+
+  const tokenEstimate = estimateUserMessageTokens(content);
+  const tokenLimit = getUserMessageTokenLimit(contextWindow);
+
+  if (tokenEstimate > tokenLimit) {
+    return `Message is too large (about ${tokenEstimate.toLocaleString()} tokens). The maximum for a single message is ${tokenLimit.toLocaleString()} tokens. Attach large content as a file or split it into smaller messages.`;
+  }
+
+  return null;
+}
+
 export interface AgentStepStartPayload {
   conversationId: number;
   /** Zero-based step index, matches SDK stepNumber */

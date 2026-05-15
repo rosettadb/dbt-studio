@@ -128,24 +128,33 @@ export const ProcessProvider: React.FC<ProcessProviderProps> = ({
     };
 
     // Setup listeners
-    window.electron.ipcRenderer.on('process:output', handleOutput);
-    window.electron.ipcRenderer.on('process:error', handleError);
-    window.electron.ipcRenderer.on('process:started', handleStarted);
-    window.electron.ipcRenderer.on('process:exit', handleExit);
-    window.electron.ipcRenderer.on('process:done', handleDone);
+    const unsubOutput = window.electron.ipcRenderer.on(
+      'process:output',
+      handleOutput,
+    );
+    const unsubError = window.electron.ipcRenderer.on(
+      'process:error',
+      handleError,
+    );
+    const unsubStarted = window.electron.ipcRenderer.on(
+      'process:started',
+      handleStarted,
+    );
+    const unsubExit = window.electron.ipcRenderer.on(
+      'process:exit',
+      handleExit,
+    );
+    const unsubDone = window.electron.ipcRenderer.on(
+      'process:done',
+      handleDone,
+    );
 
     return () => {
-      window.electron.ipcRenderer.removeListener(
-        'process:output',
-        handleOutput,
-      );
-      window.electron.ipcRenderer.removeListener('process:error', handleError);
-      window.electron.ipcRenderer.removeListener(
-        'process:started',
-        handleStarted,
-      );
-      window.electron.ipcRenderer.removeListener('process:exit', handleExit);
-      window.electron.ipcRenderer.removeListener('process:done', handleDone);
+      if (typeof unsubOutput === 'function') unsubOutput();
+      if (typeof unsubError === 'function') unsubError();
+      if (typeof unsubStarted === 'function') unsubStarted();
+      if (typeof unsubExit === 'function') unsubExit();
+      if (typeof unsubDone === 'function') unsubDone();
 
       if (durationIntervalRef.current) {
         clearInterval(durationIntervalRef.current);

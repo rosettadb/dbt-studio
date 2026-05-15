@@ -52,10 +52,7 @@ export const getMainElements = (
   isProjectSelected: boolean,
 ): SideBarElementType[] => {
   return baseElements.map((element) => {
-    if (
-      !isProjectSelected &&
-      (element.path === '/app' || element.path === '/app/sql')
-    ) {
+    if (!isProjectSelected && element.path === '/app') {
       return { ...element, disabled: true };
     }
     return element;

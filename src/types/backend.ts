@@ -813,3 +813,44 @@ export type AISettingsConfig = {
     maxWorkspaceFileCount: number;
   };
 };
+
+// ---------------------------------------------------------------------------
+// AI Agent — SQL Editor query-result snapshot
+// Used by studio_sql_get_query_results tool to read back query output.
+// ---------------------------------------------------------------------------
+
+/** A compact snapshot of the current SQL Editor result pane, served to the AI Agent. */
+export interface QueryResultSnapshot {
+  /** Overall outcome of the last query execution. */
+  status: 'success' | 'error' | 'command' | 'empty' | 'pending';
+  /** Column names returned by the query (empty for commands/errors). */
+  columns: string[];
+  /** First N data rows (capped at maxRows, never the full dataset). */
+  rows: Record<string, any>[];
+  /** Total number of rows in the result set (may exceed rows.length). */
+  totalRowCount: number;
+  /** Query execution time in milliseconds. */
+  duration?: number;
+  /** The SQL that produced this result (sanitised, first 500 chars). */
+  sql?: string;
+  /** Error message when status === 'error'. */
+  error?: string;
+  /** DDL or DML when status === 'command'. */
+  commandType?: string;
+  /** Number of rows affected when status === 'command'. */
+  rowsAffected?: number;
+  /** True when rows[] was capped at maxRows and more rows exist. */
+  truncated?: boolean;
+  /** The SQL tab ID this snapshot belongs to. */
+  tabId?: string;
+  /** Date.now() timestamp when snapshot was captured. */
+  capturedAt?: number;
+}
+
+/** Request payload for the agent:editor:get-query-results IPC channel. */
+export interface GetQueryResultsRequest {
+  /** Target SQL tab ID; defaults to the most-recently-executed tab. */
+  tabId?: string;
+  /** Maximum rows to include in the summary (1–50, default 20). */
+  maxRows?: number;
+}

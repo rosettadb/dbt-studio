@@ -204,7 +204,7 @@ export const SqlEditorComponent: React.FC<Props> = ({
         onMount={handleEditorMount}
         loading={<Shimmer text="Loading editor..." />}
         options={{
-          fontSize: 14,
+          fontSize: 13,
           glyphMargin: true,
           minimap: { enabled: false },
           lineNumbers: 'on',

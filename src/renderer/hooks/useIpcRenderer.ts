@@ -7,9 +7,9 @@ const useIpcRenderer = <T = unknown>(
 ) => {
   React.useEffect(() => {
     const handler = (event: any, data: unknown) => callback(event, data as T);
-    window.electron.ipcRenderer.on(channel, handler);
+    const unsub = window.electron.ipcRenderer.on(channel, handler);
     return () => {
-      window.electron.ipcRenderer.removeListener(channel, handler);
+      if (typeof unsub === 'function') unsub();
     };
   }, [channel, callback]);
 };

@@ -26,6 +26,7 @@ interface ContextUsageRingProps {
 
 const RING_SIZE = 20;
 const STROKE_WIDTH = 2.5;
+const AUTO_COMPACTION_THRESHOLD = 70;
 
 function getColor(percent: number): string {
   if (percent >= 90) return '#f44336'; // red
@@ -254,13 +255,19 @@ export const ContextUsageRing: React.FC<ContextUsageRingProps> = ({
             variant="caption"
             sx={{
               fontSize: '0.72rem',
-              color: pct >= 85 ? 'error.main' : 'text.secondary',
-              fontWeight: pct >= 85 ? 600 : 400,
+              color:
+                pct >= AUTO_COMPACTION_THRESHOLD
+                  ? 'error.main'
+                  : 'text.secondary',
+              fontWeight: pct >= AUTO_COMPACTION_THRESHOLD ? 600 : 400,
             }}
           >
-            {pct >= 85
-              ? 'Auto-compaction will trigger on next send'
-              : `${Math.max(0, 85 - pct)}% until auto-compaction`}
+            {pct >= AUTO_COMPACTION_THRESHOLD
+              ? 'Auto-compaction threshold reached'
+              : `${Math.max(
+                  0,
+                  AUTO_COMPACTION_THRESHOLD - pct,
+                )}% until auto-compaction`}
           </Typography>
         </Box>
       </Popover>

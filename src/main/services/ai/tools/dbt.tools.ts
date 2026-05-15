@@ -27,6 +27,193 @@ const ALLOWED_DBT_COMMANDS = [
 const MAX_FILE_SIZE = 500_000; // 500 KB
 const COMMAND_TIMEOUT = 120_000; // 2 minutes
 
+function parseExtraArgs(extraArgs?: string): string[] {
+  if (!extraArgs) return [];
+  const parsed = extraArgs.match(/(?:[^\s"']+|(["'])[^\1]*?\1)+/g);
+  if (!parsed) return [];
+  return parsed.map((p) => {
+    if (
+      (p.startsWith('"') && p.endsWith('"')) ||
+      (p.startsWith("'") && p.endsWith("'"))
+    ) {
+      return p.slice(1, -1);
+    }
+    return p;
+  });
+}
+
+function normalizeCommand(value: string): string {
+  return value.trim().replace(/\s+/g, ' ');
+}
+
+function isAllowedCommand(command: string, allowedCommands: string[]): boolean {
+  const normalized = normalizeCommand(command).toLowerCase();
+  return allowedCommands.some((allowed) => {
+    const normalizedAllowed = normalizeCommand(allowed).toLowerCase();
+    return (
+      normalized === normalizedAllowed ||
+      normalized.startsWith(`${normalizedAllowed} `)
+    );
+  });
+}
+
+export async function executeDbtCommand(opts: {
+  command: string;
+  select?: string;
+  extraArgs?: string;
+  projectPath: string;
+  conversationId?: number;
+  mainWindow?: BrowserWindow;
+  toolName: string;
+  requireApproval?: boolean;
+  strictApproval?: boolean;
+  allowedCommands?: string[];
+}): Promise<any> {
+  const {
+    command,
+    select,
+    extraArgs,
+    projectPath,
+    conversationId,
+    mainWindow,
+    toolName,
+    requireApproval = true,
+    strictApproval = false,
+    allowedCommands,
+  } = opts;
+
+  const normalizedCommand = normalizeCommand(command);
+
+  if (allowedCommands && allowedCommands.length > 0) {
+    if (!isAllowedCommand(normalizedCommand, allowedCommands)) {
+      return {
+        ok: false,
+        error: `Command not permitted: ${normalizedCommand}. Allowed commands: ${allowedCommands.join(', ')}`,
+      };
+    }
+  } else {
+    const baseCommand = normalizedCommand.split(' ')[0];
+    if (!ALLOWED_DBT_COMMANDS.includes(baseCommand)) {
+      return {
+        ok: false,
+        error: `Command not permitted: ${baseCommand}. Allowed commands: ${ALLOWED_DBT_COMMANDS.join(', ')}`,
+      };
+    }
+  }
+
+  try {
+    const dbtExe = await SettingsService.getDbtExePath();
+    const args = normalizedCommand.split(' ').filter(Boolean);
+    if (select) args.push('--select', select);
+    args.push(...parseExtraArgs(extraArgs));
+
+    const displayCmd = `"${dbtExe}" ${args.map((a) => (a.includes(' ') ? `"${a}"` : a)).join(' ')}`;
+
+    const context = conversationId
+      ? AgentService.getAgentContext(conversationId)
+      : AgentService.currentAgentContext;
+
+    if (requireApproval) {
+      if (strictApproval && !context) {
+        return {
+          ok: false,
+          error:
+            'Agent context unavailable; cannot request required user approval for dbt command.',
+          command: displayCmd,
+        };
+      }
+
+      if (context) {
+        const allowed = await TerminalConfirmGate.request({
+          event: context.event,
+          conversationId: context.conversationId,
+          toolName,
+          command: displayCmd,
+          cwd: projectPath,
+        });
+        if (!allowed) {
+          return {
+            ok: false,
+            command: displayCmd,
+            error: 'Command denied by user',
+          };
+        }
+      }
+    }
+
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send('cli:clear');
+      mainWindow.webContents.send('cli:output', `> ${displayCmd}\n`);
+    }
+
+    return await new Promise((resolve) => {
+      const child = spawn(dbtExe, args, {
+        cwd: projectPath,
+        shell: false,
+      });
+
+      let fullOutput = '';
+
+      const handleData = (data: Buffer) => {
+        const text = data.toString();
+        fullOutput += text;
+        if (mainWindow && !mainWindow.isDestroyed()) {
+          mainWindow.webContents.send('cli:output', text);
+        }
+      };
+
+      child.stdout.on('data', handleData);
+      child.stderr.on('data', handleData);
+
+      child.on('error', (err) => {
+        if (mainWindow && !mainWindow.isDestroyed()) {
+          mainWindow.webContents.send('cli:error', err.message);
+          mainWindow.webContents.send('cli:done');
+        }
+        resolve({
+          ok: false,
+          command: displayCmd,
+          error: err.message,
+          stdout: '',
+          stderr: err.message,
+        });
+      });
+
+      child.on('close', (code) => {
+        if (mainWindow && !mainWindow.isDestroyed()) {
+          mainWindow.webContents.send(
+            'cli:done',
+            `Process exited with code ${code}`,
+          );
+        }
+        if (code === 0) {
+          resolve({
+            ok: true,
+            command: displayCmd,
+            output: fullOutput,
+          });
+        } else {
+          resolve({
+            ok: false,
+            command: displayCmd,
+            error: `Command failed with code ${code}`,
+            stdout: fullOutput,
+            stderr: '',
+          });
+        }
+      });
+    });
+  } catch (error: any) {
+    return {
+      ok: false,
+      command: `dbt ${normalizedCommand}`,
+      error: error.message || 'Command failed',
+      stdout: error.stdout || '',
+      stderr: error.stderr || '',
+    };
+  }
+}
+
 /**
  * Validates that a file path is within the project root
  * Prevents directory traversal attacks
@@ -63,6 +250,8 @@ export const readDbtModel = tool({
       .describe('Absolute path to the dbt project root directory'),
   }),
   execute: async ({ filePath, projectPath }) => {
+    // eslint-disable-next-line no-console
+    console.log('[Tool][DBT] readDbtModel', { filePath, projectPath });
     try {
       assertWithinProject(filePath, projectPath);
 
@@ -111,6 +300,12 @@ export const writeDbtModel = tool({
       .describe('Absolute path to the dbt project root directory'),
   }),
   execute: async ({ filePath, content, projectPath }) => {
+    // eslint-disable-next-line no-console
+    console.log('[Tool][DBT] writeDbtModel', {
+      filePath,
+      contentLength: content?.length ?? 0,
+      projectPath,
+    });
     try {
       assertWithinProject(filePath, projectPath);
 
@@ -177,6 +372,13 @@ export const runDbtCommand = tool({
       .describe('Additional CLI arguments (e.g., "--full-refresh")'),
   }),
   execute: async ({ command, select, projectPath, extraArgs }) => {
+    // eslint-disable-next-line no-console
+    console.log('[Tool][DBT] runDbtCommand', {
+      command,
+      select,
+      projectPath,
+      extraArgs,
+    });
     try {
       // Validate command is in allowed list
       const baseCommand = command.split(' ')[0];
@@ -497,122 +699,16 @@ export function createDbtTools(
           .describe('Additional CLI arguments (e.g., "--full-refresh")'),
       }),
       execute: async ({ command, select, extraArgs }) => {
-        try {
-          const baseCommand = command.split(' ')[0];
-          if (!ALLOWED_DBT_COMMANDS.includes(baseCommand))
-            return {
-              error: `Command not permitted: ${baseCommand}. Allowed: ${ALLOWED_DBT_COMMANDS.join(', ')}`,
-            };
-          const dbtExe = await SettingsService.getDbtExePath();
-          const args = command.split(' ').filter(Boolean);
-          if (select) args.push('--select', select);
-          if (extraArgs) {
-            const parsed = extraArgs.match(/(?:[^\s"']+|(["'])[^\1]*?\1)+/g);
-            if (parsed) {
-              args.push(
-                ...parsed.map((p) => {
-                  if (
-                    (p.startsWith('"') && p.endsWith('"')) ||
-                    (p.startsWith("'") && p.endsWith("'"))
-                  ) {
-                    return p.slice(1, -1);
-                  }
-                  return p;
-                }),
-              );
-            }
-          }
-          const displayCmd = `"${dbtExe}" ${args.map((a) => (a.includes(' ') ? `"${a}"` : a)).join(' ')}`;
-
-          const context = AgentService.currentAgentContext;
-          if (context) {
-            const allowed = await TerminalConfirmGate.request({
-              event: context.event,
-              conversationId: context.conversationId,
-              toolName: 'runDbtCommand',
-              command: displayCmd,
-              cwd: projectPath,
-            });
-            if (!allowed) {
-              return {
-                success: false,
-                error: 'Command denied by user',
-                command: displayCmd,
-              };
-            }
-          }
-
-          return new Promise((resolve) => {
-            if (mainWindow && !mainWindow.isDestroyed()) {
-              mainWindow.webContents.send('cli:clear');
-              mainWindow.webContents.send('cli:output', `> ${displayCmd}\n`);
-            }
-
-            const child = spawn(dbtExe, args, {
-              cwd: projectPath,
-              shell: false,
-            });
-
-            let fullOutput = '';
-
-            const handleData = (data: Buffer) => {
-              const text = data.toString();
-              fullOutput += text;
-              if (mainWindow && !mainWindow.isDestroyed()) {
-                mainWindow.webContents.send('cli:output', text);
-              }
-            };
-
-            child.stdout.on('data', handleData);
-            child.stderr.on('data', handleData);
-
-            child.on('error', (err) => {
-              if (mainWindow && !mainWindow.isDestroyed()) {
-                mainWindow.webContents.send('cli:error', err.message);
-                mainWindow.webContents.send('cli:done');
-              }
-              resolve({
-                success: false,
-                command: displayCmd,
-                error: err.message,
-                stdout: '',
-                stderr: err.message,
-              });
-            });
-
-            child.on('close', (code) => {
-              if (mainWindow && !mainWindow.isDestroyed()) {
-                mainWindow.webContents.send(
-                  'cli:done',
-                  `Process exited with code ${code}`,
-                );
-              }
-              if (code === 0) {
-                resolve({
-                  success: true,
-                  command: displayCmd,
-                  output: fullOutput,
-                });
-              } else {
-                resolve({
-                  success: false,
-                  command: displayCmd,
-                  error: `Command failed with code ${code}`,
-                  stdout: fullOutput,
-                  stderr: '',
-                });
-              }
-            });
-          });
-        } catch (error: any) {
-          return {
-            success: false,
-            command: `dbt ${command}`,
-            error: error.message || 'Command failed',
-            stdout: error.stdout || '',
-            stderr: error.stderr || '',
-          };
-        }
+        return executeDbtCommand({
+          command,
+          select,
+          extraArgs,
+          projectPath,
+          mainWindow,
+          toolName: 'runDbtCommand',
+          requireApproval: true,
+          strictApproval: false,
+        });
       },
     }),
 

@@ -341,13 +341,15 @@ const MarkdownCodeBlock = ({
               <ContentCopy sx={{ fontSize: 11 }} />
             </IconButton>
           </Tooltip>
-          {editingFilePath && (
-            <Tooltip title={applied ? 'Applied!' : 'Apply to current file'}>
-              <IconButton size="small" onClick={apply} sx={toolbarBtnSx}>
-                <UploadFile sx={{ fontSize: 11 }} />
-              </IconButton>
-            </Tooltip>
-          )}
+          {editingFilePath &&
+            !window.location.hash.includes('/sql') &&
+            !window.location.hash.includes('/notebooks') && (
+              <Tooltip title={applied ? 'Applied!' : 'Apply to current file'}>
+                <IconButton size="small" onClick={apply} sx={toolbarBtnSx}>
+                  <UploadFile sx={{ fontSize: 11 }} />
+                </IconButton>
+              </Tooltip>
+            )}
         </Box>
       </Box>
 
