@@ -6,19 +6,32 @@ import * as os from 'os';
 import MainDatabaseService from '../../../src/main/services/mainDatabase.service';
 
 const TEST_DIR_NAME = 'dbt-studio-int-test-static';
-const canRunBetterSqliteIntegration = (() => {
+const canRunBetterSqliteIntegration = () => {
   try {
-    // Match the Electron runtime module path used in this repository.
-    // eslint-disable-next-line global-require
-    const BetterSqlite3 = require('../../../release/app/node_modules/better-sqlite3');
-    const db = new BetterSqlite3(':memory:');
-    db.close();
-    return true;
-  } catch {
+    // Try packaged path first
+    const appPath = process.cwd();
+    const betterSqlitePath = path.join(
+      appPath,
+      'release',
+      'app',
+      'node_modules',
+      'better-sqlite3',
+    );
+    try {
+      // eslint-disable-next-line global-require, import/no-dynamic-require
+      require(betterSqlitePath);
+      return true;
+    } catch {
+      // Fallback to regular require (for dev environments/standard node)
+      // eslint-disable-next-line global-require
+      require('better-sqlite3');
+      return true;
+    }
+  } catch (e) {
     return false;
   }
-})();
-const describeBetterSqlite = canRunBetterSqliteIntegration
+};
+const describeBetterSqlite = canRunBetterSqliteIntegration()
   ? describe
   : describe.skip;
 

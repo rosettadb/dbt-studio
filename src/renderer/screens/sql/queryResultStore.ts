@@ -49,4 +49,12 @@ export const QueryResultStore = {
       lastActiveTabId = undefined;
     }
   },
+
+  /**
+   * Clear all snapshots (e.g. when the entire tab session is reset).
+   */
+  clearAll(): void {
+    snapshots.clear();
+    lastActiveTabId = undefined;
+  },
 };

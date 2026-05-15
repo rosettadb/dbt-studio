@@ -77,7 +77,10 @@ export function createStudioMonacoTools(conversationId: number) {
   if (monacoUpdateEnabled) {
     tools.studio_monaco_update = tool({
       description:
-        'Update or replace SQL text in the active Monaco editor tab. This updates editor content only and does not execute queries.',
+        'CORRECTION TOOL ONLY: Overwrite the SQL text in the active Monaco editor tab with corrected SQL. ' +
+        'Use this ONLY to fix a broken or incorrect SQL statement you previously wrote. ' +
+        'Do NOT use this tool just to show SQL before running it — use studio_sql_query instead, which automatically appends the SQL to the editor AND executes it. ' +
+        'This tool updates editor content only and does not execute queries.',
       inputSchema: z.object({
         content: z
           .string()

@@ -46,7 +46,10 @@ export async function buildBaseAgentConfig(options: {
   const skills = await discoverSkills();
   const skillsPrompt = buildSkillsPrompt(skills);
   const loadSkillTool = createLoadSkillTool(skills);
-  const maxSteps = aiSettings.configuration.autoContinue ? 20 : 1;
+  // 80 steps for autoContinue: bulk SQL tasks (e.g. copying 23 tables) need
+  // ~2 steps per item (studio_sql_query + studio_sql_get_agent_run_result) plus
+  // schema reads and verification, so 20 was too low and would abort mid-task.
+  const maxSteps = aiSettings.configuration.autoContinue ? 80 : 1;
   const MAX_TOOL_RESULT_TOKENS = 3_000;
 
   const prepareStep = async ({ messages }: { messages: any[] }) => {

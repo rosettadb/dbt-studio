@@ -239,8 +239,10 @@ export const ChatWindow: React.FC<ChatWindowProps> = ({
     },
   });
 
+  const isCreatingRef = React.useRef(false);
+
   React.useEffect(() => {
-    if (isLoading) return;
+    if (isLoading || isCreatingRef.current) return;
 
     const previousScopeKey = previousScopeKeyRef.current;
     const hasScopeChanged =
@@ -270,6 +272,7 @@ export const ChatWindow: React.FC<ChatWindowProps> = ({
     }
     if (projectId || connectionId) {
       // Auto-create a default chat session for the project or connection
+      isCreatingRef.current = true;
       createSession({
         title: 'New Chat',
         projectId: projectId ?? undefined,
@@ -286,6 +289,13 @@ export const ChatWindow: React.FC<ChatWindowProps> = ({
     sessionScopeKey,
     createSession,
   ]);
+
+  // Reset isCreatingRef when isCreating state changes to false
+  React.useEffect(() => {
+    if (!isCreating) {
+      isCreatingRef.current = false;
+    }
+  }, [isCreating]);
 
   const handleCreateNewSession = () => {
     if (projectId || connectionId) {

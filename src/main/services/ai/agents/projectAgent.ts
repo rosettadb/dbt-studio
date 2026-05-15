@@ -99,7 +99,10 @@ Always confirm before making destructive changes.`;
     : { ...dbtTools, ...filesystemTools };
 
   const enabledToolNames = new Set(Object.keys(enabledTools ?? {}));
-  if (enabledToolNames.has('runDbtCommand')) {
+  if (
+    enabledToolNames.has('runDbtCommand') &&
+    (allBaseTools as any).studio_cli_run_dbt
+  ) {
     enabledToolNames.delete('runDbtCommand');
     enabledToolNames.add('studio_cli_run_dbt');
   }

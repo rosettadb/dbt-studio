@@ -103,9 +103,23 @@ export class PostgreSQLCatalogAdapter extends CatalogAdapter {
             try {
               await pgClient.connect();
 
+              // Log the exact list of tables to be dropped for observability
+              const tableListResult = await pgClient.query(
+                "SELECT schemaname, tablename FROM pg_tables WHERE schemaname = 'public' AND tablename LIKE 'ducklake_%'",
+              );
+              const tablesToDrop = tableListResult.rows
+                .map((r) => `${r.schemaname}.${r.tablename}`)
+                .join(', ');
+
+              // eslint-disable-next-line no-console
+              console.warn(
+                `[PostgreSQLCatalogAdapter] Dropping tables: ${tablesToDrop || 'none found'}. CASCADE will also remove dependent views/foreign keys.`,
+              );
+
               // Safely drop all ducklake_ prefixed tables using an anonymous DO block.
               // Use schemaname || '.' || tablename so the DROP works regardless of
               // the session's search_path (fixes issue #13 from CodeRabbit review).
+              // WARNING: CASCADE ensures clean reset but removes ALL dependent objects.
               const dropScript = `
                 DO $$ DECLARE
                     r RECORD;

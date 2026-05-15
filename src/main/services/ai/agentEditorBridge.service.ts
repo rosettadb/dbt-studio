@@ -136,12 +136,20 @@ export class AgentEditorBridgeService {
    * @param pushedAt  Timestamp (Date.now()) recorded by the renderer at push time.
    */
   static storeRunResult(snapshot: QueryResultSnapshot, pushedAt: number): void {
-    if (pushedAt < lastRunResultPushedAt) return;
-    lastRunResult = snapshot;
-    lastRunResultPushedAt = pushedAt;
+    // 1. Tab-specific storage: gated by per-tab timestamp.
     if (snapshot.tabId) {
-      lastRunResultByTab.set(snapshot.tabId, snapshot);
-      lastRunResultPushedAtByTab.set(snapshot.tabId, pushedAt);
+      const lastTabPushedAt =
+        lastRunResultPushedAtByTab.get(snapshot.tabId) ?? 0;
+      if (pushedAt >= lastTabPushedAt) {
+        lastRunResultByTab.set(snapshot.tabId, snapshot);
+        lastRunResultPushedAtByTab.set(snapshot.tabId, pushedAt);
+      }
+    }
+
+    // 2. Global storage: gated by global timestamp.
+    if (pushedAt >= lastRunResultPushedAt) {
+      lastRunResult = snapshot;
+      lastRunResultPushedAt = pushedAt;
     }
   }
 

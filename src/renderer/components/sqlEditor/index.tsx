@@ -1,6 +1,8 @@
 import React, { useRef } from 'react';
 import { toast } from 'react-toastify';
 import type * as monacoType from 'monaco-editor';
+import { Box, Tooltip, IconButton } from '@mui/material';
+import { Save as SaveIcon } from '@mui/icons-material';
 import { Inputs, RelativeContainer } from './styles';
 import { connectorsServices, projectsServices } from '../../services';
 import { DuckLakeService } from '../../services/duckLake.service';
@@ -10,6 +12,8 @@ import { SqlEditorComponent } from './editorComponent';
 import { QueryHistory } from './queryHistory';
 import { useAppContext } from '../../hooks';
 import { useSqlEditorBridge } from '../../controllers';
+import { SaveQueryDialog } from './SaveQueryDialog';
+import { useCreateSavedQuery } from '../../controllers/savedQueries.controller';
 
 type Props = {
   completions: Omit<monacoType.languages.CompletionItem, 'range'>[];
@@ -51,6 +55,8 @@ export const SqlEditor: React.FC<Props> = ({
   const editorRef = useRef<monacoType.editor.IStandaloneCodeEditor | null>(
     null,
   );
+  const [saveDialogOpen, setSaveDialogOpen] = React.useState(false);
+  const createQueryMutation = useCreateSavedQuery();
 
   // Determine if we're in connection-based mode
   const isConnectionMode = !!connectionId;
@@ -384,26 +390,72 @@ export const SqlEditor: React.FC<Props> = ({
   // Get filter ID for query history based on mode
   const historyFilterId = isConnectionMode ? connectionId : selectedProject?.id;
 
+  const handleSaveQuery = async (name: string) => {
+    if (!connectionId || !queryContent.trim()) {
+      toast.error('No connection or query content');
+      return;
+    }
+    try {
+      await createQueryMutation.mutateAsync({
+        connectionId,
+        name,
+        query: queryContent,
+      });
+      toast.success('Query saved successfully');
+    } catch (e) {
+      toast.error('Failed to save query');
+    }
+  };
+
   return (
     <Inputs>
       <RelativeContainer>
-        <SqlEditorComponent
-          content={queryContent}
-          setContent={handleQueryContentChange}
-          completions={completions}
-          editorRef={editorRef}
-          onRunSelected={(lineQuery) => handleRunQuery(lineQuery)}
-          isLoading={isLoading}
-        />
-        {queryHistory.length > 0 && historyFilterId && (
-          <QueryHistory
-            onQuerySelect={(qh) => handleQueryContentChange(qh.query)}
-            queryHistory={queryHistory}
-            projectId={isConnectionMode ? undefined : selectedProject?.id}
-            connectionId={isConnectionMode ? connectionId : undefined}
+        <Box sx={{ flex: 1, height: '100%', position: 'relative' }}>
+          <SqlEditorComponent
+            content={queryContent}
+            setContent={handleQueryContentChange}
+            completions={completions}
+            editorRef={editorRef}
+            onRunSelected={(lineQuery) => handleRunQuery(lineQuery)}
+            isLoading={isLoading}
           />
-        )}
+          <Box
+            sx={{
+              position: 'absolute',
+              top: -15,
+              right: -10,
+              margin: '20px',
+              display: 'flex',
+              alignItems: 'center',
+              zIndex: 10,
+            }}
+          >
+            {isConnectionMode && connectionId && (
+              <Tooltip title="Save Query">
+                <IconButton
+                  onClick={() => setSaveDialogOpen(true)}
+                  disabled={!queryContent.trim()}
+                >
+                  <SaveIcon />
+                </IconButton>
+              </Tooltip>
+            )}
+            {queryHistory.length > 0 && historyFilterId && (
+              <QueryHistory
+                onQuerySelect={(qh) => handleQueryContentChange(qh.query)}
+                queryHistory={queryHistory}
+                projectId={isConnectionMode ? undefined : selectedProject?.id}
+                connectionId={isConnectionMode ? connectionId : undefined}
+              />
+            )}
+          </Box>
+        </Box>
       </RelativeContainer>
+      <SaveQueryDialog
+        open={saveDialogOpen}
+        onClose={() => setSaveDialogOpen(false)}
+        onSave={handleSaveQuery}
+      />
     </Inputs>
   );
 };
