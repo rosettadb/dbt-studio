@@ -4,7 +4,8 @@ import Tooltip from '@mui/material/Tooltip';
 import CloseIcon from '@mui/icons-material/Close';
 import ErrorOutlineIcon from '@mui/icons-material/ErrorOutline';
 import { EditorTabState } from '../../../../types/editor';
-import { LoadingDot, ModifiedDot, TabButton, TabTitle } from './styles';
+import { FileIcon } from '../../fileIcon';
+import { ModifiedDot, TabButton, TabIconSlot, TabTitle } from './styles';
 
 interface EditorTabProps {
   tab: EditorTabState;
@@ -35,15 +36,10 @@ export const EditorTab: React.FC<EditorTabProps> = ({
       enterNextDelay={600}
     >
       <TabButton active={isActive} isLast={isLast} onClick={onSelect}>
-        {/* Reserve the dot slot at all times so the title doesn't shift
-            left when isLoading flips false on a clean file (the original
-            flicker). LoadingDot/ModifiedDot/hidden ModifiedDot all share
-            the same 8x8 footprint. */}
-        {tab.isLoading ? (
-          <LoadingDot />
-        ) : (
-          <ModifiedDot hidden={!tab.isModified} />
-        )}
+        <TabIconSlot>
+          <FileIcon fileName={tab.title} />
+        </TabIconSlot>
+        <TabTitle>{tab.title}</TabTitle>
         {!tab.isLoading && tab.error && (
           <Tooltip
             title={tab.error}
@@ -55,12 +51,12 @@ export const EditorTab: React.FC<EditorTabProps> = ({
             <ErrorOutlineIcon color="error" fontSize="small" />
           </Tooltip>
         )}
-        <TabTitle>{tab.title}</TabTitle>
+        <ModifiedDot hidden={!tab.isModified} />
         <IconButton
           size="small"
           onClick={handleClose}
           sx={{
-            ml: 0.5,
+            ml: 0.25,
             width: 20,
             height: 20,
             color: 'text.secondary',
