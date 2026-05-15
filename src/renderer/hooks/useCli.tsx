@@ -117,20 +117,23 @@ export const CliProvider: React.FC<CliProviderProps> = ({ children }) => {
     };
 
     // Setup listeners
-    window.electron.ipcRenderer.on('cli:output', handleOutput);
-    window.electron.ipcRenderer.on('cli:error', handleError);
-    window.electron.ipcRenderer.on('cli:done', handleDone);
-    window.electron.ipcRenderer.on('cli:clear', handleClear);
+    const unsubOutput = window.electron.ipcRenderer.on(
+      'cli:output',
+      handleOutput,
+    );
+    const unsubError = window.electron.ipcRenderer.on('cli:error', handleError);
+    const unsubDone = window.electron.ipcRenderer.on('cli:done', handleDone);
+    const unsubClear = window.electron.ipcRenderer.on('cli:clear', handleClear);
 
     listenersSetupRef.current = true;
 
     // Cleanup on unmount
     // eslint-disable-next-line consistent-return
     return () => {
-      window.electron.ipcRenderer.removeListener('cli:output', handleOutput);
-      window.electron.ipcRenderer.removeListener('cli:error', handleError);
-      window.electron.ipcRenderer.removeListener('cli:done', handleDone);
-      window.electron.ipcRenderer.removeListener('cli:clear', handleClear);
+      if (typeof unsubOutput === 'function') unsubOutput();
+      if (typeof unsubError === 'function') unsubError();
+      if (typeof unsubDone === 'function') unsubDone();
+      if (typeof unsubClear === 'function') unsubClear();
       listenersSetupRef.current = false;
     };
   }, []);

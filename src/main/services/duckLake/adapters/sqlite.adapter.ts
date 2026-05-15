@@ -27,6 +27,16 @@ import { DuckLakeError } from '../../../../types/duckLakeErrors';
 import { normalizeNumericValue } from '../../../../renderer/utils/fileUtils';
 
 export class SQLiteCatalogAdapter extends CatalogAdapter {
+  private static isUnsupportedSQLiteMigrationError(error: unknown): boolean {
+    const message = (error as Error)?.message?.toLowerCase?.() || '';
+    return (
+      (message.includes('failed to migrate ducklake from v0.1 to v0.2') &&
+        message.includes('unsupported alter table type') &&
+        message.includes('sqlite tables only support')) ||
+      message.includes('catalog version mismatch')
+    );
+  }
+
   async connect(
     config: DuckLakeCatalogConfig,
     instance: DuckLakeInstance,
@@ -62,12 +72,51 @@ export class SQLiteCatalogAdapter extends CatalogAdapter {
 
       // Attach DuckLake catalog with SQLite backend
       const attachString = `ducklake:sqlite:${config.sqlite.metadataPath}`;
-      await this.attachDuckLakeCatalog(
-        connection,
-        attachString,
-        instance.name,
-        instance.dataPath,
-      );
+      try {
+        await this.attachDuckLakeCatalog(
+          connection,
+          attachString,
+          instance.name,
+          instance.dataPath,
+        );
+      } catch (error) {
+        if (!SQLiteCatalogAdapter.isUnsupportedSQLiteMigrationError(error)) {
+          throw error;
+        }
+
+        // eslint-disable-next-line no-console
+        console.warn(
+          'DuckLake automatic migration failed or is unsupported for SQLite catalog. Resetting catalog...',
+          error,
+        );
+
+        // Delete the outdated SQLite metadata files to start fresh
+        try {
+          if (fs.existsSync(config.sqlite.metadataPath)) {
+            fs.unlinkSync(config.sqlite.metadataPath);
+          }
+          if (fs.existsSync(`${config.sqlite.metadataPath}-wal`)) {
+            fs.unlinkSync(`${config.sqlite.metadataPath}-wal`);
+          }
+          if (fs.existsSync(`${config.sqlite.metadataPath}-shm`)) {
+            fs.unlinkSync(`${config.sqlite.metadataPath}-shm`);
+          }
+        } catch (fsError) {
+          // eslint-disable-next-line no-console
+          console.error(
+            'Failed to delete outdated SQLite catalog files:',
+            fsError,
+          );
+        }
+
+        // Try attaching again to create a fresh v1.0 catalog
+        await this.attachDuckLakeCatalog(
+          connection,
+          attachString,
+          instance.name,
+          instance.dataPath,
+        );
+      }
 
       this.connectionInfo = {
         instance: duckdbInstance,

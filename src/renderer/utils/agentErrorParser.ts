@@ -47,7 +47,9 @@ export function parseAgentError(error: unknown): ParsedAgentError {
     lowerRaw.includes('rate limit') ||
     lowerRaw.includes('quota') ||
     lowerRaw.includes('resource_exhausted') ||
-    lowerRaw.includes('429')
+    lowerRaw.includes('429') ||
+    lowerRaw.includes('credit balance') ||
+    lowerRaw.includes('out of credits')
   ) {
     return {
       type: 'rateLimit',

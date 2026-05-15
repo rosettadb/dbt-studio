@@ -7,6 +7,13 @@ describe('ai.ipcHandlers', () => {
   const setupMocksAndRegister = async (
     overrides: { getProviders?: jest.Mock } = {},
   ) => {
+    jest.doMock('electron', () => ({
+      ipcMain: {
+        handle: jest.fn(),
+        removeHandler: jest.fn(),
+      },
+    }));
+
     // After resetModules, re-require electron to get the fresh mock instance
     const { ipcMain } = await import('electron');
 
@@ -24,24 +31,29 @@ describe('ai.ipcHandlers', () => {
       },
     }));
 
-    jest.doMock('../../../../src/main/services/chat.service', () => ({
-      __esModule: true,
-      default: {
-        cancelAssistantStream: jest.fn(),
-        streamAssistantReply: jest.fn(),
-      },
-    }));
-
     jest.doMock('../../../../src/main/services/secureStorage.service', () => ({
       __esModule: true,
       default: { getAIProviderCredential: jest.fn().mockResolvedValue(null) },
+    }));
+
+    jest.doMock('../../../../src/main/services/agent.service', () => ({
+      __esModule: true,
+      default: {
+        getMessages: jest.fn().mockResolvedValue([]),
+        getMessagesWithContext: jest.fn().mockResolvedValue([]),
+        resolveSelectedFileContext: jest.fn(),
+        getFileMetadata: jest.fn(),
+      },
+      loadAISettings: jest.fn().mockResolvedValue({}),
+      saveAISettings: jest.fn().mockResolvedValue(undefined),
+      getAISettingsFilePath: jest.fn().mockReturnValue('/tmp/ai-settings.json'),
     }));
 
     jest.doMock(
       '../../../../src/main/services/ai/providerManager.service',
       () => ({
         __esModule: true,
-        AIProviderManager: {
+        default: {
           createProvider: jest.fn(),
           updateProvider: jest.fn(),
           deleteProvider: jest.fn(),
@@ -80,7 +92,7 @@ describe('ai.ipcHandlers', () => {
       expect.any(Function),
     );
     expect(ipcMain.handle).toHaveBeenCalledWith(
-      'chat:message:stream',
+      'chat:message:list',
       expect.any(Function),
     );
   });

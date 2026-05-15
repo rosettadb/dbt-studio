@@ -18,6 +18,7 @@ type Props = {
   databaseName: string;
   type: SupportedConnectionTypes;
   schema: Table[];
+  schemaNames?: string[];
   isLoading: boolean;
   filter?: string;
   hideSchemaLevel?: boolean;
@@ -33,6 +34,7 @@ export const SchemaTreeViewerWithSchema: React.FC<Props> = React.memo(
     databaseName,
     type,
     schema: tables = [],
+    schemaNames,
     isLoading,
     filter = '',
     hideSchemaLevel = false,
@@ -52,14 +54,29 @@ export const SchemaTreeViewerWithSchema: React.FC<Props> = React.memo(
     }, [tables, filter]);
 
     const schemaMap = React.useMemo(() => {
-      return filteredTables.reduce<Record<string, Table[]>>((acc, table) => {
-        if (!acc[table.schema]) {
-          acc[table.schema] = [];
-        }
-        acc[table.schema].push(table);
-        return acc;
-      }, {});
-    }, [filteredTables]);
+      const map = filteredTables.reduce<Record<string, Table[]>>(
+        (acc, table) => {
+          if (!acc[table.schema]) {
+            acc[table.schema] = [];
+          }
+          acc[table.schema].push(table);
+          return acc;
+        },
+        {},
+      );
+
+      if (schemaNames) {
+        schemaNames.forEach((name) => {
+          if (!map[name]) {
+            map[name] = [];
+          }
+        });
+      }
+      return map;
+    }, [filteredTables, schemaNames]);
+
+    const hasData =
+      filteredTables.length > 0 || (schemaNames && schemaNames.length > 0);
 
     const handleExpandedItemsChange = React.useCallback(
       (_: React.SyntheticEvent, newExpanded: string[]) => {
@@ -87,12 +104,12 @@ export const SchemaTreeViewerWithSchema: React.FC<Props> = React.memo(
             <CircularProgress size={24} />
           </Box>
         )}
-        {!isLoading && filteredTables.length === 0 && (
+        {!isLoading && !hasData && (
           <NoDataMessage>
             {filter ? 'No results found' : 'No Schema available'}
           </NoDataMessage>
         )}
-        {!isLoading && filteredTables.length > 0 && (
+        {!isLoading && hasData && (
           <StyledTreeView
             expandedItems={expandedItems}
             onExpandedItemsChange={handleExpandedItemsChange}

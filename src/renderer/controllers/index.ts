@@ -13,3 +13,4 @@ export * from './agent.controller';
 export * from './aiSettings.controller';
 export * from './mcp.controller';
 export * from './skills.controller';
+export * from './editor.controller';

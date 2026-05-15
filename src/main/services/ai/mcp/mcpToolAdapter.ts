@@ -5,11 +5,11 @@ import { MCPClientManager } from './mcpClientManager';
  * Skips servers that are not currently connected (no error thrown).
  */
 export async function buildMCPToolset(
-  serverIds: string[],
+  serverIds?: string[],
 ): Promise<Record<string, any>> {
-  const connectedIds = serverIds.filter((id) =>
-    MCPClientManager.isConnected(id),
-  );
+  const connectedIds = serverIds
+    ? serverIds.filter((id) => MCPClientManager.isConnected(id))
+    : MCPClientManager.listConnected();
 
   const toolsets = await Promise.allSettled(
     connectedIds.map((id) => MCPClientManager.getTools(id)),

@@ -450,14 +450,7 @@ const QueryHistory: React.FC<Props> = ({
   }
 
   return (
-    <div
-      style={{
-        position: 'absolute',
-        top: -15,
-        right: -10,
-        margin: 20,
-      }}
-    >
+    <div>
       <Tooltip title="Query History">
         <IconButton onClick={handleClick}>
           <History />

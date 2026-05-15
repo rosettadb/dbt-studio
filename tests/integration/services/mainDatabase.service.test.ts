@@ -6,6 +6,34 @@ import * as os from 'os';
 import MainDatabaseService from '../../../src/main/services/mainDatabase.service';
 
 const TEST_DIR_NAME = 'dbt-studio-int-test-static';
+const canRunBetterSqliteIntegration = () => {
+  try {
+    // Try packaged path first
+    const appPath = process.cwd();
+    const betterSqlitePath = path.join(
+      appPath,
+      'release',
+      'app',
+      'node_modules',
+      'better-sqlite3',
+    );
+    try {
+      // eslint-disable-next-line global-require, import/no-dynamic-require
+      require(betterSqlitePath);
+      return true;
+    } catch {
+      // Fallback to regular require (for dev environments/standard node)
+      // eslint-disable-next-line global-require
+      require('better-sqlite3');
+      return true;
+    }
+  } catch (e) {
+    return false;
+  }
+};
+const describeBetterSqlite = canRunBetterSqliteIntegration()
+  ? describe
+  : describe.skip;
 
 jest.mock('electron', () => {
   // Use distinct variable names to avoid shadowing if imports are hoisted
@@ -28,7 +56,7 @@ jest.mock('electron', () => {
   };
 });
 
-describe('MainDatabaseService Integration', () => {
+describeBetterSqlite('MainDatabaseService Integration', () => {
   const testUserDataPath = path.join(os.tmpdir(), TEST_DIR_NAME);
 
   beforeAll(() => {

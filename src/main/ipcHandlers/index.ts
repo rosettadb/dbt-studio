@@ -17,6 +17,7 @@ import registerLanguageIntelligenceHandlers from './languageIntelligence.ipcHand
 import { registerAgentHandlers } from './agent.ipcHandlers';
 import { registerMCPHandlers } from './mcp.ipcHandlers';
 import { registerSkillsHandlers } from './skills.ipcHandlers';
+import registerSavedQueriesHandlers from './savedQueries.ipcHandlers';
 
 export {
   registerCliHandlers,
@@ -38,4 +39,5 @@ export {
   registerAgentHandlers,
   registerMCPHandlers,
   registerSkillsHandlers,
+  registerSavedQueriesHandlers,
 };

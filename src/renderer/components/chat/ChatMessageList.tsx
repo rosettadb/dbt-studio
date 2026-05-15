@@ -30,6 +30,7 @@ interface ChatMessageListProps {
   lastUsage?: TokenUsage | null;
   streamState?: AgentStreamState;
   isAgentRunning?: boolean;
+  screenKey?: 'project' | 'sql' | 'notebooks';
   onConfirmTerminal?: (allow: boolean) => void;
   onClearError?: () => void;
   onOpenFile?: (path: string) => void;
@@ -40,6 +41,7 @@ export const ChatMessageList: React.FC<ChatMessageListProps> = ({
   lastUsage,
   streamState,
   isAgentRunning,
+  screenKey = 'project',
   onConfirmTerminal,
   onClearError,
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
@@ -72,6 +74,13 @@ export const ChatMessageList: React.FC<ChatMessageListProps> = ({
   }, [sessionId]);
 
   const autoScroll = aiSettings?.chat?.autoScrollToLatest ?? true;
+  const hasPersistedCompaction = React.useMemo(
+    () =>
+      messages.some(
+        (m) => m.role === 'system' && (m.metadata as any)?.compacted,
+      ),
+    [messages],
+  );
 
   // Helper to scroll to bottom
   type ScrollBehaviorType = 'auto' | 'smooth';
@@ -128,6 +137,45 @@ export const ChatMessageList: React.FC<ChatMessageListProps> = ({
     };
   }, [scrollToBottom]);
 
+  const emptyState = React.useMemo(() => {
+    if (screenKey === 'sql') {
+      return {
+        title: 'SQL Agent Ready',
+        subtitle:
+          'Run queries, inspect schema, and iterate faster with connection-aware assistance.',
+        bullets: [
+          'Write and refine SQL for the active connection',
+          'Explain query errors and suggest safe fixes',
+          'Generate quick exploration queries from plain language',
+        ],
+      };
+    }
+
+    if (screenKey === 'notebooks') {
+      return {
+        title: 'Notebook Agent Ready',
+        subtitle:
+          'Build analysis workflows cell by cell with context from your notebook and connection.',
+        bullets: [
+          'Draft SQL cells from analysis goals',
+          'Help debug failing cells and outputs',
+          'Propose next steps for data investigation',
+        ],
+      };
+    }
+
+    return {
+      title: 'dbt Agent Ready',
+      subtitle:
+        'Use the dbt agent to plan, write, and improve models with project context.',
+      bullets: [
+        'Create or refactor dbt models and tests',
+        'Explain lineage and transformation intent',
+        'Suggest best-practice project improvements',
+      ],
+    };
+  }, [screenKey]);
+
   if (!sessionId) {
     return (
       <Box
@@ -180,12 +228,86 @@ export const ChatMessageList: React.FC<ChatMessageListProps> = ({
         </Typography>
       )}
       {!isLoading && messages.length === 0 && !isAgentRunning && (
-        <Typography variant="caption" color="text.disabled">
-          No messages yet. Say hello!
-        </Typography>
+        <Box sx={{ px: 1.5, pt: 1, pb: 1.5 }}>
+          <Box
+            sx={{
+              border: '1px solid',
+              borderColor: 'divider',
+              borderRadius: 0.5,
+              px: 1.5,
+              py: 1.25,
+              background:
+                'linear-gradient(180deg, rgba(144,202,249,0.08) 0%, rgba(144,202,249,0.02) 100%)',
+            }}
+          >
+            <Typography
+              variant="body2"
+              sx={{ fontWeight: 600, color: 'text.primary' }}
+            >
+              {emptyState.title}
+            </Typography>
+            <Typography
+              variant="caption"
+              sx={{
+                color: 'text.secondary',
+                display: 'block',
+                mt: 0.5,
+                lineHeight: 1.5,
+              }}
+            >
+              {emptyState.subtitle}
+            </Typography>
+            <Stack sx={{ mt: 1 }} spacing={0.5}>
+              {emptyState.bullets.map((item) => (
+                <Typography
+                  key={item}
+                  variant="caption"
+                  sx={{ color: 'text.secondary', lineHeight: 1.45 }}
+                >
+                  • {item}
+                </Typography>
+              ))}
+            </Stack>
+          </Box>
+        </Box>
       )}
-      <Stack spacing={0.25} sx={{ minWidth: 0, overflowX: 'hidden', px: 1.5 }}>
+      <Stack
+        spacing={0.25}
+        sx={{ minWidth: 0, overflowX: 'hidden', px: 1.5, pb: '50px' }}
+      >
         {messages.map((m, index) => {
+          if (m.role === 'system' && (m.metadata as any)?.compacted) {
+            const summarizedCount =
+              (m.metadata as any)?.summarizedMessageCount ??
+              compactionInfo?.messagesSummarized;
+            return (
+              <Box
+                key={m.id}
+                sx={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  my: 0.5,
+                  opacity: 0.55,
+                }}
+              >
+                <Divider sx={{ flex: 1 }} />
+                <Typography
+                  variant="caption"
+                  sx={{
+                    mx: 1.5,
+                    color: 'text.disabled',
+                    fontSize: '0.65rem',
+                    whiteSpace: 'nowrap',
+                  }}
+                >
+                  Earlier conversation summarized
+                  {summarizedCount ? ` (${summarizedCount} messages)` : ''}
+                </Typography>
+                <Divider sx={{ flex: 1 }} />
+              </Box>
+            );
+          }
+
           const isLastMessage = index === messages.length - 1;
           const persistedUsage =
             m.metadata?.promptTokens ||
@@ -222,7 +344,7 @@ export const ChatMessageList: React.FC<ChatMessageListProps> = ({
         })}
 
         {/* Compaction divider — shown when auto-compaction fired this session */}
-        {compactionInfo && (
+        {compactionInfo && !hasPersistedCompaction && (
           <Box
             sx={{
               display: 'flex',
@@ -247,31 +369,6 @@ export const ChatMessageList: React.FC<ChatMessageListProps> = ({
             <Divider sx={{ flex: 1 }} />
           </Box>
         )}
-
-        {/* Spinner — shown while streaming starts and no content yet */}
-        {isAgentRunning &&
-          (streamState?.contentParts.length ?? 0) === 0 &&
-          (() => {
-            const lastMsg = messages[messages.length - 1];
-            if (lastMsg?.role !== 'user') return null;
-            return (
-              <Box
-                sx={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 1,
-                  px: 0.5,
-                  py: 0.5,
-                  color: 'text.disabled',
-                }}
-              >
-                <CircularProgress size={10} color="inherit" />
-                <Typography variant="caption" color="text.disabled">
-                  Working…
-                </Typography>
-              </Box>
-            );
-          })()}
 
         {/* Live interleaved stream — text parts + tool-call parts in arrival order */}
         {(streamState?.contentParts.length ?? 0) > 0 &&
@@ -332,9 +429,64 @@ export const ChatMessageList: React.FC<ChatMessageListProps> = ({
           />
         )}
 
-        {/* Inline agent error alert */}
+        {/* Agent error alert */}
         {streamState?.error && onClearError && (
           <AgentErrorAlert error={streamState.error} onDismiss={onClearError} />
+        )}
+
+        {/* Global persistent Working... — visible throughout the entire generation cycle.
+            Appears below all tool calls, TerminalGate, and error banners.
+            Disappears only when generation fully stops. */}
+        {isAgentRunning && !streamState?.error && (
+          <Box
+            sx={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 0.75,
+              px: 0.5,
+              py: 0.75,
+              color: 'text.disabled',
+            }}
+          >
+            <CircularProgress size={10} color="inherit" sx={{ opacity: 0.6 }} />
+            <Typography
+              variant="caption"
+              sx={{
+                color: 'text.secondary',
+                fontSize: '0.72rem',
+                fontStyle: 'italic',
+                '@keyframes workingPulse': {
+                  '0%, 100%': { opacity: 0.45 },
+                  '50%': { opacity: 1 },
+                },
+                animation: 'workingPulse 1.6s ease-in-out infinite',
+              }}
+            >
+              {streamState?.pendingConfirm
+                ? 'Waiting for user input'
+                : 'Working'}
+            </Typography>
+            {!streamState?.pendingConfirm &&
+              [0, 1, 2].map((i) => (
+                <Box
+                  key={i}
+                  sx={{
+                    width: 3,
+                    height: 3,
+                    borderRadius: '50%',
+                    bgcolor: 'text.disabled',
+                    '@keyframes workingDot': {
+                      '0%, 80%, 100%': {
+                        transform: 'scale(0.6)',
+                        opacity: 0.35,
+                      },
+                      '40%': { transform: 'scale(1)', opacity: 0.85 },
+                    },
+                    animation: `workingDot 1.2s ease-in-out ${i * 0.2}s infinite`,
+                  }}
+                />
+              ))}
+          </Box>
         )}
 
         <div ref={bottomRef} />

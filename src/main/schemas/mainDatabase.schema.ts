@@ -37,6 +37,8 @@ export const chatConversations = sqliteTable(
     id: integer('id').primaryKey({ autoIncrement: true }),
     title: text('title').notNull(),
     projectId: integer('project_id'), // References existing project IDs from database.json (read-only)
+    screenKey: text('screen_key').default('project').notNull(),
+    connectionId: text('connection_id'),
     providerId: integer('provider_id').references(() => aiProviders.id, {
       onDelete: 'set null',
     }),
@@ -45,6 +47,12 @@ export const chatConversations = sqliteTable(
   },
   (table: any) => ({
     projectIdx: index('chat_conversations_project_idx').on(table.projectId),
+    screenKeyIdx: index('chat_conversations_screen_key_idx').on(
+      table.screenKey,
+    ),
+    connectionIdx: index('chat_conversations_connection_idx').on(
+      table.connectionId,
+    ),
     providerIdx: index('chat_conversations_provider_idx').on(table.providerId),
     createdAtIdx: index('chat_conversations_created_at_idx').on(
       table.createdAt,
@@ -333,10 +341,6 @@ export type NewSessionMetadata = typeof sessionMetadata.$inferInsert;
 
 export type ToolCall = typeof toolCalls.$inferSelect;
 export type NewToolCall = typeof toolCalls.$inferInsert;
-
-export type ChatCompactionSummary = typeof chatCompactionSummaries.$inferSelect;
-export type NewChatCompactionSummary =
-  typeof chatCompactionSummaries.$inferInsert;
 
 export type PromptTemplate = typeof promptTemplates.$inferSelect;
 export type NewPromptTemplate = typeof promptTemplates.$inferInsert;
