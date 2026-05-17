@@ -34,6 +34,7 @@ export interface GetConversationsFilter {
   projectId?: number;
   screenKey?: AgentScreenKey;
   connectionId?: string | null;
+  notebookId?: string | null;
 }
 
 export default class MainDatabaseService {
@@ -129,6 +130,7 @@ export default class MainDatabaseService {
         provider_id INTEGER,
         screen_key TEXT DEFAULT 'project',
         connection_id TEXT,
+        notebook_id TEXT,
         created_at TEXT DEFAULT (datetime('now')),
         updated_at TEXT DEFAULT (datetime('now')),
         FOREIGN KEY (provider_id) REFERENCES ai_providers(id) ON DELETE SET NULL
@@ -309,6 +311,14 @@ export default class MainDatabaseService {
         );
         alterStatements.push(
           'CREATE INDEX IF NOT EXISTS chat_conversations_connection_idx ON chat_conversations(connection_id);',
+        );
+      }
+      if (!chatConvCols.has('notebook_id')) {
+        alterStatements.push(
+          'ALTER TABLE chat_conversations ADD COLUMN notebook_id TEXT;',
+        );
+        alterStatements.push(
+          'CREATE INDEX IF NOT EXISTS chat_conversations_notebook_idx ON chat_conversations(notebook_id);',
         );
       }
 
@@ -561,6 +571,7 @@ export default class MainDatabaseService {
     providerId?: number,
     screenKey?: AgentScreenKey,
     connectionId?: string,
+    notebookId?: string,
   ): Promise<ChatConversation> {
     const db = await this.getDatabase();
 
@@ -573,6 +584,7 @@ export default class MainDatabaseService {
           providerId,
           screenKey: screenKey ?? 'project',
           connectionId,
+          notebookId,
         })
         .returning();
 
@@ -607,6 +619,15 @@ export default class MainDatabaseService {
         } else {
           conditions.push(
             eq(schema.chatConversations.connectionId, opts.connectionId),
+          );
+        }
+      }
+      if (opts.notebookId !== undefined) {
+        if (opts.notebookId === null) {
+          conditions.push(isNull(schema.chatConversations.notebookId));
+        } else {
+          conditions.push(
+            eq(schema.chatConversations.notebookId, opts.notebookId),
           );
         }
       }

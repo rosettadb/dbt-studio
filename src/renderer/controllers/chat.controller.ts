@@ -23,6 +23,7 @@ export interface GetSessionsFilter {
   projectId?: number;
   screenKey?: string;
   connectionId?: string | null;
+  notebookId?: string | null;
 }
 
 // Get all chat sessions
@@ -68,9 +69,9 @@ export const useCreateChatSession = (
     {
       title: string;
       projectId?: number;
-      providerId?: number;
       screenKey?: string;
       connectionId?: string;
+      notebookId?: string;
     }
   >,
 ): UseMutationResult<
@@ -79,9 +80,9 @@ export const useCreateChatSession = (
   {
     title: string;
     projectId?: number;
-    providerId?: number;
     screenKey?: string;
     connectionId?: string;
+    notebookId?: string;
   }
 > => {
   const { onSuccess: onCustomSuccess, onError: onCustomError } =
@@ -92,23 +93,23 @@ export const useCreateChatSession = (
     mutationFn: async ({
       title,
       projectId,
-      providerId,
       screenKey,
       connectionId,
+      notebookId,
     }) => {
       return chatService.createSession(
         title,
         projectId,
-        providerId,
         screenKey,
         connectionId,
+        notebookId,
       );
     },
     onSuccess: async (session, variables, ...args) => {
       await queryClient.invalidateQueries([QUERY_KEYS.GET_CHAT_SESSIONS]);
       await queryClient.invalidateQueries([
         QUERY_KEYS.GET_CHAT_SESSIONS,
-        variables.projectId,
+        { projectId: variables.projectId },
       ]);
       onCustomSuccess?.(session, variables, ...args);
     },

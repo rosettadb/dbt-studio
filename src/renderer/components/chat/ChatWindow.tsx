@@ -46,6 +46,7 @@ import { projectsServices } from '../../services';
 export interface ChatWindowProps {
   screenKey?: 'project' | 'sql' | 'notebooks';
   connectionId?: string;
+  notebookId?: string;
   projectId?: number | null;
   onClose?: () => void;
 }
@@ -59,6 +60,7 @@ const SCREEN_BADGE: Record<string, { label: string; color: string }> = {
 export const ChatWindow: React.FC<ChatWindowProps> = ({
   screenKey = 'project',
   connectionId,
+  notebookId,
   projectId: propProjectId,
   onClose,
 }) => {
@@ -200,8 +202,9 @@ export const ChatWindow: React.FC<ChatWindowProps> = ({
   });
 
   const sessionScopeKey = React.useMemo(
-    () => `${screenKey}|${projectId ?? 'none'}|${connectionId ?? 'none'}`,
-    [screenKey, projectId, connectionId],
+    () =>
+      `${screenKey}|${projectId ?? 'none'}|${connectionId ?? 'none'}|${notebookId ?? 'none'}`,
+    [screenKey, projectId, connectionId, notebookId],
   );
   const { data: providers = [], isLoading: isLoadingProviders } =
     useGetAIProviders();
@@ -270,7 +273,7 @@ export const ChatWindow: React.FC<ChatWindowProps> = ({
       });
       return;
     }
-    if (projectId || connectionId) {
+    if (projectId || connectionId || notebookId) {
       // Auto-create a default chat session for the project or connection
       isCreatingRef.current = true;
       createSession({
@@ -278,6 +281,7 @@ export const ChatWindow: React.FC<ChatWindowProps> = ({
         projectId: projectId ?? undefined,
         screenKey,
         connectionId,
+        notebookId,
       });
     }
   }, [
@@ -285,6 +289,7 @@ export const ChatWindow: React.FC<ChatWindowProps> = ({
     isLoading,
     projectId,
     connectionId,
+    notebookId,
     screenKey,
     sessionScopeKey,
     createSession,
@@ -298,7 +303,7 @@ export const ChatWindow: React.FC<ChatWindowProps> = ({
   }, [isCreating]);
 
   const handleCreateNewSession = () => {
-    if (projectId || connectionId) {
+    if (projectId || connectionId || notebookId) {
       const sessionCount = sessions.length;
       const title = `Chat ${sessionCount + 1}`;
       createSession({
@@ -306,6 +311,7 @@ export const ChatWindow: React.FC<ChatWindowProps> = ({
         projectId: projectId ?? undefined,
         screenKey,
         connectionId,
+        notebookId,
       });
     }
   };
@@ -838,6 +844,7 @@ export const ChatWindow: React.FC<ChatWindowProps> = ({
                 toolMode ?? currentMode,
                 screenKey,
                 connectionId,
+                notebookId,
               )
             }
             onCancelStream={cancelStream}

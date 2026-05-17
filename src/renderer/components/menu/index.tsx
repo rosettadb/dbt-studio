@@ -287,7 +287,8 @@ export const Menu: React.FC<MenuProps> = ({ actions }) => {
           </Box>
         )}
         {((isProjectSelected && isOnProjectDetails) ||
-          location.pathname === '/app/sql') && (
+          location.pathname === '/app/sql' ||
+          location.pathname.startsWith('/app/notebooks')) && (
           <Tooltip title="AI Assistant (beta)">
             <IconButton
               onClick={() => setIsChatOpen?.(!isChatOpen)}

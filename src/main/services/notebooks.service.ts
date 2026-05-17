@@ -72,6 +72,14 @@ function isRowReturningQuery(query: string): boolean {
   return /^\s*(?:WITH\b[\s\S]*?\)\s*)*SELECT\b/i.test(query.trim());
 }
 
+// Strip trailing LIMIT/OFFSET clauses to allow backend pagination to work deterministically
+function removeTrailingLimit(query: string): string {
+  let cleaned = query.trim().replace(/;$/, '').trim();
+  const limitRegex = /\bLIMIT\s+\d+(?:\s+OFFSET\s+\d+)?\s*$/i;
+  cleaned = cleaned.replace(limitRegex, '').trim();
+  return cleaned;
+}
+
 // Ensure directories exist
 async function ensureDirectories() {
   await fs.mkdir(NOTEBOOKS_DIR, { recursive: true });
@@ -684,8 +692,11 @@ export class NotebooksService {
       // Validate and sanitize pagination inputs
       const { pageLimit, pageOffset } = sanitizePagination(limit, offset);
 
+      // Strip any explicit LIMIT/OFFSET to avoid syntax errors when we append ours
+      const processedSql = removeTrailingLimit(sql);
+
       // Detect query type - includes WITH...SELECT and other row-returning queries
-      const isSelect = isRowReturningQuery(sql);
+      const isSelect = isRowReturningQuery(processedSql);
 
       let result: any;
       let totalRows: number | undefined;
@@ -697,7 +708,7 @@ export class NotebooksService {
         // DuckLake supports native pagination
         result = await DuckLakeService.executeQuery({
           instanceId,
-          query: sql,
+          query: processedSql,
           limit: isSelect ? pageLimit : undefined,
           offset: isSelect ? pageOffset : undefined,
         });
@@ -710,7 +721,7 @@ export class NotebooksService {
           result.data.length > 0
         ) {
           try {
-            const countQuery = `SELECT COUNT(*) as count FROM (${sql.trim().replace(/;$/, '')}) as subquery`;
+            const countQuery = `SELECT COUNT(*) as count FROM (${processedSql.trim().replace(/;$/, '')}) as subquery`;
             const countResult = await DuckLakeService.executeQuery({
               instanceId,
               query: countQuery,
@@ -727,11 +738,11 @@ export class NotebooksService {
         }
       } else {
         // Regular DB connection
-        let queryToExecute = sql;
+        let queryToExecute = processedSql;
 
         // Manually append LIMIT/OFFSET for SELECT queries
         if (isSelect) {
-          queryToExecute = `${sql.trim().replace(/;$/, '')} LIMIT ${pageLimit} OFFSET ${pageOffset}`;
+          queryToExecute = `${processedSql.trim().replace(/;$/, '')} LIMIT ${pageLimit} OFFSET ${pageOffset}`;
         }
 
         result = await ConnectorsService.executeQueryForConnection({
@@ -747,7 +758,7 @@ export class NotebooksService {
           result.data.length > 0
         ) {
           try {
-            const countQuery = `SELECT COUNT(*) as count FROM (${sql.trim().replace(/;$/, '')}) as subquery`;
+            const countQuery = `SELECT COUNT(*) as count FROM (${processedSql.trim().replace(/;$/, '')}) as subquery`;
             const countResult =
               await ConnectorsService.executeQueryForConnection({
                 connectionId,
@@ -844,7 +855,8 @@ export class NotebooksService {
       const { pageLimit, pageOffset } = sanitizePagination(limit, offset);
 
       // Detect query type - includes WITH...SELECT and other row-returning queries
-      const isSelect = isRowReturningQuery(sql);
+      const processedSql = removeTrailingLimit(sql);
+      const isSelect = isRowReturningQuery(processedSql);
 
       // Only paginate SELECT queries
       if (!isSelect) {
@@ -865,7 +877,7 @@ export class NotebooksService {
         // DuckLake supports native pagination
         result = await DuckLakeService.executeQuery({
           instanceId,
-          query: sql,
+          query: processedSql,
           limit: pageLimit,
           offset: pageOffset,
         });
@@ -873,7 +885,7 @@ export class NotebooksService {
         // Get total row count
         if (result.success && result.data) {
           try {
-            const countQuery = `SELECT COUNT(*) as count FROM (${sql.trim().replace(/;$/, '')}) as subquery`;
+            const countQuery = `SELECT COUNT(*) as count FROM (${processedSql.trim().replace(/;$/, '')}) as subquery`;
             const countResult = await DuckLakeService.executeQuery({
               instanceId,
               query: countQuery,
@@ -889,7 +901,7 @@ export class NotebooksService {
         }
       } else {
         // Regular DB connection - manually append LIMIT/OFFSET with sanitized values
-        const queryToExecute = `${sql.trim().replace(/;$/, '')} LIMIT ${pageLimit} OFFSET ${pageOffset}`;
+        const queryToExecute = `${processedSql.trim().replace(/;$/, '')} LIMIT ${pageLimit} OFFSET ${pageOffset}`;
 
         result = await ConnectorsService.executeQueryForConnection({
           connectionId,
@@ -899,7 +911,7 @@ export class NotebooksService {
         // Get total row count
         if (result.success && result.data) {
           try {
-            const countQuery = `SELECT COUNT(*) as count FROM (${sql.trim().replace(/;$/, '')}) as subquery`;
+            const countQuery = `SELECT COUNT(*) as count FROM (${processedSql.trim().replace(/;$/, '')}) as subquery`;
             const countResult =
               await ConnectorsService.executeQueryForConnection({
                 connectionId,

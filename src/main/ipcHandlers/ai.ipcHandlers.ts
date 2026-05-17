@@ -167,6 +167,7 @@ const registerAIHandlers = () => {
         projectId?: number;
         screenKey?: any;
         connectionId?: string | null;
+        notebookId?: string | null;
       },
     ): Promise<ChatConversation[]> => {
       return MainDatabaseService.getConversations(filter ?? {});
@@ -187,12 +188,14 @@ const registerAIHandlers = () => {
         providerId,
         screenKey,
         connectionId,
+        notebookId,
       }: {
         title: string;
         projectId?: number;
         providerId?: number;
         screenKey?: any;
         connectionId?: string;
+        notebookId?: string;
       },
     ): Promise<ChatConversation> => {
       return MainDatabaseService.createConversation(
@@ -201,6 +204,7 @@ const registerAIHandlers = () => {
         providerId,
         screenKey,
         connectionId,
+        notebookId,
       );
     },
   );
