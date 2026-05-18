@@ -236,16 +236,8 @@ export default class MainDatabaseService {
       CREATE INDEX IF NOT EXISTS ai_providers_type_idx ON ai_providers(type);
       CREATE INDEX IF NOT EXISTS ai_providers_active_idx ON ai_providers(is_active);
 
-      CREATE INDEX IF NOT EXISTS chat_conversations_project_idx ON chat_conversations(project_id);
-      CREATE INDEX IF NOT EXISTS chat_conversations_screen_key_idx ON chat_conversations(screen_key);
-      CREATE INDEX IF NOT EXISTS chat_conversations_connection_idx ON chat_conversations(connection_id);
-      CREATE INDEX IF NOT EXISTS chat_conversations_provider_idx ON chat_conversations(provider_id);
-      CREATE INDEX IF NOT EXISTS chat_conversations_created_at_idx ON chat_conversations(created_at);
-
       CREATE INDEX IF NOT EXISTS chat_messages_conversation_idx ON chat_messages(conversation_id);
       CREATE INDEX IF NOT EXISTS chat_messages_role_idx ON chat_messages(role);
-      CREATE INDEX IF NOT EXISTS chat_messages_parent_idx ON chat_messages(parent_message_id);
-      CREATE INDEX IF NOT EXISTS chat_messages_streaming_idx ON chat_messages(is_streaming);
       CREATE INDEX IF NOT EXISTS chat_messages_created_at_idx ON chat_messages(created_at);
 
       CREATE INDEX IF NOT EXISTS context_items_message_idx ON context_items(message_id);
@@ -295,22 +287,48 @@ export default class MainDatabaseService {
 
       // chat_conversations: ensure enhanced columns exist
       const chatConvCols = getColumns('chat_conversations');
+
+      if (!chatConvCols.has('project_id')) {
+        alterStatements.push(
+          'ALTER TABLE chat_conversations ADD COLUMN project_id INTEGER;',
+        );
+      }
+
+      if (!chatConvCols.has('provider_id')) {
+        alterStatements.push(
+          'ALTER TABLE chat_conversations ADD COLUMN provider_id INTEGER;',
+        );
+      }
+
       if (!chatConvCols.has('screen_key')) {
         alterStatements.push(
           "ALTER TABLE chat_conversations ADD COLUMN screen_key TEXT DEFAULT 'project';",
         );
-        alterStatements.push(
-          'CREATE INDEX IF NOT EXISTS chat_conversations_screen_key_idx ON chat_conversations(screen_key);',
-        );
       }
+
       if (!chatConvCols.has('connection_id')) {
         alterStatements.push(
           'ALTER TABLE chat_conversations ADD COLUMN connection_id TEXT;',
         );
-        alterStatements.push(
-          'CREATE INDEX IF NOT EXISTS chat_conversations_connection_idx ON chat_conversations(connection_id);',
-        );
       }
+
+      // Ensure indexes exist for chat_conversations (safe with CREATE INDEX IF NOT EXISTS if columns exist)
+      // We run these after potentially adding columns above
+      alterStatements.push(
+        'CREATE INDEX IF NOT EXISTS chat_conversations_project_idx ON chat_conversations(project_id);',
+      );
+      alterStatements.push(
+        'CREATE INDEX IF NOT EXISTS chat_conversations_screen_key_idx ON chat_conversations(screen_key);',
+      );
+      alterStatements.push(
+        'CREATE INDEX IF NOT EXISTS chat_conversations_connection_idx ON chat_conversations(connection_id);',
+      );
+      alterStatements.push(
+        'CREATE INDEX IF NOT EXISTS chat_conversations_provider_idx ON chat_conversations(provider_id);',
+      );
+      alterStatements.push(
+        'CREATE INDEX IF NOT EXISTS chat_conversations_created_at_idx ON chat_conversations(created_at);',
+      );
 
       // chat_messages: ensure enhanced columns exist
       const chatMsgCols = getColumns('chat_messages');
@@ -344,6 +362,14 @@ export default class MainDatabaseService {
           'ALTER TABLE chat_messages ADD COLUMN parent_message_id INTEGER;',
         );
       }
+
+      // Ensure indexes exist for chat_messages (safe if columns exist)
+      alterStatements.push(
+        'CREATE INDEX IF NOT EXISTS chat_messages_parent_idx ON chat_messages(parent_message_id);',
+      );
+      alterStatements.push(
+        'CREATE INDEX IF NOT EXISTS chat_messages_streaming_idx ON chat_messages(is_streaming);',
+      );
 
       if (alterStatements.length > 0) {
         const transaction = this.sqlite.transaction((sqls: string[]) => {
