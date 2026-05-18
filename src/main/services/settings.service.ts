@@ -51,12 +51,12 @@ const cliConfig: Record<
 export default class SettingsService {
   static async loadSettings(): Promise<SettingsType> {
     const dataBase = await loadDatabaseFile();
-    if (!dataBase.settings) {
-      const defaultSettings = loadDefaultSettings();
-      await updateDatabase<'settings'>('settings', defaultSettings);
-      return defaultSettings;
-    }
-    return dataBase.settings;
+    const defaultSettings = loadDefaultSettings();
+
+    return {
+      ...defaultSettings,
+      ...dataBase.settings,
+    };
   }
 
   static async loadSettingsWithDatabaseInfo(): Promise<SettingsType> {
