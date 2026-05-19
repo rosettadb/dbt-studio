@@ -7,6 +7,15 @@ import {
   CircularProgress,
 } from '@mui/material';
 import ChatIcon from '@mui/icons-material/Chat';
+import CodeIcon from '@mui/icons-material/Code';
+import ErrorOutlineIcon from '@mui/icons-material/ErrorOutline';
+import AutoFixHighIcon from '@mui/icons-material/AutoFixHigh';
+import BugReportIcon from '@mui/icons-material/BugReport';
+import PsychologyIcon from '@mui/icons-material/Psychology';
+import AccountTreeIcon from '@mui/icons-material/AccountTree';
+import TipsAndUpdatesIcon from '@mui/icons-material/TipsAndUpdates';
+import HistoryEduIcon from '@mui/icons-material/HistoryEdu';
+import ExploreIcon from '@mui/icons-material/Explore';
 import { useGetChatMessagesWithContext } from '../../controllers/chat.controller';
 import { useGetAISettings } from '../../controllers/aiSettings.controller';
 import { MessageRenderer } from './MessageRenderer';
@@ -144,9 +153,18 @@ export const ChatMessageList: React.FC<ChatMessageListProps> = ({
         subtitle:
           'Run queries, inspect schema, and iterate faster with connection-aware assistance.',
         bullets: [
-          'Write and refine SQL for the active connection',
-          'Explain query errors and suggest safe fixes',
-          'Generate quick exploration queries from plain language',
+          {
+            text: 'Write and refine SQL for the active connection',
+            icon: <CodeIcon sx={{ fontSize: '0.9rem' }} />,
+          },
+          {
+            text: 'Explain query errors and suggest safe fixes',
+            icon: <ErrorOutlineIcon sx={{ fontSize: '0.9rem' }} />,
+          },
+          {
+            text: 'Generate quick exploration queries from plain language',
+            icon: <AutoFixHighIcon sx={{ fontSize: '0.9rem' }} />,
+          },
         ],
       };
     }
@@ -157,9 +175,18 @@ export const ChatMessageList: React.FC<ChatMessageListProps> = ({
         subtitle:
           'Build analysis workflows cell by cell with context from your notebook and connection.',
         bullets: [
-          'Draft SQL cells from analysis goals',
-          'Help debug failing cells and outputs',
-          'Propose next steps for data investigation',
+          {
+            text: 'Draft SQL cells from analysis goals',
+            icon: <HistoryEduIcon sx={{ fontSize: '0.9rem' }} />,
+          },
+          {
+            text: 'Help debug failing cells and outputs',
+            icon: <BugReportIcon sx={{ fontSize: '0.9rem' }} />,
+          },
+          {
+            text: 'Propose next steps for data investigation',
+            icon: <PsychologyIcon sx={{ fontSize: '0.9rem' }} />,
+          },
         ],
       };
     }
@@ -169,9 +196,18 @@ export const ChatMessageList: React.FC<ChatMessageListProps> = ({
       subtitle:
         'Use the dbt agent to plan, write, and improve models with project context.',
       bullets: [
-        'Create or refactor dbt models and tests',
-        'Explain lineage and transformation intent',
-        'Suggest best-practice project improvements',
+        {
+          text: 'Create or refactor dbt models and tests',
+          icon: <AccountTreeIcon sx={{ fontSize: '0.9rem' }} />,
+        },
+        {
+          text: 'Explain lineage and transformation intent',
+          icon: <ExploreIcon sx={{ fontSize: '0.9rem' }} />,
+        },
+        {
+          text: 'Suggest best-practice project improvements',
+          icon: <TipsAndUpdatesIcon sx={{ fontSize: '0.9rem' }} />,
+        },
       ],
     };
   }, [screenKey]);
@@ -227,19 +263,18 @@ export const ChatMessageList: React.FC<ChatMessageListProps> = ({
           Loading messages...
         </Typography>
       )}
-      {!isLoading && messages.length === 0 && !isAgentRunning && (
-        <Box sx={{ px: 1.5, pt: 1, pb: 1.5 }}>
-          <Box
-            sx={{
-              border: '1px solid',
-              borderColor: 'divider',
-              borderRadius: 0.5,
-              px: 1.5,
-              py: 1.25,
-              background:
-                'linear-gradient(180deg, rgba(144,202,249,0.08) 0%, rgba(144,202,249,0.02) 100%)',
-            }}
-          >
+      {!isLoading && messages.length === 0 && !isAgentRunning ? (
+        <Box
+          sx={{
+            flex: 1,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            px: 3,
+            textAlign: 'center',
+          }}
+        >
+          <Stack spacing={1} sx={{ maxWidth: 420, alignItems: 'center' }}>
             <Typography
               variant="body2"
               sx={{ fontWeight: 600, color: 'text.primary' }}
@@ -248,249 +283,271 @@ export const ChatMessageList: React.FC<ChatMessageListProps> = ({
             </Typography>
             <Typography
               variant="caption"
-              sx={{
-                color: 'text.secondary',
-                display: 'block',
-                mt: 0.5,
-                lineHeight: 1.5,
-              }}
+              sx={{ color: 'text.secondary', lineHeight: 1.5 }}
             >
               {emptyState.subtitle}
             </Typography>
-            <Stack sx={{ mt: 1 }} spacing={0.5}>
+            <Stack spacing={0.75} sx={{ alignItems: 'flex-start' }}>
               {emptyState.bullets.map((item) => (
-                <Typography
-                  key={item}
-                  variant="caption"
-                  sx={{ color: 'text.secondary', lineHeight: 1.45 }}
+                <Box
+                  key={item.text}
+                  sx={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 1,
+                    color: 'text.secondary',
+                    textAlign: 'left',
+                  }}
                 >
-                  • {item}
-                </Typography>
+                  <Box
+                    sx={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      color: 'primary.main',
+                      opacity: 0.8,
+                    }}
+                  >
+                    {item.icon}
+                  </Box>
+                  <Typography variant="caption" sx={{ lineHeight: 1.45 }}>
+                    {item.text}
+                  </Typography>
+                </Box>
               ))}
             </Stack>
-          </Box>
+          </Stack>
         </Box>
-      )}
-      <Stack
-        spacing={0.25}
-        sx={{ minWidth: 0, overflowX: 'hidden', px: 1.5, pb: '50px' }}
-      >
-        {messages.map((m, index) => {
-          if (m.role === 'system' && (m.metadata as any)?.compacted) {
-            const summarizedCount =
-              (m.metadata as any)?.summarizedMessageCount ??
-              compactionInfo?.messagesSummarized;
-            return (
-              <Box
-                key={m.id}
-                sx={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  my: 0.5,
-                  opacity: 0.55,
-                }}
-              >
-                <Divider sx={{ flex: 1 }} />
-                <Typography
-                  variant="caption"
+      ) : (
+        <Stack
+          spacing={0.25}
+          sx={{ minWidth: 0, overflowX: 'hidden', px: 1.5, pb: '50px' }}
+        >
+          {messages.map((m, index) => {
+            if (m.role === 'system' && (m.metadata as any)?.compacted) {
+              const summarizedCount =
+                (m.metadata as any)?.summarizedMessageCount ??
+                compactionInfo?.messagesSummarized;
+              return (
+                <Box
+                  key={m.id}
                   sx={{
-                    mx: 1.5,
-                    color: 'text.disabled',
-                    fontSize: '0.65rem',
-                    whiteSpace: 'nowrap',
+                    display: 'flex',
+                    alignItems: 'center',
+                    my: 0.5,
+                    opacity: 0.55,
                   }}
                 >
-                  Earlier conversation summarized
-                  {summarizedCount ? ` (${summarizedCount} messages)` : ''}
-                </Typography>
-                <Divider sx={{ flex: 1 }} />
-              </Box>
+                  <Divider sx={{ flex: 1 }} />
+                  <Typography
+                    variant="caption"
+                    sx={{
+                      mx: 1.5,
+                      color: 'text.disabled',
+                      fontSize: '0.65rem',
+                      whiteSpace: 'nowrap',
+                    }}
+                  >
+                    Earlier conversation summarized
+                    {summarizedCount ? ` (${summarizedCount} messages)` : ''}
+                  </Typography>
+                  <Divider sx={{ flex: 1 }} />
+                </Box>
+              );
+            }
+
+            const isLastMessage = index === messages.length - 1;
+            const persistedUsage =
+              m.metadata?.promptTokens ||
+              m.metadata?.completionTokens ||
+              m.metadata?.totalTokens
+                ? {
+                    promptTokens: m.metadata?.promptTokens ?? 0,
+                    completionTokens: m.metadata?.completionTokens ?? 0,
+                    totalTokens: m.metadata?.totalTokens ?? 0,
+                  }
+                : null;
+            return (
+              <React.Fragment key={m.id}>
+                <MessageRenderer
+                  messageId={m.id}
+                  content={m.content || ''}
+                  role={m.role}
+                  contextItems={m.contextItems}
+                  toolCalls={m.toolCalls?.length > 0 ? m.toolCalls : undefined}
+                  reasoning={
+                    (m as any).reasoning ||
+                    (m.thinkingContent
+                      ? { text: m.thinkingContent }
+                      : undefined)
+                  }
+                  isStreaming={false}
+                  tokenUsage={
+                    persistedUsage ||
+                    (isLastMessage && m.role === 'assistant' ? lastUsage : null)
+                  }
+                  showTokenCount={aiSettings?.chat?.showTokenCount}
+                  orderedParts={m.metadata?.orderedParts}
+                />
+              </React.Fragment>
             );
-          }
+          })}
 
-          const isLastMessage = index === messages.length - 1;
-          const persistedUsage =
-            m.metadata?.promptTokens ||
-            m.metadata?.completionTokens ||
-            m.metadata?.totalTokens
-              ? {
-                  promptTokens: m.metadata?.promptTokens ?? 0,
-                  completionTokens: m.metadata?.completionTokens ?? 0,
-                  totalTokens: m.metadata?.totalTokens ?? 0,
-                }
-              : null;
-          return (
-            <React.Fragment key={m.id}>
-              <MessageRenderer
-                messageId={m.id}
-                content={m.content || ''}
-                role={m.role}
-                contextItems={m.contextItems}
-                toolCalls={m.toolCalls?.length > 0 ? m.toolCalls : undefined}
-                reasoning={
-                  (m as any).reasoning ||
-                  (m.thinkingContent ? { text: m.thinkingContent } : undefined)
-                }
-                isStreaming={false}
-                tokenUsage={
-                  persistedUsage ||
-                  (isLastMessage && m.role === 'assistant' ? lastUsage : null)
-                }
-                showTokenCount={aiSettings?.chat?.showTokenCount}
-                orderedParts={m.metadata?.orderedParts}
-              />
-            </React.Fragment>
-          );
-        })}
-
-        {/* Compaction divider — shown when auto-compaction fired this session */}
-        {compactionInfo && !hasPersistedCompaction && (
-          <Box
-            sx={{
-              display: 'flex',
-              alignItems: 'center',
-              my: 0.5,
-              opacity: 0.55,
-            }}
-          >
-            <Divider sx={{ flex: 1 }} />
-            <Typography
-              variant="caption"
+          {/* Compaction divider — shown when auto-compaction fired this session */}
+          {compactionInfo && !hasPersistedCompaction && (
+            <Box
               sx={{
-                mx: 1.5,
-                color: 'text.disabled',
-                fontSize: '0.65rem',
-                whiteSpace: 'nowrap',
+                display: 'flex',
+                alignItems: 'center',
+                my: 0.5,
+                opacity: 0.55,
               }}
             >
-              Earlier conversation summarized (
-              {compactionInfo.messagesSummarized} messages)
-            </Typography>
-            <Divider sx={{ flex: 1 }} />
-          </Box>
-        )}
+              <Divider sx={{ flex: 1 }} />
+              <Typography
+                variant="caption"
+                sx={{
+                  mx: 1.5,
+                  color: 'text.disabled',
+                  fontSize: '0.65rem',
+                  whiteSpace: 'nowrap',
+                }}
+              >
+                Earlier conversation summarized (
+                {compactionInfo.messagesSummarized} messages)
+              </Typography>
+              <Divider sx={{ flex: 1 }} />
+            </Box>
+          )}
 
-        {/* Live interleaved stream — text parts + tool-call parts in arrival order */}
-        {(streamState?.contentParts.length ?? 0) > 0 &&
-          (() => {
-            // Hide once the run is fully persisted (DB message with tool calls loaded)
-            const lastMsg = messages[messages.length - 1];
-            const alreadyPersisted =
-              !isAgentRunning &&
-              lastMsg?.role === 'assistant' &&
-              lastMsg?.toolCalls?.length > 0;
-            if (alreadyPersisted) return null;
+          {/* Live interleaved stream — text parts + tool-call parts in arrival order */}
+          {(streamState?.contentParts.length ?? 0) > 0 &&
+            (() => {
+              // Hide once the run is fully persisted (DB message with tool calls loaded)
+              const lastMsg = messages[messages.length - 1];
+              const alreadyPersisted =
+                !isAgentRunning &&
+                lastMsg?.role === 'assistant' &&
+                lastMsg?.toolCalls?.length > 0;
+              if (alreadyPersisted) return null;
 
-            return (
-              <Box sx={{ mt: 0.25 }}>
-                {streamState!.contentParts.map((part, idx) => {
-                  if (part.type === 'text') {
-                    // Only render non-empty text parts
-                    if (!part.text) return null;
-                    const assistantRole = 'assistant' as const;
+              return (
+                <Box sx={{ mt: 0.25 }}>
+                  {streamState!.contentParts.map((part, idx) => {
+                    if (part.type === 'text') {
+                      // Only render non-empty text parts
+                      if (!part.text) return null;
+                      const assistantRole = 'assistant' as const;
+                      return (
+                        <MessageRenderer
+                          // eslint-disable-next-line react/no-array-index-key
+                          key={`live-text-${idx}`}
+                          messageId={-1}
+                          role={assistantRole}
+                          content={part.text}
+                          isStreaming={!!isAgentRunning}
+                        />
+                      );
+                    }
+                    // tool-call part
+                    const tc = part as ToolCallContentPart;
                     return (
-                      <MessageRenderer
-                        // eslint-disable-next-line react/no-array-index-key
-                        key={`live-text-${idx}`}
-                        messageId={-1}
-                        role={assistantRole}
-                        content={part.text}
-                        isStreaming={!!isAgentRunning}
+                      <ToolCallRow
+                        key={tc.toolCallId}
+                        toolCall={{
+                          id: tc.toolCallId,
+                          toolName: tc.toolName,
+                          args: tc.args,
+                          result: tc.result,
+                          error: tc.error,
+                          status: tc.status,
+                          durationMs: tc.durationMs,
+                        }}
                       />
                     );
-                  }
-                  // tool-call part
-                  const tc = part as ToolCallContentPart;
-                  return (
-                    <ToolCallRow
-                      key={tc.toolCallId}
-                      toolCall={{
-                        id: tc.toolCallId,
-                        toolName: tc.toolName,
-                        args: tc.args,
-                        result: tc.result,
-                        error: tc.error,
-                        status: tc.status,
-                        durationMs: tc.durationMs,
-                      }}
-                    />
-                  );
-                })}
-              </Box>
-            );
-          })()}
+                  })}
+                </Box>
+              );
+            })()}
 
-        {/* Terminal confirmation banner — below the streaming text */}
-        {streamState?.pendingConfirm && onConfirmTerminal && (
-          <TerminalConfirmBanner
-            request={streamState.pendingConfirm}
-            onAllow={() => onConfirmTerminal(true)}
-            onDeny={() => onConfirmTerminal(false)}
-          />
-        )}
+          {/* Terminal confirmation banner — below the streaming text */}
+          {streamState?.pendingConfirm && onConfirmTerminal && (
+            <TerminalConfirmBanner
+              request={streamState.pendingConfirm}
+              onAllow={() => onConfirmTerminal(true)}
+              onDeny={() => onConfirmTerminal(false)}
+            />
+          )}
 
-        {/* Agent error alert */}
-        {streamState?.error && onClearError && (
-          <AgentErrorAlert error={streamState.error} onDismiss={onClearError} />
-        )}
+          {/* Agent error alert */}
+          {streamState?.error && onClearError && (
+            <AgentErrorAlert
+              error={streamState.error}
+              onDismiss={onClearError}
+            />
+          )}
 
-        {/* Global persistent Working... — visible throughout the entire generation cycle.
+          {/* Global persistent Working... — visible throughout the entire generation cycle.
             Appears below all tool calls, TerminalGate, and error banners.
             Disappears only when generation fully stops. */}
-        {isAgentRunning && !streamState?.error && (
-          <Box
-            sx={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: 0.75,
-              px: 0.5,
-              py: 0.75,
-              color: 'text.disabled',
-            }}
-          >
-            <CircularProgress size={10} color="inherit" sx={{ opacity: 0.6 }} />
-            <Typography
-              variant="caption"
+          {isAgentRunning && !streamState?.error && (
+            <Box
               sx={{
-                color: 'text.secondary',
-                fontSize: '0.72rem',
-                fontStyle: 'italic',
-                '@keyframes workingPulse': {
-                  '0%, 100%': { opacity: 0.45 },
-                  '50%': { opacity: 1 },
-                },
-                animation: 'workingPulse 1.6s ease-in-out infinite',
+                display: 'flex',
+                alignItems: 'center',
+                gap: 0.75,
+                px: 0.5,
+                py: 0.75,
+                color: 'text.disabled',
               }}
             >
-              {streamState?.pendingConfirm
-                ? 'Waiting for user input'
-                : 'Working'}
-            </Typography>
-            {!streamState?.pendingConfirm &&
-              [0, 1, 2].map((i) => (
-                <Box
-                  key={i}
-                  sx={{
-                    width: 3,
-                    height: 3,
-                    borderRadius: '50%',
-                    bgcolor: 'text.disabled',
-                    '@keyframes workingDot': {
-                      '0%, 80%, 100%': {
-                        transform: 'scale(0.6)',
-                        opacity: 0.35,
+              <CircularProgress
+                size={10}
+                color="inherit"
+                sx={{ opacity: 0.6 }}
+              />
+              <Typography
+                variant="caption"
+                sx={{
+                  color: 'text.secondary',
+                  fontSize: '0.72rem',
+                  fontStyle: 'italic',
+                  '@keyframes workingPulse': {
+                    '0%, 100%': { opacity: 0.45 },
+                    '50%': { opacity: 1 },
+                  },
+                  animation: 'workingPulse 1.6s ease-in-out infinite',
+                }}
+              >
+                {streamState?.pendingConfirm
+                  ? 'Waiting for user input'
+                  : 'Working'}
+              </Typography>
+              {!streamState?.pendingConfirm &&
+                [0, 1, 2].map((i) => (
+                  <Box
+                    key={i}
+                    sx={{
+                      width: 3,
+                      height: 3,
+                      borderRadius: '50%',
+                      bgcolor: 'text.disabled',
+                      '@keyframes workingDot': {
+                        '0%, 80%, 100%': {
+                          transform: 'scale(0.6)',
+                          opacity: 0.35,
+                        },
+                        '40%': { transform: 'scale(1)', opacity: 0.85 },
                       },
-                      '40%': { transform: 'scale(1)', opacity: 0.85 },
-                    },
-                    animation: `workingDot 1.2s ease-in-out ${i * 0.2}s infinite`,
-                  }}
-                />
-              ))}
-          </Box>
-        )}
+                      animation: `workingDot 1.2s ease-in-out ${i * 0.2}s infinite`,
+                    }}
+                  />
+                ))}
+            </Box>
+          )}
 
-        <div ref={bottomRef} />
-      </Stack>
+          <div ref={bottomRef} />
+        </Stack>
+      )}
     </Box>
   );
 };

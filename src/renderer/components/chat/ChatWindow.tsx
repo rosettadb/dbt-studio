@@ -14,7 +14,7 @@ import { Close, MoreHoriz, Add as AddIcon, Tag } from '@mui/icons-material';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'react-toastify';
 import { useAppContext } from '../../hooks';
-import { useGetSelectedProject, useGetConnectionById } from '../../controllers';
+import { useGetSelectedProject } from '../../controllers';
 import {
   useCreateChatSession,
   useGetChatSessions,
@@ -77,9 +77,6 @@ export const ChatWindow: React.FC<ChatWindowProps> = ({
       ? propProjectId
       : (project?.id as number | undefined);
   const navigate = useNavigate();
-
-  const { data: activeConnection } = useGetConnectionById(connectionId);
-  const connectionName = activeConnection?.connection?.name;
 
   const [selectedSessionId, setSelectedSessionId] = React.useState<number>();
   const previousScopeKeyRef = React.useRef<string | null>(null);
@@ -195,11 +192,32 @@ export const ChatWindow: React.FC<ChatWindowProps> = ({
     return { label: badge.label, color: badge.color, tooltip: tooltipText };
   }, [screenKey, projectId]);
 
-  const { data: sessions = [], isLoading } = useGetChatSessions({
-    projectId: projectId ?? undefined,
-    screenKey,
-    connectionId: connectionId ?? null,
-  });
+  const disabledReason = React.useMemo(() => {
+    if (screenKey !== 'notebooks') return null;
+    if (!connectionId) return 'Select a connection to start AI Agent';
+    if (!notebookId) return 'Select a notebook to start AI Agent';
+    return null;
+  }, [screenKey, connectionId, notebookId]);
+
+  const canUseChatScope = React.useMemo(() => {
+    if (screenKey === 'notebooks') {
+      return !disabledReason;
+    }
+
+    return Boolean(projectId || connectionId || notebookId);
+  }, [screenKey, disabledReason, projectId, connectionId, notebookId]);
+
+  const { data: sessions = [], isLoading } = useGetChatSessions(
+    {
+      projectId: projectId ?? undefined,
+      screenKey,
+      connectionId: connectionId ?? null,
+      notebookId: notebookId ?? null,
+    },
+    {
+      enabled: canUseChatScope,
+    },
+  );
 
   const sessionScopeKey = React.useMemo(
     () =>
@@ -245,6 +263,12 @@ export const ChatWindow: React.FC<ChatWindowProps> = ({
   const isCreatingRef = React.useRef(false);
 
   React.useEffect(() => {
+    if (!canUseChatScope) {
+      previousScopeKeyRef.current = sessionScopeKey;
+      setSelectedSessionId(undefined);
+      return;
+    }
+
     if (isLoading || isCreatingRef.current) return;
 
     const previousScopeKey = previousScopeKeyRef.current;
@@ -273,7 +297,7 @@ export const ChatWindow: React.FC<ChatWindowProps> = ({
       });
       return;
     }
-    if (projectId || connectionId || notebookId) {
+    if (canUseChatScope) {
       // Auto-create a default chat session for the project or connection
       isCreatingRef.current = true;
       createSession({
@@ -291,6 +315,7 @@ export const ChatWindow: React.FC<ChatWindowProps> = ({
     connectionId,
     notebookId,
     screenKey,
+    canUseChatScope,
     sessionScopeKey,
     createSession,
   ]);
@@ -303,7 +328,7 @@ export const ChatWindow: React.FC<ChatWindowProps> = ({
   }, [isCreating]);
 
   const handleCreateNewSession = () => {
-    if (projectId || connectionId || notebookId) {
+    if (canUseChatScope) {
       const sessionCount = sessions.length;
       const title = `Chat ${sessionCount + 1}`;
       createSession({
@@ -472,6 +497,30 @@ export const ChatWindow: React.FC<ChatWindowProps> = ({
   };
 
   const renderMessages = () => {
+    if (disabledReason) {
+      return (
+        <Box
+          sx={{
+            flex: 1,
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: 1.5,
+            textAlign: 'center',
+            px: 3,
+          }}
+        >
+          <Typography variant="subtitle1" fontWeight={600}>
+            AI Agent Disabled
+          </Typography>
+          <Typography variant="body2" color="text.secondary">
+            {disabledReason}
+          </Typography>
+        </Box>
+      );
+    }
+
     if (isLoadingProviders) {
       return (
         <Box
@@ -688,21 +737,6 @@ export const ChatWindow: React.FC<ChatWindowProps> = ({
                   >
                     {activeSession.title}
                   </Typography>
-                  {connectionName && (
-                    <Typography
-                      variant="caption"
-                      sx={{
-                        fontSize: '0.65rem',
-                        color: 'text.disabled',
-                        lineHeight: 1,
-                        overflow: 'hidden',
-                        textOverflow: 'ellipsis',
-                        whiteSpace: 'nowrap',
-                      }}
-                    >
-                      {connectionName}
-                    </Typography>
-                  )}
                 </>
               ) : null;
             })()}
@@ -744,7 +778,7 @@ export const ChatWindow: React.FC<ChatWindowProps> = ({
         >
           <NewChatButton
             onCreate={handleCreateNewSession}
-            disabled={(!projectId && !connectionId) || isLoading}
+            disabled={!canUseChatScope || isLoading}
             loading={isCreating}
           />
 
@@ -754,7 +788,7 @@ export const ChatWindow: React.FC<ChatWindowProps> = ({
             onSelect={handleSessionSelect}
             onDelete={handleSessionDelete}
             onRename={handleSessionRename}
-            disabled={isLoading}
+            disabled={!canUseChatScope || isLoading}
           />
 
           <Tooltip title="More options">
@@ -835,6 +869,7 @@ export const ChatWindow: React.FC<ChatWindowProps> = ({
             contextManager={contextManager}
             isStreaming={streamState.isStreaming}
             screenKey={screenKey}
+            disabledReason={disabledReason}
             onStartStream={(content, contextItems, toolMode) =>
               // toolMode is now forwarded from ChatInputBox (owns the toggle state)
               startStream(
