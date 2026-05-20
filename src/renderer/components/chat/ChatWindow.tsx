@@ -58,7 +58,7 @@ const SCREEN_BADGE: Record<string, { label: string; color: string }> = {
 };
 
 const estimateTokens = (input: unknown): number => {
-  if (!input) return 0;
+  if (input == null) return 0;
   const text = typeof input === 'string' ? input : JSON.stringify(input);
   return Math.ceil(text.length / 3);
 };

@@ -212,11 +212,11 @@ export function estimateMessagesTokens(
         const inputStr =
           typeof tc.toolInput === 'string'
             ? tc.toolInput
-            : JSON.stringify(tc.toolInput || tc.args || '');
+            : JSON.stringify(tc.toolInput ?? tc.args ?? '');
         const outputStr =
           typeof tc.toolOutput === 'string'
             ? tc.toolOutput
-            : JSON.stringify(tc.toolOutput || tc.result || '');
+            : JSON.stringify(tc.toolOutput ?? tc.result ?? '');
         return tcSum + estimateTokens(inputStr) + estimateTokens(outputStr);
       }, 0);
     }

@@ -800,28 +800,40 @@ export default class MainDatabaseService {
       // Delete if (projectId IS NOT NULL AND projectId NOT IN validProjectIds)
       // OR (connectionId IS NOT NULL AND connectionId NOT IN validConnectionIds)
 
-      const projectOrphanCondition =
+      const projectInvalidCondition =
         validProjectIds.length > 0
-          ? and(
-              isNotNull(schema.chatConversations.projectId),
-              notInArray(schema.chatConversations.projectId, validProjectIds),
-            )
-          : isNotNull(schema.chatConversations.projectId);
-
-      const connectionOrphanCondition =
-        validConnectionIds.length > 0
-          ? and(
-              isNotNull(schema.chatConversations.connectionId),
-              notInArray(
-                schema.chatConversations.connectionId,
-                validConnectionIds,
+          ? or(
+              isNull(schema.chatConversations.projectId),
+              and(
+                isNotNull(schema.chatConversations.projectId),
+                notInArray(schema.chatConversations.projectId, validProjectIds),
               ),
             )
-          : isNotNull(schema.chatConversations.connectionId);
+          : or(
+              isNull(schema.chatConversations.projectId),
+              isNotNull(schema.chatConversations.projectId),
+            );
+
+      const connectionInvalidCondition =
+        validConnectionIds.length > 0
+          ? or(
+              isNull(schema.chatConversations.connectionId),
+              and(
+                isNotNull(schema.chatConversations.connectionId),
+                notInArray(
+                  schema.chatConversations.connectionId,
+                  validConnectionIds,
+                ),
+              ),
+            )
+          : or(
+              isNull(schema.chatConversations.connectionId),
+              isNotNull(schema.chatConversations.connectionId),
+            );
 
       const result = await db
         .delete(schema.chatConversations)
-        .where(or(projectOrphanCondition, connectionOrphanCondition));
+        .where(and(projectInvalidCondition, connectionInvalidCondition));
 
       // better-sqlite3 returns the number of changes in the info object if using run()
       // but Drizzle's delete().returning() or delete() behavior varies.

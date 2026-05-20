@@ -468,7 +468,7 @@ COMBINED SUMMARY:`,
       for (let i = activeMessages.length - 1; i >= 0; i -= 1) {
         const msg = activeMessages[i];
         // Calculate tokens accurately including tools if they were included
-        const msgTokens = estimateMessagesTokens([buildCoreMessages([msg])[0]]);
+        const msgTokens = estimateMessagesTokens([msg]);
         const canFitTail =
           usedTailTokens + msgTokens <= tailTokenBudget ||
           tailMessages.length === 0;
@@ -560,12 +560,15 @@ COMBINED SUMMARY:`,
     const fullHistory = systemSummaryMessage
       ? [systemSummaryMessage, ...coreHistory]
       : coreHistory;
+    const fullEnrichedHistory = systemSummaryMessage
+      ? [systemSummaryMessage, ...activeMessages]
+      : activeMessages;
 
     const contextWindow = getContextWindow(modelId);
     const compactThreshold = contextWindow * 0.7;
     const newMsgTokens = estimateTokens(newContent);
     const ctxItemTokens = estimateTokens(contextItems);
-    const historyTokens = estimateMessagesTokens(fullHistory);
+    const historyTokens = estimateMessagesTokens(fullEnrichedHistory);
 
     const totalBeforeCompaction =
       historyTokens +
