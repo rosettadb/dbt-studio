@@ -300,3 +300,23 @@ export const downloadSeed = async (
     project,
   });
 };
+
+export const extractProfileEnvVars = async (
+  projectId: string,
+): Promise<{ name: string; value?: string }[]> => {
+  const { data } = await client.post<
+    { projectId: string },
+    { name: string; value?: string }[]
+  >('project:extractProfileEnvVars', { projectId });
+  return data;
+};
+
+export const listPipelines = async (
+  projectId: string,
+): Promise<{ name: string; path: string }[]> => {
+  const { data } = await client.post<
+    { projectId: string },
+    { name: string; path: string }[]
+  >('project:listPipelines', { projectId });
+  return data;
+};

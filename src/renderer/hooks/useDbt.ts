@@ -8,7 +8,7 @@ import {
   useGetSettings,
   useSetConnectionEnvVariable,
 } from '../controllers';
-import { Project, DbtCommandType } from '../../types/backend';
+import { Project, DbtCommandType, ConnectionInput } from '../../types/backend';
 import { useAppContext } from './index';
 
 interface UseDbtReturn {
@@ -96,6 +96,7 @@ const useDbt = (
     getDatabasePassword,
     getDatabaseToken,
     getBigQueryServiceAccountKey,
+    getConnectionField,
   } = useSecureStorage();
   const setEnvVariables = useSetConnectionEnvVariable();
 
@@ -109,7 +110,7 @@ const useDbt = (
 
   // Setup environment variables for connection
   const setupConnectionEnv = useCallback(
-    async (connectionName: string) => {
+    async (connectionName: string, conn?: ConnectionInput) => {
       try {
         const [username, password, token, bigQueryKey] = await Promise.all([
           getDatabaseUsername(connectionName),
@@ -156,6 +157,52 @@ const useDbt = (
           );
         }
 
+        // Set connection-specific fields based on type
+        if (conn) {
+          const fieldMap: Record<string, string[]> = {
+            postgres: ['host', 'port', 'dbname', 'schema'],
+            redshift: ['host', 'port', 'dbname', 'schema'],
+            snowflake: ['account', 'warehouse', 'dbname', 'schema', 'role'],
+            bigquery: ['project', 'dataset'],
+            databricks: ['host', 'httppath', 'catalog', 'schema'],
+            kinetica: ['host', 'port', 'dbname', 'schema'],
+          };
+
+          // Map field names to connection object values for fallback
+          const c = conn as any;
+          const getFieldValue = (field: string): string | undefined => {
+            const valueMap: Record<string, string | undefined> = {
+              host: c.host ? String(c.host) : undefined,
+              port: c.port ? String(c.port) : undefined,
+              dbname: c.database,
+              schema: c.schema,
+              account: c.account,
+              warehouse: c.warehouse,
+              role: c.role,
+              project: c.project,
+              dataset: c.dataset || c.schema,
+              httppath: c.httpPath,
+              catalog: c.database,
+            };
+            return valueMap[field];
+          };
+
+          const fields = fieldMap[conn.type] || [];
+          const fieldPromises = fields.map(async (field) => {
+            // Try secure storage first, fall back to connection model
+            const stored = await getConnectionField(field, connectionName);
+            const value = stored || getFieldValue(field);
+            if (value) {
+              return setEnvVariables.mutateAsync({
+                key: `db-${field}-${connectionName}`,
+                value,
+              });
+            }
+            return undefined;
+          });
+          envPromises.push(...fieldPromises);
+        }
+
         await Promise.all(envPromises);
       } catch (error) {
         toast.info(`Failed to setup environment variables: ${error}`);
@@ -166,6 +213,7 @@ const useDbt = (
       getDatabasePassword,
       getDatabaseToken,
       getBigQueryServiceAccountKey,
+      getConnectionField,
       setEnvVariables,
     ],
   );
@@ -239,7 +287,10 @@ const useDbt = (
         setActiveCommand(command);
 
         // Setup environment variables
-        await setupConnectionEnv(connection.connection.name);
+        await setupConnectionEnv(
+          connection.connection.name,
+          connection.connection,
+        );
 
         // Build command string
         const cmdString = buildCommand(command, project, args);
@@ -325,7 +376,10 @@ const useDbt = (
           setActiveCommand('compile');
 
           // Setup environment variables
-          await setupConnectionEnv(connection.connection.name);
+          await setupConnectionEnv(
+            connection.connection.name,
+            connection.connection,
+          );
 
           // Build command string
           const cmdString = buildCommand(
@@ -435,7 +489,10 @@ const useDbt = (
           }
 
           setActiveCommand('list');
-          await setupConnectionEnv(connection.connection.name);
+          await setupConnectionEnv(
+            connection.connection.name,
+            connection.connection,
+          );
           const cmdString = buildCommand('list', project, '');
           if (!cmdString) {
             return '';

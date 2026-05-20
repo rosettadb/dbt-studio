@@ -13,6 +13,7 @@ import {
   Chip,
   Tooltip,
   Box,
+  Select,
 } from '@mui/material';
 import TerminalIcon from '@mui/icons-material/Terminal';
 import {
@@ -39,17 +40,13 @@ import { useProcess } from '../../hooks';
 import { useSelectedFileContext } from '../../hooks/useSelectedFileContext';
 import useAppContext from '../../hooks/useAppContext';
 import { Project } from '../../../types/backend';
-import { useGetFileContent } from '../../controllers';
-import { LineageModal } from '../lineage/LineageModal';
-import { LineageView } from '../lineage/LineageView';
-import { useCurrentModelId } from '../../controllers/lineage.controller';
-import { PipelineView } from '../pipelineView';
 import {
-  isPipelineFile,
-  PIPELINE_CONFIG_DIR,
-  PIPELINE_CONFIG_FILENAME,
-} from '../pipelineView/parsePipelineConfig';
-import { pathJoin } from '../../services/settings.services';
+  useGetFileContent,
+  useListPipelines,
+  useCurrentModelId,
+} from '../../controllers';
+import { LineageModal, LineageView } from '../lineage';
+import { PipelineView, isPipelineFile } from '../pipelineView';
 
 type Props = {
   project: Project;
@@ -102,23 +99,27 @@ export const TerminalLayout: React.FC<Props> = ({ children, project }) => {
   const [isManualCicdTabSwitch, setIsManualCicdTabSwitch] =
     React.useState(false);
 
-  // Resolve the pipeline file path from the project root
-  const [pipelineFilePath, setPipelineFilePath] = React.useState<string>('');
+  // List available pipelines
+  const { data: availablePipelines = [] } = useListPipelines(project.id);
+  const [selectedPipelineIdx, setSelectedPipelineIdx] = React.useState(0);
+
+  // Reset selection if pipelines change
   React.useEffect(() => {
-    // eslint-disable-next-line promise/valid-params
-    pathJoin(project.path, PIPELINE_CONFIG_DIR, PIPELINE_CONFIG_FILENAME)
-      .then(setPipelineFilePath)
-      .catch();
-  }, [project.path]);
+    if (selectedPipelineIdx >= availablePipelines.length) {
+      setSelectedPipelineIdx(0);
+    }
+  }, [availablePipelines.length, selectedPipelineIdx]);
+
+  const currentPipeline = availablePipelines[selectedPipelineIdx];
+  const pipelineFilePath = currentPipeline?.path || '';
 
   // Always poll the pipeline file — tab is visible whenever the file exists on disk
-  const { data: pipelineFileContent, isSuccess: pipelineFileExists } =
-    useGetFileContent(pipelineFilePath, {
-      enabled: !!pipelineFilePath,
-      refetchInterval: 2000, // Refresh every 2 seconds to stay in sync with file changes
-    });
+  const { data: pipelineFileContent } = useGetFileContent(pipelineFilePath, {
+    enabled: !!pipelineFilePath,
+    refetchInterval: 5000,
+  });
 
-  const showPipelineTab = pipelineFileExists;
+  const showPipelineTab = availablePipelines.length > 0;
 
   const [lock, setLock] = React.useState(false);
   const [sizes, setSizes] = React.useState<number[]>([
@@ -378,21 +379,53 @@ export const TerminalLayout: React.FC<Props> = ({ children, project }) => {
                 )}
                 {/* CI/CD Pipeline Tab */}
                 {showPipelineTab && (
-                  <Button
-                    size="small"
-                    disableRipple
-                    sx={tabButtonSx(selectedTab === 3)}
-                    onClick={() => {
-                      setSelectedTab(3);
-                      setIsManualCicdTabSwitch(true); // User manually clicked
-                    }}
-                  >
-                    <Typography
-                      sx={{ fontWeight: 500, fontSize: 10.5, lineHeight: 1 }}
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                    <Button
+                      size="small"
+                      disableRipple
+                      sx={tabButtonSx(selectedTab === 3)}
+                      onClick={() => {
+                        setSelectedTab(3);
+                        setIsManualCicdTabSwitch(true);
+                      }}
                     >
-                      CI/CD
-                    </Typography>
-                  </Button>
+                      <Typography
+                        sx={{ fontWeight: 500, fontSize: 10.5, lineHeight: 1 }}
+                      >
+                        CI/CD
+                      </Typography>
+                    </Button>
+                    {selectedTab === 3 && availablePipelines.length > 1 && (
+                      <Select
+                        size="small"
+                        value={selectedPipelineIdx}
+                        onChange={(e) =>
+                          setSelectedPipelineIdx(e.target.value as number)
+                        }
+                        variant="standard"
+                        disableUnderline
+                        sx={{
+                          fontSize: '0.7rem',
+                          height: 22,
+                          '& .MuiSelect-select': {
+                            py: 0,
+                            px: 0.5,
+                            fontSize: '0.7rem',
+                          },
+                        }}
+                      >
+                        {availablePipelines.map((p, idx) => (
+                          <MenuItem
+                            key={p.name}
+                            value={idx}
+                            sx={{ fontSize: '0.75rem' }}
+                          >
+                            {p.name}
+                          </MenuItem>
+                        ))}
+                      </Select>
+                    )}
+                  </Box>
                 )}
                 {/* Process Tab - Only show when running */}
                 {hasStartedProcess && (

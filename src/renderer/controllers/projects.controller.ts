@@ -200,3 +200,23 @@ export const useSaveFileContent = (
     },
   });
 };
+
+export const useExtractProfileEnvVars = (projectId?: string) => {
+  return useQuery({
+    queryKey: ['extractProfileEnvVars', projectId],
+    enabled: !!projectId,
+    queryFn: async () => {
+      return projectsServices.extractProfileEnvVars(projectId!);
+    },
+  });
+};
+
+export const useListPipelines = (projectId?: string) => {
+  return useQuery({
+    queryKey: ['listPipelines', projectId],
+    enabled: !!projectId,
+    queryFn: async () => {
+      return projectsServices.listPipelines(projectId!);
+    },
+  });
+};

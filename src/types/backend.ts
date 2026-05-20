@@ -706,7 +706,8 @@ export type DbtCommandType =
   | 'docs:serve'
   | 'deps'
   | 'clean'
-  | 'seed';
+  | 'seed'
+  | 'pipeline';
 
 enum RosettaCommands {
   Config = 'config',

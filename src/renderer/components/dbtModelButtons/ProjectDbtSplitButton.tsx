@@ -16,6 +16,7 @@ import {
   IncrementalModal,
   RawLayerModal,
   PushToCloudModal,
+  PipelineSelectorModal,
 } from '../modals';
 import { pathJoin } from '../../services/settings.services';
 
@@ -67,6 +68,8 @@ export const ProjectDbtSplitButton: React.FC<ProjectDbtSplitButtonProps> = ({
   const [stagingModal, setStagingModal] = React.useState(false);
   const [openRawLayerModal, setOpenRawLayerModal] = React.useState(false);
   const [incrementalModal, setIncrementalModal] = React.useState(false);
+  const [pipelineModal, setPipelineModal] = React.useState(false);
+  const [pipelineArgs, setPipelineArgs] = React.useState('');
 
   React.useEffect(() => {
     const loadDefaults = async () => {
@@ -93,7 +96,14 @@ export const ProjectDbtSplitButton: React.FC<ProjectDbtSplitButtonProps> = ({
   }, [project.path]);
 
   // Define all menu items with environment restrictions
-  const allMenuItems = [
+  const allMenuItems: {
+    name: string | React.ReactNode;
+    onClick: () => void;
+    leftIcon: React.ReactNode;
+    subTitle: string;
+    localOnly: boolean;
+    cloudOnly?: boolean;
+  }[] = [
     // Rosetta Layer Generation Commands (Local Only)
     {
       name: 'Raw Layer',
@@ -312,6 +322,16 @@ export const ProjectDbtSplitButton: React.FC<ProjectDbtSplitButtonProps> = ({
       subTitle: 'Seed the dbt project',
       localOnly: false,
     },
+    {
+      name: 'Run Pipeline',
+      onClick: () => {
+        setPipelineModal(true);
+      },
+      leftIcon: <Icon src={icons.dbtTm} width={16} height={16} />,
+      subTitle: 'Run a pipeline on the cloud',
+      localOnly: false,
+      cloudOnly: true,
+    },
   ];
 
   // Filter menu items based on environment
@@ -321,7 +341,7 @@ export const ProjectDbtSplitButton: React.FC<ProjectDbtSplitButtonProps> = ({
     if (environment === 'cloud') {
       return !item.localOnly;
     }
-    return true; // Show all items in local environment
+    return !item.cloudOnly;
   });
 
   return (
@@ -337,7 +357,7 @@ export const ProjectDbtSplitButton: React.FC<ProjectDbtSplitButtonProps> = ({
         height={24}
         menuItems={filteredMenuItems.map((item) => {
           // eslint-disable-next-line @typescript-eslint/no-unused-vars
-          const { localOnly, ...menuItem } = item;
+          const { localOnly: _l, cloudOnly: _c, ...menuItem } = item;
           return menuItem;
         })}
       />
@@ -408,9 +428,27 @@ export const ProjectDbtSplitButton: React.FC<ProjectDbtSplitButtonProps> = ({
       {runInCloudModal && (
         <PushToCloudModal
           isOpen={!!runInCloudModal}
-          onClose={() => setRunInCloudModal(undefined)}
+          onClose={() => {
+            setRunInCloudModal(undefined);
+            setPipelineArgs('');
+          }}
           project={project}
           command={runInCloudModal}
+          initialDbtArguments={
+            runInCloudModal === 'pipeline' ? pipelineArgs : undefined
+          }
+        />
+      )}
+      {pipelineModal && (
+        <PipelineSelectorModal
+          isOpen={pipelineModal}
+          onClose={() => setPipelineModal(false)}
+          project={project}
+          onSelect={(pipelineName) => {
+            setPipelineModal(false);
+            setPipelineArgs(`--pipeline_name ${pipelineName}`);
+            setRunInCloudModal('pipeline');
+          }}
         />
       )}
     </>
