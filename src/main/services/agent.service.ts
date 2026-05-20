@@ -398,6 +398,7 @@ class AgentService {
    */
   private static async generateSummary(
     messages: ChatMessage[],
+    previousSummary: string | undefined,
     maxTokens: number,
   ): Promise<string> {
     const model = await getVercelModel();
@@ -419,10 +420,10 @@ Preserve exactly:
 Be concise but complete. Use bullet points.
 The summary must fit within approximately ${maxTokens} tokens.
 
-CONVERSATION:
+${previousSummary ? `PREVIOUS SUMMARY TO INTEGRATE:\n${previousSummary}\n\n` : ''}NEW CONVERSATION TO SUMMARIZE:
 ${conversationText}
 
-SUMMARY:`,
+COMBINED SUMMARY:`,
     });
     return this.truncateText(text, maxTokens);
   }
@@ -436,7 +437,8 @@ SUMMARY:`,
    */
   private static async autoCompact(
     conversationId: number,
-    messages: ChatMessage[],
+    activeMessages: any[],
+    latestSummary: any | null,
     event: IpcMainInvokeEvent,
     contextWindow: number,
   ): Promise<
@@ -445,8 +447,16 @@ SUMMARY:`,
     const tailTokenBudget = Math.floor(contextWindow * 0.2);
     const summaryMaxTokens = Math.floor(contextWindow * 0.05);
 
+    const systemSummaryMessage = latestSummary
+      ? {
+          role: 'system' as const,
+          content: `## Earlier Conversation (summarized)\n\n${latestSummary.content}`,
+        }
+      : null;
+
     if (activeCompactions.has(conversationId)) {
-      return buildCoreMessages(messages);
+      const core = buildCoreMessages(activeMessages);
+      return systemSummaryMessage ? [systemSummaryMessage, ...core] : core;
     }
     activeCompactions.add(conversationId);
 
@@ -455,9 +465,10 @@ SUMMARY:`,
       const tailMessages: ChatMessage[] = [];
       const olderMessages: ChatMessage[] = [];
 
-      for (let i = messages.length - 1; i >= 0; i -= 1) {
-        const msg = messages[i];
-        const msgTokens = estimateTokens(msg.content);
+      for (let i = activeMessages.length - 1; i >= 0; i -= 1) {
+        const msg = activeMessages[i];
+        // Calculate tokens accurately including tools if they were included
+        const msgTokens = estimateMessagesTokens([buildCoreMessages([msg])[0]]);
         const canFitTail =
           usedTailTokens + msgTokens <= tailTokenBudget ||
           tailMessages.length === 0;
@@ -470,23 +481,28 @@ SUMMARY:`,
       }
 
       if (olderMessages.length === 0) {
-        return buildCoreMessages(messages);
+        const core = buildCoreMessages(activeMessages);
+        return systemSummaryMessage ? [systemSummaryMessage, ...core] : core;
       }
 
       const summaryText = await this.generateSummary(
         olderMessages,
+        latestSummary?.content,
         summaryMaxTokens,
       );
-      await MainDatabaseService.compactConversationMessages(
+
+      const coversUpToMessageId = olderMessages[olderMessages.length - 1].id;
+
+      await MainDatabaseService.saveCompactionSummary(
         conversationId,
-        olderMessages.map((m) => m.id),
-        `## Earlier Conversation (summarized)\n\n${summaryText}`,
-        olderMessages[0]?.createdAt ?? undefined,
+        coversUpToMessageId,
+        summaryText,
       );
 
       const compactedPayload: AgentContextCompactedPayload = {
         conversationId,
         messagesSummarized: olderMessages.length,
+        coversUpToMessageId,
       };
       event.sender.send('agent:context-compacted', compactedPayload);
 
@@ -519,14 +535,37 @@ SUMMARY:`,
     messages: Array<{ role: 'user' | 'assistant' | 'system'; content: string }>;
     breakdown: ContextUsageBreakdown;
   }> {
-    const allMessages = await MainDatabaseService.getMessages(conversationId);
-    const coreHistory = buildCoreMessages(allMessages);
+    const allMessages =
+      await MainDatabaseService.getMessagesWithContext(conversationId);
+    const latestSummary =
+      await MainDatabaseService.getLatestCompactionSummary(conversationId);
+
+    let activeMessages = allMessages;
+    let systemSummaryMessage: {
+      role: 'system';
+      content: string;
+    } | null = null;
+
+    if (latestSummary && latestSummary.coversUpToMessageId) {
+      activeMessages = allMessages.filter(
+        (m) => m.id > latestSummary.coversUpToMessageId!,
+      );
+      systemSummaryMessage = {
+        role: 'system',
+        content: `## Earlier Conversation (summarized)\n\n${latestSummary.content}`,
+      };
+    }
+
+    const coreHistory = buildCoreMessages(activeMessages);
+    const fullHistory = systemSummaryMessage
+      ? [systemSummaryMessage, ...coreHistory]
+      : coreHistory;
 
     const contextWindow = getContextWindow(modelId);
     const compactThreshold = contextWindow * 0.7;
     const newMsgTokens = estimateTokens(newContent);
     const ctxItemTokens = estimateTokens(contextItems);
-    const historyTokens = estimateMessagesTokens(coreHistory);
+    const historyTokens = estimateMessagesTokens(fullHistory);
 
     const totalBeforeCompaction =
       historyTokens +
@@ -551,7 +590,8 @@ SUMMARY:`,
     if (totalBeforeCompaction >= compactThreshold) {
       const compactedMessages = await this.autoCompact(
         conversationId,
-        allMessages,
+        activeMessages,
+        latestSummary,
         event,
         contextWindow,
       );
@@ -577,7 +617,7 @@ SUMMARY:`,
       };
     }
 
-    return { messages: coreHistory as any, breakdown };
+    return { messages: fullHistory as any, breakdown };
   }
 
   /**

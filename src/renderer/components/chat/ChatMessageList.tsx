@@ -56,6 +56,7 @@ export const ChatMessageList: React.FC<ChatMessageListProps> = ({
   // Track whether auto-compaction fired during this session
   const [compactionInfo, setCompactionInfo] = React.useState<{
     messagesSummarized: number;
+    coversUpToMessageId: number;
   } | null>(null);
 
   // Reset compaction divider when session changes
@@ -68,7 +69,10 @@ export const ChatMessageList: React.FC<ChatMessageListProps> = ({
     if (!sessionId) return undefined;
     const unsub = subscribeToContextCompacted((data) => {
       if (data.conversationId !== sessionId) return;
-      setCompactionInfo({ messagesSummarized: data.messagesSummarized });
+      setCompactionInfo({
+        messagesSummarized: data.messagesSummarized,
+        coversUpToMessageId: data.coversUpToMessageId,
+      });
     });
     return unsub;
   }, [sessionId]);
@@ -81,6 +85,17 @@ export const ChatMessageList: React.FC<ChatMessageListProps> = ({
       ),
     [messages],
   );
+  const inlineCompactionDividerIndex = React.useMemo(() => {
+    if (!compactionInfo || hasPersistedCompaction || messages.length === 0) {
+      return -1;
+    }
+
+    const firstActiveMessageIndex = messages.findIndex(
+      (m) => m.id > compactionInfo.coversUpToMessageId,
+    );
+
+    return firstActiveMessageIndex === -1 ? 0 : firstActiveMessageIndex;
+  }, [compactionInfo, hasPersistedCompaction, messages]);
 
   // Helper to scroll to bottom
   type ScrollBehaviorType = 'auto' | 'smooth';
@@ -276,6 +291,9 @@ export const ChatMessageList: React.FC<ChatMessageListProps> = ({
         sx={{ minWidth: 0, overflowX: 'hidden', px: 1.5, pb: '50px' }}
       >
         {messages.map((m, index) => {
+          const showInlineCompactionDivider =
+            index === inlineCompactionDividerIndex;
+
           if (m.role === 'system' && (m.metadata as any)?.compacted) {
             const summarizedCount =
               (m.metadata as any)?.summarizedMessageCount ??
@@ -321,6 +339,31 @@ export const ChatMessageList: React.FC<ChatMessageListProps> = ({
               : null;
           return (
             <React.Fragment key={m.id}>
+              {showInlineCompactionDivider && (
+                <Box
+                  sx={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    my: 0.5,
+                    opacity: 0.55,
+                  }}
+                >
+                  <Divider sx={{ flex: 1 }} />
+                  <Typography
+                    variant="caption"
+                    sx={{
+                      mx: 1.5,
+                      color: 'text.disabled',
+                      fontSize: '0.65rem',
+                      whiteSpace: 'nowrap',
+                    }}
+                  >
+                    Earlier conversation summarized (
+                    {compactionInfo?.messagesSummarized} messages)
+                  </Typography>
+                  <Divider sx={{ flex: 1 }} />
+                </Box>
+              )}
               <MessageRenderer
                 messageId={m.id}
                 content={m.content || ''}
@@ -342,33 +385,6 @@ export const ChatMessageList: React.FC<ChatMessageListProps> = ({
             </React.Fragment>
           );
         })}
-
-        {/* Compaction divider — shown when auto-compaction fired this session */}
-        {compactionInfo && !hasPersistedCompaction && (
-          <Box
-            sx={{
-              display: 'flex',
-              alignItems: 'center',
-              my: 0.5,
-              opacity: 0.55,
-            }}
-          >
-            <Divider sx={{ flex: 1 }} />
-            <Typography
-              variant="caption"
-              sx={{
-                mx: 1.5,
-                color: 'text.disabled',
-                fontSize: '0.65rem',
-                whiteSpace: 'nowrap',
-              }}
-            >
-              Earlier conversation summarized (
-              {compactionInfo.messagesSummarized} messages)
-            </Typography>
-            <Divider sx={{ flex: 1 }} />
-          </Box>
-        )}
 
         {/* Live interleaved stream — text parts + tool-call parts in arrival order */}
         {(streamState?.contentParts.length ?? 0) > 0 &&

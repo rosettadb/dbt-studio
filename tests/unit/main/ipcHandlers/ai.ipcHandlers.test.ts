@@ -8,6 +8,9 @@ describe('ai.ipcHandlers', () => {
     overrides: { getProviders?: jest.Mock } = {},
   ) => {
     jest.doMock('electron', () => ({
+      app: {
+        getPath: jest.fn().mockReturnValue('/tmp'),
+      },
       ipcMain: {
         handle: jest.fn(),
         removeHandler: jest.fn(),
@@ -25,6 +28,7 @@ describe('ai.ipcHandlers', () => {
         setActiveProvider: jest.fn().mockResolvedValue(undefined),
         deactivateAllProviders: jest.fn().mockResolvedValue(undefined),
         getConversations: jest.fn().mockResolvedValue([]),
+        getLatestCompactionSummary: jest.fn().mockResolvedValue(null),
         getMessages: jest.fn().mockResolvedValue([]),
         addMessageWithContext: jest.fn().mockResolvedValue({}),
         deleteConversation: jest.fn().mockResolvedValue(undefined),
@@ -34,6 +38,20 @@ describe('ai.ipcHandlers', () => {
     jest.doMock('../../../../src/main/services/secureStorage.service', () => ({
       __esModule: true,
       default: { getAIProviderCredential: jest.fn().mockResolvedValue(null) },
+    }));
+
+    jest.doMock('../../../../src/main/services/projects.service', () => ({
+      __esModule: true,
+      default: {
+        loadProjects: jest.fn().mockResolvedValue([]),
+      },
+    }));
+
+    jest.doMock('../../../../src/main/services/connectors.service', () => ({
+      __esModule: true,
+      default: {
+        loadConnections: jest.fn().mockResolvedValue([]),
+      },
     }));
 
     jest.doMock('../../../../src/main/services/agent.service', () => ({
@@ -93,6 +111,10 @@ describe('ai.ipcHandlers', () => {
     );
     expect(ipcMain.handle).toHaveBeenCalledWith(
       'chat:message:list',
+      expect.any(Function),
+    );
+    expect(ipcMain.handle).toHaveBeenCalledWith(
+      'chat:conversation:get-latest-compaction-summary',
       expect.any(Function),
     );
   });
