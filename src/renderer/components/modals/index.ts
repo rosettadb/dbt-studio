@@ -16,3 +16,4 @@ export * from './aiPromptModal';
 export * from './pushToCloudModal';
 export * from './rawLayerModal';
 export * from './removeConnectionModal';
+export * from './pipelineSelectorModal';

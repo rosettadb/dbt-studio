@@ -1001,6 +1001,38 @@ export default class GitService {
   }
 
   /**
+   * Check if a specific file has unpushed commits (committed locally but not on remote)
+   */
+  async isFileUnpushed(repoPath: string, filePath: string): Promise<boolean> {
+    try {
+      const git = this.getGitInstance(repoPath);
+      const relativePath = toGitRelativePath(repoPath, filePath);
+      const branchSummary = await git.branch();
+      const currentBranch = branchSummary.current;
+      if (!currentBranch) return false;
+
+      // Check if remote tracking branch exists
+      try {
+        await git.raw(['rev-parse', `origin/${currentBranch}`]);
+      } catch {
+        // No remote tracking — everything is unpushed
+        return true;
+      }
+
+      const result = await git.raw([
+        'diff',
+        '--name-only',
+        `origin/${currentBranch}..HEAD`,
+        '--',
+        relativePath,
+      ]);
+      return result.trim().length > 0;
+    } catch {
+      return false;
+    }
+  }
+
+  /**
    * Check if there are any untracked files in the repository
    */
   async hasUntrackedChanges(repoPath: string): Promise<boolean> {

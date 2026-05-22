@@ -95,29 +95,45 @@ export const loadDatabaseFile = async (): Promise<DataBase> => {
   }
 };
 
+// Simple async mutex to prevent concurrent read-modify-write races
+let dbLockPromise: Promise<void> = Promise.resolve();
+
 export const updateDatabase = async <K extends keyof DataBase>(
   key: K,
   value: DataBase[K],
 ) => {
-  // Patch: For connections array, ensure BigQuery keyfile is only the key name
-  if (key === 'connections' && Array.isArray(value)) {
-    value.forEach((conn) => {
-      if (
-        conn &&
-        typeof conn === 'object' &&
-        'connection' in conn &&
-        conn.connection &&
-        conn.connection.type === 'bigquery' &&
-        conn.connection.keyfile &&
-        conn.connection.keyfile.startsWith('{')
-      ) {
-        conn.connection.keyfile = `db-bigquery-${conn.connection.name}`;
-      }
-    });
+  // Chain writes so they execute sequentially
+  const previousLock = dbLockPromise;
+  let releaseLock: () => void;
+  dbLockPromise = new Promise<void>((resolve) => {
+    releaseLock = resolve;
+  });
+
+  try {
+    await previousLock;
+
+    // Patch: For connections array, ensure BigQuery keyfile is only the key name
+    if (key === 'connections' && Array.isArray(value)) {
+      value.forEach((conn) => {
+        if (
+          conn &&
+          typeof conn === 'object' &&
+          'connection' in conn &&
+          conn.connection &&
+          conn.connection.type === 'bigquery' &&
+          conn.connection.keyfile &&
+          conn.connection.keyfile.startsWith('{')
+        ) {
+          conn.connection.keyfile = `db-bigquery-${conn.connection.name}`;
+        }
+      });
+    }
+    const data = await loadDatabaseFile();
+    data[key] = value;
+    await saveFileContent(DB_FILE, JSON.stringify(data, null, 2));
+  } finally {
+    releaseLock!();
   }
-  const data = await loadDatabaseFile();
-  data[key] = value;
-  await saveFileContent(DB_FILE, JSON.stringify(data, null, 2));
 };
 
 export const createNewFolder = (parentPath: string, folderName: string) => {

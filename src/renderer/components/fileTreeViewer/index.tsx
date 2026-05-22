@@ -26,6 +26,7 @@ type Props = {
   copyPath: (source: string, target: string) => Promise<void>;
   selectedPath?: string;
   onRenameCallback?: (oldPath: string, newPath: string) => void;
+  onRunPipeline?: (filePath: string) => void;
 };
 
 const filterTreeAndCollectExpanded = (
@@ -73,6 +74,7 @@ const FileTreeViewer: React.FC<Props> = ({
   copyPath,
   selectedPath,
   onRenameCallback,
+  onRunPipeline,
 }) => {
   const { data: project } = useGetSelectedProject();
   const [fileModal, setFileModal] = React.useState<string>();
@@ -170,6 +172,7 @@ const FileTreeViewer: React.FC<Props> = ({
         selectedPath={selectedPath}
         projectPath={project!.path}
         copyPath={copyPath}
+        onRunPipeline={onRunPipeline}
       />
       {(fileModal || folderModal) && (
         <NewFileModal

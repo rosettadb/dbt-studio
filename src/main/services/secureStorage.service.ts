@@ -40,6 +40,22 @@ class SecureStorageService {
       `cloud-gcs-${connectionId}`,
       `cloud-aws-${connectionId}`,
       `cloud-azure-${connectionId}`,
+      // Database connection fields
+      `db-user-${connectionId}`,
+      `db-password-${connectionId}`,
+      `db-token-${connectionId}`,
+      `db-bigquery-${connectionId}`,
+      `db-host-${connectionId}`,
+      `db-port-${connectionId}`,
+      `db-dbname-${connectionId}`,
+      `db-schema-${connectionId}`,
+      `db-account-${connectionId}`,
+      `db-warehouse-${connectionId}`,
+      `db-role-${connectionId}`,
+      `db-project-${connectionId}`,
+      `db-dataset-${connectionId}`,
+      `db-httppath-${connectionId}`,
+      `db-catalog-${connectionId}`,
     ];
 
     await Promise.all(

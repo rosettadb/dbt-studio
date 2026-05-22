@@ -61,7 +61,9 @@ export type ProjectChannels =
   | 'project:getQuery'
   | 'project:chooseDir'
   | 'project:renamePath'
-  | 'project:downloadSeed';
+  | 'project:downloadSeed'
+  | 'project:extractProfileEnvVars'
+  | 'project:listPipelines';
 
 export type RosettaCloudChannels =
   | 'rosettaCloud:push'
@@ -190,6 +192,7 @@ export type GitChannels =
   | 'git:getLocalChanges'
   | 'git:repoInfo'
   | 'git:fileStatus'
+  | 'git:isFileUnpushed'
   | 'git:unstage'
   | 'git:stageAll'
   | 'git:unstageAll'

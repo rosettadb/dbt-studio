@@ -819,19 +819,16 @@ export default class ConnectorsService {
     const jdbcUrl = await this.generateJdbcUrl(connection);
     const isDuckDb = connection.type === 'duckdb';
     const isDuckLake = connection.type === 'ducklake';
+    const ev = (field: string) => `\${db-${field}-${connection.name}}`;
     let databaseName: string;
     if (isDuckDb) {
       databaseName = this.extractDbNameFromPath(connection.short_database_path);
     } else if (isDuckLake) {
       databaseName = projectName; // Use project name as database name for ducklake
     } else {
-      databaseName = connection.database;
+      databaseName = ev('dbname');
     }
-    const schemaName = isDuckLake ? 'main' : connection.schema;
-    // Removed BigQuery keyfile fetch/validation here
-    // USER and PASSWORD only declared here
-    const USER = `db-user-${connection.name}`;
-    const PASSWORD = `db-password-${connection.name}`;
+    const schemaName = isDuckLake ? 'main' : ev('schema');
 
     // Base connection config
     const connectionConfig: any = {
@@ -882,8 +879,8 @@ export default class ConnectorsService {
       connection.type !== 'bigquery'
     ) {
       // Only add userName/password for non-BigQuery, non-Databricks, non-DuckDB, non-ducklake
-      connectionConfig.userName = `\${${USER}}`;
-      connectionConfig.password = `\${${PASSWORD}}`;
+      connectionConfig.userName = ev('user');
+      connectionConfig.password = ev('password');
     }
 
     const yamlData: {
@@ -938,18 +935,19 @@ export default class ConnectorsService {
   }
 
   static async generateJdbcUrl(conn: ConnectionInput): Promise<string> {
+    const ev = (field: string) => `\${db-${field}-${conn.name}}`;
     switch (conn.type) {
       case 'postgres': {
-        let postgresUrl = `jdbc:postgresql://${conn.host}:${conn.port}/${conn.database}?currentSchema=${conn.schema}`;
+        let postgresUrl = `jdbc:postgresql://${ev('host')}:${ev('port')}/${ev('dbname')}?currentSchema=${ev('schema')}`;
         if (conn.ssl) {
           postgresUrl += '&sslmode=require';
         }
         return postgresUrl;
       }
       case 'snowflake':
-        return `jdbc:snowflake://${conn.account}.snowflakecomputing.com/?warehouse=${conn.warehouse}&db=${conn.database}&schema=${conn.schema}`;
+        return `jdbc:snowflake://${ev('account')}.snowflakecomputing.com/?warehouse=${ev('warehouse')}&db=${ev('dbname')}&schema=${ev('schema')}`;
       case 'redshift': {
-        let redshiftUrl = `jdbc:redshift://${conn.host}:${conn.port}/${conn.database}?currentSchema=${conn.schema}`;
+        let redshiftUrl = `jdbc:redshift://${ev('host')}:${ev('port')}/${ev('dbname')}?currentSchema=${ev('schema')}`;
 
         // Add SSL parameters if enabled
         if (conn.ssl) {
@@ -961,15 +959,10 @@ export default class ConnectorsService {
         return redshiftUrl;
       }
       case 'bigquery': {
-        // For project creation/update, do NOT require or parse keyfile
-        // Just return a minimal JDBC URL
-        const projectId = conn.project;
-        return `jdbc:bigquery://https://www.googleapis.com/bigquery/v2:443;ProjectId=${projectId};`;
+        return `jdbc:bigquery://https://www.googleapis.com/bigquery/v2:443;ProjectId=${ev('project')};`;
       }
       case 'databricks':
-        // Use token-based authentication with no username (UID)
-        const TOKEN = `db-token-${conn.name}`;
-        return `jdbc:databricks://${conn.host}:443/default;transportMode=http;ssl=1;AuthMech=3;httpPath=${conn.httpPath};PWD=\${${TOKEN}}`;
+        return `jdbc:databricks://${ev('host')}:443/default;transportMode=http;ssl=1;AuthMech=3;httpPath=${ev('httppath')};PWD=${ev('token')}`;
       case 'duckdb':
         // DuckDB JDBC URL format
         return `jdbc:duckdb:${conn.database_path}`;
@@ -1199,44 +1192,44 @@ export default class ConnectorsService {
   private static async mapToDbtProfileOutput(
     conn: ConnectionInput,
   ): Promise<any> {
-    const dbUserName = `{{ env_var("db-user-${conn.name}") }}`;
-    const dbPassword = `{{ env_var("db-password-${conn.name}") }}`;
-    const dbToken = `{{ env_var("db-token-${conn.name}") }}`;
-    const dbKeyfile = `{{ env_var("db-bigquery-${conn.name}") }}`;
+    const envVar = (field: string) =>
+      `{{ env_var("db-${field}-${conn.name}") }}`;
+    const envVarInt = (field: string) =>
+      `{{ env_var("db-${field}-${conn.name}") | int }}`;
     switch (conn.type) {
       case 'postgres':
         return {
           type: 'postgres',
-          host: conn.host,
-          port: conn.port,
-          user: dbUserName,
-          password: dbPassword,
-          dbname: conn.database,
-          schema: conn.schema,
+          host: envVar('host'),
+          port: envVarInt('port'),
+          user: envVar('user'),
+          password: envVar('password'),
+          dbname: envVar('dbname'),
+          schema: envVar('schema'),
           threads: 4,
           ...(conn.ssl && { sslmode: 'require' }),
         };
       case 'snowflake':
         return {
           type: 'snowflake',
-          account: conn.account,
-          user: dbUserName,
-          password: dbPassword,
-          role: conn.role || 'SYSADMIN',
-          warehouse: conn.warehouse,
-          database: conn.database,
-          schema: conn.schema,
+          account: envVar('account'),
+          user: envVar('user'),
+          password: envVar('password'),
+          role: envVar('role'),
+          warehouse: envVar('warehouse'),
+          database: envVar('dbname'),
+          schema: envVar('schema'),
           threads: 4,
         };
       case 'redshift':
         const redshiftProfile: any = {
           type: 'redshift',
-          host: conn.host,
-          port: conn.port,
-          user: dbUserName,
-          password: dbPassword,
-          dbname: conn.database,
-          schema: conn.schema,
+          host: envVar('host'),
+          port: envVarInt('port'),
+          user: envVar('user'),
+          password: envVar('password'),
+          dbname: envVar('dbname'),
+          schema: envVar('schema'),
           threads: 4,
         };
 
@@ -1253,11 +1246,11 @@ export default class ConnectorsService {
         const profile: any = {
           type: 'bigquery',
           method: conn.method,
-          project: conn.project,
-          dataset: conn.schema,
+          project: envVar('project'),
+          dataset: envVar('dataset'),
           threads: 4,
           priority: conn.priority || 'interactive',
-          keyfile: dbKeyfile,
+          keyfile: envVar('bigquery'),
         };
 
         return profile;
@@ -1265,11 +1258,11 @@ export default class ConnectorsService {
       case 'databricks':
         return {
           type: 'databricks',
-          host: conn.host,
-          http_path: conn.httpPath,
-          token: dbToken,
-          catalog: conn.database,
-          schema: conn.schema,
+          host: envVar('host'),
+          http_path: envVar('httppath'),
+          token: envVar('token'),
+          catalog: envVar('catalog'),
+          schema: envVar('schema'),
           threads: 4,
         };
       case 'duckdb':
@@ -1335,12 +1328,12 @@ export default class ConnectorsService {
         // We output a generic 'kinetica' type profile for now.
         return {
           type: 'kinetica',
-          host: conn.host,
-          port: conn.port,
-          user: dbUserName,
-          password: dbPassword,
-          database: conn.database, // Optional in Kinetica but standard for dbt
-          schema: conn.schema,
+          host: envVar('host'),
+          port: envVarInt('port'),
+          user: envVar('user'),
+          password: envVar('password'),
+          database: envVar('dbname'),
+          schema: envVar('schema'),
           threads: 4,
           ...(conn.timeout && { timeout: conn.timeout }),
           ...(conn.useSSL && { ssl: conn.useSSL }),

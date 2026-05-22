@@ -123,8 +123,11 @@ export const BigQuery: React.FC<Props> = ({
       },
     });
 
-  const { setBigQueryServiceAccountKey, getBigQueryServiceAccountKey } =
-    useSecureStorage();
+  const {
+    setBigQueryServiceAccountKey,
+    getBigQueryServiceAccountKey,
+    setConnectionField,
+  } = useSecureStorage();
 
   React.useEffect(() => {
     // On edit or duplicate, load the service account key from secure storage
@@ -197,6 +200,12 @@ export const BigQuery: React.FC<Props> = ({
     if (formState.name && formState.keyfile) {
       await setBigQueryServiceAccountKey(formState.keyfile, formState.name);
     }
+    await setConnectionField('project', formState.project, formState.name);
+    await setConnectionField(
+      'dataset',
+      formState.dataset || formState.schema,
+      formState.name,
+    );
 
     if (connection) {
       updateConnection({
