@@ -9,9 +9,11 @@ Whether you're just getting started with dbt Core™ or looking to streamline yo
 
 ## Features
 
-#### Easy Database Connectivity
+#### Easy Database & Data Lake Connectivity
 
-- Connect to your data warehouse, assuming your **RAW layer** is already in place.
+- **Multi-Warehouse Support**: Connect seamlessly to traditional data warehouses (including PostgreSQL, SQLite, and more).
+- **Data Lake Native (DuckLake)**: Direct connection to your data lakes with dedicated schema views and native Parquet export capabilities.
+- **Connection Management**: Easily clone, switch, and manage multiple connections directly from the UI.
 
 #### Layered Data Modeling
 
@@ -20,9 +22,16 @@ Whether you're just getting started with dbt Core™ or looking to streamline yo
 - **Business Models with AI**: Describe the business logic, and let the AI assist you in generating robust business models.
 - **AI-Generated Analytical Queries**: Generate analysis-ready queries and dashboard datasets using natural language.
 
-#### SQL Editor
+#### SQL Editor & Notebooks
 
-- Explore your data using an in-app SQL editor with auto-run, formatting, and result preview.
+- **SQL Editor**: Explore your data using an in-app SQL editor with auto-run, formatting, and result preview.
+- **SQL Notebooks**: Interactive notebooks featuring SQL cells, state persistence, import/export capabilities, and data pagination.
+
+#### Advanced IDE Features
+
+- **Smart Editor**: Full dbt™ autocomplete, Jinja-SQL syntax highlighting, and intelligent language features.
+- **File Explorer**: Intuitive file tree with drag-and-drop support and external file import.
+- **Pipeline Visualiser**: Visualize your `pipeline.yml` configurations with a live, interactive split-pane viewer.
 
 #### Git Integration
 
