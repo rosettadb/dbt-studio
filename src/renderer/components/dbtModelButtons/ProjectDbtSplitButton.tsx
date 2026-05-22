@@ -1,5 +1,9 @@
 import React from 'react';
-import { PlayCircleOutline, StopCircleOutlined } from '@mui/icons-material';
+import {
+  PlayCircleOutline,
+  StopCircleOutlined,
+  AccountTree,
+} from '@mui/icons-material';
 import { toast } from 'react-toastify';
 import { SplitButton } from '../splitButton';
 import { icons } from '../../../../assets';
@@ -103,6 +107,7 @@ export const ProjectDbtSplitButton: React.FC<ProjectDbtSplitButtonProps> = ({
     subTitle: string;
     localOnly: boolean;
     cloudOnly?: boolean;
+    dividerBefore?: boolean;
   }[] = [
     // Rosetta Layer Generation Commands (Local Only)
     {
@@ -327,10 +332,11 @@ export const ProjectDbtSplitButton: React.FC<ProjectDbtSplitButtonProps> = ({
       onClick: () => {
         setPipelineModal(true);
       },
-      leftIcon: <Icon src={icons.dbtTm} width={16} height={16} />,
+      leftIcon: <AccountTree sx={{ fontSize: 16 }} />,
       subTitle: 'Run a pipeline on the cloud',
       localOnly: false,
       cloudOnly: true,
+      dividerBefore: true,
     },
   ];
 
@@ -358,6 +364,7 @@ export const ProjectDbtSplitButton: React.FC<ProjectDbtSplitButtonProps> = ({
         menuItems={filteredMenuItems.map((item) => {
           // eslint-disable-next-line @typescript-eslint/no-unused-vars
           const { localOnly: _l, cloudOnly: _c, ...menuItem } = item;
+          // dividerBefore is kept — SplitButton supports it
           return menuItem;
         })}
       />

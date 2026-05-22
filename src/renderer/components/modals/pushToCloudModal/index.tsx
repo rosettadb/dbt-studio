@@ -18,6 +18,8 @@ import {
   useTheme,
   alpha,
   Skeleton,
+  Switch,
+  FormControlLabel,
 } from '@mui/material';
 import {
   Visibility,
@@ -75,8 +77,9 @@ export const PushToCloudModal: React.FC<PushToCloudModalProps> = ({
   );
   const { mutateAsync: pushProject, isLoading: isPushing } =
     usePushProjectToCloud();
+  const isDeployed = !!project?.externalId;
   const { data: secrets = [], isSuccess: secretsLoaded } = useGetSecrets(
-    project.id,
+    isDeployed ? project.id : undefined,
   );
   const { data: profileEnvVars = [], isSuccess: profileLoaded } =
     useExtractProfileEnvVars(project.id);
@@ -105,6 +108,7 @@ export const PushToCloudModal: React.FC<PushToCloudModalProps> = ({
   const [environmentVariables, setEnvironmentVariables] = React.useState<
     EnvironmentVariable[]
   >([]);
+  const [runTeardown, setRunTeardown] = React.useState(true);
   const [newEnvKey, setNewEnvKey] = React.useState('');
   const [newEnvValue, setNewEnvValue] = React.useState('');
   const [dbtArguments, setDbtArguments] = React.useState(initialDbtArguments);
@@ -145,7 +149,8 @@ export const PushToCloudModal: React.FC<PushToCloudModalProps> = ({
   React.useEffect(() => {
     if (envVarsInitialized.current) return;
     // Wait until queries have completed
-    if (!secretsLoaded || !profileLoaded) return;
+    if (!profileLoaded) return;
+    if (isDeployed && !secretsLoaded) return;
 
     envVarsInitialized.current = true;
 
@@ -327,15 +332,15 @@ export const PushToCloudModal: React.FC<PushToCloudModalProps> = ({
         reducedSecrets.ROSETTA_GIT_PASSWORD = githubPassword;
       }
 
-      let customCommand: string;
-      if (isPipelineMode) {
-        customCommand = `pipeline ${dbtArguments.trim()}`;
-      } else {
-        const fullCommand = dbtArguments.trim()
-          ? `${command} ${dbtArguments.trim()}`
-          : command;
-        customCommand = `dbt ${fullCommand}`;
-      }
+      // Extract pipeline file name from dbtArguments (--pipeline_name <name>)
+      const pipelineNameMatch = dbtArguments.match(/--pipeline_name\s+(\S+)/);
+      const pipelineFileName = pipelineNameMatch
+        ? `${pipelineNameMatch[1]}.yml`
+        : undefined;
+
+      const fullCommand = dbtArguments.trim()
+        ? `dbt ${command} ${dbtArguments.trim()}`
+        : `dbt ${command}`;
 
       await pushProject({
         id: project.id,
@@ -344,7 +349,10 @@ export const PushToCloudModal: React.FC<PushToCloudModalProps> = ({
         gitBranch: gitBranch.trim() || 'main',
         githubUsername: isRunMode ? undefined : githubUsername.trim(),
         githubPassword: isRunMode ? undefined : githubPassword,
-        CUSTOM_DBT_COMMANDS: customCommand,
+        CUSTOM_DBT_COMMANDS: isPipelineMode ? undefined : fullCommand,
+        EXECUTION_MODE: isPipelineMode ? 'pipeline' : 'command',
+        PIPELINE_FILE: isPipelineMode ? pipelineFileName : undefined,
+        ROSETTA_RUN_TEARDOWN: isPipelineMode ? runTeardown : undefined,
         secrets: reducedSecrets,
       });
 
@@ -625,30 +633,28 @@ export const PushToCloudModal: React.FC<PushToCloudModalProps> = ({
 
         <Divider sx={{ my: 1 }} />
 
-        <TextField
-          label="Command"
-          value={isPipelineMode ? `pipeline ${dbtArguments}` : `dbt ${command}`}
-          fullWidth
-          disabled
-          sx={{
-            '& .MuiOutlinedInput-root': {
-              bgcolor: alpha(
-                theme.palette.background.default,
-                theme.palette.mode === 'dark' ? 0.4 : 0.5,
-              ),
-            },
-            '& .MuiInputBase-input': {
-              fontFamily: 'monospace',
-              fontSize: '0.875rem',
-              fontWeight: 600,
-            },
-          }}
-          helperText={
-            isPipelineMode
-              ? 'The pipeline command that will be executed on the cloud.'
-              : 'The dbt command that will be executed on the cloud.'
-          }
-        />
+        {!isPipelineMode && (
+          <TextField
+            label="Command"
+            value={`dbt ${command}`}
+            fullWidth
+            disabled
+            sx={{
+              '& .MuiOutlinedInput-root': {
+                bgcolor: alpha(
+                  theme.palette.background.default,
+                  theme.palette.mode === 'dark' ? 0.4 : 0.5,
+                ),
+              },
+              '& .MuiInputBase-input': {
+                fontFamily: 'monospace',
+                fontSize: '0.875rem',
+                fontWeight: 600,
+              },
+            }}
+            helperText="The dbt command that will be executed on the cloud."
+          />
+        )}
 
         {!isPipelineMode && (
           <TextField
@@ -672,6 +678,48 @@ export const PushToCloudModal: React.FC<PushToCloudModalProps> = ({
             }}
             helperText="Optional: Add dbt arguments like --select, --exclude, --full-refresh, --vars, etc."
           />
+        )}
+
+        {isPipelineMode && (
+          <Paper
+            elevation={0}
+            sx={{
+              p: 1.5,
+              px: 2,
+              borderRadius: 2,
+              bgcolor: runTeardown
+                ? alpha(
+                    theme.palette.success.main,
+                    theme.palette.mode === 'dark' ? 0.1 : 0.05,
+                  )
+                : alpha(theme.palette.action.disabled, 0.05),
+              border: `1px solid ${
+                runTeardown
+                  ? alpha(theme.palette.success.main, 0.3)
+                  : theme.palette.divider
+              }`,
+              transition: 'all 0.2s',
+            }}
+          >
+            <FormControlLabel
+              control={
+                <Switch
+                  checked={runTeardown}
+                  onChange={(e) => setRunTeardown(e.target.checked)}
+                  color="success"
+                />
+              }
+              label={runTeardown ? 'Teardown Enabled' : 'Teardown Disabled'}
+              sx={{
+                m: 0,
+                '& .MuiFormControlLabel-label': {
+                  fontSize: '0.875rem',
+                  fontWeight: 600,
+                  color: runTeardown ? 'success.main' : 'text.secondary',
+                },
+              }}
+            />
+          </Paper>
         )}
 
         <Paper

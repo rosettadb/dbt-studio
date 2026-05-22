@@ -248,6 +248,9 @@ export type CloudDeploymentPayload = {
   githubPassword?: string;
   secrets: Record<string, string>;
   CUSTOM_DBT_COMMANDS?: string;
+  EXECUTION_MODE?: 'command' | 'pipeline';
+  PIPELINE_FILE?: string;
+  ROSETTA_RUN_TEARDOWN?: boolean;
 };
 
 export type DuckDBStatus =
