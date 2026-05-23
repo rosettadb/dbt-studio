@@ -407,6 +407,12 @@ export type SkillsChannels =
   | 'skills:create'
   | 'skills:import';
 
+export type MemoryChannels =
+  | 'memory:tree'
+  | 'memory:read'
+  | 'memory:search'
+  | 'memory:stats';
+
 export type SavedQueriesChannels =
   | 'savedQueries:list'
   | 'savedQueries:create'
@@ -434,6 +440,7 @@ export type Channels =
   | AgentChannels
   | MCPChannels
   | SkillsChannels
+  | MemoryChannels
   | SavedQueriesChannels;
 
 export type ConfigureConnectionBody = {

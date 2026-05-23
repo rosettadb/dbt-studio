@@ -25,8 +25,15 @@ import { useGetSettingsWithDatabaseInfo } from '../../controllers';
 import { AISettingsTab } from './AISettingsTab';
 import { MCPServersTab } from './MCPServersTab';
 import { SkillsTab } from './SkillsTab';
+import { MemoryTab } from './MemoryTab';
 
-const TABS = ['Providers', 'Settings', 'MCP Servers', 'Skills'] as const;
+const TABS = [
+  'Providers',
+  'Settings',
+  'MCP Servers',
+  'Skills',
+  'Memory',
+] as const;
 type TabLabel = (typeof TABS)[number];
 
 export const AIProvidersSettings: React.FC = () => {
@@ -154,6 +161,9 @@ export const AIProvidersSettings: React.FC = () => {
 
       {/* Skills */}
       {activeTab === 'Skills' && <SkillsTab />}
+
+      {/* Memory */}
+      {activeTab === 'Memory' && <MemoryTab />}
 
       {/* General (was AI Settings) — includes DB info */}
       {activeTab === 'Settings' && (

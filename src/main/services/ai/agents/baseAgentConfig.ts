@@ -9,6 +9,43 @@ import { createLoadSkillTool } from '../skills/loadSkillTool';
 import { truncateToolResult } from '../tokenEstimator';
 import { readMemoryFile } from '../memory/memoryService';
 
+export function buildMemoryPolicySection(): string {
+  return `
+
+## Memory Policy
+
+You have a persistent memory system stored in markdown files at \`.memory/\`.
+This memory survives across all your sessions and is shared between them.
+
+For the full schema (format, naming, update rules), read \`long-term-ai-memory-schema.md\`
+using the \`memory\` tool with command: 'view' and path: 'long-term-ai-memory-schema.md'.
+
+### Before starting a task
+Call \`memory\` with command: 'search' to check if relevant past context exists.
+
+### Progressive discovery
+- \`00000_maincontext.md\` is already in your context at session start.
+- Read \`01000_rules-learned.md\` when you need to check constraints.
+- Read \`02000_skills-learned.md\` when you need a workflow.
+- Read \`03000_proprietary-knowledge.md\` when you need business context.
+- Read topic files under \`topics/\` for deep dives on specific subjects.
+
+### When to save to memory (self-learning)
+Call \`memory create\` or \`memory update\` when you discover:
+1. A **rule**: something that caused an error and should be avoided
+2. A **user preference**: the user explicitly states a preference
+3. A **workflow**: a multi-step process that worked and could be reused
+4. A **concept**: business logic that explains WHY something works this way
+
+### When NOT to save
+- Routine chat (greetings, clarifications, simple Q&A)
+- Trivial file edits without new insights
+- Tool execution output that doesn't reveal new rules
+
+### Where to save
+See \`long-term-ai-memory-schema.md\` for exact file locations and formats.`;
+}
+
 export interface BaseAgentConfig {
   model: LanguageModel;
   mcpTools: Record<string, any>;
@@ -49,7 +86,7 @@ export async function buildBaseAgentConfig(options: {
   const skillsPrompt = buildSkillsPrompt(skills);
   const loadSkillTool = createLoadSkillTool(skills);
   const memoryContext = aiSettings.configuration.autoGenerateMemories
-    ? await readMemoryFile('00000_maincontext.md').catch(() => '')
+    ? `${await readMemoryFile('00000_maincontext.md').catch(() => '')}\n${buildMemoryPolicySection()}`
     : '';
   // 80 steps for autoContinue: bulk SQL tasks (e.g. copying 23 tables) need
   // ~2 steps per item (studio_sql_query + studio_sql_get_agent_run_result) plus
