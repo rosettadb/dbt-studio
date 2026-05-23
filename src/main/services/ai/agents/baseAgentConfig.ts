@@ -7,6 +7,7 @@ import { discoverSkills } from '../skills/skillsDiscovery';
 import { buildSkillsPrompt } from '../skills/skillsPrompt';
 import { createLoadSkillTool } from '../skills/loadSkillTool';
 import { truncateToolResult } from '../tokenEstimator';
+import { readMemoryFile } from '../memory/memoryService';
 
 export interface BaseAgentConfig {
   model: LanguageModel;
@@ -14,6 +15,7 @@ export interface BaseAgentConfig {
   skillsPrompt: string;
   loadSkillTool: any;
   maxSteps: number;
+  memoryContext?: string;
   mainWindow?: BrowserWindow;
   onStepFinish: (args: {
     stepNumber: number;
@@ -46,6 +48,9 @@ export async function buildBaseAgentConfig(options: {
   const skills = await discoverSkills();
   const skillsPrompt = buildSkillsPrompt(skills);
   const loadSkillTool = createLoadSkillTool(skills);
+  const memoryContext = aiSettings.configuration.autoGenerateMemories
+    ? await readMemoryFile('00000_maincontext.md').catch(() => '')
+    : '';
   // 80 steps for autoContinue: bulk SQL tasks (e.g. copying 23 tables) need
   // ~2 steps per item (studio_sql_query + studio_sql_get_agent_run_result) plus
   // schema reads and verification, so 20 was too low and would abort mid-task.
@@ -86,6 +91,7 @@ export async function buildBaseAgentConfig(options: {
     mcpTools,
     skillsPrompt,
     loadSkillTool,
+    memoryContext,
     maxSteps,
     mainWindow,
     onStepFinish,

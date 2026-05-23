@@ -160,6 +160,7 @@ You are in **Ask mode**. You can only read and analyze — you CANNOT execute qu
 If the user asks you to perform a write operation, explain what it would look like and tell them to switch to **Code mode**.
 
 ${skills ?? ''}
+${base.memoryContext ?? ''}
 ${mcpToolsList}`
     : `You are an expert data engineering assistant in the Notebooks screen.
 Your goal is to help the user perform complex, multi-step data analysis and engineering workflows autonomously.
@@ -201,6 +202,7 @@ ${
     : `## Note\n\nNo dbt project is linked to this connection.\nFocus on: notebook cell authoring, SQL execution, result exploration, and schema inspection.\n`
 }
 ${skills ?? ''}
+${base.memoryContext ?? ''}
 ${mcpToolsList}`;
 
   const safeEnabledTools = { ...enabledTools };

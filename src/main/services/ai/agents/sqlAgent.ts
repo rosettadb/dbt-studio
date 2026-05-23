@@ -112,6 +112,7 @@ NOT available: Monaco editor updates, SQL query execution, DuckLake writes, DDL/
 If the user asks you to create, modify, or execute something, explain what the SQL would look like, but clearly state they need to switch to **Code mode** to execute it.
 
 ${skills ?? ''}
+${base.memoryContext ?? ''}
 ${mcpToolsList}
 
 ## Guidelines
@@ -134,6 +135,7 @@ You have direct access to the SQL Monaco Editor. You can read its current state 
 You are strictly scoped to the database connection. Do NOT attempt to use DBT project commands.
 
 ${skills ?? ''}
+${base.memoryContext ?? ''}
 ${mcpToolsList}
 
 ## ⚠️ CRITICAL AGENT RULES — YOU MUST FOLLOW THESE

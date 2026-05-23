@@ -37,6 +37,7 @@ You help users with dbt model development, debugging, and data operations by ans
 
 ${projectPath ? `## Active dbt Project\n\nProject path: ${projectPath}\n` : ''}
 ${skills ?? ''}
+${base.memoryContext ?? ''}
 
 ## Ask Mode Constraints
 
@@ -58,6 +59,7 @@ You have access to the dbt project filesystem and can read, write, and run dbt c
 
 ${projectPath ? `## Active dbt Project\n\nProject path: ${projectPath}\n\nAll file operations and dbt commands should use this project path as the working directory unless the user specifies otherwise.\n` : ''}
 ${skills ?? ''}
+${base.memoryContext ?? ''}
 
 ## Guidelines
 
