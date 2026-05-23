@@ -7,6 +7,7 @@ import {
   createFilesystemTools,
   filesystemTools,
 } from '../tools/filesystem.tools';
+import { createMemoryTools } from '../tools/studio/memory.tools';
 
 export interface ProjectAgentOptions {
   projectPath?: string;
@@ -109,6 +110,9 @@ Always confirm before making destructive changes.`;
     enabledToolNames.add('studio_cli_run_dbt');
   }
 
+  const memoryTools =
+    base.memoryContext !== undefined ? createMemoryTools() : {};
+
   const READ_ONLY_TOOLS = [
     'readDbtModel',
     'listDbtModels',
@@ -142,7 +146,12 @@ Always confirm before making destructive changes.`;
   return new ToolLoopAgent({
     model: base.model as any,
     instructions: systemInstructions,
-    tools: { ...baseTools, ...base.mcpTools, loadSkill: base.loadSkillTool },
+    tools: {
+      ...baseTools,
+      ...base.mcpTools,
+      loadSkill: base.loadSkillTool,
+      ...memoryTools,
+    },
     stopWhen: stepCountIs(base.maxSteps),
     prepareStep: base.prepareStep,
     onStepFinish: base.onStepFinish,

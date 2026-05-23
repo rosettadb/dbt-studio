@@ -5,7 +5,7 @@ import fs from 'fs-extra';
 export const MEMORY_ROOT = path.join(app.getPath('userData'), '.memory');
 export const MAX_FILE_LINES = 300;
 
-function resolveSafePath(relativePath: string): string {
+export function resolveSafePath(relativePath: string): string {
   const normalized = path
     .normalize(relativePath)
     .replace(/^(\.\.(\/|\\|$))+/, '');

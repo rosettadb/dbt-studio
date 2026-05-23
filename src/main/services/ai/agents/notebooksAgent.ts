@@ -6,6 +6,7 @@ import { createStudioConnectionsTools } from '../tools/studio/connections.tools'
 import { createStudioDuckLakeTools } from '../tools/studio/ducklake.tools';
 import { createStudioNotebooksTools } from '../tools/studio/notebooks.tools';
 import { NotebooksService } from '../../notebooks.service';
+import { createMemoryTools } from '../tools/studio/memory.tools';
 import { TOOL_FLAGS } from '../tools/toolRegistry';
 import type { NotebookCell } from '../../../../types/notebooks';
 
@@ -218,6 +219,9 @@ ${mcpToolsList}`;
     ...createStudioNotebooksTools(options.conversationId),
   };
 
+  const memoryTools =
+    base.memoryContext !== undefined ? createMemoryTools() : {};
+
   const READ_ONLY_TOOLS = [
     'studio_ducklake_schema_extract',
     'studio_connections_list',
@@ -256,7 +260,12 @@ ${mcpToolsList}`;
   return new ToolLoopAgent({
     model: base.model as any,
     instructions: systemInstructions,
-    tools: { ...baseTools, ...base.mcpTools, loadSkill: base.loadSkillTool },
+    tools: {
+      ...baseTools,
+      ...base.mcpTools,
+      loadSkill: base.loadSkillTool,
+      ...memoryTools,
+    },
     stopWhen: stepCountIs(base.maxSteps),
     prepareStep: base.prepareStep,
     onStepFinish: base.onStepFinish,

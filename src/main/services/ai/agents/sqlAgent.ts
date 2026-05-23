@@ -10,6 +10,7 @@ import {
   createStudioSqlTools,
   createSqlResultInspectorTools,
 } from '../tools/studio/sql.tools';
+import { createMemoryTools } from '../tools/studio/memory.tools';
 
 export interface SqlAgentOptions {
   connectionMeta: { name: string; type: string };
@@ -193,6 +194,9 @@ ${mcpToolsList}
     ...createStudioMonacoTools(options.conversationId),
   };
 
+  const memoryTools =
+    base.memoryContext !== undefined ? createMemoryTools() : {};
+
   const READ_ONLY_TOOLS = [
     'studio_sql_schema_extract',
     'studio_ducklake_schema_extract',
@@ -231,7 +235,12 @@ ${mcpToolsList}
   return new ToolLoopAgent({
     model: base.model as any,
     instructions: systemInstructions,
-    tools: { ...baseTools, ...base.mcpTools, loadSkill: base.loadSkillTool },
+    tools: {
+      ...baseTools,
+      ...base.mcpTools,
+      loadSkill: base.loadSkillTool,
+      ...memoryTools,
+    },
     stopWhen: stepCountIs(base.maxSteps),
     prepareStep: base.prepareStep,
     onStepFinish: base.onStepFinish,
