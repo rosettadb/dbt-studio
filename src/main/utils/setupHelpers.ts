@@ -3,6 +3,7 @@ import { app } from 'electron';
 import path from 'path';
 import { URL } from 'url';
 import MainDatabaseService from '../services/mainDatabase.service';
+import { bootstrapMemory } from '../services/ai/memory/memoryBootstrap';
 
 export const DATA_DIR = app.getPath('userData');
 export const DB_FILE = path.join(DATA_DIR, 'database.json');
@@ -23,6 +24,14 @@ export const initializeDataStorage = async () => {
     // eslint-disable-next-line no-console
     console.error('Failed to initialize main database:', error);
     // Don't throw error to prevent app startup failure
+  }
+
+  // Initialize long-term memory tree (no-op if already bootstrapped)
+  try {
+    await bootstrapMemory();
+  } catch (error) {
+    // eslint-disable-next-line no-console
+    console.error('Failed to bootstrap memory:', error);
   }
 };
 
