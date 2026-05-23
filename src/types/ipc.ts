@@ -410,8 +410,11 @@ export type SkillsChannels =
 export type MemoryChannels =
   | 'memory:tree'
   | 'memory:read'
+  | 'memory:write'
   | 'memory:search'
-  | 'memory:stats';
+  | 'memory:stats'
+  | 'memory:open-dir'
+  | 'memory:open-terminal';
 
 export type SavedQueriesChannels =
   | 'savedQueries:list'

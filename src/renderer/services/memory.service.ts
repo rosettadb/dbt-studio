@@ -9,6 +9,17 @@ export const readMemoryFile = async (relativePath: string): Promise<string> => {
   return window.electron.ipcRenderer.invoke('memory:read', relativePath);
 };
 
+export const writeMemoryFile = async (
+  relativePath: string,
+  content: string,
+): Promise<void> => {
+  return window.electron.ipcRenderer.invoke(
+    'memory:write',
+    relativePath,
+    content,
+  );
+};
+
 export const searchMemory = async (query: string): Promise<SearchResult[]> => {
   return window.electron.ipcRenderer.invoke('memory:search', query);
 };
@@ -19,4 +30,12 @@ export const getMemoryStats = async (): Promise<{
   lastModified: string;
 }> => {
   return window.electron.ipcRenderer.invoke('memory:stats');
+};
+
+export const openMemoryDir = async (): Promise<string> => {
+  return window.electron.ipcRenderer.invoke('memory:open-dir');
+};
+
+export const openMemoryTerminal = async (): Promise<void> => {
+  return window.electron.ipcRenderer.invoke('memory:open-terminal');
 };

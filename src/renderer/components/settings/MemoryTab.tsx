@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   Box,
   Typography,
@@ -13,20 +13,32 @@ import {
   InputAdornment,
   Stack,
   Divider,
+  Button,
 } from '@mui/material';
 import SearchIcon from '@mui/icons-material/Search';
 import MemoryIcon from '@mui/icons-material/Memory';
 import ArticleIcon from '@mui/icons-material/Article';
 import FolderIcon from '@mui/icons-material/Folder';
+import FolderOpenIcon from '@mui/icons-material/FolderOpen';
+import TerminalIcon from '@mui/icons-material/Terminal';
+import SaveIcon from '@mui/icons-material/Save';
+import Editor, { OnMount } from '@monaco-editor/react';
 import {
   useGetMemoryTree,
   useGetMemoryStats,
   useReadMemoryFile,
+  useWriteMemoryFile,
 } from '../../controllers/memory.controller';
+import {
+  openMemoryDir,
+  openMemoryTerminal,
+} from '../../services/memory.service';
 
 export const MemoryTab: React.FC = () => {
   const [selectedPath, setSelectedPath] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
+  const [editContent, setEditContent] = useState('');
+  const [isDirty, setIsDirty] = useState(false);
 
   const {
     data: tree,
@@ -36,6 +48,45 @@ export const MemoryTab: React.FC = () => {
   const { data: stats, isLoading: statsLoading } = useGetMemoryStats();
   const { data: fileContent, isLoading: contentLoading } = useReadMemoryFile(
     selectedPath ?? '',
+  );
+  const writeMutation = useWriteMemoryFile();
+
+  useEffect(() => {
+    if (fileContent !== undefined) {
+      setEditContent(fileContent);
+      setIsDirty(false);
+    }
+  }, [fileContent]);
+
+  const handleSave = useCallback(async () => {
+    if (!selectedPath) return;
+    await writeMutation.mutateAsync({
+      path: selectedPath,
+      content: editContent,
+    });
+    setIsDirty(false);
+  }, [selectedPath, editContent, writeMutation]);
+
+  const handleEditorMount: OnMount = (editor) => {
+    editor.addCommand(
+      // eslint-disable-next-line no-bitwise
+      (window as any).monaco?.KeyMod?.CtrlCmd |
+        (window as any).monaco?.KeyCode?.KeyS,
+      () => {
+        handleSave();
+      },
+    );
+  };
+
+  // eslint-disable-next-line consistent-return
+  const handleKeyDown = useCallback(
+    (e: React.KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === 's') {
+        e.preventDefault();
+        handleSave();
+      }
+    },
+    [handleSave],
   );
 
   const renderStats = () => {
@@ -232,9 +283,82 @@ export const MemoryTab: React.FC = () => {
           {renderSidebarContent()}
         </Paper>
 
-        <Paper variant="outlined" sx={{ flex: 1, overflow: 'auto', p: 2 }}>
-          {renderContentPanel()}
+        <Paper
+          variant="outlined"
+          sx={{
+            flex: 1,
+            display: 'flex',
+            flexDirection: 'column',
+            overflow: 'hidden',
+          }}
+        >
+          {selectedPath && !contentLoading ? (
+            <>
+              <Box
+                sx={{
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center',
+                  px: 2,
+                  py: 1,
+                  borderBottom: 1,
+                  borderColor: 'divider',
+                }}
+              >
+                <Typography variant="caption" sx={{ fontFamily: 'monospace' }}>
+                  {selectedPath}
+                </Typography>
+                <Button
+                  size="small"
+                  variant="contained"
+                  startIcon={<SaveIcon />}
+                  disabled={!isDirty || writeMutation.isLoading}
+                  onClick={handleSave}
+                >
+                  {writeMutation.isLoading ? 'Saving...' : 'Save'}
+                </Button>
+              </Box>
+              <Box sx={{ flex: 1, minHeight: 0 }} onKeyDown={handleKeyDown}>
+                <Editor
+                  language="markdown"
+                  theme="vs-dark"
+                  value={editContent}
+                  onChange={(val) => {
+                    setEditContent(val ?? '');
+                    setIsDirty(true);
+                  }}
+                  onMount={handleEditorMount}
+                  options={{
+                    fontSize: 13,
+                    minimap: { enabled: false },
+                    wordWrap: 'on',
+                    scrollBeyondLastLine: false,
+                    automaticLayout: true,
+                  }}
+                />
+              </Box>
+            </>
+          ) : (
+            <Box sx={{ flex: 1 }}>{renderContentPanel()}</Box>
+          )}
         </Paper>
+      </Box>
+
+      <Box sx={{ mt: 2, display: 'flex', gap: 1 }}>
+        <Button
+          size="small"
+          startIcon={<FolderOpenIcon />}
+          onClick={() => openMemoryDir()}
+        >
+          Open in Finder
+        </Button>
+        <Button
+          size="small"
+          startIcon={<TerminalIcon />}
+          onClick={() => openMemoryTerminal()}
+        >
+          Open in Terminal
+        </Button>
       </Box>
     </Box>
   );

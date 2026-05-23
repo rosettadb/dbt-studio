@@ -1,4 +1,4 @@
-import { useQuery } from 'react-query';
+import { useQuery, useMutation, useQueryClient } from 'react-query';
 import * as memoryService from '../services/memory.service';
 
 export const useGetMemoryTree = () =>
@@ -18,3 +18,17 @@ export const useReadMemoryFile = (path: string) =>
   useQuery(['memory', 'read', path], () => memoryService.readMemoryFile(path), {
     enabled: path.length > 0,
   });
+
+export const useWriteMemoryFile = () => {
+  const queryClient = useQueryClient();
+  return useMutation(
+    ({ path, content }: { path: string; content: string }) =>
+      memoryService.writeMemoryFile(path, content),
+    {
+      onSuccess: () => {
+        queryClient.invalidateQueries(['memory', 'read']);
+        queryClient.invalidateQueries(['memory', 'stats']);
+      },
+    },
+  );
+};
