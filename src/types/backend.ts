@@ -798,6 +798,23 @@ export interface MCPFileConfig {
   mcpServers: Record<string, MCPServerFileEntry>;
 }
 
+export const MEMORY_KIND = {
+  PROJECT_FACT: 'project_fact',
+  CONNECTION_FACT: 'connection_fact',
+  NOTEBOOK_FACT: 'notebook_fact',
+  USER_PREFERENCE: 'user_preference',
+  DECISION: 'decision',
+  TASK_STATE: 'task_state',
+  ERROR_RESOLUTION: 'error_resolution',
+  QUERY_PATTERN: 'query_pattern',
+  SCHEMA_FACT: 'schema_fact',
+  DATABASE_METADATA: 'database_metadata',
+  MANUAL: 'manual',
+  DREAM_SUMMARY: 'dream_summary',
+  REM_PATTERN: 'rem_pattern',
+} as const;
+export type MemoryKind = (typeof MEMORY_KIND)[keyof typeof MEMORY_KIND];
+
 export interface MCPServerWithStatus extends MCPServerFileEntry {
   id: string;
   connected: boolean;

@@ -264,6 +264,192 @@ export default class MainDatabaseService {
       CREATE INDEX IF NOT EXISTS ai_usage_logs_created_at_idx ON ai_usage_logs(created_at);
 
       CREATE INDEX IF NOT EXISTS chat_compaction_summaries_conversation_idx ON chat_compaction_summaries(conversation_id);
+
+      -- --- Agent Memory System Tables ---
+      CREATE TABLE IF NOT EXISTS agent_memory_entries (
+        id               INTEGER PRIMARY KEY AUTOINCREMENT,
+        scope_key        TEXT    NOT NULL,
+        screen_key       TEXT    NOT NULL DEFAULT 'global',
+        project_id       TEXT,
+        connection_id    TEXT,
+        notebook_id      TEXT,
+        kind             TEXT    NOT NULL,
+        source_type      TEXT    NOT NULL,
+        source_id        TEXT,
+        title            TEXT,
+        content          TEXT    NOT NULL,
+        summary          TEXT,
+        importance       REAL    NOT NULL DEFAULT 0.5,
+        confidence       REAL    NOT NULL DEFAULT 0.8,
+        status           TEXT    NOT NULL DEFAULT 'active',
+        tags             TEXT,
+        metadata         TEXT,
+        created_at       TEXT    DEFAULT (datetime('now')),
+        updated_at       TEXT    DEFAULT (datetime('now')),
+        last_accessed_at TEXT,
+        access_count     INTEGER NOT NULL DEFAULT 0,
+        promoted_at      TEXT,
+        archived         INTEGER NOT NULL DEFAULT 0
+      );
+
+      CREATE INDEX IF NOT EXISTS ame_scope_idx      ON agent_memory_entries(scope_key);
+      CREATE INDEX IF NOT EXISTS ame_screen_idx     ON agent_memory_entries(screen_key);
+      CREATE INDEX IF NOT EXISTS ame_project_idx    ON agent_memory_entries(project_id);
+      CREATE INDEX IF NOT EXISTS ame_connection_idx ON agent_memory_entries(connection_id);
+      CREATE INDEX IF NOT EXISTS ame_notebook_idx   ON agent_memory_entries(notebook_id);
+      CREATE INDEX IF NOT EXISTS ame_kind_idx       ON agent_memory_entries(kind);
+      CREATE INDEX IF NOT EXISTS ame_source_idx     ON agent_memory_entries(source_type, source_id);
+      CREATE INDEX IF NOT EXISTS ame_updated_idx    ON agent_memory_entries(updated_at);
+      CREATE INDEX IF NOT EXISTS ame_archived_idx   ON agent_memory_entries(archived);
+
+      CREATE TABLE IF NOT EXISTS agent_memory_session_corpus (
+        id              INTEGER PRIMARY KEY AUTOINCREMENT,
+        conversation_id INTEGER,
+        message_id      INTEGER,
+        day_bucket      TEXT    NOT NULL,
+        screen_key      TEXT    NOT NULL,
+        project_id      TEXT,
+        connection_id   TEXT,
+        notebook_id     TEXT,
+        role            TEXT    NOT NULL,
+        snippet         TEXT    NOT NULL,
+        message_hash    TEXT    NOT NULL,
+        token_estimate  INTEGER,
+        metadata        TEXT,
+        created_at      TEXT    DEFAULT (datetime('now')),
+        UNIQUE(message_hash)
+      );
+
+      CREATE TABLE IF NOT EXISTS agent_memory_daily_entries (
+        id          INTEGER PRIMARY KEY AUTOINCREMENT,
+        day_bucket  TEXT NOT NULL,
+        scope_key   TEXT NOT NULL,
+        screen_key  TEXT NOT NULL,
+        project_id  TEXT,
+        connection_id TEXT,
+        notebook_id TEXT,
+        source_type TEXT NOT NULL,
+        source_id   TEXT,
+        content     TEXT NOT NULL,
+        summary     TEXT,
+        metadata    TEXT,
+        created_at  TEXT DEFAULT (datetime('now')),
+        updated_at  TEXT DEFAULT (datetime('now'))
+      );
+
+      CREATE INDEX IF NOT EXISTS amde_day_idx   ON agent_memory_daily_entries(day_bucket);
+      CREATE INDEX IF NOT EXISTS amde_scope_idx ON agent_memory_daily_entries(scope_key);
+
+      CREATE TABLE IF NOT EXISTS agent_memory_short_term_recall (
+        id               INTEGER PRIMARY KEY AUTOINCREMENT,
+        recall_key       TEXT    NOT NULL UNIQUE,
+        scope_key        TEXT    NOT NULL,
+        screen_key       TEXT    NOT NULL,
+        project_id       TEXT,
+        connection_id    TEXT,
+        notebook_id      TEXT,
+        source_type      TEXT    NOT NULL,
+        source_id        TEXT,
+        snippet          TEXT    NOT NULL,
+        recall_count     INTEGER NOT NULL DEFAULT 0,
+        daily_count      INTEGER NOT NULL DEFAULT 0,
+        grounded_count   INTEGER NOT NULL DEFAULT 0,
+        total_score      REAL    NOT NULL DEFAULT 0,
+        max_score        REAL    NOT NULL DEFAULT 0,
+        query_hashes     TEXT,
+        recall_days      TEXT,
+        concept_tags     TEXT,
+        claim_hash       TEXT,
+        first_recalled_at TEXT   DEFAULT (datetime('now')),
+        last_recalled_at  TEXT   DEFAULT (datetime('now')),
+        promoted_at      TEXT,
+        metadata         TEXT
+      );
+
+      CREATE TABLE IF NOT EXISTS agent_memory_phase_signals (
+        id           INTEGER PRIMARY KEY AUTOINCREMENT,
+        recall_key   TEXT NOT NULL,
+        phase        TEXT NOT NULL,
+        hit_count    INTEGER NOT NULL DEFAULT 0,
+        first_hit_at TEXT DEFAULT (datetime('now')),
+        last_hit_at  TEXT DEFAULT (datetime('now')),
+        metadata     TEXT,
+        UNIQUE(recall_key, phase)
+      );
+
+      CREATE TABLE IF NOT EXISTS agent_memory_dreaming_runs (
+        id              INTEGER PRIMARY KEY AUTOINCREMENT,
+        trigger_type    TEXT    NOT NULL,
+        started_at      TEXT    DEFAULT (datetime('now')),
+        completed_at    TEXT,
+        status          TEXT    NOT NULL DEFAULT 'running',
+        light_count     INTEGER NOT NULL DEFAULT 0,
+        rem_count       INTEGER NOT NULL DEFAULT 0,
+        promoted_count  INTEGER NOT NULL DEFAULT 0,
+        error_message   TEXT,
+        metadata        TEXT
+      );
+
+      CREATE INDEX IF NOT EXISTS amdr_started_idx ON agent_memory_dreaming_runs(started_at);
+
+      CREATE TABLE IF NOT EXISTS agent_memory_dreaming_reports (
+        id         INTEGER PRIMARY KEY AUTOINCREMENT,
+        run_id     INTEGER,
+        phase      TEXT NOT NULL,
+        day_bucket TEXT NOT NULL,
+        content    TEXT NOT NULL,
+        metadata   TEXT,
+        created_at TEXT DEFAULT (datetime('now')),
+        FOREIGN KEY (run_id) REFERENCES agent_memory_dreaming_runs(id) ON DELETE SET NULL
+      );
+
+      CREATE TABLE IF NOT EXISTS agent_memory_embedding_cache (
+        id           INTEGER PRIMARY KEY AUTOINCREMENT,
+        provider     TEXT NOT NULL,
+        model        TEXT NOT NULL,
+        content_hash TEXT NOT NULL,
+        dims         INTEGER,
+        embedding    TEXT NOT NULL,
+        updated_at   TEXT DEFAULT (datetime('now')),
+        UNIQUE(provider, model, content_hash)
+      );
+
+      CREATE VIRTUAL TABLE IF NOT EXISTS agent_memory_fts USING fts5(
+        title,
+        content,
+        summary,
+        tags,
+        content='agent_memory_entries',
+        content_rowid='id'
+      );
+
+      CREATE TRIGGER IF NOT EXISTS ame_fts_insert AFTER INSERT ON agent_memory_entries BEGIN
+        INSERT INTO agent_memory_fts(rowid, title, content, summary, tags)
+        VALUES (new.id, new.title, new.content, new.summary, new.tags);
+      END;
+
+      CREATE TRIGGER IF NOT EXISTS ame_fts_update AFTER UPDATE ON agent_memory_entries BEGIN
+        INSERT INTO agent_memory_fts(agent_memory_fts, rowid, title, content, summary, tags)
+        VALUES ('delete', old.id, old.title, old.content, old.summary, old.tags);
+        INSERT INTO agent_memory_fts(rowid, title, content, summary, tags)
+        VALUES (new.id, new.title, new.content, new.summary, new.tags);
+      END;
+
+      CREATE TRIGGER IF NOT EXISTS ame_fts_delete AFTER DELETE ON agent_memory_entries BEGIN
+        INSERT INTO agent_memory_fts(agent_memory_fts, rowid, title, content, summary, tags)
+        VALUES ('delete', old.id, old.title, old.content, old.summary, old.tags);
+      END;
+
+      CREATE TABLE IF NOT EXISTS agent_memory_config (
+        key        TEXT PRIMARY KEY,
+        value      TEXT NOT NULL DEFAULT '',
+        updated_at TEXT DEFAULT (datetime('now'))
+      );
+
+      INSERT OR IGNORE INTO agent_memory_config (key, value) VALUES ('last_dreaming_run_at', '');
+      INSERT OR IGNORE INTO agent_memory_config (key, value) VALUES ('last_metadata_refresh_at', '');
+      INSERT OR IGNORE INTO agent_memory_config (key, value) VALUES ('fts5_available', 'unknown');
+      INSERT OR IGNORE INTO agent_memory_config (key, value) VALUES ('dreaming_next_scheduled_at', '');
     `;
 
     this.sqlite.exec(createTablesSQL);
@@ -420,6 +606,193 @@ export default class MainDatabaseService {
             FOREIGN KEY (conversation_id) REFERENCES chat_conversations(id) ON DELETE CASCADE
           );
           CREATE INDEX IF NOT EXISTS chat_compaction_summaries_conversation_idx ON chat_compaction_summaries(conversation_id);
+        `);
+      }
+
+      // agent_memory tables might be missing
+      if (!tableNames.has('agent_memory_entries')) {
+        this.sqlite.exec(`
+          CREATE TABLE IF NOT EXISTS agent_memory_entries (
+            id               INTEGER PRIMARY KEY AUTOINCREMENT,
+            scope_key        TEXT    NOT NULL,
+            screen_key       TEXT    NOT NULL DEFAULT 'global',
+            project_id       TEXT,
+            connection_id    TEXT,
+            notebook_id      TEXT,
+            kind             TEXT    NOT NULL,
+            source_type      TEXT    NOT NULL,
+            source_id        TEXT,
+            title            TEXT,
+            content          TEXT    NOT NULL,
+            summary          TEXT,
+            importance       REAL    NOT NULL DEFAULT 0.5,
+            confidence       REAL    NOT NULL DEFAULT 0.8,
+            status           TEXT    NOT NULL DEFAULT 'active',
+            tags             TEXT,
+            metadata         TEXT,
+            created_at       TEXT    DEFAULT (datetime('now')),
+            updated_at       TEXT    DEFAULT (datetime('now')),
+            last_accessed_at TEXT,
+            access_count     INTEGER NOT NULL DEFAULT 0,
+            promoted_at      TEXT,
+            archived         INTEGER NOT NULL DEFAULT 0
+          );
+          CREATE INDEX IF NOT EXISTS ame_scope_idx      ON agent_memory_entries(scope_key);
+          CREATE INDEX IF NOT EXISTS ame_screen_idx     ON agent_memory_entries(screen_key);
+          CREATE INDEX IF NOT EXISTS ame_project_idx    ON agent_memory_entries(project_id);
+          CREATE INDEX IF NOT EXISTS ame_connection_idx ON agent_memory_entries(connection_id);
+          CREATE INDEX IF NOT EXISTS ame_notebook_idx   ON agent_memory_entries(notebook_id);
+          CREATE INDEX IF NOT EXISTS ame_kind_idx       ON agent_memory_entries(kind);
+          CREATE INDEX IF NOT EXISTS ame_source_idx     ON agent_memory_entries(source_type, source_id);
+          CREATE INDEX IF NOT EXISTS ame_updated_idx    ON agent_memory_entries(updated_at);
+          CREATE INDEX IF NOT EXISTS ame_archived_idx   ON agent_memory_entries(archived);
+
+          CREATE TABLE IF NOT EXISTS agent_memory_session_corpus (
+            id              INTEGER PRIMARY KEY AUTOINCREMENT,
+            conversation_id INTEGER,
+            message_id      INTEGER,
+            day_bucket      TEXT    NOT NULL,
+            screen_key      TEXT    NOT NULL,
+            project_id      TEXT,
+            connection_id   TEXT,
+            notebook_id     TEXT,
+            role            TEXT    NOT NULL,
+            snippet         TEXT    NOT NULL,
+            message_hash    TEXT    NOT NULL,
+            token_estimate  INTEGER,
+            metadata        TEXT,
+            created_at      TEXT    DEFAULT (datetime('now')),
+            UNIQUE(message_hash)
+          );
+
+          CREATE TABLE IF NOT EXISTS agent_memory_daily_entries (
+            id          INTEGER PRIMARY KEY AUTOINCREMENT,
+            day_bucket  TEXT NOT NULL,
+            scope_key   TEXT NOT NULL,
+            screen_key  TEXT NOT NULL,
+            project_id  TEXT,
+            connection_id TEXT,
+            notebook_id TEXT,
+            source_type TEXT NOT NULL,
+            source_id   TEXT,
+            content     TEXT NOT NULL,
+            summary     TEXT,
+            metadata    TEXT,
+            created_at  TEXT DEFAULT (datetime('now')),
+            updated_at  TEXT DEFAULT (datetime('now'))
+          );
+          CREATE INDEX IF NOT EXISTS amde_day_idx   ON agent_memory_daily_entries(day_bucket);
+          CREATE INDEX IF NOT EXISTS amde_scope_idx ON agent_memory_daily_entries(scope_key);
+
+          CREATE TABLE IF NOT EXISTS agent_memory_short_term_recall (
+            id               INTEGER PRIMARY KEY AUTOINCREMENT,
+            recall_key       TEXT    NOT NULL UNIQUE,
+            scope_key        TEXT    NOT NULL,
+            screen_key       TEXT    NOT NULL,
+            project_id       TEXT,
+            connection_id    TEXT,
+            notebook_id      TEXT,
+            source_type      TEXT    NOT NULL,
+            source_id        TEXT,
+            snippet          TEXT    NOT NULL,
+            recall_count     INTEGER NOT NULL DEFAULT 0,
+            daily_count      INTEGER NOT NULL DEFAULT 0,
+            grounded_count   INTEGER NOT NULL DEFAULT 0,
+            total_score      REAL    NOT NULL DEFAULT 0,
+            max_score        REAL    NOT NULL DEFAULT 0,
+            query_hashes     TEXT,
+            recall_days      TEXT,
+            concept_tags     TEXT,
+            claim_hash       TEXT,
+            first_recalled_at TEXT   DEFAULT (datetime('now')),
+            last_recalled_at  TEXT   DEFAULT (datetime('now')),
+            promoted_at      TEXT,
+            metadata         TEXT
+          );
+
+          CREATE TABLE IF NOT EXISTS agent_memory_phase_signals (
+            id           INTEGER PRIMARY KEY AUTOINCREMENT,
+            recall_key   TEXT NOT NULL,
+            phase        TEXT NOT NULL,
+            hit_count    INTEGER NOT NULL DEFAULT 0,
+            first_hit_at TEXT DEFAULT (datetime('now')),
+            last_hit_at  TEXT DEFAULT (datetime('now')),
+            metadata     TEXT,
+            UNIQUE(recall_key, phase)
+          );
+
+          CREATE TABLE IF NOT EXISTS agent_memory_dreaming_runs (
+            id              INTEGER PRIMARY KEY AUTOINCREMENT,
+            trigger_type    TEXT    NOT NULL,
+            started_at      TEXT    DEFAULT (datetime('now')),
+            completed_at    TEXT,
+            status          TEXT    NOT NULL DEFAULT 'running',
+            light_count     INTEGER NOT NULL DEFAULT 0,
+            rem_count       INTEGER NOT NULL DEFAULT 0,
+            promoted_count  INTEGER NOT NULL DEFAULT 0,
+            error_message   TEXT,
+            metadata        TEXT
+          );
+          CREATE INDEX IF NOT EXISTS amdr_started_idx ON agent_memory_dreaming_runs(started_at);
+
+          CREATE TABLE IF NOT EXISTS agent_memory_dreaming_reports (
+            id         INTEGER PRIMARY KEY AUTOINCREMENT,
+            run_id     INTEGER,
+            phase      TEXT NOT NULL,
+            day_bucket TEXT NOT NULL,
+            content    TEXT NOT NULL,
+            metadata   TEXT,
+            created_at TEXT DEFAULT (datetime('now')),
+            FOREIGN KEY (run_id) REFERENCES agent_memory_dreaming_runs(id) ON DELETE SET NULL
+          );
+
+          CREATE TABLE IF NOT EXISTS agent_memory_embedding_cache (
+            id           INTEGER PRIMARY KEY AUTOINCREMENT,
+            provider     TEXT NOT NULL,
+            model        TEXT NOT NULL,
+            content_hash TEXT NOT NULL,
+            dims         INTEGER,
+            embedding    TEXT NOT NULL,
+            updated_at   TEXT DEFAULT (datetime('now')),
+            UNIQUE(provider, model, content_hash)
+          );
+
+          CREATE VIRTUAL TABLE IF NOT EXISTS agent_memory_fts USING fts5(
+            title,
+            content,
+            summary,
+            tags,
+            content='agent_memory_entries',
+            content_rowid='id'
+          );
+
+          CREATE TRIGGER IF NOT EXISTS ame_fts_insert AFTER INSERT ON agent_memory_entries BEGIN
+            INSERT INTO agent_memory_fts(rowid, title, content, summary, tags)
+            VALUES (new.id, new.title, new.content, new.summary, new.tags);
+          END;
+
+          CREATE TRIGGER IF NOT EXISTS ame_fts_update AFTER UPDATE ON agent_memory_entries BEGIN
+            INSERT INTO agent_memory_fts(agent_memory_fts, rowid, title, content, summary, tags)
+            VALUES ('delete', old.id, old.title, old.content, old.summary, old.tags);
+            INSERT INTO agent_memory_fts(rowid, title, content, summary, tags)
+            VALUES (new.id, new.title, new.content, new.summary, new.tags);
+          END;
+
+          CREATE TRIGGER IF NOT EXISTS ame_fts_delete AFTER DELETE ON agent_memory_entries BEGIN
+            INSERT INTO agent_memory_fts(agent_memory_fts, rowid, title, content, summary, tags)
+            VALUES ('delete', old.id, old.title, old.content, old.summary, old.tags);
+          END;
+
+          CREATE TABLE IF NOT EXISTS agent_memory_config (
+            key        TEXT PRIMARY KEY,
+            value      TEXT NOT NULL DEFAULT '',
+            updated_at TEXT DEFAULT (datetime('now'))
+          );
+
+          INSERT OR IGNORE INTO agent_memory_config (key, value) VALUES ('last_dreaming_run_at', '');
+          INSERT OR IGNORE INTO agent_memory_config (key, value) VALUES ('last_metadata_refresh_at', '');
+          INSERT OR IGNORE INTO agent_memory_config (key, value) VALUES ('fts5_available', 'unknown');
+          INSERT OR IGNORE INTO agent_memory_config (key, value) VALUES ('dreaming_next_scheduled_at', '');
         `);
       }
     } catch (error) {

@@ -8,6 +8,7 @@ import {
   text,
   real,
   index,
+  uniqueIndex,
 } from 'drizzle-orm/sqlite-core';
 import { sql, relations } from 'drizzle-orm';
 
@@ -242,6 +243,200 @@ export const aiUsageLogs = sqliteTable(
   }),
 );
 
+// --- Agent Memory System Tables (OpenClaw style) ---
+
+export const agentMemoryEntries = sqliteTable(
+  'agent_memory_entries',
+  {
+    id: integer('id').primaryKey({ autoIncrement: true }),
+    scopeKey: text('scope_key').notNull(),
+    screenKey: text('screen_key').notNull().default('global'),
+    projectId: text('project_id'),
+    connectionId: text('connection_id'),
+    notebookId: text('notebook_id'),
+    kind: text('kind').notNull(),
+    sourceType: text('source_type').notNull(),
+    sourceId: text('source_id'),
+    title: text('title'),
+    content: text('content').notNull(),
+    summary: text('summary'),
+    importance: real('importance').notNull().default(0.5),
+    confidence: real('confidence').notNull().default(0.8),
+    status: text('status').notNull().default('active'),
+    tags: text('tags'),
+    metadata: text('metadata'),
+    createdAt: text('created_at').default(sql`CURRENT_TIMESTAMP`),
+    updatedAt: text('updated_at').default(sql`CURRENT_TIMESTAMP`),
+    lastAccessedAt: text('last_accessed_at'),
+    accessCount: integer('access_count').notNull().default(0),
+    promotedAt: text('promoted_at'),
+    archived: integer('archived').notNull().default(0),
+  },
+  (table: any) => ({
+    scopeIdx: index('ame_scope_idx').on(table.scopeKey),
+    screenIdx: index('ame_screen_idx').on(table.screenKey),
+    projectIdx: index('ame_project_idx').on(table.projectId),
+    connectionIdx: index('ame_connection_idx').on(table.connectionId),
+    notebookIdx: index('ame_notebook_idx').on(table.notebookId),
+    kindIdx: index('ame_kind_idx').on(table.kind),
+    sourceIdx: index('ame_source_idx').on(table.sourceType, table.sourceId),
+    updatedIdx: index('ame_updated_idx').on(table.updatedAt),
+    archivedIdx: index('ame_archived_idx').on(table.archived),
+  }),
+);
+
+export const agentMemorySessionCorpus = sqliteTable(
+  'agent_memory_session_corpus',
+  {
+    id: integer('id').primaryKey({ autoIncrement: true }),
+    conversationId: integer('conversation_id'),
+    messageId: integer('message_id'),
+    dayBucket: text('day_bucket').notNull(),
+    screenKey: text('screen_key').notNull(),
+    projectId: text('project_id'),
+    connectionId: text('connection_id'),
+    notebookId: text('notebook_id'),
+    role: text('role').notNull(),
+    snippet: text('snippet').notNull(),
+    messageHash: text('message_hash').notNull().unique(),
+    tokenEstimate: integer('token_estimate'),
+    metadata: text('metadata'),
+    createdAt: text('created_at').default(sql`CURRENT_TIMESTAMP`),
+  },
+);
+
+export const agentMemoryDailyEntries = sqliteTable(
+  'agent_memory_daily_entries',
+  {
+    id: integer('id').primaryKey({ autoIncrement: true }),
+    dayBucket: text('day_bucket').notNull(),
+    scopeKey: text('scope_key').notNull(),
+    screenKey: text('screen_key').notNull(),
+    projectId: text('project_id'),
+    connectionId: text('connection_id'),
+    notebookId: text('notebook_id'),
+    sourceType: text('source_type').notNull(),
+    sourceId: text('source_id'),
+    content: text('content').notNull(),
+    summary: text('summary'),
+    metadata: text('metadata'),
+    createdAt: text('created_at').default(sql`CURRENT_TIMESTAMP`),
+    updatedAt: text('updated_at').default(sql`CURRENT_TIMESTAMP`),
+  },
+  (table: any) => ({
+    dayIdx: index('amde_day_idx').on(table.dayBucket),
+    scopeIdx: index('amde_scope_idx').on(table.scopeKey),
+  }),
+);
+
+export const agentMemoryShortTermRecall = sqliteTable(
+  'agent_memory_short_term_recall',
+  {
+    id: integer('id').primaryKey({ autoIncrement: true }),
+    recallKey: text('recall_key').notNull().unique(),
+    scopeKey: text('scope_key').notNull(),
+    screenKey: text('screen_key').notNull(),
+    projectId: text('project_id'),
+    connectionId: text('connection_id'),
+    notebookId: text('notebook_id'),
+    sourceType: text('source_type').notNull(),
+    sourceId: text('source_id'),
+    snippet: text('snippet').notNull(),
+    recallCount: integer('recall_count').notNull().default(0),
+    dailyCount: integer('daily_count').notNull().default(0),
+    groundedCount: integer('grounded_count').notNull().default(0),
+    totalScore: real('total_score').notNull().default(0),
+    maxScore: real('max_score').notNull().default(0),
+    queryHashes: text('query_hashes'),
+    recallDays: text('recall_days'),
+    conceptTags: text('concept_tags'),
+    claimHash: text('claim_hash'),
+    firstRecalledAt: text('first_recalled_at').default(sql`CURRENT_TIMESTAMP`),
+    lastRecalledAt: text('last_recalled_at').default(sql`CURRENT_TIMESTAMP`),
+    promotedAt: text('promoted_at'),
+    metadata: text('metadata'),
+  },
+);
+
+export const agentMemoryPhaseSignals = sqliteTable(
+  'agent_memory_phase_signals',
+  {
+    id: integer('id').primaryKey({ autoIncrement: true }),
+    recallKey: text('recall_key').notNull(),
+    phase: text('phase').notNull(),
+    hitCount: integer('hit_count').notNull().default(0),
+    firstHitAt: text('first_hit_at').default(sql`CURRENT_TIMESTAMP`),
+    lastHitAt: text('last_hit_at').default(sql`CURRENT_TIMESTAMP`),
+    metadata: text('metadata'),
+  },
+  (table: any) => ({
+    uniquePhaseIdx: uniqueIndex('amps_unique_idx').on(
+      table.recallKey,
+      table.phase,
+    ),
+  }),
+);
+
+export const agentMemoryDreamingRuns = sqliteTable(
+  'agent_memory_dreaming_runs',
+  {
+    id: integer('id').primaryKey({ autoIncrement: true }),
+    triggerType: text('trigger_type').notNull(),
+    startedAt: text('started_at').default(sql`CURRENT_TIMESTAMP`),
+    completedAt: text('completed_at'),
+    status: text('status').notNull().default('running'),
+    lightCount: integer('light_count').notNull().default(0),
+    remCount: integer('rem_count').notNull().default(0),
+    promotedCount: integer('promoted_count').notNull().default(0),
+    errorMessage: text('error_message'),
+    metadata: text('metadata'),
+  },
+  (table: any) => ({
+    startedIdx: index('amdr_started_idx').on(table.startedAt),
+  }),
+);
+
+export const agentMemoryDreamingReports = sqliteTable(
+  'agent_memory_dreaming_reports',
+  {
+    id: integer('id').primaryKey({ autoIncrement: true }),
+    runId: integer('run_id').references(() => agentMemoryDreamingRuns.id, {
+      onDelete: 'set null',
+    }),
+    phase: text('phase').notNull(),
+    dayBucket: text('day_bucket').notNull(),
+    content: text('content').notNull(),
+    metadata: text('metadata'),
+    createdAt: text('created_at').default(sql`CURRENT_TIMESTAMP`),
+  },
+);
+
+export const agentMemoryEmbeddingCache = sqliteTable(
+  'agent_memory_embedding_cache',
+  {
+    id: integer('id').primaryKey({ autoIncrement: true }),
+    provider: text('provider').notNull(),
+    model: text('model').notNull(),
+    contentHash: text('content_hash').notNull(),
+    dims: integer('dims'),
+    embedding: text('embedding').notNull(),
+    updatedAt: text('updated_at').default(sql`CURRENT_TIMESTAMP`),
+  },
+  (table: any) => ({
+    uniqueCacheIdx: uniqueIndex('amec_unique_idx').on(
+      table.provider,
+      table.model,
+      table.contentHash,
+    ),
+  }),
+);
+
+export const agentMemoryConfig = sqliteTable('agent_memory_config', {
+  key: text('key').primaryKey(),
+  value: text('value').notNull().default(''),
+  updatedAt: text('updated_at').default(sql`CURRENT_TIMESTAMP`),
+});
+
 // Define Relations for Drizzle ORM
 export const aiProvidersRelations = relations(aiProviders, ({ many }) => ({
   conversations: many(chatConversations),
@@ -323,6 +518,23 @@ export const aiUsageLogsRelations = relations(aiUsageLogs, ({ one }) => ({
   }),
 }));
 
+export const agentMemoryDreamingReportsRelations = relations(
+  agentMemoryDreamingReports,
+  ({ one }) => ({
+    run: one(agentMemoryDreamingRuns, {
+      fields: [agentMemoryDreamingReports.runId],
+      references: [agentMemoryDreamingRuns.id],
+    }),
+  }),
+);
+
+export const agentMemoryDreamingRunsRelations = relations(
+  agentMemoryDreamingRuns,
+  ({ many }) => ({
+    reports: many(agentMemoryDreamingReports),
+  }),
+);
+
 // Export types for use throughout the application
 export type AIProvider = typeof aiProviders.$inferSelect;
 export type NewAIProvider = typeof aiProviders.$inferInsert;
@@ -347,6 +559,33 @@ export type NewPromptTemplate = typeof promptTemplates.$inferInsert;
 
 export type AIUsageLog = typeof aiUsageLogs.$inferSelect;
 export type NewAIUsageLog = typeof aiUsageLogs.$inferInsert;
+
+export type AgentMemoryEntry = typeof agentMemoryEntries.$inferSelect;
+export type NewAgentMemoryEntry = typeof agentMemoryEntries.$inferInsert;
+
+export type AgentMemorySessionCorpus = typeof agentMemorySessionCorpus.$inferSelect;
+export type NewAgentMemorySessionCorpus = typeof agentMemorySessionCorpus.$inferInsert;
+
+export type AgentMemoryDailyEntry = typeof agentMemoryDailyEntries.$inferSelect;
+export type NewAgentMemoryDailyEntry = typeof agentMemoryDailyEntries.$inferInsert;
+
+export type AgentMemoryShortTermRecall = typeof agentMemoryShortTermRecall.$inferSelect;
+export type NewAgentMemoryShortTermRecall = typeof agentMemoryShortTermRecall.$inferInsert;
+
+export type AgentMemoryPhaseSignal = typeof agentMemoryPhaseSignals.$inferSelect;
+export type NewAgentMemoryPhaseSignal = typeof agentMemoryPhaseSignals.$inferInsert;
+
+export type AgentMemoryDreamingRun = typeof agentMemoryDreamingRuns.$inferSelect;
+export type NewAgentMemoryDreamingRun = typeof agentMemoryDreamingRuns.$inferInsert;
+
+export type AgentMemoryDreamingReport = typeof agentMemoryDreamingReports.$inferSelect;
+export type NewAgentMemoryDreamingReport = typeof agentMemoryDreamingReports.$inferInsert;
+
+export type AgentMemoryEmbeddingCache = typeof agentMemoryEmbeddingCache.$inferSelect;
+export type NewAgentMemoryEmbeddingCache = typeof agentMemoryEmbeddingCache.$inferInsert;
+
+export type AgentMemoryConfig = typeof agentMemoryConfig.$inferSelect;
+export type NewAgentMemoryConfig = typeof agentMemoryConfig.$inferInsert;
 
 // Complex query result types - Enhanced with Continue.dev features
 export type ChatConversationWithMessages = ChatConversation & {
