@@ -8,6 +8,8 @@ import {
   MEMORY_ROOT,
 } from '../services/ai/memory/memoryService';
 import { readTreeIndex } from '../services/ai/memory/memoryIndex';
+import { scanAll, cancelScan } from '../services/ai/memory/memoryScanner';
+import type { ScanProgress } from '../services/ai/memory/memoryScanner';
 
 export function registerMemoryHandlers() {
   ipcMain.handle('memory:tree', async () => {
@@ -46,5 +48,21 @@ export function registerMemoryHandlers() {
     } else {
       exec(`x-terminal-emulator -e "cd ${MEMORY_ROOT} && bash"`);
     }
+  });
+
+  ipcMain.handle(
+    'memory:scan-start',
+    async (event, { projectPath }: { projectPath?: string }) => {
+      const sendProgress = (data: ScanProgress) => {
+        event.sender.send('memory:scan-progress', data);
+      };
+      const result = await scanAll(projectPath, sendProgress);
+      event.sender.send('memory:scan-complete', result);
+      return result;
+    },
+  );
+
+  ipcMain.handle('memory:scan-cancel', async () => {
+    cancelScan();
   });
 }

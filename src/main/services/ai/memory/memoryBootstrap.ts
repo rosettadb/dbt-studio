@@ -2,10 +2,19 @@ import path from 'path';
 import fs from 'fs-extra';
 import yaml from 'js-yaml';
 import { app } from 'electron';
-import { MEMORY_ROOT, writeMemoryFile } from './memoryService';
-import { writeTreeIndex, generateInitialTreeIndex } from './memoryIndex';
+import { MEMORY_ROOT, writeMemoryFile, readMemoryFile } from './memoryService';
+import {
+  readTreeIndex,
+  writeTreeIndex,
+  generateInitialTreeIndex,
+  generateNodeFrontmatter,
+  NODE_IDS,
+  NODE_DESCRIPTIONS,
+  FRONTMATTER_RE,
+  addRootChildToFrontmatter,
+} from './memoryIndex';
 
-const RULES_TEMPLATE = `# Rules Learned
+const RULES_TEMPLATE = `${generateNodeFrontmatter(NODE_IDS.RULES, NODE_IDS.ROOT, [])}# Rules Learned
 
 Rules are prefixed with a domain ID (e.g. BE-01, DL-02, FE-03).
 The agent adds rules here as it discovers them.
@@ -13,18 +22,26 @@ The agent adds rules here as it discovers them.
 ## Active Rules
 `;
 
-const SKILLS_TEMPLATE = `# Skills Learned
+const SKILLS_TEMPLATE = `${generateNodeFrontmatter(NODE_IDS.SKILLS, NODE_IDS.ROOT, [])}# Skills Learned
 
 The agent documents repeatable multi-step workflows here.
 
 ## Skills
 `;
 
-const KNOWLEDGE_TEMPLATE = `# Proprietary Knowledge
+const KNOWLEDGE_TEMPLATE = `${generateNodeFrontmatter(NODE_IDS.KNOWLEDGE, NODE_IDS.ROOT, [])}# Proprietary Knowledge
 
 The agent documents business logic and domain concepts here.
 
 ## Concepts
+`;
+
+const DBT_PROJECT_TEMPLATE = `${generateNodeFrontmatter(NODE_IDS.DBT_PROJECT, NODE_IDS.ROOT, [])}# DBT Project
+
+Each project gets a numbered child node (e.g. \`04100_my-project.md\`, \`04200_another-project.md\`).
+The agent creates and updates these children when project context is scanned.
+
+## Projects
 `;
 
 async function readDbtProjectName(projectPath: string): Promise<string> {
@@ -90,7 +107,7 @@ async function readConnectors(): Promise<
   }
 }
 
-async function generateMainContext(projectPath?: string): Promise<string> {
+async function generateMainContextBody(projectPath?: string): Promise<string> {
   if (!projectPath) {
     return `# DBT Studio Project
 
@@ -143,6 +160,191 @@ ${connections.map((c) => `- ${c.type}: ${c.name}`).join('\n') || '- None configu
 `;
 }
 
+async function generateMainContext(projectPath?: string): Promise<string> {
+  const rootChildren = [
+    NODE_IDS.RULES,
+    NODE_IDS.SKILLS,
+    NODE_IDS.KNOWLEDGE,
+    NODE_IDS.DBT_PROJECT,
+    NODE_IDS.TOPICS,
+  ];
+  const frontmatter = generateNodeFrontmatter(
+    NODE_IDS.ROOT,
+    null,
+    rootChildren,
+    NODE_DESCRIPTIONS,
+  );
+
+  const body = await generateMainContextBody(projectPath);
+  return `${frontmatter}${body}`;
+}
+
+export async function refreshProjectContext(
+  projectPath?: string,
+): Promise<void> {
+  let frontmatter: string;
+  try {
+    const existing = await readMemoryFile('00000_maincontext.md');
+    const fmMatch = existing.match(FRONTMATTER_RE);
+    frontmatter = fmMatch
+      ? fmMatch[0]
+      : generateNodeFrontmatter(
+          NODE_IDS.ROOT,
+          null,
+          [
+            NODE_IDS.RULES,
+            NODE_IDS.SKILLS,
+            NODE_IDS.KNOWLEDGE,
+            NODE_IDS.DBT_PROJECT,
+            NODE_IDS.TOPICS,
+          ],
+          NODE_DESCRIPTIONS,
+        );
+  } catch {
+    frontmatter = generateNodeFrontmatter(
+      NODE_IDS.ROOT,
+      null,
+      [
+        NODE_IDS.RULES,
+        NODE_IDS.SKILLS,
+        NODE_IDS.KNOWLEDGE,
+        NODE_IDS.DBT_PROJECT,
+        NODE_IDS.TOPICS,
+      ],
+      NODE_DESCRIPTIONS,
+    );
+  }
+
+  const body = await generateMainContextBody(projectPath);
+  await writeMemoryFile(
+    '00000_maincontext.md',
+    `${frontmatter}${body}`,
+    'overwrite',
+  );
+}
+
+export async function updateDbtProjectNodes(
+  projectPath?: string,
+): Promise<void> {
+  if (!projectPath) return;
+
+  const projectName = await readDbtProjectName(projectPath);
+  const safeId = projectName
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-|-$/g, '');
+  const childId = `04100_${safeId}.md`;
+
+  // Update 04000_dbt-project.md frontmatter children + body
+  const dbtFrontmatter = generateNodeFrontmatter(
+    NODE_IDS.DBT_PROJECT,
+    NODE_IDS.ROOT,
+    [childId],
+  );
+  const body = `# DBT Project
+
+_Last updated: ${new Date().toISOString().split('T')[0]}_
+
+## Projects
+
+- **${projectName}** (\`${projectPath}\`)
+  - Child node: \`${childId}\`
+`;
+  await writeMemoryFile(
+    '04000_dbt-project.md',
+    `${dbtFrontmatter}${body}`,
+    'overwrite',
+  );
+
+  // Register child in root nodes map
+  await addRootChildToFrontmatter(
+    childId,
+    `Project: ${projectName}`,
+    projectPath,
+  );
+
+  // Create/update the child node with project-specific scan data
+  const projectFrontmatter = generateNodeFrontmatter(
+    childId,
+    NODE_IDS.DBT_PROJECT,
+    [],
+  );
+  const modelCount = await countFilesRecursive(
+    path.join(projectPath, 'models'),
+    '.sql',
+  );
+  const macroCount = await countFilesRecursive(
+    path.join(projectPath, 'macros'),
+    '.sql',
+  );
+  const sourceCount = await countFilesRecursive(
+    path.join(projectPath, 'models'),
+    '.yml',
+  );
+  const connections = await readConnectors();
+  const profile = await readDbtProfile(projectPath);
+
+  const childBody = `# ${projectName}
+
+_Last updated: ${new Date().toISOString().split('T')[0]}_
+
+## Project Scan
+
+- **Models**: ${modelCount} SQL files
+- **Macros**: ${macroCount} SQL files
+- **Source/config files**: ${sourceCount} YAML files
+- **Profile**: ${profile}
+- **Path**: \`${projectPath}\`
+
+## Connected Databases
+${connections.map((c) => `- ${c.type}: ${c.name}`).join('\n') || '- None configured'}
+`;
+  await writeMemoryFile(
+    childId,
+    `${projectFrontmatter}${childBody}`,
+    'overwrite',
+  );
+
+  // Update tree index so the Memory Tab UI reflects new nodes
+  const treeNodes = await readTreeIndex();
+
+  // Ensure 04000_dbt-project.md node exists with child in its children
+  const dbtNodeIdx = treeNodes.findIndex((n) => n.id === NODE_IDS.DBT_PROJECT);
+  const dbtNode = dbtNodeIdx >= 0 ? treeNodes[dbtNodeIdx] : null;
+  if (dbtNode) {
+    const hasChild = dbtNode.children?.some((c) => c.path === childId);
+    if (!hasChild) {
+      const childNode = {
+        id: childId,
+        path: childId,
+        title: `Project: ${projectName}`,
+        type: 'file' as const,
+        parent: NODE_IDS.DBT_PROJECT,
+        lines: 0,
+      };
+      treeNodes[dbtNodeIdx] = {
+        ...dbtNode,
+        children: [...(dbtNode.children || []), childNode],
+      };
+    }
+  }
+
+  // Add 04100 entry at root level if not already present (so UI tree shows it)
+  const childInRoot = treeNodes.some((n) => n.id === childId);
+  if (!childInRoot) {
+    treeNodes.push({
+      id: childId,
+      path: childId,
+      title: `Project: ${projectName}`,
+      type: 'file',
+      parent: NODE_IDS.DBT_PROJECT,
+      lines: 0,
+    });
+  }
+
+  await writeTreeIndex(treeNodes);
+}
+
 export async function bootstrapMemory(projectPath?: string): Promise<void> {
   if (await fs.pathExists(MEMORY_ROOT)) return;
 
@@ -163,6 +365,11 @@ export async function bootstrapMemory(projectPath?: string): Promise<void> {
   await writeMemoryFile(
     '03000_proprietary-knowledge.md',
     KNOWLEDGE_TEMPLATE,
+    'overwrite',
+  );
+  await writeMemoryFile(
+    '04000_dbt-project.md',
+    DBT_PROJECT_TEMPLATE,
     'overwrite',
   );
   await writeTreeIndex(generateInitialTreeIndex());

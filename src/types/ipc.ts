@@ -414,7 +414,11 @@ export type MemoryChannels =
   | 'memory:search'
   | 'memory:stats'
   | 'memory:open-dir'
-  | 'memory:open-terminal';
+  | 'memory:open-terminal'
+  | 'memory:scan-start'
+  | 'memory:scan-cancel'
+  | 'memory:scan-progress'
+  | 'memory:scan-complete';
 
 export type SavedQueriesChannels =
   | 'savedQueries:list'

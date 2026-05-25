@@ -7,6 +7,23 @@ import {
   searchMemory,
   resolveSafePath,
 } from '../../memory/memoryService';
+import {
+  generateNodeFrontmatter,
+  NODE_IDS,
+  addRootChildToFrontmatter,
+} from '../../memory/memoryIndex';
+
+function detectParent(filePath: string): string | null {
+  if (filePath.startsWith('topics/') || filePath.startsWith('topics\\')) {
+    return NODE_IDS.TOPICS;
+  }
+  return NODE_IDS.ROOT;
+}
+
+function wrapWithFrontmatter(filePath: string, content: string): string {
+  const parent = detectParent(filePath);
+  return `${generateNodeFrontmatter(filePath, parent, [])}${content}`;
+}
 
 export function createMemoryTools() {
   const memoryTool = tool({
@@ -56,7 +73,21 @@ Always search memory before starting a task that might depend on past context.`,
           if (!filePath || !content) {
             return { ok: false, error: 'path and content required for create' };
           }
-          await writeMemoryFile(filePath, content, 'overwrite');
+          const wrapped = filePath.endsWith('.md')
+            ? wrapWithFrontmatter(filePath, content)
+            : content;
+          await writeMemoryFile(filePath, wrapped, 'overwrite');
+          const parent = detectParent(filePath);
+          const isNewRootLevelChild =
+            parent === NODE_IDS.ROOT && filePath !== NODE_IDS.ROOT;
+          if (isNewRootLevelChild) {
+            const name = filePath.replace(/\.md$/i, '').replace(/^\d+_/, '');
+            await addRootChildToFrontmatter(
+              filePath,
+              name.replace(/[-_]/g, ' '),
+              '',
+            );
+          }
           return { ok: true, output: `Created ${filePath}` };
         }
         case 'update': {

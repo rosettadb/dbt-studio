@@ -23,6 +23,17 @@ using the \`memory\` tool with command: 'view' and path: 'long-term-ai-memory-sc
 ### Before starting a task
 Call \`memory\` with command: 'search' to check if relevant past context exists.
 
+### Node structure
+Every file has YAML frontmatter with \`id\`, \`parent\`, and \`children\` properties.
+The \`id\` is the file's relative path from \`.memory/\`:
+- \`'00000_maincontext.md'\` — root node, already in context. Its frontmatter \`nodes\` map lists all children with title and description — use it as a discovery table of contents
+- \`'01000_rules-learned.md'\` — constraints
+- \`'02000_skills-learned.md'\` — workflows
+- \`'03000_proprietary-knowledge.md'\` — business logic
+- \`'04000_dbt-project.md'\` — project-specific context, children for each project
+- \`'topics'\` folder — deep dives
+- \`'05000_*.md'\`, \`'06000_*.md'\` ... — custom nodes you create as memory grows
+
 ### Progressive discovery
 - \`00000_maincontext.md\` is already in your context at session start.
 - Read \`01000_rules-learned.md\` when you need to check constraints.

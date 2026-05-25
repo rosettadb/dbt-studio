@@ -4,6 +4,7 @@ import path from 'path';
 import { IpcMainInvokeEvent, app, BrowserWindow } from 'electron';
 import { generateText } from 'ai';
 import { buildBaseAgentConfig } from './ai/agents/baseAgentConfig';
+import { consolidateConversation } from './ai/memory/memoryConsolidation';
 import { createProjectAgent } from './ai/agents/projectAgent';
 import { createSqlAgent } from './ai/agents/sqlAgent';
 import { createNotebooksAgent } from './ai/agents/notebooksAgent';
@@ -1199,6 +1200,15 @@ SUMMARY:`,
         undefined,
         toolCallsToSave.length > 0 ? toolCallsToSave : undefined,
       );
+
+      if (aiSettings.configuration.autoGenerateMemories) {
+        MainDatabaseService.getMessages(conversationId, 4)
+          .then((recentMessages) => consolidateConversation(recentMessages))
+          .catch((err) => {
+            console.error('[MemoryConsolidation] Error:', err);
+          });
+      }
+
       return { success: true };
     } catch (error) {
       // eslint-disable-next-line no-console

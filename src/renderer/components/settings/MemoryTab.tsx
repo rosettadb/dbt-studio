@@ -4,6 +4,7 @@ import {
   Typography,
   Paper,
   CircularProgress,
+  LinearProgress,
   Alert,
   Chip,
   List,
@@ -14,6 +15,11 @@ import {
   Stack,
   Divider,
   Button,
+  Snackbar,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions,
 } from '@mui/material';
 import SearchIcon from '@mui/icons-material/Search';
 import MemoryIcon from '@mui/icons-material/Memory';
@@ -22,13 +28,16 @@ import FolderIcon from '@mui/icons-material/Folder';
 import FolderOpenIcon from '@mui/icons-material/FolderOpen';
 import TerminalIcon from '@mui/icons-material/Terminal';
 import SaveIcon from '@mui/icons-material/Save';
+import RefreshIcon from '@mui/icons-material/Refresh';
 import Editor, { OnMount } from '@monaco-editor/react';
 import {
   useGetMemoryTree,
   useGetMemoryStats,
   useReadMemoryFile,
   useWriteMemoryFile,
+  useMemoryScan,
 } from '../../controllers/memory.controller';
+import { useGetSelectedProject } from '../../controllers/projects.controller';
 import {
   openMemoryDir,
   openMemoryTerminal,
@@ -39,6 +48,7 @@ export const MemoryTab: React.FC = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [editContent, setEditContent] = useState('');
   const [isDirty, setIsDirty] = useState(false);
+  const [snackbar, setSnackbar] = useState<string | null>(null);
 
   const {
     data: tree,
@@ -50,6 +60,9 @@ export const MemoryTab: React.FC = () => {
     selectedPath ?? '',
   );
   const writeMutation = useWriteMemoryFile();
+  const { startScan, cancelScan, isScanning, progress, result } =
+    useMemoryScan();
+  const { data: selectedProject } = useGetSelectedProject();
 
   useEffect(() => {
     if (fileContent !== undefined) {
@@ -88,6 +101,22 @@ export const MemoryTab: React.FC = () => {
     },
     [handleSave],
   );
+
+  const handleScan = useCallback(async () => {
+    await startScan(selectedProject?.path);
+  }, [startScan, selectedProject?.path]);
+
+  useEffect(() => {
+    if (result?.cancelled) {
+      setSnackbar('Scan cancelled by user.');
+    } else if (result?.ok) {
+      setSnackbar(
+        `Scan complete: ${result.conversationsScanned} conversations scanned, ${result.itemsWritten} new items written.`,
+      );
+    } else if (result && !result.ok) {
+      setSnackbar(`Scan failed: ${result.error}`);
+    }
+  }, [result]);
 
   const renderStats = () => {
     if (statsLoading) return <CircularProgress size={20} />;
@@ -344,7 +373,16 @@ export const MemoryTab: React.FC = () => {
         </Paper>
       </Box>
 
-      <Box sx={{ mt: 2, display: 'flex', gap: 1 }}>
+      <Box sx={{ mt: 2, display: 'flex', gap: 1, alignItems: 'center' }}>
+        <Button
+          size="small"
+          variant="contained"
+          startIcon={<RefreshIcon />}
+          onClick={handleScan}
+        >
+          Scan & Update
+        </Button>
+        <Box sx={{ flex: 1 }} />
         <Button
           size="small"
           startIcon={<FolderOpenIcon />}
@@ -360,6 +398,51 @@ export const MemoryTab: React.FC = () => {
           Open in Terminal
         </Button>
       </Box>
+
+      <Dialog open={isScanning} disableEscapeKeyDown maxWidth="sm" fullWidth>
+        <DialogTitle>Scanning Memory</DialogTitle>
+        <DialogContent>
+          <Stack spacing={2} sx={{ mt: 1 }}>
+            <Typography variant="body2" color="text.secondary">
+              {progress?.status || 'Preparing...'}
+            </Typography>
+            {progress?.phase === 'project' ? (
+              <LinearProgress variant="indeterminate" />
+            ) : (
+              <LinearProgress
+                variant="determinate"
+                value={
+                  progress && progress.total > 0
+                    ? (progress.current / progress.total) * 100
+                    : 0
+                }
+              />
+            )}
+            {progress?.phase === 'history' && progress && (
+              <Typography variant="caption" color="text.secondary">
+                Conversation {progress.current} of {progress.total}
+              </Typography>
+            )}
+          </Stack>
+        </DialogContent>
+        <DialogActions>
+          <Button
+            variant="outlined"
+            color="error"
+            onClick={cancelScan}
+            startIcon={<CircularProgress size={14} color="inherit" />}
+          >
+            Stop
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      <Snackbar
+        open={snackbar !== null}
+        autoHideDuration={6000}
+        onClose={() => setSnackbar(null)}
+        message={snackbar}
+      />
     </Box>
   );
 };
