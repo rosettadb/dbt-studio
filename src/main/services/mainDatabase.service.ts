@@ -81,6 +81,13 @@ export default class MainDatabaseService {
     return this.db!;
   }
 
+  static async getSqliteDatabase(): Promise<Database.Database> {
+    if (!this.sqlite) {
+      await this.initializeDatabase();
+    }
+    return this.sqlite!;
+  }
+
   // Run migrations (following SettingsService version management pattern)
   private static async runMigrations(): Promise<void> {
     try {

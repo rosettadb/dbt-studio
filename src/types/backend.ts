@@ -815,6 +815,157 @@ export const MEMORY_KIND = {
 } as const;
 export type MemoryKind = (typeof MEMORY_KIND)[keyof typeof MEMORY_KIND];
 
+export type AgentMemoryScreenKey = 'project' | 'sql' | 'notebooks' | 'global';
+export type AgentMemoryStatus = 'active' | 'archived' | 'stale';
+export type AgentMemorySourceType =
+  | 'manual'
+  | 'agent_turn'
+  | 'database_json'
+  | 'notebook_metadata'
+  | 'session_corpus'
+  | 'short_term'
+  | 'dreaming';
+
+export interface AgentMemoryScope {
+  screenKey: AgentMemoryScreenKey;
+  projectId?: string | number | null;
+  connectionId?: string | null;
+  notebookId?: string | number | null;
+  sourceProjectId?: string | number | null;
+  includeGlobal?: boolean;
+}
+
+export interface AgentMemoryEntry {
+  id: number;
+  scopeKey: string;
+  screenKey: AgentMemoryScreenKey;
+  projectId: string | null;
+  connectionId: string | null;
+  notebookId: string | null;
+  kind: MemoryKind | string;
+  sourceType: AgentMemorySourceType | string;
+  sourceId: string | null;
+  title: string | null;
+  content: string;
+  summary: string | null;
+  importance: number;
+  confidence: number;
+  status: AgentMemoryStatus | string;
+  tags: string | null;
+  metadata: string | null;
+  createdAt: string | null;
+  updatedAt: string | null;
+  lastAccessedAt: string | null;
+  accessCount: number;
+  promotedAt: string | null;
+  archived: number;
+}
+
+export interface NewAgentMemoryEntry {
+  scopeKey?: string;
+  screenKey?: AgentMemoryScreenKey;
+  projectId?: string | number | null;
+  connectionId?: string | null;
+  notebookId?: string | number | null;
+  kind: MemoryKind | string;
+  sourceType?: AgentMemorySourceType | string;
+  sourceId?: string | number | null;
+  title?: string | null;
+  content: string;
+  summary?: string | null;
+  importance?: number;
+  confidence?: number;
+  status?: AgentMemoryStatus | string;
+  tags?: string[] | string | null;
+  metadata?: Record<string, unknown> | string | null;
+  promotedAt?: string | null;
+}
+
+export interface AgentMemoryListFilter extends Partial<AgentMemoryScope> {
+  kind?: MemoryKind | string;
+  sourceType?: AgentMemorySourceType | string;
+  status?: AgentMemoryStatus | string;
+  archived?: boolean;
+  search?: string;
+  limit?: number;
+  offset?: number;
+}
+
+export interface AgentMemorySearchRequest extends AgentMemoryScope {
+  query: string;
+  kind?: MemoryKind | string;
+  limit?: number;
+  offset?: number;
+  includeArchived?: boolean;
+}
+
+export interface AgentMemorySearchResult extends AgentMemoryEntry {
+  score: number;
+  matchSource: 'fts' | 'like';
+}
+
+export interface AgentMemoryStats {
+  durableCount: number;
+  activeCount: number;
+  archivedCount: number;
+  shortTermCount: number;
+  databaseMetadataCount: number;
+  lastDreamingRunAt: string | null;
+  lastMetadataRefreshAt: string | null;
+  fts5Available: boolean;
+}
+
+export interface AgentMemoryHealth {
+  ok: boolean;
+  fts5Available: boolean;
+  activeEntries: number;
+  archivedEntries: number;
+  shortTermEntries: number;
+  staleEntries: number;
+  orphanedEntries: number;
+  issues: string[];
+}
+
+export interface AgentMemoryContextRequest extends AgentMemoryScope {
+  query?: string;
+  maxEntries?: number;
+  maxChars?: number;
+}
+
+export interface AgentMemoryCaptureTurnRequest extends AgentMemoryScope {
+  conversationId: number;
+  userMessageId?: number | null;
+  assistantMessageId?: number | null;
+  userMessage: string;
+  assistantMessage?: string | null;
+  toolInputs?: unknown[];
+  toolOutputs?: unknown[];
+}
+
+export interface SessionCorpusIngestionRequest extends AgentMemoryScope {
+  conversationId?: number | null;
+  messageId?: number | null;
+  role: string;
+  snippet: string;
+  createdAt?: string;
+  metadata?: Record<string, unknown>;
+}
+
+export interface ShortTermRecallRequest extends AgentMemoryScope {
+  sourceType: string;
+  sourceId?: string | number | null;
+  snippet: string;
+  query?: string;
+  score?: number;
+  metadata?: Record<string, unknown>;
+}
+
+export interface AgentMemoryRefreshResult {
+  dryRun: boolean;
+  upserted: number;
+  entries: NewAgentMemoryEntry[];
+}
+
 export interface MCPServerWithStatus extends MCPServerFileEntry {
   id: string;
   connected: boolean;
@@ -838,6 +989,21 @@ export type AISettingsConfig = {
   };
   advanced: {
     maxWorkspaceFileCount: number;
+  };
+  memory?: {
+    enabled: boolean;
+    autoCapture: boolean;
+    injectProjectMetadata: boolean;
+    injectConnectionMetadata: boolean;
+    injectNotebookMetadata: boolean;
+    includeGlobalMemories: boolean;
+    maxPromptMemories: number;
+    maxPromptChars: number;
+    shortTermEnabled: boolean;
+    dreamingEnabled: boolean;
+    lightDreamingEnabled: boolean;
+    embeddingsEnabled: boolean;
+    embeddingProvider: 'none' | 'openai' | 'gemini' | 'ollama' | string;
   };
 };
 

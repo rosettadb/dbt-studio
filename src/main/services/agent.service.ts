@@ -62,6 +62,21 @@ const AI_SETTINGS_DEFAULTS: AISettingsConfig = {
     autoGenerateMemories: true,
   },
   advanced: { maxWorkspaceFileCount: 5000 },
+  memory: {
+    enabled: true,
+    autoCapture: true,
+    injectProjectMetadata: true,
+    injectConnectionMetadata: true,
+    injectNotebookMetadata: true,
+    includeGlobalMemories: true,
+    maxPromptMemories: 8,
+    maxPromptChars: 6000,
+    shortTermEnabled: true,
+    dreamingEnabled: false,
+    lightDreamingEnabled: true,
+    embeddingsEnabled: false,
+    embeddingProvider: 'none',
+  },
 };
 
 const aiSettingsFilePath = () =>
@@ -80,6 +95,7 @@ export const loadAISettings = async (): Promise<AISettingsConfig> => {
         ...raw.configuration,
       },
       advanced: { ...AI_SETTINGS_DEFAULTS.advanced, ...raw.advanced },
+      memory: { ...AI_SETTINGS_DEFAULTS.memory, ...raw.memory },
     };
   } catch (error) {
     console.error(error);
