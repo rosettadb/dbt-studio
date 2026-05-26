@@ -24,6 +24,8 @@ import MainDatabaseService from './mainDatabase.service';
 import ProjectsService from './projects.service';
 import SelectedFileContextProvider from './selectedFileContextProvider.service';
 import AgentMemoryService from './agentMemory.service';
+import AgentMemorySchedulerService from './agentMemoryScheduler.service';
+
 import type {
   NewContextItem,
   ChatMessage,
@@ -103,6 +105,7 @@ export const loadAISettings = async (): Promise<AISettingsConfig> => {
       memory: { ...AI_SETTINGS_DEFAULTS.memory, ...raw.memory },
     };
   } catch (error) {
+    // eslint-disable-next-line no-console
     console.error(error);
     return AI_SETTINGS_DEFAULTS;
   }
@@ -114,6 +117,7 @@ export const saveAISettings = async (
   try {
     await fs.writeJson(aiSettingsFilePath(), config, { spaces: 2 });
   } catch (error) {
+    // eslint-disable-next-line no-console
     console.error(error);
     throw error;
   }
@@ -1218,6 +1222,15 @@ SUMMARY:`,
           );
         }
       }
+
+      AgentMemorySchedulerService.runPostTurnIfDue(aiSettings).catch(
+        (dreamingError) => {
+          console.error(
+            '[AgentMemory] post-turn dreaming failed silently:',
+            dreamingError,
+          );
+        },
+      );
       return { success: true };
     } catch (error) {
       // eslint-disable-next-line no-console

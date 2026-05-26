@@ -15,6 +15,7 @@ import {
 } from './services';
 import { copyAssetsToUserData } from './utils/fileHelper';
 import { MCPClientManager } from './services/ai/mcp/mcpClientManager';
+import AgentMemorySchedulerService from './services/agentMemoryScheduler.service';
 
 const isProd = process.env.NODE_ENV === 'production';
 const isDebug =
@@ -45,6 +46,15 @@ protocol.registerSchemesAsPrivileged([
 setupApplicationIcon();
 
 let windowManager: WindowManager | null = null;
+
+async function initializeAgentMemoryScheduler() {
+  try {
+    await AgentMemorySchedulerService.initialize();
+  } catch (error) {
+    console.error('[AgentMemoryScheduler] initialization failed:', error);
+  }
+}
+
 async function handleDeepLink(url: string) {
   try {
     const parsedUrl = new URL(url);
@@ -126,6 +136,7 @@ if (!gotTheLock) {
       // MCP server configs are loaded from mcp.config.json (userData) on demand
 
       copyAssetsToUserData();
+      await initializeAgentMemoryScheduler();
       const splash = windowManager.getSplash();
 
       if (splash) {
@@ -285,6 +296,8 @@ app.on('before-quit', async (event) => {
 
     // Disconnect all MCP servers to preserve system resources
     await MCPClientManager.disconnectAll();
+
+    await AgentMemorySchedulerService.shutdown();
   } catch (error) {
     // eslint-disable-next-line no-console
     console.error('[App] Error during app cleanup:', error);

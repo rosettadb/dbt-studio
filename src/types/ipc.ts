@@ -411,6 +411,7 @@ export type MemoryChannels =
   | 'memory:archive'
   | 'memory:delete'
   | 'memory:refresh-database-context'
+  | 'memory:short-term:list'
   | 'memory:dreaming:run'
   | 'memory:dreaming:list'
   | 'memory:dreaming:reports:list'

@@ -5,6 +5,7 @@ import type {
   AgentMemoryDreamingRunListFilter,
   AgentMemoryListFilter,
   AgentMemorySearchRequest,
+  AgentMemoryShortTermRecallListFilter,
   NewAgentMemoryEntry,
 } from '../../types/backend';
 
@@ -18,6 +19,8 @@ export const MEMORY_QUERY_KEYS = {
   searches: () => [...MEMORY_QUERY_KEYS.all, 'search'] as const,
   search: (request: AgentMemorySearchRequest) =>
     [...MEMORY_QUERY_KEYS.searches(), request] as const,
+  shortTermRecall: (filter: AgentMemoryShortTermRecallListFilter) =>
+    [...MEMORY_QUERY_KEYS.all, 'short-term', filter] as const,
   dreamingRuns: (filter: AgentMemoryDreamingRunListFilter) =>
     [...MEMORY_QUERY_KEYS.all, 'dreaming', 'runs', filter] as const,
   dreamingReports: (filter: AgentMemoryDreamingReportListFilter) =>
@@ -99,6 +102,13 @@ export const useRunDreaming = () => {
     onSuccess: () => qc.invalidateQueries(MEMORY_QUERY_KEYS.all),
   });
 };
+
+export const useShortTermRecall = (
+  filter: AgentMemoryShortTermRecallListFilter = {},
+) =>
+  useQuery(MEMORY_QUERY_KEYS.shortTermRecall(filter), () =>
+    memoryService.listShortTermRecall(filter),
+  );
 
 export const useDreamingRuns = (
   filter: AgentMemoryDreamingRunListFilter = {},

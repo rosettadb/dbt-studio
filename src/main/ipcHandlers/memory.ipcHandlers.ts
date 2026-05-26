@@ -7,6 +7,7 @@ import type {
   AgentMemoryEntryIdRequest,
   AgentMemoryListFilter,
   AgentMemorySearchRequest,
+  AgentMemoryShortTermRecallListFilter,
   AgentMemoryUpdateEntryRequest,
   NewAgentMemoryEntry,
 } from '../../types/backend';
@@ -21,6 +22,7 @@ const handlerChannels = [
   'memory:archive',
   'memory:delete',
   'memory:refresh-database-context',
+  'memory:short-term:list',
   'memory:dreaming:run',
   'memory:dreaming:list',
   'memory:dreaming:reports:list',
@@ -74,6 +76,12 @@ const registerMemoryHandlers = () => {
     'memory:refresh-database-context',
     async (_event, opts: { dryRun?: boolean } = {}) =>
       AgentMemoryService.refreshDatabaseJsonMemory(opts),
+  );
+
+  ipcMain.handle(
+    'memory:short-term:list',
+    async (_event, filter: AgentMemoryShortTermRecallListFilter) =>
+      AgentMemoryService.listShortTermRecall(filter),
   );
 
   ipcMain.handle('memory:dreaming:run', async () =>

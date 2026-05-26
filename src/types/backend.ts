@@ -957,7 +957,42 @@ export interface ShortTermRecallRequest extends AgentMemoryScope {
   snippet: string;
   query?: string;
   score?: number;
+  conceptTags?: string[];
   metadata?: Record<string, unknown>;
+}
+
+export interface AgentMemoryShortTermRecall {
+  id: number;
+  recallKey: string;
+  scopeKey: string;
+  screenKey: AgentMemoryScreenKey;
+  projectId: string | null;
+  connectionId: string | null;
+  notebookId: string | null;
+  sourceType: string;
+  sourceId: string | null;
+  snippet: string;
+  recallCount: number;
+  dailyCount: number;
+  groundedCount: number;
+  totalScore: number;
+  maxScore: number;
+  queryHashes: string | null;
+  recallDays: string | null;
+  conceptTags: string | null;
+  claimHash: string | null;
+  firstRecalledAt: string | null;
+  lastRecalledAt: string | null;
+  promotedAt: string | null;
+  metadata: string | null;
+}
+
+export interface AgentMemoryShortTermRecallListFilter
+  extends Partial<AgentMemoryScope> {
+  sourceType?: string;
+  minScore?: number;
+  limit?: number;
+  offset?: number;
 }
 
 export interface AgentMemoryRefreshResult {

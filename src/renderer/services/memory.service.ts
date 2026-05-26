@@ -10,6 +10,8 @@ import type {
   AgentMemoryRefreshResult,
   AgentMemorySearchRequest,
   AgentMemorySearchResult,
+  AgentMemoryShortTermRecall,
+  AgentMemoryShortTermRecallListFilter,
   AgentMemoryStats,
   NewAgentMemoryEntry,
 } from '../../types/backend';
@@ -54,6 +56,11 @@ export const refreshDatabaseContext = async (
 
 export const runDreaming = async (): Promise<AgentMemoryDreamingRunNowResult> =>
   window.electron.ipcRenderer.invoke('memory:dreaming:run');
+
+export const listShortTermRecall = async (
+  filter: AgentMemoryShortTermRecallListFilter = {},
+): Promise<AgentMemoryShortTermRecall[]> =>
+  window.electron.ipcRenderer.invoke('memory:short-term:list', filter);
 
 export const listDreamingRuns = async (
   filter: AgentMemoryDreamingRunListFilter = {},

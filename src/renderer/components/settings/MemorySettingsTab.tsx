@@ -44,7 +44,11 @@ import {
   useMemoryStats,
   useRebuildIndex,
   useRefreshDatabaseContext,
+  useRunDreaming,
   useUpdateMemoryEntry,
+  useDreamingRuns,
+  useDreamingReports,
+  useShortTermRecall,
 } from '../../controllers/memory.controller';
 import {
   useGetAISettings,
@@ -55,13 +59,14 @@ import type {
   AgentMemoryListFilter,
   AgentMemoryRefreshResult,
   AgentMemoryScreenKey,
+  AgentMemoryShortTermRecallListFilter,
   AISettingsConfig,
   MemoryKind,
   NewAgentMemoryEntry,
 } from '../../../types/backend';
 import { MEMORY_KIND } from '../../../types/backend';
 
-type TabKey = 0 | 1 | 2;
+type TabKey = 0 | 1 | 2 | 3 | 4;
 type ArchiveFilter = 'active' | 'archived';
 type MemoryFormMode = 'create' | 'edit';
 
@@ -151,6 +156,12 @@ const formatDate = (value: string | null | undefined) => {
   return date.toLocaleString();
 };
 
+const getRunStatusColor = (status: string) => {
+  if (status === 'completed') return 'success';
+  if (status === 'failed') return 'error';
+  return 'default';
+};
+
 const getErrorMessage = (error: unknown) =>
   error instanceof Error ? error.message : String(error);
 
@@ -184,6 +195,9 @@ const normalizeTags = (tags: string | null) => {
   }
   return tags;
 };
+
+const parseStoredTags = (value: string | null) =>
+  parseTags(normalizeTags(value));
 
 const formFromEntry = (entry: AgentMemoryEntry): MemoryFormState => ({
   title: entry.title ?? '',
@@ -288,7 +302,14 @@ const StatTile: React.FC<{
   </Box>
 );
 
-const ScopeText: React.FC<{ entry: AgentMemoryEntry }> = ({ entry }) => {
+type MemoryScopeDisplay = {
+  screenKey: AgentMemoryScreenKey;
+  projectId: string | null;
+  connectionId: string | null;
+  notebookId: string | null;
+};
+
+const ScopeText: React.FC<{ entry: MemoryScopeDisplay }> = ({ entry }) => {
   const parts = [
     entry.screenKey,
     entry.projectId ? `project:${entry.projectId}` : null,
@@ -475,6 +496,7 @@ export const MemorySettingsTab: React.FC = () => {
   const healthQuery = useMemoryHealth();
   const refreshMetadata = useRefreshDatabaseContext();
   const rebuildIndex = useRebuildIndex();
+  const runDreaming = useRunDreaming();
   const createMemory = useCreateMemoryEntry();
   const updateMemory = useUpdateMemoryEntry();
   const archiveMemory = useArchiveMemoryEntry();
@@ -501,6 +523,18 @@ export const MemorySettingsTab: React.FC = () => {
     search,
   ]);
 
+  const shortTermFilter =
+    React.useMemo<AgentMemoryShortTermRecallListFilter>(() => {
+      const filter: AgentMemoryShortTermRecallListFilter = { limit: 100 };
+      if (screenFilter !== 'all') filter.screenKey = screenFilter;
+      if (projectFilter.trim()) filter.projectId = projectFilter.trim();
+      if (connectionFilter.trim()) {
+        filter.connectionId = connectionFilter.trim();
+      }
+      if (notebookFilter.trim()) filter.notebookId = notebookFilter.trim();
+      return filter;
+    }, [connectionFilter, notebookFilter, projectFilter, screenFilter]);
+
   const durableEntriesQuery = useMemoryList(listFilter);
   const metadataEntriesQuery = useMemoryList({
     kind: MEMORY_KIND.DATABASE_METADATA,
@@ -512,6 +546,25 @@ export const MemorySettingsTab: React.FC = () => {
     ...DEFAULT_MEMORY_SETTINGS,
     ...aiSettings?.memory,
   };
+
+  const shortTermEntriesQuery = useShortTermRecall(shortTermFilter);
+  const dreamingRunsQuery = useDreamingRuns({ limit: 50 });
+  const dreamingReportsQuery = useDreamingReports({
+    phase: 'light',
+    limit: 100,
+  });
+
+  const shortTermEntries = shortTermEntriesQuery.data ?? [];
+  const dreamingRuns = dreamingRunsQuery.data ?? [];
+
+  const reportsByRunId = React.useMemo(() => {
+    const map = new Map<number, string>();
+    (dreamingReportsQuery.data ?? []).forEach((report) => {
+      if (report.runId === null || map.has(report.runId)) return;
+      map.set(report.runId, report.content);
+    });
+    return map;
+  }, [dreamingReportsQuery.data]);
 
   const durableEntries = React.useMemo(
     () =>
@@ -642,6 +695,21 @@ export const MemorySettingsTab: React.FC = () => {
         toast.error(
           `Failed to rebuild memory index: ${getErrorMessage(error)}`,
         );
+      },
+    });
+  };
+
+  const handleRunDreaming = () => {
+    runDreaming.mutate(undefined, {
+      onSuccess: (result) => {
+        if (result.ok) {
+          toast.success(result.message ?? 'Light dreaming completed.');
+          return;
+        }
+        toast.error(result.message ?? 'Light dreaming failed.');
+      },
+      onError: (error) => {
+        toast.error(`Failed to run light dreaming: ${getErrorMessage(error)}`);
       },
     });
   };
@@ -917,6 +985,15 @@ export const MemorySettingsTab: React.FC = () => {
             onClick={handleRebuildIndex}
           >
             Rebuild Index
+          </Button>
+          <Button
+            type="button"
+            variant="contained"
+            startIcon={<SyncIcon />}
+            disabled={runDreaming.isLoading}
+            onClick={handleRunDreaming}
+          >
+            Run Dreaming Now
           </Button>
         </Stack>
       </Box>
@@ -1222,6 +1299,252 @@ export const MemorySettingsTab: React.FC = () => {
     </Box>
   );
 
+  const renderShortTermRecall = () => (
+    <Box sx={{ pt: 2 }}>
+      <Stack
+        direction="row"
+        alignItems="center"
+        justifyContent="space-between"
+        sx={{ mb: 2 }}
+      >
+        <Box>
+          <Typography variant="body2" fontWeight={600}>
+            Short-Term Recall Candidates
+          </Typography>
+          <Typography variant="caption" color="text.secondary">
+            These candidates are extracted from recent sessions and will be
+            evaluated during Deep Dreaming.
+          </Typography>
+        </Box>
+        <Button
+          variant="outlined"
+          startIcon={<RefreshIcon />}
+          onClick={() => shortTermEntriesQuery.refetch()}
+        >
+          Refresh
+        </Button>
+      </Stack>
+
+      <Divider sx={{ mb: 2 }} />
+
+      {shortTermEntriesQuery.isLoading ? (
+        <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}>
+          <CircularProgress size={24} />
+        </Box>
+      ) : (
+        <Box sx={{ overflowX: 'auto' }}>
+          <Table size="small">
+            <TableHead>
+              <TableRow>
+                <TableCell>Content</TableCell>
+                <TableCell>Scope</TableCell>
+                <TableCell>Score</TableCell>
+                <TableCell>Counts</TableCell>
+                <TableCell>Last Recalled</TableCell>
+              </TableRow>
+            </TableHead>
+            <TableBody>
+              {shortTermEntries.length === 0 ? (
+                <TableRow>
+                  <TableCell colSpan={5}>
+                    <Typography variant="body2" color="text.secondary">
+                      No short-term recall candidates found.
+                    </Typography>
+                  </TableCell>
+                </TableRow>
+              ) : (
+                shortTermEntries.map((entry) => (
+                  <TableRow key={entry.id} hover>
+                    <TableCell sx={{ minWidth: 360, maxWidth: 560 }}>
+                      <Typography variant="body2" fontWeight={600}>
+                        {`Candidate #${entry.id}`}
+                      </Typography>
+                      <Typography variant="caption" color="text.secondary">
+                        {truncate(entry.snippet, 220)}
+                      </Typography>
+                      <Box
+                        sx={{
+                          mt: 0.5,
+                          display: 'flex',
+                          flexWrap: 'wrap',
+                          gap: 0.5,
+                        }}
+                      >
+                        {parseStoredTags(entry.conceptTags).map((tag) => (
+                          <Chip
+                            key={tag}
+                            label={tag}
+                            size="small"
+                            variant="outlined"
+                          />
+                        ))}
+                      </Box>
+                    </TableCell>
+                    <TableCell sx={{ minWidth: 220 }}>
+                      <ScopeText entry={entry} />
+                    </TableCell>
+                    <TableCell sx={{ minWidth: 100 }}>
+                      <Typography variant="body2">
+                        {entry.maxScore.toFixed(2)}
+                      </Typography>
+                      <Typography variant="caption" color="text.secondary">
+                        Total {entry.totalScore.toFixed(2)}
+                      </Typography>
+                    </TableCell>
+                    <TableCell sx={{ minWidth: 130 }}>
+                      <Typography variant="body2">
+                        {entry.recallCount} recalls
+                      </Typography>
+                      <Typography variant="caption" color="text.secondary">
+                        {entry.dailyCount} daily / {entry.groundedCount}{' '}
+                        grounded
+                      </Typography>
+                    </TableCell>
+                    <TableCell sx={{ minWidth: 170 }}>
+                      <Typography variant="caption" color="text.secondary">
+                        {formatDate(entry.lastRecalledAt)}
+                      </Typography>
+                    </TableCell>
+                  </TableRow>
+                ))
+              )}
+            </TableBody>
+          </Table>
+        </Box>
+      )}
+    </Box>
+  );
+
+  const renderDreamingRuns = () => (
+    <Box sx={{ pt: 2 }}>
+      <Stack
+        direction="row"
+        alignItems="center"
+        justifyContent="space-between"
+        sx={{ mb: 2 }}
+      >
+        <Box>
+          <Typography variant="body2" fontWeight={600}>
+            Dreaming Sweep History
+          </Typography>
+          <Typography variant="caption" color="text.secondary">
+            Logs of recent automated background memory consolidation sweeps.
+          </Typography>
+        </Box>
+        <Stack direction="row" spacing={1}>
+          <Button
+            variant="outlined"
+            startIcon={<RefreshIcon />}
+            onClick={() => dreamingRunsQuery.refetch()}
+          >
+            Refresh
+          </Button>
+          <Button
+            variant="contained"
+            startIcon={<RefreshIcon />}
+            disabled={runDreaming.isLoading}
+            onClick={handleRunDreaming}
+          >
+            Run Dreaming Now
+          </Button>
+        </Stack>
+      </Stack>
+
+      <Divider sx={{ mb: 2 }} />
+
+      {dreamingRunsQuery.isLoading ? (
+        <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}>
+          <CircularProgress size={24} />
+        </Box>
+      ) : (
+        <Box sx={{ overflowX: 'auto' }}>
+          <Table size="small">
+            <TableHead>
+              <TableRow>
+                <TableCell>Trigger</TableCell>
+                <TableCell>Status</TableCell>
+                <TableCell>Items Processed</TableCell>
+                <TableCell>Started At</TableCell>
+                <TableCell>Completed At</TableCell>
+              </TableRow>
+            </TableHead>
+            <TableBody>
+              {dreamingRuns.length === 0 ? (
+                <TableRow>
+                  <TableCell colSpan={5}>
+                    <Typography variant="body2" color="text.secondary">
+                      No dreaming runs found.
+                    </Typography>
+                  </TableCell>
+                </TableRow>
+              ) : (
+                dreamingRuns.map((run) => {
+                  const report = reportsByRunId.get(run.id);
+                  return (
+                    <React.Fragment key={run.id}>
+                      <TableRow hover>
+                        <TableCell sx={{ minWidth: 150 }}>
+                          <Typography
+                            variant="body2"
+                            sx={{ textTransform: 'capitalize' }}
+                          >
+                            {run.triggerType.replace('_', ' ')}
+                          </Typography>
+                        </TableCell>
+                        <TableCell sx={{ minWidth: 120 }}>
+                          <Chip
+                            label={run.status}
+                            size="small"
+                            color={getRunStatusColor(run.status)}
+                          />
+                        </TableCell>
+                        <TableCell sx={{ minWidth: 180 }}>
+                          <Typography variant="body2">
+                            {run.lightCount} session rows
+                          </Typography>
+                          {(run.remCount > 0 || run.promotedCount > 0) && (
+                            <Typography
+                              variant="caption"
+                              color="text.secondary"
+                            >
+                              {run.remCount} REM / {run.promotedCount} promoted
+                            </Typography>
+                          )}
+                        </TableCell>
+                        <TableCell sx={{ minWidth: 170 }}>
+                          <Typography variant="caption" color="text.secondary">
+                            {formatDate(run.startedAt)}
+                          </Typography>
+                        </TableCell>
+                        <TableCell sx={{ minWidth: 170 }}>
+                          <Typography variant="caption" color="text.secondary">
+                            {formatDate(run.completedAt)}
+                          </Typography>
+                        </TableCell>
+                      </TableRow>
+                      {report && (
+                        <TableRow>
+                          <TableCell colSpan={5} sx={{ pt: 0 }}>
+                            <Typography
+                              variant="caption"
+                              color="text.secondary"
+                            >
+                              {report}
+                            </Typography>
+                          </TableCell>
+                        </TableRow>
+                      )}
+                    </React.Fragment>
+                  );
+                })
+              )}
+            </TableBody>
+          </Table>
+        </Box>
+      )}
+    </Box>
+  );
+
   return (
     <Box sx={{ maxWidth: 1100 }}>
       <Tabs
@@ -1232,11 +1555,15 @@ export const MemorySettingsTab: React.FC = () => {
         <Tab label="Overview" />
         <Tab label="Durable Memory" />
         <Tab label="Database Metadata" />
+        <Tab label="Short-Term Recall" />
+        <Tab label="Dreaming Runs" />
       </Tabs>
 
       {tab === 0 && renderOverview()}
       {tab === 1 && renderDurableMemory()}
       {tab === 2 && renderDatabaseMetadata()}
+      {tab === 3 && renderShortTermRecall()}
+      {tab === 4 && renderDreamingRuns()}
 
       <MemoryEntryDialog
         open={dialogOpen}

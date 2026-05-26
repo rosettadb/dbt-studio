@@ -17,6 +17,8 @@ import {
   AgentMemoryScreenKey,
   AgentMemorySearchRequest,
   AgentMemorySearchResult,
+  AgentMemoryShortTermRecall,
+  AgentMemoryShortTermRecallListFilter,
   AgentMemoryStats,
   MEMORY_KIND,
   NewAgentMemoryEntry,
@@ -222,6 +224,36 @@ function toDreamingReport(
     content: row.content,
     metadata: row.metadata,
     createdAt: row.created_at,
+  };
+}
+
+function toShortTermRecall(
+  row: RawShortTermRecall,
+): AgentMemoryShortTermRecall {
+  return {
+    id: row.id,
+    recallKey: row.recall_key,
+    scopeKey: row.scope_key,
+    screenKey: row.screen_key,
+    projectId: row.project_id,
+    connectionId: row.connection_id,
+    notebookId: row.notebook_id,
+    sourceType: row.source_type,
+    sourceId: row.source_id,
+    snippet: row.snippet,
+    recallCount: row.recall_count,
+    dailyCount: row.daily_count,
+    groundedCount: row.grounded_count,
+    totalScore: row.total_score,
+    maxScore: row.max_score,
+    queryHashes: row.query_hashes,
+    recallDays: row.recall_days,
+    conceptTags: row.concept_tags,
+    claimHash: row.claim_hash,
+    firstRecalledAt: row.first_recalled_at,
+    lastRecalledAt: row.last_recalled_at,
+    promotedAt: row.promoted_at,
+    metadata: row.metadata,
   };
 }
 
@@ -908,6 +940,51 @@ export default class AgentMemoryService {
     return rows.map(toDreamingReport);
   }
 
+  static async listShortTermRecall(
+    filter: AgentMemoryShortTermRecallListFilter = {},
+  ): Promise<AgentMemoryShortTermRecall[]> {
+    const db = await this.getDb();
+    const params: SqlParams = {};
+    const where = ['promoted_at IS NULL'];
+
+    if (
+      filter.screenKey ||
+      filter.projectId !== undefined ||
+      filter.connectionId !== undefined ||
+      filter.notebookId !== undefined ||
+      filter.sourceProjectId !== undefined
+    ) {
+      where.push(
+        appendScopeWhere(filter, params, 'agent_memory_short_term_recall'),
+      );
+    }
+    if (filter.sourceType) {
+      params.sourceType = filter.sourceType;
+      where.push('source_type = @sourceType');
+    }
+    if (filter.minScore !== undefined) {
+      params.minScore = clampRatio(filter.minScore, 0);
+      where.push('max_score >= @minScore');
+    }
+
+    params.limit = clampNumber(filter.limit, DEFAULT_LIMIT, MAX_LIMIT);
+    params.offset = clampNumber(filter.offset, 0, Number.MAX_SAFE_INTEGER);
+
+    const rows = db
+      .prepare(
+        `
+          SELECT *
+          FROM agent_memory_short_term_recall
+          WHERE ${where.join(' AND ')}
+          ORDER BY max_score DESC, recall_count DESC, last_recalled_at DESC
+          LIMIT @limit OFFSET @offset
+        `,
+      )
+      .all(params) as RawShortTermRecall[];
+
+    return rows.map(toShortTermRecall);
+  }
+
   static async refreshDatabaseJsonMemory(
     opts: { dryRun?: boolean } = {},
   ): Promise<AgentMemoryRefreshResult> {
@@ -1158,6 +1235,11 @@ export default class AgentMemoryService {
     });
     const shortTerm = await this.listShortTermForContext(req, maxEntries);
 
+    // eslint-disable-next-line no-console
+    console.log(
+      `[AgentMemoryService] buildMemoryContext scopeKey: ${buildScopeKey(req)}, selectedMetadata: ${selectedMetadata.length}, selectedDurable: ${selectedDurable.length}, shortTerm: ${shortTerm.length}`,
+    );
+
     const entryIds = [...selectedMetadata, ...selectedDurable].map(
       (entry) => entry.id,
     );
@@ -1308,6 +1390,11 @@ export default class AgentMemoryService {
     const db = await this.getDb();
     const now = new Date().toISOString();
     const scopeKey = buildScopeKey(req);
+    // eslint-disable-next-line no-console
+    console.log(
+      `[AgentMemoryService] recordShortTermRecall scopeKey: ${scopeKey}, source: ${req.sourceType}:${req.sourceId}`,
+    );
+
     const snippet = truncate(this.redactSensitiveText(req.snippet), 500);
     const recallKey = sha256(
       `${scopeKey}:${req.sourceType}:${normalizeId(req.sourceId) ?? ''}:${snippet}`,
@@ -1321,8 +1408,10 @@ export default class AgentMemoryService {
     const recallDay = now.slice(0, 10);
     const queryHashes = new Set(parseJsonArray(existing?.query_hashes ?? null));
     const recallDays = new Set(parseJsonArray(existing?.recall_days ?? null));
+    const conceptTags = new Set(parseJsonArray(existing?.concept_tags ?? null));
     if (queryHash) queryHashes.add(queryHash);
     recallDays.add(recallDay);
+    (req.conceptTags ?? []).forEach((tag) => conceptTags.add(tag));
 
     if (existing) {
       const totalScore = existing.total_score + (req.score ?? 0.3);
@@ -1334,6 +1423,7 @@ export default class AgentMemoryService {
               max_score = @maxScore,
               query_hashes = @queryHashes,
               recall_days = @recallDays,
+              concept_tags = @conceptTags,
               last_recalled_at = @now,
               metadata = @metadata
           WHERE recall_key = @recallKey
@@ -1344,6 +1434,7 @@ export default class AgentMemoryService {
         maxScore: Math.max(existing.max_score, req.score ?? 0.3),
         queryHashes: JSON.stringify(Array.from(queryHashes)),
         recallDays: JSON.stringify(Array.from(recallDays)),
+        conceptTags: JSON.stringify(Array.from(conceptTags)),
         now,
         metadata: safeJsonStringify(this.redactSensitiveFields(req.metadata)),
       });
@@ -1355,13 +1446,14 @@ export default class AgentMemoryService {
         INSERT INTO agent_memory_short_term_recall (
           recall_key, scope_key, screen_key, project_id, connection_id,
           notebook_id, source_type, source_id, snippet, recall_count,
-          total_score, max_score, query_hashes, recall_days, first_recalled_at,
-          last_recalled_at, metadata
+          total_score, max_score, query_hashes, recall_days, concept_tags,
+          first_recalled_at, last_recalled_at, metadata
         )
         VALUES (
           @recallKey, @scopeKey, @screenKey, @projectId, @connectionId,
           @notebookId, @sourceType, @sourceId, @snippet, 1,
-          @score, @score, @queryHashes, @recallDays, @now, @now, @metadata
+          @score, @score, @queryHashes, @recallDays, @conceptTags, @now,
+          @now, @metadata
         )
       `,
     ).run({
@@ -1377,6 +1469,7 @@ export default class AgentMemoryService {
       score: req.score ?? 0.3,
       queryHashes: JSON.stringify(Array.from(queryHashes)),
       recallDays: JSON.stringify(Array.from(recallDays)),
+      conceptTags: JSON.stringify(Array.from(conceptTags)),
       now,
       metadata: safeJsonStringify(this.redactSensitiveFields(req.metadata)),
     });
