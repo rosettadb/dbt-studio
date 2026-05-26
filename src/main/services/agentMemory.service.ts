@@ -13,6 +13,9 @@ import {
   AgentMemoryHealth,
   AgentMemoryListFilter,
   AgentMemoryRefreshResult,
+  AgentMemoryRecoveryAction,
+  AgentMemoryRecoveryRequest,
+  AgentMemoryRecoveryResult,
   AgentMemoryScope,
   AgentMemoryScreenKey,
   AgentMemorySearchRequest,
@@ -55,6 +58,29 @@ type RawAgentMemoryEntry = {
 };
 
 type RawCount = { count: number };
+
+type RawDuplicateMemoryEntry = {
+  id: number;
+  source_type: string;
+  source_id: string;
+  importance: number;
+  confidence: number;
+  updated_at: string | null;
+};
+
+type RawScopedMemoryRow = {
+  id: number;
+  project_id: string | null;
+  connection_id: string | null;
+  notebook_id: string | null;
+};
+
+type KnownMemoryIds = {
+  projectIds: Set<string>;
+  connectionIds: Set<string>;
+  notebookIdsByConnection: Map<string, Set<string>>;
+  notebookLookupFailures: number;
+};
 
 type RawShortTermRecall = {
   id: number;
@@ -1412,6 +1438,7 @@ export default class AgentMemoryService {
     if (queryHash) queryHashes.add(queryHash);
     recallDays.add(recallDay);
     (req.conceptTags ?? []).forEach((tag) => conceptTags.add(tag));
+    const claimHash = sha256(snippet.toLowerCase().replace(/\s+/g, ' '));
 
     if (existing) {
       const totalScore = existing.total_score + (req.score ?? 0.3);
@@ -1421,9 +1448,11 @@ export default class AgentMemoryService {
           SET recall_count = recall_count + 1,
               total_score = @totalScore,
               max_score = @maxScore,
+              daily_count = @dailyCount,
               query_hashes = @queryHashes,
               recall_days = @recallDays,
               concept_tags = @conceptTags,
+              claim_hash = @claimHash,
               last_recalled_at = @now,
               metadata = @metadata
           WHERE recall_key = @recallKey
@@ -1432,9 +1461,11 @@ export default class AgentMemoryService {
         recallKey,
         totalScore,
         maxScore: Math.max(existing.max_score, req.score ?? 0.3),
+        dailyCount: recallDays.size,
         queryHashes: JSON.stringify(Array.from(queryHashes)),
         recallDays: JSON.stringify(Array.from(recallDays)),
         conceptTags: JSON.stringify(Array.from(conceptTags)),
+        claimHash,
         now,
         metadata: safeJsonStringify(this.redactSensitiveFields(req.metadata)),
       });
@@ -1446,14 +1477,15 @@ export default class AgentMemoryService {
         INSERT INTO agent_memory_short_term_recall (
           recall_key, scope_key, screen_key, project_id, connection_id,
           notebook_id, source_type, source_id, snippet, recall_count,
-          total_score, max_score, query_hashes, recall_days, concept_tags,
-          first_recalled_at, last_recalled_at, metadata
+          daily_count, total_score, max_score, query_hashes, recall_days,
+          concept_tags, claim_hash, first_recalled_at, last_recalled_at,
+          metadata
         )
         VALUES (
           @recallKey, @scopeKey, @screenKey, @projectId, @connectionId,
           @notebookId, @sourceType, @sourceId, @snippet, 1,
-          @score, @score, @queryHashes, @recallDays, @conceptTags, @now,
-          @now, @metadata
+          @dailyCount, @score, @score, @queryHashes, @recallDays,
+          @conceptTags, @claimHash, @now, @now, @metadata
         )
       `,
     ).run({
@@ -1466,10 +1498,12 @@ export default class AgentMemoryService {
       sourceType: req.sourceType,
       sourceId: normalizeId(req.sourceId),
       snippet,
+      dailyCount: recallDays.size,
       score: req.score ?? 0.3,
       queryHashes: JSON.stringify(Array.from(queryHashes)),
       recallDays: JSON.stringify(Array.from(recallDays)),
       conceptTags: JSON.stringify(Array.from(conceptTags)),
+      claimHash,
       now,
       metadata: safeJsonStringify(this.redactSensitiveFields(req.metadata)),
     });
@@ -1523,27 +1557,370 @@ export default class AgentMemoryService {
     }
   }
 
+  private static async loadKnownMemoryIds(): Promise<KnownMemoryIds> {
+    const dbFile = await loadDatabaseFile();
+    const projectIds = new Set(
+      (dbFile.projects ?? []).map((project) => String(project.id)),
+    );
+    const connectionIds = new Set(
+      (dbFile.connections ?? []).map((connection) => String(connection.id)),
+    );
+    const notebookIdsByConnection = new Map<string, Set<string>>();
+    let notebookLookupFailures = 0;
+
+    await Promise.all(
+      (dbFile.connections ?? []).map(async (connection) => {
+        try {
+          const notebooks = await NotebooksService.listNotebooks(connection.id);
+          notebookIdsByConnection.set(
+            String(connection.id),
+            new Set(notebooks.map((notebook) => String(notebook.id))),
+          );
+        } catch (error) {
+          notebookLookupFailures += 1;
+          // eslint-disable-next-line no-console
+          console.error('[AgentMemory] notebook health scan failed:', error);
+        }
+      }),
+    );
+
+    return {
+      projectIds,
+      connectionIds,
+      notebookIdsByConnection,
+      notebookLookupFailures,
+    };
+  }
+
+  private static isOrphanRow(
+    row: RawScopedMemoryRow,
+    known: KnownMemoryIds,
+  ): boolean {
+    if (row.project_id && !known.projectIds.has(row.project_id)) return true;
+    if (row.connection_id && !known.connectionIds.has(row.connection_id)) {
+      return true;
+    }
+    if (row.notebook_id) {
+      if (!row.connection_id) return true;
+      const notebooks = known.notebookIdsByConnection.get(row.connection_id);
+      if (notebooks && !notebooks.has(row.notebook_id)) return true;
+    }
+    return false;
+  }
+
+  private static async getOrphanMemoryRows(): Promise<{
+    durable: RawScopedMemoryRow[];
+    shortTerm: RawScopedMemoryRow[];
+    notebookLookupFailures: number;
+  }> {
+    const db = await this.getDb();
+    const known = await this.loadKnownMemoryIds();
+    const durableRows = db
+      .prepare(
+        `
+          SELECT id, project_id, connection_id, notebook_id
+          FROM agent_memory_entries
+          WHERE archived = 0
+            AND (
+              project_id IS NOT NULL
+              OR connection_id IS NOT NULL
+              OR notebook_id IS NOT NULL
+            )
+        `,
+      )
+      .all() as RawScopedMemoryRow[];
+    const shortTermRows = db
+      .prepare(
+        `
+          SELECT id, project_id, connection_id, notebook_id
+          FROM agent_memory_short_term_recall
+          WHERE promoted_at IS NULL
+            AND (
+              project_id IS NOT NULL
+              OR connection_id IS NOT NULL
+              OR notebook_id IS NOT NULL
+            )
+        `,
+      )
+      .all() as RawScopedMemoryRow[];
+
+    return {
+      durable: durableRows.filter((row) => this.isOrphanRow(row, known)),
+      shortTerm: shortTermRows.filter((row) => this.isOrphanRow(row, known)),
+      notebookLookupFailures: known.notebookLookupFailures,
+    };
+  }
+
+  private static async countDuplicateEntries(): Promise<number> {
+    const db = await this.getDb();
+    const row = db
+      .prepare(
+        `
+          SELECT COALESCE(SUM(duplicate_count), 0) AS count
+          FROM (
+            SELECT COUNT(*) - 1 AS duplicate_count
+            FROM agent_memory_entries
+            WHERE archived = 0
+              AND source_id IS NOT NULL
+            GROUP BY source_type, source_id
+            HAVING COUNT(*) > 1
+          )
+        `,
+      )
+      .get() as RawCount | undefined;
+    return row?.count ?? 0;
+  }
+
+  private static computeHealthScore(input: {
+    fts5Available: boolean;
+    durableCount: number;
+    staleCount: number;
+    orphanCount: number;
+    duplicateCount: number;
+  }): number {
+    const denominator = Math.max(1, input.durableCount);
+    const ftsPenalty = input.fts5Available ? 0 : 0.18;
+    const stalePenalty = Math.min(0.22, input.staleCount / denominator);
+    const orphanPenalty = Math.min(0.28, input.orphanCount / denominator);
+    const duplicatePenalty = Math.min(0.2, input.duplicateCount / denominator);
+    return Math.max(
+      0,
+      Math.min(
+        1,
+        1 - ftsPenalty - stalePenalty - orphanPenalty - duplicatePenalty,
+      ),
+    );
+  }
+
+  private static async writeHealthSnapshot(input: {
+    healthScore: number;
+    shortTermCount: number;
+    durableCount: number;
+    staleCount: number;
+    orphanCount: number;
+    duplicateCount: number;
+    metadata: Record<string, unknown>;
+  }): Promise<number | null> {
+    const db = await this.getDb();
+    const result = db
+      .prepare(
+        `
+          INSERT INTO agent_memory_health_snapshots (
+            health_score, short_term_count, durable_count, stale_count,
+            orphan_count, duplicate_count, metadata
+          )
+          VALUES (
+            @healthScore, @shortTermCount, @durableCount, @staleCount,
+            @orphanCount, @duplicateCount, @metadata
+          )
+        `,
+      )
+      .run({
+        ...input,
+        metadata: safeJsonStringify(this.redactSensitiveFields(input.metadata)),
+      });
+    return Number(result.lastInsertRowid);
+  }
+
+  private static async archiveDuplicateEntries(
+    dryRun: boolean,
+  ): Promise<AgentMemoryRecoveryResult> {
+    const db = await this.getDb();
+    const rows = db
+      .prepare(
+        `
+          SELECT id, source_type, source_id, importance, confidence, updated_at
+          FROM agent_memory_entries
+          WHERE archived = 0
+            AND source_id IS NOT NULL
+          ORDER BY source_type ASC, source_id ASC, importance DESC,
+            confidence DESC, updated_at DESC, id DESC
+        `,
+      )
+      .all() as RawDuplicateMemoryEntry[];
+    const groups = new Map<string, RawDuplicateMemoryEntry[]>();
+    rows.forEach((row) => {
+      const key = `${row.source_type}:${row.source_id}`;
+      groups.set(key, [...(groups.get(key) ?? []), row]);
+    });
+
+    const duplicateIds = Array.from(groups.values()).flatMap((group) =>
+      group.length > 1 ? group.slice(1).map((row) => row.id) : [],
+    );
+
+    if (!dryRun && duplicateIds.length > 0) {
+      const archive = db.prepare(
+        `
+          UPDATE agent_memory_entries
+          SET archived = 1,
+              status = 'archived',
+              updated_at = datetime('now')
+          WHERE id = @id
+        `,
+      );
+      const archiveDuplicates = db.transaction((ids: number[]) => {
+        ids.forEach((id) => archive.run({ id }));
+      });
+      archiveDuplicates(duplicateIds);
+    }
+
+    return {
+      action: 'dedupe',
+      dryRun,
+      changed: duplicateIds.length,
+      message: dryRun
+        ? `${duplicateIds.length} duplicate memories would be archived.`
+        : `${duplicateIds.length} duplicate memories archived.`,
+      details: { duplicateIds },
+    };
+  }
+
+  private static async markOrphanEntriesStale(
+    dryRun: boolean,
+  ): Promise<AgentMemoryRecoveryResult> {
+    const db = await this.getDb();
+    const orphanRows = await this.getOrphanMemoryRows();
+    const orphanIds = orphanRows.durable.map((row) => row.id);
+
+    if (!dryRun && orphanIds.length > 0) {
+      const markStale = db.prepare(
+        `
+          UPDATE agent_memory_entries
+          SET status = 'stale',
+              updated_at = datetime('now')
+          WHERE id = @id
+            AND archived = 0
+        `,
+      );
+      const markRows = db.transaction((ids: number[]) => {
+        ids.forEach((id) => markStale.run({ id }));
+      });
+      markRows(orphanIds);
+    }
+
+    return {
+      action: 'mark_orphans_stale',
+      dryRun,
+      changed: orphanIds.length,
+      message: dryRun
+        ? `${orphanIds.length} orphaned durable memories would be marked stale.`
+        : `${orphanIds.length} orphaned durable memories marked stale.`,
+      details: {
+        durableOrphanIds: orphanIds,
+        shortTermOrphanCount: orphanRows.shortTerm.length,
+        notebookLookupFailures: orphanRows.notebookLookupFailures,
+      },
+    };
+  }
+
+  static async recoverHealth(
+    req: AgentMemoryRecoveryRequest,
+  ): Promise<AgentMemoryRecoveryResult> {
+    const { action } = req;
+    const dryRun = req.dryRun === true;
+
+    if (action === 'dedupe') {
+      return this.archiveDuplicateEntries(dryRun);
+    }
+    if (action === 'mark_orphans_stale') {
+      return this.markOrphanEntriesStale(dryRun);
+    }
+    if (action === 'rebuild_index') {
+      if (!dryRun) await this.rebuildIndex();
+      return {
+        action,
+        dryRun,
+        changed: dryRun ? 0 : 1,
+        message: dryRun
+          ? 'Memory index would be rebuilt.'
+          : 'Memory index rebuilt.',
+      };
+    }
+    if (action === 'refresh_metadata') {
+      const result = await this.refreshDatabaseJsonMemory({ dryRun });
+      return {
+        action,
+        dryRun,
+        changed: result.upserted,
+        message: dryRun
+          ? `${result.entries.length} metadata memories would be refreshed.`
+          : `${result.upserted} metadata memories refreshed.`,
+      };
+    }
+
+    throw new Error(`Unsupported memory recovery action: ${action}`);
+  }
+
   static async getHealth(): Promise<AgentMemoryHealth> {
     const db = await this.getDb();
     const stats = await this.getStats();
     const countOne = (sql: string): number =>
       (db.prepare(sql).get() as RawCount | undefined)?.count ?? 0;
+    const staleEntries = countOne(
+      "SELECT COUNT(*) AS count FROM agent_memory_entries WHERE archived = 0 AND status = 'stale'",
+    );
+    const orphanRows = await this.getOrphanMemoryRows();
+    const orphanedEntries =
+      orphanRows.durable.length + orphanRows.shortTerm.length;
+    const duplicateEntries = await this.countDuplicateEntries();
+    const durableEntries = stats.durableCount;
+    const healthScore = this.computeHealthScore({
+      fts5Available: stats.fts5Available,
+      durableCount: durableEntries,
+      staleCount: staleEntries,
+      orphanCount: orphanedEntries,
+      duplicateCount: duplicateEntries,
+    });
     const issues: string[] = [];
+    const recoveryActions: AgentMemoryRecoveryAction[] = [];
     if (!stats.fts5Available) {
       issues.push('FTS5 unavailable; LIKE fallback will be used.');
+      recoveryActions.push('rebuild_index');
+    }
+    if (orphanedEntries > 0) {
+      issues.push(`${orphanedEntries} orphaned memory rows detected.`);
+      recoveryActions.push('refresh_metadata', 'mark_orphans_stale');
+    }
+    if (duplicateEntries > 0) {
+      issues.push(`${duplicateEntries} duplicate durable memories detected.`);
+      recoveryActions.push('dedupe');
+    }
+    if (orphanRows.notebookLookupFailures > 0) {
+      issues.push(
+        `${orphanRows.notebookLookupFailures} notebook scopes could not be checked.`,
+      );
     }
 
+    const healthSnapshotId = await this.writeHealthSnapshot({
+      healthScore,
+      shortTermCount: stats.shortTermCount,
+      durableCount: durableEntries,
+      staleCount: staleEntries,
+      orphanCount: orphanedEntries,
+      duplicateCount: duplicateEntries,
+      metadata: {
+        fts5Available: stats.fts5Available,
+        activeEntries: stats.activeCount,
+        archivedEntries: stats.archivedCount,
+        durableOrphanCount: orphanRows.durable.length,
+        shortTermOrphanCount: orphanRows.shortTerm.length,
+        notebookLookupFailures: orphanRows.notebookLookupFailures,
+      },
+    });
+
     return {
-      ok: issues.length === 0,
+      ok: issues.length === 0 && healthScore >= 0.9,
+      healthScore,
       fts5Available: stats.fts5Available,
       activeEntries: stats.activeCount,
       archivedEntries: stats.archivedCount,
       shortTermEntries: stats.shortTermCount,
-      staleEntries: countOne(
-        "SELECT COUNT(*) AS count FROM agent_memory_entries WHERE status = 'stale'",
-      ),
-      // TODO(P6): compute orphaned entries once scheduler/metadata recovery exists.
-      orphanedEntries: 0,
+      staleEntries,
+      orphanedEntries,
+      duplicateEntries,
+      durableEntries,
+      healthSnapshotId,
+      recoveryActions: Array.from(new Set(recoveryActions)),
       issues,
     };
   }

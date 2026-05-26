@@ -406,6 +406,7 @@ export type MemoryChannels =
   | 'memory:search'
   | 'memory:stats'
   | 'memory:health'
+  | 'memory:health:recover'
   | 'memory:create'
   | 'memory:update'
   | 'memory:archive'

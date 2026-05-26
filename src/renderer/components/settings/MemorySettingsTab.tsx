@@ -43,6 +43,7 @@ import {
   useMemoryList,
   useMemoryStats,
   useRebuildIndex,
+  useRecoverMemoryHealth,
   useRefreshDatabaseContext,
   useRunDreaming,
   useUpdateMemoryEntry,
@@ -58,6 +59,7 @@ import type {
   AgentMemoryEntry,
   AgentMemoryListFilter,
   AgentMemoryRefreshResult,
+  AgentMemoryRecoveryAction,
   AgentMemoryScreenKey,
   AgentMemoryShortTermRecallListFilter,
   AISettingsConfig,
@@ -497,6 +499,7 @@ export const MemorySettingsTab: React.FC = () => {
   const refreshMetadata = useRefreshDatabaseContext();
   const rebuildIndex = useRebuildIndex();
   const runDreaming = useRunDreaming();
+  const recoverHealth = useRecoverMemoryHealth();
   const createMemory = useCreateMemoryEntry();
   const updateMemory = useUpdateMemoryEntry();
   const archiveMemory = useArchiveMemoryEntry();
@@ -549,21 +552,23 @@ export const MemorySettingsTab: React.FC = () => {
 
   const shortTermEntriesQuery = useShortTermRecall(shortTermFilter);
   const dreamingRunsQuery = useDreamingRuns({ limit: 50 });
-  const dreamingReportsQuery = useDreamingReports({
-    phase: 'light',
-    limit: 100,
-  });
+  const dreamingReportsQuery = useDreamingReports({ limit: 200 });
 
   const shortTermEntries = shortTermEntriesQuery.data ?? [];
   const dreamingRuns = dreamingRunsQuery.data ?? [];
 
   const reportsByRunId = React.useMemo(() => {
-    const map = new Map<number, string>();
+    const map = new Map<number, string[]>();
     (dreamingReportsQuery.data ?? []).forEach((report) => {
-      if (report.runId === null || map.has(report.runId)) return;
-      map.set(report.runId, report.content);
+      if (report.runId === null) return;
+      map.set(report.runId, [...(map.get(report.runId) ?? []), report.content]);
     });
-    return map;
+    return new Map(
+      Array.from(map.entries()).map(([runId, reports]) => [
+        runId,
+        reports.reverse().join(' '),
+      ]),
+    );
   }, [dreamingReportsQuery.data]);
 
   const durableEntries = React.useMemo(
@@ -699,17 +704,33 @@ export const MemorySettingsTab: React.FC = () => {
     });
   };
 
+  const handleRecoverHealth = (action: AgentMemoryRecoveryAction) => {
+    recoverHealth.mutate(
+      { action },
+      {
+        onSuccess: (result) => {
+          toast.success(result.message);
+        },
+        onError: (error) => {
+          toast.error(
+            `Failed to run memory recovery: ${getErrorMessage(error)}`,
+          );
+        },
+      },
+    );
+  };
+
   const handleRunDreaming = () => {
     runDreaming.mutate(undefined, {
       onSuccess: (result) => {
         if (result.ok) {
-          toast.success(result.message ?? 'Light dreaming completed.');
+          toast.success(result.message ?? 'Memory dreaming completed.');
           return;
         }
-        toast.error(result.message ?? 'Light dreaming failed.');
+        toast.error(result.message ?? 'Memory dreaming failed.');
       },
       onError: (error) => {
-        toast.error(`Failed to run light dreaming: ${getErrorMessage(error)}`);
+        toast.error(`Failed to run memory dreaming: ${getErrorMessage(error)}`);
       },
     });
   };
@@ -767,7 +788,11 @@ export const MemorySettingsTab: React.FC = () => {
           <Chip
             size="small"
             color={health?.ok ? 'success' : 'warning'}
-            label={health?.ok ? 'OK' : 'Needs attention'}
+            label={
+              health
+                ? `Health ${Math.round(health.healthScore * 100)}%`
+                : 'Health'
+            }
           />
           <Chip
             size="small"
@@ -782,8 +807,20 @@ export const MemorySettingsTab: React.FC = () => {
           <Chip
             size="small"
             variant="outlined"
+            label={`Duplicates: ${health?.duplicateEntries ?? 0}`}
+          />
+          <Chip
+            size="small"
+            variant="outlined"
             label={`Active: ${health?.activeEntries ?? 0}`}
           />
+          {health?.healthSnapshotId ? (
+            <Chip
+              size="small"
+              variant="outlined"
+              label={`Snapshot #${health.healthSnapshotId}`}
+            />
+          ) : null}
         </Stack>
         {health?.issues?.length ? (
           <Stack spacing={0.5} sx={{ pb: 1 }}>
@@ -994,6 +1031,28 @@ export const MemorySettingsTab: React.FC = () => {
             onClick={handleRunDreaming}
           >
             Run Dreaming Now
+          </Button>
+          <Button
+            type="button"
+            variant="outlined"
+            startIcon={<SyncIcon />}
+            disabled={
+              recoverHealth.isLoading || (health?.duplicateEntries ?? 0) === 0
+            }
+            onClick={() => handleRecoverHealth('dedupe')}
+          >
+            Dedupe Memories
+          </Button>
+          <Button
+            type="button"
+            variant="outlined"
+            startIcon={<SyncIcon />}
+            disabled={
+              recoverHealth.isLoading || (health?.orphanedEntries ?? 0) === 0
+            }
+            onClick={() => handleRecoverHealth('mark_orphans_stale')}
+          >
+            Mark Orphans Stale
           </Button>
         </Stack>
       </Box>

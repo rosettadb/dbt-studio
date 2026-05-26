@@ -437,6 +437,24 @@ export const agentMemoryConfig = sqliteTable('agent_memory_config', {
   updatedAt: text('updated_at').default(sql`CURRENT_TIMESTAMP`),
 });
 
+export const agentMemoryHealthSnapshots = sqliteTable(
+  'agent_memory_health_snapshots',
+  {
+    id: integer('id').primaryKey({ autoIncrement: true }),
+    healthScore: real('health_score').notNull(),
+    shortTermCount: integer('short_term_count').notNull().default(0),
+    durableCount: integer('durable_count').notNull().default(0),
+    staleCount: integer('stale_count').notNull().default(0),
+    orphanCount: integer('orphan_count').notNull().default(0),
+    duplicateCount: integer('duplicate_count').notNull().default(0),
+    metadata: text('metadata'),
+    createdAt: text('created_at').default(sql`CURRENT_TIMESTAMP`),
+  },
+  (table: any) => ({
+    createdIdx: index('amhs_created_idx').on(table.createdAt),
+  }),
+);
+
 // Define Relations for Drizzle ORM
 export const aiProvidersRelations = relations(aiProviders, ({ many }) => ({
   conversations: many(chatConversations),
@@ -586,6 +604,11 @@ export type NewAgentMemoryEmbeddingCache = typeof agentMemoryEmbeddingCache.$inf
 
 export type AgentMemoryConfig = typeof agentMemoryConfig.$inferSelect;
 export type NewAgentMemoryConfig = typeof agentMemoryConfig.$inferInsert;
+
+export type AgentMemoryHealthSnapshot =
+  typeof agentMemoryHealthSnapshots.$inferSelect;
+export type NewAgentMemoryHealthSnapshot =
+  typeof agentMemoryHealthSnapshots.$inferInsert;
 
 // Complex query result types - Enhanced with Continue.dev features
 export type ChatConversationWithMessages = ChatConversation & {

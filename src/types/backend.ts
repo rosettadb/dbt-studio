@@ -915,15 +915,39 @@ export interface AgentMemoryStats {
   fts5Available: boolean;
 }
 
+export type AgentMemoryRecoveryAction =
+  | 'dedupe'
+  | 'mark_orphans_stale'
+  | 'rebuild_index'
+  | 'refresh_metadata';
+
 export interface AgentMemoryHealth {
   ok: boolean;
+  healthScore: number;
   fts5Available: boolean;
   activeEntries: number;
   archivedEntries: number;
   shortTermEntries: number;
   staleEntries: number;
   orphanedEntries: number;
+  duplicateEntries: number;
+  durableEntries: number;
+  healthSnapshotId: number | null;
+  recoveryActions: AgentMemoryRecoveryAction[];
   issues: string[];
+}
+
+export interface AgentMemoryRecoveryRequest {
+  action: AgentMemoryRecoveryAction;
+  dryRun?: boolean;
+}
+
+export interface AgentMemoryRecoveryResult {
+  action: AgentMemoryRecoveryAction;
+  dryRun: boolean;
+  changed: number;
+  message: string;
+  details?: Record<string, unknown>;
 }
 
 export interface AgentMemoryContextRequest extends AgentMemoryScope {

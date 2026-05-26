@@ -117,14 +117,14 @@ export default class AgentMemorySchedulerService {
       return {
         ok: true,
         runId: run.id,
-        message: `Light dreaming completed for run ${run.id}.`,
+        message: `Memory dreaming completed for run ${run.id}.`,
       };
     }
 
     return {
       ok: false,
       runId: run.id,
-      message: run.errorMessage ?? `Light dreaming ended with ${run.status}.`,
+      message: run.errorMessage ?? `Memory dreaming ended with ${run.status}.`,
     };
   }
 

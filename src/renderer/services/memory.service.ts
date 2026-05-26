@@ -8,6 +8,8 @@ import type {
   AgentMemoryHealth,
   AgentMemoryListFilter,
   AgentMemoryRefreshResult,
+  AgentMemoryRecoveryRequest,
+  AgentMemoryRecoveryResult,
   AgentMemorySearchRequest,
   AgentMemorySearchResult,
   AgentMemoryShortTermRecall,
@@ -21,6 +23,11 @@ export const getMemoryStats = async (): Promise<AgentMemoryStats> =>
 
 export const getMemoryHealth = async (): Promise<AgentMemoryHealth> =>
   window.electron.ipcRenderer.invoke('memory:health');
+
+export const recoverMemoryHealth = async (
+  request: AgentMemoryRecoveryRequest,
+): Promise<AgentMemoryRecoveryResult> =>
+  window.electron.ipcRenderer.invoke('memory:health:recover', request);
 
 export const listMemoryEntries = async (
   filter: AgentMemoryListFilter = {},

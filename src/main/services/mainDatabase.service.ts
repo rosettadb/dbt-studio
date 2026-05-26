@@ -453,6 +453,19 @@ export default class MainDatabaseService {
         updated_at TEXT DEFAULT (datetime('now'))
       );
 
+      CREATE TABLE IF NOT EXISTS agent_memory_health_snapshots (
+        id               INTEGER PRIMARY KEY AUTOINCREMENT,
+        health_score     REAL NOT NULL,
+        short_term_count INTEGER NOT NULL DEFAULT 0,
+        durable_count    INTEGER NOT NULL DEFAULT 0,
+        stale_count      INTEGER NOT NULL DEFAULT 0,
+        orphan_count     INTEGER NOT NULL DEFAULT 0,
+        duplicate_count  INTEGER NOT NULL DEFAULT 0,
+        metadata         TEXT,
+        created_at       TEXT DEFAULT (datetime('now'))
+      );
+      CREATE INDEX IF NOT EXISTS amhs_created_idx ON agent_memory_health_snapshots(created_at);
+
       INSERT OR IGNORE INTO agent_memory_config (key, value) VALUES ('last_dreaming_run_at', '');
       INSERT OR IGNORE INTO agent_memory_config (key, value) VALUES ('last_metadata_refresh_at', '');
       INSERT OR IGNORE INTO agent_memory_config (key, value) VALUES ('fts5_available', 'unknown');
@@ -796,10 +809,40 @@ export default class MainDatabaseService {
             updated_at TEXT DEFAULT (datetime('now'))
           );
 
+          CREATE TABLE IF NOT EXISTS agent_memory_health_snapshots (
+            id               INTEGER PRIMARY KEY AUTOINCREMENT,
+            health_score     REAL NOT NULL,
+            short_term_count INTEGER NOT NULL DEFAULT 0,
+            durable_count    INTEGER NOT NULL DEFAULT 0,
+            stale_count      INTEGER NOT NULL DEFAULT 0,
+            orphan_count     INTEGER NOT NULL DEFAULT 0,
+            duplicate_count  INTEGER NOT NULL DEFAULT 0,
+            metadata         TEXT,
+            created_at       TEXT DEFAULT (datetime('now'))
+          );
+          CREATE INDEX IF NOT EXISTS amhs_created_idx ON agent_memory_health_snapshots(created_at);
+
           INSERT OR IGNORE INTO agent_memory_config (key, value) VALUES ('last_dreaming_run_at', '');
           INSERT OR IGNORE INTO agent_memory_config (key, value) VALUES ('last_metadata_refresh_at', '');
           INSERT OR IGNORE INTO agent_memory_config (key, value) VALUES ('fts5_available', 'unknown');
           INSERT OR IGNORE INTO agent_memory_config (key, value) VALUES ('dreaming_next_scheduled_at', '');
+        `);
+      }
+
+      if (!tableNames.has('agent_memory_health_snapshots')) {
+        this.sqlite.exec(`
+          CREATE TABLE IF NOT EXISTS agent_memory_health_snapshots (
+            id               INTEGER PRIMARY KEY AUTOINCREMENT,
+            health_score     REAL NOT NULL,
+            short_term_count INTEGER NOT NULL DEFAULT 0,
+            durable_count    INTEGER NOT NULL DEFAULT 0,
+            stale_count      INTEGER NOT NULL DEFAULT 0,
+            orphan_count     INTEGER NOT NULL DEFAULT 0,
+            duplicate_count  INTEGER NOT NULL DEFAULT 0,
+            metadata         TEXT,
+            created_at       TEXT DEFAULT (datetime('now'))
+          );
+          CREATE INDEX IF NOT EXISTS amhs_created_idx ON agent_memory_health_snapshots(created_at);
         `);
       }
     } catch (error) {

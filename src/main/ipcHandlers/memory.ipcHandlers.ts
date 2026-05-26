@@ -6,6 +6,7 @@ import type {
   AgentMemoryDreamingRunListFilter,
   AgentMemoryEntryIdRequest,
   AgentMemoryListFilter,
+  AgentMemoryRecoveryRequest,
   AgentMemorySearchRequest,
   AgentMemoryShortTermRecallListFilter,
   AgentMemoryUpdateEntryRequest,
@@ -17,6 +18,7 @@ const handlerChannels = [
   'memory:search',
   'memory:stats',
   'memory:health',
+  'memory:health:recover',
   'memory:create',
   'memory:update',
   'memory:archive',
@@ -49,6 +51,12 @@ const registerMemoryHandlers = () => {
   ipcMain.handle('memory:stats', async () => AgentMemoryService.getStats());
 
   ipcMain.handle('memory:health', async () => AgentMemoryService.getHealth());
+
+  ipcMain.handle(
+    'memory:health:recover',
+    async (_event, request: AgentMemoryRecoveryRequest) =>
+      AgentMemoryService.recoverHealth(request),
+  );
 
   ipcMain.handle('memory:create', async (_event, input: NewAgentMemoryEntry) =>
     AgentMemoryService.createEntry(input),

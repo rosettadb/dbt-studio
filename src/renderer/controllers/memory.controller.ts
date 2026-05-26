@@ -4,6 +4,7 @@ import type {
   AgentMemoryDreamingReportListFilter,
   AgentMemoryDreamingRunListFilter,
   AgentMemoryListFilter,
+  AgentMemoryRecoveryRequest,
   AgentMemorySearchRequest,
   AgentMemoryShortTermRecallListFilter,
   NewAgentMemoryEntry,
@@ -32,6 +33,17 @@ export const useMemoryStats = () =>
 
 export const useMemoryHealth = () =>
   useQuery(MEMORY_QUERY_KEYS.health(), memoryService.getMemoryHealth);
+
+export const useRecoverMemoryHealth = () => {
+  const qc = useQueryClient();
+  return useMutation(
+    (request: AgentMemoryRecoveryRequest) =>
+      memoryService.recoverMemoryHealth(request),
+    {
+      onSuccess: () => qc.invalidateQueries(MEMORY_QUERY_KEYS.all),
+    },
+  );
+};
 
 export const useMemoryList = (filter: AgentMemoryListFilter = {}) =>
   useQuery(MEMORY_QUERY_KEYS.list(filter), () =>
