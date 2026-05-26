@@ -966,6 +966,73 @@ export interface AgentMemoryRefreshResult {
   entries: NewAgentMemoryEntry[];
 }
 
+export interface AgentMemoryUpdateEntryRequest {
+  id: number;
+  patch: Partial<NewAgentMemoryEntry>;
+}
+
+export interface AgentMemoryEntryIdRequest {
+  id: number;
+}
+
+export type AgentMemoryDreamingTrigger =
+  | 'manual'
+  | 'startup'
+  | 'scheduled'
+  | 'post_turn'
+  | string;
+
+export type AgentMemoryDreamingStatus =
+  | 'running'
+  | 'completed'
+  | 'failed'
+  | string;
+
+export interface AgentMemoryDreamingRun {
+  id: number;
+  triggerType: AgentMemoryDreamingTrigger;
+  startedAt: string | null;
+  completedAt: string | null;
+  status: AgentMemoryDreamingStatus;
+  lightCount: number;
+  remCount: number;
+  promotedCount: number;
+  errorMessage: string | null;
+  metadata: string | null;
+}
+
+export interface AgentMemoryDreamingReport {
+  id: number;
+  runId: number | null;
+  phase: string;
+  dayBucket: string;
+  content: string;
+  metadata: string | null;
+  createdAt: string | null;
+}
+
+export interface AgentMemoryDreamingRunNowResult {
+  ok: boolean;
+  notImplemented?: boolean;
+  message?: string;
+  runId?: number;
+}
+
+export interface AgentMemoryDreamingRunListFilter {
+  triggerType?: AgentMemoryDreamingTrigger;
+  status?: AgentMemoryDreamingStatus;
+  limit?: number;
+  offset?: number;
+}
+
+export interface AgentMemoryDreamingReportListFilter {
+  runId?: number;
+  phase?: string;
+  dayBucket?: string;
+  limit?: number;
+  offset?: number;
+}
+
 export interface MCPServerWithStatus extends MCPServerFileEntry {
   id: string;
   connected: boolean;

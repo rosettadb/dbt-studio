@@ -20,6 +20,7 @@ import {
   registerMCPHandlers,
   registerSkillsHandlers,
   registerSavedQueriesHandlers,
+  registerMemoryHandlers,
 } from './ipcHandlers';
 
 const registerHandlers = (mainWindow: BrowserWindow) => {
@@ -43,6 +44,7 @@ const registerHandlers = (mainWindow: BrowserWindow) => {
   registerMCPHandlers();
   registerSkillsHandlers();
   registerSavedQueriesHandlers();
+  registerMemoryHandlers();
 };
 
 export default registerHandlers;

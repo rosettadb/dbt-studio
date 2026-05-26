@@ -5,6 +5,10 @@ import { NotebooksService } from './notebooks.service';
 import {
   AgentMemoryCaptureTurnRequest,
   AgentMemoryContextRequest,
+  AgentMemoryDreamingReport,
+  AgentMemoryDreamingReportListFilter,
+  AgentMemoryDreamingRun,
+  AgentMemoryDreamingRunListFilter,
   AgentMemoryEntry,
   AgentMemoryHealth,
   AgentMemoryListFilter,
@@ -74,6 +78,29 @@ type RawShortTermRecall = {
   last_recalled_at: string | null;
   promoted_at: string | null;
   metadata: string | null;
+};
+
+type RawAgentMemoryDreamingRun = {
+  id: number;
+  trigger_type: string;
+  started_at: string | null;
+  completed_at: string | null;
+  status: string;
+  light_count: number;
+  rem_count: number;
+  promoted_count: number;
+  error_message: string | null;
+  metadata: string | null;
+};
+
+type RawAgentMemoryDreamingReport = {
+  id: number;
+  run_id: number | null;
+  phase: string;
+  day_bucket: string;
+  content: string;
+  metadata: string | null;
+  created_at: string | null;
 };
 
 const REDACT_KEYS = new Set([
@@ -166,6 +193,35 @@ function toEntry(row: RawAgentMemoryEntry): AgentMemoryEntry {
     accessCount: row.access_count,
     promotedAt: row.promoted_at,
     archived: row.archived,
+  };
+}
+
+function toDreamingRun(row: RawAgentMemoryDreamingRun): AgentMemoryDreamingRun {
+  return {
+    id: row.id,
+    triggerType: row.trigger_type,
+    startedAt: row.started_at,
+    completedAt: row.completed_at,
+    status: row.status,
+    lightCount: row.light_count,
+    remCount: row.rem_count,
+    promotedCount: row.promoted_count,
+    errorMessage: row.error_message,
+    metadata: row.metadata,
+  };
+}
+
+function toDreamingReport(
+  row: RawAgentMemoryDreamingReport,
+): AgentMemoryDreamingReport {
+  return {
+    id: row.id,
+    runId: row.run_id,
+    phase: row.phase,
+    dayBucket: row.day_bucket,
+    content: row.content,
+    metadata: row.metadata,
+    createdAt: row.created_at,
   };
 }
 
@@ -757,6 +813,78 @@ export default class AgentMemoryService {
       ),
       fts5Available,
     };
+  }
+
+  static async listDreamingRuns(
+    filter: AgentMemoryDreamingRunListFilter = {},
+  ): Promise<AgentMemoryDreamingRun[]> {
+    const db = await this.getDb();
+    const params: SqlParams = {};
+    const where = ['1 = 1'];
+
+    if (filter.triggerType) {
+      params.triggerType = filter.triggerType;
+      where.push('trigger_type = @triggerType');
+    }
+    if (filter.status) {
+      params.status = filter.status;
+      where.push('status = @status');
+    }
+
+    params.limit = clampNumber(filter.limit, DEFAULT_LIMIT, MAX_LIMIT);
+    params.offset = clampNumber(filter.offset, 0, Number.MAX_SAFE_INTEGER);
+
+    const rows = db
+      .prepare(
+        `
+          SELECT *
+          FROM agent_memory_dreaming_runs
+          WHERE ${where.join(' AND ')}
+          ORDER BY started_at DESC, id DESC
+          LIMIT @limit OFFSET @offset
+        `,
+      )
+      .all(params) as RawAgentMemoryDreamingRun[];
+
+    return rows.map(toDreamingRun);
+  }
+
+  static async listDreamingReports(
+    filter: AgentMemoryDreamingReportListFilter = {},
+  ): Promise<AgentMemoryDreamingReport[]> {
+    const db = await this.getDb();
+    const params: SqlParams = {};
+    const where = ['1 = 1'];
+
+    if (filter.runId !== undefined) {
+      params.runId = filter.runId;
+      where.push('run_id = @runId');
+    }
+    if (filter.phase) {
+      params.phase = filter.phase;
+      where.push('phase = @phase');
+    }
+    if (filter.dayBucket) {
+      params.dayBucket = filter.dayBucket;
+      where.push('day_bucket = @dayBucket');
+    }
+
+    params.limit = clampNumber(filter.limit, DEFAULT_LIMIT, MAX_LIMIT);
+    params.offset = clampNumber(filter.offset, 0, Number.MAX_SAFE_INTEGER);
+
+    const rows = db
+      .prepare(
+        `
+          SELECT *
+          FROM agent_memory_dreaming_reports
+          WHERE ${where.join(' AND ')}
+          ORDER BY created_at DESC, id DESC
+          LIMIT @limit OFFSET @offset
+        `,
+      )
+      .all(params) as RawAgentMemoryDreamingReport[];
+
+    return rows.map(toDreamingReport);
   }
 
   static async refreshDatabaseJsonMemory(

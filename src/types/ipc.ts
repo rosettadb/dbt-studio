@@ -401,6 +401,21 @@ export type SavedQueriesChannels =
   | 'savedQueries:update'
   | 'savedQueries:delete';
 
+export type MemoryChannels =
+  | 'memory:list'
+  | 'memory:search'
+  | 'memory:stats'
+  | 'memory:health'
+  | 'memory:create'
+  | 'memory:update'
+  | 'memory:archive'
+  | 'memory:delete'
+  | 'memory:refresh-database-context'
+  | 'memory:dreaming:run'
+  | 'memory:dreaming:list'
+  | 'memory:dreaming:reports:list'
+  | 'memory:index:rebuild';
+
 export type Channels =
   | TestChannels
   | CliChannels
@@ -422,7 +437,8 @@ export type Channels =
   | AgentChannels
   | MCPChannels
   | SkillsChannels
-  | SavedQueriesChannels;
+  | SavedQueriesChannels
+  | MemoryChannels;
 
 export type ConfigureConnectionBody = {
   projectId?: string;
