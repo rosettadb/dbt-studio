@@ -7,6 +7,8 @@ import {
   createFilesystemTools,
   filesystemTools,
 } from '../tools/filesystem.tools';
+import { createMemoryTools } from '../tools/memory.tools';
+import type { AgentMemoryScope } from '../../../../types/backend';
 
 export interface ProjectAgentOptions {
   projectPath?: string;
@@ -15,6 +17,7 @@ export interface ProjectAgentOptions {
   onFileWritten?: (filePath: string) => void;
   conversationId?: number; // Added for retrofitting
   toolMode: 'chat' | 'agent';
+  memoryScope?: AgentMemoryScope;
 }
 
 export async function createProjectAgent(
@@ -30,6 +33,17 @@ export async function createProjectAgent(
       : '';
 
   const isAskMode = options.toolMode === 'chat';
+  const memoryGuidance = options.memoryScope
+    ? `
+## Memory Guidance
+- Search memory (memory_search) when the user asks about prior decisions, previous errors, conventions, project history, saved analysis, or "what did we do before?".
+- Save memory (memory_remember) only when information is durable and useful across sessions.
+- Never save passwords, tokens, API keys, or connection credentials.
+- Use memory_forget to archive bad or stale memory when the user asks to forget something.
+- Use memory_status to show the user what is currently in their memory for this scope.
+- In Ask mode, memory_remember and memory_forget are allowed only for explicit memory-management requests; they do not modify project files or database data.
+`
+    : '';
 
   const systemInstructions = isAskMode
     ? `You are an expert dbt Studio AI assistant. You are running in **Ask (read-only) mode**.
@@ -37,6 +51,7 @@ You help users with dbt model development, debugging, and data operations by ans
 
 ${projectPath ? `## Active dbt Project\n\nProject path: ${projectPath}\n` : ''}
 ${skills ?? ''}
+${memoryGuidance}
 
 ## Ask Mode Constraints
 
@@ -58,6 +73,7 @@ You have access to the dbt project filesystem and can read, write, and run dbt c
 
 ${projectPath ? `## Active dbt Project\n\nProject path: ${projectPath}\n\nAll file operations and dbt commands should use this project path as the working directory unless the user specifies otherwise.\n` : ''}
 ${skills ?? ''}
+${memoryGuidance}
 
 ## Guidelines
 
@@ -136,11 +152,19 @@ Always confirm before making destructive changes.`;
       }
     }
   });
+  const memoryTools = options.memoryScope
+    ? createMemoryTools(options.memoryScope)
+    : {};
 
   return new ToolLoopAgent({
     model: base.model as any,
     instructions: systemInstructions,
-    tools: { ...baseTools, ...base.mcpTools, loadSkill: base.loadSkillTool },
+    tools: {
+      ...baseTools,
+      ...memoryTools,
+      ...base.mcpTools,
+      loadSkill: base.loadSkillTool,
+    },
     stopWhen: stepCountIs(base.maxSteps),
     prepareStep: base.prepareStep,
     onStepFinish: base.onStepFinish,

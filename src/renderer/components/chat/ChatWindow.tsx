@@ -47,6 +47,7 @@ export interface ChatWindowProps {
   screenKey?: 'project' | 'sql' | 'notebooks';
   connectionId?: string;
   projectId?: number | null;
+  notebookId?: string | number | null;
   onClose?: () => void;
 }
 
@@ -60,6 +61,7 @@ export const ChatWindow: React.FC<ChatWindowProps> = ({
   screenKey = 'project',
   connectionId,
   projectId: propProjectId,
+  notebookId,
   onClose,
 }) => {
   const {
@@ -838,6 +840,9 @@ export const ChatWindow: React.FC<ChatWindowProps> = ({
                 toolMode ?? currentMode,
                 screenKey,
                 connectionId,
+                projectId ?? null,
+                notebookId ?? null,
+                screenKey === 'notebooks' ? (projectId ?? null) : null,
               )
             }
             onCancelStream={cancelStream}

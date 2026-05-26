@@ -4,15 +4,18 @@ import type { BaseAgentConfig } from './baseAgentConfig';
 import { createStudioCloudTools } from '../tools/studio/cloud.tools';
 import { createStudioConnectionsTools } from '../tools/studio/connections.tools';
 import { createStudioDuckLakeTools } from '../tools/studio/ducklake.tools';
+import { createMemoryTools } from '../tools/memory.tools';
+import type { AgentMemoryScope } from '../../../../types/backend';
 
 export interface NotebooksAgentOptions {
   connectionMeta: { name: string; type: string };
-  notebookId?: number;
+  notebookId?: string | number | null;
   projectPath?: string;
   enabledTools: Record<string, any>;
   skills: string;
   conversationId: number;
   toolMode: 'chat' | 'agent';
+  memoryScope?: AgentMemoryScope;
 }
 
 export async function createNotebooksAgent(
@@ -28,6 +31,17 @@ export async function createNotebooksAgent(
       : '';
 
   const isAskMode = options.toolMode === 'chat';
+  const memoryGuidance = options.memoryScope
+    ? `
+## Memory Guidance
+- Search memory (memory_search) when the user asks about prior decisions, previous errors, conventions, project history, saved analysis, or "what did we do before?".
+- Save memory (memory_remember) only when information is durable and useful across sessions.
+- Never save passwords, tokens, API keys, or connection credentials.
+- Use memory_forget to archive bad or stale memory when the user asks to forget something.
+- Use memory_status to show the user what is currently in their memory for this scope.
+- In Ask mode, memory_remember and memory_forget are allowed only for explicit memory-management requests; they do not modify project files or database data.
+`
+    : '';
 
   const systemInstructions = isAskMode
     ? `You are an expert AI assistant for data notebooks. You are running in **Ask (read-only) mode**.
@@ -43,6 +57,7 @@ You are in **Ask mode**. You can only read and analyze — you CANNOT execute qu
 If the user asks you to perform a write operation, explain what it would look like and tell them to switch to **Code mode**.
 
 ${skills ?? ''}
+${memoryGuidance}
 ${mcpToolsList}`
     : `You are an expert data engineering assistant in the Notebooks screen.
 
@@ -57,6 +72,7 @@ ${
     : `## Note\n\nNo dbt project is linked to this connection.\nFocus on: notebook cell authoring, SQL execution, result exploration, and schema inspection.\n`
 }
 ${skills ?? ''}
+${memoryGuidance}
 ${mcpToolsList}`;
 
   const studioNotebookTools: Record<string, any> = {
@@ -92,11 +108,19 @@ ${mcpToolsList}`;
       }
     }
   });
+  const memoryTools = options.memoryScope
+    ? createMemoryTools(options.memoryScope)
+    : {};
 
   return new ToolLoopAgent({
     model: base.model as any,
     instructions: systemInstructions,
-    tools: { ...baseTools, ...base.mcpTools, loadSkill: base.loadSkillTool },
+    tools: {
+      ...baseTools,
+      ...memoryTools,
+      ...base.mcpTools,
+      loadSkill: base.loadSkillTool,
+    },
     stopWhen: stepCountIs(base.maxSteps),
     prepareStep: base.prepareStep,
     onStepFinish: base.onStepFinish,

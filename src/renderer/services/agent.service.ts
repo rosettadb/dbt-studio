@@ -28,6 +28,9 @@ export interface AgentRunRequest {
   toolMode?: 'chat' | 'agent';
   screenKey?: 'project' | 'sql' | 'notebooks';
   connectionId?: string;
+  projectId?: string | number | null;
+  notebookId?: string | number | null;
+  sourceProjectId?: string | number | null;
 }
 
 /**

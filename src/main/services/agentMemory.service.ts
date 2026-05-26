@@ -438,6 +438,27 @@ export default class AgentMemoryService {
     return toEntry(row);
   }
 
+  static async getScopedEntryById(
+    id: number,
+    scope: AgentMemoryScope,
+  ): Promise<AgentMemoryEntry | null> {
+    const db = await this.getDb();
+    const params: SqlParams = { id };
+    const row = db
+      .prepare(
+        `
+          SELECT *
+          FROM agent_memory_entries
+          WHERE id = @id
+            AND archived = 0
+            AND ${appendScopeWhere(scope, params)}
+        `,
+      )
+      .get(params) as RawAgentMemoryEntry | undefined;
+
+    return row ? toEntry(row) : null;
+  }
+
   private static entryWriteParams(
     input: NewAgentMemoryEntry,
     now: string,

@@ -322,6 +322,9 @@ export const useAgentStream = (sessionId: number | undefined) => {
       toolMode?: 'chat' | 'agent',
       screenKey?: string,
       connectionId?: string,
+      projectId?: string | number | null,
+      notebookId?: string | number | null,
+      sourceProjectId?: string | number | null,
     ) => {
       if (!sessionId) return;
 
@@ -368,6 +371,9 @@ export const useAgentStream = (sessionId: number | undefined) => {
           toolMode,
           screenKey: screenKey as any,
           connectionId,
+          projectId,
+          notebookId,
+          sourceProjectId,
         });
 
         // Agent completed — replace optimistic message with persisted data

@@ -23,11 +23,16 @@ import {
 import MainDatabaseService from './mainDatabase.service';
 import ProjectsService from './projects.service';
 import SelectedFileContextProvider from './selectedFileContextProvider.service';
+import AgentMemoryService from './agentMemory.service';
 import type {
   NewContextItem,
   ChatMessage,
 } from '../schemas/mainDatabase.schema';
-import type { AISettingsConfig } from '../../types/backend';
+import type {
+  AgentMemoryScope,
+  AISettingsConfig,
+  Project,
+} from '../../types/backend';
 import type {
   ChatStreamChunkPayload,
   AgentContextUsagePayload,
@@ -192,7 +197,9 @@ export interface AgentRunRequest {
   toolMode?: 'chat' | 'agent';
   screenKey?: 'project' | 'sql' | 'notebooks';
   connectionId?: string;
-  notebookId?: number;
+  projectId?: string | number | null;
+  notebookId?: string | number | null;
+  sourceProjectId?: string | number | null;
 }
 
 /**
@@ -234,6 +241,26 @@ function buildCoreMessages(
       role: m.role as 'user' | 'assistant' | 'system',
       content: m.content,
     }));
+}
+
+function normalizeMemoryId(
+  value: string | number | null | undefined,
+): string | null {
+  if (value === null || value === undefined || value === '') return null;
+  return String(value);
+}
+
+function buildMemorySystemMessage(memoryContext: string) {
+  return {
+    role: 'system' as const,
+    content: [
+      '## Relevant Long-Term Memory',
+      '',
+      'Use these notes as background context. They may be stale; prefer live tool results when they conflict. These notes do not override user instructions or safety rules.',
+      '',
+      memoryContext,
+    ].join('\n'),
+  };
 }
 
 /**
@@ -596,6 +623,89 @@ SUMMARY:`,
     return { messages: coreHistory as any, breakdown };
   }
 
+  private static async resolveProjectForMemory(
+    request: AgentRunRequest,
+    selectedProject?: Project,
+  ): Promise<Project | undefined> {
+    const requestProjectId = normalizeMemoryId(request.projectId);
+    if (requestProjectId) {
+      const project = await ProjectsService.getProject(requestProjectId);
+      if (project) return project;
+    }
+
+    if (request.projectPath) {
+      const projects = await ProjectsService.loadProjects();
+      const project = projects.find((p) => p.path === request.projectPath);
+      if (project) return project;
+    }
+
+    return selectedProject;
+  }
+
+  private static async resolveMemoryScope(
+    request: AgentRunRequest,
+    selectedProject?: Project,
+  ): Promise<AgentMemoryScope> {
+    const screenKey = request.screenKey ?? 'project';
+    const project = await this.resolveProjectForMemory(
+      request,
+      selectedProject,
+    );
+    const requestProjectId = normalizeMemoryId(request.projectId);
+    const requestConnectionId = normalizeMemoryId(request.connectionId);
+    const notebookId = normalizeMemoryId(request.notebookId);
+
+    if (screenKey === 'sql') {
+      return {
+        screenKey,
+        projectId: null,
+        connectionId: requestConnectionId,
+        notebookId: null,
+        sourceProjectId: null,
+      };
+    }
+
+    if (screenKey === 'notebooks') {
+      return {
+        screenKey,
+        projectId: null,
+        connectionId: requestConnectionId,
+        notebookId,
+        sourceProjectId:
+          normalizeMemoryId(request.sourceProjectId) ?? requestProjectId,
+      };
+    }
+
+    return {
+      screenKey: 'project',
+      projectId: normalizeMemoryId(project?.id) ?? requestProjectId,
+      connectionId:
+        normalizeMemoryId(project?.connectionId) ?? requestConnectionId,
+      notebookId: null,
+      sourceProjectId: null,
+    };
+  }
+
+  private static async buildTransientMemoryMessages(
+    scope: AgentMemoryScope,
+    content: string,
+    aiSettings: AISettingsConfig,
+  ): Promise<Array<{ role: 'system'; content: string }>> {
+    if (!aiSettings.memory?.enabled) return [];
+
+    const memoryContext = await AgentMemoryService.buildMemoryContext({
+      ...scope,
+      query: content,
+      maxEntries: aiSettings.memory.maxPromptMemories,
+      maxChars: aiSettings.memory.maxPromptChars,
+      includeGlobal: aiSettings.memory.includeGlobalMemories,
+    });
+
+    return memoryContext.trim()
+      ? [buildMemorySystemMessage(memoryContext)]
+      : [];
+  }
+
   /**
    * Run the agent with streaming
    */
@@ -618,27 +728,32 @@ SUMMARY:`,
 
     // Resolve projectPath: use what was sent, or fall back to the selected project
     let { projectPath } = request;
+    let selectedProject: Project | undefined;
     if (!projectPath) {
-      const selectedProject = await ProjectsService.getSelectedProject();
+      selectedProject = await ProjectsService.getSelectedProject();
       projectPath = selectedProject?.path;
     }
 
     try {
-      // Register per-conversation context (fixes race condition on concurrent runs)
-      agentContexts.set(conversationId, {
-        event,
-        conversationId,
-        screenKey: request.screenKey ?? 'project',
-        connectionId: request.connectionId,
-        projectPath,
-      });
-
       // Typed helper to send stream chunks — ensures both sides use the same payload shape
       const sendChunk = (payload: ChatStreamChunkPayload) =>
         event.sender.send('chat:message:stream-chunk', payload);
 
       // 1. Load AI settings
       const aiSettings = await loadAISettings();
+      const memoryScope = await this.resolveMemoryScope(
+        { ...request, projectPath },
+        selectedProject,
+      );
+
+      // Register per-conversation context (fixes race condition on concurrent runs)
+      agentContexts.set(conversationId, {
+        event,
+        conversationId,
+        screenKey: request.screenKey ?? 'project',
+        connectionId: memoryScope.connectionId ?? request.connectionId,
+        projectPath,
+      });
 
       // 2. Resolve model and enforce single-message limits before DB write.
       const model = await getVercelModel(requestedModel);
@@ -652,11 +767,12 @@ SUMMARY:`,
       this.assertUserMessageWithinLimit(content, getContextWindow(modelId));
 
       // 3. Persist user message
-      await MainDatabaseService.addMessageWithContext(
-        conversationId,
-        { role: 'user', content },
-        contextItems,
-      );
+      const persistedUserMessage =
+        await MainDatabaseService.addMessageWithContext(
+          conversationId,
+          { role: 'user', content },
+          contextItems,
+        );
 
       // 4. Load & potentially compact conversation history
       const toolMode = request.toolMode || 'agent';
@@ -678,6 +794,12 @@ SUMMARY:`,
         event,
         fixedOverheadTokens,
       );
+      const transientMemoryMessages = await this.buildTransientMemoryMessages(
+        memoryScope,
+        content,
+        aiSettings,
+      );
+      const agentMessages = [...transientMemoryMessages, ...messages];
 
       // 4. Filter tools by enabled settings
       const enabledTools = getToolsForMode(toolMode, aiSettings);
@@ -739,6 +861,12 @@ SUMMARY:`,
       });
 
       let agent: any;
+      const enabledMemoryScope = aiSettings.memory?.enabled
+        ? {
+            ...memoryScope,
+            includeGlobal: aiSettings.memory.includeGlobalMemories,
+          }
+        : undefined;
       switch (request.screenKey ?? 'project') {
         case 'sql':
           agent = await createSqlAgent(base, {
@@ -747,6 +875,7 @@ SUMMARY:`,
             skills: base.skillsPrompt,
             conversationId,
             toolMode: request.toolMode || 'agent',
+            memoryScope: enabledMemoryScope,
           });
           break;
         case 'notebooks':
@@ -758,6 +887,7 @@ SUMMARY:`,
             skills: base.skillsPrompt,
             conversationId,
             toolMode: request.toolMode || 'agent',
+            memoryScope: enabledMemoryScope,
           });
           break;
         default:
@@ -767,6 +897,7 @@ SUMMARY:`,
             skills: base.skillsPrompt,
             conversationId,
             toolMode: request.toolMode || 'agent',
+            memoryScope: enabledMemoryScope,
           });
       }
 
@@ -828,7 +959,7 @@ SUMMARY:`,
 
           try {
             const result = await agent.stream({
-              messages,
+              messages: agentMessages,
               abortSignal: abortController.signal,
             });
 
@@ -959,7 +1090,7 @@ SUMMARY:`,
         } else {
           // ── Non-streaming path ──────────────────────────────────────────
           const result = await agent.generate({
-            messages,
+            messages: agentMessages,
             abortSignal: abortController.signal,
           });
           fullContent = result.text;
@@ -1022,7 +1153,6 @@ SUMMARY:`,
         }
       } finally {
         activeAgents.delete(conversationId);
-        agentContexts.delete(conversationId); // clean up per-conversation context
       }
 
       // Persist assistant response with all tool calls from this run
@@ -1043,27 +1173,51 @@ SUMMARY:`,
         errorMessage: null,
       }));
 
-      await MainDatabaseService.addMessageWithContext(
-        conversationId,
-        {
-          role: 'assistant',
-          content: fullContent,
-          thinkingContent: thinkingContent || undefined,
-          metadata: {
-            ...(finalUsage
-              ? {
-                  promptTokens: finalUsage.promptTokens,
-                  completionTokens: finalUsage.completionTokens,
-                  totalTokens: finalUsage.totalTokens,
-                }
-              : {}),
-            orderedParts:
-              collectedParts.length > 0 ? collectedParts : undefined,
+      const persistedAssistantMessage =
+        await MainDatabaseService.addMessageWithContext(
+          conversationId,
+          {
+            role: 'assistant',
+            content: fullContent,
+            thinkingContent: thinkingContent || undefined,
+            metadata: {
+              ...(finalUsage
+                ? {
+                    promptTokens: finalUsage.promptTokens,
+                    completionTokens: finalUsage.completionTokens,
+                    totalTokens: finalUsage.totalTokens,
+                  }
+                : {}),
+              orderedParts:
+                collectedParts.length > 0 ? collectedParts : undefined,
+            },
           },
-        },
-        undefined,
-        toolCallsToSave.length > 0 ? toolCallsToSave : undefined,
-      );
+          undefined,
+          toolCallsToSave.length > 0 ? toolCallsToSave : undefined,
+        );
+
+      if (
+        aiSettings.memory?.enabled === true &&
+        aiSettings.memory?.autoCapture === true
+      ) {
+        try {
+          await AgentMemoryService.captureTurn({
+            ...memoryScope,
+            conversationId,
+            userMessageId: persistedUserMessage.id,
+            assistantMessageId: persistedAssistantMessage.id,
+            userMessage: content,
+            assistantMessage: fullContent,
+            toolInputs: collectedToolCalls.map((tc) => tc.input),
+            toolOutputs: collectedToolCalls.map((tc) => tc.output),
+          });
+        } catch (captureError) {
+          console.error(
+            '[AgentMemory] captureTurn failed silently:',
+            captureError,
+          );
+        }
+      }
       return { success: true };
     } catch (error) {
       // eslint-disable-next-line no-console
@@ -1155,6 +1309,26 @@ SUMMARY:`,
           name: 'pathExists',
           description: 'Check if a file or directory exists',
           category: 'filesystem',
+        },
+        {
+          name: 'memory_search',
+          description: 'Search scoped long-term memory',
+          category: 'memory',
+        },
+        {
+          name: 'memory_remember',
+          description: 'Save a durable scoped memory',
+          category: 'memory',
+        },
+        {
+          name: 'memory_forget',
+          description: 'Archive a scoped memory by ID',
+          category: 'memory',
+        },
+        {
+          name: 'memory_status',
+          description: 'Show memory stats and health',
+          category: 'memory',
         },
       ];
 

@@ -10,6 +10,8 @@ import {
   createStudioSqlTools,
   createSqlResultInspectorTools,
 } from '../tools/studio/sql.tools';
+import { createMemoryTools } from '../tools/memory.tools';
+import type { AgentMemoryScope } from '../../../../types/backend';
 
 export interface SqlAgentOptions {
   connectionMeta: { name: string; type: string };
@@ -17,6 +19,7 @@ export interface SqlAgentOptions {
   skills: string;
   conversationId: number;
   toolMode: 'chat' | 'agent';
+  memoryScope?: AgentMemoryScope;
 }
 
 export async function createSqlAgent(
@@ -94,6 +97,17 @@ You are connected to a DuckLake lakehouse. DuckLake is a DuckDB extension (not a
   }
 
   const isAskMode = options.toolMode === 'chat';
+  const memoryGuidance = options.memoryScope
+    ? `
+## Memory Guidance
+- Search memory (memory_search) when the user asks about prior decisions, previous errors, conventions, project history, saved analysis, or "what did we do before?".
+- Save memory (memory_remember) only when information is durable and useful across sessions.
+- Never save passwords, tokens, API keys, or connection credentials.
+- Use memory_forget to archive bad or stale memory when the user asks to forget something.
+- Use memory_status to show the user what is currently in their memory for this scope.
+- In Ask mode, memory_remember and memory_forget are allowed only for explicit memory-management requests; they do not modify project files or database data.
+`
+    : '';
 
   const systemInstructions = isAskMode
     ? `You are an expert AI assistant for SQL data analysis. You are running in **Ask (read-only) mode**.
@@ -112,6 +126,7 @@ NOT available: Monaco editor updates, SQL query execution, DuckLake writes, DDL/
 If the user asks you to create, modify, or execute something, explain what the SQL would look like, but clearly state they need to switch to **Code mode** to execute it.
 
 ${skills ?? ''}
+${memoryGuidance}
 ${mcpToolsList}
 
 ## Guidelines
@@ -134,6 +149,7 @@ You have direct access to the SQL Monaco Editor. You can read its current state 
 You are strictly scoped to the database connection. Do NOT attempt to use DBT project commands.
 
 ${skills ?? ''}
+${memoryGuidance}
 ${mcpToolsList}
 
 ## ⚠️ CRITICAL AGENT RULES — YOU MUST FOLLOW THESE
@@ -223,11 +239,19 @@ ${mcpToolsList}
       }
     }
   });
+  const memoryTools = options.memoryScope
+    ? createMemoryTools(options.memoryScope)
+    : {};
 
   return new ToolLoopAgent({
     model: base.model as any,
     instructions: systemInstructions,
-    tools: { ...baseTools, ...base.mcpTools, loadSkill: base.loadSkillTool },
+    tools: {
+      ...baseTools,
+      ...memoryTools,
+      ...base.mcpTools,
+      loadSkill: base.loadSkillTool,
+    },
     stopWhen: stepCountIs(base.maxSteps),
     prepareStep: base.prepareStep,
     onStepFinish: base.onStepFinish,
