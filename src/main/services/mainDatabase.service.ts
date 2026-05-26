@@ -488,6 +488,22 @@ export default class MainDatabaseService {
       CREATE INDEX IF NOT EXISTS amws_connection_idx ON agent_memory_wiki_state(connection_id);
       CREATE INDEX IF NOT EXISTS amws_notebook_idx   ON agent_memory_wiki_state(notebook_id);
 
+      CREATE TABLE IF NOT EXISTS agent_memory_diagnostics (
+        id                 INTEGER PRIMARY KEY AUTOINCREMENT,
+        conversation_id    INTEGER,
+        message_id         INTEGER,
+        provider_id        TEXT,
+        model_id           TEXT,
+        execution_ms       INTEGER NOT NULL DEFAULT 0,
+        prompt_tokens      INTEGER NOT NULL DEFAULT 0,
+        completion_tokens  INTEGER NOT NULL DEFAULT 0,
+        prompt_payload     TEXT NOT NULL,
+        completion_payload TEXT NOT NULL,
+        recall_keys_found  TEXT,
+        created_at         TEXT DEFAULT (datetime('now'))
+      );
+      CREATE INDEX IF NOT EXISTS amd_conv_idx ON agent_memory_diagnostics(conversation_id);
+
       INSERT OR IGNORE INTO agent_memory_config (key, value) VALUES ('last_dreaming_run_at', '');
       INSERT OR IGNORE INTO agent_memory_config (key, value) VALUES ('last_metadata_refresh_at', '');
       INSERT OR IGNORE INTO agent_memory_config (key, value) VALUES ('fts5_available', 'unknown');
@@ -865,6 +881,26 @@ export default class MainDatabaseService {
           CREATE INDEX IF NOT EXISTS amws_project_idx    ON agent_memory_wiki_state(project_id);
           CREATE INDEX IF NOT EXISTS amws_connection_idx ON agent_memory_wiki_state(connection_id);
           CREATE INDEX IF NOT EXISTS amws_notebook_idx   ON agent_memory_wiki_state(notebook_id);
+        `);
+      }
+
+      if (!tableNames.has('agent_memory_diagnostics')) {
+        this.sqlite.exec(`
+          CREATE TABLE IF NOT EXISTS agent_memory_diagnostics (
+            id                 INTEGER PRIMARY KEY AUTOINCREMENT,
+            conversation_id    INTEGER,
+            message_id         INTEGER,
+            provider_id        TEXT,
+            model_id           TEXT,
+            execution_ms       INTEGER NOT NULL DEFAULT 0,
+            prompt_tokens      INTEGER NOT NULL DEFAULT 0,
+            completion_tokens  INTEGER NOT NULL DEFAULT 0,
+            prompt_payload     TEXT NOT NULL,
+            completion_payload TEXT NOT NULL,
+            recall_keys_found  TEXT,
+            created_at         TEXT DEFAULT (datetime('now'))
+          );
+          CREATE INDEX IF NOT EXISTS amd_conv_idx ON agent_memory_diagnostics(conversation_id);
 
           INSERT OR IGNORE INTO agent_memory_config (key, value) VALUES ('last_dreaming_run_at', '');
           INSERT OR IGNORE INTO agent_memory_config (key, value) VALUES ('last_metadata_refresh_at', '');
