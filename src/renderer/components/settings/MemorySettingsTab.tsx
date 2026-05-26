@@ -32,6 +32,7 @@ import {
 import AddIcon from '@mui/icons-material/Add';
 import ArchiveIcon from '@mui/icons-material/Archive';
 import EditIcon from '@mui/icons-material/Edit';
+import FolderOpenIcon from '@mui/icons-material/FolderOpen';
 import PreviewIcon from '@mui/icons-material/Preview';
 import RefreshIcon from '@mui/icons-material/Refresh';
 import SearchIcon from '@mui/icons-material/Search';
@@ -55,13 +56,16 @@ import {
   useGetAISettings,
   useSaveAISettings,
 } from '../../controllers/aiSettings.controller';
+import { useFilePicker } from '../../controllers/settings.controller';
 import type {
+  AgentMemoryActiveMemorySettings,
   AgentMemoryEntry,
   AgentMemoryListFilter,
   AgentMemoryRefreshResult,
   AgentMemoryRecoveryAction,
   AgentMemoryScreenKey,
   AgentMemoryShortTermRecallListFilter,
+  AgentMemoryWikiSettings,
   AISettingsConfig,
   MemoryKind,
   NewAgentMemoryEntry,
@@ -88,6 +92,26 @@ interface MemoryFormState {
   tags: string;
 }
 
+const DEFAULT_WIKI_SETTINGS: AgentMemoryWikiSettings = {
+  enabled: false,
+  vaultPath: null,
+  debounceMs: 2000,
+  includeDatabaseMetadata: false,
+  includeManualMemories: true,
+  includePromotedMemories: true,
+  manualNoteImportEnabled: false,
+};
+
+// Plan 38 Track A — Active Memory defaults.
+const DEFAULT_ACTIVE_MEMORY_SETTINGS: AgentMemoryActiveMemorySettings = {
+  enabled: false,
+  mode: 'recent',
+  timeoutMs: 15000,
+  maxInputTokens: 4000,
+  persistTranscripts: false,
+  transcriptRetention: 50,
+};
+
 const DEFAULT_MEMORY_SETTINGS: MemorySettings = {
   enabled: true,
   autoCapture: true,
@@ -102,7 +126,24 @@ const DEFAULT_MEMORY_SETTINGS: MemorySettings = {
   lightDreamingEnabled: true,
   embeddingsEnabled: false,
   embeddingProvider: 'none',
+  wiki: DEFAULT_WIKI_SETTINGS,
+  activeMemory: DEFAULT_ACTIVE_MEMORY_SETTINGS,
 };
+
+const mergeMemorySettings = (
+  settings?: AISettingsConfig['memory'],
+): MemorySettings => ({
+  ...DEFAULT_MEMORY_SETTINGS,
+  ...settings,
+  wiki: {
+    ...DEFAULT_WIKI_SETTINGS,
+    ...settings?.wiki,
+  },
+  activeMemory: {
+    ...DEFAULT_ACTIVE_MEMORY_SETTINGS,
+    ...settings?.activeMemory,
+  },
+});
 
 const SCREEN_OPTIONS: { value: AgentMemoryScreenKey | 'all'; label: string }[] =
   [
@@ -484,7 +525,10 @@ export const MemorySettingsTab: React.FC = () => {
   const [connectionFilter, setConnectionFilter] = React.useState('');
   const [notebookFilter, setNotebookFilter] = React.useState('');
   const [dialogOpen, setDialogOpen] = React.useState(false);
-  const [dialogMode, setDialogMode] = React.useState<MemoryFormMode>('create');
+  const [dialogMode, setDialogMode] = React.useState<'create' | 'edit'>(
+    'create',
+  );
+
   const [editingEntry, setEditingEntry] =
     React.useState<AgentMemoryEntry | null>(null);
   const [form, setForm] = React.useState<MemoryFormState>(EMPTY_FORM);
@@ -494,6 +538,7 @@ export const MemorySettingsTab: React.FC = () => {
 
   const { data: aiSettings, isLoading: aiSettingsLoading } = useGetAISettings();
   const saveAISettings = useSaveAISettings();
+  const filePicker = useFilePicker();
   const statsQuery = useMemoryStats();
   const healthQuery = useMemoryHealth();
   const refreshMetadata = useRefreshDatabaseContext();
@@ -545,10 +590,7 @@ export const MemorySettingsTab: React.FC = () => {
     limit: 100,
   });
 
-  const memorySettings: MemorySettings = {
-    ...DEFAULT_MEMORY_SETTINGS,
-    ...aiSettings?.memory,
-  };
+  const memorySettings = mergeMemorySettings(aiSettings?.memory);
 
   const shortTermEntriesQuery = useShortTermRecall(shortTermFilter);
   const dreamingRunsQuery = useDreamingRuns({ limit: 50 });
@@ -591,13 +633,19 @@ export const MemorySettingsTab: React.FC = () => {
 
   const updateMemorySettings = (patch: Partial<MemorySettings>) => {
     if (!aiSettings) return;
+    const currentMemorySettings = mergeMemorySettings(aiSettings.memory);
     saveAISettings.mutate(
       {
         ...aiSettings,
         memory: {
-          ...DEFAULT_MEMORY_SETTINGS,
-          ...aiSettings.memory,
+          ...currentMemorySettings,
           ...patch,
+          wiki: patch.wiki
+            ? {
+                ...currentMemorySettings.wiki,
+                ...patch.wiki,
+              }
+            : currentMemorySettings.wiki,
         },
       },
       {
@@ -605,6 +653,45 @@ export const MemorySettingsTab: React.FC = () => {
           toast.error(
             `Failed to save memory settings: ${getErrorMessage(error)}`,
           );
+        },
+      },
+    );
+  };
+
+  const updateWikiSettings = (patch: Partial<AgentMemoryWikiSettings>) => {
+    updateMemorySettings({
+      wiki: {
+        ...memorySettings.wiki,
+        ...patch,
+      },
+    });
+  };
+
+  const updateActiveMemorySettings = (
+    patch: Partial<AgentMemoryActiveMemorySettings>,
+  ) => {
+    updateMemorySettings({
+      activeMemory: {
+        ...memorySettings.activeMemory,
+        ...patch,
+      },
+    });
+  };
+
+  const handleSelectWikiVault = () => {
+    filePicker.mutate(
+      {
+        properties: ['openDirectory'],
+        defaultPath: memorySettings.wiki.vaultPath ?? undefined,
+      },
+      {
+        onSuccess: (filePaths) => {
+          const [vaultPath] = filePaths;
+          if (!vaultPath) return;
+          updateWikiSettings({ vaultPath });
+        },
+        onError: (error) => {
+          toast.error(`Failed to select vault path: ${getErrorMessage(error)}`);
         },
       },
     );
@@ -1001,6 +1088,319 @@ export const MemorySettingsTab: React.FC = () => {
             />
           }
         />
+
+        <SectionTitle>Memory Wiki</SectionTitle>
+        <Divider />
+        <Stack direction="row" spacing={1} sx={{ py: 1.25, flexWrap: 'wrap' }}>
+          <Chip
+            size="small"
+            color={memorySettings.wiki.enabled ? 'success' : 'default'}
+            label={memorySettings.wiki.enabled ? 'Wiki enabled' : 'Wiki off'}
+          />
+          <Chip
+            size="small"
+            variant="outlined"
+            color={memorySettings.wiki.vaultPath ? 'success' : 'warning'}
+            label={
+              memorySettings.wiki.vaultPath
+                ? 'Vault configured'
+                : 'Vault path required'
+            }
+          />
+          <Chip
+            size="small"
+            variant="outlined"
+            label="Human notes excluded from agent search"
+          />
+        </Stack>
+        <SettingRow
+          label="Wiki Export"
+          description="Export durable SQLite memories into a managed Obsidian vault."
+          control={
+            <Switch
+              color="success"
+              size="small"
+              checked={memorySettings.wiki.enabled}
+              disabled={
+                !memorySettings.wiki.vaultPath && !memorySettings.wiki.enabled
+              }
+              onChange={(event) =>
+                updateWikiSettings({ enabled: event.target.checked })
+              }
+            />
+          }
+        />
+        <Divider />
+        <SettingRow
+          label="Vault Folder"
+          description="Folder where dbt Studio will write managed markdown exports."
+          control={
+            <Stack
+              direction={{ xs: 'column', sm: 'row' }}
+              spacing={1}
+              sx={{ minWidth: { xs: 260, sm: 420 } }}
+            >
+              <TextField
+                size="small"
+                value={memorySettings.wiki.vaultPath ?? ''}
+                placeholder="Select Obsidian vault folder"
+                onChange={(event) =>
+                  updateWikiSettings({
+                    vaultPath: event.target.value.trim() || null,
+                    enabled: event.target.value.trim()
+                      ? memorySettings.wiki.enabled
+                      : false,
+                  })
+                }
+                fullWidth
+              />
+              <Button
+                type="button"
+                variant="outlined"
+                startIcon={<FolderOpenIcon />}
+                disabled={filePicker.isLoading}
+                onClick={handleSelectWikiVault}
+              >
+                Browse
+              </Button>
+            </Stack>
+          }
+        />
+        <Divider />
+        <SettingRow
+          label="Compile Debounce"
+          description="Delay after memory changes before wiki compilation is queued."
+          control={
+            <TextField
+              size="small"
+              value={memorySettings.wiki.debounceMs}
+              inputProps={{ inputMode: 'numeric' }}
+              sx={{ width: 130 }}
+              onChange={(event) =>
+                updateWikiSettings({
+                  debounceMs: Math.max(250, Number(event.target.value) || 0),
+                })
+              }
+            />
+          }
+        />
+        <Divider />
+        <SettingRow
+          label="Manual Memories"
+          description="Include user-created durable memories in managed wiki exports."
+          control={
+            <Switch
+              color="success"
+              size="small"
+              checked={memorySettings.wiki.includeManualMemories}
+              onChange={(event) =>
+                updateWikiSettings({
+                  includeManualMemories: event.target.checked,
+                })
+              }
+            />
+          }
+        />
+        <Divider />
+        <SettingRow
+          label="Promoted Memories"
+          description="Include memories promoted by the dreaming pipeline."
+          control={
+            <Switch
+              color="success"
+              size="small"
+              checked={memorySettings.wiki.includePromotedMemories}
+              onChange={(event) =>
+                updateWikiSettings({
+                  includePromotedMemories: event.target.checked,
+                })
+              }
+            />
+          }
+        />
+        <Divider />
+        <SettingRow
+          label="Database Metadata"
+          description="Include database metadata memories in managed wiki exports."
+          control={
+            <Switch
+              color="success"
+              size="small"
+              checked={memorySettings.wiki.includeDatabaseMetadata}
+              onChange={(event) =>
+                updateWikiSettings({
+                  includeDatabaseMetadata: event.target.checked,
+                })
+              }
+            />
+          }
+        />
+        <Divider />
+        <SettingRow
+          label="Reviewed Note Import"
+          description="Reserved for a future SQLite review/import workflow; raw vault notes stay human-only."
+          control={
+            <Tooltip title="Not active in Phase B1">
+              <span>
+                <Switch
+                  color="success"
+                  size="small"
+                  checked={memorySettings.wiki.manualNoteImportEnabled}
+                  disabled
+                />
+              </span>
+            </Tooltip>
+          }
+        />
+
+        <SectionTitle>Active Memory (Proactive Recall)</SectionTitle>
+        <Divider />
+        <Stack direction="row" spacing={1} sx={{ py: 1.25, flexWrap: 'wrap' }}>
+          <Chip
+            size="small"
+            color={memorySettings.activeMemory.enabled ? 'success' : 'default'}
+            label={
+              memorySettings.activeMemory.enabled
+                ? 'Active Memory on'
+                : 'Active Memory off'
+            }
+          />
+        </Stack>
+        <SettingRow
+          label="Proactive Recall"
+          description="Run a memory sub-agent before each main agent turn to pre-fetch relevant context. Uses the globally selected AI provider."
+          control={
+            <Switch
+              color="success"
+              size="small"
+              checked={memorySettings.activeMemory.enabled}
+              onChange={(event) =>
+                updateActiveMemorySettings({
+                  enabled: event.target.checked,
+                })
+              }
+            />
+          }
+        />
+        <Divider />
+        <SettingRow
+          label="Recall Mode"
+          description="How much conversation history is sent to the recall sub-agent."
+          control={
+            <FormControl size="small" sx={{ minWidth: 160 }}>
+              <Select
+                value={memorySettings.activeMemory.mode}
+                onChange={(event) =>
+                  updateActiveMemorySettings({
+                    mode: event.target.value as 'message' | 'recent' | 'full',
+                  })
+                }
+              >
+                <MenuItem value="message">
+                  Message — current message only
+                </MenuItem>
+                <MenuItem value="recent">
+                  Recent — last 2 user turns (default)
+                </MenuItem>
+                <MenuItem value="full">Full — entire conversation</MenuItem>
+              </Select>
+            </FormControl>
+          }
+        />
+        <Divider />
+        <SettingRow
+          label="Timeout (ms)"
+          description="How long the recall sub-agent may run before the main agent proceeds without it. Clamped 1000–60000."
+          control={
+            <TextField
+              size="small"
+              value={memorySettings.activeMemory.timeoutMs}
+              inputProps={{ inputMode: 'numeric' }}
+              sx={{ width: 130 }}
+              onBlur={(event) =>
+                updateActiveMemorySettings({
+                  timeoutMs: Math.max(
+                    1000,
+                    Math.min(60000, Number(event.target.value) || 15000),
+                  ),
+                })
+              }
+              onChange={(event) =>
+                updateActiveMemorySettings({
+                  timeoutMs: Number(event.target.value) || 15000,
+                })
+              }
+            />
+          }
+        />
+        <Divider />
+        <SettingRow
+          label="Max Input Tokens"
+          description="Maximum conversation tokens sent to the sub-agent. Clamped 100–8000."
+          control={
+            <TextField
+              size="small"
+              value={memorySettings.activeMemory.maxInputTokens}
+              inputProps={{ inputMode: 'numeric' }}
+              sx={{ width: 130 }}
+              onBlur={(event) =>
+                updateActiveMemorySettings({
+                  maxInputTokens: Math.max(
+                    100,
+                    Math.min(8000, Number(event.target.value) || 4000),
+                  ),
+                })
+              }
+              onChange={(event) =>
+                updateActiveMemorySettings({
+                  maxInputTokens: Number(event.target.value) || 4000,
+                })
+              }
+            />
+          }
+        />
+        <Divider />
+        <SettingRow
+          label="Persist Transcripts"
+          description="Store redacted recall transcripts in agent_memory_diagnostics for debugging."
+          control={
+            <Switch
+              color="success"
+              size="small"
+              checked={memorySettings.activeMemory.persistTranscripts}
+              onChange={(event) =>
+                updateActiveMemorySettings({
+                  persistTranscripts: event.target.checked,
+                })
+              }
+            />
+          }
+        />
+        {memorySettings.activeMemory.persistTranscripts && (
+          <>
+            <Divider />
+            <SettingRow
+              label="Transcript Retention"
+              description="Number of diagnostic rows to keep (oldest are deleted first)."
+              control={
+                <TextField
+                  size="small"
+                  value={memorySettings.activeMemory.transcriptRetention}
+                  inputProps={{ inputMode: 'numeric' }}
+                  sx={{ width: 110 }}
+                  onChange={(event) =>
+                    updateActiveMemorySettings({
+                      transcriptRetention: Math.max(
+                        1,
+                        Number(event.target.value) || 50,
+                      ),
+                    })
+                  }
+                />
+              }
+            />
+          </>
+        )}
 
         <SectionTitle>Maintenance</SectionTitle>
         <Divider sx={{ mb: 1.5 }} />

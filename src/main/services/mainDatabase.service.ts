@@ -466,6 +466,28 @@ export default class MainDatabaseService {
       );
       CREATE INDEX IF NOT EXISTS amhs_created_idx ON agent_memory_health_snapshots(created_at);
 
+      CREATE TABLE IF NOT EXISTS agent_memory_wiki_state (
+        id                  INTEGER PRIMARY KEY AUTOINCREMENT,
+        scope_key           TEXT    NOT NULL UNIQUE,
+        project_id          TEXT,
+        connection_id       TEXT,
+        notebook_id         TEXT,
+        file_path           TEXT    NOT NULL,
+        status              TEXT    NOT NULL DEFAULT 'idle',
+        pending_reason      TEXT,
+        queued_at           TEXT,
+        last_started_at     TEXT,
+        content_hash        TEXT,
+        last_compiled_at    TEXT,
+        last_error          TEXT,
+        contradiction_count INTEGER NOT NULL DEFAULT 0,
+        metadata            TEXT
+      );
+      CREATE INDEX IF NOT EXISTS amws_status_idx     ON agent_memory_wiki_state(status);
+      CREATE INDEX IF NOT EXISTS amws_project_idx    ON agent_memory_wiki_state(project_id);
+      CREATE INDEX IF NOT EXISTS amws_connection_idx ON agent_memory_wiki_state(connection_id);
+      CREATE INDEX IF NOT EXISTS amws_notebook_idx   ON agent_memory_wiki_state(notebook_id);
+
       INSERT OR IGNORE INTO agent_memory_config (key, value) VALUES ('last_dreaming_run_at', '');
       INSERT OR IGNORE INTO agent_memory_config (key, value) VALUES ('last_metadata_refresh_at', '');
       INSERT OR IGNORE INTO agent_memory_config (key, value) VALUES ('fts5_available', 'unknown');
@@ -822,6 +844,28 @@ export default class MainDatabaseService {
           );
           CREATE INDEX IF NOT EXISTS amhs_created_idx ON agent_memory_health_snapshots(created_at);
 
+          CREATE TABLE IF NOT EXISTS agent_memory_wiki_state (
+            id                  INTEGER PRIMARY KEY AUTOINCREMENT,
+            scope_key           TEXT    NOT NULL UNIQUE,
+            project_id          TEXT,
+            connection_id       TEXT,
+            notebook_id         TEXT,
+            file_path           TEXT    NOT NULL,
+            status              TEXT    NOT NULL DEFAULT 'idle',
+            pending_reason      TEXT,
+            queued_at           TEXT,
+            last_started_at     TEXT,
+            content_hash        TEXT,
+            last_compiled_at    TEXT,
+            last_error          TEXT,
+            contradiction_count INTEGER NOT NULL DEFAULT 0,
+            metadata            TEXT
+          );
+          CREATE INDEX IF NOT EXISTS amws_status_idx     ON agent_memory_wiki_state(status);
+          CREATE INDEX IF NOT EXISTS amws_project_idx    ON agent_memory_wiki_state(project_id);
+          CREATE INDEX IF NOT EXISTS amws_connection_idx ON agent_memory_wiki_state(connection_id);
+          CREATE INDEX IF NOT EXISTS amws_notebook_idx   ON agent_memory_wiki_state(notebook_id);
+
           INSERT OR IGNORE INTO agent_memory_config (key, value) VALUES ('last_dreaming_run_at', '');
           INSERT OR IGNORE INTO agent_memory_config (key, value) VALUES ('last_metadata_refresh_at', '');
           INSERT OR IGNORE INTO agent_memory_config (key, value) VALUES ('fts5_available', 'unknown');
@@ -843,6 +887,32 @@ export default class MainDatabaseService {
             created_at       TEXT DEFAULT (datetime('now'))
           );
           CREATE INDEX IF NOT EXISTS amhs_created_idx ON agent_memory_health_snapshots(created_at);
+        `);
+      }
+
+      if (!tableNames.has('agent_memory_wiki_state')) {
+        this.sqlite.exec(`
+          CREATE TABLE IF NOT EXISTS agent_memory_wiki_state (
+            id                  INTEGER PRIMARY KEY AUTOINCREMENT,
+            scope_key           TEXT    NOT NULL UNIQUE,
+            project_id          TEXT,
+            connection_id       TEXT,
+            notebook_id         TEXT,
+            file_path           TEXT    NOT NULL,
+            status              TEXT    NOT NULL DEFAULT 'idle',
+            pending_reason      TEXT,
+            queued_at           TEXT,
+            last_started_at     TEXT,
+            content_hash        TEXT,
+            last_compiled_at    TEXT,
+            last_error          TEXT,
+            contradiction_count INTEGER NOT NULL DEFAULT 0,
+            metadata            TEXT
+          );
+          CREATE INDEX IF NOT EXISTS amws_status_idx     ON agent_memory_wiki_state(status);
+          CREATE INDEX IF NOT EXISTS amws_project_idx    ON agent_memory_wiki_state(project_id);
+          CREATE INDEX IF NOT EXISTS amws_connection_idx ON agent_memory_wiki_state(connection_id);
+          CREATE INDEX IF NOT EXISTS amws_notebook_idx   ON agent_memory_wiki_state(notebook_id);
         `);
       }
     } catch (error) {

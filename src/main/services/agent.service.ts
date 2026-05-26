@@ -31,7 +31,9 @@ import type {
   ChatMessage,
 } from '../schemas/mainDatabase.schema';
 import type {
+  AgentMemoryActiveMemorySettings,
   AgentMemoryScope,
+  AgentMemoryWikiSettings,
   AISettingsConfig,
   Project,
 } from '../../types/backend';
@@ -83,7 +85,82 @@ const AI_SETTINGS_DEFAULTS: AISettingsConfig = {
     lightDreamingEnabled: true,
     embeddingsEnabled: false,
     embeddingProvider: 'none',
+    wiki: {
+      enabled: false,
+      vaultPath: null,
+      debounceMs: 2000,
+      includeDatabaseMetadata: false,
+      includeManualMemories: true,
+      includePromotedMemories: true,
+      manualNoteImportEnabled: false,
+    },
+    // Plan 38 Track A — default-off; no sub-agent fires until provider/model are configured.
+    activeMemory: {
+      enabled: false,
+      mode: 'recent',
+      timeoutMs: 15000,
+      maxInputTokens: 4000,
+      persistTranscripts: false,
+      transcriptRetention: 50,
+    },
   },
+};
+
+// Clamp helpers for Active Memory numeric settings.
+const clampActiveMemoryTimeoutMs = (value: unknown): number => {
+  const n = Number(value);
+  if (!Number.isFinite(n)) return 15000;
+  return Math.max(1000, Math.min(60000, Math.round(n)));
+};
+
+const clampActiveMemoryMaxInputTokens = (value: unknown): number => {
+  const n = Number(value);
+  if (!Number.isFinite(n)) return 4000;
+  return Math.max(100, Math.min(8000, Math.round(n)));
+};
+
+const mergeAISettings = (
+  raw: Partial<AISettingsConfig> = {},
+): AISettingsConfig => {
+  const memory: Partial<NonNullable<AISettingsConfig['memory']>> =
+    raw.memory ?? {};
+  const defaultMemorySettings = AI_SETTINGS_DEFAULTS.memory as NonNullable<
+    AISettingsConfig['memory']
+  >;
+  const defaultWiki = defaultMemorySettings.wiki as AgentMemoryWikiSettings;
+  const defaultActiveMemory =
+    defaultMemorySettings.activeMemory as AgentMemoryActiveMemorySettings;
+  const rawActiveMemory: Partial<AgentMemoryActiveMemorySettings> =
+    memory.activeMemory ?? {};
+
+  return {
+    chat: { ...AI_SETTINGS_DEFAULTS.chat, ...raw.chat },
+    tools: { ...AI_SETTINGS_DEFAULTS.tools, ...raw.tools },
+    configuration: {
+      ...AI_SETTINGS_DEFAULTS.configuration,
+      ...raw.configuration,
+    },
+    advanced: { ...AI_SETTINGS_DEFAULTS.advanced, ...raw.advanced },
+    memory: {
+      ...defaultMemorySettings,
+      ...memory,
+      wiki: {
+        ...defaultWiki,
+        ...memory.wiki,
+      },
+      // Deep-merge activeMemory with backend clamping on numeric fields.
+      activeMemory: {
+        ...defaultActiveMemory,
+        ...rawActiveMemory,
+        timeoutMs: clampActiveMemoryTimeoutMs(
+          rawActiveMemory.timeoutMs ?? defaultActiveMemory.timeoutMs,
+        ),
+        maxInputTokens: clampActiveMemoryMaxInputTokens(
+          rawActiveMemory.maxInputTokens ?? defaultActiveMemory.maxInputTokens,
+        ),
+      },
+    },
+  };
 };
 
 const aiSettingsFilePath = () =>
@@ -92,22 +169,13 @@ const aiSettingsFilePath = () =>
 export const loadAISettings = async (): Promise<AISettingsConfig> => {
   try {
     const fp = aiSettingsFilePath();
-    if (!fs.existsSync(fp)) return AI_SETTINGS_DEFAULTS;
+    if (!fs.existsSync(fp)) return mergeAISettings();
     const raw = await fs.readJson(fp);
-    return {
-      chat: { ...AI_SETTINGS_DEFAULTS.chat, ...raw.chat },
-      tools: { ...AI_SETTINGS_DEFAULTS.tools, ...raw.tools },
-      configuration: {
-        ...AI_SETTINGS_DEFAULTS.configuration,
-        ...raw.configuration,
-      },
-      advanced: { ...AI_SETTINGS_DEFAULTS.advanced, ...raw.advanced },
-      memory: { ...AI_SETTINGS_DEFAULTS.memory, ...raw.memory },
-    };
+    return mergeAISettings(raw);
   } catch (error) {
     // eslint-disable-next-line no-console
     console.error(error);
-    return AI_SETTINGS_DEFAULTS;
+    return mergeAISettings();
   }
 };
 

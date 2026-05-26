@@ -455,6 +455,34 @@ export const agentMemoryHealthSnapshots = sqliteTable(
   }),
 );
 
+export const agentMemoryWikiState = sqliteTable(
+  'agent_memory_wiki_state',
+  {
+    id: integer('id').primaryKey({ autoIncrement: true }),
+    scopeKey: text('scope_key').notNull(),
+    projectId: text('project_id'),
+    connectionId: text('connection_id'),
+    notebookId: text('notebook_id'),
+    filePath: text('file_path').notNull(),
+    status: text('status').notNull().default('idle'),
+    pendingReason: text('pending_reason'),
+    queuedAt: text('queued_at'),
+    lastStartedAt: text('last_started_at'),
+    contentHash: text('content_hash'),
+    lastCompiledAt: text('last_compiled_at'),
+    lastError: text('last_error'),
+    contradictionCount: integer('contradiction_count').notNull().default(0),
+    metadata: text('metadata'),
+  },
+  (table: any) => ({
+    scopeUniqueIdx: uniqueIndex('amws_scope_key_idx').on(table.scopeKey),
+    statusIdx: index('amws_status_idx').on(table.status),
+    projectIdx: index('amws_project_idx').on(table.projectId),
+    connectionIdx: index('amws_connection_idx').on(table.connectionId),
+    notebookIdx: index('amws_notebook_idx').on(table.notebookId),
+  }),
+);
+
 // Define Relations for Drizzle ORM
 export const aiProvidersRelations = relations(aiProviders, ({ many }) => ({
   conversations: many(chatConversations),
@@ -609,6 +637,9 @@ export type AgentMemoryHealthSnapshot =
   typeof agentMemoryHealthSnapshots.$inferSelect;
 export type NewAgentMemoryHealthSnapshot =
   typeof agentMemoryHealthSnapshots.$inferInsert;
+
+export type AgentMemoryWikiState = typeof agentMemoryWikiState.$inferSelect;
+export type NewAgentMemoryWikiState = typeof agentMemoryWikiState.$inferInsert;
 
 // Complex query result types - Enhanced with Continue.dev features
 export type ChatConversationWithMessages = ChatConversation & {

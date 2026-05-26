@@ -1092,6 +1092,56 @@ export interface AgentMemoryDreamingReportListFilter {
   offset?: number;
 }
 
+export type AgentMemoryWikiCompileStatus =
+  | 'idle'
+  | 'queued'
+  | 'running'
+  | 'error';
+
+export interface AgentMemoryWikiSettings {
+  enabled: boolean;
+  vaultPath: string | null;
+  debounceMs: number;
+  includeDatabaseMetadata: boolean;
+  includeManualMemories: boolean;
+  includePromotedMemories: boolean;
+  manualNoteImportEnabled: boolean;
+}
+
+/** Plan 38 Track A — Active Memory (Proactive Recall) settings. Default-off. */
+export interface AgentMemoryActiveMemorySettings {
+  /** Whether the proactive recall sub-agent runs before each main agent turn. */
+  enabled: boolean;
+  /** How much conversation history is sent to the sub-agent. */
+  mode: 'message' | 'recent' | 'full';
+  /** Hard timeout in ms before the sub-agent is abandoned (clamped 1000–60000). */
+  timeoutMs: number;
+  /** Maximum tokens of conversation history sent to the sub-agent (clamped 100–8000). */
+  maxInputTokens: number;
+  /** Whether sub-agent transcripts are stored in agent_memory_diagnostics. */
+  persistTranscripts: boolean;
+  /** How many diagnostic rows to keep when persistTranscripts is true. */
+  transcriptRetention: number;
+}
+
+export interface AgentMemoryWikiState {
+  id: number;
+  scopeKey: string;
+  projectId: string | null;
+  connectionId: string | null;
+  notebookId: string | null;
+  filePath: string;
+  status: AgentMemoryWikiCompileStatus | string;
+  pendingReason: string | null;
+  queuedAt: string | null;
+  lastStartedAt: string | null;
+  contentHash: string | null;
+  lastCompiledAt: string | null;
+  lastError: string | null;
+  contradictionCount: number;
+  metadata: string | null;
+}
+
 export interface MCPServerWithStatus extends MCPServerFileEntry {
   id: string;
   connected: boolean;
@@ -1130,6 +1180,8 @@ export type AISettingsConfig = {
     lightDreamingEnabled: boolean;
     embeddingsEnabled: boolean;
     embeddingProvider: 'none' | 'openai' | 'gemini' | 'ollama' | string;
+    wiki: AgentMemoryWikiSettings;
+    activeMemory: AgentMemoryActiveMemorySettings;
   };
 };
 
