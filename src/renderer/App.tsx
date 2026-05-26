@@ -61,6 +61,7 @@ const App: React.FC = () => {
           <Route path="settings/dbt" element={<Settings />} />
           <Route path="settings/rosetta" element={<Settings />} />
           <Route path="settings/installation" element={<Settings />} />
+          <Route path="settings/memory" element={<Settings />} />
           <Route path="settings/about" element={<Settings />} />
           <Route path="sql" element={<Sql />} />
           <Route path="notebooks" element={<Notebooks />} />

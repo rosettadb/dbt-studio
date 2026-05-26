@@ -10,3 +10,4 @@ export * from './AboutSettings';
 export * from './InstallationSettings';
 export * from './DuckDBWorkspaceCard';
 export * from './DuckDBSettings';
+export * from './MemorySettingsTab';

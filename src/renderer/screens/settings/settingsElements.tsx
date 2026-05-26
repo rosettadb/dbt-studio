@@ -3,6 +3,7 @@ import AutoAwesomeIcon from '@mui/icons-material/AutoAwesome';
 import ManageAccountsIcon from '@mui/icons-material/ManageAccounts';
 import CloudIcon from '@mui/icons-material/Cloud';
 import InfoIcon from '@mui/icons-material/Info';
+import MemoryIcon from '@mui/icons-material/Memory';
 import { SvgIconComponent } from '@mui/icons-material';
 import React from 'react';
 import { Icon } from '../../components/icon';
@@ -60,6 +61,11 @@ export const settingsSidebarElements: SettingsSidebarElement[] = [
     icon: AutoAwesomeIcon,
     text: 'AI Settings',
     path: '/app/settings/ai-providers',
+  },
+  {
+    icon: MemoryIcon,
+    text: 'Agent Memory',
+    path: '/app/settings/memory',
   },
   {
     icon: DuckDBIcon as any,

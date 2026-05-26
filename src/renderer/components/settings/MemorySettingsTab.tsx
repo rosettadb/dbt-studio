@@ -1,0 +1,1303 @@
+import React from 'react';
+import { toast } from 'react-toastify';
+import {
+  Box,
+  Button,
+  Chip,
+  CircularProgress,
+  Dialog,
+  DialogActions,
+  DialogContent,
+  DialogTitle,
+  Divider,
+  FormControl,
+  IconButton,
+  InputAdornment,
+  InputLabel,
+  MenuItem,
+  Select,
+  Stack,
+  Switch,
+  Tab,
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableRow,
+  Tabs,
+  TextField,
+  Tooltip,
+  Typography,
+} from '@mui/material';
+import AddIcon from '@mui/icons-material/Add';
+import ArchiveIcon from '@mui/icons-material/Archive';
+import EditIcon from '@mui/icons-material/Edit';
+import PreviewIcon from '@mui/icons-material/Preview';
+import RefreshIcon from '@mui/icons-material/Refresh';
+import SearchIcon from '@mui/icons-material/Search';
+import SyncIcon from '@mui/icons-material/Sync';
+import {
+  useArchiveMemoryEntry,
+  useCreateMemoryEntry,
+  useMemoryHealth,
+  useMemoryList,
+  useMemoryStats,
+  useRebuildIndex,
+  useRefreshDatabaseContext,
+  useUpdateMemoryEntry,
+} from '../../controllers/memory.controller';
+import {
+  useGetAISettings,
+  useSaveAISettings,
+} from '../../controllers/aiSettings.controller';
+import type {
+  AgentMemoryEntry,
+  AgentMemoryListFilter,
+  AgentMemoryRefreshResult,
+  AgentMemoryScreenKey,
+  AISettingsConfig,
+  MemoryKind,
+  NewAgentMemoryEntry,
+} from '../../../types/backend';
+import { MEMORY_KIND } from '../../../types/backend';
+
+type TabKey = 0 | 1 | 2;
+type ArchiveFilter = 'active' | 'archived';
+type MemoryFormMode = 'create' | 'edit';
+
+type MemorySettings = NonNullable<AISettingsConfig['memory']>;
+
+interface MemoryFormState {
+  title: string;
+  content: string;
+  summary: string;
+  kind: MemoryKind | string;
+  screenKey: AgentMemoryScreenKey;
+  projectId: string;
+  connectionId: string;
+  notebookId: string;
+  importance: string;
+  confidence: string;
+  tags: string;
+}
+
+const DEFAULT_MEMORY_SETTINGS: MemorySettings = {
+  enabled: true,
+  autoCapture: true,
+  injectProjectMetadata: true,
+  injectConnectionMetadata: true,
+  injectNotebookMetadata: true,
+  includeGlobalMemories: true,
+  maxPromptMemories: 8,
+  maxPromptChars: 6000,
+  shortTermEnabled: true,
+  dreamingEnabled: false,
+  lightDreamingEnabled: true,
+  embeddingsEnabled: false,
+  embeddingProvider: 'none',
+};
+
+const SCREEN_OPTIONS: { value: AgentMemoryScreenKey | 'all'; label: string }[] =
+  [
+    { value: 'all', label: 'All screens' },
+    { value: 'global', label: 'Global' },
+    { value: 'project', label: 'Project' },
+    { value: 'sql', label: 'SQL' },
+    { value: 'notebooks', label: 'Notebooks' },
+  ];
+
+const CREATE_SCREEN_OPTIONS: { value: AgentMemoryScreenKey; label: string }[] =
+  [
+    { value: 'global', label: 'Global' },
+    { value: 'project', label: 'Project' },
+    { value: 'sql', label: 'SQL' },
+    { value: 'notebooks', label: 'Notebooks' },
+  ];
+
+const KIND_OPTIONS: { value: MemoryKind | string; label: string }[] = [
+  { value: MEMORY_KIND.MANUAL, label: 'Manual' },
+  { value: MEMORY_KIND.DECISION, label: 'Decision' },
+  { value: MEMORY_KIND.PROJECT_FACT, label: 'Project fact' },
+  { value: MEMORY_KIND.CONNECTION_FACT, label: 'Connection fact' },
+  { value: MEMORY_KIND.NOTEBOOK_FACT, label: 'Notebook fact' },
+  { value: MEMORY_KIND.USER_PREFERENCE, label: 'User preference' },
+  { value: MEMORY_KIND.TASK_STATE, label: 'Task state' },
+  { value: MEMORY_KIND.ERROR_RESOLUTION, label: 'Error resolution' },
+  { value: MEMORY_KIND.QUERY_PATTERN, label: 'Query pattern' },
+  { value: MEMORY_KIND.SCHEMA_FACT, label: 'Schema fact' },
+  { value: MEMORY_KIND.DATABASE_METADATA, label: 'Database metadata' },
+  { value: MEMORY_KIND.DREAM_SUMMARY, label: 'Dream summary' },
+  { value: MEMORY_KIND.REM_PATTERN, label: 'REM pattern' },
+];
+
+const EMPTY_FORM: MemoryFormState = {
+  title: '',
+  content: '',
+  summary: '',
+  kind: MEMORY_KIND.MANUAL,
+  screenKey: 'global',
+  projectId: '',
+  connectionId: '',
+  notebookId: '',
+  importance: '0.8',
+  confidence: '0.9',
+  tags: '',
+};
+
+const formatDate = (value: string | null | undefined) => {
+  if (!value) return 'Never';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  return date.toLocaleString();
+};
+
+const getErrorMessage = (error: unknown) =>
+  error instanceof Error ? error.message : String(error);
+
+const truncate = (value: string, max = 180) =>
+  value.length > max ? `${value.slice(0, max - 1)}...` : value;
+
+const parseTags = (value: string) =>
+  value
+    .split(',')
+    .map((tag) => tag.trim())
+    .filter(Boolean);
+
+const toOptionalString = (value: string) => {
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed : null;
+};
+
+const toRatio = (value: string, fallback: number) => {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed)) return fallback;
+  return Math.max(0, Math.min(1, parsed));
+};
+
+const normalizeTags = (tags: string | null) => {
+  if (!tags) return '';
+  try {
+    const parsed = JSON.parse(tags);
+    if (Array.isArray(parsed)) return parsed.join(', ');
+  } catch {
+    return tags;
+  }
+  return tags;
+};
+
+const formFromEntry = (entry: AgentMemoryEntry): MemoryFormState => ({
+  title: entry.title ?? '',
+  content: entry.content,
+  summary: entry.summary ?? '',
+  kind: entry.kind,
+  screenKey: entry.screenKey,
+  projectId: entry.projectId ?? '',
+  connectionId: entry.connectionId ?? '',
+  notebookId: entry.notebookId ?? '',
+  importance: String(entry.importance),
+  confidence: String(entry.confidence),
+  tags: normalizeTags(entry.tags),
+});
+
+const buildCreateInput = (form: MemoryFormState): NewAgentMemoryEntry => ({
+  screenKey: form.screenKey,
+  projectId: toOptionalString(form.projectId),
+  connectionId: toOptionalString(form.connectionId),
+  notebookId: toOptionalString(form.notebookId),
+  kind: form.kind,
+  sourceType: 'manual',
+  title: toOptionalString(form.title),
+  content: form.content.trim(),
+  summary: toOptionalString(form.summary),
+  importance: toRatio(form.importance, 0.8),
+  confidence: toRatio(form.confidence, 0.9),
+  tags: parseTags(form.tags),
+});
+
+const buildUpdatePatch = (
+  form: MemoryFormState,
+): Partial<NewAgentMemoryEntry> => ({
+  kind: form.kind,
+  title: toOptionalString(form.title),
+  content: form.content.trim(),
+  summary: toOptionalString(form.summary),
+  importance: toRatio(form.importance, 0.8),
+  confidence: toRatio(form.confidence, 0.9),
+  tags: parseTags(form.tags),
+});
+
+const SectionTitle: React.FC<{ children: React.ReactNode }> = ({
+  children,
+}) => (
+  <Typography variant="subtitle1" fontWeight={600} sx={{ mt: 2.5, mb: 1 }}>
+    {children}
+  </Typography>
+);
+
+const SettingRow: React.FC<{
+  label: string;
+  description: string;
+  control: React.ReactNode;
+}> = ({ label, description, control }) => (
+  <Box
+    sx={{
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      gap: 2,
+      py: 1.25,
+    }}
+  >
+    <Box sx={{ minWidth: 0 }}>
+      <Typography variant="body2" fontWeight={600}>
+        {label}
+      </Typography>
+      <Typography variant="caption" color="text.secondary">
+        {description}
+      </Typography>
+    </Box>
+    <Box sx={{ flexShrink: 0 }}>{control}</Box>
+  </Box>
+);
+
+const StatTile: React.FC<{
+  label: string;
+  value: React.ReactNode;
+  detail?: string;
+}> = ({ label, value, detail }) => (
+  <Box
+    sx={{
+      border: 1,
+      borderColor: 'divider',
+      borderRadius: 1,
+      p: 1.5,
+      minHeight: 82,
+    }}
+  >
+    <Typography variant="caption" color="text.secondary">
+      {label}
+    </Typography>
+    <Typography variant="h6" sx={{ mt: 0.25 }}>
+      {value}
+    </Typography>
+    {detail && (
+      <Typography variant="caption" color="text.secondary">
+        {detail}
+      </Typography>
+    )}
+  </Box>
+);
+
+const ScopeText: React.FC<{ entry: AgentMemoryEntry }> = ({ entry }) => {
+  const parts = [
+    entry.screenKey,
+    entry.projectId ? `project:${entry.projectId}` : null,
+    entry.connectionId ? `connection:${entry.connectionId}` : null,
+    entry.notebookId ? `notebook:${entry.notebookId}` : null,
+  ].filter(Boolean);
+
+  return (
+    <Typography variant="caption" color="text.secondary">
+      {parts.join(' / ')}
+    </Typography>
+  );
+};
+
+const MemoryEntryDialog: React.FC<{
+  open: boolean;
+  mode: MemoryFormMode;
+  form: MemoryFormState;
+  saving: boolean;
+  onChange: (patch: Partial<MemoryFormState>) => void;
+  onClose: () => void;
+  onSubmit: () => void;
+}> = ({ open, mode, form, saving, onChange, onClose, onSubmit }) => (
+  <Dialog open={open} onClose={onClose} maxWidth="md" fullWidth>
+    <DialogTitle>
+      {mode === 'create' ? 'Create Memory' : 'Edit Memory'}
+    </DialogTitle>
+    <DialogContent>
+      <Stack spacing={2} sx={{ pt: 1 }}>
+        <Stack direction={{ xs: 'column', md: 'row' }} spacing={2}>
+          <FormControl size="small" sx={{ minWidth: 180 }}>
+            <InputLabel>Kind</InputLabel>
+            <Select
+              label="Kind"
+              value={form.kind}
+              onChange={(event) => onChange({ kind: event.target.value })}
+            >
+              {KIND_OPTIONS.map((kind) => (
+                <MenuItem key={kind.value} value={kind.value}>
+                  {kind.label}
+                </MenuItem>
+              ))}
+            </Select>
+          </FormControl>
+          <FormControl size="small" sx={{ minWidth: 160 }}>
+            <InputLabel>Screen</InputLabel>
+            <Select
+              label="Screen"
+              value={form.screenKey}
+              disabled={mode === 'edit'}
+              onChange={(event) =>
+                onChange({
+                  screenKey: event.target.value as AgentMemoryScreenKey,
+                })
+              }
+            >
+              {CREATE_SCREEN_OPTIONS.map((screen) => (
+                <MenuItem key={screen.value} value={screen.value}>
+                  {screen.label}
+                </MenuItem>
+              ))}
+            </Select>
+          </FormControl>
+          <TextField
+            label="Importance"
+            size="small"
+            value={form.importance}
+            onChange={(event) => onChange({ importance: event.target.value })}
+            inputProps={{ inputMode: 'decimal' }}
+            sx={{ width: 130 }}
+          />
+          <TextField
+            label="Confidence"
+            size="small"
+            value={form.confidence}
+            onChange={(event) => onChange({ confidence: event.target.value })}
+            inputProps={{ inputMode: 'decimal' }}
+            sx={{ width: 130 }}
+          />
+        </Stack>
+
+        {mode === 'create' && (
+          <Stack direction={{ xs: 'column', md: 'row' }} spacing={2}>
+            <TextField
+              label="Project ID"
+              size="small"
+              value={form.projectId}
+              onChange={(event) => onChange({ projectId: event.target.value })}
+              fullWidth
+            />
+            <TextField
+              label="Connection ID"
+              size="small"
+              value={form.connectionId}
+              onChange={(event) =>
+                onChange({ connectionId: event.target.value })
+              }
+              fullWidth
+            />
+            <TextField
+              label="Notebook ID"
+              size="small"
+              value={form.notebookId}
+              onChange={(event) => onChange({ notebookId: event.target.value })}
+              fullWidth
+            />
+          </Stack>
+        )}
+
+        <TextField
+          label="Title"
+          size="small"
+          value={form.title}
+          onChange={(event) => onChange({ title: event.target.value })}
+          fullWidth
+        />
+        <TextField
+          label="Content"
+          value={form.content}
+          onChange={(event) => onChange({ content: event.target.value })}
+          fullWidth
+          multiline
+          minRows={5}
+          required
+        />
+        <TextField
+          label="Summary"
+          value={form.summary}
+          onChange={(event) => onChange({ summary: event.target.value })}
+          fullWidth
+          multiline
+          minRows={2}
+        />
+        <TextField
+          label="Tags"
+          size="small"
+          value={form.tags}
+          onChange={(event) => onChange({ tags: event.target.value })}
+          helperText="Comma-separated tags"
+          fullWidth
+        />
+      </Stack>
+    </DialogContent>
+    <DialogActions>
+      <Button type="button" onClick={onClose} disabled={saving}>
+        Cancel
+      </Button>
+      <Button
+        type="button"
+        variant="contained"
+        onClick={onSubmit}
+        disabled={saving || form.content.trim().length === 0}
+      >
+        {saving ? 'Saving...' : 'Save'}
+      </Button>
+    </DialogActions>
+  </Dialog>
+);
+
+export const MemorySettingsTab: React.FC = () => {
+  const [tab, setTab] = React.useState<TabKey>(0);
+  const [search, setSearch] = React.useState('');
+  const [screenFilter, setScreenFilter] = React.useState<
+    AgentMemoryScreenKey | 'all'
+  >('all');
+  const [kindFilter, setKindFilter] = React.useState<string>('all');
+  const [archiveFilter, setArchiveFilter] =
+    React.useState<ArchiveFilter>('active');
+  const [projectFilter, setProjectFilter] = React.useState('');
+  const [connectionFilter, setConnectionFilter] = React.useState('');
+  const [notebookFilter, setNotebookFilter] = React.useState('');
+  const [dialogOpen, setDialogOpen] = React.useState(false);
+  const [dialogMode, setDialogMode] = React.useState<MemoryFormMode>('create');
+  const [editingEntry, setEditingEntry] =
+    React.useState<AgentMemoryEntry | null>(null);
+  const [form, setForm] = React.useState<MemoryFormState>(EMPTY_FORM);
+  const [preview, setPreview] = React.useState<AgentMemoryRefreshResult | null>(
+    null,
+  );
+
+  const { data: aiSettings, isLoading: aiSettingsLoading } = useGetAISettings();
+  const saveAISettings = useSaveAISettings();
+  const statsQuery = useMemoryStats();
+  const healthQuery = useMemoryHealth();
+  const refreshMetadata = useRefreshDatabaseContext();
+  const rebuildIndex = useRebuildIndex();
+  const createMemory = useCreateMemoryEntry();
+  const updateMemory = useUpdateMemoryEntry();
+  const archiveMemory = useArchiveMemoryEntry();
+
+  const listFilter = React.useMemo<AgentMemoryListFilter>(() => {
+    const filter: AgentMemoryListFilter = {
+      archived: archiveFilter === 'archived',
+      limit: 200,
+    };
+    if (search.trim()) filter.search = search.trim();
+    if (screenFilter !== 'all') filter.screenKey = screenFilter;
+    if (kindFilter !== 'all') filter.kind = kindFilter;
+    if (projectFilter.trim()) filter.projectId = projectFilter.trim();
+    if (connectionFilter.trim()) filter.connectionId = connectionFilter.trim();
+    if (notebookFilter.trim()) filter.notebookId = notebookFilter.trim();
+    return filter;
+  }, [
+    archiveFilter,
+    connectionFilter,
+    kindFilter,
+    notebookFilter,
+    projectFilter,
+    screenFilter,
+    search,
+  ]);
+
+  const durableEntriesQuery = useMemoryList(listFilter);
+  const metadataEntriesQuery = useMemoryList({
+    kind: MEMORY_KIND.DATABASE_METADATA,
+    archived: false,
+    limit: 100,
+  });
+
+  const memorySettings: MemorySettings = {
+    ...DEFAULT_MEMORY_SETTINGS,
+    ...aiSettings?.memory,
+  };
+
+  const durableEntries = React.useMemo(
+    () =>
+      (durableEntriesQuery.data ?? []).filter(
+        (entry) =>
+          kindFilter !== 'all' || entry.kind !== MEMORY_KIND.DATABASE_METADATA,
+      ),
+    [durableEntriesQuery.data, kindFilter],
+  );
+
+  const metadataEntries = metadataEntriesQuery.data ?? [];
+
+  const metadataCounts = React.useMemo(() => {
+    return metadataEntries.reduce<Record<string, number>>((acc, entry) => {
+      acc[entry.sourceType] = (acc[entry.sourceType] ?? 0) + 1;
+      return acc;
+    }, {});
+  }, [metadataEntries]);
+
+  const updateMemorySettings = (patch: Partial<MemorySettings>) => {
+    if (!aiSettings) return;
+    saveAISettings.mutate(
+      {
+        ...aiSettings,
+        memory: {
+          ...DEFAULT_MEMORY_SETTINGS,
+          ...aiSettings.memory,
+          ...patch,
+        },
+      },
+      {
+        onError: (error) => {
+          toast.error(
+            `Failed to save memory settings: ${getErrorMessage(error)}`,
+          );
+        },
+      },
+    );
+  };
+
+  const openCreateDialog = () => {
+    setDialogMode('create');
+    setEditingEntry(null);
+    setForm(EMPTY_FORM);
+    setDialogOpen(true);
+  };
+
+  const openEditDialog = (entry: AgentMemoryEntry) => {
+    setDialogMode('edit');
+    setEditingEntry(entry);
+    setForm(formFromEntry(entry));
+    setDialogOpen(true);
+  };
+
+  const closeDialog = () => {
+    setDialogOpen(false);
+    setEditingEntry(null);
+    setForm(EMPTY_FORM);
+  };
+
+  const handleSubmitMemory = () => {
+    if (form.content.trim().length === 0) return;
+    if (dialogMode === 'create') {
+      createMemory.mutate(buildCreateInput(form), {
+        onSuccess: () => {
+          toast.success('Memory created.');
+          closeDialog();
+        },
+        onError: (error) => {
+          toast.error(`Failed to create memory: ${getErrorMessage(error)}`);
+        },
+      });
+      return;
+    }
+    if (!editingEntry) return;
+    updateMemory.mutate(
+      { id: editingEntry.id, patch: buildUpdatePatch(form) },
+      {
+        onSuccess: () => {
+          toast.success('Memory updated.');
+          closeDialog();
+        },
+        onError: (error) => {
+          toast.error(`Failed to update memory: ${getErrorMessage(error)}`);
+        },
+      },
+    );
+  };
+
+  const handleArchive = (entry: AgentMemoryEntry) => {
+    archiveMemory.mutate(entry.id, {
+      onSuccess: () => {
+        toast.success('Memory archived.');
+      },
+      onError: (error) => {
+        toast.error(`Failed to archive memory: ${getErrorMessage(error)}`);
+      },
+    });
+  };
+
+  const handleRefreshMetadata = (dryRun: boolean) => {
+    refreshMetadata.mutate(
+      { dryRun },
+      {
+        onSuccess: (result) => {
+          if (dryRun) {
+            setPreview(result);
+            return;
+          }
+          setPreview(null);
+          toast.success(`Database metadata refreshed (${result.upserted}).`);
+        },
+        onError: (error) => {
+          toast.error(
+            `Failed to refresh database metadata: ${getErrorMessage(error)}`,
+          );
+        },
+      },
+    );
+  };
+
+  const handleRebuildIndex = () => {
+    rebuildIndex.mutate(undefined, {
+      onSuccess: () => {
+        toast.success('Memory index rebuilt.');
+      },
+      onError: (error) => {
+        toast.error(
+          `Failed to rebuild memory index: ${getErrorMessage(error)}`,
+        );
+      },
+    });
+  };
+
+  const renderOverview = () => {
+    if (statsQuery.isLoading || healthQuery.isLoading || aiSettingsLoading) {
+      return (
+        <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}>
+          <CircularProgress size={24} />
+        </Box>
+      );
+    }
+
+    const stats = statsQuery.data;
+    const health = healthQuery.data;
+
+    return (
+      <Box sx={{ pt: 2 }}>
+        <Box
+          sx={{
+            display: 'grid',
+            gap: 1.5,
+            gridTemplateColumns: {
+              xs: '1fr',
+              sm: 'repeat(2, minmax(0, 1fr))',
+              lg: 'repeat(4, minmax(0, 1fr))',
+            },
+          }}
+        >
+          <StatTile label="Durable" value={stats?.durableCount ?? '-'} />
+          <StatTile label="Active" value={stats?.activeCount ?? '-'} />
+          <StatTile label="Short-term" value={stats?.shortTermCount ?? '-'} />
+          <StatTile
+            label="Database Metadata"
+            value={stats?.databaseMetadataCount ?? '-'}
+          />
+          <StatTile label="Archived" value={stats?.archivedCount ?? '-'} />
+          <StatTile
+            label="FTS"
+            value={stats?.fts5Available ? 'Available' : 'LIKE fallback'}
+          />
+          <StatTile
+            label="Last Dreaming Run"
+            value={formatDate(stats?.lastDreamingRunAt)}
+          />
+          <StatTile
+            label="Last Metadata Refresh"
+            value={formatDate(stats?.lastMetadataRefreshAt)}
+          />
+        </Box>
+
+        <SectionTitle>Health</SectionTitle>
+        <Divider />
+        <Stack direction="row" spacing={1} sx={{ py: 1.25, flexWrap: 'wrap' }}>
+          <Chip
+            size="small"
+            color={health?.ok ? 'success' : 'warning'}
+            label={health?.ok ? 'OK' : 'Needs attention'}
+          />
+          <Chip
+            size="small"
+            variant="outlined"
+            label={`Stale: ${health?.staleEntries ?? 0}`}
+          />
+          <Chip
+            size="small"
+            variant="outlined"
+            label={`Orphaned: ${health?.orphanedEntries ?? 0}`}
+          />
+          <Chip
+            size="small"
+            variant="outlined"
+            label={`Active: ${health?.activeEntries ?? 0}`}
+          />
+        </Stack>
+        {health?.issues?.length ? (
+          <Stack spacing={0.5} sx={{ pb: 1 }}>
+            {health.issues.map((issue) => (
+              <Typography key={issue} variant="caption" color="warning.main">
+                {issue}
+              </Typography>
+            ))}
+          </Stack>
+        ) : null}
+
+        <SectionTitle>Memory Settings</SectionTitle>
+        <Divider />
+        <SettingRow
+          label="Enabled"
+          description="Inject scoped memory into agent prompts and allow memory tools."
+          control={
+            <Switch
+              color="success"
+              size="small"
+              checked={memorySettings.enabled}
+              onChange={(event) =>
+                updateMemorySettings({ enabled: event.target.checked })
+              }
+            />
+          }
+        />
+        <Divider />
+        <SettingRow
+          label="Auto Capture"
+          description="Capture useful completed agent turns after the response is saved."
+          control={
+            <Switch
+              color="success"
+              size="small"
+              checked={memorySettings.autoCapture}
+              onChange={(event) =>
+                updateMemorySettings({ autoCapture: event.target.checked })
+              }
+            />
+          }
+        />
+        <Divider />
+        <SettingRow
+          label="Project Metadata"
+          description="Include project metadata memories in matching project agent scopes."
+          control={
+            <Switch
+              color="success"
+              size="small"
+              checked={memorySettings.injectProjectMetadata}
+              onChange={(event) =>
+                updateMemorySettings({
+                  injectProjectMetadata: event.target.checked,
+                })
+              }
+            />
+          }
+        />
+        <Divider />
+        <SettingRow
+          label="Connection Metadata"
+          description="Include connection metadata memories for SQL and notebook scopes."
+          control={
+            <Switch
+              color="success"
+              size="small"
+              checked={memorySettings.injectConnectionMetadata}
+              onChange={(event) =>
+                updateMemorySettings({
+                  injectConnectionMetadata: event.target.checked,
+                })
+              }
+            />
+          }
+        />
+        <Divider />
+        <SettingRow
+          label="Notebook Metadata"
+          description="Include notebook metadata memories in notebook agent scopes."
+          control={
+            <Switch
+              color="success"
+              size="small"
+              checked={memorySettings.injectNotebookMetadata}
+              onChange={(event) =>
+                updateMemorySettings({
+                  injectNotebookMetadata: event.target.checked,
+                })
+              }
+            />
+          }
+        />
+        <Divider />
+        <SettingRow
+          label="Global Memories"
+          description="Allow global memories to be included with scoped retrieval."
+          control={
+            <Switch
+              color="success"
+              size="small"
+              checked={memorySettings.includeGlobalMemories}
+              onChange={(event) =>
+                updateMemorySettings({
+                  includeGlobalMemories: event.target.checked,
+                })
+              }
+            />
+          }
+        />
+        <Divider />
+        <SettingRow
+          label="Short-term Recall"
+          description="Keep short-term recall candidates for later dreaming passes."
+          control={
+            <Switch
+              color="success"
+              size="small"
+              checked={memorySettings.shortTermEnabled}
+              onChange={(event) =>
+                updateMemorySettings({
+                  shortTermEnabled: event.target.checked,
+                })
+              }
+            />
+          }
+        />
+        <Divider />
+        <SettingRow
+          label="Dreaming"
+          description="Enable the scheduled memory consolidation pipeline when P6 is wired."
+          control={
+            <Switch
+              color="success"
+              size="small"
+              checked={memorySettings.dreamingEnabled}
+              onChange={(event) =>
+                updateMemorySettings({
+                  dreamingEnabled: event.target.checked,
+                })
+              }
+            />
+          }
+        />
+        <Divider />
+        <SettingRow
+          label="Max Prompt Memories"
+          description="Maximum number of memory entries injected into a prompt."
+          control={
+            <TextField
+              size="small"
+              value={memorySettings.maxPromptMemories}
+              inputProps={{ inputMode: 'numeric' }}
+              sx={{ width: 110 }}
+              onChange={(event) =>
+                updateMemorySettings({
+                  maxPromptMemories: Math.max(0, Number(event.target.value)),
+                })
+              }
+            />
+          }
+        />
+        <Divider />
+        <SettingRow
+          label="Max Prompt Chars"
+          description="Maximum character budget for injected memory context."
+          control={
+            <TextField
+              size="small"
+              value={memorySettings.maxPromptChars}
+              inputProps={{ inputMode: 'numeric' }}
+              sx={{ width: 120 }}
+              onChange={(event) =>
+                updateMemorySettings({
+                  maxPromptChars: Math.max(0, Number(event.target.value)),
+                })
+              }
+            />
+          }
+        />
+
+        <SectionTitle>Maintenance</SectionTitle>
+        <Divider sx={{ mb: 1.5 }} />
+        <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1}>
+          <Button
+            type="button"
+            variant="outlined"
+            startIcon={<RefreshIcon />}
+            disabled={refreshMetadata.isLoading}
+            onClick={() => handleRefreshMetadata(false)}
+          >
+            Refresh Database Metadata
+          </Button>
+          <Button
+            type="button"
+            variant="outlined"
+            startIcon={<SyncIcon />}
+            disabled={rebuildIndex.isLoading}
+            onClick={handleRebuildIndex}
+          >
+            Rebuild Index
+          </Button>
+        </Stack>
+      </Box>
+    );
+  };
+
+  const renderDurableMemory = () => (
+    <Box sx={{ pt: 2 }}>
+      <Stack spacing={1.5}>
+        <Stack direction={{ xs: 'column', lg: 'row' }} spacing={1}>
+          <TextField
+            size="small"
+            placeholder="Search memories"
+            value={search}
+            onChange={(event) => setSearch(event.target.value)}
+            InputProps={{
+              startAdornment: (
+                <InputAdornment position="start">
+                  <SearchIcon fontSize="small" />
+                </InputAdornment>
+              ),
+            }}
+            sx={{ minWidth: 260, flex: 1 }}
+          />
+          <FormControl size="small" sx={{ minWidth: 150 }}>
+            <InputLabel>Screen</InputLabel>
+            <Select
+              label="Screen"
+              value={screenFilter}
+              onChange={(event) =>
+                setScreenFilter(
+                  event.target.value as AgentMemoryScreenKey | 'all',
+                )
+              }
+            >
+              {SCREEN_OPTIONS.map((screen) => (
+                <MenuItem key={screen.value} value={screen.value}>
+                  {screen.label}
+                </MenuItem>
+              ))}
+            </Select>
+          </FormControl>
+          <FormControl size="small" sx={{ minWidth: 170 }}>
+            <InputLabel>Kind</InputLabel>
+            <Select
+              label="Kind"
+              value={kindFilter}
+              onChange={(event) => setKindFilter(event.target.value)}
+            >
+              <MenuItem value="all">All durable kinds</MenuItem>
+              {KIND_OPTIONS.map((kind) => (
+                <MenuItem key={kind.value} value={kind.value}>
+                  {kind.label}
+                </MenuItem>
+              ))}
+            </Select>
+          </FormControl>
+          <FormControl size="small" sx={{ minWidth: 130 }}>
+            <InputLabel>Status</InputLabel>
+            <Select
+              label="Status"
+              value={archiveFilter}
+              onChange={(event) =>
+                setArchiveFilter(event.target.value as ArchiveFilter)
+              }
+            >
+              <MenuItem value="active">Active</MenuItem>
+              <MenuItem value="archived">Archived</MenuItem>
+            </Select>
+          </FormControl>
+          <Button
+            type="button"
+            variant="contained"
+            startIcon={<AddIcon />}
+            onClick={openCreateDialog}
+          >
+            Create
+          </Button>
+        </Stack>
+
+        <Stack direction={{ xs: 'column', lg: 'row' }} spacing={1}>
+          <TextField
+            size="small"
+            label="Project ID"
+            value={projectFilter}
+            onChange={(event) => setProjectFilter(event.target.value)}
+            fullWidth
+          />
+          <TextField
+            size="small"
+            label="Connection ID"
+            value={connectionFilter}
+            onChange={(event) => setConnectionFilter(event.target.value)}
+            fullWidth
+          />
+          <TextField
+            size="small"
+            label="Notebook ID"
+            value={notebookFilter}
+            onChange={(event) => setNotebookFilter(event.target.value)}
+            fullWidth
+          />
+        </Stack>
+      </Stack>
+
+      <Divider sx={{ my: 2 }} />
+
+      {durableEntriesQuery.isLoading ? (
+        <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}>
+          <CircularProgress size={24} />
+        </Box>
+      ) : (
+        <Box sx={{ overflowX: 'auto' }}>
+          <Table size="small">
+            <TableHead>
+              <TableRow>
+                <TableCell>Memory</TableCell>
+                <TableCell>Scope</TableCell>
+                <TableCell>Quality</TableCell>
+                <TableCell>Updated</TableCell>
+                <TableCell align="right">Actions</TableCell>
+              </TableRow>
+            </TableHead>
+            <TableBody>
+              {durableEntries.length === 0 ? (
+                <TableRow>
+                  <TableCell colSpan={5}>
+                    <Typography variant="body2" color="text.secondary">
+                      No matching memories.
+                    </Typography>
+                  </TableCell>
+                </TableRow>
+              ) : (
+                durableEntries.map((entry) => (
+                  <TableRow key={entry.id} hover>
+                    <TableCell sx={{ minWidth: 320, maxWidth: 520 }}>
+                      <Stack spacing={0.5}>
+                        <Stack
+                          direction="row"
+                          spacing={0.75}
+                          alignItems="center"
+                        >
+                          <Chip size="small" label={entry.kind} />
+                          <Typography variant="body2" fontWeight={600}>
+                            {entry.title ?? `Memory #${entry.id}`}
+                          </Typography>
+                        </Stack>
+                        <Typography variant="caption" color="text.secondary">
+                          {truncate(entry.summary || entry.content)}
+                        </Typography>
+                      </Stack>
+                    </TableCell>
+                    <TableCell sx={{ minWidth: 220 }}>
+                      <ScopeText entry={entry} />
+                    </TableCell>
+                    <TableCell sx={{ minWidth: 120 }}>
+                      <Typography variant="caption" color="text.secondary">
+                        I {entry.importance.toFixed(2)} / C{' '}
+                        {entry.confidence.toFixed(2)}
+                      </Typography>
+                    </TableCell>
+                    <TableCell sx={{ minWidth: 170 }}>
+                      <Typography variant="caption" color="text.secondary">
+                        {formatDate(entry.updatedAt)}
+                      </Typography>
+                    </TableCell>
+                    <TableCell align="right" sx={{ whiteSpace: 'nowrap' }}>
+                      <Tooltip title="Edit memory">
+                        <IconButton
+                          type="button"
+                          size="small"
+                          onClick={() => openEditDialog(entry)}
+                        >
+                          <EditIcon fontSize="small" />
+                        </IconButton>
+                      </Tooltip>
+                      {archiveFilter === 'active' && (
+                        <Tooltip title="Archive memory">
+                          <IconButton
+                            type="button"
+                            size="small"
+                            onClick={() => handleArchive(entry)}
+                          >
+                            <ArchiveIcon fontSize="small" />
+                          </IconButton>
+                        </Tooltip>
+                      )}
+                    </TableCell>
+                  </TableRow>
+                ))
+              )}
+            </TableBody>
+          </Table>
+        </Box>
+      )}
+    </Box>
+  );
+
+  const renderDatabaseMetadata = () => (
+    <Box sx={{ pt: 2 }}>
+      <Stack
+        direction={{ xs: 'column', md: 'row' }}
+        spacing={1}
+        alignItems={{ xs: 'stretch', md: 'center' }}
+        justifyContent="space-between"
+      >
+        <Box>
+          <Typography variant="body2" fontWeight={600}>
+            Last refresh
+          </Typography>
+          <Typography variant="caption" color="text.secondary">
+            {formatDate(statsQuery.data?.lastMetadataRefreshAt)}
+          </Typography>
+        </Box>
+        <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1}>
+          <Button
+            type="button"
+            variant="outlined"
+            startIcon={<PreviewIcon />}
+            disabled={refreshMetadata.isLoading}
+            onClick={() => handleRefreshMetadata(true)}
+          >
+            Preview Refresh
+          </Button>
+          <Button
+            type="button"
+            variant="contained"
+            startIcon={<RefreshIcon />}
+            disabled={refreshMetadata.isLoading}
+            onClick={() => handleRefreshMetadata(false)}
+          >
+            Refresh Now
+          </Button>
+        </Stack>
+      </Stack>
+
+      <Stack direction="row" spacing={1} sx={{ py: 1.5, flexWrap: 'wrap' }}>
+        {Object.entries(metadataCounts).map(([sourceType, count]) => (
+          <Chip
+            key={sourceType}
+            size="small"
+            variant="outlined"
+            label={`${sourceType}: ${count}`}
+          />
+        ))}
+      </Stack>
+
+      <Divider sx={{ mb: 2 }} />
+
+      {metadataEntriesQuery.isLoading ? (
+        <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}>
+          <CircularProgress size={24} />
+        </Box>
+      ) : (
+        <Box sx={{ overflowX: 'auto' }}>
+          <Table size="small">
+            <TableHead>
+              <TableRow>
+                <TableCell>Metadata</TableCell>
+                <TableCell>Source</TableCell>
+                <TableCell>Scope</TableCell>
+                <TableCell>Updated</TableCell>
+              </TableRow>
+            </TableHead>
+            <TableBody>
+              {metadataEntries.length === 0 ? (
+                <TableRow>
+                  <TableCell colSpan={4}>
+                    <Typography variant="body2" color="text.secondary">
+                      No database metadata memories found.
+                    </Typography>
+                  </TableCell>
+                </TableRow>
+              ) : (
+                metadataEntries.map((entry) => (
+                  <TableRow key={entry.id} hover>
+                    <TableCell sx={{ minWidth: 360, maxWidth: 560 }}>
+                      <Typography variant="body2" fontWeight={600}>
+                        {entry.title ?? `Metadata #${entry.id}`}
+                      </Typography>
+                      <Typography variant="caption" color="text.secondary">
+                        {truncate(entry.content, 220)}
+                      </Typography>
+                    </TableCell>
+                    <TableCell sx={{ minWidth: 150 }}>
+                      <Chip size="small" label={entry.sourceType} />
+                    </TableCell>
+                    <TableCell sx={{ minWidth: 220 }}>
+                      <ScopeText entry={entry} />
+                    </TableCell>
+                    <TableCell sx={{ minWidth: 170 }}>
+                      <Typography variant="caption" color="text.secondary">
+                        {formatDate(entry.updatedAt)}
+                      </Typography>
+                    </TableCell>
+                  </TableRow>
+                ))
+              )}
+            </TableBody>
+          </Table>
+        </Box>
+      )}
+    </Box>
+  );
+
+  return (
+    <Box sx={{ maxWidth: 1100 }}>
+      <Tabs
+        value={tab}
+        onChange={(_event, value) => setTab(value)}
+        sx={{ borderBottom: 1, borderColor: 'divider' }}
+      >
+        <Tab label="Overview" />
+        <Tab label="Durable Memory" />
+        <Tab label="Database Metadata" />
+      </Tabs>
+
+      {tab === 0 && renderOverview()}
+      {tab === 1 && renderDurableMemory()}
+      {tab === 2 && renderDatabaseMetadata()}
+
+      <MemoryEntryDialog
+        open={dialogOpen}
+        mode={dialogMode}
+        form={form}
+        saving={createMemory.isLoading || updateMemory.isLoading}
+        onChange={(patch) => setForm((current) => ({ ...current, ...patch }))}
+        onClose={closeDialog}
+        onSubmit={handleSubmitMemory}
+      />
+
+      <Dialog
+        open={Boolean(preview)}
+        onClose={() => setPreview(null)}
+        maxWidth="md"
+        fullWidth
+      >
+        <DialogTitle>Database Metadata Preview</DialogTitle>
+        <DialogContent>
+          <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+            {preview?.entries.length ?? 0} rows would be upserted.
+          </Typography>
+          <Stack spacing={1}>
+            {(preview?.entries ?? []).slice(0, 50).map((entry, index) => (
+              <Box
+                key={`${entry.sourceId ?? entry.title ?? index}`}
+                sx={{
+                  border: 1,
+                  borderColor: 'divider',
+                  borderRadius: 1,
+                  p: 1,
+                }}
+              >
+                <Stack direction="row" spacing={1} alignItems="center">
+                  <Chip size="small" label={entry.sourceType ?? 'metadata'} />
+                  <Typography variant="body2" fontWeight={600}>
+                    {entry.title ?? entry.sourceId ?? `Preview #${index + 1}`}
+                  </Typography>
+                </Stack>
+                <Typography variant="caption" color="text.secondary">
+                  {truncate(entry.content, 220)}
+                </Typography>
+              </Box>
+            ))}
+          </Stack>
+        </DialogContent>
+        <DialogActions>
+          <Button type="button" onClick={() => setPreview(null)}>
+            Close
+          </Button>
+          <Button
+            type="button"
+            variant="contained"
+            startIcon={<RefreshIcon />}
+            disabled={refreshMetadata.isLoading}
+            onClick={() => handleRefreshMetadata(false)}
+          >
+            Refresh Now
+          </Button>
+        </DialogActions>
+      </Dialog>
+    </Box>
+  );
+};

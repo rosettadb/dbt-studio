@@ -30,6 +30,7 @@ import {
   AboutSettings,
   AIProvidersSettings,
   DuckDBSettings,
+  MemorySettingsTab,
 } from '../../components';
 import { AppLayout } from '../../layouts';
 import { settingsSidebarElements } from './settingsElements';
@@ -104,6 +105,7 @@ const Settings: React.FC = () => {
     if (section === 'ai-providers') return 'AI Settings';
     if (section === 'profile') return 'Rosetta Cloud';
     if (section === 'duckdb') return 'DuckDB';
+    if (section === 'memory') return 'Agent Memory';
     return section.charAt(0).toUpperCase() + section.slice(1).replace('-', ' ');
   };
 
@@ -130,6 +132,8 @@ const Settings: React.FC = () => {
         return <DuckDBSettings />;
       case 'ai-providers':
         return <AIProvidersSettings />;
+      case 'memory':
+        return <MemorySettingsTab />;
       case 'dbt':
         return (
           <DbtSettings
