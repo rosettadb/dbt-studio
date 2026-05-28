@@ -422,6 +422,48 @@ export default class AgentMemoryWikiService {
   }
 
   /**
+   * Discovers all distinct scopes in agent_memory_entries and force-queues them,
+   * then runs compilePending. Useful for manually forcing a full sync of the DB
+   * to Obsidian.
+   */
+  static async forceCompileAll(): Promise<WikiCompileResult> {
+    const settings = await loadAISettings();
+    const wiki = settings.memory?.wiki;
+    if (!wiki?.enabled || !wiki.vaultPath) {
+      return { compiledScopes: 0, skippedScopes: 0, errors: [] };
+    }
+
+    const db = await MainDatabaseService.getSqliteDatabase();
+
+    // Find all distinct scopes that have active entries
+    const rows = db
+      .prepare(
+        `
+      SELECT DISTINCT project_id, connection_id, notebook_id 
+      FROM agent_memory_entries 
+      WHERE archived = 0
+    `,
+      )
+      .all() as any[];
+
+    // Queue them all (using Promise.all to satisfy no-restricted-syntax / no-for-of)
+    await Promise.all(
+      rows.map(async (row) => {
+        const scope: AgentMemoryScope = {
+          screenKey: 'project', // default filler since wiki groups by project/connection/notebook
+          projectId: row.project_id ?? undefined,
+          connectionId: row.connection_id ?? undefined,
+          notebookId: row.notebook_id ?? undefined,
+        };
+        await AgentMemoryWikiService.enqueue('manual_force_sync', scope);
+      }),
+    );
+
+    // Now run compilePending which will process everything we just queued sequentially
+    return AgentMemoryWikiService.compilePending();
+  }
+
+  /**
    * Compile a single scope to its markdown file.
    * - Queries eligible `agent_memory_entries` with Plan 37 scope rules.
    * - Preserves user content outside the managed block.

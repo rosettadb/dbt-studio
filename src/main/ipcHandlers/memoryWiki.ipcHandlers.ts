@@ -8,7 +8,7 @@ export const registerMemoryWikiHandlers = () => {
   );
 
   ipcMain.handle('memory-wiki:compile', () =>
-    AgentMemoryWikiService.compilePending(),
+    AgentMemoryWikiService.forceCompileAll(),
   );
 
   ipcMain.handle('memory-wiki:lint', (_, scope: AgentMemoryScope) =>
