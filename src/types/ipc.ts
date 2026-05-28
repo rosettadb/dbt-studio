@@ -418,6 +418,11 @@ export type MemoryChannels =
   | 'memory:dreaming:reports:list'
   | 'memory:index:rebuild';
 
+export type MemoryWikiChannels =
+  | 'memory-wiki:status'
+  | 'memory-wiki:compile'
+  | 'memory-wiki:lint';
+
 export type ActiveMemoryChannels =
   | 'active-memory:diagnostics:list'
   | 'active-memory:diagnostics:clear'
@@ -446,6 +451,7 @@ export type Channels =
   | SkillsChannels
   | SavedQueriesChannels
   | MemoryChannels
+  | MemoryWikiChannels
   | ActiveMemoryChannels;
 
 export type ConfigureConnectionBody = {

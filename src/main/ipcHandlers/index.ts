@@ -20,6 +20,7 @@ import { registerSkillsHandlers } from './skills.ipcHandlers';
 import registerSavedQueriesHandlers from './savedQueries.ipcHandlers';
 import registerMemoryHandlers from './memory.ipcHandlers';
 import { registerActiveMemoryHandlers } from './activeMemory.ipcHandlers';
+import { registerMemoryWikiHandlers } from './memoryWiki.ipcHandlers';
 
 export {
   registerCliHandlers,
@@ -44,4 +45,5 @@ export {
   registerSavedQueriesHandlers,
   registerMemoryHandlers,
   registerActiveMemoryHandlers,
+  registerMemoryWikiHandlers,
 };

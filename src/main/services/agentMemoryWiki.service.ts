@@ -22,6 +22,8 @@ import { loadAISettings } from './agent.service';
 import type {
   AgentMemoryScope,
   AgentMemoryWikiState,
+  WikiStatus,
+  WikiLintResult,
 } from '../../types/backend';
 
 // ── Types ────────────────────────────────────────────────────────────────────
@@ -47,23 +49,6 @@ export interface WikiCompileResult {
   compiledScopes: number;
   skippedScopes: number;
   errors: Array<{ scopeKey: string; error: string }>;
-}
-
-export interface WikiStatus {
-  enabled: boolean;
-  vaultPath: string | null;
-  pendingScopes: number;
-  managedScopes: AgentMemoryWikiState[];
-}
-
-export interface WikiLintResult {
-  scopeKey: string;
-  contradictions: Array<{
-    entryIdA: number;
-    entryIdB: number;
-    reason: string;
-  }>;
-  warningCount: number;
 }
 
 // ── In-memory debounce map ────────────────────────────────────────────────────

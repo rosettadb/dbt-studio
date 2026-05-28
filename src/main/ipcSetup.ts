@@ -22,6 +22,7 @@ import {
   registerSavedQueriesHandlers,
   registerMemoryHandlers,
   registerActiveMemoryHandlers,
+  registerMemoryWikiHandlers,
 } from './ipcHandlers';
 
 const registerHandlers = (mainWindow: BrowserWindow) => {
@@ -47,6 +48,7 @@ const registerHandlers = (mainWindow: BrowserWindow) => {
   registerSavedQueriesHandlers();
   registerMemoryHandlers();
   registerActiveMemoryHandlers();
+  registerMemoryWikiHandlers();
 };
 
 export default registerHandlers;

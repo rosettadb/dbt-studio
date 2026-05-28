@@ -60,6 +60,11 @@ import {
   useActiveMemoryDiagnostics,
   useClearActiveMemoryDiagnostics,
 } from '../../controllers/activeMemory.controller';
+import {
+  useWikiStatus,
+  useWikiCompile,
+  useWikiLint,
+} from '../../controllers/memoryWiki.controller';
 import { useFilePicker } from '../../controllers/settings.controller';
 import type {
   AgentMemoryActiveMemorySettings,
@@ -556,6 +561,10 @@ export const MemorySettingsTab: React.FC = () => {
   const activeMemoryDiagnosticsQuery = useActiveMemoryDiagnostics();
   const clearActiveMemoryDiagnostics = useClearActiveMemoryDiagnostics();
 
+  const { data: wikiStatus, refetch: mutateWikiStatus } = useWikiStatus();
+  const { mutateAsync: wikiCompile } = useWikiCompile();
+  const { mutateAsync: wikiLint } = useWikiLint();
+
   const listFilter = React.useMemo<AgentMemoryListFilter>(() => {
     const filter: AgentMemoryListFilter = {
       archived: archiveFilter === 'archived',
@@ -702,6 +711,31 @@ export const MemorySettingsTab: React.FC = () => {
         },
       },
     );
+  };
+
+  const handleWikiCompile = async () => {
+    try {
+      await wikiCompile();
+      mutateWikiStatus();
+      toast.success('Wiki compilation triggered');
+    } catch (err: any) {
+      toast.error(`Wiki compile failed: ${err.message}`);
+    }
+  };
+
+  const handleWikiLint = async () => {
+    try {
+      await wikiLint({
+        screenKey: screenFilter === 'all' ? 'global' : screenFilter,
+        projectId: projectFilter.trim() || null,
+        connectionId: connectionFilter.trim() || null,
+        notebookId: notebookFilter.trim() || null,
+      });
+      mutateWikiStatus();
+      toast.success('Wiki lint completed');
+    } catch (err: any) {
+      toast.error(`Wiki lint failed: ${err.message}`);
+    }
   };
 
   const openCreateDialog = () => {
@@ -1260,6 +1294,63 @@ export const MemorySettingsTab: React.FC = () => {
           }
         />
 
+        <Divider />
+        <SettingRow
+          label="Wiki Status"
+          description="View the status of the background compiler and managed vault exports."
+          control={
+            <Stack spacing={1} sx={{ minWidth: 260 }}>
+              <Stack direction="row" spacing={1} alignItems="center">
+                <Typography variant="body2" sx={{ width: 120 }}>
+                  Managed Scopes:
+                </Typography>
+                <Chip
+                  size="small"
+                  label={wikiStatus?.managedScopes.length ?? 0}
+                />
+              </Stack>
+              <Stack direction="row" spacing={1} alignItems="center">
+                <Typography variant="body2" sx={{ width: 120 }}>
+                  Pending Queue:
+                </Typography>
+                <Chip
+                  size="small"
+                  color={
+                    (wikiStatus?.pendingScopes ?? 0) > 0 ? 'warning' : 'default'
+                  }
+                  label={wikiStatus?.pendingScopes ?? 0}
+                />
+              </Stack>
+            </Stack>
+          }
+        />
+        <Divider />
+        <SettingRow
+          label="Wiki Operations"
+          description="Manually trigger Wiki sync or linting for contradictions."
+          control={
+            <Stack direction="row" spacing={1}>
+              <Button
+                variant="outlined"
+                size="small"
+                startIcon={<SyncIcon />}
+                onClick={handleWikiCompile}
+                disabled={!memorySettings.wiki.enabled}
+              >
+                Run Compile
+              </Button>
+              <Button
+                variant="outlined"
+                size="small"
+                startIcon={<PreviewIcon />}
+                onClick={handleWikiLint}
+                disabled={!memorySettings.wiki.enabled}
+              >
+                Run Lint
+              </Button>
+            </Stack>
+          }
+        />
         <SectionTitle>Active Memory (Proactive Recall)</SectionTitle>
         <Divider />
         <Stack direction="row" spacing={1} sx={{ py: 1.25, flexWrap: 'wrap' }}>
@@ -1410,8 +1501,22 @@ export const MemorySettingsTab: React.FC = () => {
         )}
 
         {memorySettings.activeMemory.enabled && (
-          <Box sx={{ mt: 3, mb: 1, p: 2, border: 1, borderColor: 'divider', borderRadius: 1 }}>
-            <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 2 }}>
+          <Box
+            sx={{
+              mt: 3,
+              mb: 1,
+              p: 2,
+              border: 1,
+              borderColor: 'divider',
+              borderRadius: 1,
+            }}
+          >
+            <Stack
+              direction="row"
+              justifyContent="space-between"
+              alignItems="center"
+              sx={{ mb: 2 }}
+            >
               <Typography variant="subtitle2" fontWeight={600}>
                 Active Memory Diagnostics
               </Typography>
@@ -1420,39 +1525,90 @@ export const MemorySettingsTab: React.FC = () => {
                 variant="outlined"
                 color="error"
                 onClick={() => clearActiveMemoryDiagnostics.mutate()}
-                disabled={clearActiveMemoryDiagnostics.isLoading || !activeMemoryDiagnosticsQuery.data?.length}
+                disabled={
+                  clearActiveMemoryDiagnostics.isLoading ||
+                  !activeMemoryDiagnosticsQuery.data?.length
+                }
               >
                 Clear Diagnostics
               </Button>
             </Stack>
-            
-            {activeMemoryDiagnosticsQuery.isLoading ? (
-              <CircularProgress size={20} />
-            ) : activeMemoryDiagnosticsQuery.data?.length === 0 ? (
-              <Typography variant="body2" color="text.secondary">
-                No active memory diagnostics available.
-              </Typography>
-            ) : (
-              <Stack spacing={1}>
-                {activeMemoryDiagnosticsQuery.data?.map((diag) => (
-                  <Box key={diag.id} sx={{ p: 1.5, bgcolor: 'background.default', borderRadius: 1 }}>
-                    <Stack direction="row" spacing={1} sx={{ mb: 1 }}>
-                      <Chip size="small" label={`ID: ${diag.id}`} />
-                      <Chip size="small" color={diag.executionMs > 0 ? 'success' : 'default'} label={`${diag.executionMs} ms`} />
-                      {diag.providerId && <Chip size="small" variant="outlined" label={diag.providerId} />}
-                      {diag.modelId && <Chip size="small" variant="outlined" label={diag.modelId} />}
-                      <Chip size="small" variant="outlined" label={`Found: ${diag.recallKeysFound || 'none'}`} />
-                    </Stack>
-                    <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 0.5 }}>
-                      Date: {formatDate(diag.createdAt)} | Conversation: {diag.conversationId}
-                    </Typography>
-                    <Typography variant="body2" sx={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word', color: 'text.secondary' }}>
-                      {truncate(diag.completionPayload || 'No summary payload', 300)}
-                    </Typography>
-                  </Box>
-                ))}
-              </Stack>
-            )}
+
+            {(() => {
+              if (activeMemoryDiagnosticsQuery.isLoading) {
+                return <CircularProgress size={20} />;
+              }
+              if (activeMemoryDiagnosticsQuery.data?.length === 0) {
+                return (
+                  <Typography variant="body2" color="text.secondary">
+                    No active memory diagnostics available.
+                  </Typography>
+                );
+              }
+              return (
+                <Stack spacing={1}>
+                  {activeMemoryDiagnosticsQuery.data?.map((diag) => (
+                    <Box
+                      key={diag.id}
+                      sx={{
+                        p: 1.5,
+                        bgcolor: 'background.default',
+                        borderRadius: 1,
+                      }}
+                    >
+                      <Stack direction="row" spacing={1} sx={{ mb: 1 }}>
+                        <Chip size="small" label={`ID: ${diag.id}`} />
+                        <Chip
+                          size="small"
+                          color={diag.executionMs > 0 ? 'success' : 'default'}
+                          label={`${diag.executionMs} ms`}
+                        />
+                        {diag.providerId && (
+                          <Chip
+                            size="small"
+                            variant="outlined"
+                            label={diag.providerId}
+                          />
+                        )}
+                        {diag.modelId && (
+                          <Chip
+                            size="small"
+                            variant="outlined"
+                            label={diag.modelId}
+                          />
+                        )}
+                        <Chip
+                          size="small"
+                          variant="outlined"
+                          label={`Found: ${diag.recallKeysFound || 'none'}`}
+                        />
+                      </Stack>
+                      <Typography
+                        variant="caption"
+                        color="text.secondary"
+                        sx={{ display: 'block', mb: 0.5 }}
+                      >
+                        Date: {formatDate(diag.createdAt)} | Conversation:{' '}
+                        {diag.conversationId}
+                      </Typography>
+                      <Typography
+                        variant="body2"
+                        sx={{
+                          whiteSpace: 'pre-wrap',
+                          wordBreak: 'break-word',
+                          color: 'text.secondary',
+                        }}
+                      >
+                        {truncate(
+                          diag.completionPayload || 'No summary payload',
+                          300,
+                        )}
+                      </Typography>
+                    </Box>
+                  ))}
+                </Stack>
+              );
+            })()}
           </Box>
         )}
 

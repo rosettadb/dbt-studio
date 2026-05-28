@@ -375,3 +375,20 @@ export interface ActiveMemoryRecallResult {
   elapsedMs: number;
   diagnosticId?: number;
 }
+
+export interface WikiStatus {
+  enabled: boolean;
+  vaultPath: string | null;
+  pendingScopes: number;
+  managedScopes: AgentMemoryWikiState[];
+}
+
+export interface WikiLintResult {
+  scopeKey: string;
+  contradictions: Array<{
+    entryIdA: number;
+    entryIdB: number;
+    reason: string;
+  }>;
+  warningCount: number;
+}
