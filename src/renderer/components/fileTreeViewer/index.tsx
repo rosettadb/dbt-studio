@@ -11,7 +11,7 @@ import { Cached, Clear } from '@mui/icons-material';
 import { Container } from './styles';
 import { FileNode, FileStatus } from '../../../types/backend';
 import { NewFileModal } from '../modals';
-import { useGetSelectedProject } from '../../controllers';
+import { useGetSelectedProject, useGetSettings } from '../../controllers';
 import { ArboristTree } from './ArboristTree';
 import { FileStatuses } from './types';
 
@@ -77,6 +77,8 @@ const FileTreeViewer: React.FC<Props> = ({
   onRunPipeline,
 }) => {
   const { data: project } = useGetSelectedProject();
+  const { data: settings } = useGetSettings();
+
   const [fileModal, setFileModal] = React.useState<string>();
   const [folderModal, setFolderModal] = React.useState<string>();
   const [searchKeyword, setSearchKeyword] = React.useState('');
@@ -172,7 +174,7 @@ const FileTreeViewer: React.FC<Props> = ({
         selectedPath={selectedPath}
         projectPath={project!.path}
         copyPath={copyPath}
-        onRunPipeline={onRunPipeline}
+        onRunPipeline={settings?.env === 'cloud' ? onRunPipeline : undefined}
       />
       {(fileModal || folderModal) && (
         <NewFileModal
