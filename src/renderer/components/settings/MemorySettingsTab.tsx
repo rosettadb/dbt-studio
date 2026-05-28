@@ -64,6 +64,9 @@ import {
   useWikiStatus,
   useWikiCompile,
   useWikiLint,
+  useWikiOpenVault,
+  useWikiOpenNote,
+  useWikiOpenSearch,
 } from '../../controllers/memoryWiki.controller';
 import { useFilePicker } from '../../controllers/settings.controller';
 import type {
@@ -564,6 +567,10 @@ export const MemorySettingsTab: React.FC = () => {
   const { data: wikiStatus, refetch: mutateWikiStatus } = useWikiStatus();
   const { mutateAsync: wikiCompile } = useWikiCompile();
   const { mutateAsync: wikiLint } = useWikiLint();
+  const { mutateAsync: wikiOpenVault } = useWikiOpenVault();
+  const { mutateAsync: wikiOpenNote } = useWikiOpenNote();
+  const { mutateAsync: wikiOpenSearch } = useWikiOpenSearch();
+  const [wikiSearchQuery, setWikiSearchQuery] = React.useState('');
 
   const listFilter = React.useMemo<AgentMemoryListFilter>(() => {
     const filter: AgentMemoryListFilter = {
@@ -735,6 +742,31 @@ export const MemorySettingsTab: React.FC = () => {
       toast.success('Wiki lint completed');
     } catch (err: any) {
       toast.error(`Wiki lint failed: ${err.message}`);
+    }
+  };
+
+  const handleWikiOpenVault = async () => {
+    const result = await wikiOpenVault();
+    if (!result.ok) {
+      toast.error(result.error ?? 'Failed to open vault in Obsidian');
+    }
+  };
+
+  const handleWikiOpenNote = async (scopeKey: string) => {
+    const result = await wikiOpenNote({ scopeKey });
+    if (!result.ok) {
+      toast.error(result.error ?? 'Failed to open note in Obsidian');
+    }
+  };
+
+  const handleWikiOpenSearch = async () => {
+    if (!wikiSearchQuery.trim()) {
+      toast.warn('Enter a search query first');
+      return;
+    }
+    const result = await wikiOpenSearch({ query: wikiSearchQuery.trim() });
+    if (!result.ok) {
+      toast.error(result.error ?? 'Failed to open search in Obsidian');
     }
   };
 
@@ -1327,9 +1359,9 @@ export const MemorySettingsTab: React.FC = () => {
         <Divider />
         <SettingRow
           label="Wiki Operations"
-          description="Manually trigger Wiki sync or linting for contradictions."
+          description="Manually trigger Wiki sync, linting, or open the vault in Obsidian."
           control={
-            <Stack direction="row" spacing={1}>
+            <Stack direction="row" spacing={1} flexWrap="wrap">
               <Button
                 variant="outlined"
                 size="small"
@@ -1348,9 +1380,114 @@ export const MemorySettingsTab: React.FC = () => {
               >
                 Run Lint
               </Button>
+              <Button
+                variant="outlined"
+                size="small"
+                startIcon={<FolderOpenIcon />}
+                onClick={handleWikiOpenVault}
+                disabled={
+                  !memorySettings.wiki.enabled || !memorySettings.wiki.vaultPath
+                }
+              >
+                Open Vault
+              </Button>
             </Stack>
           }
         />
+        <Divider />
+        <SettingRow
+          label="Search in Obsidian"
+          description="Open the Obsidian search panel with a query from the configured vault."
+          control={
+            <Stack
+              direction="row"
+              spacing={1}
+              sx={{ minWidth: { xs: 260, sm: 400 } }}
+            >
+              <TextField
+                size="small"
+                fullWidth
+                placeholder="Enter search query…"
+                value={wikiSearchQuery}
+                onChange={(e) => setWikiSearchQuery(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') handleWikiOpenSearch();
+                }}
+                disabled={
+                  !memorySettings.wiki.enabled || !memorySettings.wiki.vaultPath
+                }
+              />
+              <Button
+                variant="outlined"
+                size="small"
+                startIcon={<SearchIcon />}
+                onClick={handleWikiOpenSearch}
+                disabled={
+                  !memorySettings.wiki.enabled || !memorySettings.wiki.vaultPath
+                }
+              >
+                Search
+              </Button>
+            </Stack>
+          }
+        />
+        {wikiStatus && wikiStatus.managedScopes.length > 0 && (
+          <>
+            <Divider />
+            <SettingRow
+              label="Managed Wiki Files"
+              description="Open a compiled wiki note directly in Obsidian."
+              control={
+                <Stack spacing={0.75}>
+                  {wikiStatus.managedScopes.map((scope) => (
+                    <Stack
+                      key={scope.scopeKey}
+                      direction="row"
+                      spacing={1}
+                      alignItems="center"
+                    >
+                      <Chip
+                        size="small"
+                        label={scope.scopeKey}
+                        sx={{ maxWidth: 240, fontFamily: 'monospace' }}
+                      />
+                      <Chip
+                        size="small"
+                        color={(() => {
+                          if (scope.status === 'error') return 'error' as const;
+                          if (scope.status === 'idle')
+                            return 'success' as const;
+                          return 'warning' as const;
+                        })()}
+                        label={scope.status}
+                        variant="outlined"
+                      />
+                      {scope.contradictionCount > 0 && (
+                        <Chip
+                          size="small"
+                          color="warning"
+                          label={`${scope.contradictionCount} conflicts`}
+                        />
+                      )}
+                      <Button
+                        size="small"
+                        variant="outlined"
+                        onClick={() => handleWikiOpenNote(scope.scopeKey)}
+                        disabled={
+                          !memorySettings.wiki.enabled ||
+                          !memorySettings.wiki.vaultPath ||
+                          !scope.filePath
+                        }
+                      >
+                        Open in Obsidian
+                      </Button>
+                    </Stack>
+                  ))}
+                </Stack>
+              }
+            />
+          </>
+        )}
         <SectionTitle>Active Memory (Proactive Recall)</SectionTitle>
         <Divider />
         <Stack direction="row" spacing={1} sx={{ py: 1.25, flexWrap: 'wrap' }}>

@@ -1,6 +1,11 @@
 import { useQuery, useMutation, useQueryClient } from 'react-query';
 import AgentMemoryWikiService from '../services/memoryWiki.service';
-import type { WikiStatus, WikiLintResult, AgentMemoryScope } from '../../types/backend';
+import type {
+  WikiStatus,
+  WikiLintResult,
+  AgentMemoryScope,
+  AgentMemoryWikiOpenResult,
+} from '../../types/backend';
 
 export const WIKI_QUERY_KEYS = {
   all: ['memory-wiki'] as const,
@@ -30,5 +35,26 @@ export const useWikiLint = () => {
     {
       onSuccess: () => qc.invalidateQueries(WIKI_QUERY_KEYS.status()),
     }
+  );
+};
+
+export const useWikiOpenVault = () => {
+  return useMutation(
+    (): Promise<AgentMemoryWikiOpenResult> =>
+      AgentMemoryWikiService.openVaultInObsidian()
+  );
+};
+
+export const useWikiOpenNote = () => {
+  return useMutation(
+    (input: { scopeKey?: string; memoryId?: number }): Promise<AgentMemoryWikiOpenResult> =>
+      AgentMemoryWikiService.openNoteInObsidian(input)
+  );
+};
+
+export const useWikiOpenSearch = () => {
+  return useMutation(
+    (input: { query: string }): Promise<AgentMemoryWikiOpenResult> =>
+      AgentMemoryWikiService.openSearchInObsidian(input)
   );
 };

@@ -421,7 +421,10 @@ export type MemoryChannels =
 export type MemoryWikiChannels =
   | 'memory-wiki:status'
   | 'memory-wiki:compile'
-  | 'memory-wiki:lint';
+  | 'memory-wiki:lint'
+  | 'memory-wiki:open-vault'
+  | 'memory-wiki:open-note'
+  | 'memory-wiki:open-search';
 
 export type ActiveMemoryChannels =
   | 'active-memory:diagnostics:list'

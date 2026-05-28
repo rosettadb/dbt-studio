@@ -392,3 +392,10 @@ export interface WikiLintResult {
   }>;
   warningCount: number;
 }
+
+export interface AgentMemoryWikiOpenResult {
+  ok: boolean;
+  method: 'uri' | 'error';
+  url?: string;
+  error?: string;
+}

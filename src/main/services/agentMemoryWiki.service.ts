@@ -17,6 +17,7 @@
 import fs from 'fs-extra';
 import path from 'path';
 import crypto from 'crypto';
+import { shell } from 'electron';
 import MainDatabaseService from './mainDatabase.service';
 import { loadAISettings } from './agent.service';
 import type {
@@ -24,6 +25,7 @@ import type {
   AgentMemoryWikiState,
   WikiStatus,
   WikiLintResult,
+  AgentMemoryWikiOpenResult,
 } from '../../types/backend';
 
 // ── Types ────────────────────────────────────────────────────────────────────
@@ -765,5 +767,141 @@ export default class AgentMemoryWikiService {
       entries,
       state.lastCompiledAt ?? new Date().toISOString(),
     );
+  }
+
+  /**
+   * Open the configured vault folder in the Obsidian desktop app
+   * using the obsidian:// URI scheme via Electron shell.openExternal.
+   */
+  static async openVaultInObsidian(): Promise<AgentMemoryWikiOpenResult> {
+    const settings = await loadAISettings();
+    const vaultPath = settings.memory?.wiki?.vaultPath;
+
+    if (!vaultPath) {
+      return { ok: false, method: 'error', error: 'No vault path configured.' };
+    }
+
+    const exists = await fs.pathExists(vaultPath);
+    if (!exists) {
+      return {
+        ok: false,
+        method: 'error',
+        error: `Vault path does not exist: ${vaultPath}`,
+      };
+    }
+
+    const vaultName = path.basename(vaultPath);
+    const url = `obsidian://open?vault=${encodeURIComponent(vaultName)}`;
+    try {
+      await shell.openExternal(url);
+      return { ok: true, method: 'uri', url };
+    } catch (err: any) {
+      return {
+        ok: false,
+        method: 'error',
+        error: `Failed to open Obsidian: ${err.message}`,
+      };
+    }
+  }
+
+  /**
+   * Open a specific managed wiki note in Obsidian, resolved from SQLite state.
+   * Never accepts arbitrary renderer-provided paths.
+   */
+  static async openNoteInObsidian(input: {
+    scopeKey?: string;
+    memoryId?: number;
+  }): Promise<AgentMemoryWikiOpenResult> {
+    const settings = await loadAISettings();
+    const vaultPath = settings.memory?.wiki?.vaultPath;
+
+    if (!vaultPath) {
+      return { ok: false, method: 'error', error: 'No vault path configured.' };
+    }
+
+    const db = await MainDatabaseService.getSqliteDatabase();
+    let stateRow: any | undefined;
+
+    if (input.scopeKey) {
+      stateRow = db
+        .prepare(
+          'SELECT file_path FROM agent_memory_wiki_state WHERE scope_key = ?',
+        )
+        .get(input.scopeKey);
+    } else if (input.memoryId !== undefined) {
+      // Resolve via entry -> scope_key -> wiki_state
+      const entry = db
+        .prepare(
+          'SELECT project_id, connection_id, notebook_id FROM agent_memory_entries WHERE id = ?',
+        )
+        .get(input.memoryId) as any;
+      if (entry) {
+        const parts = [
+          entry.project_id ?? 'global',
+          entry.connection_id ?? 'global',
+          entry.notebook_id ?? 'global',
+        ];
+        const resolvedKey = parts.join('::');
+        stateRow = db
+          .prepare(
+            'SELECT file_path FROM agent_memory_wiki_state WHERE scope_key = ?',
+          )
+          .get(resolvedKey);
+      }
+    }
+
+    if (!stateRow?.file_path) {
+      return {
+        ok: false,
+        method: 'error',
+        error: 'Wiki note not found for the given scope. Compile first.',
+      };
+    }
+
+    const resolvedPath = stateRow.file_path as string;
+    const url = `obsidian://open?path=${encodeURIComponent(resolvedPath)}`;
+    try {
+      await shell.openExternal(url);
+      return { ok: true, method: 'uri', url };
+    } catch (err: any) {
+      return {
+        ok: false,
+        method: 'error',
+        error: `Failed to open Obsidian: ${err.message}`,
+      };
+    }
+  }
+
+  /**
+   * Open the Obsidian search panel for the configured vault with the given query.
+   * Only the query and vault identity are passed; no file paths or memory IDs.
+   */
+  static async openSearchInObsidian(input: {
+    query: string;
+  }): Promise<AgentMemoryWikiOpenResult> {
+    const settings = await loadAISettings();
+    const vaultPath = settings.memory?.wiki?.vaultPath;
+
+    if (!vaultPath) {
+      return { ok: false, method: 'error', error: 'No vault path configured.' };
+    }
+
+    const vaultName = path.basename(vaultPath);
+    const query = input.query.trim();
+    if (!query) {
+      return { ok: false, method: 'error', error: 'Search query is empty.' };
+    }
+
+    const url = `obsidian://search?vault=${encodeURIComponent(vaultName)}&query=${encodeURIComponent(query)}`;
+    try {
+      await shell.openExternal(url);
+      return { ok: true, method: 'uri', url };
+    } catch (err: any) {
+      return {
+        ok: false,
+        method: 'error',
+        error: `Failed to open Obsidian: ${err.message}`,
+      };
+    }
   }
 }
