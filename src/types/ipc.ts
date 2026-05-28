@@ -418,6 +418,11 @@ export type MemoryChannels =
   | 'memory:dreaming:reports:list'
   | 'memory:index:rebuild';
 
+export type ActiveMemoryChannels =
+  | 'active-memory:diagnostics:list'
+  | 'active-memory:diagnostics:clear'
+  | 'active-memory:status';
+
 export type Channels =
   | TestChannels
   | CliChannels
@@ -440,7 +445,8 @@ export type Channels =
   | MCPChannels
   | SkillsChannels
   | SavedQueriesChannels
-  | MemoryChannels;
+  | MemoryChannels
+  | ActiveMemoryChannels;
 
 export type ConfigureConnectionBody = {
   projectId?: string;

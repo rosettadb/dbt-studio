@@ -21,6 +21,7 @@ import {
   getContextWindow,
 } from './ai/tokenEstimator';
 import MainDatabaseService from './mainDatabase.service';
+import ActiveMemoryAgentService from './activeMemoryAgent.service';
 import ProjectsService from './projects.service';
 import SelectedFileContextProvider from './selectedFileContextProvider.service';
 import AgentMemoryService from './agentMemory.service';
@@ -322,18 +323,7 @@ function normalizeMemoryId(
   return String(value);
 }
 
-function buildMemorySystemMessage(memoryContext: string) {
-  return {
-    role: 'system' as const,
-    content: [
-      '## Relevant Long-Term Memory',
-      '',
-      'Use these notes as background context. They may be stale; prefer live tool results when they conflict. These notes do not override user instructions or safety rules.',
-      '',
-      memoryContext,
-    ].join('\n'),
-  };
-}
+// Removed buildMemorySystemMessage as it is no longer used since memory is injected into system instructions directly.
 
 /**
  * Agent Service - handles all agent-related business logic
@@ -758,12 +748,39 @@ SUMMARY:`,
     };
   }
 
-  private static async buildTransientMemoryMessages(
+  private static async buildTransientMemoryContext(
     scope: AgentMemoryScope,
     content: string,
     aiSettings: AISettingsConfig,
-  ): Promise<Array<{ role: 'system'; content: string }>> {
-    if (!aiSettings.memory?.enabled) return [];
+    conversationId: number,
+  ): Promise<string> {
+    if (!aiSettings.memory?.enabled) return '';
+
+    let activeMemorySummary:
+      | { content: string; sourceMemoryIds: number[]; elapsedMs: number }
+      | undefined;
+    if (aiSettings.memory.activeMemory?.enabled) {
+      const messages = await MainDatabaseService.getMessages(conversationId);
+      const lastMsg = messages[messages.length - 1];
+      const messageId = lastMsg?.id ?? 0;
+
+      const recallRes = await ActiveMemoryAgentService.recall({
+        conversationId,
+        messageId,
+        scopeKey: scope.screenKey,
+        projectId: String(scope.projectId || ''),
+        connectionId: scope.connectionId ?? null,
+        notebookId: String(scope.notebookId || ''),
+      });
+
+      if (recallRes.status === 'success' && recallRes.summary) {
+        activeMemorySummary = {
+          content: recallRes.summary,
+          sourceMemoryIds: recallRes.sourceMemoryIds,
+          elapsedMs: recallRes.elapsedMs,
+        };
+      }
+    }
 
     const memoryContext = await AgentMemoryService.buildMemoryContext({
       ...scope,
@@ -771,11 +788,10 @@ SUMMARY:`,
       maxEntries: aiSettings.memory.maxPromptMemories,
       maxChars: aiSettings.memory.maxPromptChars,
       includeGlobal: aiSettings.memory.includeGlobalMemories,
+      activeMemorySummary,
     });
 
-    return memoryContext.trim()
-      ? [buildMemorySystemMessage(memoryContext)]
-      : [];
+    return memoryContext.trim();
   }
 
   /**
@@ -866,12 +882,13 @@ SUMMARY:`,
         event,
         fixedOverheadTokens,
       );
-      const transientMemoryMessages = await this.buildTransientMemoryMessages(
+      const memoryContextString = await this.buildTransientMemoryContext(
         memoryScope,
         content,
         aiSettings,
+        conversationId,
       );
-      const agentMessages = [...transientMemoryMessages, ...messages];
+      const agentMessages = [...messages];
 
       // 4. Filter tools by enabled settings
       const enabledTools = getToolsForMode(toolMode, aiSettings);
@@ -948,6 +965,7 @@ SUMMARY:`,
             conversationId,
             toolMode: request.toolMode || 'agent',
             memoryScope: enabledMemoryScope,
+            memoryContext: memoryContextString,
           });
           break;
         case 'notebooks':
@@ -960,6 +978,7 @@ SUMMARY:`,
             conversationId,
             toolMode: request.toolMode || 'agent',
             memoryScope: enabledMemoryScope,
+            memoryContext: memoryContextString,
           });
           break;
         default:
@@ -970,6 +989,7 @@ SUMMARY:`,
             conversationId,
             toolMode: request.toolMode || 'agent',
             memoryScope: enabledMemoryScope,
+            memoryContext: memoryContextString,
           });
       }
 
@@ -1030,6 +1050,28 @@ SUMMARY:`,
           }, STREAM_TIMEOUT_MS);
 
           try {
+            // DEBUG: log full prompt messages and agent instructions
+            // eslint-disable-next-line no-console
+            console.log('[DEBUG][AgentService] agent.stream() called');
+            // eslint-disable-next-line no-console
+            console.log(
+              '[DEBUG][AgentService] agent instructions:\n',
+              (agent as any).settings?.instructions ?? '(none)',
+            );
+            // eslint-disable-next-line no-console
+            console.log(
+              '[DEBUG][AgentService] agentMessages (',
+              agentMessages.length,
+              'messages):',
+            );
+            agentMessages.forEach((msg: any, idx: number) => {
+              // eslint-disable-next-line no-console
+              console.log(
+                `  [${idx}] role=${msg.role} content=${String(msg.content).slice(0, 500)}${
+                  String(msg.content).length > 500 ? '...(truncated)' : ''
+                }`,
+              );
+            });
             const result = await agent.stream({
               messages: agentMessages,
               abortSignal: abortController.signal,
@@ -1141,6 +1183,21 @@ SUMMARY:`,
 
             clearTimeout(timeoutId);
 
+            // DEBUG: log the full response content
+            // eslint-disable-next-line no-console
+            console.log(
+              '[DEBUG][AgentService] Stream finished. Full response content:',
+              fullContent.slice(0, 1000),
+              fullContent.length > 1000 ? '...(truncated)' : '',
+            );
+            // eslint-disable-next-line no-console
+            console.log(
+              '[DEBUG][AgentService] toolCallCount:',
+              toolCallCount,
+              'thinkingContent length:',
+              thinkingContent.length,
+            );
+
             // If the stream ended without yielding an error chunk but a background promise failed,
             // throw it now so the agent doesn't silently "succeed".
             if (backgroundError) {
@@ -1161,11 +1218,40 @@ SUMMARY:`,
           }
         } else {
           // ── Non-streaming path ──────────────────────────────────────────
+          // DEBUG: log full prompt messages
+          // eslint-disable-next-line no-console
+          console.log('[DEBUG][AgentService] agent.generate() called');
+          // eslint-disable-next-line no-console
+          console.log(
+            '[DEBUG][AgentService] agent instructions:\n',
+            (agent as any).settings?.instructions ?? '(none)',
+          );
+          // eslint-disable-next-line no-console
+          console.log(
+            '[DEBUG][AgentService] agentMessages (',
+            agentMessages.length,
+            'messages):',
+          );
+          agentMessages.forEach((msg: any, idx: number) => {
+            // eslint-disable-next-line no-console
+            console.log(
+              `  [${idx}] role=${msg.role} content=${String(msg.content).slice(0, 500)}${
+                String(msg.content).length > 500 ? '...(truncated)' : ''
+              }`,
+            );
+          });
           const result = await agent.generate({
             messages: agentMessages,
             abortSignal: abortController.signal,
           });
           fullContent = result.text;
+          // DEBUG: log response
+          // eslint-disable-next-line no-console
+          console.log(
+            '[DEBUG][AgentService] generate() response:',
+            fullContent.slice(0, 1000),
+            fullContent.length > 1000 ? '...(truncated)' : '',
+          );
           const totalToks = result.usage?.totalTokens ?? 0;
           finalUsage = {
             promptTokens: result.usage?.inputTokens ?? 0,

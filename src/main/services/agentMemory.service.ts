@@ -1225,7 +1225,13 @@ export default class AgentMemoryService {
   }
 
   static async buildMemoryContext(
-    req: AgentMemoryContextRequest,
+    req: AgentMemoryContextRequest & {
+      activeMemorySummary?: {
+        content: string;
+        sourceMemoryIds: number[];
+        elapsedMs: number;
+      };
+    },
   ): Promise<string> {
     const maxEntries = clampNumber(
       req.maxEntries,
@@ -1247,6 +1253,10 @@ export default class AgentMemoryService {
       : await this.listEntries({ ...req, limit: maxEntries });
 
     const seen = new Set<number>();
+    if (req.activeMemorySummary?.sourceMemoryIds) {
+      req.activeMemorySummary.sourceMemoryIds.forEach((id) => seen.add(id));
+    }
+
     const selectedMetadata = metadata.filter((entry) => {
       if (seen.has(entry.id)) return false;
       seen.add(entry.id);
@@ -1313,6 +1323,17 @@ export default class AgentMemoryService {
                 400,
               )} (score ${entry.max_score.toFixed(2)})`,
           ),
+        ].join('\n'),
+      );
+    }
+
+    if (req.activeMemorySummary?.content) {
+      sections.push(
+        [
+          '### Active Memory',
+          '<Untrusted context>',
+          req.activeMemorySummary.content,
+          '</Untrusted context>',
         ].join('\n'),
       );
     }

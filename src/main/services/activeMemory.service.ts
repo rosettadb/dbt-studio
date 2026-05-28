@@ -77,4 +77,39 @@ export default class ActiveMemoryService {
 
     return Number(result.lastInsertRowid);
   }
+
+  public static async listDiagnostics(
+    limit = 10,
+  ): Promise<AgentMemoryDiagnostic[]> {
+    const db = await MainDatabaseService.getSqliteDatabase();
+    const rows = db
+      .prepare(
+        `
+        SELECT * FROM agent_memory_diagnostics
+        ORDER BY id DESC
+        LIMIT ?
+      `,
+      )
+      .all(limit) as any[];
+
+    return rows.map((row) => ({
+      id: row.id,
+      conversationId: row.conversation_id,
+      messageId: row.message_id,
+      providerId: row.provider_id,
+      modelId: row.model_id,
+      executionMs: row.execution_ms,
+      promptTokens: row.prompt_tokens,
+      completionTokens: row.completion_tokens,
+      promptPayload: row.prompt_payload,
+      completionPayload: row.completion_payload,
+      recallKeysFound: row.recall_keys_found,
+      createdAt: row.created_at,
+    }));
+  }
+
+  public static async clearDiagnostics(): Promise<void> {
+    const db = await MainDatabaseService.getSqliteDatabase();
+    db.prepare('DELETE FROM agent_memory_diagnostics').run();
+  }
 }

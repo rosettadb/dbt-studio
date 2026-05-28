@@ -19,6 +19,7 @@ import { registerMCPHandlers } from './mcp.ipcHandlers';
 import { registerSkillsHandlers } from './skills.ipcHandlers';
 import registerSavedQueriesHandlers from './savedQueries.ipcHandlers';
 import registerMemoryHandlers from './memory.ipcHandlers';
+import { registerActiveMemoryHandlers } from './activeMemory.ipcHandlers';
 
 export {
   registerCliHandlers,
@@ -42,4 +43,5 @@ export {
   registerSkillsHandlers,
   registerSavedQueriesHandlers,
   registerMemoryHandlers,
+  registerActiveMemoryHandlers,
 };

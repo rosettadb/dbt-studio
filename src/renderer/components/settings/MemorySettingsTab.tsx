@@ -56,6 +56,10 @@ import {
   useGetAISettings,
   useSaveAISettings,
 } from '../../controllers/aiSettings.controller';
+import {
+  useActiveMemoryDiagnostics,
+  useClearActiveMemoryDiagnostics,
+} from '../../controllers/activeMemory.controller';
 import { useFilePicker } from '../../controllers/settings.controller';
 import type {
   AgentMemoryActiveMemorySettings,
@@ -548,6 +552,9 @@ export const MemorySettingsTab: React.FC = () => {
   const createMemory = useCreateMemoryEntry();
   const updateMemory = useUpdateMemoryEntry();
   const archiveMemory = useArchiveMemoryEntry();
+
+  const activeMemoryDiagnosticsQuery = useActiveMemoryDiagnostics();
+  const clearActiveMemoryDiagnostics = useClearActiveMemoryDiagnostics();
 
   const listFilter = React.useMemo<AgentMemoryListFilter>(() => {
     const filter: AgentMemoryListFilter = {
@@ -1400,6 +1407,53 @@ export const MemorySettingsTab: React.FC = () => {
               }
             />
           </>
+        )}
+
+        {memorySettings.activeMemory.enabled && (
+          <Box sx={{ mt: 3, mb: 1, p: 2, border: 1, borderColor: 'divider', borderRadius: 1 }}>
+            <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 2 }}>
+              <Typography variant="subtitle2" fontWeight={600}>
+                Active Memory Diagnostics
+              </Typography>
+              <Button
+                size="small"
+                variant="outlined"
+                color="error"
+                onClick={() => clearActiveMemoryDiagnostics.mutate()}
+                disabled={clearActiveMemoryDiagnostics.isLoading || !activeMemoryDiagnosticsQuery.data?.length}
+              >
+                Clear Diagnostics
+              </Button>
+            </Stack>
+            
+            {activeMemoryDiagnosticsQuery.isLoading ? (
+              <CircularProgress size={20} />
+            ) : activeMemoryDiagnosticsQuery.data?.length === 0 ? (
+              <Typography variant="body2" color="text.secondary">
+                No active memory diagnostics available.
+              </Typography>
+            ) : (
+              <Stack spacing={1}>
+                {activeMemoryDiagnosticsQuery.data?.map((diag) => (
+                  <Box key={diag.id} sx={{ p: 1.5, bgcolor: 'background.default', borderRadius: 1 }}>
+                    <Stack direction="row" spacing={1} sx={{ mb: 1 }}>
+                      <Chip size="small" label={`ID: ${diag.id}`} />
+                      <Chip size="small" color={diag.executionMs > 0 ? 'success' : 'default'} label={`${diag.executionMs} ms`} />
+                      {diag.providerId && <Chip size="small" variant="outlined" label={diag.providerId} />}
+                      {diag.modelId && <Chip size="small" variant="outlined" label={diag.modelId} />}
+                      <Chip size="small" variant="outlined" label={`Found: ${diag.recallKeysFound || 'none'}`} />
+                    </Stack>
+                    <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 0.5 }}>
+                      Date: {formatDate(diag.createdAt)} | Conversation: {diag.conversationId}
+                    </Typography>
+                    <Typography variant="body2" sx={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word', color: 'text.secondary' }}>
+                      {truncate(diag.completionPayload || 'No summary payload', 300)}
+                    </Typography>
+                  </Box>
+                ))}
+              </Stack>
+            )}
+          </Box>
         )}
 
         <SectionTitle>Maintenance</SectionTitle>

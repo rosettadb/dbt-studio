@@ -356,3 +356,22 @@ export interface AgentMemoryDiagnostic {
   recallKeysFound: string | null;
   createdAt: string;
 }
+
+export interface ActiveMemoryRecallRequest {
+  conversationId: number;
+  messageId: number;
+  scopeKey: string;
+  projectId: string | null;
+  connectionId: string | null;
+  notebookId: string | null;
+  // History will be passed as a raw string or we'll fetch it from the database based on mode.
+  // We'll pass the exact message objects from the agent turn.
+}
+
+export interface ActiveMemoryRecallResult {
+  status: 'success' | 'skipped' | 'timeout' | 'error' | 'circuit_open';
+  summary: string;
+  sourceMemoryIds: number[];
+  elapsedMs: number;
+  diagnosticId?: number;
+}
