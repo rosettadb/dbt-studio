@@ -1,0 +1,784 @@
+/**
+ * AgentMemoryWikiService — Phase B2 of Plan 38 Track B
+ *
+ * Manages the debounced queue that exports SQLite `agent_memory_entries` rows
+ * into scoped Obsidian-compatible markdown files. The queue is persisted in
+ * `agent_memory_wiki_state` so interrupted compile jobs can be retried on next
+ * startup without blocking the main process.
+ *
+ * DESIGN RULES:
+ * - SQLite is the only authoritative memory store.
+ * - This service only WRITES markdown; it never reads vault markdown as memory.
+ * - Wiki writes happen only when `wiki.enabled === true` AND `wiki.vaultPath` is set.
+ * - File paths are strictly sanitized to prevent path traversal.
+ * - Debounce is per-scope-key to prevent thundering-herd on bulk mutations.
+ */
+
+import fs from 'fs-extra';
+import path from 'path';
+import crypto from 'crypto';
+import MainDatabaseService from './mainDatabase.service';
+import { loadAISettings } from './agent.service';
+import type {
+  AgentMemoryScope,
+  AgentMemoryWikiState,
+} from '../../types/backend';
+
+// ── Types ────────────────────────────────────────────────────────────────────
+
+export type WikiCompileReason =
+  | 'entry_created'
+  | 'entry_updated'
+  | 'entry_archived'
+  | 'entry_deleted'
+  | 'deep_promotion'
+  | 'manual_compile'
+  | 'startup_retry';
+
+export interface WikiFileResult {
+  scopeKey: string;
+  filePath: string;
+  entriesWritten: number;
+  contentHash: string;
+  compiledAt: string;
+}
+
+export interface WikiCompileResult {
+  compiledScopes: number;
+  skippedScopes: number;
+  errors: Array<{ scopeKey: string; error: string }>;
+}
+
+export interface WikiStatus {
+  enabled: boolean;
+  vaultPath: string | null;
+  pendingScopes: number;
+  managedScopes: AgentMemoryWikiState[];
+}
+
+export interface WikiLintResult {
+  scopeKey: string;
+  contradictions: Array<{
+    entryIdA: number;
+    entryIdB: number;
+    reason: string;
+  }>;
+  warningCount: number;
+}
+
+// ── In-memory debounce map ────────────────────────────────────────────────────
+
+/** Maps scopeKey → debounce timeout handle */
+const debounceHandles = new Map<string, ReturnType<typeof setTimeout>>();
+
+// ── Path helpers ─────────────────────────────────────────────────────────────
+
+/** Sanitize a path segment to be filesystem-safe. */
+function sanitizeSegment(value: string | number | null | undefined): string {
+  if (value === null || value === undefined) return '_global';
+  // Replace anything that isn't alphanumeric, dash, underscore, or dot
+  return String(value)
+    .replace(/[^a-zA-Z0-9_\-.]/g, '_')
+    .slice(0, 80);
+}
+
+/**
+ * Build the export file path for a given scope:
+ * `<vaultPath>/dbt-Studio/<projectId>/<connectionId>/<notebookId>.md`
+ */
+function resolveFilePath(
+  vaultPath: string,
+  scope: {
+    projectId?: string | number | null;
+    connectionId?: string | null;
+    notebookId?: string | number | null;
+  },
+): string {
+  const projectSeg = sanitizeSegment(scope.projectId);
+  const connectionSeg = sanitizeSegment(scope.connectionId);
+  const notebookSeg = sanitizeSegment(scope.notebookId);
+
+  const dir = path.join(vaultPath, 'dbt-Studio', projectSeg, connectionSeg);
+  const file = `${notebookSeg}.md`;
+
+  // Guard: resolved path must stay under vaultPath
+  const resolved = path.resolve(dir, file);
+  const vaultResolved = path.resolve(vaultPath);
+  if (
+    !resolved.startsWith(vaultResolved + path.sep) &&
+    resolved !== vaultResolved
+  ) {
+    throw new Error(`[WikiService] Path traversal detected: ${resolved}`);
+  }
+
+  return resolved;
+}
+
+/** Build a scope key string from project/connection/notebook IDs. */
+function buildScopeKey(scope: {
+  projectId?: string | number | null;
+  connectionId?: string | null;
+  notebookId?: string | number | null;
+}): string {
+  return [
+    scope.projectId ?? '_global',
+    scope.connectionId ?? '_global',
+    scope.notebookId ?? '_global',
+  ].join(':');
+}
+
+// ── Markdown compilation ──────────────────────────────────────────────────────
+
+const MANAGED_START = '<!-- dbt-studio-managed-start -->';
+const MANAGED_END = '<!-- dbt-studio-managed-end -->';
+
+interface MemoryRow {
+  id: number;
+  kind: string;
+  source_type: string | null;
+  source_id: string | null;
+  title: string | null;
+  content: string;
+  summary: string | null;
+  confidence: number;
+  importance: number;
+  status: string;
+  tags: string | null;
+  promoted_at: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+function buildManagedBlock(
+  scope: {
+    projectId?: string | number | null;
+    connectionId?: string | null;
+    notebookId?: string | number | null;
+  },
+  entries: MemoryRow[],
+  compiledAt: string,
+): string {
+  const lines: string[] = [];
+
+  lines.push('---');
+  lines.push('dbt_studio_managed: true');
+  lines.push(`project_id: ${scope.projectId ?? 'global'}`);
+  lines.push(`connection_id: ${scope.connectionId ?? 'global'}`);
+  lines.push(`notebook_id: ${scope.notebookId ?? 'global'}`);
+  lines.push(`last_compiled_at: ${compiledAt}`);
+  lines.push('---');
+  lines.push('');
+  lines.push('# dbt Studio Memory');
+  lines.push('');
+  lines.push(
+    '> This file is auto-generated by dbt Studio. Content inside the managed block will be overwritten on the next compile. Add your own notes **outside** the managed block to preserve them.',
+  );
+  lines.push('');
+  lines.push(MANAGED_START);
+  lines.push('');
+
+  if (entries.length === 0) {
+    lines.push('*No memory entries for this scope yet.*');
+  } else {
+    entries.forEach((entry) => {
+      const tags = (() => {
+        try {
+          const parsed = JSON.parse(entry.tags ?? '[]');
+          return Array.isArray(parsed) ? parsed : [];
+        } catch {
+          return [];
+        }
+      })();
+
+      lines.push(`## ${entry.title ?? entry.kind}`);
+      lines.push('');
+      lines.push(`**Kind:** ${entry.kind}  `);
+      if (entry.source_type)
+        lines.push(
+          `**Source:** ${entry.source_type}${entry.source_id ? ` / ${entry.source_id}` : ''}  `,
+        );
+      lines.push(`**Confidence:** ${Math.round(entry.confidence * 100)}%  `);
+      lines.push(`**Importance:** ${Math.round(entry.importance * 100)}%  `);
+      if (tags.length > 0) lines.push(`**Tags:** ${tags.join(', ')}  `);
+      if (entry.promoted_at) lines.push(`**Promoted:** ${entry.promoted_at}  `);
+      lines.push(`**Memory ID:** ${entry.id}  `);
+      lines.push('');
+      lines.push(entry.content);
+      if (entry.summary) {
+        lines.push('');
+        lines.push(`*Summary: ${entry.summary}*`);
+      }
+      lines.push('');
+      lines.push('---');
+      lines.push('');
+    });
+  }
+
+  lines.push(MANAGED_END);
+  lines.push('');
+
+  return lines.join('\n');
+}
+
+/**
+ * Merge new managed content into existing file content, preserving any
+ * user-written text outside the managed block.
+ */
+function mergeFileContent(
+  existingContent: string,
+  newManagedBlock: string,
+): string {
+  const startIdx = existingContent.indexOf(MANAGED_START);
+  const endIdx = existingContent.indexOf(MANAGED_END);
+
+  if (startIdx === -1 || endIdx === -1 || startIdx > endIdx) {
+    // No managed block yet — replace whole file with the new block
+    return newManagedBlock;
+  }
+
+  const after = existingContent.slice(endIdx + MANAGED_END.length);
+
+  // Replace from the frontmatter up to the managed start with new frontmatter,
+  // preserving any content after the managed end block.
+  // The new managed block already contains the frontmatter, managed start, and managed end.
+  const managedContent = newManagedBlock.slice(
+    0,
+    newManagedBlock.indexOf(MANAGED_END) + MANAGED_END.length,
+  );
+
+  return managedContent + after;
+}
+
+// ── DB helpers ────────────────────────────────────────────────────────────────
+
+function mapWikiStateRow(row: any): AgentMemoryWikiState {
+  return {
+    id: row.id,
+    scopeKey: row.scope_key,
+    projectId: row.project_id,
+    connectionId: row.connection_id,
+    notebookId: row.notebook_id,
+    filePath: row.file_path,
+    status: row.status,
+    pendingReason: row.pending_reason,
+    queuedAt: row.queued_at,
+    lastStartedAt: row.last_started_at,
+    contentHash: row.content_hash,
+    lastCompiledAt: row.last_compiled_at,
+    lastError: row.last_error,
+    contradictionCount: row.contradiction_count ?? 0,
+    metadata: row.metadata,
+  };
+}
+
+async function getWikiStateRow(
+  scopeKey: string,
+): Promise<AgentMemoryWikiState | null> {
+  const db = await MainDatabaseService.getSqliteDatabase();
+  const row = db
+    .prepare('SELECT * FROM agent_memory_wiki_state WHERE scope_key = ?')
+    .get(scopeKey) as any;
+  if (!row) return null;
+  return mapWikiStateRow(row);
+}
+
+async function upsertWikiState(params: {
+  scopeKey: string;
+  projectId: string | null;
+  connectionId: string | null;
+  notebookId: string | null;
+  filePath: string;
+  status: string;
+  pendingReason?: string | null;
+  queuedAt?: string | null;
+  lastStartedAt?: string | null;
+  contentHash?: string | null;
+  lastCompiledAt?: string | null;
+  lastError?: string | null;
+  contradictionCount?: number;
+}): Promise<void> {
+  const db = await MainDatabaseService.getSqliteDatabase();
+  db.prepare(
+    `
+    INSERT INTO agent_memory_wiki_state (
+      scope_key, project_id, connection_id, notebook_id, file_path,
+      status, pending_reason, queued_at, last_started_at,
+      content_hash, last_compiled_at, last_error, contradiction_count
+    ) VALUES (
+      @scopeKey, @projectId, @connectionId, @notebookId, @filePath,
+      @status, @pendingReason, @queuedAt, @lastStartedAt,
+      @contentHash, @lastCompiledAt, @lastError, @contradictionCount
+    )
+    ON CONFLICT(scope_key) DO UPDATE SET
+      file_path = excluded.file_path,
+      status = excluded.status,
+      pending_reason = COALESCE(excluded.pending_reason, pending_reason),
+      queued_at = COALESCE(excluded.queued_at, queued_at),
+      last_started_at = COALESCE(excluded.last_started_at, last_started_at),
+      content_hash = COALESCE(excluded.content_hash, content_hash),
+      last_compiled_at = COALESCE(excluded.last_compiled_at, last_compiled_at),
+      last_error = excluded.last_error,
+      contradiction_count = COALESCE(excluded.contradiction_count, contradiction_count)
+    `,
+  ).run({
+    scopeKey: params.scopeKey,
+    projectId: params.projectId ?? null,
+    connectionId: params.connectionId ?? null,
+    notebookId: params.notebookId ?? null,
+    filePath: params.filePath,
+    status: params.status,
+    pendingReason: params.pendingReason ?? null,
+    queuedAt: params.queuedAt ?? null,
+    lastStartedAt: params.lastStartedAt ?? null,
+    contentHash: params.contentHash ?? null,
+    lastCompiledAt: params.lastCompiledAt ?? null,
+    lastError: params.lastError ?? null,
+    contradictionCount: params.contradictionCount ?? 0,
+  });
+}
+
+// ── Core service ─────────────────────────────────────────────────────────────
+
+export default class AgentMemoryWikiService {
+  /**
+   * Enqueue a compile job for a scope. Debounced per scope key.
+   * If wiki is disabled or no vault path is configured, this is a no-op.
+   */
+  static async enqueue(
+    reason: WikiCompileReason,
+    scope: AgentMemoryScope,
+  ): Promise<void> {
+    const settings = await loadAISettings();
+    const wiki = settings.memory?.wiki;
+    if (!wiki?.enabled || !wiki.vaultPath) return;
+
+    const scopeKey = buildScopeKey(scope);
+    const { vaultPath } = wiki;
+    const filePath = resolveFilePath(vaultPath, scope);
+    const debounceMs = wiki.debounceMs ?? 2000;
+
+    // Persist queued state immediately so it can be retried if the app exits
+    await upsertWikiState({
+      scopeKey,
+      projectId: scope.projectId ? String(scope.projectId) : null,
+      connectionId: scope.connectionId ?? null,
+      notebookId: scope.notebookId ? String(scope.notebookId) : null,
+      filePath,
+      status: 'queued',
+      pendingReason: reason,
+      queuedAt: new Date().toISOString(),
+    });
+
+    // Cancel any existing debounce timer for this scope
+    const existing = debounceHandles.get(scopeKey);
+    if (existing) clearTimeout(existing);
+
+    // Schedule the compile
+    const handle = setTimeout(async () => {
+      debounceHandles.delete(scopeKey);
+      try {
+        await AgentMemoryWikiService.compileScope(scope);
+      } catch (err) {
+        // eslint-disable-next-line no-console
+        console.error(`[WikiService] Error compiling scope ${scopeKey}:`, err);
+      }
+    }, debounceMs);
+
+    debounceHandles.set(scopeKey, handle);
+  }
+
+  /**
+   * Compile all pending scopes. Called at startup to retry any scopes that
+   * were queued but not compiled before the app exited.
+   */
+  static async compilePending(): Promise<WikiCompileResult> {
+    const settings = await loadAISettings();
+    const wiki = settings.memory?.wiki;
+    if (!wiki?.enabled || !wiki.vaultPath) {
+      return { compiledScopes: 0, skippedScopes: 0, errors: [] };
+    }
+
+    const db = await MainDatabaseService.getSqliteDatabase();
+    const pendingRows = db
+      .prepare(
+        `SELECT * FROM agent_memory_wiki_state WHERE status IN ('queued', 'running', 'error') ORDER BY queued_at ASC`,
+      )
+      .all() as any[];
+
+    // Process each pending scope sequentially, collecting errors without throwing
+    const compiled = await pendingRows.reduce<Promise<WikiCompileResult>>(
+      async (accP, row) => {
+        const acc = await accP;
+        const scope: AgentMemoryScope = {
+          projectId: row.project_id ?? undefined,
+          connectionId: row.connection_id ?? undefined,
+          notebookId: row.notebook_id ?? undefined,
+          screenKey: 'project',
+        };
+        try {
+          await AgentMemoryWikiService.compileScope(scope);
+          return { ...acc, compiledScopes: acc.compiledScopes + 1 };
+        } catch (err: any) {
+          return {
+            ...acc,
+            errors: [
+              ...acc.errors,
+              { scopeKey: row.scope_key, error: err?.message ?? String(err) },
+            ],
+          };
+        }
+      },
+      Promise.resolve({ compiledScopes: 0, skippedScopes: 0, errors: [] }),
+    );
+
+    return compiled;
+  }
+
+  /**
+   * Compile a single scope to its markdown file.
+   * - Queries eligible `agent_memory_entries` with Plan 37 scope rules.
+   * - Preserves user content outside the managed block.
+   * - Writes YAML frontmatter + managed block.
+   */
+  static async compileScope(scope: AgentMemoryScope): Promise<WikiFileResult> {
+    const settings = await loadAISettings();
+    const wiki = settings.memory?.wiki;
+    if (!wiki?.enabled || !wiki.vaultPath) {
+      throw new Error(
+        '[WikiService] Wiki is disabled or vault path is not configured.',
+      );
+    }
+
+    const scopeKey = buildScopeKey(scope);
+    const filePath = resolveFilePath(wiki.vaultPath, scope);
+    const compiledAt = new Date().toISOString();
+
+    await upsertWikiState({
+      scopeKey,
+      projectId: scope.projectId ? String(scope.projectId) : null,
+      connectionId: scope.connectionId ?? null,
+      notebookId: scope.notebookId ? String(scope.notebookId) : null,
+      filePath,
+      status: 'running',
+      lastStartedAt: compiledAt,
+      lastError: null,
+    });
+
+    try {
+      const db = await MainDatabaseService.getSqliteDatabase();
+
+      // Build scope WHERE clause following Plan 37 scoping rules
+      const whereParts: string[] = ['archived = 0'];
+      const params: Record<string, any> = {};
+
+      // Scope: match project, connection, notebook if specified
+      if (scope.projectId) {
+        whereParts.push('(project_id = @projectId OR project_id IS NULL)');
+        params.projectId = scope.projectId;
+      } else {
+        whereParts.push('project_id IS NULL');
+      }
+
+      if (scope.connectionId) {
+        whereParts.push(
+          '(connection_id = @connectionId OR connection_id IS NULL)',
+        );
+        params.connectionId = scope.connectionId;
+      } else {
+        whereParts.push('connection_id IS NULL');
+      }
+
+      if (scope.notebookId) {
+        whereParts.push('(notebook_id = @notebookId OR notebook_id IS NULL)');
+        params.notebookId = scope.notebookId;
+      } else {
+        whereParts.push('notebook_id IS NULL');
+      }
+
+      // Filter by kind based on wiki settings
+      const kindExclusions: string[] = [];
+      if (!wiki.includeManualMemories) kindExclusions.push("'manual'");
+      if (!wiki.includeDatabaseMetadata)
+        kindExclusions.push("'database_metadata'");
+      if (kindExclusions.length > 0) {
+        whereParts.push(`kind NOT IN (${kindExclusions.join(', ')})`);
+      }
+      if (!wiki.includePromotedMemories) {
+        whereParts.push('promoted_at IS NULL');
+      }
+
+      const entries = db
+        .prepare(
+          `SELECT * FROM agent_memory_entries WHERE ${whereParts.join(' AND ')} ORDER BY importance DESC, confidence DESC, created_at DESC`,
+        )
+        .all(params) as MemoryRow[];
+
+      // Build new managed block content
+      const newBlock = buildManagedBlock(scope, entries, compiledAt);
+
+      // Ensure directory exists
+      await fs.ensureDir(path.dirname(filePath));
+
+      // Read existing file if present, preserve user content outside managed block
+      let finalContent: string;
+      if (await fs.pathExists(filePath)) {
+        const existing = await fs.readFile(filePath, 'utf-8');
+        finalContent = mergeFileContent(existing, newBlock);
+      } else {
+        finalContent = newBlock;
+      }
+
+      const contentHash = crypto
+        .createHash('sha256')
+        .update(finalContent)
+        .digest('hex')
+        .slice(0, 16);
+      await fs.writeFile(filePath, finalContent, 'utf-8');
+
+      await upsertWikiState({
+        scopeKey,
+        projectId: scope.projectId ? String(scope.projectId) : null,
+        connectionId: scope.connectionId ?? null,
+        notebookId: scope.notebookId ? String(scope.notebookId) : null,
+        filePath,
+        status: 'idle',
+        contentHash,
+        lastCompiledAt: compiledAt,
+        lastError: null,
+      });
+
+      return {
+        scopeKey,
+        filePath,
+        entriesWritten: entries.length,
+        contentHash,
+        compiledAt,
+      };
+    } catch (err: any) {
+      const errorMsg = err?.message ?? String(err);
+      await upsertWikiState({
+        scopeKey,
+        projectId: scope.projectId ? String(scope.projectId) : null,
+        connectionId: scope.connectionId ?? null,
+        notebookId: scope.notebookId ? String(scope.notebookId) : null,
+        filePath,
+        status: 'error',
+        lastError: errorMsg,
+      });
+      throw err;
+    }
+  }
+
+  /**
+   * Get a summary of all known wiki scopes and their compile state.
+   */
+  static async getStatus(): Promise<WikiStatus> {
+    const settings = await loadAISettings();
+    const wiki = settings.memory?.wiki;
+
+    const db = await MainDatabaseService.getSqliteDatabase();
+    const rows = db
+      .prepare(
+        'SELECT * FROM agent_memory_wiki_state ORDER BY last_compiled_at DESC',
+      )
+      .all() as any[];
+
+    const managedScopes: AgentMemoryWikiState[] = rows.map(mapWikiStateRow);
+    const pendingScopes = managedScopes.filter(
+      (s) => s.status === 'queued' || s.status === 'running',
+    ).length;
+
+    return {
+      enabled: wiki?.enabled ?? false,
+      vaultPath: wiki?.vaultPath ?? null,
+      pendingScopes,
+      managedScopes,
+    };
+  }
+
+  /**
+   * Lint a scope for contradictions — same-scope entries with opposing claims.
+   * Low-confidence detection warns but does not block compile.
+   */
+  static async lintScope(scope: AgentMemoryScope): Promise<WikiLintResult> {
+    const scopeKey = buildScopeKey(scope);
+    const db = await MainDatabaseService.getSqliteDatabase();
+
+    const params: Record<string, any> = {};
+    const whereParts: string[] = ['archived = 0'];
+
+    if (scope.projectId) {
+      whereParts.push('project_id = @projectId');
+      params.projectId = scope.projectId;
+    } else whereParts.push('project_id IS NULL');
+
+    if (scope.connectionId) {
+      whereParts.push('connection_id = @connectionId');
+      params.connectionId = scope.connectionId;
+    } else whereParts.push('connection_id IS NULL');
+
+    if (scope.notebookId) {
+      whereParts.push('notebook_id = @notebookId');
+      params.notebookId = scope.notebookId;
+    } else whereParts.push('notebook_id IS NULL');
+
+    const entries = db
+      .prepare(
+        `SELECT id, kind, title, content FROM agent_memory_entries WHERE ${whereParts.join(' AND ')}`,
+      )
+      .all(params) as Array<{
+      id: number;
+      kind: string;
+      title: string | null;
+      content: string;
+    }>;
+
+    // Simple heuristic: find pairs in the same kind where one starts with
+    // a negation of the other's key claim. Uses flatMap over index pairs.
+    const NEGATION_PREFIXES = [
+      'not ',
+      "don't ",
+      'never ',
+      'avoid ',
+      'disable ',
+      'no ',
+    ];
+
+    const contradictions: WikiLintResult['contradictions'] = entries.flatMap(
+      (a, i) =>
+        entries.slice(i + 1).flatMap((b) => {
+          if (a.kind !== b.kind) return [];
+          const aLow = a.content.toLowerCase().trim();
+          const bLow = b.content.toLowerCase().trim();
+          const found = NEGATION_PREFIXES.some(
+            (neg) =>
+              (aLow.startsWith(neg) &&
+                bLow.includes(aLow.slice(neg.length).slice(0, 30))) ||
+              (bLow.startsWith(neg) &&
+                aLow.includes(bLow.slice(neg.length).slice(0, 30))),
+          );
+          return found
+            ? [
+                {
+                  entryIdA: a.id,
+                  entryIdB: b.id,
+                  reason: `Possible contradiction between entry ${a.id} and ${b.id} in kind "${a.kind}"`,
+                },
+              ]
+            : [];
+        }),
+    );
+
+    // Persist contradiction count
+    if (contradictions.length > 0) {
+      const existing = await getWikiStateRow(scopeKey);
+      if (existing) {
+        db.prepare(
+          'UPDATE agent_memory_wiki_state SET contradiction_count = ? WHERE scope_key = ?',
+        ).run(contradictions.length, scopeKey);
+      }
+    }
+
+    return {
+      scopeKey,
+      contradictions,
+      warningCount: contradictions.length,
+    };
+  }
+
+  /**
+   * Search scoped wiki content.
+   * Uses standard AgentMemoryService search but formats the output as markdown excerpts
+   * exactly as they appear in the managed wiki block.
+   */
+  static async searchWiki(
+    req: import('../../types/backend').AgentMemorySearchRequest,
+  ): Promise<
+    Array<{
+      id: number;
+      kind: string;
+      title: string | null;
+      excerpt: string;
+      score: number;
+    }>
+  > {
+    const { default: AgentMemoryService } = await import(
+      './agentMemory.service'
+    );
+    const results = await AgentMemoryService.searchEntries(req);
+
+    return results.map((row) => {
+      let excerpt = `**Kind:** ${row.kind}  \n`;
+      if (row.sourceType) {
+        excerpt += `**Source:** ${row.sourceType}${row.sourceId ? ` / ${row.sourceId}` : ''}  \n`;
+      }
+      excerpt += `**Confidence:** ${Math.round(row.confidence * 100)}%  \n`;
+      excerpt += `**Importance:** ${Math.round(row.importance * 100)}%  \n`;
+      if (row.tags && row.tags.length > 0) {
+        try {
+          const parsedTags = JSON.parse(row.tags);
+          if (Array.isArray(parsedTags)) {
+            excerpt += `**Tags:** ${parsedTags.join(', ')}  \n`;
+          }
+        } catch {
+          excerpt += `**Tags:** ${row.tags}  \n`;
+        }
+      }
+      excerpt += `\n${row.content}`;
+
+      return {
+        id: row.id,
+        kind: row.kind,
+        title: row.title ?? row.kind,
+        score: row.score,
+        excerpt,
+      };
+    });
+  }
+
+  /**
+   * Retrieves the full managed markdown block for a given scope, formatting it identically
+   * to what is written to the physical Obsidian vault file.
+   */
+  static async getWikiFile(scope: AgentMemoryScope): Promise<string> {
+    const scopeKey = buildScopeKey(scope);
+    const db = await MainDatabaseService.getSqliteDatabase();
+
+    const state = await getWikiStateRow(scopeKey);
+    if (!state) {
+      return 'No wiki file generated for this scope yet.';
+    }
+
+    const whereParts: string[] = ['archived = 0'];
+    const params: Record<string, any> = {};
+
+    if (scope.projectId) {
+      whereParts.push('(project_id = @projectId OR project_id IS NULL)');
+      params.projectId = scope.projectId;
+    } else whereParts.push('project_id IS NULL');
+
+    if (scope.connectionId) {
+      whereParts.push(
+        '(connection_id = @connectionId OR connection_id IS NULL)',
+      );
+      params.connectionId = scope.connectionId;
+    } else whereParts.push('connection_id IS NULL');
+
+    if (scope.notebookId) {
+      whereParts.push('(notebook_id = @notebookId OR notebook_id IS NULL)');
+      params.notebookId = scope.notebookId;
+    } else whereParts.push('notebook_id IS NULL');
+
+    const entries = db
+      .prepare(
+        `SELECT * FROM agent_memory_entries WHERE ${whereParts.join(' AND ')} ORDER BY importance DESC, confidence DESC, created_at DESC`,
+      )
+      .all(params) as MemoryRow[];
+
+    return buildManagedBlock(
+      scope,
+      entries,
+      state.lastCompiledAt ?? new Date().toISOString(),
+    );
+  }
+}

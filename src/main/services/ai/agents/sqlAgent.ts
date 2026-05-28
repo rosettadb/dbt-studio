@@ -11,6 +11,7 @@ import {
   createSqlResultInspectorTools,
 } from '../tools/studio/sql.tools';
 import { createMemoryTools } from '../tools/memory.tools';
+import { createWikiTools } from '../tools/wikiMemory.tools';
 import type { AgentMemoryScope } from '../../../../types/backend';
 
 export interface SqlAgentOptions {
@@ -247,6 +248,9 @@ ${mcpToolsList}
   const memoryTools = options.memoryScope
     ? createMemoryTools(options.memoryScope)
     : {};
+  const wikiTools = options.memoryScope
+    ? await createWikiTools(options.memoryScope)
+    : {};
 
   return new ToolLoopAgent({
     model: base.model as any,
@@ -254,6 +258,7 @@ ${mcpToolsList}
     tools: {
       ...baseTools,
       ...memoryTools,
+      ...(wikiTools as any),
       ...base.mcpTools,
       loadSkill: base.loadSkillTool,
     },

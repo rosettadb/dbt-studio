@@ -29,6 +29,18 @@ import {
   ShortTermRecallRequest,
 } from '../../types/backend';
 
+// Lazy import to avoid circular dependency — wiki service imports loadAISettings from agent.service
+let cachedWikiService:
+  | typeof import('./agentMemoryWiki.service').default
+  | null = null;
+async function getWikiService() {
+  if (!cachedWikiService) {
+    const mod = await import('./agentMemoryWiki.service');
+    cachedWikiService = mod.default;
+  }
+  return cachedWikiService;
+}
+
 type SqlParams = Record<string, string | number | null>;
 
 type RawAgentMemoryEntry = {
@@ -581,6 +593,34 @@ export default class AgentMemoryService {
     return this.getEntryById(Number(result.lastInsertRowid));
   }
 
+  /** Fire-and-forget wiki enqueue after any mutation. */
+  private static fireWikiEnqueue(
+    reason:
+      | 'entry_created'
+      | 'entry_updated'
+      | 'entry_archived'
+      | 'entry_deleted',
+    entry: {
+      projectId?: string | null;
+      connectionId?: string | null;
+      notebookId?: string | null;
+    },
+  ): void {
+    getWikiService()
+      .then((svc) =>
+        svc.enqueue(reason, {
+          screenKey: 'project',
+          projectId: entry.projectId ?? undefined,
+          connectionId: entry.connectionId ?? undefined,
+          notebookId: entry.notebookId ?? undefined,
+        }),
+      )
+      .catch((err) => {
+        // eslint-disable-next-line no-console
+        console.error('[AgentMemoryService] Wiki enqueue error:', err);
+      });
+  }
+
   static async updateEntry(
     id: number,
     patch: Partial<NewAgentMemoryEntry>,
@@ -655,10 +695,33 @@ export default class AgentMemoryService {
     db.prepare(
       `UPDATE agent_memory_entries SET ${updates.join(', ')} WHERE id = @id`,
     ).run(params);
+
+    // Fetch updated entry to resolve scope for wiki enqueue
+    try {
+      const updated = db
+        .prepare(
+          'SELECT project_id, connection_id, notebook_id FROM agent_memory_entries WHERE id = @id',
+        )
+        .get({ id }) as any;
+      if (updated) {
+        this.fireWikiEnqueue('entry_updated', {
+          projectId: updated.project_id,
+          connectionId: updated.connection_id,
+          notebookId: updated.notebook_id,
+        });
+      }
+    } catch {
+      // non-critical — wiki enqueue failure must not block the caller
+    }
   }
 
   static async archiveEntry(id: number): Promise<void> {
     const db = await this.getDb();
+    const existing = db
+      .prepare(
+        'SELECT project_id, connection_id, notebook_id FROM agent_memory_entries WHERE id = ?',
+      )
+      .get(id) as any;
     db.prepare(
       `
         UPDATE agent_memory_entries
@@ -666,11 +729,30 @@ export default class AgentMemoryService {
         WHERE id = ?
       `,
     ).run(id);
+    if (existing) {
+      this.fireWikiEnqueue('entry_archived', {
+        projectId: existing.project_id,
+        connectionId: existing.connection_id,
+        notebookId: existing.notebook_id,
+      });
+    }
   }
 
   static async deleteEntry(id: number): Promise<void> {
     const db = await this.getDb();
+    const existing = db
+      .prepare(
+        'SELECT project_id, connection_id, notebook_id FROM agent_memory_entries WHERE id = ?',
+      )
+      .get(id) as any;
     db.prepare('DELETE FROM agent_memory_entries WHERE id = ?').run(id);
+    if (existing) {
+      this.fireWikiEnqueue('entry_deleted', {
+        projectId: existing.project_id,
+        connectionId: existing.connection_id,
+        notebookId: existing.notebook_id,
+      });
+    }
   }
 
   static async listEntries(

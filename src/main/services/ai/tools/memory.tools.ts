@@ -27,27 +27,65 @@ export function createMemoryTools(scope: AgentMemoryScope) {
         query: z.string().min(1),
         kind: z.enum(MEMORY_KIND_VALUES).optional(),
         limit: z.number().int().min(1).max(20).default(8),
+        corpus: z.enum(['memory', 'wiki', 'all']).default('memory'),
       }),
-      execute: async ({ query, kind, limit }) => {
-        const results = await AgentMemoryService.searchEntries({
-          ...scope,
-          query,
-          kind,
-          limit,
-        });
+      execute: async ({ query, kind, limit, corpus }) => {
+        const memResultsP = (corpus === 'memory' || corpus === 'all')
+          ? AgentMemoryService.searchEntries({ ...scope, query, kind, limit })
+          : Promise.resolve([]);
 
-        return {
-          ok: true,
-          count: results.length,
-          memories: results.map((entry) => ({
+        let wikiResultsP: Promise<Array<any>> = Promise.resolve([]);
+        if (corpus === 'wiki' || corpus === 'all') {
+          const mod = await import('../../agentMemoryWiki.service');
+          wikiResultsP = mod.default.searchWiki({ ...scope, query, kind, limit });
+        }
+
+        const [memResults, wikiResults] = await Promise.all([memResultsP, wikiResultsP]);
+
+        const merged: any[] = [];
+        const seenIds = new Set<number>();
+
+        for (const entry of memResults) {
+          merged.push({
             id: entry.id,
+            corpus: 'memory',
             kind: entry.kind,
             title: entry.title,
             summary: entry.summary ?? summarizeMemoryContent(entry.content),
             score: entry.score,
             updatedAt: entry.updatedAt,
             matchSource: entry.matchSource,
-          })),
+          });
+          seenIds.add(entry.id);
+        }
+
+        for (const entry of wikiResults) {
+          if (!seenIds.has(entry.id)) {
+            merged.push({
+              id: entry.id,
+              corpus: 'wiki',
+              kind: entry.kind,
+              title: entry.title,
+              excerpt: entry.excerpt,
+              score: entry.score,
+            });
+            seenIds.add(entry.id);
+          } else if (corpus === 'all') {
+            const existing = merged.find((m) => m.id === entry.id);
+            if (existing) {
+              existing.corpus = 'all';
+              existing.excerpt = entry.excerpt;
+            }
+          }
+        }
+
+        // Lower BM25 score means more relevant
+        merged.sort((a, b) => a.score - b.score);
+
+        return {
+          ok: true,
+          count: merged.length,
+          memories: merged.slice(0, limit),
         };
       },
     }),

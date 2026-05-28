@@ -5,6 +5,7 @@ import { createStudioCloudTools } from '../tools/studio/cloud.tools';
 import { createStudioConnectionsTools } from '../tools/studio/connections.tools';
 import { createStudioDuckLakeTools } from '../tools/studio/ducklake.tools';
 import { createMemoryTools } from '../tools/memory.tools';
+import { createWikiTools } from '../tools/wikiMemory.tools';
 import type { AgentMemoryScope } from '../../../../types/backend';
 
 export interface NotebooksAgentOptions {
@@ -116,6 +117,9 @@ ${memoryGuidance}
   const memoryTools = options.memoryScope
     ? createMemoryTools(options.memoryScope)
     : {};
+  const wikiTools = options.memoryScope
+    ? await createWikiTools(options.memoryScope)
+    : {};
 
   return new ToolLoopAgent({
     model: base.model as any,
@@ -123,6 +127,7 @@ ${memoryGuidance}
     tools: {
       ...baseTools,
       ...memoryTools,
+      ...(wikiTools as any),
       ...base.mcpTools,
       loadSkill: base.loadSkillTool,
     },

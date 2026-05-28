@@ -8,6 +8,7 @@ import {
   filesystemTools,
 } from '../tools/filesystem.tools';
 import { createMemoryTools } from '../tools/memory.tools';
+import { createWikiTools } from '../tools/wikiMemory.tools';
 import type { AgentMemoryScope } from '../../../../types/backend';
 
 export interface ProjectAgentOptions {
@@ -160,6 +161,9 @@ Always confirm before making destructive changes.`;
   const memoryTools = options.memoryScope
     ? createMemoryTools(options.memoryScope)
     : {};
+  const wikiTools = options.memoryScope
+    ? await createWikiTools(options.memoryScope)
+    : {};
 
   return new ToolLoopAgent({
     model: base.model as any,
@@ -167,6 +171,7 @@ Always confirm before making destructive changes.`;
     tools: {
       ...baseTools,
       ...memoryTools,
+      ...(wikiTools as any),
       ...base.mcpTools,
       loadSkill: base.loadSkillTool,
     },
