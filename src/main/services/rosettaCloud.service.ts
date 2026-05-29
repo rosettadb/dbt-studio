@@ -37,6 +37,10 @@ export default class RosettaCloudService {
         body: data ? JSON.stringify(data) : undefined,
       });
 
+      if (!response.ok) {
+        throw new Error(`Request failed: ${response.status}`);
+      }
+
       return response.json();
     };
 

@@ -273,6 +273,11 @@ export const PushToCloudModal: React.FC<PushToCloudModalProps> = ({
       return false;
     }
 
+    // Wait for environment variables to finish loading
+    if (!profileLoaded || (isDeployed && !secretsLoaded)) {
+      return false;
+    }
+
     const hasTitle = !!title.trim();
     const hasUrl = !!gitUrl.trim();
     const noErrors = !urlError && !titleError;
@@ -287,6 +292,9 @@ export const PushToCloudModal: React.FC<PushToCloudModalProps> = ({
     gitUrl,
     urlError,
     titleError,
+    profileLoaded,
+    secretsLoaded,
+    isDeployed,
   ]);
 
   const handleGitUrlChange = React.useCallback(
@@ -1128,7 +1136,26 @@ export const PushToCloudModal: React.FC<PushToCloudModalProps> = ({
               </Stack>
             </Paper>
 
-            {environmentVariables.length === 0 && (
+            {/* eslint-disable-next-line no-nested-ternary */}
+            {!profileLoaded || (isDeployed && !secretsLoaded) ? (
+              <Box
+                sx={{
+                  p: 3,
+                  textAlign: 'center',
+                  borderRadius: 1.5,
+                  bgcolor: alpha(
+                    theme.palette.background.default,
+                    theme.palette.mode === 'dark' ? 0.5 : 1,
+                  ),
+                  border: `1px dashed ${theme.palette.divider}`,
+                }}
+              >
+                <CircularProgress size={24} sx={{ mb: 1 }} />
+                <Typography variant="body2" color="text.secondary">
+                  Loading environment variables...
+                </Typography>
+              </Box>
+            ) : environmentVariables.length === 0 ? (
               <Box
                 sx={{
                   p: 3,
@@ -1152,7 +1179,7 @@ export const PushToCloudModal: React.FC<PushToCloudModalProps> = ({
                   No environment variables detected for this project.
                 </Typography>
               </Box>
-            )}
+            ) : null}
           </Stack>
         </AccordionDetails>
       </Accordion>
