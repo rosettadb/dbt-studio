@@ -11,7 +11,7 @@ import { Cached, Clear } from '@mui/icons-material';
 import { Container } from './styles';
 import { FileNode, FileStatus } from '../../../types/backend';
 import { NewFileModal } from '../modals';
-import { useGetSelectedProject } from '../../controllers';
+import { useGetSelectedProject, useGetSettings } from '../../controllers';
 import { ArboristTree } from './ArboristTree';
 import { FileStatuses } from './types';
 
@@ -26,6 +26,7 @@ type Props = {
   copyPath: (source: string, target: string) => Promise<void>;
   selectedPath?: string;
   onRenameCallback?: (oldPath: string, newPath: string) => void;
+  onRunPipeline?: (filePath: string) => void;
 };
 
 const filterTreeAndCollectExpanded = (
@@ -73,8 +74,11 @@ const FileTreeViewer: React.FC<Props> = ({
   copyPath,
   selectedPath,
   onRenameCallback,
+  onRunPipeline,
 }) => {
   const { data: project } = useGetSelectedProject();
+  const { data: settings } = useGetSettings();
+
   const [fileModal, setFileModal] = React.useState<string>();
   const [folderModal, setFolderModal] = React.useState<string>();
   const [searchKeyword, setSearchKeyword] = React.useState('');
@@ -170,6 +174,7 @@ const FileTreeViewer: React.FC<Props> = ({
         selectedPath={selectedPath}
         projectPath={project!.path}
         copyPath={copyPath}
+        onRunPipeline={settings?.env === 'cloud' ? onRunPipeline : undefined}
       />
       {(fileModal || folderModal) && (
         <NewFileModal

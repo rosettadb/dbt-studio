@@ -1275,4 +1275,53 @@ export default class ProjectsService {
     });
     return { success: true, filePath: savePath, filename };
   };
+
+  /**
+   * Extract env_var references from a project's profiles.yml
+   */
+  static async extractProfileEnvVars(
+    projectId: string,
+  ): Promise<{ name: string; value?: string }[]> {
+    const project = await this.getProject(projectId);
+    if (!project) throw new Error('Project not found');
+
+    const profilesPath = path.join(project.path, 'profiles.yml');
+    if (!fs.existsSync(profilesPath)) return [];
+
+    const content = await fs.promises.readFile(profilesPath, 'utf8');
+    const envVarRegex = /env_var\(\s*["']([^"']+)["']/g;
+    const vars = new Set<string>();
+    let match = envVarRegex.exec(content);
+    while (match) {
+      vars.add(match[1]);
+      match = envVarRegex.exec(content);
+    }
+
+    return Array.from(vars)
+      .sort()
+      .map((name) => ({ name }));
+  }
+
+  /**
+   * List pipeline YAML files under .rosetta/ directory
+   */
+  static async listPipelines(
+    projectId: string,
+  ): Promise<{ name: string; path: string }[]> {
+    const project = await this.getProject(projectId);
+    if (!project) throw new Error('Project not found');
+
+    const rosettaDir = path.join(project.path, '.rosetta');
+    if (!fs.existsSync(rosettaDir)) return [];
+
+    const entries = await fs.promises.readdir(rosettaDir);
+    return entries
+      .filter(
+        (f) => (f.endsWith('.yml') || f.endsWith('.yaml')) && f !== 'main.conf',
+      )
+      .map((f) => ({
+        name: f.replace(/\.(yml|yaml)$/, ''),
+        path: path.join(rosettaDir, f),
+      }));
+  }
 }

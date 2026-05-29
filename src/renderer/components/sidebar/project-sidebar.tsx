@@ -258,6 +258,7 @@ interface ExplorerTabProps {
   onCopyPath: (source: string, target: string) => Promise<void>;
   onNewFile: (filePath?: string) => void;
   onRenameFile?: (oldPath: string, newPath: string) => void;
+  onRunPipeline?: (filePath: string) => void;
 }
 
 const ExplorerTab: React.FC<ExplorerTabProps> = ({
@@ -271,6 +272,7 @@ const ExplorerTab: React.FC<ExplorerTabProps> = ({
   onCopyPath,
   onNewFile,
   onRenameFile,
+  onRunPipeline,
 }) => {
   return (
     <FileTreeContainer>
@@ -286,6 +288,7 @@ const ExplorerTab: React.FC<ExplorerTabProps> = ({
           onNewFileCallback={onNewFile}
           selectedPath={selectedFilePath}
           onRenameCallback={onRenameFile}
+          onRunPipeline={onRunPipeline}
         />
       )}
     </FileTreeContainer>
@@ -355,6 +358,9 @@ interface ProjectSidebarProps {
   onAddConnection?: () => void;
   onEditConnection?: () => void;
   onRemoveConnection?: () => void;
+
+  // Pipeline
+  onRunPipeline?: (filePath: string) => void;
 }
 
 export const ProjectSidebar: React.FC<ProjectSidebarProps> = ({
@@ -379,6 +385,7 @@ export const ProjectSidebar: React.FC<ProjectSidebarProps> = ({
   onAddConnection,
   onEditConnection,
   onRemoveConnection,
+  onRunPipeline,
 }) => {
   return (
     <Box
@@ -404,6 +411,7 @@ export const ProjectSidebar: React.FC<ProjectSidebarProps> = ({
             onCopyPath={onCopyPath}
             onNewFile={onNewFile}
             onRenameFile={onRenameFile}
+            onRunPipeline={onRunPipeline}
           />
         )}
 

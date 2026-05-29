@@ -29,6 +29,7 @@ const handlerChannels = [
   'git:fileDiff',
   'git:fileHeadContent',
   'git:fileStatusList',
+  'git:isFileUnpushed',
   'git:aheadBehind',
   'git:createBranch',
   'git:deleteBranch',
@@ -215,6 +216,16 @@ const registerGitHandlers = () => {
       { repoPath, filePath }: { repoPath: string; filePath: string },
     ): Promise<FileStatus | null> => {
       return gitService.getFileStatus(repoPath, filePath);
+    },
+  );
+
+  ipcMain.handle(
+    'git:isFileUnpushed',
+    async (
+      _event,
+      { repoPath, filePath }: { repoPath: string; filePath: string },
+    ): Promise<boolean> => {
+      return gitService.isFileUnpushed(repoPath, filePath);
     },
   );
 

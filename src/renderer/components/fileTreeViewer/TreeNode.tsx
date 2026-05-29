@@ -9,8 +9,11 @@ import {
   CreateNewFolder as CreateFolderIcon,
   NoteAdd as CreateFileIcon,
   Delete as DeleteIcon,
+  PlayArrow as PlayIcon,
 } from '@mui/icons-material';
 import { getClassWithColor } from 'file-icons-js';
+import { toast } from 'react-toastify';
+import { isFileUnpushed } from '../../services/git.service';
 import { FileNode, FileStatuses } from './types';
 import { GitStatusBadge } from './GitStatusBadge';
 
@@ -103,9 +106,21 @@ interface TreeNodeProps extends NodeRendererProps<FileNode> {
   onCreateFile: (parentPath: string) => void;
   onCreateFolder: (parentPath: string) => void;
   onDelete: (path: string) => void;
+  onRunPipeline?: (filePath: string) => void;
   dragOverFolder?: string | null;
   projectPath: string;
 }
+
+const isPipelineYaml = (filePath: string): boolean => {
+  const parts = filePath.replace(/\\/g, '/').split('/');
+  const fileName = parts[parts.length - 1] || '';
+  const parentDir = parts[parts.length - 2] || '';
+  return (
+    parentDir === '.rosetta' &&
+    (fileName.endsWith('.yml') || fileName.endsWith('.yaml')) &&
+    fileName !== 'main.conf'
+  );
+};
 
 export const TreeNode: React.FC<TreeNodeProps> = ({
   node,
@@ -116,12 +131,14 @@ export const TreeNode: React.FC<TreeNodeProps> = ({
   onCreateFile,
   onCreateFolder,
   onDelete,
+  onRunPipeline,
   dragOverFolder,
   projectPath,
 }) => {
   const inputRef = useRef<HTMLInputElement>(null);
   const isFolder = node.data.type === 'folder';
   const gitStatus = fileStatuses[node.data.path];
+  const isPipeline = !isFolder && isPipelineYaml(node.data.path);
   const isExternalDragOver = isFolder && dragOverFolder === node.data.path;
   const isRootFolder = node.data.path === projectPath;
 
@@ -266,6 +283,44 @@ export const TreeNode: React.FC<TreeNodeProps> = ({
             </IconButton>
           )}
         </NodeActions>
+      )}
+      {!node.isEditing && isPipeline && onRunPipeline && (
+        <IconButton
+          size="small"
+          onClick={async (e) => {
+            e.stopPropagation();
+            if (gitStatus) {
+              toast.error(
+                `Pipeline has uncommitted changes (${gitStatus}). Commit and push before running.`,
+              );
+              return;
+            }
+            // Check for unpushed commits
+            const relativePath = node.data.path
+              .replace(projectPath, '')
+              .replace(/^[/\\]/, '');
+            try {
+              const unpushed = await isFileUnpushed(projectPath, relativePath);
+              if (unpushed) {
+                toast.error(
+                  'Pipeline has unpushed changes. Push your commits before running on cloud.',
+                );
+                return;
+              }
+            } catch {
+              // If check fails, allow proceeding
+            }
+            onRunPipeline(node.data.path);
+          }}
+          title={
+            gitStatus
+              ? `Pipeline has uncommitted changes (${gitStatus})`
+              : 'Run Pipeline'
+          }
+          sx={{ padding: '4px', color: 'success.main', flexShrink: 0 }}
+        >
+          <PlayIcon sx={{ fontSize: 16 }} />
+        </IconButton>
       )}
     </NodeContainer>
   );

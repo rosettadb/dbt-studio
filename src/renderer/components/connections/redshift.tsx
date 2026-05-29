@@ -59,6 +59,7 @@ export const Redshift: React.FC<Props> = ({
     getDatabasePassword,
     setDatabaseUsername,
     setDatabasePassword,
+    setConnectionField,
   } = useSecureStorage();
 
   const { mutate: getFiles } = useFilePicker();
@@ -190,6 +191,10 @@ export const Redshift: React.FC<Props> = ({
 
     await setDatabaseUsername(formState.username, formState.name);
     await setDatabasePassword(formState.password, formState.name);
+    await setConnectionField('host', formState.host, formState.name);
+    await setConnectionField('port', String(formState.port), formState.name);
+    await setConnectionField('dbname', formState.database, formState.name);
+    await setConnectionField('schema', formState.schema, formState.name);
 
     if (connection) {
       updateConnection({
