@@ -163,7 +163,9 @@ function formatQueryResultSummary(snapshot: QueryResultSnapshot): string {
         `Columns: ${snapshot.columns.join(', ')}`,
         '---',
         ...snapshot.rows.map((row, i) => {
-          const s = JSON.stringify(row);
+          const s = JSON.stringify(row, (_, v) =>
+            typeof v === 'bigint' ? v.toString() : v,
+          );
           return `Row ${
             i + 1
           }: ${s.length > 300 ? `${s.slice(0, 297)}...` : s}`;
@@ -319,7 +321,9 @@ export function createStudioSqlTools(conversationId: number) {
             tableCount: filteredTables.length,
           };
 
-          const raw = JSON.stringify(payload);
+          const raw = JSON.stringify(payload, (_, v) =>
+            typeof v === 'bigint' ? v.toString() : v,
+          );
           const output = truncateToolResult(raw, DEFAULT_MAX_OUTPUT_TOKENS);
           const truncated = output !== raw;
 
