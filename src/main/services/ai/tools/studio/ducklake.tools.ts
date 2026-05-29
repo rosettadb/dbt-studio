@@ -184,7 +184,9 @@ export function createStudioDuckLakeTools(conversationId: number) {
             schemaCount,
             tableCount,
           };
-          const raw = JSON.stringify(payload);
+          const raw = JSON.stringify(payload, (_, v) =>
+            typeof v === 'bigint' ? v.toString() : v,
+          );
           const output = truncateToolResult(raw, DEFAULT_MAX_OUTPUT_TOKENS);
           const truncated = output !== raw;
 
