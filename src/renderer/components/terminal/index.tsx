@@ -46,7 +46,11 @@ import {
   useCurrentModelId,
 } from '../../controllers';
 import { LineageModal, LineageView } from '../lineage';
-import { PipelineView, isPipelineFile } from '../pipelineView';
+import {
+  PipelineView,
+  isPipelineFile,
+  parsePipelineConfig,
+} from '../pipelineView';
 
 type Props = {
   project: Project;
@@ -87,11 +91,31 @@ export const TerminalLayout: React.FC<Props> = ({ children, project }) => {
       isLoadingCurrentModel ||
       isErrorCurrentModel);
 
-  // Check if current file is a pipeline.yml file
-  const isPipelineFileActive = React.useMemo(() => {
+  // Check if current file is a .yml file in .rosetta directory
+  const isYmlFileInRosettaDir = React.useMemo(() => {
     if (!selectedFilePath) return false;
     return isPipelineFile(selectedFilePath);
   }, [selectedFilePath]);
+
+  // Fetch content of the selected file if it's a .yml file in .rosetta
+  const { data: selectedFileContent } = useGetFileContent(
+    selectedFilePath || '',
+    {
+      enabled: isYmlFileInRosettaDir,
+    },
+  );
+
+  // Check if the file is a valid pipeline file by parsing its content
+  const isPipelineFileActive = React.useMemo(() => {
+    if (!isYmlFileInRosettaDir || !selectedFileContent) return false;
+    // Use parsePipelineConfig to validate if it's a valid pipeline file
+    try {
+      const parsed = parsePipelineConfig(selectedFileContent);
+      return parsed !== null;
+    } catch {
+      return false;
+    }
+  }, [isYmlFileInRosettaDir, selectedFileContent]);
 
   const [selectedTab, setSelectedTab] = React.useState(0);
   const [isPipelineFullscreen, setIsPipelineFullscreen] = React.useState(false);
@@ -229,7 +253,7 @@ export const TerminalLayout: React.FC<Props> = ({ children, project }) => {
     }
   }, [showLineageTab, selectedTab, isLoadingCurrentModel]);
 
-  // Auto-switch to CI/CD tab when pipeline.yml file is opened in editor
+  // Auto-switch to CI/CD tab when a valid pipeline file is opened in editor
   React.useEffect(() => {
     if (isPipelineFileActive && selectedTab !== 3) {
       setSelectedTab(3);
@@ -241,7 +265,7 @@ export const TerminalLayout: React.FC<Props> = ({ children, project }) => {
     }
   }, [isPipelineFileActive]);
 
-  // Switch back to Terminal when navigating away from pipeline.yml (if not manually on CI/CD tab)
+  // Switch back to Terminal when navigating away from pipeline file (if not manually on CI/CD tab)
   React.useEffect(() => {
     if (!isPipelineFileActive && selectedTab === 3 && !isManualCicdTabSwitch) {
       setSelectedTab(0);

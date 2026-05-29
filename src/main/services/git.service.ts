@@ -1027,8 +1027,11 @@ export default class GitService {
         relativePath,
       ]);
       return result.trim().length > 0;
-    } catch {
-      return false;
+    } catch (err: any) {
+      // Fail closed: return true to block progress on indeterminate git state
+      // eslint-disable-next-line no-console
+      console.error(`Failed to check if file is unpushed: ${err.message}`);
+      return true;
     }
   }
 
@@ -1083,8 +1086,11 @@ export default class GitService {
       // Fetch to get latest remote info (without merging)
       try {
         await git.fetch();
-      } catch (err) {
-        return false;
+      } catch (err: any) {
+        // Fail closed: return true to block progress on indeterminate git state
+        // eslint-disable-next-line no-console
+        console.error(`Failed to fetch remote: ${err.message}`);
+        return true;
       }
 
       // Check if remote branch exists

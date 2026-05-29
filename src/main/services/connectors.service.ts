@@ -819,16 +819,28 @@ export default class ConnectorsService {
     const jdbcUrl = await this.generateJdbcUrl(connection);
     const isDuckDb = connection.type === 'duckdb';
     const isDuckLake = connection.type === 'ducklake';
+    const isBigQuery = connection.type === 'bigquery';
+    const isDatabricks = connection.type === 'databricks';
     const ev = (field: string) => `\${db-${field}-${connection.name}}`;
     let databaseName: string;
+    let schemaName: string;
+
     if (isDuckDb) {
       databaseName = this.extractDbNameFromPath(connection.short_database_path);
+      schemaName = ev('schema');
     } else if (isDuckLake) {
       databaseName = projectName; // Use project name as database name for ducklake
+      schemaName = 'main';
+    } else if (isBigQuery) {
+      databaseName = ev('project');
+      schemaName = ev('dataset');
+    } else if (isDatabricks) {
+      databaseName = ev('catalog');
+      schemaName = ev('schema');
     } else {
       databaseName = ev('dbname');
+      schemaName = ev('schema');
     }
-    const schemaName = isDuckLake ? 'main' : ev('schema');
 
     // Base connection config
     const connectionConfig: any = {
@@ -1215,7 +1227,7 @@ export default class ConnectorsService {
           account: envVar('account'),
           user: envVar('user'),
           password: envVar('password'),
-          role: envVar('role'),
+          ...(conn.role && { role: envVar('role') }),
           warehouse: envVar('warehouse'),
           database: envVar('dbname'),
           schema: envVar('schema'),
