@@ -1,6 +1,8 @@
 import { AgentMemoryDiagnostic } from '../../types/agentMemory';
 
-export const listActiveMemoryDiagnostics = (limit?: number): Promise<AgentMemoryDiagnostic[]> =>
+export const listActiveMemoryDiagnostics = (
+  limit?: number,
+): Promise<AgentMemoryDiagnostic[]> =>
   window.electron.ipcRenderer.invoke('active-memory:diagnostics:list', limit);
 
 export const clearActiveMemoryDiagnostics = (): Promise<void> =>

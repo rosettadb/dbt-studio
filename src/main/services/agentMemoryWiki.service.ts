@@ -455,7 +455,7 @@ export default class AgentMemoryWikiService {
           connectionId: row.connection_id ?? undefined,
           notebookId: row.notebook_id ?? undefined,
         };
-        await AgentMemoryWikiService.enqueue('manual_force_sync', scope);
+        await AgentMemoryWikiService.enqueue('manual_compile', scope);
       }),
     );
 

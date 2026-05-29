@@ -84,7 +84,7 @@ import type {
 } from '../../../types/backend';
 import { MEMORY_KIND } from '../../../types/backend';
 
-type TabKey = 0 | 1 | 2 | 3 | 4;
+type TabKey = 0 | 1 | 2 | 3 | 4 | 5 | 6;
 type ArchiveFilter = 'active' | 'archived';
 type MemoryFormMode = 'create' | 'edit';
 
@@ -895,7 +895,7 @@ export const MemorySettingsTab: React.FC = () => {
     });
   };
 
-  const renderOverview = () => {
+  const renderEngineSettings = () => {
     if (statsQuery.isLoading || healthQuery.isLoading || aiSettingsLoading) {
       return (
         <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}>
@@ -1162,6 +1162,66 @@ export const MemorySettingsTab: React.FC = () => {
           }
         />
 
+        <SectionTitle>Maintenance</SectionTitle>
+        <Divider sx={{ mb: 1.5 }} />
+        <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1}>
+          <Button
+            type="button"
+            variant="outlined"
+            startIcon={<RefreshIcon />}
+            disabled={refreshMetadata.isLoading}
+            onClick={() => handleRefreshMetadata(false)}
+          >
+            Refresh Database Metadata
+          </Button>
+          <Button
+            type="button"
+            variant="outlined"
+            startIcon={<SyncIcon />}
+            disabled={rebuildIndex.isLoading}
+            onClick={handleRebuildIndex}
+          >
+            Rebuild Index
+          </Button>
+          <Button
+            type="button"
+            variant="contained"
+            startIcon={<SyncIcon />}
+            disabled={runDreaming.isLoading}
+            onClick={handleRunDreaming}
+          >
+            Run Dreaming Now
+          </Button>
+          <Button
+            type="button"
+            variant="outlined"
+            startIcon={<SyncIcon />}
+            disabled={
+              recoverHealth.isLoading || (health?.duplicateEntries ?? 0) === 0
+            }
+            onClick={() => handleRecoverHealth('dedupe')}
+          >
+            Dedupe Memories
+          </Button>
+          <Button
+            type="button"
+            variant="outlined"
+            startIcon={<SyncIcon />}
+            disabled={
+              recoverHealth.isLoading || (health?.orphanedEntries ?? 0) === 0
+            }
+            onClick={() => handleRecoverHealth('mark_orphans_stale')}
+          >
+            Mark Orphans Stale
+          </Button>
+        </Stack>
+      </Box>
+    );
+  };
+
+  const renderWikiIntegration = () => {
+    return (
+      <Box sx={{ pt: 2 }}>
         <SectionTitle>Memory Wiki</SectionTitle>
         <Divider />
         <Stack direction="row" spacing={1} sx={{ py: 1.25, flexWrap: 'wrap' }}>
@@ -1488,6 +1548,13 @@ export const MemorySettingsTab: React.FC = () => {
             />
           </>
         )}
+      </Box>
+    );
+  };
+
+  const renderActiveMemory = () => {
+    return (
+      <Box sx={{ pt: 2 }}>
         <SectionTitle>Active Memory (Proactive Recall)</SectionTitle>
         <Divider />
         <Stack direction="row" spacing={1} sx={{ py: 1.25, flexWrap: 'wrap' }}>
@@ -1748,60 +1815,6 @@ export const MemorySettingsTab: React.FC = () => {
             })()}
           </Box>
         )}
-
-        <SectionTitle>Maintenance</SectionTitle>
-        <Divider sx={{ mb: 1.5 }} />
-        <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1}>
-          <Button
-            type="button"
-            variant="outlined"
-            startIcon={<RefreshIcon />}
-            disabled={refreshMetadata.isLoading}
-            onClick={() => handleRefreshMetadata(false)}
-          >
-            Refresh Database Metadata
-          </Button>
-          <Button
-            type="button"
-            variant="outlined"
-            startIcon={<SyncIcon />}
-            disabled={rebuildIndex.isLoading}
-            onClick={handleRebuildIndex}
-          >
-            Rebuild Index
-          </Button>
-          <Button
-            type="button"
-            variant="contained"
-            startIcon={<SyncIcon />}
-            disabled={runDreaming.isLoading}
-            onClick={handleRunDreaming}
-          >
-            Run Dreaming Now
-          </Button>
-          <Button
-            type="button"
-            variant="outlined"
-            startIcon={<SyncIcon />}
-            disabled={
-              recoverHealth.isLoading || (health?.duplicateEntries ?? 0) === 0
-            }
-            onClick={() => handleRecoverHealth('dedupe')}
-          >
-            Dedupe Memories
-          </Button>
-          <Button
-            type="button"
-            variant="outlined"
-            startIcon={<SyncIcon />}
-            disabled={
-              recoverHealth.isLoading || (health?.orphanedEntries ?? 0) === 0
-            }
-            onClick={() => handleRecoverHealth('mark_orphans_stale')}
-          >
-            Mark Orphans Stale
-          </Button>
-        </Stack>
       </Box>
     );
   };
@@ -2358,18 +2371,22 @@ export const MemorySettingsTab: React.FC = () => {
         onChange={(_event, value) => setTab(value)}
         sx={{ borderBottom: 1, borderColor: 'divider' }}
       >
-        <Tab label="Overview" />
+        <Tab label="Engine Settings" />
+        <Tab label="Active Memory" />
+        <Tab label="Wiki Integration" />
         <Tab label="Durable Memory" />
         <Tab label="Database Metadata" />
         <Tab label="Short-Term Recall" />
         <Tab label="Dreaming Runs" />
       </Tabs>
 
-      {tab === 0 && renderOverview()}
-      {tab === 1 && renderDurableMemory()}
-      {tab === 2 && renderDatabaseMetadata()}
-      {tab === 3 && renderShortTermRecall()}
-      {tab === 4 && renderDreamingRuns()}
+      {tab === 0 && renderEngineSettings()}
+      {tab === 1 && renderActiveMemory()}
+      {tab === 2 && renderWikiIntegration()}
+      {tab === 3 && renderDurableMemory()}
+      {tab === 4 && renderDatabaseMetadata()}
+      {tab === 5 && renderShortTermRecall()}
+      {tab === 6 && renderDreamingRuns()}
 
       <MemoryEntryDialog
         open={dialogOpen}

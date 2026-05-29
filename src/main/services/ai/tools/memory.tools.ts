@@ -30,22 +30,31 @@ export function createMemoryTools(scope: AgentMemoryScope) {
         corpus: z.enum(['memory', 'wiki', 'all']).default('memory'),
       }),
       execute: async ({ query, kind, limit, corpus }) => {
-        const memResultsP = (corpus === 'memory' || corpus === 'all')
-          ? AgentMemoryService.searchEntries({ ...scope, query, kind, limit })
-          : Promise.resolve([]);
+        const memResultsP =
+          corpus === 'memory' || corpus === 'all'
+            ? AgentMemoryService.searchEntries({ ...scope, query, kind, limit })
+            : Promise.resolve([]);
 
         let wikiResultsP: Promise<Array<any>> = Promise.resolve([]);
         if (corpus === 'wiki' || corpus === 'all') {
           const mod = await import('../../agentMemoryWiki.service');
-          wikiResultsP = mod.default.searchWiki({ ...scope, query, kind, limit });
+          wikiResultsP = mod.default.searchWiki({
+            ...scope,
+            query,
+            kind,
+            limit,
+          });
         }
 
-        const [memResults, wikiResults] = await Promise.all([memResultsP, wikiResultsP]);
+        const [memResults, wikiResults] = await Promise.all([
+          memResultsP,
+          wikiResultsP,
+        ]);
 
         const merged: any[] = [];
         const seenIds = new Set<number>();
 
-        for (const entry of memResults) {
+        memResults.forEach((entry: any) => {
           merged.push({
             id: entry.id,
             corpus: 'memory',
@@ -57,9 +66,9 @@ export function createMemoryTools(scope: AgentMemoryScope) {
             matchSource: entry.matchSource,
           });
           seenIds.add(entry.id);
-        }
+        });
 
-        for (const entry of wikiResults) {
+        wikiResults.forEach((entry: any) => {
           if (!seenIds.has(entry.id)) {
             merged.push({
               id: entry.id,
@@ -77,7 +86,7 @@ export function createMemoryTools(scope: AgentMemoryScope) {
               existing.excerpt = entry.excerpt;
             }
           }
-        }
+        });
 
         // Lower BM25 score means more relevant
         merged.sort((a, b) => a.score - b.score);

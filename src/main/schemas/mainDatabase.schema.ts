@@ -609,26 +609,39 @@ export type NewAIUsageLog = typeof aiUsageLogs.$inferInsert;
 export type AgentMemoryEntry = typeof agentMemoryEntries.$inferSelect;
 export type NewAgentMemoryEntry = typeof agentMemoryEntries.$inferInsert;
 
-export type AgentMemorySessionCorpus = typeof agentMemorySessionCorpus.$inferSelect;
-export type NewAgentMemorySessionCorpus = typeof agentMemorySessionCorpus.$inferInsert;
+export type AgentMemorySessionCorpus =
+  typeof agentMemorySessionCorpus.$inferSelect;
+export type NewAgentMemorySessionCorpus =
+  typeof agentMemorySessionCorpus.$inferInsert;
 
 export type AgentMemoryDailyEntry = typeof agentMemoryDailyEntries.$inferSelect;
-export type NewAgentMemoryDailyEntry = typeof agentMemoryDailyEntries.$inferInsert;
+export type NewAgentMemoryDailyEntry =
+  typeof agentMemoryDailyEntries.$inferInsert;
 
-export type AgentMemoryShortTermRecall = typeof agentMemoryShortTermRecall.$inferSelect;
-export type NewAgentMemoryShortTermRecall = typeof agentMemoryShortTermRecall.$inferInsert;
+export type AgentMemoryShortTermRecall =
+  typeof agentMemoryShortTermRecall.$inferSelect;
+export type NewAgentMemoryShortTermRecall =
+  typeof agentMemoryShortTermRecall.$inferInsert;
 
-export type AgentMemoryPhaseSignal = typeof agentMemoryPhaseSignals.$inferSelect;
-export type NewAgentMemoryPhaseSignal = typeof agentMemoryPhaseSignals.$inferInsert;
+export type AgentMemoryPhaseSignal =
+  typeof agentMemoryPhaseSignals.$inferSelect;
+export type NewAgentMemoryPhaseSignal =
+  typeof agentMemoryPhaseSignals.$inferInsert;
 
-export type AgentMemoryDreamingRun = typeof agentMemoryDreamingRuns.$inferSelect;
-export type NewAgentMemoryDreamingRun = typeof agentMemoryDreamingRuns.$inferInsert;
+export type AgentMemoryDreamingRun =
+  typeof agentMemoryDreamingRuns.$inferSelect;
+export type NewAgentMemoryDreamingRun =
+  typeof agentMemoryDreamingRuns.$inferInsert;
 
-export type AgentMemoryDreamingReport = typeof agentMemoryDreamingReports.$inferSelect;
-export type NewAgentMemoryDreamingReport = typeof agentMemoryDreamingReports.$inferInsert;
+export type AgentMemoryDreamingReport =
+  typeof agentMemoryDreamingReports.$inferSelect;
+export type NewAgentMemoryDreamingReport =
+  typeof agentMemoryDreamingReports.$inferInsert;
 
-export type AgentMemoryEmbeddingCache = typeof agentMemoryEmbeddingCache.$inferSelect;
-export type NewAgentMemoryEmbeddingCache = typeof agentMemoryEmbeddingCache.$inferInsert;
+export type AgentMemoryEmbeddingCache =
+  typeof agentMemoryEmbeddingCache.$inferSelect;
+export type NewAgentMemoryEmbeddingCache =
+  typeof agentMemoryEmbeddingCache.$inferInsert;
 
 export type AgentMemoryConfig = typeof agentMemoryConfig.$inferSelect;
 export type NewAgentMemoryConfig = typeof agentMemoryConfig.$inferInsert;
