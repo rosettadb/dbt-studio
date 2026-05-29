@@ -34,6 +34,7 @@ import type {
   AgentContextCompactedPayload,
 } from '../../types/agentEvents';
 import { getUserMessageLimitError } from '../../types/agentEvents';
+import { toError } from '../utils/errorSerializer';
 
 // ─── AI Settings ─────────────────────────────────────────────────────────────
 
@@ -908,10 +909,7 @@ SUMMARY:`,
                   break;
                 case 'error': {
                   // Extract error from the chunk and throw it so the stream fails correctly
-                  const errorObj = (chunk as any).error;
-                  throw errorObj instanceof Error
-                    ? errorObj
-                    : new Error(String(errorObj));
+                  throw toError((chunk as any).error);
                 }
                 default:
                   // Handle any other chunk types silently
