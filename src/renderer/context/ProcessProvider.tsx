@@ -46,8 +46,12 @@ interface ProcessProviderProps {
 export const ProcessProvider: React.FC<ProcessProviderProps> = ({
   children,
 }) => {
-  const { getDatabaseUsername, getDatabasePassword, getDatabaseToken } =
-    useSecureStorage();
+  const {
+    getDatabaseUsername,
+    getDatabasePassword,
+    getDatabaseToken,
+    getConnectionField,
+  } = useSecureStorage();
   const setEnvVariables = useSetConnectionEnvVariable();
 
   const [state, setState] = useState<ProcessState>({
@@ -128,24 +132,33 @@ export const ProcessProvider: React.FC<ProcessProviderProps> = ({
     };
 
     // Setup listeners
-    window.electron.ipcRenderer.on('process:output', handleOutput);
-    window.electron.ipcRenderer.on('process:error', handleError);
-    window.electron.ipcRenderer.on('process:started', handleStarted);
-    window.electron.ipcRenderer.on('process:exit', handleExit);
-    window.electron.ipcRenderer.on('process:done', handleDone);
+    const unsubOutput = window.electron.ipcRenderer.on(
+      'process:output',
+      handleOutput,
+    );
+    const unsubError = window.electron.ipcRenderer.on(
+      'process:error',
+      handleError,
+    );
+    const unsubStarted = window.electron.ipcRenderer.on(
+      'process:started',
+      handleStarted,
+    );
+    const unsubExit = window.electron.ipcRenderer.on(
+      'process:exit',
+      handleExit,
+    );
+    const unsubDone = window.electron.ipcRenderer.on(
+      'process:done',
+      handleDone,
+    );
 
     return () => {
-      window.electron.ipcRenderer.removeListener(
-        'process:output',
-        handleOutput,
-      );
-      window.electron.ipcRenderer.removeListener('process:error', handleError);
-      window.electron.ipcRenderer.removeListener(
-        'process:started',
-        handleStarted,
-      );
-      window.electron.ipcRenderer.removeListener('process:exit', handleExit);
-      window.electron.ipcRenderer.removeListener('process:done', handleDone);
+      if (typeof unsubOutput === 'function') unsubOutput();
+      if (typeof unsubError === 'function') unsubError();
+      if (typeof unsubStarted === 'function') unsubStarted();
+      if (typeof unsubExit === 'function') unsubExit();
+      if (typeof unsubDone === 'function') unsubDone();
 
       if (durationIntervalRef.current) {
         clearInterval(durationIntervalRef.current);
@@ -154,7 +167,7 @@ export const ProcessProvider: React.FC<ProcessProviderProps> = ({
   }, []);
 
   const setupConnectionEnv = useCallback(
-    async (connectionName: string) => {
+    async (connectionName: string, connType?: string) => {
       try {
         const [username, password, token] = await Promise.all([
           getDatabaseUsername(connectionName),
@@ -191,6 +204,31 @@ export const ProcessProvider: React.FC<ProcessProviderProps> = ({
           );
         }
 
+        // Set connection-specific fields based on type
+        if (connType) {
+          const fieldMap: Record<string, string[]> = {
+            postgres: ['host', 'port', 'dbname', 'schema'],
+            redshift: ['host', 'port', 'dbname', 'schema'],
+            snowflake: ['account', 'warehouse', 'dbname', 'schema', 'role'],
+            bigquery: ['project', 'dataset'],
+            databricks: ['host', 'httppath', 'catalog', 'schema'],
+            kinetica: ['host', 'port', 'dbname', 'schema'],
+          };
+
+          const fields = fieldMap[connType] || [];
+          const fieldPromises = fields.map(async (field) => {
+            const stored = await getConnectionField(field, connectionName);
+            if (stored) {
+              return setEnvVariables.mutateAsync({
+                key: `db-${field}-${connectionName}`,
+                value: stored,
+              });
+            }
+            return undefined;
+          });
+          envPromises.push(...fieldPromises);
+        }
+
         await Promise.all(envPromises);
       } catch (error) {
         throw new Error(`Failed to setup environment variables: ${error}`);
@@ -200,6 +238,7 @@ export const ProcessProvider: React.FC<ProcessProviderProps> = ({
       getDatabaseUsername,
       getDatabasePassword,
       getDatabaseToken,
+      getConnectionField,
       setEnvVariables,
     ],
   );

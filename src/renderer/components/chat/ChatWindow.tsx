@@ -14,7 +14,7 @@ import { Close, MoreHoriz, Add as AddIcon, Tag } from '@mui/icons-material';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'react-toastify';
 import { useAppContext } from '../../hooks';
-import { useGetSelectedProject } from '../../controllers';
+import { useGetSelectedProject, useGetConnectionById } from '../../controllers';
 import {
   useCreateChatSession,
   useGetChatSessions,
@@ -43,7 +43,25 @@ import {
 } from '../../controllers/agent.controller';
 import { projectsServices } from '../../services';
 
-export const ChatWindow: React.FC = () => {
+export interface ChatWindowProps {
+  screenKey?: 'project' | 'sql' | 'notebooks';
+  connectionId?: string;
+  projectId?: number | null;
+  onClose?: () => void;
+}
+
+const SCREEN_BADGE: Record<string, { label: string; color: string }> = {
+  sql: { label: 'SQL', color: '#1976d2' },
+  notebooks: { label: 'NOTEBOOKS', color: '#7b1fa2' },
+  project: { label: 'PROJECT', color: 'primary.main' },
+};
+
+export const ChatWindow: React.FC<ChatWindowProps> = ({
+  screenKey = 'project',
+  connectionId,
+  projectId: propProjectId,
+  onClose,
+}) => {
   const {
     setIsChatOpen,
     openFile,
@@ -52,10 +70,17 @@ export const ChatWindow: React.FC = () => {
     refreshFileTree,
   } = useAppContext();
   const { data: project } = useGetSelectedProject();
-  const projectId = project?.id as number | undefined;
+  const projectId =
+    propProjectId !== undefined
+      ? propProjectId
+      : (project?.id as number | undefined);
   const navigate = useNavigate();
 
+  const { data: activeConnection } = useGetConnectionById(connectionId);
+  const connectionName = activeConnection?.connection?.name;
+
   const [selectedSessionId, setSelectedSessionId] = React.useState<number>();
+  const previousScopeKeyRef = React.useRef<string | null>(null);
   const [lastUsage, setLastUsage] = React.useState<{
     promptTokens: number;
     completionTokens: number;
@@ -63,6 +88,7 @@ export const ChatWindow: React.FC = () => {
   } | null>(null);
   const [contextBreakdown, setContextBreakdown] =
     React.useState<ContextUsageBreakdown | null>(null);
+  const hasAuthoritativeContextBreakdownRef = React.useRef(false);
 
   // New Agent Stream Hook
   const {
@@ -85,11 +111,13 @@ export const ChatWindow: React.FC = () => {
   React.useEffect(() => {
     setLastUsage(null);
     setContextBreakdown(null);
+    hasAuthoritativeContextBreakdownRef.current = false;
   }, [selectedSessionId]);
 
   // Estimate context usage from loaded history whenever session or messages change.
   // This keeps the ring meaningful even before the first agent run.
   React.useEffect(() => {
+    if (hasAuthoritativeContextBreakdownRef.current) return;
     if (!selectedSessionId || sessionMessages.length === 0) return;
 
     // Rough token estimate: ~3 chars per token
@@ -138,6 +166,7 @@ export const ChatWindow: React.FC = () => {
 
   useOnContextUsage(selectedSessionId, (data) => {
     if (data.breakdown) {
+      hasAuthoritativeContextBreakdownRef.current = true;
       setContextBreakdown(data.breakdown as unknown as ContextUsageBreakdown);
     }
   });
@@ -145,7 +174,35 @@ export const ChatWindow: React.FC = () => {
   // Context management
   const contextManager = useContextManager();
 
-  const { data: sessions = [], isLoading } = useGetChatSessions(projectId);
+  const screenBadge = React.useMemo(() => {
+    if (screenKey === 'project') return null;
+    const badge = SCREEN_BADGE[screenKey] ?? SCREEN_BADGE.project;
+    const hasProject = !!projectId;
+
+    let tooltipText = '';
+    if (screenKey === 'sql') {
+      tooltipText = hasProject
+        ? 'SQL Editor — connection tools + dbt project tools active'
+        : 'SQL Editor — connection tools only (no dbt project linked)';
+    } else {
+      tooltipText = hasProject
+        ? 'Notebooks — notebook + connection + dbt project tools active'
+        : 'Notebooks — notebook + connection tools (no dbt project linked)';
+    }
+
+    return { label: badge.label, color: badge.color, tooltip: tooltipText };
+  }, [screenKey, projectId]);
+
+  const { data: sessions = [], isLoading } = useGetChatSessions({
+    projectId: projectId ?? undefined,
+    screenKey,
+    connectionId: connectionId ?? null,
+  });
+
+  const sessionScopeKey = React.useMemo(
+    () => `${screenKey}|${projectId ?? 'none'}|${connectionId ?? 'none'}`,
+    [screenKey, projectId, connectionId],
+  );
   const { data: providers = [], isLoading: isLoadingProviders } =
     useGetAIProviders();
   const { mutate: createSession, isLoading: isCreating } = useCreateChatSession(
@@ -182,25 +239,74 @@ export const ChatWindow: React.FC = () => {
     },
   });
 
+  const isCreatingRef = React.useRef(false);
+
   React.useEffect(() => {
-    if (isLoading) return;
+    if (isLoading || isCreatingRef.current) return;
+
+    const previousScopeKey = previousScopeKeyRef.current;
+    const hasScopeChanged =
+      previousScopeKey !== null && previousScopeKey !== sessionScopeKey;
+    previousScopeKeyRef.current = sessionScopeKey;
+
     if (sessions.length > 0) {
-      setSelectedSessionId(
-        (prev) => prev ?? (sessions[0].id as unknown as number),
-      );
+      setSelectedSessionId((prev) => {
+        // On connection/screen scope change, always switch to latest session
+        // in the new scope.
+        if (hasScopeChanged) {
+          return sessions[0].id as unknown as number;
+        }
+
+        // Keep current selection only if it still exists in current scope.
+        if (
+          prev &&
+          sessions.some((s) => (s.id as unknown as number) === prev)
+        ) {
+          return prev;
+        }
+
+        // Initial load or stale selection fallback.
+        return sessions[0].id as unknown as number;
+      });
       return;
     }
-    if (projectId) {
-      // Auto-create a default chat session for the project
-      createSession({ title: 'New Chat', projectId });
+    if (projectId || connectionId) {
+      // Auto-create a default chat session for the project or connection
+      isCreatingRef.current = true;
+      createSession({
+        title: 'New Chat',
+        projectId: projectId ?? undefined,
+        screenKey,
+        connectionId,
+      });
     }
-  }, [sessions, isLoading, projectId]);
+  }, [
+    sessions,
+    isLoading,
+    projectId,
+    connectionId,
+    screenKey,
+    sessionScopeKey,
+    createSession,
+  ]);
+
+  // Reset isCreatingRef when isCreating state changes to false
+  React.useEffect(() => {
+    if (!isCreating) {
+      isCreatingRef.current = false;
+    }
+  }, [isCreating]);
 
   const handleCreateNewSession = () => {
-    if (projectId) {
+    if (projectId || connectionId) {
       const sessionCount = sessions.length;
       const title = `Chat ${sessionCount + 1}`;
-      createSession({ title, projectId });
+      createSession({
+        title,
+        projectId: projectId ?? undefined,
+        screenKey,
+        connectionId,
+      });
     }
   };
 
@@ -255,7 +361,7 @@ export const ChatWindow: React.FC = () => {
       e.dataTransfer.types.includes('text/plain');
 
     // Handle any drag with file paths (Monaco tabs or tree files)
-    if (hasFilePath) {
+    if (hasFilePath && screenKey === 'project') {
       e.preventDefault();
       e.stopPropagation();
       setIsDragOver(true);
@@ -276,7 +382,7 @@ export const ChatWindow: React.FC = () => {
         e.dataTransfer.types.includes('text/plain');
 
       // Handle any drop with file paths (Monaco tabs or tree files)
-      if (hasFilePath) {
+      if (hasFilePath && screenKey === 'project') {
         e.preventDefault();
         e.stopPropagation();
         setIsDragOver(false);
@@ -426,6 +532,7 @@ export const ChatWindow: React.FC = () => {
           lastUsage={lastUsage}
           streamState={streamState}
           isAgentRunning={streamState.isStreaming}
+          screenKey={screenKey}
           onConfirmTerminal={confirmTerminal}
           onClearError={clearError}
           onOpenFile={handleOpenFile}
@@ -575,10 +682,50 @@ export const ChatWindow: React.FC = () => {
                   >
                     {activeSession.title}
                   </Typography>
+                  {connectionName && (
+                    <Typography
+                      variant="caption"
+                      sx={{
+                        fontSize: '0.65rem',
+                        color: 'text.disabled',
+                        lineHeight: 1,
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis',
+                        whiteSpace: 'nowrap',
+                      }}
+                    >
+                      {connectionName}
+                    </Typography>
+                  )}
                 </>
               ) : null;
             })()}
         </Box>
+
+        {/* Screen Context Badge */}
+        {screenBadge && (
+          <Tooltip title={screenBadge.tooltip} arrow>
+            <Box
+              id={`ai-chat-screen-badge-${screenKey}`}
+              sx={{
+                flexShrink: 0,
+                fontSize: '0.5rem',
+                fontWeight: 700,
+                lineHeight: 1,
+                px: 0.75,
+                py: 0.25,
+                borderRadius: '4px',
+                bgcolor: screenBadge.color,
+                color: '#fff',
+                letterSpacing: '0.05em',
+                textTransform: 'uppercase',
+                cursor: 'help',
+              }}
+            >
+              {screenBadge.label}
+            </Box>
+          </Tooltip>
+        )}
 
         {/* Right side controls - Session Management + Close */}
         <Box
@@ -591,7 +738,7 @@ export const ChatWindow: React.FC = () => {
         >
           <NewChatButton
             onCreate={handleCreateNewSession}
-            disabled={!projectId || isLoading}
+            disabled={(!projectId && !connectionId) || isLoading}
             loading={isCreating}
           />
 
@@ -653,7 +800,10 @@ export const ChatWindow: React.FC = () => {
           <Tooltip title="Close">
             <IconButton
               size="small"
-              onClick={() => setIsChatOpen?.(false)}
+              onClick={() => {
+                if (onClose) onClose();
+                else setIsChatOpen?.(false);
+              }}
               sx={{
                 width: 24,
                 height: 24,
@@ -678,9 +828,17 @@ export const ChatWindow: React.FC = () => {
             sessionId={selectedSessionId}
             contextManager={contextManager}
             isStreaming={streamState.isStreaming}
-            onStartStream={(content, contextItems) =>
-              // requestedModel is intentionally skipped, currentMode is passed as toolMode
-              startStream(content, contextItems, undefined, currentMode)
+            screenKey={screenKey}
+            onStartStream={(content, contextItems, toolMode) =>
+              // toolMode is now forwarded from ChatInputBox (owns the toggle state)
+              startStream(
+                content,
+                contextItems,
+                undefined,
+                toolMode ?? currentMode,
+                screenKey,
+                connectionId,
+              )
             }
             onCancelStream={cancelStream}
             contextBreakdown={contextBreakdown}

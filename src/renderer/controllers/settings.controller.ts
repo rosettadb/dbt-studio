@@ -16,17 +16,20 @@ import {
   InstallResult,
 } from '../../types/backend';
 import { QUERY_KEYS } from '../config/constants';
+import { useApiKey } from './rosettaCloud.controller';
 
 export const useGetSettings = (
   customOptions?: UseQueryOptions<SettingsType, CustomError, SettingsType>,
 ) => {
+  const { data: apiKey } = useApiKey();
+
   return useQuery({
-    queryKey: [QUERY_KEYS.GET_SETTINGS],
+    queryKey: [QUERY_KEYS.GET_SETTINGS, apiKey],
     queryFn: async () => {
       const res = await settingsServices.getSettings();
       return {
         ...res,
-        env: res.env,
+        env: apiKey ? res.env : 'local',
       };
     },
     ...customOptions,

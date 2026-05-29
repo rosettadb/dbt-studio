@@ -7,7 +7,7 @@ import { app } from 'electron';
 import path from 'path';
 import Database from 'better-sqlite3';
 import { drizzle, BetterSQLite3Database } from 'drizzle-orm/better-sqlite3';
-import { eq, desc, and, count, inArray } from 'drizzle-orm';
+import { eq, desc, and, count, inArray, isNull } from 'drizzle-orm';
 import * as schema from '../schemas/mainDatabase.schema';
 import { MainDatabaseInfo, UsageStats } from '../../types/backend';
 import {
@@ -28,6 +28,13 @@ import {
   NewAIUsageLog,
   ChatConversationWithMessages,
 } from '../schemas/mainDatabase.schema';
+import type { AgentScreenKey } from '../../types/agentEvents';
+
+export interface GetConversationsFilter {
+  projectId?: number;
+  screenKey?: AgentScreenKey;
+  connectionId?: string | null;
+}
 
 export default class MainDatabaseService {
   private static sqlite: Database.Database | null = null;
@@ -120,6 +127,8 @@ export default class MainDatabaseService {
         title TEXT NOT NULL,
         project_id INTEGER,
         provider_id INTEGER,
+        screen_key TEXT DEFAULT 'project',
+        connection_id TEXT,
         created_at TEXT DEFAULT (datetime('now')),
         updated_at TEXT DEFAULT (datetime('now')),
         FOREIGN KEY (provider_id) REFERENCES ai_providers(id) ON DELETE SET NULL
@@ -227,14 +236,8 @@ export default class MainDatabaseService {
       CREATE INDEX IF NOT EXISTS ai_providers_type_idx ON ai_providers(type);
       CREATE INDEX IF NOT EXISTS ai_providers_active_idx ON ai_providers(is_active);
 
-      CREATE INDEX IF NOT EXISTS chat_conversations_project_idx ON chat_conversations(project_id);
-      CREATE INDEX IF NOT EXISTS chat_conversations_provider_idx ON chat_conversations(provider_id);
-      CREATE INDEX IF NOT EXISTS chat_conversations_created_at_idx ON chat_conversations(created_at);
-
       CREATE INDEX IF NOT EXISTS chat_messages_conversation_idx ON chat_messages(conversation_id);
       CREATE INDEX IF NOT EXISTS chat_messages_role_idx ON chat_messages(role);
-      CREATE INDEX IF NOT EXISTS chat_messages_parent_idx ON chat_messages(parent_message_id);
-      CREATE INDEX IF NOT EXISTS chat_messages_streaming_idx ON chat_messages(is_streaming);
       CREATE INDEX IF NOT EXISTS chat_messages_created_at_idx ON chat_messages(created_at);
 
       CREATE INDEX IF NOT EXISTS context_items_message_idx ON context_items(message_id);
@@ -280,10 +283,55 @@ export default class MainDatabaseService {
     };
 
     try {
+      const alterStatements: string[] = [];
+
+      // chat_conversations: ensure enhanced columns exist
+      const chatConvCols = getColumns('chat_conversations');
+
+      if (!chatConvCols.has('project_id')) {
+        alterStatements.push(
+          'ALTER TABLE chat_conversations ADD COLUMN project_id INTEGER;',
+        );
+      }
+
+      if (!chatConvCols.has('provider_id')) {
+        alterStatements.push(
+          'ALTER TABLE chat_conversations ADD COLUMN provider_id INTEGER;',
+        );
+      }
+
+      if (!chatConvCols.has('screen_key')) {
+        alterStatements.push(
+          "ALTER TABLE chat_conversations ADD COLUMN screen_key TEXT DEFAULT 'project';",
+        );
+      }
+
+      if (!chatConvCols.has('connection_id')) {
+        alterStatements.push(
+          'ALTER TABLE chat_conversations ADD COLUMN connection_id TEXT;',
+        );
+      }
+
+      // Ensure indexes exist for chat_conversations (safe with CREATE INDEX IF NOT EXISTS if columns exist)
+      // We run these after potentially adding columns above
+      alterStatements.push(
+        'CREATE INDEX IF NOT EXISTS chat_conversations_project_idx ON chat_conversations(project_id);',
+      );
+      alterStatements.push(
+        'CREATE INDEX IF NOT EXISTS chat_conversations_screen_key_idx ON chat_conversations(screen_key);',
+      );
+      alterStatements.push(
+        'CREATE INDEX IF NOT EXISTS chat_conversations_connection_idx ON chat_conversations(connection_id);',
+      );
+      alterStatements.push(
+        'CREATE INDEX IF NOT EXISTS chat_conversations_provider_idx ON chat_conversations(provider_id);',
+      );
+      alterStatements.push(
+        'CREATE INDEX IF NOT EXISTS chat_conversations_created_at_idx ON chat_conversations(created_at);',
+      );
+
       // chat_messages: ensure enhanced columns exist
       const chatMsgCols = getColumns('chat_messages');
-
-      const alterStatements: string[] = [];
       if (!chatMsgCols.has('tool_calls')) {
         alterStatements.push(
           'ALTER TABLE chat_messages ADD COLUMN tool_calls TEXT;',
@@ -314,6 +362,14 @@ export default class MainDatabaseService {
           'ALTER TABLE chat_messages ADD COLUMN parent_message_id INTEGER;',
         );
       }
+
+      // Ensure indexes exist for chat_messages (safe if columns exist)
+      alterStatements.push(
+        'CREATE INDEX IF NOT EXISTS chat_messages_parent_idx ON chat_messages(parent_message_id);',
+      );
+      alterStatements.push(
+        'CREATE INDEX IF NOT EXISTS chat_messages_streaming_idx ON chat_messages(is_streaming);',
+      );
 
       if (alterStatements.length > 0) {
         const transaction = this.sqlite.transaction((sqls: string[]) => {
@@ -529,6 +585,8 @@ export default class MainDatabaseService {
     title: string,
     projectId?: number,
     providerId?: number,
+    screenKey?: AgentScreenKey,
+    connectionId?: string,
   ): Promise<ChatConversation> {
     const db = await this.getDatabase();
 
@@ -539,6 +597,8 @@ export default class MainDatabaseService {
           title,
           projectId,
           providerId,
+          screenKey: screenKey ?? 'project',
+          connectionId,
         })
         .returning();
 
@@ -554,23 +614,37 @@ export default class MainDatabaseService {
   }
 
   static async getConversations(
-    projectId?: number,
+    filter: number | GetConversationsFilter = {},
   ): Promise<ChatConversation[]> {
     const db = await this.getDatabase();
 
+    const opts: GetConversationsFilter =
+      typeof filter === 'number' ? { projectId: filter } : filter;
+
     try {
+      const conditions = [];
+      if (opts.projectId !== undefined)
+        conditions.push(eq(schema.chatConversations.projectId, opts.projectId));
+      if (opts.screenKey !== undefined)
+        conditions.push(eq(schema.chatConversations.screenKey, opts.screenKey));
+      if (opts.connectionId !== undefined) {
+        if (opts.connectionId === null) {
+          conditions.push(isNull(schema.chatConversations.connectionId));
+        } else {
+          conditions.push(
+            eq(schema.chatConversations.connectionId, opts.connectionId),
+          );
+        }
+      }
+
       const query = db
         .select()
         .from(schema.chatConversations)
         .orderBy(desc(schema.chatConversations.updatedAt));
 
-      if (projectId !== undefined) {
-        return await query.where(
-          eq(schema.chatConversations.projectId, projectId),
-        );
-      }
-
-      return await query;
+      return conditions.length > 0
+        ? await query.where(and(...conditions))
+        : await query;
     } catch (error) {
       throw error;
     }
@@ -776,55 +850,57 @@ export default class MainDatabaseService {
     }
   }
 
-  // ─── Compaction Summary Methods ──────────────────────────────────────────────
-
-  /**
-   * Returns the latest compaction summary for a conversation, if one exists.
-   * Used for incremental compaction — reuses existing summary rather than regenerating.
-   */
-  static async getCompactionSummary(
+  static async compactConversationMessages(
     conversationId: number,
-  ): Promise<schema.ChatCompactionSummary | null> {
-    const db = await this.getDatabase();
-    try {
-      const results = await db
-        .select()
-        .from(schema.chatCompactionSummaries)
-        .where(
-          eq(schema.chatCompactionSummaries.conversationId, conversationId),
-        )
-        .orderBy(desc(schema.chatCompactionSummaries.createdAt))
-        .limit(1);
-      return results[0] ?? null;
-    } catch (error) {
-      throw error;
-    }
-  }
+    summarizedMessageIds: number[],
+    summaryContent: string,
+    createdAt?: string,
+  ): Promise<ChatMessage | null> {
+    if (summarizedMessageIds.length === 0) return null;
 
-  /**
-   * Persists (or replaces) a compaction summary.
-   * Uses atomic delete+insert (SQLite upsert pattern for compound keys).
-   */
-  static async saveCompactionSummary(
-    conversationId: number,
-    content: string,
-    coversUpToMessageId?: number,
-  ): Promise<void> {
     const db = await this.getDatabase();
+
     try {
-      // Delete existing summaries for this conversation (keep only latest)
       await db
-        .delete(schema.chatCompactionSummaries)
+        .delete(schema.contextItems)
+        .where(inArray(schema.contextItems.messageId, summarizedMessageIds));
+
+      await db
+        .delete(schema.toolCalls)
+        .where(inArray(schema.toolCalls.messageId, summarizedMessageIds));
+
+      await db
+        .delete(schema.chatMessages)
         .where(
-          eq(schema.chatCompactionSummaries.conversationId, conversationId),
+          and(
+            eq(schema.chatMessages.conversationId, conversationId),
+            inArray(schema.chatMessages.id, summarizedMessageIds),
+          ),
         );
 
-      await db.insert(schema.chatCompactionSummaries).values({
-        conversationId,
-        content,
-        coversUpToMessageId: coversUpToMessageId ?? null,
-        updatedAt: new Date().toISOString(),
-      });
+      const results = await db
+        .insert(schema.chatMessages)
+        .values({
+          conversationId,
+          role: 'system',
+          content: summaryContent,
+          metadata: {
+            compacted: true,
+            summarizedMessageCount: summarizedMessageIds.length,
+          },
+          createdAt: createdAt ?? new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        })
+        .returning();
+
+      const [summaryMessage] = Array.isArray(results) ? results : [results];
+
+      await db
+        .update(schema.chatConversations)
+        .set({ updatedAt: new Date().toISOString() })
+        .where(eq(schema.chatConversations.id, conversationId));
+
+      return summaryMessage ?? null;
     } catch (error) {
       throw error;
     }

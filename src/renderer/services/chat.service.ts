@@ -10,10 +10,19 @@ class ChatService {
   // Chat Session Management
 
   // Get all chat sessions
-  static async getSessions(projectId?: number): Promise<ChatSession[]> {
-    const { data } = await client.post<number | undefined, ChatSession[]>(
+  static async getSessions(
+    filter?:
+      | number
+      | {
+          projectId?: number;
+          screenKey?: string;
+          connectionId?: string | null;
+        },
+  ): Promise<ChatSession[]> {
+    const payload = typeof filter === 'number' ? { projectId: filter } : filter;
+    const { data } = await client.post<any, ChatSession[]>(
       'chat:conversation:list',
-      projectId,
+      payload,
     );
     return data;
   }
@@ -32,11 +41,25 @@ class ChatService {
     title: string,
     projectId?: number,
     providerId?: number,
+    screenKey?: string,
+    connectionId?: string,
   ): Promise<ChatSession> {
     const { data } = await client.post<
-      { title: string; projectId?: number; providerId?: number },
+      {
+        title: string;
+        projectId?: number;
+        providerId?: number;
+        screenKey?: string;
+        connectionId?: string;
+      },
       ChatSession
-    >('chat:conversation:create', { title, projectId, providerId });
+    >('chat:conversation:create', {
+      title,
+      projectId,
+      providerId,
+      screenKey,
+      connectionId,
+    });
     return data;
   }
 

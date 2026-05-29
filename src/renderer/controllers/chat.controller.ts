@@ -19,15 +19,23 @@ import type {
 // Chat Session Controllers
 // These hooks provide React Query integration for chat session operations
 
+export interface GetSessionsFilter {
+  projectId?: number;
+  screenKey?: string;
+  connectionId?: string | null;
+}
+
 // Get all chat sessions
 export const useGetChatSessions = (
-  projectId?: number,
+  filter?: number | GetSessionsFilter,
   customOptions?: UseQueryOptions<ChatSession[], CustomError, ChatSession[]>,
 ) => {
+  const normalized =
+    typeof filter === 'number' ? { projectId: filter } : (filter ?? {});
   return useQuery({
-    queryKey: [QUERY_KEYS.GET_CHAT_SESSIONS, projectId],
+    queryKey: [QUERY_KEYS.GET_CHAT_SESSIONS, normalized],
     queryFn: async () => {
-      return chatService.getSessions(projectId);
+      return chatService.getSessions(normalized);
     },
     ...customOptions,
   });
@@ -57,20 +65,44 @@ export const useCreateChatSession = (
   customOptions?: UseMutationOptions<
     ChatSession,
     CustomError,
-    { title: string; projectId?: number; providerId?: number }
+    {
+      title: string;
+      projectId?: number;
+      providerId?: number;
+      screenKey?: string;
+      connectionId?: string;
+    }
   >,
 ): UseMutationResult<
   ChatSession,
   CustomError,
-  { title: string; projectId?: number; providerId?: number }
+  {
+    title: string;
+    projectId?: number;
+    providerId?: number;
+    screenKey?: string;
+    connectionId?: string;
+  }
 > => {
   const { onSuccess: onCustomSuccess, onError: onCustomError } =
     customOptions || {};
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: async ({ title, projectId, providerId }) => {
-      return chatService.createSession(title, projectId, providerId);
+    mutationFn: async ({
+      title,
+      projectId,
+      providerId,
+      screenKey,
+      connectionId,
+    }) => {
+      return chatService.createSession(
+        title,
+        projectId,
+        providerId,
+        screenKey,
+        connectionId,
+      );
     },
     onSuccess: async (session, variables, ...args) => {
       await queryClient.invalidateQueries([QUERY_KEYS.GET_CHAT_SESSIONS]);

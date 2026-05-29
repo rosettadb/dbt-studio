@@ -12,6 +12,7 @@ import type {
   CustomError,
   BigQueryTestResponse,
   ConnectionModel,
+  QueryResponseType,
 } from '../../types/backend';
 import type {
   ConfigureConnectionBody,
@@ -194,6 +195,87 @@ export const useSetConnectionEnvVariable = (
       onCustomSuccess?.(...args);
     },
     onError: (...args) => {
+      onCustomError?.(...args);
+    },
+  });
+};
+
+export const useExecuteConnectionQuery = (
+  customOptions?: UseMutationOptions<
+    QueryResponseType,
+    CustomError,
+    { connectionId: string; query: string; queryId?: string }
+  >,
+): UseMutationResult<
+  QueryResponseType,
+  CustomError,
+  { connectionId: string; query: string; queryId?: string }
+> => {
+  const { onSuccess: onCustomSuccess, onError: onCustomError } =
+    customOptions || {};
+
+  return useMutation({
+    mutationFn: async (payload) => {
+      // eslint-disable-next-line no-console
+      console.log('[ConnectorsController] executeQueryForConnection', {
+        connectionId: payload.connectionId,
+        queryId: payload.queryId,
+        queryLength: payload.query.length,
+      });
+      return connectorsServices.executeQueryForConnection(payload);
+    },
+    onSuccess: (...args) => {
+      // eslint-disable-next-line no-console
+      console.log('[ConnectorsController] executeQueryForConnection success', {
+        rowCount: args[0]?.rowCount ?? 0,
+        hasError: !!args[0]?.error,
+      });
+      onCustomSuccess?.(...args);
+    },
+    onError: (...args) => {
+      // eslint-disable-next-line no-console
+      console.error('[ConnectorsController] executeQueryForConnection error', {
+        message: (args[0] as any)?.message || 'Unknown error',
+      });
+      onCustomError?.(...args);
+    },
+  });
+};
+
+export const useUpdateConnectionQuery = (
+  customOptions?: UseMutationOptions<
+    void,
+    CustomError,
+    { connectionId: string; query: string }
+  >,
+): UseMutationResult<
+  void,
+  CustomError,
+  { connectionId: string; query: string }
+> => {
+  const { onSuccess: onCustomSuccess, onError: onCustomError } =
+    customOptions || {};
+
+  return useMutation({
+    mutationFn: async (payload) => {
+      // eslint-disable-next-line no-console
+      console.log('[ConnectorsController] updateConnectionQuery', {
+        connectionId: payload.connectionId,
+        queryLength: payload.query.length,
+      });
+      return connectorsServices.updateConnectionQuery(
+        payload.connectionId,
+        payload.query,
+      );
+    },
+    onSuccess: (...args) => {
+      onCustomSuccess?.(...args);
+    },
+    onError: (...args) => {
+      // eslint-disable-next-line no-console
+      console.error('[ConnectorsController] updateConnectionQuery error', {
+        message: (args[0] as any)?.message || 'Unknown error',
+      });
       onCustomError?.(...args);
     },
   });

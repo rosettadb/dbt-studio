@@ -5,6 +5,8 @@ import React, {
   useContext,
   useEffect,
 } from 'react';
+import SplitPane, { Pane } from 'split-pane-react';
+import 'split-pane-react/esm/themes/default.css';
 import {
   Box,
   FormControl,
@@ -22,12 +24,15 @@ import {
   TextField,
   IconButton,
   CircularProgress,
+  useMediaQuery,
 } from '@mui/material';
 import {
   Add,
   TableChart,
   Link as LinkIcon,
   Warning,
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  ChatBubbleOutline,
 } from '@mui/icons-material';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'react-toastify';
@@ -53,12 +58,44 @@ import { connectorsServices, DuckLakeService } from '../../services';
 import { NotebooksSidebar } from '../../components/notebook/NotebooksSidebar';
 import { NotebookTabManager } from '../../components/notebook/NotebookTabManager';
 import { NotebookEditor } from '../../components/notebook';
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+import { ChatWindow } from '../../components/chat';
 import { Table, SupportedConnectionTypes } from '../../../types/backend';
 import useNotebookTabManager from '../../hooks/useNotebookTabManager';
 import {
   useNotebookConnectionState,
   useNotebookSidebarState,
 } from '../../hooks';
+
+const CHAT_MIN_WIDTH = 280;
+
+const VerticalSash = (_: number, active: boolean) => (
+  <div
+    style={{
+      width: '4px',
+      height: '100%',
+      cursor: 'col-resize',
+      position: 'relative',
+      backgroundColor: active ? 'rgba(144,202,249,0.4)' : 'transparent',
+      transition: 'background-color 0.15s ease',
+    }}
+  >
+    <div
+      style={{
+        position: 'absolute',
+        left: '50%',
+        top: 0,
+        bottom: 0,
+        width: '2px',
+        transform: 'translateX(-50%)',
+        backgroundColor: active
+          ? 'rgba(144,202,249,0.8)'
+          : 'rgba(255,255,255,0.08)',
+        transition: 'background-color 0.15s ease',
+      }}
+    />
+  </div>
+);
 
 const Notebooks = () => {
   const theme = useTheme();
@@ -67,6 +104,40 @@ const Notebooks = () => {
   const { isSidebarOpen } = useContext(AppContext);
   const { data: connections = [] } = useGetConnections();
   const { data: duckLakeInstances = [] } = useDuckLakeInstances();
+
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const [notebooksChatOpen, setNotebooksChatOpen] = useState<boolean>(() => {
+    try {
+      return localStorage.getItem('notebooks-chat-open') === 'true';
+    } catch {
+      return false;
+    }
+  });
+
+  useEffect(() => {
+    localStorage.setItem('notebooks-chat-open', String(notebooksChatOpen));
+  }, [notebooksChatOpen]);
+
+  const CHAT_WIDTH_KEY = 'notebooks-chat-width';
+  const DEFAULT_CHAT_WIDTH = 360;
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const [verticalSizes, setVerticalSizes] = useState<(number | string)[]>(
+    () => {
+      const saved = parseInt(localStorage.getItem(CHAT_WIDTH_KEY) ?? '', 10);
+      const initialWidth = Number.isNaN(saved) ? DEFAULT_CHAT_WIDTH : saved;
+      return ['auto', initialWidth];
+    },
+  );
+
+  useEffect(() => {
+    const chatWidth = verticalSizes[1];
+    if (typeof chatWidth === 'number') {
+      localStorage.setItem(CHAT_WIDTH_KEY, String(chatWidth));
+    }
+  }, [verticalSizes]);
+
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const isNarrow = useMediaQuery('(max-width: 900px)');
 
   const {
     activeConnectionId,
@@ -857,6 +928,27 @@ const Notebooks = () => {
                 <Add sx={{ fontSize: 16 }} />
               </IconButton>
             </Tooltip>
+            {/* TODO: Re-enable Notebook AI Assistant in PR 32 */}
+            {/* <Tooltip
+              title={
+                notebooksChatOpen ? 'Close AI Assistant' : 'Open AI Assistant'
+              }
+            >
+              <IconButton
+                id="notebooks-ai-chat-toggle-btn"
+                size="small"
+                onClick={() => setNotebooksChatOpen((open) => !open)}
+                color={notebooksChatOpen ? 'primary' : 'default'}
+                sx={{
+                  width: 28,
+                  height: 28,
+                  bgcolor: 'transparent',
+                  '&:hover': { bgcolor: 'rgba(0,0,0,0.05)' },
+                }}
+              >
+                <ChatBubbleOutline sx={{ fontSize: 16 }} />
+              </IconButton>
+            </Tooltip> */}
           </Box>
 
           {/* Tabbed Sidebar */}
@@ -926,134 +1018,211 @@ const Notebooks = () => {
         </Box>
       }
     >
-      <Box
-        sx={{
-          height: '100%',
-          display: 'flex',
-          flexDirection: 'column',
+      <SplitPane
+        split="vertical"
+        sizes={['100%', 0]}
+        // eslint-disable-next-line @typescript-eslint/no-unused-vars
+        onChange={(newSizes) => {
+          // TODO: Re-enable in PR 32
+          /*
+          if (notebooksChatOpen && !isNarrow) {
+            const chatWidth = newSizes[1] as number;
+            if (chatWidth < CHAT_MIN_WIDTH) {
+              setVerticalSizes(['auto', CHAT_MIN_WIDTH]);
+            } else {
+              setVerticalSizes(newSizes);
+            }
+          }
+          */
         }}
+        sashRender={VerticalSash}
       >
-        {!activeConnectionId ? (
+        <Pane minSize={200}>
           <Box
             sx={{
+              height: '100%',
+              width: '100%',
+              minWidth: 0,
               display: 'flex',
               flexDirection: 'column',
-              alignItems: 'center',
-              justifyContent: 'center',
-              height: '100%',
-              color: 'text.secondary',
-              p: 2,
+              overflow: 'hidden',
             }}
           >
-            <TableChart sx={{ fontSize: 64, opacity: 0.3, mb: 2 }} />
-            <Typography
-              variant="h6"
-              color="text.secondary"
-              sx={{
-                mb: 1,
-                textAlign: 'center',
-                wordWrap: 'break-word',
-                overflowWrap: 'break-word',
-              }}
-            >
-              No Connection Selected
-            </Typography>
-            <Typography
-              variant="body2"
-              color="text.secondary"
-              sx={{
-                textAlign: 'center',
-                wordWrap: 'break-word',
-                overflowWrap: 'break-word',
-                whiteSpace: 'normal',
-              }}
-            >
-              Select a connection from the sidebar to start working with
-              notebooks
-            </Typography>
-          </Box>
-        ) : (
-          <>
-            {/* Notebook Tabs */}
-            <NotebookTabManager
-              tabs={notebookTabManager.tabs}
-              activeTabId={notebookTabManager.activeTabId}
-              onSelect={notebookTabManager.switchTab}
-              onClose={notebookTabManager.closeTab}
-              onReorder={notebookTabManager.reorderTabs}
-            />
-
-            {/* Notebook Content */}
-            <Box
-              sx={{
-                flex: 1,
-                display: 'flex',
-                flexDirection: 'column',
-                maxWidth: isSidebarOpen
-                  ? 'calc(100vw - 366px)'
-                  : 'calc(100vw - 56px)',
-              }}
-            >
-              {notebookTabManager.activeTabId ? (
-                <NotebookEditor
-                  instanceId={activeConnectionId}
-                  notebookId={notebookTabManager.activeTabId}
-                  onOpenNotebook={(notebook, connectionId) => {
-                    // Open the notebook in a new tab
-                    notebookTabManager.openNotebook(notebook, connectionId);
-                  }}
-                />
-              ) : (
-                <Box
+            {!activeConnectionId ? (
+              <Box
+                sx={{
+                  display: 'flex',
+                  flexDirection: 'column',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  height: '100%',
+                  color: 'text.secondary',
+                  p: 2,
+                }}
+              >
+                <TableChart sx={{ fontSize: 64, opacity: 0.3, mb: 2 }} />
+                <Typography
+                  variant="h6"
+                  color="text.secondary"
                   sx={{
-                    display: 'flex',
-                    flexDirection: 'column',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    height: '100%',
-                    color: 'text.secondary',
-                    p: 2,
+                    mb: 1,
+                    textAlign: 'center',
+                    wordWrap: 'break-word',
+                    overflowWrap: 'break-word',
                   }}
                 >
-                  <TableChart sx={{ fontSize: 64, opacity: 0.3, mb: 2 }} />
-                  <Typography
-                    variant="h6"
-                    color="text.secondary"
-                    sx={{
-                      mb: 1,
-                      textAlign: 'center',
-                      wordWrap: 'break-word',
-                      overflowWrap: 'break-word',
-                    }}
-                  >
-                    No Notebook Open
-                  </Typography>
-                  <Typography
-                    variant="body2"
-                    color="text.secondary"
-                    sx={{
-                      mb: 2,
-                      textAlign: 'center',
-                      wordWrap: 'break-word',
-                      overflowWrap: 'break-word',
-                      whiteSpace: 'normal',
-                    }}
-                  >
-                    Select a notebook from the sidebar to start editing
-                  </Typography>
-                  <Button
-                    variant="contained"
-                    startIcon={<Add />}
-                    onClick={() => setCreateNotebookOpen(true)}
-                  >
-                    Create New Notebook
-                  </Button>
+                  No Connection Selected
+                </Typography>
+                <Typography
+                  variant="body2"
+                  color="text.secondary"
+                  sx={{
+                    textAlign: 'center',
+                    wordWrap: 'break-word',
+                    overflowWrap: 'break-word',
+                    whiteSpace: 'normal',
+                  }}
+                >
+                  Select a connection from the sidebar to start working with
+                  notebooks
+                </Typography>
+              </Box>
+            ) : (
+              <>
+                {/* Notebook Tabs */}
+                <NotebookTabManager
+                  tabs={notebookTabManager.tabs}
+                  activeTabId={notebookTabManager.activeTabId}
+                  onSelect={notebookTabManager.switchTab}
+                  onClose={notebookTabManager.closeTab}
+                  onReorder={notebookTabManager.reorderTabs}
+                />
+
+                {/* Notebook Content */}
+                <Box
+                  sx={{
+                    flex: 1,
+                    display: 'flex',
+                    flexDirection: 'column',
+                    maxWidth: isSidebarOpen
+                      ? 'calc(100vw - 366px)'
+                      : 'calc(100vw - 56px)',
+                  }}
+                >
+                  {notebookTabManager.activeTabId ? (
+                    <NotebookEditor
+                      instanceId={activeConnectionId}
+                      notebookId={notebookTabManager.activeTabId}
+                      onOpenNotebook={(notebook, connectionId) => {
+                        // Open the notebook in a new tab
+                        notebookTabManager.openNotebook(notebook, connectionId);
+                      }}
+                    />
+                  ) : (
+                    <Box
+                      sx={{
+                        display: 'flex',
+                        flexDirection: 'column',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        height: '100%',
+                        color: 'text.secondary',
+                        p: 2,
+                      }}
+                    >
+                      <TableChart sx={{ fontSize: 64, opacity: 0.3, mb: 2 }} />
+                      <Typography
+                        variant="h6"
+                        color="text.secondary"
+                        sx={{
+                          mb: 1,
+                          textAlign: 'center',
+                          wordWrap: 'break-word',
+                          overflowWrap: 'break-word',
+                        }}
+                      >
+                        No Notebook Open
+                      </Typography>
+                      <Typography
+                        variant="body2"
+                        color="text.secondary"
+                        sx={{
+                          mb: 2,
+                          textAlign: 'center',
+                          wordWrap: 'break-word',
+                          overflowWrap: 'break-word',
+                          whiteSpace: 'normal',
+                        }}
+                      >
+                        Select a notebook from the sidebar to start editing
+                      </Typography>
+                      <Button
+                        variant="contained"
+                        startIcon={<Add />}
+                        onClick={() => setCreateNotebookOpen(true)}
+                      >
+                        Create New Notebook
+                      </Button>
+                    </Box>
+                  )}
                 </Box>
-              )}
-            </Box>
-          </>
-        )}
-      </Box>
+              </>
+            )}
+          </Box>
+        </Pane>
+        <Pane minSize={CHAT_MIN_WIDTH}>
+          <Box
+            id="notebooks-ai-chat-panel"
+            sx={{
+              height: '100%',
+              borderLeft: '1px solid',
+              borderColor: 'divider',
+              overflow: 'hidden',
+              display: 'flex',
+              flexDirection: 'column',
+            }}
+          >
+            {/* TODO: Re-enable Notebook AI Assistant in PR 32 */}
+            {/* notebooksChatOpen && !isNarrow && (
+              <ChatWindow
+                screenKey="notebooks"
+                connectionId={activeConnectionId ?? undefined}
+                projectId={
+                  selectedProject?.id ? Number(selectedProject.id) : null
+                }
+                onClose={() => setNotebooksChatOpen(false)}
+              />
+            ) */}
+          </Box>
+        </Pane>
+      </SplitPane>
+
+      {/* Mobile AI Chat Drawer */}
+      {/* TODO: Re-enable Notebook AI Assistant in PR 32 */}
+      {/* isNarrow && (
+        <Dialog
+          fullScreen
+          open={notebooksChatOpen}
+          onClose={() => setNotebooksChatOpen(false)}
+        >
+          <Box
+            sx={{
+              height: '100%',
+              display: 'flex',
+              flexDirection: 'column',
+            }}
+          >
+            <ChatWindow
+              screenKey="notebooks"
+              connectionId={activeConnectionId ?? undefined}
+              projectId={
+                selectedProject?.id ? Number(selectedProject.id) : null
+              }
+              onClose={() => setNotebooksChatOpen(false)}
+            />
+          </Box>
+        </Dialog>
+      ) */}
 
       {/* Delete Notebook Confirmation Dialog */}
       <Dialog

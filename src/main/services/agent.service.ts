@@ -3,12 +3,15 @@ import fs from 'fs-extra';
 import path from 'path';
 import { IpcMainInvokeEvent, app, BrowserWindow } from 'electron';
 import { generateText } from 'ai';
-import { createDbtAgent } from './ai/dbtAgent';
+import { buildBaseAgentConfig } from './ai/agents/baseAgentConfig';
+import { createProjectAgent } from './ai/agents/projectAgent';
+import { createSqlAgent } from './ai/agents/sqlAgent';
+import { createNotebooksAgent } from './ai/agents/notebooksAgent';
+import ConnectorsService from './connectors.service';
 import { getVercelModel } from './ai/agentAdapter';
 import { buildMCPToolset } from './ai/mcp/mcpToolAdapter';
 import { discoverSkills } from './ai/skills/skillsDiscovery';
 import { buildSkillsPrompt } from './ai/skills/skillsPrompt';
-import { createLoadSkillTool } from './ai/skills/loadSkillTool';
 import { dbtTools } from './ai/tools/dbt.tools';
 import { filesystemTools } from './ai/tools/filesystem.tools';
 import { TerminalConfirmGate } from './ai/tools/terminalConfirmGate';
@@ -30,6 +33,7 @@ import type {
   AgentContextUsagePayload,
   AgentContextCompactedPayload,
 } from '../../types/agentEvents';
+import { getUserMessageLimitError } from '../../types/agentEvents';
 
 // ─── AI Settings ─────────────────────────────────────────────────────────────
 
@@ -98,36 +102,28 @@ export const getAISettingsFilePath = (): string => aiSettingsFilePath();
 
 // Track active agent executions by conversationId
 const activeAgents = new Map<number, AbortController>();
+const pendingEditorBridgeRequests = new Map<
+  string,
+  {
+    resolve: (value: any) => void;
+    reject: (reason?: unknown) => void;
+    timeout: ReturnType<typeof setTimeout>;
+    type: 'read' | 'update';
+  }
+>();
 
 // Per-conversation agent context — replaces the static singleton to prevent
 // race conditions when multiple conversations run concurrently (#4)
 const agentContexts = new Map<
   number,
-  { event: IpcMainInvokeEvent; conversationId: number }
+  {
+    event: IpcMainInvokeEvent;
+    conversationId: number;
+    screenKey: 'project' | 'sql' | 'notebooks';
+    connectionId?: string;
+    projectPath?: string;
+  }
 >();
-
-// ─── Token Management Interfaces ─────────────────────────────────────────────
-
-export interface TokenBudget {
-  maxTotal: number;
-  recentMessages: number;
-  summary: number;
-  relevantContext: number;
-  buffer: number;
-}
-
-export interface ConversationPhase {
-  phase: 'exploration' | 'implementation' | 'debugging' | 'review';
-  recommendedLimit: number;
-}
-
-export interface ScoredMessage {
-  message: ChatMessage;
-  index: number;
-  score: number;
-  isRecent: boolean;
-  tokenCount: number;
-}
 
 // ─── Tool Categorization ─────────────────────────────────────────────────────
 
@@ -178,6 +174,9 @@ export interface AgentRunRequest {
   requestedModel?: string;
   projectPath?: string;
   toolMode?: 'chat' | 'agent';
+  screenKey?: 'project' | 'sql' | 'notebooks';
+  connectionId?: string;
+  notebookId?: number;
 }
 
 /**
@@ -210,11 +209,13 @@ const activeCompactions = new Set<number>();
  */
 function buildCoreMessages(
   messages: ChatMessage[],
-): Array<{ role: 'user' | 'assistant'; content: string }> {
+): Array<{ role: 'user' | 'assistant' | 'system'; content: string }> {
   return messages
-    .filter((m) => m.role === 'user' || m.role === 'assistant')
+    .filter(
+      (m) => m.role === 'user' || m.role === 'assistant' || m.role === 'system',
+    )
     .map((m) => ({
-      role: m.role as 'user' | 'assistant',
+      role: m.role as 'user' | 'assistant' | 'system',
       content: m.content,
     }));
 }
@@ -242,175 +243,129 @@ class AgentService {
     return entries.length > 0 ? entries[entries.length - 1] : null;
   }
 
-  // ─── Context Compaction ──────────────────────────────────────────────────────
+  /**
+   * Resolve a pending editor read response coming from renderer bridge IPC.
+   */
+  public static resolveEditorReadResponse(payload: {
+    requestId: string;
+    success: boolean;
+    content?: string;
+    error?: string;
+  }) {
+    const pending = pendingEditorBridgeRequests.get(payload.requestId);
+    if (!pending || pending.type !== 'read') return;
+    clearTimeout(pending.timeout);
+    pendingEditorBridgeRequests.delete(payload.requestId);
+    pending.resolve(payload);
+  }
 
   /**
-   * Builds a token budget scaled to the active model's context window.
+   * Resolve a pending editor update response coming from renderer bridge IPC.
    */
-  private static buildBudgetForModel(modelId?: string): TokenBudget {
-    const DEFAULT_MAX = 6000;
-    const contextWindow = modelId
-      ? getContextWindow(modelId)
-      : Math.floor(DEFAULT_MAX / 0.85);
-    const maxTotal = Math.floor(contextWindow * 0.85);
-    return {
-      maxTotal,
-      recentMessages: Math.floor(maxTotal * 0.6),
-      summary: Math.floor(maxTotal * 0.15),
-      relevantContext: Math.floor(maxTotal * 0.13),
-      buffer: Math.floor(maxTotal * 0.12),
-    };
+  public static resolveEditorUpdateResponse(payload: {
+    requestId: string;
+    success: boolean;
+    applied?: boolean;
+    error?: string;
+  }) {
+    const pending = pendingEditorBridgeRequests.get(payload.requestId);
+    if (!pending || pending.type !== 'update') return;
+    clearTimeout(pending.timeout);
+    pendingEditorBridgeRequests.delete(payload.requestId);
+    pending.resolve(payload);
   }
 
-  private static detectConversationPhase(
-    messages: ChatMessage[],
-  ): ConversationPhase {
-    const lastFewMessages = messages.slice(-5);
-    const content = lastFewMessages
-      .map((m) => m.content.toLowerCase())
-      .join(' ');
-
-    if (
-      content.includes('error') ||
-      content.includes('debug') ||
-      content.includes('fix') ||
-      content.includes('issue')
-    ) {
-      return { phase: 'debugging', recommendedLimit: 15 };
+  private static async requestSqlEditorBridge<T extends 'read' | 'update'>(
+    conversationId: number,
+    type: T,
+    payload: T extends 'read' ? {} : { content: string },
+  ): Promise<
+    T extends 'read'
+      ? { success: boolean; content?: string; error?: string }
+      : { success: boolean; applied?: boolean; error?: string }
+  > {
+    const context = this.getAgentContext(conversationId);
+    if (!context) {
+      return {
+        success: false,
+        error: 'Agent context not found for conversation',
+      } as any;
+    }
+    if (context.screenKey !== 'sql') {
+      return {
+        success: false,
+        error: `Monaco bridge only available in SQL screen (current: ${context.screenKey})`,
+      } as any;
     }
 
-    if (
-      content.includes('implement') ||
-      content.includes('code') ||
-      content.includes('function') ||
-      content.includes('class')
-    ) {
-      return { phase: 'implementation', recommendedLimit: 10 };
-    }
+    const requestId = `editor-bridge-${Date.now()}-${Math.random()
+      .toString(36)
+      .slice(2, 10)}`;
+    const channel =
+      type === 'read'
+        ? 'agent:editor:read-request'
+        : 'agent:editor:update-request';
 
-    if (
-      content.includes('review') ||
-      content.includes('summary') ||
-      content.includes('overall') ||
-      content.includes('complete')
-    ) {
-      return { phase: 'review', recommendedLimit: 18 };
-    }
+    const response = await new Promise<any>((resolve, reject) => {
+      const timeout = setTimeout(() => {
+        pendingEditorBridgeRequests.delete(requestId);
+        reject(
+          new Error(`Timed out waiting for ${type} response from renderer`),
+        );
+      }, 15000);
 
-    return { phase: 'exploration', recommendedLimit: 8 };
-  }
-
-  private static scoreMessageImportance(message: ChatMessage): number {
-    let score = 1;
-    const content = message.content.toLowerCase();
-
-    if (
-      content.includes('error') ||
-      content.includes('problem') ||
-      content.includes('issue')
-    )
-      score += 3;
-    if (
-      content.includes('solution') ||
-      content.includes('fixed') ||
-      content.includes('resolved')
-    )
-      score += 3;
-    if (
-      content.includes('important') ||
-      content.includes('key') ||
-      content.includes('critical')
-    )
-      score += 2;
-    if (
-      content.includes('```') ||
-      content.includes('code') ||
-      content.includes('function')
-    )
-      score += 2;
-    if (message.contextItems && message.contextItems.length > 0) score += 2;
-    if (
-      content.includes('decision') ||
-      content.includes('approach') ||
-      content.includes('strategy')
-    )
-      score += 2;
-
-    const contentLength = content.length;
-    if (contentLength > 500 && contentLength < 2000) score += 1;
-    if (contentLength < 50) score -= 1;
-
-    if (message.role === 'assistant' && contentLength > 200) score += 1;
-
-    const ageInHours =
-      (Date.now() - new Date(message.createdAt).getTime()) / (1000 * 60 * 60);
-    const recencyBonus = Math.max(0, 3 - ageInHours / 12);
-    score += recencyBonus;
-
-    return score;
-  }
-
-  private static selectMessagesWithinBudget(
-    scoredMessages: ScoredMessage[],
-    tokenBudget: number,
-    minMessages: number,
-    maxMessages: number,
-  ): ScoredMessage[] {
-    const selected: ScoredMessage[] = [];
-    let usedTokens = 0;
-
-    const guaranteedRecent = scoredMessages
-      .filter((item) => item.isRecent)
-      .slice(-minMessages);
-
-    guaranteedRecent.some((item) => {
-      if (usedTokens + item.tokenCount <= tokenBudget) {
-        selected.push(item);
-        usedTokens += item.tokenCount;
-        return false;
-      }
-      if (selected.length === 0) {
-        const truncated = this.truncateMessage(item, tokenBudget);
-        selected.push(truncated);
-        usedTokens = tokenBudget;
-        return true; // equivalent to break
-      }
-      return false;
+      pendingEditorBridgeRequests.set(requestId, {
+        resolve,
+        reject,
+        timeout,
+        type,
+      });
+      context.event.sender.send(channel, {
+        requestId,
+        conversationId,
+        ...(payload as any),
+      });
     });
 
-    const remainingMessages = scoredMessages
-      .filter((item) => !item.isRecent)
-      .sort((a, b) => b.score - a.score);
+    return response;
+  }
 
-    remainingMessages.forEach((item) => {
-      if (
-        usedTokens + item.tokenCount <= tokenBudget &&
-        selected.length < maxMessages
-      ) {
-        selected.push(item);
-        usedTokens += item.tokenCount;
-      }
+  public static async requestSqlEditorRead(conversationId: number) {
+    return this.requestSqlEditorBridge(conversationId, 'read', {});
+  }
+
+  public static async requestSqlEditorUpdate(
+    conversationId: number,
+    content: string,
+  ) {
+    return this.requestSqlEditorBridge(conversationId, 'update', { content });
+  }
+
+  /**
+   * Fire-and-forget: tells the SQL editor renderer to execute the current
+   * editor content, equivalent to the user pressing the Run button.
+   * No round-trip — the result appears in the UI's QueryResult panel.
+   */
+  public static requestSqlEditorRun(
+    conversationId: number,
+    query?: string,
+  ): void {
+    const context = this.getAgentContext(conversationId);
+    if (!context) {
+      // eslint-disable-next-line no-console
+      console.warn(
+        '[AgentService][MonacoRun] No agent context for conversation',
+        conversationId,
+      );
+      return;
+    }
+    context.event.sender.send('agent:editor:run-query', {
+      conversationId,
+      query,
     });
-
-    return selected;
   }
 
-  private static truncateMessage(
-    scoredMessage: ScoredMessage,
-    maxTokens: number,
-  ): ScoredMessage {
-    const originalContent = scoredMessage.message.content;
-    const truncatedContent = this.truncateText(originalContent, maxTokens - 20);
-
-    return {
-      ...scoredMessage,
-      message: {
-        ...scoredMessage.message,
-        content: `${truncatedContent}... [truncated]`,
-      },
-      tokenCount: maxTokens,
-    };
-  }
+  // ─── Context Compaction ──────────────────────────────────────────────────────
 
   private static truncateText(text: string, maxTokens: number): string {
     if (estimateTokens(text) <= maxTokens) {
@@ -437,149 +392,13 @@ class AgentService {
     return text.substring(0, bestLength);
   }
 
-  private static async summarizeConversationHistory(
-    olderMessages: ChatMessage[],
-  ): Promise<string | null> {
-    if (olderMessages.length === 0) return null;
-
-    try {
-      const keyPoints: string[] = [];
-      const topics = new Set<string>();
-      const decisions: string[] = [];
-      const codeElements: string[] = [];
-
-      olderMessages.forEach((message) => {
-        const content = message.content.toLowerCase();
-
-        if (content.includes('database') || content.includes('sql'))
-          topics.add('database work');
-        if (content.includes('react') || content.includes('component'))
-          topics.add('React development');
-        if (content.includes('dbt') || content.includes('model'))
-          topics.add('dbt modeling');
-        if (content.includes('error') || content.includes('debug'))
-          topics.add('troubleshooting');
-
-        if (
-          content.includes('decided') ||
-          content.includes('choose') ||
-          content.includes('prefer')
-        ) {
-          decisions.push(`${message.content.substring(0, 100)}...`);
-        }
-
-        if (
-          content.includes('```') ||
-          content.includes('function') ||
-          content.includes('class')
-        ) {
-          codeElements.push(`${message.role}: discussed code implementation`);
-        }
-      });
-
-      if (topics.size > 0)
-        keyPoints.push(`Previous topics: ${Array.from(topics).join(', ')}`);
-      if (decisions.length > 0)
-        keyPoints.push(`Key decisions: ${decisions.slice(0, 2).join('; ')}`);
-      if (codeElements.length > 0)
-        keyPoints.push(
-          `Technical work: ${codeElements.length} code discussions`,
-        );
-      keyPoints.push(
-        `Conversation span: ${olderMessages.length} earlier messages`,
-      );
-
-      return keyPoints.length > 0 ? keyPoints.join('. ') : null;
-    } catch (error) {
-      return `Earlier conversation with ${olderMessages.length} messages`;
-    }
-  }
-
-  private static async extractRelevantContext(
-    olderMessages: ChatMessage[],
-    currentContent: string,
-  ): Promise<string[]> {
-    if (!currentContent || olderMessages.length === 0) return [];
-
-    try {
-      const relevantSnippets: string[] = [];
-      const currentTopics = this.extractTopicsFromContent(currentContent);
-
-      olderMessages.forEach((message) => {
-        const messageTopics = this.extractTopicsFromContent(message.content);
-        const hasOverlap = currentTopics.some((topic) =>
-          messageTopics.includes(topic),
-        );
-
-        if (hasOverlap && message.content.length < 200) {
-          relevantSnippets.push(`${message.role}: ${message.content}`);
-        } else if (hasOverlap) {
-          const sentences = message.content.split(/[.!?]+/);
-          const relevantSentence = sentences.find((s: string) =>
-            currentTopics.some((topic) => s.toLowerCase().includes(topic)),
-          );
-          if (relevantSentence) {
-            relevantSnippets.push(
-              `${message.role}: ${relevantSentence.trim()}...`,
-            );
-          }
-        }
-      });
-
-      return relevantSnippets.slice(0, 3);
-    } catch (error) {
-      return [];
-    }
-  }
-
-  private static extractTopicsFromContent(content: string): string[] {
-    const topics: string[] = [];
-    const lowerContent = content.toLowerCase();
-
-    const topicKeywords = [
-      'database',
-      'sql',
-      'query',
-      'table',
-      'schema',
-      'react',
-      'component',
-      'hook',
-      'state',
-      'props',
-      'dbt',
-      'model',
-      'transformation',
-      'analytics',
-      'error',
-      'debug',
-      'fix',
-      'issue',
-      'problem',
-      'api',
-      'endpoint',
-      'request',
-      'response',
-      'typescript',
-      'javascript',
-      'function',
-      'class',
-    ];
-
-    topicKeywords.forEach((keyword) => {
-      if (lowerContent.includes(keyword)) {
-        topics.push(keyword);
-      }
-    });
-
-    return topics;
-  }
-
   /**
    * Generates a concise LLM summary of older messages for compaction.
+   * The returned text is hard-capped to maxTokens.
    */
   private static async generateSummary(
     messages: ChatMessage[],
+    maxTokens: number,
   ): Promise<string> {
     const model = await getVercelModel();
     const conversationText = messages
@@ -598,98 +417,73 @@ Preserve exactly:
 - Any code snippets still relevant to the current task
 
 Be concise but complete. Use bullet points.
+The summary must fit within approximately ${maxTokens} tokens.
 
 CONVERSATION:
 ${conversationText}
 
 SUMMARY:`,
     });
-    return text;
+    return this.truncateText(text, maxTokens);
   }
 
   /**
-   * Incrementally extends an existing summary with new messages.
-   */
-  private static async extendSummary(
-    existing: string,
-    newMessages: ChatMessage[],
-  ): Promise<string> {
-    const model = await getVercelModel();
-    const newText = newMessages
-      .map((m) => `${m.role === 'user' ? 'User' : 'Assistant'}: ${m.content}`)
-      .join('\n\n');
-
-    const { text } = await generateText({
-      model: model as any,
-      prompt: `Update this conversation summary with new information.
-Keep all existing information still relevant. Add new information from the additional messages.
-
-EXISTING SUMMARY:
-${existing}
-
-NEW MESSAGES:
-${newText}
-
-UPDATED SUMMARY:`,
-    });
-    return text;
-  }
-
-  /**
-   * Auto-compacts conversation history when context window is getting full.
-   * Keeps the last 6 messages verbatim, summarizes older ones with the LLM.
+   * Auto-compacts conversation history using percentage budgets:
+   * - Trigger happens outside this method.
+   * - Keep newest 20% tokens unchanged.
+   * - Summarize older messages from scratch.
+   * - Summary is capped to 10% of the summarized 50% block (5% of full window).
    */
   private static async autoCompact(
     conversationId: number,
     messages: ChatMessage[],
     event: IpcMainInvokeEvent,
+    contextWindow: number,
   ): Promise<
     Array<{ role: 'user' | 'assistant' | 'system'; content: string }>
   > {
-    const ALWAYS_KEEP_RECENT = 6; // last 3 user+assistant pairs verbatim
+    const tailTokenBudget = Math.floor(contextWindow * 0.2);
+    const summaryMaxTokens = Math.floor(contextWindow * 0.05);
 
-    const recentMessages = messages.slice(-ALWAYS_KEEP_RECENT);
-    const olderMessages = messages.slice(0, -ALWAYS_KEEP_RECENT);
-
-    if (olderMessages.length === 0) return buildCoreMessages(recentMessages);
-
-    // Prevent duplicate LLM calls if multiple messages trigger compaction simultaneously
     if (activeCompactions.has(conversationId)) {
       return buildCoreMessages(messages);
     }
     activeCompactions.add(conversationId);
 
     try {
-      const existingSummary =
-        await MainDatabaseService.getCompactionSummary(conversationId);
+      let usedTailTokens = 0;
+      const tailMessages: ChatMessage[] = [];
+      const olderMessages: ChatMessage[] = [];
 
-      let summaryText: string;
-      if (existingSummary) {
-        // Only extend with messages that came AFTER the last compaction point
-        // to avoid re-summarizing already-summarized history (#11)
-        const newMessages = existingSummary.coversUpToMessageId
-          ? olderMessages.filter(
-              (m) => (m.id ?? 0) > existingSummary.coversUpToMessageId!,
-            )
-          : olderMessages;
-
-        summaryText =
-          newMessages.length > 0
-            ? await this.extendSummary(existingSummary.content, newMessages)
-            : existingSummary.content;
-      } else {
-        summaryText = await this.generateSummary(olderMessages);
+      for (let i = messages.length - 1; i >= 0; i -= 1) {
+        const msg = messages[i];
+        const msgTokens = estimateTokens(msg.content);
+        const canFitTail =
+          usedTailTokens + msgTokens <= tailTokenBudget ||
+          tailMessages.length === 0;
+        if (canFitTail) {
+          tailMessages.push(msg);
+          usedTailTokens += msgTokens;
+        } else {
+          olderMessages.unshift(msg);
+        }
       }
 
-      // Persist for next turn (incremental compaction)
-      const lastOldMessageId = olderMessages[olderMessages.length - 1]?.id;
-      await MainDatabaseService.saveCompactionSummary(
+      if (olderMessages.length === 0) {
+        return buildCoreMessages(messages);
+      }
+
+      const summaryText = await this.generateSummary(
+        olderMessages,
+        summaryMaxTokens,
+      );
+      await MainDatabaseService.compactConversationMessages(
         conversationId,
-        summaryText,
-        lastOldMessageId,
+        olderMessages.map((m) => m.id),
+        `## Earlier Conversation (summarized)\n\n${summaryText}`,
+        olderMessages[0]?.createdAt ?? undefined,
       );
 
-      // Notify UI
       const compactedPayload: AgentContextCompactedPayload = {
         conversationId,
         messagesSummarized: olderMessages.length,
@@ -701,7 +495,7 @@ UPDATED SUMMARY:`,
           role: 'system',
           content: `## Earlier Conversation (summarized)\n\n${summaryText}`,
         },
-        ...buildCoreMessages(recentMessages),
+        ...buildCoreMessages(tailMessages.reverse()),
       ];
     } finally {
       activeCompactions.delete(conversationId);
@@ -709,7 +503,10 @@ UPDATED SUMMARY:`,
   }
 
   /**
-   * Builds turn messages with auto-compaction and dynamic token budgets.
+   * Builds turn messages with percentage-based compaction:
+   * - Trigger at 70% total prompt usage.
+   * - Keep 20% newest history tokens unchanged.
+   * - Summarize the remaining history from scratch.
    */
   private static async buildTurnMessages(
     conversationId: number,
@@ -717,146 +514,85 @@ UPDATED SUMMARY:`,
     contextItems: Omit<NewContextItem, 'messageId'>[] | undefined,
     modelId: string,
     event: IpcMainInvokeEvent,
+    fixedOverheadTokens: { skills: number; mcpTools: number },
   ): Promise<{
     messages: Array<{ role: 'user' | 'assistant' | 'system'; content: string }>;
     breakdown: ContextUsageBreakdown;
   }> {
-    // 1. Get dynamic token budget
-    const budget = this.buildBudgetForModel(modelId);
-
-    // 2. Load all messages
     const allMessages = await MainDatabaseService.getMessages(conversationId);
-
-    // 3. Detect conversation phase
-    const phase = this.detectConversationPhase(allMessages);
-
-    // 4. Score messages by importance
-    const MIN_RECENT_MESSAGES = 4;
-    const MAX_RECENT_MESSAGES = Math.min(100, phase.recommendedLimit);
-
-    const scoredMessages: ScoredMessage[] = allMessages.map((msg, index) => ({
-      message: msg,
-      index,
-      score: this.scoreMessageImportance(msg),
-      isRecent: index >= allMessages.length - MIN_RECENT_MESSAGES,
-      tokenCount: estimateTokens(msg.content),
-    }));
-
-    // 5. Select messages within budget
-    const selectedMessages = this.selectMessagesWithinBudget(
-      scoredMessages,
-      budget.recentMessages,
-      MIN_RECENT_MESSAGES,
-      MAX_RECENT_MESSAGES,
-    );
-
-    // Re-sort selected messages chronologically
-    const recentMessages = selectedMessages
-      .map((sm) => sm.message)
-      .sort(
-        (a, b) =>
-          new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime(),
-      );
-
-    // 6. Extract relevant context from older messages
-    const selectedIds = new Set(recentMessages.map((m) => m.id));
-    const olderMessages = allMessages.filter((m) => !selectedIds.has(m.id));
-    const relevantContext = await this.extractRelevantContext(
-      olderMessages,
-      newContent,
-    );
-
-    // 7. Decide: LLM compaction or heuristic summarization
-    const historyTokens = estimateMessagesTokens(recentMessages);
-    const newMsgTokens = estimateTokens(newContent);
-    const ctxItemTokens = estimateTokens(contextItems);
-    const RESPONSE_HEADROOM = 8_000;
+    const coreHistory = buildCoreMessages(allMessages);
 
     const contextWindow = getContextWindow(modelId);
-    const totalTokens =
-      historyTokens + newMsgTokens + ctxItemTokens + RESPONSE_HEADROOM;
-    const percentUsed = totalTokens / contextWindow;
+    const compactThreshold = contextWindow * 0.7;
+    const newMsgTokens = estimateTokens(newContent);
+    const ctxItemTokens = estimateTokens(contextItems);
+    const historyTokens = estimateMessagesTokens(coreHistory);
+
+    const totalBeforeCompaction =
+      historyTokens +
+      newMsgTokens +
+      ctxItemTokens +
+      fixedOverheadTokens.skills +
+      fixedOverheadTokens.mcpTools;
 
     const breakdown: ContextUsageBreakdown = {
       conversation: historyTokens,
       userFiles: ctxItemTokens,
-      skills: 0,
-      mcpTools: 0,
-      total: totalTokens,
+      skills: fixedOverheadTokens.skills,
+      mcpTools: fixedOverheadTokens.mcpTools,
+      total: totalBeforeCompaction,
       contextWindow,
-      percentUsed: Math.min(100, Math.round(percentUsed * 100)),
+      percentUsed: Math.min(
+        100,
+        Math.round((totalBeforeCompaction / contextWindow) * 100),
+      ),
     };
 
-    const COMPACT_THRESHOLD = 0.85;
+    if (totalBeforeCompaction >= compactThreshold) {
+      const compactedMessages = await this.autoCompact(
+        conversationId,
+        allMessages,
+        event,
+        contextWindow,
+      );
+      const compactedHistoryTokens = estimateMessagesTokens(compactedMessages);
+      const totalAfterCompaction =
+        compactedHistoryTokens +
+        newMsgTokens +
+        ctxItemTokens +
+        fixedOverheadTokens.skills +
+        fixedOverheadTokens.mcpTools;
 
-    if (percentUsed > COMPACT_THRESHOLD) {
-      // Try LLM compaction first (existing AgentService logic)
-      try {
-        const compactedMessages = await this.autoCompact(
-          conversationId,
-          allMessages,
-          event,
-        );
-        const compactedTokens = estimateMessagesTokens(compactedMessages);
-        breakdown.conversation = compactedTokens;
-        breakdown.total =
-          compactedTokens + newMsgTokens + ctxItemTokens + RESPONSE_HEADROOM;
-        breakdown.percentUsed = Math.min(
-          100,
-          Math.round((breakdown.total / contextWindow) * 100),
-        );
-        return { messages: compactedMessages, breakdown };
-      } catch (error) {
-        // Fallback to heuristic summarization
-        const summary = await this.summarizeConversationHistory(olderMessages);
-
-        let systemPrompt = '';
-        if (summary) {
-          systemPrompt += `## Earlier Conversation (summarized)\n\n${summary}\n\n`;
-        }
-        if (relevantContext.length > 0) {
-          systemPrompt += `## Relevant earlier context:\n${relevantContext.map((ctx) => `• ${ctx}`).join('\n')}\n\n`;
-        }
-
-        const finalMessages = [];
-        if (systemPrompt) {
-          finalMessages.push({
-            role: 'system' as const,
-            content: systemPrompt,
-          });
-        }
-        finalMessages.push(...buildCoreMessages(recentMessages));
-
-        const heuristicTokens = estimateMessagesTokens(finalMessages);
-        breakdown.conversation = heuristicTokens;
-        breakdown.total =
-          heuristicTokens + newMsgTokens + ctxItemTokens + RESPONSE_HEADROOM;
-        breakdown.percentUsed = Math.min(
-          100,
-          Math.round((breakdown.total / contextWindow) * 100),
-        );
-        return { messages: finalMessages as any, breakdown };
-      }
+      return {
+        messages: compactedMessages,
+        breakdown: {
+          ...breakdown,
+          conversation: compactedHistoryTokens,
+          total: totalAfterCompaction,
+          percentUsed: Math.min(
+            100,
+            Math.round((totalAfterCompaction / contextWindow) * 100),
+          ),
+        },
+      };
     }
 
-    // 8. Build final message array
-    let systemPrompt = '';
-    if (relevantContext.length > 0) {
-      systemPrompt += `## Relevant earlier context:\n${relevantContext.map((ctx) => `• ${ctx}`).join('\n')}\n\n`;
-    }
-
-    const finalMessages = [];
-    if (systemPrompt) {
-      finalMessages.push({ role: 'system' as const, content: systemPrompt });
-    }
-    finalMessages.push(...buildCoreMessages(recentMessages));
-
-    return { messages: finalMessages as any, breakdown };
+    return { messages: coreHistory as any, breakdown };
   }
 
   /**
    * Run the agent with streaming
    */
+
+  private static assertUserMessageWithinLimit(
+    content: string,
+    contextWindow: number,
+  ): void {
+    const error = getUserMessageLimitError(content, contextWindow);
+    if (error) {
+      throw new Error(error);
+    }
+  }
 
   static async runAgent(
     event: IpcMainInvokeEvent,
@@ -873,7 +609,13 @@ UPDATED SUMMARY:`,
 
     try {
       // Register per-conversation context (fixes race condition on concurrent runs)
-      agentContexts.set(conversationId, { event, conversationId });
+      agentContexts.set(conversationId, {
+        event,
+        conversationId,
+        screenKey: request.screenKey ?? 'project',
+        connectionId: request.connectionId,
+        projectPath,
+      });
 
       // Typed helper to send stream chunks — ensures both sides use the same payload shape
       const sendChunk = (payload: ChatStreamChunkPayload) =>
@@ -882,14 +624,7 @@ UPDATED SUMMARY:`,
       // 1. Load AI settings
       const aiSettings = await loadAISettings();
 
-      // 2. Persist user message
-      await MainDatabaseService.addMessageWithContext(
-        conversationId,
-        { role: 'user', content },
-        contextItems,
-      );
-
-      // 3. Load & potentially compact conversation history
+      // 2. Resolve model and enforce single-message limits before DB write.
       const model = await getVercelModel(requestedModel);
       // Extract modelId safely — prefer the SDK's own property, fall back to
       // the requested model string, then 'default'. Never silently use 32K.
@@ -898,36 +633,38 @@ UPDATED SUMMARY:`,
         (model as any).model ||
         requestedModel ||
         'default';
+      this.assertUserMessageWithinLimit(content, getContextWindow(modelId));
+
+      // 3. Persist user message
+      await MainDatabaseService.addMessageWithContext(
+        conversationId,
+        { role: 'user', content },
+        contextItems,
+      );
+
+      // 4. Load & potentially compact conversation history
       const toolMode = request.toolMode || 'agent';
+
+      // Estimate non-history prompt overhead before compaction decision.
+      const mcpTools = await buildMCPToolset();
+      const skills = await discoverSkills();
+      const skillsPrompt = buildSkillsPrompt(skills);
+      const fixedOverheadTokens = {
+        skills: estimateTokens(skillsPrompt),
+        mcpTools: estimateTokens(Object.keys(mcpTools || {}).join(' ')),
+      };
+
       const { messages, breakdown } = await this.buildTurnMessages(
         conversationId,
         content,
         contextItems,
         modelId,
         event,
+        fixedOverheadTokens,
       );
 
       // 4. Filter tools by enabled settings
       const enabledTools = getToolsForMode(toolMode, aiSettings);
-
-      // 4b. Get MCP tools (only connected servers)
-      const mcpTools = await buildMCPToolset(['rosetta', 'dbt', 'duckdb']);
-
-      // 4c. Discover skills and create loadSkill tool
-      const skills = await discoverSkills();
-      const loadSkillTool = createLoadSkillTool(skills);
-      const skillsPrompt = buildSkillsPrompt(skills);
-
-      // Enrich breakdown with skills + MCP token estimates
-      breakdown.skills = estimateTokens(skillsPrompt);
-      breakdown.mcpTools = estimateTokens(
-        Object.keys(mcpTools || {}).join(' '),
-      );
-      breakdown.total += breakdown.skills + breakdown.mcpTools;
-      breakdown.percentUsed = Math.min(
-        100,
-        Math.round((breakdown.total / breakdown.contextWindow) * 100),
-      );
 
       // Emit context usage breakdown to UI
       const contextUsagePayload: AgentContextUsagePayload = {
@@ -936,21 +673,86 @@ UPDATED SUMMARY:`,
       };
       event.sender.send('agent:context-usage', contextUsagePayload);
 
-      // 5. Respect autoContinue
-      const maxSteps = aiSettings.configuration.autoContinue ? 20 : 1;
+      // 5. Respect autoContinue (handled in baseAgentConfig)
 
       // 6. Create agent
       const mainWindow =
         BrowserWindow.fromWebContents(event.sender) || undefined;
-      const agent = await createDbtAgent({
+
+      // Resolve connection name + type — no credentials returned
+      let connectionMeta: { name: string; type: string } = {
+        name: 'unknown',
+        type: 'unknown',
+      };
+      if (request.connectionId) {
+        try {
+          if (request.connectionId.startsWith('ducklake-')) {
+            const instanceId = request.connectionId.replace(/^ducklake-/, '');
+            const { default: DuckLakeService } = await import(
+              './duckLake.service'
+            );
+            const instance = await DuckLakeService.getInstance(instanceId);
+            if (instance) {
+              connectionMeta = {
+                name: instance.name || 'DuckLake Instance',
+                type: 'ducklake',
+              };
+            }
+          } else {
+            const conn = await ConnectorsService.getConnectionById(
+              request.connectionId,
+            );
+            if (conn) {
+              connectionMeta = {
+                name: conn.connection.name,
+                type: conn.connection.type,
+              };
+            }
+          }
+        } catch {
+          // safe fallback — agent still works without connection name
+        }
+      }
+
+      const base = await buildBaseAgentConfig({
         requestedModel,
-        projectPath,
-        enabledTools,
-        extraTools: { ...mcpTools, loadSkill: loadSkillTool },
-        skills: skillsPrompt,
-        maxSteps,
+        conversationId,
+        aiSettings,
+        event,
         mainWindow,
       });
+
+      let agent: any;
+      switch (request.screenKey ?? 'project') {
+        case 'sql':
+          agent = await createSqlAgent(base, {
+            connectionMeta,
+            enabledTools,
+            skills: base.skillsPrompt,
+            conversationId,
+            toolMode: request.toolMode || 'agent',
+          });
+          break;
+        case 'notebooks':
+          agent = await createNotebooksAgent(base, {
+            connectionMeta,
+            notebookId: request.notebookId,
+            projectPath,
+            enabledTools,
+            skills: base.skillsPrompt,
+            conversationId,
+            toolMode: request.toolMode || 'agent',
+          });
+          break;
+        default:
+          agent = await createProjectAgent(base, {
+            projectPath,
+            enabledTools,
+            skills: base.skillsPrompt,
+            conversationId,
+            toolMode: request.toolMode || 'agent',
+          });
+      }
 
       const abortController = new AbortController();
       activeAgents.set(conversationId, abortController);
@@ -1013,6 +815,15 @@ UPDATED SUMMARY:`,
               messages,
               abortSignal: abortController.signal,
             });
+
+            // Prevent unhandled promise rejections from background resolution
+            let backgroundError: unknown = null;
+            result.text.catch((err: unknown) => {
+              backgroundError = err;
+            });
+            if (result.toolCalls) {
+              result.toolCalls.catch(() => {});
+            }
 
             let currentStepNumber = -1;
 
@@ -1095,6 +906,13 @@ UPDATED SUMMARY:`,
                     totalTokens: chunk.totalUsage?.totalTokens ?? 0,
                   };
                   break;
+                case 'error': {
+                  // Extract error from the chunk and throw it so the stream fails correctly
+                  const errorObj = (chunk as any).error;
+                  throw errorObj instanceof Error
+                    ? errorObj
+                    : new Error(String(errorObj));
+                }
                 default:
                   // Handle any other chunk types silently
                   break;
@@ -1103,6 +921,12 @@ UPDATED SUMMARY:`,
             /* eslint-enable no-restricted-syntax */
 
             clearTimeout(timeoutId);
+
+            // If the stream ended without yielding an error chunk but a background promise failed,
+            // throw it now so the agent doesn't silently "succeed".
+            if (backgroundError) {
+              throw backgroundError;
+            }
 
             // Always send done:true so the frontend exits streaming state
             sendChunk({
@@ -1132,7 +956,7 @@ UPDATED SUMMARY:`,
 
           thinkingContent =
             result.reasoningText ??
-            result.reasoning?.map((p) => p.text).join('') ??
+            result.reasoning?.map((p: any) => p.text).join('') ??
             '';
 
           if (fullContent) {
@@ -1140,8 +964,8 @@ UPDATED SUMMARY:`,
           }
 
           // Collect tool calls from steps for persistence
-          result.steps?.forEach((step, idx) => {
-            step.toolResults?.forEach((tr) => {
+          result.steps?.forEach((step: any, idx: number) => {
+            step.toolResults?.forEach((tr: any) => {
               collectedToolCalls.push({
                 toolName: tr.toolName,
                 toolCallId: tr.toolCallId,
@@ -1235,6 +1059,8 @@ UPDATED SUMMARY:`,
         errorStack: error instanceof Error ? error.stack : undefined,
       });
       throw error;
+    } finally {
+      agentContexts.delete(conversationId);
     }
   }
 

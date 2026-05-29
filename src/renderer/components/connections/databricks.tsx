@@ -40,7 +40,8 @@ export const Databricks: React.FC<Props> = ({
 }) => {
   const navigate = useNavigate();
   const theme = useTheme();
-  const { getDatabaseToken, setDatabaseToken } = useSecureStorage();
+  const { getDatabaseToken, setDatabaseToken, setConnectionField } =
+    useSecureStorage();
 
   const existingConnection = React.useMemo(
     () => connection?.connection as DatabricksConnection,
@@ -173,6 +174,10 @@ export const Databricks: React.FC<Props> = ({
     }
 
     await setDatabaseToken(formState.token, formState.name);
+    await setConnectionField('host', formState.host, formState.name);
+    await setConnectionField('httppath', formState.httpPath, formState.name);
+    await setConnectionField('catalog', formState.database, formState.name);
+    await setConnectionField('schema', formState.schema, formState.name);
 
     if (connection) {
       updateConnection({

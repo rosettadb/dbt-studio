@@ -207,6 +207,20 @@ const registerProjectHandlers = () => {
       return ProjectsService.downloadSeed(body);
     },
   );
+
+  ipcMain.handle(
+    'project:extractProfileEnvVars',
+    async (_event, body: { projectId: string }) => {
+      return ProjectsService.extractProfileEnvVars(body.projectId);
+    },
+  );
+
+  ipcMain.handle(
+    'project:listPipelines',
+    async (_event, body: { projectId: string }) => {
+      return ProjectsService.listPipelines(body.projectId);
+    },
+  );
 };
 
 export default registerProjectHandlers;

@@ -59,6 +59,12 @@ export const listDirectory = tool({
       .describe('Whether to list recursively (default: false)'),
   }),
   execute: async ({ dirPath, projectPath, recursive }) => {
+    // eslint-disable-next-line no-console
+    console.log('[Tool][FS] listDirectory', {
+      dirPath,
+      projectPath,
+      recursive,
+    });
     try {
       assertWithinProject(dirPath, projectPath);
 
@@ -139,6 +145,8 @@ export const readFile = tool({
       .describe('Absolute path to the project root directory'),
   }),
   execute: async ({ filePath, projectPath }) => {
+    // eslint-disable-next-line no-console
+    console.log('[Tool][FS] readFile', { filePath, projectPath });
     try {
       assertWithinProject(filePath, projectPath);
 
@@ -183,6 +191,12 @@ export const writeFile = tool({
       .describe('Absolute path to the project root directory'),
   }),
   execute: async ({ filePath, content, projectPath }) => {
+    // eslint-disable-next-line no-console
+    console.log('[Tool][FS] writeFile', {
+      filePath,
+      contentLength: content?.length ?? 0,
+      projectPath,
+    });
     try {
       assertWithinProject(filePath, projectPath);
 
@@ -226,6 +240,8 @@ export const pathExists = tool({
       .describe('Absolute path to the project root directory'),
   }),
   execute: async ({ targetPath, projectPath }) => {
+    // eslint-disable-next-line no-console
+    console.log('[Tool][FS] pathExists', { targetPath, projectPath });
     try {
       assertWithinProject(targetPath, projectPath);
 

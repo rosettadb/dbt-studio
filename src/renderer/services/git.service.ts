@@ -137,6 +137,17 @@ export const getFileStatus = async (repoPath: string, filePath: string) => {
   return data;
 };
 
+export const isFileUnpushed = async (
+  repoPath: string,
+  filePath: string,
+): Promise<boolean> => {
+  const { data } = await client.post<
+    { repoPath: string; filePath: string },
+    boolean
+  >('git:isFileUnpushed', { repoPath, filePath });
+  return data;
+};
+
 export const getLocalChanges = async (repoPath: string) => {
   const { data } = await client.post<
     { repoPath: string },

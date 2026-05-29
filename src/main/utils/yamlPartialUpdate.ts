@@ -39,6 +39,10 @@ export class PartialUpdateError extends Error {
 function generateProfileOutputFields(
   connection: ConnectionInput,
 ): Record<string, any> {
+  const envVar = (field: string) =>
+    `{{ env_var("db-${field}-${connection.name}") }}`;
+  const envVarInt = (field: string) =>
+    `{{ env_var("db-${field}-${connection.name}") | int }}`;
   const baseFields: Record<string, any> = {
     type: connection.type,
   };
@@ -47,33 +51,33 @@ function generateProfileOutputFields(
     case 'postgres':
       return {
         ...baseFields,
-        host: connection.host,
-        port: connection.port,
-        user: `{{ env_var("db-user-${connection.name}") }}`,
-        password: `{{ env_var("db-password-${connection.name}") }}`,
-        dbname: connection.database,
-        schema: connection.schema,
+        host: envVar('host'),
+        port: envVarInt('port'),
+        user: envVar('user'),
+        password: envVar('password'),
+        dbname: envVar('dbname'),
+        schema: envVar('schema'),
       };
 
     case 'snowflake':
       return {
         ...baseFields,
-        account: connection.account,
-        user: `{{ env_var("db-user-${connection.name}") }}`,
-        password: `{{ env_var("db-password-${connection.name}") }}`,
-        role: connection.role,
-        database: connection.database,
-        warehouse: connection.warehouse,
-        schema: connection.schema,
+        account: envVar('account'),
+        user: envVar('user'),
+        password: envVar('password'),
+        role: envVar('role'),
+        database: envVar('dbname'),
+        warehouse: envVar('warehouse'),
+        schema: envVar('schema'),
       };
 
     case 'bigquery':
       return {
         ...baseFields,
         method: connection.method,
-        project: connection.project,
-        dataset: connection.dataset,
-        keyfile: `{{ env_var("db-bigquery-${connection.name}") }}`,
+        project: envVar('project'),
+        dataset: envVar('dataset'),
+        keyfile: envVar('bigquery'),
         location: connection.location,
         priority: connection.priority,
       };
@@ -81,21 +85,22 @@ function generateProfileOutputFields(
     case 'redshift':
       return {
         ...baseFields,
-        host: connection.host,
-        port: connection.port,
-        user: `{{ env_var("db-user-${connection.name}") }}`,
-        password: `{{ env_var("db-password-${connection.name}") }}`,
-        dbname: connection.database,
-        schema: connection.schema,
+        host: envVar('host'),
+        port: envVarInt('port'),
+        user: envVar('user'),
+        password: envVar('password'),
+        dbname: envVar('dbname'),
+        schema: envVar('schema'),
       };
 
     case 'databricks':
       return {
         ...baseFields,
-        host: connection.host,
-        http_path: connection.httpPath,
-        token: `{{ env_var("db-token-${connection.name}") }}`,
-        schema: connection.schema,
+        host: envVar('host'),
+        http_path: envVar('httppath'),
+        token: envVar('token'),
+        catalog: envVar('catalog'),
+        schema: envVar('schema'),
       };
 
     case 'duckdb':
@@ -127,23 +132,25 @@ function generateProfileOutputFields(
  */
 function generateJdbcUrl(
   connection: ConnectionInput,
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   projectName: string,
 ): string {
+  const ev = (field: string) => `\${db-${field}-${connection.name}}`;
   switch (connection.type) {
     case 'postgres':
-      return `jdbc:postgresql://${connection.host}:${connection.port}/${connection.database}?currentSchema=${connection.schema}`;
+      return `jdbc:postgresql://${ev('host')}:${ev('port')}/${ev('dbname')}?currentSchema=${ev('schema')}`;
 
     case 'snowflake':
-      return `jdbc:snowflake://${connection.account}.snowflakecomputing.com/?warehouse=${connection.warehouse}&db=${connection.database}&schema=${connection.schema}`;
+      return `jdbc:snowflake://${ev('account')}.snowflakecomputing.com/?warehouse=${ev('warehouse')}&db=${ev('dbname')}&schema=${ev('schema')}`;
 
     case 'redshift':
-      return `jdbc:redshift://${connection.host}:${connection.port}/${connection.database}?currentSchema=${connection.schema}`;
+      return `jdbc:redshift://${ev('host')}:${ev('port')}/${ev('dbname')}?currentSchema=${ev('schema')}`;
 
     case 'bigquery':
-      return `jdbc:bigquery://https://www.googleapis.com/bigquery/v2:443;ProjectId=${connection.project};`;
+      return `jdbc:bigquery://https://www.googleapis.com/bigquery/v2:443;ProjectId=${ev('project')};`;
 
     case 'databricks':
-      return `jdbc:databricks://${connection.host}:443/default;transportMode=http;ssl=1;AuthMech=3;httpPath=${connection.httpPath};PWD=\${db-token-${projectName}}`;
+      return `jdbc:databricks://${ev('host')}:443/default;transportMode=http;ssl=1;AuthMech=3;httpPath=${ev('httppath')};PWD=${ev('token')}`;
 
     case 'duckdb':
       return `jdbc:duckdb:${connection.database_path}`;
@@ -293,23 +300,25 @@ export async function updateMainConf(
       mainConf.connections.push(connectionEntry);
     }
 
+    const ev = (field: string) => `\${db-${field}-${connection.name}}`;
     // Determine database name based on connection type
     const databaseName =
       connection.type === 'duckdb'
         ? extractDbNameFromPath(connection.database_path)
-        : connection.database;
+        : ev('dbname');
 
     // Update connection fields (preserve other custom fields in connectionEntry)
     connectionEntry.databaseName = databaseName;
-    connectionEntry.schemaName = connection.schema;
+    connectionEntry.schemaName =
+      connection.type === 'duckdb' ? connection.schema : ev('schema');
     connectionEntry.dbType = connection.type;
     connectionEntry.url = generateJdbcUrl(connection, projectName);
 
     // Handle userName and password (some connection types don't use them)
     const typesWithoutCredentials = ['bigquery', 'databricks', 'duckdb'];
     if (!typesWithoutCredentials.includes(connection.type)) {
-      connectionEntry.userName = `\${db-user-${connection.name}}`;
-      connectionEntry.password = `\${db-password-${connection.name}}`;
+      connectionEntry.userName = ev('user');
+      connectionEntry.password = ev('password');
     } else {
       // Remove userName/password if they exist but shouldn't for this type
       delete connectionEntry.userName;

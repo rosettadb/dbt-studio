@@ -76,6 +76,17 @@ export type SecureStorageAccount =
   | `cloud-rustfs-${string}`
   | `cloud-garage-${string}`
   | `db-bigquery-${string}`
+  | `db-host-${string}`
+  | `db-port-${string}`
+  | `db-dbname-${string}`
+  | `db-schema-${string}`
+  | `db-account-${string}`
+  | `db-warehouse-${string}`
+  | `db-role-${string}`
+  | `db-project-${string}`
+  | `db-dataset-${string}`
+  | `db-httppath-${string}`
+  | `db-catalog-${string}`
   | 'cloud-api-key';
 
 // Cloud Explorer Types

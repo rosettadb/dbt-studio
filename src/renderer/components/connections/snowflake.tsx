@@ -45,6 +45,7 @@ export const Snowflake: React.FC<Props> = ({
     getDatabasePassword,
     setDatabaseUsername,
     setDatabasePassword,
+    setConnectionField,
   } = useSecureStorage();
 
   const existingConnection = React.useMemo(
@@ -188,6 +189,15 @@ export const Snowflake: React.FC<Props> = ({
 
     await setDatabaseUsername(formState.username, formState.name);
     await setDatabasePassword(formState.password, formState.name);
+    await setConnectionField('account', formState.account, formState.name);
+    await setConnectionField('warehouse', formState.warehouse, formState.name);
+    await setConnectionField('dbname', formState.database, formState.name);
+    await setConnectionField('schema', formState.schema, formState.name);
+    await setConnectionField(
+      'role',
+      formState.role || 'SYSADMIN',
+      formState.name,
+    );
 
     if (connection) {
       updateConnection({

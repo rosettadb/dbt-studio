@@ -1,6 +1,8 @@
 import React, { useRef } from 'react';
 import { toast } from 'react-toastify';
 import type * as monacoType from 'monaco-editor';
+import { Box, Tooltip, IconButton } from '@mui/material';
+import { Save as SaveIcon } from '@mui/icons-material';
 import { Inputs, RelativeContainer } from './styles';
 import { connectorsServices, projectsServices } from '../../services';
 import { DuckLakeService } from '../../services/duckLake.service';
@@ -9,6 +11,9 @@ import { ConnectionInput, Project } from '../../../types/backend';
 import { SqlEditorComponent } from './editorComponent';
 import { QueryHistory } from './queryHistory';
 import { useAppContext } from '../../hooks';
+import { useSqlEditorBridge } from '../../controllers';
+import { SaveQueryDialog } from './SaveQueryDialog';
+import { useCreateSavedQuery } from '../../controllers/savedQueries.controller';
 
 type Props = {
   completions: Omit<monacoType.languages.CompletionItem, 'range'>[];
@@ -50,6 +55,8 @@ export const SqlEditor: React.FC<Props> = ({
   const editorRef = useRef<monacoType.editor.IStandaloneCodeEditor | null>(
     null,
   );
+  const [saveDialogOpen, setSaveDialogOpen] = React.useState(false);
+  const createQueryMutation = useCreateSavedQuery();
 
   // Determine if we're in connection-based mode
   const isConnectionMode = !!connectionId;
@@ -243,14 +250,80 @@ export const SqlEditor: React.FC<Props> = ({
   };
 
   const [queryContent, setQueryContent] = React.useState(initialQuery || '');
+  const queryContentRef = useRef(queryContent);
   const saveDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const lastNotifiedQueryRef = useRef(initialQuery || '');
+
+  React.useEffect(() => {
+    queryContentRef.current = queryContent;
+  }, [queryContent]);
+
+  const getEditorContent = React.useCallback(
+    () => editorRef.current?.getValue() ?? queryContentRef.current,
+    [],
+  );
+
+  const setEditorContent = React.useCallback(
+    (content: string) => {
+      setQueryContent(content);
+      lastNotifiedQueryRef.current = content;
+      if (onQueryChange) {
+        onQueryChange(content);
+      }
+      if (isConnectionMode && connectionId) {
+        connectorsServices
+          .updateConnectionQuery(connectionId, content)
+          .catch(() => {});
+      } else if (selectedProject?.id) {
+        projectsServices
+          .updateProjectQuery({
+            projectId: selectedProject.id,
+            query: content,
+          })
+          .catch(() => {});
+      }
+    },
+    [isConnectionMode, connectionId, onQueryChange, selectedProject?.id],
+  );
+
+  const runEditorQuery = React.useCallback(
+    (query?: string) => {
+      const content =
+        query || editorRef.current?.getValue() || queryContentRef.current;
+      if (content?.trim()) {
+        // eslint-disable-next-line no-console
+        console.log('[SqlEditor] Agent run-query: executing content', {
+          contentLength: content.length,
+          providedByAgent: !!query,
+        });
+        handleRunQuery(content);
+      }
+    },
+    [handleRunQuery],
+  );
+
+  useSqlEditorBridge({
+    enabled: isConnectionMode && !!connectionId,
+    getContent: getEditorContent,
+    setContent: setEditorContent,
+    setQueryResult: setQueryResults,
+    runQuery: runEditorQuery,
+  });
 
   // Load query based on mode
   React.useEffect(() => {
     if (isConnectionMode) {
       // Connection-based mode: initialQuery is already loaded via useState.
-      // We do not sync it here on changes because doing so causes cursor jumps
-      // when the parent component reflects our own debounced changes back to us.
+      // We only sync if the query changed externally (e.g. from AI Agent),
+      // ignoring echoed updates from our own debounced onQueryChange.
+      if (
+        initialQuery !== undefined &&
+        initialQuery !== queryContentRef.current &&
+        initialQuery !== lastNotifiedQueryRef.current
+      ) {
+        setQueryContent(initialQuery);
+        lastNotifiedQueryRef.current = initialQuery;
+      }
     } else if (selectedProject?.id) {
       // Project-based mode: load from backend
       const loadQuery = async () => {
@@ -263,7 +336,7 @@ export const SqlEditor: React.FC<Props> = ({
       };
       loadQuery();
     }
-  }, [isConnectionMode, selectedProject?.id, selectedProject]);
+  }, [isConnectionMode, selectedProject?.id, selectedProject, initialQuery]);
 
   React.useEffect(() => {
     return () => {
@@ -287,6 +360,7 @@ export const SqlEditor: React.FC<Props> = ({
       saveDebounceRef.current = setTimeout(() => {
         if (isConnectionMode) {
           // Connection-based mode: notify parent and save to backend
+          lastNotifiedQueryRef.current = content;
           if (onQueryChange) {
             onQueryChange(content);
           }
@@ -316,26 +390,72 @@ export const SqlEditor: React.FC<Props> = ({
   // Get filter ID for query history based on mode
   const historyFilterId = isConnectionMode ? connectionId : selectedProject?.id;
 
+  const handleSaveQuery = async (name: string) => {
+    if (!connectionId || !queryContent.trim()) {
+      toast.error('No connection or query content');
+      return;
+    }
+    try {
+      await createQueryMutation.mutateAsync({
+        connectionId,
+        name,
+        query: queryContent,
+      });
+      toast.success('Query saved successfully');
+    } catch (e) {
+      toast.error('Failed to save query');
+    }
+  };
+
   return (
     <Inputs>
       <RelativeContainer>
-        <SqlEditorComponent
-          content={queryContent}
-          setContent={handleQueryContentChange}
-          completions={completions}
-          editorRef={editorRef}
-          onRunSelected={(lineQuery) => handleRunQuery(lineQuery)}
-          isLoading={isLoading}
-        />
-        {queryHistory.length > 0 && historyFilterId && (
-          <QueryHistory
-            onQuerySelect={(qh) => handleQueryContentChange(qh.query)}
-            queryHistory={queryHistory}
-            projectId={isConnectionMode ? undefined : selectedProject?.id}
-            connectionId={isConnectionMode ? connectionId : undefined}
+        <Box sx={{ flex: 1, height: '100%', position: 'relative' }}>
+          <SqlEditorComponent
+            content={queryContent}
+            setContent={handleQueryContentChange}
+            completions={completions}
+            editorRef={editorRef}
+            onRunSelected={(lineQuery) => handleRunQuery(lineQuery)}
+            isLoading={isLoading}
           />
-        )}
+          <Box
+            sx={{
+              position: 'absolute',
+              top: -15,
+              right: -10,
+              margin: '20px',
+              display: 'flex',
+              alignItems: 'center',
+              zIndex: 10,
+            }}
+          >
+            {isConnectionMode && connectionId && (
+              <Tooltip title="Save Query">
+                <IconButton
+                  onClick={() => setSaveDialogOpen(true)}
+                  disabled={!queryContent.trim()}
+                >
+                  <SaveIcon />
+                </IconButton>
+              </Tooltip>
+            )}
+            {queryHistory.length > 0 && historyFilterId && (
+              <QueryHistory
+                onQuerySelect={(qh) => handleQueryContentChange(qh.query)}
+                queryHistory={queryHistory}
+                projectId={isConnectionMode ? undefined : selectedProject?.id}
+                connectionId={isConnectionMode ? connectionId : undefined}
+              />
+            )}
+          </Box>
+        </Box>
       </RelativeContainer>
+      <SaveQueryDialog
+        open={saveDialogOpen}
+        onClose={() => setSaveDialogOpen(false)}
+        onSave={handleSaveQuery}
+      />
     </Inputs>
   );
 };

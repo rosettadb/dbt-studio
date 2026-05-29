@@ -61,7 +61,9 @@ export type ProjectChannels =
   | 'project:getQuery'
   | 'project:chooseDir'
   | 'project:renamePath'
-  | 'project:downloadSeed';
+  | 'project:downloadSeed'
+  | 'project:extractProfileEnvVars'
+  | 'project:listPipelines';
 
 export type RosettaCloudChannels =
   | 'rosettaCloud:push'
@@ -190,6 +192,7 @@ export type GitChannels =
   | 'git:getLocalChanges'
   | 'git:repoInfo'
   | 'git:fileStatus'
+  | 'git:isFileUnpushed'
   | 'git:unstage'
   | 'git:stageAll'
   | 'git:unstageAll'
@@ -360,6 +363,15 @@ export type AgentChannels =
   | 'agent:terminal-confirm'
   | 'agent:terminal-resolve'
   | 'agent:terminal:confirm-response'
+  | 'agent:editor:read-request'
+  | 'agent:editor:update-request'
+  | 'agent:editor:read-response'
+  | 'agent:editor:update-response'
+  | 'agent:editor:query-result'
+  | 'agent:editor:run-query'
+  | 'agent:editor:query-results-request' // main → renderer: request snapshot
+  | 'agent:editor:query-results-response' // renderer → main: send snapshot back
+  | 'agent:editor:query-run-result' // renderer → main: push result after agent-triggered run
   | 'agent:context-usage'
   | 'agent:context-compacted'
   | 'agent:tools:list'
@@ -386,6 +398,12 @@ export type SkillsChannels =
   | 'skills:create'
   | 'skills:import';
 
+export type SavedQueriesChannels =
+  | 'savedQueries:list'
+  | 'savedQueries:create'
+  | 'savedQueries:update'
+  | 'savedQueries:delete';
+
 export type Channels =
   | TestChannels
   | CliChannels
@@ -406,7 +424,8 @@ export type Channels =
   | NotebookChannels
   | AgentChannels
   | MCPChannels
-  | SkillsChannels;
+  | SkillsChannels
+  | SavedQueriesChannels;
 
 export type ConfigureConnectionBody = {
   projectId?: string;
