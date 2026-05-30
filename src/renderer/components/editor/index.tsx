@@ -5,6 +5,7 @@ import {
   useGetFileHeadContent,
   useGitIsInitialized,
   useSaveFileContent,
+  useGetSettings,
 } from '../../controllers';
 import { MonacoCodeEditor } from '../monaco/MonacoCodeEditor';
 import { DiffView } from './diffView';
@@ -22,6 +23,7 @@ import type {
   EditorTabState,
   PendingCloseState,
 } from '../../../types/editor';
+import useCli from '../../hooks/useCli';
 
 type EditorProps = {
   projectId?: string;
@@ -98,6 +100,8 @@ export const Editor: React.FC<EditorProps> = ({
 
   const [showDiffView, setShowDiffView] = React.useState(false);
   const [isSaving, setIsSaving] = React.useState(false);
+  const { runCommandAsync } = useCli();
+  const { data: settings } = useGetSettings();
 
   const decorationMode: DecorationMode = React.useMemo(() => {
     if (!activeTab) return 'clean';
@@ -248,6 +252,14 @@ export const Editor: React.FC<EditorProps> = ({
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [handleSave]);
 
+  const editorOptions = React.useMemo(
+    () => ({
+      tabSize: language === 'python' ? 4 : 2,
+      insertSpaces: true,
+    }),
+    [language],
+  );
+
   if (tabs.length === 0) {
     return (
       <Container>
@@ -272,6 +284,16 @@ export const Editor: React.FC<EditorProps> = ({
         onSave={handleSave}
         onToggleDiff={() => setShowDiffView((prev) => !prev)}
         onNavigate={onOpenFile}
+        onRun={
+          language === 'python'
+            ? () => {
+                const pythonExe = settings?.pythonPath
+                  ? `"${settings.pythonPath}"`
+                  : 'python3';
+                runCommandAsync(`${pythonExe} "${activeTab.path}"`);
+              }
+            : undefined
+        }
         extraActions={extraActions}
       />
 
@@ -290,6 +312,7 @@ export const Editor: React.FC<EditorProps> = ({
             theme={monacoTheme}
             readOnly={!isFileEditable}
             onMount={handleEditorMount}
+            options={editorOptions}
           />
         )}
       </EditorViewport>
