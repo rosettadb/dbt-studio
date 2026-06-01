@@ -37,11 +37,12 @@ const registerCliHandlers = (mainWindow: BrowserWindow) => {
       _event,
       args: {
         command: string;
+        args?: string[];
         cb?: (message: string) => void;
       },
     ) => {
       try {
-        await cliAdapter.runCommand(mainWindow, args.command);
+        await cliAdapter.runCommand(mainWindow, args.command, args.args);
         return { success: true };
       } catch (error: any) {
         const errorMessage =

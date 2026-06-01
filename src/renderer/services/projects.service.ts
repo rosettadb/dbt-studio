@@ -231,8 +231,14 @@ export const getSelectedProject = async (): Promise<Project | undefined> => {
   return data;
 };
 
-export const runCliCommand = async (command: string): Promise<void> => {
-  await client.post<{ command: string }>('cli:run', { command });
+export const runCliCommand = async (
+  command: string,
+  args?: string[],
+): Promise<void> => {
+  await client.post<{ command: string; args?: string[] }>('cli:run', {
+    command,
+    args,
+  });
 };
 
 export const startProcess = async (command: string): Promise<void> => {

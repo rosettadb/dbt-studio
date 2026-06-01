@@ -284,10 +284,17 @@ export const Editor: React.FC<EditorProps> = ({
         onRun={
           language === 'python'
             ? () => {
-                const pythonExe = settings?.pythonPath
-                  ? `"${settings.pythonPath}"`
-                  : 'python3';
-                runCommandAsync(`${pythonExe} "${activeTab.path}"`);
+                const pythonExe = settings?.pythonPath || 'python3';
+                if (activeTab.isModified) {
+                  // Auto-save unsaved changes so the on-disk file matches
+                  // what the user sees before running.
+                  updateFileContent(
+                    { path: activeTab.path, content: activeContent },
+                    { onSuccess: () => runCommandAsync(pythonExe, [activeTab.path]) },
+                  );
+                } else {
+                  runCommandAsync(pythonExe, [activeTab.path]);
+                }
               }
             : undefined
         }
