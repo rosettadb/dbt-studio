@@ -1,5 +1,5 @@
 # Rosetta DBT Studio
-<img width="1080" height="1080" alt="image" src="https://github.com/user-attachments/assets/538a957e-157d-4c91-a7da-6327f3580440" />
+<img width="1080" height="1080" alt="image" src="./image-dbt-studio.png" />
 
 **Rosetta DataBase Transformation Studio** is an open-source desktop application that simplifies your data transformation journey with [dbt Core™](https://www.getdbt.com/) and brings the power of AI into your analytics engineering workflow.
 
@@ -25,6 +25,7 @@ Whether you're just getting started with dbt Core™ or looking to streamline yo
 #### SQL Editor & Notebooks
 
 - **SQL Editor**: Explore your data using an in-app SQL editor with auto-run, formatting, and result preview.
+- **AI SQL Assistant**: Chat with an AI agent directly inside the SQL Editor — ask questions in natural language, generate queries, inspect results, and iterate without leaving the editor.
 - **SQL Notebooks**: Interactive notebooks featuring SQL cells, state persistence, import/export capabilities, and data pagination.
 
 #### Advanced IDE Features
@@ -48,6 +49,7 @@ Leverage AI to:
 - Automatically draft dbt™ models from descriptions or table schemas.
 - Generate joins, transformations, and aggregations with minimal input.
 - Translate business questions into SQL queries for analysis.
+- **Chat inside the SQL Editor**: Ask the AI to write, explain, or debug queries against your live connection — results appear directly in the editor.
 
 #### Built-in Python Environment
 
