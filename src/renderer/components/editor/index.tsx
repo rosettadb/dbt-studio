@@ -290,7 +290,10 @@ export const Editor: React.FC<EditorProps> = ({
                   // what the user sees before running.
                   updateFileContent(
                     { path: activeTab.path, content: activeContent },
-                    { onSuccess: () => runCommandAsync(pythonExe, [activeTab.path]) },
+                    {
+                      onSuccess: () =>
+                        runCommandAsync(pythonExe, [activeTab.path]),
+                    },
                   );
                 } else {
                   runCommandAsync(pythonExe, [activeTab.path]);
