@@ -107,7 +107,24 @@ export const CreateProviderDialog: React.FC<CreateProviderDialogProps> = ({
 
   // Reset form when dialog opens/closes or provider changes
   React.useEffect(() => {
+    const clearForm = () => {
+      reset({
+        name: '',
+        type: 'openai',
+        apiKey: '',
+        baseUrl: '',
+        model: '',
+      });
+      setDiscoveredModels([]);
+      setShowApiKey(false);
+    };
+
     const loadProviderData = async () => {
+      if (!open) {
+        clearForm();
+        return;
+      }
+
       if (provider && isEdit) {
         // Handle both string and object formats
         const config =
@@ -115,9 +132,14 @@ export const CreateProviderDialog: React.FC<CreateProviderDialogProps> = ({
             ? JSON.parse(provider.config)
             : provider.config || {};
 
-        // Load API key from secure storage if provider type requires it
+        // Load API key from secure storage if provider type can use it
         let apiKey = config.apiKey || '';
-        const providersNeedingCredentials = ['openai', 'gemini', 'anthropic'];
+        const providersNeedingCredentials = [
+          'openai',
+          'gemini',
+          'anthropic',
+          'ollama',
+        ];
         if (providersNeedingCredentials.includes(provider.type)) {
           try {
             const storedApiKey = await aiProvidersService.getProviderCredential(
@@ -144,20 +166,12 @@ export const CreateProviderDialog: React.FC<CreateProviderDialogProps> = ({
           model: config.model || '',
         });
       } else {
-        reset({
-          name: '',
-          type: 'openai',
-          apiKey: '',
-          baseUrl: '',
-          model: '',
-        });
-        // Clear discovered models when creating new provider
-        setDiscoveredModels([]);
+        clearForm();
       }
     };
 
     loadProviderData();
-  }, [provider, isEdit, reset]);
+  }, [open, provider, isEdit, reset]);
 
   // Handle test completion and discovered models
   const handleTestComplete = React.useCallback(
@@ -227,14 +241,17 @@ export const CreateProviderDialog: React.FC<CreateProviderDialogProps> = ({
       case 'ollama':
         return {
           requiresApiKey: false,
-          apiKeyLabel: '',
-          apiKeyPlaceholder: '',
+          supportsOptionalApiKey: true,
+          apiKeyLabel: 'Ollama API Key or Bearer Token',
+          apiKeyPlaceholder:
+            'Optional for self-hosted, required for ollama.com',
           requiresBaseUrl: true,
           modelPlaceholder: 'llama2 (optional)',
         };
       default:
         return {
           requiresApiKey: false,
+          supportsOptionalApiKey: false,
           apiKeyLabel: '',
           apiKeyPlaceholder: '',
           requiresBaseUrl: false,
@@ -306,7 +323,7 @@ export const CreateProviderDialog: React.FC<CreateProviderDialogProps> = ({
                   <MenuItem value="openai">OpenAI</MenuItem>
                   <MenuItem value="anthropic">Anthropic Claude (beta)</MenuItem>
                   <MenuItem value="gemini">Google Gemini</MenuItem>
-                  <MenuItem value="ollama">Ollama (Local - beta)</MenuItem>
+                  <MenuItem value="ollama">Ollama</MenuItem>
                 </Select>
                 {errors.type && (
                   <Typography variant="caption" color="error">
@@ -318,7 +335,8 @@ export const CreateProviderDialog: React.FC<CreateProviderDialogProps> = ({
           />
 
           {/* API Key */}
-          {requirements.requiresApiKey && (
+          {(requirements.requiresApiKey ||
+            requirements.supportsOptionalApiKey) && (
             <Controller
               name="apiKey"
               control={control}
@@ -334,7 +352,10 @@ export const CreateProviderDialog: React.FC<CreateProviderDialogProps> = ({
                   fullWidth
                   error={!!errors.apiKey}
                   helperText={
-                    errors.apiKey?.message || 'Stored securely and encrypted'
+                    errors.apiKey?.message ||
+                    (watchedType === 'ollama'
+                      ? 'Optional for self-hosted Ollama, required for ollama.com'
+                      : 'Stored securely and encrypted')
                   }
                   InputProps={{
                     endAdornment: (
@@ -371,7 +392,7 @@ export const CreateProviderDialog: React.FC<CreateProviderDialogProps> = ({
                   helperText={
                     errors.baseUrl?.message ||
                     (watchedType === 'ollama'
-                      ? 'Local Ollama server address'
+                      ? 'Local, self-hosted, or hosted Ollama API URL'
                       : 'Custom API endpoint')
                   }
                 />
@@ -412,15 +433,16 @@ export const CreateProviderDialog: React.FC<CreateProviderDialogProps> = ({
           {/* Provider-specific info */}
           {watchedType === 'ollama' && (
             <Alert severity="info">
-              Make sure Ollama is running locally before testing the connection.
-              Install from{' '}
+              Use a local Ollama server, a self-hosted remote server, or
+              https://ollama.com/api. API keys are optional for self-hosted
+              servers and required for ollama.com. Install local Ollama from{' '}
               <a
-                href="https://ollama.ai"
+                href="https://ollama.com"
                 target="_blank"
                 rel="noopener noreferrer"
                 style={{ color: 'inherit' }}
               >
-                ollama.ai
+                ollama.com
               </a>
             </Alert>
           )}
