@@ -162,6 +162,11 @@ export const Editor: React.FC<EditorProps> = ({
     if (activeModel.getLanguageId() !== language) {
       monaco.editor.setModelLanguage(activeModel, language);
     }
+
+    activeModel.updateOptions({
+      tabSize: language === 'python' ? 4 : 2,
+      insertSpaces: true,
+    });
   }, [activeModel, language]);
 
   // Git diff line markers. The editor instance lives in state (not a ref)
@@ -252,14 +257,6 @@ export const Editor: React.FC<EditorProps> = ({
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [handleSave]);
 
-  const editorOptions = React.useMemo(
-    () => ({
-      tabSize: language === 'python' ? 4 : 2,
-      insertSpaces: true,
-    }),
-    [language],
-  );
-
   if (tabs.length === 0) {
     return (
       <Container>
@@ -312,7 +309,6 @@ export const Editor: React.FC<EditorProps> = ({
             theme={monacoTheme}
             readOnly={!isFileEditable}
             onMount={handleEditorMount}
-            options={editorOptions}
           />
         )}
       </EditorViewport>
