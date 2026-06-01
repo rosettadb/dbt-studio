@@ -25,6 +25,7 @@ import {
 } from '../../types/backend';
 import { loadDatabaseFile, updateDatabase } from '../utils/fileHelper';
 import { ProjectsService } from './index';
+import MainDatabaseService from './mainDatabase.service';
 import { ConfigureConnectionBody, UpdateConnectionBody } from '../../types/ipc';
 import {
   executeBigQueryQuery,
@@ -631,6 +632,14 @@ export default class ConnectorsService {
     );
 
     await updateDatabase<'connections'>('connections', updatedConnections);
+
+    // Only clean up AI chats after the connection deletion is persisted.
+    try {
+      await MainDatabaseService.deleteConversationsByConnection(connectionId);
+    } catch (error) {
+      // eslint-disable-next-line no-console
+      console.error('[ConnectorsService] Failed to clean up AI chats:', error);
+    }
   }
 
   /**

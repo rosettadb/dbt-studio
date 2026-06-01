@@ -1,6 +1,8 @@
 import { ipcMain } from 'electron';
 import MainDatabaseService from '../services/mainDatabase.service';
 import SecureStorageService from '../services/secureStorage.service';
+import ProjectsService from '../services/projects.service';
+import ConnectorsService from '../services/connectors.service';
 import AgentService, {
   loadAISettings,
   saveAISettings,
@@ -38,6 +40,7 @@ const aiHandlerChannels: string[] = [
   'chat:conversation:create',
   'chat:conversation:update',
   'chat:conversation:delete',
+  'chat:conversation:get-latest-compaction-summary',
   'chat:message:list',
   'chat:message:send',
   'chat:message:update',
@@ -79,6 +82,7 @@ const aiHandlerChannels: string[] = [
   'chat:session:set-metadata',
   'chat:session:get-metadata',
   'chat:session:delete-metadata',
+  'chat:conversation:cleanup-orphaned',
 ];
 
 const removeAIHandlers = () => {
@@ -223,8 +227,43 @@ const registerAIHandlers = () => {
 
   ipcMain.handle(
     'chat:conversation:delete',
-    async (_, id: number): Promise<void> => {
-      await MainDatabaseService.deleteConversation(id);
+    async (_event, id: number): Promise<void> => {
+      return MainDatabaseService.deleteConversation(id);
+    },
+  );
+
+  ipcMain.handle(
+    'chat:conversation:get-latest-compaction-summary',
+    async (_event, id: number) => {
+      return MainDatabaseService.getLatestCompactionSummary(id);
+    },
+  );
+
+  ipcMain.handle(
+    'chat:conversation:cleanup-orphaned',
+    async (): Promise<{ deletedCount: number }> => {
+      try {
+        const projects = await ProjectsService.loadProjects();
+        const connections = await ConnectorsService.loadConnections(true);
+
+        const validProjectIds = projects
+          .map((p) => parseInt(p.id, 10))
+          .filter((id) => !Number.isNaN(id));
+
+        const validConnectionIds = connections.map((c) => c.id);
+
+        const deletedCount =
+          await MainDatabaseService.deleteOrphanedConversations(
+            validProjectIds,
+            validConnectionIds,
+          );
+
+        return { deletedCount };
+      } catch (error) {
+        // eslint-disable-next-line no-console
+        console.error('[AI IPC] Orphan cleanup error:', error);
+        throw error;
+      }
     },
   );
 

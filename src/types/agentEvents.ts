@@ -23,7 +23,7 @@ export type AgentScreenKey =
   | 'sql' // SQL Editor screen
   | 'notebooks'; // Notebooks screen
 
-export const MAX_USER_MESSAGE_CHARS = 50_000;
+export const MAX_USER_MESSAGE_CHARS = 20_000;
 export const MAX_USER_MESSAGE_TOKENS = 8_000;
 export const MAX_USER_MESSAGE_CONTEXT_FRACTION = 0.25;
 
@@ -105,6 +105,7 @@ export interface AgentContextUsagePayload {
 export interface AgentContextCompactedPayload {
   conversationId: number;
   messagesSummarized: number;
+  coversUpToMessageId: number;
 }
 
 export interface ChatStreamChunkPayload {
