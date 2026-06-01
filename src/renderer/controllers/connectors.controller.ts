@@ -72,7 +72,10 @@ export const useConfigureConnection = (
       return connectorsServices.configureConnection(data);
     },
     onSuccess: async (...args) => {
+      await queryClient.invalidateQueries([QUERY_KEYS.GET_CONNECTIONS]);
+      await queryClient.invalidateQueries([QUERY_KEYS.GET_PROJECTS]);
       await queryClient.invalidateQueries([QUERY_KEYS.GET_SELECTED_PROJECT]);
+      queryClient.removeQueries([QUERY_KEYS.GET_PROJECT_BY_ID]);
       onCustomSuccess?.(...args);
     },
     onError: (...args) => {
@@ -93,10 +96,14 @@ export const useUpdateConnection = (
       return connectorsServices.updateConnection(data);
     },
     onSuccess: async (...args) => {
+      await queryClient.invalidateQueries([QUERY_KEYS.GET_CONNECTIONS]);
       await queryClient.invalidateQueries([
         QUERY_KEYS.GET_CONNECTION_BY_ID,
         args[1].connection.id,
       ]);
+      await queryClient.invalidateQueries([QUERY_KEYS.GET_PROJECTS]);
+      await queryClient.invalidateQueries([QUERY_KEYS.GET_SELECTED_PROJECT]);
+      queryClient.removeQueries([QUERY_KEYS.GET_PROJECT_BY_ID]);
       onCustomSuccess?.(...args);
     },
     onError: (...args) => {
@@ -118,6 +125,9 @@ export const useDeleteConnection = (
     },
     onSuccess: async (...args) => {
       await queryClient.invalidateQueries([QUERY_KEYS.GET_CONNECTIONS]);
+      await queryClient.invalidateQueries([QUERY_KEYS.GET_PROJECTS]);
+      await queryClient.invalidateQueries([QUERY_KEYS.GET_SELECTED_PROJECT]);
+      queryClient.removeQueries([QUERY_KEYS.GET_PROJECT_BY_ID]);
       onCustomSuccess?.(...args);
     },
     onError: (...args) => {
