@@ -4,6 +4,7 @@ import {
   Button,
   ButtonGroup,
   ClickAwayListener,
+  Divider,
   Grow,
   Paper,
   Popper,
@@ -27,6 +28,7 @@ type Props = {
     onClick: () => void;
     subTitle: string;
     leftIcon?: React.ReactNode;
+    dividerBefore?: boolean;
   }[];
 };
 
@@ -162,6 +164,7 @@ export const SplitButton: React.FC<Props> = ({
                       style={{ display: 'block' }}
                       key={`split-button-menu-${index}`}
                     >
+                      {option.dividerBefore && <Divider sx={{ my: 0.5 }} />}
                       <MenuItem
                         onClick={() => handleMenuItemClick(index)}
                         sx={{

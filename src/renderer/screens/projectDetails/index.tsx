@@ -33,6 +33,8 @@ import {
   SplitButton,
   TerminalLayout,
   AiPromptModal,
+  PipelineSelectorModal,
+  PushToCloudModal,
 } from '../../components';
 import {
   ProjectSidebar,
@@ -172,6 +174,9 @@ const ProjectDetails: React.FC = () => {
     React.useState<string>();
   const [isSynchronizing, setIsSynchronizing] = React.useState(false);
   const [sidebarTab, setSidebarTab] = React.useState<SidebarTab>('explorer');
+  const [pipelineModalOpen, setPipelineModalOpen] = React.useState(false);
+  const [pipelineRunArgs, setPipelineRunArgs] = React.useState('');
+  const [pipelineCloudModal, setPipelineCloudModal] = React.useState(false);
   const theme = useTheme();
 
   const {
@@ -940,6 +945,17 @@ const ProjectDetails: React.FC = () => {
                   setIsRemoveConnectionConfirmOpen(true);
                 }
               }}
+              onRunPipeline={(filePath) => {
+                // Extract pipeline name from path (filename without extension)
+                const name =
+                  filePath
+                    .replace(/\\/g, '/')
+                    .split('/')
+                    .pop()
+                    ?.replace(/\.(yml|yaml)$/, '') || '';
+                setPipelineRunArgs(`--pipeline_name ${name}`);
+                setPipelineCloudModal(true);
+              }}
             />
           </Box>
         </Box>
@@ -1131,6 +1147,30 @@ const ProjectDetails: React.FC = () => {
                   connection?.connection?.name || (connection as any)?.name
                 }
               />
+              {pipelineModalOpen && project && (
+                <PipelineSelectorModal
+                  isOpen={pipelineModalOpen}
+                  onClose={() => setPipelineModalOpen(false)}
+                  project={project}
+                  onSelect={(pipelineName) => {
+                    setPipelineModalOpen(false);
+                    setPipelineRunArgs(`--pipeline_name ${pipelineName}`);
+                    setPipelineCloudModal(true);
+                  }}
+                />
+              )}
+              {pipelineCloudModal && project && (
+                <PushToCloudModal
+                  isOpen={pipelineCloudModal}
+                  onClose={() => {
+                    setPipelineCloudModal(false);
+                    setPipelineRunArgs('');
+                  }}
+                  project={project}
+                  command="pipeline"
+                  initialDbtArguments={pipelineRunArgs}
+                />
+              )}
             </Container>
           </Box>
         </Pane>

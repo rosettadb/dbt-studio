@@ -65,6 +65,7 @@ export const ChatMessageList: React.FC<ChatMessageListProps> = ({
   // Track whether auto-compaction fired during this session
   const [compactionInfo, setCompactionInfo] = React.useState<{
     messagesSummarized: number;
+    coversUpToMessageId: number;
   } | null>(null);
 
   // Reset compaction divider when session changes
@@ -77,7 +78,10 @@ export const ChatMessageList: React.FC<ChatMessageListProps> = ({
     if (!sessionId) return undefined;
     const unsub = subscribeToContextCompacted((data) => {
       if (data.conversationId !== sessionId) return;
-      setCompactionInfo({ messagesSummarized: data.messagesSummarized });
+      setCompactionInfo({
+        messagesSummarized: data.messagesSummarized,
+        coversUpToMessageId: data.coversUpToMessageId,
+      });
     });
     return unsub;
   }, [sessionId]);

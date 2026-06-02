@@ -231,8 +231,14 @@ export const getSelectedProject = async (): Promise<Project | undefined> => {
   return data;
 };
 
-export const runCliCommand = async (command: string): Promise<void> => {
-  await client.post<{ command: string }>('cli:run', { command });
+export const runCliCommand = async (
+  command: string,
+  args?: string[],
+): Promise<void> => {
+  await client.post<{ command: string; args?: string[] }>('cli:run', {
+    command,
+    args,
+  });
 };
 
 export const startProcess = async (command: string): Promise<void> => {
@@ -299,4 +305,24 @@ export const downloadSeed = async (
     objectUrl,
     project,
   });
+};
+
+export const extractProfileEnvVars = async (
+  projectId: string,
+): Promise<{ name: string; value?: string }[]> => {
+  const { data } = await client.post<
+    { projectId: string },
+    { name: string; value?: string }[]
+  >('project:extractProfileEnvVars', { projectId });
+  return data;
+};
+
+export const listPipelines = async (
+  projectId: string,
+): Promise<{ name: string; path: string }[]> => {
+  const { data } = await client.post<
+    { projectId: string },
+    { name: string; path: string }[]
+  >('project:listPipelines', { projectId });
+  return data;
 };

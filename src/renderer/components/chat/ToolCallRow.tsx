@@ -420,7 +420,11 @@ export const ToolCallRow: React.FC<ToolCallRowProps> = ({
           }}
         >
           {hasError && toolCall.error && (
-            <Box sx={{ color: 'error.main', mb: 1 }}>{toolCall.error}</Box>
+            <Box sx={{ color: 'error.main', mb: 1 }}>
+              {typeof toolCall.error === 'string'
+                ? toolCall.error
+                : (toolCall.error as any)?.message || String(toolCall.error)}
+            </Box>
           )}
 
           <Box sx={{ color: 'text.secondary', mb: 0.5, fontWeight: 'bold' }}>

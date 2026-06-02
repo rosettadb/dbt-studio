@@ -22,8 +22,10 @@ import {
   registerMemoryHandlers,
   registerSavedQueriesHandlers,
 } from './ipcHandlers';
+import { installIpcErrorHandling } from './utils/ipcErrorHandler';
 
 const registerHandlers = (mainWindow: BrowserWindow) => {
+  installIpcErrorHandling();
   registerCliHandlers(mainWindow);
   registerSettingsHandlers(mainWindow);
   registerProjectHandlers();

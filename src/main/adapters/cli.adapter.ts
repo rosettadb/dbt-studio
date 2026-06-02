@@ -9,13 +9,18 @@ class CliAdapter {
     return this.process;
   }
 
-  async runCommandWithoutStreaming(command: string) {
+  async runCommandWithoutStreaming(command: string, args?: string[]) {
     return new Promise<void>((resolve, reject) => {
       if (this.process) {
         reject(new Error('A command is already running. Please wait.'));
         return;
       }
-      this.process = spawn(command, { shell: true });
+
+      if (args && args.length > 0) {
+        this.process = spawn(command, args, { shell: false });
+      } else {
+        this.process = spawn(command, { shell: true });
+      }
 
       // Drain stdout/stderr to avoid the child process blocking when buffers fill.
       this.process.stdout.on('data', () => undefined);
@@ -37,7 +42,7 @@ class CliAdapter {
     });
   }
 
-  runCommand(mainWindow: BrowserWindow, command: string) {
+  runCommand(mainWindow: BrowserWindow, command: string, args?: string[]) {
     return new Promise<void>((resolve, reject) => {
       if (this.process) {
         reject(new Error('A command is already running. Please wait.'));
@@ -45,7 +50,12 @@ class CliAdapter {
       }
 
       mainWindow.webContents.send('cli:clear');
-      this.process = spawn(command, { shell: true });
+
+      if (args && args.length > 0) {
+        this.process = spawn(command, args, { shell: false });
+      } else {
+        this.process = spawn(command, { shell: true });
+      }
 
       this.messageHandler(
         {

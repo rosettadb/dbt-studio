@@ -26,6 +26,15 @@ export interface GetSessionsFilter {
   notebookId?: string | null;
 }
 
+export interface ChatCompactionSummary {
+  id: number;
+  conversationId: number;
+  content: string;
+  coversUpToMessageId: number | null;
+  createdAt: string | null;
+  updatedAt: string | null;
+}
+
 // Get all chat sessions
 export const useGetChatSessions = (
   filter?: number | GetSessionsFilter,
@@ -55,6 +64,24 @@ export const useGetChatSession = (
     queryKey: [QUERY_KEYS.GET_CHAT_SESSION_BY_ID, sessionId],
     queryFn: async () => {
       return chatService.getSession(sessionId!);
+    },
+    enabled: !!sessionId,
+    ...customOptions,
+  });
+};
+
+export const useGetLatestChatCompactionSummary = (
+  sessionId?: number,
+  customOptions?: UseQueryOptions<
+    ChatCompactionSummary | null,
+    CustomError,
+    ChatCompactionSummary | null
+  >,
+) => {
+  return useQuery({
+    queryKey: ['GET_CHAT_LATEST_COMPACTION_SUMMARY', sessionId],
+    queryFn: async () => {
+      return chatService.getLatestCompactionSummary(sessionId!);
     },
     enabled: !!sessionId,
     ...customOptions,
@@ -168,6 +195,34 @@ export const useDeleteChatSession = (
     onSuccess: async (...args) => {
       await queryClient.invalidateQueries([QUERY_KEYS.GET_CHAT_SESSIONS]);
       onCustomSuccess?.(...args);
+    },
+    onError: (...args) => {
+      onCustomError?.(...args);
+    },
+  });
+};
+
+// Cleanup orphaned chat sessions
+export const useCleanupOrphanedChats = (
+  customOptions?: UseMutationOptions<
+    { deletedCount: number },
+    CustomError,
+    void
+  >,
+): UseMutationResult<{ deletedCount: number }, CustomError, void> => {
+  const { onSuccess: onCustomSuccess, onError: onCustomError } =
+    customOptions || {};
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async () => {
+      return chatService.cleanupOrphanedSessions();
+    },
+    onSuccess: async (data, variables, context) => {
+      if (data.deletedCount > 0) {
+        await queryClient.invalidateQueries([QUERY_KEYS.GET_CHAT_SESSIONS]);
+      }
+      onCustomSuccess?.(data, variables, context);
     },
     onError: (...args) => {
       onCustomError?.(...args);

@@ -110,11 +110,8 @@ export const useDeleteProject = (
     },
     onSuccess: async (...args) => {
       await queryClient.invalidateQueries([QUERY_KEYS.GET_PROJECTS]);
-      queryClient.removeQueries([
-        QUERY_KEYS.GET_PROJECT_BY_ID,
-        args[1].id,
-        QUERY_KEYS.GET_PROJECTS,
-      ]);
+      await queryClient.invalidateQueries([QUERY_KEYS.GET_SELECTED_PROJECT]);
+      queryClient.removeQueries([QUERY_KEYS.GET_PROJECT_BY_ID, args[1].id]);
       onCustomSuccess?.(...args);
     },
     onError: (...args) => {
@@ -136,6 +133,7 @@ export const useUpdateProject = (
     onSuccess: async (...args) => {
       await queryClient.invalidateQueries([QUERY_KEYS.GET_SELECTED_PROJECT]);
       await queryClient.invalidateQueries([QUERY_KEYS.GET_PROJECTS]);
+      queryClient.removeQueries([QUERY_KEYS.GET_PROJECT_BY_ID, args[1].id]);
       onCustomSuccess?.(...args);
     },
     onError: (...args) => {
@@ -197,6 +195,26 @@ export const useSaveFileContent = (
     },
     onError: (...args) => {
       onCustomError?.(...args);
+    },
+  });
+};
+
+export const useExtractProfileEnvVars = (projectId?: string) => {
+  return useQuery({
+    queryKey: ['extractProfileEnvVars', projectId],
+    enabled: !!projectId,
+    queryFn: async () => {
+      return projectsServices.extractProfileEnvVars(projectId!);
+    },
+  });
+};
+
+export const useListPipelines = (projectId?: string) => {
+  return useQuery({
+    queryKey: ['listPipelines', projectId],
+    enabled: !!projectId,
+    queryFn: async () => {
+      return projectsServices.listPipelines(projectId!);
     },
   });
 };

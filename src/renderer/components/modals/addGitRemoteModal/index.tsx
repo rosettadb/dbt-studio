@@ -23,6 +23,7 @@ export const AddGitRemoteModal: React.FC<Props> = ({
     onSuccess: () => {
       toast.success('Git remote successfully added!');
       onClose();
+      successCallback?.();
     },
   });
   const [remote, setRemote] = React.useState('');
@@ -76,7 +77,6 @@ export const AddGitRemoteModal: React.FC<Props> = ({
               path,
               url: remote.trim(),
             });
-            successCallback?.();
           }}
         >
           <TextField

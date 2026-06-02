@@ -1,6 +1,7 @@
 import type * as monaco from 'monaco-editor';
 import { registerJinjaSqlCompletions } from './jinjaSql';
 import { registerSqlKeywordCompletions } from './sqlKeywords';
+import { registerPythonCompletions } from './python';
 
 type Monaco = typeof monaco;
 
@@ -16,4 +17,5 @@ export const registerCompletionProviders = (monacoNs: Monaco): void => {
   registered = true;
   registerJinjaSqlCompletions(monacoNs);
   registerSqlKeywordCompletions(monacoNs);
+  registerPythonCompletions(monacoNs);
 };

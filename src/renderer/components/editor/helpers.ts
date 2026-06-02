@@ -71,6 +71,8 @@ export const getLanguageFromExtension = (filePath: string): string => {
       return 'yaml';
     case 'sql':
       return 'sql';
+    case 'py':
+      return 'python';
     case 'js':
     case 'jsx':
       return 'javascript';

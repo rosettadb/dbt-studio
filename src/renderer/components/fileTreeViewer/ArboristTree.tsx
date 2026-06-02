@@ -34,6 +34,7 @@ interface ArboristTreeProps {
   selectedPath?: string;
   projectPath: string;
   copyPath: (source: string, target: string) => Promise<void>;
+  onRunPipeline?: (filePath: string) => void;
 }
 
 const buildTreeStructure = (node: FileNode): FileNode => {
@@ -67,6 +68,7 @@ export const ArboristTree: React.FC<ArboristTreeProps> = ({
   selectedPath,
   projectPath,
   copyPath,
+  onRunPipeline,
 }) => {
   const treeRef = useRef<any>(null);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -496,6 +498,7 @@ export const ArboristTree: React.FC<ArboristTreeProps> = ({
                 onCreateFile={onCreateFile}
                 onCreateFolder={onCreateFolder}
                 onDelete={handleDelete}
+                onRunPipeline={onRunPipeline}
                 dragOverFolder={dragOverFolder}
                 projectPath={projectPath}
               />
