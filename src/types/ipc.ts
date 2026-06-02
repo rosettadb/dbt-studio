@@ -61,7 +61,9 @@ export type ProjectChannels =
   | 'project:getQuery'
   | 'project:chooseDir'
   | 'project:renamePath'
-  | 'project:downloadSeed';
+  | 'project:downloadSeed'
+  | 'project:extractProfileEnvVars'
+  | 'project:listPipelines';
 
 export type RosettaCloudChannels =
   | 'rosettaCloud:push'
@@ -139,9 +141,11 @@ export type AIChannels =
   | 'chat:conversation:list'
   | 'chat:conversation:get'
   | 'chat:conversation:get-with-context'
+  | 'chat:conversation:get-latest-compaction-summary'
   | 'chat:conversation:create'
   | 'chat:conversation:update'
   | 'chat:conversation:delete'
+  | 'chat:conversation:cleanup-orphaned'
   | 'chat:message:list'
   | 'chat:message:list-with-context'
   | 'chat:message:get-with-context'
@@ -190,6 +194,7 @@ export type GitChannels =
   | 'git:getLocalChanges'
   | 'git:repoInfo'
   | 'git:fileStatus'
+  | 'git:isFileUnpushed'
   | 'git:unstage'
   | 'git:stageAll'
   | 'git:unstageAll'

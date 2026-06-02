@@ -113,6 +113,8 @@ export const SourceControlView: React.FC<SourceControlViewProps> = ({
       f.status === 'staged-deleted',
   ).length;
 
+  const unstagedFilesCount = fileStatuses.length - stagedFilesCount;
+
   const queryClient = useQueryClient();
 
   // State for discard confirmation dialog
@@ -373,6 +375,7 @@ export const SourceControlView: React.FC<SourceControlViewProps> = ({
         <TipTapCommitInput
           projectPath={projectPath}
           stagedFilesCount={stagedFilesCount}
+          unstagedFilesCount={unstagedFilesCount}
           onCommitSuccess={handleRefresh}
           onGitError={handleGitError}
         />

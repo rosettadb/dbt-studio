@@ -21,6 +21,7 @@ import {
   useUpdateChatSession,
   useDeleteChatSession,
   useGetChatMessagesWithContext,
+  useGetLatestChatCompactionSummary,
 } from '../../controllers/chat.controller';
 import {
   useGetAIProviders,
@@ -57,6 +58,45 @@ const SCREEN_BADGE: Record<string, { label: string; color: string }> = {
   project: { label: 'PROJECT', color: 'primary.main' },
 };
 
+const estimateTokens = (input: unknown): number => {
+  if (input == null) return 0;
+  const text = typeof input === 'string' ? input : JSON.stringify(input);
+  return Math.ceil(text.length / 3);
+};
+
+const estimateMessagesTokens = (
+  messages: Array<{
+    content: unknown;
+    contextItems?: Array<{ content?: string | null }>;
+    toolCalls?: Array<{
+      toolInput?: unknown;
+      toolOutput?: unknown;
+      args?: unknown;
+      result?: unknown;
+    }>;
+  }>,
+): number =>
+  messages.reduce((sum, msg) => {
+    let tokens = estimateTokens(msg.content);
+
+    if (msg.contextItems?.length) {
+      tokens += msg.contextItems.reduce(
+        (ctxSum, ctx) => ctxSum + estimateTokens(ctx.content ?? ''),
+        0,
+      );
+    }
+
+    if (msg.toolCalls?.length) {
+      tokens += msg.toolCalls.reduce((toolSum, toolCall) => {
+        const toolInput = toolCall.toolInput ?? toolCall.args ?? '';
+        const toolOutput = toolCall.toolOutput ?? toolCall.result ?? '';
+        return toolSum + estimateTokens(toolInput) + estimateTokens(toolOutput);
+      }, 0);
+    }
+
+    return sum + tokens + 4;
+  }, 0);
+
 export const ChatWindow: React.FC<ChatWindowProps> = ({
   screenKey = 'project',
   connectionId,
@@ -77,7 +117,11 @@ export const ChatWindow: React.FC<ChatWindowProps> = ({
       ? propProjectId
       : (project?.id as number | undefined);
   const navigate = useNavigate();
-
+  const sessionScopeKey = React.useMemo(
+    () =>
+      `${screenKey}|${projectId ?? 'none'}|${connectionId ?? 'none'}|${notebookId ?? 'none'}`,
+    [screenKey, projectId, connectionId, notebookId],
+  );
   const [selectedSessionId, setSelectedSessionId] = React.useState<number>();
   const previousScopeKeyRef = React.useRef<string | null>(null);
   const [lastUsage, setLastUsage] = React.useState<{
@@ -104,27 +148,56 @@ export const ChatWindow: React.FC<ChatWindowProps> = ({
   // Load messages for the selected session (used to estimate context usage on session switch)
   const { data: sessionMessages = [] } =
     useGetChatMessagesWithContext(selectedSessionId);
+  const {
+    data: latestCompactionSummary,
+    isLoading: isLoadingCompactionSummary,
+  } = useGetLatestChatCompactionSummary(selectedSessionId);
   const { data: activeProvider } = useGetActiveAIProvider();
 
-  // Reset usage + context breakdown when session changes
+  // Reset usage + context breakdown when session or scope changes
   React.useEffect(() => {
     setLastUsage(null);
     setContextBreakdown(null);
     hasAuthoritativeContextBreakdownRef.current = false;
-  }, [selectedSessionId]);
+  }, [selectedSessionId, sessionScopeKey]);
 
   // Estimate context usage from loaded history whenever session or messages change.
   // This keeps the ring meaningful even before the first agent run.
   React.useEffect(() => {
     if (hasAuthoritativeContextBreakdownRef.current) return;
     if (!selectedSessionId || sessionMessages.length === 0) return;
+    if (isLoadingCompactionSummary) return;
 
-    // Rough token estimate: ~3 chars per token
-    const historyChars = sessionMessages.reduce(
-      (sum, m) => sum + (m.content?.length ?? 0),
-      0,
+    const activeMessages =
+      latestCompactionSummary?.coversUpToMessageId != null
+        ? sessionMessages.filter(
+            (m) => m.id > latestCompactionSummary.coversUpToMessageId!,
+          )
+        : sessionMessages;
+
+    const estimatedMessages = latestCompactionSummary
+      ? [
+          {
+            content: `## Earlier Conversation (summarized)\n\n${latestCompactionSummary.content}`,
+            contextItems: [],
+            toolCalls: [],
+          },
+          ...activeMessages,
+        ]
+      : activeMessages;
+
+    const historyTokens = estimateMessagesTokens(
+      estimatedMessages as Array<{
+        content: unknown;
+        contextItems?: Array<{ content?: string | null }>;
+        toolCalls?: Array<{
+          toolInput?: unknown;
+          toolOutput?: unknown;
+          args?: unknown;
+          result?: unknown;
+        }>;
+      }>,
     );
-    const historyTokens = Math.ceil(historyChars / 3);
 
     // Derive context window from active provider model (fallback 32k)
     const cfg =
@@ -154,7 +227,13 @@ export const ChatWindow: React.FC<ChatWindowProps> = ({
       contextWindow,
       percentUsed,
     });
-  }, [selectedSessionId, sessionMessages.length, activeProvider]);
+  }, [
+    selectedSessionId,
+    sessionMessages,
+    activeProvider,
+    latestCompactionSummary,
+    isLoadingCompactionSummary,
+  ]);
 
   // Listen for usage from agent mode (IPC events) — FE-03: via controller hooks, not raw IPC
   useOnStreamChunk(selectedSessionId, (data) => {
@@ -219,11 +298,6 @@ export const ChatWindow: React.FC<ChatWindowProps> = ({
     },
   );
 
-  const sessionScopeKey = React.useMemo(
-    () =>
-      `${screenKey}|${projectId ?? 'none'}|${connectionId ?? 'none'}|${notebookId ?? 'none'}`,
-    [screenKey, projectId, connectionId, notebookId],
-  );
   const { data: providers = [], isLoading: isLoadingProviders } =
     useGetAIProviders();
   const { mutate: createSession, isLoading: isCreating } = useCreateChatSession(

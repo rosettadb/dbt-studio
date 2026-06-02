@@ -34,6 +34,7 @@ import type {
   AgentContextCompactedPayload,
 } from '../../types/agentEvents';
 import { getUserMessageLimitError } from '../../types/agentEvents';
+import { toError } from '../utils/errorSerializer';
 
 // ─── AI Settings ─────────────────────────────────────────────────────────────
 
@@ -547,6 +548,7 @@ class AgentService {
    */
   private static async generateSummary(
     messages: ChatMessage[],
+    previousSummary: string | undefined,
     maxTokens: number,
   ): Promise<string> {
     const model = await getVercelModel();
@@ -568,10 +570,10 @@ Preserve exactly:
 Be concise but complete. Use bullet points.
 The summary must fit within approximately ${maxTokens} tokens.
 
-CONVERSATION:
+${previousSummary ? `PREVIOUS SUMMARY TO INTEGRATE:\n${previousSummary}\n\n` : ''}NEW CONVERSATION TO SUMMARIZE:
 ${conversationText}
 
-SUMMARY:`,
+COMBINED SUMMARY:`,
     });
     return this.truncateText(text, maxTokens);
   }
@@ -585,7 +587,8 @@ SUMMARY:`,
    */
   private static async autoCompact(
     conversationId: number,
-    messages: ChatMessage[],
+    activeMessages: any[],
+    latestSummary: any | null,
     event: IpcMainInvokeEvent,
     contextWindow: number,
   ): Promise<
@@ -594,8 +597,16 @@ SUMMARY:`,
     const tailTokenBudget = Math.floor(contextWindow * 0.2);
     const summaryMaxTokens = Math.floor(contextWindow * 0.05);
 
+    const systemSummaryMessage = latestSummary
+      ? {
+          role: 'system' as const,
+          content: `## Earlier Conversation (summarized)\n\n${latestSummary.content}`,
+        }
+      : null;
+
     if (activeCompactions.has(conversationId)) {
-      return buildCoreMessages(messages);
+      const core = buildCoreMessages(activeMessages);
+      return systemSummaryMessage ? [systemSummaryMessage, ...core] : core;
     }
     activeCompactions.add(conversationId);
 
@@ -604,9 +615,10 @@ SUMMARY:`,
       const tailMessages: ChatMessage[] = [];
       const olderMessages: ChatMessage[] = [];
 
-      for (let i = messages.length - 1; i >= 0; i -= 1) {
-        const msg = messages[i];
-        const msgTokens = estimateTokens(msg.content);
+      for (let i = activeMessages.length - 1; i >= 0; i -= 1) {
+        const msg = activeMessages[i];
+        // Calculate tokens accurately including tools if they were included
+        const msgTokens = estimateMessagesTokens([msg]);
         const canFitTail =
           usedTailTokens + msgTokens <= tailTokenBudget ||
           tailMessages.length === 0;
@@ -619,23 +631,28 @@ SUMMARY:`,
       }
 
       if (olderMessages.length === 0) {
-        return buildCoreMessages(messages);
+        const core = buildCoreMessages(activeMessages);
+        return systemSummaryMessage ? [systemSummaryMessage, ...core] : core;
       }
 
       const summaryText = await this.generateSummary(
         olderMessages,
+        latestSummary?.content,
         summaryMaxTokens,
       );
-      await MainDatabaseService.compactConversationMessages(
+
+      const coversUpToMessageId = olderMessages[olderMessages.length - 1].id;
+
+      await MainDatabaseService.saveCompactionSummary(
         conversationId,
-        olderMessages.map((m) => m.id),
-        `## Earlier Conversation (summarized)\n\n${summaryText}`,
-        olderMessages[0]?.createdAt ?? undefined,
+        coversUpToMessageId,
+        summaryText,
       );
 
       const compactedPayload: AgentContextCompactedPayload = {
         conversationId,
         messagesSummarized: olderMessages.length,
+        coversUpToMessageId,
       };
       event.sender.send('agent:context-compacted', compactedPayload);
 
@@ -668,14 +685,40 @@ SUMMARY:`,
     messages: Array<{ role: 'user' | 'assistant' | 'system'; content: string }>;
     breakdown: ContextUsageBreakdown;
   }> {
-    const allMessages = await MainDatabaseService.getMessages(conversationId);
-    const coreHistory = buildCoreMessages(allMessages);
+    const allMessages =
+      await MainDatabaseService.getMessagesWithContext(conversationId);
+    const latestSummary =
+      await MainDatabaseService.getLatestCompactionSummary(conversationId);
+
+    let activeMessages = allMessages;
+    let systemSummaryMessage: {
+      role: 'system';
+      content: string;
+    } | null = null;
+
+    if (latestSummary && latestSummary.coversUpToMessageId) {
+      activeMessages = allMessages.filter(
+        (m) => m.id > latestSummary.coversUpToMessageId!,
+      );
+      systemSummaryMessage = {
+        role: 'system',
+        content: `## Earlier Conversation (summarized)\n\n${latestSummary.content}`,
+      };
+    }
+
+    const coreHistory = buildCoreMessages(activeMessages);
+    const fullHistory = systemSummaryMessage
+      ? [systemSummaryMessage, ...coreHistory]
+      : coreHistory;
+    const fullEnrichedHistory = systemSummaryMessage
+      ? [systemSummaryMessage, ...activeMessages]
+      : activeMessages;
 
     const contextWindow = getContextWindow(modelId);
     const compactThreshold = contextWindow * 0.7;
     const newMsgTokens = estimateTokens(newContent);
     const ctxItemTokens = estimateTokens(contextItems);
-    const historyTokens = estimateMessagesTokens(coreHistory);
+    const historyTokens = estimateMessagesTokens(fullEnrichedHistory);
 
     const totalBeforeCompaction =
       historyTokens +
@@ -700,7 +743,8 @@ SUMMARY:`,
     if (totalBeforeCompaction >= compactThreshold) {
       const compactedMessages = await this.autoCompact(
         conversationId,
-        allMessages,
+        activeMessages,
+        latestSummary,
         event,
         contextWindow,
       );
@@ -726,7 +770,7 @@ SUMMARY:`,
       };
     }
 
-    return { messages: coreHistory as any, breakdown };
+    return { messages: fullHistory as any, breakdown };
   }
 
   /**
@@ -910,7 +954,6 @@ SUMMARY:`,
 
       let fullContent = '';
       let thinkingContent = '';
-      let toolCallCount = 0;
       let finalUsage:
         | {
             promptTokens: number;
@@ -1020,7 +1063,6 @@ SUMMARY:`,
                   break;
                 }
                 case 'tool-call':
-                  toolCallCount += 1;
                   collectedParts.push({
                     type: 'tool-call',
                     toolCallId: chunk.toolCallId,
@@ -1059,10 +1101,7 @@ SUMMARY:`,
                   break;
                 case 'error': {
                   // Extract error from the chunk and throw it so the stream fails correctly
-                  const errorObj = (chunk as any).error;
-                  throw errorObj instanceof Error
-                    ? errorObj
-                    : new Error(String(errorObj));
+                  throw toError((chunk as any).error);
                 }
                 default:
                   // Handle any other chunk types silently
@@ -1136,8 +1175,6 @@ SUMMARY:`,
             });
           });
 
-          toolCallCount += collectedToolCalls.length;
-
           sendChunk({ conversationId, chunk: fullContent, done: false });
           sendChunk({
             conversationId,
@@ -1148,8 +1185,37 @@ SUMMARY:`,
         }
 
         // Guard against empty responses (e.g. Gemini Flash Lite silent failures)
-        if (!fullContent.trim() && toolCallCount === 0) {
+        if (!fullContent.trim()) {
+          const notebookStateCall =
+            (request.screenKey ?? 'project') === 'notebooks'
+              ? [...collectedToolCalls]
+                  .reverse()
+                  .find((tc) => tc.toolName === 'notebooks_get_state')
+              : undefined;
+          const notebookState = (notebookStateCall?.output as any)?.data;
+          const notebookCells = Array.isArray(notebookState?.cells)
+            ? notebookState.cells
+            : [];
+          const notebookFallback =
+            notebookStateCall && (notebookStateCall.output as any)?.ok !== false
+              ? [
+                  `I inspected ${notebookState?.notebookName || notebookState?.name || 'the active notebook'}.`,
+                  `It has ${notebookCells.length} cell${notebookCells.length === 1 ? '' : 's'}.`,
+                  ...notebookCells
+                    .slice(0, 3)
+                    .map((cell: any, index: number) => {
+                      const preview =
+                        cell.contentPreview || cell.content || '(empty cell)';
+                      const outputText = cell.hasOutput
+                        ? ` Output is available${typeof cell.outputRowCount === 'number' ? ` (${cell.outputRowCount} rows loaded)` : ''}.`
+                        : ' No output is currently available.';
+                      return `Cell ${index + 1} is ${cell.type || 'unknown'}: \`${String(preview).trim()}\`.${outputText}`;
+                    }),
+                  'I do not see a notebook execution error in the state returned by the tool.',
+                ].join(' ')
+              : null;
           const fallback =
+            notebookFallback ||
             "I wasn't able to generate a response. Please try rephrasing your message or switching to a different model.";
           fullContent = fallback;
           sendChunk({ conversationId, chunk: fallback, done: false });

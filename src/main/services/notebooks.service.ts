@@ -17,6 +17,7 @@ const ORPHANED_DIR = path.join(NOTEBOOKS_DIR, '_orphaned');
 
 // Maximum rows to store in notebook output (prevent massive files)
 const MAX_STORED_ROWS = 100;
+const MAX_STORED_CELL_VALUE_CHARS = 2_000;
 
 // Helper function to convert BigInt to string for JSON serialization
 function bigIntReplacer(key: string, value: any): any {
@@ -26,17 +27,41 @@ function bigIntReplacer(key: string, value: any): any {
   return value;
 }
 
+function limitStoredValue(value: any): any {
+  if (typeof value === 'string' && value.length > MAX_STORED_CELL_VALUE_CHARS) {
+    return `${value.slice(0, MAX_STORED_CELL_VALUE_CHARS)}... [truncated for notebook storage]`;
+  }
+
+  if (typeof value === 'bigint') {
+    return value.toString();
+  }
+
+  return value;
+}
+
 // Helper function to limit data size in cell output
 function limitCellOutputData(output: CellOutput): CellOutput {
-  if (
-    output.type === 'table' &&
-    output.data &&
-    output.data.length > MAX_STORED_ROWS
-  ) {
+  if (output.type === 'table' && output.data) {
+    const limitedRows = output.data.slice(0, MAX_STORED_ROWS).map((row) => {
+      if (!row || typeof row !== 'object') {
+        return limitStoredValue(row);
+      }
+
+      return Object.fromEntries(
+        Object.entries(row).map(([key, value]) => [
+          key,
+          limitStoredValue(value),
+        ]),
+      );
+    });
+
     return {
       ...output,
-      data: output.data.slice(0, MAX_STORED_ROWS),
-      rowCount: MAX_STORED_ROWS,
+      data: limitedRows,
+      rowCount: Math.min(
+        output.rowCount ?? limitedRows.length,
+        MAX_STORED_ROWS,
+      ),
       // Keep totalRows to show full count in UI
     };
   }
@@ -151,6 +176,22 @@ function getArchivedNotebookPath(
   return filePath;
 }
 
+async function readNotebookFile(filePath: string): Promise<Notebook> {
+  const content = await fs.readFile(filePath, 'utf-8');
+  return JSON.parse(content) as Notebook;
+}
+
+async function writeNotebookFile(
+  filePath: string,
+  notebook: Notebook,
+): Promise<void> {
+  const tempPath = `${filePath}.${process.pid}.${Date.now()}.tmp`;
+  const content = JSON.stringify(notebook, bigIntReplacer, 2);
+
+  await fs.writeFile(tempPath, content, 'utf-8');
+  await fs.rename(tempPath, filePath);
+}
+
 // Normalize connection ID to connectionKey format with input validation
 function normalizeConnectionKey(connectionId: string): string {
   // Validate input before transformation
@@ -193,8 +234,7 @@ export class NotebooksService {
           try {
             const filePath = path.join(connectionDir, file);
             // eslint-disable-next-line no-await-in-loop
-            const content = await fs.readFile(filePath, 'utf-8');
-            const notebook = JSON.parse(content) as Notebook;
+            const notebook = await readNotebookFile(filePath);
             notebooks.push(notebook);
           } catch (error) {
             // eslint-disable-next-line no-console
@@ -226,8 +266,7 @@ export class NotebooksService {
       const notebookPath = getNotebookPath(connectionKey, notebookId);
 
       try {
-        const content = await fs.readFile(notebookPath, 'utf-8');
-        return JSON.parse(content) as Notebook;
+        return await readNotebookFile(notebookPath);
       } catch {
         return null;
       }
@@ -266,10 +305,7 @@ export class NotebooksService {
       };
 
       const notebookPath = getNotebookPath(connectionKey, notebook.id);
-      await fs.writeFile(
-        notebookPath,
-        JSON.stringify(notebook, bigIntReplacer, 2),
-      );
+      await writeNotebookFile(notebookPath, notebook);
 
       return notebook;
     } catch (error) {
@@ -312,10 +348,7 @@ export class NotebooksService {
       };
 
       const notebookPath = getNotebookPath(connectionKey, notebookId);
-      await fs.writeFile(
-        notebookPath,
-        JSON.stringify(updatedNotebook, bigIntReplacer, 2),
-      );
+      await writeNotebookFile(notebookPath, updatedNotebook);
 
       return updatedNotebook;
     } catch (error) {
@@ -380,10 +413,7 @@ export class NotebooksService {
         connectionKey,
         duplicatedNotebook.id,
       );
-      await fs.writeFile(
-        notebookPath,
-        JSON.stringify(duplicatedNotebook, bigIntReplacer, 2),
-      );
+      await writeNotebookFile(notebookPath, duplicatedNotebook);
 
       return duplicatedNotebook;
     } catch (error) {
@@ -523,10 +553,7 @@ export class NotebooksService {
       };
 
       const notebookPath = getNotebookPath(connectionKey, newNotebook.id);
-      await fs.writeFile(
-        notebookPath,
-        JSON.stringify(newNotebook, bigIntReplacer, 2),
-      );
+      await writeNotebookFile(notebookPath, newNotebook);
 
       return newNotebook;
     } catch (error) {
@@ -633,10 +660,7 @@ export class NotebooksService {
           };
 
           const notebookPath = getNotebookPath(connectionKey, newNotebook.id);
-          await fs.writeFile(
-            notebookPath,
-            JSON.stringify(newNotebook, bigIntReplacer, 2),
-          );
+          await writeNotebookFile(notebookPath, newNotebook);
 
           return newNotebook;
         }),
@@ -1004,10 +1028,7 @@ export class NotebooksService {
         updatedNotebook.updatedAt = now;
         const connectionKey = normalizeConnectionKey(connectionId);
         const notebookPath = getNotebookPath(connectionKey, notebookId);
-        await fs.writeFile(
-          notebookPath,
-          JSON.stringify(updatedNotebook, bigIntReplacer, 2),
-        );
+        await writeNotebookFile(notebookPath, updatedNotebook);
       }
     } catch (error) {
       // eslint-disable-next-line no-console
@@ -1067,8 +1088,7 @@ export class NotebooksService {
           jsonFiles.map(async (file) => {
             try {
               const filePath = path.join(connectionDir, file);
-              const content = await fs.readFile(filePath, 'utf-8');
-              const notebook = JSON.parse(content) as Notebook;
+              const notebook = await readNotebookFile(filePath);
 
               // Clear output data from all cells
               notebook.cells = notebook.cells.map((cell) => ({
@@ -1087,10 +1107,7 @@ export class NotebooksService {
               }));
 
               // Write back the cleaned notebook
-              await fs.writeFile(
-                filePath,
-                JSON.stringify(notebook, bigIntReplacer, 2),
-              );
+              await writeNotebookFile(filePath, notebook);
             } catch (error) {
               // eslint-disable-next-line no-console
               console.error(
@@ -1146,8 +1163,7 @@ export class NotebooksService {
                 try {
                   const filePath = path.join(connectionDir, file);
                   // eslint-disable-next-line no-await-in-loop
-                  const content = await fs.readFile(filePath, 'utf-8');
-                  const notebook = JSON.parse(content) as Notebook;
+                  const notebook = await readNotebookFile(filePath);
                   notebooks.push(notebook);
                 } catch (error) {
                   // eslint-disable-next-line no-console
@@ -1197,8 +1213,7 @@ export class NotebooksService {
         archivedConnectionKey,
         notebookId,
       );
-      const content = await fs.readFile(archivedPath, 'utf-8');
-      const notebook = JSON.parse(content) as Notebook;
+      const notebook = await readNotebookFile(archivedPath);
 
       // Ensure target connection directory exists
       const targetDir = getConnectionDir(targetConnectionKey);
@@ -1206,10 +1221,7 @@ export class NotebooksService {
 
       // Write to target location
       const targetPath = getNotebookPath(targetConnectionKey, notebookId);
-      await fs.writeFile(
-        targetPath,
-        JSON.stringify(notebook, bigIntReplacer, 2),
-      );
+      await writeNotebookFile(targetPath, notebook);
 
       // Delete from archived location
       await fs.unlink(archivedPath);

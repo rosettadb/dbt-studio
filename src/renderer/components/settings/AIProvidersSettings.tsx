@@ -12,7 +12,7 @@ import {
   Tabs,
   Tab,
 } from '@mui/material';
-import { Add, Info, Refresh, Storage } from '@mui/icons-material';
+import { Add, Info, Refresh, Storage, DeleteSweep } from '@mui/icons-material';
 import { toast } from 'react-toastify';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import {
@@ -22,6 +22,7 @@ import {
 import type { AIProvider } from '../../controllers/aiProviders.controller';
 import { CreateProviderDialog, ProviderCard } from '../ai';
 import { useGetSettingsWithDatabaseInfo } from '../../controllers';
+import { useCleanupOrphanedChats } from '../../controllers/chat.controller';
 import { AISettingsTab } from './AISettingsTab';
 import { MCPServersTab } from './MCPServersTab';
 import { SkillsTab } from './SkillsTab';
@@ -48,6 +49,22 @@ export const AIProvidersSettings: React.FC = () => {
     React.useState<AIProvider | null>(null);
 
   const { data: settingsWithDbInfo } = useGetSettingsWithDatabaseInfo();
+
+  const { mutate: cleanupOrphanedChats, isLoading: isCleaningUp } =
+    useCleanupOrphanedChats({
+      onSuccess: (data) => {
+        if (data.deletedCount > 0) {
+          toast.success(
+            `Successfully cleaned up ${data.deletedCount} orphaned chat sessions.`,
+          );
+        } else {
+          toast.info('No orphaned chat sessions found.');
+        }
+      },
+      onError: (error) => {
+        toast.error(`Failed to clean up orphaned chats: ${error.message}`);
+      },
+    });
 
   const {
     data: providers = [],
@@ -162,38 +179,58 @@ export const AIProvidersSettings: React.FC = () => {
           <Paper elevation={1} sx={{ p: 2, mb: 3 }}>
             <Box
               display="flex"
-              justifyContent="start"
+              justifyContent="space-between"
               alignItems="center"
-              gap={4}
               mb={2}
             >
-              <Box display="flex" alignItems="center" gap={1}>
-                <Storage />
-                <Typography variant="h6">AI Database Information</Typography>
+              <Box display="flex" alignItems="center" gap={4}>
+                <Box display="flex" alignItems="center" gap={1}>
+                  <Storage />
+                  <Typography variant="h6">AI Database Information</Typography>
+                </Box>
+                <Box
+                  sx={{
+                    display: 'flex',
+                    gap: 2,
+                    flexWrap: 'wrap',
+                    alignItems: 'center',
+                  }}
+                >
+                  <Chip
+                    icon={<Info />}
+                    label={`SQLite ${settingsWithDbInfo?.sqliteVersion || 'Unknown'}`}
+                    variant="outlined"
+                  />
+                  <Chip
+                    label={settingsWithDbInfo?.mainDatabaseSize || 'Unknown'}
+                    variant="outlined"
+                  />
+                  <Chip
+                    label={settingsWithDbInfo?.mainDatabaseStatus || 'Unknown'}
+                    color={getStatusColor(
+                      settingsWithDbInfo?.mainDatabaseStatus,
+                    )}
+                    variant="filled"
+                  />
+                </Box>
               </Box>
-              <Box
-                sx={{
-                  display: 'flex',
-                  gap: 2,
-                  flexWrap: 'wrap',
-                  alignItems: 'center',
-                }}
+
+              <Button
+                variant="outlined"
+                color="warning"
+                size="small"
+                startIcon={
+                  isCleaningUp ? (
+                    <CircularProgress size={16} color="inherit" />
+                  ) : (
+                    <DeleteSweep />
+                  )
+                }
+                onClick={() => cleanupOrphanedChats()}
+                disabled={isCleaningUp}
               >
-                <Chip
-                  icon={<Info />}
-                  label={`SQLite ${settingsWithDbInfo?.sqliteVersion || 'Unknown'}`}
-                  variant="outlined"
-                />
-                <Chip
-                  label={settingsWithDbInfo?.mainDatabaseSize || 'Unknown'}
-                  variant="outlined"
-                />
-                <Chip
-                  label={settingsWithDbInfo?.mainDatabaseStatus || 'Unknown'}
-                  color={getStatusColor(settingsWithDbInfo?.mainDatabaseStatus)}
-                  variant="filled"
-                />
-              </Box>
+                Clean up old history
+              </Button>
             </Box>
             <TextField
               fullWidth

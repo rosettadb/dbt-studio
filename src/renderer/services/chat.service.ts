@@ -9,6 +9,28 @@ import type {
 class ChatService {
   // Chat Session Management
 
+  static async getLatestCompactionSummary(sessionId: number): Promise<{
+    id: number;
+    conversationId: number;
+    content: string;
+    coversUpToMessageId: number | null;
+    createdAt: string | null;
+    updatedAt: string | null;
+  } | null> {
+    const { data } = await client.post<
+      number,
+      {
+        id: number;
+        conversationId: number;
+        content: string;
+        coversUpToMessageId: number | null;
+        createdAt: string | null;
+        updatedAt: string | null;
+      } | null
+    >('chat:conversation:get-latest-compaction-summary', sessionId);
+    return data;
+  }
+
   // Get all chat sessions
   static async getSessions(
     filter?:
@@ -80,6 +102,15 @@ class ChatService {
     await client.post<number>('chat:conversation:delete', sessionId);
   }
 
+  // Cleanup orphaned chat sessions
+  static async cleanupOrphanedSessions(): Promise<{ deletedCount: number }> {
+    const { data } = await client.post<any, { deletedCount: number }>(
+      'chat:conversation:cleanup-orphaned',
+      {},
+    );
+    return data;
+  }
+
   // Chat Message Management
 
   // Get messages for a session
@@ -149,11 +180,13 @@ class ChatService {
 // Export service instance following your existing pattern
 export const chatService = {
   // Session management
+  getLatestCompactionSummary: ChatService.getLatestCompactionSummary,
   getSessions: ChatService.getSessions,
   getSession: ChatService.getSession,
   createSession: ChatService.createSession,
   updateSession: ChatService.updateSession,
   deleteSession: ChatService.deleteSession,
+  cleanupOrphanedSessions: ChatService.cleanupOrphanedSessions,
 
   // Message management
   getMessages: ChatService.getMessages,

@@ -7,7 +7,18 @@ import { app } from 'electron';
 import path from 'path';
 import Database from 'better-sqlite3';
 import { drizzle, BetterSQLite3Database } from 'drizzle-orm/better-sqlite3';
-import { eq, desc, and, count, inArray, isNull } from 'drizzle-orm';
+import {
+  eq,
+  desc,
+  and,
+  count,
+  inArray,
+  isNull,
+  isNotNull,
+  or,
+  notInArray,
+  ne,
+} from 'drizzle-orm';
 import * as schema from '../schemas/mainDatabase.schema';
 import { MainDatabaseInfo, UsageStats } from '../../types/backend';
 import {
@@ -726,34 +737,130 @@ export default class MainDatabaseService {
     const db = await this.getDatabase();
 
     try {
-      // First, get all messages in this conversation
-      const messages = await db
-        .select({ id: schema.chatMessages.id })
-        .from(schema.chatMessages)
-        .where(eq(schema.chatMessages.conversationId, id));
-
-      // Delete all context items for messages in this conversation
-      if (messages.length > 0) {
-        const messageIds = messages.map((m) => m.id);
-        await db
-          .delete(schema.contextItems)
-          .where(inArray(schema.contextItems.messageId, messageIds));
-
-        // Also delete tool calls for messages in this conversation
-        await db
-          .delete(schema.toolCalls)
-          .where(inArray(schema.toolCalls.messageId, messageIds));
-      }
-
-      // Delete all messages in this conversation
-      await db
-        .delete(schema.chatMessages)
-        .where(eq(schema.chatMessages.conversationId, id));
-
-      // Finally, delete the conversation itself
+      // Due to 'cascade' delete setup on chatMessages, contextItems,
+      // toolCalls, and chatCompactionSummaries in the schema,
+      // deleting the parent conversation automatically wipes all the child data.
       await db
         .delete(schema.chatConversations)
         .where(eq(schema.chatConversations.id, id));
+    } catch (error) {
+      throw error;
+    }
+  }
+
+  /**
+   * Deletes all conversations associated with a specific project.
+   * Leverages database-level cascades to clean up messages, context, and logs.
+   */
+  static async deleteConversationsByProject(projectId: number): Promise<void> {
+    const db = await this.getDatabase();
+    try {
+      await db
+        .delete(schema.chatConversations)
+        .where(eq(schema.chatConversations.projectId, projectId));
+    } catch (error) {
+      throw error;
+    }
+  }
+
+  /**
+   * Deletes all conversations associated with a specific connection.
+   * Leverages database-level cascades to clean up messages, context, and logs.
+   */
+  static async deleteConversationsByConnection(
+    connectionId: string,
+  ): Promise<void> {
+    const db = await this.getDatabase();
+    try {
+      await db
+        .delete(schema.chatConversations)
+        .where(eq(schema.chatConversations.connectionId, connectionId));
+    } catch (error) {
+      throw error;
+    }
+  }
+
+  /**
+   * Deletes conversations that are no longer associated with any existing project or connection.
+   * Returns the number of deleted conversations.
+   */
+  static async deleteOrphanedConversations(
+    validProjectIds: number[],
+    validConnectionIds: string[],
+  ): Promise<number> {
+    const db = await this.getDatabase();
+    try {
+      const conditions = [];
+
+      // If a conversation has a projectId that is not in the valid list, it's orphaned
+      if (validProjectIds.length > 0) {
+        conditions.push(
+          and(
+            notInArray(schema.chatConversations.projectId, validProjectIds),
+            ne(schema.chatConversations.projectId, 0), // Assuming 0 is not a valid ID
+          ),
+        );
+      } else {
+        // If no valid projects exist, any conversation with a projectId is orphaned
+        conditions.push(ne(schema.chatConversations.projectId, 0));
+      }
+
+      // If a conversation has a connectionId that is not in the valid list, it's orphaned
+      if (validConnectionIds.length > 0) {
+        conditions.push(
+          notInArray(schema.chatConversations.connectionId, validConnectionIds),
+        );
+      } else {
+        // If no valid connections exist, any conversation with a connectionId is orphaned
+        conditions.push(ne(schema.chatConversations.connectionId, ''));
+      }
+
+      // We want to delete conversations that meet ANY of the orphan criteria
+      // but only if they actually have the field set.
+      // Actually, a simpler way:
+      // Delete if (projectId IS NOT NULL AND projectId NOT IN validProjectIds)
+      // OR (connectionId IS NOT NULL AND connectionId NOT IN validConnectionIds)
+
+      const projectInvalidCondition =
+        validProjectIds.length > 0
+          ? or(
+              isNull(schema.chatConversations.projectId),
+              and(
+                isNotNull(schema.chatConversations.projectId),
+                notInArray(schema.chatConversations.projectId, validProjectIds),
+              ),
+            )
+          : or(
+              isNull(schema.chatConversations.projectId),
+              isNotNull(schema.chatConversations.projectId),
+            );
+
+      const connectionInvalidCondition =
+        validConnectionIds.length > 0
+          ? or(
+              isNull(schema.chatConversations.connectionId),
+              and(
+                isNotNull(schema.chatConversations.connectionId),
+                notInArray(
+                  schema.chatConversations.connectionId,
+                  validConnectionIds,
+                ),
+              ),
+            )
+          : or(
+              isNull(schema.chatConversations.connectionId),
+              isNotNull(schema.chatConversations.connectionId),
+            );
+
+      const result = await db
+        .delete(schema.chatConversations)
+        .where(and(projectInvalidCondition, connectionInvalidCondition));
+
+      // better-sqlite3 returns the number of changes in the info object if using run()
+      // but Drizzle's delete().returning() or delete() behavior varies.
+      // For better-sqlite3, we might need to use the underlying driver or just trust it.
+      // Drizzle's delete() returns a result object that contains the changes for better-sqlite3.
+      return (result as any).changes || 0;
     } catch (error) {
       throw error;
     }
@@ -866,6 +973,52 @@ export default class MainDatabaseService {
       await db
         .delete(schema.chatMessages)
         .where(eq(schema.chatMessages.id, id));
+    } catch (error) {
+      throw error;
+    }
+  }
+
+  static async getLatestCompactionSummary(conversationId: number) {
+    const db = await this.getDatabase();
+    try {
+      const results = await db
+        .select()
+        .from(schema.chatCompactionSummaries)
+        .where(
+          eq(schema.chatCompactionSummaries.conversationId, conversationId),
+        )
+        .orderBy(desc(schema.chatCompactionSummaries.id))
+        .limit(1);
+      return results[0] || null;
+    } catch (error) {
+      throw error;
+    }
+  }
+
+  static async saveCompactionSummary(
+    conversationId: number,
+    coversUpToMessageId: number,
+    content: string,
+  ) {
+    const db = await this.getDatabase();
+    try {
+      const results = await db
+        .insert(schema.chatCompactionSummaries)
+        .values({
+          conversationId,
+          content,
+          coversUpToMessageId,
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        })
+        .returning();
+
+      await db
+        .update(schema.chatConversations)
+        .set({ updatedAt: new Date().toISOString() })
+        .where(eq(schema.chatConversations.id, conversationId));
+
+      return results[0];
     } catch (error) {
       throw error;
     }

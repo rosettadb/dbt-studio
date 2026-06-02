@@ -1001,6 +1001,41 @@ export default class GitService {
   }
 
   /**
+   * Check if a specific file has unpushed commits (committed locally but not on remote)
+   */
+  async isFileUnpushed(repoPath: string, filePath: string): Promise<boolean> {
+    try {
+      const git = this.getGitInstance(repoPath);
+      const relativePath = toGitRelativePath(repoPath, filePath);
+      const branchSummary = await git.branch();
+      const currentBranch = branchSummary.current;
+      if (!currentBranch) return false;
+
+      // Check if remote tracking branch exists
+      try {
+        await git.raw(['rev-parse', `origin/${currentBranch}`]);
+      } catch {
+        // No remote tracking — everything is unpushed
+        return true;
+      }
+
+      const result = await git.raw([
+        'diff',
+        '--name-only',
+        `origin/${currentBranch}..HEAD`,
+        '--',
+        relativePath,
+      ]);
+      return result.trim().length > 0;
+    } catch (err: any) {
+      // Fail closed: return true to block progress on indeterminate git state
+      // eslint-disable-next-line no-console
+      console.error(`Failed to check if file is unpushed: ${err.message}`);
+      return true;
+    }
+  }
+
+  /**
    * Check if there are any untracked files in the repository
    */
   async hasUntrackedChanges(repoPath: string): Promise<boolean> {
@@ -1051,8 +1086,11 @@ export default class GitService {
       // Fetch to get latest remote info (without merging)
       try {
         await git.fetch();
-      } catch (err) {
-        return false;
+      } catch (err: any) {
+        // Fail closed: return true to block progress on indeterminate git state
+        // eslint-disable-next-line no-console
+        console.error(`Failed to fetch remote: ${err.message}`);
+        return true;
       }
 
       // Check if remote branch exists

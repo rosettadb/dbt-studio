@@ -251,11 +251,16 @@ ${mcpToolsList}`;
     }
   });
 
+  // Notebook questions commonly require one step to read notebook state and a
+  // second step to explain the tool result. A single-step limit can otherwise
+  // persist a tool-only assistant message with no natural-language answer.
+  const maxSteps = Math.max(base.maxSteps, 2);
+
   return new ToolLoopAgent({
     model: base.model as any,
     instructions: systemInstructions,
     tools: { ...baseTools, ...base.mcpTools, loadSkill: base.loadSkillTool },
-    stopWhen: stepCountIs(base.maxSteps),
+    stopWhen: stepCountIs(maxSteps),
     prepareStep: base.prepareStep,
     onStepFinish: base.onStepFinish,
   });

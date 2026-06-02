@@ -6,7 +6,7 @@ import {
   Tooltip,
   CircularProgress,
 } from '@mui/material';
-import { Save, VerticalSplit } from '@mui/icons-material';
+import { Save, VerticalSplit, PlayArrow } from '@mui/icons-material';
 import { Breadcrumbs } from '../breadcrumbs';
 
 interface EditorHeaderProps {
@@ -21,6 +21,7 @@ interface EditorHeaderProps {
   onSave: () => void;
   onToggleDiff: () => void;
   onNavigate?: (path: string) => void;
+  onRun?: () => void;
   extraActions?: React.ReactNode;
 }
 
@@ -36,6 +37,7 @@ export const EditorHeader: React.FC<EditorHeaderProps> = ({
   onSave,
   onToggleDiff,
   onNavigate,
+  onRun,
   extraActions,
 }) => {
   const getDiffTooltip = () => {
@@ -72,6 +74,20 @@ export const EditorHeader: React.FC<EditorHeaderProps> = ({
       >
         {/* Extra actions (e.g. AI, Model buttons) */}
         {extraActions}
+        {/* Run Button (only shown if onRun is provided, e.g. for Python files) */}
+        {onRun && (
+          <Tooltip title="Run python script">
+            <span>
+              <IconButton
+                onClick={onRun}
+                size="small"
+                sx={{ color: 'success.main' }}
+              >
+                <PlayArrow fontSize="small" />
+              </IconButton>
+            </span>
+          </Tooltip>
+        )}
         {/* Diff Button — always visible, disabled when no diff is available */}
         <Tooltip title={getDiffTooltip()}>
           <span>

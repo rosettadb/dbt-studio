@@ -115,7 +115,7 @@ export const Menu: React.FC<MenuProps> = ({ actions }) => {
           <SimpleDropdownMenu
             items={[
               {
-                value: 'new',
+                value: 'all',
                 label: (
                   <BranchDropdownToggle>
                     <FormatListNumbered fontSize="small" />
@@ -134,8 +134,7 @@ export const Menu: React.FC<MenuProps> = ({ actions }) => {
               })),
             ]}
             onSelect={async (value) => {
-              if (value === 'new') {
-                await selectProject({ projectId: '' });
+              if (value === 'all') {
                 navigate('/app/select-project');
               } else {
                 await selectProject({ projectId: value });

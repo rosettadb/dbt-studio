@@ -23,10 +23,9 @@ export const PIPELINE_CONFIG_DIR = '.rosetta';
 
 export function isPipelineFile(filePath: string): boolean {
   const parts = filePath.replace(/\\/g, '/').split('/');
-  return (
-    parts[parts.length - 1] === PIPELINE_CONFIG_FILENAME &&
-    parts[parts.length - 2] === PIPELINE_CONFIG_DIR
-  );
+  const fileName = parts[parts.length - 1];
+  const dirName = parts[parts.length - 2];
+  return dirName === PIPELINE_CONFIG_DIR && fileName.endsWith('.yml');
 }
 
 export const PIPELINE_CONFIG_TEMPLATE = `name: "CI"

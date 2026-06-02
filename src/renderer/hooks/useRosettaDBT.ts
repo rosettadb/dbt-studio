@@ -19,6 +19,7 @@ const useRosettaDBT = (successCallback: () => Promise<void>) => {
     getDatabasePassword,
     getDatabaseToken,
     getBigQueryServiceAccountKey,
+    getConnectionField,
   } = useSecureStorage();
   const setEnvVariables = useSetConnectionEnvVariable();
   const [isSuccess, setIsSuccess] = React.useState(false);
@@ -78,6 +79,7 @@ const useRosettaDBT = (successCallback: () => Promise<void>) => {
       }
       // Set environment variables for the project
       const connectionName = connection.connection.name;
+      const conn = connection.connection;
       const [username, password, token, bigQueryKey] = await Promise.all([
         getDatabaseUsername(connectionName),
         getDatabasePassword(connectionName),
@@ -118,6 +120,48 @@ const useRosettaDBT = (successCallback: () => Promise<void>) => {
           }),
         );
       }
+
+      // Set connection-specific fields based on type
+      const fieldMap: Record<string, string[]> = {
+        postgres: ['host', 'port', 'dbname', 'schema'],
+        redshift: ['host', 'port', 'dbname', 'schema'],
+        snowflake: ['account', 'warehouse', 'dbname', 'schema', 'role'],
+        bigquery: ['project', 'dataset'],
+        databricks: ['host', 'httppath', 'catalog', 'schema'],
+        kinetica: ['host', 'port', 'dbname', 'schema'],
+      };
+
+      const c = conn as any;
+      const getFieldValue = (field: string): string | undefined => {
+        const valueMap: Record<string, string | undefined> = {
+          host: c.host ? String(c.host) : undefined,
+          port: c.port ? String(c.port) : undefined,
+          dbname: c.database,
+          schema: c.schema,
+          account: c.account,
+          warehouse: c.warehouse,
+          role: c.role,
+          project: c.project,
+          dataset: c.dataset || c.schema,
+          httppath: c.httpPath,
+          catalog: c.database,
+        };
+        return valueMap[field];
+      };
+
+      const fields = fieldMap[conn.type] || [];
+      const fieldPromises = fields.map(async (field) => {
+        const stored = await getConnectionField(field, connectionName);
+        const value = stored || getFieldValue(field);
+        if (value) {
+          return setEnvVariables.mutateAsync({
+            key: `db-${field}-${connectionName}`,
+            value,
+          });
+        }
+        return undefined;
+      });
+      envPromises.push(...fieldPromises);
 
       const openaiKey = await getOpenAIKey();
       if (openaiKey) {

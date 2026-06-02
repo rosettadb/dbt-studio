@@ -37,6 +37,10 @@ export default class RosettaCloudService {
         body: data ? JSON.stringify(data) : undefined,
       });
 
+      if (!response.ok) {
+        throw new Error(`Request failed: ${response.status}`);
+      }
+
       return response.json();
     };
 
@@ -56,8 +60,16 @@ export default class RosettaCloudService {
 
     if (project.externalId) {
       if (hasSecrets) await addSecrets(project.externalId, secrets);
-      const runEndpoint = `${baseUrl}/api/projects/${project.externalId}/run`;
-      await postJson(runEndpoint, body);
+      const teardown = body.ROSETTA_RUN_TEARDOWN ?? true;
+      const runEndpoint = `${baseUrl}/api/projects/${project.externalId}/run?teardown=${teardown}`;
+      const runBody: Record<string, any> = {
+        CUSTOM_DBT_COMMANDS: body.CUSTOM_DBT_COMMANDS,
+        EXECUTION_MODE: body.EXECUTION_MODE || 'command',
+      };
+      if (body.EXECUTION_MODE === 'pipeline' && body.PIPELINE_FILE) {
+        runBody.PIPELINE_FILE = body.PIPELINE_FILE;
+      }
+      await postJson(runEndpoint, runBody);
       await ProjectsService.updateProject({
         ...project,
         lastRun: new Date().toISOString(),
@@ -82,10 +94,16 @@ export default class RosettaCloudService {
 
     if (hasSecrets) await addSecrets(projectData.id, secrets);
 
-    const runEndpoint = `${baseUrl}/api/projects/${projectData.id}/run`;
-    await postJson(runEndpoint, {
+    const newTeardown = body.ROSETTA_RUN_TEARDOWN ?? true;
+    const runEndpoint = `${baseUrl}/api/projects/${projectData.id}/run?teardown=${newTeardown}`;
+    const newRunBody: Record<string, any> = {
       CUSTOM_DBT_COMMANDS: body.CUSTOM_DBT_COMMANDS,
-    });
+      EXECUTION_MODE: body.EXECUTION_MODE || 'command',
+    };
+    if (body.EXECUTION_MODE === 'pipeline' && body.PIPELINE_FILE) {
+      newRunBody.PIPELINE_FILE = body.PIPELINE_FILE;
+    }
+    await postJson(runEndpoint, newRunBody);
   }
 
   static async getSecrets(projectId: string): Promise<Secret[]> {
