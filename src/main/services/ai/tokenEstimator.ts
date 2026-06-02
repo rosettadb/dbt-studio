@@ -185,15 +185,44 @@ export function estimateTokens(
  * Includes per-message overhead for role etc.
  */
 export function estimateMessagesTokens(
-  messages: Array<{ role: string; content: any }>,
+  messages: Array<{
+    role: string;
+    content: any;
+    contextItems?: any[];
+    toolCalls?: any[];
+  }>,
 ): number {
   return messages.reduce((sum, msg) => {
     const contentStr =
       typeof msg.content === 'string'
         ? msg.content
         : JSON.stringify(msg.content);
+
+    let tokens = estimateTokens(contentStr);
+
+    if (msg.contextItems?.length) {
+      tokens += msg.contextItems.reduce(
+        (cSum, ctx) => cSum + estimateTokens(ctx.content ?? ''),
+        0,
+      );
+    }
+
+    if (msg.toolCalls?.length) {
+      tokens += msg.toolCalls.reduce((tcSum, tc) => {
+        const inputStr =
+          typeof tc.toolInput === 'string'
+            ? tc.toolInput
+            : JSON.stringify(tc.toolInput ?? tc.args ?? '');
+        const outputStr =
+          typeof tc.toolOutput === 'string'
+            ? tc.toolOutput
+            : JSON.stringify(tc.toolOutput ?? tc.result ?? '');
+        return tcSum + estimateTokens(inputStr) + estimateTokens(outputStr);
+      }, 0);
+    }
+
     // ~4 tokens overhead per message (role, separators)
-    return sum + estimateTokens(contentStr) + 4;
+    return sum + tokens + 4;
   }, 0);
 }
 
