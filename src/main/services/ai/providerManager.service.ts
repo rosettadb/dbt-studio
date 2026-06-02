@@ -172,11 +172,19 @@ export class AIProviderManager {
           config = updates.config as any;
         }
 
-        if (config.apiKey) {
+        const hasApiKeyUpdate =
+          Object.prototype.hasOwnProperty.call(config, 'apiKey') &&
+          config.apiKey !== undefined;
+        const normalizedApiKey =
+          typeof config.apiKey === 'string'
+            ? config.apiKey.trim()
+            : config.apiKey;
+
+        if (hasApiKeyUpdate && normalizedApiKey) {
           await SecureStorageService.setAIProviderCredential(
             id,
             updates.type as any,
-            config.apiKey,
+            normalizedApiKey,
           );
 
           // Remove API key from config before storing in database
@@ -186,19 +194,22 @@ export class AIProviderManager {
           // Always store as JSON string in database
           updates.config = JSON.stringify(configWithoutKey);
         } else {
-          if (updates.type === 'ollama') {
+          if (updates.type === 'ollama' && hasApiKeyUpdate) {
             await SecureStorageService.deleteAIProviderCredential(
               id,
               updates.type as AIProviderType,
             );
           }
 
-          // Remove an empty API key from config before storing in database
-          // eslint-disable-next-line @typescript-eslint/no-unused-vars
-          const { apiKey, ...configWithoutKey } = config;
+          if (hasApiKeyUpdate) {
+            // Remove an empty API key from config before storing in database
+            // eslint-disable-next-line @typescript-eslint/no-unused-vars
+            const { apiKey, ...configWithoutKey } = config;
 
-          // Store as JSON string if no API key to process
-          updates.config = JSON.stringify(configWithoutKey);
+            updates.config = JSON.stringify(configWithoutKey);
+          } else {
+            updates.config = JSON.stringify(config);
+          }
         }
       }
       // Update provider in database

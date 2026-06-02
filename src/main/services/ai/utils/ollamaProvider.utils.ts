@@ -22,12 +22,24 @@ export function isLocalOllamaUrl(baseUrl?: string): boolean {
 }
 
 export function isHostedOllamaCloudUrl(baseUrl?: string): boolean {
+  const isOllamaCloudHostname = (hostname: string): boolean => {
+    const normalizedHostname = hostname.toLowerCase();
+    return (
+      normalizedHostname === 'ollama.com' ||
+      normalizedHostname.endsWith('.ollama.com')
+    );
+  };
+
   try {
-    return new URL(normalizeOllamaBaseUrl(baseUrl)).hostname
-      .toLowerCase()
-      .endsWith('ollama.com');
+    return isOllamaCloudHostname(
+      new URL(normalizeOllamaBaseUrl(baseUrl)).hostname,
+    );
   } catch {
-    return normalizeOllamaBaseUrl(baseUrl).toLowerCase().includes('ollama.com');
+    const match = normalizeOllamaBaseUrl(baseUrl)
+      .toLowerCase()
+      .match(/^(?:https?:\/\/)?([^/:?#]+)/);
+
+    return Boolean(match?.[1] && isOllamaCloudHostname(match[1]));
   }
 }
 
