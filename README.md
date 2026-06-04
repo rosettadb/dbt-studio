@@ -1,5 +1,5 @@
 # Rosetta DBT Studio
-<img width="1080" height="1080" alt="image" src="./image-dbt-studio.png" />
+<img width="1080" alt="image" src="https://raw.githubusercontent.com/rosettadb/dbt-studio/refs/heads/docs/update-readme-image/readme.gif" />
 
 **Rosetta DataBase Transformation Studio** is an open-source desktop application that simplifies your data transformation journey with [dbt Core™](https://www.getdbt.com/) and brings the power of AI into your analytics engineering workflow.
 
