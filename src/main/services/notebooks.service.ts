@@ -72,6 +72,31 @@ function isRowReturningQuery(query: string): boolean {
   return /^\s*(?:WITH\b[\s\S]*?\)\s*)*SELECT\b/i.test(query.trim());
 }
 
+/**
+ * Detects and extracts a trailing ORDER BY clause from a SQL query.
+ * Returns the base SQL (without the ORDER BY) and the extracted ORDER BY clause.
+ */
+function extractTrailingOrderBy(sql: string): {
+  baseSql: string;
+  orderBy: string;
+} {
+  const trimmed = sql.trim().replace(/;+$/, '');
+  const lastOrderByIndex = trimmed.toUpperCase().lastIndexOf('ORDER BY');
+
+  if (lastOrderByIndex !== -1) {
+    const suffix = trimmed.substring(lastOrderByIndex);
+    // If the ORDER BY is not followed by a closing parenthesis,
+    // it's likely the top-level ORDER BY.
+    if (!suffix.includes(')')) {
+      const baseSql = trimmed.substring(0, lastOrderByIndex).trim();
+      const orderBy = trimmed.substring(lastOrderByIndex).trim();
+      return { baseSql, orderBy };
+    }
+  }
+
+  return { baseSql: trimmed, orderBy: '' };
+}
+
 // Ensure directories exist
 async function ensureDirectories() {
   await fs.mkdir(NOTEBOOKS_DIR, { recursive: true });
@@ -695,9 +720,12 @@ export class NotebooksService {
         const instanceId = connectionId.replace('ducklake-', '');
 
         // For SELECT queries, wrap in a subquery to ensure pagination works
-        // even if the user has their own LIMIT clause.
+        // and hoist ORDER BY to the outer query for determinism.
+        const { baseSql, orderBy } = extractTrailingOrderBy(sql);
         const queryToExecute = isSelect
-          ? `SELECT * FROM (${sql.trim().replace(/;$/, '')}) AS subquery LIMIT ${pageLimit} OFFSET ${pageOffset}`
+          ? `SELECT * FROM (${baseSql}) AS subquery${
+              orderBy ? ` ${orderBy}` : ''
+            } LIMIT ${pageLimit} OFFSET ${pageOffset}`
           : sql;
 
         // DuckLake supports native pagination, but we use the wrapped query
@@ -716,8 +744,8 @@ export class NotebooksService {
         ) {
           try {
             // Use subquery to get total rows.
-            // If user provided a LIMIT, this will correctly return the limited count.
-            const countQuery = `SELECT COUNT(*) as count FROM (${sql.trim().replace(/;$/, '')}) as subquery`;
+            // Use baseSql (without ORDER BY) for better performance.
+            const countQuery = `SELECT COUNT(*) as count FROM (${baseSql}) as subquery`;
             const countResult = await DuckLakeService.executeQuery({
               instanceId,
               query: countQuery,
@@ -735,8 +763,10 @@ export class NotebooksService {
       } else {
         // Regular DB connection
         // For SELECT queries, wrap in a subquery to ensure pagination works
+        // and hoist ORDER BY to the outer query for determinism.
+        const { baseSql, orderBy } = extractTrailingOrderBy(sql);
         const queryToExecute = isSelect
-          ? `SELECT * FROM (${sql.trim().replace(/;$/, '')}) AS subquery LIMIT ${pageLimit} OFFSET ${pageOffset}`
+          ? `SELECT * FROM (${baseSql}) AS subquery${orderBy ? ` ${orderBy}` : ''} LIMIT ${pageLimit} OFFSET ${pageOffset}`
           : sql;
 
         result = await ConnectorsService.executeQueryForConnection({
@@ -753,7 +783,8 @@ export class NotebooksService {
         ) {
           try {
             // Use subquery to get total rows
-            const countQuery = `SELECT COUNT(*) as count FROM (${sql.trim().replace(/;$/, '')}) as subquery`;
+            // Use baseSql (without ORDER BY) for better performance.
+            const countQuery = `SELECT COUNT(*) as count FROM (${baseSql}) as subquery`;
             const countResult =
               await ConnectorsService.executeQueryForConnection({
                 connectionId,
@@ -869,7 +900,11 @@ export class NotebooksService {
         const instanceId = connectionId.replace('ducklake-', '');
 
         // Wrap in a subquery to ensure pagination works correctly
-        const queryToExecute = `SELECT * FROM (${sql.trim().replace(/;$/, '')}) AS subquery LIMIT ${pageLimit} OFFSET ${pageOffset}`;
+        // and hoist ORDER BY to the outer query for determinism.
+        const { baseSql, orderBy } = extractTrailingOrderBy(sql);
+        const queryToExecute = `SELECT * FROM (${baseSql}) AS subquery${
+          orderBy ? ` ${orderBy}` : ''
+        } LIMIT ${pageLimit} OFFSET ${pageOffset}`;
 
         // DuckLake supports native pagination, but we use the wrapped query
         result = await DuckLakeService.executeQuery({
@@ -880,8 +915,9 @@ export class NotebooksService {
         // Get total row count
         if (result.success && result.data) {
           try {
-            // Use subquery to get total rows
-            const countQuery = `SELECT COUNT(*) as count FROM (${sql.trim().replace(/;$/, '')}) as subquery`;
+            // Use subquery to get total rows.
+            // Use baseSql (without ORDER BY) for better performance.
+            const countQuery = `SELECT COUNT(*) as count FROM (${baseSql}) as subquery`;
             const countResult = await DuckLakeService.executeQuery({
               instanceId,
               query: countQuery,
@@ -897,7 +933,11 @@ export class NotebooksService {
         }
       } else {
         // Regular DB connection - manually append LIMIT/OFFSET with sanitized values
-        const queryToExecute = `SELECT * FROM (${sql.trim().replace(/;$/, '')}) AS subquery LIMIT ${pageLimit} OFFSET ${pageOffset}`;
+        // Wrap in a subquery and hoist ORDER BY to the outer query for determinism.
+        const { baseSql, orderBy } = extractTrailingOrderBy(sql);
+        const queryToExecute = `SELECT * FROM (${baseSql}) AS subquery${
+          orderBy ? ` ${orderBy}` : ''
+        } LIMIT ${pageLimit} OFFSET ${pageOffset}`;
 
         result = await ConnectorsService.executeQueryForConnection({
           connectionId,
@@ -907,8 +947,9 @@ export class NotebooksService {
         // Get total row count
         if (result.success && result.data) {
           try {
-            // Use subquery to get total rows
-            const countQuery = `SELECT COUNT(*) as count FROM (${sql.trim().replace(/;$/, '')}) as subquery`;
+            // Use subquery to get total rows.
+            // Use baseSql (without ORDER BY) for better performance.
+            const countQuery = `SELECT COUNT(*) as count FROM (${baseSql}) as subquery`;
             const countResult =
               await ConnectorsService.executeQueryForConnection({
                 connectionId,
