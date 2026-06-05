@@ -270,9 +270,8 @@ if (!gotTheLock) {
 }
 
 ipcMain.handle('windows:closeSetup', () => {
-  if (windowManager) {
-    windowManager.closeSetupWindow();
-  }
+  app.relaunch();
+  app.exit(0);
 });
 
 // Cleanup DuckLake connections before app quits
