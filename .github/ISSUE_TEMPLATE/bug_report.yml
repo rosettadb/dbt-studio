@@ -1,0 +1,51 @@
+name: Report a bug
+description: Report a problem with Rosetta DBT Studio.
+type: Bug
+labels: 'state:needs triage'
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Is this bug already reported? Upvote to get it noticed faster. [Here’s the search](https://github.com/rosettadb/dbt-studio/issues). Upvote means giving it a :+1: reaction.
+  - type: textarea
+    attributes:
+      label: Reproduction steps
+      description: A step-by-step description of how to reproduce the bug from a **clean Rosetta DBT Studio install**. The more context you provide, the easier it is to find and fix the problem fast.
+      placeholder: |
+        1. Start Rosetta DBT Studio
+        2. Click X
+    validations:
+      required: true
+  - type: textarea
+    attributes:
+      label: Current vs. Expected behavior
+      description: |
+        Current behavior (screenshots, videos, etc. are appreciated), vs. what you expected the behavior to be.
+
+      placeholder: |
+        Current behavior: <screenshot with an arrow> The icon is blue. Expected behavior: The icon should be red because this is what the setting is documented to do.
+    validations:
+      required: true
+  - type: textarea
+    id: environment
+    attributes:
+      label: Rosetta DBT Studio version and system specs
+      description: |
+        This information is found in Settings->General
+      placeholder: |
+        Studio: v1.4.0
+        OS: macOS 15.1
+        Memory: 16 GiB
+        Architecture: aarch64
+    validations:
+      required: true
+  - type: textarea
+    attributes:
+      label: (for AI issues) Model provider details
+      placeholder: |
+        - Provider: (Anthropic, Copilot Chat, Mistral, OpenAI, etc.)
+        - Model Name: (Claude Sonnet 4.5, Gemini 3.1 Pro, GPT-5)
+        - Mode: (Agent Panel, Inline Assistant, or Terminal Assistant)
+        - Other details (ACPs, MCPs, other settings, etc.):
+    validations:
+      required: false

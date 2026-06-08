@@ -20,7 +20,7 @@ const ADAPTERS = [
 
 const Setup: React.FC = () => {
   const { data: settings, isLoading } = useGetSettings();
-  const { mutate: updateSettings } = useUpdateSettings();
+  const { mutateAsync: updateSettings } = useUpdateSettings();
   const [isInitialized, setIsInitialized] = React.useState(false);
   const [currentStep, setCurrentStep] = React.useState<number>(0);
   const [selectedAdapters, setSelectedAdapters] = React.useState<string[]>(
@@ -34,7 +34,9 @@ const Setup: React.FC = () => {
   };
 
   const handleSkip = async () => {
-    saveSetting('isSetup', 'true');
+    if (settings) {
+      await updateSettings({ ...settings, isSetup: 'true' });
+    }
     await client.get('windows:closeSetup');
   };
 

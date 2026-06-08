@@ -653,6 +653,13 @@ const SelectProject: React.FC = () => {
                           toast.error('Failed to import project.');
                         }
                       } catch (error: any) {
+                        if (
+                          error instanceof Error &&
+                          error.message === 'No file or folder selected'
+                        ) {
+                          return;
+                        }
+
                         // Show more specific error messages
                         if (error.message.includes('compressed')) {
                           toast.error(
