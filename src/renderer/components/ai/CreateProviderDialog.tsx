@@ -188,7 +188,7 @@ export const CreateProviderDialog: React.FC<CreateProviderDialogProps> = ({
       name: data.name,
       type: data.type,
       config: JSON.stringify(config),
-      isActive: false,
+      isActive: isEdit ? (provider?.isActive ?? false) : false,
     };
 
     if (isEdit && provider?.id) {
@@ -247,16 +247,7 @@ export const CreateProviderDialog: React.FC<CreateProviderDialogProps> = ({
   const isLoading = isCreating || isUpdating;
 
   return (
-    <Dialog
-      open={open}
-      onClose={onClose}
-      maxWidth="sm"
-      fullWidth
-      PaperProps={{
-        component: 'form',
-        onSubmit: handleSubmit(onSubmit),
-      }}
-    >
+    <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth>
       <DialogTitle>
         <Box display="flex" justifyContent="space-between" alignItems="center">
           <Typography variant="h6">
@@ -268,182 +259,192 @@ export const CreateProviderDialog: React.FC<CreateProviderDialogProps> = ({
         </Box>
       </DialogTitle>
 
-      <DialogContent dividers>
-        <Box display="flex" flexDirection="column" gap={3}>
-          {/* Provider Name */}
-          <Controller
-            name="name"
-            control={control}
-            render={({ field }) => (
-              <TextField
-                name={field.name}
-                value={field.value}
-                onChange={field.onChange}
-                onBlur={field.onBlur}
-                label="Provider Name"
-                placeholder="My OpenAI Provider"
-                fullWidth
-                error={!!errors.name}
-                helperText={errors.name?.message}
+      <Box
+        component="form"
+        onSubmit={(e) => {
+          e.stopPropagation();
+          handleSubmit(onSubmit)(e);
+        }}
+      >
+        <DialogContent dividers>
+          <Box display="flex" flexDirection="column" gap={3}>
+            {/* Provider Name */}
+            <Controller
+              name="name"
+              control={control}
+              render={({ field }) => (
+                <TextField
+                  name={field.name}
+                  value={field.value}
+                  onChange={field.onChange}
+                  onBlur={field.onBlur}
+                  label="Provider Name"
+                  placeholder="My OpenAI Provider"
+                  fullWidth
+                  error={!!errors.name}
+                  helperText={errors.name?.message}
+                />
+              )}
+            />
+
+            {/* Provider Type */}
+            <Controller
+              name="type"
+              control={control}
+              render={({ field }) => (
+                <FormControl fullWidth error={!!errors.type}>
+                  <InputLabel>Provider Type</InputLabel>
+                  <Select
+                    name={field.name}
+                    value={field.value}
+                    onChange={field.onChange}
+                    onBlur={field.onBlur}
+                    label="Provider Type"
+                  >
+                    <MenuItem value="openai">OpenAI</MenuItem>
+                    <MenuItem value="anthropic">
+                      Anthropic Claude (beta)
+                    </MenuItem>
+                    <MenuItem value="gemini">Google Gemini</MenuItem>
+                    <MenuItem value="ollama">Ollama (Local - beta)</MenuItem>
+                  </Select>
+                  {errors.type && (
+                    <Typography variant="caption" color="error">
+                      {errors.type.message}
+                    </Typography>
+                  )}
+                </FormControl>
+              )}
+            />
+
+            {/* API Key */}
+            {requirements.requiresApiKey && (
+              <Controller
+                name="apiKey"
+                control={control}
+                render={({ field }) => (
+                  <TextField
+                    name={field.name}
+                    value={field.value}
+                    onChange={field.onChange}
+                    onBlur={field.onBlur}
+                    label={requirements.apiKeyLabel}
+                    placeholder={requirements.apiKeyPlaceholder}
+                    type={showApiKey ? 'text' : 'password'}
+                    fullWidth
+                    error={!!errors.apiKey}
+                    helperText={
+                      errors.apiKey?.message || 'Stored securely and encrypted'
+                    }
+                    InputProps={{
+                      endAdornment: (
+                        <InputAdornment position="end">
+                          <IconButton
+                            onClick={() => setShowApiKey(!showApiKey)}
+                            edge="end"
+                          >
+                            {showApiKey ? <VisibilityOff /> : <Visibility />}
+                          </IconButton>
+                        </InputAdornment>
+                      ),
+                    }}
+                  />
+                )}
               />
             )}
-          />
 
-          {/* Provider Type */}
-          <Controller
-            name="type"
-            control={control}
-            render={({ field }) => (
-              <FormControl fullWidth error={!!errors.type}>
-                <InputLabel>Provider Type</InputLabel>
-                <Select
-                  name={field.name}
-                  value={field.value}
-                  onChange={field.onChange}
-                  onBlur={field.onBlur}
-                  label="Provider Type"
-                >
-                  <MenuItem value="openai">OpenAI</MenuItem>
-                  <MenuItem value="anthropic">Anthropic Claude (beta)</MenuItem>
-                  <MenuItem value="gemini">Google Gemini</MenuItem>
-                  <MenuItem value="ollama">Ollama (Local - beta)</MenuItem>
-                </Select>
-                {errors.type && (
-                  <Typography variant="caption" color="error">
-                    {errors.type.message}
-                  </Typography>
+            {/* Base URL for Ollama */}
+            {(watchedType === 'ollama' || requirements.requiresBaseUrl) && (
+              <Controller
+                name="baseUrl"
+                control={control}
+                render={({ field }) => (
+                  <TextField
+                    name={field.name}
+                    value={field.value}
+                    onChange={field.onChange}
+                    onBlur={field.onBlur}
+                    label="Base URL"
+                    placeholder="http://localhost:11434"
+                    fullWidth
+                    error={!!errors.baseUrl}
+                    helperText={
+                      errors.baseUrl?.message ||
+                      (watchedType === 'ollama'
+                        ? 'Local Ollama server address'
+                        : 'Custom API endpoint')
+                    }
+                  />
                 )}
-              </FormControl>
+              />
             )}
-          />
 
-          {/* API Key */}
-          {requirements.requiresApiKey && (
+            {/* Default Model */}
             <Controller
-              name="apiKey"
+              name="model"
               control={control}
-              render={({ field }) => (
-                <TextField
-                  name={field.name}
-                  value={field.value}
-                  onChange={field.onChange}
-                  onBlur={field.onBlur}
-                  label={requirements.apiKeyLabel}
-                  placeholder={requirements.apiKeyPlaceholder}
-                  type={showApiKey ? 'text' : 'password'}
-                  fullWidth
-                  error={!!errors.apiKey}
-                  helperText={
-                    errors.apiKey?.message || 'Stored securely and encrypted'
-                  }
-                  InputProps={{
-                    endAdornment: (
-                      <InputAdornment position="end">
-                        <IconButton
-                          onClick={() => setShowApiKey(!showApiKey)}
-                          edge="end"
-                        >
-                          {showApiKey ? <VisibilityOff /> : <Visibility />}
-                        </IconButton>
-                      </InputAdornment>
-                    ),
-                  }}
-                />
-              )}
+              render={({ field }) => {
+                return (
+                  <SmartModelSelector
+                    key={`model-selector-${watchedType}`} // Force remount when provider type changes
+                    providerId={
+                      isEdit && provider ? String(provider.id) : undefined
+                    }
+                    discoveredModels={discoveredModels}
+                    value={field.value}
+                    onChange={field.onChange}
+                    label="Default Model"
+                    disabled={isLoading}
+                    fullWidth
+                  />
+                );
+              }}
             />
-          )}
 
-          {/* Base URL for Ollama */}
-          {(watchedType === 'ollama' || requirements.requiresBaseUrl) && (
-            <Controller
-              name="baseUrl"
-              control={control}
-              render={({ field }) => (
-                <TextField
-                  name={field.name}
-                  value={field.value}
-                  onChange={field.onChange}
-                  onBlur={field.onBlur}
-                  label="Base URL"
-                  placeholder="http://localhost:11434"
-                  fullWidth
-                  error={!!errors.baseUrl}
-                  helperText={
-                    errors.baseUrl?.message ||
-                    (watchedType === 'ollama'
-                      ? 'Local Ollama server address'
-                      : 'Custom API endpoint')
-                  }
-                />
-              )}
+            {/* Test Connection */}
+            <TestProviderConnection
+              providerType={watchedType}
+              apiKey={watchedApiKey}
+              baseUrl={watchedBaseUrl}
+              onTestComplete={handleTestComplete}
             />
-          )}
 
-          {/* Default Model */}
-          <Controller
-            name="model"
-            control={control}
-            render={({ field }) => {
-              return (
-                <SmartModelSelector
-                  key={`model-selector-${watchedType}`} // Force remount when provider type changes
-                  providerId={
-                    isEdit && provider ? String(provider.id) : undefined
-                  }
-                  discoveredModels={discoveredModels}
-                  value={field.value}
-                  onChange={field.onChange}
-                  label="Default Model"
-                  disabled={isLoading}
-                  fullWidth
-                />
-              );
-            }}
-          />
+            {/* Provider-specific info */}
+            {watchedType === 'ollama' && (
+              <Alert severity="info">
+                Make sure Ollama is running locally before testing the
+                connection. Install from{' '}
+                <a
+                  href="https://ollama.ai"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  style={{ color: 'inherit' }}
+                >
+                  ollama.ai
+                </a>
+              </Alert>
+            )}
+          </Box>
+        </DialogContent>
 
-          {/* Test Connection */}
-          <TestProviderConnection
-            providerType={watchedType}
-            apiKey={watchedApiKey}
-            baseUrl={watchedBaseUrl}
-            onTestComplete={handleTestComplete}
-          />
-
-          {/* Provider-specific info */}
-          {watchedType === 'ollama' && (
-            <Alert severity="info">
-              Make sure Ollama is running locally before testing the connection.
-              Install from{' '}
-              <a
-                href="https://ollama.ai"
-                target="_blank"
-                rel="noopener noreferrer"
-                style={{ color: 'inherit' }}
-              >
-                ollama.ai
-              </a>
-            </Alert>
-          )}
-        </Box>
-      </DialogContent>
-
-      <DialogActions>
-        <Button onClick={onClose} disabled={isLoading}>
-          Cancel
-        </Button>
-        <Button
-          type="submit"
-          variant="contained"
-          disabled={!isValid || isLoading}
-        >
-          {(() => {
-            if (isLoading) {
-              return isEdit ? 'Updating...' : 'Creating...';
-            }
-            return isEdit ? 'Update Provider' : 'Create Provider';
-          })()}
-        </Button>
-      </DialogActions>
+        <DialogActions>
+          <Button onClick={onClose} disabled={isLoading}>
+            Cancel
+          </Button>
+          <Button
+            type="submit"
+            variant="contained"
+            disabled={!isValid || isLoading}
+          >
+            {(() => {
+              if (isLoading) {
+                return isEdit ? 'Updating...' : 'Creating...';
+              }
+              return isEdit ? 'Update Provider' : 'Create Provider';
+            })()}
+          </Button>
+        </DialogActions>
+      </Box>
     </Dialog>
   );
 };
