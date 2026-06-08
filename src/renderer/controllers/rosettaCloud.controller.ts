@@ -19,6 +19,7 @@ import {
   UseAuthLoginResult,
   UseAuthLogoutResult,
 } from '../../types/apiKey';
+import { CloudLogEntry, CloudPipelineData } from '../../types/cloudAction';
 import { rosettaCloudServices } from '../services';
 import { QUERY_KEYS } from '../config/constants';
 
@@ -37,6 +38,9 @@ export const usePushProjectToCloud = (
       return rosettaCloudServices.pushProjectToCloud(data);
     },
     onSuccess: async (...args) => {
+      // GET_SELECTED_PROJECT invalidation refreshes the project row from
+      // database.json — that's where pipelineRuns now lives, so the
+      // CI/CD view picks up the freshly-recorded actionId.
       await queryClient.invalidateQueries([QUERY_KEYS.GET_SELECTED_PROJECT]);
       onCustomSuccess?.(...args);
     },
@@ -128,6 +132,176 @@ export const useAuthLogout = (
     isLoading: mutation.isLoading,
     error: mutation.error,
   };
+};
+
+/**
+ * Returns the cloud action id for a given pipeline file on a given project.
+ * Reads from `project.pipelineRuns` if present (the locally-recorded mapping
+ * from any run triggered through this app); otherwise queries the cloud for a
+ * matching action and the main process persists what it finds.
+ *
+ * `recordedActionId` is the locally-cached value (caller passes it from
+ * `project.pipelineRuns?.[pipelineFile]`). When set, no cloud call happens.
+ */
+export const usePipelineActionId = (
+  projectId: string | null | undefined,
+  pipelineFile: string | null | undefined,
+  recordedActionId: string | null | undefined,
+): string | null => {
+  const queryClient = useQueryClient();
+  const enabled = !recordedActionId && !!projectId && !!pipelineFile;
+
+  const { data: discovered } = useQuery({
+    queryKey: ['pipelineActionFallback', projectId, pipelineFile],
+    queryFn: () =>
+      rosettaCloudServices.findActionForPipeline(projectId!, pipelineFile!),
+    enabled,
+    // Each call re-queries the cloud — the discovered id may be different
+    // after a new run. staleTime: 0 keeps the hook responsive to changes.
+    staleTime: 0,
+    onSuccess: (id) => {
+      if (id) {
+        // The main process already wrote the id into pipelineRuns; refresh the
+        // selected project so the recorded path takes over on next render.
+        queryClient.invalidateQueries([QUERY_KEYS.GET_SELECTED_PROJECT]);
+      }
+    },
+  });
+
+  return recordedActionId ?? discovered ?? null;
+};
+
+export const useCloudActionStatus = (
+  actionId?: string | null,
+  options?: UseQueryOptions<
+    CloudPipelineData | null,
+    CustomError,
+    CloudPipelineData | null
+  >,
+) => {
+  return useQuery({
+    queryKey: [QUERY_KEYS.CLOUD_ACTION_STATUS, actionId],
+    queryFn: () =>
+      actionId
+        ? rosettaCloudServices.getActionStatus(actionId)
+        : Promise.resolve(null),
+    enabled: !!actionId,
+    // Keep polling while at least one step is still pending/running. Stop once
+    // every step has settled into a terminal state.
+    refetchInterval: (data) => {
+      if (!data?.steps?.length) return 3000;
+      const stillActive = data.steps.some(
+        (s) =>
+          s.status === 'running' ||
+          s.status === 'pending' ||
+          s.status === 'not_started',
+      );
+      return stillActive ? 3000 : false;
+    },
+    ...options,
+  });
+};
+
+const isActionFinishedFromStatus = (
+  status: CloudPipelineData | null | undefined,
+): boolean => {
+  if (!status?.steps?.length) return false;
+  return status.steps.every(
+    (s) =>
+      s.status === 'success' ||
+      s.status === 'failed' ||
+      s.status === 'skipped' ||
+      s.status === 'cancelled',
+  );
+};
+
+/**
+ * Subscribes to the SSE log stream for the given actionId via main process.
+ * Pass `disabled` to keep the hook mounted (preserving consumers) while not
+ * opening a stream — used to short-circuit once an action is finished.
+ */
+const useCloudActionLogStream = (
+  actionId?: string | null,
+  disabled?: boolean,
+  maxEntries = 2000,
+) => {
+  const [logs, setLogs] = React.useState<CloudLogEntry[]>([]);
+  const [error, setError] = React.useState<string | null>(null);
+
+  React.useEffect(() => {
+    if (!actionId || disabled) {
+      setLogs([]);
+      setError(null);
+      return undefined;
+    }
+
+    setLogs([]);
+    setError(null);
+
+    const unsubEntries = rosettaCloudServices.subscribeToLogEntries(
+      ({ actionId: id, logs: incoming }) => {
+        if (id !== actionId) return;
+        setLogs((prev) => {
+          const next = prev.concat(incoming);
+          return next.length > maxEntries
+            ? next.slice(next.length - maxEntries)
+            : next;
+        });
+      },
+    );
+    const unsubError = rosettaCloudServices.subscribeToLogStreamError(
+      ({ actionId: id, error: err }) => {
+        if (id !== actionId) return;
+        setError(err);
+      },
+    );
+    const unsubEnd = rosettaCloudServices.subscribeToLogStreamEnd(() => {});
+
+    rosettaCloudServices.openLogStream(actionId).catch((e) => {
+      setError(e instanceof Error ? e.message : 'Failed to open log stream');
+    });
+
+    return () => {
+      unsubEntries();
+      unsubError();
+      unsubEnd();
+      rosettaCloudServices.closeLogStream(actionId).catch(() => {});
+    };
+  }, [actionId, disabled, maxEntries]);
+
+  return { logs, error };
+};
+
+/**
+ * Public log hook for the CI/CD view. Streams live while the action is
+ * running, then switches to a one-shot static fetch once every step is in a
+ * terminal state. The static endpoint returns the complete log set so we can
+ * drop the in-memory stream buffer on transition.
+ */
+export const useCloudActionLogs = (actionId?: string | null) => {
+  const { data: status } = useCloudActionStatus(actionId ?? null);
+  const isFinished = isActionFinishedFromStatus(status);
+
+  const stream = useCloudActionLogStream(actionId, isFinished);
+
+  const { data: staticData, error: staticError } = useQuery({
+    queryKey: ['cloudActionLogsStatic', actionId],
+    queryFn: () =>
+      actionId
+        ? rosettaCloudServices.getActionLogs(actionId)
+        : Promise.resolve([] as CloudLogEntry[]),
+    enabled: !!actionId && isFinished,
+    staleTime: Infinity,
+  });
+
+  if (isFinished) {
+    return {
+      logs: staticData ?? [],
+      error: (staticError as any)?.message ?? 'Failed to fetch logs',
+      mode: 'static' as const,
+    };
+  }
+  return { ...stream, mode: 'stream' as const };
 };
 
 export const useAuthSubscription = () => {

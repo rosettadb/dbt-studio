@@ -6,11 +6,22 @@ import {
   Chip,
   Paper,
   useTheme,
-  Theme,
   Tooltip,
+  CircularProgress,
 } from '@mui/material';
-import { FolderOpen, Terminal } from '@mui/icons-material';
+import type { Theme } from '@mui/material';
+import {
+  FolderOpen,
+  Terminal,
+  CheckCircle,
+  Cancel,
+  Schedule,
+  SkipNext,
+  Block,
+  HourglassEmpty,
+} from '@mui/icons-material';
 import type { PipelineStep } from './types';
+import type { CloudStepStatus } from '../../../types/cloudAction';
 
 export type PipelineNodeData = PipelineStep & {
   stepIndex: number;
@@ -19,18 +30,81 @@ export type PipelineNodeData = PipelineStep & {
 
 const CLEANUP_COLOR = '#9E9E9E'; // neutral gray for cleanup jobs
 
-function getPluginColor(plugin: string, palette: Theme['palette']): string {
-  const name = plugin.split('@')[0].toLowerCase();
-  switch (name) {
-    case 'dbt':
-      return '#FF694A'; // dbt brand orange
-    case 'terraform':
-      return '#7B42BC'; // Terraform purple
-    case 'rosetta':
-      return palette.primary.main;
+type StatusVisual = {
+  label: string;
+  color: string;
+  icon: React.ReactNode;
+  spin?: boolean;
+};
+
+function getStatusVisual(
+  status: CloudStepStatus,
+  palette: Theme['palette'],
+): StatusVisual {
+  switch (status) {
+    case 'running':
+      return {
+        label: 'Running',
+        color: palette.info.main,
+        icon: (
+          <CircularProgress
+            size={10}
+            thickness={6}
+            sx={{ color: palette.info.main }}
+          />
+        ),
+      };
+    case 'success':
+      return {
+        label: 'Success',
+        color: palette.success.main,
+        icon: <CheckCircle sx={{ fontSize: 12 }} />,
+      };
+    case 'failed':
+      return {
+        label: 'Failed',
+        color: palette.error.main,
+        icon: <Cancel sx={{ fontSize: 12 }} />,
+      };
+    case 'pending':
+      return {
+        label: 'Pending',
+        color: palette.text.secondary,
+        icon: <Schedule sx={{ fontSize: 12 }} />,
+      };
+    case 'not_started':
+      return {
+        label: 'Not Started',
+        color: palette.warning.main,
+        icon: <HourglassEmpty sx={{ fontSize: 12 }} />,
+      };
+    case 'skipped':
+      return {
+        label: 'Skipped',
+        color: palette.text.disabled,
+        icon: <SkipNext sx={{ fontSize: 12 }} />,
+      };
+    case 'cancelled':
+      return {
+        label: 'Cancelled',
+        color: palette.warning.dark,
+        icon: <Block sx={{ fontSize: 12 }} />,
+      };
     default:
-      return palette.text.secondary;
+      return {
+        label: status,
+        color: palette.text.secondary,
+        icon: <Schedule sx={{ fontSize: 12 }} />,
+      };
   }
+}
+
+function formatDuration(seconds: number | null | undefined): string {
+  if (!seconds || seconds <= 0) return '';
+  if (seconds < 60) return `${seconds}s`;
+  const m = Math.floor(seconds / 60);
+  const s = Math.round(seconds % 60);
+  return `${m}m ${s}s`;
 }
 
 function getPluginLabel(plugin: string): string {
@@ -40,10 +114,14 @@ function getPluginLabel(plugin: string): string {
 export const PipelineNode = memo(
   ({ data, selected }: NodeProps<PipelineNodeData>) => {
     const theme = useTheme();
-    const pluginColor = data.isCleanup
-      ? CLEANUP_COLOR
-      : getPluginColor(data.plugin, theme.palette);
-    const borderColor = selected ? theme.palette.primary.main : 'transparent';
+    const statusVisual = data.status
+      ? getStatusVisual(data.status, theme.palette)
+      : null;
+
+    // Border priority: selected > status color (only when run) > neutral divider.
+    const borderColor = selected
+      ? theme.palette.primary.main
+      : (statusVisual?.color ?? theme.palette.divider);
 
     return (
       <Box sx={{ position: 'relative' }}>
@@ -54,7 +132,7 @@ export const PipelineNode = memo(
         />
 
         <Paper
-          elevation={selected ? 4 : 1}
+          elevation={selected ? 4 : 0}
           sx={{
             width: 260,
             borderRadius: 2,
@@ -62,23 +140,65 @@ export const PipelineNode = memo(
             backgroundColor: theme.palette.background.paper,
             overflow: 'hidden',
             transition: 'all 0.2s',
+            boxShadow:
+              data.status === 'running'
+                ? `0 0 0 3px ${theme.palette.info.main}33`
+                : undefined,
             '&:hover': { boxShadow: theme.shadows[4] },
           }}
         >
-          {/* Plugin colour bar at top */}
-          <Box
-            sx={{
-              height: 4,
-              backgroundColor: pluginColor,
-            }}
-          />
-
           <Box sx={{ px: 1.5, pt: 1, pb: 1.25 }}>
+            {/* Status row */}
+            {statusVisual && (
+              <Box
+                sx={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  mb: 0.5,
+                }}
+              >
+                <Chip
+                  icon={
+                    <Box
+                      sx={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        ml: 0.5,
+                        color: statusVisual.color,
+                      }}
+                    >
+                      {statusVisual.icon}
+                    </Box>
+                  }
+                  label={statusVisual.label}
+                  size="small"
+                  variant="outlined"
+                  sx={{
+                    height: 20,
+                    fontSize: '0.6rem',
+                    fontWeight: 600,
+                    color: statusVisual.color,
+                    borderColor: statusVisual.color,
+                    '& .MuiChip-label': { px: 0.75 },
+                  }}
+                />
+                {data.duration ? (
+                  <Typography
+                    variant="caption"
+                    sx={{ color: 'text.disabled', fontSize: '0.6rem' }}
+                  >
+                    {formatDuration(data.duration)}
+                  </Typography>
+                ) : null}
+              </Box>
+            )}
+
             {/* Step name */}
             <Typography
               variant="subtitle2"
               noWrap
-              title={data.name}
+              title={data.error_message || data.name}
               sx={{
                 fontWeight: 600,
                 mb: 0.75,
@@ -88,7 +208,7 @@ export const PipelineNode = memo(
               {data.name}
             </Typography>
 
-            {/* Plugin chip */}
+            {/* Plugin chip (neutral by default) */}
             <Box
               sx={{
                 display: 'flex',
@@ -100,13 +220,15 @@ export const PipelineNode = memo(
               <Chip
                 label={getPluginLabel(data.plugin)}
                 size="small"
+                variant="outlined"
                 sx={{
                   height: 18,
                   fontSize: '0.6rem',
                   fontWeight: 700,
                   letterSpacing: 0.3,
-                  color: theme.palette.getContrastText(pluginColor),
-                  backgroundColor: pluginColor,
+                  color: data.isCleanup ? CLEANUP_COLOR : 'text.secondary',
+                  borderColor: 'divider',
+                  '& .MuiChip-label': { px: 0.75 },
                 }}
               />
               {data.plugin.includes('@') && (

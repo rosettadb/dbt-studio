@@ -1,17 +1,24 @@
 /* eslint-disable no-restricted-syntax, no-await-in-loop */
-import { shell } from 'electron';
+import { shell, WebContents } from 'electron';
 import { v4 as uuidv4 } from 'uuid';
 import { CloudDeploymentPayload, Secret } from '../../types/backend';
 import { UserProfile } from '../../types/profile';
+import { CloudLogEntry, CloudPipelineData } from '../../types/cloudAction';
 
 import { ROSETTA_CLOUD_BASE_URL } from '../utils/constants';
 import SecureStorageService from './secureStorage.service';
 import ProjectsService from './projects.service';
 
+type LogStreamHandle = {
+  controller: AbortController;
+};
+
 export default class RosettaCloudService {
   private static cachedProfile: UserProfile | null = null;
 
   private static readonly API_KEY_STORAGE_KEY = 'cloud-api-key';
+
+  private static activeLogStreams = new Map<string, LogStreamHandle>();
 
   static async pushProjectToCloud(body: CloudDeploymentPayload): Promise<void> {
     const { id, secrets } = body;
@@ -74,6 +81,15 @@ export default class RosettaCloudService {
         ...project,
         lastRun: new Date().toISOString(),
       });
+      // Resolve and persist the newly-created action id by querying the
+      // cloud's actions list — the run response shape is unreliable (cloud-api
+      // wraps it as { data: <Action> }), so we go to the source.
+      if (body.EXECUTION_MODE === 'pipeline' && body.PIPELINE_FILE) {
+        await this.findActionForPipeline(id, body.PIPELINE_FILE).catch((e) => {
+          // eslint-disable-next-line no-console
+          console.error('Failed to record action id for pipeline:', e);
+        });
+      }
       return;
     }
 
@@ -104,6 +120,12 @@ export default class RosettaCloudService {
       newRunBody.PIPELINE_FILE = body.PIPELINE_FILE;
     }
     await postJson(runEndpoint, newRunBody);
+    if (body.EXECUTION_MODE === 'pipeline' && body.PIPELINE_FILE) {
+      await this.findActionForPipeline(id, body.PIPELINE_FILE).catch((e) => {
+        // eslint-disable-next-line no-console
+        console.error('Failed to record action id for pipeline:', e);
+      });
+    }
   }
 
   static async getSecrets(projectId: string): Promise<Secret[]> {
@@ -317,6 +339,232 @@ export default class RosettaCloudService {
       // eslint-disable-next-line no-console
       console.error('Token check on startup failed:', error);
     }
+  }
+
+  /**
+   * Source-of-truth resolver: queries the cloud's actions list for the most
+   * recent action whose `data.PIPELINE_FILE` matches, then persists the id to
+   * `project.pipelineRuns` so subsequent reads are direct.
+   *
+   * Always queries the cloud — does NOT short-circuit on the locally-cached
+   * value. The renderer hook decides whether to call this at all (based on the
+   * presence of a recorded id), so by the time we get here the caller wants a
+   * fresh lookup.
+   */
+  static async findActionForPipeline(
+    projectId: string,
+    pipelineFile: string,
+  ): Promise<string | null> {
+    const apiKey = await this.getApiKey();
+    if (!apiKey) return null;
+
+    const project = await ProjectsService.getProject(projectId);
+    if (!project?.externalId) return null;
+
+    const baseUrl = ROSETTA_CLOUD_BASE_URL.replace(/\/$/, '');
+    const url = `${baseUrl}/api/actions?projectId=${encodeURIComponent(
+      project.externalId,
+    )}&limit=20&sortBy=createdAt&sortOrder=desc`;
+
+    const response = await fetch(url, {
+      method: 'GET',
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        'Content-Type': 'application/json',
+      },
+    });
+
+    if (!response.ok) return null;
+
+    const body = (await response.json()) as {
+      actions?: { id: string; data?: { PIPELINE_FILE?: string } }[];
+    };
+
+    const match = body.actions?.find(
+      (a) => a.data?.PIPELINE_FILE === pipelineFile,
+    );
+    if (!match?.id) return null;
+
+    // Re-read the project before merging — the cloud-action call may have
+    // raced with a separate update.
+    const fresh = await ProjectsService.getProject(projectId);
+    const base = fresh ?? project;
+    await ProjectsService.updateProject({
+      ...base,
+      pipelineRuns: {
+        ...(base.pipelineRuns ?? {}),
+        [pipelineFile]: match.id,
+      },
+    });
+
+    return match.id;
+  }
+
+  /**
+   * One-shot fetch of the full log set for a (typically finished) action.
+   * Used in place of the SSE stream once the action is terminal so we stop
+   * holding an open connection that will never receive new data.
+   */
+  static async getActionLogs(actionId: string): Promise<CloudLogEntry[]> {
+    const apiKey = await this.getApiKey();
+    if (!apiKey) return [];
+
+    const baseUrl = ROSETTA_CLOUD_BASE_URL.replace(/\/$/, '');
+    const response = await fetch(
+      `${baseUrl}/api/actions/${encodeURIComponent(actionId)}/logs`,
+      {
+        method: 'GET',
+        headers: {
+          Authorization: `Bearer ${apiKey}`,
+          'Content-Type': 'application/json',
+        },
+      },
+    );
+
+    if (!response.ok) {
+      throw new Error(`Failed to fetch logs: ${response.status}`);
+    }
+
+    const body = (await response.json()) as { logs?: CloudLogEntry[] };
+    return body.logs ?? [];
+  }
+
+  static async getActionStatus(
+    actionId: string,
+  ): Promise<CloudPipelineData | null> {
+    const apiKey = await this.getApiKey();
+    if (!apiKey) return null;
+
+    const baseUrl = ROSETTA_CLOUD_BASE_URL.replace(/\/$/, '');
+    const response = await fetch(
+      `${baseUrl}/api/actions/${encodeURIComponent(actionId)}/status`,
+      {
+        method: 'GET',
+        headers: {
+          Authorization: `Bearer ${apiKey}`,
+          'Content-Type': 'application/json',
+        },
+      },
+    );
+
+    if (response.status === 404) return null;
+    if (!response.ok) {
+      throw new Error(`Failed to fetch action status: ${response.status}`);
+    }
+
+    return (await response.json()) as CloudPipelineData;
+  }
+
+  /**
+   * Opens an SSE log stream for the given action and forwards log entries to
+   * the provided WebContents via 'rosettaCloud:logEntries' events. Calling
+   * with the same actionId twice closes the previous stream first so we never
+   * have duplicate streams running.
+   */
+  static async openLogStream(
+    actionId: string,
+    webContents: WebContents,
+  ): Promise<void> {
+    this.closeLogStream(actionId);
+
+    const apiKey = await this.getApiKey();
+    if (!apiKey) {
+      webContents.send('rosettaCloud:logStreamError', {
+        actionId,
+        error: 'Not authenticated',
+      });
+      return;
+    }
+
+    const baseUrl = ROSETTA_CLOUD_BASE_URL.replace(/\/$/, '');
+    const controller = new AbortController();
+    this.activeLogStreams.set(actionId, { controller });
+
+    const stopOnDestroy = () => this.closeLogStream(actionId);
+    webContents.once('destroyed', stopOnDestroy);
+
+    try {
+      const response = await fetch(
+        `${baseUrl}/api/actions/${encodeURIComponent(actionId)}/logs/stream`,
+        {
+          method: 'GET',
+          headers: {
+            Authorization: `Bearer ${apiKey}`,
+            Accept: 'text/event-stream',
+          },
+          signal: controller.signal,
+        },
+      );
+
+      if (!response.ok || !response.body) {
+        throw new Error(`Log stream failed: ${response.status}`);
+      }
+
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = '';
+
+      while (!controller.signal.aborted) {
+        const { value, done } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+
+        // SSE messages are separated by a blank line.
+        let separatorIdx = buffer.indexOf('\n\n');
+        while (separatorIdx !== -1) {
+          const rawEvent = buffer.slice(0, separatorIdx);
+          buffer = buffer.slice(separatorIdx + 2);
+
+          const dataLines = rawEvent
+            .split('\n')
+            .filter((l) => l.startsWith('data:'))
+            .map((l) => l.slice(5).trimStart());
+
+          if (dataLines.length > 0) {
+            const payloadText = dataLines.join('\n');
+            try {
+              const payload = JSON.parse(payloadText) as {
+                logs?: CloudLogEntry[];
+              };
+              if (
+                payload.logs &&
+                payload.logs.length > 0 &&
+                !webContents.isDestroyed()
+              ) {
+                webContents.send('rosettaCloud:logEntries', {
+                  actionId,
+                  logs: payload.logs,
+                });
+              }
+            } catch {
+              // ignore malformed SSE frames
+            }
+          }
+          separatorIdx = buffer.indexOf('\n\n');
+        }
+      }
+
+      if (!webContents.isDestroyed()) {
+        webContents.send('rosettaCloud:logStreamEnd', { actionId });
+      }
+    } catch (error) {
+      if (controller.signal.aborted) return;
+      if (!webContents.isDestroyed()) {
+        webContents.send('rosettaCloud:logStreamError', {
+          actionId,
+          error: error instanceof Error ? error.message : 'Stream error',
+        });
+      }
+    } finally {
+      this.activeLogStreams.delete(actionId);
+    }
+  }
+
+  static closeLogStream(actionId: string): void {
+    const handle = this.activeLogStreams.get(actionId);
+    if (!handle) return;
+    handle.controller.abort();
+    this.activeLogStreams.delete(actionId);
   }
 
   static async validateApiKey(
