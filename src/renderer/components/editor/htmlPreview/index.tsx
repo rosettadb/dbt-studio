@@ -16,8 +16,13 @@ export const HtmlPreview: React.FC<HtmlPreviewProps> = ({
       0,
       Math.max(sourcePath.lastIndexOf('/'), sourcePath.lastIndexOf('\\')) + 1,
     );
+    // Normalize to file:// URL format (forward slashes, leading slash for Windows)
+    const normalizedDir = dir.replace(/\\/g, '/');
+    const fileUrl = normalizedDir.startsWith('/')
+      ? `file://${normalizedDir}`
+      : `file:///${normalizedDir}`;
     // Inject <base> tag to help relative resources load from the right directory
-    const baseTag = `<base href="file://${dir}">`;
+    const baseTag = `<base href="${fileUrl}">`;
 
     if (content.toLowerCase().includes('<head>')) {
       return content.replace(/<head>/i, `<head>${baseTag}`);

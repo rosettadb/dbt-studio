@@ -43,6 +43,7 @@ import {
 import { Icon } from '../../components/icon';
 import { icons } from '../../../../assets';
 import { TabManager } from '../../components/editor/tabManager';
+import { deriveTitleFromPath } from '../../hooks/useTabManager';
 import {
   useGetConnectionById,
   useGetConnections,
@@ -356,31 +357,15 @@ const ProjectDetails: React.FC = () => {
       }
 
       // Toggle ON: open a new virtual read-only tab
-      const fileName = realSourcePath.split('/').pop() || 'Preview';
+      const fileName = deriveTitleFromPath(realSourcePath);
       await openTab(pvPath, {
-        title: `Preview ${fileName}`,
+        title: `Preview: ${fileName}`,
         content,
         isReadOnly: true,
       });
     },
     [tabs, closeTab, switchTab, openTab, activeTabId],
   );
-
-  // Keep all preview tabs content in sync when their source tabs are edited
-  React.useEffect(() => {
-    const previewTabs = tabs.filter((t) => isVirtualPreviewPath(t.path));
-    previewTabs.forEach((previewTab) => {
-      const sourcePath = getPreviewSourcePath(previewTab.path);
-      if (!sourcePath) return;
-      const sourceTab = tabs.find((t) => t.path === sourcePath);
-      if (sourceTab && sourceTab.content !== previewTab.content) {
-        updateTabContentByPath(previewTab.path, sourceTab.content, {
-          markModified: false,
-        });
-      }
-    });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [tabs]);
 
   React.useEffect(() => {
     const fetchData = async () => {

@@ -1,10 +1,14 @@
 import React from 'react';
 import { projectsServices } from '../services';
+import {
+  MD_PREVIEW_PREFIX,
+  HTML_PREVIEW_PREFIX,
+  isVirtualPreviewPath,
+} from '../components/editor/previewConstants';
 import { getLanguageFromExtension } from '../components/editor/helpers';
 import { getNonEditableFileMessage, isEditableFile } from '../helpers/utils';
 import { disposeModelForPath, renameModel } from '../lib/monaco/modelStore';
 import { clearViewState } from '../lib/monaco/viewStateStore';
-import { isVirtualPreviewPath } from '../components/editor/previewConstants';
 import type {
   EditorTabId,
   EditorTabState,
@@ -110,7 +114,7 @@ const clearPersistedState = (projectId: string) => {
   window.localStorage.removeItem(key);
 };
 
-const deriveTitleFromPath = (path: string): string => {
+export const deriveTitleFromPath = (path: string): string => {
   const parts = path.split(/[\\/]/).filter(Boolean);
   if (parts.length === 0) {
     return path || 'untitled';
@@ -329,9 +333,34 @@ const useTabManager = (projectId?: string): UseTabManagerReturn => {
 
   const updateTab = React.useCallback(
     (tabId: EditorTabId, updater: (tab: EditorTabState) => EditorTabState) => {
-      setTabs((current) =>
-        current.map((tab) => (tab.id === tabId ? updater(tab) : tab)),
-      );
+      setTabs((current) => {
+        let sourceTabModified: EditorTabState | undefined;
+        const newTabs = current.map((tab) => {
+          if (tab.id === tabId) {
+            const updated = updater(tab);
+            sourceTabModified = updated;
+            return updated;
+          }
+          return tab;
+        });
+
+        if (sourceTabModified) {
+          const st = sourceTabModified;
+          let hasPreviews = false;
+          const finalTabs = newTabs.map((tab) => {
+            if (
+              tab.path === `${MD_PREVIEW_PREFIX}${st.path}` ||
+              tab.path === `${HTML_PREVIEW_PREFIX}${st.path}`
+            ) {
+              hasPreviews = true;
+              return { ...tab, content: st.content };
+            }
+            return tab;
+          });
+          return hasPreviews ? finalTabs : newTabs;
+        }
+        return newTabs;
+      });
     },
     [],
   );
@@ -408,8 +437,8 @@ const useTabManager = (projectId?: string): UseTabManagerReturn => {
       if (!target) {
         return;
       }
-      setTabs((current) =>
-        current.map((tab) => {
+      setTabs((current) => {
+        const newTabs = current.map((tab) => {
           if (tab.id !== target.id) {
             return tab;
           }
@@ -424,8 +453,21 @@ const useTabManager = (projectId?: string): UseTabManagerReturn => {
             savedContent: isModified ? tab.savedContent : content,
             error: options?.error,
           };
-        }),
-      );
+        });
+
+        let hasPreviews = false;
+        const finalTabs = newTabs.map((tab) => {
+          if (
+            tab.path === `${MD_PREVIEW_PREFIX}${target.path}` ||
+            tab.path === `${HTML_PREVIEW_PREFIX}${target.path}`
+          ) {
+            hasPreviews = true;
+            return { ...tab, content };
+          }
+          return tab;
+        });
+        return hasPreviews ? finalTabs : newTabs;
+      });
       if (options?.markSaved) {
         markTabSaved(target.id);
       }
