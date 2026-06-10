@@ -76,6 +76,10 @@ import ChatScreen from '../chat';
 import { getFileName } from '../../services/settings.services';
 import type { EditorTabId } from '../../../types/editor';
 import { subscribeToToolResult } from '../../services/agentEvents.service';
+import {
+  toPreviewPath,
+  PREVIEW_PATH_PREFIX,
+} from '../../components/editor/previewConstants';
 
 const VerticalSash = (_: number, active: boolean) => (
   <div
@@ -325,6 +329,59 @@ const ProjectDetails: React.FC = () => {
     }
   }, [tabs, closeTab]);
 
+  // Toggles the markdown preview tab for a given file.
+  const handleTogglePreviewTab = React.useCallback(
+    async (currentPath: string, content: string) => {
+      // If we are already on a preview tab, extract the real source path
+      const isPreview = currentPath.startsWith(PREVIEW_PATH_PREFIX);
+      const realSourcePath = isPreview
+        ? currentPath.slice(PREVIEW_PATH_PREFIX.length)
+        : currentPath;
+
+      const pvPath = toPreviewPath(realSourcePath);
+      const existing = tabs.find((t) => t.path === pvPath);
+
+      if (existing) {
+        // Toggle OFF: close the preview tab
+        closeTab(existing.id);
+        // If we were focused on the preview tab, switch back to the source tab
+        if (activeTabId === existing.id) {
+          const sourceTab = tabs.find((t) => t.path === realSourcePath);
+          if (sourceTab) {
+            switchTab(sourceTab.id);
+          }
+        }
+        return;
+      }
+
+      // Toggle ON: open a new virtual read-only tab
+      const fileName = realSourcePath.split('/').pop() || 'Preview';
+      await openTab(pvPath, {
+        title: `Preview ${fileName}`,
+        content,
+        isReadOnly: true,
+      });
+    },
+    [tabs, closeTab, switchTab, openTab, activeTabId],
+  );
+
+  // Keep all preview tabs content in sync when their source tabs are edited
+  React.useEffect(() => {
+    const previewTabs = tabs.filter((t) =>
+      t.path.startsWith(PREVIEW_PATH_PREFIX),
+    );
+    previewTabs.forEach((previewTab) => {
+      const sourcePath = previewTab.path.slice(PREVIEW_PATH_PREFIX.length);
+      const sourceTab = tabs.find((t) => t.path === sourcePath);
+      if (sourceTab && sourceTab.content !== previewTab.content) {
+        updateTabContentByPath(previewTab.path, sourceTab.content, {
+          markModified: false,
+        });
+      }
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tabs]);
+
   React.useEffect(() => {
     const fetchData = async () => {
       if (project && project.path) {
@@ -358,8 +415,15 @@ const ProjectDetails: React.FC = () => {
   }, [selectedFilePath, openTab, isHydrated]);
 
   React.useEffect(() => {
-    if (activeTab?.path && activeTab.path !== selectedFilePath) {
-      setSelectedFilePath(activeTab.path);
+    if (activeTab?.path) {
+      const isPreview = activeTab.path.startsWith(PREVIEW_PATH_PREFIX);
+      const realSourcePath = isPreview
+        ? activeTab.path.slice(PREVIEW_PATH_PREFIX.length)
+        : activeTab.path;
+
+      if (realSourcePath !== selectedFilePath) {
+        setSelectedFilePath(realSourcePath);
+      }
       return;
     }
     if (!activeTab?.path && selectedFilePath) {
@@ -1058,6 +1122,7 @@ const ProjectDetails: React.FC = () => {
                           setSelectedFilePath(filePath);
                           openTab(filePath);
                         }}
+                        onTogglePreviewTab={handleTogglePreviewTab}
                         extraActions={
                           <>
                             {menuItems.length > 0 && (

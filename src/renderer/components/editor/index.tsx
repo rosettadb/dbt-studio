@@ -11,6 +11,7 @@ import { MonacoCodeEditor } from '../monaco/MonacoCodeEditor';
 import { DiffView } from './diffView';
 import { EditorHeader } from './editorHeader';
 import { UnsavedChangesDialog } from './unsavedChangesDialog';
+import { MarkdownPreview } from './markdownPreview';
 import {
   getDecorations,
   getLanguageFromExtension,
@@ -24,6 +25,13 @@ import type {
   PendingCloseState,
 } from '../../../types/editor';
 import useCli from '../../hooks/useCli';
+import {
+  PREVIEW_PATH_PREFIX,
+  getPreviewSourcePath,
+  toPreviewPath,
+} from './previewConstants';
+
+export { PREVIEW_PATH_PREFIX, getPreviewSourcePath, toPreviewPath };
 
 type EditorProps = {
   projectId?: string;
@@ -39,6 +47,8 @@ type EditorProps = {
   onCancelClose: () => void;
   onGitStatusRefresh?: () => void;
   onOpenFile?: (filePath: string) => void;
+  /** Called when the user clicks the Preview button: toggles a preview tab. */
+  onTogglePreviewTab?: (currentPath: string, content: string) => void;
   extraActions?: React.ReactNode;
 };
 
@@ -72,6 +82,7 @@ export const Editor: React.FC<EditorProps> = ({
   onCancelClose,
   onGitStatusRefresh,
   onOpenFile,
+  onTogglePreviewTab,
   extraActions,
 }) => {
   const theme = useTheme();
@@ -85,6 +96,31 @@ export const Editor: React.FC<EditorProps> = ({
   const activeContent = activeTab?.content ?? '';
   const language = computeLanguage(activeFilePath);
   const isFileEditable = !activeTab?.isReadOnly;
+
+  // Detect if the active tab is a markdown preview virtual tab
+  const previewSourcePath = getPreviewSourcePath(activeFilePath);
+  const isPreviewTab = previewSourcePath !== null;
+
+  // The content to render in the preview: from the live source tab if available
+  const previewContent = React.useMemo(() => {
+    if (!isPreviewTab) return '';
+    const sourceTab = tabs.find((t) => t.path === previewSourcePath);
+    return sourceTab?.content ?? activeContent;
+  }, [isPreviewTab, previewSourcePath, tabs, activeContent]);
+
+  // Whether the current source file has a preview tab open
+  const showPreview = React.useMemo(() => {
+    if (!activeFilePath) return false;
+    const realSourcePath = isPreviewTab ? previewSourcePath! : activeFilePath;
+    const previewPath = toPreviewPath(realSourcePath);
+    return tabs.some((t) => t.path === previewPath);
+  }, [activeFilePath, isPreviewTab, previewSourcePath, tabs]);
+
+  // Handle Preview button click: delegate up to projectDetails which owns openTab
+  const handleTogglePreview = React.useCallback(() => {
+    if (!onTogglePreviewTab || !activeFilePath) return;
+    onTogglePreviewTab(activeFilePath, activeContent);
+  }, [onTogglePreviewTab, activeFilePath, activeContent]);
 
   const { data: isInitialized } = useGitIsInitialized(projectPath, {
     enabled: Boolean(projectPath),
@@ -267,6 +303,31 @@ export const Editor: React.FC<EditorProps> = ({
 
   if (!activeTab) return null;
 
+  // --- Markdown preview tab: render MarkdownPreview instead of Monaco ---
+  if (isPreviewTab) {
+    return (
+      <Container>
+        <EditorHeader
+          filePath={previewSourcePath ?? ''}
+          projectPath={projectPath}
+          isModified={false}
+          isSaving={false}
+          hasError={false}
+          showDiffButton={false}
+          showDiffView={false}
+          showPreview
+          onSave={() => {}}
+          onToggleDiff={() => {}}
+          onTogglePreview={handleTogglePreview}
+          onNavigate={onOpenFile}
+        />
+        <EditorViewport>
+          <MarkdownPreview content={previewContent} />
+        </EditorViewport>
+      </Container>
+    );
+  }
+
   return (
     <Container>
       <EditorHeader
@@ -278,8 +339,10 @@ export const Editor: React.FC<EditorProps> = ({
         errorMessage={activeTab.error}
         showDiffButton={hasUncommittedChanges}
         showDiffView={showDiffView}
+        showPreview={showPreview}
         onSave={handleSave}
         onToggleDiff={() => setShowDiffView((prev) => !prev)}
+        onTogglePreview={handleTogglePreview}
         onNavigate={onOpenFile}
         onRun={
           language === 'python'

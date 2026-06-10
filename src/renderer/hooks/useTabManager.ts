@@ -4,6 +4,7 @@ import { getLanguageFromExtension } from '../components/editor/helpers';
 import { getNonEditableFileMessage, isEditableFile } from '../helpers/utils';
 import { disposeModelForPath, renameModel } from '../lib/monaco/modelStore';
 import { clearViewState } from '../lib/monaco/viewStateStore';
+import { PREVIEW_PATH_PREFIX } from '../components/editor/previewConstants';
 import type {
   EditorTabId,
   EditorTabState,
@@ -70,14 +71,24 @@ const persistState = (
     return;
   }
 
-  if (tabs.length === 0) {
+  // Never persist virtual preview tabs — they are ephemeral
+  const persistableTabs = tabs.filter(
+    (t) => !t.path.startsWith(PREVIEW_PATH_PREFIX),
+  );
+
+  if (persistableTabs.length === 0) {
     window.localStorage.removeItem(key);
     return;
   }
 
+  // If the active tab was a preview tab, persist the first real tab as active
+  const persistableActiveId = persistableTabs.some((t) => t.id === activeTabId)
+    ? activeTabId
+    : (persistableTabs[0]?.id ?? null);
+
   const payload: PersistedTabsState = {
-    tabs,
-    activeTabId,
+    tabs: persistableTabs,
+    activeTabId: persistableActiveId,
   };
 
   try {
@@ -522,7 +533,9 @@ const useTabManager = (projectId?: string): UseTabManagerReturn => {
       let isEditable = false;
       let hasInitialContent = false;
 
-      isEditable = isEditableFile(path);
+      // Virtual preview tabs are never loaded from disk
+      const isVirtualPreview = path.startsWith(PREVIEW_PATH_PREFIX);
+      isEditable = !isVirtualPreview && isEditableFile(path);
       hasInitialContent = typeof options?.content === 'string';
 
       // Read current tabs synchronously from ref to avoid React 18 batching issues
@@ -625,7 +638,11 @@ const useTabManager = (projectId?: string): UseTabManagerReturn => {
   const refreshTabContentByPath = React.useCallback(
     async (path: string): Promise<void> => {
       const targetTab = tabsRef.current.find((tab) => tab.path === path);
-      if (!targetTab || !isEditableFile(path)) {
+      if (
+        !targetTab ||
+        !isEditableFile(path) ||
+        path.startsWith(PREVIEW_PATH_PREFIX)
+      ) {
         return;
       }
 
