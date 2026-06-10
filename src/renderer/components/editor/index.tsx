@@ -12,6 +12,7 @@ import { DiffView } from './diffView';
 import { EditorHeader } from './editorHeader';
 import { UnsavedChangesDialog } from './unsavedChangesDialog';
 import { MarkdownPreview } from './markdownPreview';
+import { HtmlPreview } from './htmlPreview';
 import {
   getDecorations,
   getLanguageFromExtension,
@@ -26,12 +27,20 @@ import type {
 } from '../../../types/editor';
 import useCli from '../../hooks/useCli';
 import {
-  PREVIEW_PATH_PREFIX,
+  MD_PREVIEW_PREFIX,
+  HTML_PREVIEW_PREFIX,
   getPreviewSourcePath,
   toPreviewPath,
+  isVirtualPreviewPath,
 } from './previewConstants';
 
-export { PREVIEW_PATH_PREFIX, getPreviewSourcePath, toPreviewPath };
+export {
+  MD_PREVIEW_PREFIX,
+  HTML_PREVIEW_PREFIX,
+  getPreviewSourcePath,
+  toPreviewPath,
+  isVirtualPreviewPath,
+};
 
 type EditorProps = {
   projectId?: string;
@@ -97,9 +106,11 @@ export const Editor: React.FC<EditorProps> = ({
   const language = computeLanguage(activeFilePath);
   const isFileEditable = !activeTab?.isReadOnly;
 
-  // Detect if the active tab is a markdown preview virtual tab
+  // Detect if the active tab is a virtual preview tab
   const previewSourcePath = getPreviewSourcePath(activeFilePath);
   const isPreviewTab = previewSourcePath !== null;
+  const isHtmlPreviewTab = activeFilePath.startsWith(HTML_PREVIEW_PREFIX);
+  const isMarkdownPreviewTab = activeFilePath.startsWith(MD_PREVIEW_PREFIX);
 
   // The content to render in the preview: from the live source tab if available
   const previewContent = React.useMemo(() => {
@@ -303,7 +314,7 @@ export const Editor: React.FC<EditorProps> = ({
 
   if (!activeTab) return null;
 
-  // --- Markdown preview tab: render MarkdownPreview instead of Monaco ---
+  // --- Preview tab: render HtmlPreview or MarkdownPreview instead of Monaco ---
   if (isPreviewTab) {
     return (
       <Container>
@@ -322,7 +333,13 @@ export const Editor: React.FC<EditorProps> = ({
           onNavigate={onOpenFile}
         />
         <EditorViewport>
-          <MarkdownPreview content={previewContent} />
+          {isHtmlPreviewTab && (
+            <HtmlPreview
+              content={previewContent}
+              sourcePath={previewSourcePath ?? ''}
+            />
+          )}
+          {isMarkdownPreviewTab && <MarkdownPreview content={previewContent} />}
         </EditorViewport>
       </Container>
     );

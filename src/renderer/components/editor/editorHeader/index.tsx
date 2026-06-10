@@ -11,6 +11,7 @@ import {
   VerticalSplit,
   PlayArrow,
   PreviewOutlined,
+  Language,
 } from '@mui/icons-material';
 import { Breadcrumbs } from '../breadcrumbs';
 
@@ -49,7 +50,14 @@ export const EditorHeader: React.FC<EditorHeaderProps> = ({
   onRun,
   extraActions,
 }) => {
-  const isMarkdown = filePath.toLowerCase().endsWith('.md');
+  const isMarkdown =
+    filePath.toLowerCase().endsWith('.md') ||
+    filePath.toLowerCase().endsWith('.markdown');
+  const isHtml =
+    filePath.toLowerCase().endsWith('.html') ||
+    filePath.toLowerCase().endsWith('.htm');
+  const hasPreviewFeature = isMarkdown || isHtml;
+
   const getDiffTooltip = () => {
     if (showDiffView) return 'Hide Diff';
     if (showDiffButton) return 'Compare Changes';
@@ -98,8 +106,8 @@ export const EditorHeader: React.FC<EditorHeaderProps> = ({
             </span>
           </Tooltip>
         )}
-        {/* Preview Button — only visible for markdown files */}
-        {isMarkdown && (
+        {/* Preview Button — only visible for markdown and html files */}
+        {hasPreviewFeature && (
           <Tooltip title={showPreview ? 'Close Preview' : 'Open Preview'}>
             <span>
               <IconButton
@@ -117,7 +125,11 @@ export const EditorHeader: React.FC<EditorHeaderProps> = ({
                   },
                 }}
               >
-                <PreviewOutlined fontSize="small" />
+                {isHtml ? (
+                  <Language fontSize="small" />
+                ) : (
+                  <PreviewOutlined fontSize="small" />
+                )}
               </IconButton>
             </span>
           </Tooltip>

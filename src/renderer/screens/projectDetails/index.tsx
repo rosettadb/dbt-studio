@@ -78,7 +78,8 @@ import type { EditorTabId } from '../../../types/editor';
 import { subscribeToToolResult } from '../../services/agentEvents.service';
 import {
   toPreviewPath,
-  PREVIEW_PATH_PREFIX,
+  isVirtualPreviewPath,
+  getPreviewSourcePath,
 } from '../../components/editor/previewConstants';
 
 const VerticalSash = (_: number, active: boolean) => (
@@ -329,13 +330,13 @@ const ProjectDetails: React.FC = () => {
     }
   }, [tabs, closeTab]);
 
-  // Toggles the markdown preview tab for a given file.
+  // Toggles the markdown/html preview tab for a given file.
   const handleTogglePreviewTab = React.useCallback(
     async (currentPath: string, content: string) => {
       // If we are already on a preview tab, extract the real source path
-      const isPreview = currentPath.startsWith(PREVIEW_PATH_PREFIX);
+      const isPreview = isVirtualPreviewPath(currentPath);
       const realSourcePath = isPreview
-        ? currentPath.slice(PREVIEW_PATH_PREFIX.length)
+        ? getPreviewSourcePath(currentPath) || currentPath
         : currentPath;
 
       const pvPath = toPreviewPath(realSourcePath);
@@ -367,11 +368,10 @@ const ProjectDetails: React.FC = () => {
 
   // Keep all preview tabs content in sync when their source tabs are edited
   React.useEffect(() => {
-    const previewTabs = tabs.filter((t) =>
-      t.path.startsWith(PREVIEW_PATH_PREFIX),
-    );
+    const previewTabs = tabs.filter((t) => isVirtualPreviewPath(t.path));
     previewTabs.forEach((previewTab) => {
-      const sourcePath = previewTab.path.slice(PREVIEW_PATH_PREFIX.length);
+      const sourcePath = getPreviewSourcePath(previewTab.path);
+      if (!sourcePath) return;
       const sourceTab = tabs.find((t) => t.path === sourcePath);
       if (sourceTab && sourceTab.content !== previewTab.content) {
         updateTabContentByPath(previewTab.path, sourceTab.content, {
@@ -416,9 +416,9 @@ const ProjectDetails: React.FC = () => {
 
   React.useEffect(() => {
     if (activeTab?.path) {
-      const isPreview = activeTab.path.startsWith(PREVIEW_PATH_PREFIX);
+      const isPreview = isVirtualPreviewPath(activeTab.path);
       const realSourcePath = isPreview
-        ? activeTab.path.slice(PREVIEW_PATH_PREFIX.length)
+        ? getPreviewSourcePath(activeTab.path) || activeTab.path
         : activeTab.path;
 
       if (realSourcePath !== selectedFilePath) {

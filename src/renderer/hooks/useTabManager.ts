@@ -4,7 +4,7 @@ import { getLanguageFromExtension } from '../components/editor/helpers';
 import { getNonEditableFileMessage, isEditableFile } from '../helpers/utils';
 import { disposeModelForPath, renameModel } from '../lib/monaco/modelStore';
 import { clearViewState } from '../lib/monaco/viewStateStore';
-import { PREVIEW_PATH_PREFIX } from '../components/editor/previewConstants';
+import { isVirtualPreviewPath } from '../components/editor/previewConstants';
 import type {
   EditorTabId,
   EditorTabState,
@@ -72,9 +72,7 @@ const persistState = (
   }
 
   // Never persist virtual preview tabs — they are ephemeral
-  const persistableTabs = tabs.filter(
-    (t) => !t.path.startsWith(PREVIEW_PATH_PREFIX),
-  );
+  const persistableTabs = tabs.filter((t) => !isVirtualPreviewPath(t.path));
 
   if (persistableTabs.length === 0) {
     window.localStorage.removeItem(key);
@@ -534,7 +532,7 @@ const useTabManager = (projectId?: string): UseTabManagerReturn => {
       let hasInitialContent = false;
 
       // Virtual preview tabs are never loaded from disk
-      const isVirtualPreview = path.startsWith(PREVIEW_PATH_PREFIX);
+      const isVirtualPreview = isVirtualPreviewPath(path);
       isEditable = !isVirtualPreview && isEditableFile(path);
       hasInitialContent = typeof options?.content === 'string';
 
@@ -638,11 +636,7 @@ const useTabManager = (projectId?: string): UseTabManagerReturn => {
   const refreshTabContentByPath = React.useCallback(
     async (path: string): Promise<void> => {
       const targetTab = tabsRef.current.find((tab) => tab.path === path);
-      if (
-        !targetTab ||
-        !isEditableFile(path) ||
-        path.startsWith(PREVIEW_PATH_PREFIX)
-      ) {
+      if (!targetTab || !isEditableFile(path) || isVirtualPreviewPath(path)) {
         return;
       }
 
