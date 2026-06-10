@@ -12,7 +12,6 @@ import { DiffView } from './diffView';
 import { EditorHeader } from './editorHeader';
 import { UnsavedChangesDialog } from './unsavedChangesDialog';
 import { MarkdownPreview } from './markdownPreview';
-import { HtmlPreview } from './htmlPreview';
 import {
   getDecorations,
   getLanguageFromExtension,
@@ -28,7 +27,6 @@ import type {
 import useCli from '../../hooks/useCli';
 import {
   MD_PREVIEW_PREFIX,
-  HTML_PREVIEW_PREFIX,
   getPreviewSourcePath,
   toPreviewPath,
   isVirtualPreviewPath,
@@ -36,7 +34,6 @@ import {
 
 export {
   MD_PREVIEW_PREFIX,
-  HTML_PREVIEW_PREFIX,
   getPreviewSourcePath,
   toPreviewPath,
   isVirtualPreviewPath,
@@ -106,11 +103,9 @@ export const Editor: React.FC<EditorProps> = ({
   const language = computeLanguage(activeFilePath);
   const isFileEditable = !activeTab?.isReadOnly;
 
-  // Detect if the active tab is a virtual preview tab
+  // Detect if the active tab is a markdown preview virtual tab
   const previewSourcePath = getPreviewSourcePath(activeFilePath);
   const isPreviewTab = previewSourcePath !== null;
-  const isHtmlPreviewTab = activeFilePath.startsWith(HTML_PREVIEW_PREFIX);
-  const isMarkdownPreviewTab = activeFilePath.startsWith(MD_PREVIEW_PREFIX);
 
   // The content to render in the preview: from the live source tab if available
   const previewContent = React.useMemo(() => {
@@ -314,7 +309,7 @@ export const Editor: React.FC<EditorProps> = ({
 
   if (!activeTab) return null;
 
-  // --- Preview tab: render HtmlPreview or MarkdownPreview instead of Monaco ---
+  // --- Markdown preview tab: render MarkdownPreview instead of Monaco ---
   if (isPreviewTab) {
     return (
       <Container>
@@ -333,13 +328,7 @@ export const Editor: React.FC<EditorProps> = ({
           onNavigate={onOpenFile}
         />
         <EditorViewport>
-          {isHtmlPreviewTab && (
-            <HtmlPreview
-              content={previewContent}
-              sourcePath={previewSourcePath ?? ''}
-            />
-          )}
-          {isMarkdownPreviewTab && <MarkdownPreview content={previewContent} />}
+          <MarkdownPreview content={previewContent} />
         </EditorViewport>
       </Container>
     );

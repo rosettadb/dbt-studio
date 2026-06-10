@@ -2,7 +2,6 @@ import React from 'react';
 import { projectsServices } from '../services';
 import {
   MD_PREVIEW_PREFIX,
-  HTML_PREVIEW_PREFIX,
   isVirtualPreviewPath,
 } from '../components/editor/previewConstants';
 import { getLanguageFromExtension } from '../components/editor/helpers';
@@ -348,10 +347,7 @@ const useTabManager = (projectId?: string): UseTabManagerReturn => {
           const st = sourceTabModified;
           let hasPreviews = false;
           const finalTabs = newTabs.map((tab) => {
-            if (
-              tab.path === `${MD_PREVIEW_PREFIX}${st.path}` ||
-              tab.path === `${HTML_PREVIEW_PREFIX}${st.path}`
-            ) {
+            if (tab.path === `${MD_PREVIEW_PREFIX}${st.path}`) {
               hasPreviews = true;
               return { ...tab, content: st.content };
             }
@@ -457,10 +453,7 @@ const useTabManager = (projectId?: string): UseTabManagerReturn => {
 
         let hasPreviews = false;
         const finalTabs = newTabs.map((tab) => {
-          if (
-            tab.path === `${MD_PREVIEW_PREFIX}${target.path}` ||
-            tab.path === `${HTML_PREVIEW_PREFIX}${target.path}`
-          ) {
+          if (tab.path === `${MD_PREVIEW_PREFIX}${target.path}`) {
             hasPreviews = true;
             return { ...tab, content };
           }

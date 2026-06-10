@@ -84,10 +84,6 @@ export const getLanguageFromExtension = (filePath: string): string => {
     case 'md':
     case 'markdown':
       return 'markdown';
-    case 'html':
-      return 'html';
-    case 'css':
-      return 'css';
     default:
       return 'plaintext';
   }

@@ -331,7 +331,7 @@ const ProjectDetails: React.FC = () => {
     }
   }, [tabs, closeTab]);
 
-  // Toggles the markdown/html preview tab for a given file.
+  // Toggles the markdown preview tab for a given file.
   const handleTogglePreviewTab = React.useCallback(
     async (currentPath: string, content: string) => {
       // If we are already on a preview tab, extract the real source path
