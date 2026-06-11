@@ -117,4 +117,3 @@ The build files after packaging can be found at: ```/release/build```
 ## License
 
 AGPL-3.0 - See [LICENSE](./LICENSE) for details.
-
