@@ -85,7 +85,7 @@ export const TestProviderConnection: React.FC<TestProviderConnectionProps> = ({
       case 'gemini':
         return !!apiKey;
       case 'ollama':
-        return !!baseUrl;
+        return true;
       default:
         return false;
     }
@@ -123,7 +123,7 @@ export const TestProviderConnection: React.FC<TestProviderConnectionProps> = ({
       case 'gemini':
         return 'Enter Google AI API key to test';
       case 'ollama':
-        return 'Enter Ollama server URL to test';
+        return 'Blank URL uses local Ollama';
       default:
         return 'Select provider type first';
     }

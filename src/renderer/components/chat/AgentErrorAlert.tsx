@@ -14,7 +14,7 @@ export const AgentErrorAlert: React.FC<AgentErrorAlertProps> = ({
   onDismiss,
   onNavigate,
 }) => {
-  let severity: 'error' | 'warning' = 'error';
+  let severity: 'error' | 'warning' | 'info' = 'error';
   let actionButton = null;
 
   if (error.type === 'auth') {
@@ -36,6 +36,17 @@ export const AgentErrorAlert: React.FC<AgentErrorAlertProps> = ({
         onClick={() => onNavigate('/settings')}
       >
         Change Provider
+      </Button>
+    ) : undefined;
+  } else if (error.type === 'toolUnsupported') {
+    severity = 'info';
+    actionButton = onNavigate ? (
+      <Button
+        color="inherit"
+        size="small"
+        onClick={() => onNavigate('/settings')}
+      >
+        Change Model
       </Button>
     ) : undefined;
   }

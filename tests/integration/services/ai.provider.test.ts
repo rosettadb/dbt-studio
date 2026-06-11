@@ -42,7 +42,7 @@ jest.mock('@ai-sdk/anthropic', () => ({
 jest.mock('@ai-sdk/google', () => ({
   createGoogleGenerativeAI: jest.fn(() => jest.fn(() => 'mock-gemini-model')),
 }));
-jest.mock('ollama-ai-provider', () => ({
+jest.mock('ai-sdk-ollama', () => ({
   createOllama: jest.fn(() => jest.fn(() => 'mock-ollama-model')),
 }));
 
