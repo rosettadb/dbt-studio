@@ -79,7 +79,15 @@ export type RosettaCloudChannels =
   | 'rosettaCloud:authError'
   | 'rosettaCloud:apiKeyUpdated'
   | 'rosettaCloud:getSecrets'
-  | 'rosettaCloud:deleteSecret';
+  | 'rosettaCloud:deleteSecret'
+  | 'rosettaCloud:findActionForPipeline'
+  | 'rosettaCloud:getActionStatus'
+  | 'rosettaCloud:getActionLogs'
+  | 'rosettaCloud:openLogStream'
+  | 'rosettaCloud:closeLogStream'
+  | 'rosettaCloud:logEntries'
+  | 'rosettaCloud:logStreamError'
+  | 'rosettaCloud:logStreamEnd';
 
 export type ConnectorChannels =
   | 'connector:configure'

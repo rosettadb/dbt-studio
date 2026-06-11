@@ -237,6 +237,12 @@ export type Project = {
   createTemplateFolders?: boolean;
   externalId?: string;
   lastRun?: string;
+  /**
+   * Maps a pipeline file name (e.g. "pipeline.yml") to the cloud action id of
+   * the last run we triggered for it. Used to drive the CI/CD view — runs are
+   * triggered exclusively from this app, so we are the source of truth.
+   */
+  pipelineRuns?: Record<string, string>;
 };
 
 export type CloudDeploymentPayload = {
