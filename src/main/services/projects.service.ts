@@ -42,6 +42,7 @@ import {
 } from '../extractor';
 import SecureStorageService from './secureStorage.service';
 import ConnectorsService from './connectors.service';
+import MainDatabaseService from './mainDatabase.service';
 
 export default class ProjectsService {
   static async loadProjects(): Promise<Project[]> {
@@ -690,8 +691,21 @@ export default class ProjectsService {
           await updateDatabase('selectedProject', undefined);
         }
       }
+
       const filteredProjects = projects.filter((p) => p.id !== id);
       await this.saveProjects(filteredProjects);
+
+      // Only clean up AI chats after the project deletion is persisted.
+      try {
+        const projectIdNum = parseInt(id, 10);
+        if (!Number.isNaN(projectIdNum)) {
+          await MainDatabaseService.deleteConversationsByProject(projectIdNum);
+        }
+      } catch (error) {
+        // eslint-disable-next-line no-console
+        console.error('[ProjectsService] Failed to clean up AI chats:', error);
+      }
+
       return true;
     }
     return false;

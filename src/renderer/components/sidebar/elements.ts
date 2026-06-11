@@ -11,12 +11,6 @@ interface SideBarElementType {
 
 const baseElements: SideBarElementType[] = [
   {
-    path: '/app/select-project',
-    text: 'Projects',
-    icon: Icons.SelectProject,
-    testId: 'nav-item-projects',
-  },
-  {
     path: '/app',
     text: 'DBT Studio',
     icon: Icons.DBTProjects,

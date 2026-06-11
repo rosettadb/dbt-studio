@@ -12,6 +12,7 @@ import { AddGitRemoteModal, GitUiError } from '../modals';
 interface TipTapCommitInputProps {
   projectPath?: string;
   stagedFilesCount?: number;
+  unstagedFilesCount?: number;
   onCommitSuccess?: () => void;
   onGitError?: (error: GitUiError) => void;
 }
@@ -19,6 +20,7 @@ interface TipTapCommitInputProps {
 export const TipTapCommitInput: React.FC<TipTapCommitInputProps> = ({
   projectPath,
   stagedFilesCount = 0,
+  unstagedFilesCount = 0,
   onCommitSuccess,
   onGitError,
 }) => {
@@ -193,17 +195,23 @@ export const TipTapCommitInput: React.FC<TipTapCommitInputProps> = ({
   const hasTrackingBranch = aheadBehind !== null && aheadBehind !== undefined;
 
   // Show "Publish Branch" when:
-  // 1. No remote exists, OR
-  // 2. Remote exists but current branch has no tracking branch
+  // 1. No staged files AND no unstaged files (i.e. nothing to commit)
+  // 2. No remote exists, OR remote exists but current branch has no tracking branch
   const shouldShowPublish =
-    stagedFilesCount === 0 && (!hasRemote || !hasTrackingBranch);
+    stagedFilesCount === 0 &&
+    unstagedFilesCount === 0 &&
+    (!hasRemote || !hasTrackingBranch);
 
   // Show "Sync Changes" when:
   // 1. Remote exists AND tracking branch exists
   // 2. Branch is ahead of remote
-  // 3. No staged files to commit
+  // 3. No staged files and no unstaged files
   const shouldShowPush =
-    hasRemote && hasTrackingBranch && aheadCount > 0 && stagedFilesCount === 0;
+    hasRemote &&
+    hasTrackingBranch &&
+    aheadCount > 0 &&
+    stagedFilesCount === 0 &&
+    unstagedFilesCount === 0;
 
   let primaryAction: 'commit' | 'push' | 'publish' = 'commit';
   if (shouldShowPublish) {

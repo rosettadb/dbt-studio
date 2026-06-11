@@ -6,7 +6,12 @@ import {
   Tooltip,
   CircularProgress,
 } from '@mui/material';
-import { Save, VerticalSplit } from '@mui/icons-material';
+import {
+  Save,
+  VerticalSplit,
+  PlayArrow,
+  PreviewOutlined,
+} from '@mui/icons-material';
 import { Breadcrumbs } from '../breadcrumbs';
 
 interface EditorHeaderProps {
@@ -18,9 +23,12 @@ interface EditorHeaderProps {
   errorMessage?: string;
   showDiffButton: boolean;
   showDiffView: boolean;
+  showPreview: boolean;
   onSave: () => void;
   onToggleDiff: () => void;
+  onTogglePreview: () => void;
   onNavigate?: (path: string) => void;
+  onRun?: () => void;
   extraActions?: React.ReactNode;
 }
 
@@ -33,11 +41,18 @@ export const EditorHeader: React.FC<EditorHeaderProps> = ({
   errorMessage,
   showDiffButton,
   showDiffView,
+  showPreview,
   onSave,
   onToggleDiff,
+  onTogglePreview,
   onNavigate,
+  onRun,
   extraActions,
 }) => {
+  const isMarkdown =
+    filePath.toLowerCase().endsWith('.md') ||
+    filePath.toLowerCase().endsWith('.markdown');
+
   const getDiffTooltip = () => {
     if (showDiffView) return 'Hide Diff';
     if (showDiffButton) return 'Compare Changes';
@@ -72,6 +87,44 @@ export const EditorHeader: React.FC<EditorHeaderProps> = ({
       >
         {/* Extra actions (e.g. AI, Model buttons) */}
         {extraActions}
+        {/* Run Button (only shown if onRun is provided, e.g. for Python files) */}
+        {onRun && (
+          <Tooltip title="Run python script">
+            <span>
+              <IconButton
+                onClick={onRun}
+                size="small"
+                sx={{ color: 'success.main' }}
+              >
+                <PlayArrow fontSize="small" />
+              </IconButton>
+            </span>
+          </Tooltip>
+        )}
+        {/* Preview Button — only visible for markdown files */}
+        {isMarkdown && (
+          <Tooltip title={showPreview ? 'Close Preview' : 'Open Preview'}>
+            <span>
+              <IconButton
+                onClick={onTogglePreview}
+                size="small"
+                sx={{
+                  color: showPreview ? 'primary.main' : 'text.secondary',
+                  backgroundColor: showPreview
+                    ? 'action.selected'
+                    : 'transparent',
+                  '&:hover': {
+                    backgroundColor: showPreview
+                      ? 'action.selected'
+                      : 'action.hover',
+                  },
+                }}
+              >
+                <PreviewOutlined fontSize="small" />
+              </IconButton>
+            </span>
+          </Tooltip>
+        )}
         {/* Diff Button — always visible, disabled when no diff is available */}
         <Tooltip title={getDiffTooltip()}>
           <span>

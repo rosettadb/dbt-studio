@@ -71,11 +71,19 @@ export const getLanguageFromExtension = (filePath: string): string => {
       return 'yaml';
     case 'sql':
       return 'sql';
+    case 'py':
+      return 'python';
     case 'js':
     case 'jsx':
       return 'javascript';
+    case 'ts':
+    case 'tsx':
+      return 'typescript';
     case 'json':
       return 'json';
+    case 'md':
+    case 'markdown':
+      return 'markdown';
     default:
       return 'plaintext';
   }

@@ -30,9 +30,10 @@ interface CliState {
 interface CliContextValue extends CliState {
   runCommand: (
     command: string,
+    args?: string[],
     timeoutMs?: number,
   ) => Promise<{ output: string[]; error: string[] }>;
-  runCommandAsync: (command: string) => void; // Fire and forget for terminal usage
+  runCommandAsync: (command: string, args?: string[]) => void; // Fire and forget for terminal usage
   stopCommand: () => void;
   clearOutput: () => void;
   sendInput: (input: string) => void;
@@ -191,6 +192,7 @@ export const CliProvider: React.FC<CliProviderProps> = ({ children }) => {
   const runCommand = useCallback(
     async (
       commandString: string,
+      args?: string[],
       timeoutMs: number = 60000,
     ): Promise<{ output: string[]; error: string[] }> => {
       if (state.isRunning) {
@@ -230,7 +232,7 @@ export const CliProvider: React.FC<CliProviderProps> = ({ children }) => {
           }));
 
           // Execute command
-          projectsServices.runCliCommand(commandString).catch((err) => {
+          projectsServices.runCliCommand(commandString, args).catch((err) => {
             const errorMessage =
               err?.message || err?.toString() || 'Command failed';
             setState((prev) => ({
@@ -249,7 +251,7 @@ export const CliProvider: React.FC<CliProviderProps> = ({ children }) => {
 
   // Run command without waiting for result (for terminal usage)
   const runCommandAsync = useCallback(
-    (commandString: string) => {
+    (commandString: string, args?: string[]) => {
       if (state.isRunning) {
         // Add to output to show command was ignored
         setState((prev) => ({
@@ -278,7 +280,7 @@ export const CliProvider: React.FC<CliProviderProps> = ({ children }) => {
       }));
 
       // Execute command
-      projectsServices.runCliCommand(commandString).catch((err) => {
+      projectsServices.runCliCommand(commandString, args).catch((err) => {
         const errorMessage =
           err?.message || err?.toString() || 'Command failed';
         setState((prev) => ({
