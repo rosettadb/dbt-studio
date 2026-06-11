@@ -123,8 +123,11 @@ function assertSafeSegment(value: string, label: string): string {
 
 // Get notebook file path with security validation
 function getNotebookPath(connectionKey: string, notebookId: string): string {
-  const safeConnectionKey = assertSafeSegment(connectionKey, 'connection key');
+  let safeConnectionKey = assertSafeSegment(connectionKey, 'connection key');
   const safeNotebookId = assertSafeSegment(notebookId, 'notebook id');
+  if (process.platform === 'win32') {
+    safeConnectionKey = safeConnectionKey.replace(':', '_');
+  }
   const filePath = path.resolve(
     NOTEBOOKS_DIR,
     safeConnectionKey,
@@ -140,7 +143,15 @@ function getNotebookPath(connectionKey: string, notebookId: string): string {
 // Get connection directory path with security validation
 function getConnectionDir(connectionKey: string): string {
   const safeConnectionKey = assertSafeSegment(connectionKey, 'connection key');
-  const dirPath = path.resolve(NOTEBOOKS_DIR, safeConnectionKey);
+  let dirPath = path.resolve(NOTEBOOKS_DIR, safeConnectionKey);
+  if (process.platform === 'win32') {
+    const lastColonIndex = dirPath.lastIndexOf(':');
+    if (lastColonIndex !== -1) {
+      dirPath = `${dirPath.substring(0, lastColonIndex)}_${dirPath.substring(
+        lastColonIndex + 1,
+      )}`;
+    }
+  }
   const base = `${path.resolve(NOTEBOOKS_DIR)}${path.sep}`;
   if (!dirPath.startsWith(base)) {
     throw new Error('Invalid connection directory - path traversal detected');
