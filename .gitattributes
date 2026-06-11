@@ -10,6 +10,7 @@
 *.ttf   binary
 *.woff  binary
 *.woff2 binary
+*.gif   binary
 bin/rosetta/mac-arm64/lib/modules binary
 bin/rosetta/mac-arm64/lib/modules -diff
 bin/rosetta/mac-x64/lib/modules binary

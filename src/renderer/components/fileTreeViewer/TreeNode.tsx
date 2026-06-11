@@ -49,7 +49,7 @@ const NodeContainer = styled('div')<{
 const NodeContent = styled('div')({
   display: 'flex',
   alignItems: 'center',
-  gap: 8,
+  gap: 6,
   flex: 1,
   overflow: 'hidden',
   minWidth: 0,

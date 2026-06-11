@@ -1,6 +1,6 @@
 import { Box, InputBase, styled } from '@mui/material';
 
-export const TerminalContainer = styled('form')(({ theme }) => ({
+export const TerminalContainer = styled('div')(({ theme }) => ({
   display: 'flex',
   flexDirection: 'column',
   backgroundColor:
@@ -27,6 +27,8 @@ export const OutputBox = styled(Box)(({ theme }) => ({
   marginBottom: 0,
   whiteSpace: 'pre-wrap',
   fontFamily: 'monospace',
+  userSelect: 'text',
+  WebkitUserSelect: 'text',
 }));
 
 export const StyledInput = styled(InputBase)(({ theme }) => ({

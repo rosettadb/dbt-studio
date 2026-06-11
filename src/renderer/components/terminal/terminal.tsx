@@ -1,5 +1,19 @@
 import React from 'react';
-import { Typography, useColorScheme, useTheme } from '@mui/material';
+import {
+  Typography,
+  useColorScheme,
+  useTheme,
+  Menu,
+  MenuItem,
+  ListItemIcon,
+  ListItemText,
+  Divider,
+} from '@mui/material';
+import {
+  ContentCopy as CopyIcon,
+  ContentPasteSearch as CopyAllIcon,
+  DeleteSweep as ClearIcon,
+} from '@mui/icons-material';
 import { toast } from 'react-toastify';
 import AnsiToHtml from 'ansi-to-html';
 import { useCli, useCommandHistory } from '../../hooks';
@@ -20,6 +34,74 @@ export const Terminal: React.FC<Props> = ({ project }) => {
   const inputRef = React.useRef<HTMLInputElement | null>(null);
   const { data: settings } = useGetSettings();
   const { record, getPrev, getNext, resetPointer } = useCommandHistory();
+
+  const [contextMenu, setContextMenu] = React.useState<{
+    mouseX: number;
+    mouseY: number;
+    selectedText: string;
+  } | null>(null);
+
+  const lastSelectionRef = React.useRef<string>('');
+
+  const handleMouseUp = () => {
+    const selection = window.getSelection();
+    if (selection && !selection.isCollapsed) {
+      const text = selection.toString();
+      if (text) {
+        lastSelectionRef.current = text;
+      }
+    }
+  };
+
+  const handleContextMenu = (event: React.MouseEvent) => {
+    event.preventDefault();
+    const selection = window.getSelection();
+    let selectedText = selection ? selection.toString() : '';
+
+    // If current selection is empty, try the last known selection
+    if (!selectedText && lastSelectionRef.current) {
+      selectedText = lastSelectionRef.current;
+    }
+
+    setContextMenu(
+      contextMenu === null
+        ? {
+            mouseX: event.clientX + 2,
+            mouseY: event.clientY - 4,
+            selectedText,
+          }
+        : null,
+    );
+  };
+
+  const handleClose = () => {
+    setContextMenu(null);
+  };
+
+  const handleCopy = () => {
+    const textToCopy =
+      contextMenu?.selectedText ||
+      window.getSelection()?.toString() ||
+      lastSelectionRef.current;
+
+    if (textToCopy) {
+      navigator.clipboard.writeText(textToCopy);
+    }
+    handleClose();
+  };
+
+  const handleCopyAll = () => {
+    const allText = [...output, ...error].join('\n');
+    if (allText) {
+      navigator.clipboard.writeText(allText);
+    }
+    handleClose();
+  };
+
+  const handleClear = () => {
+    clearOutput();
+    handleClose();
+  };
 
   // Theme-based terminal colors using Material UI theme
   const getTerminalColors = (themeMode: string | undefined) => {
@@ -177,19 +259,17 @@ export const Terminal: React.FC<Props> = ({ project }) => {
     }
   };
 
-  const handleClearTerminal = () => {
-    clearOutput();
-  };
-
   return (
-    <TerminalContainer>
+    <TerminalContainer
+      onContextMenu={handleContextMenu}
+      onMouseUp={handleMouseUp}
+    >
       <OutputBox
         ref={outputRef}
         style={{
           backgroundColor: terminalColors.bg,
           color: terminalColors.fg,
         }}
-        onDoubleClick={handleClearTerminal}
       >
         {output.map((line, index) => (
           <Typography
@@ -274,6 +354,66 @@ export const Terminal: React.FC<Props> = ({ project }) => {
           }}
         />
       </InputLine>
+
+      <Menu
+        open={contextMenu !== null}
+        onClose={handleClose}
+        anchorReference="anchorPosition"
+        anchorPosition={
+          contextMenu !== null
+            ? { top: contextMenu.mouseY, left: contextMenu.mouseX }
+            : undefined
+        }
+        slotProps={{
+          paper: {
+            sx: {
+              minWidth: 120,
+              backgroundColor: terminalColors.bg,
+              border: `1px solid ${theme.palette.divider}`,
+              '& .MuiList-root': {
+                padding: '4px 0',
+              },
+            },
+          },
+        }}
+      >
+        <MenuItem
+          onClick={handleCopy}
+          dense
+          sx={{ py: 0.5, px: 1.5 }}
+          disabled={!contextMenu?.selectedText}
+        >
+          <ListItemIcon sx={{ minWidth: '28px !important' }}>
+            <CopyIcon sx={{ fontSize: 16 }} />
+          </ListItemIcon>
+          <ListItemText
+            primaryTypographyProps={{ variant: 'body2', fontSize: 12 }}
+          >
+            Copy
+          </ListItemText>
+        </MenuItem>
+        <MenuItem onClick={handleCopyAll} dense sx={{ py: 0.5, px: 1.5 }}>
+          <ListItemIcon sx={{ minWidth: '28px !important' }}>
+            <CopyAllIcon sx={{ fontSize: 16 }} />
+          </ListItemIcon>
+          <ListItemText
+            primaryTypographyProps={{ variant: 'body2', fontSize: 12 }}
+          >
+            Copy All
+          </ListItemText>
+        </MenuItem>
+        <Divider sx={{ my: '4px !important' }} />
+        <MenuItem onClick={handleClear} dense sx={{ py: 0.5, px: 1.5 }}>
+          <ListItemIcon sx={{ minWidth: '28px !important' }}>
+            <ClearIcon sx={{ fontSize: 16 }} />
+          </ListItemIcon>
+          <ListItemText
+            primaryTypographyProps={{ variant: 'body2', fontSize: 12 }}
+          >
+            Clear
+          </ListItemText>
+        </MenuItem>
+      </Menu>
     </TerminalContainer>
   );
 };
