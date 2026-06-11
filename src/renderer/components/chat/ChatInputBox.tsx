@@ -51,6 +51,7 @@ interface ChatInputBoxProps {
   onCancelStream?: () => void;
   contextBreakdown?: ContextUsageBreakdown | null;
   screenKey?: string;
+  disabledReason?: string | null;
 }
 
 export const ChatInputBox: React.FC<ChatInputBoxProps> = ({
@@ -61,6 +62,7 @@ export const ChatInputBox: React.FC<ChatInputBoxProps> = ({
   onCancelStream,
   contextBreakdown,
   screenKey,
+  disabledReason,
 }) => {
   const theme = useTheme();
   const [input, setInput] = React.useState('');
@@ -89,6 +91,8 @@ export const ChatInputBox: React.FC<ChatInputBoxProps> = ({
   // All messages now route through the agent path
   const isLoading = isStreaming;
   const isCanceling = false;
+  const isBlocked = !!disabledReason;
+  const inputDisabled = isLoading || isBlocked;
 
   // Auto-rename session hook
   const { autoRename } = useAutoRenameSession(sessionId);
@@ -158,6 +162,8 @@ export const ChatInputBox: React.FC<ChatInputBoxProps> = ({
   };
 
   const handleSendMessage = async (content?: string) => {
+    if (disabledReason) return;
+
     const messageContent = content || plainText.trim();
     const limitError = getUserMessageLimitError(
       messageContent,
@@ -179,14 +185,20 @@ export const ChatInputBox: React.FC<ChatInputBoxProps> = ({
   };
 
   React.useEffect(() => {
-    if (pendingMessage && sessionId && activeProvider && !isLoading) {
+    if (
+      pendingMessage &&
+      sessionId &&
+      activeProvider &&
+      !isLoading &&
+      !disabledReason
+    ) {
       setTimeout(() => {
         handleSendMessage(pendingMessage);
         setPendingMessage(null);
         setInput('');
       }, 500);
     }
-  }, [pendingMessage, sessionId, activeProvider, isLoading]);
+  }, [pendingMessage, sessionId, activeProvider, isLoading, disabledReason]);
 
   return (
     <Box
@@ -220,8 +232,8 @@ export const ChatInputBox: React.FC<ChatInputBoxProps> = ({
           <TipTapEditor
             value={input}
             onChange={setInput}
-            placeholder="Type a message..."
-            disabled={isLoading}
+            placeholder={disabledReason ?? 'Type a message...'}
+            disabled={inputDisabled}
             onSubmit={handleSend}
           />
         </Box>
@@ -239,14 +251,19 @@ export const ChatInputBox: React.FC<ChatInputBoxProps> = ({
         {screenKey !== 'sql' && (
           <>
             <Tooltip
-              title="Add context..."
+              title={disabledReason ?? 'Add context...'}
               placement="top"
               arrow
               enterDelay={500}
             >
               <IconButton
                 size="small"
-                onClick={() => setIsFilePickerOpen(true)}
+                onClick={() => {
+                  if (!isBlocked) {
+                    setIsFilePickerOpen(true);
+                  }
+                }}
+                disabled={isBlocked}
                 sx={{
                   width: 20,
                   height: 20,
@@ -289,7 +306,11 @@ export const ChatInputBox: React.FC<ChatInputBoxProps> = ({
 
         {/* Agent/Chat Mode Selector - Custom Dropdown */}
         <Box
-          onClick={(e) => !isLoading && setModeMenuAnchor(e.currentTarget)}
+          onClick={(e) => {
+            if (!inputDisabled) {
+              setModeMenuAnchor(e.currentTarget);
+            }
+          }}
           sx={{
             display: 'flex',
             alignItems: 'center',
@@ -300,9 +321,10 @@ export const ChatInputBox: React.FC<ChatInputBoxProps> = ({
             py: 0.125,
             border: '1px solid',
             borderColor: 'divider',
-            cursor: isLoading ? 'default' : 'pointer',
+            opacity: isBlocked ? 0.6 : 1,
+            cursor: inputDisabled ? 'default' : 'pointer',
             '&:hover': {
-              bgcolor: isLoading ? 'transparent' : 'action.hover',
+              bgcolor: inputDisabled ? 'transparent' : 'action.hover',
             },
           }}
         >
@@ -328,7 +350,9 @@ export const ChatInputBox: React.FC<ChatInputBoxProps> = ({
         {/* AI Provider Selector - Custom Dropdown */}
         <Box
           onClick={(e) =>
-            !switching && !isLoading && setProviderMenuAnchor(e.currentTarget)
+            !switching &&
+            !inputDisabled &&
+            setProviderMenuAnchor(e.currentTarget)
           }
           sx={{
             display: 'flex',
@@ -340,9 +364,11 @@ export const ChatInputBox: React.FC<ChatInputBoxProps> = ({
             py: 0.125,
             border: '1px solid',
             borderColor: 'divider',
-            cursor: switching || isLoading ? 'default' : 'pointer',
+            opacity: isBlocked ? 0.6 : 1,
+            cursor: switching || inputDisabled ? 'default' : 'pointer',
             '&:hover': {
-              bgcolor: switching || isLoading ? 'transparent' : 'action.hover',
+              bgcolor:
+                switching || inputDisabled ? 'transparent' : 'action.hover',
             },
           }}
         >
@@ -561,13 +587,16 @@ export const ChatInputBox: React.FC<ChatInputBoxProps> = ({
           }
 
           const sendDisabled =
+            isBlocked ||
             !sessionId ||
             !plainText.trim() ||
             !!messageLimitError ||
             !activeProvider ||
             activeContextManager.isResolvingContext;
           let tooltipTitle = 'Send message (Enter)';
-          if (!activeProvider) tooltipTitle = 'Select an AI provider to send';
+          if (disabledReason) tooltipTitle = disabledReason;
+          else if (!activeProvider)
+            tooltipTitle = 'Select an AI provider to send';
           else if (!sessionId) tooltipTitle = 'Open or create a chat session';
           else if (!plainText.trim())
             tooltipTitle = 'Type a message to enable send';

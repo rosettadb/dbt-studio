@@ -168,6 +168,37 @@ const TOOLS: ToolItem[] = [
     icon: <PatchIcon sx={{ fontSize: 16 }} />,
     planned: true,
   },
+  // ── Notebooks ─────────────────────────────────────────────────────────────
+  {
+    id: 'notebooks_get_state',
+    label: 'notebooks_get_state',
+    description: 'List all cells in the current notebook and their types',
+    icon: <SearchIcon sx={{ fontSize: 16 }} />,
+  },
+  {
+    id: 'notebooks_cell_read',
+    label: 'notebooks_cell_read',
+    description: 'Read the source code/content of a specific cell',
+    icon: <ArticleIcon sx={{ fontSize: 16 }} />,
+  },
+  {
+    id: 'notebooks_cell_update',
+    label: 'notebooks_cell_update',
+    description: 'Update the content of a notebook cell',
+    icon: <EditIcon sx={{ fontSize: 16 }} />,
+  },
+  {
+    id: 'notebooks_cell_run',
+    label: 'notebooks_cell_run',
+    description: 'Execute a specific notebook cell',
+    icon: <TerminalIcon sx={{ fontSize: 16 }} />,
+  },
+  {
+    id: 'notebooks_cell_result',
+    label: 'notebooks_cell_result',
+    description: 'Inspect the last execution result of a cell',
+    icon: <StorageIcon sx={{ fontSize: 16 }} />,
+  },
 ];
 
 // ─── Sub-components ───────────────────────────────────────────────────────────

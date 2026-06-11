@@ -39,6 +39,7 @@ export const chatConversations = sqliteTable(
     projectId: integer('project_id'), // References existing project IDs from database.json (read-only)
     screenKey: text('screen_key').default('project').notNull(),
     connectionId: text('connection_id'),
+    notebookId: text('notebook_id'),
     providerId: integer('provider_id').references(() => aiProviders.id, {
       onDelete: 'set null',
     }),

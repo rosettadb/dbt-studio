@@ -271,12 +271,21 @@ export function useRunCell() {
         limit,
         offset,
       ),
-    onSuccess: async (_, { connectionId, notebookId }) => {
+    onSuccess: async (_, { connectionId, notebookId, sql }) => {
       // Manually refetch the notebook to get updated cell output
       await queryClient.refetchQueries(
         notebooksKeys.detail(connectionId, notebookId),
         { active: true }, // Only refetch if query is currently active
       );
+
+      if (
+        /^\s*(CREATE|DROP|ALTER|INSERT|UPDATE|DELETE|TRUNCATE|MERGE|REPLACE)/i.test(
+          sql,
+        )
+      ) {
+        queryClient.invalidateQueries(['schema', connectionId]);
+        queryClient.invalidateQueries(notebooksKeys.schema(connectionId));
+      }
     },
     onError: (error: Error) => {
       toast.error(`Cell execution failed: ${error.message}`);
@@ -334,6 +343,8 @@ export function useRunAllCells() {
       queryClient.invalidateQueries(
         notebooksKeys.detail(connectionId, notebookId),
       );
+      queryClient.invalidateQueries(['schema', connectionId]);
+      queryClient.invalidateQueries(notebooksKeys.schema(connectionId));
       toast.success('All cells executed');
     },
     onError: (error: Error) => {

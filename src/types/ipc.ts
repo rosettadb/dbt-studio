@@ -374,6 +374,18 @@ export type AgentChannels =
   | 'agent:editor:query-results-request' // main → renderer: request snapshot
   | 'agent:editor:query-results-response' // renderer → main: send snapshot back
   | 'agent:editor:query-run-result' // renderer → main: push result after agent-triggered run
+  | 'agent:notebook:state-request' // main → renderer
+  | 'agent:notebook:state-response' // renderer → main
+  | 'agent:notebook:cell-read-request' // main → renderer
+  | 'agent:notebook:cell-read-response' // renderer → main
+  | 'agent:notebook:cell-add-request' // main → renderer
+  | 'agent:notebook:cell-add-response' // renderer → main
+  | 'agent:notebook:cell-update-request' // main → renderer
+  | 'agent:notebook:cell-update-response' // renderer → main
+  | 'agent:notebook:cell-run-request' // main → renderer
+  | 'agent:notebook:cell-run-response' // renderer → main
+  | 'agent:notebook:cell-result-request' // main → renderer
+  | 'agent:notebook:cell-result-response' // renderer → main
   | 'agent:context-usage'
   | 'agent:context-compacted'
   | 'agent:tools:list'
