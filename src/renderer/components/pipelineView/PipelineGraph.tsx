@@ -92,34 +92,49 @@ export const PipelineGraph: React.FC<PipelineGraphProps> = ({
         // Edge within job: previous step → this step
         if (stepIndex > 0) {
           const prevId = `${jobIndex}-${stepIndex - 1}`;
+          const targetIsRunning = step.status === 'running';
           flowEdges.push({
             id: `e-${prevId}-${id}`,
             source: prevId,
             target: id,
             type: 'smoothstep',
+            animated: targetIsRunning,
             markerEnd: {
               type: MarkerType.ArrowClosed,
-              color: theme.palette.text.disabled,
+              color: targetIsRunning
+                ? theme.palette.info.main
+                : theme.palette.text.disabled,
             },
-            style: { stroke: theme.palette.text.disabled },
+            style: {
+              stroke: targetIsRunning
+                ? theme.palette.info.main
+                : theme.palette.text.disabled,
+            },
           });
         }
       });
 
       // Edge between jobs: last step of previous job → first step of this job (dashed)
       const firstId = `${jobIndex}-0`;
+      const firstStep = steps[0];
+      const firstIsRunning = firstStep?.status === 'running';
       if (prevLastId !== null && steps.length > 0) {
         flowEdges.push({
           id: `e-${prevLastId}-${firstId}`,
           source: prevLastId,
           target: firstId,
           type: 'smoothstep',
+          animated: firstIsRunning,
           markerEnd: {
             type: MarkerType.ArrowClosed,
-            color: theme.palette.text.disabled,
+            color: firstIsRunning
+              ? theme.palette.info.main
+              : theme.palette.text.disabled,
           },
           style: {
-            stroke: theme.palette.text.disabled,
+            stroke: firstIsRunning
+              ? theme.palette.info.main
+              : theme.palette.text.disabled,
             strokeDasharray: '5 4',
           },
         });

@@ -6,6 +6,14 @@ import { getVercelModel } from './agentAdapter';
 import { HealthStatus } from './types/provider.types';
 import { fetchAndCacheContextWindows } from './tokenEstimator';
 import {
+  buildOllamaHeaders,
+  buildOllamaTagsUrl,
+  isHostedOllamaCloudUrl,
+  isRemoteOllamaUrl,
+  normalizeOllamaBaseUrl,
+  shouldAttachOllamaAuth,
+} from './utils/ollamaProvider.utils';
+import {
   CompletionRequest,
   CompletionResponse,
   TypedCompletionRequest,
@@ -22,6 +30,17 @@ export interface ProviderTestResult {
 
 export class AIProviderManager {
   private static providers: Map<string, any> = new Map();
+
+  private static providerRequiresApiKey(
+    providerType: string,
+    config?: any,
+  ): boolean {
+    if (providerType === 'ollama') {
+      return isHostedOllamaCloudUrl(config?.baseUrl);
+    }
+
+    return ['openai', 'anthropic', 'gemini'].includes(providerType);
+  }
 
   /**
    * @deprecated Use getVercelModel() from agentAdapter.ts instead.
@@ -153,11 +172,19 @@ export class AIProviderManager {
           config = updates.config as any;
         }
 
-        if (config.apiKey) {
+        const hasApiKeyUpdate =
+          Object.prototype.hasOwnProperty.call(config, 'apiKey') &&
+          config.apiKey !== undefined;
+        const normalizedApiKey =
+          typeof config.apiKey === 'string'
+            ? config.apiKey.trim()
+            : config.apiKey;
+
+        if (hasApiKeyUpdate && normalizedApiKey) {
           await SecureStorageService.setAIProviderCredential(
             id,
             updates.type as any,
-            config.apiKey,
+            normalizedApiKey,
           );
 
           // Remove API key from config before storing in database
@@ -167,11 +194,22 @@ export class AIProviderManager {
           // Always store as JSON string in database
           updates.config = JSON.stringify(configWithoutKey);
         } else {
-          // Store as JSON string if no API key to process
-          updates.config =
-            typeof updates.config === 'string'
-              ? updates.config
-              : JSON.stringify(config);
+          if (updates.type === 'ollama' && hasApiKeyUpdate) {
+            await SecureStorageService.deleteAIProviderCredential(
+              id,
+              updates.type as AIProviderType,
+            );
+          }
+
+          if (hasApiKeyUpdate) {
+            // Remove an empty API key from config before storing in database
+            // eslint-disable-next-line @typescript-eslint/no-unused-vars
+            const { apiKey, ...configWithoutKey } = config;
+
+            updates.config = JSON.stringify(configWithoutKey);
+          } else {
+            updates.config = JSON.stringify(config);
+          }
         }
       }
       // Update provider in database
@@ -228,8 +266,12 @@ export class AIProviderManager {
       // Fire-and-forget: refresh context window cache for the newly active provider
       const provider = await MainDatabaseService.getProvider(parseInt(id, 10));
       if (provider) {
+        const config =
+          typeof provider.config === 'string'
+            ? JSON.parse(provider.config)
+            : provider.config || {};
         const apiKey =
-          provider.type !== 'ollama'
+          provider.type !== 'ollama' || isRemoteOllamaUrl(config.baseUrl)
             ? await SecureStorageService.getAIProviderCredential(
                 provider.id!,
                 provider.type as AIProviderType,
@@ -276,13 +318,32 @@ export class AIProviderManager {
 
       // Test DIRECTLY without touching the database at all
       let model: any;
+      let discoveredModels: any[] = [];
 
       if (config.type === 'ollama') {
-        const { createOllama } = await import('ollama-ai-provider');
+        if (isHostedOllamaCloudUrl(parsedConfig.baseUrl) && !apiKey) {
+          return {
+            success: false,
+            error: 'No API key provided for hosted Ollama provider',
+          };
+        }
+
+        const { createOllama } = await import('ai-sdk-ollama');
+        const baseURL = normalizeOllamaBaseUrl(parsedConfig.baseUrl);
+        discoveredModels = await this.fetchOllamaModels(
+          parsedConfig.baseUrl,
+          apiKey,
+        );
         const ollama = createOllama({
-          baseURL: parsedConfig.baseUrl || 'http://localhost:11434/api',
+          baseURL,
+          ...(shouldAttachOllamaAuth(baseURL, apiKey)
+            ? { headers: buildOllamaHeaders(apiKey) }
+            : {}),
         });
-        const modelId = await this.fetchFirstOllamaModel(parsedConfig.baseUrl);
+        const modelId = await this.fetchFirstOllamaModel(
+          parsedConfig.baseUrl,
+          apiKey,
+        );
         model = ollama(modelId);
       } else {
         if (!apiKey) {
@@ -296,17 +357,20 @@ export class AIProviderManager {
           case 'openai': {
             const { createOpenAI } = await import('@ai-sdk/openai');
             const modelId = await this.fetchFirstOpenAIModel(apiKey);
+            discoveredModels = await this.fetchOpenAIModels(apiKey);
             model = createOpenAI({ apiKey })(modelId);
             break;
           }
           case 'anthropic': {
             const { createAnthropic } = await import('@ai-sdk/anthropic');
+            discoveredModels = await this.fetchAnthropicModels();
             model = createAnthropic({ apiKey })('claude-sonnet-4-6');
             break;
           }
           case 'gemini': {
             const { createGoogleGenerativeAI } = await import('@ai-sdk/google');
             const modelId = await this.fetchFirstGeminiModel(apiKey);
+            discoveredModels = await this.fetchGeminiModels(apiKey);
             // eslint-disable-next-line no-console
             console.log(
               '[PROVIDER MANAGER] testTemporaryProvider - Using Gemini model:',
@@ -340,8 +404,8 @@ export class AIProviderManager {
         success: true,
         message: 'Provider test successful',
         latencyMs,
-        models: [],
-        modelsAvailable: 0,
+        models: discoveredModels,
+        modelsAvailable: discoveredModels.length,
       };
     } catch (error) {
       // eslint-disable-next-line no-console
@@ -400,10 +464,14 @@ export class AIProviderManager {
 
   private static async fetchFirstOllamaModel(
     baseUrl?: string,
+    apiKey?: string | null,
   ): Promise<string> {
     try {
-      const url = baseUrl || 'http://localhost:11434';
-      const response = await fetch(`${url}/api/tags`);
+      const response = await fetch(buildOllamaTagsUrl(baseUrl), {
+        headers: shouldAttachOllamaAuth(baseUrl, apiKey)
+          ? buildOllamaHeaders(apiKey)
+          : undefined,
+      });
       if (!response.ok) throw new Error('Failed to fetch models');
       const data = await response.json();
       return data.models?.[0]?.name || 'llama3.2';
@@ -432,12 +500,23 @@ export class AIProviderManager {
 
       // Get API key from secure storage
       let apiKey: string | null = null;
-      const providersNeedingApiKey = ['openai', 'anthropic', 'gemini'];
-      if (providersNeedingApiKey.includes(provider.type)) {
+      if (
+        this.providerRequiresApiKey(provider.type, config) ||
+        (provider.type === 'ollama' && isRemoteOllamaUrl(config.baseUrl))
+      ) {
         apiKey = await SecureStorageService.getAIProviderCredential(
           provider.id!,
           provider.type as AIProviderType,
         );
+      }
+
+      if (
+        provider.type === 'ollama' &&
+        isHostedOllamaCloudUrl(config.baseUrl)
+      ) {
+        if (!apiKey) {
+          return [];
+        }
       }
 
       // Fetch models from provider APIs
@@ -449,7 +528,7 @@ export class AIProviderManager {
         case 'gemini':
           return await this.fetchGeminiModels(apiKey || undefined);
         case 'ollama':
-          return await this.fetchOllamaModels(config.baseUrl);
+          return await this.fetchOllamaModels(config.baseUrl, apiKey);
         default:
           return [];
       }
@@ -586,10 +665,16 @@ export class AIProviderManager {
     }
   }
 
-  private static async fetchOllamaModels(baseUrl?: string): Promise<any[]> {
+  private static async fetchOllamaModels(
+    baseUrl?: string,
+    apiKey?: string | null,
+  ): Promise<any[]> {
     try {
-      const url = baseUrl || 'http://localhost:11434';
-      const response = await fetch(`${url}/api/tags`);
+      const response = await fetch(buildOllamaTagsUrl(baseUrl), {
+        headers: shouldAttachOllamaAuth(baseUrl, apiKey)
+          ? buildOllamaHeaders(apiKey)
+          : undefined,
+      });
 
       if (!response.ok) {
         throw new Error(`Ollama API error: ${response.statusText}`);
@@ -658,18 +743,26 @@ export class AIProviderManager {
             : JSON.stringify(provider.config).substring(0, 100),
       });
 
+      const providerConfig =
+        typeof provider.config === 'string'
+          ? JSON.parse(provider.config)
+          : provider.config || {};
+
       // Get provider credentials from secure storage (only for providers that need API keys)
       let apiKey;
-      const providersNeedingApiKey = ['openai', 'anthropic', 'gemini'];
 
-      if (providersNeedingApiKey.includes(provider.type)) {
+      if (
+        this.providerRequiresApiKey(provider.type, providerConfig) ||
+        (provider.type === 'ollama' &&
+          isRemoteOllamaUrl(providerConfig.baseUrl))
+      ) {
         // Get credentials from secure storage
         apiKey = await SecureStorageService.getAIProviderCredential(
           provider.id!,
           provider.type as AIProviderType,
         );
 
-        if (!apiKey) {
+        if (!apiKey && provider.type !== 'ollama') {
           // Parse config to check for API key (backward compatibility)
           try {
             const configData =
@@ -689,7 +782,10 @@ export class AIProviderManager {
           }
         }
 
-        if (!apiKey) {
+        if (
+          !apiKey &&
+          this.providerRequiresApiKey(provider.type, providerConfig)
+        ) {
           // eslint-disable-next-line no-console
           console.error(
             `[PROVIDER MANAGER] testProvider - No API key found for provider ${provider.type}`,
@@ -700,11 +796,13 @@ export class AIProviderManager {
           };
         }
 
-        // eslint-disable-next-line no-console
-        console.log(
-          '[PROVIDER MANAGER] testProvider - API key found, length:',
-          apiKey.length,
-        );
+        if (apiKey) {
+          // eslint-disable-next-line no-console
+          console.log(
+            '[PROVIDER MANAGER] testProvider - API key found, length:',
+            apiKey.length,
+          );
+        }
       }
 
       // Test the connection using AI SDK v6
@@ -922,17 +1020,28 @@ export class AIProviderManager {
         };
       }
 
+      const providerConfig =
+        typeof provider.config === 'string'
+          ? JSON.parse(provider.config)
+          : provider.config || {};
+
       // Get provider credentials (if needed)
       let apiKey;
-      const providersNeedingApiKey = ['openai', 'anthropic', 'gemini'];
 
-      if (providersNeedingApiKey.includes(provider.type)) {
+      if (
+        this.providerRequiresApiKey(provider.type, providerConfig) ||
+        (provider.type === 'ollama' &&
+          isRemoteOllamaUrl(providerConfig.baseUrl))
+      ) {
         apiKey = await SecureStorageService.getAIProviderCredential(
           provider.id!,
           provider.type as AIProviderType,
         );
 
-        if (!apiKey) {
+        if (
+          !apiKey &&
+          this.providerRequiresApiKey(provider.type, providerConfig)
+        ) {
           return {
             status: 'unhealthy',
             lastCheck: new Date(),

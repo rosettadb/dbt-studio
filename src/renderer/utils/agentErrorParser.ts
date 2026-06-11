@@ -1,10 +1,43 @@
 export interface ParsedAgentError {
-  type: 'auth' | 'rateLimit' | 'network' | 'toolError' | 'generic';
+  type:
+    | 'auth'
+    | 'rateLimit'
+    | 'network'
+    | 'toolUnsupported'
+    | 'toolError'
+    | 'generic';
   title: string;
   body: string;
   raw: string;
   provider?: string;
   statusCode?: number;
+}
+
+function isUnsupportedToolCallingError(lowerRaw: string): boolean {
+  return (
+    (lowerRaw.includes('tool') &&
+      (lowerRaw.includes('not supported') ||
+        lowerRaw.includes('unsupported') ||
+        lowerRaw.includes('not available') ||
+        lowerRaw.includes('unavailable'))) ||
+    (lowerRaw.includes('function calling') &&
+      (lowerRaw.includes('not supported') ||
+        lowerRaw.includes('unsupported') ||
+        lowerRaw.includes('not available') ||
+        lowerRaw.includes('unavailable'))) ||
+    (lowerRaw.includes('tool calling') &&
+      (lowerRaw.includes('not supported') ||
+        lowerRaw.includes('unsupported') ||
+        lowerRaw.includes('not available') ||
+        lowerRaw.includes('unavailable'))) ||
+    lowerRaw.includes('does not support tool') ||
+    lowerRaw.includes('does not support function calling') ||
+    lowerRaw.includes('does not support tool calling') ||
+    lowerRaw.includes('this model does not support tools') ||
+    lowerRaw.includes('this model does not support tool calling') ||
+    lowerRaw.includes('tools are not supported') ||
+    lowerRaw.includes('tool use is not available')
+  );
 }
 
 export function parseAgentError(error: unknown): ParsedAgentError {
@@ -71,6 +104,15 @@ export function parseAgentError(error: unknown): ParsedAgentError {
       type: 'network',
       title: 'Connection Error',
       body: 'Failed to connect to the configured AI provider. Please check your network connection or local proxy settings.',
+      raw,
+    };
+  }
+
+  if (isUnsupportedToolCallingError(lowerRaw)) {
+    return {
+      type: 'toolUnsupported',
+      title: 'Tool Calling Unavailable',
+      body: 'This selected model does not support tool calling. You can still use it for normal chat, but agent tools are unavailable. Switch to a more advanced model to use files, dbt, SQL, terminal, and other tools.',
       raw,
     };
   }

@@ -1,18 +1,106 @@
 import React from 'react';
-import { Box, Alert } from '@mui/material';
+import { Box, Alert, Chip, Tooltip, Typography } from '@mui/material';
+import CloudIcon from '@mui/icons-material/Cloud';
 import { PipelineGraph } from './PipelineGraph';
 import { parsePipelineConfig } from './parsePipelineConfig';
+import type { PipelineJob, PipelineStep } from './types';
+import { useCloudActionStatus } from '../../controllers/rosettaCloud.controller';
+import type {
+  CloudActionStatus,
+  CloudPipelineData,
+  CloudStepStatus,
+} from '../../../types/cloudAction';
 
 type PipelineViewProps = {
   content: string;
   onEdit?: () => void;
+  /**
+   * Cloud action id recorded for this specific pipeline file. When null, no
+   * status is fetched and every node renders neutral.
+   */
+  actionId?: string | null;
+  /** Notifies parent of the active action id (for log viewer wiring). */
+  onActiveActionChange?: (actionId: string | null) => void;
 };
+
+const ACTION_STATUS_COLOR: Record<CloudActionStatus, string> = {
+  PENDING: 'default',
+  STARTING: 'info',
+  RUNNING: 'info',
+  CANCELLING: 'warning',
+  CANCELLED: 'warning',
+  FINISHED: 'success',
+  FAILED: 'error',
+};
+
+function applyStatuses(
+  jobs: PipelineJob[],
+  remote: CloudPipelineData | null | undefined,
+): PipelineJob[] {
+  if (!remote || !remote.steps?.length) return jobs;
+
+  const byName = new Map<
+    string,
+    { status: CloudStepStatus; duration?: number | null; error?: string | null }
+  >();
+  remote.steps.forEach((s) => {
+    byName.set(s.name, {
+      status: s.status,
+      duration: s.duration ?? null,
+      error: s.error_message ?? null,
+    });
+  });
+
+  return jobs.map((job) => ({
+    ...job,
+    steps: job.steps.map((step): PipelineStep => {
+      const match = byName.get(step.name);
+      if (!match) return step;
+      return {
+        ...step,
+        status: match.status,
+        duration: match.duration,
+        error_message: match.error,
+      };
+    }),
+  }));
+}
 
 export const PipelineView: React.FC<PipelineViewProps> = ({
   content,
   onEdit,
+  actionId,
+  onActiveActionChange,
 }) => {
   const config = React.useMemo(() => parsePipelineConfig(content), [content]);
+
+  // Pull status only for the action recorded against this pipeline file.
+  const { data: actionStatus } = useCloudActionStatus(actionId ?? null);
+
+  React.useEffect(() => {
+    onActiveActionChange?.(actionId ?? null);
+  }, [actionId, onActiveActionChange]);
+
+  const jobsWithStatus = React.useMemo(() => {
+    if (!config) return [];
+    return applyStatuses(config.jobs, actionStatus);
+  }, [config, actionStatus]);
+
+  // Derive a coarse run state from the matched steps so the header chip can
+  // show something meaningful without a separate /actions/[id] round-trip.
+  const derivedRunState: CloudActionStatus | null = React.useMemo(() => {
+    if (!actionId || !actionStatus?.steps?.length) return null;
+    const statuses = actionStatus.steps.map((s) => s.status);
+    if (statuses.includes('failed')) return 'FAILED';
+    if (statuses.includes('running')) return 'RUNNING';
+    if (statuses.every((s) => s === 'success' || s === 'skipped')) {
+      return 'FINISHED';
+    }
+    if (statuses.every((s) => s === 'pending' || s === 'not_started')) {
+      return 'PENDING';
+    }
+    return 'RUNNING';
+  }, [actionId, actionStatus]);
 
   if (!config) {
     return (
@@ -44,7 +132,51 @@ export const PipelineView: React.FC<PipelineViewProps> = ({
         minHeight: 0,
       }}
     >
-      <PipelineGraph jobs={config.jobs} onEdit={onEdit} />
+      {actionId && derivedRunState && (
+        <Box
+          sx={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 1,
+            px: 2,
+            py: 0.75,
+            borderBottom: 1,
+            borderColor: 'divider',
+            bgcolor: 'background.paper',
+          }}
+        >
+          <CloudIcon fontSize="small" sx={{ color: 'text.secondary' }} />
+          <Typography variant="caption" sx={{ color: 'text.secondary' }}>
+            Last run
+          </Typography>
+          <Tooltip title={actionId}>
+            <Typography
+              variant="caption"
+              sx={{
+                fontFamily: 'monospace',
+                color: 'text.disabled',
+                fontSize: '0.7rem',
+              }}
+            >
+              {actionId.slice(0, 8)}
+            </Typography>
+          </Tooltip>
+          <Chip
+            label={derivedRunState}
+            size="small"
+            color={
+              (ACTION_STATUS_COLOR[derivedRunState] as
+                | 'default'
+                | 'info'
+                | 'warning'
+                | 'success'
+                | 'error') ?? 'default'
+            }
+            sx={{ height: 18, fontSize: '0.65rem' }}
+          />
+        </Box>
+      )}
+      <PipelineGraph jobs={jobsWithStatus} onEdit={onEdit} />
     </Box>
   );
 };

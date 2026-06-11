@@ -46,6 +46,34 @@ export const registerAgentHandlers = () => {
     ) => AgentService.resolveEditorUpdateResponse(payload),
   );
 
+  ipcMain.handle('agent:notebook:state-response', async (_event, payload) =>
+    AgentService.resolveNotebookBridgeResponse(payload),
+  );
+
+  ipcMain.handle('agent:notebook:cell-read-response', async (_event, payload) =>
+    AgentService.resolveNotebookBridgeResponse(payload),
+  );
+
+  ipcMain.handle('agent:notebook:cell-add-response', async (_event, payload) =>
+    AgentService.resolveNotebookBridgeResponse(payload),
+  );
+
+  ipcMain.handle(
+    'agent:notebook:cell-update-response',
+    async (_event, payload) =>
+      AgentService.resolveNotebookBridgeResponse(payload),
+  );
+
+  ipcMain.handle('agent:notebook:cell-run-response', async (_event, payload) =>
+    AgentService.resolveNotebookBridgeResponse(payload),
+  );
+
+  ipcMain.handle(
+    'agent:notebook:cell-result-response',
+    async (_event, payload) =>
+      AgentService.resolveNotebookBridgeResponse(payload),
+  );
+
   // Thin wrapper — all logic in AgentEditorBridgeService (BE-01)
   ipcMain.handle(
     'agent:editor:get-query-results',

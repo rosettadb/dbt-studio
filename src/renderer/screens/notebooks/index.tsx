@@ -58,13 +58,13 @@ import { connectorsServices, DuckLakeService } from '../../services';
 import { NotebooksSidebar } from '../../components/notebook/NotebooksSidebar';
 import { NotebookTabManager } from '../../components/notebook/NotebookTabManager';
 import { NotebookEditor } from '../../components/notebook';
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
 import { ChatWindow } from '../../components/chat';
 import { Table, SupportedConnectionTypes } from '../../../types/backend';
 import useNotebookTabManager from '../../hooks/useNotebookTabManager';
 import {
   useNotebookConnectionState,
   useNotebookSidebarState,
+  useAppContext,
 } from '../../hooks';
 
 const CHAT_MIN_WIDTH = 280;
@@ -105,18 +105,7 @@ const Notebooks = () => {
   const { data: connections = [] } = useGetConnections();
   const { data: duckLakeInstances = [] } = useDuckLakeInstances();
 
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  const [notebooksChatOpen, setNotebooksChatOpen] = useState<boolean>(() => {
-    try {
-      return localStorage.getItem('notebooks-chat-open') === 'true';
-    } catch {
-      return false;
-    }
-  });
-
-  useEffect(() => {
-    localStorage.setItem('notebooks-chat-open', String(notebooksChatOpen));
-  }, [notebooksChatOpen]);
+  const { isChatOpen, setIsChatOpen } = useAppContext();
 
   const CHAT_WIDTH_KEY = 'notebooks-chat-width';
   const DEFAULT_CHAT_WIDTH = 360;
@@ -1020,20 +1009,15 @@ const Notebooks = () => {
     >
       <SplitPane
         split="vertical"
-        sizes={['100%', 0]}
-        // eslint-disable-next-line @typescript-eslint/no-unused-vars
+        sizes={isChatOpen && !isNarrow ? verticalSizes : ['100%', 0]}
         onChange={(newSizes) => {
-          // TODO: Re-enable in PR 32
-          /*
-          if (notebooksChatOpen && !isNarrow) {
+          if (isChatOpen && !isNarrow) {
             const chatWidth = newSizes[1] as number;
-            if (chatWidth < CHAT_MIN_WIDTH) {
-              setVerticalSizes(['auto', CHAT_MIN_WIDTH]);
-            } else {
-              setVerticalSizes(newSizes);
-            }
+            setVerticalSizes([
+              'auto',
+              chatWidth < CHAT_MIN_WIDTH ? CHAT_MIN_WIDTH : chatWidth,
+            ]);
           }
-          */
         }}
         sashRender={VerticalSash}
       >
@@ -1102,6 +1086,7 @@ const Notebooks = () => {
                 <Box
                   sx={{
                     flex: 1,
+                    minHeight: 0,
                     display: 'flex',
                     flexDirection: 'column',
                     maxWidth: isSidebarOpen
@@ -1117,6 +1102,7 @@ const Notebooks = () => {
                         // Open the notebook in a new tab
                         notebookTabManager.openNotebook(notebook, connectionId);
                       }}
+                      onSchemaChange={handleRefreshSchema}
                     />
                   ) : (
                     <Box
@@ -1182,28 +1168,28 @@ const Notebooks = () => {
               flexDirection: 'column',
             }}
           >
-            {/* TODO: Re-enable Notebook AI Assistant in PR 32 */}
-            {/* notebooksChatOpen && !isNarrow && (
+            {isChatOpen && !isNarrow && (
               <ChatWindow
+                key={`notebooks-${activeConnectionId}-${notebookTabManager.activeTabId ?? 'none'}`}
                 screenKey="notebooks"
                 connectionId={activeConnectionId ?? undefined}
+                notebookId={notebookTabManager.activeTabId ?? undefined}
                 projectId={
                   selectedProject?.id ? Number(selectedProject.id) : null
                 }
-                onClose={() => setNotebooksChatOpen(false)}
+                onClose={() => setIsChatOpen?.(false)}
               />
-            ) */}
+            )}
           </Box>
         </Pane>
       </SplitPane>
 
       {/* Mobile AI Chat Drawer */}
-      {/* TODO: Re-enable Notebook AI Assistant in PR 32 */}
-      {/* isNarrow && (
+      {isNarrow && (
         <Dialog
           fullScreen
-          open={notebooksChatOpen}
-          onClose={() => setNotebooksChatOpen(false)}
+          open={!!isChatOpen}
+          onClose={() => setIsChatOpen?.(false)}
         >
           <Box
             sx={{
@@ -1213,16 +1199,18 @@ const Notebooks = () => {
             }}
           >
             <ChatWindow
+              key={`notebooks-mobile-${activeConnectionId}-${notebookTabManager.activeTabId ?? 'none'}`}
               screenKey="notebooks"
               connectionId={activeConnectionId ?? undefined}
+              notebookId={notebookTabManager.activeTabId ?? undefined}
               projectId={
                 selectedProject?.id ? Number(selectedProject.id) : null
               }
-              onClose={() => setNotebooksChatOpen(false)}
+              onClose={() => setIsChatOpen?.(false)}
             />
           </Box>
         </Dialog>
-      ) */}
+      )}
 
       {/* Delete Notebook Confirmation Dialog */}
       <Dialog

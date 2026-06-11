@@ -6,9 +6,17 @@ import { wrapLanguageModel } from 'ai';
 import { createOpenAI } from '@ai-sdk/openai';
 import { createAnthropic } from '@ai-sdk/anthropic';
 import { createGoogleGenerativeAI } from '@ai-sdk/google';
-import { createOllama } from 'ollama-ai-provider';
+import { createOllama } from 'ai-sdk-ollama';
 import MainDatabaseService from '../mainDatabase.service';
 import SecureStorageService, { AIProviderType } from '../secureStorage.service';
+import {
+  buildOllamaHeaders,
+  buildOllamaTagsUrl,
+  isHostedOllamaCloudUrl,
+  isRemoteOllamaUrl,
+  normalizeOllamaBaseUrl,
+  shouldAttachOllamaAuth,
+} from './utils/ollamaProvider.utils';
 
 async function maybeWrapWithDevtools<TModel>(model: TModel): Promise<TModel> {
   if (process.env.NODE_ENV === 'production') {
@@ -105,8 +113,11 @@ async function getDefaultModelDynamic(
       }
 
       case 'ollama': {
-        const url = baseUrl || 'http://localhost:11434';
-        const response = await fetch(`${url}/api/tags`);
+        const response = await fetch(buildOllamaTagsUrl(baseUrl), {
+          headers: shouldAttachOllamaAuth(baseUrl, apiKey)
+            ? buildOllamaHeaders(apiKey)
+            : undefined,
+        });
         if (!response.ok) throw new Error('Failed to fetch Ollama models');
         const data = await response.json();
         if (data.models && data.models.length > 0) {
@@ -186,7 +197,7 @@ export async function getVercelModel(requestedModel?: string) {
 
   // Get API key first (needed for dynamic model fetching)
   let apiKey: string | null | undefined;
-  if (activeProvider.type !== 'ollama') {
+  if (activeProvider.type !== 'ollama' || isRemoteOllamaUrl(config.baseUrl)) {
     apiKey = await SecureStorageService.getAIProviderCredential(
       activeProvider.id!,
       activeProvider.type as AIProviderType,
@@ -217,10 +228,21 @@ export async function getVercelModel(requestedModel?: string) {
   // eslint-disable-next-line no-console
   console.log('[agentAdapter] Final model to use:', model);
 
-  // Ollama: no API key needed — use official community provider
+  // Ollama: local requires no key; remote self-hosted may optionally use bearer auth.
   if (activeProvider.type === 'ollama') {
+    const baseURL = normalizeOllamaBaseUrl(config.baseUrl);
+
+    if (isHostedOllamaCloudUrl(baseURL) && !apiKey) {
+      throw new Error(
+        'No API key configured for hosted Ollama. Please add credentials in Settings.',
+      );
+    }
+
     const ollama = createOllama({
-      baseURL: config.baseUrl || 'http://localhost:11434/api',
+      baseURL,
+      ...(shouldAttachOllamaAuth(baseURL, apiKey)
+        ? { headers: buildOllamaHeaders(apiKey) }
+        : {}),
     });
     return maybeWrapWithDevtools(ollama(model));
   }

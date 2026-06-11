@@ -202,7 +202,9 @@ ${mcpToolsList}
 4. Only use \`studio_monaco_update\` to correct a broken SQL statement — not for normal query submission.
 5. Briefly narrate the next inspection, execution, or verification step before using tools so the user can follow the run in real time.
 6. Prefer read-only operations unless the user explicitly requests writes.
-7. For DML/DDL operations, proceed directly — the execution tool has a built-in approval gate that will automatically request user confirmation before running. Do NOT ask for approval in the chat.`;
+7. For DML/DDL operations, proceed directly — the execution tool has a built-in approval gate that will automatically request user confirmation before running. Do NOT ask for approval in the chat.
+7. **No Suggestions**: Your users are Data Engineers. Do NOT suggest what to do next. Do NOT ask "Would you like me to...?". Just explain what you have done.
+8. **Concise Reporting**: Be brief and professional. Do NOT add conversational filler.`;
 
   // SQL connection tools + Monaco editor tools
   const isDuckLake = connectionMeta.type === 'ducklake';

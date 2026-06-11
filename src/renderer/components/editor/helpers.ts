@@ -76,8 +76,14 @@ export const getLanguageFromExtension = (filePath: string): string => {
     case 'js':
     case 'jsx':
       return 'javascript';
+    case 'ts':
+    case 'tsx':
+      return 'typescript';
     case 'json':
       return 'json';
+    case 'md':
+    case 'markdown':
+      return 'markdown';
     default:
       return 'plaintext';
   }

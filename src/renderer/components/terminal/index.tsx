@@ -45,9 +45,11 @@ import {
   useListPipelines,
   useCurrentModelId,
 } from '../../controllers';
+import { usePipelineActionId } from '../../controllers/rosettaCloud.controller';
 import { LineageModal, LineageView } from '../lineage';
 import {
   PipelineView,
+  CloudLogViewer,
   isPipelineFile,
   parsePipelineConfig,
 } from '../pipelineView';
@@ -144,6 +146,27 @@ export const TerminalLayout: React.FC<Props> = ({ children, project }) => {
   });
 
   const showPipelineTab = availablePipelines.length > 0;
+
+  // Look up the cloud action id for the currently-viewed pipeline. Primary
+  // source is the locally-recorded `pipelineRuns` map (populated when a run
+  // is triggered through this app). When missing — e.g. for runs that
+  // predate this feature — fall back to a cloud lookup keyed on
+  // action.data.PIPELINE_FILE; the result is persisted by the main process.
+  const pipelineFileBasename = React.useMemo(() => {
+    if (!pipelineFilePath) return null;
+    const parts = pipelineFilePath.split(/[\\/]/);
+    return parts[parts.length - 1] || null;
+  }, [pipelineFilePath]);
+
+  const recordedActionId = pipelineFileBasename
+    ? (project.pipelineRuns?.[pipelineFileBasename] ?? null)
+    : null;
+
+  const cloudActionId = usePipelineActionId(
+    project.externalId ? project.id : null,
+    pipelineFileBasename,
+    recordedActionId,
+  );
 
   const [lock, setLock] = React.useState(false);
   const [sizes, setSizes] = React.useState<number[]>([
@@ -641,10 +664,27 @@ export const TerminalLayout: React.FC<Props> = ({ children, project }) => {
                     </Tooltip>
                   )}
                   {/* Always read from pipeline.yml file on disk */}
-                  <PipelineView
-                    content={pipelineFileContent || ''}
-                    onEdit={() => openFile?.(pipelineFilePath)}
-                  />
+                  <Box
+                    sx={{ flex: cloudActionId ? '1 1 60%' : 1, minHeight: 0 }}
+                  >
+                    <PipelineView
+                      content={pipelineFileContent || ''}
+                      onEdit={() => openFile?.(pipelineFilePath)}
+                      actionId={cloudActionId}
+                    />
+                  </Box>
+                  {cloudActionId && (
+                    <Box
+                      sx={{
+                        flex: '1 1 40%',
+                        minHeight: 0,
+                        borderTop: 1,
+                        borderColor: 'divider',
+                      }}
+                    >
+                      <CloudLogViewer actionId={cloudActionId} />
+                    </Box>
+                  )}
                 </Box>
               )}
             </>
