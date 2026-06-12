@@ -82,7 +82,16 @@ export const loadDefaultSettings = (): SettingsType => {
 export const loadDatabaseFile = async (): Promise<DataBase> => {
   try {
     const data = await fs.promises.readFile(DB_FILE, 'utf8');
-    return JSON.parse(data);
+    const parsed = JSON.parse(data) as Partial<DataBase>;
+    return {
+      ...parsed,
+      projects: parsed.projects ?? [],
+      settings: parsed.settings ?? loadDefaultSettings(),
+      queries: parsed.queries ?? {},
+      connections: parsed.connections ?? [],
+      sources: parsed.sources ?? [],
+      recentItems: parsed.recentItems ?? [],
+    };
   } catch (error) {
     return {
       projects: [],

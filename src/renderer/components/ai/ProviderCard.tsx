@@ -169,11 +169,11 @@ export const ProviderCard: React.FC<ProviderCardProps> = ({
       case 'openai':
         return 'OpenAI';
       case 'ollama':
-        return 'Ollama (beta)';
+        return 'Ollama';
       case 'gemini':
         return 'Google Gemini';
       case 'anthropic':
-        return 'Anthropic Claude (beta)';
+        return 'Anthropic Claude';
       default:
         return type.charAt(0).toUpperCase() + type.slice(1);
     }

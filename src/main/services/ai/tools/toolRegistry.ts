@@ -14,6 +14,12 @@ export const TOOL_FLAGS: Record<string, boolean> = {
   'studio.cloud.preview_data': true,
   'studio.cloud.connection_test': true,
   'studio.cli.run_dbt': true,
+  notebooks_get_state: true,
+  notebooks_cell_read: true,
+  notebooks_cell_add: true,
+  notebooks_cell_update: true,
+  notebooks_cell_run: true,
+  notebooks_cell_result: true,
 };
 
 export function isToolEnabled(flag: string): boolean {

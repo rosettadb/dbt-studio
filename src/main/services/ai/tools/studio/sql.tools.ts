@@ -40,7 +40,7 @@ function filterSchemaTables(tables: any[], tableFilter?: string): any[] {
   });
 }
 
-function getFirstSqlVerb(sql: string): string {
+export function getFirstSqlVerb(sql: string): string {
   // 1. Strip comments
   const withoutComments = sql
     .replace(/\/\*[\s\S]*?\*\//g, ' ')
@@ -100,7 +100,7 @@ function getFirstSqlVerb(sql: string): string {
   return match?.[1]?.toUpperCase() ?? '';
 }
 
-function isMutationSql(sql: string): boolean {
+export function isMutationSql(sql: string): boolean {
   const verb = getFirstSqlVerb(sql);
   return [
     'INSERT',

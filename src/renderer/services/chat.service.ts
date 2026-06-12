@@ -39,6 +39,7 @@ class ChatService {
           projectId?: number;
           screenKey?: string;
           connectionId?: string | null;
+          notebookId?: string | null;
         },
   ): Promise<ChatSession[]> {
     const payload = typeof filter === 'number' ? { projectId: filter } : filter;
@@ -62,25 +63,25 @@ class ChatService {
   static async createSession(
     title: string,
     projectId?: number,
-    providerId?: number,
     screenKey?: string,
     connectionId?: string,
+    notebookId?: string,
   ): Promise<ChatSession> {
     const { data } = await client.post<
       {
         title: string;
         projectId?: number;
-        providerId?: number;
         screenKey?: string;
         connectionId?: string;
+        notebookId?: string;
       },
       ChatSession
     >('chat:conversation:create', {
       title,
       projectId,
-      providerId,
       screenKey,
       connectionId,
+      notebookId,
     });
     return data;
   }

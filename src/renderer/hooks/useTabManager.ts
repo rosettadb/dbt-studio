@@ -1,5 +1,9 @@
 import React from 'react';
 import { projectsServices } from '../services';
+import {
+  MD_PREVIEW_PREFIX,
+  isVirtualPreviewPath,
+} from '../components/editor/previewConstants';
 import { getLanguageFromExtension } from '../components/editor/helpers';
 import { getNonEditableFileMessage, isEditableFile } from '../helpers/utils';
 import { disposeModelForPath, renameModel } from '../lib/monaco/modelStore';
@@ -70,14 +74,22 @@ const persistState = (
     return;
   }
 
-  if (tabs.length === 0) {
+  // Never persist virtual preview tabs — they are ephemeral
+  const persistableTabs = tabs.filter((t) => !isVirtualPreviewPath(t.path));
+
+  if (persistableTabs.length === 0) {
     window.localStorage.removeItem(key);
     return;
   }
 
+  // If the active tab was a preview tab, persist the first real tab as active
+  const persistableActiveId = persistableTabs.some((t) => t.id === activeTabId)
+    ? activeTabId
+    : (persistableTabs[0]?.id ?? null);
+
   const payload: PersistedTabsState = {
-    tabs,
-    activeTabId,
+    tabs: persistableTabs,
+    activeTabId: persistableActiveId,
   };
 
   try {
@@ -101,7 +113,7 @@ const clearPersistedState = (projectId: string) => {
   window.localStorage.removeItem(key);
 };
 
-const deriveTitleFromPath = (path: string): string => {
+export const deriveTitleFromPath = (path: string): string => {
   const parts = path.split(/[\\/]/).filter(Boolean);
   if (parts.length === 0) {
     return path || 'untitled';
@@ -320,9 +332,31 @@ const useTabManager = (projectId?: string): UseTabManagerReturn => {
 
   const updateTab = React.useCallback(
     (tabId: EditorTabId, updater: (tab: EditorTabState) => EditorTabState) => {
-      setTabs((current) =>
-        current.map((tab) => (tab.id === tabId ? updater(tab) : tab)),
-      );
+      setTabs((current) => {
+        let sourceTabModified: EditorTabState | undefined;
+        const newTabs = current.map((tab) => {
+          if (tab.id === tabId) {
+            const updated = updater(tab);
+            sourceTabModified = updated;
+            return updated;
+          }
+          return tab;
+        });
+
+        if (sourceTabModified) {
+          const st = sourceTabModified;
+          let hasPreviews = false;
+          const finalTabs = newTabs.map((tab) => {
+            if (tab.path === `${MD_PREVIEW_PREFIX}${st.path}`) {
+              hasPreviews = true;
+              return { ...tab, content: st.content };
+            }
+            return tab;
+          });
+          return hasPreviews ? finalTabs : newTabs;
+        }
+        return newTabs;
+      });
     },
     [],
   );
@@ -399,8 +433,8 @@ const useTabManager = (projectId?: string): UseTabManagerReturn => {
       if (!target) {
         return;
       }
-      setTabs((current) =>
-        current.map((tab) => {
+      setTabs((current) => {
+        const newTabs = current.map((tab) => {
           if (tab.id !== target.id) {
             return tab;
           }
@@ -415,8 +449,18 @@ const useTabManager = (projectId?: string): UseTabManagerReturn => {
             savedContent: isModified ? tab.savedContent : content,
             error: options?.error,
           };
-        }),
-      );
+        });
+
+        let hasPreviews = false;
+        const finalTabs = newTabs.map((tab) => {
+          if (tab.path === `${MD_PREVIEW_PREFIX}${target.path}`) {
+            hasPreviews = true;
+            return { ...tab, content };
+          }
+          return tab;
+        });
+        return hasPreviews ? finalTabs : newTabs;
+      });
       if (options?.markSaved) {
         markTabSaved(target.id);
       }
@@ -522,7 +566,9 @@ const useTabManager = (projectId?: string): UseTabManagerReturn => {
       let isEditable = false;
       let hasInitialContent = false;
 
-      isEditable = isEditableFile(path);
+      // Virtual preview tabs are never loaded from disk
+      const isVirtualPreview = isVirtualPreviewPath(path);
+      isEditable = !isVirtualPreview && isEditableFile(path);
       hasInitialContent = typeof options?.content === 'string';
 
       // Read current tabs synchronously from ref to avoid React 18 batching issues
@@ -625,7 +671,7 @@ const useTabManager = (projectId?: string): UseTabManagerReturn => {
   const refreshTabContentByPath = React.useCallback(
     async (path: string): Promise<void> => {
       const targetTab = tabsRef.current.find((tab) => tab.path === path);
-      if (!targetTab || !isEditableFile(path)) {
+      if (!targetTab || !isEditableFile(path) || isVirtualPreviewPath(path)) {
         return;
       }
 

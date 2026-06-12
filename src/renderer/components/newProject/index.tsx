@@ -116,16 +116,6 @@ export const NewProject: React.FC<NewProjectProps> = ({
         p: 3,
       }}
     >
-      <Box sx={{ textAlign: 'center', mb: 2 }}>
-        <Typography
-          variant="subtitle1"
-          color="primary"
-          fontWeight={500}
-          sx={{ mb: 5 }}
-        >
-          Turn Raw Data into Business Insights—Faster with RosettaDB
-        </Typography>
-      </Box>
       <Box
         sx={{
           width: '100%',

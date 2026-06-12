@@ -46,6 +46,7 @@ import {
 import { NotebookToolbar } from './NotebookToolbar';
 import { NotebookCell } from './NotebookCell';
 import { useSchemaForConnection, useMonacoAutocomplete } from '../../hooks';
+import { useNotebookBridge } from '../../hooks/useNotebookBridge';
 
 // Module-level singleton for SQL completion provider
 let sharedCompletionProvider: any = null;
@@ -55,12 +56,15 @@ interface NotebookEditorProps {
   instanceId: string; // This is actually the connectionId
   notebookId: string;
   onOpenNotebook?: (notebook: Notebook, connectionId: string) => void; // Callback to open notebook in new tab
+  /** Called after a DDL/DML cell executes successfully so the parent can refresh the schema tree */
+  onSchemaChange?: () => void;
 }
 
 export const NotebookEditor: React.FC<NotebookEditorProps> = ({
   instanceId, // Rename for clarity: this is the connectionId
   notebookId,
   onOpenNotebook, // Callback to open notebook in new tab
+  onSchemaChange,
 }) => {
   const navigate = useNavigate();
   const connectionId = instanceId; // Use connectionId internally for clarity
@@ -444,6 +448,14 @@ export const NotebookEditor: React.FC<NotebookEditorProps> = ({
           limit: 10, // Default pagination: first 10 rows
           offset: 0,
         });
+
+        // If the executed statement may have changed the schema, notify the parent
+        if (
+          onSchemaChange &&
+          /^\s*(CREATE|DROP|ALTER|RENAME|TRUNCATE)/i.test(content.trim())
+        ) {
+          onSchemaChange();
+        }
       } catch (err) {
         // Error is already handled by React Query and displayed in output
         // Just log it for debugging
@@ -457,7 +469,7 @@ export const NotebookEditor: React.FC<NotebookEditorProps> = ({
         });
       }
     },
-    [connectionId, notebookId, runCell],
+    [connectionId, notebookId, runCell, onSchemaChange],
   );
 
   const handleExport = useCallback(() => {
@@ -608,6 +620,64 @@ export const NotebookEditor: React.FC<NotebookEditorProps> = ({
     }
   }, [notebook, connectionId, deleteNotebook, navigate]);
 
+  // Notebook Bridge for AI Agent
+  // useMemo ensures the handlers object is only recreated when its dependencies
+  // change — not on every render. This prevents useNotebookBridge's useEffect
+  // from continuously deregistering and re-registering all IPC listeners.
+  const bridgeHandlers = React.useMemo(
+    () => ({
+      getNotebookState: () => ({
+        notebookId,
+        notebookName: notebook?.name ?? '',
+        cells: localCells.map((c) => ({
+          id: c.id,
+          type: c.type,
+          order: c.order,
+          contentPreview: c.content.substring(0, 100),
+          hasOutput: !!c.output,
+          outputRowCount: c.output?.rowCount,
+        })),
+      }),
+      getCellContent: (cellId: string) => {
+        const cell = localCells.find((c) => c.id === cellId);
+        return cell?.content ?? '';
+      },
+      addCell: (content: string) => {
+        const cellId = uuidv4();
+        setLocalCells((prev) => {
+          const newCell = {
+            id: cellId,
+            type: 'sql' as const,
+            content,
+            order: prev.length,
+          };
+          const updated = [...prev, newCell];
+          if (notebookId && connectionId) {
+            updateNotebook.mutate({ connectionId, notebookId, cells: updated });
+          }
+          return updated;
+        });
+        return cellId;
+      },
+      setCellContent: (cellId: string, content: string) => {
+        handleUpdateCell(cellId, content);
+      },
+      runCell: (cellId: string) => {
+        const cell = localCells.find((c) => c.id === cellId);
+        if (cell) {
+          handleRunCell(cellId, cell.content);
+        }
+      },
+      getCellResult: (cellId: string) => {
+        const cell = localCells.find((c) => c.id === cellId);
+        return cell?.output;
+      },
+    }),
+    [localCells, handleUpdateCell, handleRunCell],
+  );
+
+  useNotebookBridge(bridgeHandlers);
+
   if (isLoading) {
     return (
       <Box
@@ -642,7 +712,9 @@ export const NotebookEditor: React.FC<NotebookEditorProps> = ({
   }
 
   return (
-    <Box sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
+    <Box
+      sx={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}
+    >
       {/* Toolbar */}
       <NotebookToolbar
         notebook={notebook}
@@ -711,87 +783,96 @@ export const NotebookEditor: React.FC<NotebookEditorProps> = ({
             </Box>
           </Box>
         ) : (
-          <DragDropContext onDragEnd={handleDragEnd}>
-            <Droppable droppableId="notebook-cells">
-              {(droppableProvided: DroppableProvided) => (
-                <Box
-                  ref={droppableProvided.innerRef}
-                  // eslint-disable-next-line react/jsx-props-no-spreading
-                  {...droppableProvided.droppableProps}
-                  sx={{ overflowY: 'auto', height: '100%', p: 3 }}
-                >
-                  {[...localCells]
-                    .sort((a, b) => a.order - b.order)
-                    .map((cell, index) => (
-                      <Draggable
-                        key={cell.id}
-                        draggableId={cell.id}
-                        index={index}
-                      >
-                        {(
-                          draggableProvided: DraggableProvided,
-                          snapshot: DraggableStateSnapshot,
-                        ) => (
-                          <Box
-                            ref={draggableProvided.innerRef}
-                            // eslint-disable-next-line react/jsx-props-no-spreading
-                            {...draggableProvided.draggableProps}
-                            sx={{
-                              opacity: snapshot.isDragging ? 0.8 : 1,
-                              transform: snapshot.isDragging
-                                ? 'rotate(2deg)'
-                                : 'none',
-                            }}
-                          >
-                            <NotebookCell
-                              cell={cell}
-                              index={index}
-                              connectionId={connectionId}
-                              notebookId={notebookId}
-                              isExecuting={
-                                executingCells.has(cell.id) ||
-                                (isRunningAll && runningCellIndex === index)
-                              }
-                              onRun={(content: string) =>
-                                handleRunCell(cell.id, content)
-                              }
-                              onUpdate={(content: string) =>
-                                handleUpdateCell(cell.id, content)
-                              }
-                              onDelete={() => handleDeleteCell(cell.id)}
-                              onDuplicate={() => handleDuplicateCell(cell.id)}
-                              onClearOutput={() => handleClearOutput(cell.id)}
-                              dragHandleProps={
-                                draggableProvided.dragHandleProps
-                              }
-                            />
-                          </Box>
-                        )}
-                      </Draggable>
-                    ))}
-                  {droppableProvided.placeholder}
-
-                  {/* Add Cell Button - inside scrollable area */}
+          <Box
+            sx={{
+              flex: 1,
+              minHeight: 0,
+              display: 'flex',
+              flexDirection: 'column',
+            }}
+          >
+            <DragDropContext onDragEnd={handleDragEnd}>
+              <Droppable droppableId="notebook-cells">
+                {(droppableProvided: DroppableProvided) => (
                   <Box
-                    sx={{
-                      display: 'flex',
-                      justifyContent: 'center',
-                      mt: 2,
-                      pb: 4,
-                    }}
+                    ref={droppableProvided.innerRef}
+                    // eslint-disable-next-line react/jsx-props-no-spreading
+                    {...droppableProvided.droppableProps}
+                    sx={{ overflowY: 'auto', flex: 1, minHeight: 0, p: 3 }}
                   >
-                    <Button
-                      variant="outlined"
-                      startIcon={<AddIcon />}
-                      onClick={() => handleAddCell('sql')}
+                    {[...localCells]
+                      .sort((a, b) => a.order - b.order)
+                      .map((cell, index) => (
+                        <Draggable
+                          key={cell.id}
+                          draggableId={cell.id}
+                          index={index}
+                        >
+                          {(
+                            draggableProvided: DraggableProvided,
+                            snapshot: DraggableStateSnapshot,
+                          ) => (
+                            <Box
+                              ref={draggableProvided.innerRef}
+                              // eslint-disable-next-line react/jsx-props-no-spreading
+                              {...draggableProvided.draggableProps}
+                              sx={{
+                                opacity: snapshot.isDragging ? 0.8 : 1,
+                                transform: snapshot.isDragging
+                                  ? 'rotate(2deg)'
+                                  : 'none',
+                              }}
+                            >
+                              <NotebookCell
+                                cell={cell}
+                                index={index}
+                                connectionId={connectionId}
+                                notebookId={notebookId}
+                                isExecuting={
+                                  executingCells.has(cell.id) ||
+                                  (isRunningAll && runningCellIndex === index)
+                                }
+                                onRun={(content: string) =>
+                                  handleRunCell(cell.id, content)
+                                }
+                                onUpdate={(content: string) =>
+                                  handleUpdateCell(cell.id, content)
+                                }
+                                onDelete={() => handleDeleteCell(cell.id)}
+                                onDuplicate={() => handleDuplicateCell(cell.id)}
+                                onClearOutput={() => handleClearOutput(cell.id)}
+                                dragHandleProps={
+                                  draggableProvided.dragHandleProps
+                                }
+                              />
+                            </Box>
+                          )}
+                        </Draggable>
+                      ))}
+                    {droppableProvided.placeholder}
+
+                    {/* Add Cell Button - inside scrollable area */}
+                    <Box
+                      sx={{
+                        display: 'flex',
+                        justifyContent: 'center',
+                        mt: 2,
+                        pb: 4,
+                      }}
                     >
-                      Add Cell
-                    </Button>
+                      <Button
+                        variant="outlined"
+                        startIcon={<AddIcon />}
+                        onClick={() => handleAddCell('sql')}
+                      >
+                        Add Cell
+                      </Button>
+                    </Box>
                   </Box>
-                </Box>
-              )}
-            </Droppable>
-          </DragDropContext>
+                )}
+              </Droppable>
+            </DragDropContext>
+          </Box>
         )}
       </Box>
 

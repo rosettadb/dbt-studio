@@ -113,6 +113,16 @@ const pendingEditorBridgeRequests = new Map<
   }
 >();
 
+const pendingNotebookBridgeRequests = new Map<
+  string,
+  {
+    resolve: (value: any) => void;
+    reject: (reason?: unknown) => void;
+    timeout: ReturnType<typeof setTimeout>;
+    type: string;
+  }
+>();
+
 // Per-conversation agent context — replaces the static singleton to prevent
 // race conditions when multiple conversations run concurrently (#4)
 const agentContexts = new Map<
@@ -122,6 +132,7 @@ const agentContexts = new Map<
     conversationId: number;
     screenKey: 'project' | 'sql' | 'notebooks';
     connectionId?: string;
+    notebookId?: string;
     projectPath?: string;
   }
 >();
@@ -175,9 +186,9 @@ export interface AgentRunRequest {
   requestedModel?: string;
   projectPath?: string;
   toolMode?: 'chat' | 'agent';
-  screenKey?: 'project' | 'sql' | 'notebooks';
+  screenKey?: import('../../types/agentEvents').AgentScreenKey;
   connectionId?: string;
-  notebookId?: number;
+  notebookId?: string;
 }
 
 /**
@@ -364,6 +375,144 @@ class AgentService {
       conversationId,
       query,
     });
+  }
+
+  // ─── Notebook Agent Bridge (Phase 1) ──────────────────────────────────────────
+
+  private static async requestNotebookBridge(
+    conversationId: number,
+    type: string,
+    requestChannel: string,
+    responseChannel: string,
+    payload: object = {},
+  ): Promise<any> {
+    const context = this.getAgentContext(conversationId);
+    if (!context) {
+      throw new Error(`No active context for conversation ${conversationId}`);
+    }
+
+    const requestId = `notebook-bridge-${Date.now()}-${Math.random()
+      .toString(36)
+      .slice(2, 10)}`;
+
+    return new Promise<any>((resolve, reject) => {
+      const timeout = setTimeout(() => {
+        pendingNotebookBridgeRequests.delete(requestId);
+        reject(
+          new Error(`Timed out waiting for ${type} response from renderer`),
+        );
+      }, 15000);
+
+      pendingNotebookBridgeRequests.set(requestId, {
+        resolve,
+        reject,
+        timeout,
+        type,
+      });
+
+      context.event.sender.send(requestChannel, {
+        requestId,
+        conversationId,
+        ...payload,
+      });
+    });
+  }
+
+  public static resolveNotebookBridgeResponse(payload: {
+    requestId: string;
+    success: boolean;
+    [key: string]: any;
+  }): void {
+    const request = pendingNotebookBridgeRequests.get(payload.requestId);
+    if (!request) return;
+
+    pendingNotebookBridgeRequests.delete(payload.requestId);
+    clearTimeout(request.timeout);
+
+    if (payload.success) {
+      request.resolve(payload);
+    } else {
+      request.reject(new Error(payload.error || 'Renderer request failed'));
+    }
+  }
+
+  public static async requestNotebookState(conversationId: number) {
+    return this.requestNotebookBridge(
+      conversationId,
+      'state',
+      'agent:notebook:state-request',
+      'agent:notebook:state-response',
+    );
+  }
+
+  public static async requestNotebookCellRead(
+    conversationId: number,
+    cellId: string,
+  ) {
+    return this.requestNotebookBridge(
+      conversationId,
+      'cell-read',
+      'agent:notebook:cell-read-request',
+      'agent:notebook:cell-read-response',
+      { cellId },
+    );
+  }
+
+  public static async requestNotebookCellAdd(
+    conversationId: number,
+    content: string,
+  ): Promise<{ cellId: string }> {
+    return this.requestNotebookBridge(
+      conversationId,
+      `cell-add-${Date.now()}`,
+      'agent:notebook:cell-add-request',
+      'agent:notebook:cell-add-response',
+      { content },
+    );
+  }
+
+  public static async requestNotebookCellUpdate(
+    conversationId: number,
+    cellId: string,
+    content: string,
+  ) {
+    return this.requestNotebookBridge(
+      conversationId,
+      'cell-update',
+      'agent:notebook:cell-update-request',
+      'agent:notebook:cell-update-response',
+      { cellId, content },
+    );
+  }
+
+  public static async requestNotebookCellRun(
+    conversationId: number,
+    cellId: string,
+  ) {
+    const context = this.getAgentContext(conversationId);
+    if (!context) {
+      throw new Error(`No active context for conversation ${conversationId}`);
+    }
+    return this.requestNotebookBridge(
+      conversationId,
+      `cell-run-${cellId}`,
+      'agent:notebook:cell-run-request',
+      'agent:notebook:cell-run-response',
+      { cellId },
+    );
+  }
+
+  public static async requestNotebookCellResult(
+    conversationId: number,
+    cellId: string,
+  ) {
+    return this.requestNotebookBridge(
+      conversationId,
+      'cell-result',
+      'agent:notebook:cell-result-request',
+      'agent:notebook:cell-result-response',
+      { cellId },
+    );
   }
 
   // ─── Context Compaction ──────────────────────────────────────────────────────
@@ -658,6 +807,7 @@ COMBINED SUMMARY:`,
         conversationId,
         screenKey: request.screenKey ?? 'project',
         connectionId: request.connectionId,
+        notebookId: request.notebookId,
         projectPath,
       });
 
@@ -781,6 +931,7 @@ COMBINED SUMMARY:`,
           agent = await createNotebooksAgent(base, {
             connectionMeta,
             notebookId: request.notebookId,
+            connectionId: request.connectionId,
             projectPath,
             enabledTools,
             skills: base.skillsPrompt,
@@ -803,7 +954,6 @@ COMBINED SUMMARY:`,
 
       let fullContent = '';
       let thinkingContent = '';
-      let toolCallCount = 0;
       let finalUsage:
         | {
             promptTokens: number;
@@ -913,7 +1063,6 @@ COMBINED SUMMARY:`,
                   break;
                 }
                 case 'tool-call':
-                  toolCallCount += 1;
                   collectedParts.push({
                     type: 'tool-call',
                     toolCallId: chunk.toolCallId,
@@ -1026,8 +1175,6 @@ COMBINED SUMMARY:`,
             });
           });
 
-          toolCallCount += collectedToolCalls.length;
-
           sendChunk({ conversationId, chunk: fullContent, done: false });
           sendChunk({
             conversationId,
@@ -1038,8 +1185,37 @@ COMBINED SUMMARY:`,
         }
 
         // Guard against empty responses (e.g. Gemini Flash Lite silent failures)
-        if (!fullContent.trim() && toolCallCount === 0) {
+        if (!fullContent.trim()) {
+          const notebookStateCall =
+            (request.screenKey ?? 'project') === 'notebooks'
+              ? [...collectedToolCalls]
+                  .reverse()
+                  .find((tc) => tc.toolName === 'notebooks_get_state')
+              : undefined;
+          const notebookState = (notebookStateCall?.output as any)?.data;
+          const notebookCells = Array.isArray(notebookState?.cells)
+            ? notebookState.cells
+            : [];
+          const notebookFallback =
+            notebookStateCall && (notebookStateCall.output as any)?.ok !== false
+              ? [
+                  `I inspected ${notebookState?.notebookName || notebookState?.name || 'the active notebook'}.`,
+                  `It has ${notebookCells.length} cell${notebookCells.length === 1 ? '' : 's'}.`,
+                  ...notebookCells
+                    .slice(0, 3)
+                    .map((cell: any, index: number) => {
+                      const preview =
+                        cell.contentPreview || cell.content || '(empty cell)';
+                      const outputText = cell.hasOutput
+                        ? ` Output is available${typeof cell.outputRowCount === 'number' ? ` (${cell.outputRowCount} rows loaded)` : ''}.`
+                        : ' No output is currently available.';
+                      return `Cell ${index + 1} is ${cell.type || 'unknown'}: \`${String(preview).trim()}\`.${outputText}`;
+                    }),
+                  'I do not see a notebook execution error in the state returned by the tool.',
+                ].join(' ')
+              : null;
           const fallback =
+            notebookFallback ||
             "I wasn't able to generate a response. Please try rephrasing your message or switching to a different model.";
           fullContent = fallback;
           sendChunk({ conversationId, chunk: fallback, done: false });

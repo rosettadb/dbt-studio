@@ -1,5 +1,5 @@
 {
-  "version": "1.5.4-internal",
+  "version": "1.5.5",
   "name": "rosetta-dbt-studio",
   "description": "Turn Raw Data into Business Insights—Faster with RosettaDB",
   "keywords": [
@@ -131,6 +131,7 @@
     "ace-builds": "^1.37.5",
     "adm-zip": "^0.5.16",
     "ai": "^6.0.142",
+    "ai-sdk-ollama": "^3.8.4",
     "ansi-to-html": "^0.7.2",
     "archiver": "^7.0.1",
     "axios": "^1.8.4",
@@ -144,7 +145,6 @@
     "js-yaml": "^4.1.0",
     "moment": "^2.30.1",
     "monaco-editor": "^0.52.2",
-    "ollama-ai-provider": "^1.2.0",
     "openai": "^4.91.1",
     "pg": "^8.14.1",
     "ps-tree": "^1.2.0",
@@ -161,6 +161,7 @@
     "react-tooltip": "^5.28.0",
     "reactflow": "^11.11.4",
     "rehype-highlight": "^7.0.2",
+    "rehype-raw": "^7.0.0",
     "remark-gfm": "^4.0.1",
     "simple-git": "^3.27.0",
     "snowflake-sdk": "^2.0.3",
