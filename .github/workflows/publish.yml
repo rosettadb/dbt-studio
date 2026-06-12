@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - main
+      - release/dev
 
 env:
   # This will be set by the first job and used by all others
@@ -509,7 +510,7 @@ jobs:
           fi
 
   publish-windows:
-    runs-on: windows-latest
+    runs-on: windows-2022
     needs: extract-version
     steps:
       - name: Checkout code
