@@ -510,7 +510,7 @@ jobs:
           fi
 
   publish-windows:
-    runs-on: windows-latest
+    runs-on: windows-2022
     needs: extract-version
     steps:
       - name: Checkout code
