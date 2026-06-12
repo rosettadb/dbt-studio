@@ -65,6 +65,7 @@ export const ChatInputBox: React.FC<ChatInputBoxProps> = ({
   disabledReason,
 }) => {
   const theme = useTheme();
+  const isDarkMode = theme.palette.mode === 'dark';
   const [input, setInput] = React.useState('');
   const [isFilePickerOpen, setIsFilePickerOpen] = React.useState(false);
   const [modeMenuAnchor, setModeMenuAnchor] =
@@ -375,7 +376,14 @@ export const ChatInputBox: React.FC<ChatInputBoxProps> = ({
           <Box
             component="img"
             src={selectedIcon}
-            sx={{ width: 10, height: 10 }}
+            sx={{
+              width: 10,
+              height: 10,
+              filter:
+                isDarkMode && selectedProvider?.type !== 'gemini'
+                  ? 'brightness(0) invert(1) opacity(0.85)'
+                  : undefined,
+            }}
           />
           <Typography
             variant="caption"
@@ -433,7 +441,15 @@ export const ChatInputBox: React.FC<ChatInputBoxProps> = ({
                   <Box
                     component="img"
                     src={providerIcon}
-                    sx={{ width: 16, height: 16, mr: 1 }}
+                    sx={{
+                      width: 16,
+                      height: 16,
+                      mr: 1,
+                      filter:
+                        isDarkMode && p.type !== 'gemini'
+                          ? 'brightness(0) invert(1) opacity(0.85)'
+                          : undefined,
+                    }}
                   />
                   <Box sx={{ flex: 1 }}>
                     <Typography
