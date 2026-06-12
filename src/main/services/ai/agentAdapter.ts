@@ -7,6 +7,7 @@ import { createOpenAI } from '@ai-sdk/openai';
 import { createAnthropic } from '@ai-sdk/anthropic';
 import { createGoogleGenerativeAI } from '@ai-sdk/google';
 import { createOllama } from 'ai-sdk-ollama';
+import { createOpenAICompatible } from '@ai-sdk/openai-compatible';
 import MainDatabaseService from '../mainDatabase.service';
 import SecureStorageService, { AIProviderType } from '../secureStorage.service';
 import {
@@ -17,6 +18,39 @@ import {
   normalizeOllamaBaseUrl,
   shouldAttachOllamaAuth,
 } from './utils/ollamaProvider.utils';
+
+const LMSTUDIO_DEFAULT_BASE_URL = 'http://localhost:1234/v1';
+
+function resolveOpenAICompatibleBaseUrl(
+  providerType: string,
+  configBaseUrl?: string,
+): string {
+  if (configBaseUrl && configBaseUrl.trim().length > 0) {
+    return configBaseUrl.trim();
+  }
+  if (providerType === 'lmstudio') {
+    return LMSTUDIO_DEFAULT_BASE_URL;
+  }
+  throw new Error(
+    `No base URL configured for ${providerType} provider. Please set a Base URL in Settings.`,
+  );
+}
+
+function createOpenAICompatibleModel(
+  providerType: string,
+  baseURL: string,
+  modelId: string,
+  apiKey?: string | null,
+  includeUsage?: boolean,
+) {
+  const provider = createOpenAICompatible({
+    name: providerType,
+    baseURL,
+    ...(apiKey ? { apiKey } : {}),
+    includeUsage: includeUsage ?? true,
+  });
+  return provider(modelId);
+}
 
 async function maybeWrapWithDevtools<TModel>(model: TModel): Promise<TModel> {
   if (process.env.NODE_ENV === 'production') {
@@ -43,12 +77,6 @@ async function getDefaultModelDynamic(
   apiKey?: string,
   baseUrl?: string,
 ): Promise<string> {
-  // eslint-disable-next-line no-console
-  console.log(
-    '[agentAdapter] Getting default model dynamically for:',
-    providerType,
-  );
-
   try {
     switch (providerType) {
       case 'openai': {
@@ -67,11 +95,6 @@ async function getDefaultModelDynamic(
           )
           .sort((a: any, b: any) => b.id.localeCompare(a.id));
         if (gptModels.length > 0) {
-          // eslint-disable-next-line no-console
-          console.log(
-            '[agentAdapter] Using first OpenAI model:',
-            gptModels[0].id,
-          );
           return gptModels[0].id;
         }
         break;
@@ -93,8 +116,7 @@ async function getDefaultModelDynamic(
           .sort((a: any, b: any) => b.name.localeCompare(a.name));
         if (geminiModels.length > 0) {
           const modelId = geminiModels[0].name.split('/').pop();
-          // eslint-disable-next-line no-console
-          console.log('[agentAdapter] Using first Gemini model:', modelId);
+
           return modelId;
         }
         break;
@@ -104,11 +126,7 @@ async function getDefaultModelDynamic(
         // Anthropic doesn't have a public models API
         // Use the latest known model
         const latestModel = 'claude-sonnet-4-6';
-        // eslint-disable-next-line no-console
-        console.log(
-          '[agentAdapter] Using latest Anthropic model:',
-          latestModel,
-        );
+
         return latestModel;
       }
 
@@ -121,14 +139,33 @@ async function getDefaultModelDynamic(
         if (!response.ok) throw new Error('Failed to fetch Ollama models');
         const data = await response.json();
         if (data.models && data.models.length > 0) {
-          // eslint-disable-next-line no-console
-          console.log(
-            '[agentAdapter] Using first Ollama model:',
-            data.models[0].name,
-          );
           return data.models[0].name;
         }
         break;
+      }
+
+      case 'lmstudio':
+      case 'openai-compatible': {
+        const resolvedBaseUrl = resolveOpenAICompatibleBaseUrl(
+          providerType,
+          baseUrl,
+        );
+        const modelsUrl = `${resolvedBaseUrl.replace(/\/+$/, '')}/models`;
+        const headers: Record<string, string> = {};
+        if (apiKey) {
+          headers.Authorization = `Bearer ${apiKey}`;
+        }
+        const response = await fetch(modelsUrl, { headers });
+        if (!response.ok)
+          throw new Error(`Failed to fetch models from ${modelsUrl}`);
+        const data = await response.json();
+        const models: any[] = data.data || data.models || [];
+        if (models.length > 0) {
+          const firstId = models[0].id ?? models[0].name;
+
+          return firstId;
+        }
+        throw new Error(`No models found at ${modelsUrl}`);
       }
 
       default:
@@ -148,10 +185,11 @@ async function getDefaultModelDynamic(
     anthropic: 'claude-sonnet-4-6',
     gemini: 'gemini-2.5-flash',
     ollama: 'llama3.2',
+    lmstudio: 'llama-3.2-1b',
+    'openai-compatible': 'model-id',
   };
   const fallback = fallbacks[providerType] || 'gpt-4o';
-  // eslint-disable-next-line no-console
-  console.warn('[agentAdapter] Using fallback model:', fallback);
+
   return fallback;
 }
 
@@ -162,12 +200,6 @@ async function getDefaultModelDynamic(
  * All credential management stays in SecureStorageService — unchanged.
  */
 export async function getVercelModel(requestedModel?: string) {
-  // eslint-disable-next-line no-console
-  console.log(
-    '[agentAdapter] getVercelModel called with requestedModel:',
-    requestedModel,
-  );
-
   const activeProvider = await MainDatabaseService.getActiveProvider();
   if (!activeProvider) {
     throw new Error(
@@ -175,58 +207,54 @@ export async function getVercelModel(requestedModel?: string) {
     );
   }
 
-  // eslint-disable-next-line no-console
-  console.log('[agentAdapter] Active provider loaded:', {
-    id: activeProvider.id,
-    name: activeProvider.name,
-    type: activeProvider.type,
-    configType: typeof activeProvider.config,
-  });
-
   const config: any =
     typeof activeProvider.config === 'string'
       ? JSON.parse(activeProvider.config)
       : activeProvider.config || {};
 
-  // eslint-disable-next-line no-console
-  console.log('[agentAdapter] Parsed config:', {
-    hasModel: !!config.model,
-    model: config.model,
-    hasBaseUrl: !!config.baseUrl,
-  });
-
   // Get API key first (needed for dynamic model fetching)
   let apiKey: string | null | undefined;
-  if (activeProvider.type !== 'ollama' || isRemoteOllamaUrl(config.baseUrl)) {
+  const isLocalLmStudio =
+    activeProvider.type === 'lmstudio' &&
+    (!config.baseUrl ||
+      config.baseUrl.includes('localhost') ||
+      config.baseUrl.includes('127.0.0.1'));
+
+  if (
+    (activeProvider.type !== 'ollama' && !isLocalLmStudio) ||
+    (activeProvider.type === 'ollama' && isRemoteOllamaUrl(config.baseUrl))
+  ) {
     apiKey = await SecureStorageService.getAIProviderCredential(
       activeProvider.id!,
       activeProvider.type as AIProviderType,
     );
   }
 
+  // For local LM Studio, also attempt to load key but don't require it
+  if (isLocalLmStudio) {
+    try {
+      apiKey = await SecureStorageService.getAIProviderCredential(
+        activeProvider.id!,
+        activeProvider.type as AIProviderType,
+      );
+    } catch {
+      // No key stored — fine for local LM Studio
+    }
+  }
+
   // Determine model: requested > configured > dynamic from API
   let model: string;
   if (requestedModel) {
     model = requestedModel;
-    // eslint-disable-next-line no-console
-    console.log('[agentAdapter] Using requested model:', model);
   } else if (config.model) {
     model = config.model;
-    // eslint-disable-next-line no-console
-    console.log('[agentAdapter] Using configured model:', model);
   } else {
-    // No model configured - fetch dynamically from API
-    // eslint-disable-next-line no-console
-    console.log('[agentAdapter] No model configured, fetching dynamically...');
     model = await getDefaultModelDynamic(
       activeProvider.type,
       apiKey || undefined,
       config.baseUrl,
     );
   }
-
-  // eslint-disable-next-line no-console
-  console.log('[agentAdapter] Final model to use:', model);
 
   // Ollama: local requires no key; remote self-hosted may optionally use bearer auth.
   if (activeProvider.type === 'ollama') {
@@ -248,17 +276,15 @@ export async function getVercelModel(requestedModel?: string) {
   }
 
   // Cloud providers: API key required
-  if (!apiKey) {
+  if (
+    !apiKey &&
+    activeProvider.type !== 'openai-compatible' &&
+    activeProvider.type !== 'lmstudio'
+  ) {
     throw new Error(
       `No API key configured for ${activeProvider.type}. Please add credentials in Settings.`,
     );
   }
-
-  // eslint-disable-next-line no-console
-  console.log(
-    '[agentAdapter] Creating provider instance for:',
-    activeProvider.type,
-  );
 
   switch (activeProvider.type) {
     case 'openai':
@@ -269,11 +295,29 @@ export async function getVercelModel(requestedModel?: string) {
         createOpenAI({ apiKey, compatibility: 'compatible' } as any)(model),
       );
     case 'anthropic':
-      return maybeWrapWithDevtools(createAnthropic({ apiKey })(model));
+      return maybeWrapWithDevtools(
+        createAnthropic({ apiKey: apiKey as string })(model),
+      );
     case 'gemini':
-      // eslint-disable-next-line no-console
-      console.log('[agentAdapter] Creating Gemini provider with model:', model);
-      return maybeWrapWithDevtools(createGoogleGenerativeAI({ apiKey })(model));
+      return maybeWrapWithDevtools(
+        createGoogleGenerativeAI({ apiKey: apiKey as string })(model),
+      );
+    case 'openai-compatible':
+    case 'lmstudio': {
+      const baseURL = resolveOpenAICompatibleBaseUrl(
+        activeProvider.type,
+        config.baseUrl,
+      );
+
+      const sdkModel = createOpenAICompatibleModel(
+        activeProvider.type,
+        baseURL,
+        model,
+        apiKey,
+        config.includeUsage,
+      );
+      return maybeWrapWithDevtools(sdkModel);
+    }
     default:
       throw new Error(`Unsupported provider type: ${activeProvider.type}`);
   }

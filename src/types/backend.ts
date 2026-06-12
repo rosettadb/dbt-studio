@@ -599,7 +599,13 @@ export type ExecuteStatementType = {
 };
 
 // AI Provider Types
-export type AIProviderType = 'openai' | 'ollama' | 'gemini' | 'anthropic';
+export type AIProviderType =
+  | 'openai'
+  | 'ollama'
+  | 'gemini'
+  | 'anthropic'
+  | 'openai-compatible'
+  | 'lmstudio';
 
 // Chat-related types
 export interface ChatConversation {

@@ -85,6 +85,8 @@ export const TestProviderConnection: React.FC<TestProviderConnectionProps> = ({
       case 'gemini':
         return !!apiKey;
       case 'ollama':
+      case 'lmstudio':
+      case 'openai-compatible':
         return true;
       default:
         return false;
@@ -124,6 +126,10 @@ export const TestProviderConnection: React.FC<TestProviderConnectionProps> = ({
         return 'Enter Google AI API key to test';
       case 'ollama':
         return 'Blank URL uses local Ollama';
+      case 'lmstudio':
+        return 'Blank URL uses local LM Studio (port 1234)';
+      case 'openai-compatible':
+        return 'Enter Base URL to test';
       default:
         return 'Select provider type first';
     }

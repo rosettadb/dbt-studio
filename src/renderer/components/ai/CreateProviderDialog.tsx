@@ -15,8 +15,21 @@ import {
   IconButton,
   InputAdornment,
   Alert,
+  Accordion,
+  AccordionSummary,
+  AccordionDetails,
+  List,
+  ListItem,
+  ListItemText,
+  Tooltip,
 } from '@mui/material';
-import { Close, Visibility, VisibilityOff } from '@mui/icons-material';
+import {
+  Close,
+  Visibility,
+  VisibilityOff,
+  ExpandMore,
+  ContentCopy,
+} from '@mui/icons-material';
 import { useForm, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
@@ -35,9 +48,19 @@ import type {
 
 export const providerSchema = z.object({
   name: z.string().min(1, 'Name is required').max(50, 'Name too long'),
-  type: z.enum(['openai', 'ollama', 'gemini', 'anthropic'], {
-    errorMap: () => ({ message: 'Please select a provider type' }),
-  }),
+  type: z.enum(
+    [
+      'openai',
+      'ollama',
+      'gemini',
+      'anthropic',
+      'openai-compatible',
+      'lmstudio',
+    ],
+    {
+      errorMap: () => ({ message: 'Please select a provider type' }),
+    },
+  ),
   apiKey: z.string().optional(),
   baseUrl: z.string().url('Invalid URL').optional().or(z.literal('')),
   model: z.string().optional(),
@@ -139,6 +162,8 @@ export const CreateProviderDialog: React.FC<CreateProviderDialogProps> = ({
           'gemini',
           'anthropic',
           'ollama',
+          'lmstudio',
+          'openai-compatible',
         ];
         if (providersNeedingCredentials.includes(provider.type)) {
           try {
@@ -246,7 +271,35 @@ export const CreateProviderDialog: React.FC<CreateProviderDialogProps> = ({
           apiKeyPlaceholder:
             'Optional for self-hosted, required for ollama.com',
           requiresBaseUrl: true,
+          baseUrlPlaceholder: 'http://localhost:11434',
           modelPlaceholder: 'llama2 (optional)',
+        };
+      case 'lmstudio':
+        return {
+          requiresApiKey: false,
+          supportsOptionalApiKey: true,
+          apiKeyLabel: 'API Key (optional)',
+          apiKeyPlaceholder:
+            'Required only for cloud-hosted LM Studio endpoints',
+          requiresBaseUrl: true,
+          baseUrlPlaceholder: 'http://localhost:1234/v1',
+          baseUrlHelperText:
+            'Local LM Studio server URL. Change only if using a non-default port or a cloud-hosted deployment.',
+          modelPlaceholder: 'llama-3.2-1b (auto-discovered if left blank)',
+        };
+      case 'openai-compatible':
+        return {
+          requiresApiKey: false,
+          supportsOptionalApiKey: true,
+          apiKeyLabel: 'API Key (optional)',
+          apiKeyPlaceholder:
+            'Bearer token or API key if the server requires auth',
+          requiresBaseUrl: true,
+          baseUrlPlaceholder: 'https://api.your-provider.com/v1',
+          baseUrlHelperText:
+            'Base URL of any OpenAI-compatible server (LLM inference, local proxies, etc.)',
+          modelPlaceholder:
+            'Model ID — required if server does not expose /v1/models',
         };
       default:
         return {
@@ -322,6 +375,10 @@ export const CreateProviderDialog: React.FC<CreateProviderDialogProps> = ({
                     <MenuItem value="anthropic">Anthropic Claude</MenuItem>
                     <MenuItem value="gemini">Google Gemini</MenuItem>
                     <MenuItem value="ollama">Ollama</MenuItem>
+                    <MenuItem value="lmstudio">LM Studio</MenuItem>
+                    <MenuItem value="openai-compatible">
+                      OpenAI Compatible
+                    </MenuItem>
                   </Select>
                   {errors.type && (
                     <Typography variant="caption" color="error">
@@ -372,8 +429,11 @@ export const CreateProviderDialog: React.FC<CreateProviderDialogProps> = ({
               />
             )}
 
-            {/* Base URL for Ollama */}
-            {(watchedType === 'ollama' || requirements.requiresBaseUrl) && (
+            {/* Base URL */}
+            {(watchedType === 'ollama' ||
+              watchedType === 'lmstudio' ||
+              watchedType === 'openai-compatible' ||
+              requirements.requiresBaseUrl) && (
               <Controller
                 name="baseUrl"
                 control={control}
@@ -384,11 +444,15 @@ export const CreateProviderDialog: React.FC<CreateProviderDialogProps> = ({
                     onChange={field.onChange}
                     onBlur={field.onBlur}
                     label="Base URL"
-                    placeholder="http://localhost:11434"
+                    placeholder={
+                      (requirements as any).baseUrlPlaceholder ||
+                      'http://localhost:11434'
+                    }
                     fullWidth
                     error={!!errors.baseUrl}
                     helperText={
                       errors.baseUrl?.message ||
+                      (requirements as any).baseUrlHelperText ||
                       (watchedType === 'ollama'
                         ? 'Local, self-hosted, or hosted Ollama API URL'
                         : 'Custom API endpoint')
@@ -443,6 +507,103 @@ export const CreateProviderDialog: React.FC<CreateProviderDialogProps> = ({
                   ollama.com
                 </a>
               </Alert>
+            )}
+
+            {watchedType === 'lmstudio' && (
+              <Alert severity="info">
+                LM Studio runs a local OpenAI-compatible server. Start it from
+                the <strong>Local Server</strong> tab in LM Studio (default port
+                1234). For cloud-hosted LM model deployments, set the remote
+                Base URL and add an API key.{' '}
+                <a
+                  href="https://lmstudio.ai/docs/basics/server"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  style={{ color: 'inherit' }}
+                >
+                  LM Studio docs
+                </a>
+              </Alert>
+            )}
+
+            {watchedType === 'openai-compatible' && (
+              <Box>
+                <Alert severity="info" sx={{ mb: 2 }}>
+                  Connect to any server that implements the OpenAI Chat
+                  Completions API — local inference servers, cloud proxies, or
+                  custom deployments.
+                </Alert>
+                <Accordion variant="outlined" elevation={0}>
+                  <AccordionSummary expandIcon={<ExpandMore />}>
+                    <Typography variant="body2" fontWeight="medium">
+                      Popular Compatible API Endpoints
+                    </Typography>
+                  </AccordionSummary>
+                  <AccordionDetails sx={{ p: 0 }}>
+                    <List dense>
+                      {[
+                        {
+                          name: 'OpenRouter',
+                          url: 'https://openrouter.ai/api/v1',
+                        },
+                        {
+                          name: 'NVIDIA NIM',
+                          url: 'https://integrate.api.nvidia.com/v1',
+                        },
+                        { name: 'DeepSeek', url: 'https://api.deepseek.com' },
+                        { name: 'Groq', url: 'https://api.groq.com/openai/v1' },
+                        {
+                          name: 'Together AI',
+                          url: 'https://api.together.xyz/v1',
+                        },
+                        {
+                          name: 'Clarifai',
+                          url: 'https://api.clarifai.com/v2/ext/openai/v1',
+                        },
+                        {
+                          name: 'NEAR AI Cloud',
+                          url: 'https://cloud-api.near.ai/v1',
+                        },
+                        {
+                          name: 'Heroku (Custom App)',
+                          url: 'https://<YOUR_APP_NAME>.herokuapp.com/v1',
+                        },
+                      ].map((endpoint) => (
+                        <ListItem
+                          key={endpoint.name}
+                          secondaryAction={
+                            <Tooltip title="Copy URL">
+                              <IconButton
+                                edge="end"
+                                size="small"
+                                onClick={() => {
+                                  navigator.clipboard.writeText(endpoint.url);
+                                  toast.success(`${endpoint.name} URL copied!`);
+                                }}
+                              >
+                                <ContentCopy fontSize="small" />
+                              </IconButton>
+                            </Tooltip>
+                          }
+                        >
+                          <ListItemText
+                            primary={endpoint.name}
+                            secondary={endpoint.url}
+                            primaryTypographyProps={{
+                              variant: 'body2',
+                              fontWeight: 'medium',
+                            }}
+                            secondaryTypographyProps={{
+                              variant: 'caption',
+                              sx: { fontFamily: 'monospace' },
+                            }}
+                          />
+                        </ListItem>
+                      ))}
+                    </List>
+                  </AccordionDetails>
+                </Accordion>
+              </Box>
             )}
           </Box>
         </DialogContent>

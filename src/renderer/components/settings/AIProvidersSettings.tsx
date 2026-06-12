@@ -2,7 +2,6 @@ import React from 'react';
 import {
   Box,
   Typography,
-  Grid,
   Button,
   Alert,
   CircularProgress,
@@ -304,18 +303,23 @@ export const AIProvidersSettings: React.FC = () => {
 
           {/* Providers Grid */}
           {providers.length > 0 && (
-            <Grid container spacing={3}>
+            <Box
+              sx={{
+                display: 'grid',
+                gridTemplateColumns: 'repeat(auto-fill, minmax(340px, 1fr))',
+                gap: 3,
+              }}
+            >
               {providers.map((provider) => (
-                <Grid item xs={12} md={6} lg={4} key={provider.id}>
-                  <ProviderCard
-                    provider={provider}
-                    isActive={activeProvider?.id === provider.id}
-                    onEdit={handleEditProvider}
-                    onRefresh={handleRefreshAll}
-                  />
-                </Grid>
+                <ProviderCard
+                  key={provider.id}
+                  provider={provider}
+                  isActive={activeProvider?.id === provider.id}
+                  onEdit={handleEditProvider}
+                  onRefresh={handleRefreshAll}
+                />
               ))}
-            </Grid>
+            </Box>
           )}
 
           <CreateProviderDialog
