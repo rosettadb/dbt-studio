@@ -174,11 +174,9 @@ export const FlowfileSettings: React.FC<FlowfileSettingsProps> = ({
           onClick={handleInstall}
           disabled={isInstalling || !isPythonConfigured}
         >
-          {isInstalling
-            ? 'Installing…'
-            : installedVersion
-              ? 'Upgrade Flowfile'
-              : 'Install Flowfile'}
+          {isInstalling && 'Installing…'}
+          {!isInstalling && installedVersion && 'Upgrade Flowfile'}
+          {!isInstalling && !installedVersion && 'Install Flowfile'}
         </Button>
       </Box>
 
@@ -190,7 +188,7 @@ export const FlowfileSettings: React.FC<FlowfileSettingsProps> = ({
           UI Port
         </Typography>
         <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-          The port Flowfile's core service runs on. Default is{' '}
+          The port Flowfile&apos;s core service runs on. Default is
           <code>63578</code>.
         </Typography>
         <TextField
