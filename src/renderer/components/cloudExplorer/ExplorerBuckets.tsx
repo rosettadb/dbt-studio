@@ -417,16 +417,25 @@ export const ExplorerBuckets: React.FC<ExplorerBucketsProps> = ({
                 </Typography>
               )}
             </CardContent>
-            <CardActions>
+            <CardActions sx={{ justifyContent: 'space-between' }}>
               <Button
                 variant="contained"
                 size="small"
                 startIcon={<OpenInNew />}
                 onClick={() => handleBucketClick(bucket.name)}
-                fullWidth
+                sx={{ flex: 1 }}
               >
                 Browse
               </Button>
+              <Tooltip title="Delete bucket">
+                <IconButton
+                  size="small"
+                  aria-label={`Delete bucket ${bucket.name}`}
+                  onClick={() => setDeleteBucket(bucket.name)}
+                >
+                  <Delete fontSize="small" />
+                </IconButton>
+              </Tooltip>
             </CardActions>
           </Card>
         </Grid>
