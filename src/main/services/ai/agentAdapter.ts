@@ -171,6 +171,12 @@ async function getDefaultModelDynamic(
           if (models.length > 0) {
             const firstId = models[0].id ?? models[0].name;
 
+            if (typeof firstId !== 'string' || firstId.trim() === '') {
+              throw new Error(
+                `Invalid model identifier received from ${modelsUrl}`,
+              );
+            }
+
             return firstId;
           }
           throw new Error(`No models found at ${modelsUrl}`);
