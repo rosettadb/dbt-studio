@@ -139,7 +139,6 @@ export class FlowfileService {
 
     try {
       flowfileProcess.kill('SIGTERM');
-      flowfileProcess = null;
       return { ok: true };
     } catch (error) {
       return {

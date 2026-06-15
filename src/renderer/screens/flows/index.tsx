@@ -1,7 +1,8 @@
 import React from 'react';
 import {
   Box,
-  Button,
+  IconButton,
+  Tooltip,
   Typography,
   CircularProgress,
   Alert,
@@ -65,15 +66,24 @@ const Flows: React.FC = () => {
       const result = await flowfileStop();
       if (!result.ok) {
         setError(result.error ?? 'Failed to stop Flowfile');
+        setIsStopping(false);
       }
-    } finally {
+      // isStopping stays true; cleared by the useEffect below once the poll
+      // confirms the process is gone
+    } catch {
       setIsStopping(false);
-      await fetchStatus();
     }
   };
 
-  const serviceUp = (status?.serviceUp ?? false) || showIframe;
   const processRunning = status?.processRunning ?? false;
+
+  React.useEffect(() => {
+    if (isStopping && !processRunning) {
+      setIsStopping(false);
+    }
+  }, [processRunning, isStopping]);
+  const serviceUp =
+    processRunning && ((status?.serviceUp ?? false) || showIframe);
   const url = status?.url ?? 'http://127.0.0.1:63578/ui';
 
   return (
@@ -102,61 +112,55 @@ const Flows: React.FC = () => {
         </Typography>
 
         {!processRunning ? (
-          <Button
-            size="small"
-            variant="contained"
-            startIcon={
-              isStarting ? (
-                <CircularProgress size={14} color="inherit" />
-              ) : (
-                <PlayArrow fontSize="small" />
-              )
-            }
-            onClick={handleStart}
-            disabled={isStarting}
-          >
-            {isStarting ? 'Starting…' : 'Start Service'}
-          </Button>
+          <Tooltip title="Start Service" placement="bottom">
+            <span>
+              <IconButton
+                size="small"
+                color="primary"
+                onClick={handleStart}
+                disabled={isStarting}
+              >
+                {isStarting ? (
+                  <CircularProgress size={16} color="inherit" />
+                ) : (
+                  <PlayArrow fontSize="small" />
+                )}
+              </IconButton>
+            </span>
+          </Tooltip>
         ) : (
-          <Button
+          <Tooltip
+            title={serviceUp ? 'Stop Service' : 'Starting up…'}
+            placement="bottom"
+          >
+            <span>
+              <IconButton
+                size="small"
+                color="error"
+                onClick={handleStop}
+                disabled={isStopping || !serviceUp}
+              >
+                {isStopping || !serviceUp ? (
+                  <CircularProgress size={16} color="inherit" />
+                ) : (
+                  <Stop fontSize="small" />
+                )}
+              </IconButton>
+            </span>
+          </Tooltip>
+        )}
+
+        <Tooltip title="Refresh" placement="bottom">
+          <IconButton
             size="small"
-            variant="outlined"
-            color="error"
-            startIcon={
-              isStopping ? (
-                <CircularProgress size={14} color="inherit" />
-              ) : (
-                <Stop fontSize="small" />
-              )
-            }
-            onClick={handleStop}
-            disabled={isStopping}
+            onClick={() => {
+              setShowIframe(true);
+              fetchStatus();
+            }}
           >
-            {isStopping ? 'Stopping…' : 'Stop Service'}
-          </Button>
-        )}
-
-        <Button
-          size="small"
-          variant="text"
-          startIcon={<Refresh fontSize="small" />}
-          onClick={() => {
-            setShowIframe(true);
-            fetchStatus();
-          }}
-        >
-          Refresh
-        </Button>
-
-        {processRunning && (
-          <Typography
-            variant="caption"
-            color={serviceUp ? 'success.main' : 'warning.main'}
-            sx={{ ml: 1 }}
-          >
-            {serviceUp ? `Running at ${url}` : 'Starting up…'}
-          </Typography>
-        )}
+            <Refresh fontSize="small" />
+          </IconButton>
+        </Tooltip>
       </Box>
 
       {/* Error banner */}
@@ -206,7 +210,7 @@ const Flows: React.FC = () => {
                   Flowfile is not running
                 </Typography>
                 <Typography variant="body2" color="text.secondary">
-                  Click <strong>Start Service</strong> to launch Flowfile.
+                  Click the play button in the toolbar to launch Flowfile.
                 </Typography>
                 <Typography variant="caption" color="text.secondary">
                   Not installed? Go to <strong>Settings &gt; Flowfile</strong>{' '}
