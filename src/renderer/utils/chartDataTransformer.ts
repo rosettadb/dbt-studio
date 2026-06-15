@@ -3,13 +3,13 @@
  *
  * @param data The raw array of objects from the SQL query
  * @param xAxisCol The column selected for the X-axis (category)
- * @param yAxisCol The column selected for the Y-axis (value)
+ * @param yAxisCols The columns selected for the Y-axis (metrics)
  * @returns An array of objects formatted and type-coerced for Recharts
  */
 export const transformSqlResultToChartData = (
   data: any[],
   xAxisCol: string,
-  yAxisCol: string,
+  yAxisCols: string[],
 ): any[] => {
   if (!data || !Array.isArray(data)) {
     return [];
@@ -21,20 +21,20 @@ export const transformSqlResultToChartData = (
 
     // Recharts expects Y-axis values to be numbers for most charts.
     // SQL sometimes returns aggregates (like COUNT or SUM) as strings.
-    // We attempt to parse the Y-axis value into a float so the chart scales correctly.
-    if (
-      yAxisCol &&
-      transformedRow[yAxisCol] !== undefined &&
-      transformedRow[yAxisCol] !== null
-    ) {
-      const rawValue = transformedRow[yAxisCol];
+    // We attempt to parse the Y-axis values into floats so the chart scales correctly.
+    if (yAxisCols && Array.isArray(yAxisCols)) {
+      yAxisCols.forEach((col) => {
+        if (transformedRow[col] !== undefined && transformedRow[col] !== null) {
+          const rawValue = transformedRow[col];
 
-      // If it's a string that looks like a number, parse it
-      if (typeof rawValue === 'string' && !Number.isNaN(Number(rawValue))) {
-        transformedRow[yAxisCol] = parseFloat(rawValue);
-      } else if (typeof rawValue === 'bigint') {
-        transformedRow[yAxisCol] = Number(rawValue);
-      }
+          // If it's a string that looks like a number, parse it
+          if (typeof rawValue === 'string' && !Number.isNaN(Number(rawValue))) {
+            transformedRow[col] = parseFloat(rawValue);
+          } else if (typeof rawValue === 'bigint') {
+            transformedRow[col] = Number(rawValue);
+          }
+        }
+      });
     }
 
     // For X-axis, we usually want strings (categories), especially for dates

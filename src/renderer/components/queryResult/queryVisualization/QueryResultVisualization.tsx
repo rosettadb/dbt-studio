@@ -9,11 +9,11 @@ export interface QueryResultVisualizationProps {
   // Optionally, we could receive initial config from notebook metadata
   initialChartType?: ChartType;
   initialXAxisCol?: string;
-  initialYAxisCol?: string;
+  initialYAxisCols?: string[];
   onConfigChange?: (config: {
     chartType: ChartType;
     xAxisCol: string;
-    yAxisCol: string;
+    yAxisCols: string[];
   }) => void;
 }
 
@@ -23,12 +23,12 @@ export const QueryResultVisualization: React.FC<
   data,
   initialChartType = 'bar',
   initialXAxisCol = '',
-  initialYAxisCol = '',
+  initialYAxisCols = [],
   onConfigChange,
 }) => {
   const [chartType, setChartType] = useState<ChartType>(initialChartType);
   const [xAxisCol, setXAxisCol] = useState<string>(initialXAxisCol);
-  const [yAxisCol, setYAxisCol] = useState<string>(initialYAxisCol);
+  const [yAxisCols, setYAxisCols] = useState<string[]>(initialYAxisCols);
   const [availableColumns, setAvailableColumns] = useState<string[]>([]);
 
   // Extract columns dynamically from the first row of data
@@ -41,25 +41,24 @@ export const QueryResultVisualization: React.FC<
       if (!xAxisCol && columns.length > 0) {
         setXAxisCol(columns[0]);
       }
-      if (!yAxisCol && columns.length > 1) {
-        setYAxisCol(columns[1]);
-      } else if (!yAxisCol && columns.length === 1) {
-        setYAxisCol(columns[0]);
+      if (yAxisCols.length === 0 && columns.length > 1) {
+        setYAxisCols([columns[1]]);
+      } else if (yAxisCols.length === 0 && columns.length === 1) {
+        setYAxisCols([columns[0]]);
       }
     }
   }, [data]);
 
-  // Notify parent of config changes (useful for notebook cell persistence)
   useEffect(() => {
     if (onConfigChange) {
-      onConfigChange({ chartType, xAxisCol, yAxisCol });
+      onConfigChange({ chartType, xAxisCol, yAxisCols });
     }
-  }, [chartType, xAxisCol, yAxisCol, onConfigChange]);
+  }, [chartType, xAxisCol, yAxisCols, onConfigChange]);
 
   // Transform the raw SQL data so Recharts can understand it
   const transformedData = useMemo(() => {
-    return transformSqlResultToChartData(data, xAxisCol, yAxisCol);
-  }, [data, xAxisCol, yAxisCol]);
+    return transformSqlResultToChartData(data, xAxisCol, yAxisCols);
+  }, [data, xAxisCol, yAxisCols]);
 
   return (
     <Box
@@ -75,17 +74,17 @@ export const QueryResultVisualization: React.FC<
           data={transformedData}
           chartType={chartType}
           xAxisCol={xAxisCol}
-          yAxisCol={yAxisCol}
+          yAxisCols={yAxisCols}
         />
       </Box>
       <ChartConfig
         chartType={chartType}
         xAxisCol={xAxisCol}
-        yAxisCol={yAxisCol}
+        yAxisCols={yAxisCols}
         availableColumns={availableColumns}
         onChartTypeChange={setChartType}
         onXAxisChange={setXAxisCol}
-        onYAxisChange={setYAxisCol}
+        onYAxisColsChange={setYAxisCols}
       />
     </Box>
   );

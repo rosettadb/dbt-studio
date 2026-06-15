@@ -13,21 +13,21 @@ export type ChartType = 'bar' | 'line' | 'scatter' | 'pie';
 export interface ChartConfigProps {
   chartType: ChartType;
   xAxisCol: string;
-  yAxisCol: string;
+  yAxisCols: string[];
   availableColumns: string[];
   onChartTypeChange: (type: ChartType) => void;
   onXAxisChange: (col: string) => void;
-  onYAxisChange: (col: string) => void;
+  onYAxisColsChange: (cols: string[]) => void;
 }
 
 export const ChartConfig: React.FC<ChartConfigProps> = ({
   chartType,
   xAxisCol,
-  yAxisCol,
+  yAxisCols,
   availableColumns,
   onChartTypeChange,
   onXAxisChange,
-  onYAxisChange,
+  onYAxisColsChange,
 }) => {
   const handleChartTypeChange = (event: SelectChangeEvent<string>) => {
     onChartTypeChange(event.target.value as ChartType);
@@ -37,8 +37,11 @@ export const ChartConfig: React.FC<ChartConfigProps> = ({
     onXAxisChange(event.target.value);
   };
 
-  const handleYAxisChange = (event: SelectChangeEvent<string>) => {
-    onYAxisChange(event.target.value);
+  const handleYAxisChange = (event: SelectChangeEvent<string[]>) => {
+    const {
+      target: { value },
+    } = event;
+    onYAxisColsChange(typeof value === 'string' ? value.split(',') : value);
   };
 
   return (
@@ -97,13 +100,23 @@ export const ChartConfig: React.FC<ChartConfigProps> = ({
 
       <FormControl size="small" fullWidth>
         <Typography variant="caption" color="text.secondary" sx={{ mb: 0.5 }}>
-          Y-Axis (Value)
+          Y-Axis (Metrics)
         </Typography>
         <Select
           id="y-axis-select"
-          value={yAxisCol}
+          multiple
+          value={yAxisCols}
           onChange={handleYAxisChange}
-          sx={{ height: 28, fontSize: '0.875rem' }}
+          sx={{
+            height: 28,
+            fontSize: '0.875rem',
+            '& .MuiSelect-select': {
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+              whiteSpace: 'nowrap',
+            },
+          }}
+          renderValue={(selected) => selected.join(', ')}
         >
           {availableColumns.map((col) => (
             <MenuItem key={col} value={col}>

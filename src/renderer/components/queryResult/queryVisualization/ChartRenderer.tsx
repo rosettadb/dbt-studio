@@ -23,7 +23,7 @@ export interface ChartRendererProps {
   data: any[];
   chartType: ChartType;
   xAxisCol: string;
-  yAxisCol: string;
+  yAxisCols: string[];
 }
 
 const COLORS = [
@@ -39,7 +39,7 @@ export const ChartRenderer: React.FC<ChartRendererProps> = ({
   data,
   chartType,
   xAxisCol,
-  yAxisCol,
+  yAxisCols,
 }) => {
   if (!data || data.length === 0) {
     return (
@@ -51,7 +51,7 @@ export const ChartRenderer: React.FC<ChartRendererProps> = ({
     );
   }
 
-  if (!xAxisCol || !yAxisCol) {
+  if (!xAxisCol || !yAxisCols || yAxisCols.length === 0) {
     return (
       <Box sx={{ p: 3, display: 'flex', justifyContent: 'center' }}>
         <Typography color="text.secondary">
@@ -74,7 +74,13 @@ export const ChartRenderer: React.FC<ChartRendererProps> = ({
             <YAxis />
             <Tooltip />
             <Legend />
-            <Bar dataKey={yAxisCol} fill="#8884d8" />
+            {yAxisCols.map((col, index) => (
+              <Bar
+                key={col}
+                dataKey={col}
+                fill={COLORS[index % COLORS.length]}
+              />
+            ))}
           </BarChart>
         );
       case 'line':
@@ -88,12 +94,15 @@ export const ChartRenderer: React.FC<ChartRendererProps> = ({
             <YAxis />
             <Tooltip />
             <Legend />
-            <Line
-              type="monotone"
-              dataKey={yAxisCol}
-              stroke="#8884d8"
-              activeDot={{ r: 8 }}
-            />
+            {yAxisCols.map((col, index) => (
+              <Line
+                key={col}
+                type="monotone"
+                dataKey={col}
+                stroke={COLORS[index % COLORS.length]}
+                activeDot={{ r: 8 }}
+              />
+            ))}
           </LineChart>
         );
       case 'scatter':
@@ -101,20 +110,29 @@ export const ChartRenderer: React.FC<ChartRendererProps> = ({
           <ScatterChart margin={{ top: 20, right: 30, left: 20, bottom: 5 }}>
             <CartesianGrid strokeDasharray="3 3" />
             <XAxis type="category" dataKey={xAxisCol} name={xAxisCol} />
-            <YAxis type="number" dataKey={yAxisCol} name={yAxisCol} />
+            <YAxis type="number" />
             <Tooltip cursor={{ strokeDasharray: '3 3' }} />
             <Legend />
-            <Scatter name="Data" data={data} fill="#8884d8" />
+            {yAxisCols.map((col, index) => (
+              <Scatter
+                key={col}
+                name={col}
+                dataKey={col}
+                data={data}
+                fill={COLORS[index % COLORS.length]}
+              />
+            ))}
           </ScatterChart>
         );
       case 'pie': {
+        const primaryYAxisCol = yAxisCols[0];
         // Recharts Pie crashes if the dataKey values are not numbers.
         // Filter out non-numeric or negative values.
         const validPieData = data.filter(
           (d) =>
-            typeof d[yAxisCol] === 'number' &&
-            !Number.isNaN(d[yAxisCol]) &&
-            d[yAxisCol] >= 0,
+            typeof d[primaryYAxisCol] === 'number' &&
+            !Number.isNaN(d[primaryYAxisCol]) &&
+            d[primaryYAxisCol] >= 0,
         );
 
         if (validPieData.length === 0) {
@@ -140,7 +158,7 @@ export const ChartRenderer: React.FC<ChartRendererProps> = ({
           <PieChart>
             <Pie
               data={validPieData}
-              dataKey={yAxisCol}
+              dataKey={primaryYAxisCol}
               nameKey={xAxisCol}
               cx="50%"
               cy="50%"
