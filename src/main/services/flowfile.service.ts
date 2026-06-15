@@ -113,7 +113,7 @@ export class FlowfileService {
     }
 
     try {
-      flowfileProcess = spawn(bin, ['run', 'ui'], {
+      flowfileProcess = spawn(bin, ['run', 'ui', '--no-browser'], {
         detached: false,
         stdio: 'ignore',
       });
