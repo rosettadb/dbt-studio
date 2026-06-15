@@ -20,11 +20,13 @@ import {
   Description as JsonIcon,
   TableChart as CsvIcon,
   InsertDriveFile as ParquetIcon,
+  BarChart as BarChartIcon,
 } from '@mui/icons-material';
 import {
   QueryResponseType,
   SupportedConnectionTypes,
 } from '../../../types/backend';
+import { QueryResultVisualization } from '../../components/queryResult/queryVisualization/QueryResultVisualization';
 import { CustomTable } from '../../components/customTable';
 import { underscoreToTitleCase } from '../../helpers/utils';
 import { DuckLakeService } from '../../services/duckLake.service';
@@ -89,6 +91,7 @@ export const QueryResult: React.FC<Props> = ({ results, exportContext }) => {
     results.rowCount ?? (results.data ? results.data.length : 0),
   );
   const [loading, setLoading] = React.useState(false);
+  const [viewMode, setViewMode] = React.useState<'table' | 'chart'>('table');
 
   const [page, setPage] = React.useState(0);
   const [perPage, setPerPage] = React.useState(10);
@@ -222,6 +225,9 @@ export const QueryResult: React.FC<Props> = ({ results, exportContext }) => {
   const [exportAnchorEl, setExportAnchorEl] =
     React.useState<null | HTMLElement>(null);
   const exportMenuOpen = Boolean(exportAnchorEl);
+  const [previewAnchorEl, setPreviewAnchorEl] =
+    React.useState<null | HTMLElement>(null);
+  const previewMenuOpen = Boolean(previewAnchorEl);
   // True while a COPY-to-file export is running on the main process
   const [isExporting, setIsExporting] = React.useState(false);
 
@@ -231,6 +237,14 @@ export const QueryResult: React.FC<Props> = ({ results, exportContext }) => {
 
   const handleExportMenuClose = () => {
     setExportAnchorEl(null);
+  };
+
+  const handlePreviewMenuOpen = (event: React.MouseEvent<HTMLElement>) => {
+    setPreviewAnchorEl(event.currentTarget);
+  };
+
+  const handlePreviewMenuClose = () => {
+    setPreviewAnchorEl(null);
   };
 
   const handleDownloadJson = async () => {
@@ -501,136 +515,237 @@ export const QueryResult: React.FC<Props> = ({ results, exportContext }) => {
     exportTooltipTitle = 'Export query results';
   }
 
+  const sharedToolbarContent = (
+    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+      {results.duration !== undefined && (
+        <Typography
+          variant="body2"
+          color="text.secondary"
+          sx={{ opacity: 0.7 }}
+        >
+          {results.duration > 1000
+            ? `${(results.duration / 1000).toFixed(2)}s`
+            : `${results.duration}ms`}
+        </Typography>
+      )}
+      {showingInfo && (
+        <Typography
+          variant="body2"
+          color="text.secondary"
+          sx={{ opacity: 0.7 }}
+        >
+          {showingInfo}
+        </Typography>
+      )}
+      <Button
+        variant="outlined"
+        size="small"
+        startIcon={viewMode === 'table' ? <CsvIcon /> : <BarChartIcon />}
+        endIcon={<ArrowDropDownIcon />}
+        onClick={handlePreviewMenuOpen}
+        sx={{ minWidth: 90 }}
+      >
+        {viewMode === 'table' ? 'Table' : 'Chart'}
+      </Button>
+      <Menu
+        anchorEl={previewAnchorEl}
+        open={previewMenuOpen}
+        onClose={handlePreviewMenuClose}
+        anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
+        transformOrigin={{ vertical: 'top', horizontal: 'right' }}
+      >
+        <MenuItem
+          onClick={() => {
+            setViewMode('table');
+            handlePreviewMenuClose();
+          }}
+          selected={viewMode === 'table'}
+          dense
+        >
+          <ListItemIcon sx={{ minWidth: 28 }}>
+            <CsvIcon sx={{ fontSize: 16 }} />
+          </ListItemIcon>
+          <ListItemText
+            primary="Table"
+            primaryTypographyProps={{ variant: 'body2' }}
+          />
+        </MenuItem>
+        <MenuItem
+          onClick={() => {
+            setViewMode('chart');
+            handlePreviewMenuClose();
+          }}
+          selected={viewMode === 'chart'}
+          dense
+        >
+          <ListItemIcon sx={{ minWidth: 28 }}>
+            <BarChartIcon sx={{ fontSize: 16 }} />
+          </ListItemIcon>
+          <ListItemText
+            primary="Chart"
+            primaryTypographyProps={{ variant: 'body2' }}
+          />
+        </MenuItem>
+      </Menu>
+      <Tooltip title={exportTooltipTitle}>
+        <span>
+          <Button
+            variant="outlined"
+            size="small"
+            startIcon={
+              isExporting ? (
+                <CircularProgress size={14} color="inherit" />
+              ) : (
+                <DownloadIcon />
+              )
+            }
+            endIcon={<ArrowDropDownIcon />}
+            onClick={handleExportMenuOpen}
+            disabled={!hasRows || isExporting}
+          >
+            {isExporting ? 'Exporting...' : 'Export'}
+          </Button>
+        </span>
+      </Tooltip>
+      <Menu
+        anchorEl={exportAnchorEl}
+        open={exportMenuOpen}
+        onClose={handleExportMenuClose}
+        anchorOrigin={{
+          vertical: 'bottom',
+          horizontal: 'right',
+        }}
+        transformOrigin={{
+          vertical: 'top',
+          horizontal: 'right',
+        }}
+      >
+        <MenuItem
+          onClick={handleDownloadJson}
+          disabled={isExporting}
+          dense
+          sx={{ py: 0.5, minHeight: 32 }}
+        >
+          <ListItemIcon sx={{ minWidth: 28 }}>
+            <JsonIcon sx={{ fontSize: 16 }} />
+          </ListItemIcon>
+          <ListItemText
+            primary={
+              isDuckLake ? 'Export JSON (full dataset)' : 'Download JSON'
+            }
+            primaryTypographyProps={{
+              variant: 'body2',
+              sx: { fontSize: 12 },
+            }}
+          />
+        </MenuItem>
+        <MenuItem
+          onClick={handleDownloadCsv}
+          disabled={isExporting}
+          dense
+          sx={{ py: 0.5, minHeight: 32 }}
+        >
+          <ListItemIcon sx={{ minWidth: 28 }}>
+            <CsvIcon sx={{ fontSize: 16 }} />
+          </ListItemIcon>
+          <ListItemText
+            primary={isDuckLake ? 'Export CSV (full dataset)' : 'Download CSV'}
+            primaryTypographyProps={{
+              variant: 'body2',
+              sx: { fontSize: 12 },
+            }}
+          />
+        </MenuItem>
+        {canExportParquet && (
+          <MenuItem
+            onClick={handleExportParquet}
+            disabled={isExporting}
+            dense
+            sx={{ py: 0.5, minHeight: 32 }}
+          >
+            <ListItemIcon sx={{ minWidth: 28 }}>
+              <ParquetIcon sx={{ fontSize: 16 }} />
+            </ListItemIcon>
+            <ListItemText
+              primary="Export Parquet (full dataset)"
+              primaryTypographyProps={{
+                variant: 'body2',
+                sx: { fontSize: 12 },
+              }}
+            />
+          </MenuItem>
+        )}
+      </Menu>
+    </Box>
+  );
+
   return (
-    <div data-testid="sql-results-pane">
-      <CustomTable<Record<string, any>>
-        id="query-result"
-        dataTestId="sql-results-table"
-        name=""
-        showSearch={false}
-        toolbarContent={
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-            {results.duration !== undefined && (
-              <Typography
-                variant="body2"
-                color="text.secondary"
-                sx={{ opacity: 0.7 }}
-              >
-                {results.duration > 1000
-                  ? `${(results.duration / 1000).toFixed(2)}s`
-                  : `${results.duration}ms`}
-              </Typography>
-            )}
-            {showingInfo && (
-              <Typography
-                variant="body2"
-                color="text.secondary"
-                sx={{ opacity: 0.7 }}
-              >
-                {showingInfo}
-              </Typography>
-            )}
-            <Tooltip title={exportTooltipTitle}>
-              <span>
-                <Button
-                  variant="outlined"
-                  size="small"
-                  startIcon={
-                    isExporting ? (
-                      <CircularProgress size={14} color="inherit" />
-                    ) : (
-                      <DownloadIcon />
-                    )
-                  }
-                  endIcon={<ArrowDropDownIcon />}
-                  onClick={handleExportMenuOpen}
-                  disabled={!hasRows || isExporting}
-                >
-                  {isExporting ? 'Exporting...' : 'Export'}
-                </Button>
-              </span>
-            </Tooltip>
-            <Menu
-              anchorEl={exportAnchorEl}
-              open={exportMenuOpen}
-              onClose={handleExportMenuClose}
-              anchorOrigin={{
-                vertical: 'bottom',
-                horizontal: 'right',
-              }}
-              transformOrigin={{
-                vertical: 'top',
-                horizontal: 'right',
-              }}
-            >
-              <MenuItem
-                onClick={handleDownloadJson}
-                disabled={isExporting}
-                dense
-                sx={{ py: 0.5, minHeight: 32 }}
-              >
-                <ListItemIcon sx={{ minWidth: 28 }}>
-                  <JsonIcon sx={{ fontSize: 16 }} />
-                </ListItemIcon>
-                <ListItemText
-                  primary={
-                    isDuckLake ? 'Export JSON (full dataset)' : 'Download JSON'
-                  }
-                  primaryTypographyProps={{
-                    variant: 'body2',
-                    sx: { fontSize: 12 },
-                  }}
-                />
-              </MenuItem>
-              <MenuItem
-                onClick={handleDownloadCsv}
-                disabled={isExporting}
-                dense
-                sx={{ py: 0.5, minHeight: 32 }}
-              >
-                <ListItemIcon sx={{ minWidth: 28 }}>
-                  <CsvIcon sx={{ fontSize: 16 }} />
-                </ListItemIcon>
-                <ListItemText
-                  primary={
-                    isDuckLake ? 'Export CSV (full dataset)' : 'Download CSV'
-                  }
-                  primaryTypographyProps={{
-                    variant: 'body2',
-                    sx: { fontSize: 12 },
-                  }}
-                />
-              </MenuItem>
-              {canExportParquet && (
-                <MenuItem
-                  onClick={handleExportParquet}
-                  disabled={isExporting}
-                  dense
-                  sx={{ py: 0.5, minHeight: 32 }}
-                >
-                  <ListItemIcon sx={{ minWidth: 28 }}>
-                    <ParquetIcon sx={{ fontSize: 16 }} />
-                  </ListItemIcon>
-                  <ListItemText
-                    primary="Export Parquet (full dataset)"
-                    primaryTypographyProps={{
-                      variant: 'body2',
-                      sx: { fontSize: 12 },
-                    }}
-                  />
-                </MenuItem>
-              )}
-            </Menu>
+    <div
+      data-testid="sql-results-pane"
+      style={{ display: 'flex', flexDirection: 'column', height: '100%' }}
+    >
+      {viewMode === 'chart' ? (
+        <Box
+          sx={{
+            flexGrow: 1,
+            overflow: 'auto',
+            display: 'flex',
+            flexDirection: 'column',
+          }}
+        >
+          <Box
+            sx={{
+              display: 'flex',
+              justifyContent: 'flex-end',
+              alignItems: 'center',
+              pr: 2,
+              minHeight: 48,
+            }}
+          >
+            {sharedToolbarContent}
           </Box>
-        }
-        rows={rows as any}
-        columns={columns.map((column) => ({
-          id: column,
-          label: underscoreToTitleCase(column),
-          render: (value) => {
-            const cellValue = value[column];
-            // Handle null and undefined
-            if (cellValue === null || cellValue === undefined) {
+          <QueryResultVisualization data={rows} />
+        </Box>
+      ) : (
+        <CustomTable<Record<string, any>>
+          id="query-result"
+          dataTestId="sql-results-table"
+          name=""
+          showSearch={false}
+          toolbarContent={sharedToolbarContent}
+          rows={rows as any}
+          columns={columns.map((column) => ({
+            id: column,
+            label: underscoreToTitleCase(column),
+            render: (value) => {
+              const cellValue = value[column];
+              // Handle null and undefined
+              if (cellValue === null || cellValue === undefined) {
+                return (
+                  <div
+                    style={{
+                      whiteSpace: 'nowrap',
+                      minHeight: '24px',
+                      display: 'flex',
+                      alignItems: 'center',
+                      color: '#999',
+                      fontStyle: 'italic',
+                    }}
+                  >
+                    NULL
+                  </div>
+                );
+              }
+              let stringValue: string;
+              if (typeof cellValue === 'object') {
+                try {
+                  stringValue = JSON.stringify(cellValue);
+                } catch {
+                  stringValue = String(cellValue);
+                }
+              } else {
+                stringValue = String(cellValue);
+              }
               return (
                 <div
                   style={{
@@ -638,41 +753,17 @@ export const QueryResult: React.FC<Props> = ({ results, exportContext }) => {
                     minHeight: '24px',
                     display: 'flex',
                     alignItems: 'center',
-                    color: '#999',
-                    fontStyle: 'italic',
                   }}
                 >
-                  NULL
+                  {stringValue}
                 </div>
               );
-            }
-            let stringValue: string;
-            if (typeof cellValue === 'object') {
-              try {
-                stringValue = JSON.stringify(cellValue);
-              } catch {
-                stringValue = String(cellValue);
-              }
-            } else {
-              stringValue = String(cellValue);
-            }
-            return (
-              <div
-                style={{
-                  whiteSpace: 'nowrap',
-                  minHeight: '24px',
-                  display: 'flex',
-                  alignItems: 'center',
-                }}
-              >
-                {stringValue}
-              </div>
-            );
-          },
-        }))}
-        customPagination={customPagination as any}
-        loading={loading}
-      />
+            },
+          }))}
+          customPagination={customPagination as any}
+          loading={loading}
+        />
+      )}
 
       <Backdrop
         sx={{

@@ -25,8 +25,10 @@ import {
   Description as JsonIcon,
   TableChart as CsvIcon,
   InsertDriveFile as ParquetIcon,
+  BarChart as BarChartIcon,
 } from '@mui/icons-material';
 import { toast } from 'react-toastify';
+import { QueryResultVisualization } from '../queryResult/queryVisualization/QueryResultVisualization';
 import { CellOutput } from '../../../types/notebooks';
 import { CustomTable } from '../customTable';
 import { useFetchCellPage } from '../../controllers/notebooks.controller';
@@ -56,9 +58,22 @@ export const OutputPanel: React.FC<OutputPanelProps> = ({
   const [isExporting, setIsExporting] = useState(false);
   const fetchCellPage = useFetchCellPage();
   const latestRequestId = useRef(0);
+  const [viewMode, setViewMode] = useState<'table' | 'chart'>('table');
 
+  const [previewAnchorEl, setPreviewAnchorEl] = useState<null | HTMLElement>(
+    null,
+  );
+  const previewMenuOpen = Boolean(previewAnchorEl);
   const exportMenuOpen = Boolean(exportAnchorEl);
   const isDuckLake = connectionId.startsWith('ducklake-');
+
+  const handlePreviewMenuOpen = (event: React.MouseEvent<HTMLElement>) => {
+    setPreviewAnchorEl(event.currentTarget);
+  };
+
+  const handlePreviewMenuClose = () => {
+    setPreviewAnchorEl(null);
+  };
 
   // Helper function to escape SQL literals
   const escapeSqlLiteral = (value: string) => value.replace(/'/g, "''");
@@ -483,131 +498,204 @@ export const OutputPanel: React.FC<OutputPanelProps> = ({
     );
   };
 
+  const toolbarContent = (
+    <Box
+      sx={{
+        display: 'flex',
+        alignItems: 'center',
+        gap: 2,
+        ml: 'auto',
+      }}
+    >
+      {/* Execution time with green badge */}
+      <Box
+        sx={{
+          display: 'inline-flex',
+          alignItems: 'center',
+          bgcolor: 'success.main',
+          color: 'success.contrastText',
+          px: 1,
+          py: 0.25,
+          borderRadius: 1,
+          fontSize: 11,
+          fontWeight: 500,
+        }}
+      >
+        {output.executionTime}ms
+      </Box>
+
+      {/* Preview button */}
+      <Button
+        variant="outlined"
+        size="small"
+        startIcon={viewMode === 'table' ? <CsvIcon /> : <BarChartIcon />}
+        endIcon={<ArrowDropDownIcon />}
+        onClick={handlePreviewMenuOpen}
+        sx={{ height: 28, minWidth: 90 }}
+      >
+        {viewMode === 'table' ? 'Table' : 'Chart'}
+      </Button>
+
+      {/* Preview menu */}
+      <Menu
+        anchorEl={previewAnchorEl}
+        open={previewMenuOpen}
+        onClose={handlePreviewMenuClose}
+        anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
+        transformOrigin={{ vertical: 'top', horizontal: 'right' }}
+      >
+        <MenuItem
+          onClick={() => {
+            setViewMode('table');
+            handlePreviewMenuClose();
+          }}
+          selected={viewMode === 'table'}
+          dense
+        >
+          <ListItemIcon sx={{ minWidth: 28 }}>
+            <CsvIcon sx={{ fontSize: 16 }} />
+          </ListItemIcon>
+          <ListItemText
+            primary="Table"
+            primaryTypographyProps={{ variant: 'body2' }}
+          />
+        </MenuItem>
+        <MenuItem
+          onClick={() => {
+            setViewMode('chart');
+            handlePreviewMenuClose();
+          }}
+          selected={viewMode === 'chart'}
+          dense
+        >
+          <ListItemIcon sx={{ minWidth: 28 }}>
+            <BarChartIcon sx={{ fontSize: 16 }} />
+          </ListItemIcon>
+          <ListItemText
+            primary="Chart"
+            primaryTypographyProps={{ variant: 'body2' }}
+          />
+        </MenuItem>
+      </Menu>
+
+      {/* Export button */}
+      <Button
+        variant="outlined"
+        size="small"
+        startIcon={
+          isExporting ? (
+            <CircularProgress size={14} color="inherit" />
+          ) : (
+            <DownloadIcon />
+          )
+        }
+        endIcon={<ArrowDropDownIcon />}
+        onClick={handleExportMenuOpen}
+        disabled={!paginatedData || paginatedData.length === 0 || isExporting}
+        sx={{ minWidth: 100, height: 28 }}
+      >
+        {isExporting ? 'Exporting...' : 'Export'}
+      </Button>
+
+      {/* Export menu */}
+      <Menu
+        anchorEl={exportAnchorEl}
+        open={exportMenuOpen}
+        onClose={handleExportMenuClose}
+        anchorOrigin={{
+          vertical: 'bottom',
+          horizontal: 'right',
+        }}
+        transformOrigin={{
+          vertical: 'top',
+          horizontal: 'right',
+        }}
+      >
+        <MenuItem onClick={handleExportJSON} disabled={isExporting} dense>
+          <ListItemIcon>
+            <JsonIcon fontSize="small" />
+          </ListItemIcon>
+          <ListItemText
+            primary={
+              isDuckLake ? 'Export JSON (full dataset)' : 'Download JSON'
+            }
+            primaryTypographyProps={{
+              variant: 'body2',
+              fontSize: '0.875rem',
+            }}
+          />
+        </MenuItem>
+
+        <MenuItem onClick={handleExportCSV} disabled={isExporting} dense>
+          <ListItemIcon>
+            <CsvIcon fontSize="small" />
+          </ListItemIcon>
+          <ListItemText
+            primary={isDuckLake ? 'Export CSV (full dataset)' : 'Download CSV'}
+            primaryTypographyProps={{
+              variant: 'body2',
+              fontSize: '0.875rem',
+            }}
+          />
+        </MenuItem>
+
+        <MenuItem onClick={handleExportParquet} disabled={isExporting} dense>
+          <ListItemIcon>
+            <ParquetIcon fontSize="small" />
+          </ListItemIcon>
+          <ListItemText
+            primary="Export Parquet (full dataset)"
+            primaryTypographyProps={{
+              variant: 'body2',
+              fontSize: '0.875rem',
+            }}
+          />
+        </MenuItem>
+      </Menu>
+    </Box>
+  );
+
   return (
     <Box sx={{ width: '100%', mt: 0.5 }}>
-      <CustomTable
-        id={`notebook-cell-${cellId}`}
-        name="" // Hide the "Cell Output" title
-        rows={paginatedData}
-        columns={columns.map((col) => ({
-          id: col,
-          label: col,
-          render: (row: any) => renderCellValue(row, col),
-        }))}
-        customPagination={customPagination as any}
-        loading={loading}
-        showSearch={false} // Hide the search field
-        toolbarContent={
+      {viewMode === 'chart' ? (
+        <Box
+          sx={{
+            flexGrow: 1,
+            overflow: 'auto',
+            display: 'flex',
+            flexDirection: 'column',
+            minHeight: 400,
+          }}
+        >
           <Box
             sx={{
               display: 'flex',
+              justifyContent: 'flex-end',
               alignItems: 'center',
-              gap: 2,
-              ml: 'auto',
+              pr: 2,
+              minHeight: 48,
             }}
           >
-            {/* Execution time with green badge */}
-            <Box
-              sx={{
-                display: 'inline-flex',
-                alignItems: 'center',
-                bgcolor: 'success.main',
-                color: 'success.contrastText',
-                px: 1,
-                py: 0.25,
-                borderRadius: 1,
-                fontSize: 11,
-                fontWeight: 500,
-              }}
-            >
-              {output.executionTime}ms
-            </Box>
-
-            {/* Export button */}
-            <Button
-              variant="outlined"
-              size="small"
-              startIcon={
-                isExporting ? (
-                  <CircularProgress size={14} color="inherit" />
-                ) : (
-                  <DownloadIcon />
-                )
-              }
-              endIcon={<ArrowDropDownIcon />}
-              onClick={handleExportMenuOpen}
-              disabled={
-                !paginatedData || paginatedData.length === 0 || isExporting
-              }
-              sx={{ minWidth: 100, height: 28 }}
-            >
-              {isExporting ? 'Exporting...' : 'Export'}
-            </Button>
-
-            {/* Export menu */}
-            <Menu
-              anchorEl={exportAnchorEl}
-              open={exportMenuOpen}
-              onClose={handleExportMenuClose}
-              anchorOrigin={{
-                vertical: 'bottom',
-                horizontal: 'right',
-              }}
-              transformOrigin={{
-                vertical: 'top',
-                horizontal: 'right',
-              }}
-            >
-              <MenuItem onClick={handleExportJSON} disabled={isExporting} dense>
-                <ListItemIcon>
-                  <JsonIcon fontSize="small" />
-                </ListItemIcon>
-                <ListItemText
-                  primary={
-                    isDuckLake ? 'Export JSON (full dataset)' : 'Download JSON'
-                  }
-                  primaryTypographyProps={{
-                    variant: 'body2',
-                    fontSize: '0.875rem',
-                  }}
-                />
-              </MenuItem>
-
-              <MenuItem onClick={handleExportCSV} disabled={isExporting} dense>
-                <ListItemIcon>
-                  <CsvIcon fontSize="small" />
-                </ListItemIcon>
-                <ListItemText
-                  primary={
-                    isDuckLake ? 'Export CSV (full dataset)' : 'Download CSV'
-                  }
-                  primaryTypographyProps={{
-                    variant: 'body2',
-                    fontSize: '0.875rem',
-                  }}
-                />
-              </MenuItem>
-
-              <MenuItem
-                onClick={handleExportParquet}
-                disabled={isExporting}
-                dense
-              >
-                <ListItemIcon>
-                  <ParquetIcon fontSize="small" />
-                </ListItemIcon>
-                <ListItemText
-                  primary="Export Parquet (full dataset)"
-                  primaryTypographyProps={{
-                    variant: 'body2',
-                    fontSize: '0.875rem',
-                  }}
-                />
-              </MenuItem>
-            </Menu>
+            {toolbarContent}
           </Box>
-        }
-      />
+          <QueryResultVisualization data={paginatedData} />
+        </Box>
+      ) : (
+        <CustomTable
+          id={`notebook-cell-${cellId}`}
+          name="" // Hide the "Cell Output" title
+          rows={paginatedData}
+          columns={columns.map((col) => ({
+            id: col,
+            label: col,
+            render: (row: any) => renderCellValue(row, col),
+          }))}
+          customPagination={customPagination as any}
+          loading={loading}
+          showSearch={false} // Hide the search field
+          toolbarContent={toolbarContent}
+        />
+      )}
 
       {/* Export loading backdrop */}
       <Backdrop
