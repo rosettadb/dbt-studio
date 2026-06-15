@@ -138,3 +138,11 @@ export const SettingsIcon: React.FC = () => {
   const theme = useTheme();
   return <Settings sx={{ color: theme.palette.primary.main }} />;
 };
+
+export const FlowsIcon: React.FC = () => (
+  <img
+    src={icons.flowGrey}
+    alt="flows"
+    style={{ ...style, width: 24, height: 24 }}
+  />
+);

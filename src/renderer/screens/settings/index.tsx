@@ -30,6 +30,7 @@ import {
   AboutSettings,
   AIProvidersSettings,
   DuckDBSettings,
+  FlowfileSettings,
 } from '../../components';
 import { AppLayout } from '../../layouts';
 import { settingsSidebarElements } from './settingsElements';
@@ -104,6 +105,7 @@ const Settings: React.FC = () => {
     if (section === 'ai-providers') return 'AI Settings';
     if (section === 'profile') return 'Rosetta Cloud';
     if (section === 'duckdb') return 'DuckDB';
+    if (section === 'flowfile') return 'Flowfile';
     return section.charAt(0).toUpperCase() + section.slice(1).replace('-', ' ');
   };
 
@@ -139,6 +141,13 @@ const Settings: React.FC = () => {
         );
       case 'rosetta':
         return <RosettaSettings settings={localSettings} />;
+      case 'flowfile':
+        return (
+          <FlowfileSettings
+            settings={localSettings}
+            onSettingsChange={handleChangeV2}
+          />
+        );
       case 'about':
         return <AboutSettings />;
       default:

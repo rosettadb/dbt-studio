@@ -18,6 +18,7 @@ import { registerAgentHandlers } from './agent.ipcHandlers';
 import { registerMCPHandlers } from './mcp.ipcHandlers';
 import { registerSkillsHandlers } from './skills.ipcHandlers';
 import registerSavedQueriesHandlers from './savedQueries.ipcHandlers';
+import registerFlowfileHandlers from './flowfile.ipcHandlers';
 
 export {
   registerCliHandlers,
@@ -40,4 +41,5 @@ export {
   registerMCPHandlers,
   registerSkillsHandlers,
   registerSavedQueriesHandlers,
+  registerFlowfileHandlers,
 };

@@ -332,6 +332,8 @@ export type SettingsType = {
   duckdbMaxConnections?: number;
   cloudWorkspaceUrl?: string;
   cloudWorkspaceLastSyncedAt?: string;
+  flowfileVersion?: string;
+  flowfilePort?: string;
 };
 
 export type FileDialogProperties = 'openFile' | 'openDirectory';

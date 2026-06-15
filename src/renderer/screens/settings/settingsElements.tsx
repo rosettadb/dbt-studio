@@ -3,6 +3,7 @@ import AutoAwesomeIcon from '@mui/icons-material/AutoAwesome';
 import ManageAccountsIcon from '@mui/icons-material/ManageAccounts';
 import CloudIcon from '@mui/icons-material/Cloud';
 import InfoIcon from '@mui/icons-material/Info';
+import AccountTreeIcon from '@mui/icons-material/AccountTree';
 import { SvgIconComponent } from '@mui/icons-material';
 import React from 'react';
 import { Icon } from '../../components/icon';
@@ -70,6 +71,11 @@ export const settingsSidebarElements: SettingsSidebarElement[] = [
     icon: CloudIcon,
     text: 'Rosetta Cloud',
     path: '/app/settings/profile',
+  },
+  {
+    icon: AccountTreeIcon as any,
+    text: 'Flowfile',
+    path: '/app/settings/flowfile',
   },
   {
     icon: InfoIcon,

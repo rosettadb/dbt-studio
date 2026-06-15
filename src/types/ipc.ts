@@ -406,6 +406,12 @@ export type SavedQueriesChannels =
   | 'savedQueries:update'
   | 'savedQueries:delete';
 
+export type FlowfileChannels =
+  | 'flowfile:install'
+  | 'flowfile:getStatus'
+  | 'flowfile:start'
+  | 'flowfile:stop';
+
 export type Channels =
   | TestChannels
   | CliChannels
@@ -427,7 +433,8 @@ export type Channels =
   | AgentChannels
   | MCPChannels
   | SkillsChannels
-  | SavedQueriesChannels;
+  | SavedQueriesChannels
+  | FlowfileChannels;
 
 export type ConfigureConnectionBody = {
   projectId?: string;

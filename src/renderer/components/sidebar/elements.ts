@@ -46,6 +46,12 @@ const baseElements: SideBarElementType[] = [
     icon: Icons.DataLakeSVG,
     testId: 'nav-item-data-lake',
   },
+  {
+    path: '/app/flows',
+    text: 'Flows',
+    icon: Icons.FlowsIcon,
+    testId: 'nav-item-flows',
+  },
 ];
 
 export const getMainElements = (
