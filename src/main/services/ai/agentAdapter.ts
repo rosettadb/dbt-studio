@@ -155,17 +155,29 @@ async function getDefaultModelDynamic(
         if (apiKey) {
           headers.Authorization = `Bearer ${apiKey}`;
         }
-        const response = await fetch(modelsUrl, { headers });
-        if (!response.ok)
-          throw new Error(`Failed to fetch models from ${modelsUrl}`);
-        const data = await response.json();
-        const models: any[] = data.data || data.models || [];
-        if (models.length > 0) {
-          const firstId = models[0].id ?? models[0].name;
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 3000);
 
-          return firstId;
+        try {
+          const response = await fetch(modelsUrl, {
+            headers,
+            signal: controller.signal,
+          });
+          clearTimeout(timeoutId);
+          if (!response.ok)
+            throw new Error(`Failed to fetch models from ${modelsUrl}`);
+          const data = await response.json();
+          const models: any[] = data.data || data.models || [];
+          if (models.length > 0) {
+            const firstId = models[0].id ?? models[0].name;
+
+            return firstId;
+          }
+          throw new Error(`No models found at ${modelsUrl}`);
+        } catch (error) {
+          clearTimeout(timeoutId);
+          throw error;
         }
-        throw new Error(`No models found at ${modelsUrl}`);
       }
 
       default:
@@ -186,11 +198,14 @@ async function getDefaultModelDynamic(
     gemini: 'gemini-2.5-flash',
     ollama: 'llama3.2',
     lmstudio: 'llama-3.2-1b',
-    'openai-compatible': 'model-id',
   };
-  const fallback = fallbacks[providerType] || 'gpt-4o';
+  const fallback = fallbacks[providerType];
 
-  return fallback;
+  if (fallback) return fallback;
+
+  throw new Error(
+    `Failed to discover models for ${providerType}. Please specify a model explicitly.`,
+  );
 }
 
 /**
@@ -232,14 +247,10 @@ export async function getVercelModel(requestedModel?: string) {
 
   // For local LM Studio, also attempt to load key but don't require it
   if (isLocalLmStudio) {
-    try {
-      apiKey = await SecureStorageService.getAIProviderCredential(
-        activeProvider.id!,
-        activeProvider.type as AIProviderType,
-      );
-    } catch {
-      // No key stored — fine for local LM Studio
-    }
+    apiKey = await SecureStorageService.getAIProviderCredential(
+      activeProvider.id!,
+      activeProvider.type as AIProviderType,
+    );
   }
 
   // Determine model: requested > configured > dynamic from API

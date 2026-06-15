@@ -445,7 +445,16 @@ export class AIProviderManager {
       } catch (genError) {
         // If we successfully discovered models but generation fails (e.g. local compute error),
         // we still consider the connection successful.
-        if (discoveredModels && discoveredModels.length > 0) {
+        if (
+          (config.type === 'lmstudio' ||
+            config.type === 'openai-compatible' ||
+            config.type === 'ollama') &&
+          (await this.verifyConnectivityProbe(
+            config.type,
+            parsedConfig,
+            apiKey,
+          ))
+        ) {
           // eslint-disable-next-line no-console
           console.warn(
             '[PROVIDER MANAGER] Model generation failed, but connection works:',
@@ -803,6 +812,45 @@ export class AIProviderManager {
     }
   }
 
+  private static async verifyConnectivityProbe(
+    providerType: string,
+    config: any,
+    apiKey?: string | null,
+  ): Promise<boolean> {
+    try {
+      if (providerType === 'ollama') {
+        const response = await fetch(buildOllamaTagsUrl(config.baseUrl), {
+          headers: shouldAttachOllamaAuth(config.baseUrl, apiKey)
+            ? buildOllamaHeaders(apiKey as string)
+            : undefined,
+        });
+        return response.ok;
+      }
+      if (providerType === 'lmstudio' || providerType === 'openai-compatible') {
+        const baseURL =
+          config.baseUrl?.trim() ||
+          (providerType === 'lmstudio' ? 'http://localhost:1234/v1' : '');
+        if (!baseURL) return false;
+
+        const modelsUrl = `${baseURL.replace(/\/+$/, '')}/models`;
+        const headers: Record<string, string> = {};
+        if (apiKey) headers.Authorization = `Bearer ${apiKey}`;
+
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 3000);
+        const response = await fetch(modelsUrl, {
+          headers,
+          signal: controller.signal,
+        });
+        clearTimeout(timeoutId);
+        return response.ok;
+      }
+      return false;
+    } catch {
+      return false;
+    }
+  }
+
   static async testProvider(providerId: string): Promise<ProviderTestResult> {
     try {
       // Parse the providerId (it might be a string number)
@@ -899,9 +947,14 @@ export class AIProviderManager {
             // If the connection succeeded (getVercelModel works) but generation fails
             // (e.g. compute error on local server), consider the connection successful.
             if (
-              provider.type === 'lmstudio' ||
-              provider.type === 'openai-compatible' ||
-              provider.type === 'ollama'
+              (provider.type === 'lmstudio' ||
+                provider.type === 'openai-compatible' ||
+                provider.type === 'ollama') &&
+              (await this.verifyConnectivityProbe(
+                provider.type,
+                providerConfig,
+                apiKey,
+              ))
             ) {
               // eslint-disable-next-line no-console
               console.warn(
@@ -1129,9 +1182,14 @@ export class AIProviderManager {
             });
           } catch (genError) {
             if (
-              provider.type === 'lmstudio' ||
-              provider.type === 'openai-compatible' ||
-              provider.type === 'ollama'
+              (provider.type === 'lmstudio' ||
+                provider.type === 'openai-compatible' ||
+                provider.type === 'ollama') &&
+              (await this.verifyConnectivityProbe(
+                provider.type,
+                providerConfig,
+                apiKey,
+              ))
             ) {
               // eslint-disable-next-line no-console
               console.warn(

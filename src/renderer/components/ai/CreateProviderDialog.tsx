@@ -551,10 +551,14 @@ export const CreateProviderDialog: React.FC<CreateProviderDialogProps> = ({
                           url: 'https://integrate.api.nvidia.com/v1',
                         },
                         { name: 'DeepSeek', url: 'https://api.deepseek.com' },
-                        { name: 'Groq', url: 'https://api.groq.com/openai/v1' },
+                        {
+                          name: 'Groq',
+                          url: 'https://api.groq.com/openai/v1',
+                          // Note: some clients auto-append /openai/v1. Avoid double-appending to prevent 404s.
+                        },
                         {
                           name: 'Together AI',
-                          url: 'https://api.together.xyz/v1',
+                          url: 'https://api.together.ai/v1',
                         },
                         {
                           name: 'Clarifai',
