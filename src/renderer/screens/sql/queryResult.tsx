@@ -443,6 +443,42 @@ export const QueryResult: React.FC<Props> = ({ results, exportContext }) => {
     }
   };
 
+  const sqlPreview = React.useMemo(() => {
+    if (!resolvedOriginalSql) return null;
+    const singleLine = resolvedOriginalSql.replace(/\s+/g, ' ').trim();
+    return (
+      <Tooltip
+        title={
+          <Typography
+            variant="body2"
+            sx={{ fontFamily: 'monospace', whiteSpace: 'pre-wrap' }}
+          >
+            {resolvedOriginalSql}
+          </Typography>
+        }
+        placement="bottom-start"
+      >
+        <Typography
+          variant="body2"
+          sx={{
+            fontFamily: 'monospace',
+            whiteSpace: 'nowrap',
+            overflow: 'hidden',
+            textOverflow: 'ellipsis',
+            color: 'text.secondary',
+            fontSize: '0.8rem',
+            opacity: 0.8,
+            cursor: 'default',
+            display: 'inline-block',
+            maxWidth: '100%',
+          }}
+        >
+          {singleLine}
+        </Typography>
+      </Tooltip>
+    );
+  }, [resolvedOriginalSql]);
+
   // Use isCommand flag if available, otherwise fallback to field check
   const isCommand =
     results.isCommand ||
@@ -696,13 +732,26 @@ export const QueryResult: React.FC<Props> = ({ results, exportContext }) => {
           <Box
             sx={{
               display: 'flex',
-              justifyContent: 'flex-end',
+              justifyContent: 'space-between',
               alignItems: 'center',
               pr: 2,
+              pl: 2,
               minHeight: 48,
             }}
           >
-            {sharedToolbarContent}
+            <Box
+              sx={{
+                flex: '1 1 auto',
+                overflow: 'hidden',
+                mr: 2,
+                display: 'flex',
+              }}
+            >
+              {sqlPreview}
+            </Box>
+            <Box sx={{ display: 'flex', flexShrink: 0 }}>
+              {sharedToolbarContent}
+            </Box>
           </Box>
           <QueryResultVisualization data={rows} />
         </Box>
@@ -710,7 +759,7 @@ export const QueryResult: React.FC<Props> = ({ results, exportContext }) => {
         <CustomTable<Record<string, any>>
           id="query-result"
           dataTestId="sql-results-table"
-          name=""
+          name={sqlPreview}
           showSearch={false}
           toolbarContent={sharedToolbarContent}
           rows={rows as any}
