@@ -1,5 +1,11 @@
 import React from 'react';
-import { Box, Button, Typography, CircularProgress, Alert } from '@mui/material';
+import {
+  Box,
+  Button,
+  Typography,
+  CircularProgress,
+  Alert,
+} from '@mui/material';
 import { PlayArrow, Stop, Refresh } from '@mui/icons-material';
 import { toast } from 'react-toastify';
 import {
@@ -134,7 +140,10 @@ const Flows: React.FC = () => {
           size="small"
           variant="text"
           startIcon={<Refresh fontSize="small" />}
-          onClick={() => { setShowIframe(true); fetchStatus(); }}
+          onClick={() => {
+            setShowIframe(true);
+            fetchStatus();
+          }}
         >
           Refresh
         </Button>
@@ -200,8 +209,8 @@ const Flows: React.FC = () => {
                   Click <strong>Start Service</strong> to launch Flowfile.
                 </Typography>
                 <Typography variant="caption" color="text.secondary">
-                  Not installed? Go to{' '}
-                  <strong>Settings &gt; Flowfile</strong> to install it first.
+                  Not installed? Go to <strong>Settings &gt; Flowfile</strong>{' '}
+                  to install it first.
                 </Typography>
               </>
             )}

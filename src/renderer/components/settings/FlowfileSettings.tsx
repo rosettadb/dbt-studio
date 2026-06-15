@@ -9,11 +9,8 @@ import {
   Chip,
   Divider,
 } from '@mui/material';
-import {
-  CheckCircle,
-  CloudDownload,
-  Refresh,
-} from '@mui/icons-material';
+import { CheckCircle, CloudDownload, Refresh } from '@mui/icons-material';
+import { toast } from 'react-toastify';
 import { SettingsType } from '../../../types/backend';
 import { useUpdateSettings } from '../../controllers';
 import {
@@ -21,7 +18,6 @@ import {
   flowfileGetStatus,
   FlowfileStatus,
 } from '../../services/flowfile.service';
-import { toast } from 'react-toastify';
 
 interface FlowfileSettingsProps {
   settings: SettingsType;

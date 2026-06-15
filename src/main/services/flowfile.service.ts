@@ -72,7 +72,8 @@ export class FlowfileService {
     if (!settings.pythonPath) {
       return {
         ok: false,
-        error: 'Python path not configured. Set it in Settings > General first.',
+        error:
+          'Python path not configured. Set it in Settings > General first.',
       };
     }
 
@@ -83,7 +84,10 @@ export class FlowfileService {
       const version = await this.getInstalledVersion();
       if (version) {
         const current = await SettingsService.loadSettings();
-        await SettingsService.saveSettings({ ...current, flowfileVersion: version });
+        await SettingsService.saveSettings({
+          ...current,
+          flowfileVersion: version,
+        });
       }
       return { ok: true };
     } catch (error) {
@@ -103,7 +107,8 @@ export class FlowfileService {
     if (!bin) {
       return {
         ok: false,
-        error: 'Flowfile binary not found. Install it from Settings > Flowfile.',
+        error:
+          'Flowfile binary not found. Install it from Settings > Flowfile.',
       };
     }
 
@@ -120,7 +125,8 @@ export class FlowfileService {
       flowfileProcess = null;
       return {
         ok: false,
-        error: error instanceof Error ? error.message : 'Failed to start Flowfile',
+        error:
+          error instanceof Error ? error.message : 'Failed to start Flowfile',
       };
     }
   }
@@ -138,7 +144,8 @@ export class FlowfileService {
     } catch (error) {
       return {
         ok: false,
-        error: error instanceof Error ? error.message : 'Failed to stop Flowfile',
+        error:
+          error instanceof Error ? error.message : 'Failed to stop Flowfile',
       };
     }
   }
