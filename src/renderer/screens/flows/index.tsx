@@ -1,6 +1,7 @@
 import React from 'react';
 import {
   Box,
+  Button,
   IconButton,
   Tooltip,
   Typography,
@@ -209,9 +210,26 @@ const Flows: React.FC = () => {
                 <Typography variant="h6" color="text.secondary">
                   Flowfile is not running
                 </Typography>
-                <Typography variant="body2" color="text.secondary">
-                  Click the play button in the toolbar to launch Flowfile.
-                </Typography>
+                <Button
+                  variant="contained"
+                  size="large"
+                  onClick={handleStart}
+                  disabled={isStarting}
+                  startIcon={
+                    isStarting ? (
+                      <CircularProgress size={18} color="inherit" />
+                    ) : (
+                      <PlayArrow />
+                    )
+                  }
+                  sx={{
+                    bgcolor: 'success.main',
+                    '&:hover': { bgcolor: 'success.dark' },
+                    px: 4,
+                  }}
+                >
+                  {isStarting ? 'Starting…' : 'Start'}
+                </Button>
                 <Typography variant="caption" color="text.secondary">
                   Not installed? Go to <strong>Settings &gt; Flowfile</strong>{' '}
                   to install it first.
