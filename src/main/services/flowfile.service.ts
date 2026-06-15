@@ -115,7 +115,7 @@ export class FlowfileService {
     try {
       flowfileProcess = spawn(bin, ['run', 'ui'], {
         detached: false,
-        stdio: 'pipe',
+        stdio: 'ignore',
       });
       flowfileProcess.on('exit', () => {
         flowfileProcess = null;

@@ -17,7 +17,7 @@ import dataLake from './data-lake.png';
 import apacheIcebergLake from './apache-iceberg-lake.png';
 import deltaLake from './delta-lake.png';
 import apacheHudiLake from './apache-hudi-lake.png';
-import flowGrey from './flow_grey.png';
+import flow from './flow.svg';
 
 export const icons = {
   settings,
@@ -39,5 +39,5 @@ export const icons = {
   apacheIcebergLake,
   deltaLake,
   apacheHudiLake,
-  flowGrey,
+  flow,
 };
