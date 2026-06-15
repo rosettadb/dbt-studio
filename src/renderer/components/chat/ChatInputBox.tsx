@@ -380,7 +380,9 @@ export const ChatInputBox: React.FC<ChatInputBoxProps> = ({
               width: 10,
               height: 10,
               filter:
-                isDarkMode && selectedProvider?.type !== 'gemini'
+                isDarkMode &&
+                selectedProvider?.type !== 'gemini' &&
+                selectedProvider?.type !== 'lmstudio'
                   ? 'brightness(0) invert(1) opacity(0.85)'
                   : undefined,
             }}
@@ -446,7 +448,9 @@ export const ChatInputBox: React.FC<ChatInputBoxProps> = ({
                       height: 16,
                       mr: 1,
                       filter:
-                        isDarkMode && p.type !== 'gemini'
+                        isDarkMode &&
+                        p.type !== 'gemini' &&
+                        p.type !== 'lmstudio'
                           ? 'brightness(0) invert(1) opacity(0.85)'
                           : undefined,
                     }}

@@ -267,7 +267,9 @@ export const ProviderCard: React.FC<ProviderCardProps> = ({
                 height: 40,
                 objectFit: 'contain',
                 filter:
-                  isDarkMode && provider.type !== 'gemini'
+                  isDarkMode &&
+                  provider.type !== 'gemini' &&
+                  provider.type !== 'lmstudio'
                     ? 'brightness(0) invert(1) opacity(0.9)'
                     : undefined,
               }}

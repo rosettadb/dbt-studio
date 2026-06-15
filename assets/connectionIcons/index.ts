@@ -24,6 +24,7 @@ import ollama from './ollama.svg';
 import google from './google.svg';
 import anthropic from './anthropic.svg';
 import openaiCompatible from './openai_compatible.svg';
+import lmstudio from './lmstudio.svg';
 import file from './file.png';
 import { SupportedConnectionTypes } from '../../src/types/backend';
 
@@ -49,7 +50,7 @@ export const aiProviderImages = {
   gemini: google,
   anthropic,
   'openai-compatible': openaiCompatible,
-  lmstudio: openaiCompatible, // using the same icon for now
+  lmstudio,
 };
 
 // Default fallback icon
