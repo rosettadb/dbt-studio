@@ -48,9 +48,16 @@ export const FlowfileSettings: React.FC<FlowfileSettingsProps> = ({
     try {
       const s = await flowfileGetStatus();
       setStatus(s);
-      if (s.version && s.version !== settings.flowfileVersion) {
-        onSettingsChange('flowfileVersion', s.version);
+      const nextVersion = s.version ?? '';
+      if (nextVersion !== (settings.flowfileVersion ?? '')) {
+        onSettingsChange('flowfileVersion', nextVersion);
       }
+    } catch (error) {
+      toast.error(
+        error instanceof Error
+          ? error.message
+          : 'Failed to check Flowfile status',
+      );
     } finally {
       setIsCheckingStatus(false);
     }
@@ -79,6 +86,10 @@ export const FlowfileSettings: React.FC<FlowfileSettingsProps> = ({
       } else {
         setInstallError(result.error ?? 'Installation failed');
       }
+    } catch (error) {
+      setInstallError(
+        error instanceof Error ? error.message : 'Installation failed',
+      );
     } finally {
       setIsInstalling(false);
       setIsLoadingDialog(false);
@@ -100,6 +111,8 @@ export const FlowfileSettings: React.FC<FlowfileSettingsProps> = ({
       } else {
         toast.error(result.error ?? 'Uninstall failed');
       }
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Uninstall failed');
     } finally {
       setIsUninstalling(false);
       setIsLoadingDialog(false);

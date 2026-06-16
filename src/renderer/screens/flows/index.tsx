@@ -24,7 +24,6 @@ const Flows: React.FC = () => {
   const [isStarting, setIsStarting] = React.useState(false);
   const [isStopping, setIsStopping] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
-  const [showIframe, setShowIframe] = React.useState(false);
   const pollRef = React.useRef<ReturnType<typeof setInterval> | null>(null);
 
   const fetchStatus = async () => {
@@ -54,6 +53,8 @@ const Flows: React.FC = () => {
       } else {
         toast.info('Flowfile is starting…');
       }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to start Flowfile');
     } finally {
       setIsStarting(false);
       await fetchStatus();
@@ -71,7 +72,8 @@ const Flows: React.FC = () => {
       }
       // isStopping stays true; cleared by the useEffect below once the poll
       // confirms the process is gone
-    } catch {
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to stop Flowfile');
       setIsStopping(false);
     }
   };
@@ -83,8 +85,7 @@ const Flows: React.FC = () => {
       setIsStopping(false);
     }
   }, [processRunning, isStopping]);
-  const serviceUp =
-    processRunning && ((status?.serviceUp ?? false) || showIframe);
+  const serviceUp = processRunning && (status?.serviceUp ?? false);
   const url = status?.url ?? 'http://127.0.0.1:63578/ui';
 
   return (
@@ -139,7 +140,7 @@ const Flows: React.FC = () => {
                 size="small"
                 color="error"
                 onClick={handleStop}
-                disabled={isStopping || !serviceUp}
+                disabled={isStopping || !processRunning}
               >
                 {isStopping || !serviceUp ? (
                   <CircularProgress size={16} color="inherit" />
@@ -155,7 +156,6 @@ const Flows: React.FC = () => {
           <IconButton
             size="small"
             onClick={() => {
-              setShowIframe(true);
               fetchStatus();
             }}
           >

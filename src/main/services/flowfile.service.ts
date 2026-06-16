@@ -133,11 +133,16 @@ export class FlowfileService {
     }
 
     try {
-      flowfileProcess = spawn(bin, ['run', 'ui', '--no-browser'], {
+      const child = spawn(bin, ['run', 'ui', '--no-browser'], {
         detached: false,
         stdio: 'ignore',
       });
-      flowfileProcess.on('exit', () => {
+      await new Promise<void>((resolve, reject) => {
+        child.once('spawn', () => resolve());
+        child.once('error', (err) => reject(err));
+      });
+      flowfileProcess = child;
+      flowfileProcess.once('exit', () => {
         flowfileProcess = null;
       });
       return { ok: true };
