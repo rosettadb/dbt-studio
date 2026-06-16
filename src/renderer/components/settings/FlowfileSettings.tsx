@@ -3,7 +3,6 @@ import {
   Box,
   Typography,
   Button,
-  TextField,
   Alert,
   CircularProgress,
   Chip,
@@ -12,7 +11,6 @@ import {
 import { CheckCircle, CloudDownload, Refresh } from '@mui/icons-material';
 import { toast } from 'react-toastify';
 import { SettingsType } from '../../../types/backend';
-import { useUpdateSettings } from '../../controllers';
 import {
   flowfileInstall,
   flowfileGetStatus,
@@ -28,15 +26,10 @@ export const FlowfileSettings: React.FC<FlowfileSettingsProps> = ({
   settings,
   onSettingsChange,
 }) => {
-  const { mutate: updateSettings } = useUpdateSettings();
-
   const [status, setStatus] = React.useState<FlowfileStatus | null>(null);
   const [isCheckingStatus, setIsCheckingStatus] = React.useState(false);
   const [isInstalling, setIsInstalling] = React.useState(false);
   const [installError, setInstallError] = React.useState<string | null>(null);
-
-  const port = settings.flowfilePort ?? '63578';
-
   const checkStatus = async () => {
     setIsCheckingStatus(true);
     try {
@@ -74,12 +67,6 @@ export const FlowfileSettings: React.FC<FlowfileSettingsProps> = ({
     } finally {
       setIsInstalling(false);
     }
-  };
-
-  const handlePortChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    onSettingsChange('flowfilePort', e.target.value);
-    const current = { ...settings, flowfilePort: e.target.value };
-    updateSettings(current);
   };
 
   const installedVersion = status?.version ?? settings.flowfileVersion ?? null;
@@ -178,27 +165,6 @@ export const FlowfileSettings: React.FC<FlowfileSettingsProps> = ({
           {!isInstalling && installedVersion && 'Upgrade Flowfile'}
           {!isInstalling && !installedVersion && 'Install Flowfile'}
         </Button>
-      </Box>
-
-      <Divider />
-
-      {/* Port config */}
-      <Box>
-        <Typography variant="subtitle1" fontWeight="medium" gutterBottom>
-          UI Port
-        </Typography>
-        <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-          The port Flowfile&apos;s core service runs on. Default is
-          <code>63578</code>.
-        </Typography>
-        <TextField
-          label="Port"
-          value={port}
-          onChange={handlePortChange}
-          size="small"
-          sx={{ width: 160 }}
-          inputProps={{ inputMode: 'numeric', pattern: '[0-9]*' }}
-        />
       </Box>
     </Box>
   );
