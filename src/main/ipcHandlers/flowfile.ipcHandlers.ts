@@ -4,6 +4,7 @@ import { FlowfileService } from '../services/flowfile.service';
 
 const handlerChannels: FlowfileChannels[] = [
   'flowfile:install',
+  'flowfile:uninstall',
   'flowfile:getStatus',
   'flowfile:start',
   'flowfile:stop',
@@ -18,6 +19,10 @@ const registerFlowfileHandlers = () => {
 
   ipcMain.handle('flowfile:install', async () => {
     return FlowfileService.install();
+  });
+
+  ipcMain.handle('flowfile:uninstall', async () => {
+    return FlowfileService.uninstall();
   });
 
   ipcMain.handle('flowfile:getStatus', async () => {

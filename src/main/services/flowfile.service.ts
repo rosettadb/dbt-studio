@@ -67,6 +67,26 @@ export class FlowfileService {
     }
   }
 
+  static async uninstall(): Promise<FlowfileResult> {
+    const settings = await SettingsService.loadSettings();
+    if (!settings.pythonPath) {
+      return { ok: false, error: 'Python path not configured.' };
+    }
+    try {
+      await execAsync(`"${settings.pythonPath}" -m pip uninstall -y Flowfile`);
+      await SettingsService.saveSettings({
+        ...settings,
+        flowfileVersion: '',
+      });
+      return { ok: true };
+    } catch (error) {
+      return {
+        ok: false,
+        error: error instanceof Error ? error.message : 'Uninstall failed',
+      };
+    }
+  }
+
   static async install(): Promise<FlowfileResult> {
     const settings = await SettingsService.loadSettings();
     if (!settings.pythonPath) {

@@ -408,6 +408,7 @@ export type SavedQueriesChannels =
 
 export type FlowfileChannels =
   | 'flowfile:install'
+  | 'flowfile:uninstall'
   | 'flowfile:getStatus'
   | 'flowfile:start'
   | 'flowfile:stop';

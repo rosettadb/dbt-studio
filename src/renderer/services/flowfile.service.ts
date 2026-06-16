@@ -22,6 +22,11 @@ export const flowfileInstall = async (): Promise<FlowfileResult> => {
   return data;
 };
 
+export const flowfileUninstall = async (): Promise<FlowfileResult> => {
+  const { data } = await client.get<FlowfileResult>('flowfile:uninstall');
+  return data;
+};
+
 export const flowfileStart = async (): Promise<FlowfileResult> => {
   const { data } = await client.get<FlowfileResult>('flowfile:start');
   return data;

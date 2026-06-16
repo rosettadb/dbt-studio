@@ -7,15 +7,23 @@ import {
   CircularProgress,
   Chip,
   Divider,
+  Backdrop,
 } from '@mui/material';
-import { CheckCircle, CloudDownload, Refresh } from '@mui/icons-material';
+import {
+  CheckCircle,
+  CloudDownload,
+  Delete,
+  Refresh,
+} from '@mui/icons-material';
 import { toast } from 'react-toastify';
 import { SettingsType } from '../../../types/backend';
 import {
   flowfileInstall,
+  flowfileUninstall,
   flowfileGetStatus,
   FlowfileStatus,
 } from '../../services/flowfile.service';
+import { ConfirmationModal } from '../modals';
 
 interface FlowfileSettingsProps {
   settings: SettingsType;
@@ -30,6 +38,11 @@ export const FlowfileSettings: React.FC<FlowfileSettingsProps> = ({
   const [isCheckingStatus, setIsCheckingStatus] = React.useState(false);
   const [isInstalling, setIsInstalling] = React.useState(false);
   const [installError, setInstallError] = React.useState<string | null>(null);
+  const [isLoadingDialog, setIsLoadingDialog] = React.useState(false);
+  const [loadingMessage, setLoadingMessage] = React.useState('');
+  const [isUninstalling, setIsUninstalling] = React.useState(false);
+  const [showUninstallConfirmation, setShowUninstallConfirmation] =
+    React.useState(false);
   const checkStatus = async () => {
     setIsCheckingStatus(true);
     try {
@@ -56,6 +69,8 @@ export const FlowfileSettings: React.FC<FlowfileSettingsProps> = ({
     }
     setIsInstalling(true);
     setInstallError(null);
+    setIsLoadingDialog(true);
+    setLoadingMessage('Installing Flowfile...');
     try {
       const result = await flowfileInstall();
       if (result.ok) {
@@ -66,6 +81,29 @@ export const FlowfileSettings: React.FC<FlowfileSettingsProps> = ({
       }
     } finally {
       setIsInstalling(false);
+      setIsLoadingDialog(false);
+      setLoadingMessage('');
+    }
+  };
+
+  const handleUninstall = async () => {
+    setShowUninstallConfirmation(false);
+    setIsUninstalling(true);
+    setIsLoadingDialog(true);
+    setLoadingMessage('Uninstalling Flowfile...');
+    try {
+      const result = await flowfileUninstall();
+      if (result.ok) {
+        toast.success('Flowfile uninstalled successfully');
+        onSettingsChange('flowfileVersion', '');
+        await checkStatus();
+      } else {
+        toast.error(result.error ?? 'Uninstall failed');
+      }
+    } finally {
+      setIsUninstalling(false);
+      setIsLoadingDialog(false);
+      setLoadingMessage('');
     }
   };
 
@@ -166,6 +204,65 @@ export const FlowfileSettings: React.FC<FlowfileSettingsProps> = ({
           {!isInstalling && !installedVersion && 'Install Flowfile'}
         </Button>
       </Box>
+
+      {installedVersion && (
+        <>
+          <Divider />
+          <Box sx={{ pt: 1, borderTop: 0 }}>
+            <Typography
+              variant="subtitle1"
+              fontWeight="medium"
+              color="error"
+              gutterBottom
+            >
+              Danger Zone
+            </Typography>
+            <Alert severity="warning" sx={{ mb: 2 }}>
+              <Typography variant="body2">
+                Uninstalling Flowfile will remove it from your Python
+                environment.
+              </Typography>
+            </Alert>
+            <Button
+              variant="outlined"
+              color="error"
+              onClick={() => setShowUninstallConfirmation(true)}
+              disabled={isUninstalling}
+              startIcon={
+                isUninstalling ? <CircularProgress size={16} /> : <Delete />
+              }
+            >
+              {isUninstalling ? 'Uninstalling...' : 'Uninstall Flowfile'}
+            </Button>
+          </Box>
+        </>
+      )}
+
+      <ConfirmationModal
+        isOpen={showUninstallConfirmation}
+        onClose={() => setShowUninstallConfirmation(false)}
+        onConfirm={handleUninstall}
+        title="Uninstall Flowfile"
+        question="Are you sure you want to uninstall Flowfile? This will remove it from your Python environment and you will need to reinstall it to use Flowfile features."
+      />
+
+      <Backdrop
+        open={isLoadingDialog}
+        sx={{ zIndex: (theme) => theme.zIndex.drawer + 1, color: '#fff' }}
+      >
+        <Box
+          display="flex"
+          flexDirection="column"
+          alignItems="center"
+          justifyContent="center"
+          py={3}
+        >
+          <CircularProgress color="inherit" />
+          <Typography variant="body2" sx={{ mt: 2, textAlign: 'center' }}>
+            {loadingMessage || 'Loading...'}
+          </Typography>
+        </Box>
+      </Backdrop>
     </Box>
   );
 };
