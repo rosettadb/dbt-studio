@@ -33,7 +33,41 @@ const COLORS = [
   '#FF8042',
   '#8884d8',
   '#82ca9d',
+  '#ffc658',
+  '#a4de6c',
+  '#d0ed57',
+  '#83a6ed',
 ];
+
+// Suppress legend when there are more than this many items to avoid clutter
+const MAX_LEGEND_ITEMS = 10;
+
+const EmptyState: React.FC<{ message: string; isError?: boolean }> = ({
+  message,
+  isError,
+}) => (
+  <Box
+    sx={{
+      width: '100%',
+      height: '100%',
+      minHeight: 300,
+      display: 'flex',
+      flexDirection: 'column',
+      justifyContent: 'center',
+      alignItems: 'center',
+      p: 4,
+      textAlign: 'center',
+    }}
+  >
+    <Typography
+      color={isError ? 'error' : 'text.secondary'}
+      variant="body1"
+      sx={{ maxWidth: 400 }}
+    >
+      {message}
+    </Typography>
+  </Box>
+);
 
 export const ChartRenderer: React.FC<ChartRendererProps> = ({
   data,
@@ -41,39 +75,35 @@ export const ChartRenderer: React.FC<ChartRendererProps> = ({
   xAxisCol,
   yAxisCols,
 }) => {
+  // Force a remeasure whenever key chart config changes.
+  // ResponsiveContainer reads its parent size on mount; changing this key
+  // unmounts/remounts the container so it picks up the current size.
+  const containerKey = `${chartType}-${xAxisCol}-${yAxisCols.join(',')}`;
+
   if (!data || data.length === 0) {
-    return (
-      <Box sx={{ p: 3, display: 'flex', justifyContent: 'center' }}>
-        <Typography color="text.secondary">
-          No data available for visualization.
-        </Typography>
-      </Box>
-    );
+    return <EmptyState message="No data available for visualization." />;
   }
 
   if (!xAxisCol || !yAxisCols || yAxisCols.length === 0) {
     return (
-      <Box sx={{ p: 3, display: 'flex', justifyContent: 'center' }}>
-        <Typography color="text.secondary">
-          Please select X and Y axes to render the chart.
-        </Typography>
-      </Box>
+      <EmptyState message="Please select X and Y axes to render the chart." />
     );
   }
 
   const renderChart = () => {
     switch (chartType) {
-      case 'bar':
+      case 'bar': {
+        const showLegend = yAxisCols.length <= MAX_LEGEND_ITEMS;
         return (
           <BarChart
             data={data}
             margin={{ top: 20, right: 30, left: 20, bottom: 5 }}
           >
             <CartesianGrid strokeDasharray="3 3" />
-            <XAxis dataKey={xAxisCol} />
-            <YAxis />
+            <XAxis dataKey={xAxisCol} tick={{ fontSize: 11 }} />
+            <YAxis tick={{ fontSize: 11 }} />
             <Tooltip />
-            <Legend />
+            {showLegend && <Legend />}
             {yAxisCols.map((col, index) => (
               <Bar
                 key={col}
@@ -83,17 +113,19 @@ export const ChartRenderer: React.FC<ChartRendererProps> = ({
             ))}
           </BarChart>
         );
-      case 'line':
+      }
+      case 'line': {
+        const showLegend = yAxisCols.length <= MAX_LEGEND_ITEMS;
         return (
           <LineChart
             data={data}
             margin={{ top: 20, right: 30, left: 20, bottom: 5 }}
           >
             <CartesianGrid strokeDasharray="3 3" />
-            <XAxis dataKey={xAxisCol} />
-            <YAxis />
+            <XAxis dataKey={xAxisCol} tick={{ fontSize: 11 }} />
+            <YAxis tick={{ fontSize: 11 }} />
             <Tooltip />
-            <Legend />
+            {showLegend && <Legend />}
             {yAxisCols.map((col, index) => (
               <Line
                 key={col}
@@ -105,14 +137,21 @@ export const ChartRenderer: React.FC<ChartRendererProps> = ({
             ))}
           </LineChart>
         );
-      case 'scatter':
+      }
+      case 'scatter': {
+        const showLegend = yAxisCols.length <= MAX_LEGEND_ITEMS;
         return (
           <ScatterChart margin={{ top: 20, right: 30, left: 20, bottom: 5 }}>
             <CartesianGrid strokeDasharray="3 3" />
-            <XAxis type="category" dataKey={xAxisCol} name={xAxisCol} />
-            <YAxis type="number" />
+            <XAxis
+              type="category"
+              dataKey={xAxisCol}
+              name={xAxisCol}
+              tick={{ fontSize: 11 }}
+            />
+            <YAxis type="number" tick={{ fontSize: 11 }} />
             <Tooltip cursor={{ strokeDasharray: '3 3' }} />
-            <Legend />
+            {showLegend && <Legend />}
             {yAxisCols.map((col, index) => (
               <Scatter
                 key={col}
@@ -124,10 +163,10 @@ export const ChartRenderer: React.FC<ChartRendererProps> = ({
             ))}
           </ScatterChart>
         );
+      }
       case 'pie': {
         const primaryYAxisCol = yAxisCols[0];
         // Recharts Pie crashes if the dataKey values are not numbers.
-        // Filter out non-numeric or negative values.
         const validPieData = data.filter(
           (d) =>
             typeof d[primaryYAxisCol] === 'number' &&
@@ -137,22 +176,15 @@ export const ChartRenderer: React.FC<ChartRendererProps> = ({
 
         if (validPieData.length === 0) {
           return (
-            <Box
-              sx={{
-                p: 3,
-                display: 'flex',
-                justifyContent: 'center',
-                alignItems: 'center',
-                height: '100%',
-              }}
-            >
-              <Typography color="error">
-                Pie chart requires numeric values for the Y-Axis. Please select
-                a column with numbers.
-              </Typography>
-            </Box>
+            <EmptyState
+              isError
+              message="Pie chart requires numeric values for the Y-Axis. Please select a column with numbers."
+            />
           );
         }
+
+        // Suppress the auto-labels and legend when there are too many slices
+        const tooManySlices = validPieData.length > MAX_LEGEND_ITEMS;
 
         return (
           <PieChart>
@@ -164,7 +196,8 @@ export const ChartRenderer: React.FC<ChartRendererProps> = ({
               cy="50%"
               outerRadius={150}
               fill="#8884d8"
-              label
+              // Only show inline labels when there are few enough slices
+              label={!tooManySlices}
             >
               {validPieData.map((entry, index) => (
                 <Cell
@@ -174,7 +207,7 @@ export const ChartRenderer: React.FC<ChartRendererProps> = ({
               ))}
             </Pie>
             <Tooltip />
-            <Legend />
+            {!tooManySlices && <Legend />}
           </PieChart>
         );
       }
@@ -184,7 +217,16 @@ export const ChartRenderer: React.FC<ChartRendererProps> = ({
   };
 
   return (
-    <Box sx={{ width: '100%', height: '100%', minHeight: 400, p: 2 }}>
+    <Box
+      key={containerKey}
+      sx={{
+        width: '100%',
+        // Use a fixed height so ResponsiveContainer always gets a measurable parent
+        height: 420,
+        p: 2,
+        flexShrink: 0,
+      }}
+    >
       <ResponsiveContainer width="100%" height="100%">
         {renderChart()}
       </ResponsiveContainer>
