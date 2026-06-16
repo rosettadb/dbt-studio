@@ -31,21 +31,27 @@ export const QueryResultVisualization: React.FC<
   const [yAxisCols, setYAxisCols] = useState<string[]>(initialYAxisCols);
   const [availableColumns, setAvailableColumns] = useState<string[]>([]);
 
-  // Extract columns dynamically from the first row of data
+  // Extract columns dynamically from the first row of data and revalidate axis selections
   useEffect(() => {
     if (data && data.length > 0) {
       const columns = Object.keys(data[0]);
       setAvailableColumns(columns);
 
-      // Auto-select axes if not provided
-      if (!xAxisCol && columns.length > 0) {
-        setXAxisCol(columns[0]);
-      }
-      if (yAxisCols.length === 0 && columns.length > 1) {
-        setYAxisCols([columns[1]]);
-      } else if (yAxisCols.length === 0 && columns.length === 1) {
-        setYAxisCols([columns[0]]);
-      }
+      // Revalidate xAxisCol — reset if it no longer exists in the new schema
+      setXAxisCol((prev) => {
+        if (prev && columns.includes(prev)) return prev;
+        return columns.length > 0 ? columns[0] : '';
+      });
+
+      // Revalidate yAxisCols — remove any columns that no longer exist
+      setYAxisCols((prev) => {
+        const stillValid = prev.filter((col) => columns.includes(col));
+        if (stillValid.length > 0) return stillValid;
+        // Fall back to sensible defaults
+        if (columns.length > 1) return [columns[1]];
+        if (columns.length === 1) return [columns[0]];
+        return [];
+      });
     }
   }, [data]);
 

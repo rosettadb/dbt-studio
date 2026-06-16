@@ -27,11 +27,22 @@ export const transformSqlResultToChartData = (
         if (transformedRow[col] !== undefined && transformedRow[col] !== null) {
           const rawValue = transformedRow[col];
 
-          // If it's a string that looks like a number, parse it
-          if (typeof rawValue === 'string' && !Number.isNaN(Number(rawValue))) {
-            transformedRow[col] = parseFloat(rawValue);
+          // If it's a string, trim first; treat blank as null, then parse numeric
+          if (typeof rawValue === 'string') {
+            const trimmed = rawValue.trim();
+            if (trimmed === '') {
+              // Empty/whitespace strings represent missing data — do not coerce to 0
+              transformedRow[col] = null;
+            } else if (!Number.isNaN(Number(trimmed))) {
+              transformedRow[col] = Number(trimmed);
+            }
           } else if (typeof rawValue === 'bigint') {
-            transformedRow[col] = Number(rawValue);
+            // Guard against silent precision loss for values beyond MAX_SAFE_INTEGER
+            if (Number.isSafeInteger(Number(rawValue))) {
+              transformedRow[col] = Number(rawValue);
+            } else {
+              transformedRow[col] = null;
+            }
           }
         }
       });
