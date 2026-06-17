@@ -52,7 +52,6 @@ export const ProviderCard: React.FC<ProviderCardProps> = ({
   onEdit,
   onRefresh,
 }) => {
-  // theme removed (not needed after layout changes)
   const [connectionStatus, setConnectionStatus] = React.useState<
     'idle' | 'success' | 'failed'
   >('idle');
@@ -123,6 +122,7 @@ export const ProviderCard: React.FC<ProviderCardProps> = ({
   };
 
   const theme = useTheme();
+  const isDarkMode = theme.palette.mode === 'dark';
 
   // Helper function to get indicator color based on connection status
   const getIndicatorColor = () => {
@@ -262,7 +262,17 @@ export const ProviderCard: React.FC<ProviderCardProps> = ({
               alt={`${provider.type} logo`}
               title={getProviderTypeLabel(provider.type)}
               aria-label={getProviderTypeLabel(provider.type)}
-              style={{ width: 40, height: 40, objectFit: 'contain' }}
+              style={{
+                width: 40,
+                height: 40,
+                objectFit: 'contain',
+                filter:
+                  isDarkMode &&
+                  provider.type !== 'gemini' &&
+                  provider.type !== 'lmstudio'
+                    ? 'brightness(0) invert(1) opacity(0.9)'
+                    : undefined,
+              }}
             />
           </Box>
 
