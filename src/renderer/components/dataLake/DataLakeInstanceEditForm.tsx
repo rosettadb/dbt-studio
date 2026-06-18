@@ -207,7 +207,6 @@ export const DataLakeInstanceEditForm: React.FC = () => {
                       onBlur={field.onBlur}
                       label="Description"
                       fullWidth
-                      multiline
                       rows={3}
                       disabled={updateMutation.isLoading}
                       placeholder="Describe the purpose of this DuckLake instance..."

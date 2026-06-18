@@ -1,4 +1,10 @@
-export type AIProviderType = 'openai' | 'ollama' | 'gemini' | 'anthropic';
+export type AIProviderType =
+  | 'openai'
+  | 'ollama'
+  | 'gemini'
+  | 'anthropic'
+  | 'openai-compatible'
+  | 'lmstudio';
 
 export interface ProviderCapabilities {
   streaming: boolean;

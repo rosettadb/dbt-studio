@@ -161,6 +161,11 @@ export const ArboristTree: React.FC<ArboristTreeProps> = ({
       try {
         const oldPath = id;
 
+        const currentName = oldPath.split('/').pop();
+        if (currentName === name) {
+          return;
+        }
+
         const newPath = await projectsServices.renamePath({
           path: oldPath,
           newName: name,

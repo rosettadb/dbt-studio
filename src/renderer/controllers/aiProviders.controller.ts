@@ -16,7 +16,13 @@ import { aiProvidersService } from '../services/aiProviders.service';
 export interface AIProvider {
   id?: number;
   name: string;
-  type: 'openai' | 'ollama' | 'gemini' | 'anthropic';
+  type:
+    | 'openai'
+    | 'ollama'
+    | 'gemini'
+    | 'anthropic'
+    | 'openai-compatible'
+    | 'lmstudio';
   config: string;
   isActive: boolean;
   createdAt?: string;
@@ -25,7 +31,13 @@ export interface AIProvider {
 
 export interface NewAIProvider {
   name: string;
-  type: 'openai' | 'ollama' | 'gemini' | 'anthropic';
+  type:
+    | 'openai'
+    | 'ollama'
+    | 'gemini'
+    | 'anthropic'
+    | 'openai-compatible'
+    | 'lmstudio';
   config: string;
   isActive?: boolean;
 }

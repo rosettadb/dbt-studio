@@ -51,6 +51,7 @@ export const Sidebar: React.FC<Props> = ({
     if (path.includes('cloud-explorer')) return '/app/cloud-explorer';
     if (path.includes('data-lake') || path.includes('datalake'))
       return '/app/data-lake';
+    if (path.includes('flows')) return '/app/flows';
     if (path.includes('connection')) return '/app/connections';
     if (path.includes('notebooks')) return '/app/notebooks';
     if (path.includes('sql')) return '/app/sql';

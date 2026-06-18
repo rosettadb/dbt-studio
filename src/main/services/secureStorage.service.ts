@@ -2,7 +2,13 @@ import keytar from 'keytar';
 import MainDatabaseService from './mainDatabase.service';
 
 // AI Provider types for secure storage
-export type AIProviderType = 'openai' | 'ollama' | 'gemini' | 'anthropic';
+export type AIProviderType =
+  | 'openai'
+  | 'ollama'
+  | 'gemini'
+  | 'anthropic'
+  | 'openai-compatible'
+  | 'lmstudio';
 
 class SecureStorageService {
   private serviceName: string;
@@ -179,6 +185,8 @@ class SecureStorageService {
         'ollama',
         'gemini',
         'anthropic',
+        'openai-compatible',
+        'lmstudio',
       ];
 
       await Promise.all(
