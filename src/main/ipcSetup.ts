@@ -20,6 +20,7 @@ import {
   registerMCPHandlers,
   registerSkillsHandlers,
   registerSavedQueriesHandlers,
+  registerFlowfileHandlers,
 } from './ipcHandlers';
 import { installIpcErrorHandling } from './utils/ipcErrorHandler';
 
@@ -45,6 +46,7 @@ const registerHandlers = (mainWindow: BrowserWindow) => {
   registerMCPHandlers();
   registerSkillsHandlers();
   registerSavedQueriesHandlers();
+  registerFlowfileHandlers();
 };
 
 export default registerHandlers;
