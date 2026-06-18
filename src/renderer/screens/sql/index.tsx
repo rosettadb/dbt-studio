@@ -34,7 +34,10 @@ import {
   FilterList,
   Link as LinkIcon,
   Code as CodeTabIcon,
+  InsertChart,
 } from '@mui/icons-material';
+import { SimpleTreeView } from '@mui/x-tree-view/SimpleTreeView';
+import { TreeItem } from '@mui/x-tree-view/TreeItem';
 import { toast } from 'react-toastify';
 import { useNavigate } from 'react-router-dom';
 import { connectorsServices, DuckLakeService } from '../../services';
@@ -49,6 +52,7 @@ import { SchemaViewContainer, SchemaViewGrid } from './styles';
 import { ErrorMessage, SqlEditor } from '../../components';
 import { ChatWindow } from '../../components/chat';
 import { QueryResult } from './queryResult';
+import { ChartRenderer } from '../../components/queryResult/queryVisualization/ChartRenderer';
 import { ConnectionInput, Table } from '../../../types/backend';
 import { getConnectionInput } from '../../helpers/utils';
 import { SqlTabManager } from '../../components/sqlTabs';
@@ -942,6 +946,17 @@ const Sql = () => {
                   fontSize: '0.8rem',
                 }}
               />
+              <Tab
+                icon={<InsertChart sx={{ fontSize: 16 }} />}
+                iconPosition="start"
+                label="Analytics"
+                sx={{
+                  minHeight: 36,
+                  textTransform: 'none',
+                  py: 0,
+                  fontSize: '0.8rem',
+                }}
+              />
             </Tabs>
           </Box>
 
@@ -1113,6 +1128,83 @@ const Sql = () => {
               />
             </Box>
           )}
+
+          {sidebarTab === 2 && (
+            <Box sx={{ flex: 1, overflow: 'auto', p: 2 }}>
+              <SimpleTreeView>
+                <TreeItem
+                  itemId="mgmt"
+                  label={
+                    <Typography variant="body2">Management KPIs</Typography>
+                  }
+                />
+                <TreeItem
+                  itemId="wbr"
+                  label={
+                    <Typography variant="body2">
+                      Weekly Business Review
+                    </Typography>
+                  }
+                />
+                <TreeItem
+                  itemId="finance"
+                  label={<Typography variant="body2">Finance</Typography>}
+                >
+                  <TreeItem
+                    itemId="rev"
+                    label={
+                      <Typography variant="body2">Revenue Analysis</Typography>
+                    }
+                  />
+                  <TreeItem
+                    itemId="exp"
+                    label={
+                      <Typography variant="body2">Expense Report</Typography>
+                    }
+                  />
+                </TreeItem>
+                <TreeItem
+                  itemId="mktg"
+                  label={<Typography variant="body2">Marketing</Typography>}
+                >
+                  <TreeItem
+                    itemId="roi"
+                    label={
+                      <Typography variant="body2">Campaign ROI</Typography>
+                    }
+                  />
+                </TreeItem>
+                <TreeItem
+                  itemId="sales"
+                  label={<Typography variant="body2">Sales</Typography>}
+                >
+                  <TreeItem
+                    itemId="perf"
+                    label={
+                      <Typography variant="body2">Sales Performance</Typography>
+                    }
+                    sx={{ bgcolor: 'action.selected' }}
+                  />
+                  <TreeItem
+                    itemId="rep"
+                    label={
+                      <Typography variant="body2">
+                        Sales Rep Dashboard
+                      </Typography>
+                    }
+                  />
+                  <TreeItem
+                    itemId="terr"
+                    label={
+                      <Typography variant="body2">
+                        Territory Analysis
+                      </Typography>
+                    }
+                  />
+                </TreeItem>
+              </SimpleTreeView>
+            </Box>
+          )}
         </Box>
       }
     >
@@ -1142,143 +1234,171 @@ const Sql = () => {
               overflow: 'hidden',
             }}
           >
-            {/* Tab Bar */}
-            <SqlTabManager
-              tabs={tabs}
-              activeTabId={activeTabId}
-              onSelect={switchTab}
-              onClose={closeTab}
-              onReorder={reorderTabs}
-            />
-
-            {/* Main Content */}
-            <Box sx={{ flex: 1, overflow: 'hidden' }}>
-              {!activeTab && (
-                <Box
-                  sx={{
-                    display: 'flex',
-                    flexDirection: 'column',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    height: '100%',
-                    color: 'text.secondary',
-                  }}
-                >
-                  <TableChart sx={{ fontSize: 64, opacity: 0.3, mb: 2 }} />
-                  <Typography
-                    variant="h6"
-                    color="text.secondary"
-                    sx={{ mb: 1 }}
-                  >
-                    No Connection Selected
-                  </Typography>
-                  <Typography variant="body2" color="text.secondary">
-                    Select a connection from the sidebar to start querying
-                  </Typography>
-                </Box>
-              )}
-
-              {activeTab && !connectionInput && (
-                <Box
-                  sx={{
-                    display: 'flex',
-                    flexDirection: 'column',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    height: '100%',
-                    color: 'text.secondary',
-                    gap: 1,
-                  }}
-                >
-                  <CircularProgress size={28} />
-                  <Typography variant="body2" color="text.secondary">
-                    Loading connection...
-                  </Typography>
-                </Box>
-              )}
-
-              {activeTab &&
-                connectionInput &&
-                isDuckLakeConnection &&
-                (connectionInput as any)?.status === 'loading' &&
-                !isLoadingDuckLakeInstances && (
+            {(() => {
+              if (sidebarTab === 2) {
+                return (
                   <Box
                     sx={{
+                      flex: 1,
+                      overflow: 'auto',
+                      p: 4,
+                      bgcolor:
+                        theme.palette.mode === 'dark' ? '#121212' : '#fafafa',
                       display: 'flex',
                       flexDirection: 'column',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      height: '100%',
-                      color: 'text.secondary',
-                      gap: 2,
-                      p: 3,
-                      textAlign: 'center',
                     }}
                   >
-                    <Typography variant="h6" color="text.secondary">
-                      Connection Not Found
+                    <Typography variant="h4" gutterBottom>
+                      Sales Performance
                     </Typography>
-                    <Typography variant="body2" color="text.secondary">
-                      The DuckLake instance &quot;{activeTab.connectionName}
-                      &quot; could not be found. It may have been deleted or is
-                      no longer available.
-                    </Typography>
-                    <Button
-                      variant="outlined"
-                      size="small"
-                      onClick={() => refetchDuckLakeInstances()}
-                    >
-                      Retry Loading
-                    </Button>
-                  </Box>
-                )}
-
-              {activeTab &&
-                connectionInput &&
-                (hasResults || hasError || isLoading ? (
-                  <SplitPane
-                    split="horizontal"
-                    sizes={sizes}
-                    onChange={(newSizes) =>
-                      setSizes(newSizes as [number, number])
-                    }
-                    sashRender={renderSash}
-                  >
-                    <Box data-testid="sql-editor-pane" sx={{ height: '100%' }}>
-                      <SqlEditor
-                        key={activeTabId}
-                        completions={completions}
-                        connectionInput={connectionInput as ConnectionInput}
-                        connectionId={activeTab.connectionId}
-                        initialQuery={activeTab.query}
-                        queryHistory={queryHistory}
-                        setQueryHistory={setQueryHistory}
-                        setLoadingQuery={handleSetLoadingQuery}
-                        setQueryResults={handleQueryResults}
-                        setError={handleSetError}
-                        onQueryChange={handleQueryChange}
-                        onQueryStart={(id) => {
-                          if (activeTabId) {
-                            setTabExecutions((prev) => ({
-                              ...prev,
-                              [activeTabId]: { id, sql: activeTab.query },
-                            }));
-                          }
+                    <Box sx={{ display: 'flex', gap: 2, mb: 4 }}>
+                      <Box
+                        sx={{
+                          p: 2,
+                          bgcolor: 'background.paper',
+                          borderRadius: 1,
+                          flex: 1,
+                          border: `1px solid ${theme.palette.divider}`,
                         }}
-                        onQuerySuccess={handleRefreshSchema}
-                        isLoading={isLoadingConnection}
-                      />
+                      >
+                        <Typography variant="subtitle2" color="text.secondary">
+                          Monthly Sales
+                        </Typography>
+                        <Typography variant="h4">$4.4M</Typography>
+                      </Box>
+                      <Box
+                        sx={{
+                          p: 2,
+                          bgcolor: 'background.paper',
+                          borderRadius: 1,
+                          flex: 1,
+                          border: `1px solid ${theme.palette.divider}`,
+                        }}
+                      >
+                        <Typography variant="subtitle2" color="text.secondary">
+                          Total Transactions
+                        </Typography>
+                        <Typography variant="h4">21,271</Typography>
+                      </Box>
                     </Box>
+                    <Box sx={{ display: 'flex', gap: 2, mb: 4, height: 300 }}>
+                      <Box
+                        sx={{
+                          p: 2,
+                          bgcolor: 'background.paper',
+                          borderRadius: 1,
+                          flex: 1,
+                          border: `1px solid ${theme.palette.divider}`,
+                        }}
+                      >
+                        <Typography variant="subtitle2" gutterBottom>
+                          Sales by Category
+                        </Typography>
+                        <ChartRenderer
+                          data={[
+                            { name: 'Home', sales: 44.3 },
+                            { name: 'Sports', sales: 41.3 },
+                            { name: 'Clothing', sales: 8.7 },
+                            { name: 'Electronics', sales: 13.1 },
+                          ]}
+                          chartType="bar"
+                          xAxisCol="name"
+                          yAxisCols={['sales']}
+                        />
+                      </Box>
+                      <Box
+                        sx={{
+                          p: 2,
+                          bgcolor: 'background.paper',
+                          borderRadius: 1,
+                          flex: 1,
+                          border: `1px solid ${theme.palette.divider}`,
+                        }}
+                      >
+                        <Typography variant="subtitle2" gutterBottom>
+                          Weekly Sales Trend
+                        </Typography>
+                        <ChartRenderer
+                          data={[
+                            { date: 'Jan', home: 4, sports: 3, clothing: 1 },
+                            { date: 'Feb', home: 5, sports: 4, clothing: 2 },
+                            { date: 'Mar', home: 6, sports: 3, clothing: 1 },
+                            { date: 'Apr', home: 8, sports: 5, clothing: 2 },
+                          ]}
+                          chartType="line"
+                          xAxisCol="date"
+                          yAxisCols={['home', 'sports', 'clothing']}
+                        />
+                      </Box>
+                    </Box>
+                  </Box>
+                );
+              }
 
-                    <Box
-                      sx={{
-                        height: '100%',
-                        padding: 1,
-                        overflowY: 'auto',
-                        background: theme.palette.background.paper,
-                      }}
-                    >
-                      {isLoading && (
+              return (
+                <>
+                  {/* Tab Bar */}
+                  <SqlTabManager
+                    tabs={tabs}
+                    activeTabId={activeTabId}
+                    onSelect={switchTab}
+                    onClose={closeTab}
+                    onReorder={reorderTabs}
+                  />
+
+                  {/* Main Content */}
+                  <Box sx={{ flex: 1, overflow: 'hidden' }}>
+                    {!activeTab && (
+                      <Box
+                        sx={{
+                          display: 'flex',
+                          flexDirection: 'column',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          height: '100%',
+                          color: 'text.secondary',
+                        }}
+                      >
+                        <TableChart
+                          sx={{ fontSize: 64, opacity: 0.3, mb: 2 }}
+                        />
+                        <Typography
+                          variant="h6"
+                          color="text.secondary"
+                          sx={{ mb: 1 }}
+                        >
+                          No Connection Selected
+                        </Typography>
+                        <Typography variant="body2" color="text.secondary">
+                          Select a connection from the sidebar to start querying
+                        </Typography>
+                      </Box>
+                    )}
+
+                    {activeTab && !connectionInput && (
+                      <Box
+                        sx={{
+                          display: 'flex',
+                          flexDirection: 'column',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          height: '100%',
+                          color: 'text.secondary',
+                          gap: 1,
+                        }}
+                      >
+                        <CircularProgress size={28} />
+                        <Typography variant="body2" color="text.secondary">
+                          Loading connection...
+                        </Typography>
+                      </Box>
+                    )}
+
+                    {activeTab &&
+                      connectionInput &&
+                      isDuckLakeConnection &&
+                      (connectionInput as any)?.status === 'loading' &&
+                      !isLoadingDuckLakeInstances && (
                         <Box
                           sx={{
                             display: 'flex',
@@ -1286,80 +1406,169 @@ const Sql = () => {
                             alignItems: 'center',
                             justifyContent: 'center',
                             height: '100%',
+                            color: 'text.secondary',
                             gap: 2,
+                            p: 3,
+                            textAlign: 'center',
                           }}
                         >
+                          <Typography variant="h6" color="text.secondary">
+                            Connection Not Found
+                          </Typography>
+                          <Typography variant="body2" color="text.secondary">
+                            The DuckLake instance &quot;
+                            {activeTab.connectionName}
+                            &quot; could not be found. It may have been deleted
+                            or is no longer available.
+                          </Typography>
                           <Button
-                            variant="contained"
-                            color="primary"
-                            onClick={handleCancelQuery}
+                            variant="outlined"
                             size="small"
-                            startIcon={<Stop />}
+                            onClick={() => refetchDuckLakeInstances()}
                           >
-                            Stop Query
+                            Retry Loading
                           </Button>
-                          <CircularProgress size={50} />
                         </Box>
                       )}
-                      {!isLoading && hasError && (
-                        <ErrorMessage
-                          title="Query Failed"
-                          description={activeTab.error}
-                        />
-                      )}
-                      {!isLoading && !hasError && hasResults && (
-                        <QueryResult
-                          results={activeTab.results}
-                          exportContext={{
-                            connectionType: connectionInput.type,
-                            connectionId: activeTab.connectionId,
-                            duckLakeInstanceId:
-                              connectionInput.type === 'ducklake'
-                                ? (connectionInput as any).instanceId
-                                : undefined,
-                            duckLakeReady:
-                              connectionInput.type === 'ducklake'
-                                ? (connectionInput as any).status !==
-                                    'loading' &&
-                                  (connectionInput as any).status !==
-                                    'connecting'
-                                : undefined,
-                            originalSql:
-                              (activeTab.results as any)?.originalSql ??
-                              activeTab.query,
-                          }}
-                        />
-                      )}
-                    </Box>
-                  </SplitPane>
-                ) : (
-                  <Box data-testid="sql-editor-pane" sx={{ height: '100%' }}>
-                    <SqlEditor
-                      key={activeTabId}
-                      completions={completions}
-                      connectionInput={connectionInput as ConnectionInput}
-                      connectionId={activeTab.connectionId}
-                      initialQuery={activeTab.query}
-                      queryHistory={queryHistory}
-                      setQueryHistory={setQueryHistory}
-                      setLoadingQuery={handleSetLoadingQuery}
-                      setQueryResults={handleQueryResults}
-                      setError={handleSetError}
-                      onQueryChange={handleQueryChange}
-                      onQueryStart={(id) => {
-                        if (activeTabId) {
-                          setTabExecutions((prev) => ({
-                            ...prev,
-                            [activeTabId]: { id, sql: activeTab.query },
-                          }));
-                        }
-                      }}
-                      onQuerySuccess={handleRefreshSchema}
-                      isLoading={isLoadingConnection}
-                    />
+
+                    {activeTab &&
+                      connectionInput &&
+                      (hasResults || hasError || isLoading ? (
+                        <SplitPane
+                          split="horizontal"
+                          sizes={sizes}
+                          onChange={(newSizes) =>
+                            setSizes(newSizes as [number, number])
+                          }
+                          sashRender={renderSash}
+                        >
+                          <Box
+                            data-testid="sql-editor-pane"
+                            sx={{ height: '100%' }}
+                          >
+                            <SqlEditor
+                              key={activeTabId}
+                              completions={completions}
+                              connectionInput={
+                                connectionInput as ConnectionInput
+                              }
+                              connectionId={activeTab.connectionId}
+                              initialQuery={activeTab.query}
+                              queryHistory={queryHistory}
+                              setQueryHistory={setQueryHistory}
+                              setLoadingQuery={handleSetLoadingQuery}
+                              setQueryResults={handleQueryResults}
+                              setError={handleSetError}
+                              onQueryChange={handleQueryChange}
+                              onQueryStart={(id) => {
+                                if (activeTabId) {
+                                  setTabExecutions((prev) => ({
+                                    ...prev,
+                                    [activeTabId]: { id, sql: activeTab.query },
+                                  }));
+                                }
+                              }}
+                              onQuerySuccess={handleRefreshSchema}
+                              isLoading={isLoadingConnection}
+                            />
+                          </Box>
+
+                          <Box
+                            sx={{
+                              height: '100%',
+                              padding: 1,
+                              overflowY: 'auto',
+                              background: theme.palette.background.paper,
+                            }}
+                          >
+                            {isLoading && (
+                              <Box
+                                sx={{
+                                  display: 'flex',
+                                  flexDirection: 'column',
+                                  alignItems: 'center',
+                                  justifyContent: 'center',
+                                  height: '100%',
+                                  gap: 2,
+                                }}
+                              >
+                                <Button
+                                  variant="contained"
+                                  color="primary"
+                                  onClick={handleCancelQuery}
+                                  size="small"
+                                  startIcon={<Stop />}
+                                >
+                                  Stop Query
+                                </Button>
+                                <CircularProgress size={50} />
+                              </Box>
+                            )}
+                            {!isLoading && hasError && (
+                              <ErrorMessage
+                                title="Query Failed"
+                                description={activeTab.error}
+                              />
+                            )}
+                            {!isLoading && !hasError && hasResults && (
+                              <QueryResult
+                                results={activeTab.results}
+                                exportContext={{
+                                  connectionType: connectionInput.type,
+                                  connectionId: activeTab.connectionId,
+                                  duckLakeInstanceId:
+                                    connectionInput.type === 'ducklake'
+                                      ? (connectionInput as any).instanceId
+                                      : undefined,
+                                  duckLakeReady:
+                                    connectionInput.type === 'ducklake'
+                                      ? (connectionInput as any).status !==
+                                          'loading' &&
+                                        (connectionInput as any).status !==
+                                          'connecting'
+                                      : undefined,
+                                  originalSql:
+                                    (activeTab.results as any)?.originalSql ??
+                                    activeTab.query,
+                                }}
+                              />
+                            )}
+                          </Box>
+                        </SplitPane>
+                      ) : (
+                        <Box
+                          data-testid="sql-editor-pane"
+                          sx={{ height: '100%' }}
+                        >
+                          <SqlEditor
+                            key={activeTabId}
+                            completions={completions}
+                            connectionInput={connectionInput as ConnectionInput}
+                            connectionId={activeTab.connectionId}
+                            initialQuery={activeTab.query}
+                            queryHistory={queryHistory}
+                            setQueryHistory={setQueryHistory}
+                            setLoadingQuery={handleSetLoadingQuery}
+                            setQueryResults={handleQueryResults}
+                            setError={handleSetError}
+                            onQueryChange={handleQueryChange}
+                            onQueryStart={(id) => {
+                              if (activeTabId) {
+                                setTabExecutions((prev) => ({
+                                  ...prev,
+                                  [activeTabId]: { id, sql: activeTab.query },
+                                }));
+                              }
+                            }}
+                            onQuerySuccess={handleRefreshSchema}
+                            isLoading={isLoadingConnection}
+                          />
+                        </Box>
+                      ))}
                   </Box>
-                ))}
-            </Box>
+                </>
+              );
+            })()}
           </Box>
         </Pane>
         <Pane minSize={CHAT_MIN_WIDTH}>

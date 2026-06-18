@@ -5,6 +5,7 @@
 
 import { app } from 'electron';
 import path from 'path';
+import crypto from 'crypto';
 import Database from 'better-sqlite3';
 import { drizzle, BetterSQLite3Database } from 'drizzle-orm/better-sqlite3';
 import {
@@ -40,6 +41,11 @@ import {
   ChatConversationWithMessages,
 } from '../schemas/mainDatabase.schema';
 import type { AgentScreenKey } from '../../types/agentEvents';
+import {
+  AnalyticsPage,
+  NewAnalyticsPage,
+  UpdateAnalyticsPage,
+} from '../../types/analyticsPages';
 
 export interface GetConversationsFilter {
   projectId?: number;
@@ -277,6 +283,20 @@ export default class MainDatabaseService {
       CREATE INDEX IF NOT EXISTS ai_usage_logs_created_at_idx ON ai_usage_logs(created_at);
 
       CREATE INDEX IF NOT EXISTS chat_compaction_summaries_conversation_idx ON chat_compaction_summaries(conversation_id);
+
+      -- Analytics Pages table
+      CREATE TABLE IF NOT EXISTS analytics_pages (
+        id TEXT PRIMARY KEY,
+        connection_id TEXT NOT NULL,
+        title TEXT NOT NULL,
+        route_path TEXT NOT NULL,
+        markdown_content TEXT NOT NULL,
+        created_at TEXT DEFAULT (datetime('now')),
+        updated_at TEXT DEFAULT (datetime('now'))
+      );
+      CREATE INDEX IF NOT EXISTS analytics_pages_connection_idx ON analytics_pages(connection_id);
+      CREATE INDEX IF NOT EXISTS analytics_pages_route_path_idx ON analytics_pages(route_path);
+      CREATE UNIQUE INDEX IF NOT EXISTS analytics_pages_unique_route_idx ON analytics_pages(connection_id, route_path);
     `;
 
     this.sqlite.exec(createTablesSQL);
@@ -441,6 +461,24 @@ export default class MainDatabaseService {
             FOREIGN KEY (conversation_id) REFERENCES chat_conversations(id) ON DELETE CASCADE
           );
           CREATE INDEX IF NOT EXISTS chat_compaction_summaries_conversation_idx ON chat_compaction_summaries(conversation_id);
+        `);
+      }
+
+      // analytics_pages table might be missing
+      if (!tableNames.has('analytics_pages')) {
+        this.sqlite.exec(`
+          CREATE TABLE IF NOT EXISTS analytics_pages (
+            id TEXT PRIMARY KEY,
+            connection_id TEXT NOT NULL,
+            title TEXT NOT NULL,
+            route_path TEXT NOT NULL,
+            markdown_content TEXT NOT NULL,
+            created_at TEXT DEFAULT (datetime('now')),
+            updated_at TEXT DEFAULT (datetime('now'))
+          );
+          CREATE INDEX IF NOT EXISTS analytics_pages_connection_idx ON analytics_pages(connection_id);
+          CREATE INDEX IF NOT EXISTS analytics_pages_route_path_idx ON analytics_pages(route_path);
+          CREATE UNIQUE INDEX IF NOT EXISTS analytics_pages_unique_route_idx ON analytics_pages(connection_id, route_path);
         `);
       }
     } catch (error) {
@@ -1776,6 +1814,143 @@ export default class MainDatabaseService {
       }
 
       return newMessage;
+    } catch (error) {
+      throw error;
+    }
+  }
+
+  // Analytics Pages Management
+  static async getAnalyticsPages(
+    connectionId: string,
+  ): Promise<AnalyticsPage[]> {
+    const db = await this.getDatabase();
+    try {
+      const results = await db
+        .select()
+        .from(schema.analyticsPages)
+        .where(eq(schema.analyticsPages.connectionId, connectionId))
+        .orderBy(desc(schema.analyticsPages.updatedAt));
+      return results as AnalyticsPage[];
+    } catch (error) {
+      throw error;
+    }
+  }
+
+  static async getAnalyticsPage(
+    connectionId: string,
+    pageId: string,
+  ): Promise<AnalyticsPage> {
+    const db = await this.getDatabase();
+    try {
+      const results = await db
+        .select()
+        .from(schema.analyticsPages)
+        .where(
+          and(
+            eq(schema.analyticsPages.connectionId, connectionId),
+            eq(schema.analyticsPages.id, pageId),
+          ),
+        );
+      if (!results[0]) {
+        throw new Error(`Analytics page not found: ${pageId}`);
+      }
+      return results[0] as AnalyticsPage;
+    } catch (error) {
+      throw error;
+    }
+  }
+
+  static async createAnalyticsPage(
+    connectionId: string,
+    data: NewAnalyticsPage,
+  ): Promise<AnalyticsPage> {
+    const db = await this.getDatabase();
+    try {
+      const newPageData = {
+        id: crypto.randomUUID(),
+        connectionId,
+        title: data.title,
+        routePath: data.routePath,
+        markdownContent: data.markdownContent,
+      };
+
+      const results = await db
+        .insert(schema.analyticsPages)
+        .values(newPageData)
+        .returning();
+
+      const [result] = Array.isArray(results) ? results : [results];
+      if (!result) {
+        throw new Error('Failed to create analytics page');
+      }
+
+      return result as AnalyticsPage;
+    } catch (error: any) {
+      if (
+        error.message?.includes('UNIQUE constraint failed') ||
+        error.code === 'SQLITE_CONSTRAINT_UNIQUE'
+      ) {
+        throw new Error(`Route path already exists: ${data.routePath}`);
+      }
+      throw error;
+    }
+  }
+
+  static async updateAnalyticsPage(
+    connectionId: string,
+    pageId: string,
+    updates: UpdateAnalyticsPage,
+  ): Promise<AnalyticsPage> {
+    const db = await this.getDatabase();
+    try {
+      const results = await db
+        .update(schema.analyticsPages)
+        .set({
+          ...updates,
+          updatedAt: new Date().toISOString(),
+        })
+        .where(
+          and(
+            eq(schema.analyticsPages.connectionId, connectionId),
+            eq(schema.analyticsPages.id, pageId),
+          ),
+        )
+        .returning();
+
+      const [result] = Array.isArray(results) ? results : [results];
+      if (!result) {
+        throw new Error(`Analytics page not found: ${pageId}`);
+      }
+
+      return result as AnalyticsPage;
+    } catch (error: any) {
+      if (
+        error.message?.includes('UNIQUE constraint failed') ||
+        error.code === 'SQLITE_CONSTRAINT_UNIQUE'
+      ) {
+        throw new Error(`Route path already exists: ${updates.routePath}`);
+      }
+      throw error;
+    }
+  }
+
+  static async deleteAnalyticsPage(
+    connectionId: string,
+    pageId: string,
+  ): Promise<void> {
+    const db = await this.getDatabase();
+    try {
+      // Check if exists first to match existing error behavior
+      await this.getAnalyticsPage(connectionId, pageId);
+
+      await db
+        .delete(schema.analyticsPages)
+        .where(
+          and(
+            eq(schema.analyticsPages.connectionId, connectionId),
+            eq(schema.analyticsPages.id, pageId),
+          ),
+        );
     } catch (error) {
       throw error;
     }

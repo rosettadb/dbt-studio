@@ -24,7 +24,10 @@ import {
   FileDownload,
   Upload,
   Close,
+  InsertChart,
 } from '@mui/icons-material';
+import { SimpleTreeView } from '@mui/x-tree-view/SimpleTreeView';
+import { TreeItem } from '@mui/x-tree-view/TreeItem';
 import { SchemaTreeViewerWithSchema } from '../../screens/sql/SchemaTreeViewerWithSchema';
 import { NotebooksTreeView } from './NotebooksTreeView';
 import { Table, SupportedConnectionTypes } from '../../../types/backend';
@@ -84,6 +87,7 @@ interface NotebooksSidebarProps {
   onExportAllNotebooks?: () => void;
   onExportSelected?: () => void;
   onImportAllNotebooks?: () => void;
+  onTabChange?: (tabIndex: number) => void;
 
   // Helper functions
   getConnectionName: (connectionKey: string) => string;
@@ -111,6 +115,7 @@ export const NotebooksSidebar: React.FC<NotebooksSidebarProps> = ({
   onExportAllNotebooks,
   onExportSelected,
   onImportAllNotebooks,
+  onTabChange,
 }) => {
   const theme = useTheme();
   const [activeTab, setActiveTab] = useState(0);
@@ -123,8 +128,9 @@ export const NotebooksSidebar: React.FC<NotebooksSidebarProps> = ({
   const handleTabChange = useCallback(
     (_event: React.SyntheticEvent, newValue: number) => {
       setActiveTab(newValue);
+      onTabChange?.(newValue);
     },
-    [],
+    [onTabChange],
   );
 
   const handleExportMenuOpen = useCallback(
@@ -223,6 +229,13 @@ export const NotebooksSidebar: React.FC<NotebooksSidebarProps> = ({
             label="Data"
             id="notebooks-tab-1"
             aria-controls="notebooks-tabpanel-1"
+          />
+          <Tab
+            icon={<InsertChart sx={{ fontSize: 16 }} />}
+            iconPosition="start"
+            label="Analytics"
+            id="notebooks-tab-2"
+            aria-controls="notebooks-tabpanel-2"
           />
         </Tabs>
       </Box>
@@ -445,6 +458,51 @@ export const NotebooksSidebar: React.FC<NotebooksSidebarProps> = ({
                 </Typography>
               </Box>
             )}
+          </Box>
+        </TabPanel>
+
+        {/* Analytics Tab */}
+        <TabPanel value={activeTab} index={2}>
+          <Box sx={{ height: '100%', overflow: 'auto' }}>
+            <SimpleTreeView
+              defaultExpandedItems={['sales', 'finance', 'marketing']}
+              sx={{
+                '& .MuiTreeItem-root': {
+                  '& .MuiTreeItem-content': {
+                    padding: '0px 2px',
+                    minHeight: '26px',
+                    borderRadius: '4px',
+                  },
+                  '& .MuiTreeItem-label': {
+                    fontSize: '0.85rem',
+                    padding: '0px',
+                  },
+                  '& .MuiTreeItem-iconContainer': {
+                    width: '12px',
+                    marginRight: '2px',
+                  },
+                },
+              }}
+            >
+              <TreeItem itemId="kpi" label="Management KPIs" />
+              <TreeItem itemId="wbr" label="Weekly Business Review" />
+              <TreeItem itemId="finance" label="Finance">
+                <TreeItem itemId="finance-1" label="Revenue Analysis" />
+                <TreeItem itemId="finance-2" label="Expense Report" />
+              </TreeItem>
+              <TreeItem itemId="marketing" label="Marketing">
+                <TreeItem itemId="marketing-1" label="Campaign ROI" />
+              </TreeItem>
+              <TreeItem itemId="sales" label="Sales">
+                <TreeItem
+                  itemId="sales-1"
+                  label="Sales Performance"
+                  sx={{ bgcolor: 'action.selected' }}
+                />
+                <TreeItem itemId="sales-2" label="Sales Rep Dashboard" />
+                <TreeItem itemId="sales-3" label="Territory Analysis" />
+              </TreeItem>
+            </SimpleTreeView>
           </Box>
         </TabPanel>
       </Box>

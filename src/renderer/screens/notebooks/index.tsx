@@ -58,6 +58,7 @@ import { connectorsServices, DuckLakeService } from '../../services';
 import { NotebooksSidebar } from '../../components/notebook/NotebooksSidebar';
 import { NotebookTabManager } from '../../components/notebook/NotebookTabManager';
 import { NotebookEditor } from '../../components/notebook';
+import { ChartRenderer } from '../../components/queryResult/queryVisualization/ChartRenderer';
 import { ChatWindow } from '../../components/chat';
 import { Table, SupportedConnectionTypes } from '../../../types/backend';
 import useNotebookTabManager from '../../hooks/useNotebookTabManager';
@@ -139,6 +140,8 @@ const Notebooks = () => {
     setShowArchived,
     isHydrated: isSidebarHydrated,
   } = useNotebookSidebarState();
+
+  const [activeSidebarTab, setActiveSidebarTab] = useState(0);
 
   const notebookTabManager = useNotebookTabManager();
 
@@ -1002,6 +1005,7 @@ const Notebooks = () => {
               getConnectionName={getConnectionName}
               onExportAllNotebooks={handleExportAllNotebooks}
               onImportAllNotebooks={handleImportAllNotebooks}
+              onTabChange={setActiveSidebarTab}
             />
           )}
         </Box>
@@ -1032,128 +1036,240 @@ const Notebooks = () => {
               overflow: 'hidden',
             }}
           >
-            {!activeConnectionId ? (
-              <Box
-                sx={{
-                  display: 'flex',
-                  flexDirection: 'column',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  height: '100%',
-                  color: 'text.secondary',
-                  p: 2,
-                }}
-              >
-                <TableChart sx={{ fontSize: 64, opacity: 0.3, mb: 2 }} />
-                <Typography
-                  variant="h6"
-                  color="text.secondary"
-                  sx={{
-                    mb: 1,
-                    textAlign: 'center',
-                    wordWrap: 'break-word',
-                    overflowWrap: 'break-word',
-                  }}
-                >
-                  No Connection Selected
-                </Typography>
-                <Typography
-                  variant="body2"
-                  color="text.secondary"
-                  sx={{
-                    textAlign: 'center',
-                    wordWrap: 'break-word',
-                    overflowWrap: 'break-word',
-                    whiteSpace: 'normal',
-                  }}
-                >
-                  Select a connection from the sidebar to start working with
-                  notebooks
-                </Typography>
-              </Box>
-            ) : (
-              <>
-                {/* Notebook Tabs */}
-                <NotebookTabManager
-                  tabs={notebookTabManager.tabs}
-                  activeTabId={notebookTabManager.activeTabId}
-                  onSelect={notebookTabManager.switchTab}
-                  onClose={notebookTabManager.closeTab}
-                  onReorder={notebookTabManager.reorderTabs}
-                />
-
-                {/* Notebook Content */}
-                <Box
-                  sx={{
-                    flex: 1,
-                    minHeight: 0,
-                    display: 'flex',
-                    flexDirection: 'column',
-                    maxWidth: isSidebarOpen
-                      ? 'calc(100vw - 366px)'
-                      : 'calc(100vw - 56px)',
-                  }}
-                >
-                  {notebookTabManager.activeTabId ? (
-                    <NotebookEditor
-                      instanceId={activeConnectionId}
-                      notebookId={notebookTabManager.activeTabId}
-                      onOpenNotebook={(notebook, connectionId) => {
-                        // Open the notebook in a new tab
-                        notebookTabManager.openNotebook(notebook, connectionId);
-                      }}
-                      onSchemaChange={handleRefreshSchema}
-                    />
-                  ) : (
-                    <Box
+            {(() => {
+              if (!activeConnectionId) {
+                return (
+                  <Box
+                    sx={{
+                      display: 'flex',
+                      flexDirection: 'column',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      height: '100%',
+                      color: 'text.secondary',
+                      p: 2,
+                    }}
+                  >
+                    <TableChart sx={{ fontSize: 64, opacity: 0.3, mb: 2 }} />
+                    <Typography
+                      variant="h6"
+                      color="text.secondary"
                       sx={{
-                        display: 'flex',
-                        flexDirection: 'column',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        height: '100%',
-                        color: 'text.secondary',
-                        p: 2,
+                        mb: 1,
+                        textAlign: 'center',
+                        wordWrap: 'break-word',
+                        overflowWrap: 'break-word',
                       }}
                     >
-                      <TableChart sx={{ fontSize: 64, opacity: 0.3, mb: 2 }} />
-                      <Typography
-                        variant="h6"
-                        color="text.secondary"
+                      No Connection Selected
+                    </Typography>
+                    <Typography
+                      variant="body2"
+                      color="text.secondary"
+                      sx={{
+                        textAlign: 'center',
+                        wordWrap: 'break-word',
+                        overflowWrap: 'break-word',
+                        whiteSpace: 'normal',
+                      }}
+                    >
+                      Select a connection from the sidebar to start working with
+                      notebooks
+                    </Typography>
+                  </Box>
+                );
+              }
+
+              if (activeSidebarTab === 2) {
+                return (
+                  <Box
+                    sx={{
+                      flex: 1,
+                      overflow: 'auto',
+                      p: 4,
+                      bgcolor:
+                        theme.palette.mode === 'dark' ? '#121212' : '#fafafa',
+                      display: 'flex',
+                      flexDirection: 'column',
+                    }}
+                  >
+                    <Typography variant="h4" gutterBottom>
+                      Sales Performance
+                    </Typography>
+                    <Box sx={{ display: 'flex', gap: 2, mb: 4 }}>
+                      <Box
                         sx={{
-                          mb: 1,
-                          textAlign: 'center',
-                          wordWrap: 'break-word',
-                          overflowWrap: 'break-word',
+                          p: 2,
+                          bgcolor: 'background.paper',
+                          borderRadius: 1,
+                          flex: 1,
+                          border: `1px solid ${theme.palette.divider}`,
                         }}
                       >
-                        No Notebook Open
-                      </Typography>
-                      <Typography
-                        variant="body2"
-                        color="text.secondary"
+                        <Typography variant="subtitle2" color="text.secondary">
+                          Monthly Sales
+                        </Typography>
+                        <Typography variant="h4">$4.4M</Typography>
+                      </Box>
+                      <Box
                         sx={{
-                          mb: 2,
-                          textAlign: 'center',
-                          wordWrap: 'break-word',
-                          overflowWrap: 'break-word',
-                          whiteSpace: 'normal',
+                          p: 2,
+                          bgcolor: 'background.paper',
+                          borderRadius: 1,
+                          flex: 1,
+                          border: `1px solid ${theme.palette.divider}`,
                         }}
                       >
-                        Select a notebook from the sidebar to start editing
-                      </Typography>
-                      <Button
-                        variant="contained"
-                        startIcon={<Add />}
-                        onClick={() => setCreateNotebookOpen(true)}
-                      >
-                        Create New Notebook
-                      </Button>
+                        <Typography variant="subtitle2" color="text.secondary">
+                          Total Transactions
+                        </Typography>
+                        <Typography variant="h4">21,271</Typography>
+                      </Box>
                     </Box>
-                  )}
-                </Box>
-              </>
-            )}
+                    <Box sx={{ display: 'flex', gap: 2, mb: 4, height: 300 }}>
+                      <Box
+                        sx={{
+                          p: 2,
+                          bgcolor: 'background.paper',
+                          borderRadius: 1,
+                          flex: 1,
+                          border: `1px solid ${theme.palette.divider}`,
+                        }}
+                      >
+                        <Typography variant="subtitle2" gutterBottom>
+                          Sales by Category
+                        </Typography>
+                        <ChartRenderer
+                          data={[
+                            { name: 'Home', sales: 44.3 },
+                            { name: 'Sports', sales: 41.3 },
+                            { name: 'Clothing', sales: 8.7 },
+                            { name: 'Electronics', sales: 13.1 },
+                          ]}
+                          chartType="bar"
+                          xAxisCol="name"
+                          yAxisCols={['sales']}
+                        />
+                      </Box>
+                      <Box
+                        sx={{
+                          p: 2,
+                          bgcolor: 'background.paper',
+                          borderRadius: 1,
+                          flex: 1,
+                          border: `1px solid ${theme.palette.divider}`,
+                        }}
+                      >
+                        <Typography variant="subtitle2" gutterBottom>
+                          Weekly Sales Trend
+                        </Typography>
+                        <ChartRenderer
+                          data={[
+                            { date: 'Jan', home: 4, sports: 3, clothing: 1 },
+                            { date: 'Feb', home: 5, sports: 4, clothing: 2 },
+                            { date: 'Mar', home: 6, sports: 3, clothing: 1 },
+                            { date: 'Apr', home: 8, sports: 5, clothing: 2 },
+                          ]}
+                          chartType="line"
+                          xAxisCol="date"
+                          yAxisCols={['home', 'sports', 'clothing']}
+                        />
+                      </Box>
+                    </Box>
+                  </Box>
+                );
+              }
+
+              return (
+                <>
+                  {/* Notebook Tabs */}
+                  <NotebookTabManager
+                    tabs={notebookTabManager.tabs}
+                    activeTabId={notebookTabManager.activeTabId}
+                    onSelect={notebookTabManager.switchTab}
+                    onClose={notebookTabManager.closeTab}
+                    onReorder={notebookTabManager.reorderTabs}
+                  />
+
+                  {/* Notebook Content */}
+                  <Box
+                    sx={{
+                      flex: 1,
+                      minHeight: 0,
+                      display: 'flex',
+                      flexDirection: 'column',
+                      maxWidth: isSidebarOpen
+                        ? 'calc(100vw - 366px)'
+                        : 'calc(100vw - 56px)',
+                    }}
+                  >
+                    {notebookTabManager.activeTabId && activeConnectionId ? (
+                      <NotebookEditor
+                        key={`notebook-${notebookTabManager.activeTabId}`}
+                        instanceId={activeConnectionId}
+                        notebookId={notebookTabManager.activeTabId}
+                        onOpenNotebook={(notebook, connectionId) => {
+                          // Open the notebook in a new tab
+                          notebookTabManager.openNotebook(
+                            notebook,
+                            connectionId,
+                          );
+                        }}
+                        onSchemaChange={handleRefreshSchema}
+                      />
+                    ) : (
+                      <Box
+                        sx={{
+                          display: 'flex',
+                          flexDirection: 'column',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          height: '100%',
+                          color: 'text.secondary',
+                          p: 2,
+                        }}
+                      >
+                        <TableChart
+                          sx={{ fontSize: 64, opacity: 0.3, mb: 2 }}
+                        />
+                        <Typography
+                          variant="h6"
+                          color="text.secondary"
+                          sx={{
+                            mb: 1,
+                            textAlign: 'center',
+                            wordWrap: 'break-word',
+                            overflowWrap: 'break-word',
+                          }}
+                        >
+                          No Notebook Open
+                        </Typography>
+                        <Typography
+                          variant="body2"
+                          color="text.secondary"
+                          sx={{
+                            mb: 2,
+                            textAlign: 'center',
+                            wordWrap: 'break-word',
+                            overflowWrap: 'break-word',
+                            whiteSpace: 'normal',
+                          }}
+                        >
+                          Select a notebook from the sidebar to start editing
+                        </Typography>
+                        <Button
+                          variant="contained"
+                          startIcon={<Add />}
+                          onClick={() => setCreateNotebookOpen(true)}
+                        >
+                          Create New Notebook
+                        </Button>
+                      </Box>
+                    )}
+                  </Box>
+                </>
+              );
+            })()}
           </Box>
         </Pane>
         <Pane minSize={CHAT_MIN_WIDTH}>

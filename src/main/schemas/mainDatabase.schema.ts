@@ -430,3 +430,27 @@ export interface CodebaseContextMetadata {
   relevanceScore?: number;
   searchMethod?: 'semantic' | 'keyword' | 'symbol';
 }
+
+// Analytics Pages Table
+export const analyticsPages = sqliteTable(
+  'analytics_pages',
+  {
+    id: text('id').primaryKey(), // using UUID
+    connectionId: text('connection_id').notNull(),
+    title: text('title').notNull(),
+    routePath: text('route_path').notNull(),
+    markdownContent: text('markdown_content').notNull(),
+    createdAt: text('created_at').default(sql`CURRENT_TIMESTAMP`),
+    updatedAt: text('updated_at').default(sql`CURRENT_TIMESTAMP`),
+  },
+  (table: any) => ({
+    connectionIdx: index('analytics_pages_connection_idx').on(
+      table.connectionId,
+    ),
+    routePathIdx: index('analytics_pages_route_path_idx').on(table.routePath),
+    uniqueRoutePathPerConnection: index('analytics_pages_unique_route_idx').on(
+      table.connectionId,
+      table.routePath,
+    ),
+  }),
+);

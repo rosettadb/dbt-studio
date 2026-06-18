@@ -426,6 +426,13 @@ export type SavedQueriesChannels =
   | 'savedQueries:update'
   | 'savedQueries:delete';
 
+export type AnalyticsPagesChannels =
+  | 'analyticsPages:list'
+  | 'analyticsPages:get'
+  | 'analyticsPages:create'
+  | 'analyticsPages:update'
+  | 'analyticsPages:delete';
+
 export type Channels =
   | TestChannels
   | CliChannels
@@ -447,7 +454,8 @@ export type Channels =
   | AgentChannels
   | MCPChannels
   | SkillsChannels
-  | SavedQueriesChannels;
+  | SavedQueriesChannels
+  | AnalyticsPagesChannels;
 
 export type ConfigureConnectionBody = {
   projectId?: string;
