@@ -16,6 +16,7 @@ import {
   flowfileStop,
   FlowfileStatus,
 } from '../../services/flowfile.service';
+import { AppLayout } from '../../layouts';
 
 const POLL_INTERVAL_MS = 3000;
 
@@ -89,157 +90,159 @@ const Flows: React.FC = () => {
   const url = status?.url ?? 'http://127.0.0.1:63578/ui';
 
   return (
-    <Box
-      sx={{
-        display: 'flex',
-        flexDirection: 'column',
-        height: '100%',
-        width: '100%',
-      }}
-    >
-      {/* Toolbar */}
+    <AppLayout>
       <Box
         sx={{
           display: 'flex',
-          alignItems: 'center',
-          gap: 1.5,
-          px: 2,
-          py: 1,
-          borderBottom: (theme) => `1px solid ${theme.palette.divider}`,
-          flexShrink: 0,
+          flexDirection: 'column',
+          height: '100%',
+          width: '100%',
         }}
       >
-        <Typography variant="subtitle2" sx={{ mr: 1 }}>
-          Flowfile
-        </Typography>
-
-        {!processRunning ? (
-          <Tooltip title="Start Service" placement="bottom">
-            <span>
-              <IconButton
-                size="small"
-                color="primary"
-                onClick={handleStart}
-                disabled={isStarting}
-              >
-                {isStarting ? (
-                  <CircularProgress size={16} color="inherit" />
-                ) : (
-                  <PlayArrow fontSize="small" />
-                )}
-              </IconButton>
-            </span>
-          </Tooltip>
-        ) : (
-          <Tooltip
-            title={serviceUp ? 'Stop Service' : 'Starting up…'}
-            placement="bottom"
-          >
-            <span>
-              <IconButton
-                size="small"
-                color="error"
-                onClick={handleStop}
-                disabled={isStopping || !processRunning}
-              >
-                {isStopping || !serviceUp ? (
-                  <CircularProgress size={16} color="inherit" />
-                ) : (
-                  <Stop fontSize="small" />
-                )}
-              </IconButton>
-            </span>
-          </Tooltip>
-        )}
-
-        <Tooltip title="Refresh" placement="bottom">
-          <IconButton
-            size="small"
-            onClick={() => {
-              fetchStatus();
-            }}
-          >
-            <Refresh fontSize="small" />
-          </IconButton>
-        </Tooltip>
-      </Box>
-
-      {/* Error banner */}
-      {error && (
-        <Alert
-          severity="error"
-          onClose={() => setError(null)}
-          sx={{ borderRadius: 0, flexShrink: 0 }}
+        {/* Toolbar */}
+        <Box
+          sx={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 1.5,
+            px: 2,
+            py: 1,
+            borderBottom: (theme) => `1px solid ${theme.palette.divider}`,
+            flexShrink: 0,
+          }}
         >
-          {error}
-        </Alert>
-      )}
+          <Typography variant="subtitle2" sx={{ mr: 1 }}>
+            Flowfile
+          </Typography>
 
-      {/* Content area */}
-      <Box sx={{ flex: 1, position: 'relative', overflow: 'hidden' }}>
-        {serviceUp ? (
-          <iframe
-            src={url}
-            title="Flowfile"
-            style={{
-              width: '100%',
-              height: '100%',
-              border: 'none',
-            }}
-          />
-        ) : (
-          <Box
-            sx={{
-              display: 'flex',
-              flexDirection: 'column',
-              alignItems: 'center',
-              justifyContent: 'center',
-              height: '100%',
-              gap: 2,
-            }}
-          >
-            {processRunning ? (
-              <>
-                <CircularProgress size={32} />
-                <Typography variant="body2" color="text.secondary">
-                  Waiting for service to be ready…
-                </Typography>
-              </>
-            ) : (
-              <>
-                <Typography variant="h6" color="text.secondary">
-                  Flowfile is not running
-                </Typography>
-                <Button
-                  variant="contained"
-                  size="large"
+          {!processRunning ? (
+            <Tooltip title="Start Service" placement="bottom">
+              <span>
+                <IconButton
+                  size="small"
+                  color="primary"
                   onClick={handleStart}
                   disabled={isStarting}
-                  startIcon={
-                    isStarting ? (
-                      <CircularProgress size={18} color="inherit" />
-                    ) : (
-                      <PlayArrow />
-                    )
-                  }
-                  sx={{
-                    bgcolor: 'success.main',
-                    '&:hover': { bgcolor: 'success.dark' },
-                    px: 4,
-                  }}
                 >
-                  {isStarting ? 'Starting…' : 'Start'}
-                </Button>
-                <Typography variant="caption" color="text.secondary">
-                  Not installed? Go to <strong>Settings &gt; Flowfile</strong>{' '}
-                  to install it first.
-                </Typography>
-              </>
-            )}
-          </Box>
+                  {isStarting ? (
+                    <CircularProgress size={16} color="inherit" />
+                  ) : (
+                    <PlayArrow fontSize="small" />
+                  )}
+                </IconButton>
+              </span>
+            </Tooltip>
+          ) : (
+            <Tooltip
+              title={serviceUp ? 'Stop Service' : 'Starting up…'}
+              placement="bottom"
+            >
+              <span>
+                <IconButton
+                  size="small"
+                  color="error"
+                  onClick={handleStop}
+                  disabled={isStopping || !processRunning}
+                >
+                  {isStopping || !serviceUp ? (
+                    <CircularProgress size={16} color="inherit" />
+                  ) : (
+                    <Stop fontSize="small" />
+                  )}
+                </IconButton>
+              </span>
+            </Tooltip>
+          )}
+
+          <Tooltip title="Refresh" placement="bottom">
+            <IconButton
+              size="small"
+              onClick={() => {
+                fetchStatus();
+              }}
+            >
+              <Refresh fontSize="small" />
+            </IconButton>
+          </Tooltip>
+        </Box>
+
+        {/* Error banner */}
+        {error && (
+          <Alert
+            severity="error"
+            onClose={() => setError(null)}
+            sx={{ borderRadius: 0, flexShrink: 0 }}
+          >
+            {error}
+          </Alert>
         )}
+
+        {/* Content area */}
+        <Box sx={{ flex: 1, position: 'relative', overflow: 'hidden' }}>
+          {serviceUp ? (
+            <iframe
+              src={url}
+              title="Flowfile"
+              style={{
+                width: '100%',
+                height: '100%',
+                border: 'none',
+              }}
+            />
+          ) : (
+            <Box
+              sx={{
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'center',
+                justifyContent: 'center',
+                height: '100%',
+                gap: 2,
+              }}
+            >
+              {processRunning ? (
+                <>
+                  <CircularProgress size={32} />
+                  <Typography variant="body2" color="text.secondary">
+                    Waiting for service to be ready…
+                  </Typography>
+                </>
+              ) : (
+                <>
+                  <Typography variant="h6" color="text.secondary">
+                    Flowfile is not running
+                  </Typography>
+                  <Button
+                    variant="contained"
+                    size="large"
+                    onClick={handleStart}
+                    disabled={isStarting}
+                    startIcon={
+                      isStarting ? (
+                        <CircularProgress size={18} color="inherit" />
+                      ) : (
+                        <PlayArrow />
+                      )
+                    }
+                    sx={{
+                      bgcolor: 'success.main',
+                      '&:hover': { bgcolor: 'success.dark' },
+                      px: 4,
+                    }}
+                  >
+                    {isStarting ? 'Starting…' : 'Start'}
+                  </Button>
+                  <Typography variant="caption" color="text.secondary">
+                    Not installed? Go to <strong>Settings &gt; Flowfile</strong>{' '}
+                    to install it first.
+                  </Typography>
+                </>
+              )}
+            </Box>
+          )}
+        </Box>
       </Box>
-    </Box>
+    </AppLayout>
   );
 };
 
