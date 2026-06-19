@@ -39,7 +39,7 @@ interface ChatMessageListProps {
   lastUsage?: TokenUsage | null;
   streamState?: AgentStreamState;
   isAgentRunning?: boolean;
-  screenKey?: 'project' | 'sql' | 'notebooks';
+  screenKey?: 'project' | 'sql' | 'notebooks' | 'analytics';
   onConfirmTerminal?: (allow: boolean) => void;
   onClearError?: () => void;
   onOpenFile?: (path: string) => void;

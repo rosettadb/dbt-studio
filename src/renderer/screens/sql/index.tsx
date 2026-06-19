@@ -36,8 +36,6 @@ import {
   Code as CodeTabIcon,
   InsertChart,
 } from '@mui/icons-material';
-import { SimpleTreeView } from '@mui/x-tree-view/SimpleTreeView';
-import { TreeItem } from '@mui/x-tree-view/TreeItem';
 import { toast } from 'react-toastify';
 import { useNavigate } from 'react-router-dom';
 import { connectorsServices, DuckLakeService } from '../../services';
@@ -52,10 +50,13 @@ import { SchemaViewContainer, SchemaViewGrid } from './styles';
 import { ErrorMessage, SqlEditor } from '../../components';
 import { ChatWindow } from '../../components/chat';
 import { QueryResult } from './queryResult';
-import { ChartRenderer } from '../../components/queryResult/queryVisualization/ChartRenderer';
 import { ConnectionInput, Table } from '../../../types/backend';
 import { getConnectionInput } from '../../helpers/utils';
 import { SqlTabManager } from '../../components/sqlTabs';
+import {
+  AnalyticsPagesTreeView,
+  AnalyticsEditor,
+} from '../../components/analytics';
 import useSqlTabManager from '../../hooks/useSqlTabManager';
 import {
   useGetConnectionById,
@@ -118,6 +119,9 @@ const Sql = () => {
     refetch: refetchDuckLakeInstances,
   } = useDuckLakeInstances();
   const [sidebarTab, setSidebarTab] = useState(0);
+  const [activeAnalyticsPageId, setActiveAnalyticsPageId] = useState<
+    string | null
+  >(null);
   const [filter, setFilter] = useState('');
   const {
     tabs,
@@ -1003,20 +1007,22 @@ const Sql = () => {
                   }}
                 />
                 <Tooltip title="Refresh Schema">
-                  <IconButton
-                    size="small"
-                    onClick={handleRefreshSchema}
-                    disabled={!activeTab}
-                    sx={{
-                      width: 28,
-                      height: 28,
-                      p: 0.5,
-                      bgcolor: 'transparent',
-                      '&:hover': { bgcolor: 'rgba(0,0,0,0.05)' },
-                    }}
-                  >
-                    <Refresh sx={{ fontSize: 18 }} />
-                  </IconButton>
+                  <span>
+                    <IconButton
+                      size="small"
+                      onClick={handleRefreshSchema}
+                      disabled={!activeTab}
+                      sx={{
+                        width: 28,
+                        height: 28,
+                        p: 0.5,
+                        bgcolor: 'transparent',
+                        '&:hover': { bgcolor: 'rgba(0,0,0,0.05)' },
+                      }}
+                    >
+                      <Refresh sx={{ fontSize: 18 }} />
+                    </IconButton>
+                  </span>
                 </Tooltip>
               </Box>
 
@@ -1130,79 +1136,16 @@ const Sql = () => {
           )}
 
           {sidebarTab === 2 && (
-            <Box sx={{ flex: 1, overflow: 'auto', p: 2 }}>
-              <SimpleTreeView>
-                <TreeItem
-                  itemId="mgmt"
-                  label={
-                    <Typography variant="body2">Management KPIs</Typography>
-                  }
-                />
-                <TreeItem
-                  itemId="wbr"
-                  label={
-                    <Typography variant="body2">
-                      Weekly Business Review
-                    </Typography>
-                  }
-                />
-                <TreeItem
-                  itemId="finance"
-                  label={<Typography variant="body2">Finance</Typography>}
-                >
-                  <TreeItem
-                    itemId="rev"
-                    label={
-                      <Typography variant="body2">Revenue Analysis</Typography>
-                    }
-                  />
-                  <TreeItem
-                    itemId="exp"
-                    label={
-                      <Typography variant="body2">Expense Report</Typography>
-                    }
-                  />
-                </TreeItem>
-                <TreeItem
-                  itemId="mktg"
-                  label={<Typography variant="body2">Marketing</Typography>}
-                >
-                  <TreeItem
-                    itemId="roi"
-                    label={
-                      <Typography variant="body2">Campaign ROI</Typography>
-                    }
-                  />
-                </TreeItem>
-                <TreeItem
-                  itemId="sales"
-                  label={<Typography variant="body2">Sales</Typography>}
-                >
-                  <TreeItem
-                    itemId="perf"
-                    label={
-                      <Typography variant="body2">Sales Performance</Typography>
-                    }
-                    sx={{ bgcolor: 'action.selected' }}
-                  />
-                  <TreeItem
-                    itemId="rep"
-                    label={
-                      <Typography variant="body2">
-                        Sales Rep Dashboard
-                      </Typography>
-                    }
-                  />
-                  <TreeItem
-                    itemId="terr"
-                    label={
-                      <Typography variant="body2">
-                        Territory Analysis
-                      </Typography>
-                    }
-                  />
-                </TreeItem>
-              </SimpleTreeView>
+            <Box sx={{ flex: 1, overflow: 'hidden' }}>
+              <AnalyticsPagesTreeView
+                connectionId={activeConnectionId || ''}
+                activePageId={activeAnalyticsPageId}
+                onOpenPage={setActiveAnalyticsPageId}
+                onDeletePage={(id) => {
+                  if (id === activeAnalyticsPageId)
+                    setActiveAnalyticsPageId(null);
+                }}
+              />
             </Box>
           )}
         </Box>
@@ -1240,97 +1183,34 @@ const Sql = () => {
                   <Box
                     sx={{
                       flex: 1,
-                      overflow: 'auto',
-                      p: 4,
-                      bgcolor:
-                        theme.palette.mode === 'dark' ? '#121212' : '#fafafa',
+                      minHeight: 0,
                       display: 'flex',
                       flexDirection: 'column',
                     }}
                   >
-                    <Typography variant="h4" gutterBottom>
-                      Sales Performance
-                    </Typography>
-                    <Box sx={{ display: 'flex', gap: 2, mb: 4 }}>
+                    {activeAnalyticsPageId ? (
+                      <AnalyticsEditor
+                        connectionId={activeConnectionId ?? ''}
+                        pageId={activeAnalyticsPageId}
+                      />
+                    ) : (
                       <Box
                         sx={{
-                          p: 2,
-                          bgcolor: 'background.paper',
-                          borderRadius: 1,
-                          flex: 1,
-                          border: `1px solid ${theme.palette.divider}`,
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          height: '100%',
+                          flexDirection: 'column',
+                          gap: 2,
+                          color: 'text.secondary',
                         }}
                       >
-                        <Typography variant="subtitle2" color="text.secondary">
-                          Monthly Sales
+                        <InsertChart sx={{ fontSize: 64, opacity: 0.2 }} />
+                        <Typography color="text.secondary">
+                          Select an analytics page from the sidebar
                         </Typography>
-                        <Typography variant="h4">$4.4M</Typography>
                       </Box>
-                      <Box
-                        sx={{
-                          p: 2,
-                          bgcolor: 'background.paper',
-                          borderRadius: 1,
-                          flex: 1,
-                          border: `1px solid ${theme.palette.divider}`,
-                        }}
-                      >
-                        <Typography variant="subtitle2" color="text.secondary">
-                          Total Transactions
-                        </Typography>
-                        <Typography variant="h4">21,271</Typography>
-                      </Box>
-                    </Box>
-                    <Box sx={{ display: 'flex', gap: 2, mb: 4, height: 300 }}>
-                      <Box
-                        sx={{
-                          p: 2,
-                          bgcolor: 'background.paper',
-                          borderRadius: 1,
-                          flex: 1,
-                          border: `1px solid ${theme.palette.divider}`,
-                        }}
-                      >
-                        <Typography variant="subtitle2" gutterBottom>
-                          Sales by Category
-                        </Typography>
-                        <ChartRenderer
-                          data={[
-                            { name: 'Home', sales: 44.3 },
-                            { name: 'Sports', sales: 41.3 },
-                            { name: 'Clothing', sales: 8.7 },
-                            { name: 'Electronics', sales: 13.1 },
-                          ]}
-                          chartType="bar"
-                          xAxisCol="name"
-                          yAxisCols={['sales']}
-                        />
-                      </Box>
-                      <Box
-                        sx={{
-                          p: 2,
-                          bgcolor: 'background.paper',
-                          borderRadius: 1,
-                          flex: 1,
-                          border: `1px solid ${theme.palette.divider}`,
-                        }}
-                      >
-                        <Typography variant="subtitle2" gutterBottom>
-                          Weekly Sales Trend
-                        </Typography>
-                        <ChartRenderer
-                          data={[
-                            { date: 'Jan', home: 4, sports: 3, clothing: 1 },
-                            { date: 'Feb', home: 5, sports: 4, clothing: 2 },
-                            { date: 'Mar', home: 6, sports: 3, clothing: 1 },
-                            { date: 'Apr', home: 8, sports: 5, clothing: 2 },
-                          ]}
-                          chartType="line"
-                          xAxisCol="date"
-                          yAxisCols={['home', 'sports', 'clothing']}
-                        />
-                      </Box>
-                    </Box>
+                    )}
                   </Box>
                 );
               }
@@ -1585,7 +1465,8 @@ const Sql = () => {
           >
             {isChatOpen && !isNarrow && (
               <ChatWindow
-                screenKey="sql"
+                key={`${sidebarTab === 2 ? 'analytics' : 'sql'}-${sqlAgentConnectionId ?? 'none'}`}
+                screenKey={sidebarTab === 2 ? 'analytics' : 'sql'}
                 connectionId={sqlAgentConnectionId}
                 projectId={
                   selectedProject?.id ? Number(selectedProject.id) : null
@@ -1612,7 +1493,8 @@ const Sql = () => {
             }}
           >
             <ChatWindow
-              screenKey="sql"
+              key={`${sidebarTab === 2 ? 'analytics' : 'sql'}-mobile-${sqlAgentConnectionId ?? 'none'}`}
+              screenKey={sidebarTab === 2 ? 'analytics' : 'sql'}
               connectionId={sqlAgentConnectionId}
               projectId={
                 selectedProject?.id ? Number(selectedProject.id) : null

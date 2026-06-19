@@ -26,10 +26,9 @@ import {
   Close,
   InsertChart,
 } from '@mui/icons-material';
-import { SimpleTreeView } from '@mui/x-tree-view/SimpleTreeView';
-import { TreeItem } from '@mui/x-tree-view/TreeItem';
 import { SchemaTreeViewerWithSchema } from '../../screens/sql/SchemaTreeViewerWithSchema';
 import { NotebooksTreeView } from './NotebooksTreeView';
+import { AnalyticsPagesTreeView } from '../analytics';
 import { Table, SupportedConnectionTypes } from '../../../types/backend';
 import { Notebook } from '../../../types/notebooks';
 
@@ -89,6 +88,12 @@ interface NotebooksSidebarProps {
   onImportAllNotebooks?: () => void;
   onTabChange?: (tabIndex: number) => void;
 
+  // Analytics
+  connectionId: string;
+  activeAnalyticsPageId: string | null;
+  onOpenAnalyticsPage: (pageId: string) => void;
+  onDeleteAnalyticsPage?: (pageId: string) => void;
+
   // Helper functions
   getConnectionName: (connectionKey: string) => string;
 }
@@ -116,6 +121,10 @@ export const NotebooksSidebar: React.FC<NotebooksSidebarProps> = ({
   onExportSelected,
   onImportAllNotebooks,
   onTabChange,
+  connectionId,
+  activeAnalyticsPageId,
+  onOpenAnalyticsPage,
+  onDeleteAnalyticsPage,
 }) => {
   const theme = useTheme();
   const [activeTab, setActiveTab] = useState(0);
@@ -463,46 +472,13 @@ export const NotebooksSidebar: React.FC<NotebooksSidebarProps> = ({
 
         {/* Analytics Tab */}
         <TabPanel value={activeTab} index={2}>
-          <Box sx={{ height: '100%', overflow: 'auto' }}>
-            <SimpleTreeView
-              defaultExpandedItems={['sales', 'finance', 'marketing']}
-              sx={{
-                '& .MuiTreeItem-root': {
-                  '& .MuiTreeItem-content': {
-                    padding: '0px 2px',
-                    minHeight: '26px',
-                    borderRadius: '4px',
-                  },
-                  '& .MuiTreeItem-label': {
-                    fontSize: '0.85rem',
-                    padding: '0px',
-                  },
-                  '& .MuiTreeItem-iconContainer': {
-                    width: '12px',
-                    marginRight: '2px',
-                  },
-                },
-              }}
-            >
-              <TreeItem itemId="kpi" label="Management KPIs" />
-              <TreeItem itemId="wbr" label="Weekly Business Review" />
-              <TreeItem itemId="finance" label="Finance">
-                <TreeItem itemId="finance-1" label="Revenue Analysis" />
-                <TreeItem itemId="finance-2" label="Expense Report" />
-              </TreeItem>
-              <TreeItem itemId="marketing" label="Marketing">
-                <TreeItem itemId="marketing-1" label="Campaign ROI" />
-              </TreeItem>
-              <TreeItem itemId="sales" label="Sales">
-                <TreeItem
-                  itemId="sales-1"
-                  label="Sales Performance"
-                  sx={{ bgcolor: 'action.selected' }}
-                />
-                <TreeItem itemId="sales-2" label="Sales Rep Dashboard" />
-                <TreeItem itemId="sales-3" label="Territory Analysis" />
-              </TreeItem>
-            </SimpleTreeView>
+          <Box sx={{ height: '100%', overflow: 'hidden' }}>
+            <AnalyticsPagesTreeView
+              connectionId={connectionId}
+              activePageId={activeAnalyticsPageId}
+              onOpenPage={onOpenAnalyticsPage}
+              onDeletePage={onDeleteAnalyticsPage}
+            />
           </Box>
         </TabPanel>
       </Box>

@@ -29,3 +29,13 @@ export interface AnalyticsCachedQuery {
   status: 'pending' | 'running' | 'success' | 'error';
   errorMessage?: string;
 }
+
+// Mirrors Evidence's fileTree node — built from AnalyticsPage[] at render time
+export interface AnalyticsTreeNode {
+  label: string; // Display name (folder segment or page title)
+  routePath: string | null; // null for folder nodes that are not pages themselves
+  pageId: string | null; // null for pure folder nodes
+  sidebarPosition?: number; // From Markdown frontmatter: sidebar_position
+  sidebarBadge?: string; // From Markdown frontmatter: sidebar_badge
+  children: AnalyticsTreeNode[];
+}

@@ -7,6 +7,7 @@ import { buildBaseAgentConfig } from './ai/agents/baseAgentConfig';
 import { createProjectAgent } from './ai/agents/projectAgent';
 import { createSqlAgent } from './ai/agents/sqlAgent';
 import { createNotebooksAgent } from './ai/agents/notebooksAgent';
+import { createAnalyticsAgent } from './ai/agents/analyticsAgent';
 import ConnectorsService from './connectors.service';
 import { getVercelModel } from './ai/agentAdapter';
 import { buildMCPToolset } from './ai/mcp/mcpToolAdapter';
@@ -130,9 +131,10 @@ const agentContexts = new Map<
   {
     event: IpcMainInvokeEvent;
     conversationId: number;
-    screenKey: 'project' | 'sql' | 'notebooks';
+    screenKey: 'project' | 'sql' | 'notebooks' | 'analytics';
     connectionId?: string;
     notebookId?: string;
+    pageId?: string;
     projectPath?: string;
   }
 >();
@@ -189,6 +191,7 @@ export interface AgentRunRequest {
   screenKey?: import('../../types/agentEvents').AgentScreenKey;
   connectionId?: string;
   notebookId?: string;
+  pageId?: string; // Analytics: currently open page ID
 }
 
 /**
@@ -808,6 +811,7 @@ COMBINED SUMMARY:`,
         screenKey: request.screenKey ?? 'project',
         connectionId: request.connectionId,
         notebookId: request.notebookId,
+        pageId: request.pageId,
         projectPath,
       });
 
@@ -933,6 +937,17 @@ COMBINED SUMMARY:`,
             notebookId: request.notebookId,
             connectionId: request.connectionId,
             projectPath,
+            enabledTools,
+            skills: base.skillsPrompt,
+            conversationId,
+            toolMode: request.toolMode || 'agent',
+          });
+          break;
+        case 'analytics':
+          agent = await createAnalyticsAgent(base, {
+            connectionMeta,
+            connectionId: request.connectionId,
+            pageId: request.pageId,
             enabledTools,
             skills: base.skillsPrompt,
             conversationId,

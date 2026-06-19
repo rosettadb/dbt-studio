@@ -31,6 +31,7 @@ import {
   TableChart,
   Link as LinkIcon,
   Warning,
+  InsertChart,
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   ChatBubbleOutline,
 } from '@mui/icons-material';
@@ -55,10 +56,10 @@ import connectionIcons, {
 } from '../../../../assets/connectionIcons';
 import { AppContext } from '../../context';
 import { connectorsServices, DuckLakeService } from '../../services';
+import { AnalyticsEditor } from '../../components/analytics';
 import { NotebooksSidebar } from '../../components/notebook/NotebooksSidebar';
 import { NotebookTabManager } from '../../components/notebook/NotebookTabManager';
 import { NotebookEditor } from '../../components/notebook';
-import { ChartRenderer } from '../../components/queryResult/queryVisualization/ChartRenderer';
 import { ChatWindow } from '../../components/chat';
 import { Table, SupportedConnectionTypes } from '../../../types/backend';
 import useNotebookTabManager from '../../hooks/useNotebookTabManager';
@@ -142,6 +143,14 @@ const Notebooks = () => {
   } = useNotebookSidebarState();
 
   const [activeSidebarTab, setActiveSidebarTab] = useState(0);
+  const [activeAnalyticsPageId, setActiveAnalyticsPageId] = useState<
+    string | null
+  >(null);
+
+  const handleOpenAnalyticsPage = useCallback((pageId: string) => {
+    setActiveAnalyticsPageId(pageId);
+    // Future Phase 3: trigger main content to show analytics editor
+  }, []);
 
   const notebookTabManager = useNotebookTabManager();
 
@@ -1006,6 +1015,13 @@ const Notebooks = () => {
               onExportAllNotebooks={handleExportAllNotebooks}
               onImportAllNotebooks={handleImportAllNotebooks}
               onTabChange={setActiveSidebarTab}
+              connectionId={activeConnectionId}
+              activeAnalyticsPageId={activeAnalyticsPageId}
+              onOpenAnalyticsPage={handleOpenAnalyticsPage}
+              onDeleteAnalyticsPage={(id) => {
+                if (id === activeAnalyticsPageId)
+                  setActiveAnalyticsPageId(null);
+              }}
             />
           )}
         </Box>
@@ -1085,97 +1101,38 @@ const Notebooks = () => {
                   <Box
                     sx={{
                       flex: 1,
-                      overflow: 'auto',
-                      p: 4,
-                      bgcolor:
-                        theme.palette.mode === 'dark' ? '#121212' : '#fafafa',
+                      minHeight: 0,
                       display: 'flex',
                       flexDirection: 'column',
                     }}
                   >
-                    <Typography variant="h4" gutterBottom>
-                      Sales Performance
-                    </Typography>
-                    <Box sx={{ display: 'flex', gap: 2, mb: 4 }}>
+                    {activeAnalyticsPageId ? (
+                      <AnalyticsEditor
+                        connectionId={activeConnectionId}
+                        pageId={activeAnalyticsPageId}
+                        onSchemaChange={handleRefreshSchema}
+                      />
+                    ) : (
                       <Box
                         sx={{
-                          p: 2,
-                          bgcolor: 'background.paper',
-                          borderRadius: 1,
-                          flex: 1,
-                          border: `1px solid ${theme.palette.divider}`,
+                          display: 'flex',
+                          flexDirection: 'column',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          height: '100%',
+                          gap: 2,
+                          color: 'text.secondary',
                         }}
                       >
-                        <Typography variant="subtitle2" color="text.secondary">
-                          Monthly Sales
+                        <InsertChart sx={{ fontSize: 64, opacity: 0.2 }} />
+                        <Typography variant="h6" color="text.secondary">
+                          Select an analytics page from the sidebar
                         </Typography>
-                        <Typography variant="h4">$4.4M</Typography>
-                      </Box>
-                      <Box
-                        sx={{
-                          p: 2,
-                          bgcolor: 'background.paper',
-                          borderRadius: 1,
-                          flex: 1,
-                          border: `1px solid ${theme.palette.divider}`,
-                        }}
-                      >
-                        <Typography variant="subtitle2" color="text.secondary">
-                          Total Transactions
+                        <Typography variant="body2" color="text.secondary">
+                          or click + to create a new dashboard page
                         </Typography>
-                        <Typography variant="h4">21,271</Typography>
                       </Box>
-                    </Box>
-                    <Box sx={{ display: 'flex', gap: 2, mb: 4, height: 300 }}>
-                      <Box
-                        sx={{
-                          p: 2,
-                          bgcolor: 'background.paper',
-                          borderRadius: 1,
-                          flex: 1,
-                          border: `1px solid ${theme.palette.divider}`,
-                        }}
-                      >
-                        <Typography variant="subtitle2" gutterBottom>
-                          Sales by Category
-                        </Typography>
-                        <ChartRenderer
-                          data={[
-                            { name: 'Home', sales: 44.3 },
-                            { name: 'Sports', sales: 41.3 },
-                            { name: 'Clothing', sales: 8.7 },
-                            { name: 'Electronics', sales: 13.1 },
-                          ]}
-                          chartType="bar"
-                          xAxisCol="name"
-                          yAxisCols={['sales']}
-                        />
-                      </Box>
-                      <Box
-                        sx={{
-                          p: 2,
-                          bgcolor: 'background.paper',
-                          borderRadius: 1,
-                          flex: 1,
-                          border: `1px solid ${theme.palette.divider}`,
-                        }}
-                      >
-                        <Typography variant="subtitle2" gutterBottom>
-                          Weekly Sales Trend
-                        </Typography>
-                        <ChartRenderer
-                          data={[
-                            { date: 'Jan', home: 4, sports: 3, clothing: 1 },
-                            { date: 'Feb', home: 5, sports: 4, clothing: 2 },
-                            { date: 'Mar', home: 6, sports: 3, clothing: 1 },
-                            { date: 'Apr', home: 8, sports: 5, clothing: 2 },
-                          ]}
-                          chartType="line"
-                          xAxisCol="date"
-                          yAxisCols={['home', 'sports', 'clothing']}
-                        />
-                      </Box>
-                    </Box>
+                    )}
                   </Box>
                 );
               }
@@ -1286,10 +1243,19 @@ const Notebooks = () => {
           >
             {isChatOpen && !isNarrow && (
               <ChatWindow
-                key={`notebooks-${activeConnectionId}-${notebookTabManager.activeTabId ?? 'none'}`}
-                screenKey="notebooks"
+                key={`${activeSidebarTab === 2 ? 'analytics' : 'notebooks'}-${activeConnectionId}-${activeSidebarTab === 2 ? (activeAnalyticsPageId ?? 'none') : (notebookTabManager.activeTabId ?? 'none')}`}
+                screenKey={activeSidebarTab === 2 ? 'analytics' : 'notebooks'}
                 connectionId={activeConnectionId ?? undefined}
-                notebookId={notebookTabManager.activeTabId ?? undefined}
+                notebookId={
+                  activeSidebarTab === 2
+                    ? undefined
+                    : (notebookTabManager.activeTabId ?? undefined)
+                }
+                pageId={
+                  activeSidebarTab === 2
+                    ? (activeAnalyticsPageId ?? undefined)
+                    : undefined
+                }
                 projectId={
                   selectedProject?.id ? Number(selectedProject.id) : null
                 }
@@ -1315,10 +1281,19 @@ const Notebooks = () => {
             }}
           >
             <ChatWindow
-              key={`notebooks-mobile-${activeConnectionId}-${notebookTabManager.activeTabId ?? 'none'}`}
-              screenKey="notebooks"
+              key={`${activeSidebarTab === 2 ? 'analytics' : 'notebooks'}-mobile-${activeConnectionId}-${activeSidebarTab === 2 ? (activeAnalyticsPageId ?? 'none') : (notebookTabManager.activeTabId ?? 'none')}`}
+              screenKey={activeSidebarTab === 2 ? 'analytics' : 'notebooks'}
               connectionId={activeConnectionId ?? undefined}
-              notebookId={notebookTabManager.activeTabId ?? undefined}
+              notebookId={
+                activeSidebarTab === 2
+                  ? undefined
+                  : (notebookTabManager.activeTabId ?? undefined)
+              }
+              pageId={
+                activeSidebarTab === 2
+                  ? (activeAnalyticsPageId ?? undefined)
+                  : undefined
+              }
               projectId={
                 selectedProject?.id ? Number(selectedProject.id) : null
               }

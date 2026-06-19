@@ -1,0 +1,478 @@
+import React, { useMemo, useState, useCallback } from 'react';
+import {
+  Box,
+  Typography,
+  CircularProgress,
+  IconButton,
+  Menu,
+  MenuItem,
+  ListItemIcon,
+  ListItemText,
+  Divider,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions,
+  Button,
+  TextField,
+  Tooltip,
+} from '@mui/material';
+import {
+  NoteAdd,
+  CreateNewFolder,
+  Description,
+  Edit,
+  Delete,
+  Web as WebIcon,
+} from '@mui/icons-material';
+import {
+  useGetAnalyticsPages,
+  useCreateAnalyticsPage,
+  useUpdateAnalyticsPage,
+  useDeleteAnalyticsPage,
+} from '../../controllers/analyticsPages.controller';
+import { buildAnalyticsTree } from '../../utils/analyticsTree';
+import { AnalyticsPageItem } from './AnalyticsPageItem';
+
+interface AnalyticsPagesTreeViewProps {
+  connectionId: string;
+  activePageId: string | null;
+  onOpenPage: (pageId: string) => void;
+  onDeletePage?: (pageId: string) => void;
+}
+
+type ContextMenuState = {
+  mouseX: number;
+  mouseY: number;
+  pageId: string;
+  title: string;
+} | null;
+
+export const AnalyticsPagesTreeView: React.FC<AnalyticsPagesTreeViewProps> = ({
+  connectionId,
+  activePageId,
+  onOpenPage,
+  onDeletePage,
+}) => {
+  const { data: pages = [], isLoading } = useGetAnalyticsPages(connectionId);
+  const createPageMutation = useCreateAnalyticsPage();
+  const updatePageMutation = useUpdateAnalyticsPage();
+  const deletePageMutation = useDeleteAnalyticsPage();
+
+  const treeNodes = useMemo(() => buildAnalyticsTree(pages), [pages]);
+
+  const [contextMenu, setContextMenu] = useState<ContextMenuState>(null);
+
+  // Dialog state: Create Page / Folder
+  const [createDialogOpen, setCreateDialogOpen] = useState(false);
+  const [newTitle, setNewTitle] = useState('');
+  const [newRoutePath, setNewRoutePath] = useState('');
+  const [isFolderMode, setIsFolderMode] = useState(false);
+
+  // Dialog state: Rename Page
+  const [renameDialogOpen, setRenameDialogOpen] = useState(false);
+  const [renamePageId, setRenamePageId] = useState('');
+  const [renameTitle, setRenameTitle] = useState('');
+
+  // Dialog state: Delete Page
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [deletePageId, setDeletePageId] = useState('');
+  const [deleteTitle, setDeleteTitle] = useState('');
+
+  // Context Menu Handlers
+  const handleContextMenu = useCallback(
+    (event: React.MouseEvent, pageId: string, title: string) => {
+      event.preventDefault();
+      event.stopPropagation();
+      setContextMenu({
+        mouseX: event.clientX,
+        mouseY: event.clientY,
+        pageId,
+        title,
+      });
+    },
+    [],
+  );
+
+  const handleCloseContextMenu = useCallback(() => {
+    setContextMenu(null);
+  }, []);
+
+  const handleMenuAction = useCallback(
+    (action: 'open' | 'rename' | 'delete') => {
+      if (!contextMenu) return;
+
+      switch (action) {
+        case 'open':
+          onOpenPage(contextMenu.pageId);
+          break;
+        case 'rename':
+          setRenamePageId(contextMenu.pageId);
+          setRenameTitle(contextMenu.title);
+          setRenameDialogOpen(true);
+          break;
+        case 'delete':
+          setDeletePageId(contextMenu.pageId);
+          setDeleteTitle(contextMenu.title);
+          setDeleteDialogOpen(true);
+          break;
+        default:
+          break;
+      }
+      handleCloseContextMenu();
+    },
+    [contextMenu, onOpenPage, handleCloseContextMenu],
+  );
+
+  // Create Handlers
+  const handleOpenCreateDialog = (folderMode = false) => {
+    setIsFolderMode(folderMode);
+    setNewTitle('');
+    setNewRoutePath(folderMode ? '/new-folder/' : '/');
+    setCreateDialogOpen(true);
+  };
+
+  const handleCreateSubmit = () => {
+    if (!newTitle.trim() || !newRoutePath.trim()) return;
+
+    // ensure route path starts with /
+    const route = newRoutePath.startsWith('/')
+      ? newRoutePath
+      : `/${newRoutePath}`;
+
+    createPageMutation.mutate(
+      {
+        connectionId,
+        data: {
+          title: newTitle,
+          routePath: route,
+          markdownContent: `---\ntitle: ${newTitle}\n---\n\n# ${newTitle}\n\nStart building your analytics page here.`,
+        },
+      },
+      {
+        onSuccess: (newPage: { id: string }) => {
+          setCreateDialogOpen(false);
+          onOpenPage(newPage.id);
+        },
+      },
+    );
+  };
+
+  // Auto-generate route based on title when title changes, if route hasn't been heavily manually edited
+  const handleTitleChange = (val: string) => {
+    setNewTitle(val);
+    const slug = val
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/(^-|-$)+/g, '');
+
+    if (isFolderMode) {
+      setNewRoutePath(`/${slug}/overview`);
+    } else {
+      setNewRoutePath(`/${slug}`);
+    }
+  };
+
+  // Rename Handlers
+  const handleRenameSubmit = () => {
+    if (!renameTitle.trim() || !renamePageId) return;
+
+    const page = pages.find((p) => p.id === renamePageId);
+    let newMarkdown = page?.markdownContent ?? '';
+
+    if (newMarkdown.startsWith('---')) {
+      const endOfFrontmatter = newMarkdown.indexOf('---', 3);
+      if (endOfFrontmatter > 3) {
+        const frontmatter = newMarkdown.substring(0, endOfFrontmatter + 3);
+        const restOfDoc = newMarkdown.substring(endOfFrontmatter + 3);
+        
+        if (/\ntitle:/.test(frontmatter)) {
+          const updatedFrontmatter = frontmatter.replace(
+            /\ntitle:[^\n]*/,
+            `\ntitle: ${renameTitle}`
+          );
+          newMarkdown = updatedFrontmatter + restOfDoc;
+        } else {
+          const updatedFrontmatter = frontmatter.replace(
+            /\n---$/,
+            `\ntitle: ${renameTitle}\n---`
+          );
+          newMarkdown = updatedFrontmatter + restOfDoc;
+        }
+      }
+    }
+
+    updatePageMutation.mutate(
+      {
+        connectionId,
+        pageId: renamePageId,
+        updates: { 
+          title: renameTitle,
+          markdownContent: newMarkdown 
+        },
+      },
+      {
+        onSuccess: () => {
+          setRenameDialogOpen(false);
+        },
+      },
+    );
+  };
+
+  // Delete Handlers
+  const handleDeleteSubmit = () => {
+    if (!deletePageId) return;
+
+    deletePageMutation.mutate(
+      { connectionId, pageId: deletePageId },
+      {
+        onSuccess: () => {
+          setDeleteDialogOpen(false);
+          if (onDeletePage) onDeletePage(deletePageId);
+        },
+      },
+    );
+  };
+
+  return (
+    <Box sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
+      {/* Toolbar */}
+      <Box
+        sx={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          px: 2,
+          py: 1,
+          borderBottom: (theme) => `1px solid ${theme.palette.divider}`,
+        }}
+      >
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+          <WebIcon sx={{ fontSize: 18, color: 'text.secondary' }} />
+          <Typography variant="body2" fontWeight={600} color="text.primary">
+            Pages
+          </Typography>
+        </Box>
+        <Box sx={{ display: 'flex', gap: 0.5 }}>
+          <Tooltip title="Create Folder">
+            <IconButton
+              size="small"
+              onClick={() => handleOpenCreateDialog(true)}
+            >
+              <CreateNewFolder sx={{ fontSize: 16 }} />
+            </IconButton>
+          </Tooltip>
+          <Tooltip title="Create Page">
+            <IconButton
+              size="small"
+              onClick={() => handleOpenCreateDialog(false)}
+            >
+              <NoteAdd sx={{ fontSize: 16 }} />
+            </IconButton>
+          </Tooltip>
+        </Box>
+      </Box>
+
+      {/* Tree Content */}
+      <Box sx={{ flex: 1, overflow: 'auto', py: 1 }}>
+        {isLoading && (
+          <Box sx={{ display: 'flex', justifyContent: 'center', p: 4 }}>
+            <CircularProgress size={24} />
+          </Box>
+        )}
+        {!isLoading && treeNodes.length === 0 && (
+          <Box
+            sx={{ textAlign: 'center', px: 2, py: 4, color: 'text.secondary' }}
+          >
+            <NoteAdd sx={{ fontSize: 40, opacity: 0.3, mb: 2 }} />
+            <Typography
+              variant="body2"
+              sx={{ whiteSpace: 'normal', wordBreak: 'break-word' }}
+            >
+              No analytics pages yet. Click + to create your first dashboard.
+            </Typography>
+          </Box>
+        )}
+        {!isLoading &&
+          treeNodes.length > 0 &&
+          treeNodes.map((node: any, index: number) => (
+            <AnalyticsPageItem
+              key={`${node.routePath}-${index}`}
+              node={node}
+              depth={0}
+              activePageId={activePageId}
+              onOpenPage={onOpenPage}
+              onRenamePage={(id, title) => {
+                setRenamePageId(id);
+                setRenameTitle(title);
+                setRenameDialogOpen(true);
+              }}
+              onDeletePage={(id, title) => {
+                setDeletePageId(id);
+                setDeleteTitle(title);
+                setDeleteDialogOpen(true);
+              }}
+              onContextMenu={handleContextMenu}
+            />
+          ))}
+      </Box>
+
+      {/* Context Menu */}
+      <Menu
+        open={contextMenu !== null}
+        onClose={handleCloseContextMenu}
+        anchorReference="anchorPosition"
+        anchorPosition={
+          contextMenu !== null
+            ? { top: contextMenu.mouseY, left: contextMenu.mouseX }
+            : undefined
+        }
+      >
+        <MenuItem
+          onClick={() => handleMenuAction('open')}
+          sx={{ fontSize: '0.75rem', py: 0.5, px: 1 }}
+        >
+          <ListItemIcon sx={{ minWidth: 28 }}>
+            <Description fontSize="small" />
+          </ListItemIcon>
+          <ListItemText
+            primary="Open"
+            primaryTypographyProps={{ fontSize: '0.75rem' }}
+          />
+        </MenuItem>
+        <MenuItem
+          onClick={() => handleMenuAction('rename')}
+          sx={{ fontSize: '0.75rem', py: 0.5, px: 1 }}
+        >
+          <ListItemIcon sx={{ minWidth: 28 }}>
+            <Edit fontSize="small" />
+          </ListItemIcon>
+          <ListItemText
+            primary="Rename"
+            primaryTypographyProps={{ fontSize: '0.75rem' }}
+          />
+        </MenuItem>
+        <Divider sx={{ my: 0.25 }} />
+        <MenuItem
+          onClick={() => handleMenuAction('delete')}
+          sx={{ color: 'error.main', fontSize: '0.75rem', py: 0.5, px: 1 }}
+        >
+          <ListItemIcon sx={{ minWidth: 28 }}>
+            <Delete fontSize="small" sx={{ color: 'error.main' }} />
+          </ListItemIcon>
+          <ListItemText
+            primary="Delete"
+            primaryTypographyProps={{ fontSize: '0.75rem' }}
+          />
+        </MenuItem>
+      </Menu>
+
+      {/* Create Dialog */}
+      <Dialog
+        open={createDialogOpen}
+        onClose={() => setCreateDialogOpen(false)}
+        maxWidth="sm"
+        fullWidth
+      >
+        <DialogTitle>
+          {isFolderMode ? 'Create Folder / Nested Page' : 'Create Page'}
+        </DialogTitle>
+        <DialogContent>
+          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, pt: 1 }}>
+            <TextField
+              autoFocus
+              label="Title"
+              fullWidth
+              value={newTitle}
+              onChange={(e) => handleTitleChange(e.target.value)}
+              placeholder="e.g. Sales Performance"
+              required
+            />
+            <TextField
+              label="Route Path"
+              fullWidth
+              value={newRoutePath}
+              onChange={(e) => setNewRoutePath(e.target.value)}
+              placeholder="e.g. /sales-performance"
+              required
+              helperText="Must start with a forward slash (/)"
+            />
+          </Box>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setCreateDialogOpen(false)}>Cancel</Button>
+          <Button
+            onClick={handleCreateSubmit}
+            variant="contained"
+            disabled={
+              !newTitle.trim() ||
+              !newRoutePath.trim() ||
+              createPageMutation.isLoading
+            }
+          >
+            {createPageMutation.isLoading ? 'Creating...' : 'Create'}
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Rename Dialog */}
+      <Dialog
+        open={renameDialogOpen}
+        onClose={() => setRenameDialogOpen(false)}
+        maxWidth="sm"
+        fullWidth
+      >
+        <DialogTitle>Rename Page</DialogTitle>
+        <DialogContent>
+          <Box sx={{ pt: 1 }}>
+            <TextField
+              autoFocus
+              label="New Title"
+              fullWidth
+              value={renameTitle}
+              onChange={(e) => setRenameTitle(e.target.value)}
+              placeholder="Enter new title"
+              required
+              onKeyPress={(e) => {
+                if (e.key === 'Enter') handleRenameSubmit();
+              }}
+            />
+          </Box>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setRenameDialogOpen(false)}>Cancel</Button>
+          <Button
+            onClick={handleRenameSubmit}
+            variant="contained"
+            disabled={!renameTitle.trim() || updatePageMutation.isLoading}
+          >
+            {updatePageMutation.isLoading ? 'Renaming...' : 'Rename'}
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Delete Confirmation Dialog */}
+      <Dialog
+        open={deleteDialogOpen}
+        onClose={() => setDeleteDialogOpen(false)}
+      >
+        <DialogTitle>Delete Page</DialogTitle>
+        <DialogContent>
+          Are you sure you want to delete the analytics page &quot;{deleteTitle}
+          &quot;? This action cannot be undone.
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setDeleteDialogOpen(false)}>Cancel</Button>
+          <Button
+            onClick={handleDeleteSubmit}
+            color="error"
+            variant="contained"
+            disabled={deletePageMutation.isLoading}
+          >
+            {deletePageMutation.isLoading ? 'Deleting...' : 'Delete'}
+          </Button>
+        </DialogActions>
+      </Dialog>
+    </Box>
+  );
+};
