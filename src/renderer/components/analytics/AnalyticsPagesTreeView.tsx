@@ -185,17 +185,17 @@ export const AnalyticsPagesTreeView: React.FC<AnalyticsPagesTreeViewProps> = ({
       if (endOfFrontmatter > 3) {
         const frontmatter = newMarkdown.substring(0, endOfFrontmatter + 3);
         const restOfDoc = newMarkdown.substring(endOfFrontmatter + 3);
-        
+
         if (/\ntitle:/.test(frontmatter)) {
           const updatedFrontmatter = frontmatter.replace(
             /\ntitle:[^\n]*/,
-            `\ntitle: ${renameTitle}`
+            `\ntitle: ${renameTitle}`,
           );
           newMarkdown = updatedFrontmatter + restOfDoc;
         } else {
           const updatedFrontmatter = frontmatter.replace(
             /\n---$/,
-            `\ntitle: ${renameTitle}\n---`
+            `\ntitle: ${renameTitle}\n---`,
           );
           newMarkdown = updatedFrontmatter + restOfDoc;
         }
@@ -206,9 +206,9 @@ export const AnalyticsPagesTreeView: React.FC<AnalyticsPagesTreeViewProps> = ({
       {
         connectionId,
         pageId: renamePageId,
-        updates: { 
+        updates: {
           title: renameTitle,
-          markdownContent: newMarkdown 
+          markdownContent: newMarkdown,
         },
       },
       {

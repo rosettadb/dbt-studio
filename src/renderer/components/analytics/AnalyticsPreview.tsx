@@ -7,7 +7,7 @@
  *   - SqlBlock   → SqlBadge (clickable, shows status + row count)
  *   - ComponentBlock → AnalyticsComponentRenderer (charts, tables, KPIs)
  */
-import React, { useMemo } from 'react';
+import React from 'react';
 import { Box, Typography, CircularProgress, useTheme } from '@mui/material';
 import {
   parseAnalyticsMarkdown,
@@ -160,8 +160,9 @@ const SqlBadge: React.FC<{
   status: 'idle' | 'running' | 'success' | 'error';
   rowCount?: number;
   error?: string | null;
+  duration?: number;
   onRun: (name: string, sql: string) => void;
-}> = ({ block, status, rowCount, error, onRun }) => {
+}> = ({ block, status, rowCount, error, duration, onRun }) => {
   const theme = useTheme();
 
   const dot = {
@@ -195,6 +196,18 @@ const SqlBadge: React.FC<{
         {status === 'success' &&
           rowCount !== undefined &&
           ` — ${rowCount} row${rowCount !== 1 ? 's' : ''}`}
+        {status === 'success' && duration !== undefined && (
+          <Typography
+            component="span"
+            variant="caption"
+            color="text.disabled"
+            sx={{ ml: 0.5 }}
+          >
+            {duration > 1000
+              ? `${(duration / 1000).toFixed(2)}s`
+              : `${Math.round(duration)}ms`}
+          </Typography>
+        )}
       </Typography>
       {status === 'error' && error && (
         <Typography
@@ -225,7 +238,9 @@ interface AnalyticsPreviewProps {
   queryCache: Record<string, any[]>;
   queryStatuses: Record<string, 'idle' | 'running' | 'success' | 'error'>;
   queryErrors?: Record<string, string | null>;
+  queryDurations?: Record<string, number | undefined>;
   onRunQuery?: (queryName: string, sql: string) => void;
+  pageId?: string;
 }
 
 export const AnalyticsPreview: React.FC<AnalyticsPreviewProps> = ({
@@ -233,18 +248,46 @@ export const AnalyticsPreview: React.FC<AnalyticsPreviewProps> = ({
   queryCache,
   queryStatuses,
   queryErrors = {},
+  queryDurations = {},
   onRunQuery,
+  pageId,
 }) => {
   const theme = useTheme();
 
-  const blocks = useMemo(
-    () => parseAnalyticsMarkdown(markdownContent),
-    [markdownContent],
+  // Phase 6.1: Debounced Parsing
+  const [blocks, setBlocks] = React.useState<AnalyticsBlock[]>(() =>
+    parseAnalyticsMarkdown(markdownContent),
   );
-  const frontmatterTitle = useMemo(
-    () => extractFrontmatterTitle(markdownContent),
-    [markdownContent],
+  const [frontmatterTitle, setFrontmatterTitle] = React.useState<string>(
+    () => extractFrontmatterTitle(markdownContent) ?? '',
   );
+
+  const parseTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(
+    null,
+  );
+  const isFirstRenderRef = React.useRef(true);
+
+  React.useEffect(() => {
+    if (isFirstRenderRef.current) {
+      isFirstRenderRef.current = false;
+      return undefined;
+    }
+    if (parseTimerRef.current) clearTimeout(parseTimerRef.current);
+    parseTimerRef.current = setTimeout(() => {
+      setBlocks(parseAnalyticsMarkdown(markdownContent));
+      setFrontmatterTitle(extractFrontmatterTitle(markdownContent) ?? '');
+    }, 300);
+
+    return () => {
+      if (parseTimerRef.current) clearTimeout(parseTimerRef.current);
+    };
+  }, [markdownContent]);
+
+  // Phase 6.7: Scroll to top on page change
+  const scrollContainerRef = React.useRef<HTMLDivElement | null>(null);
+  React.useEffect(() => {
+    scrollContainerRef.current?.scrollTo({ top: 0, behavior: 'instant' });
+  }, [pageId]);
 
   if (!markdownContent.trim()) {
     return (
@@ -268,6 +311,7 @@ export const AnalyticsPreview: React.FC<AnalyticsPreviewProps> = ({
 
   return (
     <Box
+      ref={scrollContainerRef}
       sx={{
         flex: 1,
         overflow: 'auto',
@@ -296,6 +340,7 @@ export const AnalyticsPreview: React.FC<AnalyticsPreviewProps> = ({
               status={queryStatuses[block.name] ?? 'idle'}
               rowCount={rowCount}
               error={queryErrors[block.name]}
+              duration={queryDurations[block.name]}
               onRun={onRunQuery ?? (() => {})}
             />
           );

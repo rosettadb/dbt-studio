@@ -34,6 +34,7 @@ import { useSchemaForConnection, useMonacoAutocomplete } from '../../hooks';
 import { executeAnalyticsQuery } from '../../utils/analyticsQueryEngine';
 import { parseAnalyticsMarkdown } from '../../utils/analyticsMarkdown';
 import { AnalyticsPreview } from './AnalyticsPreview';
+import { AnalyticsPreviewErrorBoundary } from './AnalyticsPreviewErrorBoundary';
 
 interface AnalyticsEditorProps {
   connectionId: string;
@@ -105,11 +106,16 @@ export const AnalyticsEditor: React.FC<AnalyticsEditorProps> = ({
   const [queryErrors, setQueryErrors] = useState<Record<string, string | null>>(
     {},
   );
+  const [queryDurations, setQueryDurations] = useState<
+    Record<string, number | undefined>
+  >({});
   const [isRunningQueries, setIsRunningQueries] = useState(false);
 
   // ── Refs ──────────────────────────────────────────────────────────────
   const autoSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const isSyncingRef = useRef(false);
+  const editorRef = useRef<monaco.editor.IStandaloneCodeEditor | null>(null);
+  const completionProviderRef = useRef<monaco.IDisposable | null>(null);
 
   // ── Schema for SQL autocomplete ───────────────────────────────────────
   const { data: schemaData } = useSchemaForConnection(connectionId);
@@ -123,17 +129,49 @@ export const AnalyticsEditor: React.FC<AnalyticsEditorProps> = ({
     analyticsCompletionsRef.current = completions;
   }, [completions]);
 
+  useEffect(() => {
+    return () => {
+      if (completionProviderRef.current) {
+        completionProviderRef.current.dispose();
+      }
+      analyticsCompletionProvider = null;
+    };
+  }, []);
+
   // ── Page data → editor sync ───────────────────────────────────────────
   useEffect(() => {
     if (page?.markdownContent !== undefined) {
       isSyncingRef.current = true;
-      setMarkdownContent(page.markdownContent ?? '');
+      const ANALYTICS_STARTER_TEMPLATE = `---
+title: My Analytics Page
+---
+
+# My Analytics Dashboard
+
+Write your SQL queries below, then use component tags to visualize them.
+
+\`\`\`sql orders
+SELECT
+  date_trunc('month', order_date) AS month,
+  COUNT(*) AS order_count,
+  SUM(total_amount) AS revenue
+FROM orders
+GROUP BY 1
+ORDER BY 1
+\`\`\`
+
+<BarChart data={orders} x="month" y="revenue" title="Monthly Revenue" />
+
+<DataTable data={orders} title="Orders by Month" />
+`;
+      const content = page.markdownContent || ANALYTICS_STARTER_TEMPLATE;
+      setMarkdownContent(content);
       setIsEditorDirty(false);
       setTimeout(() => {
         isSyncingRef.current = false;
       }, 0);
     }
-  }, [page?.markdownContent]);
+  }, [page?.id]);
 
   // ── Auto-save with 1s debounce ────────────────────────────────────────
   const handleMarkdownChange = useCallback(
@@ -210,6 +248,10 @@ export const AnalyticsEditor: React.FC<AnalyticsEditorProps> = ({
               ...prev,
               [block.name]: result.error ?? null,
             }));
+            setQueryDurations((prev) => ({
+              ...prev,
+              [block.name]: result.duration,
+            }));
 
             if (
               onSchemaChange &&
@@ -249,6 +291,10 @@ export const AnalyticsEditor: React.FC<AnalyticsEditorProps> = ({
         setQueryErrors((prev) => ({
           ...prev,
           [queryName]: result.error ?? null,
+        }));
+        setQueryDurations((prev) => ({
+          ...prev,
+          [queryName]: result.duration,
         }));
       } catch (err: any) {
         setQueryStatuses((prev) => ({ ...prev, [queryName]: 'error' }));
@@ -296,7 +342,10 @@ export const AnalyticsEditor: React.FC<AnalyticsEditorProps> = ({
               };
             },
           });
+        completionProviderRef.current = analyticsCompletionProvider;
       }
+
+      editorRef.current = editor;
 
       // Ctrl/Cmd+Shift+Enter → run all queries
       /* eslint-disable no-bitwise */
@@ -429,13 +478,17 @@ export const AnalyticsEditor: React.FC<AnalyticsEditorProps> = ({
 
           {/* Right / Bottom — Live Preview */}
           <Pane minSize={150}>
-            <AnalyticsPreview
-              markdownContent={markdownContent}
-              queryCache={queryCache}
-              queryStatuses={queryStatuses}
-              queryErrors={queryErrors}
-              onRunQuery={handleRunSingleQuery}
-            />
+            <AnalyticsPreviewErrorBoundary>
+              <AnalyticsPreview
+                markdownContent={markdownContent}
+                queryCache={queryCache}
+                queryStatuses={queryStatuses}
+                queryErrors={queryErrors}
+                queryDurations={queryDurations}
+                onRunQuery={handleRunSingleQuery}
+                pageId={pageId}
+              />
+            </AnalyticsPreviewErrorBoundary>
           </Pane>
         </SplitPane>
       </Box>

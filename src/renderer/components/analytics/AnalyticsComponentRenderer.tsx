@@ -298,12 +298,49 @@ const AnalyticsDataTable: React.FC<ChartSubProps> = ({ data, chartProps }) => {
   );
 };
 
+function formatAnalyticsValue(raw: unknown, fmt?: string): string {
+  if (typeof raw !== 'number') return String(raw ?? '—');
+
+  switch (fmt) {
+    case 'usd':
+    case '$':
+      return new Intl.NumberFormat('en-US', {
+        style: 'currency',
+        currency: 'USD',
+        maximumFractionDigits: 0,
+      }).format(raw);
+    case 'eur':
+    case '€':
+      return new Intl.NumberFormat('de-DE', {
+        style: 'currency',
+        currency: 'EUR',
+        maximumFractionDigits: 0,
+      }).format(raw);
+    case 'pct':
+    case '%':
+      return `${(raw * 100).toFixed(1)}%`;
+    case 'k':
+      return raw >= 1000 ? `${(raw / 1000).toFixed(1)}k` : String(raw);
+    case 'M':
+      return raw >= 1_000_000
+        ? `${(raw / 1_000_000).toFixed(1)}M`
+        : String(raw);
+    default:
+      return new Intl.NumberFormat('en-US', {
+        maximumFractionDigits: 2,
+      }).format(raw);
+  }
+}
+
 // ─── BigValue / Value KPI ─────────────────────────────────────────────────────
 const AnalyticsBigValue: React.FC<ChartSubProps> = ({ data, chartProps }) => {
   const valCol =
     chartProps.value || (data.length > 0 ? Object.keys(data[0])[0] : '');
   const rawValue = data.length > 0 ? data[0][valCol] : undefined;
-  const displayValue = rawValue !== undefined ? String(rawValue) : '—';
+  const displayValue =
+    rawValue !== undefined
+      ? formatAnalyticsValue(rawValue, chartProps.fmt)
+      : '—';
 
   return (
     <Box
