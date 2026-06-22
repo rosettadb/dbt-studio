@@ -106,9 +106,7 @@ export const AnalyticsPageItem: React.FC<AnalyticsPageItemProps> = ({
             />
           )}
           {!hasChildren && isPage && (
-            <Web
-              sx={{ fontSize: 14, color: 'text.secondary', ml: '2px' }}
-            />
+            <Web sx={{ fontSize: 14, color: 'text.secondary', ml: '2px' }} />
           )}
         </Box>
 
