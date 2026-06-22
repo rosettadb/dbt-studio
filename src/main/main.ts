@@ -12,6 +12,7 @@ import {
   UpdateService,
   RosettaCloudService,
   DuckLakeConnectionManager,
+  FlowfileService,
 } from './services';
 import { copyAssetsToUserData } from './utils/fileHelper';
 import { MCPClientManager } from './services/ai/mcp/mcpClientManager';
@@ -194,6 +195,13 @@ if (!gotTheLock) {
               await windowManager.showSetupWindow();
             } else {
               await windowManager.showMainWindow();
+            }
+
+            // Auto-start Flowfile if enabled
+            if (settings.flowfileAutoStart === 'true') {
+              FlowfileService.start().catch((e) =>
+                console.error('Failed to auto-start Flowfile:', e),
+              );
             }
           }
         });

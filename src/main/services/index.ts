@@ -17,6 +17,7 @@ import DuckLakeConnectionManager from './duckLake/connectionManager.service';
 import DuckDBBootstrap from './duckdb.service';
 import LineageService from './lineage.service';
 import SqlParserService from './sqlParser.service';
+import { FlowfileService } from './flowfile.service';
 
 export {
   ProjectsService,
@@ -38,4 +39,5 @@ export {
   DuckDBBootstrap,
   LineageService,
   SqlParserService,
+  FlowfileService,
 };

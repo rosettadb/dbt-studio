@@ -16,6 +16,7 @@ import {
   flowfileStop,
   FlowfileStatus,
 } from '../../services/flowfile.service';
+import { client } from '../../config/client';
 import { AppLayout } from '../../layouts';
 
 const POLL_INTERVAL_MS = 3000;
@@ -26,6 +27,8 @@ const Flows: React.FC = () => {
   const [isStopping, setIsStopping] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
   const pollRef = React.useRef<ReturnType<typeof setInterval> | null>(null);
+  const autoStartAttempted = React.useRef(false);
+  const [autoStartEnabled, setAutoStartEnabled] = React.useState(false);
 
   const fetchStatus = async () => {
     try {
@@ -39,6 +42,9 @@ const Flows: React.FC = () => {
   React.useEffect(() => {
     fetchStatus();
     pollRef.current = setInterval(fetchStatus, POLL_INTERVAL_MS);
+    client.get<{ flowfileAutoStart?: string }>('settings:load').then(({ data }) => {
+      setAutoStartEnabled(data.flowfileAutoStart === 'true');
+    });
     return () => {
       if (pollRef.current) clearInterval(pollRef.current);
     };
@@ -61,6 +67,27 @@ const Flows: React.FC = () => {
       await fetchStatus();
     }
   };
+
+  React.useEffect(() => {
+    if (autoStartAttempted.current) return;
+    if (!autoStartEnabled || !status || status.processRunning || isStarting) return;
+    autoStartAttempted.current = true;
+    setIsStarting(true);
+    setError(null);
+    flowfileStart()
+      .then((result) => {
+        if (!result.ok) {
+          setError(result.error ?? 'Failed to start Flowfile');
+        }
+      })
+      .catch((err) => {
+        setError(err instanceof Error ? err.message : 'Failed to start Flowfile');
+      })
+      .finally(() => {
+        setIsStarting(false);
+        fetchStatus();
+      });
+  }, [autoStartEnabled, status?.processRunning]);
 
   const handleStop = async () => {
     setIsStopping(true);
