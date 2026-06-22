@@ -35,6 +35,10 @@ import { executeAnalyticsQuery } from '../../utils/analyticsQueryEngine';
 import { parseAnalyticsMarkdown } from '../../utils/analyticsMarkdown';
 import { AnalyticsPreview } from './AnalyticsPreview';
 import { AnalyticsPreviewErrorBoundary } from './AnalyticsPreviewErrorBoundary';
+import {
+  AnalyticsEditorResultsSummary,
+  registerAnalyticsEditorBridge,
+} from '../../services/analyticsEditorBridge.service';
 
 interface AnalyticsEditorProps {
   connectionId: string;
@@ -72,6 +76,7 @@ const VerticalSash = (_: number, active: boolean) => (
 // Re-uses the same singleton pattern as NotebookEditor.
 let analyticsCompletionProvider: monaco.IDisposable | null = null;
 const analyticsCompletionsRef = { current: [] as any[] };
+const ANALYTICS_BRIDGE_MAX_PREVIEW_ROWS = 5;
 
 export const AnalyticsEditor: React.FC<AnalyticsEditorProps> = ({
   connectionId,
@@ -116,6 +121,14 @@ export const AnalyticsEditor: React.FC<AnalyticsEditorProps> = ({
   const isSyncingRef = useRef(false);
   const editorRef = useRef<monaco.editor.IStandaloneCodeEditor | null>(null);
   const completionProviderRef = useRef<monaco.IDisposable | null>(null);
+  const markdownContentRef = useRef('');
+  const queryCacheRef = useRef<Record<string, any[]>>({});
+  const queryStatusesRef = useRef<
+    Record<string, 'idle' | 'running' | 'success' | 'error'>
+  >({});
+  const queryErrorsRef = useRef<Record<string, string | null>>({});
+  const queryDurationsRef = useRef<Record<string, number | undefined>>({});
+  const runAllQueriesRef = useRef<() => Promise<void>>(async () => undefined);
 
   // ── Schema for SQL autocomplete ───────────────────────────────────────
   const { data: schemaData } = useSchemaForConnection(connectionId);
@@ -128,6 +141,26 @@ export const AnalyticsEditor: React.FC<AnalyticsEditorProps> = ({
   useEffect(() => {
     analyticsCompletionsRef.current = completions;
   }, [completions]);
+
+  useEffect(() => {
+    markdownContentRef.current = markdownContent;
+  }, [markdownContent]);
+
+  useEffect(() => {
+    queryCacheRef.current = queryCache;
+  }, [queryCache]);
+
+  useEffect(() => {
+    queryStatusesRef.current = queryStatuses;
+  }, [queryStatuses]);
+
+  useEffect(() => {
+    queryErrorsRef.current = queryErrors;
+  }, [queryErrors]);
+
+  useEffect(() => {
+    queryDurationsRef.current = queryDurations;
+  }, [queryDurations]);
 
   useEffect(() => {
     return () => {
@@ -306,6 +339,48 @@ ORDER BY 1
     },
     [connectionId],
   );
+
+  const getBridgeResults = useCallback((): AnalyticsEditorResultsSummary => {
+    const results = Object.fromEntries(
+      Object.entries(queryCacheRef.current).map(([queryName, rows]) => {
+        const safeRows = Array.isArray(rows) ? rows : [];
+        const firstRow = safeRows[0];
+        const columns =
+          firstRow && typeof firstRow === 'object' ? Object.keys(firstRow) : [];
+
+        return [
+          queryName,
+          {
+            rowCount: safeRows.length,
+            columns,
+            rowsPreview: safeRows.slice(0, ANALYTICS_BRIDGE_MAX_PREVIEW_ROWS),
+          },
+        ];
+      }),
+    );
+
+    return {
+      statuses: queryStatusesRef.current,
+      errors: queryErrorsRef.current,
+      durations: queryDurationsRef.current,
+      results,
+    };
+  }, []);
+
+  useEffect(() => {
+    runAllQueriesRef.current = handleRunAllQueries;
+  }, [handleRunAllQueries]);
+
+  useEffect(() => {
+    return registerAnalyticsEditorBridge({
+      getContent: () => markdownContentRef.current,
+      setContent: (content) => {
+        handleMarkdownChange(content);
+      },
+      runQueries: () => runAllQueriesRef.current(),
+      getResults: getBridgeResults,
+    });
+  }, [connectionId, pageId, handleMarkdownChange, getBridgeResults]);
 
   // ── Monaco editor mount ───────────────────────────────────────────────
   const handleEditorMount = useCallback(

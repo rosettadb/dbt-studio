@@ -1465,9 +1465,14 @@ const Sql = () => {
           >
             {isChatOpen && !isNarrow && (
               <ChatWindow
-                key={`${sidebarTab === 2 ? 'analytics' : 'sql'}-${sqlAgentConnectionId ?? 'none'}`}
+                key={`${sidebarTab === 2 ? 'analytics' : 'sql'}-${sqlAgentConnectionId ?? 'none'}-${sidebarTab === 2 ? (activeAnalyticsPageId ?? 'none') : 'none'}`}
                 screenKey={sidebarTab === 2 ? 'analytics' : 'sql'}
                 connectionId={sqlAgentConnectionId}
+                pageId={
+                  sidebarTab === 2
+                    ? (activeAnalyticsPageId ?? undefined)
+                    : undefined
+                }
                 projectId={
                   selectedProject?.id ? Number(selectedProject.id) : null
                 }
@@ -1493,9 +1498,12 @@ const Sql = () => {
             }}
           >
             <ChatWindow
-              key={`${sidebarTab === 2 ? 'analytics' : 'sql'}-mobile-${sqlAgentConnectionId ?? 'none'}`}
+              key={`${sidebarTab === 2 ? 'analytics' : 'sql'}-mobile-${sqlAgentConnectionId ?? 'none'}-${sidebarTab === 2 ? (activeAnalyticsPageId ?? 'none') : 'none'}`}
               screenKey={sidebarTab === 2 ? 'analytics' : 'sql'}
               connectionId={sqlAgentConnectionId}
+              pageId={
+                sidebarTab === 2 ? (activeAnalyticsPageId ?? undefined) : undefined
+              }
               projectId={
                 selectedProject?.id ? Number(selectedProject.id) : null
               }
