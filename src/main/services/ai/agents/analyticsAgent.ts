@@ -4,6 +4,10 @@ import type { BaseAgentConfig } from './baseAgentConfig';
 import { createStudioConnectionsTools } from '../tools/studio/connections.tools';
 import { createStudioDuckLakeTools } from '../tools/studio/ducklake.tools';
 import { createStudioAnalyticsPagesTools } from '../tools/studio/analyticsPages.tools';
+import {
+  createStudioSqlTools,
+  createSqlResultInspectorTools,
+} from '../tools/studio/sql.tools';
 import { AnalyticsPagesService } from '../../analyticsPages.service';
 import { TOOL_FLAGS } from '../tools/toolRegistry';
 
@@ -174,16 +178,26 @@ ${evidenceComponentRef}
 You are in **Ask mode**. You can only read and analyze — you CANNOT execute queries or modify analytics pages.
 If the user asks you to write or modify a page, explain what it would look like and tell them to switch to **Code mode**.
 
+## Read-Only Context Rules
+- The active session is already scoped to the current connectionId and pageId.
+- Use \`analytics_active_page_read\` to inspect the currently open page. Do not ask the user for connectionId or pageId.
+- Use \`analytics_pages_list\` and \`analytics_page_db_read\` only to inspect other stored pages on the same connection.
+- Use schema inspection tools to understand available tables and columns.
+
 ${skills ?? ''}
 ${mcpToolsList}`
     : `You are an expert data engineering assistant in the Analytics screen of dbt Studio.
 Your goal is to help the user create and maintain Evidence-style analytics dashboards backed by real SQL queries.
 
 ## Capabilities & Workflow
-1. **Inspect Schema**: Use schema tools to understand the database structure (tables, columns, types).
-2. **Design the SQL**: Write SQL queries that return the data needed for each chart or table.
-3. **Write the Page**: Use \`analytics_page_write\` to write Evidence-style Markdown that combines SQL blocks and chart components.
-4. **Verify**: Use \`analytics_page_read\` to read back the written content and confirm correctness.
+1. **Read the Active Page First**: Use \`analytics_active_page_read\` before any write. This reads live Monaco content, including unsaved changes.
+2. **Inspect Schema**: Use \`studio_sql_schema_extract\` / \`studio_ducklake_schema_extract\` when creating or changing SQL.
+3. **Use Stored Pages as Context Only**: Use \`analytics_pages_list\` and \`analytics_page_db_read\` only to inspect sibling pages on the same connection. Do not edit non-active pages.
+4. **Design and Test SQL**: Use \`studio_sql_query\` / \`studio_ducklake_query\` for non-mutating test queries, then read the output with \`studio_sql_get_agent_run_result\`.
+5. **Write the Active Page**: Use \`analytics_active_page_write\` to update the live Monaco Markdown.
+6. **Run the Active Page**: Use \`analytics_active_page_run\`.
+7. **Inspect UI Results**: Use \`analytics_active_page_get_results\`.
+8. **Fix and Rerun**: If any SQL block has status \`error\`, fix the SQL/Markdown, write again, run again, and inspect results again.
 
 ## Analytics Page Format
 - Pages are Evidence-style Markdown files combining SQL blocks (\`\`\`sql query_name\`) and JSX component tags.
@@ -195,7 +209,11 @@ ${evidenceComponentRef}
 ## Behavioral Rules
 - **No Suggestions**: Do NOT ask "Would you like me to...?" or "What would you like to do next?". Be direct and complete the task.
 - **Concise Reporting**: Briefly report what you have done. No conversational filler.
-- **Always read before writing**: Call \`analytics_page_read\` first if a page already exists, to avoid overwriting user content unintentionally.
+- **Always read before writing**: Call \`analytics_active_page_read\` first if a page already exists, to avoid overwriting user content unintentionally.
+- **Active page source of truth**: Use active-page tools for the currently open page. They already know the active connectionId and pageId from session context; do not ask the user for those IDs.
+- **Stored pages are context only**: Use \`analytics_pages_list\` and \`analytics_page_db_read\` only to inspect other pages on the same connection.
+- **No manual IDs for active page**: Never ask the user for the active page ID or active connection ID. The active-page tools infer them from the current Analytics session.
+- **Verify before final answer**: Do not give a final success response until you have run the page and inspected \`analytics_active_page_get_results\`, unless the user explicitly asked for read-only analysis.
 
 ## Active Connection
 Name: ${connectionMeta.name}
@@ -204,16 +222,27 @@ ${pageId ? `\n## Active Analytics Page\n\nPage ID: ${pageId}\nConnection ID: ${c
 ${skills ?? ''}
 ${mcpToolsList}`;
 
+  const isDuckLake = connectionMeta.type === 'ducklake';
+
   const studioAnalyticsTools: Record<string, any> = {
     ...createStudioConnectionsTools(),
-    ...createStudioDuckLakeTools(options.conversationId),
-    ...createStudioAnalyticsPagesTools(),
+    ...(isDuckLake
+      ? createStudioDuckLakeTools(options.conversationId)
+      : createStudioSqlTools(options.conversationId)),
+    ...createSqlResultInspectorTools(options.conversationId),
+    ...createStudioAnalyticsPagesTools(options.conversationId),
   };
 
   const READ_ONLY_TOOLS = [
+    'studio_sql_schema_extract',
     'studio_ducklake_schema_extract',
     'studio_connections_list',
-    'analytics_page_read',
+    'studio_sql_get_query_results',
+    'studio_sql_get_agent_run_result',
+    'analytics_active_page_read',
+    'analytics_active_page_get_results',
+    'analytics_pages_list',
+    'analytics_page_db_read',
   ];
 
   const makeAskModeStub = (toolName: string): any => {
@@ -241,8 +270,8 @@ ${mcpToolsList}`;
     }
   });
 
-  // Analytics agent needs at least 2 steps: one to read/inspect, one to write and respond.
-  const maxSteps = Math.max(base.maxSteps, 2);
+  // Analytics agent needs enough steps for read → schema/query → write → run → inspect/fix.
+  const maxSteps = Math.max(base.maxSteps, 6);
 
   return new ToolLoopAgent({
     model: base.model as any,
