@@ -179,8 +179,6 @@ export const AnalyticsEditor: React.FC<AnalyticsEditorProps> = ({
 title: My Analytics Page
 ---
 
-# My Analytics Dashboard
-
 Write your SQL queries below, then use component tags to visualize them.
 
 \`\`\`sql orders

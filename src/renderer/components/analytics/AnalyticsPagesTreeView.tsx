@@ -146,7 +146,7 @@ export const AnalyticsPagesTreeView: React.FC<AnalyticsPagesTreeViewProps> = ({
         data: {
           title: newTitle,
           routePath: route,
-          markdownContent: `---\ntitle: ${newTitle}\n---\n\n# ${newTitle}\n\nStart building your analytics page here.`,
+          markdownContent: `---\ntitle: ${newTitle}\n---\n\nStart building your analytics page here.`,
         },
       },
       {

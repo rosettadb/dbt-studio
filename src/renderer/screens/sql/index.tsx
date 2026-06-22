@@ -144,6 +144,12 @@ const Sql = () => {
   const activeConnectionId = activeTab?.connectionId;
   const activeConnectionName = activeTab?.connectionName;
 
+  // Reset analytics page when switching connections to prevent showing
+  // a page from the previous connection
+  useEffect(() => {
+    setActiveAnalyticsPageId(null);
+  }, [activeConnectionId]);
+
   // Check if active connection is DuckLake
   const isDuckLakeConnection =
     activeConnectionId?.startsWith('ducklake-') || false;
@@ -1502,7 +1508,9 @@ const Sql = () => {
               screenKey={sidebarTab === 2 ? 'analytics' : 'sql'}
               connectionId={sqlAgentConnectionId}
               pageId={
-                sidebarTab === 2 ? (activeAnalyticsPageId ?? undefined) : undefined
+                sidebarTab === 2
+                  ? (activeAnalyticsPageId ?? undefined)
+                  : undefined
               }
               projectId={
                 selectedProject?.id ? Number(selectedProject.id) : null

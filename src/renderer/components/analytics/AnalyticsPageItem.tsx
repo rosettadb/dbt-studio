@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Box, Typography, IconButton } from '@mui/material';
 import {
-  Description,
+  Web,
   Edit,
   Delete,
   ChevronRight,
@@ -106,7 +106,7 @@ export const AnalyticsPageItem: React.FC<AnalyticsPageItemProps> = ({
             />
           )}
           {!hasChildren && isPage && (
-            <Description
+            <Web
               sx={{ fontSize: 14, color: 'text.secondary', ml: '2px' }}
             />
           )}

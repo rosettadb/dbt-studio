@@ -966,6 +966,7 @@ export const ChatWindow: React.FC<ChatWindowProps> = ({
                 screenKey,
                 connectionId,
                 notebookId,
+                pageId,
               )
             }
             onCancelStream={cancelStream}

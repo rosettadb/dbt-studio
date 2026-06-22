@@ -147,6 +147,12 @@ const Notebooks = () => {
     string | null
   >(null);
 
+  // Reset analytics page when switching connections to prevent showing
+  // a page from the previous connection
+  useEffect(() => {
+    setActiveAnalyticsPageId(null);
+  }, [activeConnectionId]);
+
   const handleOpenAnalyticsPage = useCallback((pageId: string) => {
     setActiveAnalyticsPageId(pageId);
     // Future Phase 3: trigger main content to show analytics editor
