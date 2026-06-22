@@ -199,9 +199,11 @@ if (!gotTheLock) {
 
             // Auto-start Flowfile if enabled
             if (settings.flowfileAutoStart === 'true') {
-              FlowfileService.start().catch((e) =>
-                console.error('Failed to auto-start Flowfile:', e),
-              );
+              try {
+                await FlowfileService.start();
+              } catch (e) {
+                console.error('Failed to auto-start Flowfile:', e);
+              }
             }
           }
         });
