@@ -52,6 +52,7 @@ export interface GetConversationsFilter {
   screenKey?: AgentScreenKey;
   connectionId?: string | null;
   notebookId?: string | null;
+  pageId?: string | null;
 }
 
 export default class MainDatabaseService {
@@ -148,6 +149,7 @@ export default class MainDatabaseService {
         screen_key TEXT DEFAULT 'project',
         connection_id TEXT,
         notebook_id TEXT,
+        page_id TEXT,
         created_at TEXT DEFAULT (datetime('now')),
         updated_at TEXT DEFAULT (datetime('now')),
         FOREIGN KEY (provider_id) REFERENCES ai_providers(id) ON DELETE SET NULL
@@ -353,6 +355,15 @@ export default class MainDatabaseService {
         );
       }
 
+      if (!chatConvCols.has('page_id')) {
+        alterStatements.push(
+          'ALTER TABLE chat_conversations ADD COLUMN page_id TEXT;',
+        );
+        alterStatements.push(
+          'CREATE INDEX IF NOT EXISTS chat_conversations_page_idx ON chat_conversations(page_id);',
+        );
+      }
+
       // Ensure indexes exist for chat_conversations (safe with CREATE INDEX IF NOT EXISTS if columns exist)
       // We run these after potentially adding columns above
       alterStatements.push(
@@ -363,6 +374,12 @@ export default class MainDatabaseService {
       );
       alterStatements.push(
         'CREATE INDEX IF NOT EXISTS chat_conversations_connection_idx ON chat_conversations(connection_id);',
+      );
+      alterStatements.push(
+        'CREATE INDEX IF NOT EXISTS chat_conversations_notebook_idx ON chat_conversations(notebook_id);',
+      );
+      alterStatements.push(
+        'CREATE INDEX IF NOT EXISTS chat_conversations_page_idx ON chat_conversations(page_id);',
       );
       alterStatements.push(
         'CREATE INDEX IF NOT EXISTS chat_conversations_provider_idx ON chat_conversations(provider_id);',
@@ -647,6 +664,7 @@ export default class MainDatabaseService {
     screenKey?: AgentScreenKey,
     connectionId?: string,
     notebookId?: string,
+    pageId?: string,
   ): Promise<ChatConversation> {
     const db = await this.getDatabase();
 
@@ -660,6 +678,7 @@ export default class MainDatabaseService {
           screenKey: screenKey ?? 'project',
           connectionId,
           notebookId,
+          pageId,
         })
         .returning();
 
@@ -704,6 +723,13 @@ export default class MainDatabaseService {
           conditions.push(
             eq(schema.chatConversations.notebookId, opts.notebookId),
           );
+        }
+      }
+      if (opts.pageId !== undefined) {
+        if (opts.pageId === null) {
+          conditions.push(isNull(schema.chatConversations.pageId));
+        } else {
+          conditions.push(eq(schema.chatConversations.pageId, opts.pageId));
         }
       }
 

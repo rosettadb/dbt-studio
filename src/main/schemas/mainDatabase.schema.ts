@@ -40,6 +40,7 @@ export const chatConversations = sqliteTable(
     screenKey: text('screen_key').default('project').notNull(),
     connectionId: text('connection_id'),
     notebookId: text('notebook_id'),
+    pageId: text('page_id'),
     providerId: integer('provider_id').references(() => aiProviders.id, {
       onDelete: 'set null',
     }),
@@ -54,6 +55,8 @@ export const chatConversations = sqliteTable(
     connectionIdx: index('chat_conversations_connection_idx').on(
       table.connectionId,
     ),
+    notebookIdx: index('chat_conversations_notebook_idx').on(table.notebookId),
+    pageIdx: index('chat_conversations_page_idx').on(table.pageId),
     providerIdx: index('chat_conversations_provider_idx').on(table.providerId),
     createdAtIdx: index('chat_conversations_created_at_idx').on(
       table.createdAt,
