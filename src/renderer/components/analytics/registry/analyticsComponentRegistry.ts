@@ -22,6 +22,9 @@ import {
   buttonGroupSchema,
   selectSchema,
   dateRangeSchema,
+  checkboxSchema,
+  numberInputSchema,
+  textInputSchema,
 } from './componentSchemas';
 
 export type ComponentCategory =
@@ -237,6 +240,27 @@ register({
   schema: dateRangeSchema,
 });
 
+register({
+  name: 'Checkbox',
+  category: 'inputs',
+  description: 'Boolean checkbox input for analytics controls.',
+  schema: checkboxSchema,
+});
+
+register({
+  name: 'NumberInput',
+  category: 'inputs',
+  description: 'Numeric input control for analytics parameters.',
+  schema: numberInputSchema,
+});
+
+register({
+  name: 'TextInput',
+  category: 'inputs',
+  description: 'Text input control for analytics parameters.',
+  schema: textInputSchema,
+});
+
 export function getComponentDefinition(
   name: string,
 ): AnalyticsComponentDefinition | undefined {
@@ -272,12 +296,16 @@ export function getTier1ComponentNames(): string[] {
     'Alert',
     'Accordion',
     'Tabs',
+    'Tab',
     'Grid',
     'Stack',
     'Box',
     'ButtonGroup',
     'Select',
     'DateRange',
+    'Checkbox',
+    'NumberInput',
+    'TextInput',
   ];
 }
 

@@ -139,12 +139,17 @@ export const AnalyticsEditor: React.FC<AnalyticsEditorProps> = ({
     ScatterChart: `<ScatterChart data={} x="" y="" />`,
     Alert: `<Alert severity="info">\n  \n</Alert>`,
     Accordion: `<Accordion title="">\n  \n</Accordion>`,
+    Tabs: `<Tabs>\n  <Tab title="First">\n    \n  </Tab>\n</Tabs>`,
+    Tab: `<Tab title="">\n  \n</Tab>`,
     Grid: `<Grid columns={2}>\n  <Box>Item 1</Box>\n  <Box>Item 2</Box>\n</Grid>`,
     Stack: `<Stack spacing={2}>\n  <Box>Item</Box>\n  <Box>Item</Box>\n</Stack>`,
     Box: `<Box p={2}>\n  Content\n</Box>`,
     ButtonGroup: `<ButtonGroup options={} default="" />`,
     Select: `<Select data={} value="" label="" />`,
     DateRange: `<DateRange title="" />`,
+    Checkbox: `<Checkbox label="" default={false} />`,
+    NumberInput: `<NumberInput label="" default={0} />`,
+    TextInput: `<TextInput label="" placeholder="" />`,
   };
 
   // ── Refs ──────────────────────────────────────────────────────────────

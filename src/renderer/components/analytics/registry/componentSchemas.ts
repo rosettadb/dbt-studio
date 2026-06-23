@@ -186,3 +186,27 @@ export const dateRangeSchema = z.object({
   end: z.string().optional(),
   title: z.string().optional(),
 });
+
+export const checkboxSchema = z.object({
+  label: z.string().optional(),
+  default: z
+    .union([z.literal('true'), z.literal('false'), z.boolean()])
+    .optional(),
+  title: z.string().optional(),
+});
+
+export const numberInputSchema = z.object({
+  label: z.string().optional(),
+  default: z.union([z.string(), z.number()]).optional(),
+  min: z.union([z.string(), z.number()]).optional(),
+  max: z.union([z.string(), z.number()]).optional(),
+  step: z.union([z.string(), z.number()]).optional(),
+  title: z.string().optional(),
+});
+
+export const textInputSchema = z.object({
+  label: z.string().optional(),
+  default: z.string().optional(),
+  placeholder: z.string().optional(),
+  title: z.string().optional(),
+});
