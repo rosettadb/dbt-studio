@@ -200,7 +200,13 @@ if (!gotTheLock) {
             // Auto-start Flowfile if enabled
             if (settings.flowfileAutoStart === 'true') {
               try {
-                await FlowfileService.start();
+                const result = await FlowfileService.start();
+                if (!result.ok) {
+                  console.error(
+                    'Failed to auto-start Flowfile:',
+                    result.error ?? 'Unknown startup error',
+                  );
+                }
               } catch (e) {
                 console.error('Failed to auto-start Flowfile:', e);
               }
