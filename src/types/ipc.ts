@@ -220,7 +220,8 @@ export type UtilChannels =
   | 'utils:open-path'
   | 'utils:run-in-terminal'
   | 'dialog:showOpenDialog'
-  | 'dialog:showSaveDialog';
+  | 'dialog:showSaveDialog'
+  | 'utils:writeBase64File';
 
 export type ProcessChannels =
   | 'process:start'
