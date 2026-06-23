@@ -26,6 +26,20 @@ export interface ChartRendererProps {
   yAxisCols: string[];
 }
 
+/**
+ * Formats a value for display in the Recharts tooltip.
+ * Converts Date objects to locale strings to avoid React rendering errors.
+ */
+const formatTooltipValue = (value: any) => {
+  if (value instanceof Date) {
+    return value.toLocaleString();
+  }
+  if (typeof value === 'object' && value !== null) {
+    return JSON.stringify(value);
+  }
+  return value;
+};
+
 const COLORS = [
   '#0088FE',
   '#00C49F',
@@ -50,7 +64,6 @@ const EmptyState: React.FC<{ message: string; isError?: boolean }> = ({
     sx={{
       width: '100%',
       height: '100%',
-      minHeight: 300,
       display: 'flex',
       flexDirection: 'column',
       justifyContent: 'center',
@@ -62,7 +75,7 @@ const EmptyState: React.FC<{ message: string; isError?: boolean }> = ({
     <Typography
       color={isError ? 'error' : 'text.secondary'}
       variant="body1"
-      sx={{ maxWidth: 400 }}
+      sx={{ maxWidth: 400, fontWeight: isError ? 500 : 400 }}
     >
       {message}
     </Typography>
@@ -90,6 +103,26 @@ export const ChartRenderer: React.FC<ChartRendererProps> = ({
     );
   }
 
+  // Validate pie data early — must be outside ResponsiveContainer to avoid zero-size wrapper
+  let validPieData: any[] | null = null;
+  if (chartType === 'pie') {
+    const primaryYAxisCol = yAxisCols[0];
+    validPieData = data.filter(
+      (d) =>
+        typeof d[primaryYAxisCol] === 'number' &&
+        !Number.isNaN(d[primaryYAxisCol]) &&
+        d[primaryYAxisCol] >= 0,
+    );
+    if (validPieData.length === 0) {
+      return (
+        <EmptyState
+          isError
+          message="Pie chart requires numeric values for the Y-Axis. Please select a column with numbers."
+        />
+      );
+    }
+  }
+
   const renderChart = () => {
     switch (chartType) {
       case 'bar': {
@@ -102,7 +135,7 @@ export const ChartRenderer: React.FC<ChartRendererProps> = ({
             <CartesianGrid strokeDasharray="3 3" />
             <XAxis dataKey={xAxisCol} tick={{ fontSize: 11 }} />
             <YAxis tick={{ fontSize: 11 }} />
-            <Tooltip />
+            <Tooltip formatter={formatTooltipValue} />
             {showLegend && <Legend />}
             {yAxisCols.map((col, index) => (
               <Bar
@@ -124,7 +157,7 @@ export const ChartRenderer: React.FC<ChartRendererProps> = ({
             <CartesianGrid strokeDasharray="3 3" />
             <XAxis dataKey={xAxisCol} tick={{ fontSize: 11 }} />
             <YAxis tick={{ fontSize: 11 }} />
-            <Tooltip />
+            <Tooltip formatter={formatTooltipValue} />
             {showLegend && <Legend />}
             {yAxisCols.map((col, index) => (
               <Line
@@ -150,7 +183,10 @@ export const ChartRenderer: React.FC<ChartRendererProps> = ({
               tick={{ fontSize: 11 }}
             />
             <YAxis type="number" tick={{ fontSize: 11 }} />
-            <Tooltip cursor={{ strokeDasharray: '3 3' }} />
+            <Tooltip
+              cursor={{ strokeDasharray: '3 3' }}
+              formatter={formatTooltipValue}
+            />
             {showLegend && <Legend />}
             {yAxisCols.map((col, index) => (
               <Scatter
@@ -166,47 +202,28 @@ export const ChartRenderer: React.FC<ChartRendererProps> = ({
       }
       case 'pie': {
         const primaryYAxisCol = yAxisCols[0];
-        // Recharts Pie crashes if the dataKey values are not numbers.
-        const validPieData = data.filter(
-          (d) =>
-            typeof d[primaryYAxisCol] === 'number' &&
-            !Number.isNaN(d[primaryYAxisCol]) &&
-            d[primaryYAxisCol] >= 0,
-        );
-
-        if (validPieData.length === 0) {
-          return (
-            <EmptyState
-              isError
-              message="Pie chart requires numeric values for the Y-Axis. Please select a column with numbers."
-            />
-          );
-        }
-
-        // Suppress the auto-labels and legend when there are too many slices
-        const tooManySlices = validPieData.length > MAX_LEGEND_ITEMS;
+        const tooManySlices = validPieData!.length > MAX_LEGEND_ITEMS;
 
         return (
           <PieChart>
             <Pie
-              data={validPieData}
+              data={validPieData!}
               dataKey={primaryYAxisCol}
               nameKey={xAxisCol}
               cx="50%"
               cy="50%"
               outerRadius={150}
               fill="#8884d8"
-              // Only show inline labels when there are few enough slices
               label={!tooManySlices}
             >
-              {validPieData.map((entry, index) => (
+              {validPieData!.map((entry, index) => (
                 <Cell
                   key={`cell-${index}`}
                   fill={COLORS[index % COLORS.length]}
                 />
               ))}
             </Pie>
-            <Tooltip />
+            <Tooltip formatter={formatTooltipValue} />
             {!tooManySlices && <Legend />}
           </PieChart>
         );
@@ -221,10 +238,8 @@ export const ChartRenderer: React.FC<ChartRendererProps> = ({
       key={containerKey}
       sx={{
         width: '100%',
-        // Use a fixed height so ResponsiveContainer always gets a measurable parent
-        height: 420,
+        height: '100%',
         p: 2,
-        flexShrink: 0,
       }}
     >
       <ResponsiveContainer width="100%" height="100%">
