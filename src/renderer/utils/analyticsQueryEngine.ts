@@ -3,9 +3,14 @@
  *
  * Encapsulates SQL execution for analytics pages, handling both regular
  * DB connections and DuckLake connections transparently.
+ * Supports {{query_name}} dependency resolution for inter-query references.
  */
 import { executeQueryForConnection } from '../services/connectors.service';
 import { DuckLakeService } from '../services/duckLake.service';
+import {
+  buildQueryDependencyGraph,
+  validateQueryReferences,
+} from '../components/analytics/runtime/queryDependencyResolver';
 
 export type QueryExecutionResult = {
   name: string;
@@ -16,6 +21,67 @@ export type QueryExecutionResult = {
   error?: string;
   duration?: number;
 };
+
+export type DependencyError = {
+  type: 'missing' | 'circular' | 'self-reference';
+  message: string;
+  blockName?: string;
+};
+
+/**
+ * Resolve dependencies for all SQL blocks in a markdown page and
+ * return the correct execution order with resolved SQL.
+ */
+export function resolveQueryDependencies(markdownContent: string): {
+  resolved: Array<{ name: string; sql: string }>;
+  errors: DependencyError[];
+} {
+  const errors: DependencyError[] = [];
+
+  // First check for missing references
+  const refErrors = validateQueryReferences(markdownContent);
+  refErrors.forEach((err) => {
+    if (err.error.includes('Self-referencing')) {
+      errors.push({
+        type: 'self-reference',
+        message: err.error,
+        blockName: err.blockName,
+      });
+    } else {
+      errors.push({
+        type: 'missing',
+        message: err.error,
+        blockName: err.blockName,
+      });
+    }
+  });
+
+  if (errors.length > 0) {
+    return { resolved: [], errors };
+  }
+
+  try {
+    const { graph, sqlBlocks } = buildQueryDependencyGraph(markdownContent);
+
+    // Sort blocks by topological order
+    const blockMap = new Map(sqlBlocks.map((b) => [b.name, b]));
+    const resolved = graph.topoOrder
+      .map((name) => blockMap.get(name))
+      .filter(Boolean) as Array<{ name: string; sql: string }>;
+
+    return { resolved, errors };
+  } catch (err: any) {
+    const msg = err?.message ?? 'Unknown dependency error';
+    if (msg.includes('Circular')) {
+      errors.push({ type: 'circular', message: msg });
+    } else if (msg.includes('Self-referencing')) {
+      errors.push({ type: 'self-reference', message: msg });
+    } else {
+      errors.push({ type: 'missing', message: msg });
+    }
+    return { resolved: [], errors };
+  }
+}
 
 /**
  * Execute a single named SQL query for a given connection.

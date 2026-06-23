@@ -22,6 +22,7 @@ import {
   ViewColumn,
   ViewStream,
 } from '@mui/icons-material';
+import { z } from 'zod';
 import MonacoEditor from '@monaco-editor/react';
 import SplitPane, { Pane } from 'split-pane-react';
 import 'split-pane-react/esm/themes/default.css';
@@ -31,7 +32,10 @@ import {
   useUpdateAnalyticsPage,
 } from '../../controllers/analyticsPages.controller';
 import { useSchemaForConnection, useMonacoAutocomplete } from '../../hooks';
-import { executeAnalyticsQuery } from '../../utils/analyticsQueryEngine';
+import {
+  executeAnalyticsQuery,
+  resolveQueryDependencies,
+} from '../../utils/analyticsQueryEngine';
 import { parseAnalyticsMarkdown } from '../../utils/analyticsMarkdown';
 import { AnalyticsPreview } from './AnalyticsPreview';
 import { AnalyticsPreviewErrorBoundary } from './AnalyticsPreviewErrorBoundary';
@@ -39,6 +43,11 @@ import {
   AnalyticsEditorResultsSummary,
   registerAnalyticsEditorBridge,
 } from '../../services/analyticsEditorBridge.service';
+import {
+  getAllComponentDefinitions,
+  getComponentDefinition,
+  getTier1ComponentNames,
+} from './registry/analyticsComponentRegistry';
 
 interface AnalyticsEditorProps {
   connectionId: string;
@@ -116,11 +125,34 @@ export const AnalyticsEditor: React.FC<AnalyticsEditorProps> = ({
   >({});
   const [isRunningQueries, setIsRunningQueries] = useState(false);
 
+  // ── Component snippet templates for slash commands ──────────────────
+  const componentSnippets: Record<string, string> = {
+    Value: `<Value data={} value="" fmt="" />`,
+    BigValue: `<BigValue data={} value="" label="" fmt="" />`,
+    Delta: `<Delta data={} value="" comparison="" />`,
+    DataTable: `<DataTable data={} title="" />`,
+    BarChart: `<BarChart data={} x="" y="" title="" />`,
+    LineChart: `<LineChart data={} x="" y="" title="" />`,
+    AreaChart: `<AreaChart data={} x="" y="" title="" />`,
+    PieChart: `<PieChart data={} x="" y="" />`,
+    DonutChart: `<DonutChart data={} x="" y="" />`,
+    ScatterChart: `<ScatterChart data={} x="" y="" />`,
+    Alert: `<Alert severity="info">\n  \n</Alert>`,
+    Accordion: `<Accordion title="">\n  \n</Accordion>`,
+    Grid: `<Grid columns={2}>\n  <Box>Item 1</Box>\n  <Box>Item 2</Box>\n</Grid>`,
+    Stack: `<Stack spacing={2}>\n  <Box>Item</Box>\n  <Box>Item</Box>\n</Stack>`,
+    Box: `<Box p={2}>\n  Content\n</Box>`,
+    ButtonGroup: `<ButtonGroup options={} default="" />`,
+    Select: `<Select data={} value="" label="" />`,
+    DateRange: `<DateRange title="" />`,
+  };
+
   // ── Refs ──────────────────────────────────────────────────────────────
   const autoSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const isSyncingRef = useRef(false);
   const editorRef = useRef<monaco.editor.IStandaloneCodeEditor | null>(null);
   const completionProviderRef = useRef<monaco.IDisposable | null>(null);
+  const hoverProviderRef = useRef<monaco.IDisposable | null>(null);
   const markdownContentRef = useRef('');
   const queryCacheRef = useRef<Record<string, any[]>>({});
   const queryStatusesRef = useRef<
@@ -166,6 +198,9 @@ export const AnalyticsEditor: React.FC<AnalyticsEditorProps> = ({
     return () => {
       if (completionProviderRef.current) {
         completionProviderRef.current.dispose();
+      }
+      if (hoverProviderRef.current) {
+        hoverProviderRef.current.dispose();
       }
       analyticsCompletionProvider = null;
     };
@@ -237,13 +272,34 @@ ORDER BY 1
     if (isRunningQueries) return;
 
     const blocks = parseAnalyticsMarkdown(markdownContent);
-    const sqlBlocks = blocks.filter((b) => b.type === 'sql') as Array<{
+    const originalSqlBlocks = blocks.filter((b) => b.type === 'sql') as Array<{
       type: 'sql';
       name: string;
       sql: string;
     }>;
 
-    if (sqlBlocks.length === 0) return;
+    if (originalSqlBlocks.length === 0) return;
+
+    const dependencyResult = resolveQueryDependencies(markdownContent);
+    if (dependencyResult.errors.length > 0) {
+      const nextStatuses: Record<
+        string,
+        'idle' | 'running' | 'success' | 'error'
+      > = {};
+      const nextErrors: Record<string, string | null> = {};
+      dependencyResult.errors.forEach((err) => {
+        const targetName = err.blockName ?? originalSqlBlocks[0]?.name;
+        if (targetName) {
+          nextStatuses[targetName] = 'error';
+          nextErrors[targetName] = err.message;
+        }
+      });
+      setQueryStatuses((prev) => ({ ...prev, ...nextStatuses }));
+      setQueryErrors((prev) => ({ ...prev, ...nextErrors }));
+      return;
+    }
+
+    const sqlBlocks = dependencyResult.resolved;
 
     setIsRunningQueries(true);
 
@@ -312,9 +368,25 @@ ORDER BY 1
     async (queryName: string, sql: string) => {
       setQueryStatuses((prev) => ({ ...prev, [queryName]: 'running' }));
       try {
+        const dependencyResult = resolveQueryDependencies(markdownContent);
+        if (dependencyResult.errors.length > 0) {
+          const relatedError =
+            dependencyResult.errors.find(
+              (err) => err.blockName === queryName,
+            ) ?? dependencyResult.errors[0];
+          setQueryStatuses((prev) => ({ ...prev, [queryName]: 'error' }));
+          setQueryErrors((prev) => ({
+            ...prev,
+            [queryName]: relatedError.message,
+          }));
+          return;
+        }
+        const resolvedSql =
+          dependencyResult.resolved.find((block) => block.name === queryName)
+            ?.sql ?? sql;
         const result = await executeAnalyticsQuery({
           queryName,
-          sql,
+          sql: resolvedSql,
           connectionId,
         });
         setQueryCache((prev) => ({ ...prev, [queryName]: result.data }));
@@ -335,7 +407,7 @@ ORDER BY 1
         }));
       }
     },
-    [connectionId],
+    [connectionId, markdownContent],
   );
 
   const getBridgeResults = useCallback((): AnalyticsEditorResultsSummary => {
@@ -386,37 +458,187 @@ ORDER BY 1
       editor: monaco.editor.IStandaloneCodeEditor,
       monacoInstance: typeof monaco,
     ) => {
-      // Register SQL autocomplete inside ```sql...``` fences — singleton
-      if (!analyticsCompletionProvider) {
-        analyticsCompletionProvider =
-          monacoInstance.languages.registerCompletionItemProvider('markdown', {
-            provideCompletionItems: (model, position) => {
-              const text = model.getValue();
-              const offset = model.getOffsetAt(position);
-              const before = text.slice(0, offset);
+      // Clean up any previous provider
+      if (completionProviderRef.current) {
+        completionProviderRef.current.dispose();
+        analyticsCompletionProvider = null;
+      }
 
-              // Count opens vs closes to determine if cursor is inside a ```sql block
-              const opens = (before.match(/^```sql\s+\w*/gm) || []).length;
-              const closes = (before.match(/^```\s*$/gm) || []).length;
-              if (opens <= closes) return { suggestions: [] };
+      // ── Register a single combined completion provider ──────────────
+      analyticsCompletionProvider =
+        monacoInstance.languages.registerCompletionItemProvider('markdown', {
+          triggerCharacters: [' ', '.', '_', '/', '<'],
+          provideCompletionItems: (model, position) => {
+            const text = model.getValue();
+            const offset = model.getOffsetAt(position);
+            const before = text.slice(0, offset);
+            const word = model.getWordUntilPosition(position);
+            const lineContent = model.getLineContent(position.lineNumber);
+            const linePrefix = lineContent.slice(0, position.column - 1);
 
-              const word = model.getWordUntilPosition(position);
-              const range = {
-                startLineNumber: position.lineNumber,
-                endLineNumber: position.lineNumber,
-                startColumn: word.startColumn,
-                endColumn: word.endColumn,
-              };
+            const range = {
+              startLineNumber: position.lineNumber,
+              endLineNumber: position.lineNumber,
+              startColumn: word.startColumn,
+              endColumn: word.endColumn,
+            };
+
+            // ── Determine context ────────────────────────────────────
+            // Count SQL fence opens vs closes
+            const opens = (before.match(/^```sql\s+\w*/gm) || []).length;
+            const closes = (before.match(/^```\s*$/gm) || []).length;
+            const insideSqlFence = opens > closes;
+
+            // ── Inside SQL fence: SQL completions ────────────────────
+            if (insideSqlFence) {
               return {
-                suggestions: analyticsCompletionsRef.current.map((c) => ({
+                suggestions: analyticsCompletionsRef.current.map((c: any) => ({
                   ...c,
                   range,
                 })),
               };
-            },
-          });
-        completionProviderRef.current = analyticsCompletionProvider;
-      }
+            }
+
+            // ── Slash commands (at start of line) ────────────────────
+            if (linePrefix.trim() === '/' || linePrefix.startsWith('/')) {
+              if (linePrefix.trim() === '/') {
+                const slashRange = {
+                  startLineNumber: position.lineNumber,
+                  endLineNumber: position.lineNumber,
+                  startColumn: 1,
+                  endColumn: position.column,
+                };
+
+                const componentNames = getTier1ComponentNames();
+                const slashSuggestions = componentNames.map((name) => {
+                  const def = getComponentDefinition(name);
+                  const description = def?.description ?? '';
+                  const snippetBody =
+                    componentSnippets[name] ?? `<${name} data={} />`;
+                  return {
+                    label: `/${name}`,
+                    kind: monacoInstance.languages.CompletionItemKind.Snippet,
+                    detail: description,
+                    insertText: snippetBody,
+                    range: slashRange,
+                  };
+                });
+
+                return { suggestions: slashSuggestions };
+              }
+              return { suggestions: [] };
+            }
+
+            // ── Inside or near a component tag ───────────────────────
+            // Check if we're inside a <ComponentName ... > region
+            const tagMatch = lineContent.match(/^\s*<([A-Z][A-Za-z]*)/);
+            if (tagMatch) {
+              const currentTag = tagMatch[1];
+
+              // If no tag name yet (< followed by nothing), suggest component names
+              if (!currentTag || lineContent.trim() === '<') {
+                return {
+                  suggestions: getAllComponentDefinitions().map((def) => ({
+                    label: def.name,
+                    kind: monacoInstance.languages.CompletionItemKind.Class,
+                    detail: def.description,
+                    insertText: `${def.name} data={} />`,
+                    range,
+                  })),
+                };
+              }
+
+              // After tag name, suggest attributes
+              const def = getComponentDefinition(currentTag);
+              if (def && def.schema) {
+                // eslint-disable-next-line no-underscore-dangle
+                const schemaDef =
+                  (def.schema as z.ZodObject<any>).shape?.() ?? {};
+                const attrKeys = Object.keys(schemaDef);
+                return {
+                  suggestions: attrKeys.map((attr) => ({
+                    label: attr,
+                    kind: monacoInstance.languages.CompletionItemKind.Property,
+                    // eslint-disable-next-line no-underscore-dangle
+                    detail: `${attr} — ${(schemaDef[attr] as z.ZodTypeAny)?._def?.typeName ?? 'string'}`,
+                    insertText: `${attr}=""`,
+                    range,
+                  })),
+                };
+              }
+            }
+
+            // ── General completion: component names after < ──────────
+            const lessMatch = linePrefix.match(/<([A-Za-z]*)$/);
+            if (lessMatch) {
+              const partial = lessMatch[1] ?? '';
+              return {
+                suggestions: getAllComponentDefinitions()
+                  .filter((def) =>
+                    def.name.toLowerCase().startsWith(partial.toLowerCase()),
+                  )
+                  .map((def) => ({
+                    label: def.name,
+                    kind: monacoInstance.languages.CompletionItemKind.Class,
+                    detail: def.description,
+                    insertText: `${def.name} data={} />`,
+                    range,
+                  })),
+              };
+            }
+
+            return { suggestions: [] };
+          },
+        });
+      completionProviderRef.current = analyticsCompletionProvider;
+
+      // ── Hover provider for component diagnostics ───────────────────
+      hoverProviderRef.current?.dispose();
+      hoverProviderRef.current = monacoInstance.languages.registerHoverProvider(
+        'markdown',
+        {
+          provideHover: (model, position) => {
+            const word = model.getWordAtPosition(position);
+            if (!word) return null;
+            const lineContent = model.getLineContent(position.lineNumber);
+
+            // Check if the word is a component tag
+            const tagMatch = lineContent.match(
+              new RegExp(`<(${word.word})(\\s|>|/)`),
+            );
+            if (tagMatch) {
+              const tagName = tagMatch[1];
+              const def = getComponentDefinition(tagName);
+              if (def) {
+                return {
+                  contents: [
+                    { value: `**\`<${tagName}>\`**` },
+                    { value: def.description },
+                    { value: `*Category: ${def.category}*` },
+                    {
+                      value: def.supportsContent
+                        ? '*Supports child content*'
+                        : '*Self-closing component*',
+                    },
+                  ],
+                };
+              }
+              return {
+                contents: [
+                  {
+                    value: `**\`<${tagName}>\`** — Unknown component`,
+                  },
+                  {
+                    value:
+                      'This component is not registered in the analytics component registry.',
+                  },
+                ],
+              };
+            }
+            return null;
+          },
+        },
+      );
 
       editorRef.current = editor;
 

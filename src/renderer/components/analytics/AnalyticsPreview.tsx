@@ -1,14 +1,16 @@
-/**
- * AnalyticsPreview
- *
- * Live preview pane for the analytics editor. Parses the markdown content
- * into structured blocks and renders each one:
- *   - TextBlock  → MarkdownText (inline renderer)
- *   - SqlBlock   → SqlBadge (clickable, shows status + row count)
- *   - ComponentBlock → AnalyticsComponentRenderer (charts, tables, KPIs)
- */
 import React from 'react';
-import { Box, Typography, CircularProgress, useTheme } from '@mui/material';
+import {
+  Box,
+  Typography,
+  CircularProgress,
+  useTheme,
+  Link,
+} from '@mui/material';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
+import rehypeHighlight from 'rehype-highlight';
+import rehypeRaw from 'rehype-raw';
+import type { Components } from 'react-markdown';
 import {
   parseAnalyticsMarkdown,
   extractFrontmatterTitle,
@@ -16,145 +18,140 @@ import {
 } from '../../utils/analyticsMarkdown';
 import { AnalyticsComponentRenderer } from './AnalyticsComponentRenderer';
 
-// ─── Minimal Markdown Text Renderer ──────────────────────────────────────────
-const MarkdownText: React.FC<{ content: string }> = ({ content }) => {
-  const theme = useTheme();
-
-  const renderInline = (text: string): React.ReactNode => {
-    const parts: React.ReactNode[] = [];
-    const re = /(\*\*\*(.+?)\*\*\*|\*\*(.+?)\*\*|\*(.+?)\*|`(.+?)`)/g;
-    let last = 0;
-    let m: RegExpExecArray | null;
-    let key = 0;
-    // eslint-disable-next-line no-cond-assign
-    while ((m = re.exec(text)) !== null) {
-      if (m.index > last) parts.push(text.slice(last, m.index));
-      if (m[2]) {
-        const k = key;
-        key += 1;
-        parts.push(
-          <strong key={k}>
-            <em>{m[2]}</em>
-          </strong>,
-        );
-      } else if (m[3]) {
-        const k = key;
-        key += 1;
-        parts.push(<strong key={k}>{m[3]}</strong>);
-      } else if (m[4]) {
-        const k = key;
-        key += 1;
-        parts.push(<em key={k}>{m[4]}</em>);
-      } else if (m[5]) {
-        const k = key;
-        key += 1;
-        parts.push(
-          <code
-            key={k}
-            style={{
-              background: theme.palette.action.hover,
-              padding: '1px 4px',
-              borderRadius: 3,
-              fontFamily: 'monospace',
-              fontSize: '0.875em',
-            }}
-          >
-            {m[5]}
-          </code>,
-        );
-      }
-      last = m.index + m[0].length;
-    }
-    if (last < text.length) parts.push(text.slice(last));
-    return parts;
-  };
-
-  const lines = content.split('\n');
-  const elements: React.ReactNode[] = [];
-
-  for (let i = 0; i < lines.length; i += 1) {
-    const line = lines[i];
-    const trimmed = line.trim();
-
-    if (!trimmed) {
-      elements.push(<Box key={i} sx={{ height: 12 }} />);
-    } else {
-      const h1 = trimmed.match(/^#\s+(.+)/);
-      const h2 = trimmed.match(/^##\s+(.+)/);
-      const h3 = trimmed.match(/^###\s+(.+)/);
-      const h4 = trimmed.match(/^####\s+(.+)/);
-
-      if (h1) {
-        elements.push(
-          <Typography key={i} variant="h4" gutterBottom sx={{ mt: 2 }}>
-            {renderInline(h1[1])}
-          </Typography>,
-        );
-      } else if (h2) {
-        elements.push(
-          <Typography key={i} variant="h5" gutterBottom sx={{ mt: 2 }}>
-            {renderInline(h2[1])}
-          </Typography>,
-        );
-      } else if (h3) {
-        elements.push(
-          <Typography key={i} variant="h6" gutterBottom sx={{ mt: 1.5 }}>
-            {renderInline(h3[1])}
-          </Typography>,
-        );
-      } else if (h4) {
-        elements.push(
-          <Typography
-            key={i}
-            variant="subtitle1"
-            fontWeight={600}
-            gutterBottom
-            sx={{ mt: 1 }}
-          >
-            {renderInline(h4[1])}
-          </Typography>,
-        );
-      } else if (trimmed.startsWith('- ') || trimmed.startsWith('* ')) {
-        elements.push(
-          <Box key={i} component="li" sx={{ ml: 2, lineHeight: 1.8 }}>
-            <Typography variant="body2">
-              {renderInline(trimmed.slice(2))}
-            </Typography>
-          </Box>,
-        );
-      } else if (trimmed.match(/^\d+\.\s/)) {
-        const text = trimmed.replace(/^\d+\.\s/, '');
-        elements.push(
-          <Box key={i} component="li" sx={{ ml: 2, lineHeight: 1.8 }}>
-            <Typography variant="body2">{renderInline(text)}</Typography>
-          </Box>,
-        );
-      } else if (trimmed === '---' || trimmed === '***') {
-        elements.push(
-          <Box
-            key={i}
-            component="hr"
-            sx={{
-              border: 'none',
-              borderTop: `1px solid ${theme.palette.divider}`,
-              my: 2,
-            }}
-          />,
-        );
-      } else {
-        elements.push(
-          <Typography key={i} variant="body2" sx={{ lineHeight: 1.75 }}>
-            {renderInline(trimmed)}
-          </Typography>,
-        );
-      }
-    }
-  }
-
-  return <Box>{elements}</Box>;
+// ─── react-markdown component overrides ──────────────────────────────────
+const markdownComponents: Components = {
+  h1: ({ children }) => (
+    <Typography variant="h4" gutterBottom sx={{ mt: 2 }}>
+      {children}
+    </Typography>
+  ),
+  h2: ({ children }) => (
+    <Typography variant="h5" gutterBottom sx={{ mt: 2 }}>
+      {children}
+    </Typography>
+  ),
+  h3: ({ children }) => (
+    <Typography variant="h6" gutterBottom sx={{ mt: 1.5 }}>
+      {children}
+    </Typography>
+  ),
+  h4: ({ children }) => (
+    <Typography
+      variant="subtitle1"
+      fontWeight={600}
+      gutterBottom
+      sx={{ mt: 1 }}
+    >
+      {children}
+    </Typography>
+  ),
+  p: ({ children }) => (
+    <Typography variant="body2" sx={{ lineHeight: 1.75, mb: 1 }}>
+      {children}
+    </Typography>
+  ),
+  a: ({ children, href }) => (
+    <Link
+      href={href}
+      target="_blank"
+      rel="noopener noreferrer"
+      underline="hover"
+    >
+      {children}
+    </Link>
+  ),
+  code: ({ children }) => (
+    <code
+      style={{
+        background: 'rgba(0,0,0,0.06)',
+        padding: '1px 4px',
+        borderRadius: 3,
+        fontFamily: 'monospace',
+        fontSize: '0.875em',
+      }}
+    >
+      {children}
+    </code>
+  ),
+  pre: ({ children }) => (
+    <Box
+      component="pre"
+      sx={{
+        bgcolor: 'action.hover',
+        p: 1.5,
+        borderRadius: 1,
+        overflow: 'auto',
+        fontSize: '0.8rem',
+        fontFamily: 'monospace',
+        mb: 1,
+      }}
+    >
+      {children}
+    </Box>
+  ),
+  blockquote: ({ children }) => (
+    <Box
+      component="blockquote"
+      sx={{
+        borderLeft: 3,
+        borderColor: 'primary.main',
+        pl: 2,
+        my: 1,
+        color: 'text.secondary',
+        fontStyle: 'italic',
+      }}
+    >
+      {children}
+    </Box>
+  ),
+  hr: () => (
+    <Box
+      component="hr"
+      sx={{ border: 'none', borderTop: 1, borderColor: 'divider', my: 2 }}
+    />
+  ),
+  ul: ({ children }) => (
+    <Box component="ul" sx={{ pl: 2, mb: 1 }}>
+      {children}
+    </Box>
+  ),
+  ol: ({ children }) => (
+    <Box component="ol" sx={{ pl: 2, mb: 1 }}>
+      {children}
+    </Box>
+  ),
+  li: ({ children }) => (
+    <Typography component="li" variant="body2" sx={{ lineHeight: 1.8 }}>
+      {children}
+    </Typography>
+  ),
+  table: ({ children }) => (
+    <Box
+      component="table"
+      sx={{
+        width: '100%',
+        borderCollapse: 'collapse',
+        fontSize: '0.8rem',
+        mb: 1,
+        '& th, & td': {
+          border: 1,
+          borderColor: 'divider',
+          px: 1.5,
+          py: 1,
+          textAlign: 'left',
+        },
+        '& th': {
+          fontWeight: 600,
+          bgcolor: 'action.hover',
+        },
+      }}
+    >
+      {children}
+    </Box>
+  ),
 };
 
-// ─── Clickable SQL Status Badge ───────────────────────────────────────────────
+// ─── Clickable SQL Status Badge ──────────────────────────────────────────
 const SqlBadge: React.FC<{
   block: { name: string; sql: string };
   status: 'idle' | 'running' | 'success' | 'error';
@@ -165,12 +162,14 @@ const SqlBadge: React.FC<{
 }> = ({ block, status, rowCount, error, duration, onRun }) => {
   const theme = useTheme();
 
-  const dot = {
-    idle: <span style={{ color: theme.palette.text.disabled }}>○</span>,
-    running: <CircularProgress size={10} sx={{ mt: '1px' }} />,
-    success: <span style={{ color: '#4caf50' }}>●</span>,
-    error: <span style={{ color: '#f44336' }}>●</span>,
-  }[status];
+  const dot = (
+    {
+      idle: <span style={{ color: theme.palette.text.disabled }}>○</span>,
+      running: <CircularProgress size={10} sx={{ mt: '1px' }} />,
+      success: <span style={{ color: '#4caf50' }}>●</span>,
+      error: <span style={{ color: '#f44336' }}>●</span>,
+    } as Record<string, React.ReactNode>
+  )[status];
 
   return (
     <Box
@@ -232,7 +231,7 @@ const SqlBadge: React.FC<{
   );
 };
 
-// ─── Main Preview ─────────────────────────────────────────────────────────────
+// ─── Main Preview ──────────────────────────────────────────────────────────
 interface AnalyticsPreviewProps {
   markdownContent: string;
   queryCache: Record<string, any[]>;
@@ -254,7 +253,6 @@ export const AnalyticsPreview: React.FC<AnalyticsPreviewProps> = ({
 }) => {
   const theme = useTheme();
 
-  // Phase 6.1: Debounced Parsing
   const [blocks, setBlocks] = React.useState<AnalyticsBlock[]>(() =>
     parseAnalyticsMarkdown(markdownContent),
   );
@@ -283,7 +281,6 @@ export const AnalyticsPreview: React.FC<AnalyticsPreviewProps> = ({
     };
   }, [markdownContent]);
 
-  // Phase 6.7: Scroll to top on page change
   const scrollContainerRef = React.useRef<HTMLDivElement | null>(null);
   React.useEffect(() => {
     scrollContainerRef.current?.scrollTo({ top: 0, behavior: 'instant' });
@@ -328,7 +325,16 @@ export const AnalyticsPreview: React.FC<AnalyticsPreviewProps> = ({
 
       {blocks.map((block: AnalyticsBlock, i: number) => {
         if (block.type === 'text') {
-          return <MarkdownText key={i} content={block.markdown} />;
+          return (
+            <ReactMarkdown
+              key={i}
+              remarkPlugins={[remarkGfm]}
+              rehypePlugins={[rehypeHighlight, rehypeRaw]}
+              components={markdownComponents}
+            >
+              {block.markdown}
+            </ReactMarkdown>
+          );
         }
 
         if (block.type === 'sql') {
@@ -352,11 +358,13 @@ export const AnalyticsPreview: React.FC<AnalyticsPreviewProps> = ({
               key={i}
               tag={block.tag}
               rawProps={block.rawProps}
+              content={block.content}
               queryCache={queryCache}
               queryStatuses={queryStatuses}
             />
           );
         }
+
         return null;
       })}
     </Box>

@@ -1,19 +1,27 @@
 /**
  * Analytics Markdown Parser
  *
- * Converts an Evidence-style markdown page into a structured list of blocks
- * that the preview renderer can process independently.
- *
- * Supported block types:
- *  - TextBlock  : Regular markdown prose (headings, bold, lists, etc.)
- *  - SqlBlock   : ```sql queryName ... ``` fenced code blocks
- *  - ComponentBlock : Evidence component tags (<BarChart data={sales} ... />)
+ * Converts an analytics markdown page into structured blocks that the preview
+ * renderer can process independently.
  */
 
 export type AnalyticsBlock =
-  | { type: 'sql'; name: string; sql: string }
-  | { type: 'component'; tag: string; rawProps: string }
-  | { type: 'text'; markdown: string };
+  | {
+      type: 'sql';
+      name: string;
+      sql: string;
+      lineStart: number;
+      lineEnd: number;
+    }
+  | {
+      type: 'component';
+      tag: string;
+      rawProps: string;
+      content?: string;
+      lineStart: number;
+      lineEnd: number;
+    }
+  | { type: 'text'; markdown: string; lineStart: number; lineEnd: number };
 
 type ParserState =
   | 'normal'
@@ -22,22 +30,28 @@ type ParserState =
   | 'other-fence'
   | 'component-tag';
 
+function parseComponentLines(
+  tagName: string,
+  componentLines: string[],
+): { rawProps: string; content?: string } {
+  const raw = componentLines.join('\n');
+  const openMatch = raw.match(new RegExp(`^\\s*<${tagName}\\b([\\s\\S]*?)>`));
+  if (!openMatch) return { rawProps: '' };
+
+  const openingTag = openMatch[0];
+  const rawProps = (openMatch[1] ?? '').replace(/\/\s*$/, '').trim();
+  if (/\/>\s*$/.test(openingTag)) return { rawProps };
+
+  const contentWithClose = raw.slice(openingTag.length);
+  const closePattern = new RegExp(`</${tagName}>\\s*$`);
+  const innerContent = contentWithClose.replace(closePattern, '').trim();
+  return { rawProps, content: innerContent || undefined };
+}
+
 /**
- * Parse an Evidence-compatible markdown page into structured blocks.
- *
- * Example input → output:
- *   ---
- *   title: Sales Dashboard    (skipped - frontmatter)
- *   ---
- *   # Sales Report            TextBlock { markdown: "# Sales Report\n..." }
- *
- *   ```sql sales              SqlBlock { name: "sales", sql: "SELECT ..." }
- *   SELECT date, amount
- *   FROM orders
- *   ```
- *
- *   <BarChart data={sales} x="date" y="amount" />
- *                             ComponentBlock { tag: "BarChart", rawProps: 'data={sales} x="date" y="amount"' }
+ * Parse a DBT Studio analytics markdown page into SQL, text, and component
+ * blocks. Component bodies are preserved as markdown so the renderer can
+ * recurse through nested analytics components.
  */
 export function parseAnalyticsMarkdown(content: string): AnalyticsBlock[] {
   const lines = content.split('\n');
@@ -46,18 +60,34 @@ export function parseAnalyticsMarkdown(content: string): AnalyticsBlock[] {
   let state: ParserState = 'normal';
   let currentQueryName = '';
   let currentSqlLines: string[] = [];
+  let currentSqlStart = 0;
   let currentTextLines: string[] = [];
+  let currentTextStart = 0;
   let currentComponentTag = '';
   let currentComponentLines: string[] = [];
+  let currentComponentDepth = 0;
+  let currentComponentStart = 0;
   let lineIndex = 0;
 
   const flushText = () => {
     const text = currentTextLines.join('\n').trim();
-    if (text) blocks.push({ type: 'text', markdown: text });
+    if (text) {
+      blocks.push({
+        type: 'text',
+        markdown: text,
+        lineStart: currentTextStart || 1,
+        lineEnd: lineIndex,
+      });
+    }
     currentTextLines = [];
+    currentTextStart = 0;
   };
 
-  // Handle frontmatter at start of document
+  const pushTextLine = (line: string) => {
+    if (currentTextLines.length === 0) currentTextStart = lineIndex + 1;
+    currentTextLines.push(line);
+  };
+
   if (lines[0]?.trim() === '---') {
     state = 'frontmatter';
     lineIndex = 1;
@@ -67,130 +97,128 @@ export function parseAnalyticsMarkdown(content: string): AnalyticsBlock[] {
     const line = lines[lineIndex];
     const trimmed = line.trim();
 
-    // ── FRONTMATTER ────────────────────────────────────────────────────
     if (state === 'frontmatter') {
       if (trimmed === '---') state = 'normal';
-    }
-    // ── SQL BLOCK ──────────────────────────────────────────────────────
-    else if (state === 'sql-block') {
+    } else if (state === 'sql-block') {
       if (trimmed === '```') {
         blocks.push({
           type: 'sql',
           name: currentQueryName,
           sql: currentSqlLines.join('\n').trim(),
+          lineStart: currentSqlStart,
+          lineEnd: lineIndex + 1,
         });
         currentQueryName = '';
         currentSqlLines = [];
+        currentSqlStart = 0;
         state = 'normal';
       } else {
         currentSqlLines.push(line);
       }
-    }
-    // ── OTHER FENCE ────────────────────────────────────────────────────
-    else if (state === 'other-fence') {
-      currentTextLines.push(line);
-      if (trimmed === '```') {
-        state = 'normal';
-      }
-    }
-    // ── MULTI-LINE COMPONENT TAG ────────────────────────────────────────
-    else if (state === 'component-tag') {
-      const isSelfClose = trimmed.endsWith('/>');
-      const isCloseTag = trimmed.endsWith(`</${currentComponentTag}>`);
-      const isOpenTagEnd = trimmed.endsWith('>') && !trimmed.endsWith('/>');
-
-      currentComponentLines.push(trimmed);
-
-      if (isSelfClose || isCloseTag || isOpenTagEnd) {
-        const rawProps = currentComponentLines
-          .join(' ')
-          // Strip the tag name from the first line
-          .replace(/^<[A-Z][A-Za-z]+\s*/, '')
-          .replace(/\/>$/, '')
-          .replace(new RegExp(`<\\/${currentComponentTag}>$`), '')
-          .replace(/>$/, '')
-          .trim();
-
-        blocks.push({ type: 'component', tag: currentComponentTag, rawProps });
+    } else if (state === 'other-fence') {
+      pushTextLine(line);
+      if (trimmed === '```') state = 'normal';
+    } else if (state === 'component-tag') {
+      currentComponentLines.push(line);
+      const openingMatches = trimmed.match(/<([A-Z][A-Za-z]+)\b(?![^>]*\/>)/g);
+      const closingMatches = trimmed.match(/<\/[A-Z][A-Za-z]+>/g);
+      const openingCount = openingMatches?.length ?? 0;
+      const closingCount = closingMatches?.length ?? 0;
+      currentComponentDepth += openingCount - closingCount;
+      if (
+        currentComponentDepth <= 0 &&
+        (trimmed.endsWith('/>') ||
+          trimmed.endsWith(`</${currentComponentTag}>`))
+      ) {
+        const parsed = parseComponentLines(
+          currentComponentTag,
+          currentComponentLines,
+        );
+        blocks.push({
+          type: 'component',
+          tag: currentComponentTag,
+          rawProps: parsed.rawProps,
+          content: parsed.content,
+          lineStart: currentComponentStart,
+          lineEnd: lineIndex + 1,
+        });
         currentComponentTag = '';
         currentComponentLines = [];
+        currentComponentDepth = 0;
+        currentComponentStart = 0;
         state = 'normal';
       }
-    }
-    // ── NORMAL ─────────────────────────────────────────────────────────
-    else {
-      // Opening sql fence: ```sql queryName
+    } else {
       const sqlFenceMatch = trimmed.match(/^```sql\s+(\w+)\s*$/);
       if (sqlFenceMatch) {
         flushText();
         const [, queryName] = sqlFenceMatch;
         currentQueryName = queryName;
+        currentSqlStart = lineIndex + 1;
         state = 'sql-block';
       } else if (trimmed.match(/^```/)) {
-        // Opening other fence (```tsx, ```bash, etc.)
-        currentTextLines.push(line);
+        pushTextLine(line);
         state = 'other-fence';
       } else {
-        // Standalone Evidence component tag — single-line or start of multi-line
-        const componentOpenMatch = trimmed.match(/^<([A-Z][A-Za-z]+)(\s.*)?$/);
+        const componentOpenMatch = trimmed.match(
+          /^<([A-Z][A-Za-z]+)\b[\s\S]*$/,
+        );
         if (componentOpenMatch) {
-          const [, tagName, restOfLine = ''] = componentOpenMatch;
-          const restTrimmed = restOfLine.trim();
+          const [, tagName] = componentOpenMatch;
+          flushText();
+          currentComponentTag = tagName;
+          currentComponentLines = [line];
+          currentComponentDepth = 1;
+          currentComponentStart = lineIndex + 1;
 
-          if (
-            restTrimmed.endsWith('/>') ||
-            restTrimmed.endsWith(`</${tagName}>`)
-          ) {
-            // Self-closing on same line
-            flushText();
-            const rawProps = restTrimmed
-              .replace(/\/>$/, '')
-              .replace(new RegExp(`<\\/${tagName}>$`), '')
-              .trim();
-            blocks.push({ type: 'component', tag: tagName, rawProps });
-          } else if (restTrimmed.endsWith('>') && !restTrimmed.endsWith('/>')) {
-            // Open-close tag on same line
-            flushText();
-            const rawProps = restTrimmed
-              .replace(new RegExp(`<\\/${tagName}>$`), '')
-              .replace(/>$/, '')
-              .trim();
-            blocks.push({ type: 'component', tag: tagName, rawProps });
+          if (trimmed.endsWith('/>') || trimmed.endsWith(`</${tagName}>`)) {
+            const parsed = parseComponentLines(tagName, currentComponentLines);
+            blocks.push({
+              type: 'component',
+              tag: tagName,
+              rawProps: parsed.rawProps,
+              content: parsed.content,
+              lineStart: currentComponentStart,
+              lineEnd: lineIndex + 1,
+            });
+            currentComponentTag = '';
+            currentComponentLines = [];
+            currentComponentDepth = 0;
+            currentComponentStart = 0;
           } else {
-            // Multi-line component open
-            currentComponentTag = tagName;
-            currentComponentLines.push(trimmed);
             state = 'component-tag';
-            flushText();
           }
         } else {
-          currentTextLines.push(line);
+          pushTextLine(line);
         }
       }
     }
   }
 
-  // Handle EOF states
   if (state === 'sql-block' && currentQueryName) {
     blocks.push({
       type: 'sql',
       name: currentQueryName,
       sql: currentSqlLines.join('\n').trim(),
+      lineStart: currentSqlStart,
+      lineEnd: lines.length,
     });
   } else if (state === 'component-tag' && currentComponentTag) {
+    const parsed = parseComponentLines(
+      currentComponentTag,
+      currentComponentLines,
+    );
     blocks.push({
       type: 'component',
       tag: currentComponentTag,
-      rawProps: currentComponentLines
-        .join(' ')
-        .replace(/^<[A-Z][A-Za-z]+\s*/, '')
-        .replace(/>$/, '')
-        .trim(),
+      rawProps: parsed.rawProps,
+      content: parsed.content,
+      lineStart: currentComponentStart,
+      lineEnd: lines.length,
     });
   }
 
   flushText();
-
   return blocks;
 }
 
@@ -211,17 +239,4 @@ export function extractFrontmatterTitle(content: string): string | null {
   return null;
 }
 
-/**
- * Parse raw Evidence-style props string into a key→value map.
- * Handles: propName={value}  propName="value"  propName='value'
- */
-export function parseComponentProps(raw: string): Record<string, string> {
-  const result: Record<string, string> = {};
-  const re = /(\w+)=(?:\{(\w+)\}|"([^"]*?)"|'([^']*?)')/g;
-  let m: RegExpExecArray | null;
-  // eslint-disable-next-line no-cond-assign
-  while ((m = re.exec(raw)) !== null) {
-    result[m[1]] = m[2] ?? m[3] ?? m[4] ?? '';
-  }
-  return result;
-}
+export { parseComponentProps } from './analyticsComponentProps';
