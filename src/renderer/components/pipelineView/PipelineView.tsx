@@ -21,6 +21,8 @@ type PipelineViewProps = {
   actionId?: string | null;
   /** Notifies parent of the active action id (for log viewer wiring). */
   onActiveActionChange?: (actionId: string | null) => void;
+  /** When provided, enables visual edit mode with a Save button. */
+  onSave?: (content: string) => Promise<void>;
 };
 
 const ACTION_STATUS_COLOR: Record<CloudActionStatus, string> = {
@@ -71,6 +73,7 @@ export const PipelineView: React.FC<PipelineViewProps> = ({
   onEdit,
   actionId,
   onActiveActionChange,
+  onSave,
 }) => {
   const config = React.useMemo(() => parsePipelineConfig(content), [content]);
 
@@ -176,7 +179,12 @@ export const PipelineView: React.FC<PipelineViewProps> = ({
           />
         </Box>
       )}
-      <PipelineGraph jobs={jobsWithStatus} onEdit={onEdit} />
+      <PipelineGraph
+        jobs={jobsWithStatus}
+        pipelineName={config.name}
+        onEdit={onEdit}
+        onSave={onSave}
+      />
     </Box>
   );
 };

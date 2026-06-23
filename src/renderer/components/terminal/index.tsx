@@ -53,6 +53,7 @@ import {
   isPipelineFile,
   parsePipelineConfig,
 } from '../pipelineView';
+import { projectsServices } from '../../services';
 
 type Props = {
   project: Project;
@@ -671,6 +672,16 @@ export const TerminalLayout: React.FC<Props> = ({ children, project }) => {
                       content={pipelineFileContent || ''}
                       onEdit={() => openFile?.(pipelineFilePath)}
                       actionId={cloudActionId}
+                      onSave={
+                        pipelineFilePath
+                          ? async (content: string) => {
+                              await projectsServices.saveFileContent({
+                                path: pipelineFilePath,
+                                content,
+                              });
+                            }
+                          : undefined
+                      }
                     />
                   </Box>
                   {cloudActionId && (

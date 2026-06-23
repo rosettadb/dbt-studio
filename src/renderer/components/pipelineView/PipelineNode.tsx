@@ -13,6 +13,8 @@ import type { Theme } from '@mui/material';
 import {
   FolderOpen,
   Terminal,
+  Link,
+  Edit,
   CheckCircle,
   Cancel,
   Schedule,
@@ -26,6 +28,10 @@ import type { CloudStepStatus } from '../../../types/cloudAction';
 export type PipelineNodeData = PipelineStep & {
   stepIndex: number;
   isCleanup?: boolean;
+  jobName?: string;
+  jobType?: string;
+  editMode?: boolean;
+  onEditClick?: () => void;
 };
 
 const CLEANUP_COLOR = '#9E9E9E'; // neutral gray for cleanup jobs
@@ -140,13 +146,43 @@ export const PipelineNode = memo(
             backgroundColor: theme.palette.background.paper,
             overflow: 'hidden',
             transition: 'all 0.2s',
+            cursor: data.editMode ? 'pointer' : 'default',
             boxShadow:
               data.status === 'running'
                 ? `0 0 0 3px ${theme.palette.info.main}33`
                 : undefined,
-            '&:hover': { boxShadow: theme.shadows[4] },
+            '&:hover': {
+              boxShadow: theme.shadows[4],
+              '& .edit-hint': { opacity: 1 },
+            },
           }}
         >
+          {data.editMode && (
+            <Box
+              className="edit-hint"
+              sx={{
+                position: 'absolute',
+                top: 6,
+                right: 6,
+                opacity: 0,
+                transition: 'opacity 0.15s',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                bgcolor: 'background.paper',
+                borderRadius: '50%',
+                width: 20,
+                height: 20,
+                boxShadow: 1,
+                zIndex: 1,
+              }}
+            >
+              <Edit
+                sx={{ fontSize: 12, color: 'text.secondary' }}
+                onClick={(e) => { e.stopPropagation(); data.onEditClick?.(); }}
+              />
+            </Box>
+          )}
           <Box sx={{ px: 1.5, pt: 1, pb: 1.25 }}>
             {/* Status row */}
             {statusVisual && (
@@ -241,40 +277,43 @@ export const PipelineNode = memo(
               )}
             </Box>
 
-            {/* Command */}
-            <Tooltip title={data.command} placement="bottom-start">
-              <Box
-                sx={{
-                  display: 'flex',
-                  alignItems: 'flex-start',
-                  gap: 0.5,
-                  mb: data.working_dir ? 0.5 : 0,
-                }}
-              >
-                <Terminal
-                  sx={{
-                    fontSize: 12,
-                    color: 'text.disabled',
-                    mt: '2px',
-                    flexShrink: 0,
-                  }}
-                />
-                <Typography
-                  variant="caption"
-                  sx={{
-                    color: 'text.secondary',
-                    fontFamily: 'monospace',
-                    fontSize: '0.65rem',
-                    overflow: 'hidden',
-                    textOverflow: 'ellipsis',
-                    whiteSpace: 'nowrap',
-                    maxWidth: 200,
-                  }}
-                >
-                  {data.command}
-                </Typography>
-              </Box>
-            </Tooltip>
+            {/* Command or URL */}
+            {(() => {
+              const isGitClone = data.plugin === 'git_clone@v1';
+              const displayValue = isGitClone ? (data.url ?? '') : (data.command ?? '');
+              return (
+                <Tooltip title={displayValue} placement="bottom-start">
+                  <Box
+                    sx={{
+                      display: 'flex',
+                      alignItems: 'flex-start',
+                      gap: 0.5,
+                      mb: data.working_dir ? 0.5 : 0,
+                    }}
+                  >
+                    {isGitClone ? (
+                      <Link sx={{ fontSize: 12, color: 'text.disabled', mt: '2px', flexShrink: 0 }} />
+                    ) : (
+                      <Terminal sx={{ fontSize: 12, color: 'text.disabled', mt: '2px', flexShrink: 0 }} />
+                    )}
+                    <Typography
+                      variant="caption"
+                      sx={{
+                        color: 'text.secondary',
+                        fontFamily: 'monospace',
+                        fontSize: '0.65rem',
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis',
+                        whiteSpace: 'nowrap',
+                        maxWidth: 200,
+                      }}
+                    >
+                      {displayValue || <span style={{ opacity: 0.4 }}>—</span>}
+                    </Typography>
+                  </Box>
+                </Tooltip>
+              );
+            })()}
 
             {/* Working dir */}
             {data.working_dir && (
