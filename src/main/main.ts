@@ -300,6 +300,9 @@ app.on('before-quit', async (event) => {
 
     // Disconnect all MCP servers to preserve system resources
     await MCPClientManager.disconnectAll();
+
+    // Stop Flowfile service
+    await FlowfileService.stop();
   } catch (error) {
     // eslint-disable-next-line no-console
     console.error('[App] Error during app cleanup:', error);
