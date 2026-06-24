@@ -883,7 +883,7 @@ export const QueryResult: React.FC<Props> = ({ results, exportContext }) => {
               {sharedToolbarContent}
             </Box>
           </Box>
-          <QueryResultVisualization data={rows} />
+          <QueryResultVisualization data={results.data || rows} />
         </Box>
       ) : (
         <CustomTable<Record<string, any>>

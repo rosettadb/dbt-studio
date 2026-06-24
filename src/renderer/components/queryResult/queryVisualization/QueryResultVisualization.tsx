@@ -17,6 +17,52 @@ export interface QueryResultVisualizationProps {
   }) => void;
 }
 
+const isNumericChartValue = (value: any) => {
+  if (typeof value === 'number') {
+    return Number.isFinite(value);
+  }
+  if (typeof value === 'bigint') {
+    return Number.isSafeInteger(Number(value));
+  }
+  if (typeof value === 'string') {
+    const trimmed = value.trim();
+    return trimmed !== '' && !Number.isNaN(Number(trimmed));
+  }
+  return false;
+};
+
+const getNumericColumns = (data: any[], columns: string[]) =>
+  columns.filter(
+    (col) =>
+      data.some((row) => row[col] !== null && row[col] !== undefined) &&
+      data.every(
+        (row) =>
+          row[col] === null ||
+          row[col] === undefined ||
+          isNumericChartValue(row[col]),
+      ),
+  );
+
+const getDefaultXAxisCol = (columns: string[], numericColumns: string[]) => {
+  const categoricalColumns = columns.filter(
+    (col) => !numericColumns.includes(col),
+  );
+  return categoricalColumns[0] || columns[0] || '';
+};
+
+const getDefaultYAxisCols = (columns: string[], numericColumns: string[]) => {
+  if (numericColumns.length > 0) {
+    return [numericColumns[0]];
+  }
+  if (columns.length > 1) {
+    return [columns[1]];
+  }
+  if (columns.length === 1) {
+    return [columns[0]];
+  }
+  return [];
+};
+
 export const QueryResultVisualization: React.FC<
   QueryResultVisualizationProps
 > = ({
@@ -35,25 +81,36 @@ export const QueryResultVisualization: React.FC<
   useEffect(() => {
     if (data && data.length > 0) {
       const columns = Object.keys(data[0]);
+      const numericColumns = getNumericColumns(data, columns);
       setAvailableColumns(columns);
 
       // Revalidate xAxisCol — reset if it no longer exists in the new schema
       setXAxisCol((prev) => {
         if (prev && columns.includes(prev)) return prev;
-        return columns.length > 0 ? columns[0] : '';
+        return getDefaultXAxisCol(columns, numericColumns);
       });
 
       // Revalidate yAxisCols — remove any columns that no longer exist
       setYAxisCols((prev) => {
         const stillValid = prev.filter((col) => columns.includes(col));
         if (stillValid.length > 0) return stillValid;
-        // Fall back to sensible defaults
-        if (columns.length > 1) return [columns[1]];
-        if (columns.length === 1) return [columns[0]];
-        return [];
+        return getDefaultYAxisCols(columns, numericColumns);
       });
     }
   }, [data]);
+
+  const handleChartTypeChange = (nextChartType: ChartType) => {
+    setChartType(nextChartType);
+    if (nextChartType === 'pie') {
+      const numericColumns = getNumericColumns(data, availableColumns);
+      setYAxisCols((prev) => {
+        if (prev[0] && numericColumns.includes(prev[0])) {
+          return [prev[0]];
+        }
+        return getDefaultYAxisCols(availableColumns, numericColumns);
+      });
+    }
+  };
 
   useEffect(() => {
     if (onConfigChange) {
@@ -88,7 +145,7 @@ export const QueryResultVisualization: React.FC<
         xAxisCol={xAxisCol}
         yAxisCols={yAxisCols}
         availableColumns={availableColumns}
-        onChartTypeChange={setChartType}
+        onChartTypeChange={handleChartTypeChange}
         onXAxisChange={setXAxisCol}
         onYAxisColsChange={setYAxisCols}
       />

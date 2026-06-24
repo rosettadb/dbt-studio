@@ -34,6 +34,8 @@ import { CellOutput } from '../../../types/notebooks';
 import { CustomTable } from '../customTable';
 import { useFetchCellPage } from '../../controllers/notebooks.controller';
 
+const MAX_CHART_ROWS = 1000;
+
 interface OutputPanelProps {
   output: CellOutput;
   connectionId: string;
@@ -52,13 +54,17 @@ export const OutputPanel: React.FC<OutputPanelProps> = ({
   const [page, setPage] = useState(0);
   const [perPage, setPerPage] = useState(10);
   const [paginatedData, setPaginatedData] = useState(output.data || []);
+  const [chartData, setChartData] = useState<any[] | null>(null);
   const [loading, setLoading] = useState(false);
   const [exportAnchorEl, setExportAnchorEl] = useState<null | HTMLElement>(
     null,
   );
   const [isExporting, setIsExporting] = useState(false);
   const fetchCellPage = useFetchCellPage();
+  const fetchCellPageAsync = fetchCellPage.mutateAsync;
   const latestRequestId = useRef(0);
+  const latestChartRequestId = useRef(0);
+  const chartRequestKeyRef = useRef<string | null>(null);
   const chartContainerRef = useRef<HTMLDivElement>(null);
   const [viewMode, setViewMode] = useState<'table' | 'chart'>('table');
 
@@ -97,7 +103,70 @@ export const OutputPanel: React.FC<OutputPanelProps> = ({
     setLoading(false);
     setPage(0);
     setPaginatedData(output.data || []);
-  }, [output]);
+    setChartData(null);
+    chartRequestKeyRef.current = null;
+  }, [
+    cellId,
+    sql,
+    output.type,
+    output.rowCount,
+    output.totalRows,
+    output.executionTime,
+  ]);
+
+  React.useEffect(() => {
+    if (viewMode !== 'chart' || output.type !== 'table') return;
+
+    const currentRows = output.data || [];
+    const totalRows = output.totalRows ?? output.rowCount ?? currentRows.length;
+    if (totalRows <= currentRows.length) {
+      return;
+    }
+
+    const chartLimit = Math.min(totalRows, MAX_CHART_ROWS);
+    const requestKey = `${connectionId}:${notebookId}:${cellId}:${sql}:${chartLimit}`;
+    if (chartRequestKeyRef.current === requestKey) {
+      return;
+    }
+    chartRequestKeyRef.current = requestKey;
+
+    latestChartRequestId.current += 1;
+    const requestId = latestChartRequestId.current;
+
+    const fetchChartData = async () => {
+      try {
+        const result = await fetchCellPageAsync({
+          connectionId,
+          notebookId,
+          cellId,
+          sql,
+          limit: chartLimit,
+          offset: 0,
+        });
+        if (requestId !== latestChartRequestId.current) return;
+        if (result.type === 'table' && result.data) {
+          setChartData(result.data);
+        }
+      } catch (error) {
+        if (requestId !== latestChartRequestId.current) return;
+        // eslint-disable-next-line no-console
+        console.error('[OutputPanel] Failed to fetch chart data:', error);
+      }
+    };
+
+    fetchChartData();
+  }, [
+    viewMode,
+    output.type,
+    output.data,
+    output.rowCount,
+    output.totalRows,
+    connectionId,
+    notebookId,
+    cellId,
+    sql,
+    fetchCellPageAsync,
+  ]);
 
   // Fetch a specific page - only called when user explicitly changes page
   const fetchPage = useCallback(
@@ -773,25 +842,51 @@ export const OutputPanel: React.FC<OutputPanelProps> = ({
         <Box
           ref={chartContainerRef}
           sx={{
-            flexGrow: 1,
+            width: '100%',
+            height: 450,
             overflow: 'auto',
             display: 'flex',
             flexDirection: 'column',
-            minHeight: 400,
           }}
         >
           <Box
             sx={{
               display: 'flex',
-              justifyContent: 'flex-end',
+              justifyContent: 'space-between',
               alignItems: 'center',
               pr: 2,
+              pl: 2,
               minHeight: 48,
             }}
           >
+            <Box
+              sx={{
+                flex: '1 1 auto',
+                overflow: 'hidden',
+                mr: 2,
+                display: 'flex',
+              }}
+            >
+              <Typography
+                variant="body2"
+                color="text.secondary"
+                sx={{
+                  fontSize: '0.75rem',
+                  fontFamily: 'monospace',
+                  whiteSpace: 'nowrap',
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis',
+                }}
+              >
+                {output.totalRows !== undefined &&
+                  `${output.totalRows.toLocaleString()} rows`}
+              </Typography>
+            </Box>
             {toolbarContent}
           </Box>
-          <QueryResultVisualization data={paginatedData} />
+          <QueryResultVisualization
+            data={chartData || output.data || paginatedData}
+          />
         </Box>
       ) : (
         <CustomTable

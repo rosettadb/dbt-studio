@@ -16,7 +16,7 @@ import {
   ResponsiveContainer,
   Cell,
 } from 'recharts';
-import { Box, Typography } from '@mui/material';
+import { Box, Typography, useTheme } from '@mui/material';
 import { ChartType } from './ChartConfig';
 
 export interface ChartRendererProps {
@@ -82,12 +82,47 @@ const EmptyState: React.FC<{ message: string; isError?: boolean }> = ({
   </Box>
 );
 
+const PIE_COLORS = [
+  '#4f83cc',
+  '#4caf50',
+  '#ff9800',
+  '#e53935',
+  '#9c27b0',
+  '#00acc1',
+  '#ff5722',
+  '#8bc34a',
+  '#ff4081',
+  '#607d8b',
+];
+
+const formatPieLabelText = (value: any, maxLength = 18) => {
+  const text = formatTooltipValue(value);
+  const stringValue = String(text);
+  if (stringValue.length <= maxLength) {
+    return stringValue;
+  }
+  return `${stringValue.slice(0, maxLength - 1)}…`;
+};
+
+const renderPieLabel = ({
+  name,
+  percent,
+}: {
+  name?: any;
+  percent?: number;
+}) => {
+  const percentage =
+    typeof percent === 'number' ? ` ${(percent * 100).toFixed(0)}%` : '';
+  return `${formatPieLabelText(name)}${percentage}`;
+};
+
 export const ChartRenderer: React.FC<ChartRendererProps> = ({
   data,
   chartType,
   xAxisCol,
   yAxisCols,
 }) => {
+  const theme = useTheme();
   // Force a remeasure whenever key chart config changes.
   // ResponsiveContainer reads its parent size on mount; changing this key
   // unmounts/remounts the container so it picks up the current size.
@@ -202,29 +237,30 @@ export const ChartRenderer: React.FC<ChartRendererProps> = ({
       }
       case 'pie': {
         const primaryYAxisCol = yAxisCols[0];
-        const tooManySlices = validPieData!.length > MAX_LEGEND_ITEMS;
+        const sliceStroke = theme.palette.mode === 'dark' ? '#1e1e1e' : '#fff';
 
         return (
-          <PieChart>
+          <PieChart margin={{ top: 40, right: 40, left: 40, bottom: 40 }}>
             <Pie
               data={validPieData!}
               dataKey={primaryYAxisCol}
               nameKey={xAxisCol}
               cx="50%"
               cy="50%"
-              outerRadius={150}
-              fill="#8884d8"
-              label={!tooManySlices}
+              outerRadius={130}
+              stroke={sliceStroke}
+              strokeWidth={2}
+              label={renderPieLabel}
             >
               {validPieData!.map((entry, index) => (
                 <Cell
                   key={`cell-${index}`}
-                  fill={COLORS[index % COLORS.length]}
+                  fill={PIE_COLORS[index % PIE_COLORS.length]}
                 />
               ))}
             </Pie>
             <Tooltip formatter={formatTooltipValue} />
-            {!tooManySlices && <Legend />}
+            {validPieData!.length <= MAX_LEGEND_ITEMS && <Legend />}
           </PieChart>
         );
       }
