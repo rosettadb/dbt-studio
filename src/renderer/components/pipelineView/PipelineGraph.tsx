@@ -56,7 +56,9 @@ function getLayoutedElements(flowNodes: Node[], flowEdges: Edge[]) {
   const g = new dagre.graphlib.Graph();
   g.setDefaultEdgeLabel(() => ({}));
   g.setGraph({ rankdir: 'LR', ranksep: 60, nodesep: 30 });
-  flowNodes.forEach((n) => g.setNode(n.id, { width: NODE_WIDTH, height: NODE_HEIGHT }));
+  flowNodes.forEach((n) =>
+    g.setNode(n.id, { width: NODE_WIDTH, height: NODE_HEIGHT }),
+  );
   flowEdges.forEach((e) => g.setEdge(e.source, e.target));
   dagre.layout(g);
   return {
@@ -111,10 +113,14 @@ function buildNodesAndEdges(
           animated: running,
           markerEnd: {
             type: MarkerType.ArrowClosed,
-            color: running ? theme.palette.info.main : theme.palette.text.disabled,
+            color: running
+              ? theme.palette.info.main
+              : theme.palette.text.disabled,
           },
           style: {
-            stroke: running ? theme.palette.info.main : theme.palette.text.disabled,
+            stroke: running
+              ? theme.palette.info.main
+              : theme.palette.text.disabled,
           },
         });
       }
@@ -132,10 +138,14 @@ function buildNodesAndEdges(
         animated: firstRunning,
         markerEnd: {
           type: MarkerType.ArrowClosed,
-          color: firstRunning ? theme.palette.info.main : theme.palette.text.disabled,
+          color: firstRunning
+            ? theme.palette.info.main
+            : theme.palette.text.disabled,
         },
         style: {
-          stroke: firstRunning ? theme.palette.info.main : theme.palette.text.disabled,
+          stroke: firstRunning
+            ? theme.palette.info.main
+            : theme.palette.text.disabled,
           strokeDasharray: '5 4',
         },
       });
@@ -161,7 +171,9 @@ const PipelineGraphContent: React.FC<PipelineGraphProps> = ({
   const [edges, setEdges] = useEdgesState([]);
   const [isEditing, setIsEditing] = React.useState(false);
   const [pipelineName, setPipelineName] = React.useState(initialPipelineName);
-  const [editNode, setEditNode] = React.useState<Node<PipelineNodeData> | null>(null);
+  const [editNode, setEditNode] = React.useState<Node<PipelineNodeData> | null>(
+    null,
+  );
   const [validationError, setValidationError] = React.useState('');
   const [isSaving, setIsSaving] = React.useState(false);
 
@@ -178,7 +190,10 @@ const PipelineGraphContent: React.FC<PipelineGraphProps> = ({
   useEffect(() => {
     if (isEditing) return;
     const { nodes: built, edges: builtEdges } = buildNodesAndEdges(jobs, theme);
-    const { nodes: laid, edges: laidEdges } = getLayoutedElements(built, builtEdges);
+    const { nodes: laid, edges: laidEdges } = getLayoutedElements(
+      built,
+      builtEdges,
+    );
     setNodes(laid);
     setEdges(laidEdges);
   }, [jobs, isEditing, theme, setNodes, setEdges]);
@@ -190,8 +205,20 @@ const PipelineGraphContent: React.FC<PipelineGraphProps> = ({
 
   const handleEnterEdit = useCallback(() => {
     const { nodes: built, edges: builtEdges } = buildNodesAndEdges(jobs, theme);
-    const { nodes: laid, edges: laidEdges } = getLayoutedElements(built, builtEdges);
-    setNodes(laid.map((n) => ({ ...n, data: { ...n.data, editMode: true, onEditClick: () => openEditForNode(n.id) } })));
+    const { nodes: laid, edges: laidEdges } = getLayoutedElements(
+      built,
+      builtEdges,
+    );
+    setNodes(
+      laid.map((n) => ({
+        ...n,
+        data: {
+          ...n.data,
+          editMode: true,
+          onEditClick: () => openEditForNode(n.id),
+        },
+      })),
+    );
     setEdges(laidEdges);
     setPipelineName(initialPipelineName);
     setValidationError('');
@@ -246,7 +273,9 @@ const PipelineGraphContent: React.FC<PipelineGraphProps> = ({
   const onDrop = useCallback(
     (event: React.DragEvent) => {
       event.preventDefault();
-      const pluginId = event.dataTransfer.getData('application/pipeline-plugin');
+      const pluginId = event.dataTransfer.getData(
+        'application/pipeline-plugin',
+      );
       if (!pluginId) return;
 
       const target = event.currentTarget as HTMLElement;
@@ -319,22 +348,32 @@ const PipelineGraphContent: React.FC<PipelineGraphProps> = ({
   );
 
   const existingJobNames = React.useMemo(
-    () => [...new Set(nodes.map((n) => n.data.jobName).filter(Boolean))] as string[],
+    () =>
+      [
+        ...new Set(nodes.map((n) => n.data.jobName).filter(Boolean)),
+      ] as string[],
     [nodes],
   );
 
   const onNodesChange = useCallback(
-    (changes: NodeChange[]) => setNodes((nds) => applyNodeChanges(changes, nds)),
+    (changes: NodeChange[]) =>
+      setNodes((nds) => applyNodeChanges(changes, nds)),
     [setNodes],
   );
   const onEdgesChange = useCallback(
-    (changes: EdgeChange[]) => setEdges((eds) => applyEdgeChanges(changes, eds)),
+    (changes: EdgeChange[]) =>
+      setEdges((eds) => applyEdgeChanges(changes, eds)),
     [setEdges],
   );
 
   return (
     <Box
-      sx={{ height: '100%', width: '100%', display: 'flex', flexDirection: 'column' }}
+      sx={{
+        height: '100%',
+        width: '100%',
+        display: 'flex',
+        flexDirection: 'column',
+      }}
       onDrop={isEditing ? onDrop : undefined}
       onDragOver={isEditing ? onDragOver : undefined}
     >
@@ -362,7 +401,11 @@ const PipelineGraphContent: React.FC<PipelineGraphProps> = ({
               InputLabelProps={{ shrink: true }}
             />
             {validationError ? (
-              <Typography variant="caption" color="error" sx={{ flex: 1, fontSize: '0.7rem' }}>
+              <Typography
+                variant="caption"
+                color="error"
+                sx={{ flex: 1, fontSize: '0.7rem' }}
+              >
                 {validationError}
               </Typography>
             ) : (
@@ -386,37 +429,42 @@ const PipelineGraphContent: React.FC<PipelineGraphProps> = ({
               {isSaving ? 'Saving…' : 'Save'}
             </Button>
           </Box>
-          <NodePalette onAdd={(pluginId) => {
-            const def = PLUGIN_MAP.get(pluginId);
-            const defaultJobName = nodes.find((n) => !n.data.isCleanup)?.data.jobName ?? 'run';
-            const firstCommandField = def?.fields.find((f) => f.key === 'command');
-            const offset = nodes.length * 30;
-            const newId = `node-${Date.now()}`;
-            setNodes((nds) => [...nds, {
-              id: newId,
-              type: 'pipelineNode',
-              position: { x: 50 + offset, y: 50 + offset },
-              sourcePosition: Position.Right,
-              targetPosition: Position.Left,
-              data: {
-                name: `New ${def?.label ?? pluginId} step`,
-                plugin: pluginId,
-                command: firstCommandField?.defaultValue ?? '',
-                working_dir: '',
-                stepIndex: nodes.length,
-                jobName: defaultJobName,
-                editMode: true,
-                onEditClick: () => openEditForNode(newId),
-              } as PipelineNodeData,
-            }]);
-          }} />
+          <NodePalette
+            onAdd={(pluginId) => {
+              const def = PLUGIN_MAP.get(pluginId);
+              const defaultJobName =
+                nodes.find((n) => !n.data.isCleanup)?.data.jobName ?? 'run';
+              const firstCommandField = def?.fields.find(
+                (f) => f.key === 'command',
+              );
+              const offset = nodes.length * 30;
+              const newId = `node-${Date.now()}`;
+              setNodes((nds) => [
+                ...nds,
+                {
+                  id: newId,
+                  type: 'pipelineNode',
+                  position: { x: 50 + offset, y: 50 + offset },
+                  sourcePosition: Position.Right,
+                  targetPosition: Position.Left,
+                  data: {
+                    name: `New ${def?.label ?? pluginId} step`,
+                    plugin: pluginId,
+                    command: firstCommandField?.defaultValue ?? '',
+                    working_dir: '',
+                    stepIndex: nodes.length,
+                    jobName: defaultJobName,
+                    editMode: true,
+                    onEditClick: () => openEditForNode(newId),
+                  } as PipelineNodeData,
+                },
+              ]);
+            }}
+          />
         </>
       )}
 
-      <Box
-        ref={reactFlowWrapper}
-        sx={{ flex: 1, minHeight: 0 }}
-      >
+      <Box ref={reactFlowWrapper} sx={{ flex: 1, minHeight: 0 }}>
         <ReactFlow
           nodes={nodes}
           edges={edges}
@@ -464,8 +512,18 @@ const PipelineGraphContent: React.FC<PipelineGraphProps> = ({
   );
 };
 
-export const PipelineGraph: React.FC<PipelineGraphProps> = (props) => (
+export const PipelineGraph: React.FC<PipelineGraphProps> = ({
+  jobs,
+  pipelineName,
+  onEdit,
+  onSave,
+}) => (
   <ReactFlowProvider>
-    <PipelineGraphContent {...props} />
+    <PipelineGraphContent
+      jobs={jobs}
+      pipelineName={pipelineName}
+      onEdit={onEdit}
+      onSave={onSave}
+    />
   </ReactFlowProvider>
 );

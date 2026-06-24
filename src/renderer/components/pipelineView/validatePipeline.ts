@@ -34,15 +34,17 @@ export function validatePipelineGraph(
   const q = [...queue];
   while (q.length > 0) {
     const id = q.shift()!;
-    visited++;
-    for (const next of outEdges.get(id) ?? []) {
+    visited += 1;
+    (outEdges.get(id) ?? []).forEach((next) => {
       const deg = (inDegree.get(next) ?? 1) - 1;
       inDegree.set(next, deg);
       if (deg === 0) q.push(next);
-    }
+    });
   }
   if (visited < nodes.length) {
-    errors.push({ message: 'Pipeline contains a cycle — remove the circular connection' });
+    errors.push({
+      message: 'Pipeline contains a cycle — remove the circular connection',
+    });
   }
 
   // Required fields per plugin

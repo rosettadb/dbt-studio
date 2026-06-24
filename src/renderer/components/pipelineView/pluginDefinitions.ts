@@ -37,7 +37,12 @@ export const PLUGIN_DEFS: PluginDef[] = [
         defaultValue: 'dbt run',
         placeholder: 'dbt seed && dbt run',
       },
-      { key: 'working_dir', label: 'Working Dir', required: false, placeholder: 'dbt' },
+      {
+        key: 'working_dir',
+        label: 'Working Dir',
+        required: false,
+        placeholder: 'dbt',
+      },
     ],
   },
   {
@@ -52,7 +57,12 @@ export const PLUGIN_DEFS: PluginDef[] = [
         multiline: true,
         placeholder: 'rosetta apply -s bigquery',
       },
-      { key: 'working_dir', label: 'Working Dir', required: false, placeholder: 'rosetta' },
+      {
+        key: 'working_dir',
+        label: 'Working Dir',
+        required: false,
+        placeholder: 'rosetta',
+      },
     ],
   },
   {
@@ -68,7 +78,12 @@ export const PLUGIN_DEFS: PluginDef[] = [
         placeholder: 'terraform init && terraform apply -auto-approve',
         defaultValue: 'terraform init && terraform apply -auto-approve',
       },
-      { key: 'working_dir', label: 'Working Dir', required: false, placeholder: 'terraform' },
+      {
+        key: 'working_dir',
+        label: 'Working Dir',
+        required: false,
+        placeholder: 'terraform',
+      },
     ],
   },
   {
@@ -125,7 +140,12 @@ export const PLUGIN_DEFS: PluginDef[] = [
         placeholder: 'https://github.com/org/repo.git',
       },
       { key: 'branch', label: 'Branch', required: false, placeholder: 'main' },
-      { key: 'dest', label: 'Destination Dir', required: false, placeholder: '.' },
+      {
+        key: 'dest',
+        label: 'Destination Dir',
+        required: false,
+        placeholder: '.',
+      },
     ],
   },
 ];

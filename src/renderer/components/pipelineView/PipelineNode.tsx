@@ -13,7 +13,7 @@ import type { Theme } from '@mui/material';
 import {
   FolderOpen,
   Terminal,
-  Link,
+  Link as LinkIcon,
   Edit,
   CheckCircle,
   Cancel,
@@ -179,7 +179,10 @@ export const PipelineNode = memo(
             >
               <Edit
                 sx={{ fontSize: 12, color: 'text.secondary' }}
-                onClick={(e) => { e.stopPropagation(); data.onEditClick?.(); }}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  data.onEditClick?.();
+                }}
               />
             </Box>
           )}
@@ -280,7 +283,9 @@ export const PipelineNode = memo(
             {/* Command or URL */}
             {(() => {
               const isGitClone = data.plugin === 'git_clone@v1';
-              const displayValue = isGitClone ? (data.url ?? '') : (data.command ?? '');
+              const displayValue = isGitClone
+                ? (data.url ?? '')
+                : (data.command ?? '');
               return (
                 <Tooltip title={displayValue} placement="bottom-start">
                   <Box
@@ -292,9 +297,23 @@ export const PipelineNode = memo(
                     }}
                   >
                     {isGitClone ? (
-                      <Link sx={{ fontSize: 12, color: 'text.disabled', mt: '2px', flexShrink: 0 }} />
+                      <LinkIcon
+                        sx={{
+                          fontSize: 12,
+                          color: 'text.disabled',
+                          mt: '2px',
+                          flexShrink: 0,
+                        }}
+                      />
                     ) : (
-                      <Terminal sx={{ fontSize: 12, color: 'text.disabled', mt: '2px', flexShrink: 0 }} />
+                      <Terminal
+                        sx={{
+                          fontSize: 12,
+                          color: 'text.disabled',
+                          mt: '2px',
+                          flexShrink: 0,
+                        }}
+                      />
                     )}
                     <Typography
                       variant="caption"

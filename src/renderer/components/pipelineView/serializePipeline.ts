@@ -2,7 +2,10 @@ import yaml from 'js-yaml';
 import type { Node, Edge } from 'reactflow';
 import type { PipelineNodeData } from './PipelineNode';
 
-function topoSort(nodes: Node<PipelineNodeData>[], edges: Edge[]): Node<PipelineNodeData>[] {
+function topoSort(
+  nodes: Node<PipelineNodeData>[],
+  edges: Edge[],
+): Node<PipelineNodeData>[] {
   const outEdges = new Map<string, string[]>();
   const inDegree = new Map<string, number>();
 
@@ -21,11 +24,11 @@ function topoSort(nodes: Node<PipelineNodeData>[], edges: Edge[]): Node<Pipeline
   while (queue.length > 0) {
     const id = queue.shift()!;
     result.push(id);
-    for (const next of outEdges.get(id) ?? []) {
+    (outEdges.get(id) ?? []).forEach((next) => {
       const deg = (inDegree.get(next) ?? 1) - 1;
       inDegree.set(next, deg);
       if (deg === 0) queue.push(next);
-    }
+    });
   }
 
   // Append disconnected nodes sorted by their canvas x position
@@ -40,7 +43,10 @@ function topoSort(nodes: Node<PipelineNodeData>[], edges: Edge[]): Node<Pipeline
 }
 
 function stepToObject(data: PipelineNodeData): Record<string, unknown> {
-  const step: Record<string, unknown> = { name: data.name, plugin: data.plugin };
+  const step: Record<string, unknown> = {
+    name: data.name,
+    plugin: data.plugin,
+  };
   if (data.plugin === 'git_clone@v1') {
     if (data.url) step.url = data.url;
     if (data.branch) step.branch = data.branch;
@@ -59,13 +65,17 @@ export function serializePipelineConfig(
 ): string {
   const ordered = topoSort(nodes, edges);
 
-  type JobGroup = { name: string; type?: string; steps: Record<string, unknown>[] };
+  type JobGroup = {
+    name: string;
+    type?: string;
+    steps: Record<string, unknown>[];
+  };
   const jobs: JobGroup[] = [];
 
-  for (const node of ordered) {
+  ordered.forEach((node) => {
     const d = node.data;
     const jobName = d.jobName ?? 'run';
-    const jobType = d.jobType;
+    const { jobType } = d;
 
     const last = jobs[jobs.length - 1];
     if (last && last.name === jobName) {
@@ -75,7 +85,7 @@ export function serializePipelineConfig(
       if (jobType) job.type = jobType;
       jobs.push(job);
     }
-  }
+  });
 
   return yaml.dump({ name: pipelineName, jobs }, { lineWidth: -1, indent: 2 });
 }

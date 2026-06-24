@@ -36,7 +36,9 @@ export const StepEditDialog: React.FC<StepEditDialogProps> = ({
   const [plugin, setPlugin] = React.useState('dbt@v1');
   const [jobName, setJobName] = React.useState('run');
   const [jobType, setJobType] = React.useState('');
-  const [fieldValues, setFieldValues] = React.useState<Record<string, string>>({});
+  const [fieldValues, setFieldValues] = React.useState<Record<string, string>>(
+    {},
+  );
 
   React.useEffect(() => {
     if (!open || !data) return;
@@ -100,10 +102,14 @@ export const StepEditDialog: React.FC<StepEditDialogProps> = ({
             >
               {PLUGIN_DEFS.map((p) => (
                 <MenuItem key={p.id} value={p.id}>
-                  <span style={{ color: p.color, fontWeight: 700, marginRight: 8 }}>
+                  <span
+                    style={{ color: p.color, fontWeight: 700, marginRight: 8 }}
+                  >
                     {p.label}
                   </span>
-                  <span style={{ color: '#888', fontSize: '0.75rem' }}>{p.id}</span>
+                  <span style={{ color: '#888', fontSize: '0.75rem' }}>
+                    {p.id}
+                  </span>
                 </MenuItem>
               ))}
             </Select>
@@ -136,7 +142,12 @@ export const StepEditDialog: React.FC<StepEditDialogProps> = ({
               value={jobName}
               onInputChange={(_, val) => setJobName(val)}
               renderInput={(params) => (
-                <TextField {...params} label="Job Name" size="small" fullWidth />
+                <TextField
+                  {...params} // eslint-disable-line react/jsx-props-no-spreading
+                  label="Job Name"
+                  size="small"
+                  fullWidth
+                />
               )}
               sx={{ flex: 1 }}
             />

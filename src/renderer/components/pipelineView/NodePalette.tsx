@@ -2,7 +2,9 @@ import React from 'react';
 import { Box, Chip, Typography } from '@mui/material';
 import { PLUGIN_DEFS } from './pluginDefinitions';
 
-export const NodePalette: React.FC<{ onAdd?: (pluginId: string) => void }> = ({ onAdd }) => {
+export const NodePalette: React.FC<{ onAdd?: (pluginId: string) => void }> = ({
+  onAdd,
+}) => {
   const onDragStart = (event: React.DragEvent, pluginId: string) => {
     event.dataTransfer.setData('application/pipeline-plugin', pluginId);
     event.dataTransfer.effectAllowed = 'move';
@@ -24,7 +26,12 @@ export const NodePalette: React.FC<{ onAdd?: (pluginId: string) => void }> = ({ 
     >
       <Typography
         variant="caption"
-        sx={{ color: 'text.disabled', mr: 0.5, whiteSpace: 'nowrap', fontSize: '0.65rem' }}
+        sx={{
+          color: 'text.disabled',
+          mr: 0.5,
+          whiteSpace: 'nowrap',
+          fontSize: '0.65rem',
+        }}
       >
         Drag to canvas:
       </Typography>
