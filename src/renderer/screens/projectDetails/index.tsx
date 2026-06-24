@@ -54,7 +54,14 @@ import {
   useGitIsInitialized,
   useSaveFileContent,
   useUpdateProject,
+  useGetFileContent,
 } from '../../controllers';
+import { usePipelineActionId } from '../../controllers/rosettaCloud.controller';
+import {
+  PipelineView,
+  CloudLogViewer,
+  isPipelineFile,
+} from '../../components/pipelineView';
 import { projectsServices } from '../../services';
 import {
   Container,
@@ -81,6 +88,9 @@ import {
   toPreviewPath,
   isVirtualPreviewPath,
   getPreviewSourcePath,
+  isPipelineTabPath,
+  getPipelineFilePath,
+  toPipelineTabPath,
 } from '../../components/editor/previewConstants';
 
 const VerticalSash = (_: number, active: boolean) => (
@@ -184,6 +194,33 @@ const ProjectDetails: React.FC = () => {
   const [pipelineRunArgs, setPipelineRunArgs] = React.useState('');
   const [pipelineCloudModal, setPipelineCloudModal] = React.useState(false);
   const theme = useTheme();
+
+  // Pipeline tab support — derive state from the currently active tab
+  const activePipelineFilePath = React.useMemo(() => {
+    if (!activeTab?.path || !isPipelineTabPath(activeTab.path)) return '';
+    return getPipelineFilePath(activeTab.path) ?? '';
+  }, [activeTab?.path]);
+
+  const { data: activePipelineContent, refetch: refetchPipelineContent } =
+    useGetFileContent(activePipelineFilePath, {
+      enabled: !!activePipelineFilePath,
+    });
+
+  const activePipelineBasename = React.useMemo(() => {
+    if (!activePipelineFilePath) return null;
+    const parts = activePipelineFilePath.split(/[\\/]/);
+    return parts[parts.length - 1] || null;
+  }, [activePipelineFilePath]);
+
+  const recordedPipelineActionId = activePipelineBasename
+    ? (project?.pipelineRuns?.[activePipelineBasename] ?? null)
+    : null;
+
+  const activePipelineActionId = usePipelineActionId(
+    project?.externalId ? project?.id : null,
+    activePipelineBasename,
+    recordedPipelineActionId,
+  );
 
   const {
     data: directories,
@@ -401,6 +438,10 @@ const ProjectDetails: React.FC = () => {
 
   React.useEffect(() => {
     if (activeTab?.path) {
+      // Pipeline tabs don't update selectedFilePath — they manage their own content
+      if (isPipelineTabPath(activeTab.path)) {
+        return;
+      }
       const isPreview = isVirtualPreviewPath(activeTab.path);
       const realSourcePath = isPreview
         ? getPreviewSourcePath(activeTab.path) || activeTab.path
@@ -933,6 +974,19 @@ const ProjectDetails: React.FC = () => {
                 }
               }}
               onFileSelect={async (fileNode) => {
+                if (isPipelineFile(fileNode.path)) {
+                  const basename = fileNode.path
+                    .replace(/\\/g, '/')
+                    .split('/')
+                    .pop()
+                    ?.replace(/\.(yml|yaml)$/, '');
+                  openTab(toPipelineTabPath(fileNode.path), {
+                    title: basename || fileNode.name,
+                    content: '',
+                    isReadOnly: true,
+                  });
+                  return;
+                }
                 if (!utils.isEditableFile(fileNode.path)) {
                   setSelectedFilePath(fileNode.path);
                   openTab(fileNode.path, { isReadOnly: true });
@@ -1078,62 +1132,114 @@ const ProjectDetails: React.FC = () => {
                         </MenuItem>
                       </Menu>
                     )}
-                    {!selectedFilePath && (
-                      <NoFileSelected>
-                        Please select a file from the explorer on the left!
-                      </NoFileSelected>
-                    )}
-                    {project.path && (
-                      <Editor
-                        projectId={project.id}
-                        projectPath={project.path}
-                        tabs={tabs}
-                        activeTabId={activeTabId}
-                        onTabContentChange={(tabId, newContent) => {
-                          updateTabContent(tabId, newContent);
+                    {activePipelineFilePath ? (
+                      <Box
+                        sx={{
+                          display: 'flex',
+                          flexDirection: 'column',
+                          height: '100%',
+                          overflow: 'hidden',
                         }}
-                        onTabSaved={(tabId) => {
-                          markTabSaved(tabId);
-                        }}
-                        onTabError={(tabId, errorMessage) => {
-                          setTabError(tabId, errorMessage);
-                        }}
-                        pendingClose={pendingClose}
-                        onSaveAndClose={onSaveAndClose}
-                        onDiscardAndClose={onDiscardAndClose}
-                        onCancelClose={onCancelClose}
-                        onGitStatusRefresh={updateStatuses}
-                        onOpenFile={(filePath: string) => {
-                          setSelectedFilePath(filePath);
-                          openTab(filePath);
-                        }}
-                        onTogglePreviewTab={handleTogglePreviewTab}
-                        extraActions={
-                          <>
-                            {menuItems.length > 0 && (
-                              <SplitButton
-                                title="AI"
-                                isLoading={isLoadingQuery}
-                                leftIcon={<AutoAwesome />}
-                                menuItems={menuItems}
-                              />
-                            )}
-                            {selectedFilePath?.endsWith('.sql') &&
-                              selectedFilePath?.includes('models') &&
-                              project && (
-                                <ModelSplitButton
-                                  modelPath={selectedFilePath}
-                                  project={project}
-                                  isDbtConfigured={!!settings?.dbtPath}
-                                  fileContent={fileContent}
-                                  isRunningDbt={isRunningDbt}
-                                  isRunningRosettaDbt={isRunningRosettaDbt}
-                                  environment={env}
-                                />
-                              )}
-                          </>
-                        }
-                      />
+                      >
+                        <Box
+                          sx={{
+                            flex: activePipelineActionId ? '1 1 60%' : 1,
+                            minHeight: 0,
+                          }}
+                        >
+                          <PipelineView
+                            content={activePipelineContent || ''}
+                            onEdit={() => {
+                              setSelectedFilePath(activePipelineFilePath);
+                              openTab(activePipelineFilePath);
+                            }}
+                            actionId={activePipelineActionId}
+                            onSave={
+                              activePipelineFilePath
+                                ? async (content: string) => {
+                                    await projectsServices.saveFileContent({
+                                      path: activePipelineFilePath,
+                                      content,
+                                    });
+                                    await refetchPipelineContent();
+                                  }
+                                : undefined
+                            }
+                          />
+                        </Box>
+                        {activePipelineActionId && (
+                          <Box
+                            sx={{
+                              flex: '1 1 40%',
+                              minHeight: 0,
+                              borderTop: 1,
+                              borderColor: 'divider',
+                            }}
+                          >
+                            <CloudLogViewer actionId={activePipelineActionId} />
+                          </Box>
+                        )}
+                      </Box>
+                    ) : (
+                      <>
+                        {!selectedFilePath && (
+                          <NoFileSelected>
+                            Please select a file from the explorer on the left!
+                          </NoFileSelected>
+                        )}
+                        {project.path && (
+                          <Editor
+                            projectId={project.id}
+                            projectPath={project.path}
+                            tabs={tabs}
+                            activeTabId={activeTabId}
+                            onTabContentChange={(tabId, newContent) => {
+                              updateTabContent(tabId, newContent);
+                            }}
+                            onTabSaved={(tabId) => {
+                              markTabSaved(tabId);
+                            }}
+                            onTabError={(tabId, errorMessage) => {
+                              setTabError(tabId, errorMessage);
+                            }}
+                            pendingClose={pendingClose}
+                            onSaveAndClose={onSaveAndClose}
+                            onDiscardAndClose={onDiscardAndClose}
+                            onCancelClose={onCancelClose}
+                            onGitStatusRefresh={updateStatuses}
+                            onOpenFile={(filePath: string) => {
+                              setSelectedFilePath(filePath);
+                              openTab(filePath);
+                            }}
+                            onTogglePreviewTab={handleTogglePreviewTab}
+                            extraActions={
+                              <>
+                                {menuItems.length > 0 && (
+                                  <SplitButton
+                                    title="AI"
+                                    isLoading={isLoadingQuery}
+                                    leftIcon={<AutoAwesome />}
+                                    menuItems={menuItems}
+                                  />
+                                )}
+                                {selectedFilePath?.endsWith('.sql') &&
+                                  selectedFilePath?.includes('models') &&
+                                  project && (
+                                    <ModelSplitButton
+                                      modelPath={selectedFilePath}
+                                      project={project}
+                                      isDbtConfigured={!!settings?.dbtPath}
+                                      fileContent={fileContent}
+                                      isRunningDbt={isRunningDbt}
+                                      isRunningRosettaDbt={isRunningRosettaDbt}
+                                      environment={env}
+                                    />
+                                  )}
+                              </>
+                            }
+                          />
+                        )}
+                      </>
                     )}
                   </EditorContainer>
                 </Content>

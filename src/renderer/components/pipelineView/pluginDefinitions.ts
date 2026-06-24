@@ -1,3 +1,12 @@
+import type { SvgIconComponent } from '@mui/icons-material';
+import TransformIcon from '@mui/icons-material/Transform';
+import LanguageIcon from '@mui/icons-material/Language';
+import BuildIcon from '@mui/icons-material/Build';
+import TerminalIcon from '@mui/icons-material/Terminal';
+import CloudUploadIcon from '@mui/icons-material/CloudUpload';
+import SpeedIcon from '@mui/icons-material/Speed';
+import DownloadIcon from '@mui/icons-material/Download';
+
 export type PluginId =
   | 'dbt@v1'
   | 'rosetta@v1'
@@ -20,6 +29,8 @@ export interface PluginDef {
   id: PluginId;
   label: string;
   color: string;
+  category: string;
+  icon: SvgIconComponent;
   fields: PluginField[];
 }
 
@@ -28,6 +39,8 @@ export const PLUGIN_DEFS: PluginDef[] = [
     id: 'dbt@v1',
     label: 'dbt',
     color: '#FF694B',
+    category: 'Generic',
+    icon: TransformIcon,
     fields: [
       {
         key: 'command',
@@ -49,6 +62,8 @@ export const PLUGIN_DEFS: PluginDef[] = [
     id: 'rosetta@v1',
     label: 'rosetta',
     color: '#7C4DFF',
+    category: 'Generic',
+    icon: LanguageIcon,
     fields: [
       {
         key: 'command',
@@ -69,6 +84,8 @@ export const PLUGIN_DEFS: PluginDef[] = [
     id: 'terraform@v1',
     label: 'terraform',
     color: '#7B42BC',
+    category: 'Generic',
+    icon: BuildIcon,
     fields: [
       {
         key: 'command',
@@ -90,6 +107,8 @@ export const PLUGIN_DEFS: PluginDef[] = [
     id: 'command@v1',
     label: 'shell',
     color: '#455A64',
+    category: 'Generic',
+    icon: TerminalIcon,
     fields: [
       {
         key: 'command',
@@ -104,6 +123,8 @@ export const PLUGIN_DEFS: PluginDef[] = [
     id: 's3@v1',
     label: 's3',
     color: '#FF9900',
+    category: 'Generic',
+    icon: CloudUploadIcon,
     fields: [
       {
         key: 'command',
@@ -118,6 +139,8 @@ export const PLUGIN_DEFS: PluginDef[] = [
     id: 'kinetica_cli@v1',
     label: 'kinetica',
     color: '#00BCD4',
+    category: 'Generic',
+    icon: SpeedIcon,
     fields: [
       {
         key: 'command',
@@ -132,6 +155,8 @@ export const PLUGIN_DEFS: PluginDef[] = [
     id: 'git_clone@v1',
     label: 'git clone',
     color: '#F05133',
+    category: 'Generic',
+    icon: DownloadIcon,
     fields: [
       {
         key: 'url',

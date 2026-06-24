@@ -378,57 +378,60 @@ const PipelineGraphContent: React.FC<PipelineGraphProps> = ({
       onDragOver={isEditing ? onDragOver : undefined}
     >
       {isEditing && (
-        <>
-          <Box
-            sx={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: 1.5,
-              px: 2,
-              py: 0.75,
-              bgcolor: 'background.paper',
-              borderBottom: 1,
-              borderColor: 'divider',
-              flexShrink: 0,
-            }}
-          >
-            <TextField
-              label="Pipeline Name"
-              value={pipelineName}
-              onChange={(e) => setPipelineName(e.target.value)}
-              size="small"
-              sx={{ width: 200 }}
-              InputLabelProps={{ shrink: true }}
-            />
-            {validationError ? (
-              <Typography
-                variant="caption"
-                color="error"
-                sx={{ flex: 1, fontSize: '0.7rem' }}
-              >
-                {validationError}
-              </Typography>
-            ) : (
-              <Typography
-                variant="caption"
-                sx={{ flex: 1, color: 'text.disabled', fontSize: '0.65rem' }}
-              >
-                Double-click a step to edit · Del to remove selected
-              </Typography>
-            )}
-            <Button size="small" onClick={handleCancelEdit} disabled={isSaving}>
-              Cancel
-            </Button>
-            <Button
-              size="small"
-              variant="contained"
-              onClick={handleSave}
-              disabled={isSaving}
-              startIcon={<SaveIcon sx={{ fontSize: 14 }} />}
+        <Box
+          sx={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 1.5,
+            px: 2,
+            py: 0.75,
+            bgcolor: 'background.paper',
+            borderBottom: 1,
+            borderColor: 'divider',
+            flexShrink: 0,
+          }}
+        >
+          <TextField
+            label="Pipeline Name"
+            value={pipelineName}
+            onChange={(e) => setPipelineName(e.target.value)}
+            size="small"
+            sx={{ width: 200 }}
+            InputLabelProps={{ shrink: true }}
+          />
+          {validationError ? (
+            <Typography
+              variant="caption"
+              color="error"
+              sx={{ flex: 1, fontSize: '0.7rem' }}
             >
-              {isSaving ? 'Saving…' : 'Save'}
-            </Button>
-          </Box>
+              {validationError}
+            </Typography>
+          ) : (
+            <Typography
+              variant="caption"
+              sx={{ flex: 1, color: 'text.disabled', fontSize: '0.65rem' }}
+            >
+              Double-click a step to edit · Del to remove selected
+            </Typography>
+          )}
+          <Button size="small" onClick={handleCancelEdit} disabled={isSaving}>
+            Cancel
+          </Button>
+          <Button
+            size="small"
+            variant="contained"
+            onClick={handleSave}
+            disabled={isSaving}
+            startIcon={<SaveIcon sx={{ fontSize: 14 }} />}
+          >
+            {isSaving ? 'Saving…' : 'Save'}
+          </Button>
+        </Box>
+      )}
+
+      <Box sx={{ flex: 1, minHeight: 0, display: 'flex' }}>
+        {isEditing && (
           <NodePalette
             onAdd={(pluginId) => {
               const def = PLUGIN_MAP.get(pluginId);
@@ -461,44 +464,43 @@ const PipelineGraphContent: React.FC<PipelineGraphProps> = ({
               ]);
             }}
           />
-        </>
-      )}
-
-      <Box ref={reactFlowWrapper} sx={{ flex: 1, minHeight: 0 }}>
-        <ReactFlow
-          nodes={nodes}
-          edges={edges}
-          onNodesChange={onNodesChange}
-          onEdgesChange={onEdgesChange}
-          onConnect={onConnect}
-          onNodeDoubleClick={onNodeDoubleClick}
-          onDrop={isEditing ? onDrop : undefined}
-          onDragOver={isEditing ? onDragOver : undefined}
-          nodeTypes={nodeTypes}
-          deleteKeyCode={isEditing ? ['Delete', 'Backspace'] : null}
-          nodesDraggable={isEditing}
-          nodesConnectable={isEditing}
-          fitView
-          fitViewOptions={{ padding: 0.15 }}
-        >
-          <Controls>
-            {!isEditing && onSave && (
-              <Tooltip title="Visual edit pipeline" placement="right">
-                <ControlButton onClick={handleEnterEdit}>
-                  <AutoFixHighIcon style={{ maxWidth: 14, maxHeight: 14 }} />
-                </ControlButton>
-              </Tooltip>
-            )}
-            {!isEditing && onEdit && (
-              <Tooltip title="Edit pipeline.yml" placement="right">
-                <ControlButton onClick={onEdit}>
-                  <EditIcon style={{ maxWidth: 12, maxHeight: 12 }} />
-                </ControlButton>
-              </Tooltip>
-            )}
-          </Controls>
-          <Background color={theme.palette.text.disabled} gap={16} />
-        </ReactFlow>
+        )}
+        <Box ref={reactFlowWrapper} sx={{ flex: 1, minHeight: 0 }}>
+          <ReactFlow
+            nodes={nodes}
+            edges={edges}
+            onNodesChange={onNodesChange}
+            onEdgesChange={onEdgesChange}
+            onConnect={onConnect}
+            onNodeDoubleClick={onNodeDoubleClick}
+            onDrop={isEditing ? onDrop : undefined}
+            onDragOver={isEditing ? onDragOver : undefined}
+            nodeTypes={nodeTypes}
+            deleteKeyCode={isEditing ? ['Delete', 'Backspace'] : null}
+            nodesDraggable={isEditing}
+            nodesConnectable={isEditing}
+            fitView
+            fitViewOptions={{ padding: 0.15 }}
+          >
+            <Controls>
+              {!isEditing && onSave && (
+                <Tooltip title="Visual edit pipeline" placement="right">
+                  <ControlButton onClick={handleEnterEdit}>
+                    <AutoFixHighIcon style={{ maxWidth: 14, maxHeight: 14 }} />
+                  </ControlButton>
+                </Tooltip>
+              )}
+              {!isEditing && onEdit && (
+                <Tooltip title="Edit pipeline.yml" placement="right">
+                  <ControlButton onClick={onEdit}>
+                    <EditIcon style={{ maxWidth: 12, maxHeight: 12 }} />
+                  </ControlButton>
+                </Tooltip>
+              )}
+            </Controls>
+            <Background color={theme.palette.text.disabled} gap={16} />
+          </ReactFlow>
+        </Box>
       </Box>
 
       <StepEditDialog
