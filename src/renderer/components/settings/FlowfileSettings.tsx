@@ -8,6 +8,8 @@ import {
   Chip,
   Divider,
   Backdrop,
+  Switch,
+  FormControlLabel,
 } from '@mui/material';
 import {
   CheckCircle,
@@ -43,6 +45,9 @@ export const FlowfileSettings: React.FC<FlowfileSettingsProps> = ({
   const [isUninstalling, setIsUninstalling] = React.useState(false);
   const [showUninstallConfirmation, setShowUninstallConfirmation] =
     React.useState(false);
+  const [autoStart, setAutoStart] = React.useState(
+    () => settings.flowfileAutoStart === 'true',
+  );
   const checkStatus = async () => {
     setIsCheckingStatus(true);
     try {
@@ -66,6 +71,15 @@ export const FlowfileSettings: React.FC<FlowfileSettingsProps> = ({
   React.useEffect(() => {
     checkStatus();
   }, []);
+
+  React.useEffect(() => {
+    setAutoStart(settings.flowfileAutoStart === 'true');
+  }, [settings.flowfileAutoStart]);
+
+  const handleAutoStartChange = (checked: boolean) => {
+    setAutoStart(checked);
+    onSettingsChange('flowfileAutoStart', checked ? 'true' : 'false');
+  };
 
   const handleInstall = async () => {
     if (!settings.pythonPath) {
@@ -181,6 +195,17 @@ export const FlowfileSettings: React.FC<FlowfileSettingsProps> = ({
           )}
         </Box>
       </Box>
+
+      {/* Auto-start toggle */}
+      <FormControlLabel
+        control={
+          <Switch
+            checked={autoStart}
+            onChange={(_, checked) => handleAutoStartChange(checked)}
+          />
+        }
+        label="Auto-start Flowfile on app launch"
+      />
 
       <Divider />
 

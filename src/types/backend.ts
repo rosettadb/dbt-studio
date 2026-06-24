@@ -340,6 +340,7 @@ export type SettingsType = {
   cloudWorkspaceLastSyncedAt?: string;
   flowfileVersion?: string;
   flowfilePort?: string;
+  flowfileAutoStart?: string;
 };
 
 export type FileDialogProperties = 'openFile' | 'openDirectory';

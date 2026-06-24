@@ -12,6 +12,7 @@ import {
   UpdateService,
   RosettaCloudService,
   DuckLakeConnectionManager,
+  FlowfileService,
 } from './services';
 import { copyAssetsToUserData } from './utils/fileHelper';
 import { MCPClientManager } from './services/ai/mcp/mcpClientManager';
@@ -195,6 +196,21 @@ if (!gotTheLock) {
             } else {
               await windowManager.showMainWindow();
             }
+
+            // Auto-start Flowfile if enabled
+            if (settings.flowfileAutoStart === 'true') {
+              try {
+                const result = await FlowfileService.start();
+                if (!result.ok) {
+                  console.error(
+                    'Failed to auto-start Flowfile:',
+                    result.error ?? 'Unknown startup error',
+                  );
+                }
+              } catch (e) {
+                console.error('Failed to auto-start Flowfile:', e);
+              }
+            }
           }
         });
       }
@@ -284,6 +300,9 @@ app.on('before-quit', async (event) => {
 
     // Disconnect all MCP servers to preserve system resources
     await MCPClientManager.disconnectAll();
+
+    // Stop Flowfile service
+    await FlowfileService.stop();
   } catch (error) {
     // eslint-disable-next-line no-console
     console.error('[App] Error during app cleanup:', error);
