@@ -1,4 +1,5 @@
 import fs from 'fs/promises';
+import path from 'path';
 import {
   ipcMain,
   shell,
@@ -13,7 +14,7 @@ const handlerChannels = [
   'utils:getFileContentList',
   'dialog:showOpenDialog',
   'dialog:showSaveDialog',
-  'utils:writeBase64File',
+  'utils:saveBase64File',
 ];
 
 const removeUtilsIpcHandlers = () => {
@@ -63,23 +64,32 @@ const registerUtilsHandlers = () => {
     shell.openPath(filePath),
   );
 
-  // Handler for writing a base64-encoded file to disk (e.g. PNG export)
+  // Handler for saving a base64-encoded file to disk (e.g. PNG export)
   ipcMain.handle(
-    'utils:writeBase64File',
-    async (_event, { filePath, data }: { filePath: string; data: string }) => {
+    'utils:saveBase64File',
+    async (
+      _event,
+      { data, options }: { data: string; options: SaveDialogOptions },
+    ) => {
+      const result = await dialog.showSaveDialog(options);
+      if (result.canceled || !result.filePath) {
+        return { canceled: true };
+      }
+
       // eslint-disable-next-line no-console
       console.log(
-        '[writeBase64File] Received filePath:',
-        filePath,
+        '[saveBase64File] Saving filename:',
+        path.basename(result.filePath),
         'data.length:',
         data?.length,
       );
       const buffer = Buffer.from(data, 'base64');
       // eslint-disable-next-line no-console
-      console.log('[writeBase64File] Decoded buffer length:', buffer.length);
-      await fs.writeFile(filePath, buffer);
+      console.log('[saveBase64File] Decoded buffer length:', buffer.length);
+      await fs.writeFile(result.filePath, buffer);
       // eslint-disable-next-line no-console
-      console.log('[writeBase64File] File written successfully');
+      console.log('[saveBase64File] File written successfully');
+      return { canceled: false, filePath: result.filePath };
     },
   );
 };

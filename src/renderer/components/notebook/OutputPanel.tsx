@@ -399,74 +399,71 @@ export const OutputPanel: React.FC<OutputPanelProps> = ({
       return;
     }
 
-    const result = await window.electron.ipcRenderer.invoke(
-      'dialog:showSaveDialog',
-      {
-        title: 'Export Chart as PNG',
-        defaultPath: 'chart.png',
-        filters: [{ name: 'PNG Images', extensions: ['png'] }],
-      },
-    );
-    if (result.canceled || !result.filePath) return;
-
+    let svgUrl: string | undefined;
     try {
-      setIsExporting(true);
-
       const svgData = new XMLSerializer().serializeToString(svgElement);
       const svgBlob = new Blob([svgData], {
         type: 'image/svg+xml;charset=utf-8',
       });
-      const svgUrl = URL.createObjectURL(svgBlob);
+      svgUrl = URL.createObjectURL(svgBlob);
 
       const img = new Image();
       const canvas = document.createElement('canvas');
       const rect = svgElement.getBoundingClientRect();
 
       await new Promise<void>((resolve, reject) => {
-        img.onload = () => {
-          canvas.width = rect.width * 2;
-          canvas.height = rect.height * 2;
-          const ctx = canvas.getContext('2d');
-          if (!ctx) {
-            reject(new Error('Failed to get canvas context'));
-            return;
+        img.onload = async () => {
+          try {
+            canvas.width = rect.width * 2;
+            canvas.height = rect.height * 2;
+            const ctx = canvas.getContext('2d');
+            if (!ctx) {
+              reject(new Error('Failed to get canvas context'));
+              return;
+            }
+            ctx.scale(2, 2);
+            ctx.fillStyle = '#ffffff';
+            ctx.fillRect(0, 0, rect.width, rect.height);
+            ctx.drawImage(img, 0, 0);
+            const dataUrl = canvas.toDataURL('image/png');
+            const base64data = dataUrl.split(',')[1];
+            const result = await window.electron.ipcRenderer.invoke(
+              'utils:saveBase64File',
+              {
+                data: base64data,
+                options: {
+                  title: 'Export Chart as PNG',
+                  defaultPath: 'chart.png',
+                  filters: [{ name: 'PNG Images', extensions: ['png'] }],
+                },
+              },
+            );
+            if (result.canceled) {
+              resolve();
+              return;
+            }
+            toast.success('Chart exported as PNG successfully');
+            resolve();
+          } catch (writeError) {
+            // eslint-disable-next-line no-console
+            console.error('PNG write error:', writeError);
+            toast.error('Failed to save PNG file');
+            reject(writeError);
           }
-          ctx.scale(2, 2);
-          ctx.fillStyle = '#ffffff';
-          ctx.fillRect(0, 0, rect.width, rect.height);
-          ctx.drawImage(img, 0, 0);
-          const dataUrl = canvas.toDataURL('image/png');
-          const base64data = dataUrl.split(',')[1];
-          window.electron.ipcRenderer
-            .invoke('utils:writeBase64File', {
-              filePath: result.filePath,
-              data: base64data,
-            })
-            .then(() => {
-              toast.success('Chart exported as PNG successfully');
-              return resolve();
-            })
-            .catch((writeError) => {
-              // eslint-disable-next-line no-console
-              console.error('PNG write error:', writeError);
-              toast.error('Failed to save PNG file');
-              return reject(writeError);
-            });
         };
         img.onerror = () => {
-          URL.revokeObjectURL(svgUrl);
           reject(new Error('Failed to load SVG image'));
         };
-        img.src = svgUrl;
+        img.src = svgUrl!;
       });
-
-      URL.revokeObjectURL(svgUrl);
     } catch (error) {
       // eslint-disable-next-line no-console
       console.error('PNG export error:', error);
       toast.error('Chart export failed');
     } finally {
-      setIsExporting(false);
+      if (svgUrl) {
+        URL.revokeObjectURL(svgUrl);
+      }
     }
   };
 

@@ -221,7 +221,7 @@ export type UtilChannels =
   | 'utils:run-in-terminal'
   | 'dialog:showOpenDialog'
   | 'dialog:showSaveDialog'
-  | 'utils:writeBase64File';
+  | 'utils:saveBase64File';
 
 export type ProcessChannels =
   | 'process:start'

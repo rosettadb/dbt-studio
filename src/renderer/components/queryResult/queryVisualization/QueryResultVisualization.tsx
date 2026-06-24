@@ -79,24 +79,29 @@ export const QueryResultVisualization: React.FC<
 
   // Extract columns dynamically from the first row of data and revalidate axis selections
   useEffect(() => {
-    if (data && data.length > 0) {
-      const columns = Object.keys(data[0]);
-      const numericColumns = getNumericColumns(data, columns);
-      setAvailableColumns(columns);
-
-      // Revalidate xAxisCol — reset if it no longer exists in the new schema
-      setXAxisCol((prev) => {
-        if (prev && columns.includes(prev)) return prev;
-        return getDefaultXAxisCol(columns, numericColumns);
-      });
-
-      // Revalidate yAxisCols — remove any columns that no longer exist
-      setYAxisCols((prev) => {
-        const stillValid = prev.filter((col) => columns.includes(col));
-        if (stillValid.length > 0) return stillValid;
-        return getDefaultYAxisCols(columns, numericColumns);
-      });
+    if (!data || data.length === 0) {
+      setAvailableColumns([]);
+      setXAxisCol('');
+      setYAxisCols([]);
+      return;
     }
+
+    const columns = Object.keys(data[0]);
+    const numericColumns = getNumericColumns(data, columns);
+    setAvailableColumns(columns);
+
+    // Revalidate xAxisCol — reset if it no longer exists in the new schema
+    setXAxisCol((prev) => {
+      if (prev && columns.includes(prev)) return prev;
+      return getDefaultXAxisCol(columns, numericColumns);
+    });
+
+    // Revalidate yAxisCols — remove any columns that no longer exist
+    setYAxisCols((prev) => {
+      const stillValid = prev.filter((col) => columns.includes(col));
+      if (stillValid.length > 0) return stillValid;
+      return getDefaultYAxisCols(columns, numericColumns);
+    });
   }, [data]);
 
   const handleChartTypeChange = (nextChartType: ChartType) => {
@@ -107,7 +112,9 @@ export const QueryResultVisualization: React.FC<
         if (prev[0] && numericColumns.includes(prev[0])) {
           return [prev[0]];
         }
-        return getDefaultYAxisCols(availableColumns, numericColumns);
+        return numericColumns.length > 0
+          ? getDefaultYAxisCols(availableColumns, numericColumns)
+          : [];
       });
     }
   };
