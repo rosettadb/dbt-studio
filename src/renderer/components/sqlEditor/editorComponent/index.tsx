@@ -617,6 +617,7 @@ export const SqlEditorComponent: React.FC<Props> = ({
           readOnly: isLoading,
           // WordHighlighter throws "Canceled" during model swap / dispose.
           occurrencesHighlight: 'off',
+          fixedOverflowWidgets: true,
         }}
       />
       {isLoading && (

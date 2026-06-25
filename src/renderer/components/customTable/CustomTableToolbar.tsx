@@ -17,7 +17,7 @@ const useStyles = makeStyles({
 });
 
 type Props = {
-  name: string;
+  name: ReactNode;
   handleSearch: (keyword: string) => void;
   toolbarContent?: ReactNode;
   showSearch?: boolean;

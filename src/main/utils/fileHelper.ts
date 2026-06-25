@@ -78,6 +78,7 @@ export const loadDefaultSettings = (): SettingsType => {
     isSetup: 'false',
     flowfileVersion: '',
     flowfilePort: '63578',
+    flowfileAutoStart: 'false',
   };
 };
 
