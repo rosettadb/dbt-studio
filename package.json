@@ -161,7 +161,7 @@
     "react-toastify": "^11.0.3",
     "react-tooltip": "^5.28.0",
     "reactflow": "^11.11.4",
-    "recharts": "^3.8.1",
+    "recharts": "^2.15.0",
     "rehype-highlight": "^7.0.2",
     "rehype-raw": "^7.0.0",
     "remark-gfm": "^4.0.1",
