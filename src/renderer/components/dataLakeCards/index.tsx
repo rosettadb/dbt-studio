@@ -24,24 +24,18 @@ type Props = {
 };
 
 export const DataLakeCard: React.FC<Props> = ({ itemDetails, onClick }) => {
-  const handleClick = () => {
-    if (!itemDetails.disabled) {
-      onClick();
-    }
-  };
-
   return (
     <ControlBox>
-      <StyledCard onClick={handleClick}>
+      <StyledCard onClick={onClick}>
         <ContentWrapper>
           {itemDetails.disabled ? (
-            <Tooltip title="This data lake type will be available in a future release">
+            <Tooltip title="Click to vote for this feature">
               <MediaImage alt={itemDetails.name} src={icons[itemDetails.img]} />
             </Tooltip>
           ) : (
             <MediaImage alt={itemDetails.name} src={icons[itemDetails.img]} />
           )}
-          {itemDetails.disabled && <ComingSoonBanner>Soon</ComingSoonBanner>}
+          {itemDetails.disabled && <ComingSoonBanner>Vote</ComingSoonBanner>}
         </ContentWrapper>
         <StyledCardContent>
           <Typography gutterBottom variant="h5" component="h2">

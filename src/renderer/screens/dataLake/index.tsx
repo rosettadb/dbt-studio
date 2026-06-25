@@ -1,5 +1,17 @@
 import React, { useState, useEffect } from 'react';
-import { Typography, Box, Button, styled } from '@mui/material';
+import {
+  Typography,
+  Box,
+  Button,
+  styled,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions,
+  TextField,
+  IconButton,
+} from '@mui/material';
+import { Close, ThumbUp, CheckCircle } from '@mui/icons-material';
 import { useLocation, useParams, useNavigate } from 'react-router-dom';
 import { AppLayout } from '../../layouts';
 import {
@@ -34,6 +46,28 @@ const DataLake: React.FC = () => {
 
   // State for type selection in new-instance flow
   const [selectedType, setSelectedType] = useState<string>();
+
+  // Upvote modal state
+  const [voteTarget, setVoteTarget] = useState<{
+    id: string;
+    name: string;
+  } | null>(null);
+  const [voteName, setVoteName] = useState('');
+  const [voteEmail, setVoteEmail] = useState('');
+  const [voteComment, setVoteComment] = useState('');
+  const [voteSubmitted, setVoteSubmitted] = useState(false);
+
+  const handleVoteClose = () => {
+    setVoteTarget(null);
+    setVoteName('');
+    setVoteEmail('');
+    setVoteComment('');
+    setVoteSubmitted(false);
+  };
+
+  const handleVoteSubmit = () => {
+    setVoteSubmitted(true);
+  };
 
   // React Query hooks
   const instancesQuery = useDuckLakeInstances();
@@ -252,7 +286,14 @@ const DataLake: React.FC = () => {
                   <DataLakeCard
                     key={index}
                     itemDetails={lakeType}
-                    onClick={() => setSelectedType(lakeType.id)}
+                    onClick={() =>
+                      lakeType.disabled
+                        ? setVoteTarget({
+                            id: lakeType.id,
+                            name: lakeType.name,
+                          })
+                        : setSelectedType(lakeType.id)
+                    }
                   />
                 ))}
               </ConnectionCardsContainer>
@@ -391,6 +432,104 @@ const DataLake: React.FC = () => {
       <Box sx={{ p: 2 }}>
         <Box>{renderContent()}</Box>
       </Box>
+
+      {/* Upvote Dialog */}
+      <Dialog
+        open={!!voteTarget}
+        onClose={handleVoteClose}
+        maxWidth="sm"
+        fullWidth
+      >
+        <DialogTitle>
+          Vote for {voteTarget?.name}
+          <IconButton
+            onClick={handleVoteClose}
+            sx={{ position: 'absolute', right: 8, top: 8 }}
+          >
+            <Close />
+          </IconButton>
+        </DialogTitle>
+        <DialogContent>
+          {voteSubmitted ? (
+            <Box
+              sx={{
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'center',
+                py: 4,
+                gap: 2,
+              }}
+            >
+              <CheckCircle sx={{ fontSize: 56, color: 'success.main' }} />
+              <Typography variant="h6">Thanks for your vote!</Typography>
+              <Typography
+                variant="body2"
+                color="text.secondary"
+                textAlign="center"
+              >
+                We&apos;ve recorded your interest in {voteTarget?.name}.
+                We&apos;ll prioritize based on community demand.
+              </Typography>
+            </Box>
+          ) : (
+            <>
+              <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+                Let us know you&apos;re interested in {voteTarget?.name}{' '}
+                support. Your vote helps us prioritize what to build next.
+              </Typography>
+              <TextField
+                label="Name (optional)"
+                fullWidth
+                margin="normal"
+                value={voteName}
+                onChange={(e) => setVoteName(e.target.value)}
+              />
+              <TextField
+                label="Email (optional)"
+                fullWidth
+                margin="normal"
+                type="email"
+                value={voteEmail}
+                onChange={(e) => setVoteEmail(e.target.value)}
+                helperText="We'll notify you when this feature is available"
+              />
+              <TextField
+                label="What would you use it for? (optional)"
+                fullWidth
+                margin="normal"
+                multiline
+                rows={3}
+                value={voteComment}
+                onChange={(e) => setVoteComment(e.target.value)}
+              />
+            </>
+          )}
+        </DialogContent>
+        <DialogActions>
+          {voteSubmitted ? (
+            <Button onClick={handleVoteClose} variant="contained">
+              Close
+            </Button>
+          ) : (
+            <>
+              <Button
+                onClick={handleVoteClose}
+                color="inherit"
+                startIcon={<Close />}
+              >
+                Cancel
+              </Button>
+              <Button
+                onClick={handleVoteSubmit}
+                variant="contained"
+                startIcon={<ThumbUp />}
+              >
+                Submit Vote
+              </Button>
+            </>
+          )}
+        </DialogActions>
+      </Dialog>
     </AppLayout>
   );
 };
