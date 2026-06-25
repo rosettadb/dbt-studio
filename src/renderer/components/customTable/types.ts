@@ -28,7 +28,7 @@ export type TableRowAction<T> = {
 
 export type CustomTableType<T> = {
   id: string;
-  name: string;
+  name: ReactNode;
   rows: T[];
   columns: ColumnType<T>[];
   indexCell?: boolean;
