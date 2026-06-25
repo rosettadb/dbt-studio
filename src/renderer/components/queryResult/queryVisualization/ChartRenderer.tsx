@@ -275,10 +275,14 @@ export const ChartRenderer: React.FC<ChartRendererProps> = ({
       sx={{
         width: '100%',
         height: '100%',
-        p: 2,
       }}
     >
-      <ResponsiveContainer width="100%" height="100%">
+      <ResponsiveContainer
+        width="100%"
+        height="100%"
+        minWidth={1}
+        minHeight={1}
+      >
         {renderChart()}
       </ResponsiveContainer>
     </Box>
