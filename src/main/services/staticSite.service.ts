@@ -21,6 +21,13 @@ import {
   type StaticPageMeta,
   type StaticPageData,
 } from './staticSiteTemplates';
+import type {
+  StaticSiteBuildOptions,
+  StaticSiteBuildResult,
+  StaticSiteBuildProgress,
+  StaticSiteState,
+  StaticSiteDeleteResult,
+} from '../../types/staticSite';
 
 // Attempt to load the pre-compiled runtime bundle path
 const RUNTIME_BUNDLE_PATH = path.join(
@@ -39,33 +46,28 @@ const MAX_ROWS_PER_QUERY = 10_000;
 
 // ─── Public types ─────────────────────────────────────────────────────────────
 
-export interface StaticSiteBuildOptions {
-  connectionId: string;
-  outputPath: string;
-  overwrite: boolean;
-}
+export type {
+  StaticSiteBuildOptions,
+  StaticSiteBuildResult,
+  StaticSiteBuildProgress,
+  StaticSiteState,
+  StaticSiteDeleteResult,
+};
 
-export interface StaticSiteBuildResult {
-  success: boolean;
-  outputPath: string;
-  pageCount: number;
-  queryCount: number;
-  error?: string;
-}
+// ─── Helper: selective build wipe (preserves .git and user files) ─────────────
 
-export interface StaticSiteBuildProgress {
-  phase: 'loading' | 'querying' | 'rendering' | 'writing' | 'done' | 'error';
-  message: string;
-  current?: number;
-  total?: number;
-}
-
-export interface StaticSiteState {
-  connectionId: string;
-  lastBuildPath: string;
-  lastBuildAt: string;
-  lastBuildPageCount: number;
-  lastBuildQueryCount: number;
+/**
+ * Delete only the files/folders the build process controls.
+ * Preserves .git/, CNAME, README.md, and any other user files.
+ */
+function wipePreviousBuild(outputPath: string): void {
+  const controlled = ['index.html', 'assets', 'pages'];
+  controlled.forEach((name) => {
+    const target = path.join(outputPath, name);
+    if (fs.existsSync(target)) {
+      fs.rmSync(target, { recursive: true, force: true });
+    }
+  });
 }
 
 // ─── Helper: parse SQL blocks from markdown (main-process safe) ──────────────
@@ -246,9 +248,10 @@ export class StaticSiteService {
         }
         sendProgress(mainWindow, {
           phase: 'writing',
-          message: 'Removing existing site folder…',
+          message:
+            'Removing previous build files (preserving .git and user files)…',
         });
-        fs.rmSync(outputPath, { recursive: true, force: true });
+        wipePreviousBuild(outputPath);
       }
 
       // 2. Load pages
@@ -498,5 +501,24 @@ export class StaticSiteService {
         .replace(/[^a-z0-9]+/g, '-')
         .replace(/(^-|-$)/g, '') || 'analytics-site';
     return path.join(home, 'dbt-studio-sites', safe);
+  }
+
+  /** Delete the build folder entirely (full wipe incl. .git) and clear DB state */
+  static async deleteBuild(
+    connectionId: string,
+    folderPath: string,
+  ): Promise<{ success: boolean; error?: string }> {
+    try {
+      if (fs.existsSync(folderPath)) {
+        fs.rmSync(folderPath, { recursive: true, force: true });
+      }
+      await MainDatabaseService.deleteStaticSiteState(connectionId);
+      return { success: true };
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      // eslint-disable-next-line no-console
+      console.error('[StaticSiteService] deleteBuild error:', msg);
+      return { success: false, error: msg };
+    }
   }
 }

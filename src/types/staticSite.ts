@@ -29,3 +29,8 @@ export interface StaticSiteState {
   lastBuildPageCount: number;
   lastBuildQueryCount: number;
 }
+
+export interface StaticSiteDeleteResult {
+  success: boolean;
+  error?: string;
+}

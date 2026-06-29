@@ -41,4 +41,14 @@ export const registerStaticSiteHandlers = (mainWindow: BrowserWindow) => {
     'analytics:static-site:folder-exists',
     (_e, { path }: { path: string }) => StaticSiteService.folderExists(path),
   );
+  ipcMain.handle(
+    'analytics:static-site:delete-build',
+    (
+      _e,
+      {
+        connectionId,
+        outputPath,
+      }: { connectionId: string; outputPath: string },
+    ) => StaticSiteService.deleteBuild(connectionId, outputPath),
+  );
 };

@@ -28,6 +28,7 @@ import {
   Language as LanguageIcon,
   FolderOpen as FolderOpenIcon,
   OpenInBrowser as OpenInBrowserIcon,
+  DeleteOutline,
 } from '@mui/icons-material';
 import {
   useGetAnalyticsPages,
@@ -35,7 +36,10 @@ import {
   useUpdateAnalyticsPage,
   useDeleteAnalyticsPage,
 } from '../../controllers/analyticsPages.controller';
-import { useGetStaticSiteState } from '../../controllers/staticSite.controller';
+import {
+  useGetStaticSiteState,
+  useDeleteStaticSiteBuild,
+} from '../../controllers/staticSite.controller';
 import { buildAnalyticsTree } from '../../utils/analyticsTree';
 import { AnalyticsPageItem } from './AnalyticsPageItem';
 import { StaticSiteBuildDialog } from './StaticSiteBuildDialog';
@@ -81,6 +85,8 @@ export const AnalyticsPagesTreeView: React.FC<AnalyticsPagesTreeViewProps> = ({
     useState<StaticSiteBuildProgress | null>(null);
   const [lastSuccessState, setLastSuccessState] =
     useState<StaticSiteState | null>(null);
+  const [deleteSiteDialogOpen, setDeleteSiteDialogOpen] = useState(false);
+  const deleteSiteMutation = useDeleteStaticSiteBuild();
 
   // Subscribe to streaming progress events (FE-03 — subscription in service)
   useEffect(() => {
@@ -558,6 +564,7 @@ export const AnalyticsPagesTreeView: React.FC<AnalyticsPagesTreeViewProps> = ({
         connectionId={connectionId}
         connectionName={connectionId}
         pageCount={pages.length}
+        existingState={siteState ?? lastSuccessState}
         onClose={() => setBuildDialogOpen(false)}
         onBuildSuccess={(result) => {
           setBuildDialogOpen(false);
@@ -617,8 +624,76 @@ export const AnalyticsPagesTreeView: React.FC<AnalyticsPagesTreeViewProps> = ({
               <OpenInBrowserIcon sx={{ fontSize: 14 }} />
             </IconButton>
           </Tooltip>
+          <Tooltip title="Delete build">
+            <IconButton
+              size="small"
+              color="error"
+              onClick={() => setDeleteSiteDialogOpen(true)}
+            >
+              <DeleteOutline sx={{ fontSize: 14 }} />
+            </IconButton>
+          </Tooltip>
         </Box>
       )}
+
+      {/* Delete Site Build Confirmation Dialog */}
+      <Dialog
+        open={deleteSiteDialogOpen}
+        onClose={() => setDeleteSiteDialogOpen(false)}
+        maxWidth="sm"
+        fullWidth
+      >
+        <DialogTitle sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+          <DeleteOutline color="error" /> Delete site build?
+        </DialogTitle>
+        <DialogContent>
+          <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+            This will permanently delete all files at:
+          </Typography>
+          <Box
+            sx={{
+              px: 1.5,
+              py: 1,
+              bgcolor: 'action.hover',
+              borderRadius: 1,
+              fontFamily: 'monospace',
+              fontSize: '0.8rem',
+              wordBreak: 'break-all',
+              mb: 2,
+            }}
+          >
+            {(siteState ?? lastSuccessState)?.lastBuildPath}
+          </Box>
+          <Typography variant="body2" color="text.secondary">
+            This cannot be undone.
+          </Typography>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setDeleteSiteDialogOpen(false)}>Cancel</Button>
+          <Button
+            color="error"
+            variant="contained"
+            disabled={deleteSiteMutation.isLoading}
+            onClick={() => {
+              const path = (siteState ?? lastSuccessState)?.lastBuildPath;
+              if (path) {
+                deleteSiteMutation.mutate(
+                  { connectionId, outputPath: path },
+                  {
+                    onSuccess: () => {
+                      setLastSuccessState(null);
+                      setDeleteSiteDialogOpen(false);
+                      refetchSiteState();
+                    },
+                  },
+                );
+              }
+            }}
+          >
+            {deleteSiteMutation.isLoading ? 'Deleting...' : 'Delete Build'}
+          </Button>
+        </DialogActions>
+      </Dialog>
     </Box>
   );
 };

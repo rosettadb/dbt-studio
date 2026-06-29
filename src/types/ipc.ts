@@ -449,7 +449,8 @@ export type StaticSiteChannels =
   | 'analytics:static-site:get-state'
   | 'analytics:static-site:pick-folder'
   | 'analytics:static-site:get-default-path'
-  | 'analytics:static-site:folder-exists';
+  | 'analytics:static-site:folder-exists'
+  | 'analytics:static-site:delete-build';
 
 export type Channels =
   | TestChannels

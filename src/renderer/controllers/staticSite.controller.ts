@@ -41,3 +41,24 @@ export const usePickSiteFolder = () => {
       StaticSiteService.pickFolder(defaultPath),
   });
 };
+
+/** Delete a site build */
+export const useDeleteStaticSiteBuild = () => {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: ({
+      connectionId,
+      outputPath,
+    }: {
+      connectionId: string;
+      outputPath: string;
+    }) => StaticSiteService.deleteBuild(connectionId, outputPath),
+    onSuccess: (_, variables) => {
+      // Invalidate state so the sidebar resets to initial state
+      queryClient.invalidateQueries({
+        queryKey: STATIC_SITE_KEYS.state(variables.connectionId),
+      });
+    },
+  });
+};

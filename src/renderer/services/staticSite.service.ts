@@ -1,6 +1,7 @@
 import type {
   StaticSiteBuildOptions,
   StaticSiteBuildResult,
+  StaticSiteDeleteResult,
   StaticSiteState,
   StaticSiteBuildProgress,
 } from '../../types/staticSite';
@@ -77,5 +78,15 @@ export class StaticSiteService {
     );
 
     return unsubscribe as () => void;
+  }
+
+  static async deleteBuild(
+    connectionId: string,
+    outputPath: string,
+  ): Promise<StaticSiteDeleteResult> {
+    return window.electron.ipcRenderer.invoke(
+      'analytics:static-site:delete-build',
+      { connectionId, outputPath },
+    );
   }
 }

@@ -2067,6 +2067,19 @@ export default class MainDatabaseService {
     }
   }
 
+  static async deleteStaticSiteState(connectionId: string): Promise<void> {
+    if (!this.sqlite) await this.initializeDatabase();
+    try {
+      this.sqlite!.prepare(
+        'DELETE FROM analytics_static_site_state WHERE connection_id = ?',
+      ).run(connectionId);
+    } catch (error) {
+      // eslint-disable-next-line no-console
+      console.error('[MAIN DATABASE] deleteStaticSiteState error:', error);
+      throw error;
+    }
+  }
+
   private static formatFileSize(bytes: number): string {
     if (bytes === 0) return '0 Bytes';
     const k = 1024;

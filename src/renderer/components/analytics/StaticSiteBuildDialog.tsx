@@ -19,16 +19,19 @@ import {
   Warning as WarningIcon,
   CheckCircle as CheckCircleIcon,
   Language as LanguageIcon,
+  Lock as LockIcon,
 } from '@mui/icons-material';
 import { StaticSiteService } from '../../services/staticSite.service';
 import type {
   StaticSiteBuildProgress,
   StaticSiteBuildResult,
+  StaticSiteState,
 } from '../../../types/staticSite';
 
 // ─── Dialog states ────────────────────────────────────────────────────────────
 type DialogView =
   | 'configure'
+  | 'locked'
   | 'confirm-overwrite'
   | 'building'
   | 'success'
@@ -39,6 +42,7 @@ interface StaticSiteBuildDialogProps {
   connectionId: string;
   connectionName: string;
   pageCount: number;
+  existingState: StaticSiteState | null;
   onClose: () => void;
   /** Called after a successful build so the parent can update state */
   onBuildSuccess: (result: StaticSiteBuildResult) => void;
@@ -49,11 +53,16 @@ export const StaticSiteBuildDialog: React.FC<StaticSiteBuildDialogProps> = ({
   connectionId,
   connectionName,
   pageCount,
+  existingState,
   onClose,
   onBuildSuccess,
 }) => {
-  const [view, setView] = useState<DialogView>('configure');
-  const [outputPath, setOutputPath] = useState('');
+  const [view, setView] = useState<DialogView>(
+    existingState ? 'locked' : 'configure',
+  );
+  const [outputPath, setOutputPath] = useState(
+    existingState ? existingState.lastBuildPath : '',
+  );
   const [loadingDefaultPath, setLoadingDefaultPath] = useState(false);
   const [progress, setProgress] = useState<StaticSiteBuildProgress | null>(
     null,
@@ -63,9 +72,9 @@ export const StaticSiteBuildDialog: React.FC<StaticSiteBuildDialogProps> = ({
   );
   const [pickingFolder, setPickingFolder] = useState(false);
 
-  // Load default path on open
+  // Load default path on open if no existing state
   useEffect(() => {
-    if (open && !outputPath) {
+    if (open && !outputPath && !existingState) {
       setLoadingDefaultPath(true);
       // eslint-disable-next-line promise/catch-or-return
       StaticSiteService.getDefaultOutputPath(connectionName)
@@ -73,7 +82,7 @@ export const StaticSiteBuildDialog: React.FC<StaticSiteBuildDialogProps> = ({
         .catch(() => {})
         .finally(() => setLoadingDefaultPath(false));
     }
-  }, [open, connectionName, outputPath]);
+  }, [open, connectionName, outputPath, existingState]);
 
   // Subscribe to build progress events
   useEffect(() => {
@@ -86,11 +95,14 @@ export const StaticSiteBuildDialog: React.FC<StaticSiteBuildDialogProps> = ({
   // Reset on close
   const handleClose = useCallback(() => {
     if (view === 'building') return; // block accidental close during build
-    setView('configure');
+    setView(existingState ? 'locked' : 'configure');
     setProgress(null);
     setBuildResult(null);
+    if (!existingState) {
+      setOutputPath('');
+    }
     onClose();
-  }, [view, onClose]);
+  }, [view, onClose, existingState]);
 
   // Browse for folder
   const handleBrowse = async () => {
@@ -137,6 +149,13 @@ export const StaticSiteBuildDialog: React.FC<StaticSiteBuildDialogProps> = ({
   // Main build trigger — checks for existing folder first
   const handleBuildClick = async () => {
     if (!outputPath.trim()) return;
+
+    if (view === 'locked') {
+      // Re-building to the exact same path that is locked. Implicit overwrite.
+      await startBuild(true);
+      return;
+    }
+
     const exists = await StaticSiteService.folderExists(outputPath.trim());
     if (exists) {
       setView('confirm-overwrite');
@@ -150,8 +169,10 @@ export const StaticSiteBuildDialog: React.FC<StaticSiteBuildDialogProps> = ({
       ? Math.round((progress.current / progress.total) * 100)
       : undefined;
 
-  // ─── Render: Configure ──────────────────────────────────────────────────────
-  if (view === 'configure') {
+  // ─── Render: Configure & Locked ─────────────────────────────────────────────
+  if (view === 'configure' || view === 'locked') {
+    const isLocked = view === 'locked';
+
     return (
       <Dialog open={open} onClose={handleClose} maxWidth="sm" fullWidth>
         <DialogTitle sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
@@ -175,7 +196,7 @@ export const StaticSiteBuildDialog: React.FC<StaticSiteBuildDialogProps> = ({
                 color="text.secondary"
                 fontWeight={500}
               >
-                Output Folder
+                Output Folder {isLocked && '(Locked)'}
               </Typography>
               <Box sx={{ display: 'flex', gap: 1, mt: 0.5 }}>
                 <TextField
@@ -184,14 +205,26 @@ export const StaticSiteBuildDialog: React.FC<StaticSiteBuildDialogProps> = ({
                   value={loadingDefaultPath ? 'Loading…' : outputPath}
                   onChange={(e) => setOutputPath(e.target.value)}
                   placeholder="/path/to/output"
-                  disabled={loadingDefaultPath}
-                  inputProps={{ 'aria-label': 'Output folder path' }}
+                  disabled={loadingDefaultPath || isLocked}
+                  InputProps={{
+                    readOnly: isLocked,
+                    startAdornment: isLocked ? (
+                      <LockIcon
+                        fontSize="small"
+                        color="action"
+                        sx={{ mr: 1 }}
+                      />
+                    ) : undefined,
+                    inputProps: { 'aria-label': 'Output folder path' },
+                  }}
                 />
-                <Tooltip title="Browse for folder">
+                <Tooltip
+                  title={isLocked ? 'Path is locked' : 'Browse for folder'}
+                >
                   <span>
                     <IconButton
                       onClick={handleBrowse}
-                      disabled={pickingFolder || loadingDefaultPath}
+                      disabled={pickingFolder || loadingDefaultPath || isLocked}
                       size="small"
                       sx={{
                         border: 1,
@@ -204,6 +237,13 @@ export const StaticSiteBuildDialog: React.FC<StaticSiteBuildDialogProps> = ({
                   </span>
                 </Tooltip>
               </Box>
+              {isLocked && (
+                <Alert severity="info" sx={{ mt: 1.5 }} icon={<LockIcon />}>
+                  <strong>Path is locked.</strong> The site already exists at
+                  this location. To build to a different path, delete the
+                  current build first.
+                </Alert>
+              )}
             </Box>
           </Box>
         </DialogContent>
@@ -215,7 +255,7 @@ export const StaticSiteBuildDialog: React.FC<StaticSiteBuildDialogProps> = ({
             disabled={!outputPath.trim() || loadingDefaultPath}
             startIcon={<LanguageIcon />}
           >
-            Build Site
+            {isLocked ? 'Rebuild Site' : 'Build Site'}
           </Button>
         </DialogActions>
       </Dialog>
