@@ -40,16 +40,6 @@ function escapeAttr(str: string): string {
   return str.replace(/"/g, '&quot;').replace(/'/g, '&#39;');
 }
 
-// Pinned CDN versions — update when upgrading deps in package.json
-const CDN = {
-  react: '18.3.1',
-  reactDom: '18.3.1',
-  emotionReact: '11.14.0',
-  emotionStyled: '11.14.0',
-  muiMaterial: '6.4.0',
-  recharts: '2.15.0',
-};
-
 /** Converts an analytics page title or route into a URL-safe slug */
 export function toSlug(title: string): string {
   return (
