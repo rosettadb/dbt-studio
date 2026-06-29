@@ -1,11 +1,12 @@
 import React from 'react';
-import { Box, Tooltip, Typography } from '@mui/material';
+import { Box, Tooltip, Typography, useTheme } from '@mui/material';
 import { PLUGIN_DEFS, type PluginDef } from './pluginDefinitions';
 
-const PluginChip: React.FC<{
+const PluginRow: React.FC<{
   plugin: PluginDef;
   onAdd?: (pluginId: string) => void;
 }> = ({ plugin, onAdd }) => {
+  const theme = useTheme();
   const Icon = plugin.icon;
 
   const onDragStart = (event: React.DragEvent) => {
@@ -14,11 +15,7 @@ const PluginChip: React.FC<{
   };
 
   return (
-    <Tooltip
-      title="Drag to canvas or double-click to add"
-      placement="right"
-      arrow
-    >
+    <Tooltip title="Drag to canvas or double-click to add" placement="right" arrow>
       <Box
         draggable
         onDragStart={onDragStart}
@@ -26,29 +23,28 @@ const PluginChip: React.FC<{
         sx={{
           display: 'flex',
           alignItems: 'center',
-          gap: 0.75,
-          px: 0.75,
-          py: 0.5,
+          gap: 1,
+          px: 1,
+          py: 0.75,
           borderRadius: 1,
           cursor: 'grab',
           userSelect: 'none',
-          border: `1px solid ${plugin.color}60`,
-          bgcolor: `${plugin.color}10`,
-          color: plugin.color,
+          color: 'text.primary',
           transition: 'background-color 0.15s',
-          '&:hover': { bgcolor: `${plugin.color}28` },
-          '&:active': { cursor: 'grabbing' },
+          '&:hover': { bgcolor: 'action.hover' },
+          '&:active': { cursor: 'grabbing', bgcolor: 'action.selected' },
         }}
       >
-        <Icon sx={{ fontSize: 14, flexShrink: 0 }} />
+        <Icon sx={{ fontSize: 15, flexShrink: 0, color: plugin.color }} />
         <Typography
+          variant="body2"
           sx={{
-            fontSize: '0.68rem',
-            fontWeight: 700,
+            fontSize: '0.75rem',
             lineHeight: 1,
             whiteSpace: 'nowrap',
             overflow: 'hidden',
             textOverflow: 'ellipsis',
+            color: theme.palette.text.primary,
           }}
         >
           {plugin.label}
@@ -76,37 +72,50 @@ export const NodePalette: React.FC<{ onAdd?: (pluginId: string) => void }> = ({
       sx={{
         display: 'flex',
         flexDirection: 'column',
-        gap: 0,
-        px: 1,
+        px: 0.5,
         py: 1,
         borderRight: 1,
         borderColor: 'divider',
         bgcolor: 'background.paper',
-        width: 130,
+        width: 140,
         flexShrink: 0,
         overflowY: 'auto',
       }}
     >
+      <Typography
+        sx={{
+          fontSize: '0.6rem',
+          fontWeight: 600,
+          textTransform: 'uppercase',
+          letterSpacing: 0.8,
+          color: 'text.disabled',
+          px: 1,
+          mb: 0.5,
+        }}
+      >
+        Steps
+      </Typography>
       {categories.map(([category, plugins]) => (
-        <Box key={category} sx={{ mb: 1.5 }}>
-          <Typography
-            sx={{
-              fontSize: '0.58rem',
-              fontWeight: 700,
-              textTransform: 'uppercase',
-              letterSpacing: 0.6,
-              color: 'text.disabled',
-              px: 0.5,
-              mb: 0.75,
-            }}
-          >
-            {category}
-          </Typography>
-          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5 }}>
-            {plugins.map((plugin) => (
-              <PluginChip key={plugin.id} plugin={plugin} onAdd={onAdd} />
-            ))}
-          </Box>
+        <Box key={category}>
+          {categories.length > 1 && (
+            <Typography
+              sx={{
+                fontSize: '0.58rem',
+                fontWeight: 600,
+                textTransform: 'uppercase',
+                letterSpacing: 0.6,
+                color: 'text.disabled',
+                px: 1,
+                mt: 1,
+                mb: 0.25,
+              }}
+            >
+              {category}
+            </Typography>
+          )}
+          {plugins.map((plugin) => (
+            <PluginRow key={plugin.id} plugin={plugin} onAdd={onAdd} />
+          ))}
         </Box>
       ))}
     </Box>
