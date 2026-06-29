@@ -139,7 +139,7 @@ export const QueryResultVisualization: React.FC<
         width: '100%',
       }}
     >
-      <Box sx={{ flexGrow: 1, overflow: 'hidden' }}>
+      <Box sx={{ flexGrow: 1, overflow: 'hidden', p: 2 }}>
         <ChartRenderer
           data={transformedData}
           chartType={chartType}

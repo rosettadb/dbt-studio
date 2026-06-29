@@ -111,49 +111,56 @@ export const Menu: React.FC<MenuProps> = ({ actions }) => {
             </IconButton>
           </Tooltip>
         )}
-        {isProjectSelected && (
-          <SimpleDropdownMenu
-            items={[
-              {
-                value: 'all',
-                label: (
-                  <BranchDropdownToggle>
-                    <FormatListNumbered fontSize="small" />
-                    All Projects
-                  </BranchDropdownToggle>
-                ),
-              },
-              ...projects.map((p) => ({
-                value: String(p.id),
-                label: (
-                  <BranchDropdownToggle>
-                    <LetterAvatar name={p?.name ?? ''} size={16} />
-                    {p?.name}
-                  </BranchDropdownToggle>
-                ),
-              })),
-            ]}
-            onSelect={async (value) => {
-              if (value === 'all') {
-                navigate('/app/select-project');
-              } else {
-                await selectProject({ projectId: value });
-                navigate('/app');
-              }
-            }}
-            selectedItem={String(project?.id)}
-            anchorElement={
-              <BranchDropdownToggle>
-                <LetterAvatar name={project?.name ?? ''} size={16} />
-                {project?.name}
-                <ArrowDownward style={{ fontSize: 9 }} />
-              </BranchDropdownToggle>
+        <SimpleDropdownMenu
+          items={[
+            {
+              value: 'all',
+              label: (
+                <BranchDropdownToggle>
+                  <FormatListNumbered fontSize="small" />
+                  All Projects
+                </BranchDropdownToggle>
+              ),
+            },
+            ...projects.map((p) => ({
+              value: String(p.id),
+              label: (
+                <BranchDropdownToggle>
+                  <LetterAvatar name={p?.name ?? ''} size={16} />
+                  {p?.name}
+                </BranchDropdownToggle>
+              ),
+            })),
+          ]}
+          onSelect={async (value) => {
+            if (value === 'all') {
+              navigate('/app/select-project');
+            } else {
+              await selectProject({ projectId: value });
+              navigate('/app');
             }
-          />
-        )}
+          }}
+          selectedItem={project ? String(project.id) : 'all'}
+          anchorElement={
+            <BranchDropdownToggle>
+              {project ? (
+                <>
+                  <LetterAvatar name={project.name ?? ''} size={16} />
+                  {project.name}
+                </>
+              ) : (
+                <>
+                  <FormatListNumbered fontSize="small" />
+                  Select Project
+                </>
+              )}
+              <ArrowDownward style={{ fontSize: 9 }} />
+            </BranchDropdownToggle>
+          }
+        />
       </IconsContainer>
       <IconsContainer sx={{ gap: 2 }}>
-        {actions}
+        {isProjectSelected && actions}
         {/* Authentication - Only show when not logged in */}
         {!apiKey && (
           <Tooltip

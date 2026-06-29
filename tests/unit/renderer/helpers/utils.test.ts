@@ -121,6 +121,12 @@ describe('renderer/helpers/utils', () => {
     it('should return empty string when models folder missing', () => {
       expect(extractModelNameFromPath('/p/staging/my_model.sql')).toBe('');
     });
+
+    it('should handle Windows-style paths with backslashes', () => {
+      expect(
+        extractModelNameFromPath('C:\\p\\models\\staging\\my_model.sql'),
+      ).toBe('staging.my_model');
+    });
   });
 
   describe('getFileExtension / isEditableFile / getNonEditableFileMessage', () => {
