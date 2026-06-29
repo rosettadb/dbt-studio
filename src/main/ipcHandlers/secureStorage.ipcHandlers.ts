@@ -15,6 +15,10 @@ const registerSecureStorageHandlers = () => {
   ipcMain.handle('secure-storage:delete', async (_event, { account }) => {
     await SecureStorageService.deleteCredential(account);
   });
+
+  ipcMain.handle('secure-storage:list', async () => {
+    return SecureStorageService.findCredentials();
+  });
 };
 
 export default registerSecureStorageHandlers;

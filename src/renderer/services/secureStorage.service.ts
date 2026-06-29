@@ -26,4 +26,11 @@ export const secureStorageService = {
       },
     );
   },
+  list: async (): Promise<string[]> => {
+    const { data } = await client.post<Record<string, never>, string[]>(
+      'secure-storage:list',
+      {},
+    );
+    return data ?? [];
+  },
 };
