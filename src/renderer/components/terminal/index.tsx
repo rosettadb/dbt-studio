@@ -39,6 +39,18 @@ import { Project } from '../../../types/backend';
 import { useCurrentModelId } from '../../controllers';
 import { LineageModal, LineageView } from '../lineage';
 
+type TerminalMinimizeContextValue = {
+  isMinimized: boolean;
+  minimize: () => void;
+  restore: () => void;
+};
+
+const TerminalMinimizeContext =
+  React.createContext<TerminalMinimizeContextValue | null>(null);
+
+export const useTerminalMinimize = () =>
+  React.useContext(TerminalMinimizeContext);
+
 type Props = {
   project: Project;
   children: React.ReactNode;
@@ -90,21 +102,27 @@ export const TerminalLayout: React.FC<Props> = ({ children, project }) => {
   const [hasStartedProcess, setHasStartedProcess] =
     React.useState<boolean>(false);
   const lastTerminalHeight = React.useRef<number>(300);
+  const sizesRef = React.useRef(sizes);
+  sizesRef.current = sizes;
 
-  const handleMinimize = () => {
+  const handleMinimize = React.useCallback(() => {
     setIsMinimized(true);
-    // eslint-disable-next-line prefer-destructuring
-    lastTerminalHeight.current = sizes[1];
+    [, lastTerminalHeight.current] = sizesRef.current;
     setSizes([window.innerHeight, 0]);
-  };
+  }, []);
 
-  const handleRestore = () => {
+  const handleRestore = React.useCallback(() => {
     setIsMinimized(false);
     setSizes([
       window.innerHeight - lastTerminalHeight.current,
       lastTerminalHeight.current,
     ]);
-  };
+  }, []);
+
+  const terminalContextValue = React.useMemo(
+    () => ({ isMinimized, minimize: handleMinimize, restore: handleRestore }),
+    [isMinimized, handleMinimize, handleRestore],
+  );
 
   const handleMenuOpen = (event: React.MouseEvent<HTMLElement>) => {
     setMenuAnchor(event.currentTarget);
@@ -264,7 +282,9 @@ export const TerminalLayout: React.FC<Props> = ({ children, project }) => {
         sashRender={renderSash}
       >
         <EditorWrapper style={{ pointerEvents: lock ? 'none' : 'auto' }}>
-          {children}
+          <TerminalMinimizeContext.Provider value={terminalContextValue}>
+            {children}
+          </TerminalMinimizeContext.Provider>
         </EditorWrapper>
         <TerminalWrapper>
           {!isMinimized && (

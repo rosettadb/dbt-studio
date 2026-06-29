@@ -39,6 +39,7 @@ import { StepEditDialog } from './StepEditDialog';
 import { PLUGIN_MAP } from './pluginDefinitions';
 import { serializePipelineConfig } from './serializePipeline';
 import { validatePipelineGraph } from './validatePipeline';
+import { useTerminalMinimize } from '../terminal';
 
 const nodeTypes = { pipelineNode: PipelineNode };
 
@@ -166,6 +167,8 @@ const PipelineGraphContent: React.FC<PipelineGraphProps> = ({
 }) => {
   const theme = useTheme();
   const { project } = useReactFlow();
+  const terminal = useTerminalMinimize();
+  const autoMinimizedRef = React.useRef(false);
 
   const [nodes, setNodes] = useNodesState<PipelineNodeData>([]);
   const [edges, setEdges] = useEdgesState([]);
@@ -223,12 +226,20 @@ const PipelineGraphContent: React.FC<PipelineGraphProps> = ({
     setPipelineName(initialPipelineName);
     setValidationError('');
     setIsEditing(true);
-  }, [jobs, theme, initialPipelineName, setNodes, setEdges]);
+    if (terminal && !terminal.isMinimized) {
+      terminal.minimize();
+      autoMinimizedRef.current = true;
+    }
+  }, [jobs, theme, initialPipelineName, setNodes, setEdges, terminal]);
 
   const handleCancelEdit = useCallback(() => {
     setIsEditing(false);
     setValidationError('');
-  }, []);
+    if (autoMinimizedRef.current) {
+      terminal?.restore();
+      autoMinimizedRef.current = false;
+    }
+  }, [terminal]);
 
   const handleSave = useCallback(async () => {
     const errors = validatePipelineGraph(nodes, edges);
@@ -242,12 +253,16 @@ const PipelineGraphContent: React.FC<PipelineGraphProps> = ({
       const content = serializePipelineConfig(pipelineName, nodes, edges);
       await onSave?.(content);
       setIsEditing(false);
+      if (autoMinimizedRef.current) {
+        terminal?.restore();
+        autoMinimizedRef.current = false;
+      }
     } catch (err) {
       setValidationError(err instanceof Error ? err.message : 'Save failed');
     } finally {
       setIsSaving(false);
     }
-  }, [nodes, edges, pipelineName, onSave]);
+  }, [nodes, edges, pipelineName, onSave, terminal]);
 
   const onConnect = useCallback(
     (params: Connection) => {
