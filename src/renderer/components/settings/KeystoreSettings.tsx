@@ -12,6 +12,13 @@ import {
   Alert,
   Tooltip,
   Divider,
+  Tabs,
+  Tab,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogContentText,
+  DialogActions,
 } from '@mui/material';
 import {
   Delete,
@@ -19,6 +26,7 @@ import {
   VisibilityOff,
   Add,
   VpnKey,
+  Close,
 } from '@mui/icons-material';
 import { toast } from 'react-toastify';
 import { secureStorageService } from '../../services/secureStorage.service';
@@ -31,20 +39,33 @@ type Entry = {
 };
 
 export const KeystoreSettings: React.FC = () => {
+  const [environments, setEnvironments] = React.useState<string[]>([]);
+  const [activeEnv, setActiveEnv] = React.useState<string>('default');
   const [entries, setEntries] = React.useState<Entry[]>([]);
   const [isLoading, setIsLoading] = React.useState(true);
   const [newKey, setNewKey] = React.useState('');
   const [newValue, setNewValue] = React.useState('');
   const [showNewValue, setShowNewValue] = React.useState(false);
   const [isSaving, setIsSaving] = React.useState(false);
+  const [addEnvOpen, setAddEnvOpen] = React.useState(false);
+  const [newEnvName, setNewEnvName] = React.useState('');
+  const [addEnvError, setAddEnvError] = React.useState('');
+  const [deleteEnvTarget, setDeleteEnvTarget] = React.useState<string | null>(
+    null,
+  );
+  const [isDeletingEnv, setIsDeletingEnv] = React.useState(false);
 
   const load = React.useCallback(async () => {
     setIsLoading(true);
     try {
-      const keys = await secureStorageService.list();
+      const [keys, envs] = await Promise.all([
+        secureStorageService.list(),
+        secureStorageService.listEnvironments(),
+      ]);
       setEntries(
         keys.sort().map((key) => ({ key, visibleValue: null, loading: false })),
       );
+      setEnvironments(envs);
     } catch {
       toast.error('Failed to load keystore entries');
     } finally {
@@ -56,51 +77,69 @@ export const KeystoreSettings: React.FC = () => {
     load();
   }, [load]);
 
-  const handleToggleReveal = async (index: number) => {
-    const entry = entries[index];
+  const envEntries = React.useMemo(() => {
+    if (activeEnv === 'default') {
+      const envPrefixes = environments.map((e) => `${e}.`);
+      return entries.filter(
+        (e) => !envPrefixes.some((p) => e.key.startsWith(p)),
+      );
+    }
+    const prefix = `${activeEnv}.`;
+    return entries.filter((e) => e.key.startsWith(prefix));
+  }, [entries, environments, activeEnv]);
+
+  const displayKey = (key: string): string => {
+    if (activeEnv === 'default') return key;
+    return key.slice(`${activeEnv}.`.length);
+  };
+
+  const handleToggleReveal = async (key: string) => {
+    const entry = entries.find((e) => e.key === key);
+    if (!entry) return;
     if (entry.visibleValue !== null) {
       setEntries((prev) =>
-        prev.map((e, i) => (i === index ? { ...e, visibleValue: null } : e)),
+        prev.map((e) => (e.key === key ? { ...e, visibleValue: null } : e)),
       );
       return;
     }
     setEntries((prev) =>
-      prev.map((e, i) => (i === index ? { ...e, loading: true } : e)),
+      prev.map((e) => (e.key === key ? { ...e, loading: true } : e)),
     );
     try {
-      const value = await secureStorageService.get(
-        entry.key as SecureStorageAccount,
-      );
+      const value = await secureStorageService.get(key as SecureStorageAccount);
       setEntries((prev) =>
-        prev.map((e, i) =>
-          i === index ? { ...e, visibleValue: value ?? '', loading: false } : e,
+        prev.map((e) =>
+          e.key === key
+            ? { ...e, visibleValue: value ?? '', loading: false }
+            : e,
         ),
       );
     } catch {
       setEntries((prev) =>
-        prev.map((e, i) => (i === index ? { ...e, loading: false } : e)),
+        prev.map((e) => (e.key === key ? { ...e, loading: false } : e)),
       );
       toast.error('Failed to reveal value');
     }
   };
 
-  const handleDelete = async (index: number) => {
-    const entry = entries[index];
+  const handleDelete = async (key: string) => {
     try {
-      await secureStorageService.delete(entry.key as SecureStorageAccount);
-      setEntries((prev) => prev.filter((_, i) => i !== index));
-      toast.success(`Deleted "${entry.key}"`);
+      await secureStorageService.delete(key as SecureStorageAccount);
+      setEntries((prev) => prev.filter((e) => e.key !== key));
+      toast.success(`Deleted "${displayKey(key)}"`);
     } catch {
-      toast.error(`Failed to delete "${entry.key}"`);
+      toast.error(`Failed to delete "${displayKey(key)}"`);
     }
   };
 
   const handleAdd = async () => {
     if (!newKey.trim() || !newValue.trim()) return;
+    const storedKey =
+      activeEnv === 'default' ? newKey.trim() : `${activeEnv}.${newKey.trim()}`;
     setIsSaving(true);
     try {
       await secureStorageService.set(
-        newKey.trim() as SecureStorageAccount,
+        storedKey as SecureStorageAccount,
         newValue.trim(),
       );
       setNewKey('');
@@ -115,12 +154,127 @@ export const KeystoreSettings: React.FC = () => {
     }
   };
 
+  const handleAddEnv = async () => {
+    const name = newEnvName.trim();
+    if (!name) {
+      setAddEnvError('Name is required');
+      return;
+    }
+    if (name.includes('.')) {
+      setAddEnvError('Environment name cannot contain "."');
+      return;
+    }
+    if (name.toLowerCase() === 'default') {
+      setAddEnvError('"default" is reserved');
+      return;
+    }
+    if (environments.includes(name)) {
+      setAddEnvError('Environment already exists');
+      return;
+    }
+    const updated = [...environments, name];
+    try {
+      await secureStorageService.saveEnvironments(updated);
+      setEnvironments(updated);
+      setActiveEnv(name);
+      setAddEnvOpen(false);
+      setNewEnvName('');
+      setAddEnvError('');
+    } catch {
+      toast.error('Failed to create environment');
+    }
+  };
+
+  const handleDeleteEnv = async () => {
+    if (!deleteEnvTarget) return;
+    setIsDeletingEnv(true);
+    try {
+      const prefix = `${deleteEnvTarget}.`;
+      const envKeys = entries.filter((e) => e.key.startsWith(prefix));
+      await Promise.all(
+        envKeys.map((e) =>
+          secureStorageService.delete(e.key as SecureStorageAccount),
+        ),
+      );
+      const updated = environments.filter((e) => e !== deleteEnvTarget);
+      await secureStorageService.saveEnvironments(updated);
+      setEnvironments(updated);
+      setEntries((prev) => prev.filter((e) => !e.key.startsWith(prefix)));
+      if (activeEnv === deleteEnvTarget) setActiveEnv('default');
+      toast.success(`Environment "${deleteEnvTarget}" deleted`);
+      setDeleteEnvTarget(null);
+    } catch {
+      toast.error('Failed to delete environment');
+    } finally {
+      setIsDeletingEnv(false);
+    }
+  };
+
+  const closeAddEnvDialog = () => {
+    setAddEnvOpen(false);
+    setNewEnvName('');
+    setAddEnvError('');
+  };
+
+  const deleteEnvKeyCount = deleteEnvTarget
+    ? entries.filter((e) => e.key.startsWith(`${deleteEnvTarget}.`)).length
+    : 0;
+
   return (
     <Box maxWidth={800} width="100%" mt={3}>
       <Typography variant="body2" color="text.secondary" mb={3}>
-        Credentials stored in the system keystore. Values are encrypted at rest
-        by the OS.
+        Credentials stored in the system keystore, encrypted at rest by the OS.
+        Use environments to group related keys — keys are prefixed with the
+        environment name (e.g.{' '}
+        <code style={{ fontFamily: 'monospace' }}>dev.MY_KEY</code>).
       </Typography>
+
+      <Box
+        display="flex"
+        alignItems="center"
+        mb={2}
+        sx={{ borderBottom: 1, borderColor: 'divider' }}
+      >
+        <Tabs
+          value={activeEnv}
+          onChange={(_e, v) => setActiveEnv(v as string)}
+          sx={{ flex: 1, minHeight: 0 }}
+        >
+          <Tab label="Default" value="default" />
+          {environments.map((env) => (
+            <Tab
+              key={env}
+              value={env}
+              label={
+                <Box display="flex" alignItems="center" gap={0.5}>
+                  {env}
+                  <Close
+                    sx={{
+                      fontSize: 14,
+                      ml: 0.25,
+                      opacity: 0.5,
+                      '&:hover': { opacity: 1 },
+                    }}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setDeleteEnvTarget(env);
+                    }}
+                  />
+                </Box>
+              }
+            />
+          ))}
+        </Tabs>
+        <Tooltip title="Add environment">
+          <IconButton
+            size="small"
+            onClick={() => setAddEnvOpen(true)}
+            sx={{ ml: 1 }}
+          >
+            <Add fontSize="small" />
+          </IconButton>
+        </Tooltip>
+      </Box>
 
       <Card
         variant="outlined"
@@ -130,7 +284,7 @@ export const KeystoreSettings: React.FC = () => {
           <Box display="flex" alignItems="center" gap={1} mb={2}>
             <VpnKey color="primary" />
             <Typography variant="h6" sx={{ m: 0 }}>
-              Stored Entries
+              {activeEnv === 'default' ? 'Default' : activeEnv}
             </Typography>
           </Box>
 
@@ -139,12 +293,12 @@ export const KeystoreSettings: React.FC = () => {
               <CircularProgress size={24} />
             </Box>
           )}
-          {!isLoading && entries.length === 0 && (
-            <Alert severity="info">No entries stored yet.</Alert>
+          {!isLoading && envEntries.length === 0 && (
+            <Alert severity="info">No entries in this environment yet.</Alert>
           )}
           {!isLoading &&
-            entries.length > 0 &&
-            entries.map((entry, i) => (
+            envEntries.length > 0 &&
+            envEntries.map((entry, i) => (
               <React.Fragment key={entry.key}>
                 {i > 0 && <Divider />}
                 <Box display="flex" alignItems="center" gap={1} py={1}>
@@ -160,7 +314,7 @@ export const KeystoreSettings: React.FC = () => {
                       variant="body2"
                       sx={{ fontFamily: 'monospace', wordBreak: 'break-all' }}
                     >
-                      {entry.key}
+                      {displayKey(entry.key)}
                     </Typography>
                   </Box>
                   <Box flex={1} minWidth={0}>
@@ -194,7 +348,7 @@ export const KeystoreSettings: React.FC = () => {
                       >
                         <IconButton
                           size="small"
-                          onClick={() => handleToggleReveal(i)}
+                          onClick={() => handleToggleReveal(entry.key)}
                         >
                           {entry.visibleValue !== null ? (
                             <VisibilityOff fontSize="small" />
@@ -208,7 +362,7 @@ export const KeystoreSettings: React.FC = () => {
                       <IconButton
                         size="small"
                         color="error"
-                        onClick={() => handleDelete(i)}
+                        onClick={() => handleDelete(entry.key)}
                       >
                         <Delete fontSize="small" />
                       </IconButton>
@@ -233,14 +387,38 @@ export const KeystoreSettings: React.FC = () => {
               label="Key"
               value={newKey}
               onChange={(e) => setNewKey(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && handleAdd()}
               size="small"
               fullWidth
               inputProps={{ style: { fontFamily: 'monospace' } }}
+              slotProps={
+                activeEnv !== 'default'
+                  ? {
+                      input: {
+                        startAdornment: (
+                          <InputAdornment position="start">
+                            <Typography
+                              variant="body2"
+                              sx={{
+                                fontFamily: 'monospace',
+                                color: 'text.disabled',
+                                userSelect: 'none',
+                              }}
+                            >
+                              {activeEnv}.
+                            </Typography>
+                          </InputAdornment>
+                        ),
+                      },
+                    }
+                  : undefined
+              }
             />
             <TextField
               label="Value"
               value={newValue}
               onChange={(e) => setNewValue(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && handleAdd()}
               size="small"
               fullWidth
               type={showNewValue ? 'text' : 'password'}
@@ -282,6 +460,86 @@ export const KeystoreSettings: React.FC = () => {
           </Box>
         </CardContent>
       </Card>
+
+      <Dialog
+        open={addEnvOpen}
+        onClose={closeAddEnvDialog}
+        maxWidth="xs"
+        fullWidth
+      >
+        <DialogTitle>New Environment</DialogTitle>
+        <DialogContent>
+          <TextField
+            autoFocus
+            label="Environment name"
+            value={newEnvName}
+            onChange={(e) => {
+              setNewEnvName(e.target.value);
+              setAddEnvError('');
+            }}
+            onKeyDown={(e) => e.key === 'Enter' && handleAddEnv()}
+            error={!!addEnvError}
+            helperText={
+              addEnvError ||
+              'Keys will be stored as "<name>.<key>" in the OS keystore'
+            }
+            fullWidth
+            size="small"
+            sx={{ mt: 1 }}
+            inputProps={{ style: { fontFamily: 'monospace' } }}
+          />
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={closeAddEnvDialog}>Cancel</Button>
+          <Button
+            variant="contained"
+            onClick={handleAddEnv}
+            disabled={!newEnvName.trim()}
+          >
+            Create
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      <Dialog
+        open={!!deleteEnvTarget}
+        onClose={() => !isDeletingEnv && setDeleteEnvTarget(null)}
+        maxWidth="xs"
+        fullWidth
+      >
+        <DialogTitle>Delete Environment</DialogTitle>
+        <DialogContent>
+          <DialogContentText>
+            Delete environment <strong>{deleteEnvTarget}</strong>? This will
+            permanently remove{' '}
+            {deleteEnvKeyCount === 0
+              ? 'it (no keys stored)'
+              : `all ${deleteEnvKeyCount} key(s) stored in it`}
+            .
+          </DialogContentText>
+        </DialogContent>
+        <DialogActions>
+          <Button
+            onClick={() => setDeleteEnvTarget(null)}
+            disabled={isDeletingEnv}
+          >
+            Cancel
+          </Button>
+          <Button
+            variant="contained"
+            color="error"
+            onClick={handleDeleteEnv}
+            disabled={isDeletingEnv}
+            startIcon={
+              isDeletingEnv ? (
+                <CircularProgress size={14} color="inherit" />
+              ) : undefined
+            }
+          >
+            Delete
+          </Button>
+        </DialogActions>
+      </Dialog>
     </Box>
   );
 };

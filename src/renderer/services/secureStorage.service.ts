@@ -33,4 +33,17 @@ export const secureStorageService = {
     );
     return data ?? [];
   },
+  listEnvironments: async (): Promise<string[]> => {
+    const { data } = await client.post<Record<string, never>, string[]>(
+      'secure-storage:list-environments',
+      {},
+    );
+    return data ?? [];
+  },
+  saveEnvironments: async (environments: string[]): Promise<void> => {
+    await client.post<{ environments: string[] }, void>(
+      'secure-storage:save-environments',
+      { environments },
+    );
+  },
 };

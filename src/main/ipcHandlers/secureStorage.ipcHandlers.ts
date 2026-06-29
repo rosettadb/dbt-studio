@@ -19,6 +19,17 @@ const registerSecureStorageHandlers = () => {
   ipcMain.handle('secure-storage:list', async () => {
     return SecureStorageService.findCredentials();
   });
+
+  ipcMain.handle('secure-storage:list-environments', async () => {
+    return SecureStorageService.getEnvironments();
+  });
+
+  ipcMain.handle(
+    'secure-storage:save-environments',
+    async (_event, { environments }) => {
+      await SecureStorageService.setEnvironments(environments);
+    },
+  );
 };
 
 export default registerSecureStorageHandlers;
