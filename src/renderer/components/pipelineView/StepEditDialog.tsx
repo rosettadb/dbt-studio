@@ -151,7 +151,7 @@ export const StepEditDialog: React.FC<StepEditDialogProps> = ({
               )}
               sx={{ flex: 1 }}
             />
-            <FormControl size="small" sx={{ minWidth: 110 }}>
+            <FormControl size="small" sx={{ minWidth: 160 }}>
               <InputLabel>Job Type</InputLabel>
               <Select
                 value={jobType}

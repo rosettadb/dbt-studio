@@ -24,7 +24,9 @@ export function validatePipelineGraph(
     inDegree.set(n.id, 0);
     outEdges.set(n.id, []);
   });
+  const nodeIds = new Set(nodes.map((n) => n.id));
   edges.forEach((e) => {
+    if (!nodeIds.has(e.source) || !nodeIds.has(e.target)) return;
     outEdges.get(e.source)?.push(e.target);
     inDegree.set(e.target, (inDegree.get(e.target) ?? 0) + 1);
   });

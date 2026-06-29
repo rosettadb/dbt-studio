@@ -11,6 +11,7 @@ const PluginRow: React.FC<{
 
   const onDragStart = (event: React.DragEvent) => {
     event.dataTransfer.setData('application/pipeline-plugin', plugin.id);
+    event.dataTransfer.setData('text/plain', plugin.id);
     event.dataTransfer.effectAllowed = 'move';
   };
 
@@ -73,6 +74,7 @@ export const NodePalette: React.FC<{ onAdd?: (pluginId: string) => void }> = ({
 
   return (
     <Box
+      onDragOver={(e: React.DragEvent) => e.preventDefault()}
       sx={{
         display: 'flex',
         flexDirection: 'column',

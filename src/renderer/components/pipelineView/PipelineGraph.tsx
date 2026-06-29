@@ -288,16 +288,17 @@ const PipelineGraphContent: React.FC<PipelineGraphProps> = ({
   const onDrop = useCallback(
     (event: React.DragEvent) => {
       event.preventDefault();
-      const pluginId = event.dataTransfer.getData(
-        'application/pipeline-plugin',
-      );
+      event.stopPropagation();
+      const pluginId =
+        event.dataTransfer.getData('application/pipeline-plugin') ||
+        event.dataTransfer.getData('text/plain');
       if (!pluginId) return;
 
-      const target = event.currentTarget as HTMLElement;
-      const rect = target.getBoundingClientRect();
+      const reactFlowBounds = reactFlowWrapper.current?.getBoundingClientRect();
+      if (!reactFlowBounds) return;
       const position = project({
-        x: event.clientX - rect.left,
-        y: event.clientY - rect.top,
+        x: event.clientX - reactFlowBounds.left,
+        y: event.clientY - reactFlowBounds.top,
       });
 
       const def = PLUGIN_MAP.get(pluginId);
@@ -305,8 +306,9 @@ const PipelineGraphContent: React.FC<PipelineGraphProps> = ({
         nodes.find((n) => !n.data.isCleanup)?.data.jobName ?? 'run';
       const firstCommandField = def?.fields.find((f) => f.key === 'command');
 
+      const newId = `node-${Date.now()}`;
       const newNode: Node<PipelineNodeData> = {
-        id: `node-${Date.now()}`,
+        id: newId,
         type: 'pipelineNode',
         position,
         sourcePosition: Position.Right,
@@ -318,6 +320,8 @@ const PipelineGraphContent: React.FC<PipelineGraphProps> = ({
           working_dir: '',
           stepIndex: nodes.length,
           jobName: defaultJobName,
+          editMode: true,
+          onEditClick: () => openEditForNode(newId),
         } as PipelineNodeData,
       };
 
@@ -368,6 +372,38 @@ const PipelineGraphContent: React.FC<PipelineGraphProps> = ({
         ...new Set(nodes.map((n) => n.data.jobName).filter(Boolean)),
       ] as string[],
     [nodes],
+  );
+
+  const handlePaletteAdd = useCallback(
+    (pluginId: string) => {
+      const def = PLUGIN_MAP.get(pluginId);
+      const defaultJobName =
+        nodes.find((n) => !n.data.isCleanup)?.data.jobName ?? 'run';
+      const firstCommandField = def?.fields.find((f) => f.key === 'command');
+      const offset = nodes.length * 30;
+      const newId = `node-${Date.now()}`;
+      setNodes((nds) => [
+        ...nds,
+        {
+          id: newId,
+          type: 'pipelineNode',
+          position: { x: 50 + offset, y: 50 + offset },
+          sourcePosition: Position.Right,
+          targetPosition: Position.Left,
+          data: {
+            name: `New ${def?.label ?? pluginId} step`,
+            plugin: pluginId,
+            command: firstCommandField?.defaultValue ?? '',
+            working_dir: '',
+            stepIndex: nodes.length,
+            jobName: defaultJobName,
+            editMode: true,
+            onEditClick: () => openEditForNode(newId),
+          } as PipelineNodeData,
+        },
+      ]);
+    },
+    [nodes, setNodes, openEditForNode],
   );
 
   const onNodesChange = useCallback(
@@ -445,42 +481,17 @@ const PipelineGraphContent: React.FC<PipelineGraphProps> = ({
         </Box>
       )}
 
-      <Box sx={{ flex: 1, minHeight: 0, display: 'flex' }}>
+      <Box sx={{ flex: 1, minHeight: 0, display: 'flex' }}
+        onDragOver={isEditing ? onDragOver : undefined}
+      >
         {isEditing && (
           <NodePalette
-            onAdd={(pluginId) => {
-              const def = PLUGIN_MAP.get(pluginId);
-              const defaultJobName =
-                nodes.find((n) => !n.data.isCleanup)?.data.jobName ?? 'run';
-              const firstCommandField = def?.fields.find(
-                (f) => f.key === 'command',
-              );
-              const offset = nodes.length * 30;
-              const newId = `node-${Date.now()}`;
-              setNodes((nds) => [
-                ...nds,
-                {
-                  id: newId,
-                  type: 'pipelineNode',
-                  position: { x: 50 + offset, y: 50 + offset },
-                  sourcePosition: Position.Right,
-                  targetPosition: Position.Left,
-                  data: {
-                    name: `New ${def?.label ?? pluginId} step`,
-                    plugin: pluginId,
-                    command: firstCommandField?.defaultValue ?? '',
-                    working_dir: '',
-                    stepIndex: nodes.length,
-                    jobName: defaultJobName,
-                    editMode: true,
-                    onEditClick: () => openEditForNode(newId),
-                  } as PipelineNodeData,
-                },
-              ]);
-            }}
+            onAdd={handlePaletteAdd}
           />
         )}
-        <Box ref={reactFlowWrapper} sx={{ flex: 1, minHeight: 0 }}>
+        <Box ref={reactFlowWrapper} sx={{ flex: 1, minHeight: 0 }}
+          onDragOver={isEditing ? onDragOver : undefined}
+        >
           <ReactFlow
             nodes={nodes}
             edges={edges}
