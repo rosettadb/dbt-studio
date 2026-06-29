@@ -50,6 +50,7 @@ interface DataLakeConnectionSelectorProps {
   initialConnectionId?: string;
   initialBucket?: string;
   initialPrefix?: string;
+  hideBucketAndPrefix?: boolean;
 }
 
 const getProviderIcon = (provider: string) => {
@@ -86,6 +87,7 @@ export const DataLakeConnectionSelector: React.FC<
   initialConnectionId,
   initialBucket,
   initialPrefix,
+  hideBucketAndPrefix,
 }) => {
   const { data: connections, isLoading, refetch } = useCloudConnections();
   const createConnection = useCreateCloudConnection();
@@ -114,10 +116,16 @@ export const DataLakeConnectionSelector: React.FC<
 
   // Update parent when connection or bucket changes
   React.useEffect(() => {
-    if (selectedConnectionId && bucket) {
+    if (selectedConnectionId && (hideBucketAndPrefix || bucket)) {
       onSelectExisting(selectedConnectionId, bucket, prefix || undefined);
     }
-  }, [selectedConnectionId, bucket, prefix, onSelectExisting]);
+  }, [
+    selectedConnectionId,
+    bucket,
+    prefix,
+    onSelectExisting,
+    hideBucketAndPrefix,
+  ]);
 
   // Sync initial values from parent when revisiting the step
   useEffect(() => {
@@ -600,29 +608,33 @@ export const DataLakeConnectionSelector: React.FC<
         Create New {getProviderLabel(selectedProvider)} Connection
       </Button>
 
-      {/* Bucket/Container Input */}
-      <TextField
-        label={getBucketLabel()}
-        fullWidth
-        margin="normal"
-        value={bucket}
-        onChange={(e) => setBucket(e.target.value)}
-        required
-        helperText={getBucketHelperText()}
-        disabled={!selectedConnectionId}
-      />
+      {!hideBucketAndPrefix && (
+        <>
+          {/* Bucket/Container Input */}
+          <TextField
+            label={getBucketLabel()}
+            fullWidth
+            margin="normal"
+            value={bucket}
+            onChange={(e) => setBucket(e.target.value)}
+            required
+            helperText={getBucketHelperText()}
+            disabled={!selectedConnectionId}
+          />
 
-      {/* Prefix Input */}
-      <TextField
-        label="Folder Prefix (Optional)"
-        fullWidth
-        margin="normal"
-        value={prefix}
-        onChange={(e) => setPrefix(e.target.value)}
-        helperText="Optional folder path within the bucket (e.g., 'datalakes/prod')"
-        disabled={!selectedConnectionId}
-        placeholder="datalakes/my-instance"
-      />
+          {/* Prefix Input */}
+          <TextField
+            label="Folder Prefix (Optional)"
+            fullWidth
+            margin="normal"
+            value={prefix}
+            onChange={(e) => setPrefix(e.target.value)}
+            helperText="Optional folder path within the bucket (e.g., 'datalakes/prod')"
+            disabled={!selectedConnectionId}
+            placeholder="datalakes/my-instance"
+          />
+        </>
+      )}
 
       {/* New Connection Modal */}
       <Dialog

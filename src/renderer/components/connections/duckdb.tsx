@@ -10,8 +10,15 @@ import {
   CircularProgress,
   IconButton,
   Typography,
+  FormControlLabel,
+  Checkbox,
+  FormControl,
+  InputLabel,
+  Select,
+  MenuItem,
 } from '@mui/material';
 import { FolderOpen } from '@mui/icons-material';
+import { DataLakeConnectionSelector } from '../dataLake/DataLakeConnectionSelector';
 import { ConnectionModel, DuckDBConnection } from '../../../types/backend';
 import connectionIcons from '../../../../assets/connectionIcons';
 import {
@@ -61,6 +68,10 @@ export const DuckDB: React.FC<Props> = ({
     [duplicateFrom],
   );
 
+  const [cloudProvider, setCloudProvider] = React.useState<
+    'aws' | 'azure' | 'gcs'
+  >('aws');
+
   const [formState, setFormState] = React.useState<DuckDBConnection>({
     type: 'duckdb',
     name: existingConnection?.name ?? suggestedName ?? 'DuckDB Connection',
@@ -71,6 +82,14 @@ export const DuckDB: React.FC<Props> = ({
     database:
       existingConnection?.database ?? duplicateConnection?.database ?? 'main',
     schema: existingConnection?.schema ?? duplicateConnection?.schema ?? 'main',
+    use_httpfs:
+      existingConnection?.use_httpfs ??
+      duplicateConnection?.use_httpfs ??
+      false,
+    cloud_connection_id:
+      existingConnection?.cloud_connection_id ??
+      duplicateConnection?.cloud_connection_id ??
+      undefined,
     short_database_path:
       existingConnection?.database_path || duplicateConnection?.database_path
         ? shortDuckdbPath(
@@ -325,6 +344,68 @@ export const DuckDB: React.FC<Props> = ({
           helperText="DuckDB schema name (default: main). Schema must exist in the database."
           placeholder="main"
         />
+
+        <FormControlLabel
+          control={
+            <Checkbox
+              checked={formState.use_httpfs || false}
+              onChange={(e) => {
+                setFormState((prev) => ({
+                  ...prev,
+                  use_httpfs: e.target.checked,
+                  cloud_connection_id: e.target.checked
+                    ? prev.cloud_connection_id
+                    : undefined,
+                }));
+              }}
+            />
+          }
+          label="Add httpfs extension to connect to object storage"
+        />
+
+        {formState.use_httpfs && (
+          <Box
+            sx={{
+              display: 'flex',
+              flexDirection: 'column',
+              gap: 2,
+              pl: 2,
+              borderLeft: '2px solid',
+              borderColor: 'divider',
+            }}
+          >
+            <FormControl fullWidth>
+              <InputLabel>Cloud Provider</InputLabel>
+              <Select
+                value={cloudProvider}
+                onChange={(e) => {
+                  setCloudProvider(e.target.value as 'aws' | 'azure' | 'gcs');
+                  setFormState((prev) => ({
+                    ...prev,
+                    cloud_connection_id: undefined,
+                  }));
+                }}
+                label="Cloud Provider"
+              >
+                <MenuItem value="aws">AWS S3</MenuItem>
+                <MenuItem value="azure">Azure Blob Storage</MenuItem>
+                <MenuItem value="gcs">Google Cloud Storage</MenuItem>
+              </Select>
+            </FormControl>
+
+            <DataLakeConnectionSelector
+              selectedProvider={cloudProvider}
+              initialConnectionId={formState.cloud_connection_id}
+              hideBucketAndPrefix
+              onSelectExisting={(connectionId) => {
+                setFormState((prev) => ({
+                  ...prev,
+                  cloud_connection_id: connectionId,
+                }));
+              }}
+            />
+          </Box>
+        )}
 
         <Box
           sx={{

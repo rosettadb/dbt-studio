@@ -1286,13 +1286,40 @@ export default class ConnectorsService {
           schema: envVar('schema'),
           threads: 4,
         };
-      case 'duckdb':
-        return {
+      case 'duckdb': {
+        const duckdbProfile: any = {
           type: 'duckdb',
           path: conn.database_path,
           schema: conn.schema,
           threads: 4,
         };
+
+        if (conn.use_httpfs && conn.cloud_connection_id) {
+          duckdbProfile.extensions = ['httpfs', 'parquet'];
+
+          let region = '';
+          try {
+            const cloudConn = await this.getCloudConnectionById(
+              conn.cloud_connection_id,
+            );
+            if (cloudConn && cloudConn.provider === 'aws') {
+              region = (cloudConn.config as any)?.region || '';
+            }
+          } catch (e) {
+            console.error('Failed to load cloud connection region', e);
+          }
+
+          duckdbProfile.secrets = [
+            {
+              type: 's3',
+              region,
+              key_id: `{{ env_var('db-s3_access_key_id-${conn.name}') }}`,
+              secret: `{{ env_var('db-s3_secret_access_key-${conn.name}') }}`,
+            },
+          ];
+        }
+        return duckdbProfile;
+      }
       case 'ducklake': {
         // For ducklake, we need to generate a DuckDB profile with ducklake extension
         const instance = await DuckLakeService.getInstance(conn.instanceId);

@@ -10,6 +10,7 @@ import fs from 'fs';
 import yaml from 'js-yaml';
 import path from 'path';
 import { ConnectionInput } from '../../types/backend';
+import { loadDatabaseFile } from './fileHelper';
 
 /**
  * Extracts the database name from a file path (filename without extension)
@@ -36,9 +37,9 @@ export class PartialUpdateError extends Error {
  * Generates the connection-specific output configuration for profiles.yml
  * This is the subset of fields that should be updated
  */
-function generateProfileOutputFields(
+async function generateProfileOutputFields(
   connection: ConnectionInput,
-): Record<string, any> {
+): Promise<Record<string, any>> {
   const envVar = (field: string) =>
     `{{ env_var("db-${field}-${connection.name}") }}`;
   const envVarInt = (field: string) =>
@@ -103,12 +104,44 @@ function generateProfileOutputFields(
         schema: envVar('schema'),
       };
 
-    case 'duckdb':
-      return {
+    case 'duckdb': {
+      const duckdbFields: Record<string, any> = {
         ...baseFields,
         path: connection.database_path,
         schema: connection.schema,
       };
+
+      if (connection.use_httpfs && connection.cloud_connection_id) {
+        duckdbFields.extensions = ['httpfs', 'parquet'];
+        // Assume S3 configuration structure by default for cloud connections
+
+        let region = '';
+        try {
+          const db = await loadDatabaseFile();
+          const sources = db.sources ?? [];
+          const cloudConn = sources.find(
+            (c: any) => c.id === connection.cloud_connection_id,
+          );
+          if (cloudConn && cloudConn.provider === 'aws') {
+            region = (cloudConn.config as any)?.region || '';
+          }
+        } catch (e) {
+          console.error('Failed to load cloud connection region', e);
+        }
+
+        // We inject the env vars for secrets but keep region as literal string
+        duckdbFields.secrets = [
+          {
+            type: 's3',
+            region,
+            key_id: `{{ env_var('db-s3_access_key_id-${connection.name}') }}`,
+            secret: `{{ env_var('db-s3_secret_access_key-${connection.name}') }}`,
+          },
+        ];
+      }
+
+      return duckdbFields;
+    }
 
     case 'ducklake':
       return {
@@ -217,7 +250,7 @@ export async function updateProfilesYml(
     }
 
     // Get new connection fields
-    const newFields = generateProfileOutputFields(connection);
+    const newFields = await generateProfileOutputFields(connection);
 
     // Merge new fields into existing dev output, preserving custom fields
     profiles[projectName].outputs.dev = {

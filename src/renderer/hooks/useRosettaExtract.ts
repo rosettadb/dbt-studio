@@ -7,7 +7,7 @@ import {
   useGetConnections,
 } from '../controllers';
 import { Project } from '../../types/backend';
-import { settingsServices } from '../services';
+import { settingsServices, connectionStorage } from '../services';
 
 const useRosettaExtract = () => {
   const {
@@ -16,6 +16,7 @@ const useRosettaExtract = () => {
     getDatabaseToken,
     getBigQueryServiceAccountKey,
     getConnectionField,
+    getCloudAwsSecret,
   } = useSecureStorage();
   const { data: settings } = useGetSettings();
   const { data: connections = [] } = useGetConnections(true);
@@ -130,6 +131,56 @@ const useRosettaExtract = () => {
         return undefined;
       });
       envPromises.push(...fieldPromises);
+
+      if (
+        conn.type === 'duckdb' &&
+        (conn as any).use_httpfs &&
+        (conn as any).cloud_connection_id
+      ) {
+        try {
+          const cloudConnections = await connectionStorage.getConnections();
+          const cloudConn = cloudConnections.find(
+            (cloudConnItem) =>
+              cloudConnItem.id === (conn as any).cloud_connection_id,
+          );
+          if (cloudConn && cloudConn.provider === 'aws') {
+            const region = (cloudConn.config as any)?.region;
+            const keyId = (cloudConn.config as any)?.accessKeyId;
+            const secret = await getCloudAwsSecret(cloudConn.id);
+
+            if (region) {
+              envPromises.push(
+                setEnvVariables.mutateAsync({
+                  key: `db-s3_region-${connectionName}`,
+                  value: region,
+                }),
+              );
+            }
+            if (keyId) {
+              envPromises.push(
+                setEnvVariables.mutateAsync({
+                  key: `db-s3_access_key_id-${connectionName}`,
+                  value: keyId,
+                }),
+              );
+            }
+            if (secret) {
+              envPromises.push(
+                setEnvVariables.mutateAsync({
+                  key: `db-s3_secret_access_key-${connectionName}`,
+                  value: secret,
+                }),
+              );
+            }
+          }
+        } catch (err) {
+          // eslint-disable-next-line no-console
+          console.error(
+            'Failed to load cloud connection for DuckDB httpfs',
+            err,
+          );
+        }
+      }
 
       await Promise.all(envPromises);
 
