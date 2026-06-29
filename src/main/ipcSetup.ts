@@ -21,6 +21,7 @@ import {
   registerSkillsHandlers,
   registerSavedQueriesHandlers,
   registerAnalyticsPagesHandlers,
+  registerStaticSiteHandlers,
 } from './ipcHandlers';
 import { installIpcErrorHandling } from './utils/ipcErrorHandler';
 
@@ -47,6 +48,7 @@ const registerHandlers = (mainWindow: BrowserWindow) => {
   registerSkillsHandlers();
   registerSavedQueriesHandlers();
   registerAnalyticsPagesHandlers();
+  registerStaticSiteHandlers(mainWindow);
 };
 
 export default registerHandlers;

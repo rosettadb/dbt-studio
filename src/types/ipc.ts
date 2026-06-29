@@ -441,6 +441,16 @@ export type AnalyticsPagesChannels =
   | 'analyticsPages:update'
   | 'analyticsPages:delete';
 
+export type StaticSiteChannels =
+  | 'analytics:static-site:build'
+  | 'analytics:static-site:build-progress'
+  | 'analytics:static-site:open-folder'
+  | 'analytics:static-site:open-preview'
+  | 'analytics:static-site:get-state'
+  | 'analytics:static-site:pick-folder'
+  | 'analytics:static-site:get-default-path'
+  | 'analytics:static-site:folder-exists';
+
 export type Channels =
   | TestChannels
   | CliChannels
@@ -463,7 +473,8 @@ export type Channels =
   | MCPChannels
   | SkillsChannels
   | SavedQueriesChannels
-  | AnalyticsPagesChannels;
+  | AnalyticsPagesChannels
+  | StaticSiteChannels;
 
 export type ConfigureConnectionBody = {
   projectId?: string;

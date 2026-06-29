@@ -19,6 +19,7 @@ import { registerMCPHandlers } from './mcp.ipcHandlers';
 import { registerSkillsHandlers } from './skills.ipcHandlers';
 import registerSavedQueriesHandlers from './savedQueries.ipcHandlers';
 import { registerAnalyticsPagesHandlers } from './analyticsPages.ipcHandlers';
+import { registerStaticSiteHandlers } from './staticSite.ipcHandlers';
 
 export {
   registerCliHandlers,
@@ -42,4 +43,5 @@ export {
   registerSkillsHandlers,
   registerSavedQueriesHandlers,
   registerAnalyticsPagesHandlers,
+  registerStaticSiteHandlers,
 };

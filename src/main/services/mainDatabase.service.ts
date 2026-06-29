@@ -299,6 +299,15 @@ export default class MainDatabaseService {
       CREATE INDEX IF NOT EXISTS analytics_pages_connection_idx ON analytics_pages(connection_id);
       CREATE INDEX IF NOT EXISTS analytics_pages_route_path_idx ON analytics_pages(route_path);
       CREATE UNIQUE INDEX IF NOT EXISTS analytics_pages_unique_route_idx ON analytics_pages(connection_id, route_path);
+
+      -- Static Site Build State table
+      CREATE TABLE IF NOT EXISTS analytics_static_site_state (
+        connection_id TEXT PRIMARY KEY,
+        last_build_path TEXT NOT NULL,
+        last_build_at TEXT NOT NULL,
+        last_build_page_count INTEGER NOT NULL DEFAULT 0,
+        last_build_query_count INTEGER NOT NULL DEFAULT 0
+      );
     `;
 
     this.sqlite.exec(createTablesSQL);
@@ -496,6 +505,19 @@ export default class MainDatabaseService {
           CREATE INDEX IF NOT EXISTS analytics_pages_connection_idx ON analytics_pages(connection_id);
           CREATE INDEX IF NOT EXISTS analytics_pages_route_path_idx ON analytics_pages(route_path);
           CREATE UNIQUE INDEX IF NOT EXISTS analytics_pages_unique_route_idx ON analytics_pages(connection_id, route_path);
+        `);
+      }
+
+      // analytics_static_site_state table might be missing
+      if (!tableNames.has('analytics_static_site_state')) {
+        this.sqlite.exec(`
+          CREATE TABLE IF NOT EXISTS analytics_static_site_state (
+            connection_id TEXT PRIMARY KEY,
+            last_build_path TEXT NOT NULL,
+            last_build_at TEXT NOT NULL,
+            last_build_page_count INTEGER NOT NULL DEFAULT 0,
+            last_build_query_count INTEGER NOT NULL DEFAULT 0
+          );
         `);
       }
     } catch (error) {
@@ -1978,6 +2000,69 @@ export default class MainDatabaseService {
           ),
         );
     } catch (error) {
+      throw error;
+    }
+  }
+
+  // ─── Static Site State ──────────────────────────────────────────────────
+
+  static async getStaticSiteState(connectionId: string): Promise<{
+    connectionId: string;
+    lastBuildPath: string;
+    lastBuildAt: string;
+    lastBuildPageCount: number;
+    lastBuildQueryCount: number;
+  } | null> {
+    if (!this.sqlite) await this.initializeDatabase();
+    try {
+      const stmt = this.sqlite!.prepare(
+        'SELECT connection_id, last_build_path, last_build_at, last_build_page_count, last_build_query_count FROM analytics_static_site_state WHERE connection_id = ?',
+      );
+      const row = stmt.get(connectionId) as any;
+      if (!row) return null;
+      return {
+        connectionId: row.connection_id,
+        lastBuildPath: row.last_build_path,
+        lastBuildAt: row.last_build_at,
+        lastBuildPageCount: row.last_build_page_count,
+        lastBuildQueryCount: row.last_build_query_count,
+      };
+    } catch (error) {
+      // eslint-disable-next-line no-console
+      console.error('[MAIN DATABASE] getStaticSiteState error:', error);
+      return null;
+    }
+  }
+
+  static async upsertStaticSiteState(state: {
+    connectionId: string;
+    lastBuildPath: string;
+    lastBuildAt: string;
+    lastBuildPageCount: number;
+    lastBuildQueryCount: number;
+  }): Promise<void> {
+    if (!this.sqlite) await this.initializeDatabase();
+    try {
+      const stmt = this.sqlite!.prepare(`
+        INSERT INTO analytics_static_site_state
+          (connection_id, last_build_path, last_build_at, last_build_page_count, last_build_query_count)
+        VALUES (?, ?, ?, ?, ?)
+        ON CONFLICT(connection_id) DO UPDATE SET
+          last_build_path = excluded.last_build_path,
+          last_build_at = excluded.last_build_at,
+          last_build_page_count = excluded.last_build_page_count,
+          last_build_query_count = excluded.last_build_query_count
+      `);
+      stmt.run(
+        state.connectionId,
+        state.lastBuildPath,
+        state.lastBuildAt,
+        state.lastBuildPageCount,
+        state.lastBuildQueryCount,
+      );
+    } catch (error) {
+      // eslint-disable-next-line no-console
+      console.error('[MAIN DATABASE] upsertStaticSiteState error:', error);
       throw error;
     }
   }

@@ -1,4 +1,4 @@
-import React, { useMemo, useState, useCallback } from 'react';
+import React, { useMemo, useState, useCallback, useEffect } from 'react';
 import {
   Box,
   Typography,
@@ -16,6 +16,7 @@ import {
   Button,
   TextField,
   Tooltip,
+  LinearProgress,
 } from '@mui/material';
 import {
   NoteAdd,
@@ -24,6 +25,9 @@ import {
   Edit,
   Delete,
   Web as WebIcon,
+  Language as LanguageIcon,
+  FolderOpen as FolderOpenIcon,
+  OpenInBrowser as OpenInBrowserIcon,
 } from '@mui/icons-material';
 import {
   useGetAnalyticsPages,
@@ -31,8 +35,15 @@ import {
   useUpdateAnalyticsPage,
   useDeleteAnalyticsPage,
 } from '../../controllers/analyticsPages.controller';
+import { useGetStaticSiteState } from '../../controllers/staticSite.controller';
 import { buildAnalyticsTree } from '../../utils/analyticsTree';
 import { AnalyticsPageItem } from './AnalyticsPageItem';
+import { StaticSiteBuildDialog } from './StaticSiteBuildDialog';
+import { StaticSiteService } from '../../services/staticSite.service';
+import type {
+  StaticSiteBuildProgress,
+  StaticSiteState,
+} from '../../../types/staticSite';
 
 interface AnalyticsPagesTreeViewProps {
   connectionId: string;
@@ -60,6 +71,27 @@ export const AnalyticsPagesTreeView: React.FC<AnalyticsPagesTreeViewProps> = ({
   const deletePageMutation = useDeleteAnalyticsPage();
 
   const treeNodes = useMemo(() => buildAnalyticsTree(pages), [pages]);
+
+  // ── Static site state ─────────────────────────────────────────────────────
+  const { data: siteState, refetch: refetchSiteState } =
+    useGetStaticSiteState(connectionId);
+  const [buildDialogOpen, setBuildDialogOpen] = useState(false);
+  const [isBuilding, setIsBuilding] = useState(false);
+  const [buildProgress, setBuildProgress] =
+    useState<StaticSiteBuildProgress | null>(null);
+  const [lastSuccessState, setLastSuccessState] =
+    useState<StaticSiteState | null>(null);
+
+  // Subscribe to streaming progress events (FE-03 — subscription in service)
+  useEffect(() => {
+    if (!isBuilding) return undefined;
+    return StaticSiteService.subscribeToBuildProgress((p) => {
+      setBuildProgress(p);
+      if (p.phase === 'done' || p.phase === 'error') {
+        setIsBuilding(false);
+      }
+    });
+  }, [isBuilding]);
 
   const [contextMenu, setContextMenu] = useState<ContextMenuState>(null);
 
@@ -270,8 +302,54 @@ export const AnalyticsPagesTreeView: React.FC<AnalyticsPagesTreeViewProps> = ({
               <NoteAdd sx={{ fontSize: 16 }} />
             </IconButton>
           </Tooltip>
+          <Tooltip title="Build Static Site">
+            <IconButton
+              size="small"
+              onClick={() => setBuildDialogOpen(true)}
+              disabled={isBuilding}
+              color={isBuilding ? 'primary' : 'default'}
+            >
+              <LanguageIcon sx={{ fontSize: 16 }} />
+            </IconButton>
+          </Tooltip>
         </Box>
       </Box>
+
+      {/* Inline build progress (shown while building) */}
+      {isBuilding && buildProgress && (
+        <Box
+          sx={{
+            px: 2,
+            py: 1.5,
+            borderBottom: (theme) => `1px solid ${theme.palette.divider}`,
+            display: 'flex',
+            flexDirection: 'column',
+            gap: 0.75,
+          }}
+        >
+          <LinearProgress
+            variant={
+              buildProgress.current !== undefined && buildProgress.total
+                ? 'determinate'
+                : 'indeterminate'
+            }
+            value={
+              buildProgress.current !== undefined && buildProgress.total
+                ? Math.round(
+                    (buildProgress.current / buildProgress.total) * 100,
+                  )
+                : undefined
+            }
+          />
+          <Typography
+            variant="caption"
+            color="text.secondary"
+            sx={{ fontSize: '0.7rem', lineHeight: 1.4 }}
+          >
+            {buildProgress.message}
+          </Typography>
+        </Box>
+      )}
 
       {/* Tree Content */}
       <Box sx={{ flex: 1, overflow: 'auto', py: 1 }}>
@@ -473,6 +551,74 @@ export const AnalyticsPagesTreeView: React.FC<AnalyticsPagesTreeViewProps> = ({
           </Button>
         </DialogActions>
       </Dialog>
+
+      {/* Build Site Dialog */}
+      <StaticSiteBuildDialog
+        open={buildDialogOpen}
+        connectionId={connectionId}
+        connectionName={connectionId}
+        pageCount={pages.length}
+        onClose={() => setBuildDialogOpen(false)}
+        onBuildSuccess={(result) => {
+          setBuildDialogOpen(false);
+          setLastSuccessState({
+            connectionId,
+            lastBuildPath: result.outputPath,
+            lastBuildAt: new Date().toISOString(),
+            lastBuildPageCount: result.pageCount,
+            lastBuildQueryCount: result.queryCount,
+          });
+          refetchSiteState();
+        }}
+      />
+
+      {/* Open Folder / Preview actions — shown when a previous build exists */}
+      {(siteState ?? lastSuccessState) && !isBuilding && (
+        <Box
+          sx={{
+            px: 1.5,
+            py: 1,
+            borderTop: (theme) => `1px solid ${theme.palette.divider}`,
+            display: 'flex',
+            gap: 0.5,
+          }}
+        >
+          <Tooltip
+            title={`Open site folder: ${(siteState ?? lastSuccessState)!.lastBuildPath}`}
+          >
+            <Button
+              size="small"
+              variant="text"
+              startIcon={<FolderOpenIcon sx={{ fontSize: 14 }} />}
+              sx={{
+                fontSize: '0.7rem',
+                py: 0.25,
+                textTransform: 'none',
+                flex: 1,
+              }}
+              onClick={() =>
+                StaticSiteService.openFolder(
+                  (siteState ?? lastSuccessState)!.lastBuildPath,
+                )
+              }
+            >
+              Open Site Folder
+            </Button>
+          </Tooltip>
+          <Tooltip title="Preview site in browser">
+            <IconButton
+              size="small"
+              onClick={() =>
+                StaticSiteService.openPreview(
+                  (siteState ?? lastSuccessState)!.lastBuildPath,
+                )
+              }
+            >
+              <OpenInBrowserIcon sx={{ fontSize: 14 }} />
+            </IconButton>
+          </Tooltip>
+        </Box>
+      )}
     </Box>
   );
 };
