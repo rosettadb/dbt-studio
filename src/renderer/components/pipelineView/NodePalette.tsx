@@ -15,7 +15,11 @@ const PluginRow: React.FC<{
   };
 
   return (
-    <Tooltip title="Drag to canvas or double-click to add" placement="right" arrow>
+    <Tooltip
+      title="Drag to canvas or double-click to add"
+      placement="right"
+      arrow
+    >
       <Box
         draggable
         onDragStart={onDragStart}
