@@ -21,6 +21,8 @@ import {
   PlayArrow,
   ViewColumn,
   ViewStream,
+  Code,
+  CodeOff,
 } from '@mui/icons-material';
 import { z } from 'zod';
 import MonacoEditor from '@monaco-editor/react';
@@ -132,6 +134,7 @@ export const AnalyticsEditor: React.FC<AnalyticsEditorProps> = ({
   const [splitSizes, setSplitSizes] = useState<
     [number | string, number | string]
   >(['50%', '50%']);
+  const [editorCollapsed, setEditorCollapsed] = useState(false);
 
   // ── Query execution state ─────────────────────────────────────────────
   const [queryCache, setQueryCache] = useState<Record<string, any[]>>({});
@@ -738,11 +741,25 @@ export const AnalyticsEditor: React.FC<AnalyticsEditorProps> = ({
                 o === 'vertical' ? 'horizontal' : 'vertical',
               )
             }
+            disabled={editorCollapsed}
           >
             {splitOrientation === 'vertical' ? (
               <ViewColumn sx={{ fontSize: 18 }} />
             ) : (
               <ViewStream sx={{ fontSize: 18 }} />
+            )}
+          </IconButton>
+        </Tooltip>
+
+        <Tooltip title={editorCollapsed ? 'Show editor' : 'Hide editor'}>
+          <IconButton
+            size="small"
+            onClick={() => setEditorCollapsed((c) => !c)}
+          >
+            {editorCollapsed ? (
+              <Code sx={{ fontSize: 18 }} />
+            ) : (
+              <CodeOff sx={{ fontSize: 18 }} />
             )}
           </IconButton>
         </Tooltip>
@@ -752,55 +769,70 @@ export const AnalyticsEditor: React.FC<AnalyticsEditorProps> = ({
       <Box
         sx={{ flex: 1, minHeight: 0, position: 'relative', overflow: 'hidden' }}
       >
-        <SplitPane
-          split={splitOrientation}
-          sizes={splitSizes}
-          onChange={(sizes) =>
-            setSplitSizes(sizes as [number | string, number | string])
-          }
-          sashRender={VerticalSash}
-        >
-          {/* Left / Top — Monaco Markdown Editor */}
-          <Pane minSize={150}>
-            <Box sx={{ height: '100%', overflow: 'hidden' }}>
-              <MonacoEditor
-                height="100%"
-                width="100%"
-                language="markdown"
-                theme={isDarkMode ? 'vs-dark' : 'light'}
-                value={markdownContent}
-                onChange={(val) => handleMarkdownChange(val ?? '')}
-                options={{
-                  fontSize: 13,
-                  minimap: { enabled: false },
-                  lineNumbers: 'on',
-                  wordWrap: 'on',
-                  scrollBeyondLastLine: false,
-                  automaticLayout: true,
-                  occurrencesHighlight: 'off',
-                  fixedOverflowWidgets: true,
-                  padding: { top: 12 },
-                }}
-                onMount={handleEditorMount}
-              />
-            </Box>
-          </Pane>
+        {editorCollapsed ? (
+          /* Preview-only mode — editor hidden, AI Agent bridge stays active */
+          <AnalyticsPreviewErrorBoundary>
+            <AnalyticsPreview
+              markdownContent={markdownContent}
+              queryCache={queryCache}
+              queryStatuses={queryStatuses}
+              queryErrors={queryErrors}
+              queryDurations={queryDurations}
+              onRunQuery={handleRunSingleQuery}
+              pageId={pageId}
+            />
+          </AnalyticsPreviewErrorBoundary>
+        ) : (
+          <SplitPane
+            split={splitOrientation}
+            sizes={splitSizes}
+            onChange={(sizes) =>
+              setSplitSizes(sizes as [number | string, number | string])
+            }
+            sashRender={VerticalSash}
+          >
+            {/* Left / Top — Monaco Markdown Editor */}
+            <Pane minSize={150}>
+              <Box sx={{ height: '100%', overflow: 'hidden' }}>
+                <MonacoEditor
+                  height="100%"
+                  width="100%"
+                  language="markdown"
+                  theme={isDarkMode ? 'vs-dark' : 'light'}
+                  value={markdownContent}
+                  onChange={(val) => handleMarkdownChange(val ?? '')}
+                  options={{
+                    fontSize: 13,
+                    minimap: { enabled: false },
+                    lineNumbers: 'on',
+                    wordWrap: 'on',
+                    scrollBeyondLastLine: false,
+                    automaticLayout: true,
+                    occurrencesHighlight: 'off',
+                    fixedOverflowWidgets: true,
+                    padding: { top: 12 },
+                  }}
+                  onMount={handleEditorMount}
+                />
+              </Box>
+            </Pane>
 
-          {/* Right / Bottom — Live Preview */}
-          <Pane minSize={150}>
-            <AnalyticsPreviewErrorBoundary>
-              <AnalyticsPreview
-                markdownContent={markdownContent}
-                queryCache={queryCache}
-                queryStatuses={queryStatuses}
-                queryErrors={queryErrors}
-                queryDurations={queryDurations}
-                onRunQuery={handleRunSingleQuery}
-                pageId={pageId}
-              />
-            </AnalyticsPreviewErrorBoundary>
-          </Pane>
-        </SplitPane>
+            {/* Right / Bottom — Live Preview */}
+            <Pane minSize={150}>
+              <AnalyticsPreviewErrorBoundary>
+                <AnalyticsPreview
+                  markdownContent={markdownContent}
+                  queryCache={queryCache}
+                  queryStatuses={queryStatuses}
+                  queryErrors={queryErrors}
+                  queryDurations={queryDurations}
+                  onRunQuery={handleRunSingleQuery}
+                  pageId={pageId}
+                />
+              </AnalyticsPreviewErrorBoundary>
+            </Pane>
+          </SplitPane>
+        )}
       </Box>
     </Box>
   );

@@ -47,6 +47,12 @@ export function resolveQueryDependencies(markdownContent: string): {
         message: err.error,
         blockName: err.blockName,
       });
+    } else if (err.error.includes('Duplicate SQL block name')) {
+      errors.push({
+        type: 'duplicate',
+        message: err.error,
+        blockName: err.blockName,
+      });
     } else {
       errors.push({
         type: 'missing',

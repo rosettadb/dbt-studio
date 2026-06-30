@@ -1,5 +1,11 @@
-import React, { useMemo } from 'react';
-import { Box, Typography, CircularProgress } from '@mui/material';
+import React, { useMemo, useState } from 'react';
+import {
+  Box,
+  Typography,
+  CircularProgress,
+  TablePagination,
+  TextField,
+} from '@mui/material';
 import {
   AreaChart,
   Area,
@@ -20,6 +26,7 @@ import {
   getStringProp,
   getBooleanProp,
   getNumberProp,
+  getArrayProp,
 } from '../../utils/analyticsComponentProps';
 import { parseAnalyticsMarkdown } from '../../utils/analyticsMarkdown';
 import type { ParsedProps } from '../../utils/analyticsComponentProps';
@@ -377,6 +384,9 @@ function formatCellValue(val: unknown): React.ReactNode {
 
 // ─── DataTable ────────────────────────────────────────────────────────────────
 const AnalyticsDataTable: React.FC<ChartSubProps> = ({ data, chartProps }) => {
+  const [page, setPage] = useState(0);
+  const [searchTerm, setSearchTerm] = useState('');
+
   if (data.length === 0) {
     return (
       <Typography
@@ -389,15 +399,51 @@ const AnalyticsDataTable: React.FC<ChartSubProps> = ({ data, chartProps }) => {
     );
   }
 
-  const limit = getNumberProp(chartProps, 'rows', 100);
-  const displayRows = data.slice(0, limit);
-  const cols = Object.keys(data[0]);
+  const rawPageSize = getNumberProp(
+    chartProps,
+    'page_size',
+    getNumberProp(chartProps, 'pageSize', 10),
+  );
+  const pageSize = Math.min(Math.max(rawPageSize ?? 10, 1), 200);
+  const limit = getNumberProp(
+    chartProps,
+    'limit',
+    getNumberProp(chartProps, 'rows', data.length),
+  );
+  const cappedRows = data.slice(0, limit);
+  const columnsFromProps = getArrayProp(chartProps, 'columns')
+    ?.map(String)
+    .filter(Boolean);
+  const cols =
+    columnsFromProps && columnsFromProps.length > 0
+      ? columnsFromProps
+      : Object.keys(data[0]);
+  const showSearch = getBooleanProp(chartProps, 'search', false);
+  const rowShading = getBooleanProp(chartProps, 'row_shading', false);
+  const rowLines = getBooleanProp(chartProps, 'row_lines', true);
+  const columnLines = getBooleanProp(chartProps, 'column_lines', true);
+  const wrap = getBooleanProp(chartProps, 'wrap', false);
+  const filteredRows =
+    showSearch && searchTerm.trim()
+      ? cappedRows.filter((row) =>
+          cols.some((col) =>
+            String(row[col] ?? '')
+              .toLowerCase()
+              .includes(searchTerm.trim().toLowerCase()),
+          ),
+        )
+      : cappedRows;
+  const pageCount = Math.max(Math.ceil(filteredRows.length / pageSize), 1);
+  const safePage = Math.min(page, pageCount - 1);
+  const displayRows = filteredRows.slice(
+    safePage * pageSize,
+    safePage * pageSize + pageSize,
+  );
 
   return (
     <Box
       sx={{
         mb: 3,
-        overflowX: 'auto',
         border: '1px solid',
         borderColor: 'divider',
         borderRadius: 1,
@@ -406,60 +452,130 @@ const AnalyticsDataTable: React.FC<ChartSubProps> = ({ data, chartProps }) => {
       {chartProps.title && (
         <ChartTitle title={getStringProp(chartProps, 'title')} />
       )}
-      <table
-        style={{
-          width: '100%',
-          borderCollapse: 'collapse',
-          fontSize: '0.8rem',
+      {showSearch && (
+        <Box sx={{ px: 1.5, py: 1 }}>
+          <TextField
+            size="small"
+            value={searchTerm}
+            onChange={(event) => {
+              setSearchTerm(event.target.value);
+              setPage(0);
+            }}
+            placeholder="Search table..."
+            fullWidth
+            inputProps={{ 'aria-label': 'Search table' }}
+          />
+        </Box>
+      )}
+      <Box
+        sx={{
+          overflowX: 'auto',
+          '& table': {
+            borderCollapse: 'separate',
+            borderSpacing: 0,
+          },
+          '& th': {
+            borderBottom: rowLines ? '1px solid' : 'none',
+            borderColor: 'divider',
+          },
+          '& td': {
+            borderBottom: rowLines ? '1px solid' : 'none',
+            borderColor: 'divider',
+          },
+          '& th:not(:last-child), & td:not(:last-child)': {
+            borderRight: columnLines ? '1px solid' : 'none',
+            borderColor: 'divider',
+          },
+          '& tbody tr:last-child td': {
+            borderBottom: 'none',
+          },
         }}
       >
-        <thead>
-          <tr>
-            {cols.map((col) => (
-              <th
-                key={col}
+        <table
+          style={{
+            width: '100%',
+            fontSize: '0.8rem',
+          }}
+        >
+          <thead>
+            <tr>
+              {cols.map((col) => (
+                <th
+                  key={col}
+                  style={{
+                    textAlign: 'left',
+                    padding: '8px 12px',
+                    fontWeight: 600,
+                    whiteSpace: 'nowrap',
+                  }}
+                >
+                  {col}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {displayRows.map((row, i) => (
+              <tr
+                key={`${safePage}-${i}`}
                 style={{
-                  textAlign: 'left',
-                  padding: '8px 12px',
-                  fontWeight: 600,
-                  whiteSpace: 'nowrap',
-                  borderBottom: '1px solid rgba(0,0,0,0.12)',
+                  background:
+                    rowShading && i % 2 === 1
+                      ? 'rgba(0,0,0,0.025)'
+                      : 'transparent',
                 }}
               >
-                {col}
-              </th>
+                {cols.map((col) => {
+                  const val = row[col];
+                  return (
+                    <td
+                      key={col}
+                      style={{
+                        padding: '6px 12px',
+                        whiteSpace: wrap ? 'normal' : 'nowrap',
+                      }}
+                    >
+                      {formatCellValue(val)}
+                    </td>
+                  );
+                })}
+              </tr>
             ))}
-          </tr>
-        </thead>
-        <tbody>
-          {displayRows.map((row, i) => (
-            <tr key={i}>
-              {cols.map((col) => {
-                const val = row[col];
-                return (
-                  <td
-                    key={col}
-                    style={{
-                      padding: '6px 12px',
-                      borderBottom: '1px solid rgba(0,0,0,0.06)',
-                    }}
-                  >
-                    {formatCellValue(val)}
-                  </td>
-                );
-              })}
-            </tr>
-          ))}
-        </tbody>
-      </table>
-      {data.length > displayRows.length && (
+          </tbody>
+        </table>
+      </Box>
+      {filteredRows.length === 0 ? (
         <Typography
           variant="caption"
           color="text.secondary"
-          sx={{ px: 1.5, py: 0.5, display: 'block' }}
+          sx={{ px: 1.5, py: 1, display: 'block' }}
         >
-          Showing {displayRows.length} of {data.length} rows
+          No matching rows
         </Typography>
+      ) : (
+        <TablePagination
+          component="div"
+          count={filteredRows.length}
+          page={safePage}
+          rowsPerPage={pageSize}
+          rowsPerPageOptions={[pageSize]}
+          onPageChange={(_event, nextPage) => setPage(nextPage)}
+          onRowsPerPageChange={undefined}
+          labelDisplayedRows={({ from, to, count }) =>
+            `${from}-${to} of ${count}`
+          }
+          sx={{
+            borderTop: '1px solid',
+            borderColor: 'divider',
+            '.MuiTablePagination-toolbar': {
+              minHeight: 36,
+              px: 1,
+            },
+            '.MuiTablePagination-selectLabel, .MuiTablePagination-input': {
+              display: 'none',
+            },
+          }}
+        />
       )}
     </Box>
   );

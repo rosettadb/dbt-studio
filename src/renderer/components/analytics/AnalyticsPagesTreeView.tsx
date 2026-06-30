@@ -20,7 +20,6 @@ import {
 } from '@mui/material';
 import {
   NoteAdd,
-  CreateNewFolder,
   Description,
   Edit,
   Delete,
@@ -101,11 +100,9 @@ export const AnalyticsPagesTreeView: React.FC<AnalyticsPagesTreeViewProps> = ({
 
   const [contextMenu, setContextMenu] = useState<ContextMenuState>(null);
 
-  // Dialog state: Create Page / Folder
+  // Dialog state: Create Page
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
   const [newTitle, setNewTitle] = useState('');
-  const [newRoutePath, setNewRoutePath] = useState('');
-  const [isFolderMode, setIsFolderMode] = useState(false);
 
   // Dialog state: Rename Page
   const [renameDialogOpen, setRenameDialogOpen] = useState(false);
@@ -163,28 +160,42 @@ export const AnalyticsPagesTreeView: React.FC<AnalyticsPagesTreeViewProps> = ({
   );
 
   // Create Handlers
-  const handleOpenCreateDialog = (folderMode = false) => {
-    setIsFolderMode(folderMode);
+  const handleOpenCreateDialog = () => {
     setNewTitle('');
-    setNewRoutePath(folderMode ? '/new-folder/' : '/');
     setCreateDialogOpen(true);
   };
 
-  const handleCreateSubmit = () => {
-    if (!newTitle.trim() || !newRoutePath.trim()) return;
+  const buildUniqueRoutePath = (title: string) => {
+    const slug =
+      title
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, '-')
+        .replace(/(^-|-$)+/g, '') || 'untitled';
+    const existingRoutes = new Set(pages.map((page) => page.routePath));
+    let route = `/${slug}`;
+    let suffix = 2;
 
-    // ensure route path starts with /
-    const route = newRoutePath.startsWith('/')
-      ? newRoutePath
-      : `/${newRoutePath}`;
+    while (existingRoutes.has(route)) {
+      route = `/${slug}-${suffix}`;
+      suffix += 1;
+    }
+
+    return route;
+  };
+
+  const handleCreateSubmit = () => {
+    const trimmedTitle = newTitle.trim();
+    if (!trimmedTitle) return;
+
+    const route = buildUniqueRoutePath(trimmedTitle);
 
     createPageMutation.mutate(
       {
         connectionId,
         data: {
-          title: newTitle,
+          title: trimmedTitle,
           routePath: route,
-          markdownContent: `---\ntitle: "${newTitle.replace(/"/g, '\\"').replace(/\n/g, ' ')}"\n---\n\nStart building your analytics page here.`,
+          markdownContent: `---\ntitle: "${trimmedTitle.replace(/"/g, '\\"').replace(/\n/g, ' ')}"\n---\n\nStart building your analytics page here.`,
         },
       },
       {
@@ -194,21 +205,6 @@ export const AnalyticsPagesTreeView: React.FC<AnalyticsPagesTreeViewProps> = ({
         },
       },
     );
-  };
-
-  // Auto-generate route based on title when title changes, if route hasn't been heavily manually edited
-  const handleTitleChange = (val: string) => {
-    setNewTitle(val);
-    const slug = val
-      .toLowerCase()
-      .replace(/[^a-z0-9]+/g, '-')
-      .replace(/(^-|-$)+/g, '');
-
-    if (isFolderMode) {
-      setNewRoutePath(`/${slug}/overview`);
-    } else {
-      setNewRoutePath(`/${slug}`);
-    }
   };
 
   // Rename Handlers
@@ -292,19 +288,8 @@ export const AnalyticsPagesTreeView: React.FC<AnalyticsPagesTreeViewProps> = ({
           </Typography>
         </Box>
         <Box sx={{ display: 'flex', gap: 0.5 }}>
-          <Tooltip title="Create Folder">
-            <IconButton
-              size="small"
-              onClick={() => handleOpenCreateDialog(true)}
-            >
-              <CreateNewFolder sx={{ fontSize: 16 }} />
-            </IconButton>
-          </Tooltip>
           <Tooltip title="Create Page">
-            <IconButton
-              size="small"
-              onClick={() => handleOpenCreateDialog(false)}
-            >
+            <IconButton size="small" onClick={() => handleOpenCreateDialog()}>
               <NoteAdd sx={{ fontSize: 16 }} />
             </IconButton>
           </Tooltip>
@@ -458,9 +443,7 @@ export const AnalyticsPagesTreeView: React.FC<AnalyticsPagesTreeViewProps> = ({
         maxWidth="sm"
         fullWidth
       >
-        <DialogTitle>
-          {isFolderMode ? 'Create Folder / Nested Page' : 'Create Page'}
-        </DialogTitle>
+        <DialogTitle>Create Page</DialogTitle>
         <DialogContent>
           <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, pt: 1 }}>
             <TextField
@@ -468,18 +451,12 @@ export const AnalyticsPagesTreeView: React.FC<AnalyticsPagesTreeViewProps> = ({
               label="Title"
               fullWidth
               value={newTitle}
-              onChange={(e) => handleTitleChange(e.target.value)}
+              onChange={(e) => setNewTitle(e.target.value)}
               placeholder="e.g. Sales Performance"
               required
-            />
-            <TextField
-              label="Route Path"
-              fullWidth
-              value={newRoutePath}
-              onChange={(e) => setNewRoutePath(e.target.value)}
-              placeholder="e.g. /sales-performance"
-              required
-              helperText="Must start with a forward slash (/)"
+              onKeyPress={(e) => {
+                if (e.key === 'Enter') handleCreateSubmit();
+              }}
             />
           </Box>
         </DialogContent>
@@ -488,11 +465,7 @@ export const AnalyticsPagesTreeView: React.FC<AnalyticsPagesTreeViewProps> = ({
           <Button
             onClick={handleCreateSubmit}
             variant="contained"
-            disabled={
-              !newTitle.trim() ||
-              !newRoutePath.trim() ||
-              createPageMutation.isLoading
-            }
+            disabled={!newTitle.trim() || createPageMutation.isLoading}
           >
             {createPageMutation.isLoading ? 'Creating...' : 'Create'}
           </Button>

@@ -63,9 +63,15 @@ export const dataTableSchema = z.object({
   title: z.string().optional(),
   columns: z.union([z.string(), z.array(z.string())]).optional(),
   limit: z.union([z.string(), z.number()]).optional(),
+  page_size: z.union([z.string(), z.number()]).optional(),
+  pageSize: z.union([z.string(), z.number()]).optional(),
   search: z
     .union([z.literal('true'), z.literal('false'), z.boolean()])
     .optional(),
+  row_shading: z
+    .union([z.literal('true'), z.literal('false'), z.boolean()])
+    .optional(),
+  wrap: z.union([z.literal('true'), z.literal('false'), z.boolean()]).optional(),
   sort: z.string().optional(),
   fmt: fmtSchema,
   width: widthSchema,
