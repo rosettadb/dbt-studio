@@ -184,7 +184,7 @@ export const AnalyticsPagesTreeView: React.FC<AnalyticsPagesTreeViewProps> = ({
         data: {
           title: newTitle,
           routePath: route,
-          markdownContent: `---\ntitle: ${newTitle}\n---\n\nStart building your analytics page here.`,
+          markdownContent: `---\ntitle: "${newTitle.replace(/"/g, '\\"').replace(/\n/g, ' ')}"\n---\n\nStart building your analytics page here.`,
         },
       },
       {
@@ -227,13 +227,13 @@ export const AnalyticsPagesTreeView: React.FC<AnalyticsPagesTreeViewProps> = ({
         if (/\ntitle:/.test(frontmatter)) {
           const updatedFrontmatter = frontmatter.replace(
             /\ntitle:[^\n]*/,
-            `\ntitle: ${renameTitle}`,
+            `\ntitle: "${renameTitle.replace(/"/g, '\\"').replace(/\n/g, ' ')}"`,
           );
           newMarkdown = updatedFrontmatter + restOfDoc;
         } else {
           const updatedFrontmatter = frontmatter.replace(
-            /\n---$/,
-            `\ntitle: ${renameTitle}\n---`,
+            /\n---\s*$/,
+            `\ntitle: "${renameTitle.replace(/"/g, '\\"').replace(/\n/g, ' ')}"\n---`,
           );
           newMarkdown = updatedFrontmatter + restOfDoc;
         }
@@ -564,7 +564,7 @@ export const AnalyticsPagesTreeView: React.FC<AnalyticsPagesTreeViewProps> = ({
         connectionId={connectionId}
         connectionName={connectionId}
         pageCount={pages.length}
-        existingState={siteState ?? lastSuccessState}
+        existingState={lastSuccessState ?? siteState ?? null}
         onClose={() => setBuildDialogOpen(false)}
         onBuildSuccess={(result) => {
           setBuildDialogOpen(false);
@@ -580,7 +580,7 @@ export const AnalyticsPagesTreeView: React.FC<AnalyticsPagesTreeViewProps> = ({
       />
 
       {/* Open Folder / Preview actions — shown when a previous build exists */}
-      {(siteState ?? lastSuccessState) && !isBuilding && (
+      {(lastSuccessState ?? siteState) && !isBuilding && (
         <Box
           sx={{
             px: 1.5,
@@ -591,7 +591,7 @@ export const AnalyticsPagesTreeView: React.FC<AnalyticsPagesTreeViewProps> = ({
           }}
         >
           <Tooltip
-            title={`Open site folder: ${(siteState ?? lastSuccessState)!.lastBuildPath}`}
+            title={`Open site folder: ${(lastSuccessState ?? siteState)!.lastBuildPath}`}
           >
             <Button
               size="small"
@@ -605,7 +605,7 @@ export const AnalyticsPagesTreeView: React.FC<AnalyticsPagesTreeViewProps> = ({
               }}
               onClick={() =>
                 StaticSiteService.openFolder(
-                  (siteState ?? lastSuccessState)!.lastBuildPath,
+                  (lastSuccessState ?? siteState)!.lastBuildPath,
                 )
               }
             >

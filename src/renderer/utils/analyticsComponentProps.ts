@@ -32,7 +32,7 @@ function tokenizeProps(raw: string): Array<{
     quote: 'brace' | 'double' | 'single' | 'none';
   }> = [];
   const re =
-    /(\w+)\s*=\s*(?:\{([^}]*)\}|"((?:[^"\\]|\\.)*)"|'((?:[^'\\]|\\.)*)'|(\w+))/g;
+    /(\w+)\s*=\s*(?:\{([^}]*)\}|"((?:[^"\\]|\\.)*)"|'((?:[^'\\]|\\.)*)'|([\w-]+))/g;
   let execResult: RegExpExecArray | null;
   for (
     execResult = re.exec(raw);
@@ -108,7 +108,13 @@ function parseArrayLiteral(raw: string): ParsedPropValue[] {
   ) {
     const val = execResult[1] ?? execResult[2] ?? execResult[3]?.trim();
     if (val !== undefined && val !== '') {
-      items.push(parseLiteralValue(val, 'none'));
+      if (execResult[1] !== undefined) {
+        items.push(parseLiteralValue(val, 'single'));
+      } else if (execResult[2] !== undefined) {
+        items.push(parseLiteralValue(val, 'double'));
+      } else {
+        items.push(parseLiteralValue(val, 'none'));
+      }
     }
   }
   return items;

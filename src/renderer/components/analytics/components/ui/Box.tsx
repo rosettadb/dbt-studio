@@ -17,8 +17,19 @@ export const AnalyticsBox: React.FC<Props> = ({
 }) => {
   const p = getNumberProp(chartProps, 'p');
   const m = getNumberProp(chartProps, 'm');
-  const width = getStringProp(chartProps, 'width', '100%');
-  const height = getStringProp(chartProps, 'height');
+  const widthVal = chartProps.width;
+  const heightVal = chartProps.height;
+
+  const resolveWidth = (): string | number => {
+    if (widthVal === undefined) return '100%';
+    return typeof widthVal === 'number' ? widthVal : String(widthVal);
+  };
+  const resolveHeight = (): string | number | undefined => {
+    if (heightVal === undefined) return undefined;
+    return typeof heightVal === 'number' ? heightVal : String(heightVal);
+  };
+  const width = resolveWidth();
+  const height = resolveHeight();
   const bgcolor = getStringProp(chartProps, 'bgcolor');
 
   return (

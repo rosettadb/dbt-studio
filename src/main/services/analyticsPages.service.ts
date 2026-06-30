@@ -33,6 +33,10 @@ export class AnalyticsPagesService {
     pageId: string,
     updates: UpdateAnalyticsPage,
   ): Promise<AnalyticsPage> {
+    if (updates.routePath !== undefined && !updates.routePath.startsWith('/')) {
+      throw new Error('routePath must start with /');
+    }
+
     return MainDatabaseService.updateAnalyticsPage(
       connectionId,
       pageId,

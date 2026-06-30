@@ -30,10 +30,13 @@ export const AnalyticsTabs: React.FC<
 
   if (tabs.length === 0) return null;
 
+  const maxTab = Math.max(0, tabs.length - 1);
+  const clampedTab = Math.min(activeTab, maxTab);
+
   return (
     <Box sx={{ mb: 2 }}>
       <MuiTabs
-        value={Math.min(activeTab, tabs.length - 1)}
+        value={clampedTab}
         onChange={(_, v) => setActiveTab(v)}
         variant="scrollable"
         scrollButtons="auto"
@@ -46,7 +49,7 @@ export const AnalyticsTabs: React.FC<
           />
         ))}
       </MuiTabs>
-      <Box sx={{ pt: 2 }}>{tabs[activeTab]?.content}</Box>
+      <Box sx={{ pt: 2 }}>{tabs[clampedTab]?.content}</Box>
     </Box>
   );
 };

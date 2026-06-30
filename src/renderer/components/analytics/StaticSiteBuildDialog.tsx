@@ -92,6 +92,18 @@ export const StaticSiteBuildDialog: React.FC<StaticSiteBuildDialogProps> = ({
     });
   }, [view]);
 
+  // Sync state when open changes
+  useEffect(() => {
+    if (open) {
+      setView(existingState ? 'locked' : 'configure');
+      setProgress(null);
+      setBuildResult(null);
+      if (existingState) {
+        setOutputPath(existingState.lastBuildPath);
+      }
+    }
+  }, [open, existingState]);
+
   // Reset on close
   const handleClose = useCallback(() => {
     if (view === 'building') return; // block accidental close during build

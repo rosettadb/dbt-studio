@@ -11,8 +11,9 @@ import fs from 'fs';
 import path from 'path';
 import { AnalyticsPagesService } from './analyticsPages.service';
 import ConnectorsService from './connectors.service';
-import DuckLakeService from './duckLake.service';
 import MainDatabaseService from './mainDatabase.service';
+import { extractQueryReferences } from '../../renderer/components/analytics/runtime/queryDependencyResolver';
+import DuckLakeService from './duckLake.service';
 import {
   toSlug,
   generateSiteShell,
@@ -81,14 +82,14 @@ function extractSqlBlocks(markdown: string): SqlBlock[] {
   const blocks: SqlBlock[] = [];
   // Match ```sql <name>\n...\n``` blocks
   const regex = /```sql\s+(\w+)\s*\n([\s\S]*?)```/g;
-  let match: RegExpExecArray | null;
-  // eslint-disable-next-line no-cond-assign
-  while ((match = regex.exec(markdown)) !== null) {
+  let match = regex.exec(markdown);
+  while (match !== null) {
     const name = match[1].trim();
     const sql = match[2].trim();
     if (name && sql) {
       blocks.push({ name, sql });
     }
+    match = regex.exec(markdown);
   }
   return blocks;
 }
@@ -105,14 +106,17 @@ function resolveDependencyOrder(blocks: SqlBlock[]): SqlBlock[] {
     chain.add(name);
     const block = byName.get(name);
     if (!block) return;
-    // Find dependencies
-    const deps = [...block.sql.matchAll(/\{\{(\w+)\}\}/g)].map((m) => m[1]);
-    deps.forEach((dep) => visit(dep, new Set(chain)));
+    const deps = extractQueryReferences(block.sql);
+    deps.forEach((dep) => {
+      visit(dep, new Set(chain));
+    });
     visited.add(name);
     order.push(block);
   }
 
-  blocks.forEach((block) => visit(block.name, new Set()));
+  blocks.forEach((block) => {
+    visit(block.name, new Set());
+  });
   return order;
 }
 
@@ -121,20 +125,28 @@ function substituteQueryRefs(
   sql: string,
   results: Record<string, any[]>,
 ): string {
-  // Replace {{query_name}} with a VALUES clause representing the result rows
-  return sql.replace(/\{\{(\w+)\}\}/g, (_match, name: string) => {
+  // Use extractQueryReferences to find dependencies to replace
+  const deps = extractQueryReferences(sql);
+  let resolvedSql = sql;
+  deps.forEach((name) => {
     const rows = results[name];
-    if (!rows || rows.length === 0) return '(SELECT NULL WHERE FALSE)';
-    const cols = Object.keys(rows[0]);
-    const values = rows
-      .slice(0, 500) // limit substituted rows
-      .map(
-        (row) =>
-          `(${cols.map((c) => JSON.stringify(row[c] ?? null)).join(', ')})`,
-      )
-      .join(', ');
-    return `(SELECT ${cols.map((c) => JSON.stringify(c)).join(', ')} FROM (VALUES ${values}) AS _t(${cols.join(', ')}))`;
+    let substitution = '(SELECT NULL WHERE FALSE)';
+    if (rows && rows.length > 0) {
+      const cols = Object.keys(rows[0]);
+      const values = rows
+        .slice(0, 500) // limit substituted rows
+        .map(
+          (row) =>
+            `(${cols.map((c) => JSON.stringify(row[c] ?? null)).join(', ')})`,
+        )
+        .join(', ');
+      substitution = `(SELECT ${cols.map((c) => JSON.stringify(c)).join(', ')} FROM (VALUES ${values}) AS _t(${cols.join(', ')}))`;
+    }
+    // Replace all exact matches of {{name}}
+    const regex = new RegExp(`\\{\\{${name}\\}\\}`, 'g');
+    resolvedSql = resolvedSql.replace(regex, substitution);
   });
+  return resolvedSql;
 }
 
 // ─── Query execution (main-process) ──────────────────────────────────────────
@@ -509,7 +521,24 @@ export class StaticSiteService {
     folderPath: string,
   ): Promise<{ success: boolean; error?: string }> {
     try {
+      const state = await this.getState(connectionId);
+      if (!state || state.lastBuildPath !== folderPath) {
+        return { success: false, error: 'Invalid or unauthorized build path' };
+      }
+
+      // Additional safety check to prevent wiping root directories or out-of-scope paths
+      if (folderPath.length < 10) {
+        return {
+          success: false,
+          error: 'Path too short, aborting deletion for safety',
+        };
+      }
+
       if (fs.existsSync(folderPath)) {
+        const stats = fs.lstatSync(folderPath);
+        if (stats.isSymbolicLink()) {
+          return { success: false, error: 'Target is a symbolic link' };
+        }
         fs.rmSync(folderPath, { recursive: true, force: true });
       }
       await MainDatabaseService.deleteStaticSiteState(connectionId);

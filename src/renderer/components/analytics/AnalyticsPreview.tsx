@@ -10,6 +10,7 @@ import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import rehypeHighlight from 'rehype-highlight';
 import rehypeRaw from 'rehype-raw';
+import rehypeSanitize from 'rehype-sanitize';
 import type { Components } from 'react-markdown';
 import {
   parseAnalyticsMarkdown,
@@ -152,7 +153,7 @@ const markdownComponents: Components = {
 };
 
 // ─── Clickable SQL Status Badge ──────────────────────────────────────────
-const SqlBadge: React.FC<{
+export const SqlBadge: React.FC<{
   block: { name: string; sql: string };
   status: 'idle' | 'running' | 'success' | 'error';
   rowCount?: number;
@@ -329,7 +330,7 @@ export const AnalyticsPreview: React.FC<AnalyticsPreviewProps> = ({
             <ReactMarkdown
               key={i}
               remarkPlugins={[remarkGfm]}
-              rehypePlugins={[rehypeHighlight, rehypeRaw]}
+              rehypePlugins={[rehypeHighlight, rehypeRaw, rehypeSanitize]}
               components={markdownComponents}
             >
               {block.markdown}

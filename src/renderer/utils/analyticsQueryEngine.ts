@@ -139,7 +139,7 @@ export async function executeAnalyticsQuery(params: {
     // Regular DB connection
     const response = await executeQueryForConnection({
       connectionId,
-      query: sql,
+      query: `SELECT * FROM (\n${sql}\n) AS _limit_wrapper LIMIT ${ROW_LIMIT}`,
     });
 
     if (!response.success) {

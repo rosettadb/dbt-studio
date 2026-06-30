@@ -238,7 +238,10 @@ export function generatePageHtml(
   page: StaticPageMeta,
   data: StaticPageData,
 ): string {
-  const serialized = JSON.stringify(data);
+  const serialized = JSON.stringify(data).replace(
+    /<\/script>/gi,
+    '<\\/script>',
+  );
   const escapedTitle = escapeHtml(data.pageTitle || page.title);
 
   return `<!DOCTYPE html>

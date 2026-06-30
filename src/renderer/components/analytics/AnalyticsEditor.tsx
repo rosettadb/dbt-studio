@@ -87,6 +87,27 @@ let analyticsCompletionProvider: monaco.IDisposable | null = null;
 const analyticsCompletionsRef = { current: [] as any[] };
 const ANALYTICS_BRIDGE_MAX_PREVIEW_ROWS = 5;
 
+const ANALYTICS_STARTER_TEMPLATE = `---
+title: My Analytics Page
+---
+
+Write your SQL queries below, then use component tags to visualize them.
+
+\`\`\`sql orders
+SELECT
+  date_trunc('month', order_date) AS month,
+  COUNT(*) AS order_count,
+  SUM(total_amount) AS revenue
+FROM orders
+GROUP BY 1
+ORDER BY 1
+\`\`\`
+
+<BarChart data={orders} x="month" y="revenue" title="Monthly Revenue" />
+
+<DataTable data={orders} title="Orders by Month" />
+`;
+
 export const AnalyticsEditor: React.FC<AnalyticsEditorProps> = ({
   connectionId,
   pageId,
@@ -215,26 +236,6 @@ export const AnalyticsEditor: React.FC<AnalyticsEditorProps> = ({
   useEffect(() => {
     if (page?.markdownContent !== undefined) {
       isSyncingRef.current = true;
-      const ANALYTICS_STARTER_TEMPLATE = `---
-title: My Analytics Page
----
-
-Write your SQL queries below, then use component tags to visualize them.
-
-\`\`\`sql orders
-SELECT
-  date_trunc('month', order_date) AS month,
-  COUNT(*) AS order_count,
-  SUM(total_amount) AS revenue
-FROM orders
-GROUP BY 1
-ORDER BY 1
-\`\`\`
-
-<BarChart data={orders} x="month" y="revenue" title="Monthly Revenue" />
-
-<DataTable data={orders} title="Orders by Month" />
-`;
       const content = page.markdownContent || ANALYTICS_STARTER_TEMPLATE;
       setMarkdownContent(content);
       setIsEditorDirty(false);
@@ -277,11 +278,20 @@ ORDER BY 1
     if (isRunningQueries) return;
 
     const blocks = parseAnalyticsMarkdown(markdownContent);
-    const originalSqlBlocks = blocks.filter((b) => b.type === 'sql') as Array<{
+    const originalSqlBlocks: Array<{
       type: 'sql';
       name: string;
       sql: string;
-    }>;
+    }> = [];
+    const walkBlocks = (blks: any[]) => {
+      blks.forEach((b) => {
+        if (b.type === 'sql') originalSqlBlocks.push(b as any);
+        if (b.type === 'component' && b.content) {
+          walkBlocks(parseAnalyticsMarkdown(b.content));
+        }
+      });
+    };
+    walkBlocks(blocks);
 
     if (originalSqlBlocks.length === 0) return;
 
@@ -490,8 +500,8 @@ ORDER BY 1
 
             // ── Determine context ────────────────────────────────────
             // Count SQL fence opens vs closes
-            const opens = (before.match(/^```sql\s+\w*/gm) || []).length;
-            const closes = (before.match(/^```\s*$/gm) || []).length;
+            const opens = (before.match(/^\s*```sql\s+\w*/gm) || []).length;
+            const closes = (before.match(/^\s*```\s*$/gm) || []).length;
             const insideSqlFence = opens > closes;
 
             // ── Inside SQL fence: SQL completions ────────────────────

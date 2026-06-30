@@ -27,6 +27,7 @@ import {
   getComponentDefinition,
   validateComponentProps,
 } from './registry/analyticsComponentRegistry';
+import { SqlBadge } from './AnalyticsPreview';
 import { AnalyticsAlert } from './components/ui/Alert';
 import { AnalyticsAccordion } from './components/ui/Accordion';
 import { AnalyticsTabs, AnalyticsTab } from './components/ui/Tabs';
@@ -737,6 +738,18 @@ export function AnalyticsComponentRenderer({
             content={block.content}
             queryCache={queryCache}
             queryStatuses={queryStatuses}
+          />
+        );
+      }
+      if (block.type === 'sql') {
+        const rowCount = queryCache[block.name]?.length;
+        return (
+          <SqlBadge
+            key={`${block.name}-${index}`}
+            block={block}
+            status={queryStatuses[block.name] ?? 'idle'}
+            rowCount={rowCount}
+            onRun={() => {}} // Can't easily run from here without passing it down, but the preview shows it
           />
         );
       }

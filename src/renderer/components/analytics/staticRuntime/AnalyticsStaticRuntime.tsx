@@ -18,6 +18,7 @@ import React from 'react';
 import ReactDOM from 'react-dom/client';
 import { ThemeProvider, createTheme, CssBaseline } from '@mui/material';
 import { AnalyticsPreview } from '../AnalyticsPreview';
+import { AnalyticsPreviewErrorBoundary } from '../AnalyticsPreviewErrorBoundary';
 
 export interface StaticPageData {
   pageTitle: string;
@@ -48,20 +49,20 @@ export function mount(container: HTMLElement, data: StaticPageData): void {
       <React.StrictMode>
         <ThemeProvider theme={muiTheme}>
           <CssBaseline />
-          <AnalyticsPreview
-            markdownContent={data.markdown}
-            queryCache={data.queryResults}
-            queryStatuses={
-              data.queryStatuses as Record<
-                string,
-                'idle' | 'running' | 'success' | 'error'
-              >
-            }
-            queryErrors={data.queryErrors}
-            queryDurations={{}}
-            // onRunQuery intentionally omitted:
-            // SQL badges show build-time status only, re-querying is not possible.
-          />
+          <AnalyticsPreviewErrorBoundary>
+            <AnalyticsPreview
+              markdownContent={data.markdown}
+              queryCache={data.queryResults}
+              queryStatuses={
+                data.queryStatuses as Record<
+                  string,
+                  'idle' | 'running' | 'success' | 'error'
+                >
+              }
+              queryErrors={data.queryErrors}
+              // Truncated flags are ignored in runtime since we don't fetch more rows
+            />
+          </AnalyticsPreviewErrorBoundary>
         </ThemeProvider>
       </React.StrictMode>,
     );

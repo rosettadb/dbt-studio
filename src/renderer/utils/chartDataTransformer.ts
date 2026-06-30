@@ -38,7 +38,10 @@ export const transformSqlResultToChartData = (
             }
           } else if (typeof rawValue === 'bigint') {
             // Guard against silent precision loss for values beyond MAX_SAFE_INTEGER
-            if (Number.isSafeInteger(Number(rawValue))) {
+            if (
+              rawValue <= BigInt(Number.MAX_SAFE_INTEGER) &&
+              rawValue >= BigInt(Number.MIN_SAFE_INTEGER)
+            ) {
               transformedRow[col] = Number(rawValue);
             } else {
               transformedRow[col] = null;
