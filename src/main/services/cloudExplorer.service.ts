@@ -6,7 +6,6 @@ import {
   ListObjectsV2Command,
   ListObjectsCommand,
   GetObjectCommand,
-  HeadObjectCommand,
   PutObjectCommand,
   CreateMultipartUploadCommand,
   UploadPartCommand,
@@ -63,7 +62,7 @@ import {
 
 // Cloud storage service class
 class CloudExplorerService {
-  private static async withS3FolderMarkerDates(
+  private static async withS3FolderMetadata(
     client: S3Client,
     bucketName: string,
     folders: StorageObject[],
@@ -71,16 +70,41 @@ class CloudExplorerService {
     return Promise.all(
       folders.map(async (folder) => {
         try {
-          const result = await client.send(
-            new HeadObjectCommand({
-              Bucket: bucketName,
-              Key: folder.name,
-            }),
-          );
+          let continuationToken: string | undefined;
+          let latestModified: Date | undefined;
+          let totalSize = 0;
+
+          do {
+            // eslint-disable-next-line no-await-in-loop
+            const result = await client.send(
+              new ListObjectsV2Command({
+                Bucket: bucketName,
+                Prefix: folder.name,
+                ContinuationToken: continuationToken,
+                MaxKeys: 1000,
+              }),
+            );
+
+            (result.Contents || []).forEach((object) => {
+              totalSize += object.Size || 0;
+
+              if (
+                object.LastModified &&
+                (!latestModified || object.LastModified > latestModified)
+              ) {
+                latestModified = object.LastModified;
+              }
+            });
+
+            continuationToken = result.IsTruncated
+              ? result.NextContinuationToken
+              : undefined;
+          } while (continuationToken);
 
           return {
             ...folder,
-            updated: result.LastModified,
+            size: totalSize,
+            updated: latestModified,
           };
         } catch {
           return folder;
@@ -149,7 +173,7 @@ class CloudExplorerService {
         }),
       );
 
-      const folders = await CloudExplorerService.withS3FolderMarkerDates(
+      const folders = await CloudExplorerService.withS3FolderMetadata(
         client,
         bucketName,
         (result.CommonPrefixes || []).map((folderPrefix) => ({
@@ -642,7 +666,7 @@ class CloudExplorerService {
         }),
       );
 
-      const folders = await CloudExplorerService.withS3FolderMarkerDates(
+      const folders = await CloudExplorerService.withS3FolderMetadata(
         client,
         bucketName,
         (result.CommonPrefixes || []).map((folderPrefix) => ({
@@ -827,7 +851,7 @@ class CloudExplorerService {
         }),
       );
 
-      const folders = await CloudExplorerService.withS3FolderMarkerDates(
+      const folders = await CloudExplorerService.withS3FolderMetadata(
         client,
         bucketName,
         (result.CommonPrefixes || []).map((folderPrefix) => ({
@@ -1051,7 +1075,7 @@ class CloudExplorerService {
 
       return {
         objects: [
-          ...(await CloudExplorerService.withS3FolderMarkerDates(
+          ...(await CloudExplorerService.withS3FolderMetadata(
             client,
             bucketName,
             folders,
@@ -1221,7 +1245,7 @@ class CloudExplorerService {
         }),
       );
 
-      const folders = await CloudExplorerService.withS3FolderMarkerDates(
+      const folders = await CloudExplorerService.withS3FolderMetadata(
         client,
         bucketName,
         (result.CommonPrefixes || []).map((folderPrefix) => ({
@@ -1410,7 +1434,7 @@ class CloudExplorerService {
         }),
       );
 
-      const folders = await CloudExplorerService.withS3FolderMarkerDates(
+      const folders = await CloudExplorerService.withS3FolderMetadata(
         client,
         bucketName,
         (result.CommonPrefixes || []).map((folderPrefix) => ({
