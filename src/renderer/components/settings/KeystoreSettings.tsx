@@ -50,6 +50,9 @@ export const KeystoreSettings: React.FC = () => {
   const [addEnvOpen, setAddEnvOpen] = React.useState(false);
   const [newEnvName, setNewEnvName] = React.useState('');
   const [addEnvError, setAddEnvError] = React.useState('');
+  const [deleteKeyTarget, setDeleteKeyTarget] = React.useState<string | null>(
+    null,
+  );
   const [deleteEnvTarget, setDeleteEnvTarget] = React.useState<string | null>(
     null,
   );
@@ -122,13 +125,17 @@ export const KeystoreSettings: React.FC = () => {
     }
   };
 
-  const handleDelete = async (key: string) => {
+  const handleDeleteKey = async () => {
+    if (!deleteKeyTarget) return;
     try {
-      await secureStorageService.delete(key as SecureStorageAccount);
-      setEntries((prev) => prev.filter((e) => e.key !== key));
-      toast.success(`Deleted "${displayKey(key)}"`);
+      await secureStorageService.delete(
+        deleteKeyTarget as SecureStorageAccount,
+      );
+      setEntries((prev) => prev.filter((e) => e.key !== deleteKeyTarget));
+      toast.success(`Deleted "${displayKey(deleteKeyTarget)}"`);
+      setDeleteKeyTarget(null);
     } catch {
-      toast.error(`Failed to delete "${displayKey(key)}"`);
+      toast.error(`Failed to delete "${displayKey(deleteKeyTarget)}"`);
     }
   };
 
@@ -362,7 +369,7 @@ export const KeystoreSettings: React.FC = () => {
                       <IconButton
                         size="small"
                         color="error"
-                        onClick={() => handleDelete(entry.key)}
+                        onClick={() => setDeleteKeyTarget(entry.key)}
                       >
                         <Delete fontSize="small" />
                       </IconButton>
@@ -460,6 +467,30 @@ export const KeystoreSettings: React.FC = () => {
           </Box>
         </CardContent>
       </Card>
+
+      <Dialog
+        open={!!deleteKeyTarget}
+        onClose={() => setDeleteKeyTarget(null)}
+        maxWidth="xs"
+        fullWidth
+      >
+        <DialogTitle>Delete Key</DialogTitle>
+        <DialogContent>
+          <DialogContentText>
+            Permanently delete{' '}
+            <strong style={{ fontFamily: 'monospace' }}>
+              {deleteKeyTarget ? displayKey(deleteKeyTarget) : ''}
+            </strong>
+            ? This cannot be undone.
+          </DialogContentText>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setDeleteKeyTarget(null)}>Cancel</Button>
+          <Button variant="contained" color="error" onClick={handleDeleteKey}>
+            Delete
+          </Button>
+        </DialogActions>
+      </Dialog>
 
       <Dialog
         open={addEnvOpen}
