@@ -23,6 +23,7 @@ export * from './settings';
 export * from './dbtSetup';
 export * from './finishSetup';
 export * from './GetStartedModal';
+export * from './GetStartedPipelineModal';
 export * from './sidebarConnections';
 export * from './newProject';
 export * from './dbtModelButtons';

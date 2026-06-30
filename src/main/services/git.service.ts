@@ -744,9 +744,14 @@ export default class GitService {
 
       // Only configure connection if connection files were found
       if (connections.connectionInput) {
-        connectionId = await ConnectorsService.configureConnection({
-          connection: connections.connectionInput,
-        });
+        try {
+          connectionId = await ConnectorsService.configureConnection({
+            connection: connections.connectionInput,
+          });
+        } catch (connError) {
+          // eslint-disable-next-line no-console
+          console.warn('Failed to auto-configure connection after clone:', connError);
+        }
       }
 
       return {

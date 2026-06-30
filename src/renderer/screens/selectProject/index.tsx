@@ -45,6 +45,7 @@ import {
   CloneRepoModal,
   Icon,
   GetStartedModal,
+  GetStartedPipelineModal,
   NewProject,
 } from '../../components';
 import { icons } from '../../../../assets';
@@ -112,6 +113,8 @@ const SelectProject: React.FC = () => {
     name: string;
   } | null>(null);
   const [isGetStartedModalOpen, setIsGetStartedModalOpen] =
+    React.useState(false);
+  const [isGetStartedPipelineModalOpen, setIsGetStartedPipelineModalOpen] =
     React.useState(false);
   const [isAddConnectionModalOpen, setIsAddConnectionModalOpen] =
     React.useState(false);
@@ -298,6 +301,10 @@ const SelectProject: React.FC = () => {
     setIsGetStartedModalOpen(true);
   };
 
+  const handleGetStartedPipeline = () => {
+    setIsGetStartedPipelineModalOpen(true);
+  };
+
   const handleAddConnection = (project: Project) => {
     setSelectedProjectForConnection(project);
     setIsAddConnectionModalOpen(true);
@@ -358,6 +365,15 @@ const SelectProject: React.FC = () => {
               sx={{ height: 40 }}
             >
               Get Started
+            </Button>
+            <Button
+              variant="outlined"
+              color="secondary"
+              startIcon={<RocketLaunchIcon />}
+              onClick={handleGetStartedPipeline}
+              sx={{ height: 40 }}
+            >
+              Get Started — Pipeline
             </Button>
           </Box>
         </EmptyStateContainer>
@@ -603,6 +619,24 @@ const SelectProject: React.FC = () => {
                     </Button>
                   </Tooltip>
                 )}
+                {!projects.some(
+                  (p) => p.name === 'rosetta_project',
+                ) && (
+                  <Tooltip title="Import getting started pipeline project">
+                    <Button
+                      variant="outlined"
+                      color="secondary"
+                      onClick={handleGetStartedPipeline}
+                      sx={{ height: 40 }}
+                    >
+                      <RocketLaunchIcon
+                        sx={{ marginRight: 1 }}
+                        fontSize="small"
+                      />
+                      Get Started — Pipeline
+                    </Button>
+                  </Tooltip>
+                )}
                 <Tooltip title="Clone from git repository...">
                   <Button
                     variant="contained"
@@ -737,6 +771,10 @@ const SelectProject: React.FC = () => {
         <GetStartedModal
           isOpen={isGetStartedModalOpen}
           onClose={() => setIsGetStartedModalOpen(false)}
+        />
+        <GetStartedPipelineModal
+          isOpen={isGetStartedPipelineModalOpen}
+          onClose={() => setIsGetStartedPipelineModalOpen(false)}
         />
         {isCloneModalOpen && (
           <CloneRepoModal
