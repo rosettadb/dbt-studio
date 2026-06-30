@@ -24,6 +24,7 @@ import {
   Connections,
   DuckLake as DataLake,
   Notebooks,
+  Flows,
 } from './screens';
 import { SelectProjectLayout, AppShell } from './layouts';
 import { AppProvider, ProcessProvider } from './context';
@@ -62,6 +63,7 @@ const App: React.FC = () => {
           <Route path="settings/rosetta" element={<Settings />} />
           <Route path="settings/installation" element={<Settings />} />
           <Route path="settings/about" element={<Settings />} />
+          <Route path="settings/flowfile" element={<Settings />} />
           <Route path="sql" element={<Sql />} />
           <Route path="notebooks" element={<Notebooks />} />
           <Route
@@ -113,6 +115,7 @@ const App: React.FC = () => {
             path="data-lake/:type/instances/:instanceId/tables/:tableName"
             element={<DataLake />}
           />
+          <Route path="flows" element={<Flows />} />
           <Route path="loading" element={<Loading />} />
           <Route path="*" element={<Navigate to="/app" />} />
         </Route>

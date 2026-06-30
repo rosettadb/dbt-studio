@@ -20,6 +20,7 @@ import { registerSkillsHandlers } from './skills.ipcHandlers';
 import registerSavedQueriesHandlers from './savedQueries.ipcHandlers';
 import { registerAnalyticsPagesHandlers } from './analyticsPages.ipcHandlers';
 import { registerStaticSiteHandlers } from './staticSite.ipcHandlers';
+import registerFlowfileHandlers from './flowfile.ipcHandlers';
 
 export {
   registerCliHandlers,
@@ -44,4 +45,5 @@ export {
   registerSavedQueriesHandlers,
   registerAnalyticsPagesHandlers,
   registerStaticSiteHandlers,
+  registerFlowfileHandlers,
 };

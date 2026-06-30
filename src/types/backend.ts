@@ -338,6 +338,9 @@ export type SettingsType = {
   duckdbMaxConnections?: number;
   cloudWorkspaceUrl?: string;
   cloudWorkspaceLastSyncedAt?: string;
+  flowfileVersion?: string;
+  flowfilePort?: string;
+  flowfileAutoStart?: string;
 };
 
 export type FileDialogProperties = 'openFile' | 'openDirectory';
@@ -599,7 +602,13 @@ export type ExecuteStatementType = {
 };
 
 // AI Provider Types
-export type AIProviderType = 'openai' | 'ollama' | 'gemini' | 'anthropic';
+export type AIProviderType =
+  | 'openai'
+  | 'ollama'
+  | 'gemini'
+  | 'anthropic'
+  | 'openai-compatible'
+  | 'lmstudio';
 
 // Chat-related types
 export interface ChatConversation {

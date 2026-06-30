@@ -56,6 +56,12 @@ export default class SettingsService {
     return {
       ...defaultSettings,
       ...dataBase.settings,
+      projectsDirectory:
+        dataBase.settings.projectsDirectory ||
+        defaultSettings.projectsDirectory,
+      sampleRosettaMainConf:
+        dataBase.settings.sampleRosettaMainConf ||
+        defaultSettings.sampleRosettaMainConf,
     };
   }
 

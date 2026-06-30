@@ -27,8 +27,10 @@ export const transformSqlResultToChartData = (
         if (transformedRow[col] !== undefined && transformedRow[col] !== null) {
           const rawValue = transformedRow[col];
 
-          // If it's a string, trim first; treat blank as null, then parse numeric
-          if (typeof rawValue === 'string') {
+          // Convert Date objects to timestamps for chart plotting
+          if (rawValue instanceof Date) {
+            transformedRow[col] = rawValue.getTime();
+          } else if (typeof rawValue === 'string') {
             const trimmed = rawValue.trim();
             if (trimmed === '') {
               // Empty/whitespace strings represent missing data — do not coerce to 0

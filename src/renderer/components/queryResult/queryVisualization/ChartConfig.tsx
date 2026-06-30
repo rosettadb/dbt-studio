@@ -29,6 +29,10 @@ export const ChartConfig: React.FC<ChartConfigProps> = ({
   onXAxisChange,
   onYAxisColsChange,
 }) => {
+  const yAxisSelectValue = (
+    chartType === 'pie' ? yAxisCols[0] || '' : yAxisCols
+  ) as string[];
+
   const handleChartTypeChange = (event: SelectChangeEvent<string>) => {
     onChartTypeChange(event.target.value as ChartType);
   };
@@ -41,6 +45,10 @@ export const ChartConfig: React.FC<ChartConfigProps> = ({
     const {
       target: { value },
     } = event;
+    if (chartType === 'pie') {
+      onYAxisColsChange([value as unknown as string]);
+      return;
+    }
     onYAxisColsChange(typeof value === 'string' ? value.split(',') : value);
   };
 
@@ -104,8 +112,8 @@ export const ChartConfig: React.FC<ChartConfigProps> = ({
         </Typography>
         <Select
           id="y-axis-select"
-          multiple
-          value={yAxisCols}
+          multiple={chartType !== 'pie'}
+          value={yAxisSelectValue}
           onChange={handleYAxisChange}
           sx={{
             height: 28,
@@ -116,7 +124,9 @@ export const ChartConfig: React.FC<ChartConfigProps> = ({
               whiteSpace: 'nowrap',
             },
           }}
-          renderValue={(selected) => selected.join(', ')}
+          renderValue={(selected) =>
+            Array.isArray(selected) ? selected.join(', ') : selected
+          }
         >
           {availableColumns.map((col) => (
             <MenuItem key={col} value={col}>

@@ -21,6 +21,7 @@ import {
   TableChart as CsvIcon,
   InsertDriveFile as ParquetIcon,
   BarChart as BarChartIcon,
+  Image as ImageIcon,
 } from '@mui/icons-material';
 import {
   QueryResponseType,
@@ -101,6 +102,7 @@ export const QueryResult: React.FC<Props> = ({ results, exportContext }) => {
   const [fetchError, setFetchError] = React.useState<string | null>(null);
 
   const fetchSeqRef = React.useRef(0);
+  const chartContainerRef = React.useRef<HTMLDivElement>(null);
 
   const fetchPage = React.useCallback(
     async (newPage: number, newPerPage: number) => {
@@ -443,6 +445,106 @@ export const QueryResult: React.FC<Props> = ({ results, exportContext }) => {
     }
   };
 
+  const handleExportPng = async () => {
+    handleExportMenuClose();
+    if (!chartContainerRef.current) return;
+
+    // Find the chart SVG (exclude MUI icons which are tiny toolbar SVGs)
+    const svgElement = Array.from(
+      chartContainerRef.current.querySelectorAll('svg'),
+    ).find(
+      (svg) =>
+        !svg.classList.contains('MuiSvgIcon-root') &&
+        svg.getBoundingClientRect().width > 100,
+    );
+    if (!svgElement) {
+      toast.error('No chart SVG found to export');
+      return;
+    }
+
+    let svgUrl: string | undefined;
+    try {
+      // eslint-disable-next-line no-console
+      console.log('[PNG Export] Starting export, svgElement:', svgElement);
+
+      const svgData = new XMLSerializer().serializeToString(svgElement);
+      const svgBlob = new Blob([svgData], {
+        type: 'image/svg+xml;charset=utf-8',
+      });
+      svgUrl = URL.createObjectURL(svgBlob);
+
+      const img = new Image();
+      const canvas = document.createElement('canvas');
+      const rect = svgElement.getBoundingClientRect();
+      // eslint-disable-next-line no-console
+      console.log('[PNG Export] SVG rect:', rect.width, rect.height);
+
+      await new Promise<void>((resolve, reject) => {
+        img.onload = async () => {
+          try {
+            // eslint-disable-next-line no-console
+            console.log('[PNG Export] Image loaded, drawing to canvas');
+            canvas.width = rect.width * 2;
+            canvas.height = rect.height * 2;
+            const ctx = canvas.getContext('2d');
+            if (!ctx) {
+              reject(new Error('Failed to get canvas context'));
+              return;
+            }
+            ctx.scale(2, 2);
+            ctx.fillStyle = '#ffffff';
+            ctx.fillRect(0, 0, rect.width, rect.height);
+            ctx.drawImage(img, 0, 0);
+            const dataUrl = canvas.toDataURL('image/png');
+            const base64data = dataUrl.split(',')[1];
+            // eslint-disable-next-line no-console
+            console.log('[PNG Export] Canvas data URL length:', dataUrl.length);
+            const result = await window.electron.ipcRenderer.invoke(
+              'utils:saveBase64File',
+              {
+                data: base64data,
+                options: {
+                  title: 'Export Chart as PNG',
+                  defaultPath: 'chart.png',
+                  filters: [{ name: 'PNG Images', extensions: ['png'] }],
+                },
+              },
+            );
+            if (result.canceled) {
+              resolve();
+              return;
+            }
+            // eslint-disable-next-line no-console
+            console.log('[PNG Export] File written successfully');
+            toast.success('Chart exported as PNG successfully');
+            resolve();
+          } catch (writeError) {
+            // eslint-disable-next-line no-console
+            console.error('[PNG Export] Write error:', writeError);
+            toast.error('Failed to save PNG file');
+            reject(writeError);
+          }
+        };
+        img.onerror = () => {
+          // eslint-disable-next-line no-console
+          console.error('[PNG Export] Failed to load SVG image');
+          reject(new Error('Failed to load SVG image'));
+        };
+        img.src = svgUrl!;
+      });
+    } catch (error) {
+      // eslint-disable-next-line no-console
+      console.error('PNG export error:', error);
+      if (!(error instanceof Error && error.message === 'User cancelled')) {
+        toast.error('Chart export failed');
+      }
+    } finally {
+      if (svgUrl) {
+        URL.revokeObjectURL(svgUrl);
+      }
+    }
+  };
+
   const sqlPreview = React.useMemo(() => {
     if (!resolvedOriginalSql) return null;
     const singleLine = resolvedOriginalSql.replace(/\s+/g, ' ').trim();
@@ -656,60 +758,84 @@ export const QueryResult: React.FC<Props> = ({ results, exportContext }) => {
           horizontal: 'right',
         }}
       >
-        <MenuItem
-          onClick={handleDownloadJson}
-          disabled={isExporting}
-          dense
-          sx={{ py: 0.5, minHeight: 32 }}
-        >
-          <ListItemIcon sx={{ minWidth: 28 }}>
-            <JsonIcon sx={{ fontSize: 16 }} />
-          </ListItemIcon>
-          <ListItemText
-            primary={
-              isDuckLake ? 'Export JSON (full dataset)' : 'Download JSON'
-            }
-            primaryTypographyProps={{
-              variant: 'body2',
-              sx: { fontSize: 12 },
-            }}
-          />
-        </MenuItem>
-        <MenuItem
-          onClick={handleDownloadCsv}
-          disabled={isExporting}
-          dense
-          sx={{ py: 0.5, minHeight: 32 }}
-        >
-          <ListItemIcon sx={{ minWidth: 28 }}>
-            <CsvIcon sx={{ fontSize: 16 }} />
-          </ListItemIcon>
-          <ListItemText
-            primary={isDuckLake ? 'Export CSV (full dataset)' : 'Download CSV'}
-            primaryTypographyProps={{
-              variant: 'body2',
-              sx: { fontSize: 12 },
-            }}
-          />
-        </MenuItem>
-        {canExportParquet && (
+        {viewMode === 'chart' ? (
           <MenuItem
-            onClick={handleExportParquet}
+            onClick={handleExportPng}
             disabled={isExporting}
             dense
             sx={{ py: 0.5, minHeight: 32 }}
           >
             <ListItemIcon sx={{ minWidth: 28 }}>
-              <ParquetIcon sx={{ fontSize: 16 }} />
+              <ImageIcon sx={{ fontSize: 16 }} />
             </ListItemIcon>
             <ListItemText
-              primary="Export Parquet (full dataset)"
+              primary="Export as PNG"
               primaryTypographyProps={{
                 variant: 'body2',
                 sx: { fontSize: 12 },
               }}
             />
           </MenuItem>
+        ) : (
+          <>
+            <MenuItem
+              onClick={handleDownloadJson}
+              disabled={isExporting}
+              dense
+              sx={{ py: 0.5, minHeight: 32 }}
+            >
+              <ListItemIcon sx={{ minWidth: 28 }}>
+                <JsonIcon sx={{ fontSize: 16 }} />
+              </ListItemIcon>
+              <ListItemText
+                primary={
+                  isDuckLake ? 'Export JSON (full dataset)' : 'Download JSON'
+                }
+                primaryTypographyProps={{
+                  variant: 'body2',
+                  sx: { fontSize: 12 },
+                }}
+              />
+            </MenuItem>
+            <MenuItem
+              onClick={handleDownloadCsv}
+              disabled={isExporting}
+              dense
+              sx={{ py: 0.5, minHeight: 32 }}
+            >
+              <ListItemIcon sx={{ minWidth: 28 }}>
+                <CsvIcon sx={{ fontSize: 16 }} />
+              </ListItemIcon>
+              <ListItemText
+                primary={
+                  isDuckLake ? 'Export CSV (full dataset)' : 'Download CSV'
+                }
+                primaryTypographyProps={{
+                  variant: 'body2',
+                  sx: { fontSize: 12 },
+                }}
+              />
+            </MenuItem>
+            {canExportParquet && (
+              <MenuItem
+                onClick={handleExportParquet}
+                disabled={isExporting}
+                dense
+                sx={{ py: 0.5, minHeight: 32 }}
+              >
+                <ListItemIcon sx={{ minWidth: 28 }}>
+                  <ParquetIcon sx={{ fontSize: 16 }} />
+                </ListItemIcon>
+                <ListItemText
+                  primary="Export Parquet (full dataset)"
+                  primaryTypographyProps={{
+                    variant: 'body2',
+                    sx: { fontSize: 12 },
+                  }}
+                />
+              </MenuItem>
+            )}
+          </>
         )}
       </Menu>
     </Box>
@@ -722,6 +848,7 @@ export const QueryResult: React.FC<Props> = ({ results, exportContext }) => {
     >
       {viewMode === 'chart' ? (
         <Box
+          ref={chartContainerRef}
           sx={{
             flexGrow: 1,
             overflow: 'auto',
@@ -753,7 +880,7 @@ export const QueryResult: React.FC<Props> = ({ results, exportContext }) => {
               {sharedToolbarContent}
             </Box>
           </Box>
-          <QueryResultVisualization data={rows} />
+          <QueryResultVisualization data={results.data || rows} />
         </Box>
       ) : (
         <CustomTable<Record<string, any>>

@@ -62,6 +62,7 @@ export const StatusBar: React.FC = () => {
   const dbtVersion = settings?.dbtVersion || '—';
   const pythonVersion = settings?.pythonVersion || '—';
   const rosettaVersion = settings?.rosettaVersion || '—';
+  const flowfileVersion = settings?.flowfileVersion || '—';
   const currentBranch = repoInfo?.currentBranch;
 
   return (
@@ -167,6 +168,17 @@ export const StatusBar: React.FC = () => {
             label="Rosetta"
             value={rosettaVersion}
             tooltip="Rosetta CLI version"
+          />
+        </>
+      )}
+
+      {flowfileVersion && flowfileVersion !== '—' && (
+        <>
+          <Sep />
+          <Item
+            label="Flowfile"
+            value={flowfileVersion}
+            tooltip="Flowfile version"
           />
         </>
       )}
