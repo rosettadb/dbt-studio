@@ -85,7 +85,8 @@ class CloudExplorerService {
               }),
             );
 
-            (result.Contents || []).forEach((object) => {
+            // eslint-disable-next-line no-restricted-syntax
+            for (const object of result.Contents || []) {
               totalSize += object.Size || 0;
 
               if (
@@ -94,7 +95,7 @@ class CloudExplorerService {
               ) {
                 latestModified = object.LastModified;
               }
-            });
+            }
 
             continuationToken = result.IsTruncated
               ? result.NextContinuationToken
