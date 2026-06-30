@@ -71,7 +71,9 @@ export const dataTableSchema = z.object({
   row_shading: z
     .union([z.literal('true'), z.literal('false'), z.boolean()])
     .optional(),
-  wrap: z.union([z.literal('true'), z.literal('false'), z.boolean()]).optional(),
+  wrap: z
+    .union([z.literal('true'), z.literal('false'), z.boolean()])
+    .optional(),
   sort: z.string().optional(),
   fmt: fmtSchema,
   width: widthSchema,
