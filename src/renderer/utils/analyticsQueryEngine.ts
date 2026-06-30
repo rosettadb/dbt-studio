@@ -23,7 +23,7 @@ export type QueryExecutionResult = {
 };
 
 export type DependencyError = {
-  type: 'missing' | 'circular' | 'self-reference';
+  type: 'missing' | 'circular' | 'self-reference' | 'duplicate';
   message: string;
   blockName?: string;
 };
@@ -76,6 +76,8 @@ export function resolveQueryDependencies(markdownContent: string): {
       errors.push({ type: 'circular', message: msg });
     } else if (msg.includes('Self-referencing')) {
       errors.push({ type: 'self-reference', message: msg });
+    } else if (msg.includes('Duplicate SQL block name')) {
+      errors.push({ type: 'duplicate', message: msg });
     } else {
       errors.push({ type: 'missing', message: msg });
     }

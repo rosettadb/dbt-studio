@@ -120,6 +120,15 @@ function resolveDependencyOrder(blocks: SqlBlock[]): SqlBlock[] {
   return order;
 }
 
+/** Convert a JS value to a SQL literal that is safe for inline VALUES clauses. */
+function toSqlLiteral(v: unknown): string {
+  if (v === null || v === undefined) return 'NULL';
+  if (typeof v === 'boolean') return v ? 'TRUE' : 'FALSE';
+  if (typeof v === 'number' || typeof v === 'bigint') return String(v);
+  // Strings: single-quote with escaped single quotes ('' per ANSI SQL)
+  return `'${String(v).replace(/'/g, "''")}'`;
+}
+
 /** Substitute {{query_name}} references with a CTE or subquery using already-run results */
 function substituteQueryRefs(
   sql: string,
@@ -137,13 +146,14 @@ function substituteQueryRefs(
         .slice(0, 500) // limit substituted rows
         .map(
           (row) =>
-            `(${cols.map((c) => JSON.stringify(row[c] ?? null)).join(', ')})`,
+            `(${cols.map((c) => toSqlLiteral(row[c] ?? null)).join(', ')})`,
         )
         .join(', ');
-      substitution = `(SELECT ${cols.map((c) => JSON.stringify(c)).join(', ')} FROM (VALUES ${values}) AS _t(${cols.join(', ')}))`;
+      // Column names as double-quoted identifiers (ANSI SQL) — this is correct
+      substitution = `(SELECT ${cols.map((c) => `"${c}"`).join(', ')} FROM (VALUES ${values}) AS _t(${cols.map((c) => `"${c}"`).join(', ')}))`;
     }
-    // Replace all exact matches of {{name}}
-    const regex = new RegExp(`\\{\\{${name}\\}\\}`, 'g');
+    // Allow optional whitespace around the name to match both {{name}} and {{ name }}
+    const regex = new RegExp(`\\{\\{\\s*${name}\\s*\\}\\}`, 'g');
     resolvedSql = resolvedSql.replace(regex, substitution);
   });
   return resolvedSql;

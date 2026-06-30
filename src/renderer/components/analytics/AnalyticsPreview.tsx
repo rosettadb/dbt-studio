@@ -362,6 +362,7 @@ export const AnalyticsPreview: React.FC<AnalyticsPreviewProps> = ({
               content={block.content}
               queryCache={queryCache}
               queryStatuses={queryStatuses}
+              onRunQuery={onRunQuery ?? undefined}
             />
           );
         }

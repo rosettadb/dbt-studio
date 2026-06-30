@@ -152,7 +152,19 @@ export function buildQueryDependencyGraph(markdownContent: string): {
     (b): b is SqlAnalyticsBlock => b.type === 'sql',
   );
 
-  const blockNames = new Set(sqlBlocks.map((b) => b.name));
+  // Reject duplicates before any graph construction — duplicate names cause
+  // Set/Map/inDegree/queryCache to collapse distinct blocks silently.
+  const seenNames = new Set<string>();
+  sqlBlocks.forEach((b) => {
+    if (seenNames.has(b.name)) {
+      throw new Error(
+        `Duplicate SQL block name "${b.name}" — each SQL block on a page must have a unique name`,
+      );
+    }
+    seenNames.add(b.name);
+  });
+
+  const blockNames = seenNames;
   const edges: Array<{ from: string; to: string }> = [];
   const nodes: string[] = sqlBlocks.map((b) => b.name);
 
@@ -256,7 +268,24 @@ export function validateQueryReferences(
   const sqlBlocks = blocks.filter(
     (b): b is SqlAnalyticsBlock => b.type === 'sql',
   );
-  const blockNames = new Set(sqlBlocks.map((b) => b.name));
+
+  // Detect duplicate block names first — duplicates make the rest of the
+  // graph undefined, so report them before ref-resolution.
+  const seenNames = new Set<string>();
+  sqlBlocks.forEach((block) => {
+    if (seenNames.has(block.name)) {
+      errors.push({
+        blockName: block.name,
+        error: `Duplicate SQL block name "${block.name}" — each SQL block on a page must have a unique name`,
+      });
+    } else {
+      seenNames.add(block.name);
+    }
+  });
+
+  if (errors.length > 0) return errors;
+
+  const blockNames = seenNames;
 
   sqlBlocks.forEach((block) => {
     const refs = extractQueryReferences(block.sql);

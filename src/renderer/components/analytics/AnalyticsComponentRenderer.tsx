@@ -49,6 +49,8 @@ interface RendererProps {
   content?: string;
   queryCache: Record<string, Row[]>;
   queryStatuses: Record<string, 'idle' | 'running' | 'success' | 'error'>;
+  /** Passed down so nested SQL badges inside containers can trigger execution */
+  onRunQuery?: (queryName: string, sql: string) => void;
 }
 
 interface ChartSubProps {
@@ -90,10 +92,31 @@ function detectColumns(
   return { xCol, yCols: numericCols.length > 0 ? numericCols : keys.slice(1) };
 }
 
+/** Safely coerce SQL result values (string numerics, bigint) to number. Returns null if not convertible. */
+function toNumber(v: unknown): number | null {
+  if (typeof v === 'number') return Number.isFinite(v) ? v : null;
+  if (typeof v === 'bigint') {
+    if (
+      v <= BigInt(Number.MAX_SAFE_INTEGER) &&
+      v >= BigInt(Number.MIN_SAFE_INTEGER)
+    ) {
+      return Number(v);
+    }
+    return null;
+  }
+  if (typeof v === 'string' && v.trim() !== '') {
+    const n = Number(v);
+    return Number.isFinite(n) ? n : null;
+  }
+  return null;
+}
+
 function formatAnalyticsValue(raw: unknown, fmt?: string): string {
   if (raw === null || raw === undefined) return '—';
-  if (typeof raw !== 'number') return String(raw);
-
+  // Coerce string/bigint SQL numerics before formatting
+  const coerced = toNumber(raw);
+  if (coerced === null) return String(raw);
+  const num = coerced;
   switch (fmt) {
     case 'usd':
     case '$':
@@ -101,40 +124,40 @@ function formatAnalyticsValue(raw: unknown, fmt?: string): string {
         style: 'currency',
         currency: 'USD',
         maximumFractionDigits: 0,
-      }).format(raw);
+      }).format(num);
     case 'eur':
     case '€':
       return new Intl.NumberFormat('de-DE', {
         style: 'currency',
         currency: 'EUR',
         maximumFractionDigits: 0,
-      }).format(raw);
+      }).format(num);
     case 'gbp':
     case '£':
       return new Intl.NumberFormat('en-GB', {
         style: 'currency',
         currency: 'GBP',
         maximumFractionDigits: 0,
-      }).format(raw);
+      }).format(num);
     case 'pct':
     case '%':
-      return `${(raw * 100).toFixed(1)}%`;
+      return `${(num * 100).toFixed(1)}%`;
     case 'k':
-      return raw >= 1000 ? `${(raw / 1000).toFixed(1)}k` : String(raw);
+      return num >= 1000 ? `${(num / 1000).toFixed(1)}k` : String(num);
     case 'M':
-      return raw >= 1_000_000
-        ? `${(raw / 1_000_000).toFixed(1)}M`
-        : String(raw);
+      return num >= 1_000_000
+        ? `${(num / 1_000_000).toFixed(1)}M`
+        : String(num);
     case 'num':
       return new Intl.NumberFormat('en-US', {
         maximumFractionDigits: 2,
-      }).format(raw);
+      }).format(num);
     case 'id':
-      return String(raw);
+      return String(num);
     default:
       return new Intl.NumberFormat('en-US', {
         maximumFractionDigits: 2,
-      }).format(raw);
+      }).format(num);
   }
 }
 
@@ -263,13 +286,19 @@ const AnalyticsPieChart: React.FC<ChartSubProps> = ({ data, chartProps }) => {
 
 // ─── DonutChart ───────────────────────────────────────────────────────────────
 const AnalyticsDonutChart: React.FC<ChartSubProps> = ({ data, chartProps }) => {
-  const xCol =
-    getStringProp(chartProps, 'x') ||
-    (data.length > 0 ? Object.keys(data[0])[0] : '');
-  const yCol =
-    getStringProp(chartProps, 'y') ||
-    (data.length > 0 ? Object.keys(data[0])[1] : '');
+  const { xCol, yCols } = detectColumns(
+    data,
+    getStringProp(chartProps, 'x'),
+    getStringProp(chartProps, 'y'),
+  );
+  const yCol = yCols[0] ?? '';
   const innerRadius = getNumberProp(chartProps, 'innerRadius', 50);
+  // Run through the same SQL-coercion step as BarChart/LineChart/PieChart so
+  // COUNT/SUM values that arrive as strings or bigint are converted to numbers.
+  const chartData = useMemo(
+    () => transformSqlResultToChartData(data, xCol, yCols),
+    [data, xCol, yCols],
+  );
 
   return (
     <Box sx={{ mb: 3 }}>
@@ -287,7 +316,7 @@ const AnalyticsDonutChart: React.FC<ChartSubProps> = ({ data, chartProps }) => {
             <RechartsTooltip />
             <Legend />
             <Pie
-              data={data}
+              data={chartData}
               dataKey={yCol}
               nameKey={xCol}
               cx="50%"
@@ -457,15 +486,17 @@ const AnalyticsDelta: React.FC<ChartSubProps> = ({ data, chartProps }) => {
   const isMax = getBooleanProp(chartProps, 'isMax');
   const isMin = getBooleanProp(chartProps, 'isMin');
 
+  // Coerce SQL strings/bigints to numbers before any math
+  const currentNum = toNumber(currentVal);
+  const prevNum = prevVal !== undefined ? toNumber(prevVal) : null;
+
   const currentDisplay = formatAnalyticsValue(currentVal, fmt);
   const delta =
-    typeof currentVal === 'number' && typeof prevVal === 'number'
-      ? ((currentVal - prevVal) / Math.abs(prevVal)) * 100
+    currentNum !== null && prevNum !== null && prevNum !== 0
+      ? ((currentNum - prevNum) / Math.abs(prevNum)) * 100
       : null;
   const absDelta =
-    typeof currentVal === 'number' && typeof prevVal === 'number'
-      ? currentVal - prevVal
-      : null;
+    currentNum !== null && prevNum !== null ? currentNum - prevNum : null;
 
   let isGood = true;
   if (delta !== null) {
@@ -545,15 +576,18 @@ const AnalyticsBigValue: React.FC<ChartSubProps> = ({ data, chartProps }) => {
   const redNeg = getBooleanProp(chartProps, 'redNegatives');
   const comparison = getStringProp(chartProps, 'comparison');
 
-  const isNegative = typeof rawValue === 'number' && rawValue < 0;
+  // Coerce to number for sign check and delta math
+  const rawNum = rawValue !== undefined ? toNumber(rawValue) : null;
+  const isNegative = rawNum !== null && rawNum < 0;
   const valueColor = redNeg && isNegative ? 'error.main' : undefined;
 
   // Delta from 2nd row
   const comparisonRow = data.length > 1 ? data[1] : null;
   const prevValue = comparisonRow && valCol ? comparisonRow[valCol] : undefined;
+  const prevNum = prevValue !== undefined ? toNumber(prevValue) : null;
   const delta =
-    typeof rawValue === 'number' && typeof prevValue === 'number'
-      ? ((rawValue - prevValue) / Math.abs(prevValue)) * 100
+    rawNum !== null && prevNum !== null && prevNum !== 0
+      ? ((rawNum - prevNum) / Math.abs(prevNum)) * 100
       : null;
 
   return (
@@ -686,6 +720,7 @@ export function AnalyticsComponentRenderer({
   content,
   queryCache,
   queryStatuses,
+  onRunQuery,
 }: RendererProps): React.ReactElement {
   const parsedProps = useMemo(() => parseComponentProps(rawProps), [rawProps]);
   const def = getComponentDefinition(tag);
@@ -738,6 +773,7 @@ export function AnalyticsComponentRenderer({
             content={block.content}
             queryCache={queryCache}
             queryStatuses={queryStatuses}
+            onRunQuery={onRunQuery}
           />
         );
       }
@@ -749,7 +785,7 @@ export function AnalyticsComponentRenderer({
             block={block}
             status={queryStatuses[block.name] ?? 'idle'}
             rowCount={rowCount}
-            onRun={() => {}} // Can't easily run from here without passing it down, but the preview shows it
+            onRun={onRunQuery ?? (() => {})}
           />
         );
       }
