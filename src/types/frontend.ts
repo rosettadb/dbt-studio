@@ -101,7 +101,7 @@ export interface Bucket {
 export interface StorageObject {
   name: string;
   size: number;
-  updated: Date;
+  updated?: Date;
   contentType?: string;
   isDirectory: boolean;
 }
