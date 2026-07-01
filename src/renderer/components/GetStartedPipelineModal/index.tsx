@@ -108,11 +108,27 @@ export const GetStartedPipelineModal: React.FC<
   ) => {
     try {
       let content = await projectsServices.getFileContent({ path: filePath });
+      let originalContent = content;
+      
       for (const [search, replace] of replacements) {
+        if (!content.includes(search)) {
+          console.warn(
+            `Patch warning: Could not find "${search}" in ${filePath}`,
+          );
+        }
         content = content.split(search).join(replace);
       }
-      await projectsServices.saveFileContent({ path: filePath, content });
-    } catch {
+      
+      if (content !== originalContent) {
+        await projectsServices.saveFileContent({ path: filePath, content });
+        console.log(`✓ Patched ${filePath}`);
+      } else {
+        console.warn(`⚠ No changes to ${filePath} (file may not have placeholders)`);
+      }
+    } catch (err: any) {
+      const errorMsg = `Failed to patch ${filePath}: ${err.message}`;
+      console.error(errorMsg);
+      toast.warning(errorMsg);
       // Non-fatal — file may not exist
     }
   };
@@ -172,24 +188,28 @@ export const GetStartedPipelineModal: React.FC<
       const newProject = config.bqProject.trim();
       const newDataset = config.bqDataset.trim();
 
-      // `path` from gitClone points to the dbt sub-project dir; go up one level
-      // to reach the repo root where rosetta/ lives.
-      const projectRoot = path.split('/').slice(0, -1).join('/') || path;
+      // `path` from gitClone already points to the repo root (where dbt_project.yml is).
+      // The .rosetta/, rosetta/, terraform/ and other dirs are siblings of dbt_project.yml.
+      const projectRoot = path;
 
-      const commonReplacements: [string, string][] = [
-        ['YOUR_PROJECT_ID', newProject],
-        ['YOUR_DATASET_NAME', newDataset],
-        ['adaptivescale-178418', newProject],
-        ['demo_jetron', newDataset],
+      // Patch files sequentially. Replace the specific placeholder format with actual values.
+      const patchOperations: { file: string; replacements: [string, string][] }[] = [
+        { file: `${projectRoot}/rosetta/bigquery/model.yaml`, replacements: [['YOUR_DATASET_NAME', newDataset]] },
+        {
+          file: `${projectRoot}/.rosetta/pipeline.yml`,
+          replacements: [
+            ['-var="project_id=$PROJECT_ID"', `-var="project_id=${newProject}"`],
+            ['-var="dataset_id=$DATASET_NAME"', `-var="dataset_id=${newDataset}"`],
+          ],
+        },
+        { file: `${projectRoot}/profiles.yml`, replacements: [["{{ env_var('PROJECT_ID') }}", newProject], ["{{ env_var('DATASET_NAME') }}", newDataset]] },
+        { file: `${projectRoot}/models/staging/stg_customers.sql`, replacements: [['YOUR_PROJECT_ID', newProject], ['YOUR_DATASET_NAME', newDataset]] },
       ];
 
-      await Promise.all([
-        patchFile(`${projectRoot}/rosetta/main.conf`, commonReplacements),
-        patchFile(
-          `${projectRoot}/rosetta/bigquery/model.yaml`,
-          commonReplacements,
-        ),
-      ]);
+      // Patch files sequentially to ensure all succeed
+      for (const { file, replacements } of patchOperations) {
+        await patchFile(file, replacements);
+      }
 
       // Store the service account JSON in secure storage so it can be retrieved by standard connections flow
       if (hasJson && config.connectionName.trim()) {
@@ -197,6 +217,20 @@ export const GetStartedPipelineModal: React.FC<
           config.serviceAccountJson.trim(),
           config.connectionName.trim(),
         );
+      }
+
+      // Also write the service account JSON to the terraform directory so Terraform can use it
+      if (hasJson) {
+        try {
+          const credentialsPath = `${projectRoot}/terraform/credentials.json`;
+          await projectsServices.saveFileContent({
+            path: credentialsPath,
+            content: config.serviceAccountJson.trim(),
+          });
+        } catch (err: any) {
+          console.warn('Failed to write credentials file for Terraform:', err.message);
+          // Non-fatal — continue
+        }
       }
 
       // Build the ConnectionInput from actual user values
@@ -229,6 +263,43 @@ export const GetStartedPipelineModal: React.FC<
         projectId: project.id,
         connection: connectionInput,
       });
+
+      // Rewrite main.conf AFTER configureConnection — that call regenerates main.conf
+      // with a truncated JDBC URL, so we overwrite it here with the full correct version.
+      // We embed the actual project/dataset values directly so Rosetta CLI can connect
+      // without needing a secrets store to resolve ${...} variables.
+      try {
+        const mainConfPath = `${projectRoot}/rosetta/main.conf`;
+        const connName = config.connectionName.trim();
+        const projectVar = `db-project-${connName}`;
+        const datasetVar = `db-dataset-${connName}`;
+        const jdbcUrl =
+          `jdbc:bigquery://https://www.googleapis.com/bigquery/v2:443` +
+          `;ProjectId=${newProject}` +
+          `;OAuthType=0` +
+          `;OAuthServiceAcctEmail=service-account@${newProject}.iam.gserviceaccount.com` +
+          `;OAuthPvtKeyPath=../terraform/credentials.json`;
+
+        const newMainConf = [
+          'openai_api_key: ${openai-api-key}',
+          '',
+          'connections:',
+          '  - name: bigquery',
+          `    databaseName: \${${projectVar}}`,
+          `    schemaName: \${${datasetVar}}`,
+          '    dbType: bigquery',
+          '    url: >-',
+          `      ${jdbcUrl}`,
+          '    userName:',
+          '    password:',
+          '',
+        ].join('\n');
+
+        await projectsServices.saveFileContent({ path: mainConfPath, content: newMainConf });
+        console.log(`✓ Wrote main.conf with full BigQuery JDBC URL`);
+      } catch (err: any) {
+        console.error('Failed to rewrite main.conf:', err.message);
+      }
 
       selectProject({ projectId: project.id });
       toast.success('Pipeline getting started project created successfully!');
