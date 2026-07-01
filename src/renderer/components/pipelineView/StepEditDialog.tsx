@@ -13,6 +13,8 @@ import {
   Stack,
   Divider,
   Autocomplete,
+  Typography,
+  Box,
 } from '@mui/material';
 import type { PipelineNodeData } from './PipelineNode';
 import { PLUGIN_DEFS, PLUGIN_MAP } from './pluginDefinitions';
@@ -79,9 +81,9 @@ export const StepEditDialog: React.FC<StepEditDialogProps> = ({
   };
 
   return (
-    <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth>
+    <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth PaperProps={{ sx: { maxHeight: '85vh' } }}>
       <DialogTitle sx={{ pb: 1, fontSize: '1rem' }}>Edit Step</DialogTitle>
-      <DialogContent>
+      <DialogContent sx={{ overflowY: 'auto' }}>
         <Stack spacing={2} sx={{ mt: 0.5 }}>
           <TextField
             label="Step Name"
@@ -115,23 +117,56 @@ export const StepEditDialog: React.FC<StepEditDialogProps> = ({
             </Select>
           </FormControl>
 
-          {pluginDef?.fields.map((field) => (
-            <TextField
-              key={field.key}
-              label={field.label}
-              value={fieldValues[field.key] ?? ''}
-              onChange={(e) =>
-                setFieldValues((v) => ({ ...v, [field.key]: e.target.value }))
-              }
-              fullWidth
-              size="small"
-              multiline={field.multiline}
-              minRows={field.multiline ? 2 : 1}
-              required={field.required}
-              placeholder={field.placeholder}
-              InputLabelProps={field.placeholder ? { shrink: true } : undefined}
-            />
-          ))}
+          {pluginDef?.fields.map((field) =>
+            field.multiline ? (
+              <Box key={field.key}>
+                <Typography
+                  variant="caption"
+                  color="text.secondary"
+                  sx={{ mb: 0.5, display: 'block' }}
+                >
+                  {field.label}
+                  {field.required && ' *'}
+                </Typography>
+                <textarea
+                  value={fieldValues[field.key] ?? ''}
+                  onChange={(e) =>
+                    setFieldValues((v) => ({ ...v, [field.key]: e.target.value }))
+                  }
+                  rows={4}
+                  placeholder={field.placeholder}
+                  style={{
+                    width: '100%',
+                    boxSizing: 'border-box',
+                    fontFamily: 'monospace',
+                    fontSize: '0.85rem',
+                    padding: '8px 12px',
+                    border: '1px solid rgba(0,0,0,0.23)',
+                    borderRadius: 4,
+                    resize: 'vertical',
+                    outline: 'none',
+                    background: 'transparent',
+                    color: 'inherit',
+                    lineHeight: 1.5,
+                  }}
+                />
+              </Box>
+            ) : (
+              <TextField
+                key={field.key}
+                label={field.label}
+                value={fieldValues[field.key] ?? ''}
+                onChange={(e) =>
+                  setFieldValues((v) => ({ ...v, [field.key]: e.target.value }))
+                }
+                fullWidth
+                size="small"
+                required={field.required}
+                placeholder={field.placeholder}
+                InputLabelProps={field.placeholder ? { shrink: true } : undefined}
+              />
+            )
+          )}
 
           <Divider sx={{ my: 0.5 }} />
 
@@ -152,10 +187,12 @@ export const StepEditDialog: React.FC<StepEditDialogProps> = ({
               sx={{ flex: 1 }}
             />
             <FormControl size="small" sx={{ minWidth: 160 }}>
-              <InputLabel>Job Type</InputLabel>
+              <InputLabel shrink>Job Type</InputLabel>
               <Select
                 value={jobType}
                 label="Job Type"
+                displayEmpty
+                notched
                 onChange={(e) => setJobType(e.target.value)}
               >
                 <MenuItem value="">generic</MenuItem>
