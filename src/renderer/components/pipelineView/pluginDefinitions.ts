@@ -5,7 +5,6 @@ import BuildIcon from '@mui/icons-material/Build';
 import TerminalIcon from '@mui/icons-material/Terminal';
 import CloudUploadIcon from '@mui/icons-material/CloudUpload';
 import SpeedIcon from '@mui/icons-material/Speed';
-import DownloadIcon from '@mui/icons-material/Download';
 
 export type PluginId =
   | 'dbt@v1'
@@ -148,28 +147,6 @@ export const PLUGIN_DEFS: PluginDef[] = [
         required: true,
         multiline: true,
         placeholder: 'kisql --url http://localhost:9191 --sql "SELECT 1"',
-      },
-    ],
-  },
-  {
-    id: 'git_clone@v1',
-    label: 'git clone',
-    color: '#F05133',
-    category: 'Generic',
-    icon: DownloadIcon,
-    fields: [
-      {
-        key: 'url',
-        label: 'Repository URL',
-        required: true,
-        placeholder: 'https://github.com/org/repo.git',
-      },
-      { key: 'branch', label: 'Branch', required: false, placeholder: 'main' },
-      {
-        key: 'dest',
-        label: 'Destination Dir',
-        required: false,
-        placeholder: '.',
       },
     ],
   },
