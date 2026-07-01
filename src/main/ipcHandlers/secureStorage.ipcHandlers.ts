@@ -27,6 +27,12 @@ const registerSecureStorageHandlers = () => {
   ipcMain.handle(
     'secure-storage:save-environments',
     async (_event, { environments }) => {
+      if (
+        !Array.isArray(environments) ||
+        environments.some((value) => typeof value !== 'string')
+      ) {
+        throw new TypeError('environments must be a string[]');
+      }
       await SecureStorageService.setEnvironments(environments);
     },
   );

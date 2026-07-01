@@ -212,6 +212,7 @@ export const KeystoreSettings: React.FC = () => {
       setDeleteEnvTarget(null);
     } catch {
       toast.error('Failed to delete environment');
+      await load();
     } finally {
       setIsDeletingEnv(false);
     }

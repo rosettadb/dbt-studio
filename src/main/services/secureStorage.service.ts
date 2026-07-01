@@ -46,7 +46,11 @@ class SecureStorageService {
     const stored = await this.getCredential(this.ENVIRONMENTS_KEY);
     if (!stored) return [];
     try {
-      return JSON.parse(stored);
+      const parsed: unknown = JSON.parse(stored);
+      return Array.isArray(parsed) &&
+        parsed.every((value) => typeof value === 'string')
+        ? parsed
+        : [];
     } catch {
       return [];
     }
