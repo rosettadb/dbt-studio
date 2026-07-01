@@ -6,7 +6,6 @@ import {
   Chip,
   Paper,
   useTheme,
-  Tooltip,
   CircularProgress,
   alpha,
 } from '@mui/material';
@@ -133,13 +132,12 @@ export const PipelineNode = memo(
       : (pluginDef?.color ?? theme.palette.primary.main);
     const PluginIcon = pluginDef?.icon ?? Terminal;
 
-    const outerBorderColor = selected
-      ? theme.palette.primary.main
-      : data.status === 'running'
-        ? theme.palette.info.main
-        : data.status === 'failed'
-          ? theme.palette.error.main
-          : 'transparent';
+    let outerBorderColor = 'transparent';
+    if (selected) outerBorderColor = theme.palette.primary.main;
+    else if (data.status === 'running')
+      outerBorderColor = theme.palette.info.main;
+    else if (data.status === 'failed')
+      outerBorderColor = theme.palette.error.main;
 
     const isGitClone = data.plugin === 'git_clone@v1';
     const displayValue = isGitClone ? (data.url ?? '') : (data.command ?? '');
@@ -170,12 +168,13 @@ export const PipelineNode = memo(
             overflow: 'hidden',
             transition: 'box-shadow 0.2s, border-color 0.2s',
             cursor: data.editMode ? 'pointer' : 'default',
-            boxShadow:
-              data.status === 'running'
-                ? `0 0 0 3px ${alpha(theme.palette.info.main, 0.2)}, ${theme.shadows[3]}`
-                : selected
-                  ? `0 0 0 3px ${alpha(theme.palette.primary.main, 0.2)}, ${theme.shadows[6]}`
-                  : theme.shadows[2],
+            boxShadow: (() => {
+              if (data.status === 'running')
+                return `0 0 0 3px ${alpha(theme.palette.info.main, 0.2)}, ${theme.shadows[3]}`;
+              if (selected)
+                return `0 0 0 3px ${alpha(theme.palette.primary.main, 0.2)}, ${theme.shadows[6]}`;
+              return theme.shadows[2];
+            })(),
             '&:hover': {
               boxShadow: `0 0 0 3px ${alpha(pluginColor, 0.15)}, ${theme.shadows[8]}`,
               '& .edit-hint': { opacity: 1 },
@@ -325,7 +324,14 @@ export const PipelineNode = memo(
               )}
 
               {statusVisual && (
-                <Box sx={{ ml: 'auto', display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                <Box
+                  sx={{
+                    ml: 'auto',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 0.5,
+                  }}
+                >
                   <Chip
                     icon={
                       <Box
@@ -381,9 +387,7 @@ export const PipelineNode = memo(
                 alignItems: 'flex-start',
                 gap: 0.75,
                 mb: data.working_dir ? 0.75 : 0,
-                bgcolor: isDark
-                  ? alpha('#000', 0.2)
-                  : alpha('#000', 0.03),
+                bgcolor: isDark ? alpha('#000', 0.2) : alpha('#000', 0.03),
                 borderRadius: 1,
                 px: 1,
                 py: 0.5,

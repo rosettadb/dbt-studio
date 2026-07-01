@@ -81,7 +81,13 @@ export const StepEditDialog: React.FC<StepEditDialogProps> = ({
   };
 
   return (
-    <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth PaperProps={{ sx: { maxHeight: '85vh' } }}>
+    <Dialog
+      open={open}
+      onClose={onClose}
+      maxWidth="sm"
+      fullWidth
+      PaperProps={{ sx: { maxHeight: '85vh' } }}
+    >
       <DialogTitle sx={{ pb: 1, fontSize: '1rem' }}>Edit Step</DialogTitle>
       <DialogContent sx={{ overflowY: 'auto' }}>
         <Stack spacing={2} sx={{ mt: 0.5 }}>
@@ -131,7 +137,10 @@ export const StepEditDialog: React.FC<StepEditDialogProps> = ({
                 <textarea
                   value={fieldValues[field.key] ?? ''}
                   onChange={(e) =>
-                    setFieldValues((v) => ({ ...v, [field.key]: e.target.value }))
+                    setFieldValues((v) => ({
+                      ...v,
+                      [field.key]: e.target.value,
+                    }))
                   }
                   rows={4}
                   placeholder={field.placeholder}
@@ -163,9 +172,11 @@ export const StepEditDialog: React.FC<StepEditDialogProps> = ({
                 size="small"
                 required={field.required}
                 placeholder={field.placeholder}
-                InputLabelProps={field.placeholder ? { shrink: true } : undefined}
+                InputLabelProps={
+                  field.placeholder ? { shrink: true } : undefined
+                }
               />
-            )
+            ),
           )}
 
           <Divider sx={{ my: 0.5 }} />

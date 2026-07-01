@@ -481,15 +481,14 @@ const PipelineGraphContent: React.FC<PipelineGraphProps> = ({
         </Box>
       )}
 
-      <Box sx={{ flex: 1, minHeight: 0, display: 'flex' }}
+      <Box
+        sx={{ flex: 1, minHeight: 0, display: 'flex' }}
         onDragOver={isEditing ? onDragOver : undefined}
       >
-        {isEditing && (
-          <NodePalette
-            onAdd={handlePaletteAdd}
-          />
-        )}
-        <Box ref={reactFlowWrapper} sx={{ flex: 1, minHeight: 0 }}
+        {isEditing && <NodePalette onAdd={handlePaletteAdd} />}
+        <Box
+          ref={reactFlowWrapper}
+          sx={{ flex: 1, minHeight: 0 }}
           onDragOver={isEditing ? onDragOver : undefined}
         >
           <ReactFlow
