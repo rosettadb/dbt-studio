@@ -143,6 +143,25 @@ const Sql = () => {
   // (isLoading / results), which cascades into schema re-loading and sidebar spinner flashes.
   const activeConnectionId = activeTab?.connectionId;
   const activeConnectionName = activeTab?.connectionName;
+  const activeConnectionDisplayName = useMemo(() => {
+    if (!activeConnectionId) return undefined;
+
+    if (activeConnectionId.startsWith('ducklake-')) {
+      const instanceId = activeConnectionId.replace('ducklake-', '');
+      const instance = duckLakeInstances.find((inst) => inst.id === instanceId);
+      return instance?.name ?? activeConnectionName;
+    }
+
+    const connection = connections.find(
+      (conn) => conn.id === activeConnectionId,
+    );
+    return connection?.connection.name ?? activeConnectionName;
+  }, [
+    activeConnectionId,
+    activeConnectionName,
+    connections,
+    duckLakeInstances,
+  ]);
 
   // Reset analytics page when switching connections to prevent showing
   // a page from the previous connection
@@ -1145,6 +1164,7 @@ const Sql = () => {
             <Box sx={{ flex: 1, overflow: 'hidden' }}>
               <AnalyticsPagesTreeView
                 connectionId={activeConnectionId || ''}
+                connectionName={activeConnectionDisplayName}
                 activePageId={activeAnalyticsPageId}
                 onOpenPage={setActiveAnalyticsPageId}
                 onDeletePage={(id) => {

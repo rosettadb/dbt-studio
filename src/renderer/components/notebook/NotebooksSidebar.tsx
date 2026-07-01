@@ -475,6 +475,7 @@ export const NotebooksSidebar: React.FC<NotebooksSidebarProps> = ({
           <Box sx={{ height: '100%', overflow: 'hidden' }}>
             <AnalyticsPagesTreeView
               connectionId={connectionId}
+              connectionName={connectionName}
               activePageId={activeAnalyticsPageId}
               onOpenPage={onOpenAnalyticsPage}
               onDeletePage={onDeleteAnalyticsPage}

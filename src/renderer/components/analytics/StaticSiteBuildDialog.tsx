@@ -74,15 +74,29 @@ export const StaticSiteBuildDialog: React.FC<StaticSiteBuildDialogProps> = ({
 
   // Load default path on open if no existing state
   useEffect(() => {
-    if (open && !outputPath && !existingState) {
+    if (!open || existingState) return undefined;
+
+    let active = true;
+
+    const loadDefaultPath = async () => {
       setLoadingDefaultPath(true);
-      // eslint-disable-next-line promise/catch-or-return
-      StaticSiteService.getDefaultOutputPath(connectionName)
-        .then((p) => setOutputPath(p))
-        .catch(() => {})
-        .finally(() => setLoadingDefaultPath(false));
-    }
-  }, [open, connectionName, outputPath, existingState]);
+      try {
+        const nextPath =
+          await StaticSiteService.getDefaultOutputPath(connectionName);
+        if (active) setOutputPath(nextPath);
+      } catch {
+        // Keep the field empty; the user can still choose a folder manually.
+      } finally {
+        if (active) setLoadingDefaultPath(false);
+      }
+    };
+
+    loadDefaultPath();
+
+    return () => {
+      active = false;
+    };
+  }, [open, connectionId, connectionName, existingState]);
 
   // Subscribe to build progress events
   useEffect(() => {
@@ -100,9 +114,11 @@ export const StaticSiteBuildDialog: React.FC<StaticSiteBuildDialogProps> = ({
       setBuildResult(null);
       if (existingState) {
         setOutputPath(existingState.lastBuildPath);
+      } else {
+        setOutputPath('');
       }
     }
-  }, [open, existingState]);
+  }, [open, connectionId, existingState]);
 
   // Reset on close
   const handleClose = useCallback(() => {

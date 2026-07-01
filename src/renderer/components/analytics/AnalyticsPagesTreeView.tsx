@@ -50,6 +50,7 @@ import type {
 
 interface AnalyticsPagesTreeViewProps {
   connectionId: string;
+  connectionName?: string;
   activePageId: string | null;
   onOpenPage: (pageId: string) => void;
   onDeletePage?: (pageId: string) => void;
@@ -64,6 +65,7 @@ type ContextMenuState = {
 
 export const AnalyticsPagesTreeView: React.FC<AnalyticsPagesTreeViewProps> = ({
   connectionId,
+  connectionName,
   activePageId,
   onOpenPage,
   onDeletePage,
@@ -86,6 +88,21 @@ export const AnalyticsPagesTreeView: React.FC<AnalyticsPagesTreeViewProps> = ({
     useState<StaticSiteState | null>(null);
   const [deleteSiteDialogOpen, setDeleteSiteDialogOpen] = useState(false);
   const deleteSiteMutation = useDeleteStaticSiteBuild();
+  const currentSiteState = useMemo(() => {
+    if (lastSuccessState?.connectionId === connectionId) {
+      return lastSuccessState;
+    }
+    if (siteState?.connectionId === connectionId) {
+      return siteState;
+    }
+    return null;
+  }, [connectionId, lastSuccessState, siteState]);
+
+  useEffect(() => {
+    setLastSuccessState(null);
+    setBuildDialogOpen(false);
+    setDeleteSiteDialogOpen(false);
+  }, [connectionId]);
 
   // Subscribe to streaming progress events (FE-03 — subscription in service)
   useEffect(() => {
@@ -535,9 +552,9 @@ export const AnalyticsPagesTreeView: React.FC<AnalyticsPagesTreeViewProps> = ({
       <StaticSiteBuildDialog
         open={buildDialogOpen}
         connectionId={connectionId}
-        connectionName={connectionId}
+        connectionName={connectionName || connectionId}
         pageCount={pages.length}
-        existingState={lastSuccessState ?? siteState ?? null}
+        existingState={currentSiteState}
         onClose={() => setBuildDialogOpen(false)}
         onBuildSuccess={(result) => {
           setBuildDialogOpen(false);
@@ -553,7 +570,7 @@ export const AnalyticsPagesTreeView: React.FC<AnalyticsPagesTreeViewProps> = ({
       />
 
       {/* Open Folder / Preview actions — shown when a previous build exists */}
-      {(lastSuccessState ?? siteState) && !isBuilding && (
+      {currentSiteState && !isBuilding && (
         <Box
           sx={{
             px: 1.5,
@@ -564,7 +581,7 @@ export const AnalyticsPagesTreeView: React.FC<AnalyticsPagesTreeViewProps> = ({
           }}
         >
           <Tooltip
-            title={`Open site folder: ${(lastSuccessState ?? siteState)!.lastBuildPath}`}
+            title={`Open site folder: ${currentSiteState.lastBuildPath}`}
           >
             <Button
               size="small"
@@ -577,9 +594,7 @@ export const AnalyticsPagesTreeView: React.FC<AnalyticsPagesTreeViewProps> = ({
                 flex: 1,
               }}
               onClick={() =>
-                StaticSiteService.openFolder(
-                  (lastSuccessState ?? siteState)!.lastBuildPath,
-                )
+                StaticSiteService.openFolder(currentSiteState.lastBuildPath)
               }
             >
               Open Site Folder
@@ -589,9 +604,7 @@ export const AnalyticsPagesTreeView: React.FC<AnalyticsPagesTreeViewProps> = ({
             <IconButton
               size="small"
               onClick={() =>
-                StaticSiteService.openPreview(
-                  (siteState ?? lastSuccessState)!.lastBuildPath,
-                )
+                StaticSiteService.openPreview(currentSiteState.lastBuildPath)
               }
             >
               <OpenInBrowserIcon sx={{ fontSize: 14 }} />
@@ -635,7 +648,7 @@ export const AnalyticsPagesTreeView: React.FC<AnalyticsPagesTreeViewProps> = ({
               mb: 2,
             }}
           >
-            {(siteState ?? lastSuccessState)?.lastBuildPath}
+            {currentSiteState?.lastBuildPath}
           </Box>
           <Typography variant="body2" color="text.secondary">
             This cannot be undone.
@@ -648,7 +661,7 @@ export const AnalyticsPagesTreeView: React.FC<AnalyticsPagesTreeViewProps> = ({
             variant="contained"
             disabled={deleteSiteMutation.isLoading}
             onClick={() => {
-              const path = (siteState ?? lastSuccessState)?.lastBuildPath;
+              const path = currentSiteState?.lastBuildPath;
               if (path) {
                 deleteSiteMutation.mutate(
                   { connectionId, outputPath: path },

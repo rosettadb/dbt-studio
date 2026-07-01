@@ -12,6 +12,7 @@ import path from 'path';
 import { AnalyticsPagesService } from './analyticsPages.service';
 import ConnectorsService from './connectors.service';
 import MainDatabaseService from './mainDatabase.service';
+import SettingsService from './settings.service';
 import { extractQueryReferences } from '../../renderer/components/analytics/runtime/queryDependencyResolver';
 import DuckLakeService from './duckLake.service';
 import {
@@ -514,15 +515,17 @@ export class StaticSiteService {
   }
 
   /** Get the default output path for a connection */
-  static getDefaultOutputPath(connectionName: string): string {
-    const home =
-      process.env.HOME || process.env.USERPROFILE || app.getPath('home');
+  static async getDefaultOutputPath(connectionName: string): Promise<string> {
+    const settings = await SettingsService.loadSettings();
+    const projectsDirectory =
+      settings.projectsDirectory ||
+      path.join(app.getPath('home'), 'rosetta-dbt-studio-projects');
     const safe =
       connectionName
         .toLowerCase()
         .replace(/[^a-z0-9]+/g, '-')
         .replace(/(^-|-$)/g, '') || 'analytics-site';
-    return path.join(home, 'dbt-studio-sites', safe);
+    return path.join(projectsDirectory, 'analytics-pages-and-BI', safe);
   }
 
   /** Delete the build folder entirely (full wipe incl. .git) and clear DB state */
