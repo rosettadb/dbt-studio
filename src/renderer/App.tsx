@@ -64,6 +64,7 @@ const App: React.FC = () => {
           <Route path="settings/installation" element={<Settings />} />
           <Route path="settings/about" element={<Settings />} />
           <Route path="settings/flowfile" element={<Settings />} />
+          <Route path="settings/keystore" element={<Settings />} />
           <Route path="sql" element={<Sql />} />
           <Route path="notebooks" element={<Notebooks />} />
           <Route

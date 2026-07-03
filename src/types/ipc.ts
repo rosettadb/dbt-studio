@@ -237,7 +237,10 @@ export type ProcessChannels =
 export type SecureStorageChannels =
   | 'secure-storage:set'
   | 'secure-storage:get'
-  | 'secure-storage:delete';
+  | 'secure-storage:delete'
+  | 'secure-storage:list'
+  | 'secure-storage:list-environments'
+  | 'secure-storage:save-environments';
 
 export type UpdateChannels =
   | 'updates:check'
