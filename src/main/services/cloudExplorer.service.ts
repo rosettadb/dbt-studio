@@ -62,6 +62,58 @@ import {
 
 // Cloud storage service class
 class CloudExplorerService {
+  private static async withS3FolderMetadata(
+    client: S3Client,
+    bucketName: string,
+    folders: StorageObject[],
+  ): Promise<StorageObject[]> {
+    return Promise.all(
+      folders.map(async (folder) => {
+        try {
+          let continuationToken: string | undefined;
+          let latestModified: Date | undefined;
+          let totalSize = 0;
+
+          do {
+            // eslint-disable-next-line no-await-in-loop
+            const result = await client.send(
+              new ListObjectsV2Command({
+                Bucket: bucketName,
+                Prefix: folder.name,
+                ContinuationToken: continuationToken,
+                MaxKeys: 1000,
+              }),
+            );
+
+            // eslint-disable-next-line no-restricted-syntax
+            for (const object of result.Contents || []) {
+              totalSize += object.Size || 0;
+
+              if (
+                object.LastModified &&
+                (!latestModified || object.LastModified > latestModified)
+              ) {
+                latestModified = object.LastModified;
+              }
+            }
+
+            continuationToken = result.IsTruncated
+              ? result.NextContinuationToken
+              : undefined;
+          } while (continuationToken);
+
+          return {
+            ...folder,
+            size: totalSize,
+            updated: latestModified,
+          };
+        } catch {
+          return folder;
+        }
+      }),
+    );
+  }
+
   // AWS S3 Methods
   private static createS3Client(config: S3Config): S3Client {
     // Validate credentials are provided
@@ -122,12 +174,15 @@ class CloudExplorerService {
         }),
       );
 
-      const folders = (result.CommonPrefixes || []).map((folderPrefix) => ({
-        name: folderPrefix.Prefix!,
-        size: 0,
-        updated: new Date(),
-        isDirectory: true,
-      }));
+      const folders = await CloudExplorerService.withS3FolderMetadata(
+        client,
+        bucketName,
+        (result.CommonPrefixes || []).map((folderPrefix) => ({
+          name: folderPrefix.Prefix!,
+          size: 0,
+          isDirectory: true,
+        })),
+      );
 
       const files = (result.Contents || [])
         .filter((obj) => obj.Key !== prefix)
@@ -301,7 +356,6 @@ class CloudExplorerService {
         result.push({
           name: blobPrefix.name,
           size: 0,
-          updated: new Date(),
           isDirectory: true,
         });
       });
@@ -483,7 +537,6 @@ class CloudExplorerService {
       const directoryObjects = prefixes.map((folderPrefix: string) => ({
         name: folderPrefix,
         size: 0,
-        updated: new Date(),
         isDirectory: true,
       }));
 
@@ -614,12 +667,15 @@ class CloudExplorerService {
         }),
       );
 
-      const folders = (result.CommonPrefixes || []).map((folderPrefix) => ({
-        name: folderPrefix.Prefix!,
-        size: 0,
-        updated: new Date(),
-        isDirectory: true,
-      }));
+      const folders = await CloudExplorerService.withS3FolderMetadata(
+        client,
+        bucketName,
+        (result.CommonPrefixes || []).map((folderPrefix) => ({
+          name: folderPrefix.Prefix!,
+          size: 0,
+          isDirectory: true,
+        })),
+      );
 
       const files = (result.Contents || [])
         .filter((obj) => obj.Key !== prefix)
@@ -796,12 +852,15 @@ class CloudExplorerService {
         }),
       );
 
-      const folders = (result.CommonPrefixes || []).map((folderPrefix) => ({
-        name: folderPrefix.Prefix!,
-        size: 0,
-        updated: new Date(),
-        isDirectory: true,
-      }));
+      const folders = await CloudExplorerService.withS3FolderMetadata(
+        client,
+        bucketName,
+        (result.CommonPrefixes || []).map((folderPrefix) => ({
+          name: folderPrefix.Prefix!,
+          size: 0,
+          isDirectory: true,
+        })),
+      );
 
       const files = (result.Contents || [])
         .filter((obj) => obj.Key !== prefix)
@@ -991,7 +1050,6 @@ class CloudExplorerService {
             objects.push({
               name: cp.Prefix,
               size: 0,
-              updated: new Date(),
               isDirectory: true,
             });
           }
@@ -1013,8 +1071,18 @@ class CloudExplorerService {
         });
       }
 
+      const folders = objects.filter((object) => object.isDirectory);
+      const files = objects.filter((object) => !object.isDirectory);
+
       return {
-        objects,
+        objects: [
+          ...(await CloudExplorerService.withS3FolderMetadata(
+            client,
+            bucketName,
+            folders,
+          )),
+          ...files,
+        ],
         nextPageToken: response.NextContinuationToken,
       };
     } catch (error) {
@@ -1178,12 +1246,15 @@ class CloudExplorerService {
         }),
       );
 
-      const folders = (result.CommonPrefixes || []).map((folderPrefix) => ({
-        name: folderPrefix.Prefix!,
-        size: 0,
-        updated: new Date(),
-        isDirectory: true,
-      }));
+      const folders = await CloudExplorerService.withS3FolderMetadata(
+        client,
+        bucketName,
+        (result.CommonPrefixes || []).map((folderPrefix) => ({
+          name: folderPrefix.Prefix!,
+          size: 0,
+          isDirectory: true,
+        })),
+      );
 
       const files = (result.Contents || [])
         .filter((obj) => obj.Key !== prefix)
@@ -1364,12 +1435,15 @@ class CloudExplorerService {
         }),
       );
 
-      const folders = (result.CommonPrefixes || []).map((folderPrefix) => ({
-        name: folderPrefix.Prefix!,
-        size: 0,
-        updated: new Date(),
-        isDirectory: true,
-      }));
+      const folders = await CloudExplorerService.withS3FolderMetadata(
+        client,
+        bucketName,
+        (result.CommonPrefixes || []).map((folderPrefix) => ({
+          name: folderPrefix.Prefix!,
+          size: 0,
+          isDirectory: true,
+        })),
+      );
 
       const files = (result.Contents || [])
         .filter((obj) => obj.Key !== prefix)
