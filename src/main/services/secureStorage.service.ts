@@ -13,6 +13,8 @@ export type AIProviderType =
 class SecureStorageService {
   private serviceName: string;
 
+  private readonly ENVIRONMENTS_KEY = '__keystore_environments__';
+
   constructor(serviceName: string) {
     this.serviceName = serviceName;
   }
@@ -35,7 +37,30 @@ class SecureStorageService {
 
   async findCredentials(): Promise<string[]> {
     const credentials = await keytar.findCredentials(this.serviceName);
-    return credentials.map((cred) => cred.account);
+    return credentials
+      .map((cred) => cred.account)
+      .filter((account) => account !== this.ENVIRONMENTS_KEY);
+  }
+
+  async getEnvironments(): Promise<string[]> {
+    const stored = await this.getCredential(this.ENVIRONMENTS_KEY);
+    if (!stored) return [];
+    try {
+      const parsed: unknown = JSON.parse(stored);
+      return Array.isArray(parsed) &&
+        parsed.every((value) => typeof value === 'string')
+        ? parsed
+        : [];
+    } catch {
+      return [];
+    }
+  }
+
+  async setEnvironments(environments: string[]): Promise<void> {
+    await this.setCredential(
+      this.ENVIRONMENTS_KEY,
+      JSON.stringify(environments),
+    );
   }
 
   /**

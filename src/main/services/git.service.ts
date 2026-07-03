@@ -2,6 +2,7 @@
 import simpleGit, { SimpleGit } from 'simple-git';
 import path from 'path';
 import fs from 'fs';
+import os from 'os';
 import { AuthError } from '../errors';
 import {
   FileStatus,
@@ -43,6 +44,21 @@ function getRepoNameFromUrl(url: string): string {
   }
 
   return clean;
+}
+
+function isSshUrl(url: string): boolean {
+  return url.startsWith('git@') || url.startsWith('ssh://');
+}
+
+async function getOrCreateAskpassScript(): Promise<string> {
+  const isWindows = process.platform === 'win32';
+  const ext = isWindows ? '.bat' : '.sh';
+  const scriptPath = path.join(os.tmpdir(), `rosetta-git-askpass${ext}`);
+  const content = isWindows
+    ? '@echo off\r\necho %GIT_PASSPHRASE%\r\n'
+    : '#!/bin/sh\necho "$GIT_PASSPHRASE"\n';
+  await fs.promises.writeFile(scriptPath, content, { mode: 0o700 });
+  return scriptPath;
 }
 
 function injectCredentialsIntoRemoteUrl(
@@ -712,11 +728,24 @@ export default class GitService {
     try {
       let urlToUse = remoteUrl;
 
-      if (credentials) {
-        urlToUse = injectCredentialsIntoRemoteUrl(remoteUrl, credentials);
+      if (credentials?.sshPassphrase && isSshUrl(remoteUrl)) {
+        const askpassScript = await getOrCreateAskpassScript();
+        await git
+          .env({
+            ...process.env,
+            SSH_ASKPASS: askpassScript,
+            SSH_ASKPASS_REQUIRE: 'force',
+            GIT_PASSPHRASE: credentials.sshPassphrase,
+            GIT_TERMINAL_PROMPT: '0',
+            DISPLAY: process.env.DISPLAY || 'dummy',
+          })
+          .clone(urlToUse, destinationPath);
+      } else {
+        if (credentials && !isSshUrl(remoteUrl)) {
+          urlToUse = injectCredentialsIntoRemoteUrl(remoteUrl, credentials);
+        }
+        await git.clone(urlToUse, destinationPath);
       }
-
-      await git.clone(urlToUse, destinationPath);
 
       // Remove .git directory if requested (for external repos that users want to make their own)
       if (removeGit) {

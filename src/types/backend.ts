@@ -516,6 +516,7 @@ export type EnhanceModelResponseType = {
 export type GitCredentials = {
   username: string;
   password: string;
+  sshPassphrase?: string;
 };
 
 export type GitBranch = {

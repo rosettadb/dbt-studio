@@ -554,7 +554,7 @@ export const ExplorerBucketContent: React.FC<ExplorerBucketContentProps> = ({
                   </Box>
                 </TableCell>
                 <TableCell align="right">
-                  {object.isDirectory
+                  {object.isDirectory && object.size === 0
                     ? '-'
                     : formatFileSize(object.size, {
                         showZeroAsNA: false,
