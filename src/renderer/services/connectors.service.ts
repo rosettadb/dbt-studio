@@ -1,9 +1,9 @@
 import { client } from '../config/client';
 import {
   ConnectionInput,
+  ConnectorTestResponse,
   Project,
   QueryResponseType,
-  BigQueryTestResponse,
   ConnectionModel,
 } from '../../types/backend';
 import { ConfigureConnectionBody, UpdateConnectionBody } from '../../types/ipc';
@@ -40,11 +40,11 @@ export const saveConnection = async (
 
 export const testConnection = async (
   body: ConnectionInput,
-): Promise<boolean | BigQueryTestResponse> => {
-  const { data } = await client.post<
-    ConnectionInput,
-    boolean | BigQueryTestResponse
-  >('connector:test', body);
+): Promise<ConnectorTestResponse> => {
+  const { data } = await client.post<ConnectionInput, ConnectorTestResponse>(
+    'connector:test',
+    body,
+  );
   return data;
 };
 

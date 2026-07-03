@@ -9,6 +9,7 @@ import type {
   MinIOConfig,
   RustfsConfig,
 } from '../../../../../types/frontend';
+import type { ConnectorTestResponse } from '../../../../../types/backend';
 import CloudExplorerService from '../../../cloudExplorer.service';
 import ConnectorsService from '../../../connectors.service';
 import DuckLakeService from '../../../duckLake.service';
@@ -20,11 +21,12 @@ const STUDIO_CLOUD_CONNECTION_TEST_FLAG = 'studio.cloud.connection_test';
 
 type ConnectionHealth = 'healthy' | 'unhealthy' | 'unknown';
 
-function toHealthLabel(
-  testResult: boolean | { success: boolean },
-): ConnectionHealth {
+function toHealthLabel(testResult: ConnectorTestResponse): ConnectionHealth {
   if (typeof testResult === 'boolean') {
     return testResult ? 'healthy' : 'unhealthy';
+  }
+  if (typeof testResult?.ok === 'boolean') {
+    return testResult.ok ? 'healthy' : 'unhealthy';
   }
   if (typeof testResult?.success === 'boolean') {
     return testResult.success ? 'healthy' : 'unhealthy';

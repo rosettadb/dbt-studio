@@ -8,9 +8,9 @@ import {
 } from 'react-query';
 import type {
   ConnectionInput,
+  ConnectorTestResponse,
   Project,
   CustomError,
-  BigQueryTestResponse,
   ConnectionModel,
   QueryResponseType,
 } from '../../types/backend';
@@ -138,23 +138,15 @@ export const useDeleteConnection = (
 
 export const useTestConnection = (
   customOptions?: UseMutationOptions<
-    boolean | BigQueryTestResponse,
+    ConnectorTestResponse,
     CustomError,
     ConnectionInput
   >,
-): UseMutationResult<
-  boolean | BigQueryTestResponse,
-  CustomError,
-  ConnectionInput
-> => {
+): UseMutationResult<ConnectorTestResponse, CustomError, ConnectionInput> => {
   const { onSuccess: onCustomSuccess, onError: onCustomError } =
     customOptions || {};
 
-  return useMutation<
-    boolean | BigQueryTestResponse,
-    CustomError,
-    ConnectionInput
-  >({
+  return useMutation<ConnectorTestResponse, CustomError, ConnectionInput>({
     mutationFn: async (data: ConnectionInput) => {
       return connectorsServices.testConnection(data);
     },

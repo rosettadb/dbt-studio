@@ -34,12 +34,16 @@ export type PostgresConnection = ConnectionBase & {
   sslRejectUnauthorized?: boolean;
 };
 
+export type SnowflakeAuthMethod = 'password' | 'web_browser';
+
 export type SnowflakeConnection = ConnectionBase & {
   type: 'snowflake';
   account: string;
+  accountLocator?: string;
   warehouse: string;
   role?: string;
   client_session_keep_alive?: boolean;
+  authMethod?: SnowflakeAuthMethod;
 };
 
 export type BigQueryConnection = ConnectionBase & {
@@ -139,13 +143,17 @@ export type PostgresDBTConnection = DBTConnectionBase & {
   ssl?: boolean;
 };
 
-export type SnowflakeDBTConnection = DBTConnectionBase & {
+export type SnowflakeDBTConnection = Omit<DBTConnectionBase, 'password'> & {
   type: 'snowflake';
+  password?: string;
   account: string;
+  accountLocator?: string;
   warehouse: string;
   role?: string;
   client_session_keep_alive?: boolean;
   query_tag?: string;
+  authMethod?: SnowflakeAuthMethod;
+  authenticator?: 'externalbrowser';
 };
 
 export type BigQueryDBTConnection = DBTConnectionBase & {
@@ -216,6 +224,7 @@ export type RosettaConnection = {
   userName?: string; // Make userName optional
   password?: string; // Make password optional
   token?: string; // Add token field
+  authenticator?: string;
 };
 
 export type Project = {
@@ -544,6 +553,19 @@ export type FileStatus = {
 export type BigQueryTestResponse = {
   success: boolean;
 };
+
+export type ConnectionTestResult = {
+  ok: boolean;
+  code?: string;
+  message?: string;
+  details?: string;
+  authFlow?: 'none' | 'browser';
+};
+
+export type ConnectorTestResponse =
+  | boolean
+  | BigQueryTestResponse
+  | ConnectionTestResult;
 
 export type UpdateInfo = {
   currentVersion: string;

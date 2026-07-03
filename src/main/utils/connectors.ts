@@ -8,12 +8,14 @@ import fs from 'fs';
 import {
   BigQueryConnection,
   BigQueryTestResponse,
+  ConnectionTestResult,
   DatabricksConnection,
   DuckDBConnection,
   KineticaConnection,
   PostgresConnection,
   QueryResponseType,
   RedshiftConnection,
+  SnowflakeAuthMethod,
   SnowflakeConnection,
 } from '../../types/backend';
 import { SNOWFLAKE_TYPE_MAP } from './constants';
@@ -164,35 +166,155 @@ export const executeRedshiftQuery = async (
   }
 };
 
+const getSnowflakeAuthMethod = (
+  config: SnowflakeConnection,
+): SnowflakeAuthMethod =>
+  config.authMethod === 'web_browser' ? 'web_browser' : 'password';
+
+const sanitizeSnowflakeMessage = (message?: string) =>
+  (message || 'Unknown Snowflake connection error').replace(/\s+/g, ' ').trim();
+
+const normalizeSnowflakeError = (
+  error: any,
+  authMethod: SnowflakeAuthMethod,
+): ConnectionTestResult => {
+  const sanitizedMessage = sanitizeSnowflakeMessage(error?.message);
+  const lowercaseMessage = sanitizedMessage.toLowerCase();
+  const authFlow = authMethod === 'web_browser' ? 'browser' : 'none';
+  const code =
+    typeof error?.code === 'string' || typeof error?.code === 'number'
+      ? String(error.code)
+      : undefined;
+
+  if (
+    authMethod === 'web_browser' &&
+    /(cancel|timed out|timeout|did not complete|browser|mfa token cache entry has expired)/i.test(
+      sanitizedMessage,
+    )
+  ) {
+    return {
+      ok: false,
+      code,
+      message: 'Snowflake browser authentication failed',
+      details:
+        'Browser authentication did not complete. Finish the Snowflake sign-in flow and test again.',
+      authFlow,
+    };
+  }
+
+  if (lowercaseMessage.includes('role')) {
+    return {
+      ok: false,
+      code,
+      message: 'Snowflake role authorization failed',
+      details: 'The selected Snowflake role is not authorized for this user.',
+      authFlow,
+    };
+  }
+
+  if (lowercaseMessage.includes('warehouse')) {
+    return {
+      ok: false,
+      code,
+      message: 'Snowflake warehouse validation failed',
+      details:
+        'The selected Snowflake warehouse is unavailable or not authorized for this user.',
+      authFlow,
+    };
+  }
+
+  if (lowercaseMessage.includes('saml') || lowercaseMessage.includes('sso')) {
+    return {
+      ok: false,
+      code,
+      message: 'Snowflake SAML/SSO authentication failed',
+      details: sanitizedMessage,
+      authFlow,
+    };
+  }
+
+  if (
+    lowercaseMessage.includes('account') ||
+    lowercaseMessage.includes('incorrect username or password') ||
+    lowercaseMessage.includes('could not connect') ||
+    lowercaseMessage.includes('nodename nor servname provided')
+  ) {
+    return {
+      ok: false,
+      code,
+      message: 'Snowflake account validation failed',
+      details: 'The Snowflake account identifier appears invalid.',
+      authFlow,
+    };
+  }
+
+  return {
+    ok: false,
+    code,
+    message:
+      authMethod === 'web_browser'
+        ? 'Snowflake connection failed after browser authentication'
+        : 'Snowflake connection failed',
+    details: sanitizedMessage,
+    authFlow,
+  };
+};
+
 const createSnowflakeConnection = (config: SnowflakeConnection) => {
-  return snowflake.createConnection({
-    account: config.account.split('.')[0],
+  const authMethod = getSnowflakeAuthMethod(config);
+  const baseConfig = {
+    account: config.account,
     username: config.username,
-    password: config.password,
     warehouse: config.warehouse,
     database: config.database,
     schema: config.schema,
     role: config.role,
+  };
+
+  if (authMethod === 'web_browser') {
+    return snowflake.createConnection({
+      ...baseConfig,
+      account: config.accountLocator || config.account,
+      authenticator: 'EXTERNALBROWSER',
+    });
+  }
+
+  return snowflake.createConnection({
+    ...baseConfig,
+    password: config.password,
   });
 };
 
 export async function testSnowflakeConnection(
   config: SnowflakeConnection,
-): Promise<boolean> {
+): Promise<ConnectionTestResult> {
   const connection = createSnowflakeConnection(config);
+  const authMethod = getSnowflakeAuthMethod(config);
 
-  const connectPromise = () =>
-    new Promise<void>((resolve, reject) => {
-      connection.connect((err) => {
-        if (err) {
-          return reject(err);
-        }
-        resolve();
+  const connectPromise = async () => {
+    if (authMethod === 'web_browser') {
+      await new Promise<void>((resolve, reject) => {
+        connection.connectAsync((err) => {
+          if (err) {
+            return reject(err);
+          }
+          resolve();
+        });
       });
-    });
+    } else {
+      return new Promise<void>((resolve, reject) => {
+        connection.connect((err) => {
+          if (err) {
+            return reject(err);
+          }
+          resolve();
+        });
+      });
+    }
+  };
 
-  const executePromise = (sql: string) =>
-    new Promise<any[]>((resolve, reject) => {
+  const executePromise = (sql: string) => {
+    return new Promise<any[]>((resolve, reject) => {
       connection.execute({
         sqlText: sql,
         complete: (err, _stmt, rows) => {
@@ -203,13 +325,17 @@ export async function testSnowflakeConnection(
         },
       });
     });
+  };
 
   try {
     await connectPromise();
-    const rows = await executePromise('SELECT 1 AS connection_test');
-    return rows[0]?.CONNECTION_TEST === 1;
-  } catch (error) {
-    return false;
+    await executePromise('SELECT current_version()');
+    return {
+      ok: true,
+      authFlow: authMethod === 'web_browser' ? 'browser' : 'none',
+    };
+  } catch (error: any) {
+    return normalizeSnowflakeError(error, authMethod);
   } finally {
     connection.destroy(() => {});
   }
@@ -228,33 +354,49 @@ export const executeSnowflakeQuery = async (
     });
   }
 
-  return new Promise((resolve) => {
-    connection.connect((err) => {
-      if (err) {
-        return resolve({ success: false, error: err.message });
-      }
+  const authMethod = getSnowflakeAuthMethod(config);
 
-      connection.execute({
-        sqlText: query,
-        complete: (error, stmt, rows) => {
-          connection.destroy(() => {});
-          if (error) {
-            return resolve({ success: false, error: error.message });
-          }
-
-          const fields =
-            stmt?.getColumns().map((col) => ({
-              name: col.getName(),
-              type: SNOWFLAKE_TYPE_MAP[col.getType().toUpperCase()] || 0,
-            })) || [];
-
-          resolve({
-            success: true,
-            data: rows,
-            fields,
-          });
-        },
+  try {
+    if (authMethod === 'web_browser') {
+      await new Promise<void>((resolve, reject) => {
+        connection.connectAsync((err) => {
+          if (err) return reject(err);
+          resolve();
+        });
       });
+    } else {
+      await new Promise<void>((resolve, reject) => {
+        connection.connect((err) => {
+          if (err) return reject(err);
+          resolve();
+        });
+      });
+    }
+  } catch (err: any) {
+    return { success: false, error: err.message };
+  }
+
+  return new Promise((resolve) => {
+    connection.execute({
+      sqlText: query,
+      complete: (error, stmt, rows) => {
+        connection.destroy(() => {});
+        if (error) {
+          return resolve({ success: false, error: error.message });
+        }
+
+        const fields =
+          stmt?.getColumns()?.map((col) => ({
+            name: col.getName(),
+            type: SNOWFLAKE_TYPE_MAP[col.getType().toUpperCase()] || 0,
+          })) || [];
+
+        resolve({
+          success: true,
+          data: rows,
+          fields,
+        });
+      },
     });
   });
 };

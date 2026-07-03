@@ -7,8 +7,9 @@ import { v4 as uuidV4 } from 'uuid';
 import { NotebooksService } from './notebooks.service';
 import {
   BigQueryConnection,
-  BigQueryTestResponse,
+  ConnectionTestResult,
   ConnectionInput,
+  ConnectorTestResponse,
   ConnectionModel,
   DatabricksConnection,
   DBTConnection,
@@ -21,6 +22,7 @@ import {
   QueryResponseType,
   RedshiftConnection,
   RosettaConnection,
+  SnowflakeAuthMethod,
   SnowflakeConnection,
 } from '../../types/backend';
 import { loadDatabaseFile, updateDatabase } from '../utils/fileHelper';
@@ -50,6 +52,33 @@ import DuckLakeService from './duckLake.service';
 import DuckLakeInstanceStore from './duckLake/instanceStore.service';
 
 export default class ConnectorsService {
+  private static getSnowflakeAuthMethod(
+    connection: SnowflakeConnection,
+  ): SnowflakeAuthMethod {
+    return connection.authMethod === 'web_browser' ? 'web_browser' : 'password';
+  }
+
+  private static logSnowflakeTestFailure(
+    connection: SnowflakeConnection,
+    result: ConnectionTestResult,
+  ): void {
+    // eslint-disable-next-line no-console
+    console.error('[ConnectorsService] Snowflake test connection failed', {
+      scope: 'connectors',
+      provider: 'snowflake',
+      operation: 'testConnection',
+      authMethod: this.getSnowflakeAuthMethod(connection),
+      account: connection.account,
+      username: connection.username,
+      warehouse: connection.warehouse,
+      database: connection.database,
+      schema: connection.schema,
+      code: result.code,
+      message: result.message,
+      details: result.details,
+    });
+  }
+
   static async loadConnections(
     includeDataLake: boolean = false,
   ): Promise<ConnectionModel[]> {
@@ -135,7 +164,9 @@ export default class ConnectorsService {
           (conn1 as SnowflakeConnection).warehouse ===
             (conn2 as SnowflakeConnection).warehouse &&
           (conn1 as SnowflakeConnection).schema ===
-            (conn2 as SnowflakeConnection).schema
+            (conn2 as SnowflakeConnection).schema &&
+          this.getSnowflakeAuthMethod(conn1 as SnowflakeConnection) ===
+            this.getSnowflakeAuthMethod(conn2 as SnowflakeConnection)
         );
 
       case 'bigquery':
@@ -647,17 +678,17 @@ export default class ConnectorsService {
    */
   static async testConnection(
     connection: ConnectionInput,
-  ): Promise<boolean | BigQueryTestResponse> {
+  ): Promise<ConnectorTestResponse> {
     await this.validateConnection(connection);
     switch (connection.type) {
       case 'postgres':
         return testPostgresConnection(connection);
       case 'snowflake':
-        try {
-          return await testSnowflakeConnection(connection);
-        } catch {
-          return false;
+        const result = await testSnowflakeConnection(connection);
+        if (!result.ok) {
+          this.logSnowflakeTestFailure(connection, result);
         }
+        return result;
       case 'bigquery':
         return testBigQueryConnection(connection);
       case 'databricks':
@@ -901,7 +932,14 @@ export default class ConnectorsService {
     ) {
       // Only add userName/password for non-BigQuery, non-Databricks, non-DuckDB, non-ducklake
       connectionConfig.userName = ev('user');
-      connectionConfig.password = ev('password');
+      if (
+        connection.type === 'snowflake' &&
+        this.getSnowflakeAuthMethod(connection) === 'web_browser'
+      ) {
+        connectionConfig.authenticator = 'externalbrowser';
+      } else {
+        connectionConfig.password = ev('password');
+      }
     }
 
     const yamlData: {
@@ -928,6 +966,13 @@ export default class ConnectorsService {
       case 'snowflake':
         if (!conn.account) throw new Error('Snowflake account is required');
         if (!('warehouse' in conn)) throw new Error('Warehouse is required');
+        if (!conn.username) throw new Error('Username is required');
+        if (
+          this.getSnowflakeAuthMethod(conn) === 'password' &&
+          !conn.password
+        ) {
+          throw new Error('Password is required for Snowflake password auth');
+        }
         break;
       case 'bigquery':
         if (!('project' in conn)) throw new Error('Project ID is required');
@@ -966,7 +1011,7 @@ export default class ConnectorsService {
         return postgresUrl;
       }
       case 'snowflake':
-        return `jdbc:snowflake://${ev('account')}.snowflakecomputing.com/?warehouse=${ev('warehouse')}&db=${ev('dbname')}&schema=${ev('schema')}`;
+        return `jdbc:snowflake://${ev('account')}.snowflakecomputing.com/?warehouse=${ev('warehouse')}&db=${ev('dbname')}&schema=${ev('schema')}${this.getSnowflakeAuthMethod(conn) === 'web_browser' ? '&authenticator=externalbrowser' : ''}`;
       case 'redshift': {
         let redshiftUrl = `jdbc:redshift://${ev('host')}:${ev('port')}/${ev('dbname')}?currentSchema=${ev('schema')}`;
 
@@ -1059,9 +1104,15 @@ export default class ConnectorsService {
         connection.type !== 'duckdb' &&
         connection.type !== 'bigquery' &&
         'username' in connection &&
-        'password' in connection && {
+        (connection.type !== 'snowflake' ||
+          this.getSnowflakeAuthMethod(connection) !== 'web_browser') && {
           userName: `db-user-${connection.name}`,
           password: `db-password-${connection.name}`,
+        }),
+      ...(connection.type === 'snowflake' &&
+        this.getSnowflakeAuthMethod(connection) === 'web_browser' && {
+          userName: `db-user-${connection.name}`,
+          authenticator: 'externalbrowser',
         }),
     };
   }
@@ -1069,6 +1120,19 @@ export default class ConnectorsService {
   private static mapToDbtConnection(conn: ConnectionInput): DBTConnection {
     switch (conn.type) {
       case 'snowflake':
+        if (this.getSnowflakeAuthMethod(conn) === 'web_browser') {
+          return {
+            type: 'snowflake',
+            username: `db-user-${conn.name}`,
+            database: conn.database,
+            schema: conn.schema,
+            account: conn.accountLocator || conn.account,
+            warehouse: conn.warehouse,
+            ...(conn.role && { role: conn.role }),
+            authMethod: 'web_browser',
+            authenticator: 'externalbrowser',
+          };
+        }
         return {
           type: 'snowflake',
           username: `db-user-${conn.name}`,
@@ -1231,6 +1295,19 @@ export default class ConnectorsService {
           ...(conn.ssl && { sslmode: 'require' }),
         };
       case 'snowflake':
+        if (this.getSnowflakeAuthMethod(conn) === 'web_browser') {
+          return {
+            type: 'snowflake',
+            account: envVar('account'),
+            user: envVar('user'),
+            authenticator: 'externalbrowser',
+            ...(conn.role && { role: envVar('role') }),
+            warehouse: envVar('warehouse'),
+            database: envVar('dbname'),
+            schema: envVar('schema'),
+            threads: 4,
+          };
+        }
         return {
           type: 'snowflake',
           account: envVar('account'),
@@ -1443,11 +1520,15 @@ export default class ConnectorsService {
             type: 'snowflake',
             account: devOutput.account,
             username: devOutput.user,
-            password: devOutput.password,
+            password: devOutput.password || '',
             database: devOutput.database,
             schema: devOutput.schema,
             warehouse: devOutput.warehouse,
             role: devOutput.role,
+            authMethod:
+              devOutput.authenticator === 'externalbrowser'
+                ? 'web_browser'
+                : 'password',
           };
 
         case 'bigquery':
@@ -1542,11 +1623,16 @@ export default class ConnectorsService {
             account: dbtConnection.account,
             warehouse: dbtConnection.warehouse,
             username: dbtConnection.username,
-            password: dbtConnection.password,
+            password: dbtConnection.password || '',
             database: dbtConnection.database,
             schema: dbtConnection.schema,
             role: dbtConnection.role,
             client_session_keep_alive: dbtConnection.client_session_keep_alive,
+            authMethod:
+              dbtConnection.authenticator === 'externalbrowser' ||
+              dbtConnection.authMethod === 'web_browser'
+                ? 'web_browser'
+                : 'password',
           };
 
         case 'bigquery':
@@ -1909,6 +1995,7 @@ export default class ConnectorsService {
           database: sfConn.database,
           schema: sfConn.schema,
           role: sfConn.role,
+          authMethod: this.getSnowflakeAuthMethod(sfConn),
         });
         try {
           await extractor.connect();
