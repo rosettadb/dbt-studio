@@ -10,8 +10,8 @@ import {
 import { toast } from 'react-toastify';
 import {
   BigQueryConnection,
-  BigQueryTestResponse,
   ConnectionModel,
+  ConnectorTestResponse,
 } from '../../../types/backend';
 import connectionIcons from '../../../../assets/connectionIcons';
 import {
@@ -78,9 +78,14 @@ export const BigQuery: React.FC<Props> = ({
   const [keyfileError, setKeyfileError] = React.useState<string>('');
 
   const { mutate: testConnection, isLoading: isTesting } = useTestConnection({
-    onSuccess: (response: BigQueryTestResponse | boolean) => {
+    onSuccess: (response: ConnectorTestResponse) => {
       // Handle BigQuery specific response
-      if (typeof response === 'object' && response.success) {
+      if (
+        typeof response === 'object' &&
+        response !== null &&
+        'success' in response &&
+        response.success
+      ) {
         toast.success('Connection test successful!');
         setConnectionStatus('success');
       } else if (typeof response === 'boolean' && response) {

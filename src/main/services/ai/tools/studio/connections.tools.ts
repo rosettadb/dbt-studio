@@ -9,7 +9,11 @@ import type {
   MinIOConfig,
   RustfsConfig,
 } from '../../../../../types/frontend';
-import type { ConnectorTestResponse } from '../../../../../types/backend';
+import type {
+  ConnectorTestResponse,
+  ConnectionTestResult,
+  BigQueryTestResponse,
+} from '../../../../../types/backend';
 import CloudExplorerService from '../../../cloudExplorer.service';
 import ConnectorsService from '../../../connectors.service';
 import DuckLakeService from '../../../duckLake.service';
@@ -25,11 +29,15 @@ function toHealthLabel(testResult: ConnectorTestResponse): ConnectionHealth {
   if (typeof testResult === 'boolean') {
     return testResult ? 'healthy' : 'unhealthy';
   }
-  if (typeof testResult?.ok === 'boolean') {
-    return testResult.ok ? 'healthy' : 'unhealthy';
-  }
-  if (typeof testResult?.success === 'boolean') {
-    return testResult.success ? 'healthy' : 'unhealthy';
+  if (typeof testResult === 'object' && testResult !== null) {
+    if ('ok' in testResult) {
+      return (testResult as ConnectionTestResult).ok ? 'healthy' : 'unhealthy';
+    }
+    if ('success' in testResult) {
+      return (testResult as BigQueryTestResponse).success
+        ? 'healthy'
+        : 'unhealthy';
+    }
   }
   return 'unknown';
 }
