@@ -38,6 +38,13 @@ const RUNTIME_BUNDLE_PATH = path.join(
   'analytics-runtime.umd.js',
 );
 
+// Production / packaged app — extraResources copies to process.resourcesPath
+const RUNTIME_BUNDLE_PROD_PATH = path.join(
+  process.resourcesPath,
+  'resources',
+  'analytics-runtime.umd.js',
+);
+
 // Fallback for development — look in the project root
 const RUNTIME_BUNDLE_DEV_PATH = path.resolve(
   __dirname,
@@ -219,6 +226,7 @@ async function executeQueryInMain(params: {
 // ─── Runtime bundle resolution ────────────────────────────────────────────────
 
 function getRuntimeBundlePath(): string | null {
+  if (fs.existsSync(RUNTIME_BUNDLE_PROD_PATH)) return RUNTIME_BUNDLE_PROD_PATH;
   if (fs.existsSync(RUNTIME_BUNDLE_PATH)) return RUNTIME_BUNDLE_PATH;
   if (fs.existsSync(RUNTIME_BUNDLE_DEV_PATH)) return RUNTIME_BUNDLE_DEV_PATH;
   return null;
