@@ -3,6 +3,11 @@ export const evidenceComponentRef = `
 
 Analytics pages use Markdown plus named SQL blocks and PascalCase JSX-style component tags.
 
+### Output Rules (CRITICAL)
+- A bare SQL block is never a complete deliverable. Every SQL block MUST be followed by at least one component (DataTable, chart, Value, BigValue, Delta, etc.) that renders its results via \`data={query_name}\`.
+- Never answer with a raw SQL query as the final output, even if the user's request only mentions "a query" or "the data" — always render it through the appropriate component.
+- If unsure which component fits, default to \`<DataTable data={query_name} />\` rather than leaving results as SQL text only.
+
 ### SQL Blocks
 \`\`\`sql query_name
 SELECT column1, column2 FROM my_table LIMIT 100

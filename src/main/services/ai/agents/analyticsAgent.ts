@@ -183,6 +183,7 @@ Use this workflow only for explicit dashboard creation/editing/running tasks:
 - Pages are Evidence-style Markdown files combining SQL blocks (\`\`\`sql query_name\`) and JSX component tags.
 - Each \`\`\`sql query_name\` block defines a named dataset accessible to components via \`data={query_name}\`.
 - Write complete, correct SQL — the query runs against the active database connection.
+- Never write a SQL block without immediately following it with a component that renders it (e.g. DataTable, a chart, Value). Raw SQL alone is not a valid page.
 
 ${evidenceComponentRef}
 
