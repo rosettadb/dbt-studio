@@ -1,13 +1,18 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Box, Button, CircularProgress, useTheme } from '@mui/material';
 import { Check, Sync, ArrowUpward } from '@mui/icons-material';
+import { toast } from 'react-toastify';
 import {
   useGitCommit,
   useGetAheadBehindCount,
   useGitPush,
   useGetRemotes,
 } from '../../controllers';
-import { AddGitRemoteModal, GitUiError } from '../modals';
+import { AddGitRemoteModal, GitUiError, SshPassphraseModal } from '../modals';
+
+function isSshUrl(url: string): boolean {
+  return url.startsWith('git@') || url.startsWith('ssh://');
+}
 
 interface TipTapCommitInputProps {
   projectPath?: string;
@@ -67,10 +72,37 @@ export const TipTapCommitInput: React.FC<TipTapCommitInputProps> = ({
     },
   });
 
+  const {
+    data: remotes = [],
+    refetch: refetchRemotes,
+    isLoading: isRemotesLoading,
+  } = useGetRemotes(projectPath || '', {
+    enabled: !!projectPath,
+  });
+
+  const [sshPassphraseDialogOpen, setSshPassphraseDialogOpen] = useState(false);
+  const [sshPassphraseAttempted, setSshPassphraseAttempted] = useState(false);
+
+  // Close any pending SSH prompt from a previous project — this component
+  // stays mounted across project switches, only projectPath changes.
+  useEffect(() => {
+    setSshPassphraseDialogOpen(false);
+    setSshPassphraseAttempted(false);
+  }, [projectPath]);
+
   const { mutate: pushFiles, isLoading: isPushing } = useGitPush({
     onSuccess: (data) => {
       setPendingAction(null);
       if (data?.authRequired) {
+        const originPushUrl = remotes.find((r) => r.name === 'origin')?.refs
+          .push;
+        if (originPushUrl && isSshUrl(originPushUrl)) {
+          if (sshPassphraseAttempted) {
+            toast.error('Incorrect SSH key passphrase. Please try again.');
+          }
+          setSshPassphraseDialogOpen(true);
+          return;
+        }
         onGitError?.({
           title: 'Authentication required',
           message:
@@ -90,6 +122,8 @@ export const TipTapCommitInput: React.FC<TipTapCommitInputProps> = ({
         });
         return;
       }
+      setSshPassphraseDialogOpen(false);
+      setSshPassphraseAttempted(false);
       refetchAheadBehind();
       onCommitSuccess?.();
     },
@@ -102,14 +136,6 @@ export const TipTapCommitInput: React.FC<TipTapCommitInputProps> = ({
         repoPath: projectPath,
       });
     },
-  });
-
-  const {
-    data: remotes = [],
-    refetch: refetchRemotes,
-    isLoading: isRemotesLoading,
-  } = useGetRemotes(projectPath || '', {
-    enabled: !!projectPath,
   });
 
   const [isAddRemoteModalOpen, setIsAddRemoteModalOpen] = useState(false);
@@ -160,6 +186,22 @@ export const TipTapCommitInput: React.FC<TipTapCommitInputProps> = ({
 
     setPendingAction('push');
     pushFiles({ path: projectPath });
+  };
+
+  const handleSshPassphraseSubmit = (sshPassphrase: string) => {
+    if (!projectPath) return;
+    setSshPassphraseAttempted(true);
+    setPendingAction('push');
+    pushFiles({
+      path: projectPath,
+      credentials: { username: '', password: '', sshPassphrase },
+    });
+  };
+
+  const handleSshPassphraseCancel = () => {
+    setSshPassphraseDialogOpen(false);
+    setSshPassphraseAttempted(false);
+    setPendingAction(null);
   };
 
   const handleCloseAddRemoteModal = () => {
@@ -428,6 +470,13 @@ export const TipTapCommitInput: React.FC<TipTapCommitInputProps> = ({
           path={projectPath}
         />
       ) : null}
+
+      <SshPassphraseModal
+        isOpen={sshPassphraseDialogOpen}
+        isLoading={isPushing}
+        onClose={handleSshPassphraseCancel}
+        onSubmit={handleSshPassphraseSubmit}
+      />
     </>
   );
 };

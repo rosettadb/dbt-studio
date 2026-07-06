@@ -652,10 +652,7 @@ export default class GitService {
     );
   }
 
-  async push(
-    repoPath: string,
-    credentials?: { username: string; password: string },
-  ) {
+  async push(repoPath: string, credentials?: GitCredentials) {
     const git = this.getGitInstance(repoPath);
 
     try {
@@ -667,11 +664,32 @@ export default class GitService {
 
       const branchSummary = await git.branch();
       const currentBranch = branchSummary.current;
-      const remoteWithAuth = credentials
-        ? injectCredentialsIntoRemoteUrl(origin.refs.push, credentials)
-        : origin.refs.push;
 
-      await git.remote(['set-url', 'origin', remoteWithAuth]);
+      const isSsh = isSshUrl(origin.refs.push);
+
+      const remoteWithAuth =
+        credentials && !isSsh
+          ? injectCredentialsIntoRemoteUrl(origin.refs.push, credentials)
+          : origin.refs.push;
+
+      if (remoteWithAuth !== origin.refs.push) {
+        await git.remote(['set-url', 'origin', remoteWithAuth]);
+      }
+
+      // For SSH remotes, terminal prompting must always be disabled, even when
+      // no passphrase has been supplied yet. Otherwise ssh opens /dev/tty
+      // directly and blocks waiting for input on the process's controlling
+      // terminal instead of failing back into an authRequired response.
+      const gitForPush = isSsh
+        ? git.env({
+            ...process.env,
+            SSH_ASKPASS: await getOrCreateAskpassScript(),
+            SSH_ASKPASS_REQUIRE: 'force',
+            GIT_PASSPHRASE: credentials?.sshPassphrase ?? '',
+            GIT_TERMINAL_PROMPT: '0',
+            DISPLAY: process.env.DISPLAY || 'dummy',
+          })
+        : git;
 
       // Check if tracking is set before pushing
       const isTracking = await this.isTrackingSet(repoPath);
@@ -679,9 +697,9 @@ export default class GitService {
       try {
         // Always use -u flag if tracking is not set to ensure upstream is configured
         if (!isTracking) {
-          await git.push(['-u', 'origin', currentBranch]);
+          await gitForPush.push(['-u', 'origin', currentBranch]);
         } else {
-          await git.push('origin', currentBranch);
+          await gitForPush.push('origin', currentBranch);
         }
       } catch (err: any) {
         const msg = err.message?.toLowerCase() ?? '';
@@ -693,13 +711,15 @@ export default class GitService {
           msg.includes('has no upstream');
 
         if (shouldTryUpstreamPush) {
-          await git.push(['-u', 'origin', currentBranch]);
+          await gitForPush.push(['-u', 'origin', currentBranch]);
         } else {
           throw err;
         }
       }
 
-      await git.remote(['set-url', 'origin', origin.refs.push]);
+      if (remoteWithAuth !== origin.refs.push) {
+        await git.remote(['set-url', 'origin', origin.refs.push]);
+      }
 
       return { success: true };
     } catch (err) {
