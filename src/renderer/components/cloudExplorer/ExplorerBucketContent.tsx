@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { formatDistanceToNow } from 'date-fns';
 import { toast } from 'react-toastify';
@@ -20,6 +20,7 @@ import {
   IconButton,
   InputBase,
   CircularProgress,
+  LinearProgress,
   Alert,
   Tooltip,
   Select,
@@ -52,6 +53,7 @@ import {
   useConnection,
   useListObjects,
   useGetDownloadUrl,
+  useDownloadObject,
   useAddRecentItem,
   usePreviewData,
 } from '../../controllers/cloudExplorer.controller';
@@ -64,7 +66,7 @@ import useSecureStorage from '../../hooks/useSecureStorage';
 import { formatFileSize, isPreviewSupported } from '../../utils/fileUtils';
 import { DBTProjects } from '../sidebar/icons';
 import { useGetSelectedProject } from '../../controllers';
-import { projectsServices } from '../../services';
+import { projectsServices, cloudExplorerService } from '../../services';
 import bucketIcon from '../../../../assets/icons/bucket-blue.png';
 import UploadDropzone from './UploadDropzone';
 import DeleteConfirmDialog from './DeleteConfirmDialog';
@@ -92,6 +94,10 @@ export const ExplorerBucketContent: React.FC<ExplorerBucketContentProps> = ({
   const [searchTerm, setSearchTerm] = useState('');
   const [downloadUrls, setDownloadUrls] = useState<Record<string, string>>({});
   const [loadingUrls, setLoadingUrls] = useState<Record<string, boolean>>({});
+  const [downloadProgress, setDownloadProgress] = useState<
+    Record<string, number>
+  >({});
+  const activeDownloadObjectRef = useRef<string | null>(null);
   const [previewFile, setPreviewFile] = useState<{
     fileName: string;
     objectName: string;
@@ -188,6 +194,18 @@ export const ExplorerBucketContent: React.FC<ExplorerBucketContentProps> = ({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [connection]);
 
+  useEffect(() => {
+    const unsubscribe = cloudExplorerService.onDownloadProgress((event) => {
+      const objectName = activeDownloadObjectRef.current;
+      if (!objectName) return;
+      setDownloadProgress((prev) => ({
+        ...prev,
+        [objectName]: event.percentage,
+      }));
+    });
+    return unsubscribe;
+  }, []);
+
   const objectsQuery = useListObjects(
     connection?.provider as CloudProvider,
     secureConfig as any,
@@ -196,6 +214,7 @@ export const ExplorerBucketContent: React.FC<ExplorerBucketContentProps> = ({
     !!connection && !!secureConfig,
   );
   const getDownloadUrl = useGetDownloadUrl();
+  const downloadObject = useDownloadObject();
   const addRecentItem = useAddRecentItem();
   const previewData = usePreviewData();
 
@@ -310,10 +329,44 @@ export const ExplorerBucketContent: React.FC<ExplorerBucketContentProps> = ({
     }
   };
 
+  const saveObjectToDisk = async (objectName: string, url: string) => {
+    const fileName = objectName.split('/').pop() || objectName;
+    const saveDialogResult = await window.electron.ipcRenderer.invoke(
+      'dialog:showSaveDialog',
+      {
+        title: 'Save File',
+        defaultPath: fileName,
+      },
+    );
+    if (saveDialogResult.canceled || !saveDialogResult.filePath) return;
+
+    activeDownloadObjectRef.current = objectName;
+    setDownloadProgress((prev) => ({ ...prev, [objectName]: 0 }));
+    try {
+      await downloadObject.mutateAsync({
+        objectUrl: url,
+        destinationPath: saveDialogResult.filePath,
+      });
+      toast.success(`File downloaded to ${saveDialogResult.filePath}`);
+    } finally {
+      activeDownloadObjectRef.current = null;
+      setDownloadProgress((prev) => {
+        const next = { ...prev };
+        delete next[objectName];
+        return next;
+      });
+    }
+  };
+
   const handleDownload = async (objectName: string) => {
     if (downloadUrls[objectName]) {
-      window.open(downloadUrls[objectName], '_blank');
-      toast.success('File download started successfully');
+      try {
+        await saveObjectToDisk(objectName, downloadUrls[objectName]);
+      } catch (error) {
+        // eslint-disable-next-line no-console
+        console.error('Error downloading file:', error);
+        toast.error('Failed to download file. Please try again.');
+      }
       return;
     }
 
@@ -330,8 +383,7 @@ export const ExplorerBucketContent: React.FC<ExplorerBucketContentProps> = ({
       });
       if (url) {
         setDownloadUrls((prev) => ({ ...prev, [objectName]: url }));
-        window.open(url, '_blank');
-        toast.success('File download started successfully');
+        await saveObjectToDisk(objectName, url);
 
         // Add to recent items
         const fileName = objectName.split('/').pop() || objectName;
@@ -590,22 +642,36 @@ export const ExplorerBucketContent: React.FC<ExplorerBucketContentProps> = ({
                       </Tooltip>
                     )}
                     {!object.isDirectory && (
-                      <Tooltip title="Download">
-                        <IconButton
-                          size="small"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleDownload(object.name);
-                          }}
-                          disabled={loadingUrls[object.name]}
-                        >
-                          {loadingUrls[object.name] ? (
-                            <CircularProgress size={16} />
-                          ) : (
-                            <Download fontSize="small" />
-                          )}
-                        </IconButton>
-                      </Tooltip>
+                      <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                        <Tooltip title="Download">
+                          <span>
+                            <IconButton
+                              size="small"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleDownload(object.name);
+                              }}
+                              disabled={loadingUrls[object.name]}
+                            >
+                              {loadingUrls[object.name] &&
+                              downloadProgress[object.name] === undefined ? (
+                                <CircularProgress size={16} />
+                              ) : (
+                                <Download fontSize="small" />
+                              )}
+                            </IconButton>
+                          </span>
+                        </Tooltip>
+                        {downloadProgress[object.name] !== undefined && (
+                          <Box sx={{ width: 60, ml: 0.5 }}>
+                            <LinearProgress
+                              variant="determinate"
+                              value={downloadProgress[object.name]}
+                              aria-label={`Download progress: ${downloadProgress[object.name]}%`}
+                            />
+                          </Box>
+                        )}
+                      </Box>
                     )}
                     {!object.isDirectory &&
                       project &&

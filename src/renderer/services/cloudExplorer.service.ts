@@ -20,6 +20,9 @@ import type {
   CreateFolderResponse,
   DeleteBucketRequest,
   DeleteBucketResponse,
+  DownloadObjectRequest,
+  DownloadObjectResponse,
+  DownloadProgressEvent,
 } from '../../types/ipc';
 import { client } from '../config/client';
 
@@ -187,6 +190,25 @@ class CloudExplorerService {
       DeleteBucketResponse
     >('cloudExplorer:deleteBucket', params);
     return data;
+  }
+
+  static async downloadObject(
+    params: DownloadObjectRequest,
+  ): Promise<DownloadObjectResponse> {
+    const { data } = await client.post<
+      DownloadObjectRequest,
+      DownloadObjectResponse
+    >('cloudExplorer:downloadObject', params);
+    return data;
+  }
+
+  static onDownloadProgress(
+    handler: (event: DownloadProgressEvent) => void,
+  ): () => void {
+    return window.electron.ipcRenderer.on(
+      'cloudExplorer:downloadProgress',
+      handler as (...args: unknown[]) => void,
+    );
   }
 }
 

@@ -261,7 +261,9 @@ export type CloudExplorerChannels =
   | 'cloudExplorer:deleteObject'
   | 'cloudExplorer:uploadProgress'
   | 'cloudExplorer:createFolder'
-  | 'cloudExplorer:deleteBucket';
+  | 'cloudExplorer:deleteBucket'
+  | 'cloudExplorer:downloadObject'
+  | 'cloudExplorer:downloadProgress';
 
 export type DuckLakeChannels =
   // Extension Management
@@ -522,6 +524,22 @@ export interface DeleteObjectRequest {
 export interface DeleteObjectResponse {
   success: boolean;
   deletedCount: number;
+}
+
+export interface DownloadObjectRequest {
+  objectUrl: string;
+  destinationPath: string;
+}
+
+export interface DownloadObjectResponse {
+  success: boolean;
+  filePath: string;
+}
+
+export interface DownloadProgressEvent {
+  loaded: number;
+  total: number;
+  percentage: number;
 }
 
 export interface UploadProgressEvent {

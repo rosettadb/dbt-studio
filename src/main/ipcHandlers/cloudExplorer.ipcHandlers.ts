@@ -7,6 +7,7 @@ import type {
   DeleteObjectRequest,
   CreateFolderRequest,
   DeleteBucketRequest,
+  DownloadObjectRequest,
 } from '../../types/ipc';
 import { CloudExplorerService, CloudPreviewService } from '../services';
 
@@ -22,6 +23,7 @@ const handlerChannels = [
   'cloudExplorer:createFolder',
   'cloudExplorer:deleteBucket',
   'cloudExplorer:uploadFolder',
+  'cloudExplorer:downloadObject',
 ];
 
 const removeCloudExplorerIpcHandlers = () => {
@@ -274,6 +276,13 @@ const registerCloudExplorerHandlers = () => {
     'cloudExplorer:uploadFolder',
     async (event, params: UploadFolderRequest) => {
       return CloudExplorerService.uploadFolder(params, event.sender);
+    },
+  );
+
+  ipcMain.handle(
+    'cloudExplorer:downloadObject',
+    async (event, params: DownloadObjectRequest) => {
+      return CloudExplorerService.downloadObject(params, event.sender);
     },
   );
 };
