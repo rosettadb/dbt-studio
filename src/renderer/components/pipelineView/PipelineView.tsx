@@ -1,5 +1,5 @@
 import React from 'react';
-import { Box, Alert, Chip, Tooltip, Typography } from '@mui/material';
+import { Box, Alert, Button, Chip, Tooltip, Typography } from '@mui/material';
 import CloudIcon from '@mui/icons-material/Cloud';
 import { PipelineGraph } from './PipelineGraph';
 import { parsePipelineConfig } from './parsePipelineConfig';
@@ -107,11 +107,20 @@ export const PipelineView: React.FC<PipelineViewProps> = ({
 
   if (!config) {
     return (
-      <Box sx={{ p: 3 }}>
+      <Box sx={{ p: 3, display: 'flex', flexDirection: 'column', gap: 2 }}>
         <Alert severity="warning">
           Unable to parse pipeline config. Make sure the file is valid YAML with
           a <code>jobs</code> array.
         </Alert>
+        {onEdit && (
+          <Button
+            variant="outlined"
+            onClick={onEdit}
+            sx={{ alignSelf: 'flex-start' }}
+          >
+            Open pipeline.yml in editor
+          </Button>
+        )}
       </Box>
     );
   }
