@@ -65,36 +65,12 @@ export default class RosettaCloudService {
       await postJson(addSecretsEndpoint, addSecretsBody);
     };
 
-    if (project.externalId) {
-      if (hasSecrets) await addSecrets(project.externalId, secrets);
-      const teardown = body.ROSETTA_RUN_TEARDOWN ?? true;
-      const runEndpoint = `${baseUrl}/api/projects/${project.externalId}/run?teardown=${teardown}`;
-      const runBody: Record<string, any> = {
-        CUSTOM_DBT_COMMANDS: body.CUSTOM_DBT_COMMANDS,
-        EXECUTION_MODE: body.EXECUTION_MODE || 'command',
-      };
-      if (body.EXECUTION_MODE === 'pipeline' && body.PIPELINE_FILE) {
-        runBody.PIPELINE_FILE = body.PIPELINE_FILE;
-      }
-      await postJson(runEndpoint, runBody);
-      await ProjectsService.updateProject({
-        ...project,
-        lastRun: new Date().toISOString(),
-      });
-      // Resolve and persist the newly-created action id by querying the
-      // cloud's actions list — the run response shape is unreliable (cloud-api
-      // wraps it as { data: <Action> }), so we go to the source.
-      if (body.EXECUTION_MODE === 'pipeline' && body.PIPELINE_FILE) {
-        await this.findActionForPipeline(id, body.PIPELINE_FILE).catch((e) => {
-          // eslint-disable-next-line no-console
-          console.error('Failed to record action id for pipeline:', e);
-        });
-      }
-      return;
-    }
-
+    // The cloud's create endpoint is idempotent per (user, title) — it
+    // resolves to the caller's existing project instead of creating a
+    // duplicate. So we always call it rather than trusting a locally cached
+    // externalId, which can point at a project from a different account
+    // (e.g. after switching API keys) and 404 on every subsequent call.
     const createEndpoint = `${baseUrl}/api/projects`;
-
     const requestBody = {
       title: body.title,
       git_url: body.gitUrl,
@@ -102,24 +78,36 @@ export default class RosettaCloudService {
     };
 
     const projectData = await postJson(createEndpoint, requestBody);
-    await ProjectsService.updateProject({
-      ...project,
-      externalId: projectData.id,
-      lastRun: new Date().toISOString(),
-    });
+    const externalId = projectData.id;
 
-    if (hasSecrets) await addSecrets(projectData.id, secrets);
+    if (externalId !== project.externalId) {
+      await ProjectsService.updateProject({
+        ...project,
+        externalId,
+      });
+    }
 
-    const newTeardown = body.ROSETTA_RUN_TEARDOWN ?? true;
-    const runEndpoint = `${baseUrl}/api/projects/${projectData.id}/run?teardown=${newTeardown}`;
-    const newRunBody: Record<string, any> = {
+    if (hasSecrets) await addSecrets(externalId, secrets);
+
+    const teardown = body.ROSETTA_RUN_TEARDOWN ?? true;
+    const runEndpoint = `${baseUrl}/api/projects/${externalId}/run?teardown=${teardown}`;
+    const runBody: Record<string, any> = {
       CUSTOM_DBT_COMMANDS: body.CUSTOM_DBT_COMMANDS,
       EXECUTION_MODE: body.EXECUTION_MODE || 'command',
     };
     if (body.EXECUTION_MODE === 'pipeline' && body.PIPELINE_FILE) {
-      newRunBody.PIPELINE_FILE = body.PIPELINE_FILE;
+      runBody.PIPELINE_FILE = body.PIPELINE_FILE;
     }
-    await postJson(runEndpoint, newRunBody);
+    await postJson(runEndpoint, runBody);
+    await ProjectsService.updateProject({
+      ...project,
+      externalId,
+      lastRun: new Date().toISOString(),
+    });
+
+    // Resolve and persist the newly-created action id by querying the
+    // cloud's actions list — the run response shape is unreliable (cloud-api
+    // wraps it as { data: <Action> }), so we go to the source.
     if (body.EXECUTION_MODE === 'pipeline' && body.PIPELINE_FILE) {
       await this.findActionForPipeline(id, body.PIPELINE_FILE).catch((e) => {
         // eslint-disable-next-line no-console
@@ -153,6 +141,7 @@ export default class RosettaCloudService {
       },
     });
 
+    if (response.status === 404) return [];
     if (!response.ok) {
       throw new Error(`Failed to fetch secrets: ${response.status}`);
     }
