@@ -28,6 +28,38 @@ export type DependencyError = {
   blockName?: string;
 };
 
+function normalizeAnalyticsValue(value: unknown): unknown {
+  if (typeof value === 'bigint') {
+    return value <= BigInt(Number.MAX_SAFE_INTEGER) &&
+      value >= BigInt(Number.MIN_SAFE_INTEGER)
+      ? Number(value)
+      : value.toString();
+  }
+
+  if (value instanceof Date) {
+    return value.toISOString();
+  }
+
+  if (Array.isArray(value)) {
+    return value.map((item) => normalizeAnalyticsValue(item));
+  }
+
+  if (value && typeof value === 'object') {
+    return Object.fromEntries(
+      Object.entries(value as Record<string, unknown>).map(([key, val]) => [
+        key,
+        normalizeAnalyticsValue(val),
+      ]),
+    );
+  }
+
+  return value;
+}
+
+function normalizeAnalyticsRows(rows: any[]): any[] {
+  return rows.map((row) => normalizeAnalyticsValue(row) as any);
+}
+
 /**
  * Resolve dependencies for all SQL blocks in a markdown page and
  * return the correct execution order with resolved SQL.
@@ -132,7 +164,9 @@ export async function executeAnalyticsQuery(params: {
         };
       }
 
-      const data = (response.data ?? []).slice(0, ROW_LIMIT);
+      const data = normalizeAnalyticsRows(
+        (response.data ?? []).slice(0, ROW_LIMIT),
+      );
       return {
         name: queryName,
         status: 'success',
@@ -162,7 +196,9 @@ export async function executeAnalyticsQuery(params: {
       };
     }
 
-    const data = (response.data ?? []).slice(0, ROW_LIMIT);
+    const data = normalizeAnalyticsRows(
+      (response.data ?? []).slice(0, ROW_LIMIT),
+    );
     return {
       name: queryName,
       status: 'success',
