@@ -1,5 +1,6 @@
 import FolderIcon from '@mui/icons-material/Folder';
 import AutoAwesomeIcon from '@mui/icons-material/AutoAwesome';
+import VpnKeyIcon from '@mui/icons-material/VpnKey';
 import ManageAccountsIcon from '@mui/icons-material/ManageAccounts';
 import CloudIcon from '@mui/icons-material/Cloud';
 import InfoIcon from '@mui/icons-material/Info';
@@ -76,6 +77,11 @@ export const settingsSidebarElements: SettingsSidebarElement[] = [
     icon: AccountTreeIcon as any,
     text: 'Flowfile',
     path: '/app/settings/flowfile',
+  },
+  {
+    icon: VpnKeyIcon,
+    text: 'Keystore',
+    path: '/app/settings/keystore',
   },
   {
     icon: InfoIcon,

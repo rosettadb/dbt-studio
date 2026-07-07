@@ -40,6 +40,7 @@ export const chatConversations = sqliteTable(
     screenKey: text('screen_key').default('project').notNull(),
     connectionId: text('connection_id'),
     notebookId: text('notebook_id'),
+    pageId: text('page_id'),
     providerId: integer('provider_id').references(() => aiProviders.id, {
       onDelete: 'set null',
     }),
@@ -54,6 +55,8 @@ export const chatConversations = sqliteTable(
     connectionIdx: index('chat_conversations_connection_idx').on(
       table.connectionId,
     ),
+    notebookIdx: index('chat_conversations_notebook_idx').on(table.notebookId),
+    pageIdx: index('chat_conversations_page_idx').on(table.pageId),
     providerIdx: index('chat_conversations_provider_idx').on(table.providerId),
     createdAtIdx: index('chat_conversations_created_at_idx').on(
       table.createdAt,
@@ -430,3 +433,27 @@ export interface CodebaseContextMetadata {
   relevanceScore?: number;
   searchMethod?: 'semantic' | 'keyword' | 'symbol';
 }
+
+// Analytics Pages Table
+export const analyticsPages = sqliteTable(
+  'analytics_pages',
+  {
+    id: text('id').primaryKey(), // using UUID
+    connectionId: text('connection_id').notNull(),
+    title: text('title').notNull(),
+    routePath: text('route_path').notNull(),
+    markdownContent: text('markdown_content').notNull(),
+    createdAt: text('created_at').default(sql`CURRENT_TIMESTAMP`),
+    updatedAt: text('updated_at').default(sql`CURRENT_TIMESTAMP`),
+  },
+  (table: any) => ({
+    connectionIdx: index('analytics_pages_connection_idx').on(
+      table.connectionId,
+    ),
+    routePathIdx: index('analytics_pages_route_path_idx').on(table.routePath),
+    uniqueRoutePathPerConnection: index('analytics_pages_unique_route_idx').on(
+      table.connectionId,
+      table.routePath,
+    ),
+  }),
+);

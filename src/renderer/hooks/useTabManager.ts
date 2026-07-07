@@ -3,6 +3,7 @@ import { projectsServices } from '../services';
 import {
   MD_PREVIEW_PREFIX,
   isVirtualPreviewPath,
+  isPipelineTabPath,
 } from '../components/editor/previewConstants';
 import { getLanguageFromExtension } from '../components/editor/helpers';
 import { getNonEditableFileMessage, isEditableFile } from '../helpers/utils';
@@ -74,8 +75,10 @@ const persistState = (
     return;
   }
 
-  // Never persist virtual preview tabs — they are ephemeral
-  const persistableTabs = tabs.filter((t) => !isVirtualPreviewPath(t.path));
+  // Never persist virtual tabs — they are ephemeral
+  const persistableTabs = tabs.filter(
+    (t) => !isVirtualPreviewPath(t.path) && !isPipelineTabPath(t.path),
+  );
 
   if (persistableTabs.length === 0) {
     window.localStorage.removeItem(key);
@@ -566,9 +569,9 @@ const useTabManager = (projectId?: string): UseTabManagerReturn => {
       let isEditable = false;
       let hasInitialContent = false;
 
-      // Virtual preview tabs are never loaded from disk
-      const isVirtualPreview = isVirtualPreviewPath(path);
-      isEditable = !isVirtualPreview && isEditableFile(path);
+      // Virtual tabs (preview, pipeline) are never loaded from disk
+      const isVirtual = isVirtualPreviewPath(path) || isPipelineTabPath(path);
+      isEditable = !isVirtual && isEditableFile(path);
       hasInitialContent = typeof options?.content === 'string';
 
       // Read current tabs synchronously from ref to avoid React 18 batching issues
@@ -671,7 +674,12 @@ const useTabManager = (projectId?: string): UseTabManagerReturn => {
   const refreshTabContentByPath = React.useCallback(
     async (path: string): Promise<void> => {
       const targetTab = tabsRef.current.find((tab) => tab.path === path);
-      if (!targetTab || !isEditableFile(path) || isVirtualPreviewPath(path)) {
+      if (
+        !targetTab ||
+        !isEditableFile(path) ||
+        isVirtualPreviewPath(path) ||
+        isPipelineTabPath(path)
+      ) {
         return;
       }
 

@@ -20,6 +20,10 @@ type Props = {
   successCallback?: (project?: any) => void;
 };
 
+function isSshUrl(url: string): boolean {
+  return url.startsWith('git@') || url.startsWith('ssh://');
+}
+
 export const CloneRepoModal: React.FC<Props> = ({
   isOpen,
   onClose,
@@ -29,6 +33,10 @@ export const CloneRepoModal: React.FC<Props> = ({
   const [url, setUrl] = React.useState('');
   const [loading, setLoading] = React.useState(false);
   const [removeGit, setRemoveGit] = React.useState(false);
+  const [sshPassphrase, setSshPassphrase] = React.useState('');
+
+  const isSSH = isSshUrl(url);
+
   return (
     <Modal isOpen={isOpen} onClose={onClose} title="Clone Repo">
       <StyledForm
@@ -36,8 +44,13 @@ export const CloneRepoModal: React.FC<Props> = ({
           event.preventDefault();
           setLoading(true);
           try {
+            const credentials =
+              isSSH && sshPassphrase
+                ? { username: '', password: '', sshPassphrase }
+                : undefined;
+
             const { error, authRequired, path, name, connectionId } =
-              await gitServices.gitClone(url, undefined, removeGit);
+              await gitServices.gitClone(url, credentials, removeGit);
 
             if (error) {
               toast.error(error);
@@ -49,7 +62,6 @@ export const CloneRepoModal: React.FC<Props> = ({
               setLoading(false);
               return;
             }
-
             if (!path || !name) {
               toast.error('Something went wrong!');
               setLoading(false);
@@ -76,12 +88,27 @@ export const CloneRepoModal: React.FC<Props> = ({
           <TextField
             variant="outlined"
             placeholder="Enter repository URL (e.g., https://github.com/user/repo.git)"
-            onChange={(event) => setUrl(event.target.value)}
+            onChange={(event) => {
+              setUrl(event.target.value);
+              setSshPassphrase('');
+            }}
             value={url}
             fullWidth
             autoFocus
             disabled={loading}
           />
+          {isSSH && (
+            <TextField
+              variant="outlined"
+              type="password"
+              label="SSH Key Passphrase"
+              placeholder="Leave empty if key has no passphrase"
+              onChange={(event) => setSshPassphrase(event.target.value)}
+              value={sshPassphrase}
+              fullWidth
+              disabled={loading}
+            />
+          )}
           <Tooltip
             title="Check this if you're cloning an external repository that you want to make your own. This removes the original .git history so you can initialize your own repository."
             placement="top"

@@ -101,7 +101,7 @@ export interface Bucket {
 export interface StorageObject {
   name: string;
   size: number;
-  updated: Date;
+  updated?: Date;
   contentType?: string;
   isDirectory: boolean;
 }
@@ -308,3 +308,10 @@ export type DatabaseSources = {
   cloudConnections: CloudConnection[];
   recentItems: RecentItem[];
 };
+
+// ── Analytics Query Types ──────────────────────────────────────────────────
+export type AnalyticsQueryCache = Record<string, Record<string, unknown>[]>;
+export type AnalyticsQueryStatus = 'idle' | 'running' | 'success' | 'error';
+export type AnalyticsQueryStatuses = Record<string, AnalyticsQueryStatus>;
+export type AnalyticsQueryErrors = Record<string, string | null>;
+export type AnalyticsQueryDurations = Record<string, number | undefined>;

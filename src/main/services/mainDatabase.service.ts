@@ -5,6 +5,7 @@
 
 import { app } from 'electron';
 import path from 'path';
+import crypto from 'crypto';
 import Database from 'better-sqlite3';
 import { drizzle, BetterSQLite3Database } from 'drizzle-orm/better-sqlite3';
 import {
@@ -40,12 +41,18 @@ import {
   ChatConversationWithMessages,
 } from '../schemas/mainDatabase.schema';
 import type { AgentScreenKey } from '../../types/agentEvents';
+import {
+  AnalyticsPage,
+  NewAnalyticsPage,
+  UpdateAnalyticsPage,
+} from '../../types/analyticsPages';
 
 export interface GetConversationsFilter {
   projectId?: number;
   screenKey?: AgentScreenKey;
   connectionId?: string | null;
   notebookId?: string | null;
+  pageId?: string | null;
 }
 
 export default class MainDatabaseService {
@@ -142,6 +149,7 @@ export default class MainDatabaseService {
         screen_key TEXT DEFAULT 'project',
         connection_id TEXT,
         notebook_id TEXT,
+        page_id TEXT,
         created_at TEXT DEFAULT (datetime('now')),
         updated_at TEXT DEFAULT (datetime('now')),
         FOREIGN KEY (provider_id) REFERENCES ai_providers(id) ON DELETE SET NULL
@@ -277,6 +285,29 @@ export default class MainDatabaseService {
       CREATE INDEX IF NOT EXISTS ai_usage_logs_created_at_idx ON ai_usage_logs(created_at);
 
       CREATE INDEX IF NOT EXISTS chat_compaction_summaries_conversation_idx ON chat_compaction_summaries(conversation_id);
+
+      -- Analytics Pages table
+      CREATE TABLE IF NOT EXISTS analytics_pages (
+        id TEXT PRIMARY KEY,
+        connection_id TEXT NOT NULL,
+        title TEXT NOT NULL,
+        route_path TEXT NOT NULL,
+        markdown_content TEXT NOT NULL,
+        created_at TEXT DEFAULT (datetime('now')),
+        updated_at TEXT DEFAULT (datetime('now'))
+      );
+      CREATE INDEX IF NOT EXISTS analytics_pages_connection_idx ON analytics_pages(connection_id);
+      CREATE INDEX IF NOT EXISTS analytics_pages_route_path_idx ON analytics_pages(route_path);
+      CREATE UNIQUE INDEX IF NOT EXISTS analytics_pages_unique_route_idx ON analytics_pages(connection_id, route_path);
+
+      -- Static Site Build State table
+      CREATE TABLE IF NOT EXISTS analytics_static_site_state (
+        connection_id TEXT PRIMARY KEY,
+        last_build_path TEXT NOT NULL,
+        last_build_at TEXT NOT NULL,
+        last_build_page_count INTEGER NOT NULL DEFAULT 0,
+        last_build_query_count INTEGER NOT NULL DEFAULT 0
+      );
     `;
 
     this.sqlite.exec(createTablesSQL);
@@ -333,6 +364,15 @@ export default class MainDatabaseService {
         );
       }
 
+      if (!chatConvCols.has('page_id')) {
+        alterStatements.push(
+          'ALTER TABLE chat_conversations ADD COLUMN page_id TEXT;',
+        );
+        alterStatements.push(
+          'CREATE INDEX IF NOT EXISTS chat_conversations_page_idx ON chat_conversations(page_id);',
+        );
+      }
+
       // Ensure indexes exist for chat_conversations (safe with CREATE INDEX IF NOT EXISTS if columns exist)
       // We run these after potentially adding columns above
       alterStatements.push(
@@ -343,6 +383,12 @@ export default class MainDatabaseService {
       );
       alterStatements.push(
         'CREATE INDEX IF NOT EXISTS chat_conversations_connection_idx ON chat_conversations(connection_id);',
+      );
+      alterStatements.push(
+        'CREATE INDEX IF NOT EXISTS chat_conversations_notebook_idx ON chat_conversations(notebook_id);',
+      );
+      alterStatements.push(
+        'CREATE INDEX IF NOT EXISTS chat_conversations_page_idx ON chat_conversations(page_id);',
       );
       alterStatements.push(
         'CREATE INDEX IF NOT EXISTS chat_conversations_provider_idx ON chat_conversations(provider_id);',
@@ -441,6 +487,37 @@ export default class MainDatabaseService {
             FOREIGN KEY (conversation_id) REFERENCES chat_conversations(id) ON DELETE CASCADE
           );
           CREATE INDEX IF NOT EXISTS chat_compaction_summaries_conversation_idx ON chat_compaction_summaries(conversation_id);
+        `);
+      }
+
+      // analytics_pages table might be missing
+      if (!tableNames.has('analytics_pages')) {
+        this.sqlite.exec(`
+          CREATE TABLE IF NOT EXISTS analytics_pages (
+            id TEXT PRIMARY KEY,
+            connection_id TEXT NOT NULL,
+            title TEXT NOT NULL,
+            route_path TEXT NOT NULL,
+            markdown_content TEXT NOT NULL,
+            created_at TEXT DEFAULT (datetime('now')),
+            updated_at TEXT DEFAULT (datetime('now'))
+          );
+          CREATE INDEX IF NOT EXISTS analytics_pages_connection_idx ON analytics_pages(connection_id);
+          CREATE INDEX IF NOT EXISTS analytics_pages_route_path_idx ON analytics_pages(route_path);
+          CREATE UNIQUE INDEX IF NOT EXISTS analytics_pages_unique_route_idx ON analytics_pages(connection_id, route_path);
+        `);
+      }
+
+      // analytics_static_site_state table might be missing
+      if (!tableNames.has('analytics_static_site_state')) {
+        this.sqlite.exec(`
+          CREATE TABLE IF NOT EXISTS analytics_static_site_state (
+            connection_id TEXT PRIMARY KEY,
+            last_build_path TEXT NOT NULL,
+            last_build_at TEXT NOT NULL,
+            last_build_page_count INTEGER NOT NULL DEFAULT 0,
+            last_build_query_count INTEGER NOT NULL DEFAULT 0
+          );
         `);
       }
     } catch (error) {
@@ -609,6 +686,7 @@ export default class MainDatabaseService {
     screenKey?: AgentScreenKey,
     connectionId?: string,
     notebookId?: string,
+    pageId?: string,
   ): Promise<ChatConversation> {
     const db = await this.getDatabase();
 
@@ -622,6 +700,7 @@ export default class MainDatabaseService {
           screenKey: screenKey ?? 'project',
           connectionId,
           notebookId,
+          pageId,
         })
         .returning();
 
@@ -666,6 +745,13 @@ export default class MainDatabaseService {
           conditions.push(
             eq(schema.chatConversations.notebookId, opts.notebookId),
           );
+        }
+      }
+      if (opts.pageId !== undefined) {
+        if (opts.pageId === null) {
+          conditions.push(isNull(schema.chatConversations.pageId));
+        } else {
+          conditions.push(eq(schema.chatConversations.pageId, opts.pageId));
         }
       }
 
@@ -1777,6 +1863,219 @@ export default class MainDatabaseService {
 
       return newMessage;
     } catch (error) {
+      throw error;
+    }
+  }
+
+  // Analytics Pages Management
+  static async getAnalyticsPages(
+    connectionId: string,
+  ): Promise<AnalyticsPage[]> {
+    const db = await this.getDatabase();
+    try {
+      const results = await db
+        .select()
+        .from(schema.analyticsPages)
+        .where(eq(schema.analyticsPages.connectionId, connectionId))
+        .orderBy(desc(schema.analyticsPages.updatedAt));
+      return results as AnalyticsPage[];
+    } catch (error) {
+      throw error;
+    }
+  }
+
+  static async getAnalyticsPage(
+    connectionId: string,
+    pageId: string,
+  ): Promise<AnalyticsPage> {
+    const db = await this.getDatabase();
+    try {
+      const results = await db
+        .select()
+        .from(schema.analyticsPages)
+        .where(
+          and(
+            eq(schema.analyticsPages.connectionId, connectionId),
+            eq(schema.analyticsPages.id, pageId),
+          ),
+        );
+      if (!results[0]) {
+        throw new Error(`Analytics page not found: ${pageId}`);
+      }
+      return results[0] as AnalyticsPage;
+    } catch (error) {
+      throw error;
+    }
+  }
+
+  static async createAnalyticsPage(
+    connectionId: string,
+    data: NewAnalyticsPage,
+  ): Promise<AnalyticsPage> {
+    const db = await this.getDatabase();
+    try {
+      const newPageData = {
+        id: crypto.randomUUID(),
+        connectionId,
+        title: data.title,
+        routePath: data.routePath,
+        markdownContent: data.markdownContent,
+      };
+
+      const results = await db
+        .insert(schema.analyticsPages)
+        .values(newPageData)
+        .returning();
+
+      const [result] = Array.isArray(results) ? results : [results];
+      if (!result) {
+        throw new Error('Failed to create analytics page');
+      }
+
+      return result as AnalyticsPage;
+    } catch (error: any) {
+      if (
+        error.message?.includes('UNIQUE constraint failed') ||
+        error.code === 'SQLITE_CONSTRAINT_UNIQUE'
+      ) {
+        throw new Error(`Route path already exists: ${data.routePath}`);
+      }
+      throw error;
+    }
+  }
+
+  static async updateAnalyticsPage(
+    connectionId: string,
+    pageId: string,
+    updates: UpdateAnalyticsPage,
+  ): Promise<AnalyticsPage> {
+    const db = await this.getDatabase();
+    try {
+      const results = await db
+        .update(schema.analyticsPages)
+        .set({
+          ...updates,
+          updatedAt: new Date().toISOString(),
+        })
+        .where(
+          and(
+            eq(schema.analyticsPages.connectionId, connectionId),
+            eq(schema.analyticsPages.id, pageId),
+          ),
+        )
+        .returning();
+
+      const [result] = Array.isArray(results) ? results : [results];
+      if (!result) {
+        throw new Error(`Analytics page not found: ${pageId}`);
+      }
+
+      return result as AnalyticsPage;
+    } catch (error: any) {
+      if (
+        error.message?.includes('UNIQUE constraint failed') ||
+        error.code === 'SQLITE_CONSTRAINT_UNIQUE'
+      ) {
+        throw new Error(`Route path already exists: ${updates.routePath}`);
+      }
+      throw error;
+    }
+  }
+
+  static async deleteAnalyticsPage(
+    connectionId: string,
+    pageId: string,
+  ): Promise<void> {
+    const db = await this.getDatabase();
+    try {
+      // Check if exists first to match existing error behavior
+      await this.getAnalyticsPage(connectionId, pageId);
+
+      await db
+        .delete(schema.analyticsPages)
+        .where(
+          and(
+            eq(schema.analyticsPages.connectionId, connectionId),
+            eq(schema.analyticsPages.id, pageId),
+          ),
+        );
+    } catch (error) {
+      throw error;
+    }
+  }
+
+  // ─── Static Site State ──────────────────────────────────────────────────
+
+  static async getStaticSiteState(connectionId: string): Promise<{
+    connectionId: string;
+    lastBuildPath: string;
+    lastBuildAt: string;
+    lastBuildPageCount: number;
+    lastBuildQueryCount: number;
+  } | null> {
+    if (!this.sqlite) await this.initializeDatabase();
+    try {
+      const stmt = this.sqlite!.prepare(
+        'SELECT connection_id, last_build_path, last_build_at, last_build_page_count, last_build_query_count FROM analytics_static_site_state WHERE connection_id = ?',
+      );
+      const row = stmt.get(connectionId) as any;
+      if (!row) return null;
+      return {
+        connectionId: row.connection_id,
+        lastBuildPath: row.last_build_path,
+        lastBuildAt: row.last_build_at,
+        lastBuildPageCount: row.last_build_page_count,
+        lastBuildQueryCount: row.last_build_query_count,
+      };
+    } catch (error) {
+      // eslint-disable-next-line no-console
+      console.error('[MAIN DATABASE] getStaticSiteState error:', error);
+      return null;
+    }
+  }
+
+  static async upsertStaticSiteState(state: {
+    connectionId: string;
+    lastBuildPath: string;
+    lastBuildAt: string;
+    lastBuildPageCount: number;
+    lastBuildQueryCount: number;
+  }): Promise<void> {
+    if (!this.sqlite) await this.initializeDatabase();
+    try {
+      const stmt = this.sqlite!.prepare(`
+        INSERT INTO analytics_static_site_state
+          (connection_id, last_build_path, last_build_at, last_build_page_count, last_build_query_count)
+        VALUES (?, ?, ?, ?, ?)
+        ON CONFLICT(connection_id) DO UPDATE SET
+          last_build_path = excluded.last_build_path,
+          last_build_at = excluded.last_build_at,
+          last_build_page_count = excluded.last_build_page_count,
+          last_build_query_count = excluded.last_build_query_count
+      `);
+      stmt.run(
+        state.connectionId,
+        state.lastBuildPath,
+        state.lastBuildAt,
+        state.lastBuildPageCount,
+        state.lastBuildQueryCount,
+      );
+    } catch (error) {
+      // eslint-disable-next-line no-console
+      console.error('[MAIN DATABASE] upsertStaticSiteState error:', error);
+      throw error;
+    }
+  }
+
+  static async deleteStaticSiteState(connectionId: string): Promise<void> {
+    if (!this.sqlite) await this.initializeDatabase();
+    try {
+      this.sqlite!.prepare(
+        'DELETE FROM analytics_static_site_state WHERE connection_id = ?',
+      ).run(connectionId);
+    } catch (error) {
+      // eslint-disable-next-line no-console
+      console.error('[MAIN DATABASE] deleteStaticSiteState error:', error);
       throw error;
     }
   }

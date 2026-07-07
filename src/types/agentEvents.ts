@@ -21,7 +21,8 @@ import type { TextStreamPart } from 'ai';
 export type AgentScreenKey =
   | 'project' // dbt project screen (existing default)
   | 'sql' // SQL Editor screen
-  | 'notebooks'; // Notebooks screen
+  | 'notebooks' // Notebooks screen
+  | 'analytics'; // Analytics pages screen
 
 export const MAX_USER_MESSAGE_CHARS = 20_000;
 export const MAX_USER_MESSAGE_TOKENS = 8_000;

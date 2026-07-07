@@ -41,3 +41,6 @@ test-results/
 playwright-report/
 .erb/renderer/
 .devtools/
+
+# Generated analytics static runtime bundle (rebuild with: npm run build:analytics-runtime)
+resources/analytics-runtime.umd.js

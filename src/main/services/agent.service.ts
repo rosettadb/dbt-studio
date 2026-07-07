@@ -7,6 +7,7 @@ import { buildBaseAgentConfig } from './ai/agents/baseAgentConfig';
 import { createProjectAgent } from './ai/agents/projectAgent';
 import { createSqlAgent } from './ai/agents/sqlAgent';
 import { createNotebooksAgent } from './ai/agents/notebooksAgent';
+import { createAnalyticsAgent } from './ai/agents/analyticsAgent';
 import ConnectorsService from './connectors.service';
 import { getVercelModel } from './ai/agentAdapter';
 import { buildMCPToolset } from './ai/mcp/mcpToolAdapter';
@@ -123,6 +124,16 @@ const pendingNotebookBridgeRequests = new Map<
   }
 >();
 
+const pendingAnalyticsBridgeRequests = new Map<
+  string,
+  {
+    resolve: (value: any) => void;
+    reject: (reason?: unknown) => void;
+    timeout: ReturnType<typeof setTimeout>;
+    type: string;
+  }
+>();
+
 // Per-conversation agent context — replaces the static singleton to prevent
 // race conditions when multiple conversations run concurrently (#4)
 const agentContexts = new Map<
@@ -130,9 +141,10 @@ const agentContexts = new Map<
   {
     event: IpcMainInvokeEvent;
     conversationId: number;
-    screenKey: 'project' | 'sql' | 'notebooks';
+    screenKey: 'project' | 'sql' | 'notebooks' | 'analytics';
     connectionId?: string;
     notebookId?: string;
+    pageId?: string;
     projectPath?: string;
   }
 >();
@@ -189,6 +201,7 @@ export interface AgentRunRequest {
   screenKey?: import('../../types/agentEvents').AgentScreenKey;
   connectionId?: string;
   notebookId?: string;
+  pageId?: string; // Analytics: currently open page ID
 }
 
 /**
@@ -515,6 +528,123 @@ class AgentService {
     );
   }
 
+  // ─── Analytics Agent Bridge ───────────────────────────────────────────────
+
+  private static async requestAnalyticsBridge(
+    conversationId: number,
+    type: string,
+    requestChannel: string,
+    responseChannel: string,
+    payload: object = {},
+  ): Promise<any> {
+    const context = this.getAgentContext(conversationId);
+    if (!context) {
+      throw new Error(`No active context for conversation ${conversationId}`);
+    }
+    if (context.screenKey !== 'analytics') {
+      throw new Error(
+        `Analytics bridge only available in Analytics screen (current: ${context.screenKey})`,
+      );
+    }
+    if (!context.connectionId) {
+      throw new Error('Analytics bridge requires an active connectionId');
+    }
+    if (!context.pageId) {
+      throw new Error('Analytics bridge requires an active pageId');
+    }
+
+    const requestId = `analytics-bridge-${Date.now()}-${Math.random()
+      .toString(36)
+      .slice(2, 10)}`;
+
+    return new Promise<any>((resolve, reject) => {
+      const timeout = setTimeout(() => {
+        pendingAnalyticsBridgeRequests.delete(requestId);
+        reject(
+          new Error(
+            `Timed out waiting for ${type} response from Analytics renderer`,
+          ),
+        );
+      }, 15000);
+
+      pendingAnalyticsBridgeRequests.set(requestId, {
+        resolve,
+        reject,
+        timeout,
+        type: responseChannel,
+      });
+
+      context.event.sender.send(requestChannel, {
+        requestId,
+        conversationId,
+        connectionId: context.connectionId,
+        pageId: context.pageId,
+        ...payload,
+      });
+    });
+  }
+
+  public static resolveAnalyticsBridgeResponse(payload: {
+    requestId: string;
+    success: boolean;
+    error?: string;
+    [key: string]: any;
+  }): void {
+    const request = pendingAnalyticsBridgeRequests.get(payload.requestId);
+    if (!request) return;
+
+    pendingAnalyticsBridgeRequests.delete(payload.requestId);
+    clearTimeout(request.timeout);
+
+    if (payload.success) {
+      request.resolve(payload);
+    } else {
+      request.reject(
+        new Error(payload.error || 'Analytics renderer request failed'),
+      );
+    }
+  }
+
+  public static async requestAnalyticsEditorRead(conversationId: number) {
+    return this.requestAnalyticsBridge(
+      conversationId,
+      'analytics-read',
+      'agent:analytics:read-request',
+      'agent:analytics:read-response',
+    );
+  }
+
+  public static async requestAnalyticsEditorUpdate(
+    conversationId: number,
+    markdownContent: string,
+  ) {
+    return this.requestAnalyticsBridge(
+      conversationId,
+      'analytics-update',
+      'agent:analytics:update-request',
+      'agent:analytics:update-response',
+      { markdownContent },
+    );
+  }
+
+  public static async requestAnalyticsEditorRun(conversationId: number) {
+    return this.requestAnalyticsBridge(
+      conversationId,
+      'analytics-run',
+      'agent:analytics:run-request',
+      'agent:analytics:run-response',
+    );
+  }
+
+  public static async requestAnalyticsEditorResults(conversationId: number) {
+    return this.requestAnalyticsBridge(
+      conversationId,
+      'analytics-query-results',
+      'agent:analytics:query-results-request',
+      'agent:analytics:query-results-response',
+    );
+  }
+
   // ─── Context Compaction ──────────────────────────────────────────────────────
 
   private static truncateText(text: string, maxTokens: number): string {
@@ -808,6 +938,7 @@ COMBINED SUMMARY:`,
         screenKey: request.screenKey ?? 'project',
         connectionId: request.connectionId,
         notebookId: request.notebookId,
+        pageId: request.pageId,
         projectPath,
       });
 
@@ -933,6 +1064,17 @@ COMBINED SUMMARY:`,
             notebookId: request.notebookId,
             connectionId: request.connectionId,
             projectPath,
+            enabledTools,
+            skills: base.skillsPrompt,
+            conversationId,
+            toolMode: request.toolMode || 'agent',
+          });
+          break;
+        case 'analytics':
+          agent = await createAnalyticsAgent(base, {
+            connectionMeta,
+            connectionId: request.connectionId,
+            pageId: request.pageId,
             enabledTools,
             skills: base.skillsPrompt,
             conversationId,

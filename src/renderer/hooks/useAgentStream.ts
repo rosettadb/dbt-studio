@@ -323,6 +323,7 @@ export const useAgentStream = (sessionId: number | undefined) => {
       screenKey?: string,
       connectionId?: string,
       notebookId?: string,
+      pageId?: string,
     ) => {
       if (!sessionId) return;
 
@@ -370,6 +371,7 @@ export const useAgentStream = (sessionId: number | undefined) => {
           screenKey: screenKey as any,
           connectionId,
           notebookId,
+          pageId,
         });
 
         // Agent completed — replace optimistic message with persisted data

@@ -74,6 +74,24 @@ export const registerAgentHandlers = () => {
       AgentService.resolveNotebookBridgeResponse(payload),
   );
 
+  ipcMain.handle('agent:analytics:read-response', async (_event, payload) =>
+    AgentService.resolveAnalyticsBridgeResponse(payload),
+  );
+
+  ipcMain.handle('agent:analytics:update-response', async (_event, payload) =>
+    AgentService.resolveAnalyticsBridgeResponse(payload),
+  );
+
+  ipcMain.handle('agent:analytics:run-response', async (_event, payload) =>
+    AgentService.resolveAnalyticsBridgeResponse(payload),
+  );
+
+  ipcMain.handle(
+    'agent:analytics:query-results-response',
+    async (_event, payload) =>
+      AgentService.resolveAnalyticsBridgeResponse(payload),
+  );
+
   // Thin wrapper — all logic in AgentEditorBridgeService (BE-01)
   ipcMain.handle(
     'agent:editor:get-query-results',

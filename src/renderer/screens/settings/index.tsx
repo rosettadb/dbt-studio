@@ -31,6 +31,7 @@ import {
   AIProvidersSettings,
   DuckDBSettings,
   FlowfileSettings,
+  KeystoreSettings,
 } from '../../components';
 import { AppLayout } from '../../layouts';
 import { settingsSidebarElements } from './settingsElements';
@@ -106,6 +107,7 @@ const Settings: React.FC = () => {
     if (section === 'profile') return 'Rosetta Cloud';
     if (section === 'duckdb') return 'DuckDB';
     if (section === 'flowfile') return 'Flowfile';
+    if (section === 'keystore') return 'Keystore';
     return section.charAt(0).toUpperCase() + section.slice(1).replace('-', ' ');
   };
 
@@ -148,6 +150,8 @@ const Settings: React.FC = () => {
             onSettingsChange={handleChangeV2}
           />
         );
+      case 'keystore':
+        return <KeystoreSettings />;
       case 'about':
         return <AboutSettings />;
       default:

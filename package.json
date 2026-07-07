@@ -1,5 +1,5 @@
 {
-  "version": "1.5.7",
+  "version": "1.5.8",
   "name": "rosetta-dbt-studio",
   "description": "Turn Raw Data into Business Insights—Faster with RosettaDB",
   "keywords": [
@@ -30,6 +30,7 @@
     "lint:fix": "cross-env NODE_ENV=development eslint src/ --ext .js,.jsx,.ts,.tsx --fix",
     "package": "ts-node ./.erb/scripts/clean.js dist && npm run build && electron-builder build --publish never && npm run build:dll",
     "rebuild": "electron-rebuild --parallel --types prod,dev,optional --module-dir release/app",
+    "prepackage": "node scripts/build-analytics-runtime.mjs",
     "prestart": "cross-env NODE_ENV=development TS_NODE_TRANSPILE_ONLY=true webpack --config ./.erb/configs/webpack.config.main.dev.ts",
     "start": "ts-node ./.erb/scripts/check-port-in-use.js && npm run prestart && npm run start:renderer",
     "start:main": "concurrently -k \"cross-env NODE_ENV=development TS_NODE_TRANSPILE_ONLY=true webpack --watch --config ./.erb/configs/webpack.config.main.dev.ts\" \"electronmon .\"",
@@ -50,7 +51,8 @@
     "test:integration:coverage": "npm run test:integration -- --coverage",
     "sync-version": "node .erb/scripts/sync-version.js",
     "version": "npm run sync-version && git add .",
-    "prepare": "husky"
+    "prepare": "husky",
+    "build:analytics-runtime": "node scripts/build-analytics-runtime.mjs"
   },
   "browserslist": [
     "extends browserslist-config-erb"
@@ -164,6 +166,7 @@
     "recharts": "^2.15.0",
     "rehype-highlight": "^7.0.2",
     "rehype-raw": "^7.0.0",
+    "rehype-sanitize": "^6.0.0",
     "remark-gfm": "^4.0.1",
     "simple-git": "^3.27.0",
     "snowflake-sdk": "^2.0.3",
@@ -326,8 +329,9 @@
       "output": "release/build"
     },
     "extraResources": [
-      "./assets/**"
-    ],
+      "./assets/**",
+      "./resources/**"
+ ],
     "publish": {
       "provider": "github",
       "owner": "rosettadb",

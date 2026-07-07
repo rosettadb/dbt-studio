@@ -13,7 +13,6 @@ import {
   Chip,
   Tooltip,
   Box,
-  Select,
 } from '@mui/material';
 import TerminalIcon from '@mui/icons-material/Terminal';
 import {
@@ -24,8 +23,6 @@ import {
   PowerOffRounded,
   TimerRounded,
 } from '@mui/icons-material';
-import FullscreenIcon from '@mui/icons-material/Fullscreen';
-import FullscreenExitIcon from '@mui/icons-material/FullscreenExit';
 import { Terminal } from './terminal';
 import {
   Root,
@@ -38,21 +35,21 @@ import {
 import { ProcessTerminal } from './processTerminal';
 import { useProcess } from '../../hooks';
 import { useSelectedFileContext } from '../../hooks/useSelectedFileContext';
-import useAppContext from '../../hooks/useAppContext';
 import { Project } from '../../../types/backend';
-import {
-  useGetFileContent,
-  useListPipelines,
-  useCurrentModelId,
-} from '../../controllers';
-import { usePipelineActionId } from '../../controllers/rosettaCloud.controller';
+import { useCurrentModelId } from '../../controllers';
 import { LineageModal, LineageView } from '../lineage';
-import {
-  PipelineView,
-  CloudLogViewer,
-  isPipelineFile,
-  parsePipelineConfig,
-} from '../pipelineView';
+
+type TerminalMinimizeContextValue = {
+  isMinimized: boolean;
+  minimize: () => void;
+  restore: () => void;
+};
+
+const TerminalMinimizeContext =
+  React.createContext<TerminalMinimizeContextValue | null>(null);
+
+export const useTerminalMinimize = () =>
+  React.useContext(TerminalMinimizeContext);
 
 type Props = {
   project: Project;
@@ -62,12 +59,7 @@ type Props = {
   queryResultsRevision?: number;
 };
 
-type TerminalPanelTab =
-  | 'terminal'
-  | 'process'
-  | 'lineage'
-  | 'cicd'
-  | 'queryResults';
+type TerminalPanelTab = 'terminal' | 'process' | 'lineage' | 'queryResults';
 
 export const TerminalLayout: React.FC<Props> = ({
   children,
@@ -78,7 +70,6 @@ export const TerminalLayout: React.FC<Props> = ({
 }) => {
   const { mode } = useColorScheme();
   const theme = useTheme();
-  const { openFile } = useAppContext();
   const { isRunning, stop, forceStop, pid, duration, status, command } =
     useProcess();
 
@@ -109,81 +100,8 @@ export const TerminalLayout: React.FC<Props> = ({
       isLoadingCurrentModel ||
       isErrorCurrentModel);
 
-  // Check if current file is a .yml file in .rosetta directory
-  const isYmlFileInRosettaDir = React.useMemo(() => {
-    if (!selectedFilePath) return false;
-    return isPipelineFile(selectedFilePath);
-  }, [selectedFilePath]);
-
-  // Fetch content of the selected file if it's a .yml file in .rosetta
-  const { data: selectedFileContent } = useGetFileContent(
-    selectedFilePath || '',
-    {
-      enabled: isYmlFileInRosettaDir,
-    },
-  );
-
-  // Check if the file is a valid pipeline file by parsing its content
-  const isPipelineFileActive = React.useMemo(() => {
-    if (!isYmlFileInRosettaDir || !selectedFileContent) return false;
-    // Use parsePipelineConfig to validate if it's a valid pipeline file
-    try {
-      const parsed = parsePipelineConfig(selectedFileContent);
-      return parsed !== null;
-    } catch {
-      return false;
-    }
-  }, [isYmlFileInRosettaDir, selectedFileContent]);
-
   const [selectedTab, setSelectedTab] =
     React.useState<TerminalPanelTab>('terminal');
-  const [isPipelineFullscreen, setIsPipelineFullscreen] = React.useState(false);
-  // Track if user manually clicked on CI/CD tab (vs auto-switched)
-  const [isManualCicdTabSwitch, setIsManualCicdTabSwitch] =
-    React.useState(false);
-
-  // List available pipelines
-  const { data: availablePipelines = [] } = useListPipelines(project.id);
-  const [selectedPipelineIdx, setSelectedPipelineIdx] = React.useState(0);
-
-  // Reset selection if pipelines change
-  React.useEffect(() => {
-    if (selectedPipelineIdx >= availablePipelines.length) {
-      setSelectedPipelineIdx(0);
-    }
-  }, [availablePipelines.length, selectedPipelineIdx]);
-
-  const currentPipeline = availablePipelines[selectedPipelineIdx];
-  const pipelineFilePath = currentPipeline?.path || '';
-
-  // Always poll the pipeline file — tab is visible whenever the file exists on disk
-  const { data: pipelineFileContent } = useGetFileContent(pipelineFilePath, {
-    enabled: !!pipelineFilePath,
-    refetchInterval: 5000,
-  });
-
-  const showPipelineTab = availablePipelines.length > 0;
-
-  // Look up the cloud action id for the currently-viewed pipeline. Primary
-  // source is the locally-recorded `pipelineRuns` map (populated when a run
-  // is triggered through this app). When missing — e.g. for runs that
-  // predate this feature — fall back to a cloud lookup keyed on
-  // action.data.PIPELINE_FILE; the result is persisted by the main process.
-  const pipelineFileBasename = React.useMemo(() => {
-    if (!pipelineFilePath) return null;
-    const parts = pipelineFilePath.split(/[\\/]/);
-    return parts[parts.length - 1] || null;
-  }, [pipelineFilePath]);
-
-  const recordedActionId = pipelineFileBasename
-    ? (project.pipelineRuns?.[pipelineFileBasename] ?? null)
-    : null;
-
-  const cloudActionId = usePipelineActionId(
-    project.externalId ? project.id : null,
-    pipelineFileBasename,
-    recordedActionId,
-  );
 
   const [lock, setLock] = React.useState(false);
   const [sizes, setSizes] = React.useState<number[]>([
@@ -196,21 +114,27 @@ export const TerminalLayout: React.FC<Props> = ({
   const [hasStartedProcess, setHasStartedProcess] =
     React.useState<boolean>(false);
   const lastTerminalHeight = React.useRef<number>(300);
+  const sizesRef = React.useRef(sizes);
+  sizesRef.current = sizes;
 
-  const handleMinimize = () => {
+  const handleMinimize = React.useCallback(() => {
     setIsMinimized(true);
-    // eslint-disable-next-line prefer-destructuring
-    lastTerminalHeight.current = sizes[1];
+    [, lastTerminalHeight.current] = sizesRef.current;
     setSizes([window.innerHeight, 0]);
-  };
+  }, []);
 
-  const handleRestore = () => {
+  const handleRestore = React.useCallback(() => {
     setIsMinimized(false);
     setSizes([
       window.innerHeight - lastTerminalHeight.current,
       lastTerminalHeight.current,
     ]);
-  };
+  }, []);
+
+  const terminalContextValue = React.useMemo(
+    () => ({ isMinimized, minimize: handleMinimize, restore: handleRestore }),
+    [isMinimized, handleMinimize, handleRestore],
+  );
 
   const handleMenuOpen = (event: React.MouseEvent<HTMLElement>) => {
     setMenuAnchor(event.currentTarget);
@@ -296,36 +220,6 @@ export const TerminalLayout: React.FC<Props> = ({
       setSelectedTab('terminal');
     }
   }, [showLineageTab, selectedTab, isLoadingCurrentModel]);
-
-  // Auto-switch to CI/CD tab when a valid pipeline file is opened in editor
-  React.useEffect(() => {
-    if (isPipelineFileActive && selectedTab !== 'cicd') {
-      setSelectedTab('cicd');
-      setIsManualCicdTabSwitch(false); // This is an auto-switch
-      // Restore terminal if minimized
-      if (isMinimized) {
-        handleRestore();
-      }
-    }
-  }, [isPipelineFileActive]);
-
-  // Switch back to Terminal when navigating away from pipeline file (if not manually on CI/CD tab)
-  React.useEffect(() => {
-    if (
-      !isPipelineFileActive &&
-      selectedTab === 'cicd' &&
-      !isManualCicdTabSwitch
-    ) {
-      setSelectedTab('terminal');
-    }
-  }, [isPipelineFileActive, selectedTab, isManualCicdTabSwitch]);
-
-  // If Pipeline tab is hidden but selected, switch back to terminal
-  React.useEffect(() => {
-    if (!showPipelineTab && selectedTab === 'cicd') {
-      setSelectedTab('terminal');
-    }
-  }, [showPipelineTab, selectedTab]);
 
   React.useEffect(() => {
     if (showQueryResultsTab && queryResultsRevision > 0) {
@@ -415,7 +309,9 @@ export const TerminalLayout: React.FC<Props> = ({
         sashRender={renderSash}
       >
         <EditorWrapper style={{ pointerEvents: lock ? 'none' : 'auto' }}>
-          {children}
+          <TerminalMinimizeContext.Provider value={terminalContextValue}>
+            {children}
+          </TerminalMinimizeContext.Provider>
         </EditorWrapper>
         <TerminalWrapper>
           {!isMinimized && (
@@ -459,57 +355,6 @@ export const TerminalLayout: React.FC<Props> = ({
                       LINEAGE
                     </Typography>
                   </Button>
-                )}
-                {/* CI/CD Pipeline Tab */}
-                {showPipelineTab && (
-                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-                    <Button
-                      size="small"
-                      disableRipple
-                      sx={tabButtonSx(selectedTab === 'cicd')}
-                      onClick={() => {
-                        setSelectedTab('cicd');
-                        setIsManualCicdTabSwitch(true);
-                      }}
-                    >
-                      <Typography
-                        sx={{ fontWeight: 500, fontSize: 10.5, lineHeight: 1 }}
-                      >
-                        CI/CD
-                      </Typography>
-                    </Button>
-                    {selectedTab === 'cicd' &&
-                      availablePipelines.length > 1 && (
-                        <Select
-                          size="small"
-                          value={selectedPipelineIdx}
-                          onChange={(e) =>
-                            setSelectedPipelineIdx(e.target.value as number)
-                          }
-                          variant="standard"
-                          disableUnderline
-                          sx={{
-                            fontSize: '0.7rem',
-                            height: 22,
-                            '& .MuiSelect-select': {
-                              py: 0,
-                              px: 0.5,
-                              fontSize: '0.7rem',
-                            },
-                          }}
-                        >
-                          {availablePipelines.map((p, idx) => (
-                            <MenuItem
-                              key={p.name}
-                              value={idx}
-                              sx={{ fontSize: '0.75rem' }}
-                            >
-                              {p.name}
-                            </MenuItem>
-                          ))}
-                        </Select>
-                      )}
-                  </Box>
                 )}
                 {/* Process Tab - Only show when running */}
                 {hasStartedProcess && (
@@ -614,43 +459,11 @@ export const TerminalLayout: React.FC<Props> = ({
                     </Typography>
                   </Button>
                 )}
-                {/* Fullscreen Toggle - Only for CI/CD tab */}
-                {selectedTab === 'cicd' && (
-                  <Tooltip
-                    title={
-                      isPipelineFullscreen ? 'Exit fullscreen' : 'Fullscreen'
-                    }
-                  >
-                    <IconButton
-                      onClick={() =>
-                        setIsPipelineFullscreen(!isPipelineFullscreen)
-                      }
-                      size="small"
-                      style={{ marginLeft: 'auto' }}
-                    >
-                      {isPipelineFullscreen ? (
-                        <FullscreenExitIcon
-                          style={{
-                            color: getTextColor(mode),
-                            fontSize: 20,
-                          }}
-                        />
-                      ) : (
-                        <FullscreenIcon
-                          style={{
-                            color: getTextColor(mode),
-                            fontSize: 20,
-                          }}
-                        />
-                      )}
-                    </IconButton>
-                  </Tooltip>
-                )}
                 {/* Minimize Button */}
                 <IconButton
                   onClick={handleMinimize}
                   size="small"
-                  style={{ marginLeft: selectedTab === 'cicd' ? 0 : 'auto' }}
+                  style={{ marginLeft: 'auto' }}
                 >
                   <div style={{ marginTop: -8 }}>
                     <MinimizeRounded
@@ -675,72 +488,6 @@ export const TerminalLayout: React.FC<Props> = ({
               {selectedTab === 'queryResults' && showQueryResultsTab && (
                 <Box sx={{ height: '100%', minHeight: 0 }}>
                   {queryResultsPanel}
-                </Box>
-              )}
-              {selectedTab === 'cicd' && showPipelineTab && (
-                <Box
-                  sx={{
-                    height: '100%',
-                    display: 'flex',
-                    flexDirection: 'column',
-                    position: isPipelineFullscreen ? 'fixed' : 'relative',
-                    top: isPipelineFullscreen ? 0 : 'auto',
-                    left: isPipelineFullscreen ? 0 : 'auto',
-                    right: isPipelineFullscreen ? 0 : 'auto',
-                    bottom: isPipelineFullscreen ? 0 : 'auto',
-                    zIndex: isPipelineFullscreen ? 9999 : 'auto',
-                    bgcolor: 'background.default',
-                  }}
-                >
-                  {/* Exit fullscreen button - only shown when fullscreen is active */}
-                  {isPipelineFullscreen && (
-                    <Tooltip title="Exit fullscreen">
-                      <IconButton
-                        onClick={() => setIsPipelineFullscreen(false)}
-                        size="small"
-                        sx={{
-                          position: 'absolute',
-                          top: 16,
-                          right: 16,
-                          zIndex: 10000,
-                          bgcolor: 'background.paper',
-                          '&:hover': {
-                            bgcolor: 'action.hover',
-                          },
-                        }}
-                        aria-label="Exit fullscreen"
-                      >
-                        <FullscreenExitIcon
-                          style={{
-                            color: getTextColor(mode),
-                            fontSize: 20,
-                          }}
-                        />
-                      </IconButton>
-                    </Tooltip>
-                  )}
-                  {/* Always read from pipeline.yml file on disk */}
-                  <Box
-                    sx={{ flex: cloudActionId ? '1 1 60%' : 1, minHeight: 0 }}
-                  >
-                    <PipelineView
-                      content={pipelineFileContent || ''}
-                      onEdit={() => openFile?.(pipelineFilePath)}
-                      actionId={cloudActionId}
-                    />
-                  </Box>
-                  {cloudActionId && (
-                    <Box
-                      sx={{
-                        flex: '1 1 40%',
-                        minHeight: 0,
-                        borderTop: 1,
-                        borderColor: 'divider',
-                      }}
-                    >
-                      <CloudLogViewer actionId={cloudActionId} />
-                    </Box>
-                  )}
                 </Box>
               )}
             </>
