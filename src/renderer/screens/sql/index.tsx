@@ -1274,7 +1274,8 @@ const Sql = () => {
                       sx={{
                         height: '100%',
                         padding: 1,
-                        overflowY: 'auto',
+                        minHeight: 0,
+                        overflow: 'hidden',
                         background: theme.palette.background.paper,
                       }}
                     >

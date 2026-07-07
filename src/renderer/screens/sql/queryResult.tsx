@@ -844,7 +844,13 @@ export const QueryResult: React.FC<Props> = ({ results, exportContext }) => {
   return (
     <div
       data-testid="sql-results-pane"
-      style={{ display: 'flex', flexDirection: 'column', height: '100%' }}
+      style={{
+        display: 'flex',
+        flexDirection: 'column',
+        height: '100%',
+        minHeight: 0,
+        overflow: 'hidden',
+      }}
     >
       {viewMode === 'chart' ? (
         <Box
@@ -937,6 +943,7 @@ export const QueryResult: React.FC<Props> = ({ results, exportContext }) => {
             },
           }))}
           customPagination={customPagination as any}
+          containerStyle={{ flex: '1 1 auto', minHeight: 0 }}
           loading={loading}
         />
       )}
