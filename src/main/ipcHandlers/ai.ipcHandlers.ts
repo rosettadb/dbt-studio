@@ -172,6 +172,7 @@ const registerAIHandlers = () => {
         screenKey?: any;
         connectionId?: string | null;
         notebookId?: string | null;
+        pageId?: string | null;
       },
     ): Promise<ChatConversation[]> => {
       return MainDatabaseService.getConversations(filter ?? {});
@@ -193,6 +194,7 @@ const registerAIHandlers = () => {
         screenKey,
         connectionId,
         notebookId,
+        pageId,
       }: {
         title: string;
         projectId?: number;
@@ -200,6 +202,7 @@ const registerAIHandlers = () => {
         screenKey?: any;
         connectionId?: string;
         notebookId?: string;
+        pageId?: string;
       },
     ): Promise<ChatConversation> => {
       return MainDatabaseService.createConversation(
@@ -209,6 +212,7 @@ const registerAIHandlers = () => {
         screenKey,
         connectionId,
         notebookId,
+        pageId,
       );
     },
   );

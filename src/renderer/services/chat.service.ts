@@ -40,6 +40,7 @@ class ChatService {
           screenKey?: string;
           connectionId?: string | null;
           notebookId?: string | null;
+          pageId?: string | null;
         },
   ): Promise<ChatSession[]> {
     const payload = typeof filter === 'number' ? { projectId: filter } : filter;
@@ -66,6 +67,7 @@ class ChatService {
     screenKey?: string,
     connectionId?: string,
     notebookId?: string,
+    pageId?: string,
   ): Promise<ChatSession> {
     const { data } = await client.post<
       {
@@ -74,6 +76,7 @@ class ChatService {
         screenKey?: string;
         connectionId?: string;
         notebookId?: string;
+        pageId?: string;
       },
       ChatSession
     >('chat:conversation:create', {
@@ -82,6 +85,7 @@ class ChatService {
       screenKey,
       connectionId,
       notebookId,
+      pageId,
     });
     return data;
   }

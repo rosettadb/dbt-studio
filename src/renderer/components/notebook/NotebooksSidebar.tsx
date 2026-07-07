@@ -24,9 +24,11 @@ import {
   FileDownload,
   Upload,
   Close,
+  InsertChart,
 } from '@mui/icons-material';
 import { SchemaTreeViewerWithSchema } from '../../screens/sql/SchemaTreeViewerWithSchema';
 import { NotebooksTreeView } from './NotebooksTreeView';
+import { AnalyticsPagesTreeView } from '../analytics';
 import { Table, SupportedConnectionTypes } from '../../../types/backend';
 import { Notebook } from '../../../types/notebooks';
 
@@ -84,6 +86,13 @@ interface NotebooksSidebarProps {
   onExportAllNotebooks?: () => void;
   onExportSelected?: () => void;
   onImportAllNotebooks?: () => void;
+  onTabChange?: (tabIndex: number) => void;
+
+  // Analytics
+  connectionId: string;
+  activeAnalyticsPageId: string | null;
+  onOpenAnalyticsPage: (pageId: string) => void;
+  onDeleteAnalyticsPage?: (pageId: string) => void;
 
   // Helper functions
   getConnectionName: (connectionKey: string) => string;
@@ -111,6 +120,11 @@ export const NotebooksSidebar: React.FC<NotebooksSidebarProps> = ({
   onExportAllNotebooks,
   onExportSelected,
   onImportAllNotebooks,
+  onTabChange,
+  connectionId,
+  activeAnalyticsPageId,
+  onOpenAnalyticsPage,
+  onDeleteAnalyticsPage,
 }) => {
   const theme = useTheme();
   const [activeTab, setActiveTab] = useState(0);
@@ -123,8 +137,9 @@ export const NotebooksSidebar: React.FC<NotebooksSidebarProps> = ({
   const handleTabChange = useCallback(
     (_event: React.SyntheticEvent, newValue: number) => {
       setActiveTab(newValue);
+      onTabChange?.(newValue);
     },
-    [],
+    [onTabChange],
   );
 
   const handleExportMenuOpen = useCallback(
@@ -223,6 +238,13 @@ export const NotebooksSidebar: React.FC<NotebooksSidebarProps> = ({
             label="Data"
             id="notebooks-tab-1"
             aria-controls="notebooks-tabpanel-1"
+          />
+          <Tab
+            icon={<InsertChart sx={{ fontSize: 16 }} />}
+            iconPosition="start"
+            label="Analytics"
+            id="notebooks-tab-2"
+            aria-controls="notebooks-tabpanel-2"
           />
         </Tabs>
       </Box>
@@ -445,6 +467,19 @@ export const NotebooksSidebar: React.FC<NotebooksSidebarProps> = ({
                 </Typography>
               </Box>
             )}
+          </Box>
+        </TabPanel>
+
+        {/* Analytics Tab */}
+        <TabPanel value={activeTab} index={2}>
+          <Box sx={{ height: '100%', overflow: 'hidden' }}>
+            <AnalyticsPagesTreeView
+              connectionId={connectionId}
+              connectionName={connectionName}
+              activePageId={activeAnalyticsPageId}
+              onOpenPage={onOpenAnalyticsPage}
+              onDeletePage={onDeleteAnalyticsPage}
+            />
           </Box>
         </TabPanel>
       </Box>
