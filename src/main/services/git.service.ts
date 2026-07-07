@@ -809,11 +809,17 @@ export default class GitService {
       // Clean up the created directory if clone fails
       try {
         if (fs.existsSync(destinationPath)) {
-          await fs.promises.rm(destinationPath, { recursive: true, force: true });
+          await fs.promises.rm(destinationPath, {
+            recursive: true,
+            force: true,
+          });
         }
       } catch (cleanupErr) {
         // eslint-disable-next-line no-console
-        console.error('Failed to clean up directory after failed clone:', cleanupErr);
+        console.error(
+          'Failed to clean up directory after failed clone:',
+          cleanupErr,
+        );
       }
 
       if (isAuthError(err)) throw new AuthError();
