@@ -748,20 +748,20 @@ export default class GitService {
     try {
       let urlToUse = remoteUrl;
 
-      if (credentials?.sshPassphrase && isSshUrl(remoteUrl)) {
+      if (isSshUrl(remoteUrl)) {
         const askpassScript = await getOrCreateAskpassScript();
         await git
           .env({
             ...process.env,
             SSH_ASKPASS: askpassScript,
             SSH_ASKPASS_REQUIRE: 'force',
-            GIT_PASSPHRASE: credentials.sshPassphrase,
+            GIT_PASSPHRASE: credentials?.sshPassphrase ?? '',
             GIT_TERMINAL_PROMPT: '0',
             DISPLAY: process.env.DISPLAY || 'dummy',
           })
           .clone(urlToUse, destinationPath);
       } else {
-        if (credentials && !isSshUrl(remoteUrl)) {
+        if (credentials) {
           urlToUse = injectCredentialsIntoRemoteUrl(remoteUrl, credentials);
         }
         await git.clone(urlToUse, destinationPath);
@@ -806,6 +806,16 @@ export default class GitService {
         connectionId,
       };
     } catch (err: any) {
+      // Clean up the created directory if clone fails
+      try {
+        if (fs.existsSync(destinationPath)) {
+          await fs.promises.rm(destinationPath, { recursive: true, force: true });
+        }
+      } catch (cleanupErr) {
+        // eslint-disable-next-line no-console
+        console.error('Failed to clean up directory after failed clone:', cleanupErr);
+      }
+
       if (isAuthError(err)) throw new AuthError();
       throw new Error(`Clone failed: ${err.message}`);
     }
