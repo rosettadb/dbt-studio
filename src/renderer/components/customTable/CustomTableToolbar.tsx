@@ -13,6 +13,7 @@ const useStyles = makeStyles({
     overflow: 'hidden',
     display: 'flex',
     alignItems: 'center',
+    marginRight: 32,
   },
   searchContainer: {
     paddingTop: '4px',
