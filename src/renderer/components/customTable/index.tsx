@@ -22,6 +22,8 @@ const CustomTable = <T,>({
   toolbarContent,
   dataTestId,
   showSearch,
+  hideToolbar,
+  paginationLeftContent,
 }: CustomTableType<T>) => {
   const [page, setPage] = React.useState(0);
   const [perPage, setPerPage] = useLocalStorage(id, '10');
@@ -59,18 +61,20 @@ const CustomTable = <T,>({
           <Loader size={40} marginTop={0} />
         </div>
       )}
-      <CustomTableToolbar
-        name={name}
-        toolbarContent={toolbarContent}
-        handleSearch={(value) => {
-          if (customPagination) {
-            customPagination.setKeyword(value);
-            return;
-          }
-          setKeyword(value);
-        }}
-        showSearch={showSearch}
-      />
+      {!hideToolbar && (
+        <CustomTableToolbar
+          name={name}
+          toolbarContent={toolbarContent}
+          handleSearch={(value) => {
+            if (customPagination) {
+              customPagination.setKeyword(value);
+              return;
+            }
+            setKeyword(value);
+          }}
+          showSearch={showSearch}
+        />
+      )}
       <TableContainer
         style={{
           ...(containerStyle ?? {}),
@@ -120,19 +124,28 @@ const CustomTable = <T,>({
           </TableBody>
         </Table>
       </TableContainer>
-      <CustomTablePagination
-        page={customPagination?.page ?? page}
-        setPage={customPagination?.setPage ?? setPage}
-        perPage={customPagination?.perPage ?? Number(perPage)}
-        setPerPage={(value) => {
-          if (customPagination?.setPerPage) {
-            customPagination?.setPerPage(value);
-            return;
-          }
-          setPerPage(String(value));
-        }}
-        total={customPagination?.count ?? rows.length}
-      />
+      <div style={{ display: 'flex', alignItems: 'center' }}>
+        {paginationLeftContent && (
+          <div style={{ paddingLeft: 8, paddingRight: 4, flexShrink: 0 }}>
+            {paginationLeftContent}
+          </div>
+        )}
+        <div style={{ flex: 1 }}>
+          <CustomTablePagination
+            page={customPagination?.page ?? page}
+            setPage={customPagination?.setPage ?? setPage}
+            perPage={customPagination?.perPage ?? Number(perPage)}
+            setPerPage={(value) => {
+              if (customPagination?.setPerPage) {
+                customPagination?.setPerPage(value);
+                return;
+              }
+              setPerPage(String(value));
+            }}
+            total={customPagination?.count ?? rows.length}
+          />
+        </div>
+      </div>
     </div>
   );
 };

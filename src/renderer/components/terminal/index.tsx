@@ -57,9 +57,25 @@ import {
 type Props = {
   project: Project;
   children: React.ReactNode;
+  queryResultsPanel?: React.ReactNode;
+  showQueryResultsTab?: boolean;
+  queryResultsRevision?: number;
 };
 
-export const TerminalLayout: React.FC<Props> = ({ children, project }) => {
+type TerminalPanelTab =
+  | 'terminal'
+  | 'process'
+  | 'lineage'
+  | 'cicd'
+  | 'queryResults';
+
+export const TerminalLayout: React.FC<Props> = ({
+  children,
+  project,
+  queryResultsPanel,
+  showQueryResultsTab = false,
+  queryResultsRevision = 0,
+}) => {
   const { mode } = useColorScheme();
   const theme = useTheme();
   const { openFile } = useAppContext();
@@ -119,7 +135,8 @@ export const TerminalLayout: React.FC<Props> = ({ children, project }) => {
     }
   }, [isYmlFileInRosettaDir, selectedFileContent]);
 
-  const [selectedTab, setSelectedTab] = React.useState(0);
+  const [selectedTab, setSelectedTab] =
+    React.useState<TerminalPanelTab>('terminal');
   const [isPipelineFullscreen, setIsPipelineFullscreen] = React.useState(false);
   // Track if user manually clicked on CI/CD tab (vs auto-switched)
   const [isManualCicdTabSwitch, setIsManualCicdTabSwitch] =
@@ -206,18 +223,18 @@ export const TerminalLayout: React.FC<Props> = ({ children, project }) => {
   const handleGracefulStop = async () => {
     handleMenuClose();
     await stop();
-    setSelectedTab(0);
+    setSelectedTab('terminal');
   };
 
   const handleForceStop = async () => {
     handleMenuClose();
     await forceStop();
-    setSelectedTab(0);
+    setSelectedTab('terminal');
   };
 
   const handleQuickStop = async () => {
     await stop();
-    setSelectedTab(0);
+    setSelectedTab('terminal');
   };
 
   const renderSash = (_: number, active: boolean) => {
@@ -256,8 +273,8 @@ export const TerminalLayout: React.FC<Props> = ({ children, project }) => {
     if (isRunning) {
       setHasStartedProcess(true);
     }
-    if (isRunning && selectedTab !== 1) {
-      setSelectedTab(1);
+    if (isRunning && selectedTab !== 'process') {
+      setSelectedTab('process');
     }
   }, [isRunning]);
 
@@ -271,15 +288,19 @@ export const TerminalLayout: React.FC<Props> = ({ children, project }) => {
   // If Lineage tab is hidden but selected, switch back to terminal
   // Only auto-switch when the query is settled (not loading)
   React.useEffect(() => {
-    if (!showLineageTab && selectedTab === 2 && !isLoadingCurrentModel) {
-      setSelectedTab(0);
+    if (
+      !showLineageTab &&
+      selectedTab === 'lineage' &&
+      !isLoadingCurrentModel
+    ) {
+      setSelectedTab('terminal');
     }
   }, [showLineageTab, selectedTab, isLoadingCurrentModel]);
 
   // Auto-switch to CI/CD tab when a valid pipeline file is opened in editor
   React.useEffect(() => {
-    if (isPipelineFileActive && selectedTab !== 3) {
-      setSelectedTab(3);
+    if (isPipelineFileActive && selectedTab !== 'cicd') {
+      setSelectedTab('cicd');
       setIsManualCicdTabSwitch(false); // This is an auto-switch
       // Restore terminal if minimized
       if (isMinimized) {
@@ -290,17 +311,32 @@ export const TerminalLayout: React.FC<Props> = ({ children, project }) => {
 
   // Switch back to Terminal when navigating away from pipeline file (if not manually on CI/CD tab)
   React.useEffect(() => {
-    if (!isPipelineFileActive && selectedTab === 3 && !isManualCicdTabSwitch) {
-      setSelectedTab(0);
+    if (
+      !isPipelineFileActive &&
+      selectedTab === 'cicd' &&
+      !isManualCicdTabSwitch
+    ) {
+      setSelectedTab('terminal');
     }
   }, [isPipelineFileActive, selectedTab, isManualCicdTabSwitch]);
 
   // If Pipeline tab is hidden but selected, switch back to terminal
   React.useEffect(() => {
-    if (!showPipelineTab && selectedTab === 3) {
-      setSelectedTab(0);
+    if (!showPipelineTab && selectedTab === 'cicd') {
+      setSelectedTab('terminal');
     }
   }, [showPipelineTab, selectedTab]);
+
+  React.useEffect(() => {
+    if (showQueryResultsTab && queryResultsRevision > 0) {
+      setSelectedTab('queryResults');
+      if (isMinimized) {
+        handleRestore();
+      }
+    }
+    // handleRestore intentionally reads refs/state and should not retrigger this.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [showQueryResultsTab, queryResultsRevision]);
 
   const getTextColor = (themeMode: string | undefined) => {
     switch (themeMode) {
@@ -400,8 +436,8 @@ export const TerminalLayout: React.FC<Props> = ({ children, project }) => {
                 <Button
                   size="small"
                   disableRipple
-                  sx={tabButtonSx(selectedTab === 0)}
-                  onClick={() => setSelectedTab(0)}
+                  sx={tabButtonSx(selectedTab === 'terminal')}
+                  onClick={() => setSelectedTab('terminal')}
                 >
                   <Typography
                     sx={{ fontWeight: 500, fontSize: 10.5, lineHeight: 1 }}
@@ -414,8 +450,8 @@ export const TerminalLayout: React.FC<Props> = ({ children, project }) => {
                   <Button
                     size="small"
                     disableRipple
-                    sx={tabButtonSx(selectedTab === 2)}
-                    onClick={() => setSelectedTab(2)}
+                    sx={tabButtonSx(selectedTab === 'lineage')}
+                    onClick={() => setSelectedTab('lineage')}
                   >
                     <Typography
                       sx={{ fontWeight: 500, fontSize: 10.5, lineHeight: 1 }}
@@ -430,9 +466,9 @@ export const TerminalLayout: React.FC<Props> = ({ children, project }) => {
                     <Button
                       size="small"
                       disableRipple
-                      sx={tabButtonSx(selectedTab === 3)}
+                      sx={tabButtonSx(selectedTab === 'cicd')}
                       onClick={() => {
-                        setSelectedTab(3);
+                        setSelectedTab('cicd');
                         setIsManualCicdTabSwitch(true);
                       }}
                     >
@@ -442,36 +478,37 @@ export const TerminalLayout: React.FC<Props> = ({ children, project }) => {
                         CI/CD
                       </Typography>
                     </Button>
-                    {selectedTab === 3 && availablePipelines.length > 1 && (
-                      <Select
-                        size="small"
-                        value={selectedPipelineIdx}
-                        onChange={(e) =>
-                          setSelectedPipelineIdx(e.target.value as number)
-                        }
-                        variant="standard"
-                        disableUnderline
-                        sx={{
-                          fontSize: '0.7rem',
-                          height: 22,
-                          '& .MuiSelect-select': {
-                            py: 0,
-                            px: 0.5,
+                    {selectedTab === 'cicd' &&
+                      availablePipelines.length > 1 && (
+                        <Select
+                          size="small"
+                          value={selectedPipelineIdx}
+                          onChange={(e) =>
+                            setSelectedPipelineIdx(e.target.value as number)
+                          }
+                          variant="standard"
+                          disableUnderline
+                          sx={{
                             fontSize: '0.7rem',
-                          },
-                        }}
-                      >
-                        {availablePipelines.map((p, idx) => (
-                          <MenuItem
-                            key={p.name}
-                            value={idx}
-                            sx={{ fontSize: '0.75rem' }}
-                          >
-                            {p.name}
-                          </MenuItem>
-                        ))}
-                      </Select>
-                    )}
+                            height: 22,
+                            '& .MuiSelect-select': {
+                              py: 0,
+                              px: 0.5,
+                              fontSize: '0.7rem',
+                            },
+                          }}
+                        >
+                          {availablePipelines.map((p, idx) => (
+                            <MenuItem
+                              key={p.name}
+                              value={idx}
+                              sx={{ fontSize: '0.75rem' }}
+                            >
+                              {p.name}
+                            </MenuItem>
+                          ))}
+                        </Select>
+                      )}
                   </Box>
                 )}
                 {/* Process Tab - Only show when running */}
@@ -480,9 +517,9 @@ export const TerminalLayout: React.FC<Props> = ({ children, project }) => {
                     <Box
                       component="button"
                       type="button"
-                      onClick={() => setSelectedTab(1)}
+                      onClick={() => setSelectedTab('process')}
                       sx={{
-                        ...tabButtonSx(selectedTab === 1),
+                        ...tabButtonSx(selectedTab === 'process'),
                         display: 'flex',
                         alignItems: 'center',
                         gap: 0.75,
@@ -563,8 +600,22 @@ export const TerminalLayout: React.FC<Props> = ({ children, project }) => {
                     </Box>
                   </Box>
                 )}
+                {showQueryResultsTab && (
+                  <Button
+                    size="small"
+                    disableRipple
+                    sx={tabButtonSx(selectedTab === 'queryResults')}
+                    onClick={() => setSelectedTab('queryResults')}
+                  >
+                    <Typography
+                      sx={{ fontWeight: 500, fontSize: 10.5, lineHeight: 1 }}
+                    >
+                      QUERY RESULTS
+                    </Typography>
+                  </Button>
+                )}
                 {/* Fullscreen Toggle - Only for CI/CD tab */}
-                {selectedTab === 3 && (
+                {selectedTab === 'cicd' && (
                   <Tooltip
                     title={
                       isPipelineFullscreen ? 'Exit fullscreen' : 'Fullscreen'
@@ -599,7 +650,7 @@ export const TerminalLayout: React.FC<Props> = ({ children, project }) => {
                 <IconButton
                   onClick={handleMinimize}
                   size="small"
-                  style={{ marginLeft: selectedTab === 3 ? 0 : 'auto' }}
+                  style={{ marginLeft: selectedTab === 'cicd' ? 0 : 'auto' }}
                 >
                   <div style={{ marginTop: -8 }}>
                     <MinimizeRounded
@@ -612,16 +663,21 @@ export const TerminalLayout: React.FC<Props> = ({ children, project }) => {
               </TerminalHeader>
 
               {/* Tab Content */}
-              {selectedTab === 0 && <Terminal project={project} />}
-              {selectedTab === 1 && <ProcessTerminal />}
-              {selectedTab === 2 && showLineageTab && (
+              {selectedTab === 'terminal' && <Terminal project={project} />}
+              {selectedTab === 'process' && <ProcessTerminal />}
+              {selectedTab === 'lineage' && showLineageTab && (
                 <LineageView
                   projectId={project.id}
                   filePath={selectedFilePath}
                   onExpandClick={() => setOpenLineageModal(true)}
                 />
               )}
-              {selectedTab === 3 && showPipelineTab && (
+              {selectedTab === 'queryResults' && showQueryResultsTab && (
+                <Box sx={{ height: '100%', minHeight: 0 }}>
+                  {queryResultsPanel}
+                </Box>
+              )}
+              {selectedTab === 'cicd' && showPipelineTab && (
                 <Box
                   sx={{
                     height: '100%',

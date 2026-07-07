@@ -36,6 +36,7 @@ import {
   PipelineSelectorModal,
   PushToCloudModal,
 } from '../../components';
+import { ProjectQueryResultsPanel } from '../../components/projectQueryResults';
 import {
   ProjectSidebar,
   SidebarTab,
@@ -66,6 +67,8 @@ import {
 import {
   useAppContext,
   useDbt,
+  useProjectQueryResultsPanel,
+  useProjectSqlExecution,
   useRosettaDBT,
   useTabManager,
 } from '../../hooks';
@@ -163,6 +166,12 @@ const ProjectDetails: React.FC = () => {
     onCancelClose,
   } = useTabManager(project?.id);
   const fileContent = activeTab?.content;
+  const projectQueryResults = useProjectQueryResultsPanel(project?.id);
+  const { executeProjectSql } = useProjectSqlExecution({
+    onStart: projectQueryResults.startPreview,
+    onSuccess: projectQueryResults.completePreview,
+    onError: projectQueryResults.failPreview,
+  });
 
   const previousProjectPathRef = React.useRef<string | undefined>();
 
@@ -317,6 +326,86 @@ const ProjectDetails: React.FC = () => {
     );
     await updateStatuses();
   }, [tabs, markTabSavedByPath, setTabErrorByPath, updateStatuses]);
+
+  const handleOpenQuerySqlInEditor = React.useCallback(
+    (sql: string) => {
+      if (!activeTabId) {
+        toast.error('No active editor tab');
+        return;
+      }
+      updateTabContent(activeTabId, sql);
+    },
+    [activeTabId, updateTabContent],
+  );
+
+  const handleExecuteEditorQuery = React.useCallback(
+    async ({
+      sql,
+      filePath,
+      modelName,
+      compileModel,
+    }: {
+      sql: string;
+      filePath: string;
+      modelName?: string;
+      compileModel?: boolean;
+    }) => {
+      if (!project) {
+        toast.error('No active project');
+        return;
+      }
+      if (!settings?.dbtPath && compileModel) {
+        toast.info('Please configure dbt path in settings');
+        return;
+      }
+
+      await executeProjectSql({
+        project,
+        filePath,
+        rawSql: sql,
+        modelName,
+        compileModel,
+      });
+    },
+    [executeProjectSql, project, settings?.dbtPath],
+  );
+
+  const handleExecuteEditorCte = React.useCallback(
+    async ({
+      sql,
+      filePath,
+      cteName,
+      modelName,
+      compileModel,
+    }: {
+      sql: string;
+      filePath: string;
+      cteName: string;
+      modelName?: string;
+      compileModel?: boolean;
+    }) => {
+      if (!project) {
+        toast.error('No active project');
+        return;
+      }
+      if (!settings?.dbtPath && compileModel) {
+        toast.info('Please configure dbt path in settings');
+        return;
+      }
+
+      await executeProjectSql({
+        project,
+        filePath,
+        rawSql: sql,
+        querySql: sql,
+        modelName,
+        label: `CTE ${cteName}`,
+        compileModel,
+        cteName,
+      });
+    },
+    [executeProjectSql, project, settings?.dbtPath],
+  );
 
   const handleCloseAllTabs = React.useCallback(() => {
     const unmodifiedTabs = tabs.filter((tab) => !tab.isModified);
@@ -1029,7 +1118,54 @@ const ProjectDetails: React.FC = () => {
         <Pane minSize={200}>
           <Box height="100%" overflow="hidden">
             <Container>
-              <TerminalLayout project={project}>
+              <TerminalLayout
+                project={project}
+                showQueryResultsTab={
+                  selectedFilePath?.endsWith('.sql') ||
+                  projectQueryResults.state.history.length > 0 ||
+                  Boolean(projectQueryResults.state.result)
+                }
+                queryResultsRevision={projectQueryResults.revision}
+                queryResultsPanel={
+                  <ProjectQueryResultsPanel
+                    state={projectQueryResults.state}
+                    onTabChange={projectQueryResults.setActiveTab}
+                    onLimitChange={projectQueryResults.setLimit}
+                    onClear={projectQueryResults.clear}
+                    onAddBookmark={projectQueryResults.addBookmark}
+                    onDeleteBookmark={projectQueryResults.deleteBookmark}
+                    onRunHistoryItem={async (item) => {
+                      if (!project) return;
+                      await executeProjectSql({
+                        project,
+                        filePath: item.filePath,
+                        modelName: item.modelName,
+                        rawSql: item.rawSql,
+                        querySql: item.compiledSql ?? item.rawSql,
+                        compileModel: false,
+                      });
+                    }}
+                    onRun={
+                      projectQueryResults.state.rawSql
+                        ? async () => {
+                            if (!project) return;
+                            await executeProjectSql({
+                              project,
+                              filePath: projectQueryResults.state.filePath,
+                              modelName: projectQueryResults.state.modelName,
+                              rawSql: projectQueryResults.state.rawSql!,
+                              querySql:
+                                projectQueryResults.state.compiledSql ??
+                                projectQueryResults.state.rawSql!,
+                              compileModel: false,
+                            });
+                          }
+                        : undefined
+                    }
+                    onOpenSqlInEditor={handleOpenQuerySqlInEditor}
+                  />
+                }
+              >
                 <Content>
                   <EditorContainer>
                     <Header>
@@ -1108,6 +1244,8 @@ const ProjectDetails: React.FC = () => {
                           openTab(filePath);
                         }}
                         onTogglePreviewTab={handleTogglePreviewTab}
+                        onExecuteQuery={handleExecuteEditorQuery}
+                        onExecuteCte={handleExecuteEditorCte}
                         extraActions={
                           <>
                             {menuItems.length > 0 && (
@@ -1129,6 +1267,15 @@ const ProjectDetails: React.FC = () => {
                                   isRunningDbt={isRunningDbt}
                                   isRunningRosettaDbt={isRunningRosettaDbt}
                                   environment={env}
+                                  onQueryPreviewStart={
+                                    projectQueryResults.startPreview
+                                  }
+                                  onQueryPreviewSuccess={
+                                    projectQueryResults.completePreview
+                                  }
+                                  onQueryPreviewError={
+                                    projectQueryResults.failPreview
+                                  }
                                 />
                               )}
                           </>

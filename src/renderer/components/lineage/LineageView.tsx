@@ -9,7 +9,7 @@ import {
   Tooltip,
 } from '@mui/material';
 import RefreshIcon from '@mui/icons-material/Refresh';
-import OpenInFullIcon from '@mui/icons-material/OpenInFull';
+import FullscreenIcon from '@mui/icons-material/Fullscreen';
 import { LineageToolbar } from './LineageToolbar';
 import { LineageGraph } from './LineageGraph';
 import { NodeDetailsPanel } from './NodeDetailsPanel';
@@ -334,7 +334,7 @@ export const LineageView: React.FC<LineageViewProps> = ({
                 extraActions={
                   <Tooltip title="Maximize">
                     <IconButton onClick={onExpandClick} size="small">
-                      <OpenInFullIcon fontSize="small" />
+                      <FullscreenIcon fontSize="small" />
                     </IconButton>
                   </Tooltip>
                 }
