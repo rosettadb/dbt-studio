@@ -1,5 +1,5 @@
 import React from 'react';
-import { Box, Alert, Chip, Tooltip, Typography } from '@mui/material';
+import { Box, Alert, Button, Chip, Tooltip, Typography } from '@mui/material';
 import CloudIcon from '@mui/icons-material/Cloud';
 import { PipelineGraph } from './PipelineGraph';
 import { parsePipelineConfig } from './parsePipelineConfig';
@@ -21,6 +21,8 @@ type PipelineViewProps = {
   actionId?: string | null;
   /** Notifies parent of the active action id (for log viewer wiring). */
   onActiveActionChange?: (actionId: string | null) => void;
+  /** When provided, enables visual edit mode with a Save button. */
+  onSave?: (content: string) => Promise<void>;
 };
 
 const ACTION_STATUS_COLOR: Record<CloudActionStatus, string> = {
@@ -71,6 +73,7 @@ export const PipelineView: React.FC<PipelineViewProps> = ({
   onEdit,
   actionId,
   onActiveActionChange,
+  onSave,
 }) => {
   const config = React.useMemo(() => parsePipelineConfig(content), [content]);
 
@@ -104,11 +107,20 @@ export const PipelineView: React.FC<PipelineViewProps> = ({
 
   if (!config) {
     return (
-      <Box sx={{ p: 3 }}>
+      <Box sx={{ p: 3, display: 'flex', flexDirection: 'column', gap: 2 }}>
         <Alert severity="warning">
           Unable to parse pipeline config. Make sure the file is valid YAML with
           a <code>jobs</code> array.
         </Alert>
+        {onEdit && (
+          <Button
+            variant="outlined"
+            onClick={onEdit}
+            sx={{ alignSelf: 'flex-start' }}
+          >
+            Open pipeline.yml in editor
+          </Button>
+        )}
       </Box>
     );
   }
@@ -176,7 +188,12 @@ export const PipelineView: React.FC<PipelineViewProps> = ({
           />
         </Box>
       )}
-      <PipelineGraph jobs={jobsWithStatus} onEdit={onEdit} />
+      <PipelineGraph
+        jobs={jobsWithStatus}
+        pipelineName={config.name}
+        onEdit={onEdit}
+        onSave={onSave}
+      />
     </Box>
   );
 };
