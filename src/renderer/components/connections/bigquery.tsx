@@ -116,7 +116,11 @@ export const BigQuery: React.FC<Props> = ({
     useUpdateConnection({
       onSuccess: () => {
         toast.success('BigQuery connection updated successfully!');
-        navigate('/app/project-details');
+        if (projectId) {
+          navigate('/app');
+          return;
+        }
+        navigate('/app/connections');
       },
       onError: (error) => {
         toast.error(`Update failed: ${error}`);

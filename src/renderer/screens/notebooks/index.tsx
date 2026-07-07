@@ -1308,8 +1308,6 @@ const Notebooks = () => {
             <TextField
               label="Description (optional)"
               fullWidth
-              multiline
-              rows={3}
               value={newNotebookDescription}
               onChange={(e) => setNewNotebookDescription(e.target.value)}
               placeholder="Describe what this notebook is for..."
