@@ -134,6 +134,7 @@ const Sql = () => {
     updateTabResults,
     setTabLoading,
     setTabError,
+    markTabSaved,
     reorderTabs,
   } = tabManager;
 
@@ -520,6 +521,12 @@ const Sql = () => {
     },
     [activeTabId, updateTabQuery],
   );
+
+  const handleQuerySaved = useCallback(() => {
+    if (activeTabId) {
+      markTabSaved(activeTabId);
+    }
+  }, [activeTabId, markTabSaved]);
 
   // Handle query results — also captures a snapshot for the AI Agent
   const handleQueryResults = useCallback(
@@ -1366,6 +1373,7 @@ const Sql = () => {
                               setQueryResults={handleQueryResults}
                               setError={handleSetError}
                               onQueryChange={handleQueryChange}
+                              onQuerySaved={handleQuerySaved}
                               onQueryStart={(id) => {
                                 if (activeTabId) {
                                   setTabExecutions((prev) => ({
@@ -1383,7 +1391,8 @@ const Sql = () => {
                             sx={{
                               height: '100%',
                               padding: 1,
-                              overflowY: 'auto',
+                              minHeight: 0,
+                              overflow: 'hidden',
                               background: theme.palette.background.paper,
                             }}
                           >
@@ -1458,6 +1467,7 @@ const Sql = () => {
                             setQueryResults={handleQueryResults}
                             setError={handleSetError}
                             onQueryChange={handleQueryChange}
+                            onQuerySaved={handleQuerySaved}
                             onQueryStart={(id) => {
                               if (activeTabId) {
                                 setTabExecutions((prev) => ({

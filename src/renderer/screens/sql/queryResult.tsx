@@ -571,8 +571,9 @@ export const QueryResult: React.FC<Props> = ({ results, exportContext }) => {
             fontSize: '0.8rem',
             opacity: 0.8,
             cursor: 'default',
-            display: 'inline-block',
+            display: 'block',
             maxWidth: '100%',
+            minWidth: 0,
           }}
         >
           {singleLine}
@@ -654,12 +655,20 @@ export const QueryResult: React.FC<Props> = ({ results, exportContext }) => {
   }
 
   const sharedToolbarContent = (
-    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+    <Box
+      sx={{
+        display: 'flex',
+        alignItems: 'center',
+        gap: 1,
+        flex: '0 0 auto',
+        whiteSpace: 'nowrap',
+      }}
+    >
       {results.duration !== undefined && (
         <Typography
           variant="body2"
           color="text.secondary"
-          sx={{ opacity: 0.7 }}
+          sx={{ opacity: 0.7, flex: '0 0 auto' }}
         >
           {results.duration > 1000
             ? `${(results.duration / 1000).toFixed(2)}s`
@@ -670,7 +679,7 @@ export const QueryResult: React.FC<Props> = ({ results, exportContext }) => {
         <Typography
           variant="body2"
           color="text.secondary"
-          sx={{ opacity: 0.7 }}
+          sx={{ opacity: 0.7, flex: '0 0 auto' }}
         >
           {showingInfo}
         </Typography>
@@ -681,7 +690,7 @@ export const QueryResult: React.FC<Props> = ({ results, exportContext }) => {
         startIcon={viewMode === 'table' ? <CsvIcon /> : <BarChartIcon />}
         endIcon={<ArrowDropDownIcon />}
         onClick={handlePreviewMenuOpen}
-        sx={{ minWidth: 90 }}
+        sx={{ minWidth: 90, flex: '0 0 auto' }}
       >
         {viewMode === 'table' ? 'Table' : 'Chart'}
       </Button>
@@ -740,6 +749,7 @@ export const QueryResult: React.FC<Props> = ({ results, exportContext }) => {
             endIcon={<ArrowDropDownIcon />}
             onClick={handleExportMenuOpen}
             disabled={!hasRows || isExporting}
+            sx={{ flex: '0 0 auto' }}
           >
             {isExporting ? 'Exporting...' : 'Export'}
           </Button>
@@ -844,7 +854,13 @@ export const QueryResult: React.FC<Props> = ({ results, exportContext }) => {
   return (
     <div
       data-testid="sql-results-pane"
-      style={{ display: 'flex', flexDirection: 'column', height: '100%' }}
+      style={{
+        display: 'flex',
+        flexDirection: 'column',
+        height: '100%',
+        minHeight: 0,
+        overflow: 'hidden',
+      }}
     >
       {viewMode === 'chart' ? (
         <Box
@@ -937,6 +953,7 @@ export const QueryResult: React.FC<Props> = ({ results, exportContext }) => {
             },
           }))}
           customPagination={customPagination as any}
+          containerStyle={{ flex: '1 1 auto', minHeight: 0 }}
           loading={loading}
         />
       )}

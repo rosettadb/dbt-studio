@@ -24,6 +24,7 @@ type Props = {
   connectionId?: string;
   initialQuery?: string;
   onQueryChange?: (query: string) => void;
+  onQuerySaved?: (query: string) => void;
   // Common props
   queryHistory: QueryHistoryType[];
   setQueryHistory: (v: QueryHistoryType[]) => void;
@@ -42,6 +43,7 @@ export const SqlEditor: React.FC<Props> = ({
   connectionId,
   initialQuery,
   onQueryChange,
+  onQuerySaved,
   queryHistory,
   setQueryHistory,
   setLoadingQuery,
@@ -273,6 +275,12 @@ export const SqlEditor: React.FC<Props> = ({
       if (isConnectionMode && connectionId) {
         connectorsServices
           .updateConnectionQuery(connectionId, content)
+          .then(() => {
+            if (content === queryContentRef.current) {
+              onQuerySaved?.(content);
+            }
+            return undefined;
+          })
           .catch(() => {});
       } else if (selectedProject?.id) {
         projectsServices
@@ -283,7 +291,13 @@ export const SqlEditor: React.FC<Props> = ({
           .catch(() => {});
       }
     },
-    [isConnectionMode, connectionId, onQueryChange, selectedProject?.id],
+    [
+      isConnectionMode,
+      connectionId,
+      onQueryChange,
+      onQuerySaved,
+      selectedProject?.id,
+    ],
   );
 
   const runEditorQuery = React.useCallback(
@@ -367,6 +381,12 @@ export const SqlEditor: React.FC<Props> = ({
           if (connectionId) {
             connectorsServices
               .updateConnectionQuery(connectionId, content)
+              .then(() => {
+                if (content === queryContentRef.current) {
+                  onQuerySaved?.(content);
+                }
+                return undefined;
+              })
               .catch(() => {
                 // Silently fail - query is still in local state
               });
@@ -384,7 +404,13 @@ export const SqlEditor: React.FC<Props> = ({
         }
       }, 500);
     },
-    [isConnectionMode, connectionId, onQueryChange, selectedProject?.id],
+    [
+      isConnectionMode,
+      connectionId,
+      onQueryChange,
+      onQuerySaved,
+      selectedProject?.id,
+    ],
   );
 
   // Get filter ID for query history based on mode
