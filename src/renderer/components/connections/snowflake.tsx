@@ -113,6 +113,11 @@ export const Snowflake: React.FC<Props> = ({
     useUpdateConnection({
       onSuccess: () => {
         toast.success('Snowflake connection updated successfully!');
+        if (projectId) {
+          navigate('/app');
+          return;
+        }
+        navigate('/app/connections');
       },
       onError: (error) => {
         toast.error(`Configuration failed: ${error}`);
