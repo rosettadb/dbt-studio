@@ -13,7 +13,7 @@ import type {
 
 type PipelineViewProps = {
   content: string;
-  onEdit?: () => void;
+  onEdit?: (content?: string) => void;
   /**
    * Cloud action id recorded for this specific pipeline file. When null, no
    * status is fetched and every node renders neutral.
@@ -115,7 +115,7 @@ export const PipelineView: React.FC<PipelineViewProps> = ({
         {onEdit && (
           <Button
             variant="outlined"
-            onClick={onEdit}
+            onClick={() => onEdit()}
             sx={{ alignSelf: 'flex-start' }}
           >
             Open pipeline.yml in editor

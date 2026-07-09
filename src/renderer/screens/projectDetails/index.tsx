@@ -236,21 +236,25 @@ const ProjectDetails: React.FC = () => {
     setPipelineDraftTab(null);
   }, [activePipelineFilePath]);
 
-  const handleEnterPipelineCodeMode = React.useCallback(() => {
-    setPipelineDraftTab({
-      id: activePipelineFilePath,
-      path: activePipelineFilePath,
-      title: activePipelineBasename ?? activePipelineFilePath,
-      content: activePipelineContent ?? '',
-      savedContent: activePipelineContent ?? '',
-      isModified: false,
-      isLoading: false,
-      error: undefined,
-      viewState: null,
-      isReadOnly: false,
-    });
-    setPipelineCodeMode(true);
-  }, [activePipelineFilePath, activePipelineBasename, activePipelineContent]);
+  const handleEnterPipelineCodeMode = React.useCallback(
+    (content?: string) => {
+      const resolvedContent = content ?? activePipelineContent ?? '';
+      setPipelineDraftTab({
+        id: activePipelineFilePath,
+        path: activePipelineFilePath,
+        title: activePipelineBasename ?? activePipelineFilePath,
+        content: resolvedContent,
+        savedContent: resolvedContent,
+        isModified: false,
+        isLoading: false,
+        error: undefined,
+        viewState: null,
+        isReadOnly: false,
+      });
+      setPipelineCodeMode(true);
+    },
+    [activePipelineFilePath, activePipelineBasename, activePipelineContent],
+  );
 
   const handleExitPipelineCodeMode = React.useCallback(() => {
     if (

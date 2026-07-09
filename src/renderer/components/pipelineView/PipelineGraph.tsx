@@ -41,6 +41,7 @@ import { PLUGIN_MAP } from './pluginDefinitions';
 import { serializePipelineConfig } from './serializePipeline';
 import { validatePipelineGraph } from './validatePipeline';
 import { useTerminalMinimize } from '../terminal';
+import { UnsavedChangesDialog } from '../editor/unsavedChangesDialog';
 
 const nodeTypes = { pipelineNode: PipelineNode };
 
@@ -50,7 +51,7 @@ const NODE_HEIGHT = 110;
 type PipelineGraphProps = {
   jobs: PipelineJob[];
   pipelineName: string;
-  onEdit?: () => void;
+  onEdit?: (content?: string) => void;
   onSave?: (content: string) => Promise<void>;
 };
 
@@ -180,10 +181,15 @@ const PipelineGraphContent: React.FC<PipelineGraphProps> = ({
   );
   const [validationError, setValidationError] = React.useState('');
   const [isSaving, setIsSaving] = React.useState(false);
+  const [showUnsavedDialog, setShowUnsavedDialog] = React.useState(false);
 
   const reactFlowWrapper = React.useRef<HTMLDivElement>(null);
   const nodesRef = React.useRef(nodes);
   nodesRef.current = nodes;
+  // Snapshot of the serialized graph at the moment edit mode was entered,
+  // so we can tell whether anything actually changed before warning about
+  // unsaved changes.
+  const editSnapshotRef = React.useRef('');
 
   const openEditForNode = useCallback((id: string) => {
     const node = nodesRef.current.find((n) => n.id === id);
@@ -227,6 +233,11 @@ const PipelineGraphContent: React.FC<PipelineGraphProps> = ({
     setPipelineName(initialPipelineName);
     setValidationError('');
     setIsEditing(true);
+    editSnapshotRef.current = serializePipelineConfig(
+      initialPipelineName,
+      laid,
+      laidEdges,
+    );
     if (terminal && !terminal.isMinimized) {
       terminal.minimize();
       autoMinimizedRef.current = true;
@@ -242,11 +253,11 @@ const PipelineGraphContent: React.FC<PipelineGraphProps> = ({
     }
   }, [terminal]);
 
-  const handleSave = useCallback(async () => {
+  const handleSave = useCallback(async (): Promise<string | null> => {
     const errors = validatePipelineGraph(nodes, edges);
     if (errors.length > 0) {
       setValidationError(errors[0].message);
-      return;
+      return null;
     }
     setValidationError('');
     setIsSaving(true);
@@ -258,12 +269,46 @@ const PipelineGraphContent: React.FC<PipelineGraphProps> = ({
         terminal?.restore();
         autoMinimizedRef.current = false;
       }
+      return content;
     } catch (err) {
       setValidationError(err instanceof Error ? err.message : 'Save failed');
+      return null;
     } finally {
       setIsSaving(false);
     }
   }, [nodes, edges, pipelineName, onSave, terminal]);
+
+  const handleRequestCodeView = useCallback(() => {
+    if (!onEdit) return;
+    if (isEditing) {
+      const currentSnapshot = serializePipelineConfig(
+        pipelineName,
+        nodes,
+        edges,
+      );
+      if (currentSnapshot !== editSnapshotRef.current) {
+        setShowUnsavedDialog(true);
+        return;
+      }
+    }
+    onEdit();
+  }, [isEditing, onEdit, pipelineName, nodes, edges]);
+
+  const handleUnsavedSave = useCallback(async () => {
+    const content = await handleSave();
+    setShowUnsavedDialog(false);
+    if (content !== null) onEdit?.(content);
+  }, [handleSave, onEdit]);
+
+  const handleUnsavedDiscard = useCallback(() => {
+    setShowUnsavedDialog(false);
+    handleCancelEdit();
+    onEdit?.();
+  }, [handleCancelEdit, onEdit]);
+
+  const handleUnsavedCancel = useCallback(() => {
+    setShowUnsavedDialog(false);
+  }, []);
 
   const onConnect = useCallback(
     (params: Connection) => {
@@ -476,7 +521,7 @@ const PipelineGraphContent: React.FC<PipelineGraphProps> = ({
         )}
         {onEdit && (
           <Tooltip title="View as YAML">
-            <IconButton size="small" onClick={onEdit}>
+            <IconButton size="small" onClick={handleRequestCodeView}>
               <CodeIcon fontSize="small" />
             </IconButton>
           </Tooltip>
@@ -545,6 +590,14 @@ const PipelineGraphContent: React.FC<PipelineGraphProps> = ({
         existingJobNames={existingJobNames}
         onClose={() => setEditNode(null)}
         onSave={handleDialogSave}
+      />
+
+      <UnsavedChangesDialog
+        open={showUnsavedDialog}
+        fileName={pipelineName || 'pipeline.yml'}
+        onSave={handleUnsavedSave}
+        onDiscard={handleUnsavedDiscard}
+        onCancel={handleUnsavedCancel}
       />
     </Box>
   );
