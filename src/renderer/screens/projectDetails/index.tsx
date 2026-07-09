@@ -36,6 +36,7 @@ import {
   PipelineSelectorModal,
   PushToCloudModal,
 } from '../../components';
+import { TerminalLayoutRef, TerminalPanelTab } from '../../components/terminal';
 import { ProjectQueryResultsPanel } from '../../components/projectQueryResults';
 import {
   ProjectSidebar,
@@ -63,14 +64,9 @@ import {
   CloudLogViewer,
   isPipelineFile,
 } from '../../components/pipelineView';
+import { DbtRunHistoryPanel } from '../../components/dbtRunHistory';
 import { projectsServices } from '../../services';
-import {
-  Container,
-  Content,
-  EditorContainer,
-  Header,
-  NoFileSelected,
-} from './styles';
+import { Content, EditorContainer, Header, NoFileSelected } from './styles';
 import {
   useAppContext,
   useDbt,
@@ -175,10 +171,19 @@ const ProjectDetails: React.FC = () => {
     onDiscardAndClose,
     onCancelClose,
   } = useTabManager(project?.id);
+  const terminalLayoutRef = React.useRef<TerminalLayoutRef>(null);
+
+  const handleTerminalTabSwitch = React.useCallback((tab: TerminalPanelTab) => {
+    terminalLayoutRef.current?.switchTab(tab);
+  }, []);
+
   const fileContent = activeTab?.content;
   const projectQueryResults = useProjectQueryResultsPanel(project?.id);
   const { executeProjectSql } = useProjectSqlExecution({
-    onStart: projectQueryResults.startPreview,
+    onStart: (payload) => {
+      handleTerminalTabSwitch('queryResults');
+      projectQueryResults.startPreview(payload);
+    },
     onSuccess: projectQueryResults.completePreview,
     onError: projectQueryResults.failPreview,
   });
@@ -934,15 +939,16 @@ const ProjectDetails: React.FC = () => {
     <AppLayout
       topMenuActions={
         <ProjectDbtSplitButton
-          rosettaPath={settings?.rosettaPath}
-          dbtPath={settings?.dbtPath}
-          project={project}
-          isDbtConfigured={!!settings?.dbtPath}
+          connection={connection}
+          isDbtConfigured={Boolean(settings?.dbtPath)}
           isRunningDbt={isRunningDbt}
           isRunningRosettaDbt={isRunningRosettaDbt}
-          connection={connection}
-          environment={env}
+          project={project}
+          rosettaPath={settings?.rosettaPath}
+          dbtPath={settings?.dbtPath}
+          environment="local"
           rosettaDbt={rosettaDbt}
+          onBeforeExecute={() => handleTerminalTabSwitch('terminal')}
         />
       }
       panelTitle="DBT Studio"
@@ -1171,13 +1177,15 @@ const ProjectDetails: React.FC = () => {
       >
         <Pane minSize={200}>
           <Box height="100%" overflow="hidden">
-            <Container>
+            <div style={{ height: '100%', overflow: 'hidden' }}>
               <TerminalLayout
+                ref={terminalLayoutRef}
                 project={project}
                 showQueryResultsTab={
                   selectedFilePath?.endsWith('.sql') ||
                   projectQueryResults.state.history.length > 0 ||
-                  Boolean(projectQueryResults.state.result)
+                  Boolean(projectQueryResults.state.result) ||
+                  projectQueryResults.state.isRunning
                 }
                 queryResultsRevision={projectQueryResults.revision}
                 queryResultsPanel={
@@ -1217,6 +1225,13 @@ const ProjectDetails: React.FC = () => {
                         : undefined
                     }
                     onOpenSqlInEditor={handleOpenQuerySqlInEditor}
+                  />
+                }
+                showRunHistoryTab
+                runHistoryPanel={
+                  <DbtRunHistoryPanel
+                    projectId={project.id}
+                    onFixWithAI={(prompt) => openChatWithMessage(prompt)}
                   />
                 }
               >
@@ -1371,9 +1386,15 @@ const ProjectDetails: React.FC = () => {
                                       isRunningDbt={isRunningDbt}
                                       isRunningRosettaDbt={isRunningRosettaDbt}
                                       environment={env}
-                                      onQueryPreviewStart={
-                                        projectQueryResults.startPreview
+                                      onBeforeExecute={() =>
+                                        handleTerminalTabSwitch('terminal')
                                       }
+                                      onQueryPreviewStart={(payload) => {
+                                        handleTerminalTabSwitch('queryResults');
+                                        projectQueryResults.startPreview(
+                                          payload,
+                                        );
+                                      }}
                                       onQueryPreviewSuccess={
                                         projectQueryResults.completePreview
                                       }
@@ -1474,7 +1495,7 @@ const ProjectDetails: React.FC = () => {
                   initialDbtArguments={pipelineRunArgs}
                 />
               )}
-            </Container>
+            </div>
           </Box>
         </Pane>
         <Pane minSize={CHAT_MIN_WIDTH}>

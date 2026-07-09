@@ -27,6 +27,7 @@ interface ModelSplitButtonProps {
   isRunningDbt: boolean;
   isRunningRosettaDbt: boolean;
   environment?: 'local' | 'cloud';
+  onBeforeExecute?: () => void;
   onQueryPreviewStart?: (payload: Partial<ProjectQueryPreviewPayload>) => void;
   onQueryPreviewSuccess?: (payload: ProjectQueryPreviewPayload) => void;
   onQueryPreviewError?: (payload: ProjectQueryPreviewPayload) => void;
@@ -40,6 +41,7 @@ export const ModelSplitButton: React.FC<ModelSplitButtonProps> = ({
   isRunningDbt,
   isRunningRosettaDbt,
   environment = 'local',
+  onBeforeExecute,
   onQueryPreviewStart,
   onQueryPreviewSuccess,
   onQueryPreviewError,
@@ -78,6 +80,7 @@ export const ModelSplitButton: React.FC<ModelSplitButtonProps> = ({
     localHandler: () => Promise<void>,
     dbtArgs?: string,
   ) => {
+    onBeforeExecute?.();
     if (environment === 'cloud') {
       setCloudDbtArguments(dbtArgs || '');
       setRunInCloudModal(command);

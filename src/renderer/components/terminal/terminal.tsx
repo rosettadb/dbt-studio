@@ -35,6 +35,12 @@ export const Terminal: React.FC<Props> = ({ project }) => {
   const { data: settings } = useGetSettings();
   const { record, getPrev, getNext, resetPointer } = useCommandHistory();
 
+  // Clear output when mounting for a new project (project.id changes → key changes → remount)
+  React.useEffect(() => {
+    clearOutput();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   const [contextMenu, setContextMenu] = React.useState<{
     mouseX: number;
     mouseY: number;
