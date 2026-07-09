@@ -25,11 +25,12 @@ import {
   Tooltip,
   useTheme,
   Button,
+  IconButton,
   TextField,
   Typography,
 } from '@mui/material';
 import type { Theme } from '@mui/material';
-import EditIcon from '@mui/icons-material/Edit';
+import CodeIcon from '@mui/icons-material/Code';
 import AutoFixHighIcon from '@mui/icons-material/AutoFixHigh';
 import SaveIcon from '@mui/icons-material/Save';
 import type { PipelineJob } from './types';
@@ -428,20 +429,20 @@ const PipelineGraphContent: React.FC<PipelineGraphProps> = ({
       onDrop={isEditing ? onDrop : undefined}
       onDragOver={isEditing ? onDragOver : undefined}
     >
-      {isEditing && (
-        <Box
-          sx={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: 1.5,
-            px: 2,
-            py: 0.75,
-            bgcolor: 'background.paper',
-            borderBottom: 1,
-            borderColor: 'divider',
-            flexShrink: 0,
-          }}
-        >
+      <Box
+        sx={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: 1.5,
+          px: 2,
+          py: 0.75,
+          bgcolor: 'background.paper',
+          borderBottom: 1,
+          borderColor: 'divider',
+          flexShrink: 0,
+        }}
+      >
+        {isEditing ? (
           <TextField
             label="Pipeline Name"
             value={pipelineName}
@@ -450,36 +451,53 @@ const PipelineGraphContent: React.FC<PipelineGraphProps> = ({
             sx={{ width: 200 }}
             InputLabelProps={{ shrink: true }}
           />
-          {validationError ? (
-            <Typography
-              variant="caption"
-              color="error"
-              sx={{ flex: 1, fontSize: '0.7rem' }}
-            >
-              {validationError}
-            </Typography>
-          ) : (
-            <Typography
-              variant="caption"
-              sx={{ flex: 1, color: 'text.disabled', fontSize: '0.65rem' }}
-            >
-              Double-click a step to edit · Del to remove selected
-            </Typography>
-          )}
-          <Button size="small" onClick={handleCancelEdit} disabled={isSaving}>
-            Cancel
-          </Button>
-          <Button
-            size="small"
-            variant="contained"
-            onClick={handleSave}
-            disabled={isSaving}
-            startIcon={<SaveIcon sx={{ fontSize: 14 }} />}
+        ) : (
+          <Typography variant="body2" sx={{ fontWeight: 500 }}>
+            {pipelineName}
+          </Typography>
+        )}
+        {isEditing && validationError ? (
+          <Typography
+            variant="caption"
+            color="error"
+            sx={{ flex: 1, fontSize: '0.7rem' }}
           >
-            {isSaving ? 'Saving…' : 'Save'}
-          </Button>
-        </Box>
-      )}
+            {validationError}
+          </Typography>
+        ) : (
+          <Typography
+            variant="caption"
+            sx={{ flex: 1, color: 'text.disabled', fontSize: '0.65rem' }}
+          >
+            {isEditing
+              ? 'Double-click a step to edit · Del to remove selected'
+              : ''}
+          </Typography>
+        )}
+        {onEdit && (
+          <Tooltip title="View as YAML">
+            <IconButton size="small" onClick={onEdit}>
+              <CodeIcon fontSize="small" />
+            </IconButton>
+          </Tooltip>
+        )}
+        {isEditing && (
+          <>
+            <Button size="small" onClick={handleCancelEdit} disabled={isSaving}>
+              Cancel
+            </Button>
+            <Button
+              size="small"
+              variant="contained"
+              onClick={handleSave}
+              disabled={isSaving}
+              startIcon={<SaveIcon sx={{ fontSize: 14 }} />}
+            >
+              {isSaving ? 'Saving…' : 'Save'}
+            </Button>
+          </>
+        )}
+      </Box>
 
       <Box
         sx={{ flex: 1, minHeight: 0, display: 'flex' }}
@@ -512,13 +530,6 @@ const PipelineGraphContent: React.FC<PipelineGraphProps> = ({
                 <Tooltip title="Visual edit pipeline" placement="right">
                   <ControlButton onClick={handleEnterEdit}>
                     <AutoFixHighIcon style={{ maxWidth: 14, maxHeight: 14 }} />
-                  </ControlButton>
-                </Tooltip>
-              )}
-              {!isEditing && onEdit && (
-                <Tooltip title="Edit pipeline.yml" placement="right">
-                  <ControlButton onClick={onEdit}>
-                    <EditIcon style={{ maxWidth: 12, maxHeight: 12 }} />
                   </ControlButton>
                 </Tooltip>
               )}

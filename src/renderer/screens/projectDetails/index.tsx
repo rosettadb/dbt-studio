@@ -3,6 +3,7 @@ import SplitPane, { Pane } from 'split-pane-react';
 import 'split-pane-react/esm/themes/default.css';
 import { Navigate, useNavigate } from 'react-router-dom';
 import {
+  AccountTree,
   AutoAwesome,
   AutoFixHigh,
   Cable,
@@ -12,12 +13,14 @@ import {
 import {
   Badge,
   Box,
+  IconButton,
   ListItemIcon,
   ListItemText,
   Menu,
   MenuItem,
   Tab,
   Tabs,
+  Tooltip,
 } from '@mui/material';
 import { toast } from 'react-toastify';
 import yaml from 'js-yaml';
@@ -82,7 +85,7 @@ import { utils } from '../../helpers';
 import { AppLayout } from '../../layouts';
 import ChatScreen from '../chat';
 import { getFileName } from '../../services/settings.services';
-import type { EditorTabId } from '../../../types/editor';
+import type { EditorTabId, EditorTabState } from '../../../types/editor';
 import { subscribeToToolResult } from '../../services/agentEvents.service';
 import {
   toPreviewPath,
@@ -221,6 +224,45 @@ const ProjectDetails: React.FC = () => {
     activePipelineBasename,
     recordedPipelineActionId,
   );
+
+  // Code/visual toggle for the pipeline tab — the raw YAML is edited inline
+  // via a one-off Editor instance instead of opening a second tab.
+  const [pipelineCodeMode, setPipelineCodeMode] = React.useState(false);
+  const [pipelineDraftTab, setPipelineDraftTab] =
+    React.useState<EditorTabState | null>(null);
+
+  React.useEffect(() => {
+    setPipelineCodeMode(false);
+    setPipelineDraftTab(null);
+  }, [activePipelineFilePath]);
+
+  const handleEnterPipelineCodeMode = React.useCallback(() => {
+    setPipelineDraftTab({
+      id: activePipelineFilePath,
+      path: activePipelineFilePath,
+      title: activePipelineBasename ?? activePipelineFilePath,
+      content: activePipelineContent ?? '',
+      savedContent: activePipelineContent ?? '',
+      isModified: false,
+      isLoading: false,
+      error: undefined,
+      viewState: null,
+      isReadOnly: false,
+    });
+    setPipelineCodeMode(true);
+  }, [activePipelineFilePath, activePipelineBasename, activePipelineContent]);
+
+  const handleExitPipelineCodeMode = React.useCallback(() => {
+    if (
+      pipelineDraftTab?.isModified &&
+      // eslint-disable-next-line no-alert
+      !window.confirm('Discard unsaved YAML changes?')
+    ) {
+      return;
+    }
+    setPipelineCodeMode(false);
+    setPipelineDraftTab(null);
+  }, [pipelineDraftTab]);
 
   const {
     data: directories,
@@ -975,13 +1017,8 @@ const ProjectDetails: React.FC = () => {
               }}
               onFileSelect={async (fileNode) => {
                 if (isPipelineFile(fileNode.path)) {
-                  const basename = fileNode.path
-                    .replace(/\\/g, '/')
-                    .split('/')
-                    .pop()
-                    ?.replace(/\.(yml|yaml)$/, '');
                   openTab(toPipelineTabPath(fileNode.path), {
-                    title: basename || fileNode.name,
+                    title: fileNode.name,
                     content: '',
                     isReadOnly: true,
                   });
@@ -1147,25 +1184,83 @@ const ProjectDetails: React.FC = () => {
                             minHeight: 0,
                           }}
                         >
-                          <PipelineView
-                            content={activePipelineContent || ''}
-                            onEdit={() => {
-                              setSelectedFilePath(activePipelineFilePath);
-                              openTab(activePipelineFilePath);
-                            }}
-                            actionId={activePipelineActionId}
-                            onSave={
-                              activePipelineFilePath
-                                ? async (content: string) => {
-                                    await projectsServices.saveFileContent({
-                                      path: activePipelineFilePath,
-                                      content,
-                                    });
-                                    await refetchPipelineContent();
-                                  }
-                                : undefined
-                            }
-                          />
+                          {pipelineCodeMode && pipelineDraftTab ? (
+                            <Editor
+                              projectId={project.id}
+                              projectPath={project.path}
+                              tabs={[pipelineDraftTab]}
+                              activeTabId={pipelineDraftTab.id}
+                              onTabContentChange={(_tabId, newContent) => {
+                                setPipelineDraftTab((prev) =>
+                                  prev
+                                    ? {
+                                        ...prev,
+                                        content: newContent,
+                                        isModified:
+                                          newContent !==
+                                          (prev.savedContent ?? ''),
+                                      }
+                                    : prev,
+                                );
+                              }}
+                              onTabSaved={() => {
+                                setPipelineDraftTab((prev) =>
+                                  prev
+                                    ? {
+                                        ...prev,
+                                        isModified: false,
+                                        savedContent: prev.content,
+                                      }
+                                    : prev,
+                                );
+                                refetchPipelineContent();
+                                updateStatuses();
+                              }}
+                              onTabError={(_tabId, errorMessage) => {
+                                setPipelineDraftTab((prev) =>
+                                  prev
+                                    ? { ...prev, error: errorMessage }
+                                    : prev,
+                                );
+                              }}
+                              pendingClose={null}
+                              onSaveAndClose={async () => {}}
+                              onDiscardAndClose={() => {}}
+                              onCancelClose={() => {}}
+                              onGitStatusRefresh={updateStatuses}
+                              onOpenFile={(filePath: string) => {
+                                setSelectedFilePath(filePath);
+                                openTab(filePath);
+                              }}
+                              extraActions={
+                                <Tooltip title="Visual editor">
+                                  <IconButton
+                                    size="small"
+                                    onClick={handleExitPipelineCodeMode}
+                                  >
+                                    <AccountTree fontSize="small" />
+                                  </IconButton>
+                                </Tooltip>
+                              }
+                            />
+                          ) : (
+                            <PipelineView
+                              content={activePipelineContent || ''}
+                              onEdit={handleEnterPipelineCodeMode}
+                              actionId={activePipelineActionId}
+                              onSave={
+                                activePipelineFilePath
+                                  ? async (content: string) => {
+                                      await projectsServices.saveFileContent({
+                                        path: activePipelineFilePath,
+                                        content,
+                                      });
+                                      await refetchPipelineContent();
+                                    }
+                                  : undefined
+                              }
+                            />
+                          )}
                         </Box>
                         {activePipelineActionId && (
                           <Box
