@@ -30,3 +30,9 @@ export * from './sourceControl';
 export * from './queryResult';
 export { ScrollbarStyles } from './scrollbarStyles';
 export { StatusBar } from './statusBar';
+export {
+  QuickStartTour,
+  hasSeenTour,
+  markTourSeen,
+  resetTour,
+} from './QuickStartTour';

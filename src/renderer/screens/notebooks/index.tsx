@@ -31,6 +31,7 @@ import {
   TableChart,
   Link as LinkIcon,
   Warning,
+  InsertChart,
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   ChatBubbleOutline,
 } from '@mui/icons-material';
@@ -55,6 +56,7 @@ import connectionIcons, {
 } from '../../../../assets/connectionIcons';
 import { AppContext } from '../../context';
 import { connectorsServices, DuckLakeService } from '../../services';
+import { AnalyticsEditor } from '../../components/analytics';
 import { NotebooksSidebar } from '../../components/notebook/NotebooksSidebar';
 import { NotebookTabManager } from '../../components/notebook/NotebookTabManager';
 import { NotebookEditor } from '../../components/notebook';
@@ -139,6 +141,22 @@ const Notebooks = () => {
     setShowArchived,
     isHydrated: isSidebarHydrated,
   } = useNotebookSidebarState();
+
+  const [activeSidebarTab, setActiveSidebarTab] = useState(0);
+  const [activeAnalyticsPageId, setActiveAnalyticsPageId] = useState<
+    string | null
+  >(null);
+
+  // Reset analytics page when switching connections to prevent showing
+  // a page from the previous connection
+  useEffect(() => {
+    setActiveAnalyticsPageId(null);
+  }, [activeConnectionId]);
+
+  const handleOpenAnalyticsPage = useCallback((pageId: string) => {
+    setActiveAnalyticsPageId(pageId);
+    // Future Phase 3: trigger main content to show analytics editor
+  }, []);
 
   const notebookTabManager = useNotebookTabManager();
 
@@ -1002,6 +1020,14 @@ const Notebooks = () => {
               getConnectionName={getConnectionName}
               onExportAllNotebooks={handleExportAllNotebooks}
               onImportAllNotebooks={handleImportAllNotebooks}
+              onTabChange={setActiveSidebarTab}
+              connectionId={activeConnectionId}
+              activeAnalyticsPageId={activeAnalyticsPageId}
+              onOpenAnalyticsPage={handleOpenAnalyticsPage}
+              onDeleteAnalyticsPage={(id) => {
+                if (id === activeAnalyticsPageId)
+                  setActiveAnalyticsPageId(null);
+              }}
             />
           )}
         </Box>
@@ -1032,128 +1058,181 @@ const Notebooks = () => {
               overflow: 'hidden',
             }}
           >
-            {!activeConnectionId ? (
-              <Box
-                sx={{
-                  display: 'flex',
-                  flexDirection: 'column',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  height: '100%',
-                  color: 'text.secondary',
-                  p: 2,
-                }}
-              >
-                <TableChart sx={{ fontSize: 64, opacity: 0.3, mb: 2 }} />
-                <Typography
-                  variant="h6"
-                  color="text.secondary"
-                  sx={{
-                    mb: 1,
-                    textAlign: 'center',
-                    wordWrap: 'break-word',
-                    overflowWrap: 'break-word',
-                  }}
-                >
-                  No Connection Selected
-                </Typography>
-                <Typography
-                  variant="body2"
-                  color="text.secondary"
-                  sx={{
-                    textAlign: 'center',
-                    wordWrap: 'break-word',
-                    overflowWrap: 'break-word',
-                    whiteSpace: 'normal',
-                  }}
-                >
-                  Select a connection from the sidebar to start working with
-                  notebooks
-                </Typography>
-              </Box>
-            ) : (
-              <>
-                {/* Notebook Tabs */}
-                <NotebookTabManager
-                  tabs={notebookTabManager.tabs}
-                  activeTabId={notebookTabManager.activeTabId}
-                  onSelect={notebookTabManager.switchTab}
-                  onClose={notebookTabManager.closeTab}
-                  onReorder={notebookTabManager.reorderTabs}
-                />
-
-                {/* Notebook Content */}
-                <Box
-                  sx={{
-                    flex: 1,
-                    minHeight: 0,
-                    display: 'flex',
-                    flexDirection: 'column',
-                    maxWidth: isSidebarOpen
-                      ? 'calc(100vw - 366px)'
-                      : 'calc(100vw - 56px)',
-                  }}
-                >
-                  {notebookTabManager.activeTabId ? (
-                    <NotebookEditor
-                      instanceId={activeConnectionId}
-                      notebookId={notebookTabManager.activeTabId}
-                      onOpenNotebook={(notebook, connectionId) => {
-                        // Open the notebook in a new tab
-                        notebookTabManager.openNotebook(notebook, connectionId);
-                      }}
-                      onSchemaChange={handleRefreshSchema}
-                    />
-                  ) : (
-                    <Box
+            {(() => {
+              if (!activeConnectionId) {
+                return (
+                  <Box
+                    sx={{
+                      display: 'flex',
+                      flexDirection: 'column',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      height: '100%',
+                      color: 'text.secondary',
+                      p: 2,
+                    }}
+                  >
+                    <TableChart sx={{ fontSize: 64, opacity: 0.3, mb: 2 }} />
+                    <Typography
+                      variant="h6"
+                      color="text.secondary"
                       sx={{
-                        display: 'flex',
-                        flexDirection: 'column',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        height: '100%',
-                        color: 'text.secondary',
-                        p: 2,
+                        mb: 1,
+                        textAlign: 'center',
+                        wordWrap: 'break-word',
+                        overflowWrap: 'break-word',
                       }}
                     >
-                      <TableChart sx={{ fontSize: 64, opacity: 0.3, mb: 2 }} />
-                      <Typography
-                        variant="h6"
-                        color="text.secondary"
+                      No Connection Selected
+                    </Typography>
+                    <Typography
+                      variant="body2"
+                      color="text.secondary"
+                      sx={{
+                        textAlign: 'center',
+                        wordWrap: 'break-word',
+                        overflowWrap: 'break-word',
+                        whiteSpace: 'normal',
+                      }}
+                    >
+                      Select a connection from the sidebar to start working with
+                      notebooks
+                    </Typography>
+                  </Box>
+                );
+              }
+
+              if (activeSidebarTab === 2) {
+                return (
+                  <Box
+                    sx={{
+                      flex: 1,
+                      minHeight: 0,
+                      display: 'flex',
+                      flexDirection: 'column',
+                    }}
+                  >
+                    {activeAnalyticsPageId ? (
+                      <AnalyticsEditor
+                        connectionId={activeConnectionId}
+                        pageId={activeAnalyticsPageId}
+                        onSchemaChange={handleRefreshSchema}
+                      />
+                    ) : (
+                      <Box
                         sx={{
-                          mb: 1,
-                          textAlign: 'center',
-                          wordWrap: 'break-word',
-                          overflowWrap: 'break-word',
+                          display: 'flex',
+                          flexDirection: 'column',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          height: '100%',
+                          gap: 2,
+                          color: 'text.secondary',
                         }}
                       >
-                        No Notebook Open
-                      </Typography>
-                      <Typography
-                        variant="body2"
-                        color="text.secondary"
+                        <InsertChart sx={{ fontSize: 64, opacity: 0.2 }} />
+                        <Typography variant="h6" color="text.secondary">
+                          Select an analytics page from the sidebar
+                        </Typography>
+                        <Typography variant="body2" color="text.secondary">
+                          or click + to create a new dashboard page
+                        </Typography>
+                      </Box>
+                    )}
+                  </Box>
+                );
+              }
+
+              return (
+                <>
+                  {/* Notebook Tabs */}
+                  <NotebookTabManager
+                    tabs={notebookTabManager.tabs}
+                    activeTabId={notebookTabManager.activeTabId}
+                    onSelect={notebookTabManager.switchTab}
+                    onClose={notebookTabManager.closeTab}
+                    onReorder={notebookTabManager.reorderTabs}
+                  />
+
+                  {/* Notebook Content */}
+                  <Box
+                    sx={{
+                      flex: 1,
+                      minHeight: 0,
+                      display: 'flex',
+                      flexDirection: 'column',
+                      maxWidth: isSidebarOpen
+                        ? 'calc(100vw - 366px)'
+                        : 'calc(100vw - 56px)',
+                    }}
+                  >
+                    {notebookTabManager.activeTabId && activeConnectionId ? (
+                      <NotebookEditor
+                        key={`notebook-${notebookTabManager.activeTabId}`}
+                        instanceId={activeConnectionId}
+                        notebookId={notebookTabManager.activeTabId}
+                        onOpenNotebook={(notebook, connectionId) => {
+                          // Open the notebook in a new tab
+                          notebookTabManager.openNotebook(
+                            notebook,
+                            connectionId,
+                          );
+                        }}
+                        onSchemaChange={handleRefreshSchema}
+                      />
+                    ) : (
+                      <Box
                         sx={{
-                          mb: 2,
-                          textAlign: 'center',
-                          wordWrap: 'break-word',
-                          overflowWrap: 'break-word',
-                          whiteSpace: 'normal',
+                          display: 'flex',
+                          flexDirection: 'column',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          height: '100%',
+                          color: 'text.secondary',
+                          p: 2,
                         }}
                       >
-                        Select a notebook from the sidebar to start editing
-                      </Typography>
-                      <Button
-                        variant="contained"
-                        startIcon={<Add />}
-                        onClick={() => setCreateNotebookOpen(true)}
-                      >
-                        Create New Notebook
-                      </Button>
-                    </Box>
-                  )}
-                </Box>
-              </>
-            )}
+                        <TableChart
+                          sx={{ fontSize: 64, opacity: 0.3, mb: 2 }}
+                        />
+                        <Typography
+                          variant="h6"
+                          color="text.secondary"
+                          sx={{
+                            mb: 1,
+                            textAlign: 'center',
+                            wordWrap: 'break-word',
+                            overflowWrap: 'break-word',
+                          }}
+                        >
+                          No Notebook Open
+                        </Typography>
+                        <Typography
+                          variant="body2"
+                          color="text.secondary"
+                          sx={{
+                            mb: 2,
+                            textAlign: 'center',
+                            wordWrap: 'break-word',
+                            overflowWrap: 'break-word',
+                            whiteSpace: 'normal',
+                          }}
+                        >
+                          Select a notebook from the sidebar to start editing
+                        </Typography>
+                        <Button
+                          variant="contained"
+                          startIcon={<Add />}
+                          onClick={() => setCreateNotebookOpen(true)}
+                        >
+                          Create New Notebook
+                        </Button>
+                      </Box>
+                    )}
+                  </Box>
+                </>
+              );
+            })()}
           </Box>
         </Pane>
         <Pane minSize={CHAT_MIN_WIDTH}>
@@ -1170,10 +1249,19 @@ const Notebooks = () => {
           >
             {isChatOpen && !isNarrow && (
               <ChatWindow
-                key={`notebooks-${activeConnectionId}-${notebookTabManager.activeTabId ?? 'none'}`}
-                screenKey="notebooks"
+                key={`${activeSidebarTab === 2 ? 'analytics' : 'notebooks'}-${activeConnectionId}-${activeSidebarTab === 2 ? (activeAnalyticsPageId ?? 'none') : (notebookTabManager.activeTabId ?? 'none')}`}
+                screenKey={activeSidebarTab === 2 ? 'analytics' : 'notebooks'}
                 connectionId={activeConnectionId ?? undefined}
-                notebookId={notebookTabManager.activeTabId ?? undefined}
+                notebookId={
+                  activeSidebarTab === 2
+                    ? undefined
+                    : (notebookTabManager.activeTabId ?? undefined)
+                }
+                pageId={
+                  activeSidebarTab === 2
+                    ? (activeAnalyticsPageId ?? undefined)
+                    : undefined
+                }
                 projectId={
                   selectedProject?.id ? Number(selectedProject.id) : null
                 }
@@ -1199,10 +1287,19 @@ const Notebooks = () => {
             }}
           >
             <ChatWindow
-              key={`notebooks-mobile-${activeConnectionId}-${notebookTabManager.activeTabId ?? 'none'}`}
-              screenKey="notebooks"
+              key={`${activeSidebarTab === 2 ? 'analytics' : 'notebooks'}-mobile-${activeConnectionId}-${activeSidebarTab === 2 ? (activeAnalyticsPageId ?? 'none') : (notebookTabManager.activeTabId ?? 'none')}`}
+              screenKey={activeSidebarTab === 2 ? 'analytics' : 'notebooks'}
               connectionId={activeConnectionId ?? undefined}
-              notebookId={notebookTabManager.activeTabId ?? undefined}
+              notebookId={
+                activeSidebarTab === 2
+                  ? undefined
+                  : (notebookTabManager.activeTabId ?? undefined)
+              }
+              pageId={
+                activeSidebarTab === 2
+                  ? (activeAnalyticsPageId ?? undefined)
+                  : undefined
+              }
               projectId={
                 selectedProject?.id ? Number(selectedProject.id) : null
               }
@@ -1308,8 +1405,6 @@ const Notebooks = () => {
             <TextField
               label="Description (optional)"
               fullWidth
-              multiline
-              rows={3}
               value={newNotebookDescription}
               onChange={(e) => setNewNotebookDescription(e.target.value)}
               placeholder="Describe what this notebook is for..."

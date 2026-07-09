@@ -117,6 +117,11 @@ export const Redshift: React.FC<Props> = ({
     useUpdateConnection({
       onSuccess: () => {
         toast.success('Redshift connection updated successfully!');
+        if (projectId) {
+          navigate('/app');
+          return;
+        }
+        navigate('/app/connections');
       },
       onError: (error) => {
         toast.error(`Update failed: ${error}`);

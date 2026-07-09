@@ -46,7 +46,17 @@ const CustomTable = <T,>({
   }, [page, perPage, filteredRows]);
 
   return (
-    <div style={{ position: 'relative', width: '100%', overflow: 'hidden' }}>
+    <div
+      style={{
+        position: 'relative',
+        width: '100%',
+        height: '100%',
+        minHeight: 0,
+        overflow: 'hidden',
+        display: 'flex',
+        flexDirection: 'column',
+      }}
+    >
       {loading && (
         <div
           style={{
@@ -74,9 +84,11 @@ const CustomTable = <T,>({
       <TableContainer
         style={{
           ...(containerStyle ?? {}),
+          minHeight: 0,
+          flex: 1,
           opacity: loading ? 0.4 : 1,
           pointerEvents: loading ? 'none' : 'auto',
-          overflowX: 'auto',
+          overflow: 'auto',
           width: '100%',
         }}
       >

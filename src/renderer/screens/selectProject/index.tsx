@@ -46,6 +46,9 @@ import {
   Icon,
   GetStartedModal,
   NewProject,
+  QuickStartTour,
+  markTourSeen,
+  hasSeenTour,
 } from '../../components';
 import { icons } from '../../../../assets';
 import connectionIcons from '../../../../assets/connectionIcons';
@@ -533,6 +536,12 @@ const SelectProject: React.FC = () => {
     setDefaultProjectPath(settings?.projectsDirectory ?? '');
   }, [settings?.projectsDirectory]);
 
+  React.useEffect(() => {
+    if (projects.length > 0 && !hasSeenTour()) {
+      markTourSeen();
+    }
+  }, [projects.length]);
+
   return (
     <AppLayout>
       <ProjectSelectionContainer data-testid="project-selection">
@@ -564,7 +573,7 @@ const SelectProject: React.FC = () => {
             </TaglineContainer>
 
             <HeaderContainer>
-              <SearchContainer>
+              <SearchContainer data-tour="tour-search-bar">
                 <TextField
                   fullWidth
                   placeholder="Search Projects"
@@ -594,6 +603,7 @@ const SelectProject: React.FC = () => {
                       color="primary"
                       onClick={handleGetStarted}
                       sx={{ height: 40 }}
+                      data-tour="tour-get-started-btn"
                     >
                       <RocketLaunchIcon
                         sx={{ marginRight: 1 }}
@@ -623,6 +633,7 @@ const SelectProject: React.FC = () => {
                     variant="contained"
                     color="primary"
                     data-testid="import-project-btn"
+                    data-tour="tour-import-btn"
                     onClick={async () => {
                       try {
                         const project =
@@ -694,6 +705,7 @@ const SelectProject: React.FC = () => {
                     onClick={() => setIsAddingProject(true)}
                     sx={{ height: 40 }}
                     data-testid="create-project-btn"
+                    data-tour="tour-new-project-btn"
                   >
                     New
                   </Button>
@@ -701,7 +713,17 @@ const SelectProject: React.FC = () => {
               </Box>
             </HeaderContainer>
 
-            {renderConditionalContent()}
+            <Box
+              data-tour="tour-projects-area"
+              sx={{
+                flex: 1,
+                minHeight: 0,
+                display: 'flex',
+                flexDirection: 'column',
+              }}
+            >
+              {renderConditionalContent()}
+            </Box>
           </>
         )}
 
@@ -738,6 +760,8 @@ const SelectProject: React.FC = () => {
           isOpen={isGetStartedModalOpen}
           onClose={() => setIsGetStartedModalOpen(false)}
         />
+        {/* Only show the quick start tour for brand-new users with no projects */}
+        {projects.length === 0 && <QuickStartTour />}
         {isCloneModalOpen && (
           <CloneRepoModal
             isOpen={isCloneModalOpen}

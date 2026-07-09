@@ -82,12 +82,7 @@ export type RosettaCloudChannels =
   | 'rosettaCloud:deleteSecret'
   | 'rosettaCloud:findActionForPipeline'
   | 'rosettaCloud:getActionStatus'
-  | 'rosettaCloud:getActionLogs'
-  | 'rosettaCloud:openLogStream'
-  | 'rosettaCloud:closeLogStream'
-  | 'rosettaCloud:logEntries'
-  | 'rosettaCloud:logStreamError'
-  | 'rosettaCloud:logStreamEnd';
+  | 'rosettaCloud:getActionLogs';
 
 export type ConnectorChannels =
   | 'connector:configure'
@@ -386,6 +381,14 @@ export type AgentChannels =
   | 'agent:editor:query-results-request' // main → renderer: request snapshot
   | 'agent:editor:query-results-response' // renderer → main: send snapshot back
   | 'agent:editor:query-run-result' // renderer → main: push result after agent-triggered run
+  | 'agent:analytics:read-request' // main → renderer: read active Analytics editor
+  | 'agent:analytics:read-response' // renderer → main
+  | 'agent:analytics:update-request' // main → renderer: update active Analytics editor
+  | 'agent:analytics:update-response' // renderer → main
+  | 'agent:analytics:run-request' // main → renderer: run active Analytics page
+  | 'agent:analytics:run-response' // renderer → main
+  | 'agent:analytics:query-results-request' // main → renderer: read active Analytics results
+  | 'agent:analytics:query-results-response' // renderer → main
   | 'agent:notebook:state-request' // main → renderer
   | 'agent:notebook:state-response' // renderer → main
   | 'agent:notebook:cell-read-request' // main → renderer
@@ -430,6 +433,24 @@ export type SavedQueriesChannels =
   | 'savedQueries:update'
   | 'savedQueries:delete';
 
+export type AnalyticsPagesChannels =
+  | 'analyticsPages:list'
+  | 'analyticsPages:get'
+  | 'analyticsPages:create'
+  | 'analyticsPages:update'
+  | 'analyticsPages:delete';
+
+export type StaticSiteChannels =
+  | 'analytics:static-site:build'
+  | 'analytics:static-site:build-progress'
+  | 'analytics:static-site:open-folder'
+  | 'analytics:static-site:open-preview'
+  | 'analytics:static-site:get-state'
+  | 'analytics:static-site:pick-folder'
+  | 'analytics:static-site:get-default-path'
+  | 'analytics:static-site:folder-exists'
+  | 'analytics:static-site:delete-build';
+
 export type FlowfileChannels =
   | 'flowfile:install'
   | 'flowfile:uninstall'
@@ -459,6 +480,8 @@ export type Channels =
   | MCPChannels
   | SkillsChannels
   | SavedQueriesChannels
+  | AnalyticsPagesChannels
+  | StaticSiteChannels
   | FlowfileChannels;
 
 export type ConfigureConnectionBody = {

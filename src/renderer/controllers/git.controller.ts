@@ -12,6 +12,7 @@ import {
   FileStatus,
   GitBranch,
   GitChangesRes,
+  GitCredentials,
   RepoInfoRes,
 } from '../../types/backend';
 import { QUERY_KEYS } from '../config/constants';
@@ -281,18 +282,18 @@ export const useGitPush = (
   customOptions?: UseMutationOptions<
     { error?: string; authRequired?: boolean },
     CustomError,
-    { path: string }
+    { path: string; credentials?: GitCredentials }
   >,
 ): UseMutationResult<
   { error?: string; authRequired?: boolean },
   CustomError,
-  { path: string }
+  { path: string; credentials?: GitCredentials }
 > => {
   const { onSuccess: onCustomSuccess, onError: onCustomError } =
     customOptions || {};
   return useMutation({
     mutationFn: async (data) => {
-      return gitServices.push(data.path);
+      return gitServices.push(data.path, data.credentials);
     },
     onSuccess: async (...args) => {
       onCustomSuccess?.(...args);

@@ -24,6 +24,7 @@ export interface GetSessionsFilter {
   screenKey?: string;
   connectionId?: string | null;
   notebookId?: string | null;
+  pageId?: string | null;
 }
 
 export interface ChatCompactionSummary {
@@ -99,6 +100,7 @@ export const useCreateChatSession = (
       screenKey?: string;
       connectionId?: string;
       notebookId?: string;
+      pageId?: string;
     }
   >,
 ): UseMutationResult<
@@ -110,6 +112,7 @@ export const useCreateChatSession = (
     screenKey?: string;
     connectionId?: string;
     notebookId?: string;
+    pageId?: string;
   }
 > => {
   const { onSuccess: onCustomSuccess, onError: onCustomError } =
@@ -123,6 +126,7 @@ export const useCreateChatSession = (
       screenKey,
       connectionId,
       notebookId,
+      pageId,
     }) => {
       return chatService.createSession(
         title,
@@ -130,6 +134,7 @@ export const useCreateChatSession = (
         screenKey,
         connectionId,
         notebookId,
+        pageId,
       );
     },
     onSuccess: async (session, variables, ...args) => {

@@ -82,23 +82,6 @@ const registerRosettaCloudIpcHandlers = () => {
       return RosettaCloudService.getActionLogs(actionId);
     },
   );
-
-  ipcMain.handle(
-    'rosettaCloud:openLogStream',
-    async (event, actionId: string) => {
-      // Fire and forget — the stream pushes events back via webContents.send.
-      RosettaCloudService.openLogStream(actionId, event.sender).catch(() => {
-        // Errors are forwarded via 'rosettaCloud:logStreamError'.
-      });
-    },
-  );
-
-  ipcMain.handle(
-    'rosettaCloud:closeLogStream',
-    async (_event, actionId: string) => {
-      RosettaCloudService.closeLogStream(actionId);
-    },
-  );
 };
 
 export default registerRosettaCloudIpcHandlers;

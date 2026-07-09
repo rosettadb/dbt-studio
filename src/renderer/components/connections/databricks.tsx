@@ -107,6 +107,11 @@ export const Databricks: React.FC<Props> = ({
     useUpdateConnection({
       onSuccess: () => {
         toast.success('Databricks connection updated successfully!');
+        if (projectId) {
+          navigate('/app');
+          return;
+        }
+        navigate('/app/connections');
       },
       onError: (error) => {
         toast.error(`Update failed: ${error.message}`);
