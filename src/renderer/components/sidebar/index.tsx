@@ -110,10 +110,14 @@ export const Sidebar: React.FC<Props> = ({
       </ListItem>
     );
 
+    const tourAttr =
+      element.path === '/app/connections' ? 'tour-connections-nav' : undefined;
+
     const wrapped = (
       <StyledNavLink
         to={element.path}
         data-testid={element.testId}
+        data-tour={tourAttr}
         style={{
           cursor: 'pointer',
           pointerEvents: isDisabled ? 'none' : 'auto',
