@@ -288,7 +288,6 @@ const PipelineGraphContent: React.FC<PipelineGraphProps> = ({
   const onDrop = useCallback(
     (event: React.DragEvent) => {
       event.preventDefault();
-      event.stopPropagation();
       const pluginId =
         event.dataTransfer.getData('application/pipeline-plugin') ||
         event.dataTransfer.getData('text/plain');
