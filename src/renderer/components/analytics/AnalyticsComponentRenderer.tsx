@@ -175,6 +175,41 @@ const ChartTitle: React.FC<{ title?: string }> = ({ title }) =>
     </Typography>
   ) : null;
 
+const resolveChartHeight = ({ height }: ParsedProps): number | string => {
+  if (typeof height === 'number') return Math.max(height, 120);
+  if (typeof height === 'string' && height.trim()) return height;
+  return 300;
+};
+
+const AnalyticsChartFrame: React.FC<{
+  chartProps: ParsedProps;
+  children: React.ReactNode;
+}> = ({ chartProps, children }) => (
+  <Box
+    sx={{
+      width: '100%',
+      height: resolveChartHeight(chartProps),
+      minHeight: 120,
+      maxHeight: '70vh',
+      position: 'relative',
+      overflow: 'hidden',
+      flex: '0 0 auto',
+      contain: 'layout size',
+    }}
+  >
+    <Box
+      sx={{
+        position: 'absolute',
+        inset: 0,
+        minWidth: 0,
+        minHeight: 0,
+      }}
+    >
+      {children}
+    </Box>
+  </Box>
+);
+
 // ─── BarChart ─────────────────────────────────────────────────────────────────
 const AnalyticsBarChart: React.FC<ChartSubProps> = ({ data, chartProps }) => {
   const { xCol, yCols } = detectColumns(
@@ -189,12 +224,14 @@ const AnalyticsBarChart: React.FC<ChartSubProps> = ({ data, chartProps }) => {
   return (
     <Box sx={{ mb: 3 }}>
       <ChartTitle title={getStringProp(chartProps, 'title')} />
-      <ChartRenderer
-        data={chartData}
-        chartType="bar"
-        xAxisCol={xCol}
-        yAxisCols={yCols}
-      />
+      <AnalyticsChartFrame chartProps={chartProps}>
+        <ChartRenderer
+          data={chartData}
+          chartType="bar"
+          xAxisCol={xCol}
+          yAxisCols={yCols}
+        />
+      </AnalyticsChartFrame>
     </Box>
   );
 };
@@ -213,12 +250,14 @@ const AnalyticsLineChart: React.FC<ChartSubProps> = ({ data, chartProps }) => {
   return (
     <Box sx={{ mb: 3 }}>
       <ChartTitle title={getStringProp(chartProps, 'title')} />
-      <ChartRenderer
-        data={chartData}
-        chartType="line"
-        xAxisCol={xCol}
-        yAxisCols={yCols}
-      />
+      <AnalyticsChartFrame chartProps={chartProps}>
+        <ChartRenderer
+          data={chartData}
+          chartType="line"
+          xAxisCol={xCol}
+          yAxisCols={yCols}
+        />
+      </AnalyticsChartFrame>
     </Box>
   );
 };
@@ -238,7 +277,7 @@ const AnalyticsAreaChart: React.FC<ChartSubProps> = ({ data, chartProps }) => {
   return (
     <Box sx={{ mb: 3 }}>
       <ChartTitle title={getStringProp(chartProps, 'title')} />
-      <Box sx={{ width: '100%', height: 300 }}>
+      <AnalyticsChartFrame chartProps={chartProps}>
         <ResponsiveContainer width="100%" height="100%">
           <AreaChart
             data={chartData}
@@ -262,7 +301,7 @@ const AnalyticsAreaChart: React.FC<ChartSubProps> = ({ data, chartProps }) => {
             ))}
           </AreaChart>
         </ResponsiveContainer>
-      </Box>
+      </AnalyticsChartFrame>
     </Box>
   );
 };
@@ -281,12 +320,14 @@ const AnalyticsPieChart: React.FC<ChartSubProps> = ({ data, chartProps }) => {
   return (
     <Box sx={{ mb: 3 }}>
       <ChartTitle title={getStringProp(chartProps, 'title')} />
-      <ChartRenderer
-        data={chartData}
-        chartType="pie"
-        xAxisCol={xCol}
-        yAxisCols={yCols}
-      />
+      <AnalyticsChartFrame chartProps={chartProps}>
+        <ChartRenderer
+          data={chartData}
+          chartType="pie"
+          xAxisCol={xCol}
+          yAxisCols={yCols}
+        />
+      </AnalyticsChartFrame>
     </Box>
   );
 };
@@ -313,35 +354,43 @@ const AnalyticsDonutChart: React.FC<ChartSubProps> = ({ data, chartProps }) => {
       <Box
         sx={{
           width: '100%',
-          height: 300,
+          height: resolveChartHeight(chartProps),
+          minHeight: 120,
+          maxHeight: '70vh',
+          position: 'relative',
+          overflow: 'hidden',
+          flex: '0 0 auto',
+          contain: 'layout size',
           display: 'flex',
           justifyContent: 'center',
         }}
       >
-        <ResponsiveContainer width="100%" height="100%">
-          <RechartsPieChart>
-            <RechartsTooltip />
-            <Legend />
-            <Pie
-              data={chartData}
-              dataKey={yCol}
-              nameKey={xCol}
-              cx="50%"
-              cy="50%"
-              innerRadius={innerRadius}
-              outerRadius={120}
-              paddingAngle={2}
-              label
-            >
-              {data.map((_, i) => (
-                <Cell
-                  key={`cell-${i}`}
-                  fill={CHART_COLORS[i % CHART_COLORS.length]}
-                />
-              ))}
-            </Pie>
-          </RechartsPieChart>
-        </ResponsiveContainer>
+        <Box sx={{ position: 'absolute', inset: 0, minWidth: 0, minHeight: 0 }}>
+          <ResponsiveContainer width="100%" height="100%">
+            <RechartsPieChart>
+              <RechartsTooltip />
+              <Legend />
+              <Pie
+                data={chartData}
+                dataKey={yCol}
+                nameKey={xCol}
+                cx="50%"
+                cy="50%"
+                innerRadius={innerRadius}
+                outerRadius={120}
+                paddingAngle={2}
+                label
+              >
+                {data.map((_, i) => (
+                  <Cell
+                    key={`cell-${i}`}
+                    fill={CHART_COLORS[i % CHART_COLORS.length]}
+                  />
+                ))}
+              </Pie>
+            </RechartsPieChart>
+          </ResponsiveContainer>
+        </Box>
       </Box>
     </Box>
   );
@@ -364,12 +413,14 @@ const AnalyticsScatterChart: React.FC<ChartSubProps> = ({
   return (
     <Box sx={{ mb: 3 }}>
       <ChartTitle title={getStringProp(chartProps, 'title')} />
-      <ChartRenderer
-        data={chartData}
-        chartType="scatter"
-        xAxisCol={xCol}
-        yAxisCols={yCols}
-      />
+      <AnalyticsChartFrame chartProps={chartProps}>
+        <ChartRenderer
+          data={chartData}
+          chartType="scatter"
+          xAxisCol={xCol}
+          yAxisCols={yCols}
+        />
+      </AnalyticsChartFrame>
     </Box>
   );
 };
