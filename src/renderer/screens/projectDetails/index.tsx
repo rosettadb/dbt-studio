@@ -7,6 +7,7 @@ import {
   AutoAwesome,
   AutoFixHigh,
   Cable,
+  Cloud,
   Delete,
   Edit,
 } from '@mui/icons-material';
@@ -21,6 +22,7 @@ import {
   Tab,
   Tabs,
   Tooltip,
+  Typography,
 } from '@mui/material';
 import { toast } from 'react-toastify';
 import yaml from 'js-yaml';
@@ -65,6 +67,7 @@ import {
   CloudLogViewer,
   isPipelineFile,
 } from '../../components/pipelineView';
+import { Taskbar, TaskbarItem } from '../../components/terminal/styles';
 import { projectsServices } from '../../services';
 import {
   Container,
@@ -236,9 +239,24 @@ const ProjectDetails: React.FC = () => {
     setPipelineDraftTab(null);
   }, [activePipelineFilePath]);
 
+  // Cloud logs auto-minimize while editing YAML or the visual graph, and
+  // can be restored without leaving edit mode (mirrors the terminal's
+  // minimize/restore).
+  const [pipelineLogsMinimized, setPipelineLogsMinimized] =
+    React.useState(false);
+  const [pipelineVisualEditing, setPipelineVisualEditing] =
+    React.useState(false);
+
+  React.useEffect(() => {
+    setPipelineLogsMinimized(pipelineCodeMode || pipelineVisualEditing);
+  }, [pipelineCodeMode, pipelineVisualEditing]);
+
   const handleEnterPipelineCodeMode = React.useCallback(
     (content?: string) => {
-      const resolvedContent = content ?? activePipelineContent ?? '';
+      const resolvedContent = content ?? activePipelineContent;
+      if (resolvedContent === undefined) {
+        return;
+      }
       setPipelineDraftTab({
         id: activePipelineFilePath,
         path: activePipelineFilePath,
@@ -267,6 +285,20 @@ const ProjectDetails: React.FC = () => {
     setPipelineCodeMode(false);
     setPipelineDraftTab(null);
   }, [pipelineDraftTab]);
+
+  const handleTabSelect = React.useCallback(
+    (tabId: string) => {
+      if (
+        pipelineDraftTab?.isModified &&
+        // eslint-disable-next-line no-alert
+        !window.confirm('Discard unsaved YAML changes?')
+      ) {
+        return;
+      }
+      switchTab(tabId);
+    },
+    [pipelineDraftTab, switchTab],
+  );
 
   const {
     data: directories,
@@ -1132,7 +1164,7 @@ const ProjectDetails: React.FC = () => {
                         <TabManager
                           tabs={tabs}
                           activeTabId={activeTabId}
-                          onSelect={switchTab}
+                          onSelect={handleTabSelect}
                           onClose={closeTab}
                           onCloseAll={handleCloseAllTabs}
                           onSaveAll={handleSaveAllTabs}
@@ -1184,7 +1216,10 @@ const ProjectDetails: React.FC = () => {
                       >
                         <Box
                           sx={{
-                            flex: activePipelineActionId ? '1 1 60%' : 1,
+                            flex:
+                              activePipelineActionId && !pipelineLogsMinimized
+                                ? '1 1 60%'
+                                : 1,
                             minHeight: 0,
                           }}
                         >
@@ -1260,24 +1295,45 @@ const ProjectDetails: React.FC = () => {
                                         content,
                                       });
                                       await refetchPipelineContent();
+                                      await updateStatuses();
                                     }
                                   : undefined
                               }
+                              onEditingChange={setPipelineVisualEditing}
                             />
                           )}
                         </Box>
-                        {activePipelineActionId && (
-                          <Box
-                            sx={{
-                              flex: '1 1 40%',
-                              minHeight: 0,
-                              borderTop: 1,
-                              borderColor: 'divider',
-                            }}
-                          >
-                            <CloudLogViewer actionId={activePipelineActionId} />
-                          </Box>
-                        )}
+                        {activePipelineActionId &&
+                          (pipelineLogsMinimized ? (
+                            <Taskbar
+                              onClick={() => setPipelineLogsMinimized(false)}
+                              sx={{ cursor: 'pointer' }}
+                            >
+                              <TaskbarItem>
+                                <Typography
+                                  fontSize={13}
+                                  sx={{ mr: 1 }}
+                                  fontWeight="bold"
+                                >
+                                  Cloud Logs
+                                </Typography>
+                                <Cloud fontSize="small" />
+                              </TaskbarItem>
+                            </Taskbar>
+                          ) : (
+                            <Box
+                              sx={{
+                                flex: '1 1 40%',
+                                minHeight: 0,
+                                borderTop: 1,
+                                borderColor: 'divider',
+                              }}
+                            >
+                              <CloudLogViewer
+                                actionId={activePipelineActionId}
+                              />
+                            </Box>
+                          ))}
                       </Box>
                     ) : (
                       <>

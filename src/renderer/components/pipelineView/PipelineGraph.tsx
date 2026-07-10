@@ -53,6 +53,7 @@ type PipelineGraphProps = {
   pipelineName: string;
   onEdit?: (content?: string) => void;
   onSave?: (content: string) => Promise<void>;
+  onEditingChange?: (isEditing: boolean) => void;
 };
 
 function getLayoutedElements(flowNodes: Node[], flowEdges: Edge[]) {
@@ -166,6 +167,7 @@ const PipelineGraphContent: React.FC<PipelineGraphProps> = ({
   pipelineName: initialPipelineName,
   onEdit,
   onSave,
+  onEditingChange,
 }) => {
   const theme = useTheme();
   const { project } = useReactFlow();
@@ -207,6 +209,10 @@ const PipelineGraphContent: React.FC<PipelineGraphProps> = ({
     setNodes(laid);
     setEdges(laidEdges);
   }, [jobs, isEditing, theme, setNodes, setEdges]);
+
+  useEffect(() => {
+    onEditingChange?.(isEditing);
+  }, [isEditing, onEditingChange]);
 
   // Keep pipeline name in sync when not editing
   useEffect(() => {
@@ -608,6 +614,7 @@ export const PipelineGraph: React.FC<PipelineGraphProps> = ({
   pipelineName,
   onEdit,
   onSave,
+  onEditingChange,
 }) => (
   <ReactFlowProvider>
     <PipelineGraphContent
@@ -615,6 +622,7 @@ export const PipelineGraph: React.FC<PipelineGraphProps> = ({
       pipelineName={pipelineName}
       onEdit={onEdit}
       onSave={onSave}
+      onEditingChange={onEditingChange}
     />
   </ReactFlowProvider>
 );
