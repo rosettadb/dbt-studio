@@ -31,14 +31,25 @@ import type {
   StaticSiteDeleteResult,
 } from '../../types/staticSite';
 
-const RUNTIME_BUNDLE_CANDIDATE_PATHS = [
-  // Production / packaged app: extraResources copies ./resources/** here.
-  path.join(process.resourcesPath, 'resources', 'analytics-runtime.umd.js'),
-  // Development from Electron app root.
-  path.join(app.getAppPath(), 'resources', 'analytics-runtime.umd.js'),
-  // Development from webpack dist/main output.
-  path.resolve(__dirname, '../../../../resources/analytics-runtime.umd.js'),
-];
+// Attempt to load the pre-compiled runtime bundle path
+const RUNTIME_BUNDLE_PATH = path.join(
+  app.getAppPath(),
+  'resources',
+  'analytics-runtime.umd.js',
+);
+
+// Production / packaged app — extraResources copies to process.resourcesPath
+const RUNTIME_BUNDLE_PROD_PATH = path.join(
+  process.resourcesPath,
+  'resources',
+  'analytics-runtime.umd.js',
+);
+
+// Fallback for development — look in the project root
+const RUNTIME_BUNDLE_DEV_PATH = path.resolve(
+  __dirname,
+  '../../../../resources/analytics-runtime.umd.js',
+);
 
 const MAX_ROWS_PER_QUERY = 10_000;
 
@@ -215,20 +226,10 @@ async function executeQueryInMain(params: {
 // ─── Runtime bundle resolution ────────────────────────────────────────────────
 
 function getRuntimeBundlePath(): string | null {
-  const runtimePath = RUNTIME_BUNDLE_CANDIDATE_PATHS.find((candidate) =>
-    fs.existsSync(candidate),
-  );
-  if (runtimePath) return runtimePath;
+  if (fs.existsSync(RUNTIME_BUNDLE_PROD_PATH)) return RUNTIME_BUNDLE_PROD_PATH;
+  if (fs.existsSync(RUNTIME_BUNDLE_PATH)) return RUNTIME_BUNDLE_PATH;
+  if (fs.existsSync(RUNTIME_BUNDLE_DEV_PATH)) return RUNTIME_BUNDLE_DEV_PATH;
   return null;
-}
-
-function getRuntimeBundleMissingMessage(): string {
-  return [
-    'Analytics runtime bundle is missing.',
-    'Run `npm run build:analytics-runtime` from the DBT Studio app directory, then rebuild the static site.',
-    'Searched paths:',
-    ...RUNTIME_BUNDLE_CANDIDATE_PATHS.map((candidate) => `- ${candidate}`),
-  ].join('\n');
 }
 
 // ─── Progress helper ──────────────────────────────────────────────────────────
@@ -414,7 +415,12 @@ export class StaticSiteService {
       if (runtimeSrc) {
         fs.copyFileSync(runtimeSrc, runtimeDest);
       } else {
-        throw new Error(getRuntimeBundleMissingMessage());
+        // Write a stub that shows a friendly error
+        fs.writeFileSync(
+          runtimeDest,
+          `/* analytics-runtime.umd.js not found — rebuild DBT Studio to generate it */\nwindow.AnalyticsRuntime = { mount: function(el) { el.innerHTML = '<div style="padding:32px;color:#d32f2f"><h2>Runtime bundle missing</h2><p>Please rebuild the site from DBT Studio.</p></div>'; } };`,
+          'utf-8',
+        );
       }
 
       // 8. Write per-page HTML files
