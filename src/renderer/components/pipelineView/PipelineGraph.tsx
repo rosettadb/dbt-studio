@@ -424,7 +424,6 @@ const PipelineGraphContent: React.FC<PipelineGraphProps> = ({
         display: 'flex',
         flexDirection: 'column',
       }}
-      onDrop={isEditing ? onDrop : undefined}
       onDragOver={isEditing ? onDragOver : undefined}
     >
       {isEditing && (
