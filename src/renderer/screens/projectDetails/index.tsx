@@ -407,9 +407,15 @@ const ProjectDetails: React.FC = () => {
         rawSql: sql,
         modelName,
         compileModel,
+        limit: projectQueryResults.state.limit,
       });
     },
-    [executeProjectSql, project, settings?.dbtPath],
+    [
+      executeProjectSql,
+      project,
+      settings?.dbtPath,
+      projectQueryResults.state.limit,
+    ],
   );
 
   const handleExecuteEditorCte = React.useCallback(
@@ -444,9 +450,15 @@ const ProjectDetails: React.FC = () => {
         label: `CTE ${cteName}`,
         compileModel,
         cteName,
+        limit: projectQueryResults.state.limit,
       });
     },
-    [executeProjectSql, project, settings?.dbtPath],
+    [
+      executeProjectSql,
+      project,
+      settings?.dbtPath,
+      projectQueryResults.state.limit,
+    ],
   );
 
   const handleCloseAllTabs = React.useCallback(() => {
@@ -1205,6 +1217,7 @@ const ProjectDetails: React.FC = () => {
                         rawSql: item.rawSql,
                         querySql: item.compiledSql ?? item.rawSql,
                         compileModel: false,
+                        limit: projectQueryResults.state.limit,
                       });
                     }}
                     onRun={
@@ -1220,6 +1233,7 @@ const ProjectDetails: React.FC = () => {
                                 projectQueryResults.state.compiledSql ??
                                 projectQueryResults.state.rawSql!,
                               compileModel: false,
+                              limit: projectQueryResults.state.limit,
                             });
                           }
                         : undefined

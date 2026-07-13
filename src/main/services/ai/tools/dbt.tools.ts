@@ -82,7 +82,7 @@ async function buildDbtProcessEnv(
 
   await Promise.all(
     Array.from(envVarNames).map(async (envVarName) => {
-      if (env[envVarName]) return;
+      if (envVarName in env) return;
 
       const storedValue = await SecureStorageService.getCredential(envVarName);
       if (storedValue) {

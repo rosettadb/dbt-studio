@@ -347,11 +347,15 @@ const useDbt = (
           if (options.showToast) {
             toast.success(`dbt ${command} completed successfully`);
           }
-          await recordCommandFinished(
-            runHistoryId,
-            project.id,
-            `${project.path}/target/run_results.json`,
-          );
+          // Only attach run_results.json for commands that actually produce it
+          const commandsWithRunResults = ['run', 'test', 'seed', 'snapshot'];
+          if (commandsWithRunResults.includes(command)) {
+            await recordCommandFinished(
+              runHistoryId,
+              project.id,
+              `${project.path}/target/run_results.json`,
+            );
+          }
           successCallback?.();
         } else {
           if (options.showToast) {

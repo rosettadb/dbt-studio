@@ -38,8 +38,7 @@ export const Terminal: React.FC<Props> = ({ project }) => {
   // Clear output when mounting for a new project (project.id changes → key changes → remount)
   React.useEffect(() => {
     clearOutput();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [project.id]);
 
   const [contextMenu, setContextMenu] = React.useState<{
     mouseX: number;

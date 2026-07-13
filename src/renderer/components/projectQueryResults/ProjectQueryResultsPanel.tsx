@@ -25,6 +25,7 @@ import {
   Code as CodeIcon,
   ContentCopy as CopyIcon,
   DeleteOutline as DeleteOutlineIcon,
+  Error as ErrorIcon,
   Fullscreen as FullscreenIcon,
   FullscreenExit as FullscreenExitIcon,
   PlayArrow as PlayArrowIcon,
@@ -265,25 +266,39 @@ const ProjectQueryHistoryTab: React.FC<{
               },
             }}
           >
-            <CodeIcon
-              sx={{ fontSize: 16, color: 'success.main', mr: 2, flexShrink: 0 }}
-            />
-            <Typography
-              variant="body2"
-              sx={{
-                flex: 1,
-                minWidth: 0,
-                whiteSpace: 'nowrap',
-                overflow: 'hidden',
-                textOverflow: 'ellipsis',
-                fontFamily:
-                  'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace',
-                fontSize: 11,
-                mr: 4,
-              }}
-            >
-              {item.rawSql.replace(/\n/g, ' ')}
-            </Typography>
+            {item.status === 'error' ? (
+              <ErrorIcon
+                sx={{ fontSize: 16, color: 'error.main', mr: 2, flexShrink: 0 }}
+              />
+            ) : (
+              <CodeIcon
+                sx={{
+                  fontSize: 16,
+                  color: 'success.main',
+                  mr: 2,
+                  flexShrink: 0,
+                }}
+              />
+            )}
+            <Tooltip title={item.rawSql.replace(/\n/g, ' ')} arrow>
+              <Typography
+                variant="body2"
+                sx={{
+                  flex: 1,
+                  minWidth: 0,
+                  whiteSpace: 'nowrap',
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis',
+                  fontFamily:
+                    'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace',
+                  fontSize: 11,
+                  mr: 4,
+                }}
+              >
+                {item.modelName ||
+                  item.rawSql.replace(/\n/g, ' ').substring(0, 100)}
+              </Typography>
+            </Tooltip>
 
             <Typography
               className="date"
@@ -308,6 +323,18 @@ const ProjectQueryHistoryTab: React.FC<{
               spacing={0.5}
               sx={{ ml: 4, display: 'none', flexShrink: 0 }}
             >
+              <Tooltip title="Copy query">
+                <IconButton
+                  size="small"
+                  onClick={() => {
+                    navigator.clipboard.writeText(item.rawSql);
+                    toast.success('Query copied to clipboard');
+                  }}
+                  sx={{ p: 0.5 }}
+                >
+                  <CopyIcon sx={{ fontSize: 16 }} />
+                </IconButton>
+              </Tooltip>
               {onRunHistoryItem && (
                 <Tooltip title="Run query">
                   <IconButton
@@ -387,20 +414,23 @@ const ProjectQueryBookmarksTab: React.FC<{
               <Typography variant="body2" fontWeight={600} noWrap>
                 {item.name}
               </Typography>
-              <Typography
-                variant="body2"
-                color="text.secondary"
-                sx={{
-                  whiteSpace: 'nowrap',
-                  overflow: 'hidden',
-                  textOverflow: 'ellipsis',
-                  fontFamily:
-                    'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace',
-                  fontSize: 10,
-                }}
-              >
-                {item.rawSql.replace(/\n/g, ' ')}
-              </Typography>
+              <Tooltip title={item.rawSql.replace(/\n/g, ' ')} arrow>
+                <Typography
+                  variant="body2"
+                  color="text.secondary"
+                  sx={{
+                    whiteSpace: 'nowrap',
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis',
+                    fontFamily:
+                      'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace',
+                    fontSize: 10,
+                  }}
+                >
+                  {item.modelName ||
+                    item.rawSql.replace(/\n/g, ' ').substring(0, 100)}
+                </Typography>
+              </Tooltip>
             </Box>
 
             {item.tags.length > 0 && (
@@ -447,6 +477,18 @@ const ProjectQueryBookmarksTab: React.FC<{
               spacing={0.5}
               sx={{ display: 'none', flexShrink: 0 }}
             >
+              <Tooltip title="Copy query">
+                <IconButton
+                  size="small"
+                  onClick={() => {
+                    navigator.clipboard.writeText(item.rawSql);
+                    toast.success('Query copied to clipboard');
+                  }}
+                  sx={{ p: 0.5 }}
+                >
+                  <CopyIcon sx={{ fontSize: 16 }} />
+                </IconButton>
+              </Tooltip>
               {onRunHistoryItem && (
                 <Tooltip title="Run query">
                   <IconButton
@@ -743,6 +785,9 @@ export const ProjectQueryResultsPanel: React.FC<Props> = ({
             onClear={onClear}
             onRun={onRun}
             onOpenSqlInEditor={onOpenSqlInEditor}
+            onAddBookmark={onAddBookmark}
+            onDeleteBookmark={onDeleteBookmark}
+            onRunHistoryItem={onRunHistoryItem}
             isFullscreenView
             onCloseFullscreen={() => setIsFullscreen(false)}
           />

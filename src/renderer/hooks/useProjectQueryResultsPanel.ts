@@ -52,11 +52,31 @@ export const useProjectQueryResultsPanel = (projectId?: string) => {
         ...current,
         history: savedHistory,
         bookmarks: savedBookmarks,
+        // Clear transient preview state when switching projects
+        result: undefined,
+        error: undefined,
+        rawSql: undefined,
+        compiledSql: undefined,
+        filePath: undefined,
+        modelName: undefined,
+        lastDurationMs: undefined,
       }));
     } catch (e) {
       // eslint-disable-next-line no-console
       console.warn('Failed to parse query state from localStorage', e);
-      setState((current) => ({ ...current, history: [], bookmarks: [] }));
+      setState((current) => ({
+        ...current,
+        history: [],
+        bookmarks: [],
+        // Clear transient preview state on error as well
+        result: undefined,
+        error: undefined,
+        rawSql: undefined,
+        compiledSql: undefined,
+        filePath: undefined,
+        modelName: undefined,
+        lastDurationMs: undefined,
+      }));
     }
   }, [projectId]);
 

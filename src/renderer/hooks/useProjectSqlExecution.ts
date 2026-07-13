@@ -19,6 +19,7 @@ type ExecuteProjectSqlParams = {
   label?: string;
   compileModel?: boolean;
   cteName?: string;
+  limit?: number;
 };
 
 type UseProjectSqlExecutionParams = {
@@ -44,6 +45,7 @@ export const useProjectSqlExecution = ({
       label,
       compileModel = false,
       cteName,
+      limit,
     }: ExecuteProjectSqlParams) => {
       const startedAt = Date.now();
       const modelName =
@@ -59,10 +61,10 @@ export const useProjectSqlExecution = ({
         rawSql,
       });
 
-      try {
-        let executableSql = querySql ?? rawSql;
-        let compiledSql: string | undefined = querySql;
+      let executableSql = querySql ?? rawSql;
+      let compiledSql: string | undefined = querySql;
 
+      try {
         if (compileModel) {
           if (!modelName) {
             throw new Error('Could not extract model name from path');
@@ -105,6 +107,7 @@ export const useProjectSqlExecution = ({
           connection: connection.connection,
           query: executableSql,
           projectName: project.name,
+          limit,
         });
         const durationMs = Date.now() - startedAt;
 
@@ -149,7 +152,7 @@ export const useProjectSqlExecution = ({
           filePath,
           modelName,
           rawSql,
-          compiledSql: querySql,
+          compiledSql,
           durationMs: Date.now() - startedAt,
           errorMessage,
         });

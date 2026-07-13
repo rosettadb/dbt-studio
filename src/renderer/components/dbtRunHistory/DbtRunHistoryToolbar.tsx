@@ -81,11 +81,12 @@ export const DbtRunHistoryToolbar: React.FC<Props> = ({
       />
 
       {onToggleFullscreen && (
-        <Tooltip
-          title={isFullscreen ? 'Exit fullscreen' : 'Fullscreen'}
-          sx={{ ml: 'auto' }}
-        >
-          <IconButton size="small" onClick={onToggleFullscreen}>
+        <Tooltip title={isFullscreen ? 'Exit fullscreen' : 'Fullscreen'}>
+          <IconButton
+            size="small"
+            onClick={onToggleFullscreen}
+            sx={{ ml: 'auto' }}
+          >
             {isFullscreen ? (
               <FullscreenExitIcon fontSize="small" />
             ) : (
