@@ -21,6 +21,10 @@ import {
   Accordion,
   AccordionSummary,
   AccordionDetails,
+  Dialog,
+  DialogActions,
+  DialogContent,
+  DialogTitle,
 } from '@mui/material';
 import {
   Info,
@@ -34,22 +38,57 @@ import {
   ExpandMore,
 } from '@mui/icons-material';
 import {
+  DbtProjectCompatibilityResult,
+  DbtVersionChangePlan,
   DbtVersionListResponse,
+  PythonPackageInstallVersionResponse,
   PythonPackageVersionListResponse,
   SettingsType,
 } from '../../../types/backend';
-import { useCli } from '../../hooks';
-import { settingsServices } from '../../services';
 import {
-  listDbtCoreVersions,
-  installPackageVersion,
-  listPackageVersions,
-} from '../../services/dbtVersions.service';
+  useCheckCurrentProjectCompatibility,
+  useGetInstalledDbtCore,
+  useGetInstalledPackages,
+  useInstallDbtVersionChange,
+  useInstallLatestPackage,
+  useInstallPackageVersion,
+  useListDbtCoreVersions,
+  useListPackageVersions,
+  usePlanDbtVersionChange,
+  useUninstallPackage,
+} from '../../controllers';
 
 interface DbtSettingsProps {
   settings: SettingsType;
   onInstallDbtSave: (key: string, value: string) => void;
 }
+
+const RuntimeLanguageIcon = ({ language }: { language: 'python' | 'rust' }) => (
+  <Box
+    aria-hidden="true"
+    sx={{
+      width: 32,
+      height: 32,
+      flex: '0 0 auto',
+      display: 'grid',
+      placeItems: 'center',
+      borderRadius: language === 'python' ? 1 : '50%',
+      bgcolor: language === 'rust' ? '#ce422b' : undefined,
+      background:
+        language === 'python'
+          ? 'linear-gradient(135deg, #3776ab 0%, #3776ab 52%, #ffd343 52%, #ffd343 100%)'
+          : undefined,
+      color: language === 'python' ? '#fff' : '#fff7f2',
+      fontSize: '0.72rem',
+      fontWeight: 800,
+      letterSpacing: '-0.02em',
+      boxShadow: 1,
+      textShadow: '0 1px 2px rgba(0, 0, 0, 0.55)',
+    }}
+  >
+    {language === 'python' ? 'Py' : 'Rs'}
+  </Box>
+);
 
 export const DbtSettings: React.FC<DbtSettingsProps> = ({
   settings,
@@ -58,7 +97,17 @@ export const DbtSettings: React.FC<DbtSettingsProps> = ({
   const [isLoadingInstall, setIsLoadingInstall] = React.useState(false);
   const [currentPackage, setCurrentPackage] = React.useState('');
   const [installProgress, setInstallProgress] = React.useState(0);
-  const { runCommand } = useCli();
+  const listDbtCoreVersions = useListDbtCoreVersions();
+  const getInstalledDbtCore = useGetInstalledDbtCore();
+  const getInstalledPackages = useGetInstalledPackages();
+  const installPackageVersion = useInstallPackageVersion();
+  const installLatestPackage = useInstallLatestPackage();
+  const uninstallPackage = useUninstallPackage();
+  const listPackageVersions = useListPackageVersions();
+  const planDbtVersionChange = usePlanDbtVersionChange();
+  const installDbtVersionChange = useInstallDbtVersionChange();
+  const checkCurrentProjectCompatibility =
+    useCheckCurrentProjectCompatibility();
 
   const [isLoadingDialog, setIsLoadingDialog] = React.useState(false);
   const [loadingMessage, setLoadingMessage] = React.useState('');
@@ -86,6 +135,16 @@ export const DbtSettings: React.FC<DbtSettingsProps> = ({
     React.useState<DbtVersionListResponse | null>(null);
   const [isCheckingDbtCoreVersions, setIsCheckingDbtCoreVersions] =
     React.useState(false);
+  const [showOlderVersions, setShowOlderVersions] = React.useState(false);
+  const [versionChangePlan, setVersionChangePlan] =
+    React.useState<DbtVersionChangePlan | null>(null);
+  const [isVersionChangeDialogOpen, setIsVersionChangeDialogOpen] =
+    React.useState(false);
+  const [runProjectCheck, setRunProjectCheck] = React.useState(true);
+  const [versionChangeResult, setVersionChangeResult] =
+    React.useState<PythonPackageInstallVersionResponse | null>(null);
+  const [compatibilityResult, setCompatibilityResult] =
+    React.useState<DbtProjectCompatibilityResult | null>(null);
 
   const [packageVersions, setPackageVersions] = React.useState<
     Record<string, PythonPackageVersionListResponse | null>
@@ -128,6 +187,14 @@ export const DbtSettings: React.FC<DbtSettingsProps> = ({
     return 0;
   };
 
+  const getAdapterAlertSeverity = (
+    status: 'likely-compatible' | 'warning' | 'unknown',
+  ): 'success' | 'warning' | 'info' => {
+    if (status === 'likely-compatible') return 'success';
+    if (status === 'warning') return 'warning';
+    return 'info';
+  };
+
   const handlePackageToggle = (packageName: string) => {
     if (packageName === 'dbt-core') return; // Don't allow unchecking dbt-core
 
@@ -142,18 +209,8 @@ export const DbtSettings: React.FC<DbtSettingsProps> = ({
     setLoadingMessage('Checking dbt version...');
 
     try {
-      const python = settings.pythonPath
-        ? `"${settings.pythonPath}"`
-        : 'python';
-      const result = await runCommand(`${python} -m pip show dbt-core`);
-
-      if (result.error.length > 0) {
-        return null;
-      }
-
-      const outputText = result.output.join('\n');
-      const versionMatch = outputText.match(/Version:\s*(.+)/);
-      return versionMatch ? versionMatch[1].trim() : null;
+      const installed = await getInstalledDbtCore();
+      return installed.isExecutableVerified ? installed.version : null;
     } catch (error) {
       return null;
     } finally {
@@ -183,52 +240,57 @@ export const DbtSettings: React.FC<DbtSettingsProps> = ({
     setIsLoadingDialog(true);
 
     try {
-      if (settings.pythonPath) {
-        const python = `"${settings.pythonPath}"`;
-
-        setCurrentPackage('Setting up pip...');
-        setLoadingMessage('Setting up pip...');
-        try {
-          await runCommand(`${python} -m ensurepip --upgrade`);
-        } catch {
-          /* Continue even if this fails */
-        }
-
-        for (let i = 0; i < packages.length; i++) {
-          const pkg = packages[i];
-          setCurrentPackage(pkg);
-          setLoadingMessage(`Installing ${pkg}...`);
-          setInstallProgress((i / packages.length) * 100);
-
-          try {
-            await runCommand(`${python} -m pip install ${pkg}`);
-          } catch {
-            /* Continue with next package */
-          }
-        }
-      } else {
-        try {
-          for (let i = 0; i < packages.length; i++) {
-            const pkg = packages[i];
-            setCurrentPackage(pkg);
-            setInstallProgress((i / packages.length) * 100);
-
-            try {
-              await runCommand(`pip install ${pkg}`);
-            } catch {
-              /* Continue with next package */
-            }
-          }
-        } catch {
-          /* empty */
-        }
+      if (!settings.pythonPath) {
+        throw new Error(
+          'Managed Python environment not found. Install Python first.',
+        );
       }
 
-      // Get and save the dbt path
-      setCurrentPackage('Locating dbt path...');
+      const availableDbtVersions =
+        dbtCoreVersions ?? (await listDbtCoreVersions({ limit: 5 }));
+      const targetDbtVersion = availableDbtVersions.latestStable;
+      if (!targetDbtVersion) {
+        throw new Error('No stable dbt-core version is available.');
+      }
+
+      for (let i = 0; i < packages.length; i++) {
+        const pkg = packages[i];
+        setCurrentPackage(pkg);
+        setLoadingMessage(`Installing ${pkg}...`);
+        setInstallProgress((i / packages.length) * 100);
+
+        if (pkg === 'dbt-core') {
+          const result = await installPackageVersion({
+            pythonPath: settings.pythonPath,
+            packageName: pkg,
+            version: targetDbtVersion,
+          });
+          if (!result.ok) {
+            setVersionChangeResult(result);
+            break;
+          }
+          if (result.dbtPath) {
+            onInstallDbtSave('dbtPath', result.dbtPath);
+          }
+          if (result.installedVersion) {
+            onInstallDbtSave('dbtVersion', result.installedVersion);
+          }
+        } else {
+          const result = await installLatestPackage({
+            pythonPath: settings.pythonPath,
+            packageName: pkg,
+          });
+          if (!result.ok) {
+            setVersionChangeResult({
+              ok: false,
+              error: result.error || `Unable to install ${pkg}.`,
+            });
+          }
+        }
+      }
       setInstallProgress(100);
-      const dbtPath = await settingsServices.getDbtPath();
-      onInstallDbtSave('dbtPath', dbtPath);
+      // eslint-disable-next-line no-use-before-define
+      await checkInstalledPackages();
     } finally {
       setIsLoadingInstall(false);
       setCurrentPackage('');
@@ -236,93 +298,16 @@ export const DbtSettings: React.FC<DbtSettingsProps> = ({
     }
   };
 
-  const checkPackagesIndividually = async (
-    python: string,
-    packages: string[],
-    installed: { [key: string]: string },
-  ) => {
-    for (const pkg of packages) {
-      if (!isCheckingPackages) break;
-
-      try {
-        await new Promise((resolve) => {
-          setTimeout(resolve, 200);
-        });
-
-        const result = await runCommand(`${python} -m pip show ${pkg}`);
-
-        if (result.output.length > 0 && result.error.length === 0) {
-          const outputText = result.output.join('\n');
-          const versionMatch = outputText.match(/Version:\s*(.+)/);
-          if (versionMatch) {
-            installed[pkg] = versionMatch[1].trim();
-          }
-        }
-      } catch {
-        /* empty */
-      }
-    }
-  };
-
   async function checkInstalledPackages(): Promise<void> {
     if (isCheckingPackages) return;
 
     setIsCheckingPackages(true);
-    const python = settings.pythonPath ? `"${settings.pythonPath}"` : 'python';
-    const packages = Object.keys(packageDescriptions);
-    const installed: { [key: string]: string } = {};
-
     try {
-      const result = await runCommand(`${python} -m pip list --format=json`);
-
-      if (result.output.length > 0 && result.error.length === 0) {
-        const outputText = result.output.join('\n').trim();
-
-        try {
-          const lines = outputText.split('\n');
-          let jsonStartIndex = -1;
-          let jsonEndIndex = -1;
-
-          for (let i = 0; i < lines.length; i++) {
-            const line = lines[i].trim();
-            if (line.startsWith('[') && jsonStartIndex === -1) {
-              jsonStartIndex = i;
-            }
-            if (
-              line.endsWith(']') &&
-              jsonStartIndex !== -1 &&
-              jsonEndIndex === -1
-            ) {
-              jsonEndIndex = i;
-              break;
-            }
-          }
-
-          if (jsonStartIndex !== -1 && jsonEndIndex !== -1) {
-            const jsonLines = lines.slice(jsonStartIndex, jsonEndIndex + 1);
-            const jsonString = jsonLines.join('\n');
-
-            const pipList = JSON.parse(jsonString);
-
-            packages.forEach((pkg) => {
-              const found = pipList.find((item: any) => item.name === pkg);
-              if (found) {
-                installed[pkg] = found.version;
-              }
-            });
-          } else {
-            await checkPackagesIndividually(python, packages, installed);
-          }
-        } catch (parseError) {
-          await checkPackagesIndividually(python, packages, installed);
-        }
-      } else {
-        await checkPackagesIndividually(python, packages, installed);
-      }
-    } catch (error) {
-      await checkPackagesIndividually(python, packages, installed);
+      const result = await getInstalledPackages();
+      setInstalledPackages(result.packages);
+    } catch {
+      setInstalledPackages({});
     } finally {
-      setInstalledPackages(installed);
       setIsCheckingPackages(false);
     }
   }
@@ -330,7 +315,10 @@ export const DbtSettings: React.FC<DbtSettingsProps> = ({
   const refreshDbtCoreVersions = async () => {
     setIsCheckingDbtCoreVersions(true);
     try {
-      const data = await listDbtCoreVersions();
+      const data = await listDbtCoreVersions({
+        includePrerelease: true,
+        limit: 100,
+      });
       setDbtCoreVersions(data);
     } finally {
       setIsCheckingDbtCoreVersions(false);
@@ -352,20 +340,10 @@ export const DbtSettings: React.FC<DbtSettingsProps> = ({
       });
 
       if (!res.ok) {
+        setVersionChangeResult(res);
         return;
       }
-
-      if (packageName === 'dbt-core') {
-        const installedVersion = await getDbtVersion();
-        if (installedVersion) {
-          onInstallDbtSave('dbtVersion', installedVersion);
-        }
-        await refreshDbtCoreVersions();
-      }
-
-      if (settings.dbtPath && settings.dbtPath !== 'dbt') {
-        await checkInstalledPackages();
-      }
+      await checkInstalledPackages();
     } finally {
       setInstallingPackageKey(null);
       setIsLoadingDialog(false);
@@ -373,8 +351,78 @@ export const DbtSettings: React.FC<DbtSettingsProps> = ({
     }
   };
 
-  const handleInstallDbtCoreVersionClick = (version: string) => {
-    installSinglePackageVersion('dbt-core', version).catch(() => undefined);
+  const prepareDbtVersionChange = async (version: string) => {
+    setIsLoadingDialog(true);
+    setLoadingMessage(`Planning dbt-core ${version} change...`);
+    setVersionChangeResult(null);
+    setCompatibilityResult(null);
+    try {
+      const plan = await planDbtVersionChange({
+        targetVersion: version,
+        includeAdapters: true,
+      });
+      setVersionChangePlan(plan);
+      setRunProjectCheck(plan.isMajorVersionChange);
+      setIsVersionChangeDialogOpen(true);
+    } catch (error) {
+      setVersionChangeResult({
+        ok: false,
+        error:
+          error instanceof Error ? error.message : 'Unable to plan change.',
+      });
+    } finally {
+      setIsLoadingDialog(false);
+      setLoadingMessage('');
+    }
+  };
+
+  const confirmDbtVersionChange = async () => {
+    if (!versionChangePlan) return;
+    setIsVersionChangeDialogOpen(false);
+    setIsLoadingDialog(true);
+    setInstallingPackageKey(`dbt-core@${versionChangePlan.targetVersion}`);
+    setLoadingMessage(
+      `Installing dbt-core==${versionChangePlan.targetVersion}...`,
+    );
+    try {
+      const result = await installDbtVersionChange({
+        targetVersion: versionChangePlan.targetVersion,
+        includeAdapters: true,
+        pythonPath: settings.pythonPath,
+      });
+      setVersionChangeResult(result);
+      if (result.ok) {
+        if (result.dbtPath) onInstallDbtSave('dbtPath', result.dbtPath);
+        if (result.installedVersion) {
+          onInstallDbtSave('dbtVersion', result.installedVersion);
+        }
+        await refreshDbtCoreVersions();
+        await checkInstalledPackages();
+        if (runProjectCheck) {
+          setLoadingMessage(
+            'Checking the current project with dbt parse and compile...',
+          );
+          setCompatibilityResult(await checkCurrentProjectCompatibility());
+        }
+      }
+    } catch (error) {
+      setVersionChangeResult({
+        ok: false,
+        error:
+          error instanceof Error ? error.message : 'Version change failed.',
+      });
+    } finally {
+      setInstallingPackageKey(null);
+      setIsLoadingDialog(false);
+      setLoadingMessage('');
+    }
+  };
+
+  const handleRollback = () => {
+    if (!versionChangeResult?.previousVersion) return;
+    prepareDbtVersionChange(versionChangeResult.previousVersion).catch(
+      () => undefined,
+    );
   };
 
   const fetchPackageVersions = async (packageName: string) => {
@@ -413,10 +461,14 @@ export const DbtSettings: React.FC<DbtSettingsProps> = ({
     setLoadingMessage(`Uninstalling ${packageName}...`);
 
     try {
-      const python = settings.pythonPath
-        ? `"${settings.pythonPath}"`
-        : 'python';
-      await runCommand(`${python} -m pip uninstall -y ${packageName}`);
+      const result = await uninstallPackage({
+        pythonPath: settings.pythonPath,
+        packageName,
+      });
+      if (!result.ok) {
+        setVersionChangeResult(result);
+        return;
+      }
 
       setInstalledPackages((prev) => {
         const updated = { ...prev };
@@ -426,6 +478,7 @@ export const DbtSettings: React.FC<DbtSettingsProps> = ({
 
       if (packageName === 'dbt-core') {
         onInstallDbtSave('dbtPath', '');
+        onInstallDbtSave('dbtVersion', '');
       }
     } finally {
       setIsLoadingInstall(false);
@@ -440,22 +493,17 @@ export const DbtSettings: React.FC<DbtSettingsProps> = ({
     setLoadingMessage(`Installing ${packageName}...`);
 
     try {
-      const python = settings.pythonPath
-        ? `"${settings.pythonPath}"`
-        : 'python';
-      await runCommand(`${python} -m pip install ${packageName}`);
-
-      // Check if the package was installed successfully
-      const result = await runCommand(`${python} -m pip show ${packageName}`);
-      if (result.output.length > 0 && result.error.length === 0) {
-        const outputText = result.output.join('\n');
-        const versionMatch = outputText.match(/Version:\s*(.+)/);
-        const version = versionMatch ? versionMatch[1].trim() : 'unknown';
-
+      const result = await installLatestPackage({
+        pythonPath: settings.pythonPath,
+        packageName,
+      });
+      if (result.ok && result.installedVersion) {
         setInstalledPackages((prev) => ({
           ...prev,
-          [packageName]: version,
+          [packageName]: result.installedVersion as string,
         }));
+      } else if (!result.ok) {
+        setVersionChangeResult(result);
       }
     } finally {
       setIsLoadingInstall(false);
@@ -526,8 +574,120 @@ export const DbtSettings: React.FC<DbtSettingsProps> = ({
     checkInstalledPackages().catch(() => undefined);
   };
 
+  const availableVersions = dbtCoreVersions?.versions ?? [];
+  const pythonDbtVersions = availableVersions
+    .filter(
+      (item) => Number.parseInt(item.version, 10) === 1 && !item.isPrerelease,
+    )
+    .slice(0, showOlderVersions ? 15 : 5);
+  const rustDbtVersions = availableVersions
+    .filter((item) => Number.parseInt(item.version, 10) >= 2)
+    .slice(0, showOlderVersions ? 15 : 5);
+
+  const renderVersionList = (
+    versions: DbtVersionListResponse['versions'],
+    emptyMessage: string,
+  ) => {
+    if (versions.length === 0) {
+      return <Alert severity="info">{emptyMessage}</Alert>;
+    }
+
+    return (
+      <List
+        disablePadding
+        sx={{
+          border: 1,
+          borderColor: 'divider',
+          borderRadius: 1,
+          overflow: 'hidden',
+        }}
+      >
+        {versions.map((item, index) => {
+          const installed = settings.dbtVersion;
+          const isInstalled = item.isInstalled || installed === item.version;
+          const isLatest = item.isLatestStable;
+
+          let actionLabel = installed ? 'Downgrade' : 'Install';
+          if (isInstalled) {
+            actionLabel = 'Installed';
+          } else if (item.isPrerelease) {
+            actionLabel = 'Install Preview';
+          } else if (
+            installed &&
+            compareSimpleVersions(item.version, installed) > 0
+          ) {
+            actionLabel = 'Upgrade';
+          }
+
+          return (
+            <React.Fragment key={item.version}>
+              <ListItem sx={{ pr: 17, minHeight: 56 }}>
+                <ListItemText
+                  primary={
+                    <Box
+                      sx={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 0.75,
+                        flexWrap: 'wrap',
+                      }}
+                    >
+                      <Typography variant="body2" sx={{ fontWeight: 600 }}>
+                        {item.version}
+                      </Typography>
+                      {isInstalled && (
+                        <>
+                          <CheckCircle color="success" fontSize="small" />
+                          <Chip
+                            label="Installed"
+                            size="small"
+                            color="success"
+                          />
+                        </>
+                      )}
+                      {isLatest && !item.isPrerelease && (
+                        <Chip label="Latest stable" size="small" />
+                      )}
+                      {item.isPrerelease && (
+                        <Chip label="Preview" size="small" color="warning" />
+                      )}
+                    </Box>
+                  }
+                />
+                <ListItemSecondaryAction>
+                  <Button
+                    size="small"
+                    variant="contained"
+                    onClick={() => {
+                      prepareDbtVersionChange(item.version).catch(
+                        () => undefined,
+                      );
+                    }}
+                    disabled={
+                      isInstalled || isLoadingDialog || isLoadingInstall
+                    }
+                    startIcon={
+                      installingPackageKey === `dbt-core@${item.version}` ? (
+                        <CircularProgress size={16} />
+                      ) : (
+                        <Download />
+                      )
+                    }
+                  >
+                    {actionLabel}
+                  </Button>
+                </ListItemSecondaryAction>
+              </ListItem>
+              {index < versions.length - 1 && <Divider />}
+            </React.Fragment>
+          );
+        })}
+      </List>
+    );
+  };
+
   return (
-    <Box sx={{ p: 2, maxWidth: 800 }}>
+    <Box sx={{ p: 2, maxWidth: 1200 }}>
       <Box display="flex" alignItems="center" gap={1} sx={{ mb: 2 }}>
         <TextField
           fullWidth
@@ -550,7 +710,10 @@ export const DbtSettings: React.FC<DbtSettingsProps> = ({
       {settings.dbtPath && settings.dbtPath !== 'dbt' ? (
         <Box sx={{ mt: 2 }}>
           <Alert severity="success" sx={{ mb: 2 }}>
-            dbt™ is installed at: {settings.dbtPath}
+            {settings.dbtVersion?.startsWith('2.')
+              ? 'dbt Core v2 (Rust)'
+              : 'dbt Core v1 (Python)'}{' '}
+            is active at: {settings.dbtPath}
             {settings?.dbtVersion && (
               <Typography variant="body2" sx={{ mt: 1 }}>
                 Version: {settings?.dbtVersion}
@@ -561,116 +724,251 @@ export const DbtSettings: React.FC<DbtSettingsProps> = ({
       ) : null}
 
       <Box sx={{ mb: 3 }}>
-        <Typography
-          variant="h6"
-          sx={{ mb: 2, display: 'flex', alignItems: 'center', gap: 1 }}
+        <Box
+          sx={{
+            mb: 1,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            gap: 2,
+            flexWrap: 'wrap',
+          }}
         >
-          Available dbt-core versions (latest 5)
-          {isCheckingDbtCoreVersions && <CircularProgress size={16} />}
-          <Button
-            size="small"
-            onClick={handleRefreshDbtCoreVersionsClick}
-            disabled={isCheckingDbtCoreVersions}
-            startIcon={<Refresh />}
-          >
-            Refresh
-          </Button>
-        </Typography>
-
-        {(dbtCoreVersions?.versions ?? []).length > 0 ? (
-          <List
+          <Box>
+            <Typography variant="h6">Available dbt runtimes</Typography>
+            <Typography variant="body2" color="text.secondary">
+              Rosetta DBT Studio supports both dbt Core v1 (Python) and dbt Core
+              v2 (Rust).
+            </Typography>
+          </Box>
+          <Box
             sx={{
-              border: 1,
-              borderColor: 'divider',
-              borderRadius: 1,
+              display: 'flex',
+              alignItems: 'center',
+              gap: 1,
+              flexWrap: 'wrap',
+              justifyContent: 'flex-end',
             }}
           >
-            {(dbtCoreVersions?.versions ?? []).map((item) => {
-              const installed = settings.dbtVersion;
-              const isInstalled = installed === item.version;
-              const isLatest =
-                item.version === (dbtCoreVersions?.latestStable ?? null);
+            {isCheckingDbtCoreVersions && <CircularProgress size={16} />}
+            <Button
+              size="small"
+              onClick={handleRefreshDbtCoreVersionsClick}
+              disabled={isCheckingDbtCoreVersions}
+              startIcon={<Refresh />}
+            >
+              Refresh
+            </Button>
+            <Button
+              size="small"
+              onClick={() => setShowOlderVersions((value) => !value)}
+            >
+              {showOlderVersions
+                ? 'Show fewer versions'
+                : 'Show older versions'}
+            </Button>
+          </Box>
+        </Box>
 
-              let actionLabel = 'Downgrade';
-              if (isInstalled) {
-                actionLabel = 'Installed';
-              } else if (
-                installed &&
-                compareSimpleVersions(item.version, installed) > 0
-              ) {
-                actionLabel = 'Upgrade';
-              }
+        <Alert severity="info" sx={{ mb: 2 }}>
+          Changing the active dbt runtime affects all local projects. Preview
+          versions are hidden by default and should be tested before production
+          use.
+        </Alert>
 
-              return (
-                <React.Fragment key={item.version}>
-                  <ListItem>
-                    <ListItemText
-                      primary={
-                        <Box
-                          sx={{
-                            display: 'flex',
-                            alignItems: 'center',
-                            gap: 1,
-                          }}
-                        >
-                          <Typography variant="body1" sx={{ fontWeight: 500 }}>
-                            {item.version}
-                          </Typography>
-
-                          {isInstalled && (
-                            <Box
-                              sx={{
-                                display: 'flex',
-                                alignItems: 'center',
-                                gap: 0.5,
-                              }}
-                            >
-                              <CheckCircle color="success" fontSize="small" />
-                              <Chip
-                                label="Installed"
-                                size="small"
-                                color="success"
-                              />
-                            </Box>
-                          )}
-
-                          {isLatest && !item.isPrerelease && (
-                            <Chip label="Latest" size="small" color="primary" />
-                          )}
-                        </Box>
-                      }
-                    />
-                    <ListItemSecondaryAction>
-                      <Button
-                        size="small"
-                        variant="contained"
-                        onClick={() => {
-                          handleInstallDbtCoreVersionClick(item.version);
-                        }}
-                        disabled={
-                          isInstalled || isLoadingDialog || isLoadingInstall
-                        }
-                        startIcon={
-                          installingPackageKey ===
-                          `dbt-core@${item.version}` ? (
-                            <CircularProgress size={16} />
-                          ) : (
-                            <Download />
-                          )
-                        }
-                      >
-                        {actionLabel}
-                      </Button>
-                    </ListItemSecondaryAction>
-                  </ListItem>
-                  <Divider />
-                </React.Fragment>
-              );
-            })}
-          </List>
-        ) : (
-          <Alert severity="info">No versions available.</Alert>
+        {versionChangeResult && (
+          <Alert
+            severity={versionChangeResult.ok ? 'success' : 'error'}
+            sx={{ mb: 2 }}
+          >
+            {versionChangeResult.ok
+              ? `Verified dbt-core ${versionChangeResult.installedVersion} is now active.`
+              : versionChangeResult.error ||
+                'The dbt-core version change failed.'}
+            {versionChangeResult.ok && versionChangeResult.previousVersion && (
+              <Button size="small" sx={{ ml: 2 }} onClick={handleRollback}>
+                Roll back to {versionChangeResult.previousVersion}
+              </Button>
+            )}
+          </Alert>
         )}
+
+        {compatibilityResult && (
+          <Alert
+            severity={compatibilityResult.ok ? 'success' : 'warning'}
+            sx={{ mb: 2 }}
+          >
+            <Typography variant="body2" sx={{ fontWeight: 600 }}>
+              {compatibilityResult.ok
+                ? `Project ${compatibilityResult.projectName} passed dbt parse and compile.`
+                : `Project ${compatibilityResult.projectName || ''} has migration diagnostics.`}
+            </Typography>
+            {compatibilityResult.error && (
+              <Typography variant="body2">
+                {compatibilityResult.error}
+              </Typography>
+            )}
+            {compatibilityResult.diagnostics
+              .filter((diagnostic) => !diagnostic.ok)
+              .map((diagnostic) => (
+                <Box key={diagnostic.command} sx={{ mt: 1 }}>
+                  <Typography variant="body2" sx={{ fontWeight: 600 }}>
+                    dbt {diagnostic.command} failed
+                  </Typography>
+                  <Typography
+                    component="pre"
+                    variant="caption"
+                    sx={{
+                      whiteSpace: 'pre-wrap',
+                      maxHeight: 180,
+                      overflow: 'auto',
+                    }}
+                  >
+                    {diagnostic.summary}
+                  </Typography>
+                </Box>
+              ))}
+            {compatibilityResult.recommendations.map((recommendation) => (
+              <Typography key={recommendation} variant="body2" sx={{ mt: 1 }}>
+                {recommendation}
+              </Typography>
+            ))}
+          </Alert>
+        )}
+
+        <Box
+          sx={{
+            display: 'grid',
+            gridTemplateColumns: {
+              xs: 'minmax(0, 1fr)',
+              lg: 'repeat(2, minmax(0, 1fr))',
+            },
+            gap: 2,
+          }}
+        >
+          <Box
+            component="section"
+            aria-labelledby="python-dbt-runtime-title"
+            sx={{
+              p: 2,
+              border: 1,
+              borderColor: settings.dbtVersion?.startsWith('1.')
+                ? 'success.main'
+                : 'divider',
+              borderRadius: 2,
+              bgcolor: 'background.paper',
+            }}
+          >
+            <Box
+              sx={{
+                display: 'flex',
+                alignItems: 'flex-start',
+                justifyContent: 'space-between',
+                gap: 1,
+                mb: 1.5,
+              }}
+            >
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                <RuntimeLanguageIcon language="python" />
+                <Box>
+                  <Typography
+                    id="python-dbt-runtime-title"
+                    variant="subtitle1"
+                    sx={{ fontWeight: 700 }}
+                  >
+                    dbt Core v1
+                  </Typography>
+                  <Typography variant="body2" color="text.secondary">
+                    Python engine · Stable runtime
+                  </Typography>
+                </Box>
+              </Box>
+              <Box
+                sx={{
+                  display: 'flex',
+                  gap: 0.75,
+                  flexWrap: 'wrap',
+                  justifyContent: 'flex-end',
+                }}
+              >
+                <Chip label="Python" size="small" variant="outlined" />
+                <Chip label="Supported" size="small" color="success" />
+              </Box>
+            </Box>
+            <Typography variant="caption" color="text.secondary">
+              Recommended for production projects and broad adapter
+              compatibility.
+            </Typography>
+            <Box sx={{ mt: 1.5 }}>
+              {renderVersionList(
+                pythonDbtVersions,
+                'No dbt Core v1 releases are available.',
+              )}
+            </Box>
+          </Box>
+
+          <Box
+            component="section"
+            aria-labelledby="rust-dbt-runtime-title"
+            sx={{
+              p: 2,
+              border: 1,
+              borderColor: settings.dbtVersion?.startsWith('2.')
+                ? 'success.main'
+                : 'divider',
+              borderRadius: 2,
+              bgcolor: 'background.paper',
+            }}
+          >
+            <Box
+              sx={{
+                display: 'flex',
+                alignItems: 'flex-start',
+                justifyContent: 'space-between',
+                gap: 1,
+                mb: 1.5,
+              }}
+            >
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                <RuntimeLanguageIcon language="rust" />
+                <Box>
+                  <Typography
+                    id="rust-dbt-runtime-title"
+                    variant="subtitle1"
+                    sx={{ fontWeight: 700 }}
+                  >
+                    dbt Core v2
+                  </Typography>
+                  <Typography variant="body2" color="text.secondary">
+                    Rust engine · Preview runtime
+                  </Typography>
+                </Box>
+              </Box>
+              <Box
+                sx={{
+                  display: 'flex',
+                  gap: 0.75,
+                  flexWrap: 'wrap',
+                  justifyContent: 'flex-end',
+                }}
+              >
+                <Chip label="Rust" size="small" variant="outlined" />
+                <Chip label="Supported" size="small" color="success" />
+                <Chip label="Preview" size="small" color="warning" />
+              </Box>
+            </Box>
+            <Typography variant="caption" color="text.secondary">
+              Preview releases are available in Rosetta DBT Studio. Validate
+              project and adapter compatibility before production use.
+            </Typography>
+            <Box sx={{ mt: 1.5 }}>
+              {renderVersionList(
+                rustDbtVersions,
+                'No dbt Core v2 preview releases are available.',
+              )}
+            </Box>
+          </Box>
+        </Box>
       </Box>
 
       <Box sx={{ mb: 3 }}>
@@ -1073,6 +1371,103 @@ export const DbtSettings: React.FC<DbtSettingsProps> = ({
           </Box>
         </Box>
       )}
+
+      <Dialog
+        open={isVersionChangeDialogOpen}
+        onClose={() => setIsVersionChangeDialogOpen(false)}
+        fullWidth
+        maxWidth="sm"
+      >
+        <DialogTitle>Confirm global dbt-core version change</DialogTitle>
+        <DialogContent>
+          {versionChangePlan && (
+            <Box sx={{ pt: 1 }}>
+              <Typography variant="body2">
+                Current version:{' '}
+                {versionChangePlan.currentVersion || 'Not installed'}
+              </Typography>
+              <Typography variant="body2">
+                Target version: {versionChangePlan.targetVersion}
+              </Typography>
+              <Typography variant="body2" sx={{ mb: 2 }}>
+                Change: {versionChangePlan.direction} (
+                {versionChangePlan.channel})
+              </Typography>
+
+              <Alert
+                severity={
+                  versionChangePlan.isMajorVersionChange ? 'warning' : 'info'
+                }
+                sx={{ mb: 2 }}
+              >
+                {versionChangePlan.globalImpactWarning}
+              </Alert>
+
+              {versionChangePlan.warnings.map((warning) => (
+                <Alert key={warning} severity="warning" sx={{ mb: 1 }}>
+                  {warning}
+                </Alert>
+              ))}
+
+              {versionChangePlan.adapters.length > 0 && (
+                <Box sx={{ mt: 2 }}>
+                  <Typography variant="subtitle2" sx={{ mb: 1 }}>
+                    Installed adapter compatibility
+                  </Typography>
+                  {versionChangePlan.adapters.map((adapter) => (
+                    <Alert
+                      key={adapter.packageName}
+                      severity={getAdapterAlertSeverity(adapter.status)}
+                      sx={{ mb: 1 }}
+                    >
+                      {adapter.packageName} {adapter.installedVersion}:{' '}
+                      {adapter.message}
+                    </Alert>
+                  ))}
+                </Box>
+              )}
+
+              {(versionChangePlan.channel === 'preview' ||
+                versionChangePlan.targetVersion.startsWith('2.')) && (
+                <Alert severity="info" sx={{ mt: 2 }}>
+                  Rosetta will install only the Apache-licensed dbt-core package
+                  and will block an ambiguous or proprietary dbt distribution.
+                </Alert>
+              )}
+
+              <FormControlLabel
+                sx={{ mt: 2 }}
+                control={
+                  <Checkbox
+                    checked={runProjectCheck}
+                    onChange={(event) =>
+                      setRunProjectCheck(event.target.checked)
+                    }
+                  />
+                }
+                label="Check current project after install (dbt parse and compile)"
+              />
+              <Typography
+                variant="caption"
+                color="text.secondary"
+                display="block"
+              >
+                Artifacts and logs are redirected to a temporary directory. dbt
+                deps is not run automatically because it can modify dependencies
+                and require network access.
+              </Typography>
+            </Box>
+          )}
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setIsVersionChangeDialogOpen(false)}>
+            Cancel
+          </Button>
+          <Button variant="contained" onClick={confirmDbtVersionChange}>
+            Confirm version change
+          </Button>
+        </DialogActions>
+      </Dialog>
 
       <Backdrop
         open={isLoadingDialog}

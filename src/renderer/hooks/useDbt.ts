@@ -10,6 +10,7 @@ import {
 } from '../controllers';
 import { Project, DbtCommandType, ConnectionInput } from '../../types/backend';
 import { useAppContext } from './index';
+import { getDbtProcessEnvironment } from '../utils/dbtProcessEnvironment';
 
 interface UseDbtReturn {
   run: (project: Project, path?: string) => Promise<void>;
@@ -300,7 +301,21 @@ const useDbt = (
         }
 
         // Execute command
-        const result = await runCommand(cmdString);
+        const processEnvironment = getDbtProcessEnvironment(
+          settings?.dbtVersion,
+          connection.connection.type,
+        );
+        if (processEnvironment?.DBT_ALLOW_EXPERIMENTAL_ADAPTERS) {
+          toast.warning(
+            'Postgres support in dbt Core v2 is experimental. Rosetta enabled it for this command only.',
+          );
+        }
+        const result = await runCommand(
+          cmdString,
+          undefined,
+          undefined,
+          processEnvironment,
+        );
         const aggregatedError = extractCliErrorDetails(
           result.output,
           result.error,
@@ -334,6 +349,7 @@ const useDbt = (
       runCommand,
       successCallback,
       settings?.dbtPath,
+      settings?.dbtVersion,
     ],
   );
 
@@ -392,7 +408,15 @@ const useDbt = (
           }
 
           // Execute command and capture output
-          const result = await runCommand(cmdString);
+          const result = await runCommand(
+            cmdString,
+            undefined,
+            undefined,
+            getDbtProcessEnvironment(
+              settings?.dbtVersion,
+              connection.connection.type,
+            ),
+          );
 
           // Detect failure via stderr forwarded to stdout or non-zero exit code indicator
           const aggregatedError = extractCliErrorDetails(
@@ -462,7 +486,13 @@ const useDbt = (
           setActiveCommand(null);
         }
       },
-      [connections, setupConnectionEnv, buildCommand, runCommand],
+      [
+        connections,
+        setupConnectionEnv,
+        buildCommand,
+        runCommand,
+        settings?.dbtVersion,
+      ],
     ),
 
     compileProject: useCallback(
@@ -497,7 +527,15 @@ const useDbt = (
           if (!cmdString) {
             return '';
           }
-          const result = await runCommand(cmdString);
+          const result = await runCommand(
+            cmdString,
+            undefined,
+            undefined,
+            getDbtProcessEnvironment(
+              settings?.dbtVersion,
+              connection.connection.type,
+            ),
+          );
 
           const aggregatedError = extractCliErrorDetails(
             result.output,
@@ -517,7 +555,13 @@ const useDbt = (
           setActiveCommand(null);
         }
       },
-      [connections, setupConnectionEnv, buildCommand, runCommand],
+      [
+        connections,
+        setupConnectionEnv,
+        buildCommand,
+        runCommand,
+        settings?.dbtVersion,
+      ],
     ),
 
     debug: useCallback(

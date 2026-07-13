@@ -30,6 +30,13 @@ export type SettingsChannels =
   | 'settings:duckdb:diagnose'
   | 'settings:installSqlGlot'
   | 'dbt:versions:list'
+  | 'dbt:installed:get'
+  | 'dbt:versionChange:plan'
+  | 'dbt:versionChange:install'
+  | 'dbt:compatibility:check'
+  | 'dbt:packages:installed'
+  | 'dbt:package:installLatest'
+  | 'dbt:package:uninstall'
   | 'dbt:packageVersions:list'
   | 'dbt:packageVersion:install';
 

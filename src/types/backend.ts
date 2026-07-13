@@ -384,7 +384,15 @@ export type RosettaVersionInfo = {
 
 export type DbtCoreVersionListItem = {
   version: string;
-  isPrerelease?: boolean;
+  isPrerelease: boolean;
+  isLatestStable: boolean;
+  isInstalled: boolean;
+  channel: 'stable' | 'preview';
+};
+
+export type DbtVersionListOptions = {
+  includePrerelease?: boolean;
+  limit?: number;
 };
 
 export type DbtVersionListResponse = {
@@ -414,8 +422,83 @@ export type PythonPackageInstallVersionRequest = {
   version: string;
 };
 
+export type DbtAdapterCompatibility = {
+  packageName: string;
+  installedVersion: string;
+  status: 'likely-compatible' | 'warning' | 'unknown';
+  message: string;
+};
+
 export type PythonPackageInstallVersionResponse = {
   ok: boolean;
+  error?: string;
+  installedVersion?: string;
+  dbtPath?: string;
+  previousVersion?: string | null;
+  previousDbtPath?: string | null;
+  adapterWarnings?: DbtAdapterCompatibility[];
+};
+
+export type PythonPackageActionRequest = {
+  pythonPath?: string;
+  packageName: string;
+};
+
+export type InstalledPythonPackagesResponse = {
+  packages: Record<string, string>;
+};
+
+export type InstalledDbtCoreInfo = {
+  version: string | null;
+  pythonPath: string;
+  dbtPath: string | null;
+  dbtVersionOutput?: string;
+  isDbtCorePackage: boolean;
+  isExecutableVerified: boolean;
+  hasProprietaryDbtPackage?: boolean;
+  error?: string;
+};
+
+export type DbtVersionChangeDirection =
+  | 'upgrade'
+  | 'downgrade'
+  | 'reinstall'
+  | 'preview-install';
+
+export type DbtVersionChangePlanRequest = {
+  targetVersion: string;
+  includeAdapters?: boolean;
+};
+
+export type DbtVersionChangePlan = {
+  currentVersion: string | null;
+  targetVersion: string;
+  direction: DbtVersionChangeDirection;
+  channel: 'stable' | 'preview';
+  isMajorVersionChange: boolean;
+  globalImpactWarning: string;
+  warnings: string[];
+  adapters: DbtAdapterCompatibility[];
+  rollbackVersion: string | null;
+};
+
+export type DbtVersionChangeRequest = DbtVersionChangePlanRequest & {
+  pythonPath?: string;
+};
+
+export type DbtCompatibilityDiagnostic = {
+  command: 'parse' | 'compile';
+  ok: boolean;
+  exitCode: number | null;
+  summary: string;
+};
+
+export type DbtProjectCompatibilityResult = {
+  ok: boolean;
+  projectName?: string;
+  projectPath?: string;
+  diagnostics: DbtCompatibilityDiagnostic[];
+  recommendations: string[];
   error?: string;
 };
 
@@ -445,6 +528,10 @@ export type CustomError = {
 export type CliMessage = {
   message: string;
   type: 'error' | 'info' | 'success';
+};
+
+export type CliProcessEnvironment = {
+  DBT_ALLOW_EXPERIMENTAL_ADAPTERS?: 'true';
 };
 
 type ForeignKey = {

@@ -8,6 +8,7 @@ import React, {
   ReactNode,
 } from 'react';
 import { projectsServices } from '../services';
+import { CliProcessEnvironment } from '../../types/backend';
 
 interface CliCommand {
   id: string;
@@ -32,8 +33,13 @@ interface CliContextValue extends CliState {
     command: string,
     args?: string[],
     timeoutMs?: number,
+    environment?: CliProcessEnvironment,
   ) => Promise<{ output: string[]; error: string[] }>;
-  runCommandAsync: (command: string, args?: string[]) => void; // Fire and forget for terminal usage
+  runCommandAsync: (
+    command: string,
+    args?: string[],
+    environment?: CliProcessEnvironment,
+  ) => void; // Fire and forget for terminal usage
   stopCommand: () => void;
   clearOutput: () => void;
   sendInput: (input: string) => void;
@@ -193,7 +199,8 @@ export const CliProvider: React.FC<CliProviderProps> = ({ children }) => {
     async (
       commandString: string,
       args?: string[],
-      timeoutMs: number = 60000,
+      timeoutMs?: number,
+      environment?: CliProcessEnvironment,
     ): Promise<{ output: string[]; error: string[] }> => {
       if (state.isRunning) {
         throw new Error('Another command is already running');
@@ -203,14 +210,15 @@ export const CliProvider: React.FC<CliProviderProps> = ({ children }) => {
 
       return new Promise<{ output: string[]; error: string[] }>(
         (resolve, reject) => {
+          const commandTimeoutMs = timeoutMs ?? 60000;
           const timeoutId = setTimeout(() => {
             setState((prev) => ({
               ...prev,
               isRunning: false,
               currentCommand: null,
             }));
-            reject(new Error(`Command timeout after ${timeoutMs}ms`));
-          }, timeoutMs);
+            reject(new Error(`Command timeout after ${commandTimeoutMs}ms`));
+          }, commandTimeoutMs);
 
           const command: CliCommand = {
             id: commandId,
@@ -232,17 +240,19 @@ export const CliProvider: React.FC<CliProviderProps> = ({ children }) => {
           }));
 
           // Execute command
-          projectsServices.runCliCommand(commandString, args).catch((err) => {
-            const errorMessage =
-              err?.message || err?.toString() || 'Command failed';
-            setState((prev) => ({
-              ...prev,
-              isRunning: false,
-              currentCommand: null,
-              error: [...prev.error, errorMessage],
-            }));
-            reject(new Error(errorMessage));
-          });
+          projectsServices
+            .runCliCommand(commandString, args, environment)
+            .catch((err) => {
+              const errorMessage =
+                err?.message || err?.toString() || 'Command failed';
+              setState((prev) => ({
+                ...prev,
+                isRunning: false,
+                currentCommand: null,
+                error: [...prev.error, errorMessage],
+              }));
+              reject(new Error(errorMessage));
+            });
         },
       );
     },
@@ -251,7 +261,11 @@ export const CliProvider: React.FC<CliProviderProps> = ({ children }) => {
 
   // Run command without waiting for result (for terminal usage)
   const runCommandAsync = useCallback(
-    (commandString: string, args?: string[]) => {
+    (
+      commandString: string,
+      args?: string[],
+      environment?: CliProcessEnvironment,
+    ) => {
       if (state.isRunning) {
         // Add to output to show command was ignored
         setState((prev) => ({
@@ -280,14 +294,16 @@ export const CliProvider: React.FC<CliProviderProps> = ({ children }) => {
       }));
 
       // Execute command
-      projectsServices.runCliCommand(commandString, args).catch((err) => {
-        const errorMessage =
-          err?.message || err?.toString() || 'Command failed';
-        setState((prev) => ({
-          ...prev,
-          error: [...prev.error, errorMessage],
-        }));
-      });
+      projectsServices
+        .runCliCommand(commandString, args, environment)
+        .catch((err) => {
+          const errorMessage =
+            err?.message || err?.toString() || 'Command failed';
+          setState((prev) => ({
+            ...prev,
+            error: [...prev.error, errorMessage],
+          }));
+        });
     },
     [state.isRunning, generateCommandId],
   );
