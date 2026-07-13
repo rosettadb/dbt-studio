@@ -195,6 +195,18 @@ const ProjectDetails: React.FC = () => {
   const [pipelineCloudModal, setPipelineCloudModal] = React.useState(false);
   const theme = useTheme();
 
+  const handleRunPipelineFile = React.useCallback((filePath: string) => {
+    // Extract pipeline name from path (filename without extension)
+    const name =
+      filePath
+        .replace(/\\/g, '/')
+        .split('/')
+        .pop()
+        ?.replace(/\.(yml|yaml)$/, '') || '';
+    setPipelineRunArgs(`--pipeline_name ${name}`);
+    setPipelineCloudModal(true);
+  }, []);
+
   // Pipeline tab support — derive state from the currently active tab
   const activePipelineFilePath = React.useMemo(() => {
     if (!activeTab?.path || !isPipelineTabPath(activeTab.path)) return '';
@@ -1048,17 +1060,7 @@ const ProjectDetails: React.FC = () => {
                   setIsRemoveConnectionConfirmOpen(true);
                 }
               }}
-              onRunPipeline={(filePath) => {
-                // Extract pipeline name from path (filename without extension)
-                const name =
-                  filePath
-                    .replace(/\\/g, '/')
-                    .split('/')
-                    .pop()
-                    ?.replace(/\.(yml|yaml)$/, '') || '';
-                setPipelineRunArgs(`--pipeline_name ${name}`);
-                setPipelineCloudModal(true);
-              }}
+              onRunPipeline={handleRunPipelineFile}
             />
           </Box>
         </Box>
@@ -1163,6 +1165,11 @@ const ProjectDetails: React.FC = () => {
                                     });
                                     await refetchPipelineContent();
                                   }
+                                : undefined
+                            }
+                            onRun={
+                              settings?.env === 'cloud' && activePipelineFilePath
+                                ? () => handleRunPipelineFile(activePipelineFilePath)
                                 : undefined
                             }
                           />
