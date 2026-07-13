@@ -22,6 +22,7 @@ import AddIcon from '@mui/icons-material/Add';
 import SearchIcon from '@mui/icons-material/Search';
 import MoreVertIcon from '@mui/icons-material/MoreVert';
 import DeleteIcon from '@mui/icons-material/Delete';
+import PlaylistRemoveIcon from '@mui/icons-material/PlaylistRemove';
 import SearchOffIcon from '@mui/icons-material/SearchOff';
 import HelpOutlineIcon from '@mui/icons-material/HelpOutline';
 import DriveFolderUploadIcon from '@mui/icons-material/DriveFolderUpload';
@@ -32,6 +33,7 @@ import { Cable } from '@mui/icons-material';
 import { projectsServices, connectorsServices } from '../../services';
 import {
   useDeleteProject,
+  useRemoveProjectFromList,
   useFilePicker,
   useGetConnections,
   useGetProjects,
@@ -114,6 +116,12 @@ const SelectProject: React.FC = () => {
     id: string;
     name: string;
   } | null>(null);
+  const [removeFromListDialogOpen, setRemoveFromListDialogOpen] =
+    React.useState(false);
+  const [projectToRemoveFromList, setProjectToRemoveFromList] = React.useState<{
+    id: string;
+    name: string;
+  } | null>(null);
   const [isGetStartedModalOpen, setIsGetStartedModalOpen] =
     React.useState(false);
   const [isAddConnectionModalOpen, setIsAddConnectionModalOpen] =
@@ -124,6 +132,14 @@ const SelectProject: React.FC = () => {
   const { mutate: deleteProject } = useDeleteProject({
     onSuccess: () => {
       toast.info(`Project ${projectToDelete?.name} successfully deleted!`);
+    },
+  });
+
+  const { mutate: removeProjectFromList } = useRemoveProjectFromList({
+    onSuccess: () => {
+      toast.info(
+        `Project ${projectToRemoveFromList?.name} removed from Studio.`,
+      );
     },
   });
 
@@ -198,6 +214,23 @@ const SelectProject: React.FC = () => {
     }
     setDeleteDialogOpen(false);
     setProjectToDelete(null);
+  };
+
+  const handleRemoveProjectFromList = () => {
+    const project = projects.find((p) => p.id === activeProjectId);
+    if (project) {
+      setProjectToRemoveFromList({ id: project.id, name: project.name });
+      setRemoveFromListDialogOpen(true);
+    }
+    handleCloseMenu();
+  };
+
+  const confirmRemoveProjectFromList = async () => {
+    if (projectToRemoveFromList) {
+      removeProjectFromList({ id: projectToRemoveFromList.id });
+    }
+    setRemoveFromListDialogOpen(false);
+    setProjectToRemoveFromList(null);
   };
 
   const validateProjectName = (
@@ -519,6 +552,15 @@ const SelectProject: React.FC = () => {
             </MenuItem>
           )}
           <MenuItem
+            onClick={handleRemoveProjectFromList}
+            data-testid="context-menu-remove-from-list"
+          >
+            <ListItemIcon>
+              <PlaylistRemoveIcon fontSize="small" color="warning" />
+            </ListItemIcon>
+            <ListItemText>Remove from List</ListItemText>
+          </MenuItem>
+          <MenuItem
             onClick={handleDeleteProject}
             data-testid="context-menu-delete"
           >
@@ -753,6 +795,41 @@ const SelectProject: React.FC = () => {
               data-testid="confirm-delete-btn"
             >
               Delete
+            </Button>
+          </DialogActions>
+        </Dialog>
+        <Dialog
+          open={removeFromListDialogOpen}
+          onClose={() => setRemoveFromListDialogOpen(false)}
+          aria-labelledby="remove-from-list-dialog-title"
+          aria-describedby="remove-from-list-dialog-description"
+        >
+          <DialogTitle id="remove-from-list-dialog-title">
+            Remove Project from List
+          </DialogTitle>
+          <DialogContent>
+            <DialogContentText id="remove-from-list-dialog-description">
+              Are you sure you want to remove &quot;
+              {projectToRemoveFromList?.name}
+              &quot; from Studio? The project folder on disk will not be
+              deleted, and you can re-add it later.
+            </DialogContentText>
+          </DialogContent>
+          <DialogActions>
+            <Button
+              onClick={() => setRemoveFromListDialogOpen(false)}
+              color="primary"
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={confirmRemoveProjectFromList}
+              color="warning"
+              variant="contained"
+              autoFocus
+              data-testid="confirm-remove-from-list-btn"
+            >
+              Remove
             </Button>
           </DialogActions>
         </Dialog>

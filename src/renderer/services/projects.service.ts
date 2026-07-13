@@ -84,6 +84,16 @@ export const deleteProject = async (body: { id: string }): Promise<boolean> => {
   return data;
 };
 
+export const removeProjectFromList = async (body: {
+  id: string;
+}): Promise<boolean> => {
+  const { data } = await client.post<{ id: string }, boolean>(
+    'project:removeFromList',
+    body,
+  );
+  return data;
+};
+
 export const loadProjectDirectory = async (body: {
   path: string;
 }): Promise<FileNode> => {
