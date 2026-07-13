@@ -609,13 +609,20 @@ const PipelineGraphContent: React.FC<PipelineGraphProps> = ({
             This pipeline has unsaved changes. Save them before running?
           </Typography>
           {validationError && (
-            <Typography variant="caption" color="error" sx={{ mt: 1, display: 'block' }}>
+            <Typography
+              variant="caption"
+              color="error"
+              sx={{ mt: 1, display: 'block' }}
+            >
               {validationError}
             </Typography>
           )}
         </DialogContent>
         <DialogActions>
-          <Button onClick={() => setShowRunSaveConfirm(false)} disabled={isSaving}>
+          <Button
+            onClick={() => setShowRunSaveConfirm(false)}
+            disabled={isSaving}
+          >
             Cancel
           </Button>
           <Button

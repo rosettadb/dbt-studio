@@ -1168,8 +1168,12 @@ const ProjectDetails: React.FC = () => {
                                 : undefined
                             }
                             onRun={
-                              settings?.env === 'cloud' && activePipelineFilePath
-                                ? () => handleRunPipelineFile(activePipelineFilePath)
+                              settings?.env === 'cloud' &&
+                              activePipelineFilePath
+                                ? () =>
+                                    handleRunPipelineFile(
+                                      activePipelineFilePath,
+                                    )
                                 : undefined
                             }
                           />
