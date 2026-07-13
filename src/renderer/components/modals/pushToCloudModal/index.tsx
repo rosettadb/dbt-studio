@@ -20,6 +20,12 @@ import {
   Skeleton,
   Switch,
   FormControlLabel,
+  Popover,
+  List,
+  ListItemButton,
+  ListItemText,
+  ListItemIcon,
+  Tooltip,
 } from '@mui/material';
 import {
   Visibility,
@@ -31,6 +37,7 @@ import {
   Lock,
   Key,
   AddOutlined,
+  VpnKey,
 } from '@mui/icons-material';
 import { toast } from 'react-toastify';
 import { Modal } from '../modal';
@@ -42,6 +49,8 @@ import {
   useExtractProfileEnvVars,
 } from '../../../controllers';
 import { DbtCommandType, Project } from '../../../../types/backend';
+import { secureStorageService } from '../../../services/secureStorage.service';
+import { SecureStorageAccount } from '../../../../types/frontend';
 
 interface EnvironmentVariable {
   key: string;
@@ -115,6 +124,15 @@ export const PushToCloudModal: React.FC<PushToCloudModalProps> = ({
   const [newEnvKey, setNewEnvKey] = React.useState('');
   const [newEnvValue, setNewEnvValue] = React.useState('');
   const [dbtArguments, setDbtArguments] = React.useState(initialDbtArguments);
+
+  // Keystore picker state
+  const [keystoreAnchor, setKeystoreAnchor] =
+    React.useState<HTMLButtonElement | null>(null);
+  const [keystoreKeys, setKeystoreKeys] = React.useState<string[]>([]);
+  const [keystoreLoading, setKeystoreLoading] = React.useState(false);
+  const [keystoreAdding, setKeystoreAdding] = React.useState<string | null>(
+    null,
+  );
 
   React.useEffect(() => {
     setDbtArguments(initialDbtArguments);
@@ -472,6 +490,89 @@ export const PushToCloudModal: React.FC<PushToCloudModalProps> = ({
       }),
     );
   }, []);
+
+  const handleOpenKeystore = React.useCallback(
+    async (event: React.MouseEvent<HTMLButtonElement>) => {
+      setKeystoreAnchor(event.currentTarget);
+      setKeystoreLoading(true);
+      try {
+        const keys = await secureStorageService.list();
+        // Filter out internal/system keys (those used for db/cloud connections)
+        const userKeys = keys.filter(
+          (k) =>
+            !k.startsWith('db-') &&
+            !k.startsWith('cloud-') &&
+            !k.startsWith('openai') &&
+            !k.startsWith('ollama') &&
+            !k.startsWith('gemini') &&
+            !k.startsWith('anthropic') &&
+            !k.startsWith('lmstudio') &&
+            !k.startsWith('openai-compatible'),
+        );
+        setKeystoreKeys(userKeys);
+      } catch {
+        toast.error('Failed to load keystore entries');
+      } finally {
+        setKeystoreLoading(false);
+      }
+    },
+    [],
+  );
+
+  const handleAddFromKeystore = React.useCallback(
+    async (keystoreKey: string) => {
+      setKeystoreAdding(keystoreKey);
+      try {
+        const value = await secureStorageService.get(
+          keystoreKey as SecureStorageAccount,
+        );
+        if (value === null) {
+          toast.error(`Could not retrieve value for "${keystoreKey}"`);
+          return;
+        }
+
+        // Strip environment prefix for the variable key (e.g. "dev.MY_KEY" → "MY_KEY")
+        const varKey = keystoreKey.includes('.')
+          ? keystoreKey.slice(keystoreKey.indexOf('.') + 1)
+          : keystoreKey;
+
+        if (RESERVED_KEYS.includes(varKey.toUpperCase())) {
+          toast.error(`${varKey} is a reserved key`);
+          return;
+        }
+
+        const alreadyExists = environmentVariables.some(
+          (env) => env.key === varKey,
+        );
+        if (alreadyExists) {
+          // Update existing entry with the keystore value
+          setEnvironmentVariables((prev) =>
+            prev.map((env) =>
+              env.key === varKey ? { ...env, value, isEdited: true } : env,
+            ),
+          );
+          toast.success(`Updated "${varKey}" from keystore`);
+        } else {
+          const newEntry: EnvironmentVariable = {
+            id: `keystore-${Date.now()}`,
+            key: varKey,
+            value,
+            originalValue: value,
+            isEdited: true,
+          };
+          setEnvironmentVariables((prev) => [...prev, newEntry]);
+          toast.success(`Added "${varKey}" from keystore`);
+        }
+
+        setKeystoreAnchor(null);
+      } catch {
+        toast.error(`Failed to retrieve value for "${keystoreKey}"`);
+      } finally {
+        setKeystoreAdding(null);
+      }
+    },
+    [environmentVariables],
+  );
 
   const handleGithubUsernameFocus = React.useCallback(() => {
     if (!isGithubUsernameEdited) {
@@ -1129,13 +1230,192 @@ export const PushToCloudModal: React.FC<PushToCloudModalProps> = ({
                     <AddOutlined />
                   </IconButton>
                 </Box>
-                <Typography
-                  variant="caption"
-                  color="text.secondary"
-                  sx={{ pl: 0.5 }}
+                <Box
+                  display="flex"
+                  alignItems="center"
+                  justifyContent="space-between"
                 >
-                  Add additional custom environment variables.
-                </Typography>
+                  <Typography
+                    variant="caption"
+                    color="text.secondary"
+                    sx={{ pl: 0.5 }}
+                  >
+                    Add additional custom environment variables.
+                  </Typography>
+                  <Tooltip title="Pick a variable from your local keystore">
+                    <Button
+                      size="small"
+                      variant="outlined"
+                      startIcon={<VpnKey sx={{ fontSize: 14 }} />}
+                      onClick={handleOpenKeystore}
+                      sx={{
+                        fontSize: '0.75rem',
+                        textTransform: 'none',
+                        borderColor: alpha(theme.palette.primary.main, 0.4),
+                        color: 'primary.main',
+                        '&:hover': {
+                          borderColor: 'primary.main',
+                          bgcolor: alpha(theme.palette.primary.main, 0.06),
+                        },
+                      }}
+                    >
+                      From Keystore
+                    </Button>
+                  </Tooltip>
+                </Box>
+
+                {/* Keystore picker popover */}
+                <Popover
+                  open={Boolean(keystoreAnchor)}
+                  anchorEl={keystoreAnchor}
+                  onClose={() => setKeystoreAnchor(null)}
+                  anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
+                  transformOrigin={{ vertical: 'top', horizontal: 'right' }}
+                  slotProps={{
+                    paper: {
+                      sx: {
+                        mt: 0.5,
+                        minWidth: 260,
+                        maxWidth: 360,
+                        maxHeight: 320,
+                        overflow: 'hidden',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        borderRadius: 2,
+                        border: `1px solid ${theme.palette.divider}`,
+                        boxShadow: theme.shadows[4],
+                      },
+                    },
+                  }}
+                >
+                  <Box
+                    sx={{
+                      px: 2,
+                      py: 1.5,
+                      borderBottom: `1px solid ${theme.palette.divider}`,
+                      bgcolor: alpha(
+                        theme.palette.primary.main,
+                        theme.palette.mode === 'dark' ? 0.12 : 0.04,
+                      ),
+                    }}
+                  >
+                    <Box display="flex" alignItems="center" gap={1}>
+                      <VpnKey sx={{ fontSize: 16, color: 'primary.main' }} />
+                      <Typography variant="subtitle2" fontWeight="600">
+                        Select from Keystore
+                      </Typography>
+                    </Box>
+                    <Typography
+                      variant="caption"
+                      color="text.secondary"
+                      display="block"
+                      mt={0.25}
+                    >
+                      Click a key to add it as an environment variable
+                    </Typography>
+                  </Box>
+
+                  {keystoreLoading && (
+                    <Box
+                      display="flex"
+                      justifyContent="center"
+                      alignItems="center"
+                      py={3}
+                    >
+                      <CircularProgress size={20} />
+                    </Box>
+                  )}
+                  {!keystoreLoading && keystoreKeys.length === 0 && (
+                    <Box px={2} py={3} textAlign="center">
+                      <VpnKey
+                        sx={{ fontSize: 32, color: 'text.disabled', mb: 1 }}
+                      />
+                      <Typography variant="body2" color="text.secondary">
+                        No keystore entries found.
+                      </Typography>
+                      <Typography
+                        variant="caption"
+                        color="text.secondary"
+                        display="block"
+                        mt={0.5}
+                      >
+                        Add variables in Settings → Keystore.
+                      </Typography>
+                    </Box>
+                  )}
+                  {!keystoreLoading && keystoreKeys.length > 0 && (
+                    <List
+                      dense
+                      disablePadding
+                      sx={{ overflowY: 'auto', flex: 1 }}
+                    >
+                      {keystoreKeys.map((k) => {
+                        const displayKey = k.includes('.')
+                          ? k.slice(k.indexOf('.') + 1)
+                          : k;
+                        const envPrefix = k.includes('.')
+                          ? k.slice(0, k.indexOf('.'))
+                          : null;
+                        const isAdding = keystoreAdding === k;
+                        return (
+                          <ListItemButton
+                            key={k}
+                            onClick={() => handleAddFromKeystore(k)}
+                            disabled={isAdding}
+                            sx={{
+                              py: 1,
+                              px: 2,
+                              '&:hover': {
+                                bgcolor: alpha(
+                                  theme.palette.primary.main,
+                                  0.06,
+                                ),
+                              },
+                            }}
+                          >
+                            <ListItemIcon sx={{ minWidth: 32 }}>
+                              {isAdding ? (
+                                <CircularProgress size={14} />
+                              ) : (
+                                <Key
+                                  sx={{
+                                    fontSize: 14,
+                                    color: 'text.secondary',
+                                  }}
+                                />
+                              )}
+                            </ListItemIcon>
+                            <ListItemText
+                              primary={
+                                <Typography
+                                  variant="body2"
+                                  sx={{
+                                    fontFamily: 'monospace',
+                                    fontSize: '0.8rem',
+                                    fontWeight: 600,
+                                  }}
+                                >
+                                  {displayKey}
+                                </Typography>
+                              }
+                              secondary={
+                                envPrefix && (
+                                  <Typography
+                                    variant="caption"
+                                    color="text.disabled"
+                                    sx={{ fontFamily: 'monospace' }}
+                                  >
+                                    env: {envPrefix}
+                                  </Typography>
+                                )
+                              }
+                            />
+                          </ListItemButton>
+                        );
+                      })}
+                    </List>
+                  )}
+                </Popover>
               </Stack>
             </Paper>
 
