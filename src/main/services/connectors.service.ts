@@ -836,7 +836,7 @@ export default class ConnectorsService {
 
     if (isDuckDb) {
       databaseName = this.extractDbNameFromPath(connection.short_database_path);
-      schemaName = ev('schema');
+      schemaName = connection.schema;
     } else if (isDuckLake) {
       databaseName = projectName; // Use project name as database name for ducklake
       schemaName = 'main';
