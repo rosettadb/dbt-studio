@@ -16,6 +16,10 @@ import SearchIcon from '@mui/icons-material/Search';
 import HandymanIcon from '@mui/icons-material/Handyman';
 import { useTheme } from '@mui/material/styles';
 
+import {
+  getToolResultError,
+  isToolResultFailure,
+} from '../../../shared/toolResult';
 import { FileTypeBadge } from '../../utils/fileTypeIcon';
 import type { ToolCallState } from '../../hooks/useAgentStream';
 import { renderArguments, renderResult } from './ToolCallFormatters';
@@ -286,7 +290,9 @@ export const ToolCallRow: React.FC<ToolCallRowProps> = ({
   };
 
   const { icon, label, suffix } = getToolDisplayInfo();
-  const hasError = toolCall.status === 'error';
+  const hasError =
+    toolCall.status === 'error' || isToolResultFailure(toolCall.result);
+  const resultError = toolCall.error ?? getToolResultError(toolCall.result);
   const safeStringify = (obj: any) => {
     try {
       const seen = new WeakSet();
@@ -419,12 +425,8 @@ export const ToolCallRow: React.FC<ToolCallRowProps> = ({
             overflowX: 'auto',
           }}
         >
-          {hasError && toolCall.error && (
-            <Box sx={{ color: 'error.main', mb: 1 }}>
-              {typeof toolCall.error === 'string'
-                ? toolCall.error
-                : (toolCall.error as any)?.message || String(toolCall.error)}
-            </Box>
+          {hasError && resultError && (
+            <Box sx={{ color: 'error.main', mb: 1 }}>{resultError}</Box>
           )}
 
           <Box sx={{ color: 'text.secondary', mb: 0.5, fontWeight: 'bold' }}>

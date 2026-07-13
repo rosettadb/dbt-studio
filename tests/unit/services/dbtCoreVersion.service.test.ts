@@ -273,7 +273,7 @@ describe('DbtCoreVersionService', () => {
         packageName: 'dbt-postgres',
         installedVersion: '1.9.0',
         status: 'warning',
-        message: expect.stringContaining('DBT_ALLOW_EXPERIMENTAL_ADAPTERS'),
+        message: expect.stringContaining('blocks v2 Postgres execution'),
       }),
     ]);
   });
@@ -332,7 +332,7 @@ describe('DbtCoreVersionService', () => {
       name: 'Migration project',
       path: '/projects/migration',
       createdAt: '2026-07-13',
-      connection: { type: 'postgres' } as any,
+      connection: { type: 'duckdb' } as any,
     });
     mkdtempMock.mockImplementation(
       async () => '/tmp/rosetta-dbt-compatibility-test',
@@ -365,12 +365,36 @@ describe('DbtCoreVersionService', () => {
         env: expect.objectContaining({
           DBT_TARGET_PATH: '/tmp/rosetta-dbt-compatibility-test/target',
           DBT_LOG_PATH: '/tmp/rosetta-dbt-compatibility-test/logs',
-          DBT_ALLOW_EXPERIMENTAL_ADAPTERS: 'true',
         }),
       }),
     );
     expect(removeMock).toHaveBeenCalledWith(
       '/tmp/rosetta-dbt-compatibility-test',
     );
+  });
+
+  it('blocks v2 Postgres compatibility commands before native execution', async () => {
+    getSelectedProjectMock.mockResolvedValue({
+      id: 'project-1',
+      name: 'Postgres project',
+      path: '/projects/postgres',
+      createdAt: '2026-07-13',
+      connection: { type: 'postgres' } as any,
+    });
+    mockCommands([
+      { exitCode: 0, stdout: 'Name: dbt-core\nVersion: 2.0.0a4\n' },
+      { exitCode: 1 },
+      { exitCode: 0, stdout: 'dbt Fusion 2.0.0-alpha.4\n' },
+    ]);
+
+    const result =
+      await DbtCoreVersionService.checkCurrentProjectCompatibility();
+
+    expect(result.ok).toBe(false);
+    expect(result.error).toContain('Postgres is not supported safely');
+    expect(result.recommendations).toEqual([
+      expect.stringContaining('stable v1'),
+    ]);
+    expect(mkdtempMock).not.toHaveBeenCalled();
   });
 });

@@ -1,11 +1,11 @@
-import { getDbtProcessEnvironment } from '../../../src/renderer/utils/dbtProcessEnvironment';
+import { getDbtV2CompatibilityError } from '../../../src/renderer/utils/dbtProcessEnvironment';
 
-describe('dbt v2 experimental adapter environment', () => {
-  it('enables experimental adapters only for dbt v2 Postgres commands', () => {
-    expect(getDbtProcessEnvironment('2.0.0a4', 'postgres')).toEqual({
-      DBT_ALLOW_EXPERIMENTAL_ADAPTERS: 'true',
-    });
-    expect(getDbtProcessEnvironment('1.11.12', 'postgres')).toBeUndefined();
-    expect(getDbtProcessEnvironment('2.0.0a4', 'duckdb')).toBeUndefined();
+describe('dbt v2 adapter compatibility', () => {
+  it('blocks v2 Postgres and permits supported or v1 adapters', () => {
+    expect(getDbtV2CompatibilityError('2.0.0a4', 'postgres')).toContain(
+      'Postgres is not supported safely',
+    );
+    expect(getDbtV2CompatibilityError('1.11.12', 'postgres')).toBeNull();
+    expect(getDbtV2CompatibilityError('2.0.0a4', 'duckdb')).toBeNull();
   });
 });

@@ -10,7 +10,8 @@ import {
 } from '../controllers';
 import { Project, DbtCommandType, ConnectionInput } from '../../types/backend';
 import { useAppContext } from './index';
-import { getDbtProcessEnvironment } from '../utils/dbtProcessEnvironment';
+import { getDbtV2CompatibilityError } from '../utils/dbtProcessEnvironment';
+import { extractCliErrorDetails } from '../utils/dbtCommandResult';
 
 interface UseDbtReturn {
   run: (project: Project, path?: string) => Promise<void>;
@@ -29,57 +30,6 @@ interface UseDbtReturn {
   isRunning: boolean;
   activeCommand: DbtCommandType | null;
 }
-
-const ANSI_ESCAPE_REGEX = /\[[0-9;]*m/g;
-const ERROR_SUMMARY_REGEX = /ERROR=(\d+)/i;
-const NON_ZERO_EXIT_REGEX = /Process exited with code\s+(\d+)/i;
-const ERROR_HINT_REGEX =
-  /(Error importing adapter|Encountered an error|Runtime Error|Traceback|Database Error|Compilation Error|^ERROR:?\b|\bERROR\b)/i;
-const ERROR_HINT_IGNORE_REGEX = /ERROR=0\b/i;
-
-const sanitizeCliLine = (line: string): string =>
-  line.replace(ANSI_ESCAPE_REGEX, '').trimEnd();
-
-const extractCliErrorDetails = (
-  output: string[],
-  errors: string[],
-): string[] => {
-  const details = new Set<string>();
-
-  errors.forEach((err) => {
-    const sanitizedError = sanitizeCliLine(err);
-    if (sanitizedError) {
-      details.add(sanitizedError);
-    }
-  });
-
-  const cleanedOutput = output.map(sanitizeCliLine);
-
-  cleanedOutput.forEach((line) => {
-    const match = line.match(ERROR_SUMMARY_REGEX);
-    if (match && Number(match[1]) > 0) {
-      details.add(line);
-    }
-  });
-
-  cleanedOutput.forEach((line) => {
-    const match = line.match(NON_ZERO_EXIT_REGEX);
-    if (match && Number(match[1]) !== 0) {
-      details.add(line);
-    }
-  });
-
-  cleanedOutput.forEach((line) => {
-    if (ERROR_HINT_IGNORE_REGEX.test(line)) {
-      return;
-    }
-    if (ERROR_HINT_REGEX.test(line)) {
-      details.add(line);
-    }
-  });
-
-  return Array.from(details);
-};
 
 const useDbt = (
   successCallback?: () => void,
@@ -285,6 +235,15 @@ const useDbt = (
           return;
         }
 
+        const compatibilityError = getDbtV2CompatibilityError(
+          settings?.dbtVersion,
+          connection.connection.type,
+        );
+        if (compatibilityError) {
+          if (options.showToast) toast.error(compatibilityError);
+          return;
+        }
+
         setActiveCommand(command);
 
         // Setup environment variables
@@ -301,24 +260,11 @@ const useDbt = (
         }
 
         // Execute command
-        const processEnvironment = getDbtProcessEnvironment(
-          settings?.dbtVersion,
-          connection.connection.type,
-        );
-        if (processEnvironment?.DBT_ALLOW_EXPERIMENTAL_ADAPTERS) {
-          toast.warning(
-            'Postgres support in dbt Core v2 is experimental. Rosetta enabled it for this command only.',
-          );
-        }
-        const result = await runCommand(
-          cmdString,
-          undefined,
-          undefined,
-          processEnvironment,
-        );
+        const result = await runCommand(cmdString);
         const aggregatedError = extractCliErrorDetails(
           result.output,
           result.error,
+          result.exitCode,
         );
 
         // Handle success vs failure
@@ -389,6 +335,15 @@ const useDbt = (
             return '';
           }
 
+          const compatibilityError = getDbtV2CompatibilityError(
+            settings?.dbtVersion,
+            connection.connection.type,
+          );
+          if (compatibilityError) {
+            toast.error(compatibilityError);
+            return '';
+          }
+
           setActiveCommand('compile');
 
           // Setup environment variables
@@ -408,20 +363,13 @@ const useDbt = (
           }
 
           // Execute command and capture output
-          const result = await runCommand(
-            cmdString,
-            undefined,
-            undefined,
-            getDbtProcessEnvironment(
-              settings?.dbtVersion,
-              connection.connection.type,
-            ),
-          );
+          const result = await runCommand(cmdString);
 
           // Detect failure via stderr forwarded to stdout or non-zero exit code indicator
           const aggregatedError = extractCliErrorDetails(
             result.output,
             result.error,
+            result.exitCode,
           );
           if (aggregatedError.length === 0) {
             // Extract the compiled SQL from the output
@@ -518,6 +466,15 @@ const useDbt = (
             return '';
           }
 
+          const compatibilityError = getDbtV2CompatibilityError(
+            settings?.dbtVersion,
+            connection.connection.type,
+          );
+          if (compatibilityError) {
+            toast.error(compatibilityError);
+            return '';
+          }
+
           setActiveCommand('list');
           await setupConnectionEnv(
             connection.connection.name,
@@ -527,19 +484,12 @@ const useDbt = (
           if (!cmdString) {
             return '';
           }
-          const result = await runCommand(
-            cmdString,
-            undefined,
-            undefined,
-            getDbtProcessEnvironment(
-              settings?.dbtVersion,
-              connection.connection.type,
-            ),
-          );
+          const result = await runCommand(cmdString);
 
           const aggregatedError = extractCliErrorDetails(
             result.output,
             result.error,
+            result.exitCode,
           );
           if (aggregatedError.length === 0) {
             return result.output.join('\n');

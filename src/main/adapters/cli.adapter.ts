@@ -110,34 +110,19 @@ class CliAdapter {
       });
 
       this.process.on('close', (code) => {
-        // Send exit event first
-        mainWindow.webContents.send('cli:exit', code);
-
-        // Always send done event for frontend to know command completed
-        mainWindow.webContents.send('cli:done');
-
-        // Reset process
-        this.process = null;
-
-        // Handle promise resolution
         if (code === 0) {
-          this.messageHandler(
-            {
-              type: 'success',
-              message: `Command executed successfully.`,
-            },
-            mainWindow,
-          );
+          mainWindow.webContents.send('cli:exit', code);
+          mainWindow.webContents.send('cli:done', code);
           resolve();
         } else {
-          // Don't call messageHandler with error type here since it calls stopCommand
-          // Just add the exit code message directly
-          mainWindow.webContents.send(
-            'cli:output',
-            `Process exited with code ${code}`,
-          );
+          const exitMessage = `Process exited with code ${code}`;
+          mainWindow.webContents.send('cli:error', exitMessage);
+          mainWindow.webContents.send('cli:exit', code);
+          mainWindow.webContents.send('cli:done', code);
           reject(new Error(`Process exited with error code ${code}`));
         }
+
+        this.process = null;
       });
 
       this.process.on('error', (err) => {

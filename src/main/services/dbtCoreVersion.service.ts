@@ -703,6 +703,23 @@ export class DbtCoreVersionService {
       };
     }
 
+    if (
+      installed.version?.startsWith('2.') &&
+      project.connection?.type === 'postgres'
+    ) {
+      return {
+        ok: false,
+        projectName: project.name,
+        projectPath: project.path,
+        diagnostics: [],
+        recommendations: [
+          'Switch the global dbt runtime to the latest stable v1 release in Settings before running this Postgres project.',
+        ],
+        error:
+          'Postgres is not supported safely by dbt Core v2 preview. Rosetta did not start the compatibility commands.',
+      };
+    }
+
     const temporaryRoot = await fs.mkdtemp(
       path.join(os.tmpdir(), 'rosetta-dbt-compatibility-'),
     );
@@ -710,10 +727,6 @@ export class DbtCoreVersionService {
       ...process.env,
       DBT_TARGET_PATH: path.join(temporaryRoot, 'target'),
       DBT_LOG_PATH: path.join(temporaryRoot, 'logs'),
-      ...(installed.version?.startsWith('2.') &&
-      project.connection?.type === 'postgres'
-        ? { DBT_ALLOW_EXPERIMENTAL_ADAPTERS: 'true' }
-        : {}),
     };
     const diagnostics: DbtProjectCompatibilityResult['diagnostics'] = [];
 
@@ -868,7 +881,7 @@ export class DbtCoreVersionService {
         if (target && target.major >= 2) {
           const message =
             packageName === 'dbt-postgres'
-              ? `Postgres is experimental in dbt-core ${targetVersion}. Rosetta enables DBT_ALLOW_EXPERIMENTAL_ADAPTERS for v2 Postgres commands only; production stability is not guaranteed.`
+              ? `Postgres is not supported safely by dbt-core ${targetVersion}. Rosetta blocks v2 Postgres execution; use a stable dbt-core v1 release for Postgres projects.`
               : `Compatibility with dbt-core ${targetVersion} is not proven. A v2-capable adapter may be required.`;
           return {
             packageName,

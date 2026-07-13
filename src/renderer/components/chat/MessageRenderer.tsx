@@ -16,6 +16,10 @@ import {
   Terminal,
 } from '@mui/icons-material';
 import Collapse from '@mui/material/Collapse';
+import {
+  getToolResultError,
+  isToolResultFailure,
+} from '../../../shared/toolResult';
 import { useAppContext } from '../../hooks';
 import { useSaveFileContent } from '../../controllers';
 
@@ -95,13 +99,14 @@ function buildStepsFromToolCalls(
       failed: 'error',
     };
 
+    const resultFailed = isToolResultFailure(tc.toolOutput);
     const toolCallState: ToolCallState = {
       id: toolCallId,
       toolName: tc.toolName,
       args: displayArgs as Record<string, unknown>,
       result: tc.toolOutput,
-      error: tc.errorMessage ?? undefined,
-      status: statusMap[tc.status] ?? 'done',
+      error: tc.errorMessage ?? getToolResultError(tc.toolOutput) ?? undefined,
+      status: resultFailed ? 'error' : (statusMap[tc.status] ?? 'done'),
     };
 
     if (!stepMap.has(stepNumber)) {
