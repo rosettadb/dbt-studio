@@ -1,12 +1,17 @@
 import React, { useRef, useState, useEffect } from 'react';
-import { Tooltip } from '@mui/material';
+import { Tooltip, TooltipProps } from '@mui/material';
 
 type Props = {
   children: React.ReactNode;
   style?: React.CSSProperties;
+  placement?: TooltipProps['placement'];
 };
 
-export const OverflowTip: React.FC<Props> = ({ children, style }) => {
+export const OverflowTip: React.FC<Props> = ({
+  children,
+  style,
+  placement,
+}) => {
   const [isOverflowed, setIsOverflow] = useState(false);
   const textElementRef: any = useRef();
   useEffect(() => {
@@ -16,7 +21,11 @@ export const OverflowTip: React.FC<Props> = ({ children, style }) => {
   }, []);
 
   return (
-    <Tooltip title={children} disableHoverListener={!isOverflowed}>
+    <Tooltip
+      title={children}
+      disableHoverListener={!isOverflowed}
+      placement={placement}
+    >
       <div
         ref={textElementRef}
         style={{
