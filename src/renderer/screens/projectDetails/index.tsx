@@ -3,21 +3,26 @@ import SplitPane, { Pane } from 'split-pane-react';
 import 'split-pane-react/esm/themes/default.css';
 import { Navigate, useNavigate } from 'react-router-dom';
 import {
+  AccountTree,
   AutoAwesome,
   AutoFixHigh,
   Cable,
+  Cloud,
   Delete,
   Edit,
 } from '@mui/icons-material';
 import {
   Badge,
   Box,
+  IconButton,
   ListItemIcon,
   ListItemText,
   Menu,
   MenuItem,
   Tab,
   Tabs,
+  Tooltip,
+  Typography,
 } from '@mui/material';
 import { toast } from 'react-toastify';
 import yaml from 'js-yaml';
@@ -62,6 +67,7 @@ import {
   CloudLogViewer,
   isPipelineFile,
 } from '../../components/pipelineView';
+import { Taskbar, TaskbarItem } from '../../components/terminal/styles';
 import { projectsServices } from '../../services';
 import {
   Container,
@@ -82,7 +88,7 @@ import { utils } from '../../helpers';
 import { AppLayout } from '../../layouts';
 import ChatScreen from '../chat';
 import { getFileName } from '../../services/settings.services';
-import type { EditorTabId } from '../../../types/editor';
+import type { EditorTabId, EditorTabState } from '../../../types/editor';
 import { subscribeToToolResult } from '../../services/agentEvents.service';
 import {
   toPreviewPath,
@@ -232,6 +238,78 @@ const ProjectDetails: React.FC = () => {
     project?.externalId ? project?.id : null,
     activePipelineBasename,
     recordedPipelineActionId,
+  );
+
+  // Code/visual toggle for the pipeline tab — the raw YAML is edited inline
+  // via a one-off Editor instance instead of opening a second tab.
+  const [pipelineCodeMode, setPipelineCodeMode] = React.useState(false);
+  const [pipelineDraftTab, setPipelineDraftTab] =
+    React.useState<EditorTabState | null>(null);
+
+  React.useEffect(() => {
+    setPipelineCodeMode(false);
+    setPipelineDraftTab(null);
+  }, [activePipelineFilePath]);
+
+  // Cloud logs auto-minimize while editing YAML or the visual graph, and
+  // can be restored without leaving edit mode (mirrors the terminal's
+  // minimize/restore).
+  const [pipelineLogsMinimized, setPipelineLogsMinimized] =
+    React.useState(false);
+  const [pipelineVisualEditing, setPipelineVisualEditing] =
+    React.useState(false);
+
+  React.useEffect(() => {
+    setPipelineLogsMinimized(pipelineCodeMode || pipelineVisualEditing);
+  }, [pipelineCodeMode, pipelineVisualEditing]);
+
+  const handleEnterPipelineCodeMode = React.useCallback(
+    (content?: string) => {
+      const resolvedContent = content ?? activePipelineContent;
+      if (resolvedContent === undefined) {
+        return;
+      }
+      setPipelineDraftTab({
+        id: activePipelineFilePath,
+        path: activePipelineFilePath,
+        title: activePipelineBasename ?? activePipelineFilePath,
+        content: resolvedContent,
+        savedContent: resolvedContent,
+        isModified: false,
+        isLoading: false,
+        error: undefined,
+        viewState: null,
+        isReadOnly: false,
+      });
+      setPipelineCodeMode(true);
+    },
+    [activePipelineFilePath, activePipelineBasename, activePipelineContent],
+  );
+
+  const handleExitPipelineCodeMode = React.useCallback(() => {
+    if (
+      pipelineDraftTab?.isModified &&
+      // eslint-disable-next-line no-alert
+      !window.confirm('Discard unsaved YAML changes?')
+    ) {
+      return;
+    }
+    setPipelineCodeMode(false);
+    setPipelineDraftTab(null);
+  }, [pipelineDraftTab]);
+
+  const handleTabSelect = React.useCallback(
+    (tabId: string) => {
+      if (
+        pipelineDraftTab?.isModified &&
+        // eslint-disable-next-line no-alert
+        !window.confirm('Discard unsaved YAML changes?')
+      ) {
+        return;
+      }
+      switchTab(tabId);
+    },
+    [pipelineDraftTab, switchTab],
   );
 
   const {
@@ -987,13 +1065,8 @@ const ProjectDetails: React.FC = () => {
               }}
               onFileSelect={async (fileNode) => {
                 if (isPipelineFile(fileNode.path)) {
-                  const basename = fileNode.path
-                    .replace(/\\/g, '/')
-                    .split('/')
-                    .pop()
-                    ?.replace(/\.(yml|yaml)$/, '');
                   openTab(toPipelineTabPath(fileNode.path), {
-                    title: basename || fileNode.name,
+                    title: fileNode.name,
                     content: '',
                     isReadOnly: true,
                   });
@@ -1093,7 +1166,7 @@ const ProjectDetails: React.FC = () => {
                         <TabManager
                           tabs={tabs}
                           activeTabId={activeTabId}
-                          onSelect={switchTab}
+                          onSelect={handleTabSelect}
                           onClose={closeTab}
                           onCloseAll={handleCloseAllTabs}
                           onSaveAll={handleSaveAllTabs}
@@ -1145,51 +1218,133 @@ const ProjectDetails: React.FC = () => {
                       >
                         <Box
                           sx={{
-                            flex: activePipelineActionId ? '1 1 60%' : 1,
+                            flex:
+                              activePipelineActionId && !pipelineLogsMinimized
+                                ? '1 1 60%'
+                                : 1,
                             minHeight: 0,
                           }}
                         >
-                          <PipelineView
-                            content={activePipelineContent || ''}
-                            onEdit={() => {
-                              setSelectedFilePath(activePipelineFilePath);
-                              openTab(activePipelineFilePath);
-                            }}
-                            actionId={activePipelineActionId}
-                            onSave={
-                              activePipelineFilePath
-                                ? async (content: string) => {
-                                    await projectsServices.saveFileContent({
-                                      path: activePipelineFilePath,
-                                      content,
-                                    });
-                                    await refetchPipelineContent();
-                                  }
-                                : undefined
-                            }
-                            onRun={
-                              settings?.env === 'cloud' &&
-                              activePipelineFilePath
-                                ? () =>
-                                    handleRunPipelineFile(
-                                      activePipelineFilePath,
-                                    )
-                                : undefined
-                            }
-                          />
+                          {pipelineCodeMode && pipelineDraftTab ? (
+                            <Editor
+                              projectId={project.id}
+                              projectPath={project.path}
+                              tabs={[pipelineDraftTab]}
+                              activeTabId={pipelineDraftTab.id}
+                              onTabContentChange={(_tabId, newContent) => {
+                                setPipelineDraftTab((prev) =>
+                                  prev
+                                    ? {
+                                        ...prev,
+                                        content: newContent,
+                                        isModified:
+                                          newContent !==
+                                          (prev.savedContent ?? ''),
+                                      }
+                                    : prev,
+                                );
+                              }}
+                              onTabSaved={() => {
+                                setPipelineDraftTab((prev) =>
+                                  prev
+                                    ? {
+                                        ...prev,
+                                        isModified: false,
+                                        savedContent: prev.content,
+                                      }
+                                    : prev,
+                                );
+                                refetchPipelineContent();
+                                updateStatuses();
+                              }}
+                              onTabError={(_tabId, errorMessage) => {
+                                setPipelineDraftTab((prev) =>
+                                  prev
+                                    ? { ...prev, error: errorMessage }
+                                    : prev,
+                                );
+                              }}
+                              pendingClose={null}
+                              onSaveAndClose={async () => {}}
+                              onDiscardAndClose={() => {}}
+                              onCancelClose={() => {}}
+                              onGitStatusRefresh={updateStatuses}
+                              onOpenFile={(filePath: string) => {
+                                setSelectedFilePath(filePath);
+                                openTab(filePath);
+                              }}
+                              extraActions={
+                                <Tooltip title="Visual editor">
+                                  <IconButton
+                                    size="small"
+                                    onClick={handleExitPipelineCodeMode}
+                                  >
+                                    <AccountTree fontSize="small" />
+                                  </IconButton>
+                                </Tooltip>
+                              }
+                            />
+                          ) : (
+                            <PipelineView
+                              content={activePipelineContent || ''}
+                              onEdit={handleEnterPipelineCodeMode}
+                              actionId={activePipelineActionId}
+                              onSave={
+                                activePipelineFilePath
+                                  ? async (content: string) => {
+                                      await projectsServices.saveFileContent({
+                                        path: activePipelineFilePath,
+                                        content,
+                                      });
+                                      await refetchPipelineContent();
+                                      await updateStatuses();
+                                    }
+                                  : undefined
+                              }
+                              onRun={
+                                settings?.env === 'cloud' &&
+                                activePipelineFilePath
+                                  ? () =>
+                                      handleRunPipelineFile(
+                                        activePipelineFilePath,
+                                      )
+                                  : undefined
+                              }
+                              onEditingChange={setPipelineVisualEditing}
+                            />
+                          )}
                         </Box>
-                        {activePipelineActionId && (
-                          <Box
-                            sx={{
-                              flex: '1 1 40%',
-                              minHeight: 0,
-                              borderTop: 1,
-                              borderColor: 'divider',
-                            }}
-                          >
-                            <CloudLogViewer actionId={activePipelineActionId} />
-                          </Box>
-                        )}
+                        {activePipelineActionId &&
+                          (pipelineLogsMinimized ? (
+                            <Taskbar
+                              onClick={() => setPipelineLogsMinimized(false)}
+                              sx={{ cursor: 'pointer' }}
+                            >
+                              <TaskbarItem>
+                                <Typography
+                                  fontSize={13}
+                                  sx={{ mr: 1 }}
+                                  fontWeight="bold"
+                                >
+                                  Cloud Logs
+                                </Typography>
+                                <Cloud fontSize="small" />
+                              </TaskbarItem>
+                            </Taskbar>
+                          ) : (
+                            <Box
+                              sx={{
+                                flex: '1 1 40%',
+                                minHeight: 0,
+                                borderTop: 1,
+                                borderColor: 'divider',
+                              }}
+                            >
+                              <CloudLogViewer
+                                actionId={activePipelineActionId}
+                              />
+                            </Box>
+                          ))}
                       </Box>
                     ) : (
                       <>

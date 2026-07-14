@@ -13,7 +13,7 @@ import type {
 
 type PipelineViewProps = {
   content: string;
-  onEdit?: () => void;
+  onEdit?: (content?: string) => void;
   /**
    * Cloud action id recorded for this specific pipeline file. When null, no
    * status is fetched and every node renders neutral.
@@ -25,6 +25,8 @@ type PipelineViewProps = {
   onSave?: (content: string) => Promise<void>;
   /** When provided (cloud mode), shows a Run button that triggers a cloud run. */
   onRun?: () => void;
+  /** Notifies parent when the visual graph enters/exits edit mode. */
+  onEditingChange?: (isEditing: boolean) => void;
 };
 
 const ACTION_STATUS_COLOR: Record<CloudActionStatus, string> = {
@@ -77,6 +79,7 @@ export const PipelineView: React.FC<PipelineViewProps> = ({
   onActiveActionChange,
   onSave,
   onRun,
+  onEditingChange,
 }) => {
   const config = React.useMemo(() => parsePipelineConfig(content), [content]);
 
@@ -118,7 +121,7 @@ export const PipelineView: React.FC<PipelineViewProps> = ({
         {onEdit && (
           <Button
             variant="outlined"
-            onClick={onEdit}
+            onClick={() => onEdit()}
             sx={{ alignSelf: 'flex-start' }}
           >
             Open pipeline.yml in editor
@@ -197,6 +200,7 @@ export const PipelineView: React.FC<PipelineViewProps> = ({
         onEdit={onEdit}
         onSave={onSave}
         onRun={onRun}
+        onEditingChange={onEditingChange}
       />
     </Box>
   );
