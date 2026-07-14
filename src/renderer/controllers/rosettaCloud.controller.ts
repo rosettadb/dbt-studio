@@ -88,6 +88,22 @@ export const useGetSecrets = (
   });
 };
 
+export const useDeleteSecret = () => {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      projectId,
+      secretId,
+    }: {
+      projectId: string;
+      secretId: string;
+    }) => rosettaCloudServices.deleteSecret(projectId, secretId),
+    onSuccess: () => {
+      queryClient.invalidateQueries([QUERY_KEYS.CLOUD_SECRETS]);
+    },
+  });
+};
+
 export const useAuthLogin = (
   options?: UseMutationOptions<string, CustomError, void>,
 ): UseAuthLoginResult => {

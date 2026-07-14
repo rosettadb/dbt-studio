@@ -45,6 +45,7 @@ import {
   useGetLocalChanges,
   useGetRepoInfo,
   useGetSecrets,
+  useDeleteSecret,
   usePushProjectToCloud,
   useExtractProfileEnvVars,
 } from '../../../controllers';
@@ -87,6 +88,7 @@ export const PushToCloudModal: React.FC<PushToCloudModalProps> = ({
   );
   const { mutateAsync: pushProject, isLoading: isPushing } =
     usePushProjectToCloud();
+  const { mutateAsync: deleteSecretFromCloud } = useDeleteSecret();
   const isDeployed = !!project?.externalId;
   const {
     data: secrets = [],
@@ -434,9 +436,29 @@ export const PushToCloudModal: React.FC<PushToCloudModalProps> = ({
     setNewEnvValue('');
   }, [newEnvKey, newEnvValue, environmentVariables]);
 
-  const removeEnvironmentVariable = React.useCallback((id: string) => {
-    setEnvironmentVariables((prev) => prev.filter((env) => env.id !== id));
-  }, []);
+  const removeEnvironmentVariable = React.useCallback(
+    (id: string) => {
+      // Find the variable to check whether it's an existing cloud secret
+      const envVar = environmentVariables.find((e) => e.id === id);
+
+      // Remove from local state immediately
+      setEnvironmentVariables((prev) => prev.filter((env) => env.id !== id));
+
+      // If the project is deployed and the variable has a real cloud secret ID
+      // (not a locally-added one, which uses Date.now() as id), delete it from
+      // the cloud so it doesn't reappear on the next modal open or pipeline run.
+      const isLocallyAdded = /^\d+$/.test(id);
+      if (envVar && project?.id && !isLocallyAdded) {
+        deleteSecretFromCloud({ projectId: project.id, secretId: id }).catch(
+          () => {
+            // Best-effort: cloud delete failures are non-fatal here since the
+            // user can always retry. Don't block the UX.
+          },
+        );
+      }
+    },
+    [environmentVariables, project?.id, deleteSecretFromCloud],
+  );
 
   const updateEnvironmentVariable = React.useCallback(
     (id: string, key: string, value: string) => {
