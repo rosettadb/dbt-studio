@@ -1010,11 +1010,9 @@ export class DbtCoreVersionService {
     projectPath?: string,
   ): Promise<DbtAdapterCapabilityResponse> {
     const settings = await SettingsService.loadSettings();
-    const runtime = settings.dbtVersion?.startsWith('2.')
-      ? 'v2'
-      : settings.dbtVersion?.startsWith('1.')
-        ? 'v1'
-        : 'unknown';
+    let runtime: DbtAdapterCapabilityResponse['runtime'] = 'unknown';
+    if (settings.dbtVersion?.startsWith('2.')) runtime = 'v2';
+    if (settings.dbtVersion?.startsWith('1.')) runtime = 'v1';
     const resolved = await this.resolveProjectAdapter(projectPath);
     const adapter = this.capabilityFor(
       resolved.adapter,
