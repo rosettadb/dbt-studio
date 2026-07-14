@@ -28,7 +28,8 @@ export type SecondBrainErrorCode =
   | 'BUDGET_EXCEEDED'
   | 'SYMLINK_NOT_ALLOWED'
   | 'OUT_OF_SCOPE'
-  | 'SCOPE_MISMATCH';
+  | 'SCOPE_MISMATCH'
+  | 'CANCELLED';
 
 export class SecondBrainError extends Error {
   public readonly code: SecondBrainErrorCode;
@@ -54,7 +55,27 @@ export type SecondBrainState = {
   sourceCursors: Record<string, unknown>;
   sourceHashes: Record<string, string>;
   pageHashes: Record<string, string>;
-  lastRefresh?: { status: string; error?: string };
+  lastRefresh?: {
+    status: 'completed' | 'no-change' | 'failed' | 'cancelled';
+    completedAt: string;
+    sources: string[];
+    itemsCollected: number;
+    operationsApplied: number;
+    truncated: boolean;
+    error?: string;
+  };
+};
+
+export type SecondBrainRefreshStateInput = {
+  sources: Array<{
+    sourceId: string;
+    cursor: unknown;
+    hash: string;
+  }>;
+  status: 'completed' | 'no-change';
+  itemsCollected: number;
+  operationsApplied: number;
+  truncated: boolean;
 };
 
 export type ParsedSecondBrainDocument = {

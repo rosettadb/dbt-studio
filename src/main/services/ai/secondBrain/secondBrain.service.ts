@@ -35,6 +35,7 @@ import {
   SecondBrainError,
   SecondBrainServiceOptions,
   SecondBrainState,
+  SecondBrainRefreshStateInput,
 } from './secondBrain.types';
 
 const textEncoder = new TextEncoder();
@@ -479,6 +480,32 @@ export default class SecondBrainService {
     if (!(await fs.pathExists(this.rootPath))) return null;
     await this.ensureSafeRoot();
     return this.readState(true);
+  }
+
+  public async commitRefreshState(
+    input: SecondBrainRefreshStateInput,
+  ): Promise<SecondBrainState> {
+    return this.withStateLock(async () => {
+      const state = await this.requireInitializedState();
+      for (const source of input.sources) {
+        state.sourceCursors[source.sourceId] = source.cursor;
+        state.sourceHashes[source.sourceId] = source.hash;
+      }
+      const completedAt = this.now().toISOString();
+      if (input.status === 'completed') {
+        state.lastSuccessfulRefreshAt = completedAt;
+      }
+      state.lastRefresh = {
+        status: input.status,
+        completedAt,
+        sources: input.sources.map((source) => source.sourceId).sort(),
+        itemsCollected: input.itemsCollected,
+        operationsApplied: input.operationsApplied,
+        truncated: input.truncated,
+      };
+      await this.writeState(state);
+      return state;
+    });
   }
 
   private async ensureSafeRoot(): Promise<void> {

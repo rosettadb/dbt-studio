@@ -19,6 +19,8 @@ import {
   or,
   notInArray,
   ne,
+  asc,
+  gt,
 } from 'drizzle-orm';
 import * as schema from '../schemas/mainDatabase.schema';
 import { MainDatabaseInfo, UsageStats } from '../../types/backend';
@@ -54,6 +56,38 @@ export interface GetConversationsFilter {
   notebookId?: string | null;
   pageId?: string | null;
 }
+
+export type SecondBrainEvidenceCursor = {
+  updatedAt: string;
+  stableId: string;
+};
+
+export type SecondBrainSessionEvidenceRow = {
+  stableId: string;
+  conversationId: number;
+  conversationTitle: string;
+  projectId: number | null;
+  screenKey: string;
+  connectionId: string | null;
+  notebookId: string | null;
+  pageId: string | null;
+  role: string;
+  content: string;
+  toolCalls: unknown;
+  contextItems: unknown;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type SecondBrainAnalyticsEvidenceRow = {
+  stableId: string;
+  connectionId: string;
+  title: string;
+  routePath: string;
+  markdownContent: string;
+  createdAt: string;
+  updatedAt: string;
+};
 
 export default class MainDatabaseService {
   private static sqlite: Database.Database | null = null;
@@ -823,6 +857,115 @@ export default class MainDatabaseService {
       .limit(1);
 
     return conversation ?? null;
+  }
+
+  static async getSecondBrainSessionEvidence(options: {
+    after?: SecondBrainEvidenceCursor;
+    limit: number;
+  }): Promise<SecondBrainSessionEvidenceRow[]> {
+    const db = await this.getDatabase();
+    const limit = Math.max(1, Math.min(options.limit, 200));
+    const conditions = [
+      inArray(schema.chatMessages.role, ['user', 'assistant']),
+      or(
+        eq(schema.chatMessages.isStreaming, false),
+        isNull(schema.chatMessages.isStreaming),
+      )!,
+    ];
+    if (options.after) {
+      if (!/^\d+$/u.test(options.after.stableId)) {
+        throw new Error('Invalid Second Brain session evidence cursor.');
+      }
+      conditions.push(
+        or(
+          gt(schema.chatMessages.updatedAt, options.after.updatedAt),
+          and(
+            eq(schema.chatMessages.updatedAt, options.after.updatedAt),
+            gt(schema.chatMessages.id, Number(options.after.stableId)),
+          ),
+        )!,
+      );
+    }
+
+    const rows = await db
+      .select({
+        stableId: schema.chatMessages.id,
+        conversationId: schema.chatConversations.id,
+        conversationTitle: schema.chatConversations.title,
+        projectId: schema.chatConversations.projectId,
+        screenKey: schema.chatConversations.screenKey,
+        connectionId: schema.chatConversations.connectionId,
+        notebookId: schema.chatConversations.notebookId,
+        pageId: schema.chatConversations.pageId,
+        role: schema.chatMessages.role,
+        content: schema.chatMessages.content,
+        toolCalls: schema.chatMessages.toolCalls,
+        contextItems: schema.chatMessages.contextItems,
+        createdAt: schema.chatMessages.createdAt,
+        updatedAt: schema.chatMessages.updatedAt,
+      })
+      .from(schema.chatMessages)
+      .innerJoin(
+        schema.chatConversations,
+        eq(schema.chatMessages.conversationId, schema.chatConversations.id),
+      )
+      .where(and(...conditions))
+      .orderBy(asc(schema.chatMessages.updatedAt), asc(schema.chatMessages.id))
+      .limit(limit);
+
+    return rows.map((row) => ({
+      ...row,
+      stableId: String(row.stableId),
+      createdAt: row.createdAt ?? '',
+      updatedAt: row.updatedAt ?? row.createdAt ?? '',
+    }));
+  }
+
+  static async getSecondBrainAnalyticsEvidence(options: {
+    after?: SecondBrainEvidenceCursor;
+    limit: number;
+  }): Promise<SecondBrainAnalyticsEvidenceRow[]> {
+    const db = await this.getDatabase();
+    const limit = Math.max(1, Math.min(options.limit, 100));
+    const conditions = [];
+    if (options.after) {
+      conditions.push(
+        or(
+          gt(schema.analyticsPages.updatedAt, options.after.updatedAt),
+          and(
+            eq(schema.analyticsPages.updatedAt, options.after.updatedAt),
+            gt(schema.analyticsPages.id, options.after.stableId),
+          ),
+        )!,
+      );
+    }
+
+    const query = db
+      .select({
+        stableId: schema.analyticsPages.id,
+        connectionId: schema.analyticsPages.connectionId,
+        title: schema.analyticsPages.title,
+        routePath: schema.analyticsPages.routePath,
+        markdownContent: schema.analyticsPages.markdownContent,
+        createdAt: schema.analyticsPages.createdAt,
+        updatedAt: schema.analyticsPages.updatedAt,
+      })
+      .from(schema.analyticsPages)
+      .orderBy(
+        asc(schema.analyticsPages.updatedAt),
+        asc(schema.analyticsPages.id),
+      )
+      .limit(limit);
+    const rows =
+      conditions.length > 0
+        ? await query.where(and(...conditions))
+        : await query;
+
+    return rows.map((row) => ({
+      ...row,
+      createdAt: row.createdAt ?? '',
+      updatedAt: row.updatedAt ?? row.createdAt ?? '',
+    }));
   }
 
   static async updateConversation(
