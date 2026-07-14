@@ -6,6 +6,7 @@ const listVersions = jest.fn();
 const planVersionChange = jest.fn();
 const installVersionChange = jest.fn();
 const getInstalledPackages = jest.fn();
+const getActiveAdapterCapabilities = jest.fn();
 
 jest.mock('../../../src/renderer/controllers', () => ({
   useListDbtCoreVersions: () => listVersions,
@@ -18,6 +19,7 @@ jest.mock('../../../src/renderer/controllers', () => ({
   usePlanDbtVersionChange: () => planVersionChange,
   useInstallDbtVersionChange: () => installVersionChange,
   useCheckCurrentProjectCompatibility: () => jest.fn(),
+  useGetActiveAdapterCapabilities: () => getActiveAdapterCapabilities,
 }));
 
 const stableItem = {
@@ -58,6 +60,12 @@ describe('DbtSettings version change flow', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     getInstalledPackages.mockResolvedValue({ packages: {} });
+    getActiveAdapterCapabilities.mockResolvedValue({
+      dbtCoreVersion: '1.11.12',
+      runtime: 'v1',
+      packageProvenance: 'apache-dbt-core',
+      adapters: [],
+    });
     listVersions.mockImplementation(
       async ({ includePrerelease }: { includePrerelease?: boolean }) => ({
         versions: includePrerelease

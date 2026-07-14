@@ -38,6 +38,7 @@ import {
   ExpandMore,
 } from '@mui/icons-material';
 import {
+  DbtAdapterCapabilityResponse,
   DbtProjectCompatibilityResult,
   DbtVersionChangePlan,
   DbtVersionListResponse,
@@ -47,6 +48,7 @@ import {
 } from '../../../types/backend';
 import {
   useCheckCurrentProjectCompatibility,
+  useGetActiveAdapterCapabilities,
   useGetInstalledDbtCore,
   useGetInstalledPackages,
   useInstallDbtVersionChange,
@@ -108,6 +110,7 @@ export const DbtSettings: React.FC<DbtSettingsProps> = ({
   const installDbtVersionChange = useInstallDbtVersionChange();
   const checkCurrentProjectCompatibility =
     useCheckCurrentProjectCompatibility();
+  const getActiveAdapterCapabilities = useGetActiveAdapterCapabilities();
 
   const [isLoadingDialog, setIsLoadingDialog] = React.useState(false);
   const [loadingMessage, setLoadingMessage] = React.useState('');
@@ -145,6 +148,8 @@ export const DbtSettings: React.FC<DbtSettingsProps> = ({
     React.useState<PythonPackageInstallVersionResponse | null>(null);
   const [compatibilityResult, setCompatibilityResult] =
     React.useState<DbtProjectCompatibilityResult | null>(null);
+  const [adapterCapabilities, setAdapterCapabilities] =
+    React.useState<DbtAdapterCapabilityResponse | null>(null);
 
   const [packageVersions, setPackageVersions] = React.useState<
     Record<string, PythonPackageVersionListResponse | null>
@@ -566,6 +571,12 @@ export const DbtSettings: React.FC<DbtSettingsProps> = ({
     refreshDbtCoreVersions().catch(() => undefined);
   }, []);
 
+  useEffect(() => {
+    getActiveAdapterCapabilities()
+      .then(setAdapterCapabilities)
+      .catch(() => setAdapterCapabilities(null));
+  }, [getActiveAdapterCapabilities, settings.dbtVersion]);
+
   const handleRefreshDbtCoreVersionsClick = () => {
     refreshDbtCoreVersions().catch(() => undefined);
   };
@@ -973,208 +984,252 @@ export const DbtSettings: React.FC<DbtSettingsProps> = ({
 
       <Box sx={{ mb: 3 }}>
         <Typography variant="h6" gutterBottom>
-          Adapter packages
+          {settings.dbtVersion?.startsWith('2.')
+            ? 'Project adapter compatibility'
+            : 'Adapter packages'}
         </Typography>
 
-        {(
-          [
-            'dbt-postgres',
-            'dbt-snowflake',
-            'dbt-bigquery',
-            'dbt-redshift',
-            'dbt-databricks',
-            'dbt-duckdb',
-          ] as const
-        ).map((pkg) => {
-          const installed = installedPackages[pkg];
-          const versions = packageVersions[pkg]?.versions ?? [];
-          const latestStable = packageVersions[pkg]?.latestStable ?? null;
-          const isLoading = isCheckingPackageVersions[pkg] ?? false;
+        {settings.dbtVersion?.startsWith('2.') && adapterCapabilities && (
+          <Box
+            sx={{ border: 1, borderColor: 'divider', borderRadius: 1, p: 2 }}
+          >
+            <Typography variant="body2" color="text.secondary" sx={{ mb: 1.5 }}>
+              dbt Core v2 includes its own adapter runtime. Python adapter
+              packages are used only by dbt Core v1 and do not enable dbt Core
+              v2 adapters.
+            </Typography>
+            {adapterCapabilities.adapters.map((adapter) => (
+              <Box
+                key={adapter.adapter || 'unknown'}
+                sx={{
+                  display: 'flex',
+                  gap: 1,
+                  alignItems: 'center',
+                  flexWrap: 'wrap',
+                }}
+              >
+                <Typography variant="body1" sx={{ fontWeight: 600 }}>
+                  {adapter.displayName}
+                </Typography>
+                <Chip
+                  size="small"
+                  label={adapter.status}
+                  color={adapter.canExecute ? 'warning' : 'error'}
+                />
+                <Chip size="small" variant="outlined" label={adapter.driver} />
+                <Typography variant="body2" color="text.secondary">
+                  {adapter.notes}
+                </Typography>
+              </Box>
+            ))}
+          </Box>
+        )}
 
-          return (
-            <Accordion
-              key={pkg}
-              expanded={expandedPackage === pkg}
-              onChange={handlePackageAccordionChange(pkg)}
-              TransitionProps={{ timeout: 500 }}
-              sx={{ mb: 1 }}
-            >
-              <AccordionSummary expandIcon={<ExpandMore />}>
-                <Box>
-                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                    <Typography variant="body1" sx={{ fontWeight: 500 }}>
-                      {pkg}
+        {!settings.dbtVersion?.startsWith('2.') &&
+          (
+            [
+              'dbt-postgres',
+              'dbt-snowflake',
+              'dbt-bigquery',
+              'dbt-redshift',
+              'dbt-databricks',
+              'dbt-duckdb',
+            ] as const
+          ).map((pkg) => {
+            const installed = installedPackages[pkg];
+            const versions = packageVersions[pkg]?.versions ?? [];
+            const latestStable = packageVersions[pkg]?.latestStable ?? null;
+            const isLoading = isCheckingPackageVersions[pkg] ?? false;
+
+            return (
+              <Accordion
+                key={pkg}
+                expanded={expandedPackage === pkg}
+                onChange={handlePackageAccordionChange(pkg)}
+                TransitionProps={{ timeout: 500 }}
+                sx={{ mb: 1 }}
+              >
+                <AccordionSummary expandIcon={<ExpandMore />}>
+                  <Box>
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                      <Typography variant="body1" sx={{ fontWeight: 500 }}>
+                        {pkg}
+                      </Typography>
+                      {installed && (
+                        <Chip
+                          label={`v${installed}`}
+                          size="small"
+                          color="primary"
+                          sx={{
+                            height: 18,
+                            '& .MuiChip-label': {
+                              px: 0.75,
+                              fontSize: '0.7rem',
+                              lineHeight: 1,
+                            },
+                          }}
+                        />
+                      )}
+                    </Box>
+                    <Typography variant="body2" color="text.secondary">
+                      {packageDescriptions[pkg]}
                     </Typography>
+                  </Box>
+                </AccordionSummary>
+                <AccordionDetails>
+                  <Box
+                    sx={{
+                      mb: 2,
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 1,
+                    }}
+                  >
+                    <Button
+                      size="small"
+                      variant="outlined"
+                      onClick={() => {
+                        fetchPackageVersions(pkg).catch(() => undefined);
+                      }}
+                      disabled={isLoading}
+                      startIcon={
+                        isLoading ? <CircularProgress size={16} /> : <Refresh />
+                      }
+                    >
+                      {isLoading ? 'Loading...' : 'Load Versions'}
+                    </Button>
+
                     {installed && (
-                      <Chip
-                        label={`v${installed}`}
+                      <Button
+                        color="error"
+                        variant="outlined"
                         size="small"
-                        color="primary"
-                        sx={{
-                          height: 18,
-                          '& .MuiChip-label': {
-                            px: 0.75,
-                            fontSize: '0.7rem',
-                            lineHeight: 1,
-                          },
+                        onClick={() => {
+                          handleUninstallPackage(pkg).catch(() => undefined);
                         }}
-                      />
+                        disabled={isLoadingInstall || isLoadingDialog}
+                        startIcon={<Delete />}
+                      >
+                        Uninstall
+                      </Button>
                     )}
                   </Box>
-                  <Typography variant="body2" color="text.secondary">
-                    {packageDescriptions[pkg]}
-                  </Typography>
-                </Box>
-              </AccordionSummary>
-              <AccordionDetails>
-                <Box
-                  sx={{ mb: 2, display: 'flex', alignItems: 'center', gap: 1 }}
-                >
-                  <Button
-                    size="small"
-                    variant="outlined"
-                    onClick={() => {
-                      fetchPackageVersions(pkg).catch(() => undefined);
-                    }}
-                    disabled={isLoading}
-                    startIcon={
-                      isLoading ? <CircularProgress size={16} /> : <Refresh />
-                    }
-                  >
-                    {isLoading ? 'Loading...' : 'Load Versions'}
-                  </Button>
 
-                  {installed && (
-                    <Button
-                      color="error"
-                      variant="outlined"
-                      size="small"
-                      onClick={() => {
-                        handleUninstallPackage(pkg).catch(() => undefined);
+                  {versions.length > 0 ? (
+                    <List
+                      sx={{
+                        border: 1,
+                        borderColor: 'divider',
+                        borderRadius: 1,
                       }}
-                      disabled={isLoadingInstall || isLoadingDialog}
-                      startIcon={<Delete />}
                     >
-                      Uninstall
-                    </Button>
-                  )}
-                </Box>
+                      {versions.map((v) => {
+                        const isInstalled = installed === v.version;
+                        const isLatest = v.version === latestStable;
 
-                {versions.length > 0 ? (
-                  <List
-                    sx={{
-                      border: 1,
-                      borderColor: 'divider',
-                      borderRadius: 1,
-                    }}
-                  >
-                    {versions.map((v) => {
-                      const isInstalled = installed === v.version;
-                      const isLatest = v.version === latestStable;
+                        let actionLabel = 'Install';
+                        if (isInstalled) {
+                          actionLabel = 'Installed';
+                        } else if (
+                          installed &&
+                          compareSimpleVersions(v.version, installed) > 0
+                        ) {
+                          actionLabel = 'Upgrade';
+                        } else if (installed) {
+                          actionLabel = 'Downgrade';
+                        }
 
-                      let actionLabel = 'Install';
-                      if (isInstalled) {
-                        actionLabel = 'Installed';
-                      } else if (
-                        installed &&
-                        compareSimpleVersions(v.version, installed) > 0
-                      ) {
-                        actionLabel = 'Upgrade';
-                      } else if (installed) {
-                        actionLabel = 'Downgrade';
-                      }
-
-                      return (
-                        <React.Fragment key={v.version}>
-                          <ListItem>
-                            <ListItemText
-                              primary={
-                                <Box
-                                  sx={{
-                                    display: 'flex',
-                                    alignItems: 'center',
-                                    gap: 1,
-                                  }}
-                                >
-                                  <Typography
-                                    variant="body1"
-                                    sx={{ fontWeight: 500 }}
+                        return (
+                          <React.Fragment key={v.version}>
+                            <ListItem>
+                              <ListItemText
+                                primary={
+                                  <Box
+                                    sx={{
+                                      display: 'flex',
+                                      alignItems: 'center',
+                                      gap: 1,
+                                    }}
                                   >
-                                    {v.version}
-                                  </Typography>
-
-                                  {isInstalled && (
-                                    <Box
-                                      sx={{
-                                        display: 'flex',
-                                        alignItems: 'center',
-                                        gap: 0.5,
-                                      }}
+                                    <Typography
+                                      variant="body1"
+                                      sx={{ fontWeight: 500 }}
                                     >
-                                      <CheckCircle
-                                        color="success"
-                                        fontSize="small"
-                                      />
-                                      <Chip
-                                        label="Installed"
-                                        size="small"
-                                        color="success"
-                                      />
-                                    </Box>
-                                  )}
+                                      {v.version}
+                                    </Typography>
 
-                                  {isLatest && !v.isPrerelease && (
-                                    <Chip
-                                      label="Latest"
-                                      size="small"
-                                      color="primary"
-                                    />
-                                  )}
-                                </Box>
-                              }
-                            />
-                            <ListItemSecondaryAction>
-                              <Button
-                                size="small"
-                                variant="contained"
-                                onClick={() => {
-                                  installSinglePackageVersion(
-                                    pkg,
-                                    v.version,
-                                  ).catch(() => undefined);
-                                }}
-                                disabled={
-                                  isInstalled ||
-                                  isLoadingDialog ||
-                                  isLoadingInstall
+                                    {isInstalled && (
+                                      <Box
+                                        sx={{
+                                          display: 'flex',
+                                          alignItems: 'center',
+                                          gap: 0.5,
+                                        }}
+                                      >
+                                        <CheckCircle
+                                          color="success"
+                                          fontSize="small"
+                                        />
+                                        <Chip
+                                          label="Installed"
+                                          size="small"
+                                          color="success"
+                                        />
+                                      </Box>
+                                    )}
+
+                                    {isLatest && !v.isPrerelease && (
+                                      <Chip
+                                        label="Latest"
+                                        size="small"
+                                        color="primary"
+                                      />
+                                    )}
+                                  </Box>
                                 }
-                                startIcon={
-                                  installingPackageKey ===
-                                  `${pkg}@${v.version}` ? (
-                                    <CircularProgress size={16} />
-                                  ) : (
-                                    <Download />
-                                  )
-                                }
-                              >
-                                {actionLabel}
-                              </Button>
-                            </ListItemSecondaryAction>
-                          </ListItem>
-                          <Divider />
-                        </React.Fragment>
-                      );
-                    })}
-                  </List>
-                ) : (
-                  <Alert severity="info">
-                    Click &quot;Load Versions&quot; to view versions.
-                  </Alert>
-                )}
-              </AccordionDetails>
-            </Accordion>
-          );
-        })}
+                              />
+                              <ListItemSecondaryAction>
+                                <Button
+                                  size="small"
+                                  variant="contained"
+                                  onClick={() => {
+                                    installSinglePackageVersion(
+                                      pkg,
+                                      v.version,
+                                    ).catch(() => undefined);
+                                  }}
+                                  disabled={
+                                    isInstalled ||
+                                    isLoadingDialog ||
+                                    isLoadingInstall
+                                  }
+                                  startIcon={
+                                    installingPackageKey ===
+                                    `${pkg}@${v.version}` ? (
+                                      <CircularProgress size={16} />
+                                    ) : (
+                                      <Download />
+                                    )
+                                  }
+                                >
+                                  {actionLabel}
+                                </Button>
+                              </ListItemSecondaryAction>
+                            </ListItem>
+                            <Divider />
+                          </React.Fragment>
+                        );
+                      })}
+                    </List>
+                  ) : (
+                    <Alert severity="info">
+                      Click &quot;Load Versions&quot; to view versions.
+                    </Alert>
+                  )}
+                </AccordionDetails>
+              </Accordion>
+            );
+          })}
       </Box>
 
       {settings.dbtPath && settings.dbtPath !== 'dbt' ? (

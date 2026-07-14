@@ -6,11 +6,11 @@ import {
   useApiKey,
   useGetConnections,
   useGetSettings,
+  useCheckProjectAdapterCompatibility,
   useSetConnectionEnvVariable,
 } from '../controllers';
 import { Project, DbtCommandType, ConnectionInput } from '../../types/backend';
 import { useAppContext } from './index';
-import { getDbtV2CompatibilityError } from '../utils/dbtProcessEnvironment';
 import { extractCliErrorDetails } from '../utils/dbtCommandResult';
 
 interface UseDbtReturn {
@@ -50,6 +50,8 @@ const useDbt = (
     getConnectionField,
   } = useSecureStorage();
   const setEnvVariables = useSetConnectionEnvVariable();
+  const checkProjectAdapterCompatibility =
+    useCheckProjectAdapterCompatibility();
 
   const env = React.useMemo(() => {
     return apiKey ? environment : 'local';
@@ -235,12 +237,11 @@ const useDbt = (
           return;
         }
 
-        const compatibilityError = getDbtV2CompatibilityError(
-          settings?.dbtVersion,
-          connection.connection.type,
+        const adapterCheck = await checkProjectAdapterCompatibility(
+          project.path,
         );
-        if (compatibilityError) {
-          if (options.showToast) toast.error(compatibilityError);
+        if (!adapterCheck.adapter.canExecute) {
+          if (options.showToast) toast.error(adapterCheck.adapter.notes);
           return;
         }
 
@@ -296,6 +297,7 @@ const useDbt = (
       successCallback,
       settings?.dbtPath,
       settings?.dbtVersion,
+      checkProjectAdapterCompatibility,
     ],
   );
 
@@ -335,12 +337,11 @@ const useDbt = (
             return '';
           }
 
-          const compatibilityError = getDbtV2CompatibilityError(
-            settings?.dbtVersion,
-            connection.connection.type,
+          const adapterCheck = await checkProjectAdapterCompatibility(
+            project.path,
           );
-          if (compatibilityError) {
-            toast.error(compatibilityError);
+          if (!adapterCheck.adapter.canExecute) {
+            toast.error(adapterCheck.adapter.notes);
             return '';
           }
 
@@ -440,6 +441,7 @@ const useDbt = (
         buildCommand,
         runCommand,
         settings?.dbtVersion,
+        checkProjectAdapterCompatibility,
       ],
     ),
 
@@ -466,12 +468,11 @@ const useDbt = (
             return '';
           }
 
-          const compatibilityError = getDbtV2CompatibilityError(
-            settings?.dbtVersion,
-            connection.connection.type,
+          const adapterCheck = await checkProjectAdapterCompatibility(
+            project.path,
           );
-          if (compatibilityError) {
-            toast.error(compatibilityError);
+          if (!adapterCheck.adapter.canExecute) {
+            toast.error(adapterCheck.adapter.notes);
             return '';
           }
 
@@ -511,6 +512,7 @@ const useDbt = (
         buildCommand,
         runCommand,
         settings?.dbtVersion,
+        checkProjectAdapterCompatibility,
       ],
     ),
 

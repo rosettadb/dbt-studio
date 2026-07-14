@@ -8,6 +8,7 @@ import type { BrowserWindow } from 'electron';
 import * as fs from 'fs';
 import * as path from 'path';
 import SettingsService from '../../settings.service';
+import { DbtCoreVersionService } from '../../dbtCoreVersion.service';
 import AgentService from '../../agent.service';
 import { TerminalConfirmGate } from './terminalConfirmGate';
 
@@ -102,6 +103,16 @@ export async function executeDbtCommand(opts: {
   }
 
   try {
+    const adapterCheck =
+      await DbtCoreVersionService.checkProjectAdapterCompatibility(projectPath);
+    if (!adapterCheck.adapter.canExecute) {
+      return {
+        ok: false,
+        error: `dbt command blocked: ${adapterCheck.adapter.notes}`,
+        adapter: adapterCheck.adapter,
+      };
+    }
+
     const dbtExe = await SettingsService.getDbtExePath();
     const args = normalizedCommand.split(' ').filter(Boolean);
     if (select) args.push('--select', select);
@@ -389,6 +400,18 @@ export const runDbtCommand = tool({
       if (!ALLOWED_DBT_COMMANDS.includes(baseCommand)) {
         return {
           error: `Command not permitted: ${baseCommand}. Allowed commands: ${ALLOWED_DBT_COMMANDS.join(', ')}`,
+        };
+      }
+
+      const adapterCheck =
+        await DbtCoreVersionService.checkProjectAdapterCompatibility(
+          projectPath,
+        );
+      if (!adapterCheck.adapter.canExecute) {
+        return {
+          success: false,
+          error: `dbt command blocked: ${adapterCheck.adapter.notes}`,
+          adapter: adapterCheck.adapter,
         };
       }
 

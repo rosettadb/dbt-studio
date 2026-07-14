@@ -3,10 +3,14 @@ import fs from 'fs-extra';
 import { spawn } from 'child_process';
 import path from 'path';
 import os from 'os';
+import yaml from 'js-yaml';
 import SettingsService from './settings.service';
 import ProjectsService from './projects.service';
 import {
+  DbtAdapterCapability,
+  DbtAdapterCapabilityResponse,
   DbtAdapterCompatibility,
+  DbtProjectAdapterCheck,
   DbtProjectCompatibilityResult,
   DbtCoreVersionListItem,
   DbtVersionChangePlan,
@@ -54,6 +58,71 @@ const ADAPTER_PACKAGES = [
   'dbt-databricks',
   'dbt-duckdb',
 ] as const;
+
+const V2_ADAPTERS: Record<
+  string,
+  Omit<DbtAdapterCapability, 'adapter' | 'displayName' | 'source'>
+> = {
+  snowflake: {
+    status: 'preview',
+    driver: 'adbc',
+    requiresNetworkOnFirstUse: true,
+    canExecute: true,
+    notes:
+      'v2 preview adapter. Validate authentication and project behavior before production use.',
+  },
+  bigquery: {
+    status: 'preview',
+    driver: 'adbc',
+    requiresNetworkOnFirstUse: true,
+    canExecute: true,
+    notes:
+      'v2 preview adapter. Validate authentication and project behavior before production use.',
+  },
+  redshift: {
+    status: 'preview',
+    driver: 'adbc',
+    requiresNetworkOnFirstUse: true,
+    canExecute: true,
+    notes:
+      'v2 preview adapter. Validate authentication and project behavior before production use.',
+  },
+  databricks: {
+    status: 'preview',
+    driver: 'adbc',
+    requiresNetworkOnFirstUse: true,
+    canExecute: true,
+    notes:
+      'v2 preview adapter. Validate authentication and project behavior before production use.',
+  },
+  duckdb: {
+    status: 'preview',
+    driver: 'native',
+    requiresNetworkOnFirstUse: false,
+    canExecute: true,
+    notes:
+      'v2 preview adapter. Validate project behavior before production use.',
+  },
+};
+
+const adapterDisplayName = (adapter: string | null): string => {
+  if (!adapter) return 'Unknown adapter';
+  const labels: Record<string, string> = {
+    bigquery: 'BigQuery',
+    databricks: 'Databricks',
+    duckdb: 'DuckDB',
+    postgres: 'PostgreSQL',
+    redshift: 'Redshift',
+    snowflake: 'Snowflake',
+  };
+  return labels[adapter] ?? adapter;
+};
+
+const normalizeAdapter = (value: string | undefined | null): string | null => {
+  const adapter = value?.trim().toLowerCase();
+  if (!adapter) return null;
+  return adapter === 'ducklake' ? 'duckdb' : adapter;
+};
 
 const ALLOWED_PYTHON_PACKAGES = new Set([
   'dbt-core',
@@ -703,20 +772,19 @@ export class DbtCoreVersionService {
       };
     }
 
-    if (
-      installed.version?.startsWith('2.') &&
-      project.connection?.type === 'postgres'
-    ) {
+    const adapterCheck = await this.checkProjectAdapterCompatibility(
+      project.path,
+    );
+    if (!adapterCheck.adapter.canExecute) {
       return {
         ok: false,
         projectName: project.name,
         projectPath: project.path,
         diagnostics: [],
         recommendations: [
-          'Switch the global dbt runtime to the latest stable v1 release in Settings before running this Postgres project.',
+          'Switch the global dbt runtime to a stable v1 release in Settings before running this project.',
         ],
-        error:
-          'Postgres is not supported safely by dbt Core v2 preview. Rosetta did not start the compatibility commands.',
+        error: `${adapterCheck.adapter.displayName}: ${adapterCheck.adapter.notes}`,
       };
     }
 
@@ -850,6 +918,124 @@ export class DbtCoreVersionService {
         error: error instanceof Error ? error.message : 'Unknown error',
       };
     }
+  }
+
+  private static async resolveProjectAdapter(projectPath?: string): Promise<{
+    adapter: string | null;
+    source: DbtAdapterCapability['source'];
+    projectPath?: string;
+  }> {
+    const selected = await ProjectsService.getSelectedProject();
+    const resolvedPath = projectPath || selected?.path;
+    if (selected && selected.path === resolvedPath && selected.connection?.type)
+      return {
+        adapter: normalizeAdapter(selected.connection.type),
+        source: 'connection',
+        projectPath: resolvedPath,
+      };
+    if (!resolvedPath) return { adapter: null, source: 'unresolved' };
+    try {
+      const projectConfig = yaml.load(
+        await fs.readFile(path.join(resolvedPath, 'dbt_project.yml'), 'utf8'),
+      ) as { profile?: string } | undefined;
+      const profiles = yaml.load(
+        await fs.readFile(path.join(resolvedPath, 'profiles.yml'), 'utf8'),
+      ) as Record<string, any> | undefined;
+      const profile =
+        projectConfig?.profile && profiles?.[projectConfig.profile];
+      const output = profile?.target
+        ? profile?.outputs?.[profile.target]
+        : Object.values(profile?.outputs ?? {})[0];
+      return {
+        adapter: normalizeAdapter(output?.type),
+        source: output?.type ? 'profiles.yml' : 'unresolved',
+        projectPath: resolvedPath,
+      };
+    } catch {
+      return { adapter: null, source: 'unresolved', projectPath: resolvedPath };
+    }
+  }
+
+  private static capabilityFor(
+    adapter: string | null,
+    source: DbtAdapterCapability['source'],
+    isV2: boolean,
+  ): DbtAdapterCapability {
+    if (!isV2)
+      return {
+        adapter,
+        displayName: adapterDisplayName(adapter),
+        status: adapter ? 'supported' : 'unknown',
+        driver: 'unknown',
+        requiresNetworkOnFirstUse: false,
+        canExecute: true,
+        source,
+        notes: adapter
+          ? 'dbt Core v1 uses separately installed Python adapter packages. Confirm the matching package is installed.'
+          : 'Could not determine the project adapter. Verify profiles.yml before running.',
+      };
+    if (!adapter)
+      return {
+        adapter: null,
+        displayName: adapterDisplayName(null),
+        status: 'unknown',
+        driver: 'unknown',
+        requiresNetworkOnFirstUse: false,
+        canExecute: false,
+        source,
+        notes:
+          'Rosetta could not determine this project adapter. v2 execution is blocked until the connection or profiles.yml identifies it.',
+      };
+    const capability = V2_ADAPTERS[adapter];
+    if (capability)
+      return {
+        adapter,
+        displayName: adapterDisplayName(adapter),
+        source,
+        ...capability,
+      };
+    return {
+      adapter,
+      displayName: adapterDisplayName(adapter),
+      status: 'unsupported',
+      driver: 'unknown',
+      requiresNetworkOnFirstUse: false,
+      canExecute: false,
+      source,
+      notes: `${adapterDisplayName(adapter)} is not available in Rosetta's dbt Core v2 compatibility table. Switch to dbt Core v1 for this project.`,
+    };
+  }
+
+  static async getActiveAdapterCapabilities(
+    projectPath?: string,
+  ): Promise<DbtAdapterCapabilityResponse> {
+    const settings = await SettingsService.loadSettings();
+    const runtime = settings.dbtVersion?.startsWith('2.')
+      ? 'v2'
+      : settings.dbtVersion?.startsWith('1.')
+        ? 'v1'
+        : 'unknown';
+    const resolved = await this.resolveProjectAdapter(projectPath);
+    const adapter = this.capabilityFor(
+      resolved.adapter,
+      resolved.source,
+      runtime === 'v2',
+    );
+    return {
+      dbtCoreVersion: settings.dbtVersion || null,
+      runtime,
+      packageProvenance:
+        runtime === 'unknown' ? 'unverified' : 'apache-dbt-core',
+      projectPath: resolved.projectPath,
+      adapters: [adapter],
+    };
+  }
+
+  static async checkProjectAdapterCompatibility(
+    projectPath?: string,
+  ): Promise<DbtProjectAdapterCheck> {
+    const result = await this.getActiveAdapterCapabilities(projectPath);
+    return { ...result, adapter: result.adapters[0] };
   }
 
   private static async inspectAdapterCompatibility(

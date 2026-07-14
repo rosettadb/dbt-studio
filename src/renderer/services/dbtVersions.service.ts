@@ -1,4 +1,6 @@
 import {
+  DbtAdapterCapabilityResponse,
+  DbtProjectAdapterCheck,
   DbtProjectCompatibilityResult,
   DbtVersionChangePlan,
   DbtVersionChangePlanRequest,
@@ -57,6 +59,26 @@ export const checkCurrentProjectCompatibility =
     );
     return data;
   };
+
+export const getActiveAdapterCapabilities = async (
+  projectPath?: string,
+): Promise<DbtAdapterCapabilityResponse> => {
+  const { data } = await client.post<
+    { projectPath?: string },
+    DbtAdapterCapabilityResponse
+  >('dbt:adapters:active', { projectPath });
+  return data;
+};
+
+export const checkProjectAdapterCompatibility = async (
+  projectPath?: string,
+): Promise<DbtProjectAdapterCheck> => {
+  const { data } = await client.post<
+    { projectPath?: string },
+    DbtProjectAdapterCheck
+  >('dbt:adapters:check', { projectPath });
+  return data;
+};
 
 export const getInstalledPackages =
   async (): Promise<InstalledPythonPackagesResponse> => {

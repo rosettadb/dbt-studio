@@ -502,6 +502,38 @@ export type DbtProjectCompatibilityResult = {
   error?: string;
 };
 
+export type DbtAdapterSupportStatus =
+  | 'supported'
+  | 'preview'
+  | 'experimental'
+  | 'unsupported'
+  | 'unknown';
+
+export type DbtAdapterDriver = 'builtin' | 'adbc' | 'native' | 'unknown';
+
+export type DbtAdapterCapability = {
+  adapter: string | null;
+  displayName: string;
+  status: DbtAdapterSupportStatus;
+  driver: DbtAdapterDriver;
+  requiresNetworkOnFirstUse: boolean;
+  canExecute: boolean;
+  source: 'connection' | 'profiles.yml' | 'unresolved';
+  notes: string;
+};
+
+export type DbtAdapterCapabilityResponse = {
+  dbtCoreVersion: string | null;
+  runtime: 'v1' | 'v2' | 'unknown';
+  packageProvenance: 'apache-dbt-core' | 'unverified';
+  projectPath?: string;
+  adapters: DbtAdapterCapability[];
+};
+
+export type DbtProjectAdapterCheck = DbtAdapterCapabilityResponse & {
+  adapter: DbtAdapterCapability;
+};
+
 export type InstallResult = {
   success: boolean;
   version: string;

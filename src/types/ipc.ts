@@ -34,6 +34,8 @@ export type SettingsChannels =
   | 'dbt:versionChange:plan'
   | 'dbt:versionChange:install'
   | 'dbt:compatibility:check'
+  | 'dbt:adapters:active'
+  | 'dbt:adapters:check'
   | 'dbt:packages:installed'
   | 'dbt:package:installLatest'
   | 'dbt:package:uninstall'

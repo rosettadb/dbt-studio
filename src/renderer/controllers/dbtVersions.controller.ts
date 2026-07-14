@@ -1,5 +1,7 @@
 import { useCallback } from 'react';
 import {
+  DbtAdapterCapabilityResponse,
+  DbtProjectAdapterCheck,
   DbtProjectCompatibilityResult,
   DbtVersionChangePlan,
   DbtVersionChangePlanRequest,
@@ -47,6 +49,24 @@ export const useCheckCurrentProjectCompatibility =
       () => dbtVersionsService.checkCurrentProjectCompatibility(),
       [],
     );
+
+export const useCheckProjectAdapterCompatibility = (): ((
+  projectPath?: string,
+) => Promise<DbtProjectAdapterCheck>) =>
+  useCallback(
+    (projectPath) =>
+      dbtVersionsService.checkProjectAdapterCompatibility(projectPath),
+    [],
+  );
+
+export const useGetActiveAdapterCapabilities = (): ((
+  projectPath?: string,
+) => Promise<DbtAdapterCapabilityResponse>) =>
+  useCallback(
+    (projectPath) =>
+      dbtVersionsService.getActiveAdapterCapabilities(projectPath),
+    [],
+  );
 
 export const useGetInstalledPackages =
   (): (() => Promise<InstalledPythonPackagesResponse>) =>
