@@ -472,7 +472,6 @@ export const PushToCloudModal: React.FC<PushToCloudModalProps> = ({
               ...env,
               value: env.isEdited ? env.value : '',
               isEdited: true,
-              isFromKeystore: false,
             }
           : env,
       ),
