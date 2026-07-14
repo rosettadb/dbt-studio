@@ -59,6 +59,7 @@ interface EnvironmentVariable {
   isEdited?: boolean;
   originalValue?: string;
   isFromProfile?: boolean;
+  isFromKeystore?: boolean;
 }
 
 interface PushToCloudModalProps {
@@ -342,9 +343,8 @@ export const PushToCloudModal: React.FC<PushToCloudModalProps> = ({
     }
 
     try {
-      // Only include edited environment variables
       const reducedSecrets = environmentVariables
-        .filter((env) => env.isEdited)
+        .filter((env) => env.isEdited || !env.isFromProfile)
         .reduce(
           (acc, env) => {
             acc[env.key] = env.value;
@@ -468,7 +468,12 @@ export const PushToCloudModal: React.FC<PushToCloudModalProps> = ({
     setEnvironmentVariables((prev) =>
       prev.map((env) =>
         env.id === id
-          ? { ...env, value: env.isEdited ? env.value : '', isEdited: true }
+          ? {
+              ...env,
+              value: env.isEdited ? env.value : '',
+              isEdited: true,
+              isFromKeystore: false,
+            }
           : env,
       ),
     );
@@ -495,6 +500,7 @@ export const PushToCloudModal: React.FC<PushToCloudModalProps> = ({
     async (event: React.MouseEvent<HTMLButtonElement>) => {
       setKeystoreAnchor(event.currentTarget);
       setKeystoreLoading(true);
+      setKeystoreKeys([]);
       try {
         const keys = await secureStorageService.list();
         // Filter out internal/system keys (those used for db/cloud connections)
@@ -511,6 +517,7 @@ export const PushToCloudModal: React.FC<PushToCloudModalProps> = ({
         );
         setKeystoreKeys(userKeys);
       } catch {
+        setKeystoreKeys([]);
         toast.error('Failed to load keystore entries');
       } finally {
         setKeystoreLoading(false);
@@ -548,7 +555,9 @@ export const PushToCloudModal: React.FC<PushToCloudModalProps> = ({
           // Update existing entry with the keystore value
           setEnvironmentVariables((prev) =>
             prev.map((env) =>
-              env.key === varKey ? { ...env, value, isEdited: true } : env,
+              env.key === varKey
+                ? { ...env, value, isEdited: true, isFromKeystore: true }
+                : env,
             ),
           );
           toast.success(`Updated "${varKey}" from keystore`);
@@ -557,8 +566,9 @@ export const PushToCloudModal: React.FC<PushToCloudModalProps> = ({
             id: `keystore-${Date.now()}`,
             key: varKey,
             value,
-            originalValue: value,
+            originalValue: '',
             isEdited: true,
+            isFromKeystore: true,
           };
           setEnvironmentVariables((prev) => [...prev, newEntry]);
           toast.success(`Added "${varKey}" from keystore`);
@@ -1134,7 +1144,9 @@ export const PushToCloudModal: React.FC<PushToCloudModalProps> = ({
                         />
                         <TextField
                           type={
-                            isRunMode && !env.isEdited ? 'password' : 'text'
+                            isRunMode && (!env.isEdited || env.isFromKeystore)
+                              ? 'password'
+                              : 'text'
                           }
                           value={env.value}
                           onChange={(e) =>
@@ -1148,7 +1160,7 @@ export const PushToCloudModal: React.FC<PushToCloudModalProps> = ({
                           onBlur={() => handleEnvBlur(env.id)}
                           variant="outlined"
                           placeholder={
-                            isRunMode && !env.isEdited
+                            isRunMode && (!env.isEdited || env.isFromKeystore)
                               ? '\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022'
                               : ''
                           }
@@ -1347,7 +1359,7 @@ export const PushToCloudModal: React.FC<PushToCloudModalProps> = ({
                           <ListItemButton
                             key={k}
                             onClick={() => handleAddFromKeystore(k)}
-                            disabled={isAdding}
+                            disabled={keystoreAdding !== null}
                             sx={{
                               py: 1,
                               px: 2,
