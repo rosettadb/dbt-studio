@@ -447,7 +447,7 @@ export const PushToCloudModal: React.FC<PushToCloudModalProps> = ({
       // If the project is deployed and the variable has a real cloud secret ID
       // (not a locally-added one, which uses Date.now() as id), delete it from
       // the cloud so it doesn't reappear on the next modal open or pipeline run.
-      const isLocallyAdded = /^\d+$/.test(id);
+      const isLocallyAdded = /^\d+$/.test(id) || id.startsWith('keystore-');
       if (envVar && project?.id && !isLocallyAdded) {
         deleteSecretFromCloud({ projectId: project.id, secretId: id }).catch(
           () => {
