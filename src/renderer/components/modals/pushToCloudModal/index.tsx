@@ -1160,32 +1160,18 @@ export const PushToCloudModal: React.FC<PushToCloudModalProps> = ({
                             },
                           }}
                         />
-                        {!isRunMode && (
-                          <IconButton
-                            onClick={() => removeEnvironmentVariable(env.id)}
-                            sx={{
-                              color: 'error.main',
-                              bgcolor: alpha(theme.palette.error.main, 0.08),
-                              '&:hover': {
-                                bgcolor: alpha(theme.palette.error.main, 0.15),
-                              },
-                            }}
-                          >
-                            <Delete />
-                          </IconButton>
-                        )}
-                        {env.isEdited && (
-                          <Chip
-                            label="Modified"
-                            size="small"
-                            sx={{
-                              height: 20,
-                              fontSize: '0.7rem',
-                              bgcolor: alpha(theme.palette.success.main, 0.1),
-                              color: 'success.main',
-                            }}
-                          />
-                        )}
+                        <IconButton
+                          onClick={() => removeEnvironmentVariable(env.id)}
+                          sx={{
+                            color: 'error.main',
+                            bgcolor: alpha(theme.palette.error.main, 0.08),
+                            '&:hover': {
+                              bgcolor: alpha(theme.palette.error.main, 0.15),
+                            },
+                          }}
+                        >
+                          <Delete />
+                        </IconButton>
                       </Box>
                     </Paper>
                   ))}
