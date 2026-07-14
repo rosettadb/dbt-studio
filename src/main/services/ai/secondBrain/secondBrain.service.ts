@@ -241,7 +241,7 @@ export default class SecondBrainService {
   public async listPages(): Promise<SecondBrainPageSummary[]> {
     if (!(await fs.pathExists(this.rootPath))) return [];
     await this.ensureSafeRoot();
-    const pageIds = await this.walkMarkdownPages(this.rootPath, '');
+    const pageIds = await this.listPageIds();
     const pages = await Promise.all(
       pageIds.map((pageId) => this.readPage(pageId)),
     );
@@ -255,6 +255,14 @@ export default class SecondBrainService {
         frontmatter: page.frontmatter,
       }))
       .sort((left, right) => left.pageId.localeCompare(right.pageId));
+  }
+
+  public async listPageIds(): Promise<string[]> {
+    if (!(await fs.pathExists(this.rootPath))) return [];
+    await this.ensureSafeRoot();
+    return (await this.walkMarkdownPages(this.rootPath, '')).sort(
+      (left, right) => left.localeCompare(right),
+    );
   }
 
   public async readPage(pageId: string): Promise<SecondBrainPage> {

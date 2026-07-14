@@ -8,6 +8,7 @@ import { createStudioNotebooksTools } from '../tools/studio/notebooks.tools';
 import { NotebooksService } from '../../notebooks.service';
 import { TOOL_FLAGS } from '../tools/toolRegistry';
 import type { NotebookCell } from '../../../../types/notebooks';
+import { composeAgentRuntime } from './composeAgentRuntime';
 
 export interface NotebooksAgentOptions {
   connectionMeta: { name: string; type: string };
@@ -255,11 +256,12 @@ ${mcpToolsList}`;
   // second step to explain the tool result. A single-step limit can otherwise
   // persist a tool-only assistant message with no natural-language answer.
   const maxSteps = Math.max(base.maxSteps, 2);
+  const runtime = composeAgentRuntime(base, systemInstructions, baseTools);
 
   return new ToolLoopAgent({
     model: base.model as any,
-    instructions: systemInstructions,
-    tools: { ...baseTools, ...base.mcpTools, loadSkill: base.loadSkillTool },
+    instructions: runtime.instructions,
+    tools: runtime.tools,
     stopWhen: stepCountIs(maxSteps),
     prepareStep: base.prepareStep,
     onStepFinish: base.onStepFinish,

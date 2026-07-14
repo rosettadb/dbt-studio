@@ -14,6 +14,7 @@ export interface ContextUsageBreakdown {
   userFiles: number;
   skills: number;
   mcpTools: number;
+  secondBrain?: number;
   total: number;
   contextWindow: number;
   percentUsed: number;
@@ -237,6 +238,12 @@ export const ContextUsageRing: React.FC<ContextUsageRingProps> = ({
           tokens={breakdown.mcpTools}
           total={breakdown.contextWindow}
           color="#4caf50"
+        />
+        <UsageRow
+          label="Second Brain"
+          tokens={breakdown.secondBrain ?? 0}
+          total={breakdown.contextWindow}
+          color="#00acc1"
         />
 
         <Divider sx={{ my: 1.25 }} />

@@ -7,6 +7,7 @@ import {
   createFilesystemTools,
   filesystemTools,
 } from '../tools/filesystem.tools';
+import { composeAgentRuntime } from './composeAgentRuntime';
 
 export interface ProjectAgentOptions {
   projectPath?: string;
@@ -213,10 +214,12 @@ Always confirm before making destructive changes.`;
     }
   });
 
+  const runtime = composeAgentRuntime(base, systemInstructions, baseTools);
+
   return new ToolLoopAgent({
     model: base.model as any,
-    instructions: systemInstructions,
-    tools: { ...baseTools, ...base.mcpTools, loadSkill: base.loadSkillTool },
+    instructions: runtime.instructions,
+    tools: runtime.tools,
     stopWhen: stepCountIs(base.maxSteps),
     prepareStep: base.prepareStep,
     onStepFinish: base.onStepFinish,

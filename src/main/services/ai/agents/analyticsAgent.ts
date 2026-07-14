@@ -11,6 +11,7 @@ import {
 import { AnalyticsPagesService } from '../../analyticsPages.service';
 import { TOOL_FLAGS } from '../tools/toolRegistry';
 import { evidenceComponentRef } from './analyticsAgent.prompts';
+import { composeAgentRuntime } from './composeAgentRuntime';
 
 export interface AnalyticsAgentOptions {
   connectionMeta: { name: string; type: string };
@@ -257,11 +258,12 @@ ${mcpToolsList}`;
 
   // Analytics agent needs enough steps for read → schema/query → write → run → inspect/fix.
   const maxSteps = Math.max(base.maxSteps, 6);
+  const runtime = composeAgentRuntime(base, systemInstructions, baseTools);
 
   return new ToolLoopAgent({
     model: base.model as any,
-    instructions: systemInstructions,
-    tools: { ...baseTools, ...base.mcpTools, loadSkill: base.loadSkillTool },
+    instructions: runtime.instructions,
+    tools: runtime.tools,
     stopWhen: stepCountIs(maxSteps),
     prepareStep: base.prepareStep,
     onStepFinish: base.onStepFinish,

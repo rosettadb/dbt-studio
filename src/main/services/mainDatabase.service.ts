@@ -800,6 +800,31 @@ export default class MainDatabaseService {
     }
   }
 
+  static async getConversationScope(id: number): Promise<{
+    id: number;
+    projectId: number | null;
+    screenKey: string;
+    connectionId: string | null;
+    notebookId: string | null;
+    pageId: string | null;
+  } | null> {
+    const db = await this.getDatabase();
+    const [conversation] = await db
+      .select({
+        id: schema.chatConversations.id,
+        projectId: schema.chatConversations.projectId,
+        screenKey: schema.chatConversations.screenKey,
+        connectionId: schema.chatConversations.connectionId,
+        notebookId: schema.chatConversations.notebookId,
+        pageId: schema.chatConversations.pageId,
+      })
+      .from(schema.chatConversations)
+      .where(eq(schema.chatConversations.id, id))
+      .limit(1);
+
+    return conversation ?? null;
+  }
+
   static async updateConversation(
     id: number,
     updates: Partial<NewChatConversation>,

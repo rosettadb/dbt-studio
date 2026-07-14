@@ -2,6 +2,7 @@ import AgentService, {
   AI_SETTINGS_DEFAULTS,
   getToolsForMode,
   normalizeAISettings,
+  sanitizeWikiToolCallForPersistence,
 } from '../../../../src/main/services/agent.service';
 import type { AISettingsConfig } from '../../../../src/types/backend';
 import type { ChatMessage } from '../../../../src/main/schemas/mainDatabase.schema';
@@ -104,6 +105,9 @@ jest.mock('../../../../src/main/services/mainDatabase.service', () => ({
   __esModule: true,
   default: {
     getMessages: jest.fn(),
+    getMessagesWithContext: jest.fn(),
+    getLatestCompactionSummary: jest.fn().mockResolvedValue(null),
+    saveCompactionSummary: jest.fn(),
     addMessageWithContext: jest.fn(),
     compactConversationMessages: jest.fn(),
   },
@@ -152,6 +156,40 @@ describe('AgentService (Phase 1)', () => {
       expect(normalized.secondBrain.maxPromptChars).toBe(6000);
       expect(normalized.secondBrain.maxPageBytes).toBe(1024);
       expect(normalized.secondBrain.maxTotalBytes).toBe(1024);
+    });
+  });
+
+  describe('Second Brain persistence redaction', () => {
+    it('omits wiki page bodies and update content from persisted tool metadata', () => {
+      const read = sanitizeWikiToolCallForPersistence(
+        'wiki_read',
+        { pageId: 'memory.md' },
+        {
+          ok: true,
+          pageId: 'memory.md',
+          title: 'Second Brain',
+          body: 'private durable page body',
+          hash: 'a'.repeat(64),
+        },
+      );
+      const update = sanitizeWikiToolCallForPersistence(
+        'wiki_update',
+        {
+          pageId: 'memory.md',
+          operation: { type: 'append-section', content: 'new private fact' },
+        },
+        { ok: true },
+      );
+
+      expect(read.output).toMatchObject({
+        bodyOmitted: true,
+        bodyChars: 25,
+      });
+      expect(JSON.stringify(read.output)).not.toContain('private durable');
+      expect(update.input).toMatchObject({
+        operation: { contentOmitted: true, contentChars: 16 },
+      });
+      expect(JSON.stringify(update.input)).not.toContain('new private fact');
     });
   });
 
@@ -254,6 +292,7 @@ describe('AgentService (Phase 1)', () => {
       const compacted = await (AgentService as any).autoCompact(
         1,
         messages,
+        null,
         event,
         100,
       );
@@ -270,9 +309,9 @@ describe('AgentService (Phase 1)', () => {
 
     it('buildTurnMessages triggers compaction at >=70% total prompt usage', async () => {
       const messages = Array.from({ length: 6 }, (_, i) => makeMessage(i + 1));
-      (MainDatabaseService.getMessages as jest.Mock).mockResolvedValue(
-        messages,
-      );
+      (
+        MainDatabaseService.getMessagesWithContext as jest.Mock
+      ).mockResolvedValue(messages);
       (estimateMessagesTokens as jest.Mock).mockReturnValue(70000);
       const autoCompactSpy = jest
         .spyOn(AgentService as any, 'autoCompact')
@@ -294,9 +333,9 @@ describe('AgentService (Phase 1)', () => {
 
     it('buildTurnMessages skips compaction below 70% total prompt usage', async () => {
       const messages = Array.from({ length: 4 }, (_, i) => makeMessage(i + 1));
-      (MainDatabaseService.getMessages as jest.Mock).mockResolvedValue(
-        messages,
-      );
+      (
+        MainDatabaseService.getMessagesWithContext as jest.Mock
+      ).mockResolvedValue(messages);
       (estimateMessagesTokens as jest.Mock).mockReturnValue(10000);
       const autoCompactSpy = jest.spyOn(AgentService as any, 'autoCompact');
 
@@ -306,11 +345,13 @@ describe('AgentService (Phase 1)', () => {
         [],
         'test-model',
         { sender: { send: jest.fn() } } as any,
-        { skills: 0, mcpTools: 0 },
+        { skills: 0, mcpTools: 0, secondBrain: 200 },
       );
 
       expect(autoCompactSpy).not.toHaveBeenCalled();
       expect(result.messages[0].role).toBe(messages[0].role);
+      expect(result.breakdown.secondBrain).toBe(200);
+      expect(result.breakdown.total).toBe(10_220);
       autoCompactSpy.mockRestore();
     });
   });
@@ -333,7 +374,7 @@ describe('AgentService (Phase 1)', () => {
       ).toThrow(/Message is too large/);
     });
 
-    it('caps the per-message token limit at 8k for large context models', () => {
+    it('applies the 20k character cap before token limits', () => {
       const largeMessage = 'x'.repeat(24_003);
 
       expect(() =>
@@ -341,7 +382,7 @@ describe('AgentService (Phase 1)', () => {
           largeMessage,
           1_000_000,
         ),
-      ).toThrow(/8,000 tokens/);
+      ).toThrow(/20,000 characters/);
     });
   });
 });

@@ -36,6 +36,9 @@ import type {
 } from '../../types/agentEvents';
 import { getUserMessageLimitError } from '../../types/agentEvents';
 import { toError } from '../utils/errorSerializer';
+import SecondBrainService from './ai/secondBrain/secondBrain.service';
+import SecondBrainRuntimeService from './ai/secondBrain/secondBrainRuntime.service';
+import { createSecondBrainTools } from './ai/tools/studio/secondBrain.tools';
 
 // ─── AI Settings ─────────────────────────────────────────────────────────────
 
@@ -295,10 +298,63 @@ export interface ContextUsageBreakdown {
   userFiles: number;
   skills: number;
   mcpTools: number;
+  secondBrain: number;
   total: number;
   contextWindow: number;
   percentUsed: number;
 }
+
+export const sanitizeWikiToolCallForPersistence = (
+  toolName: string,
+  input: unknown,
+  output: unknown,
+): { input: unknown; output: unknown } => {
+  if (!toolName.startsWith('wiki_')) return { input, output };
+
+  let persistedInput = input;
+  if (
+    toolName === 'wiki_update' &&
+    input &&
+    typeof input === 'object' &&
+    'operation' in input
+  ) {
+    const typedInput = input as Record<string, any>;
+    const operation = typedInput.operation as Record<string, any> | undefined;
+    persistedInput = {
+      ...typedInput,
+      operation: operation
+        ? {
+            type: operation.type,
+            heading: operation.heading,
+            searchQuery: operation.searchQuery,
+            contentChars:
+              typeof operation.content === 'string'
+                ? operation.content.length
+                : 0,
+            contentOmitted: true,
+          }
+        : undefined,
+    };
+  }
+
+  let persistedOutput = output;
+  if (toolName === 'wiki_read' && output && typeof output === 'object') {
+    const typedOutput = output as Record<string, any>;
+    persistedOutput = {
+      ok: typedOutput.ok,
+      pageId: typedOutput.pageId,
+      title: typedOutput.title,
+      hash: typedOutput.hash,
+      modifiedAt: typedOutput.modifiedAt,
+      links: typedOutput.links,
+      bodyChars:
+        typeof typedOutput.body === 'string' ? typedOutput.body.length : 0,
+      bodyOmitted: true,
+      error: typedOutput.error,
+    };
+  }
+  return { input: persistedInput, output: persistedOutput };
+};
 
 /** Tracks which conversations are actively compacting (prevent duplicate calls) */
 const activeCompactions = new Set<number>();
@@ -884,7 +940,11 @@ COMBINED SUMMARY:`,
     contextItems: Omit<NewContextItem, 'messageId'>[] | undefined,
     modelId: string,
     event: IpcMainInvokeEvent,
-    fixedOverheadTokens: { skills: number; mcpTools: number },
+    fixedOverheadTokens: {
+      skills: number;
+      mcpTools: number;
+      secondBrain?: number;
+    },
   ): Promise<{
     messages: Array<{ role: 'user' | 'assistant' | 'system'; content: string }>;
     breakdown: ContextUsageBreakdown;
@@ -929,13 +989,15 @@ COMBINED SUMMARY:`,
       newMsgTokens +
       ctxItemTokens +
       fixedOverheadTokens.skills +
-      fixedOverheadTokens.mcpTools;
+      fixedOverheadTokens.mcpTools +
+      (fixedOverheadTokens.secondBrain ?? 0);
 
     const breakdown: ContextUsageBreakdown = {
       conversation: historyTokens,
       userFiles: ctxItemTokens,
       skills: fixedOverheadTokens.skills,
       mcpTools: fixedOverheadTokens.mcpTools,
+      secondBrain: fixedOverheadTokens.secondBrain ?? 0,
       total: totalBeforeCompaction,
       contextWindow,
       percentUsed: Math.min(
@@ -958,7 +1020,8 @@ COMBINED SUMMARY:`,
         newMsgTokens +
         ctxItemTokens +
         fixedOverheadTokens.skills +
-        fixedOverheadTokens.mcpTools;
+        fixedOverheadTokens.mcpTools +
+        (fixedOverheadTokens.secondBrain ?? 0);
 
       return {
         messages: compactedMessages,
@@ -1044,6 +1107,53 @@ COMBINED SUMMARY:`,
       // 4. Load & potentially compact conversation history
       const toolMode = request.toolMode || 'agent';
 
+      let secondBrainContext = '';
+      let secondBrainTools: Record<string, any> = {};
+      let secondBrainTokens = 0;
+      if (aiSettings.secondBrain.enabled) {
+        try {
+          const secondBrain = new SecondBrainService({
+            maxPageBytes: aiSettings.secondBrain.maxPageBytes,
+            maxTotalBytes: aiSettings.secondBrain.maxTotalBytes,
+          });
+          const status = await secondBrain.getStatus();
+          const runtimeContext = agentContexts.get(conversationId);
+          if (status.initialized && runtimeContext) {
+            const secondBrainRuntime = new SecondBrainRuntimeService(
+              secondBrain,
+            );
+            const scope = await secondBrainRuntime.resolveScope(
+              conversationId,
+              {
+                screenKey: runtimeContext.screenKey,
+                connectionId: runtimeContext.connectionId,
+                notebookId: runtimeContext.notebookId,
+                pageId: runtimeContext.pageId,
+                projectPath: runtimeContext.projectPath,
+              },
+            );
+            const contextResult = await secondBrainRuntime.buildContext(
+              scope,
+              aiSettings.secondBrain,
+            );
+            secondBrainContext = contextResult.context;
+            secondBrainTokens = estimateTokens(secondBrainContext);
+            secondBrainTools = createSecondBrainTools({
+              secondBrain,
+              runtime: secondBrainRuntime,
+              scope,
+              settings: aiSettings.secondBrain,
+              toolMode,
+            });
+          }
+        } catch (error) {
+          console.warn(
+            '[SecondBrain] Memory disabled for this turn:',
+            error instanceof Error ? error.message : error,
+          );
+        }
+      }
+
       // Estimate non-history prompt overhead before compaction decision.
       const mcpTools = await buildMCPToolset();
       const skills = await discoverSkills();
@@ -1051,6 +1161,7 @@ COMBINED SUMMARY:`,
       const fixedOverheadTokens = {
         skills: estimateTokens(skillsPrompt),
         mcpTools: estimateTokens(Object.keys(mcpTools || {}).join(' ')),
+        secondBrain: secondBrainTokens,
       };
 
       const { messages, breakdown } = await this.buildTurnMessages(
@@ -1119,6 +1230,9 @@ COMBINED SUMMARY:`,
         aiSettings,
         event,
         mainWindow,
+        secondBrainContext,
+        secondBrainTools,
+        secondBrainTokens,
       });
 
       let agent: any;
@@ -1279,20 +1393,32 @@ COMBINED SUMMARY:`,
                   break;
                 }
                 case 'tool-call':
-                  collectedParts.push({
-                    type: 'tool-call',
-                    toolCallId: chunk.toolCallId,
-                    toolName: chunk.toolName,
-                    args: (chunk as any).input ?? {},
-                    status: 'running',
-                  });
+                  {
+                    const persisted = sanitizeWikiToolCallForPersistence(
+                      chunk.toolName,
+                      (chunk as any).input ?? {},
+                      undefined,
+                    );
+                    collectedParts.push({
+                      type: 'tool-call',
+                      toolCallId: chunk.toolCallId,
+                      toolName: chunk.toolName,
+                      args: persisted.input,
+                      status: 'running',
+                    });
+                  }
                   break;
                 case 'tool-result': {
+                  const persisted = sanitizeWikiToolCallForPersistence(
+                    chunk.toolName,
+                    (chunk as any).input ?? (chunk as any).args,
+                    (chunk as any).output ?? (chunk as any).result,
+                  );
                   collectedToolCalls.push({
                     toolName: chunk.toolName,
                     toolCallId: chunk.toolCallId,
-                    input: (chunk as any).input ?? (chunk as any).args,
-                    output: (chunk as any).output ?? (chunk as any).result,
+                    input: persisted.input,
+                    output: persisted.output,
                     stepNumber: currentStepNumber >= 0 ? currentStepNumber : 0,
                     status: 'done',
                   });
@@ -1302,8 +1428,7 @@ COMBINED SUMMARY:`,
                       p.toolCallId === chunk.toolCallId,
                   );
                   if (part) {
-                    part.result =
-                      (chunk as any).output ?? (chunk as any).result;
+                    part.result = persisted.output;
                     part.status = 'done';
                   }
                   break;
@@ -1372,11 +1497,16 @@ COMBINED SUMMARY:`,
           // Collect tool calls from steps for persistence
           result.steps?.forEach((step: any, idx: number) => {
             step.toolResults?.forEach((tr: any) => {
+              const persisted = sanitizeWikiToolCallForPersistence(
+                tr.toolName,
+                (tr as any).input ?? (tr as any).args,
+                (tr as any).output ?? (tr as any).result,
+              );
               collectedToolCalls.push({
                 toolName: tr.toolName,
                 toolCallId: tr.toolCallId,
-                input: (tr as any).input ?? (tr as any).args,
-                output: (tr as any).output ?? (tr as any).result,
+                input: persisted.input,
+                output: persisted.output,
                 stepNumber: idx,
                 status: 'done',
               });
@@ -1384,8 +1514,8 @@ COMBINED SUMMARY:`,
                 type: 'tool-call',
                 toolCallId: tr.toolCallId,
                 toolName: tr.toolName,
-                args: (tr as any).input ?? (tr as any).args,
-                result: (tr as any).output ?? (tr as any).result,
+                args: persisted.input,
+                result: persisted.output,
                 status: 'done',
               });
             });

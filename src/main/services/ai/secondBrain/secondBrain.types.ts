@@ -26,7 +26,9 @@ export type SecondBrainErrorCode =
   | 'INVALID_FRONTMATTER'
   | 'INVALID_STATE'
   | 'BUDGET_EXCEEDED'
-  | 'SYMLINK_NOT_ALLOWED';
+  | 'SYMLINK_NOT_ALLOWED'
+  | 'OUT_OF_SCOPE'
+  | 'SCOPE_MISMATCH';
 
 export class SecondBrainError extends Error {
   public readonly code: SecondBrainErrorCode;
