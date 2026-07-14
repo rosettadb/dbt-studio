@@ -25,8 +25,15 @@ import { useCleanupOrphanedChats } from '../../controllers/chat.controller';
 import { AISettingsTab } from './AISettingsTab';
 import { MCPServersTab } from './MCPServersTab';
 import { SkillsTab } from './SkillsTab';
+import { SecondBrainTab } from './SecondBrainTab';
 
-const TABS = ['Providers', 'Settings', 'MCP Servers', 'Skills'] as const;
+const TABS = [
+  'Providers',
+  'Settings',
+  'Second Brain',
+  'MCP Servers',
+  'Skills',
+] as const;
 type TabLabel = (typeof TABS)[number];
 
 export const AIProvidersSettings: React.FC = () => {
@@ -170,6 +177,9 @@ export const AIProvidersSettings: React.FC = () => {
 
       {/* Skills */}
       {activeTab === 'Skills' && <SkillsTab />}
+
+      {/* User-owned long-term memory */}
+      {activeTab === 'Second Brain' && <SecondBrainTab />}
 
       {/* General (was AI Settings) — includes DB info */}
       {activeTab === 'Settings' && (

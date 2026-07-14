@@ -27,9 +27,16 @@ export const app = {
 };
 
 export const BrowserWindow = jest.fn();
-export const Menu = { buildFromTemplate: jest.fn(), setApplicationMenu: jest.fn() };
-export const dialog = { showOpenDialog: jest.fn(), showSaveDialog: jest.fn(), showMessageBox: jest.fn() };
-export const shell = { openExternal: jest.fn() };
+export const Menu = {
+  buildFromTemplate: jest.fn(),
+  setApplicationMenu: jest.fn(),
+};
+export const dialog = {
+  showOpenDialog: jest.fn(),
+  showSaveDialog: jest.fn(),
+  showMessageBox: jest.fn(),
+};
+export const shell = { openExternal: jest.fn(), openPath: jest.fn() };
 
 export const net = {
   request: jest.fn(),

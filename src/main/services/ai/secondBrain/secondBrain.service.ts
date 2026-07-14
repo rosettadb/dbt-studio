@@ -16,6 +16,12 @@ import type {
   SecondBrainStatus,
   SecondBrainWriteInput,
 } from '../../../../types/backend';
+import type {
+  SecondBrainManagedPage,
+  SecondBrainRevisionContent,
+  SecondBrainSearchHit,
+  SecondBrainTreeItem,
+} from '../../../../types/secondBrain';
 import {
   SECOND_BRAIN_ARCHIVE_DIRECTORY,
   SECOND_BRAIN_BOOTSTRAP_PAGES,
@@ -266,6 +272,39 @@ export default class SecondBrainService {
     );
   }
 
+  public async listManagedPages(
+    includeArchived = true,
+  ): Promise<SecondBrainTreeItem[]> {
+    const active = (await this.listPages()).map((page) => ({
+      ...page,
+      archived: false,
+    }));
+    if (!includeArchived) return active;
+    const archiveRoot = path.join(
+      this.rootPath,
+      SECOND_BRAIN_ARCHIVE_DIRECTORY,
+    );
+    if (!(await fs.pathExists(archiveRoot))) return active;
+    const archivedIds = await this.walkMarkdownPages(archiveRoot, '');
+    const archived = await Promise.all(
+      archivedIds.map(async (pageId) => {
+        const page = await this.readArchivedPage(pageId);
+        return {
+          pageId: page.pageId,
+          title: page.title,
+          hash: page.hash,
+          modifiedAt: page.modifiedAt,
+          sizeBytes: page.sizeBytes,
+          frontmatter: page.frontmatter,
+          archived: true,
+        };
+      }),
+    );
+    return [...active, ...archived].sort((left, right) =>
+      left.pageId.localeCompare(right.pageId),
+    );
+  }
+
   public async readPage(pageId: string): Promise<SecondBrainPage> {
     const normalizedPageId = normalizeSecondBrainPageId(pageId);
     const pagePath = await this.resolvePagePath(normalizedPageId, true);
@@ -304,6 +343,75 @@ export default class SecondBrainService {
       modifiedAt: stat.mtime.toISOString(),
       sizeBytes: stat.size,
     };
+  }
+
+  public async readArchivedPage(
+    pageIdInput: string,
+  ): Promise<SecondBrainManagedPage> {
+    const pageId = normalizeSecondBrainPageId(pageIdInput);
+    const archivePath = await this.resolveInternalPath(
+      path.posix.join(SECOND_BRAIN_ARCHIVE_DIRECTORY, pageId),
+    );
+    if (!(await fs.pathExists(archivePath))) {
+      throw new SecondBrainError('NOT_FOUND', 'Archived page not found.', {
+        pageId,
+      });
+    }
+    await this.assertNoSymlink(archivePath);
+    const stat = await fs.stat(archivePath);
+    if (!stat.isFile() || stat.size > this.maxPageBytes) {
+      throw new SecondBrainError(
+        'BUDGET_EXCEEDED',
+        'Archived page exceeds the configured read limit.',
+        { pageId, sizeBytes: stat.size },
+      );
+    }
+    const content = await fs.readFile(archivePath, 'utf8');
+    const { frontmatter, body } = parseSecondBrainDocument(content);
+    return {
+      pageId,
+      title: SecondBrainService.resolveTitle(pageId, frontmatter, body),
+      content,
+      body,
+      frontmatter,
+      hash: hashContent(content),
+      modifiedAt: stat.mtime.toISOString(),
+      sizeBytes: stat.size,
+      archived: true,
+      readOnly: true,
+    };
+  }
+
+  public async searchManagedPages(
+    queryInput: string,
+    limitInput = 20,
+  ): Promise<SecondBrainSearchHit[]> {
+    const query = queryInput.trim().toLowerCase().slice(0, 500);
+    if (!query) return [];
+    const limit = Math.max(1, Math.min(limitInput, 50));
+    const pages = (await this.listPages()).slice(0, 500);
+    const hits: SecondBrainSearchHit[] = [];
+    for (const summary of pages) {
+      const page = await this.readPage(summary.pageId);
+      const searchable = `${page.title}\n${page.body}`.toLowerCase();
+      const index = searchable.indexOf(query);
+      if (index === -1) continue;
+      const bodyIndex = Math.max(0, page.body.toLowerCase().indexOf(query));
+      const excerptStart = Math.max(0, bodyIndex - 100);
+      const excerpt = page.body
+        .slice(excerptStart, excerptStart + 300)
+        .replace(/\s+/gu, ' ')
+        .trim();
+      hits.push({
+        pageId: page.pageId,
+        title: page.title,
+        excerpt,
+        hash: page.hash,
+        modifiedAt: page.modifiedAt,
+      });
+      if (hits.length >= limit) break;
+    }
+    return hits;
   }
 
   public async writePage(
@@ -400,6 +508,39 @@ export default class SecondBrainService {
     });
   }
 
+  public async restoreArchivedPage(
+    pageIdInput: string,
+    expectedHash: string,
+  ): Promise<SecondBrainPage> {
+    const pageId = normalizeSecondBrainPageId(pageIdInput);
+    return this.withPageLock(pageId, async () => {
+      await this.requireInitializedState();
+      const archived = await this.readArchivedPage(pageId);
+      if (archived.hash !== expectedHash) {
+        throw new SecondBrainError(
+          'CONFLICT',
+          'Archived page changed since it was read.',
+          { pageId, currentHash: archived.hash },
+        );
+      }
+      const activePath = await this.resolvePagePath(pageId, false);
+      if (await fs.pathExists(activePath)) {
+        throw new SecondBrainError(
+          'ALREADY_EXISTS',
+          'An active page already exists at this page ID.',
+          { pageId },
+        );
+      }
+      const archivePath = await this.resolveInternalPath(
+        path.posix.join(SECOND_BRAIN_ARCHIVE_DIRECTORY, pageId),
+      );
+      await fs.ensureDir(path.dirname(activePath));
+      await nodeFs.rename(archivePath, activePath);
+      await this.updatePageHash(pageId, archived.hash);
+      return this.readPage(pageId);
+    });
+  }
+
   public async listRevisions(
     pageIdInput: string,
   ): Promise<SecondBrainRevisionSummary[]> {
@@ -429,6 +570,31 @@ export default class SecondBrainService {
     return revisions.sort((left, right) =>
       right.revisionId.localeCompare(left.revisionId),
     );
+  }
+
+  public async readRevision(
+    pageIdInput: string,
+    revisionId: string,
+  ): Promise<SecondBrainRevisionContent> {
+    const pageId = normalizeSecondBrainPageId(pageIdInput);
+    if (!/^[0-9]+-[0-9a-f-]+$/iu.test(revisionId)) {
+      throw new SecondBrainError('INVALID_PAGE_ID', 'Revision ID is invalid.');
+    }
+    const directory = await this.revisionDirectory(pageId);
+    const revisionPath = await this.resolveContainedPath(
+      directory,
+      `${revisionId}.md`,
+    );
+    if (!(await fs.pathExists(revisionPath))) {
+      throw new SecondBrainError('NOT_FOUND', 'Revision not found.', {
+        pageId,
+        revisionId,
+      });
+    }
+    await this.assertNoSymlink(revisionPath);
+    const content = await fs.readFile(revisionPath, 'utf8');
+    const { frontmatter } = parseSecondBrainDocument(content);
+    return { pageId, revisionId, content, frontmatter };
   }
 
   public async restoreRevision(

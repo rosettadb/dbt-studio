@@ -459,6 +459,23 @@ export type FlowfileChannels =
   | 'flowfile:start'
   | 'flowfile:stop';
 
+export type SecondBrainChannels =
+  | 'second-brain:status'
+  | 'second-brain:tree'
+  | 'second-brain:read'
+  | 'second-brain:write'
+  | 'second-brain:search'
+  | 'second-brain:archive'
+  | 'second-brain:init'
+  | 'second-brain:update-preview'
+  | 'second-brain:update-apply'
+  | 'second-brain:cancel'
+  | 'second-brain:revisions'
+  | 'second-brain:revision-read'
+  | 'second-brain:restore'
+  | 'second-brain:open-folder'
+  | 'second-brain:progress';
+
 export type Channels =
   | TestChannels
   | CliChannels
@@ -483,7 +500,8 @@ export type Channels =
   | SavedQueriesChannels
   | AnalyticsPagesChannels
   | StaticSiteChannels
-  | FlowfileChannels;
+  | FlowfileChannels
+  | SecondBrainChannels;
 
 export type ConfigureConnectionBody = {
   projectId?: string;

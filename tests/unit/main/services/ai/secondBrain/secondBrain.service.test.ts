@@ -175,6 +175,67 @@ describe('SecondBrainService', () => {
     ).not.toContain(page.pageId);
   });
 
+  it('lists, reads, and restores archived pages through page IDs only', async () => {
+    await service.initializeRoot();
+    const page = await service.writePage({
+      pageId: 'topics/managed-archive.md',
+      content: markdown('Managed archive'),
+      actor: 'user',
+    });
+    await service.archivePage({
+      pageId: page.pageId,
+      expectedHash: page.hash,
+      actor: 'user',
+    });
+
+    expect(await service.listManagedPages()).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          pageId: page.pageId,
+          archived: true,
+        }),
+      ]),
+    );
+    const archived = await service.readArchivedPage(page.pageId);
+    expect(archived).toMatchObject({ archived: true, readOnly: true });
+
+    const restored = await service.restoreArchivedPage(
+      page.pageId,
+      archived.hash,
+    );
+    expect(restored.pageId).toBe(page.pageId);
+    expect(
+      (await service.listManagedPages()).find(
+        (item) => item.pageId === page.pageId,
+      )?.archived,
+    ).toBe(false);
+  });
+
+  it('provides bounded management search and read-only revision content', async () => {
+    await service.initializeRoot();
+    const created = await service.writePage({
+      pageId: 'topics/customer-metrics.md',
+      content: markdown('Customer metrics', 'Use retained customer revenue.'),
+      actor: 'user',
+    });
+    await service.writePage({
+      pageId: created.pageId,
+      content: markdown('Customer metrics', 'Use net customer revenue.'),
+      expectedHash: created.hash,
+      actor: 'user',
+    });
+
+    expect(await service.searchManagedPages('net customer')).toEqual([
+      expect.objectContaining({ pageId: created.pageId }),
+    ]);
+    const [revision] = await service.listRevisions(created.pageId);
+    const content = await service.readRevision(
+      created.pageId,
+      revision.revisionId,
+    );
+    expect(content.content).toContain('retained customer revenue');
+  });
+
   it('rejects symlink escapes', async () => {
     await service.initializeRoot();
     const outside = path.join(temporaryDirectory, 'outside');

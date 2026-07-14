@@ -29,7 +29,8 @@ export type SecondBrainErrorCode =
   | 'SYMLINK_NOT_ALLOWED'
   | 'OUT_OF_SCOPE'
   | 'SCOPE_MISMATCH'
-  | 'CANCELLED';
+  | 'CANCELLED'
+  | 'BUSY';
 
 export class SecondBrainError extends Error {
   public readonly code: SecondBrainErrorCode;
