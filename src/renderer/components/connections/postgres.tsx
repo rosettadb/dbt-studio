@@ -92,6 +92,11 @@ export const Postgres: React.FC<Props> = ({
     useUpdateConnection({
       onSuccess: () => {
         toast.success('PostgreSQL connection updated successfully!');
+        if (projectId) {
+          navigate('/app');
+          return;
+        }
+        navigate('/app/connections');
       },
       onError: (error) => {
         toast.error(`Update failed: ${error}`);

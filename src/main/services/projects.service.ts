@@ -711,6 +711,26 @@ export default class ProjectsService {
     return false;
   }
 
+  // Removes a project from Studio's known-projects list without touching
+  // its folder on disk — unlike deleteProject, which also deletes the
+  // folder and the project's AI chat history.
+  static async removeProjectFromList(id: string) {
+    const projects = await this.loadProjects();
+    const projectToRemove = projects.find((p) => p.id === id);
+    if (projectToRemove) {
+      const selectedProject = await this.getSelectedProject();
+      if (selectedProject && selectedProject.id === id) {
+        await updateDatabase('selectedProject', undefined);
+      }
+
+      const filteredProjects = projects.filter((p) => p.id !== id);
+      await this.saveProjects(filteredProjects);
+
+      return true;
+    }
+    return false;
+  }
+
   static async getProjectPath(name: string) {
     return path.join(
       (await SettingsService.loadSettings()).projectsDirectory,

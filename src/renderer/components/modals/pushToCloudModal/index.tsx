@@ -78,9 +78,12 @@ export const PushToCloudModal: React.FC<PushToCloudModalProps> = ({
   const { mutateAsync: pushProject, isLoading: isPushing } =
     usePushProjectToCloud();
   const isDeployed = !!project?.externalId;
-  const { data: secrets = [], isSuccess: secretsLoaded } = useGetSecrets(
-    isDeployed ? project.id : undefined,
-  );
+  const {
+    data: secrets = [],
+    isSuccess: secretsLoaded,
+    isError: secretsFailed,
+  } = useGetSecrets(isDeployed ? project.id : undefined);
+  const secretsSettled = secretsLoaded || secretsFailed;
   const { data: profileEnvVars = [], isSuccess: profileLoaded } =
     useExtractProfileEnvVars(project.id);
 
@@ -150,7 +153,7 @@ export const PushToCloudModal: React.FC<PushToCloudModalProps> = ({
     if (envVarsInitialized.current) return;
     // Wait until queries have completed
     if (!profileLoaded) return;
-    if (isDeployed && !secretsLoaded) return;
+    if (isDeployed && !secretsSettled) return;
 
     envVarsInitialized.current = true;
 
@@ -204,7 +207,7 @@ export const PushToCloudModal: React.FC<PushToCloudModalProps> = ({
       setGithubPassword(gitPassword.value);
       setOriginalGithubPassword(gitPassword.value);
     }
-  }, [secrets, profileEnvVars]);
+  }, [secrets, profileEnvVars, isDeployed, profileLoaded, secretsSettled]);
 
   const blockingError = React.useMemo(() => {
     if (isLoading) return null;
@@ -274,7 +277,7 @@ export const PushToCloudModal: React.FC<PushToCloudModalProps> = ({
     }
 
     // Wait for environment variables to finish loading
-    if (!profileLoaded || (isDeployed && !secretsLoaded)) {
+    if (!profileLoaded || (isDeployed && !secretsSettled)) {
       return false;
     }
 
@@ -293,7 +296,7 @@ export const PushToCloudModal: React.FC<PushToCloudModalProps> = ({
     urlError,
     titleError,
     profileLoaded,
-    secretsLoaded,
+    secretsSettled,
     isDeployed,
   ]);
 
@@ -1136,8 +1139,16 @@ export const PushToCloudModal: React.FC<PushToCloudModalProps> = ({
               </Stack>
             </Paper>
 
+            {isDeployed && secretsFailed && (
+              <Alert severity="warning" sx={{ borderRadius: 1.5 }}>
+                Couldn&apos;t load saved secrets from Rosetta Cloud. You can
+                still set environment variables below, but existing cloud
+                secrets won&apos;t be shown or preserved unless re-added.
+              </Alert>
+            )}
+
             {/* eslint-disable-next-line no-nested-ternary */}
-            {!profileLoaded || (isDeployed && !secretsLoaded) ? (
+            {!profileLoaded || (isDeployed && !secretsSettled) ? (
               <Box
                 sx={{
                   p: 3,

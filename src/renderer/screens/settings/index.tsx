@@ -2,7 +2,6 @@ import React from 'react';
 import { toast } from 'react-toastify';
 import {
   Button,
-  IconButton,
   Typography,
   Box,
   List,
@@ -11,8 +10,8 @@ import {
   ListItemIcon,
   ListItemText,
 } from '@mui/material';
-import { Close, DarkMode, LightMode } from '@mui/icons-material';
-import { useNavigate, useLocation } from 'react-router-dom';
+import { DarkMode, LightMode } from '@mui/icons-material';
+import { useLocation } from 'react-router-dom';
 import { useColorScheme } from '@mui/material/styles';
 import AppsIcon from '@mui/icons-material/Apps';
 import { SettingsType } from '../../../types/backend';
@@ -47,7 +46,6 @@ const Settings: React.FC = () => {
   });
   const { mutate: getFiles } = useFilePicker();
   const location = useLocation();
-  const navigate = useNavigate();
   const currentSection = location.pathname.split('/').pop() || 'general';
 
   const [localSettings, setLocalSettings] = React.useState<SettingsType>({
@@ -95,10 +93,6 @@ const Settings: React.FC = () => {
         },
       },
     );
-  };
-
-  const handleClose = () => {
-    navigate('/app');
   };
 
   const getSectionTitle = (section: string) => {
@@ -280,21 +274,9 @@ const Settings: React.FC = () => {
             updateSettings(localSettings);
           }}
         >
-          <div
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'space-between',
-              marginBottom: '16px',
-            }}
-          >
-            <Title style={{ margin: 0 }}>
-              {getSectionTitle(currentSection)}
-            </Title>
-            <IconButton onClick={handleClose} edge="end" aria-label="close">
-              <Close />
-            </IconButton>
-          </div>
+          <Title style={{ margin: 0, marginBottom: '16px' }}>
+            {getSectionTitle(currentSection)}
+          </Title>
           <div style={{ maxWidth: '100%' }}>{renderContent()}</div>
         </StyledForm>
       </Container>

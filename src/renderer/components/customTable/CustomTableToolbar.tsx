@@ -1,5 +1,5 @@
 import React, { ReactNode } from 'react';
-import { Toolbar, Typography, Tooltip, TextField, Box } from '@mui/material';
+import { Toolbar, Tooltip, TextField, Box } from '@mui/material';
 import { makeStyles } from '@mui/styles';
 
 const useStyles = makeStyles({
@@ -8,7 +8,12 @@ const useStyles = makeStyles({
     paddingRight: '5px',
   },
   title: {
-    flex: '1 1 45%',
+    flex: '1 1 auto',
+    minWidth: 0,
+    overflow: 'hidden',
+    display: 'flex',
+    alignItems: 'center',
+    marginRight: 32,
   },
   searchContainer: {
     paddingTop: '4px',
@@ -37,19 +42,18 @@ const CustomTableToolbar = ({
         style={{ minHeight: '36px', paddingLeft: '8px', paddingRight: '8px' }}
       >
         {name ? (
-          <Typography
-            className={classes.title}
-            variant="h6"
-            id="tableTitle"
-            component="div"
-          >
+          <Box className={classes.title} id="tableTitle">
             {name}
-          </Typography>
+          </Box>
         ) : (
           <div className={classes.title} />
         )}
 
-        {toolbarContent && <Box mr={2}>{toolbarContent}</Box>}
+        {toolbarContent && (
+          <Box mr={2} sx={{ flex: '0 0 auto' }}>
+            {toolbarContent}
+          </Box>
+        )}
 
         {showSearch && (
           <Tooltip title="Search by name">

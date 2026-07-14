@@ -39,6 +39,7 @@ export type ProjectChannels =
   | 'project:add'
   | 'project:update'
   | 'project:delete'
+  | 'project:removeFromList'
   | 'project:getPath'
   | 'project:getDirectory'
   | 'project:readFile'
@@ -82,12 +83,7 @@ export type RosettaCloudChannels =
   | 'rosettaCloud:deleteSecret'
   | 'rosettaCloud:findActionForPipeline'
   | 'rosettaCloud:getActionStatus'
-  | 'rosettaCloud:getActionLogs'
-  | 'rosettaCloud:openLogStream'
-  | 'rosettaCloud:closeLogStream'
-  | 'rosettaCloud:logEntries'
-  | 'rosettaCloud:logStreamError'
-  | 'rosettaCloud:logStreamEnd';
+  | 'rosettaCloud:getActionLogs';
 
 export type ConnectorChannels =
   | 'connector:configure'

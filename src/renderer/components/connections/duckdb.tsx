@@ -90,6 +90,11 @@ export const DuckDB: React.FC<Props> = ({
     useUpdateConnection({
       onSuccess: () => {
         toast.success('DuckDB connection updated successfully!');
+        if (projectId) {
+          navigate('/app');
+          return;
+        }
+        navigate('/app/connections');
       },
       onError: (error) => {
         toast.error(`Update failed: ${error}`);

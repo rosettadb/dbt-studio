@@ -216,92 +216,33 @@ const isActionFinishedFromStatus = (
 };
 
 /**
- * Subscribes to the SSE log stream for the given actionId via main process.
- * Pass `disabled` to keep the hook mounted (preserving consumers) while not
- * opening a stream — used to short-circuit once an action is finished.
- */
-const useCloudActionLogStream = (
-  actionId?: string | null,
-  disabled?: boolean,
-  maxEntries = 2000,
-) => {
-  const [logs, setLogs] = React.useState<CloudLogEntry[]>([]);
-  const [error, setError] = React.useState<string | null>(null);
-
-  React.useEffect(() => {
-    if (!actionId || disabled) {
-      setLogs([]);
-      setError(null);
-      return undefined;
-    }
-
-    setLogs([]);
-    setError(null);
-
-    const unsubEntries = rosettaCloudServices.subscribeToLogEntries(
-      ({ actionId: id, logs: incoming }) => {
-        if (id !== actionId) return;
-        setLogs((prev) => {
-          const next = prev.concat(incoming);
-          return next.length > maxEntries
-            ? next.slice(next.length - maxEntries)
-            : next;
-        });
-      },
-    );
-    const unsubError = rosettaCloudServices.subscribeToLogStreamError(
-      ({ actionId: id, error: err }) => {
-        if (id !== actionId) return;
-        setError(err);
-      },
-    );
-    const unsubEnd = rosettaCloudServices.subscribeToLogStreamEnd(() => {});
-
-    rosettaCloudServices.openLogStream(actionId).catch((e) => {
-      setError(e instanceof Error ? e.message : 'Failed to open log stream');
-    });
-
-    return () => {
-      unsubEntries();
-      unsubError();
-      unsubEnd();
-      rosettaCloudServices.closeLogStream(actionId).catch(() => {});
-    };
-  }, [actionId, disabled, maxEntries]);
-
-  return { logs, error };
-};
-
-/**
- * Public log hook for the CI/CD view. Streams live while the action is
- * running, then switches to a one-shot static fetch once every step is in a
- * terminal state. The static endpoint returns the complete log set so we can
- * drop the in-memory stream buffer on transition.
+ * Public log hook for the CI/CD view. Polls the same `/logs` endpoint the
+ * cloud dashboard itself uses to display logs (rather than the SSE stream
+ * endpoint, which nothing else in the product exercises) every 3s while the
+ * action is still running, and stops once every step has settled into a
+ * terminal state.
  */
 export const useCloudActionLogs = (actionId?: string | null) => {
   const { data: status } = useCloudActionStatus(actionId ?? null);
   const isFinished = isActionFinishedFromStatus(status);
 
-  const stream = useCloudActionLogStream(actionId, isFinished);
-
-  const { data: staticData, error: staticError } = useQuery({
-    queryKey: ['cloudActionLogsStatic', actionId],
+  const { data, error } = useQuery({
+    queryKey: ['cloudActionLogs', actionId],
     queryFn: () =>
       actionId
         ? rosettaCloudServices.getActionLogs(actionId)
         : Promise.resolve([] as CloudLogEntry[]),
-    enabled: !!actionId && isFinished,
-    staleTime: Infinity,
+    enabled: !!actionId,
+    refetchInterval: isFinished ? false : 3000,
   });
 
-  if (isFinished) {
-    return {
-      logs: staticData ?? [],
-      error: (staticError as any)?.message ?? 'Failed to fetch logs',
-      mode: 'static' as const,
-    };
-  }
-  return { ...stream, mode: 'stream' as const };
+  return {
+    logs: data ?? [],
+    error: error
+      ? ((error as CustomError)?.message ?? 'Failed to fetch logs')
+      : null,
+    mode: isFinished ? ('static' as const) : ('stream' as const),
+  };
 };
 
 export const useAuthSubscription = () => {
