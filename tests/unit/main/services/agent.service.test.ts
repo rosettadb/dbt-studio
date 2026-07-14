@@ -1,5 +1,7 @@
 import AgentService, {
+  AI_SETTINGS_DEFAULTS,
   getToolsForMode,
+  normalizeAISettings,
 } from '../../../../src/main/services/agent.service';
 import type { AISettingsConfig } from '../../../../src/types/backend';
 import type { ChatMessage } from '../../../../src/main/schemas/mainDatabase.schema';
@@ -14,7 +16,11 @@ jest.mock('fs-extra', () => ({
 }));
 
 jest.mock('electron', () => ({
-  app: { getPath: jest.fn().mockReturnValue('/mock/path') },
+  app: {
+    getPath: jest.fn().mockReturnValue('/mock/path'),
+    getName: jest.fn().mockReturnValue('dbt-studio-test'),
+    getVersion: jest.fn().mockReturnValue('0.0.0-test'),
+  },
   BrowserWindow: { fromWebContents: jest.fn() },
 }));
 
@@ -40,6 +46,10 @@ jest.mock('../../../../src/main/services/ai/agents/sqlAgent', () => ({
 
 jest.mock('../../../../src/main/services/ai/agents/notebooksAgent', () => ({
   createNotebooksAgent: jest.fn(),
+}));
+
+jest.mock('../../../../src/main/services/ai/agents/analyticsAgent', () => ({
+  createAnalyticsAgent: jest.fn(),
 }));
 
 jest.mock('../../../../src/main/services/ai/mcp/mcpToolAdapter', () => ({
@@ -117,6 +127,34 @@ jest.mock(
 );
 
 describe('AgentService (Phase 1)', () => {
+  describe('AI settings migration', () => {
+    it('adds disabled Second Brain defaults to legacy settings', () => {
+      const normalized = normalizeAISettings({
+        configuration: { autoGenerateMemories: true },
+      });
+
+      expect(normalized.secondBrain).toEqual(AI_SETTINGS_DEFAULTS.secondBrain);
+      expect(normalized.secondBrain.enabled).toBe(false);
+      expect(normalized.configuration.autoGenerateMemories).toBe(true);
+    });
+
+    it('clamps Second Brain byte and prompt budgets', () => {
+      const normalized = normalizeAISettings({
+        secondBrain: {
+          enabled: true,
+          maxPromptChars: Number.POSITIVE_INFINITY,
+          maxPageBytes: 100,
+          maxTotalBytes: 500,
+        },
+      });
+
+      expect(normalized.secondBrain.enabled).toBe(true);
+      expect(normalized.secondBrain.maxPromptChars).toBe(6000);
+      expect(normalized.secondBrain.maxPageBytes).toBe(1024);
+      expect(normalized.secondBrain.maxTotalBytes).toBe(1024);
+    });
+  });
+
   describe('getToolsForMode', () => {
     const aiSettingsMock: AISettingsConfig = {
       chat: {
@@ -143,6 +181,15 @@ describe('AgentService (Phase 1)', () => {
         autoGenerateMemories: true,
       },
       advanced: { maxWorkspaceFileCount: 5000 },
+      secondBrain: {
+        enabled: false,
+        initialized: false,
+        maxPromptChars: 6000,
+        maxPageBytes: 64 * 1024,
+        maxTotalBytes: 10 * 1024 * 1024,
+        includeGlobalPages: true,
+        inlineSelfLearning: true,
+      },
     };
 
     it('returns only analysis tools in chat mode', () => {

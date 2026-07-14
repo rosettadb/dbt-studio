@@ -825,6 +825,79 @@ export interface MCPServerWithStatus extends MCPServerFileEntry {
   tools?: { name: string; description: string }[];
 }
 
+export type SecondBrainSettings = {
+  enabled: boolean;
+  initialized: boolean;
+  maxPromptChars: number;
+  maxPageBytes: number;
+  maxTotalBytes: number;
+  includeGlobalPages: boolean;
+  inlineSelfLearning: boolean;
+};
+
+export type SecondBrainScope = {
+  screenKey: 'project' | 'sql' | 'notebooks' | 'analytics';
+  projectId?: number | null;
+  projectPath?: string | null;
+  connectionId?: string | null;
+  notebookId?: string | null;
+  pageId?: string | null;
+};
+
+export type SecondBrainActor = 'user' | 'agent' | 'refresh' | 'migration';
+
+export type SecondBrainFrontmatter = Record<string, unknown>;
+
+export type SecondBrainPageSummary = {
+  pageId: string;
+  title: string;
+  hash: string;
+  modifiedAt: string;
+  sizeBytes: number;
+  frontmatter: SecondBrainFrontmatter;
+};
+
+export type SecondBrainPage = SecondBrainPageSummary & {
+  content: string;
+  body: string;
+};
+
+export type SecondBrainRevisionSummary = {
+  revisionId: string;
+  pageId: string;
+  createdAt: string;
+  sizeBytes: number;
+};
+
+export type SecondBrainStatus = {
+  initialized: boolean;
+  pageCount: number;
+  totalBytes: number;
+  rootPath: string;
+  stateVersion?: number;
+  lastSuccessfulRefreshAt?: string;
+};
+
+export type SecondBrainWriteInput = {
+  pageId: string;
+  content: string;
+  expectedHash?: string;
+  actor: SecondBrainActor;
+};
+
+export type SecondBrainArchiveInput = {
+  pageId: string;
+  expectedHash: string;
+  actor: SecondBrainActor;
+};
+
+export type SecondBrainRestoreInput = {
+  pageId: string;
+  revisionId: string;
+  expectedHash: string;
+  actor: SecondBrainActor;
+};
+
 export type AISettingsConfig = {
   chat: {
     streamResponses: boolean;
@@ -842,6 +915,7 @@ export type AISettingsConfig = {
   advanced: {
     maxWorkspaceFileCount: number;
   };
+  secondBrain: SecondBrainSettings;
 };
 
 // ---------------------------------------------------------------------------

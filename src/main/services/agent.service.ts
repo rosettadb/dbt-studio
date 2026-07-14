@@ -39,7 +39,7 @@ import { toError } from '../utils/errorSerializer';
 
 // ─── AI Settings ─────────────────────────────────────────────────────────────
 
-const AI_SETTINGS_DEFAULTS: AISettingsConfig = {
+export const AI_SETTINGS_DEFAULTS: AISettingsConfig = {
   chat: {
     streamResponses: true,
     autoIncludeFileContext: true,
@@ -64,6 +64,86 @@ const AI_SETTINGS_DEFAULTS: AISettingsConfig = {
     autoGenerateMemories: true,
   },
   advanced: { maxWorkspaceFileCount: 5000 },
+  secondBrain: {
+    enabled: false,
+    initialized: false,
+    maxPromptChars: 6000,
+    maxPageBytes: 64 * 1024,
+    maxTotalBytes: 10 * 1024 * 1024,
+    includeGlobalPages: true,
+    inlineSelfLearning: true,
+  },
+};
+
+const clampInteger = (
+  value: unknown,
+  fallback: number,
+  minimum: number,
+  maximum: number,
+): number => {
+  if (typeof value !== 'number' || !Number.isFinite(value)) return fallback;
+  return Math.min(maximum, Math.max(minimum, Math.trunc(value)));
+};
+
+export const normalizeAISettings = (raw: unknown): AISettingsConfig => {
+  const input =
+    raw && typeof raw === 'object'
+      ? (raw as Partial<AISettingsConfig>)
+      : ({} as Partial<AISettingsConfig>);
+  const secondBrain =
+    input.secondBrain && typeof input.secondBrain === 'object'
+      ? input.secondBrain
+      : ({} as Partial<AISettingsConfig['secondBrain']>);
+  const maxPageBytes = clampInteger(
+    secondBrain.maxPageBytes,
+    AI_SETTINGS_DEFAULTS.secondBrain.maxPageBytes,
+    1024,
+    1024 * 1024,
+  );
+  const maxTotalBytes = clampInteger(
+    secondBrain.maxTotalBytes,
+    AI_SETTINGS_DEFAULTS.secondBrain.maxTotalBytes,
+    maxPageBytes,
+    1024 * 1024 * 1024,
+  );
+
+  return {
+    chat: { ...AI_SETTINGS_DEFAULTS.chat, ...input.chat },
+    tools: { ...AI_SETTINGS_DEFAULTS.tools, ...input.tools },
+    configuration: {
+      ...AI_SETTINGS_DEFAULTS.configuration,
+      ...input.configuration,
+    },
+    advanced: { ...AI_SETTINGS_DEFAULTS.advanced, ...input.advanced },
+    secondBrain: {
+      ...AI_SETTINGS_DEFAULTS.secondBrain,
+      ...secondBrain,
+      enabled:
+        typeof secondBrain.enabled === 'boolean'
+          ? secondBrain.enabled
+          : AI_SETTINGS_DEFAULTS.secondBrain.enabled,
+      initialized:
+        typeof secondBrain.initialized === 'boolean'
+          ? secondBrain.initialized
+          : AI_SETTINGS_DEFAULTS.secondBrain.initialized,
+      includeGlobalPages:
+        typeof secondBrain.includeGlobalPages === 'boolean'
+          ? secondBrain.includeGlobalPages
+          : AI_SETTINGS_DEFAULTS.secondBrain.includeGlobalPages,
+      inlineSelfLearning:
+        typeof secondBrain.inlineSelfLearning === 'boolean'
+          ? secondBrain.inlineSelfLearning
+          : AI_SETTINGS_DEFAULTS.secondBrain.inlineSelfLearning,
+      maxPromptChars: clampInteger(
+        secondBrain.maxPromptChars,
+        AI_SETTINGS_DEFAULTS.secondBrain.maxPromptChars,
+        1000,
+        50_000,
+      ),
+      maxPageBytes,
+      maxTotalBytes,
+    },
+  };
 };
 
 const aiSettingsFilePath = () =>
@@ -72,20 +152,12 @@ const aiSettingsFilePath = () =>
 export const loadAISettings = async (): Promise<AISettingsConfig> => {
   try {
     const fp = aiSettingsFilePath();
-    if (!fs.existsSync(fp)) return AI_SETTINGS_DEFAULTS;
+    if (!fs.existsSync(fp)) return normalizeAISettings(undefined);
     const raw = await fs.readJson(fp);
-    return {
-      chat: { ...AI_SETTINGS_DEFAULTS.chat, ...raw.chat },
-      tools: { ...AI_SETTINGS_DEFAULTS.tools, ...raw.tools },
-      configuration: {
-        ...AI_SETTINGS_DEFAULTS.configuration,
-        ...raw.configuration,
-      },
-      advanced: { ...AI_SETTINGS_DEFAULTS.advanced, ...raw.advanced },
-    };
+    return normalizeAISettings(raw);
   } catch (error) {
     console.error(error);
-    return AI_SETTINGS_DEFAULTS;
+    return normalizeAISettings(undefined);
   }
 };
 
@@ -93,7 +165,9 @@ export const saveAISettings = async (
   config: AISettingsConfig,
 ): Promise<void> => {
   try {
-    await fs.writeJson(aiSettingsFilePath(), config, { spaces: 2 });
+    await fs.writeJson(aiSettingsFilePath(), normalizeAISettings(config), {
+      spaces: 2,
+    });
   } catch (error) {
     console.error(error);
     throw error;
