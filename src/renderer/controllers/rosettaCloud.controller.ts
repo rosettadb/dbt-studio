@@ -82,9 +82,10 @@ export const useGetSecrets = (
   options?: UseQueryOptions<Secret[], CustomError, Secret[]>,
 ) => {
   return useQuery({
-    queryKey: [QUERY_KEYS.CLOUD_SECRETS],
-    queryFn: () => rosettaCloudServices.getSecrets(projectId ?? ''),
+    queryKey: [QUERY_KEYS.CLOUD_SECRETS, projectId],
+    queryFn: () => rosettaCloudServices.getSecrets(projectId!),
     ...options,
+    enabled: !!projectId && (options?.enabled ?? true),
   });
 };
 

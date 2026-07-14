@@ -21,11 +21,8 @@ import {
   Switch,
   FormControlLabel,
   Popover,
-  List,
-  ListItemButton,
-  ListItemText,
-  ListItemIcon,
   Tooltip,
+  Autocomplete,
 } from '@mui/material';
 import {
   Visibility,
@@ -39,7 +36,6 @@ import {
   AddOutlined,
   VpnKey,
 } from '@mui/icons-material';
-import { toast } from 'react-toastify';
 import { Modal } from '../modal';
 import {
   useGetLocalChanges,
@@ -60,7 +56,6 @@ interface EnvironmentVariable {
   isEdited?: boolean;
   originalValue?: string;
   isFromProfile?: boolean;
-  isFromKeystore?: boolean;
 }
 
 interface PushToCloudModalProps {
@@ -107,6 +102,7 @@ export const PushToCloudModal: React.FC<PushToCloudModalProps> = ({
   const [urlError, setUrlError] = React.useState('');
   const [titleError, setTitleError] = React.useState('');
   const [formError, setFormError] = React.useState('');
+  const [environmentError, setEnvironmentError] = React.useState('');
 
   const [githubUsername, setGithubUsername] = React.useState('');
   const [githubPassword, setGithubPassword] = React.useState('');
@@ -123,6 +119,8 @@ export const PushToCloudModal: React.FC<PushToCloudModalProps> = ({
   const [environmentVariables, setEnvironmentVariables] = React.useState<
     EnvironmentVariable[]
   >([]);
+  const [visibleEnvironmentVariableIds, setVisibleEnvironmentVariableIds] =
+    React.useState<Set<string>>(() => new Set());
   const [runTeardown, setRunTeardown] = React.useState(true);
   const [newEnvKey, setNewEnvKey] = React.useState('');
   const [newEnvValue, setNewEnvValue] = React.useState('');
@@ -387,7 +385,6 @@ export const PushToCloudModal: React.FC<PushToCloudModalProps> = ({
         secrets: reducedSecrets,
       });
 
-      await toast.success('Project deployed to cloud.');
       onClose();
     } catch (error) {
       const message =
@@ -395,9 +392,6 @@ export const PushToCloudModal: React.FC<PushToCloudModalProps> = ({
           ? error.message
           : `Failed to run project to Rosetta Cloud.`;
       setFormError(message);
-      toast.error(
-        `Unable to run project. Please review the form and try again.`,
-      );
     }
   };
 
@@ -406,12 +400,14 @@ export const PushToCloudModal: React.FC<PushToCloudModalProps> = ({
     const trimmedValue = newEnvValue.trim();
 
     if (!trimmedKey || !trimmedValue) {
-      toast.error('Both key and value are required for environment variables');
+      setEnvironmentError(
+        'Both key and value are required for environment variables.',
+      );
       return;
     }
 
     if (RESERVED_KEYS.includes(trimmedKey.toUpperCase())) {
-      toast.error(
+      setEnvironmentError(
         `${trimmedKey} is a reserved key. Please use the dedicated fields above.`,
       );
       return;
@@ -419,7 +415,7 @@ export const PushToCloudModal: React.FC<PushToCloudModalProps> = ({
 
     const exists = environmentVariables.some((env) => env.key === trimmedKey);
     if (exists) {
-      toast.error('Environment variable key already exists');
+      setEnvironmentError('Environment variable key already exists.');
       return;
     }
 
@@ -432,6 +428,7 @@ export const PushToCloudModal: React.FC<PushToCloudModalProps> = ({
     };
 
     setEnvironmentVariables((prev) => [...prev, newEnv]);
+    setEnvironmentError('');
     setNewEnvKey('');
     setNewEnvValue('');
   }, [newEnvKey, newEnvValue, environmentVariables]);
@@ -463,7 +460,7 @@ export const PushToCloudModal: React.FC<PushToCloudModalProps> = ({
   const updateEnvironmentVariable = React.useCallback(
     (id: string, key: string, value: string) => {
       if (RESERVED_KEYS.includes(key.toUpperCase())) {
-        toast.error(
+        setEnvironmentError(
           `${key} is a reserved key. Please use the dedicated fields.`,
         );
         return;
@@ -473,10 +470,11 @@ export const PushToCloudModal: React.FC<PushToCloudModalProps> = ({
         (env) => env.key === key && env.id !== id,
       );
       if (exists) {
-        toast.error('Environment variable key already exists');
+        setEnvironmentError('Environment variable key already exists.');
         return;
       }
 
+      setEnvironmentError('');
       setEnvironmentVariables((prev) =>
         prev.map((env) =>
           env.id === id ? { ...env, key, value, isEdited: true } : env,
@@ -517,29 +515,39 @@ export const PushToCloudModal: React.FC<PushToCloudModalProps> = ({
     );
   }, []);
 
+  const toggleEnvironmentVariableVisibility = React.useCallback(
+    (id: string) => {
+      setVisibleEnvironmentVariableIds((visibleIds) => {
+        const nextVisibleIds = new Set(visibleIds);
+        if (nextVisibleIds.has(id)) {
+          nextVisibleIds.delete(id);
+        } else {
+          nextVisibleIds.add(id);
+        }
+        return nextVisibleIds;
+      });
+    },
+    [],
+  );
+
   const handleOpenKeystore = React.useCallback(
     async (event: React.MouseEvent<HTMLButtonElement>) => {
       setKeystoreAnchor(event.currentTarget);
       setKeystoreLoading(true);
       setKeystoreKeys([]);
+      setEnvironmentError('');
       try {
         const keys = await secureStorageService.list();
-        // Filter out internal/system keys (those used for db/cloud connections)
-        const userKeys = keys.filter(
-          (k) =>
-            !k.startsWith('db-') &&
-            !k.startsWith('cloud-') &&
-            !k.startsWith('openai') &&
-            !k.startsWith('ollama') &&
-            !k.startsWith('gemini') &&
-            !k.startsWith('anthropic') &&
-            !k.startsWith('lmstudio') &&
-            !k.startsWith('openai-compatible'),
-        );
+        const userKeys = keys.filter((key) => {
+          const variableName = key.includes('.')
+            ? key.slice(key.indexOf('.') + 1)
+            : key;
+          return !RESERVED_KEYS.includes(variableName.toUpperCase());
+        });
         setKeystoreKeys(userKeys);
       } catch {
         setKeystoreKeys([]);
-        toast.error('Failed to load keystore entries');
+        setEnvironmentError('Failed to load keystore entries.');
       } finally {
         setKeystoreLoading(false);
       }
@@ -550,12 +558,13 @@ export const PushToCloudModal: React.FC<PushToCloudModalProps> = ({
   const handleAddFromKeystore = React.useCallback(
     async (keystoreKey: string) => {
       setKeystoreAdding(keystoreKey);
+      setEnvironmentError('');
       try {
         const value = await secureStorageService.get(
           keystoreKey as SecureStorageAccount,
         );
         if (value === null) {
-          toast.error(`Could not retrieve value for "${keystoreKey}"`);
+          setEnvironmentError(`Could not retrieve value for "${keystoreKey}".`);
           return;
         }
 
@@ -565,7 +574,7 @@ export const PushToCloudModal: React.FC<PushToCloudModalProps> = ({
           : keystoreKey;
 
         if (RESERVED_KEYS.includes(varKey.toUpperCase())) {
-          toast.error(`${varKey} is a reserved key`);
+          setEnvironmentError(`${varKey} is a reserved key.`);
           return;
         }
 
@@ -576,12 +585,9 @@ export const PushToCloudModal: React.FC<PushToCloudModalProps> = ({
           // Update existing entry with the keystore value
           setEnvironmentVariables((prev) =>
             prev.map((env) =>
-              env.key === varKey
-                ? { ...env, value, isEdited: true, isFromKeystore: true }
-                : env,
+              env.key === varKey ? { ...env, value, isEdited: true } : env,
             ),
           );
-          toast.success(`Updated "${varKey}" from keystore`);
         } else {
           const newEntry: EnvironmentVariable = {
             id: `keystore-${Date.now()}`,
@@ -589,15 +595,13 @@ export const PushToCloudModal: React.FC<PushToCloudModalProps> = ({
             value,
             originalValue: '',
             isEdited: true,
-            isFromKeystore: true,
           };
           setEnvironmentVariables((prev) => [...prev, newEntry]);
-          toast.success(`Added "${varKey}" from keystore`);
         }
 
         setKeystoreAnchor(null);
       } catch {
-        toast.error(`Failed to retrieve value for "${keystoreKey}"`);
+        setEnvironmentError(`Failed to retrieve value for "${keystoreKey}".`);
       } finally {
         setKeystoreAdding(null);
       }
@@ -1022,6 +1026,16 @@ export const PushToCloudModal: React.FC<PushToCloudModalProps> = ({
           }}
         >
           <Stack spacing={2.5}>
+            {environmentError && (
+              <Alert
+                severity="error"
+                onClose={() => setEnvironmentError('')}
+                sx={{ borderRadius: 1.5 }}
+              >
+                {environmentError}
+              </Alert>
+            )}
+
             {/* Required variables from profiles.yml */}
             {profileVars.length > 0 && (
               <>
@@ -1056,7 +1070,8 @@ export const PushToCloudModal: React.FC<PushToCloudModalProps> = ({
                           variant="outlined"
                           slotProps={{ input: { readOnly: true } }}
                           sx={{
-                            flex: 1,
+                            flex: '0 0 44%',
+                            minWidth: 0,
                             '& .MuiInputBase-input': {
                               fontFamily: 'monospace',
                               fontSize: '0.875rem',
@@ -1066,7 +1081,11 @@ export const PushToCloudModal: React.FC<PushToCloudModalProps> = ({
                         />
                         <TextField
                           type={
-                            isRunMode && !env.isEdited ? 'password' : 'text'
+                            (env.isEdited &&
+                              !visibleEnvironmentVariableIds.has(env.id)) ||
+                            (!env.isEdited && isRunMode && !!env.originalValue)
+                              ? 'password'
+                              : 'text'
                           }
                           value={env.value}
                           onChange={(e) =>
@@ -1080,30 +1099,48 @@ export const PushToCloudModal: React.FC<PushToCloudModalProps> = ({
                           onBlur={() => handleEnvBlur(env.id)}
                           variant="outlined"
                           placeholder={
-                            isRunMode && !env.isEdited
-                              ? '\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022'
+                            !env.isEdited && env.originalValue
+                              ? '******'
                               : 'Enter value'
                           }
+                          slotProps={{
+                            input: {
+                              endAdornment: env.isEdited && env.value && (
+                                <InputAdornment position="end">
+                                  <IconButton
+                                    onClick={() =>
+                                      toggleEnvironmentVariableVisibility(
+                                        env.id,
+                                      )
+                                    }
+                                    edge="end"
+                                    aria-label={
+                                      visibleEnvironmentVariableIds.has(env.id)
+                                        ? `Hide ${env.key} value`
+                                        : `Show ${env.key} value`
+                                    }
+                                  >
+                                    {visibleEnvironmentVariableIds.has(
+                                      env.id,
+                                    ) ? (
+                                      <VisibilityOff />
+                                    ) : (
+                                      <Visibility />
+                                    )}
+                                  </IconButton>
+                                </InputAdornment>
+                              ),
+                            },
+                          }}
                           sx={{
                             flex: 2,
+                            minWidth: 0,
                             '& .MuiInputBase-input': {
                               fontFamily: 'monospace',
                               fontSize: '0.875rem',
                             },
                           }}
                         />
-                        {env.isEdited && (
-                          <Chip
-                            label="Modified"
-                            size="small"
-                            sx={{
-                              height: 20,
-                              fontSize: '0.7rem',
-                              bgcolor: alpha(theme.palette.success.main, 0.1),
-                              color: 'success.main',
-                            }}
-                          />
-                        )}
                       </Box>
                     </Paper>
                   ))}
@@ -1155,7 +1192,8 @@ export const PushToCloudModal: React.FC<PushToCloudModalProps> = ({
                             input: { readOnly: isRunMode },
                           }}
                           sx={{
-                            flex: 1,
+                            flex: '0 0 44%',
+                            minWidth: 0,
                             '& .MuiInputBase-input': {
                               fontFamily: 'monospace',
                               fontSize: '0.875rem',
@@ -1165,7 +1203,9 @@ export const PushToCloudModal: React.FC<PushToCloudModalProps> = ({
                         />
                         <TextField
                           type={
-                            isRunMode && (!env.isEdited || env.isFromKeystore)
+                            (env.isEdited &&
+                              !visibleEnvironmentVariableIds.has(env.id)) ||
+                            (!env.isEdited && isRunMode && !!env.originalValue)
                               ? 'password'
                               : 'text'
                           }
@@ -1181,12 +1221,42 @@ export const PushToCloudModal: React.FC<PushToCloudModalProps> = ({
                           onBlur={() => handleEnvBlur(env.id)}
                           variant="outlined"
                           placeholder={
-                            isRunMode && (!env.isEdited || env.isFromKeystore)
-                              ? '\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022'
-                              : ''
+                            !env.isEdited && env.originalValue
+                              ? '******'
+                              : 'Enter value'
                           }
+                          slotProps={{
+                            input: {
+                              endAdornment: env.isEdited && env.value && (
+                                <InputAdornment position="end">
+                                  <IconButton
+                                    onClick={() =>
+                                      toggleEnvironmentVariableVisibility(
+                                        env.id,
+                                      )
+                                    }
+                                    edge="end"
+                                    aria-label={
+                                      visibleEnvironmentVariableIds.has(env.id)
+                                        ? `Hide ${env.key} value`
+                                        : `Show ${env.key} value`
+                                    }
+                                  >
+                                    {visibleEnvironmentVariableIds.has(
+                                      env.id,
+                                    ) ? (
+                                      <VisibilityOff />
+                                    ) : (
+                                      <Visibility />
+                                    )}
+                                  </IconButton>
+                                </InputAdornment>
+                              ),
+                            },
+                          }}
                           sx={{
                             flex: 2,
+                            minWidth: 0,
                             '& .MuiInputBase-input': {
                               fontFamily: 'monospace',
                               fontSize: '0.875rem',
@@ -1288,8 +1358,8 @@ export const PushToCloudModal: React.FC<PushToCloudModalProps> = ({
                   open={Boolean(keystoreAnchor)}
                   anchorEl={keystoreAnchor}
                   onClose={() => setKeystoreAnchor(null)}
-                  anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
-                  transformOrigin={{ vertical: 'top', horizontal: 'right' }}
+                  anchorOrigin={{ vertical: 'top', horizontal: 'right' }}
+                  transformOrigin={{ vertical: 'bottom', horizontal: 'right' }}
                   slotProps={{
                     paper: {
                       sx: {
@@ -1334,106 +1404,104 @@ export const PushToCloudModal: React.FC<PushToCloudModalProps> = ({
                     </Typography>
                   </Box>
 
-                  {keystoreLoading && (
-                    <Box
-                      display="flex"
-                      justifyContent="center"
-                      alignItems="center"
-                      py={3}
-                    >
-                      <CircularProgress size={20} />
-                    </Box>
-                  )}
-                  {!keystoreLoading && keystoreKeys.length === 0 && (
-                    <Box px={2} py={3} textAlign="center">
-                      <VpnKey
-                        sx={{ fontSize: 32, color: 'text.disabled', mb: 1 }}
-                      />
-                      <Typography variant="body2" color="text.secondary">
-                        No keystore entries found.
-                      </Typography>
+                  <Box p={2}>
+                    <Autocomplete
+                      options={keystoreKeys}
+                      value={null}
+                      loading={keystoreLoading}
+                      disabled={keystoreAdding !== null}
+                      slotProps={{
+                        popper: {
+                          sx: { zIndex: theme.zIndex.modal + 2 },
+                        },
+                        paper: {
+                          sx: { maxHeight: 280 },
+                        },
+                      }}
+                      noOptionsText={
+                        keystoreLoading
+                          ? 'Loading keystore entries…'
+                          : 'No matching keystore entries'
+                      }
+                      getOptionLabel={(key) => key}
+                      onChange={(_event, key) => {
+                        if (key) handleAddFromKeystore(key);
+                      }}
+                      renderInput={(params) => (
+                        <TextField
+                          // eslint-disable-next-line react/jsx-props-no-spreading
+                          {...params}
+                          autoFocus
+                          label="Keystore variable"
+                          placeholder="Search variables…"
+                          size="small"
+                          slotProps={{
+                            input: {
+                              ...params.InputProps,
+                              endAdornment: (
+                                <>
+                                  {keystoreAdding && (
+                                    <CircularProgress size={16} />
+                                  )}
+                                  {params.InputProps.endAdornment}
+                                </>
+                              ),
+                            },
+                          }}
+                        />
+                      )}
+                      renderOption={(props, keystoreKey) => {
+                        // eslint-disable-next-line react/prop-types
+                        const { key: optionKey, ...optionProps } = props;
+                        const displayKey = keystoreKey.includes('.')
+                          ? keystoreKey.slice(keystoreKey.indexOf('.') + 1)
+                          : keystoreKey;
+                        const envPrefix = keystoreKey.includes('.')
+                          ? keystoreKey.slice(0, keystoreKey.indexOf('.'))
+                          : null;
+                        return (
+                          <Box
+                            component="li"
+                            key={optionKey}
+                            // eslint-disable-next-line react/jsx-props-no-spreading
+                            {...optionProps}
+                          >
+                            <Box minWidth={0}>
+                              <Typography
+                                variant="body2"
+                                noWrap
+                                sx={{
+                                  fontFamily: 'monospace',
+                                  fontWeight: 600,
+                                }}
+                              >
+                                {displayKey}
+                              </Typography>
+                              {envPrefix && (
+                                <Typography
+                                  variant="caption"
+                                  color="text.secondary"
+                                  sx={{ fontFamily: 'monospace' }}
+                                >
+                                  env: {envPrefix}
+                                </Typography>
+                              )}
+                            </Box>
+                          </Box>
+                        );
+                      }}
+                    />
+                    {!keystoreLoading && keystoreKeys.length === 0 && (
                       <Typography
                         variant="caption"
                         color="text.secondary"
                         display="block"
-                        mt={0.5}
+                        mt={1}
                       >
                         Add variables in Settings → Keystore.
                       </Typography>
-                    </Box>
-                  )}
-                  {!keystoreLoading && keystoreKeys.length > 0 && (
-                    <List
-                      dense
-                      disablePadding
-                      sx={{ overflowY: 'auto', flex: 1 }}
-                    >
-                      {keystoreKeys.map((k) => {
-                        const displayKey = k.includes('.')
-                          ? k.slice(k.indexOf('.') + 1)
-                          : k;
-                        const envPrefix = k.includes('.')
-                          ? k.slice(0, k.indexOf('.'))
-                          : null;
-                        const isAdding = keystoreAdding === k;
-                        return (
-                          <ListItemButton
-                            key={k}
-                            onClick={() => handleAddFromKeystore(k)}
-                            disabled={keystoreAdding !== null}
-                            sx={{
-                              py: 1,
-                              px: 2,
-                              '&:hover': {
-                                bgcolor: alpha(
-                                  theme.palette.primary.main,
-                                  0.06,
-                                ),
-                              },
-                            }}
-                          >
-                            <ListItemIcon sx={{ minWidth: 32 }}>
-                              {isAdding ? (
-                                <CircularProgress size={14} />
-                              ) : (
-                                <Key
-                                  sx={{
-                                    fontSize: 14,
-                                    color: 'text.secondary',
-                                  }}
-                                />
-                              )}
-                            </ListItemIcon>
-                            <ListItemText
-                              primary={
-                                <Typography
-                                  variant="body2"
-                                  sx={{
-                                    fontFamily: 'monospace',
-                                    fontSize: '0.8rem',
-                                    fontWeight: 600,
-                                  }}
-                                >
-                                  {displayKey}
-                                </Typography>
-                              }
-                              secondary={
-                                envPrefix && (
-                                  <Typography
-                                    variant="caption"
-                                    color="text.disabled"
-                                    sx={{ fontFamily: 'monospace' }}
-                                  >
-                                    env: {envPrefix}
-                                  </Typography>
-                                )
-                              }
-                            />
-                          </ListItemButton>
-                        );
-                      })}
-                    </List>
-                  )}
+                    )}
+                  </Box>
                 </Popover>
               </Stack>
             </Paper>
