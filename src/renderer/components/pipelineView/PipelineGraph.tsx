@@ -178,7 +178,7 @@ const PipelineGraphContent: React.FC<PipelineGraphProps> = ({
   onEditingChange,
 }) => {
   const theme = useTheme();
-  const { project } = useReactFlow();
+  const { project, deleteElements } = useReactFlow();
   const terminal = useTerminalMinimize();
   const autoMinimizedRef = React.useRef(false);
 
@@ -206,6 +206,13 @@ const PipelineGraphContent: React.FC<PipelineGraphProps> = ({
     const node = nodesRef.current.find((n) => n.id === id);
     if (node) setEditNode(node as Node<PipelineNodeData>);
   }, []);
+
+  const handleNodeDelete = useCallback(
+    (id: string) => {
+      deleteElements({ nodes: [{ id }] });
+    },
+    [deleteElements],
+  );
 
   // Read mode: rebuild whenever jobs change
   useEffect(() => {
@@ -241,6 +248,7 @@ const PipelineGraphContent: React.FC<PipelineGraphProps> = ({
           ...n.data,
           editMode: true,
           onEditClick: () => openEditForNode(n.id),
+          onDeleteClick: () => handleNodeDelete(n.id),
         },
       })),
     );
@@ -257,7 +265,16 @@ const PipelineGraphContent: React.FC<PipelineGraphProps> = ({
       terminal.minimize();
       autoMinimizedRef.current = true;
     }
-  }, [jobs, theme, initialPipelineName, setNodes, setEdges, terminal]);
+  }, [
+    jobs,
+    theme,
+    initialPipelineName,
+    setNodes,
+    setEdges,
+    terminal,
+    openEditForNode,
+    handleNodeDelete,
+  ]);
 
   const handleCancelEdit = useCallback(() => {
     setIsEditing(false);
@@ -405,12 +422,13 @@ const PipelineGraphContent: React.FC<PipelineGraphProps> = ({
           jobName: defaultJobName,
           editMode: true,
           onEditClick: () => openEditForNode(newId),
+          onDeleteClick: () => handleNodeDelete(newId),
         } as PipelineNodeData,
       };
 
       setNodes((nds) => [...nds, newNode]);
     },
-    [project, nodes, setNodes],
+    [project, nodes, setNodes, openEditForNode, handleNodeDelete],
   );
 
   const onDragOver = useCallback((event: React.DragEvent) => {
@@ -482,11 +500,12 @@ const PipelineGraphContent: React.FC<PipelineGraphProps> = ({
             jobName: defaultJobName,
             editMode: true,
             onEditClick: () => openEditForNode(newId),
+            onDeleteClick: () => handleNodeDelete(newId),
           } as PipelineNodeData,
         },
       ]);
     },
-    [nodes, setNodes, openEditForNode],
+    [nodes, setNodes, openEditForNode, handleNodeDelete],
   );
 
   const onNodesChange = useCallback(
