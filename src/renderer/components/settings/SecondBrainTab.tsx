@@ -111,6 +111,8 @@ export const SecondBrainTab: React.FC = () => {
   const [modeValue, setModeValue] = React.useState<EditorMode>('edit');
   const [draft, setDraft] = React.useState('');
   const [dirty, setDirty] = React.useState(false);
+  const dirtyRef = React.useRef(false);
+  const savedContentRef = React.useRef('');
   const [selectedRevisionId, setSelectedRevisionId] = React.useState<
     string | undefined
   >();
@@ -151,10 +153,11 @@ export const SecondBrainTab: React.FC = () => {
 
   React.useEffect(() => {
     const page = pageQuery.data;
-    if (!page || dirty) return;
+    if (!page || dirtyRef.current) return;
+    savedContentRef.current = page.content;
     setDraft(page.content);
-    model.setValue(page.content);
-  }, [dirty, model, pageQuery.data]);
+    if (model.getValue() !== page.content) model.setValue(page.content);
+  }, [model, pageQuery.data]);
 
   React.useEffect(() => {
     if (!selected && treeQuery.data?.length) {
@@ -166,9 +169,13 @@ export const SecondBrainTab: React.FC = () => {
   }, [selected, treeQuery.data]);
 
   const selectPage = (item: SecondBrainTreeItem) => {
-    if (dirty && !window.confirm('Discard the unsaved Second Brain draft?')) {
+    if (
+      dirtyRef.current &&
+      !window.confirm('Discard the unsaved Second Brain draft?')
+    ) {
       return;
     }
+    dirtyRef.current = false;
     setDirty(false);
     setNewPageId(null);
     setSelectedRevisionId(undefined);
@@ -193,7 +200,9 @@ export const SecondBrainTab: React.FC = () => {
     setNewPageId(pageId);
     setSelectedRevisionId(undefined);
     setDraft(content);
+    savedContentRef.current = '';
     model.setValue(content);
+    dirtyRef.current = true;
     setDirty(true);
     setModeValue('edit');
   };
@@ -201,8 +210,10 @@ export const SecondBrainTab: React.FC = () => {
   const handleEditorMount = (editor: monaco.editor.IStandaloneCodeEditor) => {
     const subscription = editor.onDidChangeModelContent(() => {
       const value = editor.getValue();
+      const isDirty = value !== savedContentRef.current;
       setDraft(value);
-      setDirty(value !== (pageQuery.data?.content ?? ''));
+      dirtyRef.current = isDirty;
+      setDirty(isDirty);
     });
     return () => subscription.dispose();
   };
@@ -216,6 +227,9 @@ export const SecondBrainTab: React.FC = () => {
         content: draft,
         expectedHash: newPageId ? undefined : pageQuery.data?.hash,
       });
+      savedContentRef.current = saved.content;
+      dirtyRef.current = false;
+      setDraft(saved.content);
       setDirty(false);
       setNewPageId(null);
       setSelected({ ...saved, archived: false });

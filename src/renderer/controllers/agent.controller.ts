@@ -80,6 +80,18 @@ export const useListAgentTools = () => {
   });
 };
 
+export const useGetAgentContextOverhead = (
+  request: agentService.AgentContextOverheadRequest | undefined,
+) =>
+  useQuery(
+    ['agent', 'context-overhead', request],
+    () => agentService.getContextOverhead(request!),
+    {
+      enabled: Boolean(request?.conversationId),
+      staleTime: 30_000,
+    },
+  );
+
 // ---------------------------------------------------------------------------
 // IPC event subscription hooks (FE-03: subscriptions live here, not in components)
 // ---------------------------------------------------------------------------

@@ -72,11 +72,14 @@ describe('SecondBrainRefreshService', () => {
 
   it('redacts credentials, environment values, and absolute home paths', () => {
     const redacted = redactSecondBrainEvidence(
-      'api_key = abcdefghijklmnop\nDB_PASSWORD=hunter2\n/Users/nuri/private/model.sql',
+      'api_key = abcdefghijklmnop\nrefreshToken: refresh-secret-value\n"authorization": "Bearer-secret-value"\nkeyfile=/private/key.json\nDB_PASSWORD=hunter2\n/Users/nuri/private/model.sql',
     );
 
     expect(redacted).not.toContain('abcdefghijklmnop');
     expect(redacted).not.toContain('hunter2');
+    expect(redacted).not.toContain('refresh-secret-value');
+    expect(redacted).not.toContain('Bearer-secret-value');
+    expect(redacted).not.toContain('/private/key.json');
     expect(redacted).not.toContain('/Users/nuri');
     expect(redacted).toContain('[REDACTED]');
   });
@@ -169,5 +172,62 @@ describe('SecondBrainRefreshService', () => {
     await expect(
       secondBrain.readPage(durableOperation.pageId),
     ).rejects.toMatchObject({ code: 'NOT_FOUND' });
+  });
+
+  it('validates provider availability before initialization mutates the wiki', async () => {
+    const uninitializedRoot = path.join(temporaryDirectory, 'provider-failure');
+    const uninitialized = new SecondBrainService({
+      rootPath: uninitializedRoot,
+    });
+    const refresh = new SecondBrainRefreshService(uninitialized, {
+      getModel: jest.fn(async () => {
+        throw new Error('Provider unavailable');
+      }),
+      generateOperations: jest.fn(async () => []),
+      collectSessions: jest.fn(async () => []) as any,
+      collectAnalytics: jest.fn(async () => []) as any,
+      loadProjects: jest.fn(async () => []),
+    });
+
+    await expect(refresh.refresh({ initialize: true })).rejects.toThrow(
+      'Provider unavailable',
+    );
+    expect(await fs.pathExists(uninitializedRoot)).toBe(false);
+  });
+
+  it('does not advance source cursors when generation fails', async () => {
+    const refresh = new SecondBrainRefreshService(secondBrain, {
+      generateOperations: jest.fn(async () => {
+        throw new Error('Structured generation failed');
+      }),
+      collectSessions: jest.fn(async () => [sessionRow]) as any,
+      collectAnalytics: jest.fn(async () => []) as any,
+      loadProjects: jest.fn(async () => []),
+    });
+
+    await expect(refresh.refresh({})).rejects.toThrow(
+      'Structured generation failed',
+    );
+    expect((await secondBrain.readStateFile())?.sourceCursors).toEqual({});
+  });
+
+  it('cancels before collection without a model call or state change', async () => {
+    const controller = new AbortController();
+    controller.abort();
+    const generateOperations = jest.fn(async () => []);
+    const collectSessions = jest.fn(async () => [sessionRow]);
+    const refresh = new SecondBrainRefreshService(secondBrain, {
+      generateOperations,
+      collectSessions: collectSessions as any,
+      collectAnalytics: jest.fn(async () => []) as any,
+      loadProjects: jest.fn(async () => []),
+    });
+
+    await expect(
+      refresh.refresh({ abortSignal: controller.signal }),
+    ).rejects.toMatchObject({ code: 'CANCELLED' });
+    expect(collectSessions).not.toHaveBeenCalled();
+    expect(generateOperations).not.toHaveBeenCalled();
+    expect((await secondBrain.readStateFile())?.sourceCursors).toEqual({});
   });
 });

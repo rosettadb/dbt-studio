@@ -687,6 +687,7 @@ export const MessageRenderer: React.FC<MessageRendererProps> = ({
             }
             // tool-call part
             const tc = part as ToolCallContentPart;
+            const endedWithoutResult = !isStreaming && tc.status === 'running';
             return (
               <ToolCallRow
                 key={tc.toolCallId}
@@ -695,8 +696,10 @@ export const MessageRenderer: React.FC<MessageRendererProps> = ({
                   toolName: tc.toolName,
                   args: tc.args,
                   result: tc.result,
-                  error: tc.error,
-                  status: tc.status,
+                  error: endedWithoutResult
+                    ? 'Tool call ended without a result. Check the tool arguments and try again.'
+                    : tc.error,
+                  status: endedWithoutResult ? 'error' : tc.status,
                   durationMs: tc.durationMs,
                 }}
               />

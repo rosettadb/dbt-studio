@@ -281,6 +281,18 @@ export interface AgentRunRequest {
   pageId?: string; // Analytics: currently open page ID
 }
 
+export type AgentContextOverheadRequest = Omit<
+  AgentRunRequest,
+  'content' | 'contextItems'
+>;
+
+export interface AgentContextOverhead {
+  skills: number;
+  mcpTools: number;
+  secondBrain: number;
+  contextWindow: number;
+}
+
 /**
  * Tool information
  */
@@ -354,6 +366,16 @@ export const sanitizeWikiToolCallForPersistence = (
     };
   }
   return { input: persistedInput, output: persistedOutput };
+};
+
+export const getToolFailureMessage = (value: unknown): string | undefined => {
+  if (!value || typeof value !== 'object') return undefined;
+  const result = value as Record<string, any>;
+  if (result.ok !== false) return undefined;
+  const { error } = result;
+  if (typeof error === 'string') return error;
+  if (error && typeof error.message === 'string') return error.message;
+  return 'Tool returned an unsuccessful result.';
 };
 
 /** Tracks which conversations are actively compacting (prevent duplicate calls) */
@@ -1000,10 +1022,7 @@ COMBINED SUMMARY:`,
       secondBrain: fixedOverheadTokens.secondBrain ?? 0,
       total: totalBeforeCompaction,
       contextWindow,
-      percentUsed: Math.min(
-        100,
-        Math.round((totalBeforeCompaction / contextWindow) * 100),
-      ),
+      percentUsed: Math.min(100, (totalBeforeCompaction / contextWindow) * 100),
     };
 
     if (totalBeforeCompaction >= compactThreshold) {
@@ -1031,7 +1050,7 @@ COMBINED SUMMARY:`,
           total: totalAfterCompaction,
           percentUsed: Math.min(
             100,
-            Math.round((totalAfterCompaction / contextWindow) * 100),
+            (totalAfterCompaction / contextWindow) * 100,
           ),
         },
       };
@@ -1052,6 +1071,99 @@ COMBINED SUMMARY:`,
     if (error) {
       throw new Error(error);
     }
+  }
+
+  private static async buildFixedPromptContext(
+    request: AgentContextOverheadRequest,
+    aiSettings: AISettingsConfig,
+    projectPath?: string,
+  ): Promise<{
+    secondBrainContext: string;
+    secondBrainTools: Record<string, any>;
+    fixedOverheadTokens: Omit<AgentContextOverhead, 'contextWindow'>;
+  }> {
+    let secondBrainContext = '';
+    let secondBrainTools: Record<string, any> = {};
+    let secondBrainTokens = 0;
+    if (aiSettings.secondBrain.enabled) {
+      try {
+        const secondBrain = new SecondBrainService({
+          maxPageBytes: aiSettings.secondBrain.maxPageBytes,
+          maxTotalBytes: aiSettings.secondBrain.maxTotalBytes,
+        });
+        const status = await secondBrain.getStatus();
+        if (status.initialized) {
+          const secondBrainRuntime = new SecondBrainRuntimeService(secondBrain);
+          const scope = await secondBrainRuntime.resolveScope(
+            request.conversationId,
+            {
+              screenKey: request.screenKey ?? 'project',
+              connectionId: request.connectionId,
+              notebookId: request.notebookId,
+              pageId: request.pageId,
+              projectPath,
+            },
+          );
+          const contextResult = await secondBrainRuntime.buildContext(
+            scope,
+            aiSettings.secondBrain,
+          );
+          secondBrainContext = contextResult.context;
+          secondBrainTokens = estimateTokens(secondBrainContext);
+          secondBrainTools = createSecondBrainTools({
+            secondBrain,
+            runtime: secondBrainRuntime,
+            scope,
+            settings: aiSettings.secondBrain,
+            toolMode: request.toolMode ?? 'agent',
+          });
+        }
+      } catch (error) {
+        console.warn(
+          '[SecondBrain] Memory disabled for this context:',
+          error instanceof Error ? error.message : error,
+        );
+      }
+    }
+
+    const mcpTools = await buildMCPToolset();
+    const skills = await discoverSkills();
+    const skillsPrompt = buildSkillsPrompt(skills);
+    return {
+      secondBrainContext,
+      secondBrainTools,
+      fixedOverheadTokens: {
+        skills: estimateTokens(skillsPrompt),
+        mcpTools: estimateTokens(Object.keys(mcpTools || {}).join(' ')),
+        secondBrain: secondBrainTokens,
+      },
+    };
+  }
+
+  public static async getContextOverhead(
+    request: AgentContextOverheadRequest,
+  ): Promise<AgentContextOverhead> {
+    let { projectPath } = request;
+    if (!projectPath) {
+      const selectedProject = await ProjectsService.getSelectedProject();
+      projectPath = selectedProject?.path;
+    }
+    const aiSettings = await loadAISettings();
+    const model = await getVercelModel(request.requestedModel);
+    const modelId: string =
+      (model as any).modelId ||
+      (model as any).model ||
+      request.requestedModel ||
+      'default';
+    const { fixedOverheadTokens } = await this.buildFixedPromptContext(
+      request,
+      aiSettings,
+      projectPath,
+    );
+    return {
+      ...fixedOverheadTokens,
+      contextWindow: getContextWindow(modelId),
+    };
   }
 
   static async runAgent(
@@ -1107,62 +1219,13 @@ COMBINED SUMMARY:`,
       // 4. Load & potentially compact conversation history
       const toolMode = request.toolMode || 'agent';
 
-      let secondBrainContext = '';
-      let secondBrainTools: Record<string, any> = {};
-      let secondBrainTokens = 0;
-      if (aiSettings.secondBrain.enabled) {
-        try {
-          const secondBrain = new SecondBrainService({
-            maxPageBytes: aiSettings.secondBrain.maxPageBytes,
-            maxTotalBytes: aiSettings.secondBrain.maxTotalBytes,
-          });
-          const status = await secondBrain.getStatus();
-          const runtimeContext = agentContexts.get(conversationId);
-          if (status.initialized && runtimeContext) {
-            const secondBrainRuntime = new SecondBrainRuntimeService(
-              secondBrain,
-            );
-            const scope = await secondBrainRuntime.resolveScope(
-              conversationId,
-              {
-                screenKey: runtimeContext.screenKey,
-                connectionId: runtimeContext.connectionId,
-                notebookId: runtimeContext.notebookId,
-                pageId: runtimeContext.pageId,
-                projectPath: runtimeContext.projectPath,
-              },
-            );
-            const contextResult = await secondBrainRuntime.buildContext(
-              scope,
-              aiSettings.secondBrain,
-            );
-            secondBrainContext = contextResult.context;
-            secondBrainTokens = estimateTokens(secondBrainContext);
-            secondBrainTools = createSecondBrainTools({
-              secondBrain,
-              runtime: secondBrainRuntime,
-              scope,
-              settings: aiSettings.secondBrain,
-              toolMode,
-            });
-          }
-        } catch (error) {
-          console.warn(
-            '[SecondBrain] Memory disabled for this turn:',
-            error instanceof Error ? error.message : error,
-          );
-        }
-      }
-
-      // Estimate non-history prompt overhead before compaction decision.
-      const mcpTools = await buildMCPToolset();
-      const skills = await discoverSkills();
-      const skillsPrompt = buildSkillsPrompt(skills);
-      const fixedOverheadTokens = {
-        skills: estimateTokens(skillsPrompt),
-        mcpTools: estimateTokens(Object.keys(mcpTools || {}).join(' ')),
-        secondBrain: secondBrainTokens,
-      };
+      const { secondBrainContext, secondBrainTools, fixedOverheadTokens } =
+        await this.buildFixedPromptContext(
+          { ...request, projectPath, toolMode },
+          aiSettings,
+          projectPath,
+        );
+      const secondBrainTokens = fixedOverheadTokens.secondBrain;
 
       const { messages, breakdown } = await this.buildTurnMessages(
         conversationId,
@@ -1300,6 +1363,7 @@ COMBINED SUMMARY:`,
         output: unknown;
         stepNumber: number;
         status: 'done' | 'error';
+        error?: string;
       }> = [];
       const collectedParts: any[] = [];
 
@@ -1414,13 +1478,17 @@ COMBINED SUMMARY:`,
                     (chunk as any).input ?? (chunk as any).args,
                     (chunk as any).output ?? (chunk as any).result,
                   );
+                  const failureMessage = getToolFailureMessage(
+                    persisted.output,
+                  );
                   collectedToolCalls.push({
                     toolName: chunk.toolName,
                     toolCallId: chunk.toolCallId,
                     input: persisted.input,
                     output: persisted.output,
                     stepNumber: currentStepNumber >= 0 ? currentStepNumber : 0,
-                    status: 'done',
+                    status: failureMessage ? 'error' : 'done',
+                    error: failureMessage,
                   });
                   const part = collectedParts.find(
                     (p) =>
@@ -1429,7 +1497,45 @@ COMBINED SUMMARY:`,
                   );
                   if (part) {
                     part.result = persisted.output;
-                    part.status = 'done';
+                    part.error = failureMessage;
+                    part.status = failureMessage ? 'error' : 'done';
+                  }
+                  break;
+                }
+                case 'tool-error': {
+                  const errorValue = (chunk as any).error;
+                  let errorMessage =
+                    (chunk as any).errorText ??
+                    (chunk as any).message ??
+                    'Tool execution failed.';
+                  if (errorValue instanceof Error) {
+                    errorMessage = errorValue.message;
+                  } else if (typeof errorValue === 'string') {
+                    errorMessage = errorValue;
+                  }
+                  const persisted = sanitizeWikiToolCallForPersistence(
+                    chunk.toolName,
+                    (chunk as any).input ?? (chunk as any).args ?? {},
+                    { ok: false, error: { message: errorMessage } },
+                  );
+                  collectedToolCalls.push({
+                    toolName: chunk.toolName,
+                    toolCallId: chunk.toolCallId,
+                    input: persisted.input,
+                    output: persisted.output,
+                    stepNumber: currentStepNumber >= 0 ? currentStepNumber : 0,
+                    status: 'error',
+                    error: errorMessage,
+                  });
+                  const part = collectedParts.find(
+                    (candidate) =>
+                      candidate.type === 'tool-call' &&
+                      candidate.toolCallId === chunk.toolCallId,
+                  );
+                  if (part) {
+                    part.result = persisted.output;
+                    part.error = errorMessage;
+                    part.status = 'error';
                   }
                   break;
                 }
@@ -1450,6 +1556,30 @@ COMBINED SUMMARY:`,
               }
             }
             /* eslint-enable no-restricted-syntax */
+
+            collectedParts.forEach((part) => {
+              if (part.type !== 'tool-call' || part.status !== 'running')
+                return;
+              const errorMessage =
+                'Tool call ended without a result. Check the tool arguments and try again.';
+              part.status = 'error';
+              part.error = errorMessage;
+              if (
+                !collectedToolCalls.some(
+                  (toolCall) => toolCall.toolCallId === part.toolCallId,
+                )
+              ) {
+                collectedToolCalls.push({
+                  toolName: part.toolName,
+                  toolCallId: part.toolCallId,
+                  input: part.args,
+                  output: { ok: false, error: { message: errorMessage } },
+                  stepNumber: currentStepNumber >= 0 ? currentStepNumber : 0,
+                  status: 'error',
+                  error: errorMessage,
+                });
+              }
+            });
 
             clearTimeout(timeoutId);
 
@@ -1587,7 +1717,7 @@ COMBINED SUMMARY:`,
         status: tc.status === 'done' ? 'completed' : 'failed',
         startedAt: new Date().toISOString(),
         completedAt: new Date().toISOString(),
-        errorMessage: null,
+        errorMessage: tc.error ?? null,
       }));
 
       await MainDatabaseService.addMessageWithContext(

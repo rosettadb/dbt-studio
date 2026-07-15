@@ -4,6 +4,46 @@ import Markdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import rehypeHighlight from 'rehype-highlight';
 
+const stringifyToolValue = (value: unknown): string => {
+  try {
+    const seen = new WeakSet<object>();
+    return JSON.stringify(
+      value,
+      (_key, item) => {
+        if (typeof item === 'bigint') return item.toString();
+        if (typeof item === 'object' && item !== null) {
+          if (seen.has(item)) return '[Circular]';
+          seen.add(item);
+        }
+        return item;
+      },
+      2,
+    );
+  } catch (error) {
+    return `[Unable to display arguments: ${String(error)}]`;
+  }
+};
+
+const ToolJson: React.FC<{ value: unknown }> = ({ value }) => (
+  <Box
+    component="pre"
+    sx={{
+      m: 0,
+      p: 1,
+      borderRadius: 1,
+      bgcolor: 'background.default',
+      color: 'text.primary',
+      whiteSpace: 'pre-wrap',
+      wordBreak: 'break-word',
+      maxHeight: 260,
+      overflow: 'auto',
+      fontSize: '0.72rem',
+    }}
+  >
+    {stringifyToolValue(value)}
+  </Box>
+);
+
 export const renderArguments = (toolName: string, args: any) => {
   if (!args || Object.keys(args).length === 0) {
     return (
@@ -141,10 +181,8 @@ export const renderArguments = (toolName: string, args: any) => {
       break;
   }
 
-  // Fallback for unknown tools
-  return (
-    <Box sx={{ fontStyle: 'italic', opacity: 0.75 }}>Arguments available</Box>
-  );
+  // New and plugin-provided tools still expose their persisted arguments.
+  return <ToolJson value={args} />;
 };
 
 export const renderResult = (toolName: string, result: any) => {
@@ -482,10 +520,21 @@ export const renderResult = (toolName: string, result: any) => {
   }
 
   if (result && typeof result === 'object') {
+    const structuredError = (result as any).error;
+    const errorMessage =
+      typeof structuredError === 'string'
+        ? structuredError
+        : structuredError?.message;
+    const errorCode =
+      structuredError && typeof structuredError === 'object'
+        ? structuredError.code
+        : undefined;
     const message =
       (result as any).message ||
       (result as any).summary ||
-      (result as any).error ||
+      (errorMessage && errorCode
+        ? `${errorCode}: ${errorMessage}`
+        : errorMessage) ||
       ((result as any).ok === true || (result as any).success === true
         ? 'Completed successfully'
         : null);

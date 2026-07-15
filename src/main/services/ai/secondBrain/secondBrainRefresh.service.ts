@@ -27,7 +27,7 @@ const OPERATION_LIMIT = 24;
 const PAGE_CHANGE_LIMIT = 12;
 
 const secretPatterns = [
-  /(?:api[_-]?key|password|secret|token)\s*[:=]\s*[^\s]{6,}/giu,
+  /\b(?:api[_-]?key|password|secret|token|authorization|credentials?|keyfile|access[_-]?key|refresh[_-]?token|private[_-]?key|client[_-]?secret)\b["']?\s*[:=]\s*["']?[^\s"',}]{6,}/giu,
   /-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----[\s\S]*?-----END (?:RSA |EC |OPENSSH )?PRIVATE KEY-----/giu,
   /\b(?:sk|ghp|github_pat)_[a-z0-9_-]{12,}\b/giu,
   /\b(?:postgres|mysql|mongodb(?:\+srv)?):\/\/[^\s]+/giu,
@@ -48,6 +48,13 @@ const excludedProjectSegments = new Set([
   'node_modules',
   'target',
   'venv',
+]);
+
+const excludedProjectFiles = new Set([
+  '.env',
+  '.env.local',
+  'profiles.yml',
+  'profiles.yaml',
 ]);
 
 const allowedProjectExtensions = new Set([
@@ -662,6 +669,7 @@ export default class SecondBrainRefreshService {
       if (
         entry.isSymbolicLink() ||
         excludedProjectSegments.has(entry.name) ||
+        excludedProjectFiles.has(entry.name.toLowerCase()) ||
         matcher.ignores(relative)
       ) {
         continue;

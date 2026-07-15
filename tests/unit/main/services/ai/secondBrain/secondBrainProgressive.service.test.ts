@@ -121,9 +121,55 @@ describe('Second Brain progressive discovery', () => {
     ]);
     expect(result.context).toContain('user-controlled reference data');
     expect(result.context).toContain(`Page: projects/${projectKey}/index.md`);
+    expect(result.context).toContain('### Active writable scope');
+    expect(result.context).toContain(
+      `Existing scoped page: \`projects/${projectKey}/index.md\``,
+    );
+    expect(result.context).toContain(
+      `Writable prefix: \`projects/${projectKey}/\``,
+    );
     expect(result.context).not.toContain('Durable marker');
     expect(result.context.length).toBeLessThanOrEqual(settings.maxPromptChars);
   });
+
+  it('labels an authorized but missing scoped index as a creation target', async () => {
+    const pageId = `projects/${projectKey}/index.md`;
+    const page = await secondBrain.readPage(pageId);
+    await secondBrain.archivePage({
+      pageId,
+      expectedHash: page.hash,
+      actor: 'user',
+    });
+
+    const result = await runtime.buildContext(scope, settings);
+
+    expect(result.includedPageIds).toEqual(['memory.md']);
+    expect(result.context).toContain(
+      `Suggested create target (not found until created): \`${pageId}\``,
+    );
+    expect(result.context).not.toContain(`Page: ${pageId}`);
+  });
+
+  it.each(['memory', 'memory.md', '[[memory]]'])(
+    'reads the global entry page from the %s wiki reference',
+    async (pageId) => {
+      const tools = createSecondBrainTools({
+        secondBrain,
+        runtime,
+        scope,
+        settings: { ...settings, includeGlobalPages: false },
+        toolMode: 'chat',
+      });
+
+      await expect(
+        executeTool(tools, 'wiki_read', { pageId }),
+      ).resolves.toMatchObject({
+        ok: true,
+        pageId: 'memory.md',
+        title: 'Second Brain',
+      });
+    },
+  );
 
   it('keeps Chat mode read-only and rejects cross-scope reads', async () => {
     const chatTools = createSecondBrainTools({
@@ -135,8 +181,9 @@ describe('Second Brain progressive discovery', () => {
     });
     const otherKey = toSecondBrainScopeKey(99);
     const denied = await executeTool(chatTools, 'wiki_read', {
-      pageId: `projects/${otherKey}/index.md`,
+      pageId: `projects/${otherKey}/index`,
     });
+    const status = await executeTool(chatTools, 'wiki_status', {});
     const noLearningTools = createSecondBrainTools({
       secondBrain,
       runtime,
@@ -157,7 +204,22 @@ describe('Second Brain progressive discovery', () => {
     ]);
     expect(denied).toMatchObject({
       ok: false,
-      error: { code: 'OUT_OF_SCOPE' },
+      error: {
+        code: 'OUT_OF_SCOPE',
+        details: {
+          writablePagePrefixes: [`projects/${projectKey}/`],
+          suggestedCreatePageIds: [`projects/${projectKey}/index.md`],
+        },
+      },
+    });
+    expect(status).toMatchObject({
+      ok: true,
+      writablePagePrefixes: [`projects/${projectKey}/`],
+      existingScopedPageIds: expect.arrayContaining([
+        `projects/${projectKey}/decisions.md`,
+        `projects/${projectKey}/index.md`,
+      ]),
+      suggestedCreatePageIds: [],
     });
   });
 

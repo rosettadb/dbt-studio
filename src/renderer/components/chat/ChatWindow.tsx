@@ -39,6 +39,7 @@ import { useContextManager } from '../../hooks/useContextManager';
 import { useAgentStream } from '../../hooks/useAgentStream';
 import { useToolMode } from '../../hooks/useToolMode';
 import {
+  useGetAgentContextOverhead,
   useOnStreamChunk,
   useOnContextUsage,
 } from '../../controllers/agent.controller';
@@ -156,6 +157,45 @@ export const ChatWindow: React.FC<ChatWindowProps> = ({
     isLoading: isLoadingCompactionSummary,
   } = useGetLatestChatCompactionSummary(selectedSessionId);
   const { data: activeProvider } = useGetActiveAIProvider();
+  const activeProviderModel = React.useMemo(() => {
+    try {
+      const config =
+        typeof (activeProvider as any)?.config === 'string'
+          ? JSON.parse((activeProvider as any).config)
+          : (activeProvider as any)?.config;
+      return typeof config?.model === 'string' ? config.model : undefined;
+    } catch {
+      return undefined;
+    }
+  }, [activeProvider]);
+  const contextOverheadRequest = React.useMemo(
+    () =>
+      selectedSessionId
+        ? {
+            conversationId: selectedSessionId,
+            requestedModel: activeProviderModel,
+            projectPath: project?.path,
+            toolMode: currentMode,
+            screenKey,
+            connectionId,
+            notebookId,
+            pageId,
+          }
+        : undefined,
+    [
+      selectedSessionId,
+      activeProviderModel,
+      project?.path,
+      currentMode,
+      screenKey,
+      connectionId,
+      notebookId,
+      pageId,
+    ],
+  );
+  const { data: contextOverhead } = useGetAgentContextOverhead(
+    contextOverheadRequest,
+  );
 
   // Reset usage + context breakdown when session or scope changes
   React.useEffect(() => {
@@ -168,7 +208,7 @@ export const ChatWindow: React.FC<ChatWindowProps> = ({
   // This keeps the ring meaningful even before the first agent run.
   React.useEffect(() => {
     if (hasAuthoritativeContextBreakdownRef.current) return;
-    if (!selectedSessionId || sessionMessages.length === 0) return;
+    if (!selectedSessionId || !contextOverhead) return;
     if (isLoadingCompactionSummary) return;
 
     const activeMessages =
@@ -202,38 +242,30 @@ export const ChatWindow: React.FC<ChatWindowProps> = ({
       }>,
     );
 
-    // Derive context window from active provider model (fallback 32k)
-    const cfg =
-      typeof (activeProvider as any)?.config === 'string'
-        ? JSON.parse((activeProvider as any).config)
-        : (activeProvider as any)?.config;
-    const modelId = cfg?.model ?? '';
-    const contextWindow = (() => {
-      const m = modelId.toLowerCase();
-      if (m.includes('gemini-2.5') || m.includes('gemini-3')) return 1_000_000;
-      if (m.includes('claude') || m.includes('gpt-4')) return 200_000;
-      if (m.includes('gpt-4o') || m.includes('gpt-4.1')) return 128_000;
-      return 32_000;
-    })();
-
+    const total =
+      historyTokens +
+      contextOverhead.skills +
+      contextOverhead.mcpTools +
+      contextOverhead.secondBrain;
     const percentUsed = Math.min(
       100,
-      Math.round((historyTokens / contextWindow) * 100),
+      (total / contextOverhead.contextWindow) * 100,
     );
 
     setContextBreakdown({
       conversation: historyTokens,
       userFiles: 0,
-      skills: 0,
-      mcpTools: 0,
-      total: historyTokens,
-      contextWindow,
+      skills: contextOverhead.skills,
+      mcpTools: contextOverhead.mcpTools,
+      secondBrain: contextOverhead.secondBrain,
+      total,
+      contextWindow: contextOverhead.contextWindow,
       percentUsed,
     });
   }, [
     selectedSessionId,
     sessionMessages,
-    activeProvider,
+    contextOverhead,
     latestCompactionSummary,
     isLoadingCompactionSummary,
   ]);

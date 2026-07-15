@@ -115,6 +115,15 @@ function deriveSteps(parts: StreamContentPart[]): AgentStep[] {
   return [{ stepNumber: 0, toolCalls, startedAt: 0 }];
 }
 
+function getToolFailureMessage(value: unknown): string | undefined {
+  if (!value || typeof value !== 'object') return undefined;
+  const result = value as Record<string, any>;
+  if (result.ok !== false) return undefined;
+  if (typeof result.error === 'string') return result.error;
+  if (typeof result.error?.message === 'string') return result.error.message;
+  return 'Tool returned an unsuccessful result.';
+}
+
 const EMPTY_STATE: AgentStreamState = {
   isStreaming: false,
   contentParts: [],
@@ -175,8 +184,21 @@ export const useAgentStream = (sessionId: number | undefined) => {
       if (data.conversationId !== sessionId) return;
 
       if (data.done) {
-        // Stream finished — stop the streaming indicator
-        setStreamState((prev) => ({ ...prev, isStreaming: false }));
+        // A terminal stream must never leave a tool call spinning forever.
+        setStreamState((prev) =>
+          withParts({ ...prev, isStreaming: false }, (parts) =>
+            parts.map((part) =>
+              part.type === 'tool-call' && part.status === 'running'
+                ? {
+                    ...part,
+                    status: 'error' as const,
+                    error:
+                      'Tool call ended without a result. Check the tool arguments and try again.',
+                  }
+                : part,
+            ),
+          ),
+        );
         return;
       }
 
@@ -241,11 +263,19 @@ export const useAgentStream = (sessionId: number | undefined) => {
         case 'tool-result': {
           const resultToolCallId = (chunk as any).toolCallId as string;
           const { output } = chunk as any;
+          const failureMessage = getToolFailureMessage(output);
           setStreamState((prev) =>
             withParts(prev, (parts) =>
               parts.map((p) =>
                 p.type === 'tool-call' && p.toolCallId === resultToolCallId
-                  ? { ...p, result: output, status: 'done' as const }
+                  ? {
+                      ...p,
+                      result: output,
+                      error: failureMessage,
+                      status: failureMessage
+                        ? ('error' as const)
+                        : ('done' as const),
+                    }
                   : p,
               ),
             ),

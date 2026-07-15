@@ -79,6 +79,13 @@ const runRefresh = async (
   event: IpcMainInvokeEvent,
   options: { initialize?: boolean; dryRun?: boolean },
 ): Promise<SecondBrainOperationResponse> => {
+  const settings = await loadAISettings();
+  if (!settings.secondBrain.enabled) {
+    throw new SecondBrainError(
+      'DISABLED',
+      'Enable Second Brain before initializing or refreshing memory.',
+    );
+  }
   if (activeOperation) {
     throw new SecondBrainError(
       'BUSY',
@@ -93,6 +100,8 @@ const runRefresh = async (
     ownerWebContentsId: event.sender.id,
     controller,
   };
+  const abortOnOwnerDestroyed = () => controller.abort();
+  event.sender.once('destroyed', abortOnOwnerDestroyed);
   try {
     const service = await createService();
     const refresh = new SecondBrainRefreshService(service);
@@ -119,6 +128,7 @@ const runRefresh = async (
     }
     throw error;
   } finally {
+    event.sender.removeListener('destroyed', abortOnOwnerDestroyed);
     if (activeOperation?.operationId === operationId) activeOperation = null;
   }
 };

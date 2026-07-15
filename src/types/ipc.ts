@@ -368,6 +368,7 @@ export type NotebookChannels =
 export type AgentChannels =
   | 'agent:run'
   | 'agent:cancel'
+  | 'agent:context-overhead:get'
   | 'agent:tool-call'
   | 'agent:step-start'
   | 'agent:terminal-confirm'

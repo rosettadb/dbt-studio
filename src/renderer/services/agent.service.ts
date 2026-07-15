@@ -32,6 +32,18 @@ export interface AgentRunRequest {
   pageId?: string;
 }
 
+export type AgentContextOverheadRequest = Omit<
+  AgentRunRequest,
+  'content' | 'contextItems'
+>;
+
+export interface AgentContextOverhead {
+  skills: number;
+  mcpTools: number;
+  secondBrain: number;
+  contextWindow: number;
+}
+
 /**
  * Tool information
  */
@@ -83,6 +95,16 @@ export const listTools = async (): Promise<{
     tools: AgentTool[];
     error?: string;
   }>('agent:tools:list');
+  return data;
+};
+
+export const getContextOverhead = async (
+  request: AgentContextOverheadRequest,
+): Promise<AgentContextOverhead> => {
+  const { data } = await client.post<
+    AgentContextOverheadRequest,
+    AgentContextOverhead
+  >('agent:context-overhead:get', request);
   return data;
 };
 

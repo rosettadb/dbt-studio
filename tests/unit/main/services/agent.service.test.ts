@@ -1,5 +1,6 @@
 import AgentService, {
   AI_SETTINGS_DEFAULTS,
+  getToolFailureMessage,
   getToolsForMode,
   normalizeAISettings,
   sanitizeWikiToolCallForPersistence,
@@ -8,6 +9,7 @@ import type { AISettingsConfig } from '../../../../src/types/backend';
 import type { ChatMessage } from '../../../../src/main/schemas/mainDatabase.schema';
 import { estimateMessagesTokens } from '../../../../src/main/services/ai/tokenEstimator';
 import MainDatabaseService from '../../../../src/main/services/mainDatabase.service';
+import { getVercelModel } from '../../../../src/main/services/ai/agentAdapter';
 
 // Mock everything agent.service imports
 jest.mock('fs-extra', () => ({
@@ -193,6 +195,18 @@ describe('AgentService (Phase 1)', () => {
     });
   });
 
+  describe('Tool terminal states', () => {
+    it('recognizes structured tool failures as errors', () => {
+      expect(
+        getToolFailureMessage({
+          ok: false,
+          error: { code: 'OUT_OF_SCOPE', message: 'Page is out of scope.' },
+        }),
+      ).toBe('Page is out of scope.');
+      expect(getToolFailureMessage({ ok: true })).toBeUndefined();
+    });
+  });
+
   describe('getToolsForMode', () => {
     const aiSettingsMock: AISettingsConfig = {
       chat: {
@@ -353,6 +367,41 @@ describe('AgentService (Phase 1)', () => {
       expect(result.breakdown.secondBrain).toBe(200);
       expect(result.breakdown.total).toBe(10_220);
       autoCompactSpy.mockRestore();
+    });
+  });
+
+  describe('Resumed session context overhead', () => {
+    it('returns fixed prompt categories without running an agent turn', async () => {
+      (getVercelModel as jest.Mock).mockResolvedValue({
+        modelId: 'gemini-3.1-flash-lite',
+      });
+      const overheadSpy = jest
+        .spyOn(AgentService as any, 'buildFixedPromptContext')
+        .mockResolvedValue({
+          secondBrainContext: 'memory context',
+          secondBrainTools: {},
+          fixedOverheadTokens: {
+            skills: 595,
+            mcpTools: 0,
+            secondBrain: 401,
+          },
+        });
+
+      await expect(
+        AgentService.getContextOverhead({
+          conversationId: 7,
+          projectPath: '/project',
+          screenKey: 'project',
+          toolMode: 'agent',
+        }),
+      ).resolves.toEqual({
+        skills: 595,
+        mcpTools: 0,
+        secondBrain: 401,
+        contextWindow: 100_000,
+      });
+
+      overheadSpy.mockRestore();
     });
   });
 

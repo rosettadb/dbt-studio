@@ -4,9 +4,13 @@ import type {
   SecondBrainScope,
   SecondBrainSettings,
 } from '../../../../../types/backend';
-import SecondBrainService from '../../secondBrain/secondBrain.service';
+import SecondBrainService, {
+  normalizeSecondBrainPageId,
+} from '../../secondBrain/secondBrain.service';
 import SecondBrainRuntimeService, {
   assertSecondBrainPageAuthorized,
+  getSecondBrainInitialPageIds,
+  getSecondBrainScopePrefixes,
   isSecondBrainPageAuthorized,
 } from '../../secondBrain/secondBrainRuntime.service';
 import { SecondBrainError } from '../../secondBrain/secondBrain.types';
@@ -20,7 +24,7 @@ type SecondBrainToolOptions = {
 };
 
 const secretPatterns = [
-  /(?:api[_-]?key|password|secret|token)\s*[:=]\s*[^\s]{8,}/iu,
+  /\b(?:api[_-]?key|password|secret|token|authorization|credentials?|keyfile|access[_-]?key|refresh[_-]?token|private[_-]?key|client[_-]?secret)\b["']?\s*[:=]\s*["']?[^\s"',}]{6,}/iu,
   /-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----/u,
   /\b(?:sk|ghp|github_pat)_[a-z0-9_-]{16,}\b/iu,
 ];
@@ -115,6 +119,17 @@ const wikiLinks = (content: string): string[] =>
     .filter(Boolean)
     .slice(0, 100);
 
+const normalizeWikiPageReference = (reference: string): string => {
+  let pageId = reference.trim();
+  const wikiLink = /^\[\[([^\]]+)\]\]$/u.exec(pageId);
+  if (wikiLink) {
+    [pageId] = wikiLink[1].split(/[|#]/u, 1);
+    pageId = pageId.trim();
+  }
+  if (!pageId.toLowerCase().endsWith('.md')) pageId = `${pageId}.md`;
+  return normalizeSecondBrainPageId(pageId);
+};
+
 const compactError = (error: unknown) => {
   if (error instanceof SecondBrainError) {
     return {
@@ -193,10 +208,11 @@ export const createSecondBrainTools = (
     }),
     wiki_read: tool({
       description:
-        'Read one authorized Second Brain Markdown page by page ID. Read before relying on or changing durable knowledge.',
+        'Read one authorized Second Brain Markdown page by page ID. The global entry page is memory.md; memory and [[memory]] are accepted aliases. Read before relying on or changing durable knowledge.',
       inputSchema: z.object({ pageId: z.string().min(3).max(500) }),
-      execute: async ({ pageId }) => {
+      execute: async ({ pageId: pageReference }) => {
         try {
+          const pageId = normalizeWikiPageReference(pageReference);
           assertSecondBrainPageAuthorized(
             pageId,
             scope,
@@ -220,24 +236,42 @@ export const createSecondBrainTools = (
     }),
     wiki_status: tool({
       description:
-        'Return Second Brain readiness and scoped page counts without exposing filesystem paths.',
+        'Return Second Brain readiness, existing scoped pages, and separate suggested creation targets. A suggestedCreatePageId is authorized but does not exist yet. Call this before inventing a scoped page ID.',
       inputSchema: z.object({}),
       execute: async () => {
         try {
           const status = await secondBrain.getStatus();
-          const scopedPageCount = (await secondBrain.listPageIds()).filter(
-            (pageId) =>
-              isSecondBrainPageAuthorized(
-                pageId,
-                scope,
-                settings.includeGlobalPages,
-              ),
+          const pageIds = await secondBrain.listPageIds();
+          const authorizedPageCount = pageIds.filter((pageId) =>
+            isSecondBrainPageAuthorized(
+              pageId,
+              scope,
+              settings.includeGlobalPages,
+            ),
           ).length;
+          const scopedPrefixes = getSecondBrainScopePrefixes(scope);
+          const scopedPageIds = pageIds.filter((pageId) =>
+            scopedPrefixes.some((prefix) =>
+              prefix.endsWith('.md')
+                ? pageId === prefix
+                : pageId.startsWith(prefix),
+            ),
+          );
+          const candidatePageIds = getSecondBrainInitialPageIds(scope).filter(
+            (pageId) => pageId !== 'memory.md',
+          );
           return {
             ok: true,
             enabled: settings.enabled,
             initialized: status.initialized,
-            scopedPageCount,
+            authorizedPageCount,
+            existingScopedPageIds: scopedPageIds,
+            suggestedCreatePageIds: candidatePageIds.filter(
+              (pageId) => !pageIds.includes(pageId),
+            ),
+            writablePagePrefixes: scopedPrefixes.filter(
+              (prefix) => !prefix.endsWith('.md'),
+            ),
             rootDisplayName: 'Second Brain',
             lastSuccessfulRefreshAt: status.lastSuccessfulRefreshAt,
           };
@@ -254,7 +288,7 @@ export const createSecondBrainTools = (
     ...readTools,
     wiki_update: tool({
       description:
-        'Create or update one authorized Second Brain Markdown page using a conflict-safe structured operation. Search and read before writing.',
+        'Create or update one authorized Second Brain Markdown page using a conflict-safe structured operation. Search and read before writing. Use the exact scoped page ID or writable prefix from the system context or wiki_status; never invent projects/<name>.',
       inputSchema: z.object({
         pageId: z.string().min(3).max(500),
         expectedHash: z.string().length(64).optional(),
@@ -263,13 +297,14 @@ export const createSecondBrainTools = (
         operation: operationSchema,
       }),
       execute: async ({
-        pageId,
+        pageId: pageReference,
         expectedHash,
         rationale,
         sourceRefs,
         operation,
       }) => {
         try {
+          const pageId = normalizeWikiPageReference(pageReference);
           assertSecondBrainPageAuthorized(
             pageId,
             scope,
@@ -356,8 +391,9 @@ export const createSecondBrainTools = (
         expectedHash: z.string().length(64),
         rationale: z.string().min(5).max(500),
       }),
-      execute: async ({ pageId, expectedHash, rationale }) => {
+      execute: async ({ pageId: pageReference, expectedHash, rationale }) => {
         try {
+          const pageId = normalizeWikiPageReference(pageReference);
           assertSecondBrainPageAuthorized(
             pageId,
             scope,

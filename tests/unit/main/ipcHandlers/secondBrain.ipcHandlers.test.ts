@@ -12,7 +12,7 @@ describe('secondBrain.ipcHandlers', () => {
     return registration[1] as (...args: any[]) => any;
   };
 
-  const setup = async () => {
+  const setup = async (enabled = true) => {
     const service = {
       getStatus: jest.fn(async () => ({
         initialized: true,
@@ -55,7 +55,7 @@ describe('secondBrain.ipcHandlers', () => {
     jest.doMock('../../../../src/main/services/agent.service', () => ({
       loadAISettings: jest.fn(async () => ({
         secondBrain: {
-          enabled: true,
+          enabled,
           maxPageBytes: 65536,
           maxTotalBytes: 10485760,
         },
@@ -140,6 +140,8 @@ describe('secondBrain.ipcHandlers', () => {
       id: 17,
       isDestroyed: () => false,
       send: jest.fn(),
+      once: jest.fn(),
+      removeListener: jest.fn(),
     };
 
     const response = await handler({ sender });
@@ -154,5 +156,20 @@ describe('secondBrain.ipcHandlers', () => {
         cancellable: true,
       }),
     );
+    expect(sender.once).toHaveBeenCalledWith('destroyed', expect.any(Function));
+    expect(sender.removeListener).toHaveBeenCalledWith(
+      'destroyed',
+      expect.any(Function),
+    );
+  });
+
+  it('blocks initialization and refresh while the feature is disabled', async () => {
+    const { electron, refresh } = await setup(false);
+    const handler = getHandler(electron.ipcMain, 'second-brain:update-apply');
+
+    await expect(handler({ sender: { id: 1 } })).rejects.toMatchObject({
+      code: 'DISABLED',
+    });
+    expect(refresh).not.toHaveBeenCalled();
   });
 });

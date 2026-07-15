@@ -79,6 +79,9 @@ describe('SecondBrainService', () => {
     'projects/secret.txt',
     'C:/secret.md',
     'topics/CON.md',
+    'Topics/secret.md',
+    'topics/%2e%2e/secret.md',
+    'topics/secret\u202emd',
     'topics/e\u0301.md',
   ])('rejects unsafe page ID %s', (pageId) => {
     expect(() => normalizeSecondBrainPageId(pageId)).toThrow(SecondBrainError);
@@ -249,6 +252,17 @@ describe('SecondBrainService', () => {
         actor: 'user',
       }),
     ).rejects.toMatchObject({ code: 'SYMLINK_NOT_ALLOWED' });
+  });
+
+  it('rejects hard-linked Markdown files', async () => {
+    await service.initializeRoot();
+    const outside = path.join(temporaryDirectory, 'outside.md');
+    await fs.writeFile(outside, markdown('Outside'), 'utf8');
+    await nodeFs.link(outside, path.join(rootPath, 'topics', 'linked.md'));
+
+    await expect(service.readPage('topics/linked.md')).rejects.toMatchObject({
+      code: 'HARD_LINK_NOT_ALLOWED',
+    });
   });
 
   it('enforces page and memory.md line budgets', async () => {

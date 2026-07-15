@@ -102,7 +102,10 @@ export const normalizeSecondBrainPageId = (pageId: string): string => {
     pageId.includes('\\') ||
     path.posix.isAbsolute(pageId) ||
     pageId.normalize('NFC') !== pageId ||
-    !pageId.toLowerCase().endsWith('.md')
+    !pageId.toLowerCase().endsWith('.md') ||
+    pageId !== pageId.toLowerCase() ||
+    /%[0-9a-f]{2}/iu.test(pageId) ||
+    /\p{Cf}/u.test(pageId)
   ) {
     throw new SecondBrainError(
       'INVALID_PAGE_ID',
@@ -761,6 +764,12 @@ export default class SecondBrainService {
       throw new SecondBrainError(
         'SYMLINK_NOT_ALLOWED',
         'Symbolic links are not allowed in the Second Brain.',
+      );
+    }
+    if (stat.isFile() && stat.nlink > 1) {
+      throw new SecondBrainError(
+        'HARD_LINK_NOT_ALLOWED',
+        'Hard-linked files are not allowed in the Second Brain.',
       );
     }
   }

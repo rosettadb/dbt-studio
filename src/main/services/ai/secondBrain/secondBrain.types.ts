@@ -27,6 +27,7 @@ export type SecondBrainErrorCode =
   | 'INVALID_STATE'
   | 'BUDGET_EXCEEDED'
   | 'SYMLINK_NOT_ALLOWED'
+  | 'HARD_LINK_NOT_ALLOWED'
   | 'OUT_OF_SCOPE'
   | 'SCOPE_MISMATCH'
   | 'CANCELLED'
