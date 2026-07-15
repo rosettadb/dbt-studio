@@ -54,8 +54,8 @@ const registerRosettaCloudIpcHandlers = () => {
 
   ipcMain.handle(
     'rosettaCloud:deleteSecret',
-    async (_event, projectId: string, secretId: string) => {
-      return RosettaCloudService.deleteSecret(projectId, secretId);
+    async (_event, body: { projectId: string; secretId: string }) => {
+      return RosettaCloudService.deleteSecret(body.projectId, body.secretId);
     },
   );
 

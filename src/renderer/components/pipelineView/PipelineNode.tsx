@@ -15,6 +15,7 @@ import {
   Terminal,
   Link as LinkIcon,
   Edit,
+  DeleteOutline,
   CheckCircle,
   Cancel,
   Schedule,
@@ -33,6 +34,7 @@ export type PipelineNodeData = PipelineStep & {
   jobType?: string;
   editMode?: boolean;
   onEditClick?: () => void;
+  onDeleteClick?: () => void;
 };
 
 const CLEANUP_COLOR = '#9E9E9E'; // neutral gray for cleanup jobs
@@ -253,14 +255,10 @@ export const PipelineNode = memo(
               </Box>
             )}
 
-            {/* Edit hint */}
+            {/* Edit / delete hints */}
             {data.editMode && (
               <Box
                 className="edit-hint"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  data.onEditClick?.();
-                }}
                 sx={{
                   position: 'absolute',
                   top: 6,
@@ -269,17 +267,48 @@ export const PipelineNode = memo(
                   transition: 'opacity 0.15s',
                   display: 'flex',
                   alignItems: 'center',
-                  justifyContent: 'center',
-                  bgcolor: alpha('#fff', 0.25),
-                  borderRadius: '50%',
-                  width: 22,
-                  height: 22,
-                  cursor: 'pointer',
+                  gap: 0.5,
                   zIndex: 1,
-                  '&:hover': { bgcolor: alpha('#fff', 0.4) },
                 }}
               >
-                <Edit sx={{ fontSize: 12, color: '#fff' }} />
+                <Box
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    data.onEditClick?.();
+                  }}
+                  sx={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    bgcolor: alpha('#fff', 0.25),
+                    borderRadius: '50%',
+                    width: 22,
+                    height: 22,
+                    cursor: 'pointer',
+                    '&:hover': { bgcolor: alpha('#fff', 0.4) },
+                  }}
+                >
+                  <Edit sx={{ fontSize: 12, color: '#fff' }} />
+                </Box>
+                <Box
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    data.onDeleteClick?.();
+                  }}
+                  sx={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    bgcolor: alpha('#fff', 0.25),
+                    borderRadius: '50%',
+                    width: 22,
+                    height: 22,
+                    cursor: 'pointer',
+                    '&:hover': { bgcolor: theme.palette.error.main },
+                  }}
+                >
+                  <DeleteOutline sx={{ fontSize: 12, color: '#fff' }} />
+                </Box>
               </Box>
             )}
           </Box>

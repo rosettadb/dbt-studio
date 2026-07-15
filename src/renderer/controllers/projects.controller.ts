@@ -120,6 +120,28 @@ export const useDeleteProject = (
   });
 };
 
+export const useRemoveProjectFromList = (
+  customOptions?: UseMutationOptions<boolean, CustomError, { id: string }>,
+): UseMutationResult<boolean, CustomError, { id: string }> => {
+  const { onSuccess: onCustomSuccess, onError: onCustomError } =
+    customOptions || {};
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (data) => {
+      return projectsServices.removeProjectFromList(data);
+    },
+    onSuccess: async (...args) => {
+      await queryClient.invalidateQueries([QUERY_KEYS.GET_PROJECTS]);
+      await queryClient.invalidateQueries([QUERY_KEYS.GET_SELECTED_PROJECT]);
+      queryClient.removeQueries([QUERY_KEYS.GET_PROJECT_BY_ID, args[1].id]);
+      onCustomSuccess?.(...args);
+    },
+    onError: (...args) => {
+      onCustomError?.(...args);
+    },
+  });
+};
+
 export const useUpdateProject = (
   customOptions?: UseMutationOptions<Project, CustomError, Project>,
 ): UseMutationResult<Project, CustomError, Project> => {

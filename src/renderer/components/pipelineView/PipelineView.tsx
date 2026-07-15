@@ -23,6 +23,8 @@ type PipelineViewProps = {
   onActiveActionChange?: (actionId: string | null) => void;
   /** When provided, enables visual edit mode with a Save button. */
   onSave?: (content: string) => Promise<void>;
+  /** When provided (cloud mode), shows a Run button that triggers a cloud run. */
+  onRun?: () => void;
   /** Notifies parent when the visual graph enters/exits edit mode. */
   onEditingChange?: (isEditing: boolean) => void;
 };
@@ -76,6 +78,7 @@ export const PipelineView: React.FC<PipelineViewProps> = ({
   actionId,
   onActiveActionChange,
   onSave,
+  onRun,
   onEditingChange,
 }) => {
   const config = React.useMemo(() => parsePipelineConfig(content), [content]);
@@ -196,6 +199,7 @@ export const PipelineView: React.FC<PipelineViewProps> = ({
         pipelineName={config.name}
         onEdit={onEdit}
         onSave={onSave}
+        onRun={onRun}
         onEditingChange={onEditingChange}
       />
     </Box>
