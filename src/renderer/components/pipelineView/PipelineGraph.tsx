@@ -603,7 +603,12 @@ const PipelineGraphContent: React.FC<PipelineGraphProps> = ({
         )}
         {isEditing && (
           <>
-            <Button size="small" onClick={handleCancelEdit} disabled={isSaving}>
+            <Button
+              size="small"
+              variant="outlined"
+              onClick={handleCancelEdit}
+              disabled={isSaving}
+            >
               Cancel
             </Button>
             <Button
