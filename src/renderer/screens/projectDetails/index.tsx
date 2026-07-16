@@ -66,6 +66,7 @@ import {
   PipelineView,
   CloudLogViewer,
   isPipelineFile,
+  parsePipelineConfig,
 } from '../../components/pipelineView';
 import { Taskbar, TaskbarItem } from '../../components/terminal/styles';
 import { projectsServices } from '../../services';
@@ -251,17 +252,11 @@ const ProjectDetails: React.FC = () => {
     setPipelineDraftTab(null);
   }, [activePipelineFilePath]);
 
-  // Cloud logs auto-minimize while editing YAML or the visual graph, and
-  // can be restored without leaving edit mode (mirrors the terminal's
-  // minimize/restore).
+  // Cloud logs auto-minimize once when a pipeline is first opened (mirrors
+  // the terminal's own minimize/restore) and can be freely restored
+  // afterward — restoring doesn't get overridden by mode changes.
   const [pipelineLogsMinimized, setPipelineLogsMinimized] =
     React.useState(false);
-  const [pipelineVisualEditing, setPipelineVisualEditing] =
-    React.useState(false);
-
-  React.useEffect(() => {
-    setPipelineLogsMinimized(pipelineCodeMode || pipelineVisualEditing);
-  }, [pipelineCodeMode, pipelineVisualEditing]);
 
   const handleEnterPipelineCodeMode = React.useCallback(
     (content?: string) => {
@@ -1274,14 +1269,34 @@ const ProjectDetails: React.FC = () => {
                                 openTab(filePath);
                               }}
                               extraActions={
-                                <Tooltip title="Visual editor">
-                                  <IconButton
-                                    size="small"
-                                    onClick={handleExitPipelineCodeMode}
-                                  >
-                                    <AccountTree fontSize="small" />
-                                  </IconButton>
-                                </Tooltip>
+                                <>
+                                  {parsePipelineConfig(
+                                    pipelineDraftTab.savedContent ?? '',
+                                  ) === null && (
+                                    <Typography
+                                      variant="caption"
+                                      sx={{
+                                        bgcolor: 'warning.main',
+                                        color: 'warning.contrastText',
+                                        px: 1,
+                                        py: 0.25,
+                                        borderRadius: 1,
+                                        mr: 1,
+                                      }}
+                                    >
+                                      Pipeline YAML is invalid — check syntax
+                                      and required fields.
+                                    </Typography>
+                                  )}
+                                  <Tooltip title="Visual editor">
+                                    <IconButton
+                                      size="small"
+                                      onClick={handleExitPipelineCodeMode}
+                                    >
+                                      <AccountTree fontSize="small" />
+                                    </IconButton>
+                                  </Tooltip>
+                                </>
                               }
                             />
                           ) : (
@@ -1310,7 +1325,7 @@ const ProjectDetails: React.FC = () => {
                                       )
                                   : undefined
                               }
-                              onEditingChange={setPipelineVisualEditing}
+                              onEnterView={() => setPipelineLogsMinimized(true)}
                             />
                           )}
                         </Box>
@@ -1342,6 +1357,9 @@ const ProjectDetails: React.FC = () => {
                             >
                               <CloudLogViewer
                                 actionId={activePipelineActionId}
+                                onMinimize={() =>
+                                  setPipelineLogsMinimized(true)
+                                }
                               />
                             </Box>
                           ))}
