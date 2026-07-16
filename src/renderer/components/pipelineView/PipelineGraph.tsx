@@ -25,13 +25,19 @@ import {
   Tooltip,
   useTheme,
   Button,
+  IconButton,
   TextField,
   Typography,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions,
 } from '@mui/material';
 import type { Theme } from '@mui/material';
-import EditIcon from '@mui/icons-material/Edit';
+import CodeIcon from '@mui/icons-material/Code';
 import AutoFixHighIcon from '@mui/icons-material/AutoFixHigh';
 import SaveIcon from '@mui/icons-material/Save';
+import PlayArrowIcon from '@mui/icons-material/PlayArrow';
 import type { PipelineJob } from './types';
 import { PipelineNode, type PipelineNodeData } from './PipelineNode';
 import { NodePalette } from './NodePalette';
@@ -40,6 +46,7 @@ import { PLUGIN_MAP } from './pluginDefinitions';
 import { serializePipelineConfig } from './serializePipeline';
 import { validatePipelineGraph } from './validatePipeline';
 import { useTerminalMinimize } from '../terminal';
+import { UnsavedChangesDialog } from '../editor/unsavedChangesDialog';
 
 const nodeTypes = { pipelineNode: PipelineNode };
 
@@ -49,8 +56,13 @@ const NODE_HEIGHT = 110;
 type PipelineGraphProps = {
   jobs: PipelineJob[];
   pipelineName: string;
-  onEdit?: () => void;
+  onEdit?: (content?: string) => void;
   onSave?: (content: string) => Promise<void>;
+  /** When provided (cloud mode), shows a Run button that triggers a cloud run. */
+  onRun?: () => void;
+  onEditingChange?: (isEditing: boolean) => void;
+  /** Fired once when the pipeline view first mounts (e.g. tab opened). */
+  onEnterView?: () => void;
 };
 
 function getLayoutedElements(flowNodes: Node[], flowEdges: Edge[]) {
@@ -164,11 +176,13 @@ const PipelineGraphContent: React.FC<PipelineGraphProps> = ({
   pipelineName: initialPipelineName,
   onEdit,
   onSave,
+  onRun,
+  onEditingChange,
+  onEnterView,
 }) => {
   const theme = useTheme();
-  const { project } = useReactFlow();
+  const { project, deleteElements } = useReactFlow();
   const terminal = useTerminalMinimize();
-  const autoMinimizedRef = React.useRef(false);
 
   const [nodes, setNodes] = useNodesState<PipelineNodeData>([]);
   const [edges, setEdges] = useEdgesState([]);
@@ -179,15 +193,28 @@ const PipelineGraphContent: React.FC<PipelineGraphProps> = ({
   );
   const [validationError, setValidationError] = React.useState('');
   const [isSaving, setIsSaving] = React.useState(false);
+  const [showRunSaveConfirm, setShowRunSaveConfirm] = React.useState(false);
+  const [showUnsavedDialog, setShowUnsavedDialog] = React.useState(false);
 
   const reactFlowWrapper = React.useRef<HTMLDivElement>(null);
   const nodesRef = React.useRef(nodes);
   nodesRef.current = nodes;
+  // Snapshot of the serialized graph at the moment edit mode was entered,
+  // so we can tell whether anything actually changed before warning about
+  // unsaved changes.
+  const editSnapshotRef = React.useRef('');
 
   const openEditForNode = useCallback((id: string) => {
     const node = nodesRef.current.find((n) => n.id === id);
     if (node) setEditNode(node as Node<PipelineNodeData>);
   }, []);
+
+  const handleNodeDelete = useCallback(
+    (id: string) => {
+      deleteElements({ nodes: [{ id }] });
+    },
+    [deleteElements],
+  );
 
   // Read mode: rebuild whenever jobs change
   useEffect(() => {
@@ -200,6 +227,20 @@ const PipelineGraphContent: React.FC<PipelineGraphProps> = ({
     setNodes(laid);
     setEdges(laidEdges);
   }, [jobs, isEditing, theme, setNodes, setEdges]);
+
+  useEffect(() => {
+    onEditingChange?.(isEditing);
+  }, [isEditing, onEditingChange]);
+
+  // Collapse terminal/cloud logs once when the pipeline view is first shown
+  // (mirrors what edit mode already did), leaving later manual restores alone.
+  useEffect(() => {
+    onEnterView?.();
+    if (terminal && !terminal.isMinimized) {
+      terminal.minimize();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Keep pipeline name in sync when not editing
   useEffect(() => {
@@ -219,6 +260,7 @@ const PipelineGraphContent: React.FC<PipelineGraphProps> = ({
           ...n.data,
           editMode: true,
           onEditClick: () => openEditForNode(n.id),
+          onDeleteClick: () => handleNodeDelete(n.id),
         },
       })),
     );
@@ -226,26 +268,31 @@ const PipelineGraphContent: React.FC<PipelineGraphProps> = ({
     setPipelineName(initialPipelineName);
     setValidationError('');
     setIsEditing(true);
-    if (terminal && !terminal.isMinimized) {
-      terminal.minimize();
-      autoMinimizedRef.current = true;
-    }
-  }, [jobs, theme, initialPipelineName, setNodes, setEdges, terminal]);
+    editSnapshotRef.current = serializePipelineConfig(
+      initialPipelineName,
+      laid,
+      laidEdges,
+    );
+  }, [
+    jobs,
+    theme,
+    initialPipelineName,
+    setNodes,
+    setEdges,
+    openEditForNode,
+    handleNodeDelete,
+  ]);
 
   const handleCancelEdit = useCallback(() => {
     setIsEditing(false);
     setValidationError('');
-    if (autoMinimizedRef.current) {
-      terminal?.restore();
-      autoMinimizedRef.current = false;
-    }
-  }, [terminal]);
+  }, []);
 
-  const handleSave = useCallback(async () => {
+  const handleSave = useCallback(async (): Promise<string | null> => {
     const errors = validatePipelineGraph(nodes, edges);
     if (errors.length > 0) {
       setValidationError(errors[0].message);
-      return;
+      return null;
     }
     setValidationError('');
     setIsSaving(true);
@@ -253,16 +300,69 @@ const PipelineGraphContent: React.FC<PipelineGraphProps> = ({
       const content = serializePipelineConfig(pipelineName, nodes, edges);
       await onSave?.(content);
       setIsEditing(false);
-      if (autoMinimizedRef.current) {
-        terminal?.restore();
-        autoMinimizedRef.current = false;
-      }
+      return content;
     } catch (err) {
       setValidationError(err instanceof Error ? err.message : 'Save failed');
+      return null;
     } finally {
       setIsSaving(false);
     }
-  }, [nodes, edges, pipelineName, onSave, terminal]);
+  }, [nodes, edges, pipelineName, onSave]);
+
+  const handleRunClick = useCallback(() => {
+    if (isEditing) {
+      const currentSnapshot = serializePipelineConfig(
+        pipelineName,
+        nodes,
+        edges,
+      );
+      if (currentSnapshot !== editSnapshotRef.current) {
+        setShowRunSaveConfirm(true);
+        return;
+      }
+    }
+    onRun?.();
+  }, [isEditing, onRun, pipelineName, nodes, edges]);
+
+  const handleConfirmSaveAndRun = useCallback(async () => {
+    const saved = await handleSave();
+    if (saved) {
+      setShowRunSaveConfirm(false);
+      onRun?.();
+    }
+  }, [handleSave, onRun]);
+
+  const handleRequestCodeView = useCallback(() => {
+    if (!onEdit) return;
+    if (isEditing) {
+      const currentSnapshot = serializePipelineConfig(
+        pipelineName,
+        nodes,
+        edges,
+      );
+      if (currentSnapshot !== editSnapshotRef.current) {
+        setShowUnsavedDialog(true);
+        return;
+      }
+    }
+    onEdit();
+  }, [isEditing, onEdit, pipelineName, nodes, edges]);
+
+  const handleUnsavedSave = useCallback(async () => {
+    const content = await handleSave();
+    setShowUnsavedDialog(false);
+    if (content !== null) onEdit?.(content);
+  }, [handleSave, onEdit]);
+
+  const handleUnsavedDiscard = useCallback(() => {
+    setShowUnsavedDialog(false);
+    handleCancelEdit();
+    onEdit?.();
+  }, [handleCancelEdit, onEdit]);
+
+  const handleUnsavedCancel = useCallback(() => {
+    setShowUnsavedDialog(false);
+  }, []);
 
   const onConnect = useCallback(
     (params: Connection) => {
@@ -321,12 +421,13 @@ const PipelineGraphContent: React.FC<PipelineGraphProps> = ({
           jobName: defaultJobName,
           editMode: true,
           onEditClick: () => openEditForNode(newId),
+          onDeleteClick: () => handleNodeDelete(newId),
         } as PipelineNodeData,
       };
 
       setNodes((nds) => [...nds, newNode]);
     },
-    [project, nodes, setNodes],
+    [project, nodes, setNodes, openEditForNode, handleNodeDelete],
   );
 
   const onDragOver = useCallback((event: React.DragEvent) => {
@@ -398,11 +499,12 @@ const PipelineGraphContent: React.FC<PipelineGraphProps> = ({
             jobName: defaultJobName,
             editMode: true,
             onEditClick: () => openEditForNode(newId),
+            onDeleteClick: () => handleNodeDelete(newId),
           } as PipelineNodeData,
         },
       ]);
     },
-    [nodes, setNodes, openEditForNode],
+    [nodes, setNodes, openEditForNode, handleNodeDelete],
   );
 
   const onNodesChange = useCallback(
@@ -426,20 +528,20 @@ const PipelineGraphContent: React.FC<PipelineGraphProps> = ({
       }}
       onDragOver={isEditing ? onDragOver : undefined}
     >
-      {isEditing && (
-        <Box
-          sx={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: 1.5,
-            px: 2,
-            py: 0.75,
-            bgcolor: 'background.paper',
-            borderBottom: 1,
-            borderColor: 'divider',
-            flexShrink: 0,
-          }}
-        >
+      <Box
+        sx={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: 1.5,
+          px: 2,
+          py: 0.75,
+          bgcolor: 'background.paper',
+          borderBottom: 1,
+          borderColor: 'divider',
+          flexShrink: 0,
+        }}
+      >
+        {isEditing ? (
           <TextField
             label="Pipeline Name"
             value={pipelineName}
@@ -448,36 +550,79 @@ const PipelineGraphContent: React.FC<PipelineGraphProps> = ({
             sx={{ width: 200 }}
             InputLabelProps={{ shrink: true }}
           />
-          {validationError ? (
-            <Typography
-              variant="caption"
-              color="error"
-              sx={{ flex: 1, fontSize: '0.7rem' }}
-            >
-              {validationError}
-            </Typography>
-          ) : (
-            <Typography
-              variant="caption"
-              sx={{ flex: 1, color: 'text.disabled', fontSize: '0.65rem' }}
-            >
-              Double-click a step to edit · Del to remove selected
-            </Typography>
-          )}
-          <Button size="small" onClick={handleCancelEdit} disabled={isSaving}>
-            Cancel
-          </Button>
+        ) : (
+          <Typography variant="body2" sx={{ fontWeight: 500 }}>
+            {pipelineName}
+          </Typography>
+        )}
+        {isEditing && validationError ? (
+          <Typography
+            variant="caption"
+            color="error"
+            sx={{ flex: 1, fontSize: '0.7rem' }}
+          >
+            {validationError}
+          </Typography>
+        ) : (
+          <Typography
+            variant="caption"
+            sx={{ flex: 1, color: 'text.disabled', fontSize: '0.65rem' }}
+          >
+            {isEditing
+              ? 'Double-click a step to edit · Del to remove selected'
+              : ''}
+          </Typography>
+        )}
+        {onEdit && (
+          <Tooltip title="View as YAML">
+            <IconButton size="small" onClick={handleRequestCodeView}>
+              <CodeIcon fontSize="small" />
+            </IconButton>
+          </Tooltip>
+        )}
+        {!isEditing && onSave && (
           <Button
             size="small"
-            variant="contained"
-            onClick={handleSave}
-            disabled={isSaving}
-            startIcon={<SaveIcon sx={{ fontSize: 14 }} />}
+            variant="outlined"
+            onClick={handleEnterEdit}
+            startIcon={<AutoFixHighIcon sx={{ fontSize: 14 }} />}
           >
-            {isSaving ? 'Saving…' : 'Save'}
+            Edit
           </Button>
-        </Box>
-      )}
+        )}
+        {onRun && (
+          <Button
+            size="small"
+            variant="outlined"
+            onClick={handleRunClick}
+            disabled={isSaving}
+            startIcon={<PlayArrowIcon sx={{ fontSize: 14 }} />}
+          >
+            Run
+          </Button>
+        )}
+        {isEditing && (
+          <>
+            <Button
+              size="small"
+              variant="outlined"
+              onClick={handleCancelEdit}
+              disabled={isSaving}
+            >
+              Cancel
+            </Button>
+            <Button
+              size="small"
+              variant="contained"
+              onClick={handleSave}
+              disabled={isSaving}
+              startIcon={<SaveIcon sx={{ fontSize: 14 }} />}
+            >
+              {isSaving ? 'Saving…' : 'Save'}
+            </Button>
+          </>
+        )}
+      </Box>
 
       <Box
         sx={{ flex: 1, minHeight: 0, display: 'flex' }}
@@ -513,13 +658,6 @@ const PipelineGraphContent: React.FC<PipelineGraphProps> = ({
                   </ControlButton>
                 </Tooltip>
               )}
-              {!isEditing && onEdit && (
-                <Tooltip title="Edit pipeline.yml" placement="right">
-                  <ControlButton onClick={onEdit}>
-                    <EditIcon style={{ maxWidth: 12, maxHeight: 12 }} />
-                  </ControlButton>
-                </Tooltip>
-              )}
             </Controls>
             <Background color={theme.palette.text.disabled} gap={16} />
           </ReactFlow>
@@ -533,6 +671,52 @@ const PipelineGraphContent: React.FC<PipelineGraphProps> = ({
         onClose={() => setEditNode(null)}
         onSave={handleDialogSave}
       />
+
+      <Dialog
+        open={showRunSaveConfirm}
+        onClose={() => setShowRunSaveConfirm(false)}
+        maxWidth="xs"
+        fullWidth
+      >
+        <DialogTitle>Save before running?</DialogTitle>
+        <DialogContent>
+          <Typography>
+            This pipeline has unsaved changes. Save them before running?
+          </Typography>
+          {validationError && (
+            <Typography
+              variant="caption"
+              color="error"
+              sx={{ mt: 1, display: 'block' }}
+            >
+              {validationError}
+            </Typography>
+          )}
+        </DialogContent>
+        <DialogActions>
+          <Button
+            onClick={() => setShowRunSaveConfirm(false)}
+            disabled={isSaving}
+          >
+            Cancel
+          </Button>
+          <Button
+            variant="contained"
+            onClick={handleConfirmSaveAndRun}
+            disabled={isSaving}
+            startIcon={<SaveIcon sx={{ fontSize: 14 }} />}
+          >
+            {isSaving ? 'Saving…' : 'Save & Run'}
+          </Button>
+        </DialogActions>
+      </Dialog>
+      <UnsavedChangesDialog
+        open={showUnsavedDialog}
+        fileName={pipelineName || 'pipeline.yml'}
+        onSave={handleUnsavedSave}
+        onDiscard={handleUnsavedDiscard}
+        onCancel={handleUnsavedCancel}
+      />
     </Box>
   );
 };
@@ -542,6 +726,9 @@ export const PipelineGraph: React.FC<PipelineGraphProps> = ({
   pipelineName,
   onEdit,
   onSave,
+  onRun,
+  onEditingChange,
+  onEnterView,
 }) => (
   <ReactFlowProvider>
     <PipelineGraphContent
@@ -549,6 +736,9 @@ export const PipelineGraph: React.FC<PipelineGraphProps> = ({
       pipelineName={pipelineName}
       onEdit={onEdit}
       onSave={onSave}
+      onRun={onRun}
+      onEditingChange={onEditingChange}
+      onEnterView={onEnterView}
     />
   </ReactFlowProvider>
 );
