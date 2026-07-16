@@ -251,17 +251,11 @@ const ProjectDetails: React.FC = () => {
     setPipelineDraftTab(null);
   }, [activePipelineFilePath]);
 
-  // Cloud logs auto-minimize while editing YAML or the visual graph, and
-  // can be restored without leaving edit mode (mirrors the terminal's
-  // minimize/restore).
+  // Cloud logs auto-minimize once when a pipeline is first opened (mirrors
+  // the terminal's own minimize/restore) and can be freely restored
+  // afterward — restoring doesn't get overridden by mode changes.
   const [pipelineLogsMinimized, setPipelineLogsMinimized] =
     React.useState(false);
-  const [pipelineVisualEditing, setPipelineVisualEditing] =
-    React.useState(false);
-
-  React.useEffect(() => {
-    setPipelineLogsMinimized(pipelineCodeMode || pipelineVisualEditing);
-  }, [pipelineCodeMode, pipelineVisualEditing]);
 
   const handleEnterPipelineCodeMode = React.useCallback(
     (content?: string) => {
@@ -1310,7 +1304,7 @@ const ProjectDetails: React.FC = () => {
                                       )
                                   : undefined
                               }
-                              onEditingChange={setPipelineVisualEditing}
+                              onEnterView={() => setPipelineLogsMinimized(true)}
                             />
                           )}
                         </Box>
@@ -1342,6 +1336,9 @@ const ProjectDetails: React.FC = () => {
                             >
                               <CloudLogViewer
                                 actionId={activePipelineActionId}
+                                onMinimize={() =>
+                                  setPipelineLogsMinimized(true)
+                                }
                               />
                             </Box>
                           ))}

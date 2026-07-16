@@ -16,6 +16,7 @@ import {
   AccessTime,
   Fullscreen,
   FullscreenExit,
+  MinimizeRounded,
 } from '@mui/icons-material';
 import AnsiToHtml from 'ansi-to-html';
 import { toast } from 'react-toastify';
@@ -25,6 +26,7 @@ import type { CloudLogEntry } from '../../../types/cloudAction';
 type Props = {
   actionId: string | null;
   title?: string;
+  onMinimize?: () => void;
 };
 
 const FULLSCREEN_Z = 9999;
@@ -63,6 +65,7 @@ const HeaderButton: React.FC<{
 export const CloudLogViewer: React.FC<Props> = ({
   actionId,
   title = 'Cloud Logs',
+  onMinimize,
 }) => {
   const theme = useTheme();
   const { mode } = useColorScheme();
@@ -277,6 +280,11 @@ export const CloudLogViewer: React.FC<Props> = ({
         >
           <ClearAll sx={{ fontSize: 16 }} />
         </HeaderButton>
+        {onMinimize && (
+          <HeaderButton title="Minimize" onClick={onMinimize}>
+            <MinimizeRounded sx={{ fontSize: 18 }} />
+          </HeaderButton>
+        )}
         <HeaderButton
           title={fullscreen ? 'Exit fullscreen (Esc)' : 'Fullscreen'}
           onClick={() => setFullscreen((v) => !v)}

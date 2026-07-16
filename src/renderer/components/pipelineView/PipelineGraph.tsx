@@ -61,6 +61,8 @@ type PipelineGraphProps = {
   /** When provided (cloud mode), shows a Run button that triggers a cloud run. */
   onRun?: () => void;
   onEditingChange?: (isEditing: boolean) => void;
+  /** Fired once when the pipeline view first mounts (e.g. tab opened). */
+  onEnterView?: () => void;
 };
 
 function getLayoutedElements(flowNodes: Node[], flowEdges: Edge[]) {
@@ -176,11 +178,11 @@ const PipelineGraphContent: React.FC<PipelineGraphProps> = ({
   onSave,
   onRun,
   onEditingChange,
+  onEnterView,
 }) => {
   const theme = useTheme();
   const { project, deleteElements } = useReactFlow();
   const terminal = useTerminalMinimize();
-  const autoMinimizedRef = React.useRef(false);
 
   const [nodes, setNodes] = useNodesState<PipelineNodeData>([]);
   const [edges, setEdges] = useEdgesState([]);
@@ -230,6 +232,16 @@ const PipelineGraphContent: React.FC<PipelineGraphProps> = ({
     onEditingChange?.(isEditing);
   }, [isEditing, onEditingChange]);
 
+  // Collapse terminal/cloud logs once when the pipeline view is first shown
+  // (mirrors what edit mode already did), leaving later manual restores alone.
+  useEffect(() => {
+    onEnterView?.();
+    if (terminal && !terminal.isMinimized) {
+      terminal.minimize();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   // Keep pipeline name in sync when not editing
   useEffect(() => {
     if (!isEditing) setPipelineName(initialPipelineName);
@@ -261,17 +273,12 @@ const PipelineGraphContent: React.FC<PipelineGraphProps> = ({
       laid,
       laidEdges,
     );
-    if (terminal && !terminal.isMinimized) {
-      terminal.minimize();
-      autoMinimizedRef.current = true;
-    }
   }, [
     jobs,
     theme,
     initialPipelineName,
     setNodes,
     setEdges,
-    terminal,
     openEditForNode,
     handleNodeDelete,
   ]);
@@ -279,11 +286,7 @@ const PipelineGraphContent: React.FC<PipelineGraphProps> = ({
   const handleCancelEdit = useCallback(() => {
     setIsEditing(false);
     setValidationError('');
-    if (autoMinimizedRef.current) {
-      terminal?.restore();
-      autoMinimizedRef.current = false;
-    }
-  }, [terminal]);
+  }, []);
 
   const handleSave = useCallback(async (): Promise<string | null> => {
     const errors = validatePipelineGraph(nodes, edges);
@@ -297,10 +300,6 @@ const PipelineGraphContent: React.FC<PipelineGraphProps> = ({
       const content = serializePipelineConfig(pipelineName, nodes, edges);
       await onSave?.(content);
       setIsEditing(false);
-      if (autoMinimizedRef.current) {
-        terminal?.restore();
-        autoMinimizedRef.current = false;
-      }
       return content;
     } catch (err) {
       setValidationError(err instanceof Error ? err.message : 'Save failed');
@@ -308,7 +307,7 @@ const PipelineGraphContent: React.FC<PipelineGraphProps> = ({
     } finally {
       setIsSaving(false);
     }
-  }, [nodes, edges, pipelineName, onSave, terminal]);
+  }, [nodes, edges, pipelineName, onSave]);
 
   const handleRunClick = useCallback(() => {
     if (isEditing) {
@@ -581,6 +580,16 @@ const PipelineGraphContent: React.FC<PipelineGraphProps> = ({
             </IconButton>
           </Tooltip>
         )}
+        {!isEditing && onSave && (
+          <Button
+            size="small"
+            variant="outlined"
+            onClick={handleEnterEdit}
+            startIcon={<AutoFixHighIcon sx={{ fontSize: 14 }} />}
+          >
+            Edit
+          </Button>
+        )}
         {onRun && (
           <Button
             size="small"
@@ -714,6 +723,7 @@ export const PipelineGraph: React.FC<PipelineGraphProps> = ({
   onSave,
   onRun,
   onEditingChange,
+  onEnterView,
 }) => (
   <ReactFlowProvider>
     <PipelineGraphContent
@@ -723,6 +733,7 @@ export const PipelineGraph: React.FC<PipelineGraphProps> = ({
       onSave={onSave}
       onRun={onRun}
       onEditingChange={onEditingChange}
+      onEnterView={onEnterView}
     />
   </ReactFlowProvider>
 );
