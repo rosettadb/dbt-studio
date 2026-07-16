@@ -18,7 +18,7 @@ import {
   SwapHoriz,
   AccountTree,
 } from '@mui/icons-material';
-import { useTheme, alpha } from '@mui/material/styles';
+import { useTheme } from '@mui/material/styles';
 import { FileTreeViewer } from '../index';
 import { FileTreeContainer } from '../../screens/projectDetails/styles';
 import {
@@ -283,11 +283,7 @@ const ExplorerTab: React.FC<ExplorerTabProps> = ({
   const theme = useTheme();
   const [createPipelineOpen, setCreatePipelineOpen] = React.useState(false);
 
-  const { data: pipelines = [], refetch: refetchPipelines } = useListPipelines(
-    project?.id,
-  );
-
-  const hasPipelines = pipelines.length > 0;
+  const { refetch: refetchPipelines } = useListPipelines(project?.id);
 
   const handlePipelineCreated = React.useCallback(
     async (filePath: string) => {
