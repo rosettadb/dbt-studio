@@ -7,12 +7,20 @@ import {
   Typography,
   Button,
   CircularProgress,
+  Divider,
+  ListItemIcon,
+  ListItemText,
   Menu,
   MenuItem,
 } from '@mui/material';
 import { Close, MoreHoriz, Add as AddIcon, Tag } from '@mui/icons-material';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'react-toastify';
+import { ReactComponent as ProvidersIcon } from '../../assets/icons/lucide/bot.svg';
+import { ReactComponent as SettingsIcon } from '../../assets/icons/lucide/settings-2.svg';
+import { ReactComponent as MCPServersIcon } from '../../assets/icons/lucide/network.svg';
+import { ReactComponent as SkillsIcon } from '../../assets/icons/lucide/blocks.svg';
+import { ReactComponent as MemoriesIcon } from '../../assets/icons/lucide/brain-circuit.svg';
 import { useAppContext } from '../../hooks';
 import { useGetSelectedProject } from '../../controllers';
 import {
@@ -33,6 +41,7 @@ import { ChatMessageList } from './ChatMessageList';
 import { ChatInputBox } from './ChatInputBox';
 import { FilesChangedBlock } from './FilesChangedBlock';
 import { GradientBorder } from './GradientBorder';
+import { MemoryConsentDialog } from './MemoryConsentDialog';
 import type { ContextUsageBreakdown } from './ContextUsageRing';
 
 import { useContextManager } from '../../hooks/useContextManager';
@@ -927,32 +936,88 @@ export const ChatWindow: React.FC<ChatWindowProps> = ({
             transformOrigin={{ vertical: 'top', horizontal: 'right' }}
             slotProps={{
               paper: {
-                sx: { minWidth: 120, py: 0.25 },
+                sx: {
+                  minWidth: 190,
+                  py: 0.5,
+                  borderRadius: 1.5,
+                  border: 1,
+                  borderColor: 'divider',
+                  boxShadow: 6,
+                },
               },
             }}
           >
             {(
               [
-                { label: 'Providers', tab: 'Providers' },
-                { label: 'Settings', tab: 'Settings' },
-                { label: 'MCP Servers', tab: 'MCP Servers' },
-                { label: 'Skills', tab: 'Skills' },
+                {
+                  label: 'AI Providers',
+                  tab: 'Providers',
+                  icon: <ProvidersIcon />,
+                },
+                {
+                  label: 'AI Settings',
+                  tab: 'Settings',
+                  icon: <SettingsIcon />,
+                },
+                {
+                  label: 'MCP Servers',
+                  tab: 'MCP Servers',
+                  icon: <MCPServersIcon />,
+                },
+                { label: 'Skills', tab: 'Skills', icon: <SkillsIcon /> },
               ] as const
-            ).map(({ label, tab }) => (
+            ).map(({ label, tab, icon }) => (
               <MenuItem
                 key={tab}
                 onClick={() => navigateToAISettings(tab)}
                 dense
                 sx={{
-                  py: 0.5,
-                  px: 1.5,
-                  minHeight: 'unset',
-                  fontSize: '0.8rem',
+                  minHeight: 34,
+                  px: 1.25,
+                  borderRadius: 0.75,
+                  mx: 0.5,
                 }}
               >
-                {label}
+                <ListItemIcon
+                  sx={{
+                    minWidth: 30,
+                    color: 'text.secondary',
+                    '& svg': { width: 17, height: 17 },
+                  }}
+                >
+                  {icon}
+                </ListItemIcon>
+                <ListItemText
+                  primary={label}
+                  primaryTypographyProps={{ fontSize: '0.8rem' }}
+                />
               </MenuItem>
             ))}
+            <Divider sx={{ my: 0.5 }} />
+            <MenuItem
+              onClick={() => navigateToAISettings('Second Brain')}
+              dense
+              sx={{
+                minHeight: 34,
+                px: 1.25,
+                borderRadius: 0.75,
+                mx: 0.5,
+              }}
+            >
+              <ListItemIcon
+                sx={{
+                  minWidth: 30,
+                  color: 'text.secondary',
+                  '& svg': { width: 17, height: 17 },
+                }}
+              >
+                <MemoriesIcon />
+              </ListItemIcon>
+              <ListItemText
+                primary="Edit Memories"
+                primaryTypographyProps={{ fontSize: '0.8rem' }}
+              />
+            </MenuItem>
           </Menu>
 
           <Tooltip title="Close">
@@ -1006,6 +1071,8 @@ export const ChatWindow: React.FC<ChatWindowProps> = ({
           />
         </GradientBorder>
       </Box>
+
+      <MemoryConsentDialog />
     </Paper>
   );
 };
