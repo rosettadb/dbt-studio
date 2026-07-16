@@ -325,8 +325,8 @@ const ExplorerTab: React.FC<ExplorerTabProps> = ({
         )}
       </Box>
 
-      {/* Create Pipeline button — only rendered (and takes space) when no pipelines exist */}
-      {project && !hasPipelines && (
+      {/* Create Pipeline button — always visible */}
+      {project && (
         <Box
           sx={{
             px: 1,
@@ -337,28 +337,19 @@ const ExplorerTab: React.FC<ExplorerTabProps> = ({
           }}
         >
           <Tooltip
-            title="No pipeline found in .rosetta/ — create one to run jobs on the cloud"
+            title="Create a pipeline to run jobs on the cloud"
             placement="top"
             arrow
           >
             <Button
               fullWidth
-              variant="outlined"
+              variant="contained"
               size="small"
               startIcon={<AccountTree sx={{ fontSize: 16 }} />}
               onClick={() => setCreatePipelineOpen(true)}
               sx={{
                 fontSize: '0.72rem',
                 py: 0.75,
-                borderStyle: 'dashed',
-                color: 'text.secondary',
-                borderColor: alpha(theme.palette.text.secondary, 0.3),
-                '&:hover': {
-                  borderColor: 'primary.main',
-                  color: 'primary.main',
-                  borderStyle: 'dashed',
-                  bgcolor: alpha(theme.palette.primary.main, 0.04),
-                },
               }}
             >
               Create Pipeline

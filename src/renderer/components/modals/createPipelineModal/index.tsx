@@ -28,6 +28,7 @@ interface PipelineTemplate {
   description: string;
   badge?: string;
   steps: string[];
+  fileName: string;
   content: string;
 }
 
@@ -39,6 +40,7 @@ const TEMPLATES: PipelineTemplate[] = [
     description:
       'A simple pipeline that runs dbt deps, dbt test, and a teardown step. Perfect for new projects.',
     steps: ['dbt deps', 'dbt test', 'teardown'],
+    fileName: 'pipeline.yml',
     content: `name: "CI"
 jobs:
   - name: "setup"
@@ -72,6 +74,7 @@ jobs:
       'dbt source freshness',
       'deploy',
     ],
+    fileName: 'pipeline-full-ci.yml',
     content: `name: "Full CI/CD"
 jobs:
   - name: "setup"
@@ -147,7 +150,7 @@ export const CreatePipelineModal: React.FC<CreatePipelineModalProps> = ({
         name: '.rosetta',
       });
 
-      const pipelinePath = `${project.path}/.rosetta/pipeline.yml`;
+      const pipelinePath = `${project.path}/.rosetta/${template.fileName}`;
       await projectsServices.saveFileContent({
         path: pipelinePath,
         content: template.content,
@@ -175,8 +178,8 @@ export const CreatePipelineModal: React.FC<CreatePipelineModalProps> = ({
       <Stack spacing={3}>
         {/* Header description */}
         <Typography variant="body2" color="text.secondary">
-          Choose a template to scaffold your pipeline. The file will be created
-          at <code>.rosetta/pipeline.yml</code> in your project.
+          Choose a template to scaffold your pipeline. Each template creates its
+          own file inside <code>.rosetta/</code> in your project.
         </Typography>
 
         {/* Template cards */}
@@ -187,7 +190,9 @@ export const CreatePipelineModal: React.FC<CreatePipelineModalProps> = ({
               <Paper
                 key={template.id}
                 variant="outlined"
-                onClick={() => setSelectedTemplateId(template.id)}
+                onClick={() => {
+                  setSelectedTemplateId(template.id);
+                }}
                 sx={{
                   p: 2,
                   cursor: 'pointer',
@@ -268,6 +273,20 @@ export const CreatePipelineModal: React.FC<CreatePipelineModalProps> = ({
                       sx={{ lineHeight: 1.5, display: 'block' }}
                     >
                       {template.description}
+                    </Typography>
+
+                    {/* File name */}
+                    <Typography
+                      variant="caption"
+                      sx={{
+                        mt: 0.5,
+                        display: 'block',
+                        fontFamily: 'monospace',
+                        fontSize: '0.65rem',
+                        color: isSelected ? 'primary.main' : 'text.disabled',
+                      }}
+                    >
+                      .rosetta/{template.fileName}
                     </Typography>
 
                     {/* Steps preview */}
