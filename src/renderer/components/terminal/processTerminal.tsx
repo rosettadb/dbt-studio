@@ -12,13 +12,15 @@ import {
   Divider,
 } from '@mui/material';
 import {
+  AutoAwesome as AiAssistIcon,
   ContentCopy as CopyIcon,
   ContentPasteSearch as CopyAllIcon,
   DeleteSweep as ClearIcon,
 } from '@mui/icons-material';
 import AnsiToHtml from 'ansi-to-html';
-import { useProcess } from '../../hooks';
+import { useAppContext, useProcess } from '../../hooks';
 import { OutputBox, TerminalContainer } from './styles';
+import { buildTerminalAiPrompt } from './aiAssist';
 
 const ProcessTerminal: React.FC = () => {
   const { mode } = useColorScheme();
@@ -34,6 +36,7 @@ const ProcessTerminal: React.FC = () => {
     duration,
     status,
   } = useProcess();
+  const { openChatWithMessage } = useAppContext();
   const outputRef = React.useRef<HTMLDivElement>(null);
 
   const [contextMenu, setContextMenu] = React.useState<{
@@ -95,6 +98,19 @@ const ProcessTerminal: React.FC = () => {
     const allText = [...output, ...error].join('\n');
     if (allText) {
       navigator.clipboard.writeText(allText);
+    }
+    handleClose();
+  };
+
+  const aiPrompt = buildTerminalAiPrompt(
+    contextMenu?.selectedText ?? '',
+    output,
+    error,
+  );
+
+  const handleAskAi = () => {
+    if (aiPrompt) {
+      openChatWithMessage(aiPrompt);
     }
     handleClose();
   };
@@ -320,6 +336,22 @@ const ProcessTerminal: React.FC = () => {
             primaryTypographyProps={{ variant: 'body2', fontSize: 12 }}
           >
             Copy All
+          </ListItemText>
+        </MenuItem>
+        <Divider sx={{ my: '4px !important' }} />
+        <MenuItem
+          onClick={handleAskAi}
+          dense
+          sx={{ py: 0.5, px: 1.5 }}
+          disabled={!aiPrompt}
+        >
+          <ListItemIcon sx={{ minWidth: '28px !important' }}>
+            <AiAssistIcon sx={{ fontSize: 16 }} />
+          </ListItemIcon>
+          <ListItemText
+            primaryTypographyProps={{ variant: 'body2', fontSize: 12 }}
+          >
+            Ask AI Agent
           </ListItemText>
         </MenuItem>
         <Divider sx={{ my: '4px !important' }} />

@@ -10,16 +10,18 @@ import {
   Divider,
 } from '@mui/material';
 import {
+  AutoAwesome as AiAssistIcon,
   ContentCopy as CopyIcon,
   ContentPasteSearch as CopyAllIcon,
   DeleteSweep as ClearIcon,
 } from '@mui/icons-material';
 import { toast } from 'react-toastify';
 import AnsiToHtml from 'ansi-to-html';
-import { useCli, useCommandHistory } from '../../hooks';
+import { useAppContext, useCli, useCommandHistory } from '../../hooks';
 import { OutputBox, StyledInput, TerminalContainer, InputLine } from './styles';
 import { useGetSettings } from '../../controllers';
 import { Project } from '../../../types/backend';
+import { buildTerminalAiPrompt } from './aiAssist';
 
 type Props = {
   project: Project;
@@ -34,6 +36,7 @@ export const Terminal: React.FC<Props> = ({ project }) => {
   const inputRef = React.useRef<HTMLInputElement | null>(null);
   const { data: settings } = useGetSettings();
   const { record, getPrev, getNext, resetPointer } = useCommandHistory();
+  const { openChatWithMessage } = useAppContext();
 
   const [contextMenu, setContextMenu] = React.useState<{
     mouseX: number;
@@ -94,6 +97,19 @@ export const Terminal: React.FC<Props> = ({ project }) => {
     const allText = [...output, ...error].join('\n');
     if (allText) {
       navigator.clipboard.writeText(allText);
+    }
+    handleClose();
+  };
+
+  const aiPrompt = buildTerminalAiPrompt(
+    contextMenu?.selectedText ?? '',
+    output,
+    error,
+  );
+
+  const handleAskAi = () => {
+    if (aiPrompt) {
+      openChatWithMessage(aiPrompt);
     }
     handleClose();
   };
@@ -400,6 +416,22 @@ export const Terminal: React.FC<Props> = ({ project }) => {
             primaryTypographyProps={{ variant: 'body2', fontSize: 12 }}
           >
             Copy All
+          </ListItemText>
+        </MenuItem>
+        <Divider sx={{ my: '4px !important' }} />
+        <MenuItem
+          onClick={handleAskAi}
+          dense
+          sx={{ py: 0.5, px: 1.5 }}
+          disabled={!aiPrompt}
+        >
+          <ListItemIcon sx={{ minWidth: '28px !important' }}>
+            <AiAssistIcon sx={{ fontSize: 16 }} />
+          </ListItemIcon>
+          <ListItemText
+            primaryTypographyProps={{ variant: 'body2', fontSize: 12 }}
+          >
+            Ask AI Agent
           </ListItemText>
         </MenuItem>
         <Divider sx={{ my: '4px !important' }} />
