@@ -4,21 +4,24 @@ import {
   Button,
   Typography,
   Stack,
-  Paper,
   alpha,
   CircularProgress,
   Chip,
+  Dialog,
+  DialogContent,
+  IconButton,
+  Divider,
 } from '@mui/material';
 import {
   Close,
   AccountTree,
-  CheckCircleOutline,
+  CheckCircle,
   PlayArrow,
   Code,
+  ArrowForward,
 } from '@mui/icons-material';
 import { useTheme } from '@mui/material/styles';
 import { toast } from 'react-toastify';
-import { Modal } from '../modal';
 import { projectsServices } from '../../../services';
 import { Project } from '../../../../types/backend';
 
@@ -27,6 +30,7 @@ interface PipelineTemplate {
   label: string;
   description: string;
   badge?: string;
+  badgeColor?: 'success' | 'warning' | 'primary' | 'info';
   steps: string[];
   fileName: string;
   content: string;
@@ -37,6 +41,7 @@ const TEMPLATES: PipelineTemplate[] = [
     id: 'getting-started',
     label: 'Getting Started',
     badge: 'Recommended',
+    badgeColor: 'success',
     description:
       'A simple pipeline that runs dbt deps, dbt test, and a teardown step. Perfect for new projects.',
     steps: ['dbt deps', 'dbt test', 'teardown'],
@@ -65,6 +70,7 @@ jobs:
     id: 'full-ci',
     label: 'Full CI/CD',
     badge: 'Advanced',
+    badgeColor: 'warning',
     description:
       'A complete pipeline with dependency install, model runs, tests, freshness checks, and a deploy notification step.',
     steps: [
@@ -124,12 +130,13 @@ export const CreatePipelineModal: React.FC<CreatePipelineModalProps> = ({
   onCreated,
 }) => {
   const theme = useTheme();
+  const isDark = theme.palette.mode === 'dark';
+
   const [selectedTemplateId, setSelectedTemplateId] = React.useState<
     string | null
   >(null);
   const [isCreating, setIsCreating] = React.useState(false);
 
-  // Reset selection when modal opens
   React.useEffect(() => {
     if (isOpen) {
       setSelectedTemplateId(null);
@@ -138,13 +145,11 @@ export const CreatePipelineModal: React.FC<CreatePipelineModalProps> = ({
 
   const handleCreate = async () => {
     if (!selectedTemplateId) return;
-
     const template = TEMPLATES.find((t) => t.id === selectedTemplateId);
     if (!template) return;
 
     setIsCreating(true);
     try {
-      // Ensure .rosetta directory exists
       await projectsServices.createFolder({
         filePath: project.path,
         name: '.rosetta',
@@ -169,79 +174,176 @@ export const CreatePipelineModal: React.FC<CreatePipelineModalProps> = ({
   };
 
   return (
-    <Modal
-      isOpen={isOpen}
+    <Dialog
+      open={isOpen}
       onClose={onClose}
-      title="Create Pipeline"
+      fullWidth
       maxWidth="sm"
+      PaperProps={{
+        sx: {
+          borderRadius: 2.5,
+          overflow: 'hidden',
+          backgroundImage: 'none',
+          boxShadow: isDark
+            ? '0 24px 48px rgba(0,0,0,0.6)'
+            : '0 24px 48px rgba(0,0,0,0.16)',
+        },
+      }}
     >
-      <Stack spacing={3}>
-        {/* Header description */}
-        <Typography variant="body2" color="text.secondary">
-          Choose a template to scaffold your pipeline. Each template creates its
-          own file inside <code>.rosetta/</code> in your project.
-        </Typography>
+      {/* Gradient header */}
+      <Box
+        sx={{
+          px: 3,
+          pt: 3,
+          pb: 2.5,
+          background: isDark
+            ? `linear-gradient(135deg, ${alpha(theme.palette.primary.dark, 0.5)} 0%, ${alpha(theme.palette.primary.main, 0.2)} 100%)`
+            : `linear-gradient(135deg, ${theme.palette.primary.main} 0%, ${alpha(theme.palette.primary.light, 0.85)} 100%)`,
+          position: 'relative',
+        }}
+      >
+        {/* Close button */}
+        <IconButton
+          onClick={onClose}
+          size="small"
+          sx={{
+            position: 'absolute',
+            top: 12,
+            right: 12,
+            color: isDark
+              ? alpha(theme.palette.common.white, 0.7)
+              : alpha(theme.palette.common.white, 0.9),
+            '&:hover': {
+              bgcolor: alpha(theme.palette.common.white, 0.15),
+            },
+          }}
+        >
+          <Close fontSize="small" />
+        </IconButton>
 
-        {/* Template cards */}
-        <Stack spacing={1.5}>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, mb: 1 }}>
+          <Box
+            sx={{
+              p: 1,
+              borderRadius: 1.5,
+              bgcolor: alpha(theme.palette.common.white, isDark ? 0.1 : 0.2),
+              display: 'flex',
+            }}
+          >
+            <AccountTree
+              sx={{
+                fontSize: 22,
+                color: isDark ? theme.palette.primary.light : '#fff',
+              }}
+            />
+          </Box>
+          <Typography
+            variant="h6"
+            fontWeight={700}
+            sx={{ color: isDark ? theme.palette.primary.light : '#fff' }}
+          >
+            Create Pipeline
+          </Typography>
+        </Box>
+
+        <Typography
+          variant="body2"
+          sx={{
+            color: isDark
+              ? alpha(theme.palette.common.white, 0.6)
+              : alpha(theme.palette.common.white, 0.85),
+            maxWidth: 420,
+          }}
+        >
+          Choose a template to scaffold your pipeline. Files are created inside{' '}
+          <Box
+            component="code"
+            sx={{
+              fontFamily: 'monospace',
+              fontSize: '0.8em',
+              px: 0.5,
+              py: 0.1,
+              borderRadius: 0.5,
+              bgcolor: alpha(theme.palette.common.white, 0.15),
+            }}
+          >
+            .rosetta/
+          </Box>
+        </Typography>
+      </Box>
+
+      <DialogContent sx={{ p: 0, overflow: 'hidden' }}>
+        <Stack spacing={0} divider={<Divider />}>
           {TEMPLATES.map((template) => {
             const isSelected = selectedTemplateId === template.id;
+
+            const selectedBgColor = isDark
+              ? alpha(theme.palette.primary.main, 0.12)
+              : alpha(theme.palette.primary.main, 0.05);
+
+            const hoverSelectedBg = isDark
+              ? alpha(theme.palette.primary.main, 0.16)
+              : alpha(theme.palette.primary.main, 0.07);
+
+            const hoverBgColor = isSelected ? hoverSelectedBg : 'transparent';
+
+            const unselectedIconBg = isDark
+              ? alpha(theme.palette.common.white, 0.06)
+              : alpha(theme.palette.common.black, 0.05);
+
             return (
-              <Paper
+              <Box
                 key={template.id}
-                variant="outlined"
-                onClick={() => {
-                  setSelectedTemplateId(template.id);
-                }}
+                onClick={() => setSelectedTemplateId(template.id)}
                 sx={{
-                  p: 2,
+                  px: 3,
+                  py: 2.5,
                   cursor: 'pointer',
-                  border: '1px solid',
-                  borderColor: isSelected
-                    ? 'primary.main'
-                    : theme.palette.divider,
-                  bgcolor: isSelected
-                    ? alpha(
-                        theme.palette.primary.main,
-                        theme.palette.mode === 'dark' ? 0.1 : 0.04,
-                      )
-                    : 'background.paper',
-                  transition: 'border-color 0.15s, background-color 0.15s',
+                  position: 'relative',
+                  bgcolor: isSelected ? selectedBgColor : 'background.paper',
+                  transition: 'background-color 0.15s',
                   '&:hover': {
-                    borderColor: 'primary.main',
-                    bgcolor: alpha(
-                      theme.palette.primary.main,
-                      theme.palette.mode === 'dark' ? 0.08 : 0.03,
-                    ),
+                    bgcolor: hoverBgColor,
                   },
                 }}
               >
-                <Box
-                  sx={{
-                    display: 'flex',
-                    alignItems: 'flex-start',
-                    gap: 1.5,
-                  }}
-                >
+                {/* Selected accent bar */}
+                {isSelected && (
+                  <Box
+                    sx={{
+                      position: 'absolute',
+                      left: 0,
+                      top: 0,
+                      bottom: 0,
+                      width: 3,
+                      bgcolor: 'primary.main',
+                      borderRadius: '0 2px 2px 0',
+                    }}
+                  />
+                )}
+
+                <Box sx={{ display: 'flex', gap: 2, alignItems: 'flex-start' }}>
                   {/* Icon */}
                   <Box
                     sx={{
                       mt: 0.25,
-                      p: 0.75,
-                      borderRadius: 1,
+                      p: 1,
+                      borderRadius: 1.5,
+                      flexShrink: 0,
                       bgcolor: isSelected
-                        ? alpha(theme.palette.primary.main, 0.12)
-                        : alpha(theme.palette.text.secondary, 0.08),
+                        ? alpha(theme.palette.primary.main, 0.15)
+                        : unselectedIconBg,
                       color: isSelected ? 'primary.main' : 'text.secondary',
                       display: 'flex',
-                      flexShrink: 0,
+                      transition: 'background-color 0.15s',
                     }}
                   >
-                    <AccountTree sx={{ fontSize: 18 }} />
+                    <AccountTree sx={{ fontSize: 20 }} />
                   </Box>
 
                   {/* Content */}
                   <Box sx={{ flex: 1, minWidth: 0 }}>
+                    {/* Title row */}
                     <Box
                       sx={{
                         display: 'flex',
@@ -261,101 +363,140 @@ export const CreatePipelineModal: React.FC<CreatePipelineModalProps> = ({
                         <Chip
                           label={template.badge}
                           size="small"
-                          color="primary"
-                          variant="outlined"
-                          sx={{ height: 18, fontSize: '0.6rem' }}
+                          color={template.badgeColor ?? 'primary'}
+                          variant={isSelected ? 'filled' : 'outlined'}
+                          sx={{
+                            height: 18,
+                            fontSize: '0.6rem',
+                            fontWeight: 600,
+                            letterSpacing: '0.03em',
+                          }}
                         />
                       )}
                     </Box>
+
                     <Typography
                       variant="caption"
                       color="text.secondary"
-                      sx={{ lineHeight: 1.5, display: 'block' }}
+                      sx={{ lineHeight: 1.6, display: 'block', mb: 1.25 }}
                     >
                       {template.description}
                     </Typography>
 
-                    {/* File name */}
-                    <Typography
-                      variant="caption"
-                      sx={{
-                        mt: 0.5,
-                        display: 'block',
-                        fontFamily: 'monospace',
-                        fontSize: '0.65rem',
-                        color: isSelected ? 'primary.main' : 'text.disabled',
-                      }}
-                    >
-                      .rosetta/{template.fileName}
-                    </Typography>
-
-                    {/* Steps preview */}
+                    {/* Pipeline steps flow */}
                     <Box
                       sx={{
-                        mt: 1,
                         display: 'flex',
+                        alignItems: 'center',
                         gap: 0.5,
                         flexWrap: 'wrap',
                       }}
                     >
-                      {template.steps.map((step) => (
-                        <Box
-                          key={step}
-                          sx={{
-                            display: 'inline-flex',
-                            alignItems: 'center',
-                            gap: 0.4,
-                            px: 0.75,
-                            py: 0.25,
-                            borderRadius: 0.75,
-                            bgcolor: alpha(theme.palette.text.secondary, 0.07),
-                          }}
-                        >
-                          <Code sx={{ fontSize: 10, opacity: 0.6 }} />
-                          <Typography
-                            variant="caption"
-                            sx={{ fontSize: '0.65rem', opacity: 0.8 }}
+                      {template.steps.map((step, i) => (
+                        <React.Fragment key={step}>
+                          <Box
+                            sx={{
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: 0.4,
+                              px: 0.75,
+                              py: 0.3,
+                              borderRadius: 1,
+                              border: '1px solid',
+                              borderColor: isSelected
+                                ? alpha(theme.palette.primary.main, 0.3)
+                                : alpha(theme.palette.divider, 1),
+                              bgcolor: isSelected
+                                ? alpha(theme.palette.primary.main, 0.08)
+                                : 'transparent',
+                              transition: 'all 0.15s',
+                            }}
                           >
-                            {step}
-                          </Typography>
-                        </Box>
+                            <Code
+                              sx={{
+                                fontSize: 10,
+                                color: isSelected
+                                  ? 'primary.main'
+                                  : 'text.disabled',
+                              }}
+                            />
+                            <Typography
+                              variant="caption"
+                              sx={{
+                                fontSize: '0.65rem',
+                                fontFamily: 'monospace',
+                                color: isSelected
+                                  ? 'primary.main'
+                                  : 'text.secondary',
+                                fontWeight: isSelected ? 500 : 400,
+                              }}
+                            >
+                              {step}
+                            </Typography>
+                          </Box>
+                          {i < template.steps.length - 1 && (
+                            <ArrowForward
+                              sx={{
+                                fontSize: 10,
+                                color: isSelected
+                                  ? alpha(theme.palette.primary.main, 0.5)
+                                  : alpha(theme.palette.text.disabled, 0.5),
+                                flexShrink: 0,
+                              }}
+                            />
+                          )}
+                        </React.Fragment>
                       ))}
                     </Box>
+
+                    {/* File path */}
+                    <Typography
+                      variant="caption"
+                      sx={{
+                        mt: 1,
+                        display: 'block',
+                        fontFamily: 'monospace',
+                        fontSize: '0.65rem',
+                        color: isSelected ? 'primary.main' : 'text.disabled',
+                        opacity: 0.8,
+                      }}
+                    >
+                      .rosetta/{template.fileName}
+                    </Typography>
                   </Box>
 
                   {/* Checkmark */}
-                  {isSelected && (
-                    <CheckCircleOutline
-                      sx={{
-                        color: 'primary.main',
-                        fontSize: 20,
-                        flexShrink: 0,
-                      }}
-                    />
-                  )}
+                  <Box
+                    sx={{
+                      mt: 0.25,
+                      flexShrink: 0,
+                      opacity: isSelected ? 1 : 0,
+                      transition: 'opacity 0.15s',
+                    }}
+                  >
+                    <CheckCircle sx={{ color: 'primary.main', fontSize: 20 }} />
+                  </Box>
                 </Box>
-              </Paper>
+              </Box>
             );
           })}
         </Stack>
 
-        {/* Footer actions */}
+        {/* Footer */}
         <Box
-          display="flex"
-          justifyContent="flex-end"
-          gap={1.5}
-          pt={1}
-          borderTop={`1px solid ${theme.palette.divider}`}
+          sx={{
+            px: 3,
+            py: 2,
+            display: 'flex',
+            justifyContent: 'flex-end',
+            gap: 1.5,
+            bgcolor: isDark
+              ? alpha(theme.palette.common.white, 0.02)
+              : alpha(theme.palette.common.black, 0.02),
+            borderTop: `1px solid ${theme.palette.divider}`,
+          }}
         >
-          <Button
-            variant="outlined"
-            onClick={onClose}
-            startIcon={<Close />}
-            sx={{
-              minWidth: 100,
-              borderColor: alpha(theme.palette.divider, 0.5),
-            }}
-          >
+          <Button variant="outlined" onClick={onClose} sx={{ minWidth: 90 }}>
             Cancel
           </Button>
           <Button
@@ -364,14 +505,25 @@ export const CreatePipelineModal: React.FC<CreatePipelineModalProps> = ({
             onClick={handleCreate}
             disabled={!selectedTemplateId || isCreating}
             startIcon={
-              isCreating ? <CircularProgress size={16} /> : <PlayArrow />
+              isCreating ? (
+                <CircularProgress size={15} color="inherit" />
+              ) : (
+                <PlayArrow />
+              )
             }
-            sx={{ minWidth: 140, fontWeight: 600 }}
+            sx={{
+              minWidth: 150,
+              fontWeight: 600,
+              boxShadow: selectedTemplateId
+                ? `0 4px 14px ${alpha(theme.palette.primary.main, 0.4)}`
+                : 'none',
+              transition: 'box-shadow 0.2s',
+            }}
           >
-            {isCreating ? 'Creating...' : 'Create Pipeline'}
+            {isCreating ? 'Creating…' : 'Create Pipeline'}
           </Button>
         </Box>
-      </Stack>
-    </Modal>
+      </DialogContent>
+    </Dialog>
   );
 };
