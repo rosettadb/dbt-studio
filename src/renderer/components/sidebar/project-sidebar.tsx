@@ -8,6 +8,7 @@ import {
   CardContent,
   Chip,
   Divider,
+  Tooltip,
 } from '@mui/material';
 import {
   Add,
@@ -15,6 +16,7 @@ import {
   DeleteOutline,
   Storage as DatabaseIcon,
   SwapHoriz,
+  AccountTree,
 } from '@mui/icons-material';
 import { useTheme } from '@mui/material/styles';
 import { FileTreeViewer } from '../index';
@@ -27,6 +29,8 @@ import {
 } from '../../../types/backend';
 import { SourceControlView } from '../sourceControl';
 import connectionIcons from '../../../../assets/connectionIcons';
+import { useListPipelines } from '../../controllers';
+import { CreatePipelineModal } from '../modals';
 
 export type SidebarTab = 'explorer' | 'scm' | 'connections';
 
@@ -252,6 +256,7 @@ interface ExplorerTabProps {
   statuses: FileStatus[];
   isLoadingDirectories: boolean;
   selectedFilePath?: string;
+  project?: Project;
   onDeleteFile: (deletedFile: string) => void;
   onFileSelect: (fileNode: any) => Promise<void>;
   onRefreshFiles: () => Promise<void>;
@@ -266,6 +271,7 @@ const ExplorerTab: React.FC<ExplorerTabProps> = ({
   statuses,
   isLoadingDirectories,
   selectedFilePath,
+  project,
   onDeleteFile,
   onFileSelect,
   onRefreshFiles,
@@ -274,21 +280,86 @@ const ExplorerTab: React.FC<ExplorerTabProps> = ({
   onRenameFile,
   onRunPipeline,
 }) => {
+  const theme = useTheme();
+  const [createPipelineOpen, setCreatePipelineOpen] = React.useState(false);
+
+  const { refetch: refetchPipelines } = useListPipelines(project?.id);
+
+  const handlePipelineCreated = React.useCallback(
+    async (filePath: string) => {
+      await refetchPipelines();
+      await onRefreshFiles();
+      // Open the newly created pipeline file in the editor
+      onFileSelect({
+        id: filePath,
+        name: 'pipeline.yml',
+        path: filePath,
+        type: 'file' as const,
+      });
+    },
+    [refetchPipelines, onRefreshFiles, onFileSelect],
+  );
+
   return (
-    <FileTreeContainer>
-      {directories && (
-        <FileTreeViewer
-          statuses={statuses}
-          node={directories}
-          onDeleteFileCallback={onDeleteFile}
-          onFileSelect={onFileSelect}
-          isLoadingFiles={isLoadingDirectories}
-          refreshFiles={onRefreshFiles}
-          copyPath={onCopyPath}
-          onNewFileCallback={onNewFile}
-          selectedPath={selectedFilePath}
-          onRenameCallback={onRenameFile}
-          onRunPipeline={onRunPipeline}
+    <FileTreeContainer sx={{ gap: 0, p: 0 }}>
+      {/* Tree takes all remaining space */}
+      <Box sx={{ flex: 1, overflow: 'hidden', minHeight: 0 }}>
+        {directories && (
+          <FileTreeViewer
+            statuses={statuses}
+            node={directories}
+            onDeleteFileCallback={onDeleteFile}
+            onFileSelect={onFileSelect}
+            isLoadingFiles={isLoadingDirectories}
+            refreshFiles={onRefreshFiles}
+            copyPath={onCopyPath}
+            onNewFileCallback={onNewFile}
+            selectedPath={selectedFilePath}
+            onRenameCallback={onRenameFile}
+            onRunPipeline={onRunPipeline}
+          />
+        )}
+      </Box>
+
+      {/* Create Pipeline button — always visible */}
+      {project && (
+        <Box
+          sx={{
+            px: 1,
+            pb: 1,
+            pt: 0.75,
+            flexShrink: 0,
+            borderTop: `1px solid ${theme.palette.divider}`,
+          }}
+        >
+          <Tooltip
+            title="Create a pipeline to run jobs on the cloud"
+            placement="top"
+            arrow
+          >
+            <Button
+              fullWidth
+              variant="contained"
+              size="small"
+              startIcon={<AccountTree sx={{ fontSize: 16 }} />}
+              onClick={() => setCreatePipelineOpen(true)}
+              sx={{
+                fontSize: '0.72rem',
+                py: 0.75,
+              }}
+            >
+              Create Pipeline
+            </Button>
+          </Tooltip>
+        </Box>
+      )}
+
+      {project && (
+        <CreatePipelineModal
+          isOpen={createPipelineOpen}
+          onClose={() => setCreatePipelineOpen(false)}
+          project={project}
+          onCreated={(filePath) => handlePipelineCreated(filePath)}
         />
       )}
     </FileTreeContainer>
@@ -405,6 +476,7 @@ export const ProjectSidebar: React.FC<ProjectSidebarProps> = ({
             statuses={statuses}
             isLoadingDirectories={isLoadingDirectories}
             selectedFilePath={selectedFilePath}
+            project={project}
             onDeleteFile={onDeleteFile}
             onFileSelect={onFileSelect}
             onRefreshFiles={onRefreshFiles}
