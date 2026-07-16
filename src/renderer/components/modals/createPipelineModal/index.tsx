@@ -45,7 +45,7 @@ const TEMPLATES: PipelineTemplate[] = [
     description:
       'A simple pipeline that runs dbt deps, dbt test, and a teardown step. Perfect for new projects.',
     steps: ['dbt deps', 'dbt test', 'teardown'],
-    fileName: 'pipeline.yml',
+    fileName: 'pipeline-getting-started.yml',
     content: `name: "CI"
 jobs:
   - name: "setup"
