@@ -66,6 +66,7 @@ import {
   PipelineView,
   CloudLogViewer,
   isPipelineFile,
+  parsePipelineConfig,
 } from '../../components/pipelineView';
 import { Taskbar, TaskbarItem } from '../../components/terminal/styles';
 import { projectsServices } from '../../services';
@@ -1268,14 +1269,34 @@ const ProjectDetails: React.FC = () => {
                                 openTab(filePath);
                               }}
                               extraActions={
-                                <Tooltip title="Visual editor">
-                                  <IconButton
-                                    size="small"
-                                    onClick={handleExitPipelineCodeMode}
-                                  >
-                                    <AccountTree fontSize="small" />
-                                  </IconButton>
-                                </Tooltip>
+                                <>
+                                  {parsePipelineConfig(
+                                    pipelineDraftTab.savedContent ?? '',
+                                  ) === null && (
+                                    <Typography
+                                      variant="caption"
+                                      sx={{
+                                        bgcolor: 'warning.main',
+                                        color: 'warning.contrastText',
+                                        px: 1,
+                                        py: 0.25,
+                                        borderRadius: 1,
+                                        mr: 1,
+                                      }}
+                                    >
+                                      Pipeline YAML is invalid — check syntax
+                                      and required fields.
+                                    </Typography>
+                                  )}
+                                  <Tooltip title="Visual editor">
+                                    <IconButton
+                                      size="small"
+                                      onClick={handleExitPipelineCodeMode}
+                                    >
+                                      <AccountTree fontSize="small" />
+                                    </IconButton>
+                                  </Tooltip>
+                                </>
                               }
                             />
                           ) : (
