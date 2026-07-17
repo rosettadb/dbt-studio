@@ -1048,7 +1048,7 @@ const ProjectDetails: React.FC = () => {
           project={project}
           rosettaPath={settings?.rosettaPath}
           dbtPath={settings?.dbtPath}
-          environment="local"
+          environment={env}
           rosettaDbt={rosettaDbt}
           onBeforeExecute={() => handleTerminalTabSwitch('terminal')}
         />
