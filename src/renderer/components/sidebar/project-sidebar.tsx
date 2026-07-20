@@ -290,9 +290,10 @@ const ExplorerTab: React.FC<ExplorerTabProps> = ({
       await refetchPipelines();
       await onRefreshFiles();
       // Open the newly created pipeline file in the editor
+      const fileName = filePath.split('/').pop() ?? 'pipeline.yml';
       onFileSelect({
         id: filePath,
-        name: 'pipeline.yml',
+        name: fileName,
         path: filePath,
         type: 'file' as const,
       });
