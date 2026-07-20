@@ -89,6 +89,8 @@ export const PushToCloudModal: React.FC<PushToCloudModalProps> = ({
     data: secrets = [],
     isSuccess: secretsLoaded,
     isError: secretsFailed,
+    isFetching: secretsFetching,
+    refetch: refetchSecrets,
   } = useGetSecrets(isDeployed ? project.id : undefined);
   const secretsSettled = secretsLoaded || secretsFailed;
   const { data: profileEnvVars = [], isSuccess: profileLoaded } =
@@ -172,7 +174,7 @@ export const PushToCloudModal: React.FC<PushToCloudModalProps> = ({
     if (envVarsInitialized.current) return;
     // Wait until queries have completed
     if (!profileLoaded) return;
-    if (isDeployed && !secretsSettled) return;
+    if (isDeployed && (!secretsSettled || secretsFetching)) return;
 
     envVarsInitialized.current = true;
 
@@ -226,7 +228,14 @@ export const PushToCloudModal: React.FC<PushToCloudModalProps> = ({
       setGithubPassword(gitPassword.value);
       setOriginalGithubPassword(gitPassword.value);
     }
-  }, [secrets, profileEnvVars, isDeployed, profileLoaded, secretsSettled]);
+  }, [
+    secrets,
+    profileEnvVars,
+    isDeployed,
+    profileLoaded,
+    secretsSettled,
+    secretsFetching,
+  ]);
 
   const blockingError = React.useMemo(() => {
     if (isLoading) return null;
@@ -1507,7 +1516,23 @@ export const PushToCloudModal: React.FC<PushToCloudModalProps> = ({
             </Paper>
 
             {isDeployed && secretsFailed && (
-              <Alert severity="warning" sx={{ borderRadius: 1.5 }}>
+              <Alert
+                severity="warning"
+                sx={{ borderRadius: 1.5 }}
+                action={
+                  <Button
+                    color="inherit"
+                    size="small"
+                    disabled={secretsFetching}
+                    onClick={() => {
+                      envVarsInitialized.current = false;
+                      refetchSecrets();
+                    }}
+                  >
+                    {secretsFetching ? 'Retrying...' : 'Retry'}
+                  </Button>
+                }
+              >
                 Couldn&apos;t load saved secrets from Rosetta Cloud. You can
                 still set environment variables below, but existing cloud
                 secrets won&apos;t be shown or preserved unless re-added.
