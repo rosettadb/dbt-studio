@@ -13,7 +13,7 @@ import type {
 
 type PipelineViewProps = {
   content: string;
-  onEdit?: () => void;
+  onEdit?: (content?: string) => void;
   /**
    * Cloud action id recorded for this specific pipeline file. When null, no
    * status is fetched and every node renders neutral.
@@ -23,6 +23,12 @@ type PipelineViewProps = {
   onActiveActionChange?: (actionId: string | null) => void;
   /** When provided, enables visual edit mode with a Save button. */
   onSave?: (content: string) => Promise<void>;
+  /** When provided (cloud mode), shows a Run button that triggers a cloud run. */
+  onRun?: () => void;
+  /** Notifies parent when the visual graph enters/exits edit mode. */
+  onEditingChange?: (isEditing: boolean) => void;
+  /** Fired once when the pipeline view first mounts (e.g. tab opened). */
+  onEnterView?: () => void;
 };
 
 const ACTION_STATUS_COLOR: Record<CloudActionStatus, string> = {
@@ -74,6 +80,9 @@ export const PipelineView: React.FC<PipelineViewProps> = ({
   actionId,
   onActiveActionChange,
   onSave,
+  onRun,
+  onEditingChange,
+  onEnterView,
 }) => {
   const config = React.useMemo(() => parsePipelineConfig(content), [content]);
 
@@ -115,7 +124,7 @@ export const PipelineView: React.FC<PipelineViewProps> = ({
         {onEdit && (
           <Button
             variant="outlined"
-            onClick={onEdit}
+            onClick={() => onEdit()}
             sx={{ alignSelf: 'flex-start' }}
           >
             Open pipeline.yml in editor
@@ -193,6 +202,9 @@ export const PipelineView: React.FC<PipelineViewProps> = ({
         pipelineName={config.name}
         onEdit={onEdit}
         onSave={onSave}
+        onRun={onRun}
+        onEditingChange={onEditingChange}
+        onEnterView={onEnterView}
       />
     </Box>
   );

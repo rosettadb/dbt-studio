@@ -67,6 +67,13 @@ const registerProjectHandlers = () => {
     return ProjectsService.deleteProject(body.id);
   });
 
+  ipcMain.handle(
+    'project:removeFromList',
+    async (_event, body: { id: string }) => {
+      return ProjectsService.removeProjectFromList(body.id);
+    },
+  );
+
   ipcMain.handle('project:getPath', async (_event, body: { name: string }) => {
     return ProjectsService.getProjectPath(body.name);
   });

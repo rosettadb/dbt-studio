@@ -48,6 +48,7 @@ export type ProjectChannels =
   | 'project:add'
   | 'project:update'
   | 'project:delete'
+  | 'project:removeFromList'
   | 'project:getPath'
   | 'project:getDirectory'
   | 'project:readFile'

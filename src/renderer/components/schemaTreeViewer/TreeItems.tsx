@@ -100,7 +100,7 @@ export const TreeItems = {
     <StyledTreeItem>
       {getColumnIcon(typeName, primaryKey, foreignKey)}
       <StyledColumnLabel variant="caption">
-        <OverflowTip>{label}</OverflowTip>
+        <OverflowTip placement="right">{label}</OverflowTip>
       </StyledColumnLabel>
     </StyledTreeItem>
   ),
@@ -108,7 +108,7 @@ export const TreeItems = {
     <StyledTreeItem>
       <SchemaIcon sx={{ color: '#5f89f4', width: 14, height: 14 }} />
       <StyledLabel variant="caption">
-        <OverflowTip>{label}</OverflowTip>
+        <OverflowTip placement="right">{label}</OverflowTip>
       </StyledLabel>
     </StyledTreeItem>
   ),
@@ -116,7 +116,7 @@ export const TreeItems = {
     <StyledTreeItem>
       <TableChart sx={{ color: '#5f89f4', width: 14, height: 14 }} />
       <StyledLabel variant="caption">
-        <OverflowTip>{label}</OverflowTip>
+        <OverflowTip placement="right">{label}</OverflowTip>
       </StyledLabel>
     </StyledTreeItem>
   ),
@@ -124,7 +124,7 @@ export const TreeItems = {
     <StyledTreeItem>
       <TableChart sx={{ color: '#4db6ac', width: 14, height: 14 }} />
       <StyledLabel variant="caption">
-        <OverflowTip>{label}</OverflowTip>
+        <OverflowTip placement="right">{label}</OverflowTip>
       </StyledLabel>
     </StyledTreeItem>
   ),
@@ -132,7 +132,7 @@ export const TreeItems = {
     <StyledTreeItem>
       {icon && <DatabaseIcon src={icon} alt="icon" />}
       <StyledLabel variant="caption">
-        <OverflowTip>{label}</OverflowTip>
+        <OverflowTip placement="right">{label}</OverflowTip>
       </StyledLabel>
     </StyledTreeItem>
   ),
