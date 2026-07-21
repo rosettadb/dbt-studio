@@ -1,5 +1,5 @@
 import React from 'react';
-import { useTheme } from '@mui/material';
+import { GlobalStyles, useTheme } from '@mui/material';
 import * as monaco from 'monaco-editor';
 import {
   useGetFileHeadContent,
@@ -17,8 +17,10 @@ import {
   getLanguageFromExtension,
   normalizeEol,
 } from './helpers';
+import { extractModelNameFromPath } from '../../helpers/utils';
 import { Container, EditorViewport } from './styles';
 import { getOrCreateModel } from '../../lib/monaco/modelStore';
+import { buildCteQuery, detectCtes } from '../../utils/sql/cteDetection';
 import type {
   EditorTabId,
   EditorTabState,
@@ -55,6 +57,19 @@ type EditorProps = {
   onOpenFile?: (filePath: string) => void;
   /** Called when the user clicks the Preview button: toggles a preview tab. */
   onTogglePreviewTab?: (currentPath: string, content: string) => void;
+  onExecuteQuery?: (payload: {
+    sql: string;
+    filePath: string;
+    modelName?: string;
+    compileModel?: boolean;
+  }) => void | Promise<void>;
+  onExecuteCte?: (payload: {
+    sql: string;
+    filePath: string;
+    cteName: string;
+    modelName?: string;
+    compileModel?: boolean;
+  }) => void | Promise<void>;
   extraActions?: React.ReactNode;
 };
 
@@ -89,6 +104,8 @@ export const Editor: React.FC<EditorProps> = ({
   onGitStatusRefresh,
   onOpenFile,
   onTogglePreviewTab,
+  onExecuteQuery,
+  onExecuteCte,
   extraActions,
 }) => {
   const theme = useTheme();
@@ -225,6 +242,128 @@ export const Editor: React.FC<EditorProps> = ({
     },
     [],
   );
+
+  React.useEffect(() => {
+    if (!onExecuteQuery && !onExecuteCte) {
+      return undefined;
+    }
+
+    const runQueryCommandId = `dbtStudio.executeQuery.${projectId ?? 'project'}`;
+    const runCteCommandId = `dbtStudio.executeCte.${projectId ?? 'project'}`;
+
+    const runQueryCommand = monaco.editor.registerCommand(
+      runQueryCommandId,
+      (_accessor, args?: { uri?: string }) => {
+        const model = editorInstance?.getModel();
+        if (
+          !model ||
+          model.uri.toString() !== args?.uri ||
+          !activeTab ||
+          !activeTab.path.endsWith('.sql')
+        ) {
+          return;
+        }
+
+        const selection = editorInstance?.getSelection();
+        const selectedSql =
+          selection && !selection.isEmpty()
+            ? model.getValueInRange(selection)
+            : model.getValue();
+
+        onExecuteQuery?.({
+          sql: selectedSql,
+          filePath: activeTab.path,
+          modelName: extractModelNameFromPath(activeTab.path),
+          compileModel: selection?.isEmpty() ?? true,
+        });
+      },
+    );
+
+    const runCteCommand = monaco.editor.registerCommand(
+      runCteCommandId,
+      (_accessor, args?: { uri?: string; cteIndex?: number }) => {
+        const model = editorInstance?.getModel();
+        if (
+          !model ||
+          model.uri.toString() !== args?.uri ||
+          args?.cteIndex === undefined ||
+          !activeTab ||
+          !activeTab.path.endsWith('.sql')
+        ) {
+          return;
+        }
+
+        const ctes = detectCtes(model, monaco);
+        const builtQuery = buildCteQuery(model, ctes, args.cteIndex);
+        if (!builtQuery) {
+          return;
+        }
+
+        onExecuteCte?.({
+          sql: builtQuery.query,
+          filePath: activeTab.path,
+          cteName: builtQuery.targetCte.name,
+          modelName: extractModelNameFromPath(activeTab.path),
+          compileModel: true,
+        });
+      },
+    );
+
+    const provider = monaco.languages.registerCodeLensProvider('jinja-sql', {
+      provideCodeLenses(model) {
+        if (
+          !activeTab ||
+          !activeTab.path.endsWith('.sql') ||
+          model.uri.toString() !== activeModel?.uri.toString()
+        ) {
+          return { lenses: [], dispose: () => {} };
+        }
+
+        const lenses: monaco.languages.CodeLens[] = [
+          {
+            range: new monaco.Range(1, 1, 1, 1),
+            command: {
+              id: runQueryCommandId,
+              title: '$(play) Execute Query',
+              arguments: [{ uri: model.uri.toString() }],
+            },
+          },
+        ];
+
+        const ctes = detectCtes(model, monaco);
+        ctes.forEach((cte, index) => {
+          lenses.push({
+            range: new monaco.Range(
+              cte.range.startLineNumber,
+              1,
+              cte.range.startLineNumber,
+              1,
+            ),
+            command: {
+              id: runCteCommandId,
+              title: `$(play) Execute CTE: ${cte.name}`,
+              arguments: [{ uri: model.uri.toString(), cteIndex: index }],
+            },
+          });
+        });
+
+        return { lenses, dispose: () => {} };
+      },
+    });
+
+    return () => {
+      provider.dispose();
+      runQueryCommand.dispose();
+      runCteCommand.dispose();
+    };
+  }, [
+    activeModel,
+    activeTab,
+    editorInstance,
+    onExecuteCte,
+    onExecuteQuery,
+    projectId,
+  ]);
 
   React.useEffect(() => {
     if (!editorInstance || !activeModel || decorationMode === 'clean') {
@@ -374,6 +513,23 @@ export const Editor: React.FC<EditorProps> = ({
       />
 
       <EditorViewport>
+        <GlobalStyles
+          styles={{
+            '.monaco-editor .codelens-decoration': {
+              left: '0 !important',
+              paddingLeft: '0 !important',
+              whiteSpace: 'nowrap',
+            },
+            '.monaco-editor .codelens-decoration > a': {
+              position: 'relative',
+              left: -10,
+            },
+            '.monaco-editor .codelens-decoration .codicon': {
+              fontSize: 11,
+              marginRight: 3,
+            },
+          }}
+        />
         {showDiffView ? (
           <DiffView
             modified={activeContent}
@@ -387,6 +543,7 @@ export const Editor: React.FC<EditorProps> = ({
             modelKey={activeTabId}
             theme={monacoTheme}
             readOnly={!isFileEditable}
+            options={{ codeLens: true, codeLensFontSize: 11 }}
             onMount={handleEditorMount}
           />
         )}

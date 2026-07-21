@@ -12,6 +12,7 @@ import {
 import { Project, DbtCommandType, ConnectionInput } from '../../types/backend';
 import { useAppContext } from './index';
 import { extractCliErrorDetails } from '../utils/dbtCommandResult';
+import { useDbtRunHistory } from './useDbtRunHistory';
 
 interface UseDbtReturn {
   run: (project: Project, path?: string) => Promise<void>;
@@ -39,6 +40,8 @@ const useDbt = (
   const { data: apiKey } = useApiKey();
 
   const { env: environment } = useAppContext();
+  const { recordCommandStart, recordCommandFinished, recordCommandFailed } =
+    useDbtRunHistory();
 
   const { runCommand, stopCommand, isRunning } = useCli();
   const { data: connections = [] } = useGetConnections(true);
@@ -171,6 +174,25 @@ const useDbt = (
     ],
   );
 
+  // Build human-readable command string for display in run history
+  const buildDisplayCommand = useCallback(
+    (command: DbtCommandType, args: string = ''): string => {
+      let displayCmd: string;
+      switch (command) {
+        case 'docs:generate':
+          displayCmd = 'dbt docs generate';
+          break;
+        case 'docs:serve':
+          displayCmd = 'dbt docs serve';
+          break;
+        default:
+          displayCmd = `dbt ${command}`;
+      }
+      return args ? `${displayCmd} ${args}` : displayCmd;
+    },
+    [],
+  );
+
   // Build command string
   const buildCommand = useCallback(
     (command: DbtCommandType, project: Project, args: string = '') => {
@@ -212,6 +234,8 @@ const useDbt = (
         }
         return;
       }
+
+      let runHistoryId: string | undefined;
 
       try {
         // Check if DBT path is configured
@@ -260,6 +284,18 @@ const useDbt = (
           return;
         }
 
+        runHistoryId = recordCommandStart({
+          projectId: project.id,
+          projectName: project.name,
+          projectPath: project.path,
+          command,
+          args,
+          // Short human-readable command for display
+          fullCommand: buildDisplayCommand(command, args),
+          // Full shell command for copy-to-clipboard
+          shellCommand: cmdString,
+        });
+
         // Execute command
         const result = await runCommand(cmdString);
         const aggregatedError = extractCliErrorDetails(
@@ -273,11 +309,35 @@ const useDbt = (
           if (options.showToast) {
             toast.success(`dbt ${command} completed successfully`);
           }
+          // Only attach run_results.json for commands that actually produce it
+          const commandsWithRunResults = ['run', 'test', 'seed', 'snapshot'];
+          if (commandsWithRunResults.includes(command)) {
+            await recordCommandFinished(
+              runHistoryId,
+              project.id,
+              `${project.path}/target/run_results.json`,
+            );
+          }
           successCallback?.();
-        } else if (options.showToast) {
-          toast.error(`Command failed: ${aggregatedError.join('\n')}`);
+        } else {
+          if (options.showToast) {
+            toast.error(`Command failed: ${aggregatedError.join('\n')}`);
+          }
+          recordCommandFailed(
+            runHistoryId,
+            project.id,
+            aggregatedError.join('\n'),
+            result.output.slice(-20).join('\n'), // last 20 lines of output
+          );
         }
       } catch (error) {
+        if (runHistoryId) {
+          recordCommandFailed(
+            runHistoryId,
+            project.id,
+            error instanceof Error ? error.message : 'Unknown error',
+          );
+        }
         if (options.showToast) {
           const errorMessage =
             error instanceof Error ? error.message : 'Unknown error';
@@ -293,11 +353,15 @@ const useDbt = (
       connections,
       setupConnectionEnv,
       buildCommand,
+      buildDisplayCommand,
       runCommand,
       successCallback,
       settings?.dbtPath,
       settings?.dbtVersion,
       checkProjectAdapterCompatibility,
+      recordCommandStart,
+      recordCommandFinished,
+      recordCommandFailed,
     ],
   );
 

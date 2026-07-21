@@ -51,9 +51,11 @@ export const InputLine = styled('div')(({ theme }) => ({
 }));
 
 export const Root = styled(Box)(() => ({
-  height: '100vh',
+  height: '100%',
+  minHeight: 0,
   display: 'flex',
   flexDirection: 'column',
+  overflow: 'hidden',
 }));
 
 export const Sash = styled(Box)(({ theme }) => ({
@@ -86,7 +88,8 @@ export const TerminalHeader = styled(Box)(({ theme }) => ({
 }));
 
 export const Taskbar = styled(Box)(({ theme }) => ({
-  height: 40,
+  height: '100%',
+  minHeight: 32,
   backgroundColor: theme.palette.background.paper,
   display: 'flex',
   alignItems: 'center',
@@ -98,7 +101,7 @@ export const Taskbar = styled(Box)(({ theme }) => ({
 
 export const TaskbarItem = styled(Box)(({ theme }) => ({
   color: theme.palette.primary.main,
-  height: 30,
+  height: 24,
   cursor: 'pointer',
   display: 'flex',
   alignItems: 'center',

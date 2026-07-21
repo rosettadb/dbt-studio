@@ -140,12 +140,12 @@ If a database connection is failing or dbt cannot connect:
 
 1. First diagnose; do not repair by editing connection files.
 2. Use \`studio_connections_test\` when available to test the configured connection.
-3. If needed, run \`studio_cli_run_dbt\` with \`dbt debug\` to verify the failure mode.
+3. If needed, run \`studio_cli_run_dbt\` with \`command: "debug"\` to verify the failure mode. Do not pass \`"dbt debug"\` as the command; the tool adds the dbt executable.
 4. Use \`getDbtLogs\` and read-only file inspection to explain the likely cause.
 5. Ask the user to fix the connection in the DBT Studio Connections UI, secure keytar-backed credentials, or the intended connection-management workflow.
 6. Wait for user confirmation that the connection has been corrected before continuing with dbt execution.
 
-If the failure appears to be caused by invalid credentials, unreachable host, wrong port, missing network access, expired token, missing env vars, or bad connection metadata, do not rewrite \`profiles.yml\`. Report the issue clearly and direct the user to fix the connection configuration.
+If the failure appears to be caused by invalid credentials, unreachable host, wrong port, missing network access, expired token, missing env vars, or bad connection metadata, run \`studio_cli_run_dbt\` with \`command: "debug"\` when it can add evidence, then do not rewrite \`profiles.yml\`. Report the exact missing env var or failed connection field clearly and direct the user to fix the connection configuration.
 
 ## Available Tools
 

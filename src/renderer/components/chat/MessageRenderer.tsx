@@ -68,6 +68,49 @@ interface MessageRendererProps {
   orderedParts?: StreamContentPart[];
 }
 
+type RenderToolStatus = ToolCallState['status'];
+
+function normalizePersistedToolStatus(
+  status: string | undefined,
+  output?: unknown,
+  error?: unknown,
+  isStreaming = false,
+): RenderToolStatus {
+  const normalizedStatus = String(status ?? '').toLowerCase();
+
+  if (
+    ['done', 'completed', 'success', 'succeeded'].includes(normalizedStatus)
+  ) {
+    return 'done';
+  }
+
+  if (
+    ['error', 'failed', 'failure', 'cancelled', 'canceled'].includes(
+      normalizedStatus,
+    )
+  ) {
+    return 'error';
+  }
+
+  if (
+    isStreaming &&
+    ['running', 'pending', 'queued'].includes(normalizedStatus)
+  ) {
+    return 'running';
+  }
+
+  if (error) return 'error';
+  if (output !== undefined && output !== null) return 'done';
+
+  // Persisted history is never actively running. A historical running/pending
+  // tool without output most likely failed or was interrupted before result.
+  if (['running', 'pending', 'queued'].includes(normalizedStatus)) {
+    return 'error';
+  }
+
+  return 'done';
+}
+
 /**
  * Converts persisted DB tool calls into AgentStep[] for rendering with AgentStepBlock.
  * Tool calls are grouped by _stepNumber stored in toolInput.
@@ -93,7 +136,7 @@ function buildStepsFromToolCalls(
         },
       );
     }
-
+    
     const statusMap: Record<string, 'done' | 'error'> = {
       completed: 'done',
       failed: 'error',
@@ -105,8 +148,12 @@ function buildStepsFromToolCalls(
       toolName: tc.toolName,
       args: displayArgs as Record<string, unknown>,
       result: tc.toolOutput,
-      error: tc.errorMessage ?? getToolResultError(tc.toolOutput) ?? undefined,
-      status: resultFailed ? 'error' : (statusMap[tc.status] ?? 'done'),
+      error: tc.errorMessage ?? undefined,
+      status: normalizePersistedToolStatus(
+        tc.status,
+        tc.toolOutput,
+        tc.errorMessage,
+      ),
     };
 
     if (!stepMap.has(stepNumber)) {
@@ -599,6 +646,22 @@ export const MessageRenderer: React.FC<MessageRendererProps> = ({
     return buildStepsFromToolCalls(toolCalls);
   }, [toolCalls]);
 
+  const persistedToolStatusById = React.useMemo(() => {
+    const statusById = new Map<string, RenderToolStatus>();
+    if (!toolCalls) return statusById;
+
+    toolCalls.forEach((tc) => {
+      const toolCallId: string =
+        (tc.toolInput?.tcId as string) ?? String(tc.id);
+      statusById.set(
+        toolCallId,
+        normalizePersistedToolStatus(tc.status, tc.toolOutput, tc.errorMessage),
+      );
+    });
+
+    return statusById;
+  }, [toolCalls]);
+
   // Fallback: if content looks like HTML (legacy TipTap), strip tags for display
   const displayContent = React.useMemo(() => {
     const looksLikeHtml = /<\/?[a-z][\s\S]*>/i.test(content || '');
@@ -692,6 +755,15 @@ export const MessageRenderer: React.FC<MessageRendererProps> = ({
             }
             // tool-call part
             const tc = part as ToolCallContentPart;
+            const persistedStatus = persistedToolStatusById.get(tc.toolCallId);
+            const status =
+              persistedStatus ??
+              normalizePersistedToolStatus(
+                tc.status,
+                tc.result,
+                tc.error,
+                isStreaming,
+              );
             return (
               <ToolCallRow
                 key={tc.toolCallId}
@@ -701,7 +773,7 @@ export const MessageRenderer: React.FC<MessageRendererProps> = ({
                   args: tc.args,
                   result: tc.result,
                   error: tc.error,
-                  status: tc.status,
+                  status,
                   durationMs: tc.durationMs,
                 }}
               />

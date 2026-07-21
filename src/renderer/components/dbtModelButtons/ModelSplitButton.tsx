@@ -17,6 +17,7 @@ import {
 } from '../../services/connectors.service';
 import type { PreviewResult } from '../../../types/frontend';
 import type { DbtCommandType } from '../../../types/backend';
+import type { ProjectQueryPreviewPayload } from '../projectQueryResults';
 
 interface ModelSplitButtonProps {
   modelPath: string;
@@ -26,6 +27,10 @@ interface ModelSplitButtonProps {
   isRunningDbt: boolean;
   isRunningRosettaDbt: boolean;
   environment?: 'local' | 'cloud';
+  onBeforeExecute?: () => void;
+  onQueryPreviewStart?: (payload: Partial<ProjectQueryPreviewPayload>) => void;
+  onQueryPreviewSuccess?: (payload: ProjectQueryPreviewPayload) => void;
+  onQueryPreviewError?: (payload: ProjectQueryPreviewPayload) => void;
 }
 
 export const ModelSplitButton: React.FC<ModelSplitButtonProps> = ({
@@ -36,6 +41,10 @@ export const ModelSplitButton: React.FC<ModelSplitButtonProps> = ({
   isRunningDbt,
   isRunningRosettaDbt,
   environment = 'local',
+  onBeforeExecute,
+  onQueryPreviewStart,
+  onQueryPreviewSuccess,
+  onQueryPreviewError,
 }) => {
   const [isCompiling, setIsCompiling] = useState(false);
   const [showCompileModal, setShowCompileModal] = useState(false);
@@ -71,6 +80,7 @@ export const ModelSplitButton: React.FC<ModelSplitButtonProps> = ({
     localHandler: () => Promise<void>,
     dbtArgs?: string,
   ) => {
+    onBeforeExecute?.();
     if (environment === 'cloud') {
       setCloudDbtArguments(dbtArgs || '');
       setRunInCloudModal(command);
@@ -151,12 +161,28 @@ export const ModelSplitButton: React.FC<ModelSplitButtonProps> = ({
     setIsPreviewing(true);
     setPreviewError(undefined);
     setPreviewResult(null);
+    const startedAt = Date.now();
+    onQueryPreviewStart?.({
+      projectId: project.id,
+      projectName: project.name,
+      filePath: modelPath,
+      rawSql: fileContent,
+    });
 
     try {
       // Extract model name from path for compilation
       const modelName = extractModelNameFromPath(modelPath);
       if (!modelName) {
-        toast.error('Could not extract model name from path');
+        const errorMessage = 'Could not extract model name from path';
+        toast.error(errorMessage);
+        onQueryPreviewError?.({
+          projectId: project.id,
+          projectName: project.name,
+          filePath: modelPath,
+          rawSql: fileContent,
+          durationMs: Date.now() - startedAt,
+          errorMessage,
+        });
         return;
       }
 
@@ -164,22 +190,55 @@ export const ModelSplitButton: React.FC<ModelSplitButtonProps> = ({
       const modelCompiledSql = await dbtCompileModel(project, modelName);
 
       if (!modelCompiledSql || modelCompiledSql.trim() === '') {
-        toast.error(
-          'No compiled SQL returned. The model might not exist or be disabled.',
-        );
+        const errorMessage =
+          'No compiled SQL returned. The model might not exist or be disabled.';
+        toast.error(errorMessage);
+        onQueryPreviewError?.({
+          projectId: project.id,
+          projectName: project.name,
+          filePath: modelPath,
+          modelName,
+          rawSql: fileContent,
+          compiledSql: modelCompiledSql,
+          durationMs: Date.now() - startedAt,
+          errorMessage,
+        });
         return;
       }
 
       // Check if project has a connection configured
       if (!project.connectionId) {
-        toast.error('No database connection configured for this project');
+        const errorMessage =
+          'No database connection configured for this project';
+        toast.error(errorMessage);
+        onQueryPreviewError?.({
+          projectId: project.id,
+          projectName: project.name,
+          filePath: modelPath,
+          modelName,
+          rawSql: fileContent,
+          compiledSql: modelCompiledSql,
+          durationMs: Date.now() - startedAt,
+          errorMessage,
+        });
         return;
       }
 
       // Get the connection details
       const connection = await getConnectionById(project.connectionId);
       if (!connection) {
-        toast.error('Database connection not found');
+        const errorMessage = 'Database connection not found';
+        toast.error(errorMessage);
+        onQueryPreviewError?.({
+          projectId: project.id,
+          projectName: project.name,
+          filePath: modelPath,
+          modelName,
+          rawSql: fileContent,
+          compiledSql: modelCompiledSql,
+          durationMs: Date.now() - startedAt,
+          errorMessage,
+        });
         return;
       }
 
@@ -195,6 +254,17 @@ export const ModelSplitButton: React.FC<ModelSplitButtonProps> = ({
         toast.error(`Preview failed: ${errorMessage}`);
         setPreviewError(errorMessage);
         setIsPreviewing(false);
+        onQueryPreviewError?.({
+          projectId: project.id,
+          projectName: project.name,
+          filePath: modelPath,
+          modelName,
+          rawSql: fileContent,
+          compiledSql: modelCompiledSql,
+          result: queryResult,
+          durationMs: Date.now() - startedAt,
+          errorMessage,
+        });
         return;
       }
 
@@ -214,11 +284,32 @@ export const ModelSplitButton: React.FC<ModelSplitButtonProps> = ({
 
       setPreviewResult(modelPreviewResult);
       setShowPreviewModal(true);
+      onQueryPreviewSuccess?.({
+        projectId: project.id,
+        projectName: project.name,
+        filePath: modelPath,
+        modelName,
+        rawSql: fileContent,
+        compiledSql: modelCompiledSql,
+        result: {
+          ...queryResult,
+          duration: Date.now() - startedAt,
+        },
+        durationMs: Date.now() - startedAt,
+      });
     } catch (error) {
       const errorMessage =
         error instanceof Error ? error.message : 'Unknown error';
       setPreviewError(errorMessage);
       toast.error(`Preview failed: ${errorMessage}`);
+      onQueryPreviewError?.({
+        projectId: project.id,
+        projectName: project.name,
+        filePath: modelPath,
+        rawSql: fileContent,
+        durationMs: Date.now() - startedAt,
+        errorMessage,
+      });
     } finally {
       setIsPreviewing(false);
     }
