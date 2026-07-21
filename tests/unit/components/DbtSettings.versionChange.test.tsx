@@ -5,6 +5,8 @@ import { DbtSettings } from '../../../src/renderer/components/settings/DbtSettin
 const listVersions = jest.fn();
 const planVersionChange = jest.fn();
 const installVersionChange = jest.fn();
+const installPackageVersion = jest.fn();
+const installLatestPackage = jest.fn();
 const getInstalledPackages = jest.fn();
 const getActiveAdapterCapabilities = jest.fn();
 
@@ -12,8 +14,8 @@ jest.mock('../../../src/renderer/controllers', () => ({
   useListDbtCoreVersions: () => listVersions,
   useGetInstalledDbtCore: () => jest.fn(),
   useGetInstalledPackages: () => getInstalledPackages,
-  useInstallPackageVersion: () => jest.fn(),
-  useInstallLatestPackage: () => jest.fn(),
+  useInstallPackageVersion: () => installPackageVersion,
+  useInstallLatestPackage: () => installLatestPackage,
   useUninstallPackage: () => jest.fn(),
   useListPackageVersions: () => jest.fn(),
   usePlanDbtVersionChange: () => planVersionChange,
@@ -60,6 +62,12 @@ describe('DbtSettings version change flow', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     getInstalledPackages.mockResolvedValue({ packages: {} });
+    installPackageVersion.mockResolvedValue({
+      ok: true,
+      installedVersion: '1.11.12',
+      dbtPath: '/managed/venv/bin/dbt',
+    });
+    installLatestPackage.mockResolvedValue({ ok: true });
     getActiveAdapterCapabilities.mockResolvedValue({
       dbtCoreVersion: '1.11.12',
       runtime: 'v1',
@@ -176,5 +184,25 @@ describe('DbtSettings version change flow', () => {
     expect(
       screen.getByRole('button', { name: 'Roll back to 1.11.12' }),
     ).toBeInTheDocument();
+  });
+
+  it('preserves every adapter failure from the package install loop', async () => {
+    installLatestPackage.mockImplementation(
+      async ({ packageName }: { packageName: string }) =>
+        ['dbt-postgres', 'dbt-bigquery'].includes(packageName)
+          ? { ok: false, error: `${packageName} failed` }
+          : { ok: true },
+    );
+    renderSettings();
+
+    fireEvent.click(
+      await screen.findByRole('button', {
+        name: 'Install Selected Packages (8)',
+      }),
+    );
+
+    expect(await screen.findByText(/dbt-postgres failed/)).toHaveTextContent(
+      'dbt-bigquery failed',
+    );
   });
 });

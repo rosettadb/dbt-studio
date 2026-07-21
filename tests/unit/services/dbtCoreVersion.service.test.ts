@@ -326,6 +326,34 @@ describe('DbtCoreVersionService', () => {
     expect(saveSettingsMock).not.toHaveBeenCalled();
   });
 
+  it('terminates and reports a process that exceeds the execution timeout', async () => {
+    jest.useFakeTimers();
+    const child = new EventEmitter() as any;
+    child.stdout = new EventEmitter();
+    child.stderr = new EventEmitter();
+    child.kill = jest.fn();
+    spawnMock.mockReturnValue(child);
+
+    try {
+      const resultPromise = DbtCoreVersionService.installDbtCoreVersion({
+        pythonPath,
+        packageName: 'dbt-core',
+        version: '2.0.0a4',
+      });
+
+      await jest.advanceTimersByTimeAsync(5 * 60 * 1000);
+      const result = await resultPromise;
+
+      expect(child.kill).toHaveBeenCalledWith('SIGTERM');
+      expect(result).toEqual({
+        ok: false,
+        error: expect.stringContaining('Process timed out'),
+      });
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
   it('checks parse and compile with temporary artifacts without running deps', async () => {
     getSelectedProjectMock.mockResolvedValue({
       id: 'project-1',
@@ -373,7 +401,7 @@ describe('DbtCoreVersionService', () => {
     );
   });
 
-  it('blocks v2 Postgres compatibility commands before native execution', async () => {
+  it('uses the live v2 version to block Postgres when settings still report v1', async () => {
     getSelectedProjectMock.mockResolvedValue({
       id: 'project-1',
       name: 'Postgres project',
@@ -391,7 +419,9 @@ describe('DbtCoreVersionService', () => {
       await DbtCoreVersionService.checkCurrentProjectCompatibility();
 
     expect(result.ok).toBe(false);
-    expect(result.error).toContain('Postgres is not supported safely');
+    expect(result.error).toContain(
+      "PostgreSQL is not available in Rosetta's dbt Core v2 compatibility table",
+    );
     expect(result.recommendations).toEqual([
       expect.stringContaining('stable v1'),
     ]);

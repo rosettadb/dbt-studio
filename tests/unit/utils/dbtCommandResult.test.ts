@@ -10,4 +10,13 @@ describe('dbt command result detection', () => {
   it('does not report a successful empty result as a failure', () => {
     expect(extractCliErrorDetails([], [], 0)).toEqual([]);
   });
+
+  it('strips ANSI formatting without stripping literal bracketed text', () => {
+    expect(
+      extractCliErrorDetails(
+        [],
+        ['\u001b[31mRuntime Error\u001b[0m', 'Array[1m'],
+      ),
+    ).toEqual(['Runtime Error', 'Array[1m']);
+  });
 });

@@ -243,6 +243,7 @@ export const DbtSettings: React.FC<DbtSettingsProps> = ({
     setIsLoadingInstall(true);
     setInstallProgress(0);
     setIsLoadingDialog(true);
+    setVersionChangeResult(null);
 
     try {
       if (!settings.pythonPath) {
@@ -286,10 +287,14 @@ export const DbtSettings: React.FC<DbtSettingsProps> = ({
             packageName: pkg,
           });
           if (!result.ok) {
-            setVersionChangeResult({
+            const error = result.error || `Unable to install ${pkg}.`;
+            setVersionChangeResult((previous) => ({
               ok: false,
-              error: result.error || `Unable to install ${pkg}.`,
-            });
+              error:
+                previous && !previous.ok
+                  ? [previous.error, error].filter(Boolean).join('\n')
+                  : error,
+            }));
           }
         }
       }

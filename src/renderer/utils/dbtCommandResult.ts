@@ -1,4 +1,5 @@
-const ANSI_ESCAPE_REGEX = /\[[0-9;]*m/g;
+// eslint-disable-next-line no-control-regex
+const ANSI_ESCAPE_REGEX = /\u001b\[[0-9;]*m/g;
 const ERROR_SUMMARY_REGEX = /ERROR=(\d+)/i;
 const NON_ZERO_EXIT_REGEX = /Process exited with code\s+(\d+)/i;
 const ERROR_HINT_REGEX =

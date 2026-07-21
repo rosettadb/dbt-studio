@@ -50,6 +50,8 @@ type ProcessOptions = {
   env?: Record<string, string | undefined>;
 };
 
+const PROCESS_TIMEOUT_MS = 5 * 60 * 1000;
+
 const ADAPTER_PACKAGES = [
   'dbt-postgres',
   'dbt-snowflake',
@@ -247,6 +249,29 @@ const runProcess = (
     });
     let stdout = '';
     let stderr = '';
+    let settled = false;
+
+    const timeout = setTimeout(() => {
+      if (settled) return;
+      settled = true;
+      try {
+        child.kill('SIGTERM');
+      } catch {
+        // The process may have exited before the timeout callback ran.
+      }
+      reject(
+        new Error(
+          `Process timed out after ${PROCESS_TIMEOUT_MS}ms: ${command}`,
+        ),
+      );
+    }, PROCESS_TIMEOUT_MS);
+
+    const finish = (callback: () => void) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timeout);
+      callback();
+    };
 
     child.stdout.on('data', (data) => {
       stdout += String(data);
@@ -257,11 +282,11 @@ const runProcess = (
     });
 
     child.on('error', (error) => {
-      reject(error);
+      finish(() => reject(error));
     });
 
     child.on('close', (exitCode) => {
-      resolve({ exitCode, stdout, stderr });
+      finish(() => resolve({ exitCode, stdout, stderr }));
     });
   });
 };
@@ -774,6 +799,7 @@ export class DbtCoreVersionService {
 
     const adapterCheck = await this.checkProjectAdapterCompatibility(
       project.path,
+      installed.version,
     );
     if (!adapterCheck.adapter.canExecute) {
       return {
@@ -1008,11 +1034,15 @@ export class DbtCoreVersionService {
 
   static async getActiveAdapterCapabilities(
     projectPath?: string,
+    detectedDbtCoreVersion?: string | null,
   ): Promise<DbtAdapterCapabilityResponse> {
-    const settings = await SettingsService.loadSettings();
+    const dbtCoreVersion =
+      detectedDbtCoreVersion === undefined
+        ? ((await SettingsService.loadSettings()).dbtVersion ?? null)
+        : detectedDbtCoreVersion;
     let runtime: DbtAdapterCapabilityResponse['runtime'] = 'unknown';
-    if (settings.dbtVersion?.startsWith('2.')) runtime = 'v2';
-    if (settings.dbtVersion?.startsWith('1.')) runtime = 'v1';
+    if (dbtCoreVersion?.startsWith('2.')) runtime = 'v2';
+    if (dbtCoreVersion?.startsWith('1.')) runtime = 'v1';
     const resolved = await this.resolveProjectAdapter(projectPath);
     const adapter = this.capabilityFor(
       resolved.adapter,
@@ -1020,7 +1050,7 @@ export class DbtCoreVersionService {
       runtime === 'v2',
     );
     return {
-      dbtCoreVersion: settings.dbtVersion || null,
+      dbtCoreVersion,
       runtime,
       packageProvenance:
         runtime === 'unknown' ? 'unverified' : 'apache-dbt-core',
@@ -1031,8 +1061,12 @@ export class DbtCoreVersionService {
 
   static async checkProjectAdapterCompatibility(
     projectPath?: string,
+    detectedDbtCoreVersion?: string | null,
   ): Promise<DbtProjectAdapterCheck> {
-    const result = await this.getActiveAdapterCapabilities(projectPath);
+    const result = await this.getActiveAdapterCapabilities(
+      projectPath,
+      detectedDbtCoreVersion,
+    );
     return { ...result, adapter: result.adapters[0] };
   }
 
