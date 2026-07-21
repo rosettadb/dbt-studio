@@ -1,3 +1,6 @@
+import fs from 'fs';
+import ConnectorsService from '../../../../src/main/services/connectors.service';
+
 const testPostgresConnection = jest.fn();
 
 jest.mock('openai', () => ({
@@ -5,7 +8,9 @@ jest.mock('openai', () => ({
 }));
 
 jest.mock('../../../../src/main/utils/fileHelper', () => ({
-  loadDatabaseFile: jest.fn().mockResolvedValue({ connections: [], projects: [] }),
+  loadDatabaseFile: jest
+    .fn()
+    .mockResolvedValue({ connections: [], projects: [] }),
   updateDatabase: jest.fn(),
 }));
 
@@ -40,8 +45,6 @@ jest.mock('../../../../src/main/utils/connectors', () => ({
   testSnowflakeConnection: jest.fn(),
 }));
 
-import ConnectorsService from '../../../../src/main/services/connectors.service';
-
 describe('ConnectorsService (main)', () => {
   beforeEach(() => {
     jest.clearAllMocks();
@@ -49,9 +52,9 @@ describe('ConnectorsService (main)', () => {
 
   describe('validateConnection', () => {
     it('throws when connection type is missing', async () => {
-      await expect(ConnectorsService.validateConnection({} as any)).rejects.toThrow(
-        'Connection type is required',
-      );
+      await expect(
+        ConnectorsService.validateConnection({} as any),
+      ).rejects.toThrow('Connection type is required');
     });
   });
 
@@ -69,7 +72,9 @@ describe('ConnectorsService (main)', () => {
         password: 'pw',
       } as any;
 
-      await expect(ConnectorsService.testConnection(connection)).resolves.toBe(true);
+      await expect(ConnectorsService.testConnection(connection)).resolves.toBe(
+        true,
+      );
       expect(testPostgresConnection).toHaveBeenCalledWith(connection);
     });
 
@@ -78,6 +83,51 @@ describe('ConnectorsService (main)', () => {
         'Connection type is required',
       );
       expect(testPostgresConnection).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('BigQuery Rosetta authentication', () => {
+    it('generates a service-account JDBC URL using runtime environment values', async () => {
+      const url = await ConnectorsService.generateJdbcUrl({
+        type: 'bigquery',
+        name: 'bigquery_01',
+        project: 'analytics-project',
+      } as any);
+
+      expect(url).toBe(
+        `jdbc:bigquery://https://www.googleapis.com/bigquery/v2:443;ProjectId=\${db-project-bigquery_01};OAuthType=0;OAuthServiceAcctEmail=\${db-bigquery-email-bigquery_01};OAuthPvtKeyPath=\${db-bigquery-bigquery_01};`,
+      );
+    });
+
+    it('materializes the service-account key as a protected temporary file', async () => {
+      const writeFileSpy = jest
+        .spyOn(fs.promises, 'writeFile')
+        .mockResolvedValue(undefined);
+      const key = 'db-bigquery-bigquery_01';
+      const emailKey = 'db-bigquery-email-bigquery_01';
+      const serviceAccount = JSON.stringify({
+        client_email: 'service@example.iam.gserviceaccount.com',
+        private_key: 'private-key',
+      });
+
+      try {
+        await ConnectorsService.setConnectionEnvVariable(key, serviceAccount);
+
+        expect(writeFileSpy).toHaveBeenCalledWith(
+          expect.stringMatching(/rosetta-bigquery-.*\.json$/),
+          serviceAccount,
+          { encoding: 'utf8', mode: 0o600 },
+        );
+        expect(process.env[key]).toMatch(/rosetta-bigquery-.*\.json$/);
+        expect(process.env[emailKey]).toBe(
+          'service@example.iam.gserviceaccount.com',
+        );
+        expect(process.env[key]).not.toBe(serviceAccount);
+      } finally {
+        writeFileSpy.mockRestore();
+        delete process.env[key];
+        delete process.env[emailKey];
+      }
     });
   });
 });

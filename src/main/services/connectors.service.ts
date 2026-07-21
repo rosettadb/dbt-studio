@@ -50,6 +50,8 @@ import DuckLakeService from './duckLake.service';
 import DuckLakeInstanceStore from './duckLake/instanceStore.service';
 
 export default class ConnectorsService {
+  private static readonly bigQueryKeyFiles = new Map<string, string>();
+
   static async loadConnections(
     includeDataLake: boolean = false,
   ): Promise<ConnectionModel[]> {
@@ -980,7 +982,7 @@ export default class ConnectorsService {
         return redshiftUrl;
       }
       case 'bigquery': {
-        return `jdbc:bigquery://https://www.googleapis.com/bigquery/v2:443;ProjectId=${ev('project')};`;
+        return `jdbc:bigquery://https://www.googleapis.com/bigquery/v2:443;ProjectId=${ev('project')};OAuthType=0;OAuthServiceAcctEmail=${ev('bigquery-email')};OAuthPvtKeyPath=${ev('bigquery')};`;
       }
       case 'databricks':
         return `jdbc:databricks://${ev('host')}:443/default;transportMode=http;ssl=1;AuthMech=3;httpPath=${ev('httppath')};PWD=${ev('token')}`;
@@ -1654,6 +1656,46 @@ export default class ConnectorsService {
     key: string,
     value: string,
   ): Promise<void> {
+    const bigQueryPrefix = 'db-bigquery-';
+    if (key.startsWith(bigQueryPrefix)) {
+      let credentials: { client_email?: unknown };
+      try {
+        credentials = JSON.parse(value);
+      } catch {
+        throw new Error('Invalid BigQuery service account key JSON format.');
+      }
+
+      if (
+        typeof credentials.client_email !== 'string' ||
+        !credentials.client_email.trim()
+      ) {
+        throw new Error(
+          'BigQuery service account key is missing client_email.',
+        );
+      }
+
+      const connectionName = key.slice(bigQueryPrefix.length);
+      const tempKeyPath = path.join(
+        os.tmpdir(),
+        `rosetta-bigquery-${uuidV4()}.json`,
+      );
+      await fs.promises.writeFile(tempKeyPath, value, {
+        encoding: 'utf8',
+        mode: 0o600,
+      });
+
+      const previousKeyPath = this.bigQueryKeyFiles.get(key);
+      this.bigQueryKeyFiles.set(key, tempKeyPath);
+      process.env[key] = tempKeyPath;
+      process.env[`db-bigquery-email-${connectionName}`] =
+        credentials.client_email;
+
+      if (previousKeyPath) {
+        await fs.promises.rm(previousKeyPath, { force: true });
+      }
+      return;
+    }
+
     process.env[key] = value;
   }
 
