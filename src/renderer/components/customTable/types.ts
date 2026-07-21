@@ -40,4 +40,6 @@ export type CustomTableType<T> = {
   toolbarContent?: ReactNode;
   dataTestId?: string;
   showSearch?: boolean;
+  hideToolbar?: boolean;
+  paginationLeftContent?: ReactNode;
 };
