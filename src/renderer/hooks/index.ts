@@ -17,6 +17,8 @@ import { useSchemaForConnection } from './useSchemaForConnection';
 import { useNotebookConnectionState } from './useNotebookConnectionState';
 import { useNotebookSidebarState } from './useNotebookSidebarState';
 import { useToolMode } from './useToolMode';
+import { useProjectQueryResultsPanel } from './useProjectQueryResultsPanel';
+import { useProjectSqlExecution } from './useProjectSqlExecution';
 
 import { useAgentStream } from './useAgentStream';
 
@@ -40,5 +42,7 @@ export {
   useNotebookConnectionState,
   useNotebookSidebarState,
   useToolMode,
+  useProjectQueryResultsPanel,
+  useProjectSqlExecution,
   useAgentStream,
 };

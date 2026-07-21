@@ -54,8 +54,8 @@ const registerRosettaCloudIpcHandlers = () => {
 
   ipcMain.handle(
     'rosettaCloud:deleteSecret',
-    async (_event, projectId: string, secretId: string) => {
-      return RosettaCloudService.deleteSecret(projectId, secretId);
+    async (_event, body: { projectId: string; secretId: string }) => {
+      return RosettaCloudService.deleteSecret(body.projectId, body.secretId);
     },
   );
 
@@ -80,23 +80,6 @@ const registerRosettaCloudIpcHandlers = () => {
     'rosettaCloud:getActionLogs',
     async (_event, actionId: string) => {
       return RosettaCloudService.getActionLogs(actionId);
-    },
-  );
-
-  ipcMain.handle(
-    'rosettaCloud:openLogStream',
-    async (event, actionId: string) => {
-      // Fire and forget — the stream pushes events back via webContents.send.
-      RosettaCloudService.openLogStream(actionId, event.sender).catch(() => {
-        // Errors are forwarded via 'rosettaCloud:logStreamError'.
-      });
-    },
-  );
-
-  ipcMain.handle(
-    'rosettaCloud:closeLogStream',
-    async (_event, actionId: string) => {
-      RosettaCloudService.closeLogStream(actionId);
     },
   );
 };

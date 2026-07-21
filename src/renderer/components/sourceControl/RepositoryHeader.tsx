@@ -11,6 +11,7 @@ import {
 } from '@mui/material';
 import { MoreHoriz, Sync } from '@mui/icons-material';
 import { useQueryClient } from 'react-query';
+import { toast } from 'react-toastify';
 import {
   useGitPull,
   useGitPush,
@@ -25,7 +26,11 @@ import { BranchDialog } from './BranchDialog';
 import { Icon } from '../icon';
 import { icons } from '../../../../assets';
 import { QUERY_KEYS } from '../../config/constants';
-import { GitUiError } from '../modals';
+import { GitUiError, SshPassphraseModal } from '../modals';
+
+function isSshUrl(url: string): boolean {
+  return url.startsWith('git@') || url.startsWith('ssh://');
+}
 
 interface RepositoryHeaderProps {
   projectPath?: string;
@@ -97,9 +102,28 @@ export const RepositoryHeader: React.FC<RepositoryHeaderProps> = ({
     },
   });
 
+  const [sshPassphraseDialogOpen, setSshPassphraseDialogOpen] = useState(false);
+  const [sshPassphraseAttempted, setSshPassphraseAttempted] = useState(false);
+
+  // Close any pending SSH prompt from a previous project — this component
+  // stays mounted across project switches, only projectPath changes.
+  React.useEffect(() => {
+    setSshPassphraseDialogOpen(false);
+    setSshPassphraseAttempted(false);
+  }, [projectPath]);
+
   const { mutate: push, isLoading: isPushing } = useGitPush({
     onSuccess: (data) => {
       if (data?.authRequired) {
+        const originPushUrl = remotes.find((r) => r.name === 'origin')?.refs
+          .push;
+        if (originPushUrl && isSshUrl(originPushUrl)) {
+          if (sshPassphraseAttempted) {
+            toast.error('Incorrect SSH key passphrase. Please try again.');
+          }
+          setSshPassphraseDialogOpen(true);
+          return;
+        }
         emitGitError({
           title: 'Authentication required',
           message:
@@ -119,6 +143,8 @@ export const RepositoryHeader: React.FC<RepositoryHeaderProps> = ({
         });
         return;
       }
+      setSshPassphraseDialogOpen(false);
+      setSshPassphraseAttempted(false);
       onSynchronize?.();
     },
     onError: (error) => {
@@ -130,6 +156,20 @@ export const RepositoryHeader: React.FC<RepositoryHeaderProps> = ({
       });
     },
   });
+
+  const handleSshPassphraseSubmit = (sshPassphrase: string) => {
+    if (!projectPath) return;
+    setSshPassphraseAttempted(true);
+    push({
+      path: projectPath,
+      credentials: { username: '', password: '', sshPassphrase },
+    });
+  };
+
+  const handleSshPassphraseCancel = () => {
+    setSshPassphraseDialogOpen(false);
+    setSshPassphraseAttempted(false);
+  };
 
   // Branch operation state
   const [branchDialogOpen, setBranchDialogOpen] = useState(false);
@@ -524,6 +564,14 @@ export const RepositoryHeader: React.FC<RepositoryHeaderProps> = ({
           }}
           isLoading={isCreating || isDeleting || isRenaming || isSwitching}
           branches={branches}
+        />
+
+        {/* SSH Passphrase Dialog */}
+        <SshPassphraseModal
+          isOpen={sshPassphraseDialogOpen}
+          isLoading={isPushing}
+          onClose={handleSshPassphraseCancel}
+          onSubmit={handleSshPassphraseSubmit}
         />
       </Box>
     </Box>

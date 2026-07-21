@@ -20,3 +20,23 @@ export const getPreviewSourcePath = (path: string): string | null =>
 /** Returns the preview tab path for a given source file path. */
 export const toPreviewPath = (sourcePath: string): string =>
   `${MD_PREVIEW_PREFIX}${sourcePath}`;
+
+/**
+ * Prefix used to identify virtual pipeline view tabs.
+ * A pipeline tab path looks like: `__pipeline__:/absolute/path/to/pipeline.yml`
+ */
+export const PIPELINE_TAB_PREFIX = '__pipeline__:';
+
+/** Returns true if the path is a virtual pipeline view tab. */
+export const isPipelineTabPath = (path: string): boolean =>
+  path.startsWith(PIPELINE_TAB_PREFIX);
+
+/** Returns the real file path for a pipeline tab, or null if not a pipeline tab. */
+export const getPipelineFilePath = (path: string): string | null =>
+  path.startsWith(PIPELINE_TAB_PREFIX)
+    ? path.slice(PIPELINE_TAB_PREFIX.length)
+    : null;
+
+/** Returns the pipeline tab path for a given pipeline file path. */
+export const toPipelineTabPath = (filePath: string): string =>
+  `${PIPELINE_TAB_PREFIX}${filePath}`;

@@ -13,7 +13,6 @@ import {
   Chip,
   Tooltip,
   Box,
-  Select,
 } from '@mui/material';
 import TerminalIcon from '@mui/icons-material/Terminal';
 import {
@@ -24,8 +23,6 @@ import {
   PowerOffRounded,
   TimerRounded,
 } from '@mui/icons-material';
-import FullscreenIcon from '@mui/icons-material/Fullscreen';
-import FullscreenExitIcon from '@mui/icons-material/FullscreenExit';
 import { Terminal } from './terminal';
 import {
   Root,
@@ -38,747 +35,666 @@ import {
 import { ProcessTerminal } from './processTerminal';
 import { useProcess } from '../../hooks';
 import { useSelectedFileContext } from '../../hooks/useSelectedFileContext';
-import useAppContext from '../../hooks/useAppContext';
 import { Project } from '../../../types/backend';
-import {
-  useGetFileContent,
-  useListPipelines,
-  useCurrentModelId,
-} from '../../controllers';
-import { usePipelineActionId } from '../../controllers/rosettaCloud.controller';
+import { useCurrentModelId } from '../../controllers';
 import { LineageModal, LineageView } from '../lineage';
-import {
-  PipelineView,
-  CloudLogViewer,
-  isPipelineFile,
-  parsePipelineConfig,
-} from '../pipelineView';
+
+type TerminalMinimizeContextValue = {
+  isMinimized: boolean;
+  minimize: () => void;
+  restore: () => void;
+};
+
+const TerminalMinimizeContext =
+  React.createContext<TerminalMinimizeContextValue | null>(null);
+
+export const useTerminalMinimize = () =>
+  React.useContext(TerminalMinimizeContext);
+
+const MINIMIZED_TERMINAL_HEIGHT = 32;
+
+export type TerminalPanelTab =
+  | 'terminal'
+  | 'process'
+  | 'lineage'
+  | 'queryResults'
+  | 'runHistory';
+
+export interface TerminalLayoutRef {
+  switchTab: (tab: TerminalPanelTab) => void;
+}
 
 type Props = {
   project: Project;
   children: React.ReactNode;
+  queryResultsPanel?: React.ReactNode;
+  showQueryResultsTab?: boolean;
+  queryResultsRevision?: number;
+  runHistoryPanel?: React.ReactNode;
+  showRunHistoryTab?: boolean;
 };
 
-export const TerminalLayout: React.FC<Props> = ({ children, project }) => {
-  const { mode } = useColorScheme();
-  const theme = useTheme();
-  const { openFile } = useAppContext();
-  const { isRunning, stop, forceStop, pid, duration, status, command } =
-    useProcess();
-
-  const { selectedFilePath } = useSelectedFileContext();
-
-  // Only query for lineage if the file is a SQL model (not .yml/.yaml)
-  const isExecutableModel = React.useMemo(() => {
-    if (!selectedFilePath) return false;
-    const ext = selectedFilePath.toLowerCase().split('.').pop();
-    return ext === 'sql';
-  }, [selectedFilePath]);
-
-  const {
-    data: currentModelData,
-    isLoading: isLoadingCurrentModel,
-    isError: isErrorCurrentModel,
-  } = useCurrentModelId(
+export const TerminalLayout = React.forwardRef<TerminalLayoutRef, Props>(
+  (
     {
-      projectId: project.id,
-      filePath: selectedFilePath,
+      children,
+      project,
+      queryResultsPanel,
+      showQueryResultsTab = false,
+      queryResultsRevision = 0,
+      runHistoryPanel,
+      showRunHistoryTab = false,
     },
-    { enabled: !!project.id && !!selectedFilePath && isExecutableModel },
-  );
+    ref,
+  ) => {
+    const { mode } = useColorScheme();
+    const theme = useTheme();
+    const { isRunning, stop, forceStop, pid, duration, status, command } =
+      useProcess();
 
-  const showLineageTab =
-    isExecutableModel &&
-    (Boolean(currentModelData?.modelId) ||
-      isLoadingCurrentModel ||
-      isErrorCurrentModel);
+    const { selectedFilePath } = useSelectedFileContext();
 
-  // Check if current file is a .yml file in .rosetta directory
-  const isYmlFileInRosettaDir = React.useMemo(() => {
-    if (!selectedFilePath) return false;
-    return isPipelineFile(selectedFilePath);
-  }, [selectedFilePath]);
+    // Only query for lineage if the file is a SQL model (not .yml/.yaml)
+    const isExecutableModel = React.useMemo(() => {
+      if (!selectedFilePath) return false;
+      const ext = selectedFilePath.toLowerCase().split('.').pop();
+      return ext === 'sql';
+    }, [selectedFilePath]);
 
-  // Fetch content of the selected file if it's a .yml file in .rosetta
-  const { data: selectedFileContent } = useGetFileContent(
-    selectedFilePath || '',
-    {
-      enabled: isYmlFileInRosettaDir,
-    },
-  );
+    const {
+      data: currentModelData,
+      isLoading: isLoadingCurrentModel,
+      isError: isErrorCurrentModel,
+    } = useCurrentModelId(
+      {
+        projectId: project.id,
+        filePath: selectedFilePath,
+      },
+      { enabled: !!project.id && !!selectedFilePath && isExecutableModel },
+    );
 
-  // Check if the file is a valid pipeline file by parsing its content
-  const isPipelineFileActive = React.useMemo(() => {
-    if (!isYmlFileInRosettaDir || !selectedFileContent) return false;
-    // Use parsePipelineConfig to validate if it's a valid pipeline file
-    try {
-      const parsed = parsePipelineConfig(selectedFileContent);
-      return parsed !== null;
-    } catch {
-      return false;
-    }
-  }, [isYmlFileInRosettaDir, selectedFileContent]);
+    const showLineageTab =
+      isExecutableModel &&
+      (Boolean(currentModelData?.modelId) ||
+        isLoadingCurrentModel ||
+        isErrorCurrentModel);
 
-  const [selectedTab, setSelectedTab] = React.useState(0);
-  const [isPipelineFullscreen, setIsPipelineFullscreen] = React.useState(false);
-  // Track if user manually clicked on CI/CD tab (vs auto-switched)
-  const [isManualCicdTabSwitch, setIsManualCicdTabSwitch] =
-    React.useState(false);
+    const [selectedTab, setSelectedTab] =
+      React.useState<TerminalPanelTab>('terminal');
 
-  // List available pipelines
-  const { data: availablePipelines = [] } = useListPipelines(project.id);
-  const [selectedPipelineIdx, setSelectedPipelineIdx] = React.useState(0);
-
-  // Reset selection if pipelines change
-  React.useEffect(() => {
-    if (selectedPipelineIdx >= availablePipelines.length) {
-      setSelectedPipelineIdx(0);
-    }
-  }, [availablePipelines.length, selectedPipelineIdx]);
-
-  const currentPipeline = availablePipelines[selectedPipelineIdx];
-  const pipelineFilePath = currentPipeline?.path || '';
-
-  // Always poll the pipeline file — tab is visible whenever the file exists on disk
-  const { data: pipelineFileContent } = useGetFileContent(pipelineFilePath, {
-    enabled: !!pipelineFilePath,
-    refetchInterval: 5000,
-  });
-
-  const showPipelineTab = availablePipelines.length > 0;
-
-  // Look up the cloud action id for the currently-viewed pipeline. Primary
-  // source is the locally-recorded `pipelineRuns` map (populated when a run
-  // is triggered through this app). When missing — e.g. for runs that
-  // predate this feature — fall back to a cloud lookup keyed on
-  // action.data.PIPELINE_FILE; the result is persisted by the main process.
-  const pipelineFileBasename = React.useMemo(() => {
-    if (!pipelineFilePath) return null;
-    const parts = pipelineFilePath.split(/[\\/]/);
-    return parts[parts.length - 1] || null;
-  }, [pipelineFilePath]);
-
-  const recordedActionId = pipelineFileBasename
-    ? (project.pipelineRuns?.[pipelineFileBasename] ?? null)
-    : null;
-
-  const cloudActionId = usePipelineActionId(
-    project.externalId ? project.id : null,
-    pipelineFileBasename,
-    recordedActionId,
-  );
-
-  const [lock, setLock] = React.useState(false);
-  const [sizes, setSizes] = React.useState<number[]>([
-    window.innerHeight - 300,
-    300,
-  ]);
-  const [isMinimized, setIsMinimized] = React.useState(false);
-  const [menuAnchor, setMenuAnchor] = React.useState<null | HTMLElement>(null);
-  const [openLineageModal, setOpenLineageModal] = React.useState(false);
-  const [hasStartedProcess, setHasStartedProcess] =
-    React.useState<boolean>(false);
-  const lastTerminalHeight = React.useRef<number>(300);
-
-  const handleMinimize = () => {
-    setIsMinimized(true);
-    // eslint-disable-next-line prefer-destructuring
-    lastTerminalHeight.current = sizes[1];
-    setSizes([window.innerHeight, 0]);
-  };
-
-  const handleRestore = () => {
-    setIsMinimized(false);
-    setSizes([
-      window.innerHeight - lastTerminalHeight.current,
-      lastTerminalHeight.current,
+    const [lock, setLock] = React.useState(false);
+    const [sizes, setSizes] = React.useState<number[]>([
+      window.innerHeight - 300,
+      300,
     ]);
-  };
+    const [isMinimized, setIsMinimized] = React.useState(false);
+    const [menuAnchor, setMenuAnchor] = React.useState<null | HTMLElement>(
+      null,
+    );
+    const [openLineageModal, setOpenLineageModal] = React.useState(false);
+    const [hasStartedProcess, setHasStartedProcess] =
+      React.useState<boolean>(false);
+    const rootRef = React.useRef<HTMLDivElement | null>(null);
+    const lastTerminalHeight = React.useRef<number>(300);
+    const sizesRef = React.useRef(sizes);
+    sizesRef.current = sizes;
+    const getLayoutHeight = React.useCallback(
+      () => rootRef.current?.clientHeight || window.innerHeight,
+      [],
+    );
 
-  const handleMenuOpen = (event: React.MouseEvent<HTMLElement>) => {
-    setMenuAnchor(event.currentTarget);
-  };
+    const handleMinimize = React.useCallback(() => {
+      setIsMinimized(true);
+      const layoutHeight = getLayoutHeight();
+      const [, currentTerminalHeight] = sizesRef.current;
+      if (
+        typeof currentTerminalHeight === 'number' &&
+        currentTerminalHeight > MINIMIZED_TERMINAL_HEIGHT
+      ) {
+        lastTerminalHeight.current = currentTerminalHeight;
+      }
+      setSizes([
+        layoutHeight - MINIMIZED_TERMINAL_HEIGHT,
+        MINIMIZED_TERMINAL_HEIGHT,
+      ]);
+    }, [getLayoutHeight]);
 
-  const handleMenuClose = () => {
-    setMenuAnchor(null);
-  };
+    const handleRestore = React.useCallback(() => {
+      setIsMinimized(false);
+      const layoutHeight = getLayoutHeight();
+      setSizes([
+        layoutHeight - lastTerminalHeight.current,
+        lastTerminalHeight.current,
+      ]);
+    }, [getLayoutHeight]);
 
-  const handleGracefulStop = async () => {
-    handleMenuClose();
-    await stop();
-    setSelectedTab(0);
-  };
+    const terminalContextValue = React.useMemo(
+      () => ({ isMinimized, minimize: handleMinimize, restore: handleRestore }),
+      [isMinimized, handleMinimize, handleRestore],
+    );
 
-  const handleForceStop = async () => {
-    handleMenuClose();
-    await forceStop();
-    setSelectedTab(0);
-  };
+    React.useImperativeHandle(
+      ref,
+      () => ({
+        switchTab: (tab: TerminalPanelTab) => {
+          setSelectedTab((prev) => {
+            if (prev !== tab) {
+              return tab;
+            }
+            return prev;
+          });
+          if (isMinimized) {
+            handleRestore();
+          }
+        },
+      }),
+      [isMinimized, handleRestore],
+    );
 
-  const handleQuickStop = async () => {
-    await stop();
-    setSelectedTab(0);
-  };
+    const handleMenuOpen = (event: React.MouseEvent<HTMLElement>) => {
+      setMenuAnchor(event.currentTarget);
+    };
 
-  const renderSash = (_: number, active: boolean) => {
-    if (isMinimized) return null;
-    return (
-      <div
-        style={{
-          width: '100%',
-          height: '4px',
-          cursor: 'row-resize',
-          position: 'relative',
-          backgroundColor: active ? 'rgba(144,202,249,0.4)' : 'transparent',
-          transition: 'background-color 0.15s ease',
-        }}
-      >
+    const handleMenuClose = () => {
+      setMenuAnchor(null);
+    };
+
+    const handleGracefulStop = async () => {
+      handleMenuClose();
+      await stop();
+      setSelectedTab('terminal');
+    };
+
+    const handleForceStop = async () => {
+      handleMenuClose();
+      await forceStop();
+      setSelectedTab('terminal');
+    };
+
+    const handleQuickStop = async () => {
+      await stop();
+      setSelectedTab('terminal');
+    };
+
+    const handleCloseProcessTab = React.useCallback(() => {
+      setHasStartedProcess(false);
+      setSelectedTab((prev) => (prev === 'process' ? 'terminal' : prev));
+    }, []);
+
+    const renderSash = (_: number, active: boolean) => {
+      if (isMinimized) return null;
+      return (
         <div
           style={{
-            position: 'absolute',
-            top: '50%',
-            left: 0,
-            right: 0,
-            height: '2px',
-            transform: 'translateY(-50%)',
-            backgroundColor: active
-              ? 'rgba(144,202,249,0.8)'
-              : 'rgba(255,255,255,0.08)',
+            width: '100%',
+            height: '4px',
+            cursor: 'row-resize',
+            position: 'relative',
+            backgroundColor: active ? 'rgba(144,202,249,0.4)' : 'transparent',
             transition: 'background-color 0.15s ease',
           }}
-        />
-      </div>
-    );
-  };
+        >
+          <div
+            style={{
+              position: 'absolute',
+              top: '50%',
+              left: 0,
+              right: 0,
+              height: '2px',
+              transform: 'translateY(-50%)',
+              backgroundColor: active
+                ? 'rgba(144,202,249,0.8)'
+                : 'rgba(255,255,255,0.08)',
+              transition: 'background-color 0.15s ease',
+            }}
+          />
+        </div>
+      );
+    };
 
-  // Auto-switch to process tab when a process starts
-  React.useEffect(() => {
-    if (isRunning) {
-      setHasStartedProcess(true);
-    }
-    if (isRunning && selectedTab !== 1) {
-      setSelectedTab(1);
-    }
-  }, [isRunning]);
-
-  // // Reset stopping state when process stops
-  // React.useEffect(() => {
-  //   if (!isRunning) {
-  //     setIsStoppingGracefully(false);
-  //   }
-  // }, [isRunning]);
-
-  // If Lineage tab is hidden but selected, switch back to terminal
-  // Only auto-switch when the query is settled (not loading)
-  React.useEffect(() => {
-    if (!showLineageTab && selectedTab === 2 && !isLoadingCurrentModel) {
-      setSelectedTab(0);
-    }
-  }, [showLineageTab, selectedTab, isLoadingCurrentModel]);
-
-  // Auto-switch to CI/CD tab when a valid pipeline file is opened in editor
-  React.useEffect(() => {
-    if (isPipelineFileActive && selectedTab !== 3) {
-      setSelectedTab(3);
-      setIsManualCicdTabSwitch(false); // This is an auto-switch
-      // Restore terminal if minimized
-      if (isMinimized) {
-        handleRestore();
+    // Auto-switch to process tab when a process starts
+    React.useEffect(() => {
+      if (isRunning) {
+        setHasStartedProcess(true);
       }
-    }
-  }, [isPipelineFileActive]);
+      if (isRunning && selectedTab !== 'process') {
+        setSelectedTab('process');
+      }
+    }, [isRunning]);
 
-  // Switch back to Terminal when navigating away from pipeline file (if not manually on CI/CD tab)
-  React.useEffect(() => {
-    if (!isPipelineFileActive && selectedTab === 3 && !isManualCicdTabSwitch) {
-      setSelectedTab(0);
-    }
-  }, [isPipelineFileActive, selectedTab, isManualCicdTabSwitch]);
+    // // Reset stopping state when process stops
+    // React.useEffect(() => {
+    //   if (!isRunning) {
+    //     setIsStoppingGracefully(false);
+    //   }
+    // }, [isRunning]);
 
-  // If Pipeline tab is hidden but selected, switch back to terminal
-  React.useEffect(() => {
-    if (!showPipelineTab && selectedTab === 3) {
-      setSelectedTab(0);
-    }
-  }, [showPipelineTab, selectedTab]);
+    // If Lineage tab is hidden but selected, switch back to terminal
+    // Only auto-switch when the query is settled (not loading)
+    React.useEffect(() => {
+      if (
+        !showLineageTab &&
+        selectedTab === 'lineage' &&
+        !isLoadingCurrentModel
+      ) {
+        setSelectedTab('terminal');
+      }
+    }, [showLineageTab, selectedTab, isLoadingCurrentModel]);
 
-  const getTextColor = (themeMode: string | undefined) => {
-    switch (themeMode) {
-      case 'dark':
-        return theme.palette.common.white;
-      case 'light':
-        return theme.palette.common.black;
-      case 'system':
-        return theme.palette.text.primary;
-      default:
-        return theme.palette.text.primary;
-    }
-  };
+    React.useEffect(() => {
+      if (showQueryResultsTab && queryResultsRevision > 0) {
+        setSelectedTab('queryResults');
+        if (isMinimized) {
+          handleRestore();
+        }
+      }
+      // handleRestore intentionally reads refs/state and should not retrigger this.
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [showQueryResultsTab, queryResultsRevision]);
 
-  const tabButtonSx = (isSelected: boolean) => ({
-    minHeight: 22,
-    height: 22,
-    padding: '0 10px',
-    borderRadius: '4px',
-    marginRight: '6px',
-    backgroundColor: isSelected ? theme.palette.action.selected : 'transparent',
-    transition: 'background-color 0.15s, border-color 0.15s',
-    border: `1px solid ${isSelected ? theme.palette.divider : 'transparent'}`,
-    color: isSelected
-      ? theme.palette.text.primary
-      : theme.palette.text.secondary,
-    textTransform: 'none',
-    letterSpacing: 0.2,
-    '&:hover': {
+    const getTextColor = (themeMode: string | undefined) => {
+      switch (themeMode) {
+        case 'dark':
+          return theme.palette.common.white;
+        case 'light':
+          return theme.palette.common.black;
+        case 'system':
+          return theme.palette.text.primary;
+        default:
+          return theme.palette.text.primary;
+      }
+    };
+
+    const tabButtonSx = (isSelected: boolean) => ({
+      minHeight: 22,
+      height: 22,
+      padding: '0 10px',
+      borderRadius: '4px',
+      marginRight: '6px',
       backgroundColor: isSelected
         ? theme.palette.action.selected
-        : theme.palette.action.hover,
-      borderColor: isSelected ? theme.palette.divider : 'transparent',
-    },
-  });
+        : 'transparent',
+      transition: 'background-color 0.15s, border-color 0.15s',
+      border: `1px solid ${isSelected ? theme.palette.divider : 'transparent'}`,
+      color: isSelected
+        ? theme.palette.text.primary
+        : theme.palette.text.secondary,
+      textTransform: 'none',
+      letterSpacing: 0.2,
+      '&:hover': {
+        backgroundColor: isSelected
+          ? theme.palette.action.selected
+          : theme.palette.action.hover,
+        borderColor: isSelected ? theme.palette.divider : 'transparent',
+      },
+    });
 
-  const formatDuration = (ms: number | null) => {
-    if (!ms) return '0s';
-    const seconds = Math.floor(ms / 1000);
-    const minutes = Math.floor(seconds / 60);
-    const hours = Math.floor(minutes / 60);
+    const formatDuration = (ms: number | null) => {
+      if (!ms) return '0s';
+      const seconds = Math.floor(ms / 1000);
+      const minutes = Math.floor(seconds / 60);
+      const hours = Math.floor(minutes / 60);
 
-    if (hours > 0) return `${hours}h ${minutes % 60}m`;
-    if (minutes > 0) return `${minutes}m ${seconds % 60}s`;
-    return `${seconds}s`;
-  };
+      if (hours > 0) return `${hours}h ${minutes % 60}m`;
+      if (minutes > 0) return `${minutes}m ${seconds % 60}s`;
+      return `${seconds}s`;
+    };
 
-  // eslint-disable-next-line @typescript-eslint/no-shadow
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case 'running':
-        return 'success';
-      case 'starting':
-        return 'info';
-      case 'stopping':
-        return 'warning';
-      case 'stopped':
-        return 'default';
-      default:
-        return 'default';
-    }
-  };
+    // eslint-disable-next-line @typescript-eslint/no-shadow
+    const getStatusColor = (status: string) => {
+      switch (status) {
+        case 'running':
+          return 'success';
+        case 'starting':
+          return 'info';
+        case 'stopping':
+          return 'warning';
+        case 'stopped':
+          return 'default';
+        default:
+          return 'default';
+      }
+    };
 
-  return (
-    <Root>
-      <SplitPane
-        split="horizontal"
-        sizes={sizes}
-        onChange={(newSizes) => {
-          if (!isMinimized) {
-            setSizes(newSizes);
-          }
-        }}
-        onDragStart={() => setLock(true)}
-        onDragEnd={() => setLock(false)}
-        sashRender={renderSash}
-      >
-        <EditorWrapper style={{ pointerEvents: lock ? 'none' : 'auto' }}>
-          {children}
-        </EditorWrapper>
-        <TerminalWrapper>
-          {!isMinimized && (
-            <>
-              <TerminalHeader
-                sx={{
-                  backgroundColor:
-                    theme.palette.mode === 'dark'
-                      ? theme.palette.grey[900]
-                      : theme.palette.grey[50],
-                  borderBottom: `1px solid ${theme.palette.divider}`,
-                  padding: '4px 6px',
-                  height: 32,
-                }}
-              >
-                {/* CLI Terminal Tab */}
-                {/* CLI Terminal Tab */}
-                <Button
-                  size="small"
-                  disableRipple
-                  sx={tabButtonSx(selectedTab === 0)}
-                  onClick={() => setSelectedTab(0)}
-                >
-                  <Typography
-                    sx={{ fontWeight: 500, fontSize: 10.5, lineHeight: 1 }}
-                  >
-                    TERMINAL
+    return (
+      <Root ref={rootRef}>
+        <SplitPane
+          split="horizontal"
+          sizes={sizes}
+          onChange={(newSizes) => {
+            if (!isMinimized) {
+              setSizes(newSizes);
+            }
+          }}
+          onDragStart={() => setLock(true)}
+          onDragEnd={() => setLock(false)}
+          sashRender={renderSash}
+        >
+          <EditorWrapper style={{ pointerEvents: lock ? 'none' : 'auto' }}>
+            <TerminalMinimizeContext.Provider value={terminalContextValue}>
+              {children}
+            </TerminalMinimizeContext.Provider>
+          </EditorWrapper>
+          <TerminalWrapper>
+            {isMinimized ? (
+              <Taskbar>
+                <TaskbarItem onClick={handleRestore}>
+                  <Typography fontSize={13} sx={{ mr: 1 }} fontWeight="bold">
+                    Terminal
                   </Typography>
-                </Button>
-                {/* Lineage Terminal Tab */}
-                {showLineageTab && (
+                  <TerminalIcon fontSize="small" />
+                  {isRunning && (
+                    <Chip
+                      label="Running"
+                      size="small"
+                      color="success"
+                      sx={{ ml: 1, height: 18, fontSize: '0.65rem' }}
+                    />
+                  )}
+                </TaskbarItem>
+
+                {/* Quick stop when minimized */}
+                {isRunning && (
+                  <TaskbarItem
+                    onClick={handleQuickStop}
+                    sx={{
+                      color: theme.palette.warning.main,
+                      '&:hover': {
+                        backgroundColor: `${theme.palette.warning.main}20`,
+                      },
+                    }}
+                  >
+                    <Tooltip title="Stop process">
+                      <CloseRounded fontSize="small" />
+                    </Tooltip>
+                  </TaskbarItem>
+                )}
+              </Taskbar>
+            ) : (
+              <>
+                <TerminalHeader
+                  sx={{
+                    backgroundColor:
+                      theme.palette.mode === 'dark'
+                        ? theme.palette.grey[900]
+                        : theme.palette.grey[50],
+                    borderBottom: `1px solid ${theme.palette.divider}`,
+                    padding: '4px 6px',
+                    height: 32,
+                  }}
+                >
+                  {/* CLI Terminal Tab */}
+                  {/* CLI Terminal Tab */}
                   <Button
                     size="small"
                     disableRipple
-                    sx={tabButtonSx(selectedTab === 2)}
-                    onClick={() => setSelectedTab(2)}
+                    sx={tabButtonSx(selectedTab === 'terminal')}
+                    onClick={() => setSelectedTab('terminal')}
                   >
                     <Typography
                       sx={{ fontWeight: 500, fontSize: 10.5, lineHeight: 1 }}
                     >
-                      LINEAGE
+                      TERMINAL
                     </Typography>
                   </Button>
-                )}
-                {/* CI/CD Pipeline Tab */}
-                {showPipelineTab && (
-                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                  {/* Lineage Terminal Tab */}
+                  {showLineageTab && (
                     <Button
                       size="small"
                       disableRipple
-                      sx={tabButtonSx(selectedTab === 3)}
-                      onClick={() => {
-                        setSelectedTab(3);
-                        setIsManualCicdTabSwitch(true);
-                      }}
+                      sx={tabButtonSx(selectedTab === 'lineage')}
+                      onClick={() => setSelectedTab('lineage')}
                     >
                       <Typography
                         sx={{ fontWeight: 500, fontSize: 10.5, lineHeight: 1 }}
                       >
-                        CI/CD
+                        LINEAGE
                       </Typography>
                     </Button>
-                    {selectedTab === 3 && availablePipelines.length > 1 && (
-                      <Select
-                        size="small"
-                        value={selectedPipelineIdx}
-                        onChange={(e) =>
-                          setSelectedPipelineIdx(e.target.value as number)
-                        }
-                        variant="standard"
-                        disableUnderline
+                  )}
+                  {/* Process Tab - Only show when running */}
+                  {hasStartedProcess && (
+                    <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                      <Box
+                        component="button"
+                        type="button"
+                        onClick={() => setSelectedTab('process')}
                         sx={{
-                          fontSize: '0.7rem',
-                          height: 22,
-                          '& .MuiSelect-select': {
-                            py: 0,
-                            px: 0.5,
-                            fontSize: '0.7rem',
-                          },
+                          ...tabButtonSx(selectedTab === 'process'),
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: 0.75,
+                          padding: '0 6px 0 10px',
+                          cursor: 'pointer',
+                          outline: 'none',
                         }}
                       >
-                        {availablePipelines.map((p, idx) => (
-                          <MenuItem
-                            key={p.name}
-                            value={idx}
-                            sx={{ fontSize: '0.75rem' }}
+                        <Typography
+                          sx={{
+                            fontWeight: 500,
+                            fontSize: 10.5,
+                            lineHeight: 1,
+                          }}
+                        >
+                          PID SERVER
+                        </Typography>
+
+                        <Box
+                          sx={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: 0.5,
+                          }}
+                        >
+                          {pid && (
+                            <Chip
+                              label={`PID: ${pid}`}
+                              size="small"
+                              variant="outlined"
+                              sx={{ height: 16, fontSize: '0.6rem' }}
+                            />
+                          )}
+                          {duration && (
+                            <Chip
+                              label={formatDuration(duration)}
+                              size="small"
+                              color={getStatusColor(status)}
+                              sx={{ height: 16, fontSize: '0.6rem' }}
+                            />
+                          )}
+                        </Box>
+
+                        {/* Stop Options Menu */}
+                        <Tooltip title="Stop options">
+                          <IconButton
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleMenuOpen(e);
+                            }}
+                            size="small"
+                            sx={{
+                              padding: 0.25,
+                              color: 'inherit',
+                              minWidth: 'auto',
+                            }}
                           >
-                            {p.name}
-                          </MenuItem>
-                        ))}
-                      </Select>
-                    )}
-                  </Box>
-                )}
-                {/* Process Tab - Only show when running */}
-                {hasStartedProcess && (
-                  <Box sx={{ display: 'flex', alignItems: 'center' }}>
-                    <Box
-                      component="button"
-                      type="button"
-                      onClick={() => setSelectedTab(1)}
-                      sx={{
-                        ...tabButtonSx(selectedTab === 1),
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: 0.75,
-                        padding: '0 6px 0 10px',
-                        cursor: 'pointer',
-                        outline: 'none',
-                      }}
+                            <MoreVertRounded style={{ fontSize: 16 }} />
+                          </IconButton>
+                        </Tooltip>
+
+                        {/* Close Tab */}
+                        <Tooltip title="Close PID server tab">
+                          <IconButton
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleCloseProcessTab();
+                            }}
+                            size="small"
+                            sx={{
+                              padding: 0.25,
+                              color: 'inherit',
+                              minWidth: 'auto',
+                            }}
+                          >
+                            <CloseRounded style={{ fontSize: 14 }} />
+                          </IconButton>
+                        </Tooltip>
+                      </Box>
+                    </Box>
+                  )}
+                  {/* Query Results Tab */}
+                  {showQueryResultsTab && (
+                    <Button
+                      size="small"
+                      disableRipple
+                      sx={tabButtonSx(selectedTab === 'queryResults')}
+                      onClick={() => setSelectedTab('queryResults')}
                     >
                       <Typography
                         sx={{ fontWeight: 500, fontSize: 10.5, lineHeight: 1 }}
                       >
-                        PID SERVER
+                        QUERY RESULTS
                       </Typography>
-
-                      <Box
-                        sx={{
-                          display: 'flex',
-                          alignItems: 'center',
-                          gap: 0.5,
-                        }}
-                      >
-                        {pid && (
-                          <Chip
-                            label={`PID: ${pid}`}
-                            size="small"
-                            variant="outlined"
-                            sx={{ height: 16, fontSize: '0.6rem' }}
-                          />
-                        )}
-                        {duration && (
-                          <Chip
-                            label={formatDuration(duration)}
-                            size="small"
-                            color={getStatusColor(status)}
-                            sx={{ height: 16, fontSize: '0.6rem' }}
-                          />
-                        )}
-                      </Box>
-
-                      {/* Stop Options Menu */}
-                      <Tooltip title="Stop options">
-                        <IconButton
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleMenuOpen(e);
-                          }}
-                          size="small"
-                          disabled={status === 'stopping'}
-                          sx={{
-                            padding: 0.25,
-                            color: 'inherit',
-                            minWidth: 'auto',
-                          }}
-                        >
-                          <MoreVertRounded style={{ fontSize: 16 }} />
-                        </IconButton>
-                      </Tooltip>
-
-                      {/* Quick Stop */}
-                      <Tooltip title="Quick stop (Ctrl+C)">
-                        <IconButton
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleQuickStop();
-                            setHasStartedProcess(false);
-                          }}
-                          size="small"
-                          disabled={status === 'stopping'}
-                          sx={{
-                            padding: 0.25,
-                            color: 'inherit',
-                            minWidth: 'auto',
-                          }}
-                        >
-                          <CloseRounded style={{ fontSize: 14 }} />
-                        </IconButton>
-                      </Tooltip>
-                    </Box>
-                  </Box>
-                )}
-                {/* Fullscreen Toggle - Only for CI/CD tab */}
-                {selectedTab === 3 && (
-                  <Tooltip
-                    title={
-                      isPipelineFullscreen ? 'Exit fullscreen' : 'Fullscreen'
-                    }
-                  >
-                    <IconButton
-                      onClick={() =>
-                        setIsPipelineFullscreen(!isPipelineFullscreen)
-                      }
+                    </Button>
+                  )}
+                  {/* Run History Tab */}
+                  {showRunHistoryTab && (
+                    <Button
                       size="small"
-                      style={{ marginLeft: 'auto' }}
+                      disableRipple
+                      sx={tabButtonSx(selectedTab === 'runHistory')}
+                      onClick={() => setSelectedTab('runHistory')}
                     >
-                      {isPipelineFullscreen ? (
-                        <FullscreenExitIcon
-                          style={{
-                            color: getTextColor(mode),
-                            fontSize: 20,
-                          }}
-                        />
-                      ) : (
-                        <FullscreenIcon
-                          style={{
-                            color: getTextColor(mode),
-                            fontSize: 20,
-                          }}
-                        />
-                      )}
-                    </IconButton>
-                  </Tooltip>
-                )}
-                {/* Minimize Button */}
-                <IconButton
-                  onClick={handleMinimize}
-                  size="small"
-                  style={{ marginLeft: selectedTab === 3 ? 0 : 'auto' }}
-                >
-                  <div style={{ marginTop: -8 }}>
-                    <MinimizeRounded
-                      style={{
-                        color: getTextColor(mode),
-                      }}
-                    />
-                  </div>
-                </IconButton>
-              </TerminalHeader>
+                      <Typography
+                        sx={{ fontWeight: 500, fontSize: 10.5, lineHeight: 1 }}
+                      >
+                        RUN HISTORY
+                      </Typography>
+                    </Button>
+                  )}
+                  {/* Minimize Button */}
+                  <IconButton
+                    onClick={handleMinimize}
+                    size="small"
+                    style={{ marginLeft: 'auto' }}
+                  >
+                    <div style={{ marginTop: -8 }}>
+                      <MinimizeRounded
+                        style={{
+                          color: getTextColor(mode),
+                        }}
+                      />
+                    </div>
+                  </IconButton>
+                </TerminalHeader>
 
-              {/* Tab Content */}
-              {selectedTab === 0 && <Terminal project={project} />}
-              {selectedTab === 1 && <ProcessTerminal />}
-              {selectedTab === 2 && showLineageTab && (
-                <LineageView
-                  projectId={project.id}
-                  filePath={selectedFilePath}
-                  onExpandClick={() => setOpenLineageModal(true)}
-                />
-              )}
-              {selectedTab === 3 && showPipelineTab && (
+                {/* Tab Content */}
                 <Box
                   sx={{
+                    display: selectedTab === 'terminal' ? 'block' : 'none',
                     height: '100%',
-                    display: 'flex',
-                    flexDirection: 'column',
-                    position: isPipelineFullscreen ? 'fixed' : 'relative',
-                    top: isPipelineFullscreen ? 0 : 'auto',
-                    left: isPipelineFullscreen ? 0 : 'auto',
-                    right: isPipelineFullscreen ? 0 : 'auto',
-                    bottom: isPipelineFullscreen ? 0 : 'auto',
-                    zIndex: isPipelineFullscreen ? 9999 : 'auto',
-                    bgcolor: 'background.default',
+                    overflow: 'hidden',
                   }}
                 >
-                  {/* Exit fullscreen button - only shown when fullscreen is active */}
-                  {isPipelineFullscreen && (
-                    <Tooltip title="Exit fullscreen">
-                      <IconButton
-                        onClick={() => setIsPipelineFullscreen(false)}
-                        size="small"
-                        sx={{
-                          position: 'absolute',
-                          top: 16,
-                          right: 16,
-                          zIndex: 10000,
-                          bgcolor: 'background.paper',
-                          '&:hover': {
-                            bgcolor: 'action.hover',
-                          },
-                        }}
-                        aria-label="Exit fullscreen"
-                      >
-                        <FullscreenExitIcon
-                          style={{
-                            color: getTextColor(mode),
-                            fontSize: 20,
-                          }}
-                        />
-                      </IconButton>
-                    </Tooltip>
-                  )}
-                  {/* Always read from pipeline.yml file on disk */}
-                  <Box
-                    sx={{ flex: cloudActionId ? '1 1 60%' : 1, minHeight: 0 }}
-                  >
-                    <PipelineView
-                      content={pipelineFileContent || ''}
-                      onEdit={() => openFile?.(pipelineFilePath)}
-                      actionId={cloudActionId}
-                    />
-                  </Box>
-                  {cloudActionId && (
-                    <Box
-                      sx={{
-                        flex: '1 1 40%',
-                        minHeight: 0,
-                        borderTop: 1,
-                        borderColor: 'divider',
-                      }}
-                    >
-                      <CloudLogViewer actionId={cloudActionId} />
-                    </Box>
-                  )}
+                  <Terminal project={project} />
                 </Box>
-              )}
-            </>
-          )}
-        </TerminalWrapper>
-      </SplitPane>
-
-      {/* Minimized Taskbar */}
-      {isMinimized && (
-        <Taskbar>
-          <TaskbarItem onClick={handleRestore}>
-            <Typography fontSize={14} sx={{ mr: 1 }} fontWeight="bold">
-              Terminal
-            </Typography>
-            <TerminalIcon fontSize="small" />
-            {isRunning && (
-              <Chip
-                label="Running"
-                size="small"
-                color="success"
-                sx={{ ml: 1, height: 18, fontSize: '0.65rem' }}
-              />
+                <Box
+                  sx={{
+                    display: selectedTab === 'process' ? 'block' : 'none',
+                    height: '100%',
+                    overflow: 'hidden',
+                  }}
+                >
+                  <ProcessTerminal />
+                </Box>
+                {selectedTab === 'lineage' && showLineageTab && (
+                  <LineageView
+                    projectId={project.id}
+                    filePath={selectedFilePath}
+                    onExpandClick={() => setOpenLineageModal(true)}
+                  />
+                )}
+                {selectedTab === 'queryResults' && showQueryResultsTab && (
+                  <Box
+                    sx={{
+                      height: '100%',
+                      bgcolor: 'background.default',
+                      overflow: 'hidden',
+                    }}
+                  >
+                    {queryResultsPanel}
+                  </Box>
+                )}
+                {selectedTab === 'runHistory' && showRunHistoryTab && (
+                  <Box
+                    sx={{
+                      height: '100%',
+                      bgcolor: 'background.default',
+                      overflow: 'hidden',
+                    }}
+                  >
+                    {runHistoryPanel}
+                  </Box>
+                )}
+              </>
             )}
-          </TaskbarItem>
+          </TerminalWrapper>
+        </SplitPane>
 
-          {/* Quick stop when minimized */}
-          {isRunning && (
-            <TaskbarItem
-              onClick={handleQuickStop}
-              sx={{
-                color: theme.palette.warning.main,
-                '&:hover': {
-                  backgroundColor: `${theme.palette.warning.main}20`,
-                },
-              }}
-            >
-              <Tooltip title="Stop process">
-                <CloseRounded fontSize="small" />
-              </Tooltip>
-            </TaskbarItem>
-          )}
-        </Taskbar>
-      )}
-
-      {/* Stop Options Menu */}
-      <Menu
-        anchorEl={menuAnchor}
-        open={Boolean(menuAnchor)}
-        onClose={handleMenuClose}
-        PaperProps={{
-          sx: { minWidth: 200 },
-        }}
-      >
-        <MenuItem onClick={handleGracefulStop} disabled={status === 'stopping'}>
-          <ListItemIcon>
-            <StopRounded fontSize="small" color="warning" />
-          </ListItemIcon>
-          <ListItemText
-            primary="Graceful Stop"
-            secondary="Send SIGTERM (5s timeout)"
-          />
-        </MenuItem>
-
-        <MenuItem onClick={handleForceStop}>
-          <ListItemIcon>
-            <PowerOffRounded fontSize="small" color="error" />
-          </ListItemIcon>
-          <ListItemText primary="Force Kill" secondary="Immediate SIGKILL" />
-        </MenuItem>
-
-        {command && (
-          <MenuItem disabled>
+        {/* Stop Options Menu */}
+        <Menu
+          anchorEl={menuAnchor}
+          open={Boolean(menuAnchor)}
+          onClose={handleMenuClose}
+          PaperProps={{
+            sx: { minWidth: 200 },
+          }}
+        >
+          <MenuItem
+            onClick={handleGracefulStop}
+            disabled={status === 'stopping'}
+          >
             <ListItemIcon>
-              <TimerRounded fontSize="small" />
+              <StopRounded fontSize="small" color="warning" />
             </ListItemIcon>
-            <Tooltip title={command}>
-              <ListItemText
-                primary="Command:"
-                secondary={
-                  command.length > 30
-                    ? `${command.substring(0, 30)}...`
-                    : command
-                }
-              />
-            </Tooltip>
+            <ListItemText
+              primary="Graceful Stop"
+              secondary="Send SIGTERM (5s timeout)"
+            />
           </MenuItem>
-        )}
-      </Menu>
-      <LineageModal
-        isOpen={openLineageModal}
-        onClose={() => setOpenLineageModal(false)}
-        projectId={project.id}
-        filePath={selectedFilePath}
-      />
-    </Root>
-  );
-};
+
+          <MenuItem onClick={handleForceStop}>
+            <ListItemIcon>
+              <PowerOffRounded fontSize="small" color="error" />
+            </ListItemIcon>
+            <ListItemText primary="Force Kill" secondary="Immediate SIGKILL" />
+          </MenuItem>
+
+          {command && (
+            <MenuItem disabled>
+              <ListItemIcon>
+                <TimerRounded fontSize="small" />
+              </ListItemIcon>
+              <Tooltip title={command}>
+                <ListItemText
+                  primary="Command:"
+                  secondary={
+                    command.length > 30
+                      ? `${command.substring(0, 30)}...`
+                      : command
+                  }
+                />
+              </Tooltip>
+            </MenuItem>
+          )}
+        </Menu>
+        <LineageModal
+          isOpen={openLineageModal}
+          onClose={() => setOpenLineageModal(false)}
+          projectId={project.id}
+          filePath={selectedFilePath}
+        />
+      </Root>
+    );
+  },
+);

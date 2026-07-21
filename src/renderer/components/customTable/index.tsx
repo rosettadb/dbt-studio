@@ -22,6 +22,8 @@ const CustomTable = <T,>({
   toolbarContent,
   dataTestId,
   showSearch,
+  hideToolbar,
+  paginationLeftContent,
 }: CustomTableType<T>) => {
   const [page, setPage] = React.useState(0);
   const [perPage, setPerPage] = useLocalStorage(id, '10');
@@ -46,7 +48,17 @@ const CustomTable = <T,>({
   }, [page, perPage, filteredRows]);
 
   return (
-    <div style={{ position: 'relative', width: '100%', overflow: 'hidden' }}>
+    <div
+      style={{
+        position: 'relative',
+        width: '100%',
+        height: '100%',
+        minHeight: 0,
+        overflow: 'hidden',
+        display: 'flex',
+        flexDirection: 'column',
+      }}
+    >
       {loading && (
         <div
           style={{
@@ -59,24 +71,28 @@ const CustomTable = <T,>({
           <Loader size={40} marginTop={0} />
         </div>
       )}
-      <CustomTableToolbar
-        name={name}
-        toolbarContent={toolbarContent}
-        handleSearch={(value) => {
-          if (customPagination) {
-            customPagination.setKeyword(value);
-            return;
-          }
-          setKeyword(value);
-        }}
-        showSearch={showSearch}
-      />
+      {!hideToolbar && (
+        <CustomTableToolbar
+          name={name}
+          toolbarContent={toolbarContent}
+          handleSearch={(value) => {
+            if (customPagination) {
+              customPagination.setKeyword(value);
+              return;
+            }
+            setKeyword(value);
+          }}
+          showSearch={showSearch}
+        />
+      )}
       <TableContainer
         style={{
           ...(containerStyle ?? {}),
+          minHeight: 0,
+          flex: 1,
           opacity: loading ? 0.4 : 1,
           pointerEvents: loading ? 'none' : 'auto',
-          overflowX: 'auto',
+          overflow: 'auto',
           width: '100%',
         }}
       >
@@ -120,19 +136,28 @@ const CustomTable = <T,>({
           </TableBody>
         </Table>
       </TableContainer>
-      <CustomTablePagination
-        page={customPagination?.page ?? page}
-        setPage={customPagination?.setPage ?? setPage}
-        perPage={customPagination?.perPage ?? Number(perPage)}
-        setPerPage={(value) => {
-          if (customPagination?.setPerPage) {
-            customPagination?.setPerPage(value);
-            return;
-          }
-          setPerPage(String(value));
-        }}
-        total={customPagination?.count ?? rows.length}
-      />
+      <div style={{ display: 'flex', alignItems: 'center' }}>
+        {paginationLeftContent && (
+          <div style={{ paddingLeft: 8, paddingRight: 4, flexShrink: 0 }}>
+            {paginationLeftContent}
+          </div>
+        )}
+        <div style={{ flex: 1 }}>
+          <CustomTablePagination
+            page={customPagination?.page ?? page}
+            setPage={customPagination?.setPage ?? setPage}
+            perPage={customPagination?.perPage ?? Number(perPage)}
+            setPerPage={(value) => {
+              if (customPagination?.setPerPage) {
+                customPagination?.setPerPage(value);
+                return;
+              }
+              setPerPage(String(value));
+            }}
+            total={customPagination?.count ?? rows.length}
+          />
+        </div>
+      </div>
     </div>
   );
 };

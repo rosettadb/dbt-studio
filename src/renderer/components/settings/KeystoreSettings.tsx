@@ -273,15 +273,15 @@ export const KeystoreSettings: React.FC = () => {
             />
           ))}
         </Tabs>
-        <Tooltip title="Add environment">
-          <IconButton
-            size="small"
-            onClick={() => setAddEnvOpen(true)}
-            sx={{ ml: 1 }}
-          >
-            <Add fontSize="small" />
-          </IconButton>
-        </Tooltip>
+        <Button
+          variant="contained"
+          size="small"
+          startIcon={<Add />}
+          onClick={() => setAddEnvOpen(true)}
+          sx={{ ml: 1, whiteSpace: 'nowrap' }}
+        >
+          New environment
+        </Button>
       </Box>
 
       <Card

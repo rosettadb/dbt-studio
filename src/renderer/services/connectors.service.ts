@@ -73,6 +73,7 @@ export const queryData = async (body: {
   query: string;
   projectName: string;
   queryId?: string;
+  limit?: number;
 }): Promise<QueryResponseType> => {
   const { data } = await client.post<
     {
@@ -80,6 +81,7 @@ export const queryData = async (body: {
       query: string;
       projectName: string;
       queryId?: string;
+      limit?: number;
     },
     QueryResponseType
   >('connector:query', body);

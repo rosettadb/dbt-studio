@@ -1,5 +1,5 @@
 {
-  "version": "1.5.8",
+  "version": "1.6.0",
   "name": "rosetta-dbt-studio",
   "description": "Turn Raw Data into Business Insights—Faster with RosettaDB",
   "keywords": [
@@ -21,6 +21,7 @@
   },
   "main": "./.erb/dll/main.bundle.dev.js",
   "scripts": {
+    "prebuild": "node scripts/build-analytics-runtime.mjs",
     "build": "concurrently \"npm run build:main\" \"npm run build:renderer\"",
     "build:dll": "cross-env NODE_ENV=development TS_NODE_TRANSPILE_ONLY=true webpack --config ./.erb/configs/webpack.config.renderer.dev.dll.ts",
     "build:main": "cross-env NODE_ENV=production TS_NODE_TRANSPILE_ONLY=true webpack --config ./.erb/configs/webpack.config.main.prod.ts",
@@ -50,7 +51,8 @@
     "test:integration:coverage": "npm run test:integration -- --coverage",
     "sync-version": "node .erb/scripts/sync-version.js",
     "version": "npm run sync-version && git add .",
-    "prepare": "husky"
+    "prepare": "husky",
+    "build:analytics-runtime": "node scripts/build-analytics-runtime.mjs"
   },
   "browserslist": [
     "extends browserslist-config-erb"
@@ -164,6 +166,7 @@
     "recharts": "^2.15.0",
     "rehype-highlight": "^7.0.2",
     "rehype-raw": "^7.0.0",
+    "rehype-sanitize": "^6.0.0",
     "remark-gfm": "^4.0.1",
     "simple-git": "^3.27.0",
     "snowflake-sdk": "^2.0.3",
@@ -326,8 +329,9 @@
       "output": "release/build"
     },
     "extraResources": [
-      "./assets/**"
-    ],
+      "./assets/**",
+      "./resources/**"
+ ],
     "publish": {
       "provider": "github",
       "owner": "rosettadb",

@@ -98,6 +98,11 @@ export const Kinetica: React.FC<Props> = ({
     useUpdateConnection({
       onSuccess: () => {
         toast.success('Kinetica connection updated successfully!');
+        if (projectId) {
+          navigate('/app');
+          return;
+        }
+        navigate('/app/connections');
       },
       onError: (error) => {
         toast.error(`Update failed: ${error}`);

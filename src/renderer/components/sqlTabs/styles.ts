@@ -116,15 +116,6 @@ export const TabIcon = styled('img')(() => ({
   objectFit: 'contain',
 }));
 
-export const ModifiedDot = styled('span')<{ hidden?: boolean }>(
-  ({ theme, hidden }) => ({
-    width: 8,
-    height: 8,
-    borderRadius: 999,
-    backgroundColor: hidden ? 'transparent' : theme.palette.warning.main,
-  }),
-);
-
 export const LoadingDot = styled('span')(({ theme }) => ({
   width: 8,
   height: 8,

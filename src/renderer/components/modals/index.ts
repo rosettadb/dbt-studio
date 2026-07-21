@@ -17,3 +17,5 @@ export * from './pushToCloudModal';
 export * from './rawLayerModal';
 export * from './removeConnectionModal';
 export * from './pipelineSelectorModal';
+export * from './createPipelineModal';
+export * from './sshPassphraseModal';
