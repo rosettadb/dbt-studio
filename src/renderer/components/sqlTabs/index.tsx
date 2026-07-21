@@ -13,7 +13,6 @@ import {
   SqlTabButton,
   TabTitle,
   TabIcon,
-  ModifiedDot,
   LoadingDot,
   EmptyTabsPlaceholder,
 } from './styles';
@@ -66,7 +65,6 @@ const SqlTab: React.FC<SqlTabProps> = ({
         }}
       >
         {tab.isLoading && <LoadingDot />}
-        {!tab.isLoading && tab.isModified && <ModifiedDot />}
         {!tab.isLoading && tab.error && (
           <Tooltip
             title={tab.error}

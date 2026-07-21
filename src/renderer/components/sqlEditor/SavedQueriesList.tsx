@@ -214,7 +214,7 @@ export const SavedQueriesList: React.FC<SavedQueriesListProps> = ({
       <Box
         key={query.id}
         onContextMenu={(e) => handleContextMenu(e, query)}
-        onDoubleClick={() => onOpenQuery(query.query)}
+        onClick={() => onOpenQuery(query.query)}
         sx={{
           display: 'flex',
           alignItems: 'flex-start',
