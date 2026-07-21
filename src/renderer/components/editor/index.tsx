@@ -12,6 +12,7 @@ import { DiffView } from './diffView';
 import { EditorHeader } from './editorHeader';
 import { UnsavedChangesDialog } from './unsavedChangesDialog';
 import { MarkdownPreview } from './markdownPreview';
+import { HtmlPreview } from './htmlPreview';
 import {
   getDecorations,
   getLanguageFromExtension,
@@ -106,6 +107,7 @@ export const Editor: React.FC<EditorProps> = ({
   // Detect if the active tab is a markdown preview virtual tab
   const previewSourcePath = getPreviewSourcePath(activeFilePath);
   const isPreviewTab = previewSourcePath !== null;
+  const isHtmlPreview = /\.html?$/i.test(previewSourcePath ?? '');
 
   // The content to render in the preview: from the live source tab if available
   const previewContent = React.useMemo(() => {
@@ -328,7 +330,11 @@ export const Editor: React.FC<EditorProps> = ({
           onNavigate={onOpenFile}
         />
         <EditorViewport>
-          <MarkdownPreview content={previewContent} />
+          {isHtmlPreview ? (
+            <HtmlPreview filePath={previewSourcePath ?? ''} />
+          ) : (
+            <MarkdownPreview content={previewContent} />
+          )}
         </EditorViewport>
       </Container>
     );
