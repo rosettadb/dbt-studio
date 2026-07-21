@@ -61,6 +61,7 @@ interface EnvironmentVariable {
 interface PushToCloudModalProps {
   isOpen: boolean;
   onClose: () => void;
+  onSuccess?: () => void;
   project: Project;
   command: DbtCommandType;
   initialDbtArguments?: string;
@@ -71,6 +72,7 @@ const RESERVED_KEYS = ['ROSETTA_GIT_USER', 'ROSETTA_GIT_PASSWORD'];
 export const PushToCloudModal: React.FC<PushToCloudModalProps> = ({
   isOpen,
   onClose,
+  onSuccess,
   project,
   command,
   initialDbtArguments = '',
@@ -385,6 +387,7 @@ export const PushToCloudModal: React.FC<PushToCloudModalProps> = ({
         secrets: reducedSecrets,
       });
 
+      onSuccess?.();
       onClose();
     } catch (error) {
       const message =

@@ -1506,6 +1506,7 @@ const ProjectDetails: React.FC = () => {
                     setPipelineCloudModal(false);
                     setPipelineRunArgs('');
                   }}
+                  onSuccess={() => setPipelineLogsMinimized(false)}
                   project={project}
                   command="pipeline"
                   initialDbtArguments={pipelineRunArgs}
