@@ -1,7 +1,8 @@
-import React, { useState, useMemo, useEffect, useRef } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { formatDistanceToNow } from 'date-fns';
 import { toast } from 'react-toastify';
+import { v4 as uuidv4 } from 'uuid';
 import {
   Box,
   Typography,
@@ -42,6 +43,7 @@ import {
   Download,
   Search,
   Clear,
+  Cancel,
   Refresh,
   NavigateNext,
   TableView,
@@ -57,6 +59,8 @@ import {
   useAddRecentItem,
   usePreviewData,
 } from '../../controllers/cloudExplorer.controller';
+import { useTaskChannel } from '../../hooks';
+import { useTaskManager } from '../../context';
 import type {
   CloudProvider,
   CloudStorageConfig,
@@ -66,7 +70,7 @@ import useSecureStorage from '../../hooks/useSecureStorage';
 import { formatFileSize, isPreviewSupported } from '../../utils/fileUtils';
 import { DBTProjects } from '../sidebar/icons';
 import { useGetSelectedProject } from '../../controllers';
-import { projectsServices, cloudExplorerService } from '../../services';
+import { projectsServices } from '../../services';
 import bucketIcon from '../../../../assets/icons/bucket-blue.png';
 import UploadDropzone from './UploadDropzone';
 import DeleteConfirmDialog from './DeleteConfirmDialog';
@@ -83,6 +87,35 @@ const isCSVFile = (fileName: string): boolean => {
   return extension === 'csv';
 };
 
+// Separate component (not inlined in a .map()) so useTaskChannel can be
+// called safely per row — each download's progress keeps updating even if
+// the user navigates away and back, as long as this row is still mounted.
+const DownloadProgressIndicator: React.FC<{
+  taskId?: string;
+  onCancel: (taskId: string) => void;
+}> = ({ taskId, onCancel }) => {
+  const task = useTaskChannel(taskId);
+  if (!task || task.status !== 'running') return null;
+  const percentage = task.progress?.percentage ?? 0;
+
+  return (
+    <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+      <Box sx={{ width: 60 }}>
+        <LinearProgress
+          variant="determinate"
+          value={percentage}
+          aria-label={`Download progress: ${percentage}%`}
+        />
+      </Box>
+      <Tooltip title="Cancel download">
+        <IconButton size="small" onClick={() => onCancel(taskId as string)}>
+          <Cancel fontSize="small" />
+        </IconButton>
+      </Tooltip>
+    </Box>
+  );
+};
+
 export const ExplorerBucketContent: React.FC<ExplorerBucketContentProps> = ({
   connectionId,
   bucketName,
@@ -94,10 +127,10 @@ export const ExplorerBucketContent: React.FC<ExplorerBucketContentProps> = ({
   const [searchTerm, setSearchTerm] = useState('');
   const [downloadUrls, setDownloadUrls] = useState<Record<string, string>>({});
   const [loadingUrls, setLoadingUrls] = useState<Record<string, boolean>>({});
-  const [downloadProgress, setDownloadProgress] = useState<
-    Record<string, number>
+  const [downloadTaskIds, setDownloadTaskIds] = useState<
+    Record<string, string>
   >({});
-  const activeDownloadObjectRef = useRef<string | null>(null);
+  const { cancel: cancelTask, getTask } = useTaskManager();
   const [previewFile, setPreviewFile] = useState<{
     fileName: string;
     objectName: string;
@@ -193,18 +226,6 @@ export const ExplorerBucketContent: React.FC<ExplorerBucketContentProps> = ({
     // Only refetch if connection changes
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [connection]);
-
-  useEffect(() => {
-    const unsubscribe = cloudExplorerService.onDownloadProgress((event) => {
-      const objectName = activeDownloadObjectRef.current;
-      if (!objectName) return;
-      setDownloadProgress((prev) => ({
-        ...prev,
-        [objectName]: event.percentage,
-      }));
-    });
-    return unsubscribe;
-  }, []);
 
   const objectsQuery = useListObjects(
     connection?.provider as CloudProvider,
@@ -340,17 +361,23 @@ export const ExplorerBucketContent: React.FC<ExplorerBucketContentProps> = ({
     );
     if (saveDialogResult.canceled || !saveDialogResult.filePath) return;
 
-    activeDownloadObjectRef.current = objectName;
-    setDownloadProgress((prev) => ({ ...prev, [objectName]: 0 }));
+    const taskId = `cloudExplorer:download:${uuidv4()}`;
+    setDownloadTaskIds((prev) => ({ ...prev, [objectName]: taskId }));
     try {
       await downloadObject.mutateAsync({
         objectUrl: url,
         destinationPath: saveDialogResult.filePath,
+        taskId,
+        label: fileName,
       });
       toast.success(`File downloaded to ${saveDialogResult.filePath}`);
+    } catch (error) {
+      // User-initiated cancellation isn't a failure — the Task Manager
+      // already reflects the cancelled status, so skip the error toast.
+      if (getTask(taskId)?.status === 'cancelled') return;
+      throw error;
     } finally {
-      activeDownloadObjectRef.current = null;
-      setDownloadProgress((prev) => {
+      setDownloadTaskIds((prev) => {
         const next = { ...prev };
         delete next[objectName];
         return next;
@@ -654,7 +681,7 @@ export const ExplorerBucketContent: React.FC<ExplorerBucketContentProps> = ({
                               disabled={loadingUrls[object.name]}
                             >
                               {loadingUrls[object.name] &&
-                              downloadProgress[object.name] === undefined ? (
+                              !downloadTaskIds[object.name] ? (
                                 <CircularProgress size={16} />
                               ) : (
                                 <Download fontSize="small" />
@@ -662,15 +689,10 @@ export const ExplorerBucketContent: React.FC<ExplorerBucketContentProps> = ({
                             </IconButton>
                           </span>
                         </Tooltip>
-                        {downloadProgress[object.name] !== undefined && (
-                          <Box sx={{ width: 60, ml: 0.5 }}>
-                            <LinearProgress
-                              variant="determinate"
-                              value={downloadProgress[object.name]}
-                              aria-label={`Download progress: ${downloadProgress[object.name]}%`}
-                            />
-                          </Box>
-                        )}
+                        <DownloadProgressIndicator
+                          taskId={downloadTaskIds[object.name]}
+                          onCancel={cancelTask}
+                        />
                       </Box>
                     )}
                     {!object.isDirectory &&

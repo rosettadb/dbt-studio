@@ -62,6 +62,7 @@ import {
   MULTIPART_THRESHOLD_BYTES,
   S3_BATCH_DELETE_LIMIT,
 } from '../../types/ipc';
+import { TaskManagerService } from './taskManager.service';
 
 // Cloud storage service class
 class CloudExplorerService {
@@ -1724,52 +1725,83 @@ class CloudExplorerService {
     }
   }
 
-  static async downloadObject(
-    { objectUrl, destinationPath }: DownloadObjectRequest,
-    webContents: WebContents,
-  ): Promise<DownloadObjectResponse> {
+  static async downloadObject({
+    objectUrl,
+    destinationPath,
+    taskId,
+    label,
+  }: DownloadObjectRequest): Promise<DownloadObjectResponse> {
+    const fileName = label || path.basename(destinationPath);
+    TaskManagerService.create({
+      id: taskId,
+      type: 'cloudExplorer:download',
+      label: fileName,
+      cancellable: true,
+    });
+
     const downloadRequest = net.request(objectUrl);
-    const response: IncomingMessage = await new Promise((resolve, reject) => {
-      downloadRequest.on('response', resolve);
-      downloadRequest.on('error', reject);
-      downloadRequest.end();
+    let cancelled = false;
+    let fileStream: fs.WriteStream | null = null;
+    TaskManagerService.registerCanceller(taskId, () => {
+      cancelled = true;
+      downloadRequest.abort();
+      fileStream?.destroy();
     });
-    if (response.statusCode !== 200) {
-      throw new Error(`Download error ${response.statusCode}`);
+
+    try {
+      const response: IncomingMessage = await new Promise((resolve, reject) => {
+        downloadRequest.on('response', resolve);
+        downloadRequest.on('error', reject);
+        downloadRequest.end();
+      });
+      if (response.statusCode !== 200) {
+        throw new Error(`Download error ${response.statusCode}`);
+      }
+
+      const contentLength = Number(response.headers['content-length']);
+      const total = Number.isFinite(contentLength) ? contentLength : 0;
+      let loaded = 0;
+      const emitProgress = () => {
+        const percentage = total > 0 ? Math.round((loaded / total) * 100) : 0;
+        TaskManagerService.updateProgress(taskId, {
+          loaded,
+          total,
+          percentage,
+        });
+      };
+
+      fs.mkdirSync(path.dirname(destinationPath), { recursive: true });
+      fileStream = fs.createWriteStream(destinationPath);
+      await new Promise<void>((resolve, reject) => {
+        response.on('data', (chunk) => {
+          loaded += chunk.length;
+          fileStream?.write(chunk);
+          emitProgress();
+        });
+        response.on('end', () => {
+          fileStream?.end();
+          resolve();
+        });
+        response.on('error', (err: Error) => {
+          fileStream?.destroy();
+          reject(err);
+        });
+        fileStream?.on('error', reject);
+      });
+
+      if (cancelled) {
+        return { success: false, filePath: destinationPath };
+      }
+
+      TaskManagerService.complete(taskId);
+      return { success: true, filePath: destinationPath };
+    } catch (err) {
+      if (!cancelled) {
+        const message = err instanceof Error ? err.message : String(err);
+        TaskManagerService.fail(taskId, message);
+      }
+      throw err;
     }
-
-    const contentLength = Number(response.headers['content-length']);
-    const total = Number.isFinite(contentLength) ? contentLength : 0;
-    let loaded = 0;
-    const emitProgress = () => {
-      const percentage = total > 0 ? Math.round((loaded / total) * 100) : 0;
-      webContents.send('cloudExplorer:downloadProgress', {
-        loaded,
-        total,
-        percentage,
-      });
-    };
-
-    fs.mkdirSync(path.dirname(destinationPath), { recursive: true });
-    const fileStream = fs.createWriteStream(destinationPath);
-    await new Promise<void>((resolve, reject) => {
-      response.on('data', (chunk) => {
-        loaded += chunk.length;
-        fileStream.write(chunk);
-        emitProgress();
-      });
-      response.on('end', () => {
-        fileStream.end();
-        resolve();
-      });
-      response.on('error', (err: Error) => {
-        fileStream.destroy();
-        reject(err);
-      });
-      fileStream.on('error', reject);
-    });
-
-    return { success: true, filePath: destinationPath };
   }
 
   static async testConnection(

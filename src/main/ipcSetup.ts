@@ -23,6 +23,7 @@ import {
   registerAnalyticsPagesHandlers,
   registerStaticSiteHandlers,
   registerFlowfileHandlers,
+  registerTaskManagerHandlers,
 } from './ipcHandlers';
 import { installIpcErrorHandling } from './utils/ipcErrorHandler';
 
@@ -51,6 +52,7 @@ const registerHandlers = (mainWindow: BrowserWindow) => {
   registerAnalyticsPagesHandlers();
   registerStaticSiteHandlers(mainWindow);
   registerFlowfileHandlers();
+  registerTaskManagerHandlers(mainWindow);
 };
 
 export default registerHandlers;

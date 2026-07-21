@@ -18,6 +18,7 @@ import DuckDBBootstrap from './duckdb.service';
 import LineageService from './lineage.service';
 import SqlParserService from './sqlParser.service';
 import { FlowfileService } from './flowfile.service';
+import { TaskManagerService } from './taskManager.service';
 
 export {
   ProjectsService,
@@ -40,4 +41,5 @@ export {
   LineageService,
   SqlParserService,
   FlowfileService,
+  TaskManagerService,
 };

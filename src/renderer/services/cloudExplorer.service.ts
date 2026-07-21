@@ -22,7 +22,6 @@ import type {
   DeleteBucketResponse,
   DownloadObjectRequest,
   DownloadObjectResponse,
-  DownloadProgressEvent,
 } from '../../types/ipc';
 import { client } from '../config/client';
 
@@ -200,15 +199,6 @@ class CloudExplorerService {
       DownloadObjectResponse
     >('cloudExplorer:downloadObject', params);
     return data;
-  }
-
-  static onDownloadProgress(
-    handler: (event: DownloadProgressEvent) => void,
-  ): () => void {
-    return window.electron.ipcRenderer.on(
-      'cloudExplorer:downloadProgress',
-      handler as (...args: unknown[]) => void,
-    );
   }
 }
 

@@ -281,8 +281,8 @@ const registerCloudExplorerHandlers = () => {
 
   ipcMain.handle(
     'cloudExplorer:downloadObject',
-    async (event, params: DownloadObjectRequest) => {
-      return CloudExplorerService.downloadObject(params, event.sender);
+    async (_event, params: DownloadObjectRequest) => {
+      return CloudExplorerService.downloadObject(params);
     },
   );
 };
