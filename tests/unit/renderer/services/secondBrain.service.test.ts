@@ -27,13 +27,12 @@ describe('renderer/services/secondBrain.service', () => {
     });
   });
 
-  it('does not accept or send a filesystem path when opening the folder', async () => {
+  it('opens the wiki without accepting or sending a filesystem path', async () => {
     const invoke = (window as any).electron.ipcRenderer.invoke as jest.Mock;
     invoke.mockResolvedValue(undefined);
 
-    await secondBrainService.openFolder();
-
-    expect(invoke).toHaveBeenCalledWith('second-brain:open-folder');
+    await secondBrainService.openWikiFolder();
+    expect(invoke).toHaveBeenCalledWith('second-brain:open-wiki-folder');
   });
 
   it('owns progress subscription and returns the preload unsubscribe function', () => {

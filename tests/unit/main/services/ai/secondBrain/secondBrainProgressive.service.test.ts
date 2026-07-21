@@ -26,6 +26,7 @@ const settings: SecondBrainSettings = {
 };
 
 const markdown = (title: string, body: string) => `---
+type: Knowledge Note
 id: ${title.toLowerCase().replace(/\s+/gu, '-')}
 title: ${title}
 scope: project
@@ -68,7 +69,7 @@ describe('Second Brain progressive discovery', () => {
     runtime = new SecondBrainRuntimeService(secondBrain);
 
     await secondBrain.writePage({
-      pageId: `projects/${projectKey}/index.md`,
+      pageId: `projects/${projectKey}/overview.md`,
       content: markdown(
         'Project 42',
         `Project navigation. [[projects/${projectKey}/decisions.md]]`,
@@ -85,7 +86,7 @@ describe('Second Brain progressive discovery', () => {
     });
     const otherKey = toSecondBrainScopeKey(99);
     await secondBrain.writePage({
-      pageId: `projects/${otherKey}/index.md`,
+      pageId: `projects/${otherKey}/overview.md`,
       content: markdown(
         'Warehouse naming',
         'Forbidden marker from another project.',
@@ -112,6 +113,28 @@ describe('Second Brain progressive discovery', () => {
     );
   });
 
+  it('discovers concepts through OKF metadata without searching indexes', async () => {
+    await secondBrain.writePage({
+      pageId: `projects/${projectKey}/reconciliation.md`,
+      content: markdown(
+        'Reconciliation',
+        'Durable validation details.',
+      ).replace(
+        'title: Reconciliation',
+        'title: Reconciliation\ndescription: Monthly finance close checklist\ntags: [finance, close]',
+      ),
+      actor: 'user',
+    });
+
+    const result = await runtime.search('monthly finance close', scope);
+    expect(result.results[0]).toMatchObject({
+      pageId: `projects/${projectKey}/reconciliation.md`,
+    });
+    expect(
+      result.results.every((item) => !item.pageId.endsWith('index.md')),
+    ).toBe(true);
+  });
+
   it('injects only memory.md and the scoped index under the prompt budget', async () => {
     const result = await runtime.buildContext(scope, settings);
 
@@ -132,8 +155,8 @@ describe('Second Brain progressive discovery', () => {
     expect(result.context.length).toBeLessThanOrEqual(settings.maxPromptChars);
   });
 
-  it('labels an authorized but missing scoped index as a creation target', async () => {
-    const pageId = `projects/${projectKey}/index.md`;
+  it('labels a missing scoped concept, never an index, as a creation target', async () => {
+    const pageId = `projects/${projectKey}/overview.md`;
     const page = await secondBrain.readPage(pageId);
     await secondBrain.archivePage({
       pageId,
@@ -143,9 +166,15 @@ describe('Second Brain progressive discovery', () => {
 
     const result = await runtime.buildContext(scope, settings);
 
-    expect(result.includedPageIds).toEqual(['memory.md']);
+    expect(result.includedPageIds).toEqual([
+      'memory.md',
+      `projects/${projectKey}/index.md`,
+    ]);
     expect(result.context).toContain(
       `Suggested create target (not found until created): \`${pageId}\``,
+    );
+    expect(result.context).not.toContain(
+      `Suggested create target (not found until created): \`projects/${projectKey}/index.md\``,
     );
     expect(result.context).not.toContain(`Page: ${pageId}`);
   });
@@ -208,7 +237,7 @@ describe('Second Brain progressive discovery', () => {
         code: 'OUT_OF_SCOPE',
         details: {
           writablePagePrefixes: [`projects/${projectKey}/`],
-          suggestedCreatePageIds: [`projects/${projectKey}/index.md`],
+          suggestedCreatePageIds: [`projects/${projectKey}/overview.md`],
         },
       },
     });
@@ -258,7 +287,7 @@ describe('Second Brain progressive discovery', () => {
     expect(archive).toMatchObject({
       ok: false,
       error: { code: 'INBOUND_LINKS' },
-      inboundLinks: [`projects/${projectKey}/index.md`],
+      inboundLinks: [`projects/${projectKey}/overview.md`],
     });
   });
 

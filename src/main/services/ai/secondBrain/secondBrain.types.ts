@@ -31,7 +31,9 @@ export type SecondBrainErrorCode =
   | 'OUT_OF_SCOPE'
   | 'SCOPE_MISMATCH'
   | 'CANCELLED'
-  | 'BUSY';
+  | 'BUSY'
+  | 'UNSUPPORTED_BUNDLE_VERSION'
+  | 'GENERATED_PAGE_READ_ONLY';
 
 export class SecondBrainError extends Error {
   public readonly code: SecondBrainErrorCode;
@@ -51,7 +53,9 @@ export class SecondBrainError extends Error {
 }
 
 export type SecondBrainState = {
-  version: 1;
+  version: 2;
+  layoutVersion: 2;
+  okfVersion: '0.1';
   initializedAt: string;
   lastSuccessfulRefreshAt?: string;
   sourceCursors: Record<string, unknown>;

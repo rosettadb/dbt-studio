@@ -4,7 +4,7 @@ import { promises as nodeFs } from 'fs';
 import type { FileHandle } from 'fs/promises';
 import fs from 'fs-extra';
 import path from 'path';
-import { app } from 'electron';
+import { app, shell } from 'electron';
 import yaml from 'js-yaml';
 import type {
   SecondBrainArchiveInput,
@@ -33,8 +33,14 @@ import {
   SECOND_BRAIN_ENTRY_MAX_BYTES,
   SECOND_BRAIN_ENTRY_MAX_LINES,
   SECOND_BRAIN_ENTRY_PAGE,
-  SECOND_BRAIN_META_DIRECTORY,
+  SECOND_BRAIN_INDEX_PAGE,
+  SECOND_BRAIN_LAYOUT_VERSION,
+  SECOND_BRAIN_LOG_PAGE,
+  SECOND_BRAIN_OKF_VERSION,
+  SECOND_BRAIN_REVISIONS_DIRECTORY,
   SECOND_BRAIN_STATE_FILE,
+  SECOND_BRAIN_SUPPORT_DIRECTORIES,
+  SECOND_BRAIN_WIKI_DIRECTORY,
 } from './secondBrainPolicy';
 import {
   ParsedSecondBrainDocument,
@@ -43,8 +49,6 @@ import {
   SecondBrainState,
   SecondBrainRefreshStateInput,
 } from './secondBrain.types';
-
-const textEncoder = new TextEncoder();
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   value !== null && typeof value === 'object' && !Array.isArray(value);
@@ -77,6 +81,17 @@ export const parseSecondBrainDocument = (
     );
   }
 
+  if (
+    Buffer.byteLength(frontmatterMatch[1], 'utf8') > 16 * 1024 ||
+    /(?:^|\s)[&*][A-Za-z0-9_-]+/mu.test(frontmatterMatch[1]) ||
+    /^\s*<<\s*:/mu.test(frontmatterMatch[1])
+  ) {
+    throw new SecondBrainError(
+      'INVALID_FRONTMATTER',
+      'Markdown frontmatter contains unsupported aliases or exceeds 16 KiB.',
+    );
+  }
+
   try {
     const parsed = yaml.load(frontmatterMatch[1]);
     if (parsed !== undefined && !isRecord(parsed)) {
@@ -92,6 +107,51 @@ export const parseSecondBrainDocument = (
       `Invalid Markdown frontmatter: ${(error as Error).message}`,
     );
   }
+};
+
+export const isSecondBrainGeneratedPageId = (pageId: string): boolean => {
+  const basename = path.posix.basename(pageId);
+  return (
+    basename === SECOND_BRAIN_INDEX_PAGE || basename === SECOND_BRAIN_LOG_PAGE
+  );
+};
+
+const inferConceptType = (pageId: string): string => {
+  if (pageId === SECOND_BRAIN_ENTRY_PAGE) return 'Memory Map';
+  if (pageId === 'preferences.md') return 'User Preferences';
+  if (pageId === 'workflows.md') return 'Workflow Catalog';
+  if (pageId.startsWith('projects/')) return 'Project Knowledge';
+  if (pageId.startsWith('connections/')) return 'Connection Knowledge';
+  if (pageId.startsWith('notebooks/')) return 'Notebook Knowledge';
+  if (pageId.startsWith('analytics/')) return 'Analytics Knowledge';
+  if (pageId.startsWith('topics/')) return 'Topic';
+  return 'Knowledge Note';
+};
+
+const indexText = (value: string): string =>
+  value
+    .replace(/[[\]\r\n]/gu, ' ')
+    .replace(/\p{Cc}/gu, '')
+    .replace(/\s+/gu, ' ')
+    .trim();
+
+const ensureConceptType = (pageId: string, content: string): string => {
+  if (isSecondBrainGeneratedPageId(pageId)) return normalizeContent(content);
+  const normalized = normalizeContent(content);
+  const parsed = parseSecondBrainDocument(normalized);
+  if (
+    typeof parsed.frontmatter.type === 'string' &&
+    parsed.frontmatter.type.trim()
+  ) {
+    return normalized;
+  }
+  if (normalized.startsWith('---\n')) {
+    return normalized.replace(
+      '---\n',
+      `---\ntype: ${inferConceptType(pageId)}\n`,
+    );
+  }
+  return `---\ntype: ${inferConceptType(pageId)}\n---\n\n${normalized}`;
 };
 
 export const normalizeSecondBrainPageId = (pageId: string): string => {
@@ -180,14 +240,33 @@ export default class SecondBrainService {
     this.createId = options.createId ?? randomUUID;
   }
 
-  public getRootPath(): string {
-    return this.rootPath;
+  private wikiRoot(): string {
+    return path.join(this.rootPath, SECOND_BRAIN_WIKI_DIRECTORY);
+  }
+
+  public async openWikiFolder(): Promise<void> {
+    const status = await this.getStatus();
+    if (!status.initialized) {
+      throw new SecondBrainError(
+        'NOT_INITIALIZED',
+        'Initialize Second Brain before opening its OKF bundle.',
+      );
+    }
+    const error = await shell.openPath(this.wikiRoot());
+    if (error) throw new Error(error);
   }
 
   public async initializeRoot(): Promise<SecondBrainStatus> {
     await this.ensureSafeRoot();
+    await this.detectLayout();
+    await fs.ensureDir(this.wikiRoot());
     await Promise.all(
       SECOND_BRAIN_CANONICAL_DIRECTORIES.map((directory) =>
+        fs.ensureDir(path.join(this.wikiRoot(), directory)),
+      ),
+    );
+    await Promise.all(
+      SECOND_BRAIN_SUPPORT_DIRECTORIES.map((directory) =>
         fs.ensureDir(path.join(this.rootPath, directory)),
       ),
     );
@@ -201,7 +280,7 @@ export default class SecondBrainService {
       if (!(await fs.pathExists(pagePath))) {
         const normalized = normalizeContent(content);
         this.assertPageBudget(pageId, normalized);
-        await this.assertTotalBudget(textEncoder.encode(normalized).byteLength);
+        await this.assertTotalBudget(Buffer.byteLength(normalized, 'utf8'));
         await this.atomicWrite(pagePath, normalized);
       }
     }
@@ -209,7 +288,9 @@ export default class SecondBrainService {
     const existingState = await this.readState(true);
     const pages = await this.listPages();
     const state: SecondBrainState = existingState ?? {
-      version: 1,
+      version: 2,
+      layoutVersion: SECOND_BRAIN_LAYOUT_VERSION,
+      okfVersion: SECOND_BRAIN_OKF_VERSION,
       initializedAt: this.now().toISOString(),
       sourceCursors: {},
       sourceHashes: {},
@@ -218,6 +299,10 @@ export default class SecondBrainService {
     state.pageHashes = Object.fromEntries(
       pages.map((page) => [page.pageId, page.hash]),
     );
+    state.version = 2;
+    state.layoutVersion = SECOND_BRAIN_LAYOUT_VERSION;
+    state.okfVersion = SECOND_BRAIN_OKF_VERSION;
+    await this.regenerateIndexes();
     await this.writeState(state);
     return this.getStatus();
   }
@@ -229,22 +314,28 @@ export default class SecondBrainService {
         pageCount: 0,
         totalBytes: 0,
         rootPath: this.rootPath,
+        layoutVersion: 'empty',
       };
     }
 
     await this.ensureSafeRoot();
     const pages = await this.listPages();
     const state = await this.readState(true);
+    const layoutVersion = await this.detectLayout();
     const requiredPagesExist = Object.keys(SECOND_BRAIN_BOOTSTRAP_PAGES).every(
       (pageId) => pages.some((page) => page.pageId === pageId),
     );
     return {
-      initialized: Boolean(state && requiredPagesExist),
+      initialized: Boolean(
+        state && requiredPagesExist && layoutVersion === 'okf-v0.1',
+      ),
       pageCount: pages.length,
       totalBytes: pages.reduce((total, page) => total + page.sizeBytes, 0),
       rootPath: this.rootPath,
       stateVersion: state?.version,
       lastSuccessfulRefreshAt: state?.lastSuccessfulRefreshAt,
+      layoutVersion,
+      okfVersion: layoutVersion === 'okf-v0.1' ? '0.1' : undefined,
     };
   }
 
@@ -270,8 +361,10 @@ export default class SecondBrainService {
   public async listPageIds(): Promise<string[]> {
     if (!(await fs.pathExists(this.rootPath))) return [];
     await this.ensureSafeRoot();
-    return (await this.walkMarkdownPages(this.rootPath, '')).sort(
-      (left, right) => left.localeCompare(right),
+    const contentRoot = await this.contentRoot();
+    if (!(await fs.pathExists(contentRoot))) return [];
+    return (await this.walkMarkdownPages(contentRoot, '')).sort((left, right) =>
+      left.localeCompare(right),
     );
   }
 
@@ -281,6 +374,7 @@ export default class SecondBrainService {
     const active = (await this.listPages()).map((page) => ({
       ...page,
       archived: false,
+      generated: isSecondBrainGeneratedPageId(page.pageId),
     }));
     if (!includeArchived) return active;
     const archiveRoot = path.join(
@@ -392,7 +486,9 @@ export default class SecondBrainService {
     const query = queryInput.trim().toLowerCase().slice(0, 500);
     if (!query) return [];
     const limit = Math.max(1, Math.min(limitInput, 50));
-    const pages = (await this.listPages()).slice(0, 500);
+    const pages = (await this.listPages())
+      .filter((page) => !isSecondBrainGeneratedPageId(page.pageId))
+      .slice(0, 500);
     const hits: SecondBrainSearchHit[] = [];
     for (const summary of pages) {
       const page = await this.readPage(summary.pageId);
@@ -421,10 +517,17 @@ export default class SecondBrainService {
     input: SecondBrainWriteInput,
   ): Promise<SecondBrainPage> {
     const pageId = normalizeSecondBrainPageId(input.pageId);
+    if (isSecondBrainGeneratedPageId(pageId)) {
+      throw new SecondBrainError(
+        'GENERATED_PAGE_READ_ONLY',
+        'OKF index and log pages are application-managed.',
+        { pageId },
+      );
+    }
     return this.withPageLock(pageId, async () => {
       await this.requireInitializedState();
       const content = normalizeContent(input.content);
-      parseSecondBrainDocument(content);
+      SecondBrainService.assertValidOkfConcept(pageId, content);
       this.assertPageBudget(pageId, content);
       const pagePath = await this.resolvePagePath(pageId, false);
       const exists = await fs.pathExists(pagePath);
@@ -460,17 +563,25 @@ export default class SecondBrainService {
       }
 
       await this.assertTotalBudget(
-        textEncoder.encode(content).byteLength - previousBytes,
+        Buffer.byteLength(content, 'utf8') - previousBytes,
       );
       if (previousContent) await this.saveRevision(pageId, previousContent);
       await this.atomicWrite(pagePath, content);
       await this.updatePageHash(pageId, hashContent(content));
+      await this.regenerateIndexes();
       return this.readPage(pageId);
     });
   }
 
   public async archivePage(input: SecondBrainArchiveInput): Promise<void> {
     const pageId = normalizeSecondBrainPageId(input.pageId);
+    if (isSecondBrainGeneratedPageId(pageId)) {
+      throw new SecondBrainError(
+        'GENERATED_PAGE_READ_ONLY',
+        'Generated OKF pages cannot be archived.',
+        { pageId },
+      );
+    }
     await this.withPageLock(pageId, async () => {
       await this.requireInitializedState();
       const pagePath = await this.resolvePagePath(pageId, true);
@@ -508,6 +619,7 @@ export default class SecondBrainService {
       await fs.ensureDir(path.dirname(archivePath));
       await nodeFs.rename(pagePath, archivePath);
       await this.removePageHash(pageId);
+      await this.regenerateIndexes();
     });
   }
 
@@ -540,6 +652,7 @@ export default class SecondBrainService {
       await fs.ensureDir(path.dirname(activePath));
       await nodeFs.rename(archivePath, activePath);
       await this.updatePageHash(pageId, archived.hash);
+      await this.regenerateIndexes();
       return this.readPage(pageId);
     });
   }
@@ -634,13 +747,14 @@ export default class SecondBrainService {
       }
       await this.assertNoSymlink(revisionPath);
       const revision = await fs.readFile(revisionPath, 'utf8');
-      const normalized = normalizeContent(revision);
-      parseSecondBrainDocument(normalized);
+      const normalized = ensureConceptType(pageId, revision);
+      SecondBrainService.assertValidOkfConcept(pageId, normalized);
       this.assertPageBudget(pageId, normalized);
       await this.saveRevision(pageId, Buffer.from(currentPage.content, 'utf8'));
       const pagePath = await this.resolvePagePath(pageId, true);
       await this.atomicWrite(pagePath, normalized);
       await this.updatePageHash(pageId, hashContent(normalized));
+      await this.regenerateIndexes();
       return this.readPage(pageId);
     });
   }
@@ -677,6 +791,128 @@ export default class SecondBrainService {
     });
   }
 
+  private async detectLayout(): Promise<'okf-v0.1' | 'empty'> {
+    const wikiIndex = path.join(this.wikiRoot(), SECOND_BRAIN_INDEX_PAGE);
+    if (await fs.pathExists(wikiIndex)) {
+      const parsed = parseSecondBrainDocument(
+        await fs.readFile(wikiIndex, 'utf8'),
+      );
+      if (parsed.frontmatter.okf_version !== SECOND_BRAIN_OKF_VERSION) {
+        throw new SecondBrainError(
+          'UNSUPPORTED_BUNDLE_VERSION',
+          'Second Brain uses an unsupported OKF version.',
+        );
+      }
+      return 'okf-v0.1';
+    }
+    return 'empty';
+  }
+
+  private contentRoot(): string {
+    return this.wikiRoot();
+  }
+
+  private statePath(): string {
+    return path.join(this.rootPath, SECOND_BRAIN_STATE_FILE);
+  }
+
+  private static assertValidOkfConcept(pageId: string, content: string): void {
+    if (isSecondBrainGeneratedPageId(pageId)) return;
+    const { frontmatter } = parseSecondBrainDocument(content);
+    if (typeof frontmatter.type !== 'string' || !frontmatter.type.trim()) {
+      throw new SecondBrainError(
+        'INVALID_FRONTMATTER',
+        'OKF concept frontmatter requires a non-empty type.',
+        { pageId },
+      );
+    }
+  }
+
+  private async regenerateIndexes(): Promise<void> {
+    if (!(await fs.pathExists(this.wikiRoot()))) return;
+    const pageIds = await this.walkMarkdownPages(this.wikiRoot(), '');
+    const concepts = pageIds.filter(
+      (pageId) => !isSecondBrainGeneratedPageId(pageId),
+    );
+    const directories = new Set<string>(['']);
+    for (const pageId of concepts) {
+      let directory = path.posix.dirname(pageId);
+      while (directory !== '.') {
+        directories.add(directory);
+        directory = path.posix.dirname(directory);
+      }
+    }
+    for (const canonical of SECOND_BRAIN_CANONICAL_DIRECTORIES) {
+      directories.add(canonical);
+    }
+
+    const descriptions = new Map<
+      string,
+      { title: string; description?: string }
+    >();
+    for (const pageId of concepts) {
+      const pagePath = path.join(this.wikiRoot(), ...pageId.split('/'));
+      const content = await fs.readFile(pagePath, 'utf8');
+      const parsed = parseSecondBrainDocument(content);
+      descriptions.set(pageId, {
+        title: indexText(
+          SecondBrainService.resolveTitle(
+            pageId,
+            parsed.frontmatter,
+            parsed.body,
+          ),
+        ),
+        description:
+          typeof parsed.frontmatter.description === 'string'
+            ? indexText(parsed.frontmatter.description)
+            : undefined,
+      });
+    }
+
+    for (const directory of [...directories].sort()) {
+      const directPages = concepts.filter(
+        (pageId) => path.posix.dirname(pageId) === (directory || '.'),
+      );
+      const directDirectories = [...directories].filter(
+        (candidate) =>
+          candidate !== directory &&
+          path.posix.dirname(candidate) === (directory || '.'),
+      );
+      const title = directory
+        ? path.posix.basename(directory).replace(/[-_]/gu, ' ')
+        : 'Second Brain';
+      const lines = [
+        ...(directory
+          ? []
+          : ['---', `okf_version: "${SECOND_BRAIN_OKF_VERSION}"`, '---', '']),
+        `# ${title.replace(/^./u, (character) => character.toUpperCase())}`,
+        '',
+        ...directDirectories.sort().map((child) => {
+          const relative = path.posix.relative(directory || '.', child);
+          return `- [${path.posix.basename(child)}](${relative}/index.md)`;
+        }),
+        ...directPages.sort().map((pageId) => {
+          const metadata = descriptions.get(pageId)!;
+          const relative = path.posix.relative(directory || '.', pageId);
+          return `- [${metadata.title}](${relative})${metadata.description ? ` — ${metadata.description}` : ''}`;
+        }),
+        '',
+      ];
+      const indexPath = path.join(
+        this.wikiRoot(),
+        ...(directory ? directory.split('/') : []),
+        SECOND_BRAIN_INDEX_PAGE,
+      );
+      const content = lines.join('\n');
+      if (
+        !(await fs.pathExists(indexPath)) ||
+        (await fs.readFile(indexPath, 'utf8')) !== content
+      ) {
+        await this.atomicWrite(indexPath, content);
+      }
+    }
+  }
+
   private async ensureSafeRoot(): Promise<void> {
     await fs.ensureDir(this.rootPath);
     const rootStat = await fs.lstat(this.rootPath);
@@ -696,7 +932,8 @@ export default class SecondBrainService {
     if (requireRoot || (await fs.pathExists(this.rootPath))) {
       await this.ensureSafeRoot();
     }
-    return this.resolveContainedPath(this.rootPath, ...normalized.split('/'));
+    const contentRoot = await this.contentRoot();
+    return this.resolveContainedPath(contentRoot, ...normalized.split('/'));
   }
 
   private async resolveInternalPath(relativePath: string): Promise<string> {
@@ -775,7 +1012,7 @@ export default class SecondBrainService {
   }
 
   private assertPageBudget(pageId: string, content: string): void {
-    const sizeBytes = textEncoder.encode(content).byteLength;
+    const sizeBytes = Buffer.byteLength(content, 'utf8');
     const maxBytes =
       pageId === SECOND_BRAIN_ENTRY_PAGE
         ? Math.min(this.maxPageBytes, SECOND_BRAIN_ENTRY_MAX_BYTES)
@@ -800,7 +1037,10 @@ export default class SecondBrainService {
   }
 
   private async assertTotalBudget(deltaBytes: number): Promise<void> {
-    const totalBytes = await this.calculateManagedPageBytes(this.rootPath, '');
+    const totalBytes = await this.calculateManagedPageBytes(
+      await this.contentRoot(),
+      '',
+    );
     if (totalBytes + deltaBytes > this.maxTotalBytes) {
       throw new SecondBrainError(
         'BUDGET_EXCEEDED',
@@ -824,7 +1064,6 @@ export default class SecondBrainService {
           'Symbolic links are not allowed in the Second Brain.',
         );
       }
-      if (entry.name === SECOND_BRAIN_META_DIRECTORY) continue;
       const relative = path.posix.join(relativeDirectory, entry.name);
       const absolute = path.join(directory, entry.name);
       if (entry.isDirectory()) {
@@ -850,7 +1089,6 @@ export default class SecondBrainService {
         );
       }
       if (
-        entry.name === SECOND_BRAIN_META_DIRECTORY ||
         entry.name === SECOND_BRAIN_ARCHIVE_DIRECTORY ||
         entry.name.startsWith('.')
       ) {
@@ -901,15 +1139,11 @@ export default class SecondBrainService {
   }
 
   private revisionsRoot(): string {
-    return path.join(this.rootPath, SECOND_BRAIN_META_DIRECTORY, 'revisions');
+    return path.join(this.rootPath, SECOND_BRAIN_REVISIONS_DIRECTORY);
   }
 
   private stateBackupsRoot(): string {
-    return path.join(
-      this.rootPath,
-      SECOND_BRAIN_META_DIRECTORY,
-      'state-backups',
-    );
+    return path.join(this.revisionsRoot(), 'state-backups');
   }
 
   private async revisionDirectory(pageId: string): Promise<string> {
@@ -941,7 +1175,7 @@ export default class SecondBrainService {
   private async readState(
     recoverMalformed: boolean,
   ): Promise<SecondBrainState | null> {
-    const statePath = path.join(this.rootPath, SECOND_BRAIN_STATE_FILE);
+    const statePath = await this.statePath();
     if (!(await fs.pathExists(statePath))) return null;
     await this.assertNoSymlink(statePath);
     try {
@@ -962,7 +1196,9 @@ export default class SecondBrainService {
   private static validateState(value: unknown): SecondBrainState {
     if (
       !isRecord(value) ||
-      value.version !== 1 ||
+      value.version !== 2 ||
+      value.layoutVersion !== SECOND_BRAIN_LAYOUT_VERSION ||
+      value.okfVersion !== SECOND_BRAIN_OKF_VERSION ||
       typeof value.initializedAt !== 'string' ||
       !isRecord(value.sourceCursors) ||
       !isRecord(value.sourceHashes) ||
@@ -979,7 +1215,7 @@ export default class SecondBrainService {
   private async writeState(state: SecondBrainState): Promise<void> {
     SecondBrainService.validateState(state);
     await this.atomicWrite(
-      path.join(this.rootPath, SECOND_BRAIN_STATE_FILE),
+      await this.statePath(),
       `${JSON.stringify(state, null, 2)}\n`,
     );
   }

@@ -844,7 +844,7 @@ export type SecondBrainScope = {
   pageId?: string | null;
 };
 
-export type SecondBrainActor = 'user' | 'agent' | 'refresh' | 'migration';
+export type SecondBrainActor = 'user' | 'agent' | 'refresh';
 
 export type SecondBrainFrontmatter = Record<string, unknown>;
 
@@ -876,6 +876,8 @@ export type SecondBrainStatus = {
   rootPath: string;
   stateVersion?: number;
   lastSuccessfulRefreshAt?: string;
+  layoutVersion: 'okf-v0.1' | 'empty';
+  okfVersion?: '0.1';
 };
 
 export type SecondBrainWriteInput = {

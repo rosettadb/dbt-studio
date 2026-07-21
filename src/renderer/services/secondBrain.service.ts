@@ -77,8 +77,8 @@ export const restore = (
 ): Promise<SecondBrainPage> =>
   window.electron.ipcRenderer.invoke('second-brain:restore', input);
 
-export const openFolder = (): Promise<void> =>
-  window.electron.ipcRenderer.invoke('second-brain:open-folder');
+export const openWikiFolder = (): Promise<void> =>
+  window.electron.ipcRenderer.invoke('second-brain:open-wiki-folder');
 
 export const onProgress = (
   callback: (event: SecondBrainProgressEvent) => void,

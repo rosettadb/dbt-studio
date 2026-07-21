@@ -2,6 +2,7 @@ import { promises as nodeFs } from 'fs';
 import os from 'os';
 import path from 'path';
 import fs from 'fs-extra';
+import { shell } from 'electron';
 import SecondBrainService, {
   normalizeSecondBrainPageId,
 } from '../../../../../../src/main/services/ai/secondBrain/secondBrain.service';
@@ -10,8 +11,10 @@ import { SecondBrainError } from '../../../../../../src/main/services/ai/secondB
 const fixedDate = new Date('2026-07-15T10:00:00.000Z');
 
 const markdown = (title: string, body = 'A durable fact.') => `---
+type: Knowledge Note
 id: ${title.toLowerCase().replace(/\s+/gu, '-')}
 title: ${title}
+description: ${title} durable knowledge.
 scope: global
 updated_by: user
 sources: []
@@ -50,15 +53,43 @@ describe('SecondBrainService', () => {
     await fs.remove(temporaryDirectory);
   });
 
+  it('opens only the initialized portable wiki folder', async () => {
+    const openPath = shell.openPath as jest.Mock;
+    openPath.mockResolvedValue('');
+
+    await expect(service.openWikiFolder()).rejects.toMatchObject({
+      code: 'NOT_INITIALIZED',
+    });
+    expect(openPath).not.toHaveBeenCalled();
+
+    await service.initializeRoot();
+    await service.openWikiFolder();
+
+    expect(openPath).toHaveBeenCalledTimes(1);
+    expect(openPath).toHaveBeenCalledWith(path.join(rootPath, 'wiki'));
+  });
+
   it('bootstraps an idempotent editable wiki with memory.md as entry page', async () => {
     const firstStatus = await service.initializeRoot();
-    expect(firstStatus).toMatchObject({ initialized: true, pageCount: 3 });
-    expect(await fs.pathExists(path.join(rootPath, 'memory.md'))).toBe(true);
-    expect(await fs.pathExists(path.join(rootPath, 'projects'))).toBe(true);
+    expect(firstStatus).toMatchObject({
+      initialized: true,
+      pageCount: 9,
+      layoutVersion: 'okf-v0.1',
+      okfVersion: '0.1',
+      stateVersion: 2,
+    });
+    expect(await fs.pathExists(path.join(rootPath, 'wiki', 'memory.md'))).toBe(
+      true,
+    );
+    expect(await fs.pathExists(path.join(rootPath, 'wiki', 'projects'))).toBe(
+      true,
+    );
+    expect(await fs.pathExists(path.join(rootPath, 'state.json'))).toBe(true);
+    expect(await fs.pathExists(path.join(rootPath, 'revisions'))).toBe(true);
 
     const memory = await service.readPage('memory.md');
     await fs.writeFile(
-      path.join(rootPath, 'memory.md'),
+      path.join(rootPath, 'wiki', 'memory.md'),
       memory.content.replace('compact navigation map', 'user-owned map'),
       'utf8',
     );
@@ -243,7 +274,10 @@ describe('SecondBrainService', () => {
     await service.initializeRoot();
     const outside = path.join(temporaryDirectory, 'outside');
     await fs.ensureDir(outside);
-    await nodeFs.symlink(outside, path.join(rootPath, 'projects', 'escape'));
+    await nodeFs.symlink(
+      outside,
+      path.join(rootPath, 'wiki', 'projects', 'escape'),
+    );
 
     await expect(
       service.writePage({
@@ -258,7 +292,10 @@ describe('SecondBrainService', () => {
     await service.initializeRoot();
     const outside = path.join(temporaryDirectory, 'outside.md');
     await fs.writeFile(outside, markdown('Outside'), 'utf8');
-    await nodeFs.link(outside, path.join(rootPath, 'topics', 'linked.md'));
+    await nodeFs.link(
+      outside,
+      path.join(rootPath, 'wiki', 'topics', 'linked.md'),
+    );
 
     await expect(service.readPage('topics/linked.md')).rejects.toMatchObject({
       code: 'HARD_LINK_NOT_ALLOWED',
@@ -286,10 +323,10 @@ describe('SecondBrainService', () => {
     await expect(
       limitedService.writePage({
         pageId: 'memory.md',
-        content: Array.from(
-          { length: 201 },
-          (_, index) => `line ${index}`,
-        ).join('\n'),
+        content: markdown(
+          'Second Brain',
+          Array.from({ length: 201 }, (_, index) => `line ${index}`).join('\n'),
+        ),
         expectedHash: memory.hash,
         actor: 'user',
       }),
@@ -324,15 +361,93 @@ describe('SecondBrainService', () => {
 
   it('backs up malformed state and rebuilds it during initialization', async () => {
     await service.initializeRoot();
-    await fs.writeFile(path.join(rootPath, '.state.json'), '{broken', 'utf8');
+    await fs.writeFile(path.join(rootPath, 'state.json'), '{broken', 'utf8');
 
     const status = await service.initializeRoot();
     const backups = await fs.readdir(
-      path.join(rootPath, '.meta', 'state-backups'),
+      path.join(rootPath, 'revisions', 'state-backups'),
     );
 
     expect(status.initialized).toBe(true);
     expect(backups).toHaveLength(1);
-    expect((await service.readStateFile())?.version).toBe(1);
+    expect((await service.readStateFile())?.version).toBe(2);
+  });
+
+  it('generates deterministic OKF indexes and protects reserved pages', async () => {
+    await service.initializeRoot();
+    const rootIndex = await service.readPage('index.md');
+    expect(rootIndex.frontmatter).toEqual({ okf_version: '0.1' });
+    expect(rootIndex.content).toContain('[Second Brain](memory.md)');
+
+    await service.writePage({
+      pageId: 'topics/metrics.md',
+      content: markdown('Metrics'),
+      actor: 'user',
+    });
+    const firstIndex = (await service.readPage('topics/index.md')).content;
+    expect(firstIndex.startsWith('# Topics\n')).toBe(true);
+    expect(firstIndex).toContain('[Metrics](metrics.md)');
+
+    await service.initializeRoot();
+    expect((await service.readPage('topics/index.md')).content).toBe(
+      firstIndex,
+    );
+    await expect(
+      service.writePage({
+        pageId: 'topics/index.md',
+        content: '# Poisoned index',
+        actor: 'user',
+      }),
+    ).rejects.toMatchObject({ code: 'GENERATED_PAGE_READ_ONLY' });
+  });
+
+  it('requires OKF type frontmatter for every concept', async () => {
+    await service.initializeRoot();
+    await expect(
+      service.writePage({
+        pageId: 'topics/missing-type.md',
+        content: '---\ntitle: Missing type\n---\n\n# Missing type\n',
+        actor: 'user',
+      }),
+    ).rejects.toMatchObject({ code: 'INVALID_FRONTMATTER' });
+  });
+
+  it('preserves unknown OKF extensions and rejects YAML aliases', async () => {
+    await service.initializeRoot();
+    const page = await service.writePage({
+      pageId: 'topics/extensions.md',
+      content: markdown('Extensions').replace(
+        'description: Extensions durable knowledge.',
+        'description: Extensions durable knowledge.\nx-dbt-owner: finance',
+      ),
+      actor: 'user',
+    });
+    expect(page.frontmatter['x-dbt-owner']).toBe('finance');
+    expect(page.content).toContain('x-dbt-owner: finance');
+
+    await expect(
+      service.writePage({
+        pageId: 'topics/alias.md',
+        content:
+          '---\ntype: &kind Topic\ntitle: Alias\ndescription: *kind\n---\n\n# Alias\n',
+        actor: 'user',
+      }),
+    ).rejects.toMatchObject({ code: 'INVALID_FRONTMATTER' });
+  });
+
+  it('rejects an unsupported OKF bundle version before initialization writes', async () => {
+    await fs.ensureDir(path.join(rootPath, 'wiki'));
+    await fs.writeFile(
+      path.join(rootPath, 'wiki', 'index.md'),
+      '---\nokf_version: "9.0"\n---\n\n# Future bundle\n',
+      'utf8',
+    );
+
+    await expect(service.initializeRoot()).rejects.toMatchObject({
+      code: 'UNSUPPORTED_BUNDLE_VERSION',
+    });
+    expect(await fs.pathExists(path.join(rootPath, 'wiki', 'memory.md'))).toBe(
+      false,
+    );
   });
 });

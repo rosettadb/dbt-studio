@@ -157,7 +157,10 @@ const operationSchema = z.discriminatedUnion('type', [
     content: z
       .string()
       .min(1)
-      .max(64 * 1024),
+      .max(64 * 1024)
+      .describe(
+        'Complete OKF concept Markdown with YAML frontmatter containing a non-empty type; never use index.md or log.md',
+      ),
     searchQuery: z
       .string()
       .min(2)

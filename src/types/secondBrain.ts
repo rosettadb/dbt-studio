@@ -10,14 +10,16 @@ export type SecondBrainManagerStatus = {
   initialized: boolean;
   pageCount: number;
   totalBytes: number;
-  rootDisplayName: string;
   lastSuccessfulRefreshAt?: string;
   busy: boolean;
   activeOperationId?: string;
+  layoutVersion: 'okf-v0.1' | 'empty';
+  okfVersion?: '0.1';
 };
 
 export type SecondBrainTreeItem = SecondBrainPageSummary & {
   archived: boolean;
+  generated?: boolean;
 };
 
 export type SecondBrainManagedPage = SecondBrainPage & {

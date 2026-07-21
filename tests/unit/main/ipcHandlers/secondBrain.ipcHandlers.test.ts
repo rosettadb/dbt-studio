@@ -19,8 +19,10 @@ describe('secondBrain.ipcHandlers', () => {
         pageCount: 3,
         totalBytes: 1024,
         rootPath: '/private/user/second-brain',
+        layoutVersion: 'okf-v0.1',
+        okfVersion: '0.1',
       })),
-      getRootPath: jest.fn(() => '/private/user/second-brain'),
+      openWikiFolder: jest.fn(async () => undefined),
       listManagedPages: jest.fn(async () => []),
       readPage: jest.fn(async () => ({ pageId: 'memory.md' })),
       readArchivedPage: jest.fn(),
@@ -74,6 +76,8 @@ describe('secondBrain.ipcHandlers', () => {
           }
           return pageId;
         },
+        isSecondBrainGeneratedPageId: (pageId: string) =>
+          pageId.endsWith('index.md') || pageId.endsWith('log.md'),
       }),
     );
     jest.doMock(
@@ -105,6 +109,14 @@ describe('secondBrain.ipcHandlers', () => {
       'second-brain:status',
       expect.any(Function),
     );
+    expect(electron.ipcMain.handle).toHaveBeenCalledWith(
+      'second-brain:open-wiki-folder',
+      expect.any(Function),
+    );
+    expect(electron.ipcMain.handle).not.toHaveBeenCalledWith(
+      'second-brain:open-folder',
+      expect.any(Function),
+    );
   });
 
   it('returns a safe status without exposing the absolute root', async () => {
@@ -116,18 +128,34 @@ describe('secondBrain.ipcHandlers', () => {
     expect(status).toMatchObject({
       enabled: true,
       initialized: true,
-      rootDisplayName: 'second-brain',
+      layoutVersion: 'okf-v0.1',
+      okfVersion: '0.1',
     });
     expect(status).not.toHaveProperty('rootPath');
+    expect(status).not.toHaveProperty('rootDisplayName');
+  });
+
+  it('delegates the single wiki-folder action to the backend service', async () => {
+    const { electron, service } = await setup();
+    const handler = getHandler(
+      electron.ipcMain,
+      'second-brain:open-wiki-folder',
+    );
+
+    await handler({});
+
+    expect(service.openWikiFolder).toHaveBeenCalledTimes(1);
   });
 
   it('validates page IDs and delegates page reads once', async () => {
     const { electron, service } = await setup();
     const handler = getHandler(electron.ipcMain, 'second-brain:read');
 
-    await handler({}, { pageId: 'memory.md' });
+    const editable = await handler({}, { pageId: 'memory.md' });
 
     expect(service.readPage).toHaveBeenCalledWith('memory.md');
+    expect(editable.readOnly).toBe(false);
+    expect((await handler({}, { pageId: 'index.md' })).readOnly).toBe(true);
     await expect(handler({}, { pageId: '../secret.md' })).rejects.toMatchObject(
       { code: 'INVALID_PAGE_ID' },
     );

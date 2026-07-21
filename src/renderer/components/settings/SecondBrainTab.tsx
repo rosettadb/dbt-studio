@@ -40,7 +40,7 @@ import type * as monaco from 'monaco-editor';
 import { MonacoCodeEditor } from '../monaco/MonacoCodeEditor';
 import { getMonaco } from '../../lib/monaco/bootstrap';
 import {
-  openSecondBrainFolder,
+  openSecondBrainWikiFolder,
   useApplySecondBrainRefresh,
   useArchiveSecondBrainPage,
   useCancelSecondBrainRefresh,
@@ -74,8 +74,10 @@ const emptyMarkdown = (pageId: string) => {
     .replace(/[-_]+/gu, ' ')
     .replace(/^./u, (value) => value.toUpperCase());
   return `---
+type: Knowledge Note
 id: ${pageId.replace(/\.md$/u, '').replace(/\//gu, '-')}
 title: ${title}
+description: Durable Second Brain knowledge.
 scope: global
 updated_by: user
 sources: []
@@ -282,7 +284,9 @@ export const SecondBrainTab: React.FC = () => {
   const displayContent = selectedRevisionId
     ? (revisionQuery.data?.content ?? '')
     : draft;
-  const readOnly = Boolean(selected?.archived || selectedRevisionId);
+  const readOnly = Boolean(
+    selected?.archived || selected?.generated || selectedRevisionId,
+  );
   const busy =
     initialize.isLoading || previewRefresh.isLoading || applyRefresh.isLoading;
   const visiblePages = search.trim()
@@ -327,11 +331,18 @@ export const SecondBrainTab: React.FC = () => {
                   : 'Not initialized'
               }
             />
-            <Tooltip title="Open the user-owned Second Brain folder">
+            {status?.okfVersion && (
+              <Chip
+                size="small"
+                variant="outlined"
+                label={`OKF ${status.okfVersion}`}
+              />
+            )}
+            <Tooltip title="Open the user-owned OKF wiki folder">
               <span>
                 <IconButton
                   onClick={() =>
-                    openSecondBrainFolder().catch((error) =>
+                    openSecondBrainWikiFolder().catch((error) =>
                       toast.error(error.message),
                     )
                   }
@@ -372,6 +383,13 @@ export const SecondBrainTab: React.FC = () => {
 
       {settings?.secondBrain.enabled && status?.initialized && (
         <>
+          <Alert severity="info">
+            The portable long-term knowledge bundle is stored in{' '}
+            <code>wiki/</code>. Concept pages are editable; generated{' '}
+            <code>index.md</code> navigation is read-only. State, revisions,
+            archive, sources, and maintenance logs are support data outside the
+            bundle. The folder icon opens this user-owned OKF wiki bundle.
+          </Alert>
           <Paper variant="outlined" sx={{ p: 1.5 }}>
             <Stack direction="row" gap={1} alignItems="center" flexWrap="wrap">
               <Button
@@ -455,7 +473,7 @@ export const SecondBrainTab: React.FC = () => {
                   >
                     <ListItemText
                       primary={item.title}
-                      secondary={`${item.archived ? 'Archived · ' : ''}${item.pageId}`}
+                      secondary={`${item.archived ? 'Archived · ' : ''}${item.generated ? 'Generated · ' : ''}${item.pageId}`}
                     />
                   </ListItemButton>
                 ))}
@@ -561,7 +579,9 @@ export const SecondBrainTab: React.FC = () => {
                       size="small"
                       color="warning"
                       startIcon={<Archive />}
-                      disabled={canonicalPages.has(pageQuery.data.pageId)}
+                      disabled={
+                        readOnly || canonicalPages.has(pageQuery.data.pageId)
+                      }
                       onClick={async () => {
                         if (
                           window.confirm(

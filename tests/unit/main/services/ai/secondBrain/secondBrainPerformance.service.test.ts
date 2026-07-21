@@ -12,6 +12,7 @@ import type {
 } from '../../../../../../src/types/backend';
 
 const markdown = (index: number) => `---
+type: Benchmark Knowledge
 id: benchmark-${index}
 title: Benchmark ${index}
 scope: global

@@ -474,7 +474,7 @@ export type SecondBrainChannels =
   | 'second-brain:revisions'
   | 'second-brain:revision-read'
   | 'second-brain:restore'
-  | 'second-brain:open-folder'
+  | 'second-brain:open-wiki-folder'
   | 'second-brain:progress';
 
 export type Channels =

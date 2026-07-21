@@ -112,4 +112,4 @@ export const useSecondBrainProgress = () => {
   return progress;
 };
 
-export const openSecondBrainFolder = secondBrainService.openFolder;
+export const openSecondBrainWikiFolder = secondBrainService.openWikiFolder;

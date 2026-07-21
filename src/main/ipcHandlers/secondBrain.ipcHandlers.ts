@@ -1,6 +1,5 @@
 import { randomUUID } from 'crypto';
-import path from 'path';
-import { ipcMain, shell } from 'electron';
+import { ipcMain } from 'electron';
 import type { IpcMainInvokeEvent } from 'electron';
 import type {
   SecondBrainArchiveRequest,
@@ -13,6 +12,7 @@ import type {
 import { loadAISettings } from '../services/agent.service';
 import SecondBrainRefreshService from '../services/ai/secondBrain/secondBrainRefresh.service';
 import SecondBrainService, {
+  isSecondBrainGeneratedPageId,
   normalizeSecondBrainPageId,
 } from '../services/ai/secondBrain/secondBrain.service';
 import { SecondBrainError } from '../services/ai/secondBrain/secondBrain.types';
@@ -31,7 +31,7 @@ const channels = [
   'second-brain:revisions',
   'second-brain:revision-read',
   'second-brain:restore',
-  'second-brain:open-folder',
+  'second-brain:open-wiki-folder',
 ] as const;
 
 type ActiveOperation = {
@@ -146,10 +146,11 @@ export const registerSecondBrainHandlers = (): void => {
       initialized: status.initialized,
       pageCount: status.pageCount,
       totalBytes: status.totalBytes,
-      rootDisplayName: path.basename(status.rootPath),
       lastSuccessfulRefreshAt: status.lastSuccessfulRefreshAt,
       busy: Boolean(activeOperation),
       activeOperationId: activeOperation?.operationId,
+      layoutVersion: status.layoutVersion,
+      okfVersion: status.okfVersion,
     };
   });
 
@@ -164,7 +165,11 @@ export const registerSecondBrainHandlers = (): void => {
       const service = await createService();
       if (input.archived) return service.readArchivedPage(pageId);
       const page = await service.readPage(pageId);
-      return { ...page, archived: false, readOnly: false };
+      return {
+        ...page,
+        archived: false,
+        readOnly: isSecondBrainGeneratedPageId(pageId),
+      };
     },
   );
 
@@ -267,18 +272,9 @@ export const registerSecondBrainHandlers = (): void => {
     },
   );
 
-  ipcMain.handle('second-brain:open-folder', async () => {
-    const service = await createService();
-    const status = await service.getStatus();
-    if (!status.initialized) {
-      throw new SecondBrainError(
-        'NOT_INITIALIZED',
-        'Initialize Second Brain before opening its folder.',
-      );
-    }
-    const error = await shell.openPath(service.getRootPath());
-    if (error) throw new Error(error);
-  });
+  ipcMain.handle('second-brain:open-wiki-folder', async () =>
+    (await createService()).openWikiFolder(),
+  );
 };
 
 export const resetSecondBrainHandlersForTests = (): void => {

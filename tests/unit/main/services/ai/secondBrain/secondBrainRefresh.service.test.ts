@@ -32,6 +32,7 @@ const durableOperation: SecondBrainRefreshOperation = {
   type: 'create',
   pageId: 'topics/revenue-validation.md',
   content: `---
+type: Project Knowledge
 id: revenue-validation
 title: Revenue validation
 scope: global
@@ -109,12 +110,12 @@ describe('SecondBrainRefreshService', () => {
     );
 
     const stateBefore = await fs.readFile(
-      path.join(rootPath, '.state.json'),
+      path.join(rootPath, 'state.json'),
       'utf8',
     );
     const second = await refresh.refresh({});
     const stateAfter = await fs.readFile(
-      path.join(rootPath, '.state.json'),
+      path.join(rootPath, 'state.json'),
       'utf8',
     );
 
