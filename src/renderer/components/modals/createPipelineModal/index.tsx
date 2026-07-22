@@ -747,10 +747,6 @@ export const CreatePipelineModal: React.FC<CreatePipelineModalProps> = ({
                     ? alpha(theme.palette.primary.main, 0.12)
                     : alpha(theme.palette.primary.main, 0.05);
 
-                  const unselectedIconBg = isDark
-                    ? alpha(theme.palette.common.white, 0.06)
-                    : alpha(theme.palette.common.black, 0.05);
-
                   return (
                     <Box
                       key={template.id}
@@ -773,38 +769,17 @@ export const CreatePipelineModal: React.FC<CreatePipelineModalProps> = ({
                         },
                       }}
                     >
-                      <Box
+                      <CheckCircle
                         sx={{
-                          display: 'flex',
-                          alignItems: 'flex-start',
-                          justifyContent: 'space-between',
-                          mb: 1,
+                          position: 'absolute',
+                          top: 12,
+                          right: 12,
+                          color: 'primary.main',
+                          fontSize: 20,
+                          opacity: isSelected ? 1 : 0,
+                          transition: 'opacity 0.15s',
                         }}
-                      >
-                        <Box
-                          sx={{
-                            p: 1,
-                            borderRadius: 1.5,
-                            display: 'flex',
-                            bgcolor: isSelected
-                              ? alpha(theme.palette.primary.main, 0.15)
-                              : unselectedIconBg,
-                            color: isSelected
-                              ? 'primary.main'
-                              : 'text.secondary',
-                          }}
-                        >
-                          <Public sx={{ fontSize: 20 }} />
-                        </Box>
-                        <CheckCircle
-                          sx={{
-                            color: 'primary.main',
-                            fontSize: 20,
-                            opacity: isSelected ? 1 : 0,
-                            transition: 'opacity 0.15s',
-                          }}
-                        />
-                      </Box>
+                      />
 
                       <Box
                         sx={{
@@ -812,6 +787,7 @@ export const CreatePipelineModal: React.FC<CreatePipelineModalProps> = ({
                           alignItems: 'center',
                           gap: 1,
                           mb: 0.5,
+                          pr: 3.5,
                           flexWrap: 'wrap',
                         }}
                       >
