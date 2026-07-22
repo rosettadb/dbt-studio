@@ -240,14 +240,17 @@ export const ChartRenderer: React.FC<ChartRendererProps> = ({
         const sliceStroke = theme.palette.mode === 'dark' ? '#1e1e1e' : '#fff';
 
         return (
-          <PieChart margin={{ top: 40, right: 40, left: 40, bottom: 40 }}>
+          <PieChart margin={{ top: 24, right: 48, left: 48, bottom: 8 }}>
             <Pie
               data={validPieData!}
               dataKey={primaryYAxisCol}
               nameKey={xAxisCol}
               cx="50%"
               cy="50%"
-              outerRadius={130}
+              // Keep the pie responsive to the plot area Recharts leaves after
+              // measuring the legend. A fixed radius can extend into the legend
+              // and outside labels in shorter Analytics chart frames.
+              outerRadius="82%"
               stroke={sliceStroke}
               strokeWidth={2}
               label={renderPieLabel}
