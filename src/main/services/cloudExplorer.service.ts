@@ -1742,14 +1742,19 @@ class CloudExplorerService {
     const downloadRequest = net.request(objectUrl);
     let cancelled = false;
     let fileStream: fs.WriteStream | null = null;
+    let rejectPending: ((err: Error) => void) | null = null;
     TaskManagerService.registerCanceller(taskId, () => {
       cancelled = true;
       downloadRequest.abort();
       fileStream?.destroy();
+      // abort() doesn't reliably emit 'error' on an in-flight response, so
+      // the pending promise below could otherwise hang forever — settle it.
+      rejectPending?.(new Error('Download cancelled'));
     });
 
     try {
       const response: IncomingMessage = await new Promise((resolve, reject) => {
+        rejectPending = reject;
         downloadRequest.on('response', resolve);
         downloadRequest.on('error', reject);
         downloadRequest.end();
@@ -1773,6 +1778,7 @@ class CloudExplorerService {
       fs.mkdirSync(path.dirname(destinationPath), { recursive: true });
       fileStream = fs.createWriteStream(destinationPath);
       await new Promise<void>((resolve, reject) => {
+        rejectPending = reject;
         response.on('data', (chunk) => {
           loaded += chunk.length;
           fileStream?.write(chunk);
