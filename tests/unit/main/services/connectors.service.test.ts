@@ -2,6 +2,7 @@ import fs from 'fs';
 import ConnectorsService from '../../../../src/main/services/connectors.service';
 
 const testPostgresConnection = jest.fn();
+const getCredential = jest.fn();
 
 jest.mock('openai', () => ({
   OpenAI: jest.fn(),
@@ -25,7 +26,7 @@ jest.mock('../../../../src/main/services/secureStorage.service', () => ({
   __esModule: true,
   default: {
     setCredential: jest.fn(),
-    getCredential: jest.fn(),
+    getCredential: (...args: any[]) => getCredential(...args),
     deleteCredential: jest.fn(),
   },
 }));
@@ -48,6 +49,7 @@ jest.mock('../../../../src/main/utils/connectors', () => ({
 describe('ConnectorsService (main)', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    getCredential.mockReset();
   });
 
   describe('validateConnection', () => {
@@ -103,6 +105,7 @@ describe('ConnectorsService (main)', () => {
       const writeFileSpy = jest
         .spyOn(fs.promises, 'writeFile')
         .mockResolvedValue(undefined);
+      const rmSyncSpy = jest.spyOn(fs, 'rmSync').mockImplementation(() => {});
       const key = 'db-bigquery-bigquery_01';
       const emailKey = 'db-bigquery-email-bigquery_01';
       const serviceAccount = JSON.stringify({
@@ -124,9 +127,113 @@ describe('ConnectorsService (main)', () => {
         );
         expect(process.env[key]).not.toBe(serviceAccount);
       } finally {
+        ConnectorsService.cleanupBigQueryKeyFiles();
         writeFileSpy.mockRestore();
+        rmSyncSpy.mockRestore();
         delete process.env[key];
         delete process.env[emailKey];
+      }
+    });
+
+    it('materializes both service-account variables before loading configs', async () => {
+      const serviceAccount = JSON.stringify({
+        client_email: 'saved@example.iam.gserviceaccount.com',
+        private_key: 'private-key',
+      });
+      getCredential.mockResolvedValue(serviceAccount);
+      const project = {
+        id: 'project-1',
+        name: 'Project',
+        path: '/projects/project-1',
+        connectionId: 'connection-1',
+      } as any;
+      const connection = {
+        id: 'connection-1',
+        connection: {
+          type: 'bigquery',
+          name: 'saved-bigquery',
+          method: 'service-account',
+          project: 'analytics-project',
+          database: 'analytics-project',
+          schema: 'analytics',
+          dataset: 'analytics',
+          username: '',
+          password: '',
+        },
+      } as any;
+      const projectSpy = jest
+        .spyOn(ConnectorsService, 'getProjectById')
+        .mockResolvedValue(project);
+      const connectionsSpy = jest
+        .spyOn(ConnectorsService, 'loadConnections')
+        .mockResolvedValue([connection]);
+      const writeFileSpy = jest
+        .spyOn(fs.promises, 'writeFile')
+        .mockResolvedValue(undefined);
+      const mkdirSpy = jest
+        .spyOn(fs.promises, 'mkdir')
+        .mockResolvedValue(undefined);
+      const rmSyncSpy = jest.spyOn(fs, 'rmSync').mockImplementation(() => {});
+
+      try {
+        await ConnectorsService.loadConfigurations(project.id);
+
+        expect(getCredential).toHaveBeenCalledWith(
+          'db-bigquery-saved-bigquery',
+        );
+        expect(process.env['db-bigquery-saved-bigquery']).toMatch(
+          /rosetta-bigquery-.*\.json$/,
+        );
+        expect(process.env['db-bigquery-email-saved-bigquery']).toBe(
+          'saved@example.iam.gserviceaccount.com',
+        );
+      } finally {
+        ConnectorsService.cleanupBigQueryKeyFiles();
+        projectSpy.mockRestore();
+        connectionsSpy.mockRestore();
+        writeFileSpy.mockRestore();
+        mkdirSpy.mockRestore();
+        rmSyncSpy.mockRestore();
+      }
+    });
+
+    it('removes all tracked service-account files and environment values', async () => {
+      const writeFileSpy = jest
+        .spyOn(fs.promises, 'writeFile')
+        .mockResolvedValue(undefined);
+      const rmSyncSpy = jest.spyOn(fs, 'rmSync').mockImplementation(() => {});
+      const serviceAccount = JSON.stringify({
+        client_email: 'cleanup@example.iam.gserviceaccount.com',
+        private_key: 'private-key',
+      });
+
+      try {
+        await ConnectorsService.setConnectionEnvVariable(
+          'db-bigquery-first',
+          serviceAccount,
+        );
+        await ConnectorsService.setConnectionEnvVariable(
+          'db-bigquery-second',
+          serviceAccount,
+        );
+        const paths = [
+          process.env['db-bigquery-first'],
+          process.env['db-bigquery-second'],
+        ];
+
+        ConnectorsService.cleanupBigQueryKeyFiles();
+
+        paths.forEach((keyPath) => {
+          expect(rmSyncSpy).toHaveBeenCalledWith(keyPath, { force: true });
+        });
+        expect(process.env['db-bigquery-first']).toBeUndefined();
+        expect(process.env['db-bigquery-second']).toBeUndefined();
+        expect(process.env['db-bigquery-email-first']).toBeUndefined();
+        expect(process.env['db-bigquery-email-second']).toBeUndefined();
+      } finally {
+        ConnectorsService.cleanupBigQueryKeyFiles();
+        writeFileSpy.mockRestore();
+        rmSyncSpy.mockRestore();
       }
     });
   });
