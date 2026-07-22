@@ -2,7 +2,6 @@ import React, { useState, useMemo, useEffect } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { formatDistanceToNow } from 'date-fns';
 import { toast } from 'react-toastify';
-import { v4 as uuidv4 } from 'uuid';
 import {
   Box,
   Typography,
@@ -87,6 +86,19 @@ const isCSVFile = (fileName: string): boolean => {
   return extension === 'csv';
 };
 
+// Deterministic task id derived purely from the download's source (connection
+// + bucket + object), not local component state — so any row can recompute
+// its own task id on every render, including right after remounting, and
+// find its in-flight download in the global task registry. ':' is reserved
+// for the 'cloudExplorer:download:<id>' protocol separator, so the id's own
+// parts are joined with '_'.
+const buildDownloadTaskId = (
+  connectionId: string,
+  bucketName: string,
+  objectName: string,
+): string =>
+  `cloudExplorer:download:${connectionId}_${bucketName}_${objectName}`;
+
 // Separate component (not inlined in a .map()) so useTaskChannel can be
 // called safely per row — each download's progress keeps updating even if
 // the user navigates away and back, as long as this row is still mounted.
@@ -127,9 +139,6 @@ export const ExplorerBucketContent: React.FC<ExplorerBucketContentProps> = ({
   const [searchTerm, setSearchTerm] = useState('');
   const [downloadUrls, setDownloadUrls] = useState<Record<string, string>>({});
   const [loadingUrls, setLoadingUrls] = useState<Record<string, boolean>>({});
-  const [downloadTaskIds, setDownloadTaskIds] = useState<
-    Record<string, string>
-  >({});
   const { cancel: cancelTask, getTask } = useTaskManager();
   const [previewFile, setPreviewFile] = useState<{
     fileName: string;
@@ -361,8 +370,7 @@ export const ExplorerBucketContent: React.FC<ExplorerBucketContentProps> = ({
     );
     if (saveDialogResult.canceled || !saveDialogResult.filePath) return;
 
-    const taskId = `cloudExplorer:download:${uuidv4()}`;
-    setDownloadTaskIds((prev) => ({ ...prev, [objectName]: taskId }));
+    const taskId = buildDownloadTaskId(connectionId, bucketName, objectName);
     try {
       await downloadObject.mutateAsync({
         objectUrl: url,
@@ -376,12 +384,6 @@ export const ExplorerBucketContent: React.FC<ExplorerBucketContentProps> = ({
       // already reflects the cancelled status, so skip the error toast.
       if (getTask(taskId)?.status === 'cancelled') return;
       throw error;
-    } finally {
-      setDownloadTaskIds((prev) => {
-        const next = { ...prev };
-        delete next[objectName];
-        return next;
-      });
     }
   };
 
@@ -668,33 +670,41 @@ export const ExplorerBucketContent: React.FC<ExplorerBucketContentProps> = ({
                         </IconButton>
                       </Tooltip>
                     )}
-                    {!object.isDirectory && (
-                      <Box sx={{ display: 'flex', alignItems: 'center' }}>
-                        <Tooltip title="Download">
-                          <span>
-                            <IconButton
-                              size="small"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                handleDownload(object.name);
-                              }}
-                              disabled={loadingUrls[object.name]}
-                            >
-                              {loadingUrls[object.name] &&
-                              !downloadTaskIds[object.name] ? (
-                                <CircularProgress size={16} />
-                              ) : (
-                                <Download fontSize="small" />
-                              )}
-                            </IconButton>
-                          </span>
-                        </Tooltip>
-                        <DownloadProgressIndicator
-                          taskId={downloadTaskIds[object.name]}
-                          onCancel={cancelTask}
-                        />
-                      </Box>
-                    )}
+                    {!object.isDirectory &&
+                      (() => {
+                        const objectTaskId = buildDownloadTaskId(
+                          connectionId,
+                          bucketName,
+                          object.name,
+                        );
+                        const existingTask = getTask(objectTaskId);
+                        return (
+                          <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                            <Tooltip title="Download">
+                              <span>
+                                <IconButton
+                                  size="small"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleDownload(object.name);
+                                  }}
+                                  disabled={loadingUrls[object.name]}
+                                >
+                                  {loadingUrls[object.name] && !existingTask ? (
+                                    <CircularProgress size={16} />
+                                  ) : (
+                                    <Download fontSize="small" />
+                                  )}
+                                </IconButton>
+                              </span>
+                            </Tooltip>
+                            <DownloadProgressIndicator
+                              taskId={objectTaskId}
+                              onCancel={cancelTask}
+                            />
+                          </Box>
+                        );
+                      })()}
                     {!object.isDirectory &&
                       project &&
                       isCSVFile(
