@@ -88,8 +88,7 @@ export const TerminalHeader = styled(Box)(({ theme }) => ({
 }));
 
 export const Taskbar = styled(Box)(({ theme }) => ({
-  height: '100%',
-  minHeight: 32,
+  height: 40,
   backgroundColor: theme.palette.background.paper,
   display: 'flex',
   alignItems: 'center',
