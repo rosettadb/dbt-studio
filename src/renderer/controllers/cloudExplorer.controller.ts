@@ -21,6 +21,7 @@ import type {
   CreateFolderResponse,
   DeleteBucketRequest,
   DeleteBucketResponse,
+  DownloadObjectRequest,
 } from '../../types/ipc';
 
 export const cloudExplorerKeys = {
@@ -113,6 +114,13 @@ export const useGetDownloadUrl = () => {
         bucketName,
         objectName,
       ),
+  );
+};
+
+// Mutation for downloading an object to a local path
+export const useDownloadObject = () => {
+  return useMutation((params: DownloadObjectRequest) =>
+    cloudExplorerService.downloadObject(params),
   );
 };
 

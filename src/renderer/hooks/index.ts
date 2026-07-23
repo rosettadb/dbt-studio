@@ -21,6 +21,7 @@ import { useProjectQueryResultsPanel } from './useProjectQueryResultsPanel';
 import { useProjectSqlExecution } from './useProjectSqlExecution';
 
 import { useAgentStream } from './useAgentStream';
+import { useTaskChannel } from './useTaskChannel';
 
 export {
   useIpcPromise,
@@ -45,4 +46,5 @@ export {
   useProjectQueryResultsPanel,
   useProjectSqlExecution,
   useAgentStream,
+  useTaskChannel,
 };

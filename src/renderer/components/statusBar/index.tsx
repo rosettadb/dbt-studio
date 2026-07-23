@@ -1,13 +1,16 @@
 import React from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Box, Tooltip, Typography, Divider } from '@mui/material';
 import StorageIcon from '@mui/icons-material/Storage';
 import CodeIcon from '@mui/icons-material/Code';
 import TerminalIcon from '@mui/icons-material/Terminal';
+import PendingActionsIcon from '@mui/icons-material/PendingActions';
 import {
   useGetSelectedProject,
   useGetSettingsWithDatabaseInfo,
 } from '../../controllers';
 import { useGetRepoInfo } from '../../controllers/git.controller';
+import { useTaskManager } from '../../context';
 import { Icon } from '../icon';
 import { icons } from '../../../../assets';
 
@@ -51,11 +54,16 @@ const Sep: React.FC = () => (
 );
 
 export const StatusBar: React.FC = () => {
+  const navigate = useNavigate();
   const { data: settings } = useGetSettingsWithDatabaseInfo();
   const { data: project } = useGetSelectedProject();
   const { data: repoInfo } = useGetRepoInfo(project?.path ?? '', {
     enabled: !!project?.path,
   });
+  const { tasks } = useTaskManager();
+  const activeTaskCount = tasks.filter(
+    (task) => task.status === 'running' || task.status === 'pending',
+  ).length;
 
   const appVersion = window.electron?.app?.version ?? '—';
   const duckdbPkgVersion = settings?.duckdbVersion || '—';
@@ -136,6 +144,39 @@ export const StatusBar: React.FC = () => {
       )}
 
       <Box sx={{ flex: 1 }} />
+
+      {activeTaskCount > 0 && (
+        <>
+          <Tooltip
+            title={`${activeTaskCount} background task${activeTaskCount === 1 ? '' : 's'} running — click to view`}
+            placement="top"
+          >
+            <Box
+              onClick={() => navigate('/app/settings/task-manager')}
+              sx={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 0.5,
+                px: 1,
+                cursor: 'pointer',
+                '&:hover': { bgcolor: 'action.hover' },
+                borderRadius: 0.5,
+              }}
+            >
+              <PendingActionsIcon
+                sx={{ fontSize: FS, color: 'primary.main' }}
+              />
+              <Typography
+                variant="caption"
+                sx={{ fontSize: FS, lineHeight: 1, fontWeight: 600 }}
+              >
+                {activeTaskCount}
+              </Typography>
+            </Box>
+          </Tooltip>
+          <Sep />
+        </>
+      )}
 
       {/* Right */}
       <Item
