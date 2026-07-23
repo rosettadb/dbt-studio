@@ -52,6 +52,7 @@ export const EditorHeader: React.FC<EditorHeaderProps> = ({
   const isMarkdown =
     filePath.toLowerCase().endsWith('.md') ||
     filePath.toLowerCase().endsWith('.markdown');
+  const isHtml = /\.html?$/i.test(filePath);
 
   const getDiffTooltip = () => {
     if (showDiffView) return 'Hide Diff';
@@ -101,8 +102,8 @@ export const EditorHeader: React.FC<EditorHeaderProps> = ({
             </span>
           </Tooltip>
         )}
-        {/* Preview Button — only visible for markdown files */}
-        {isMarkdown && (
+        {/* Preview Button — only visible for markdown/HTML files */}
+        {(isMarkdown || isHtml) && (
           <Tooltip title={showPreview ? 'Close Preview' : 'Open Preview'}>
             <span>
               <IconButton

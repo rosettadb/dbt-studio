@@ -61,13 +61,6 @@ type Props = {
 };
 
 export const QueryResult: React.FC<Props> = ({ results, exportContext }) => {
-  const formatNumber = React.useCallback((n: number) => {
-    try {
-      return new Intl.NumberFormat('de-DE').format(n);
-    } catch {
-      return String(n);
-    }
-  }, []);
   const originalSql =
     (results as any).originalSql ?? exportContext?.originalSql;
 
@@ -184,14 +177,6 @@ export const QueryResult: React.FC<Props> = ({ results, exportContext }) => {
   ]);
 
   const hasRows = rows.length > 0 && columns.length > 0;
-  const showingInfo =
-    isDuckLake && totalCount > 0
-      ? `Showing ${formatNumber(
-          Math.min(page * perPage + 1, totalCount),
-        )}–${formatNumber(Math.min((page + 1) * perPage, totalCount))} of ${formatNumber(
-          totalCount,
-        )}`
-      : undefined;
 
   const [exportAnchorEl, setExportAnchorEl] =
     React.useState<null | HTMLElement>(null);
@@ -488,28 +473,58 @@ export const QueryResult: React.FC<Props> = ({ results, exportContext }) => {
         id="query-result"
         dataTestId="sql-results-table"
         name=""
-        toolbarContent={
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-            {results.duration !== undefined && (
-              <Typography
-                variant="body2"
-                color="text.secondary"
-                sx={{ opacity: 0.7 }}
+        hideToolbar
+        rows={rows as any}
+        columns={columns.map((column) => ({
+          id: column,
+          label: underscoreToTitleCase(column),
+          render: (value) => {
+            const cellValue = value[column];
+            // Handle null and undefined
+            if (cellValue === null || cellValue === undefined) {
+              return (
+                <div
+                  style={{
+                    whiteSpace: 'nowrap',
+                    minHeight: '24px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    color: '#999',
+                    fontStyle: 'italic',
+                  }}
+                >
+                  NULL
+                </div>
+              );
+            }
+            let stringValue: string;
+            if (typeof cellValue === 'object') {
+              try {
+                stringValue = JSON.stringify(cellValue);
+              } catch {
+                stringValue = String(cellValue);
+              }
+            } else {
+              stringValue = String(cellValue);
+            }
+            return (
+              <div
+                style={{
+                  whiteSpace: 'nowrap',
+                  minHeight: '24px',
+                  display: 'flex',
+                  alignItems: 'center',
+                }}
               >
-                {results.duration > 1000
-                  ? `${(results.duration / 1000).toFixed(2)}s`
-                  : `${results.duration}ms`}
-              </Typography>
-            )}
-            {showingInfo && (
-              <Typography
-                variant="body2"
-                color="text.secondary"
-                sx={{ opacity: 0.7 }}
-              >
-                {showingInfo}
-              </Typography>
-            )}
+                {stringValue}
+              </div>
+            );
+          },
+        }))}
+        customPagination={customPagination as any}
+        loading={loading}
+        paginationLeftContent={
+          <>
             <Tooltip title={exportTooltipTitle}>
               <span>
                 <Button
@@ -525,6 +540,7 @@ export const QueryResult: React.FC<Props> = ({ results, exportContext }) => {
                   endIcon={<ArrowDropDownIcon />}
                   onClick={handleExportMenuOpen}
                   disabled={!hasRows || isExporting}
+                  sx={{ height: 26 }}
                 >
                   {isExporting ? 'Exporting...' : 'Export'}
                 </Button>
@@ -535,12 +551,12 @@ export const QueryResult: React.FC<Props> = ({ results, exportContext }) => {
               open={exportMenuOpen}
               onClose={handleExportMenuClose}
               anchorOrigin={{
-                vertical: 'bottom',
-                horizontal: 'right',
+                vertical: 'top',
+                horizontal: 'left',
               }}
               transformOrigin={{
-                vertical: 'top',
-                horizontal: 'right',
+                vertical: 'bottom',
+                horizontal: 'left',
               }}
             >
               <MenuItem
@@ -601,57 +617,8 @@ export const QueryResult: React.FC<Props> = ({ results, exportContext }) => {
                 </MenuItem>
               )}
             </Menu>
-          </Box>
+          </>
         }
-        rows={rows as any}
-        columns={columns.map((column) => ({
-          id: column,
-          label: underscoreToTitleCase(column),
-          render: (value) => {
-            const cellValue = value[column];
-            // Handle null and undefined
-            if (cellValue === null || cellValue === undefined) {
-              return (
-                <div
-                  style={{
-                    whiteSpace: 'nowrap',
-                    minHeight: '24px',
-                    display: 'flex',
-                    alignItems: 'center',
-                    color: '#999',
-                    fontStyle: 'italic',
-                  }}
-                >
-                  NULL
-                </div>
-              );
-            }
-            let stringValue: string;
-            if (typeof cellValue === 'object') {
-              try {
-                stringValue = JSON.stringify(cellValue);
-              } catch {
-                stringValue = String(cellValue);
-              }
-            } else {
-              stringValue = String(cellValue);
-            }
-            return (
-              <div
-                style={{
-                  whiteSpace: 'nowrap',
-                  minHeight: '24px',
-                  display: 'flex',
-                  alignItems: 'center',
-                }}
-              >
-                {stringValue}
-              </div>
-            );
-          },
-        }))}
-        customPagination={customPagination as any}
-        loading={loading}
       />
 
       <Backdrop

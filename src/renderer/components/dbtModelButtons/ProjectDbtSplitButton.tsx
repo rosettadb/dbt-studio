@@ -33,6 +33,7 @@ interface ProjectDbtSplitButtonProps {
   isRunningRosettaDbt: boolean;
   connection?: any;
   environment?: 'local' | 'cloud';
+  onBeforeExecute?: () => void;
   // Function handlers that are used elsewhere in ProjectDetails
   rosettaDbt: (project: Project, command: Command) => Promise<void>;
 }
@@ -46,6 +47,7 @@ export const ProjectDbtSplitButton: React.FC<ProjectDbtSplitButtonProps> = ({
   isRunningRosettaDbt,
   connection,
   environment = 'local',
+  onBeforeExecute,
   rosettaDbt,
 }) => {
   // Functions that are only used in this component - moved inside
@@ -190,6 +192,7 @@ export const ProjectDbtSplitButton: React.FC<ProjectDbtSplitButtonProps> = ({
           toast.info('Please configure dbt path in settings');
           return;
         }
+        onBeforeExecute?.();
         dbtRun(project);
       },
       leftIcon: <Icon src={icons.dbtTm} width={16} height={16} />,
@@ -203,6 +206,7 @@ export const ProjectDbtSplitButton: React.FC<ProjectDbtSplitButtonProps> = ({
           toast.info('Please configure dbt path in settings');
           return;
         }
+        onBeforeExecute?.();
         dbtTest(project);
       },
       leftIcon: <Icon src={icons.dbtTm} width={16} height={16} />,
@@ -216,6 +220,7 @@ export const ProjectDbtSplitButton: React.FC<ProjectDbtSplitButtonProps> = ({
           toast.info('Please configure dbt path in settings');
           return;
         }
+        onBeforeExecute?.();
         dbtBuild(project);
       },
       leftIcon: <Icon src={icons.dbtTm} width={16} height={16} />,
@@ -229,6 +234,7 @@ export const ProjectDbtSplitButton: React.FC<ProjectDbtSplitButtonProps> = ({
           toast.info('Please configure dbt path in settings');
           return;
         }
+        onBeforeExecute?.();
         dbtCompileProject(project);
       },
       leftIcon: <Icon src={icons.dbtTm} width={16} height={16} />,
@@ -242,6 +248,7 @@ export const ProjectDbtSplitButton: React.FC<ProjectDbtSplitButtonProps> = ({
           toast.info('Please configure dbt path in settings');
           return;
         }
+        onBeforeExecute?.();
         dbtDebug(project);
       },
       leftIcon: <Icon src={icons.dbtTm} width={16} height={16} />,
@@ -255,6 +262,7 @@ export const ProjectDbtSplitButton: React.FC<ProjectDbtSplitButtonProps> = ({
           toast.info('Please configure dbt path in settings');
           return;
         }
+        onBeforeExecute?.();
         dbtDocsGenerate(project);
       },
       leftIcon: <Icon src={icons.dbtTm} width={16} height={16} />,
@@ -279,6 +287,7 @@ export const ProjectDbtSplitButton: React.FC<ProjectDbtSplitButtonProps> = ({
           stop();
           return;
         }
+        onBeforeExecute?.();
         start(
           `cd "${project.path}" && "${dbtPath}" docs serve`,
           connection?.connection?.name ?? '',
@@ -295,6 +304,7 @@ export const ProjectDbtSplitButton: React.FC<ProjectDbtSplitButtonProps> = ({
           toast.info('Please configure dbt path in settings');
           return;
         }
+        onBeforeExecute?.();
         dbtClean(project);
       },
       leftIcon: <Icon src={icons.dbtTm} width={16} height={16} />,
@@ -308,6 +318,7 @@ export const ProjectDbtSplitButton: React.FC<ProjectDbtSplitButtonProps> = ({
           toast.info('Please configure dbt path in settings');
           return;
         }
+        onBeforeExecute?.();
         dbtDeps(project);
       },
       leftIcon: <Icon src={icons.dbtTm} width={16} height={16} />,
@@ -321,6 +332,7 @@ export const ProjectDbtSplitButton: React.FC<ProjectDbtSplitButtonProps> = ({
           toast.info('Please configure dbt path in settings');
           return;
         }
+        onBeforeExecute?.();
         dbtSeed(project);
       },
       leftIcon: <Icon src={icons.dbtTm} width={16} height={16} />,
@@ -375,6 +387,7 @@ export const ProjectDbtSplitButton: React.FC<ProjectDbtSplitButtonProps> = ({
           path={rawPath}
           project={project}
           processCallback={async (updatedPath) => {
+            onBeforeExecute?.();
             await rosettaDbt(project, {
               command: 'extract',
               commandType: CommandType.DBTNext,
@@ -399,6 +412,7 @@ export const ProjectDbtSplitButton: React.FC<ProjectDbtSplitButtonProps> = ({
               });
               args.set(' ', command);
             }
+            onBeforeExecute?.();
             await rosettaDbt(project, {
               command: 'staging',
               commandType: CommandType.DBTNext,
@@ -423,6 +437,7 @@ export const ProjectDbtSplitButton: React.FC<ProjectDbtSplitButtonProps> = ({
               });
               args.set(' ', command);
             }
+            onBeforeExecute?.();
             await rosettaDbt(project, {
               commandType: CommandType.DBTNext,
               command: 'incremental',

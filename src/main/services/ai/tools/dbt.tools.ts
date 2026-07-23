@@ -9,6 +9,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import SettingsService from '../../settings.service';
 import AgentService from '../../agent.service';
+import SecureStorageService from '../../secureStorage.service';
 import { TerminalConfirmGate } from './terminalConfirmGate';
 
 // Security constraints
@@ -55,6 +56,42 @@ function isAllowedCommand(command: string, allowedCommands: string[]): boolean {
       normalized.startsWith(`${normalizedAllowed} `)
     );
   });
+}
+
+async function buildDbtProcessEnv(
+  projectPath: string,
+): Promise<Record<string, string | undefined>> {
+  const env = { ...process.env };
+  const profilesPath = path.join(projectPath, 'profiles.yml');
+
+  if (!fs.existsSync(profilesPath)) {
+    return env;
+  }
+
+  const profilesContent = await fs.promises.readFile(profilesPath, 'utf8');
+  const envVarRegex = /env_var\(\s*["']([^"']+)["']/g;
+  const envVarNames = new Set<string>();
+
+  for (
+    let match = envVarRegex.exec(profilesContent);
+    match !== null;
+    match = envVarRegex.exec(profilesContent)
+  ) {
+    envVarNames.add(match[1]);
+  }
+
+  await Promise.all(
+    Array.from(envVarNames).map(async (envVarName) => {
+      if (envVarName in env) return;
+
+      const storedValue = await SecureStorageService.getCredential(envVarName);
+      if (storedValue) {
+        env[envVarName] = storedValue;
+      }
+    }),
+  );
+
+  return env;
 }
 
 export async function executeDbtCommand(opts: {
@@ -146,9 +183,12 @@ export async function executeDbtCommand(opts: {
       mainWindow.webContents.send('cli:output', `> ${displayCmd}\n`);
     }
 
+    const env = await buildDbtProcessEnv(projectPath);
+
     return await new Promise((resolve) => {
       const child = spawn(dbtExe, args, {
         cwd: projectPath,
+        env,
         shell: false,
       });
 
@@ -435,6 +475,7 @@ export const runDbtCommand = tool({
       // Execute with timeout
       const output = execFileSync(dbtExe, args, {
         cwd: projectPath,
+        env: await buildDbtProcessEnv(projectPath),
         encoding: 'utf-8',
         timeout: COMMAND_TIMEOUT,
         maxBuffer: 1024 * 1024 * 10, // 10 MB buffer

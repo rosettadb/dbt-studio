@@ -26,6 +26,7 @@ export const createMainWindow = (
         : path.join(__dirname, '../../.erb/dll/preload.js'),
       contextIsolation: true,
       nodeIntegration: false,
+      webviewTag: true,
     },
   });
 

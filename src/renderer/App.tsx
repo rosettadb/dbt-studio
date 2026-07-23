@@ -27,7 +27,7 @@ import {
   Flows,
 } from './screens';
 import { SelectProjectLayout, AppShell } from './layouts';
-import { AppProvider, ProcessProvider } from './context';
+import { AppProvider, ProcessProvider, TaskManagerProvider } from './context';
 import { QueryClientContextProvider } from './context/QueryClientContext';
 import { themeStorageManager, getStoredThemeMode } from './utils/themeStorage';
 import { ScrollbarStyles, UpdateDialog } from './components';
@@ -65,6 +65,7 @@ const App: React.FC = () => {
           <Route path="settings/about" element={<Settings />} />
           <Route path="settings/flowfile" element={<Settings />} />
           <Route path="settings/keystore" element={<Settings />} />
+          <Route path="settings/task-manager" element={<Settings />} />
           <Route path="sql" element={<Sql />} />
           <Route path="notebooks" element={<Notebooks />} />
           <Route
@@ -134,27 +135,29 @@ const AppWithProjectProvider: React.FC = () => {
       <AppProvider>
         <CliProvider>
           <ProcessProvider>
-            <CssVarsProvider
-              theme={theme}
-              defaultMode={initialMode}
-              storageManager={themeStorageManager}
-            >
-              <CssBaseline />
-              <App />
-              <UpdateDialog />
-              <ToastContainer
-                position="bottom-right"
-                autoClose={3000}
-                hideProgressBar={false}
-                newestOnTop
-                closeOnClick
-                rtl={false}
-                pauseOnFocusLoss
-                pauseOnHover
-                theme={initialMode === 'dark' ? 'dark' : 'light'}
-                limit={3}
-              />
-            </CssVarsProvider>
+            <TaskManagerProvider>
+              <CssVarsProvider
+                theme={theme}
+                defaultMode={initialMode}
+                storageManager={themeStorageManager}
+              >
+                <CssBaseline />
+                <App />
+                <UpdateDialog />
+                <ToastContainer
+                  position="bottom-right"
+                  autoClose={3000}
+                  hideProgressBar={false}
+                  newestOnTop
+                  closeOnClick
+                  rtl={false}
+                  pauseOnFocusLoss
+                  pauseOnHover
+                  theme={initialMode === 'dark' ? 'dark' : 'light'}
+                  limit={3}
+                />
+              </CssVarsProvider>
+            </TaskManagerProvider>
           </ProcessProvider>
         </CliProvider>
       </AppProvider>
