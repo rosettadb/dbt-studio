@@ -101,6 +101,28 @@ describe('ConnectorsService (main)', () => {
       );
     });
 
+    it('registers BigQuery cleanup once for exit and termination signals', () => {
+      const service = ConnectorsService as unknown as {
+        isBigQueryCleanupRegistered: boolean;
+        registerBigQueryCleanup: () => void;
+      };
+      const onceSpy = jest.spyOn(process, 'once').mockReturnValue(process);
+
+      try {
+        service.isBigQueryCleanupRegistered = false;
+        service.registerBigQueryCleanup();
+        service.registerBigQueryCleanup();
+
+        expect(onceSpy.mock.calls.map(([event]) => event)).toEqual([
+          'exit',
+          'SIGINT',
+          'SIGTERM',
+        ]);
+      } finally {
+        onceSpy.mockRestore();
+      }
+    });
+
     it('materializes the service-account key as a protected temporary file', async () => {
       const writeFileSpy = jest
         .spyOn(fs.promises, 'writeFile')

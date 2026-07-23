@@ -57,7 +57,17 @@ export default class ConnectorsService {
   private static registerBigQueryCleanup(): void {
     if (this.isBigQueryCleanupRegistered) return;
     this.isBigQueryCleanupRegistered = true;
+
     process.once('exit', () => this.cleanupBigQueryKeyFiles());
+
+    const cleanupAndExit = (exitCode: number): void => {
+      this.cleanupBigQueryKeyFiles();
+      process.exitCode = exitCode;
+      setImmediate(() => process.exit(exitCode));
+    };
+
+    process.once('SIGINT', () => cleanupAndExit(130));
+    process.once('SIGTERM', () => cleanupAndExit(143));
   }
 
   private static async materializeBigQueryServiceAccount(
