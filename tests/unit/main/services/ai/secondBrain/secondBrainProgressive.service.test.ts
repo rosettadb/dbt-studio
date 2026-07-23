@@ -195,7 +195,7 @@ describe('Second Brain progressive discovery', () => {
       ).resolves.toMatchObject({
         ok: true,
         pageId: 'memory.md',
-        title: 'Second Brain',
+        title: 'Wiki Memory',
       });
     },
   );

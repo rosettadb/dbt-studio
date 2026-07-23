@@ -33,7 +33,7 @@ const assertNoLikelySecret = (content: string): void => {
   if (secretPatterns.some((pattern) => pattern.test(content))) {
     throw new SecondBrainError(
       'INVALID_CONTENT',
-      'Potential credentials or secrets cannot be written to Second Brain.',
+      'Potential credentials or secrets cannot be written to Wiki Memory.',
     );
   }
 };
@@ -146,7 +146,7 @@ const compactError = (error: unknown) => {
     error: {
       code: 'UNKNOWN',
       message:
-        error instanceof Error ? error.message : 'Second Brain tool failed.',
+        error instanceof Error ? error.message : 'Wiki Memory tool failed.',
     },
   };
 };
@@ -192,7 +192,7 @@ export const createSecondBrainTools = (
   const readTools: Record<string, any> = {
     wiki_search: tool({
       description:
-        'Search authorized Second Brain Markdown pages for durable prior knowledge. Scope is supplied by DBT Studio and cannot be overridden.',
+        'Search authorized Wiki Memory Markdown pages for durable prior knowledge. Scope is supplied by DBT Studio and cannot be overridden.',
       inputSchema: z.object({
         query: z.string().min(2).max(500),
         limit: z.number().int().min(1).max(10).optional().default(5),
@@ -211,7 +211,7 @@ export const createSecondBrainTools = (
     }),
     wiki_read: tool({
       description:
-        'Read one authorized Second Brain Markdown page by page ID. The global entry page is memory.md; memory and [[memory]] are accepted aliases. Read before relying on or changing durable knowledge.',
+        'Read one authorized Wiki Memory Markdown page by page ID. The global entry page is memory.md; memory and [[memory]] are accepted aliases. Read before relying on or changing durable knowledge.',
       inputSchema: z.object({ pageId: z.string().min(3).max(500) }),
       execute: async ({ pageId: pageReference }) => {
         try {
@@ -239,7 +239,7 @@ export const createSecondBrainTools = (
     }),
     wiki_status: tool({
       description:
-        'Return Second Brain readiness, existing scoped pages, and separate suggested creation targets. A suggestedCreatePageId is authorized but does not exist yet. Call this before inventing a scoped page ID.',
+        'Return Wiki Memory readiness, existing scoped pages, and separate suggested creation targets. A suggestedCreatePageId is authorized but does not exist yet. Call this before inventing a scoped page ID.',
       inputSchema: z.object({}),
       execute: async () => {
         try {
@@ -275,7 +275,7 @@ export const createSecondBrainTools = (
             writablePagePrefixes: scopedPrefixes.filter(
               (prefix) => !prefix.endsWith('.md'),
             ),
-            rootDisplayName: 'Second Brain',
+            rootDisplayName: 'Wiki Memory',
             lastSuccessfulRefreshAt: status.lastSuccessfulRefreshAt,
           };
         } catch (error) {
@@ -291,7 +291,7 @@ export const createSecondBrainTools = (
     ...readTools,
     wiki_update: tool({
       description:
-        'Create or update one authorized Second Brain Markdown page using a conflict-safe structured operation. Search and read before writing. Use the exact scoped page ID or writable prefix from the system context or wiki_status; never invent projects/<name>.',
+        'Create or update one authorized Wiki Memory Markdown page using a conflict-safe structured operation. Search and read before writing. Use the exact scoped page ID or writable prefix from the system context or wiki_status; never invent projects/<name>.',
       inputSchema: z.object({
         pageId: z.string().min(3).max(500),
         expectedHash: z.string().length(64).optional(),
@@ -388,7 +388,7 @@ export const createSecondBrainTools = (
     }),
     wiki_archive: tool({
       description:
-        'Archive one authorized Second Brain page after checking conflicts and inbound wiki links. Never deletes content permanently.',
+        'Archive one authorized Wiki Memory page after checking conflicts and inbound wiki links. Never deletes content permanently.',
       inputSchema: z.object({
         pageId: z.string().min(3).max(500),
         expectedHash: z.string().length(64),
@@ -407,7 +407,7 @@ export const createSecondBrainTools = (
           ) {
             throw new SecondBrainError(
               'INVALID_CONTENT',
-              'Canonical Second Brain pages cannot be archived by the agent.',
+              'Canonical Wiki Memory pages cannot be archived by the agent.',
               { pageId },
             );
           }

@@ -5,6 +5,7 @@ import fs from 'fs-extra';
 import SecondBrainService from '../../../../../../src/main/services/ai/secondBrain/secondBrain.service';
 import SecondBrainRefreshService, {
   redactSecondBrainEvidence,
+  SecondBrainEvidenceItem,
   SecondBrainRefreshOperation,
 } from '../../../../../../src/main/services/ai/secondBrain/secondBrainRefresh.service';
 import { SecondBrainSessionEvidenceRow } from '../../../../../../src/main/services/mainDatabase.service';
@@ -49,6 +50,12 @@ Validate revenue totals before publishing.
   provenanceIds: ['conversation:7:message:11'],
 };
 
+const emptyAdditionalSources = {
+  loadConnections: jest.fn(async () => []),
+  listNotebooks: jest.fn(async () => []),
+  collectGitStatus: jest.fn(async () => ({})),
+};
+
 describe('SecondBrainRefreshService', () => {
   let temporaryDirectory: string;
   let rootPath: string;
@@ -91,6 +98,7 @@ describe('SecondBrainRefreshService', () => {
       after ? [] : [sessionRow],
     );
     const refresh = new SecondBrainRefreshService(secondBrain, {
+      ...emptyAdditionalSources,
       generateOperations,
       collectSessions: collectSessions as any,
       collectAnalytics: jest.fn(async () => []) as any,
@@ -130,6 +138,7 @@ describe('SecondBrainRefreshService', () => {
 
   it('does not advance source state or write pages during a dry run', async () => {
     const refresh = new SecondBrainRefreshService(secondBrain, {
+      ...emptyAdditionalSources,
       generateOperations: jest.fn(async () => [durableOperation]),
       collectSessions: jest.fn(async () => [sessionRow]) as any,
       collectAnalytics: jest.fn(async () => []) as any,
@@ -149,6 +158,64 @@ describe('SecondBrainRefreshService', () => {
     ).rejects.toMatchObject({ code: 'NOT_FOUND' });
   });
 
+  it('records aggregate source support data without making it authoritative', async () => {
+    const supportData = {
+      recordSource: jest.fn(async () => undefined),
+      appendDiagnostic: jest.fn(async () => undefined),
+    };
+    const refresh = new SecondBrainRefreshService(secondBrain, {
+      ...emptyAdditionalSources,
+      supportData: supportData as any,
+      generateOperations: jest.fn(async () => [durableOperation]),
+      collectSessions: jest.fn(async () => [sessionRow]) as any,
+      collectAnalytics: jest.fn(async () => []) as any,
+      loadProjects: jest.fn(async () => []),
+    });
+
+    await refresh.refresh({ operationId: 'operation-1' });
+
+    expect(supportData.recordSource).toHaveBeenCalledWith(
+      expect.objectContaining({
+        sourceKind: 'sessions',
+        itemCount: 1,
+        aggregateHash: expect.stringMatching(/^[a-f0-9]{64}$/u),
+      }),
+    );
+    expect(JSON.stringify(supportData.recordSource.mock.calls)).not.toContain(
+      sessionRow.content,
+    );
+    expect(supportData.appendDiagnostic).toHaveBeenCalledWith(
+      expect.objectContaining({
+        operationId: 'operation-1',
+        event: 'refresh-completed',
+      }),
+    );
+  });
+
+  it('does not fail refresh when support persistence fails', async () => {
+    const supportData = {
+      recordSource: jest.fn(async () => {
+        throw new Error('Support disk unavailable');
+      }),
+      appendDiagnostic: jest.fn(async () => {
+        throw new Error('Support disk unavailable');
+      }),
+    };
+    const refresh = new SecondBrainRefreshService(secondBrain, {
+      ...emptyAdditionalSources,
+      supportData: supportData as any,
+      generateOperations: jest.fn(async () => [durableOperation]),
+      collectSessions: jest.fn(async () => [sessionRow]) as any,
+      collectAnalytics: jest.fn(async () => []) as any,
+      loadProjects: jest.fn(async () => []),
+    });
+
+    await expect(refresh.refresh({})).resolves.toMatchObject({
+      status: 'completed',
+      operationsApplied: 1,
+    });
+  });
+
   it('rejects generated pages containing credentials while advancing safe cursors', async () => {
     const unsafeOperation = {
       ...durableOperation,
@@ -158,6 +225,7 @@ describe('SecondBrainRefreshService', () => {
       ),
     };
     const refresh = new SecondBrainRefreshService(secondBrain, {
+      ...emptyAdditionalSources,
       generateOperations: jest.fn(async () => [unsafeOperation]),
       collectSessions: jest.fn(async () => [sessionRow]) as any,
       collectAnalytics: jest.fn(async () => []) as any,
@@ -175,12 +243,89 @@ describe('SecondBrainRefreshService', () => {
     ).rejects.toMatchObject({ code: 'NOT_FOUND' });
   });
 
+  it('skips malformed model page IDs without aborting initialization', async () => {
+    const malformedOperation = {
+      ...durableOperation,
+      pageId: 'Topics/Revenue Validation',
+    };
+    const refresh = new SecondBrainRefreshService(secondBrain, {
+      ...emptyAdditionalSources,
+      getModel: jest.fn(async () => ({}) as any),
+      generateOperations: jest.fn(async () => [
+        malformedOperation,
+        durableOperation,
+      ]),
+      collectSessions: jest.fn(async () => [sessionRow]) as any,
+      collectAnalytics: jest.fn(async () => []) as any,
+      loadProjects: jest.fn(async () => []),
+    });
+
+    const result = await refresh.refresh({ initialize: true });
+
+    expect(result).toMatchObject({
+      status: 'completed',
+      operationsProposed: 2,
+      operationsSkipped: 1,
+      operationsApplied: 1,
+      changedPageIds: [durableOperation.pageId],
+    });
+    await expect(
+      secondBrain.readPage(durableOperation.pageId),
+    ).resolves.toBeDefined();
+    expect(
+      (await secondBrain.readStateFile())?.sourceCursors.sessions,
+    ).toBeDefined();
+  });
+
+  it('continues after an apply failure and withholds the failed source cursor', async () => {
+    const failingOperation = {
+      ...durableOperation,
+      pageId: 'topics/failing-operation.md',
+    };
+    const originalWritePage = secondBrain.writePage.bind(secondBrain);
+    jest.spyOn(secondBrain, 'writePage').mockImplementation(async (input) => {
+      if (input.pageId === failingOperation.pageId) {
+        throw new Error('Simulated disk failure');
+      }
+      return originalWritePage(input);
+    });
+    const refresh = new SecondBrainRefreshService(secondBrain, {
+      ...emptyAdditionalSources,
+      generateOperations: jest.fn(async () => [
+        failingOperation,
+        durableOperation,
+      ]),
+      collectSessions: jest.fn(async () => [sessionRow]) as any,
+      collectAnalytics: jest.fn(async () => []) as any,
+      loadProjects: jest.fn(async () => []),
+    });
+
+    const result = await refresh.refresh({});
+
+    expect(result).toMatchObject({
+      status: 'partial',
+      operationsProposed: 2,
+      operationsSkipped: 0,
+      operationsApplied: 1,
+      operationsFailed: 1,
+      failures: [{ pageId: failingOperation.pageId, code: 'APPLY_FAILED' }],
+      changedPageIds: [durableOperation.pageId],
+    });
+    expect(
+      (await secondBrain.readStateFile())?.sourceCursors.sessions,
+    ).toBeUndefined();
+    await expect(
+      secondBrain.readPage(durableOperation.pageId),
+    ).resolves.toBeDefined();
+  });
+
   it('validates provider availability before initialization mutates the wiki', async () => {
     const uninitializedRoot = path.join(temporaryDirectory, 'provider-failure');
     const uninitialized = new SecondBrainService({
       rootPath: uninitializedRoot,
     });
     const refresh = new SecondBrainRefreshService(uninitialized, {
+      ...emptyAdditionalSources,
       getModel: jest.fn(async () => {
         throw new Error('Provider unavailable');
       }),
@@ -198,6 +343,7 @@ describe('SecondBrainRefreshService', () => {
 
   it('does not advance source cursors when generation fails', async () => {
     const refresh = new SecondBrainRefreshService(secondBrain, {
+      ...emptyAdditionalSources,
       generateOperations: jest.fn(async () => {
         throw new Error('Structured generation failed');
       }),
@@ -212,12 +358,76 @@ describe('SecondBrainRefreshService', () => {
     expect((await secondBrain.readStateFile())?.sourceCursors).toEqual({});
   });
 
+  it('collects bounded application, notebook, and Git metadata', async () => {
+    const projectRoot = path.join(temporaryDirectory, 'project');
+    await fs.ensureDir(path.join(projectRoot, '.git'));
+    await fs.outputFile(
+      path.join(projectRoot, 'dbt_project.yml'),
+      'name: revenue_project\n',
+    );
+    let capturedEvidence: SecondBrainEvidenceItem[] = [];
+    const generateOperations = jest.fn(async (input: any) => {
+      capturedEvidence = input.evidence;
+      return [];
+    });
+    const refresh = new SecondBrainRefreshService(secondBrain, {
+      generateOperations,
+      collectSessions: jest.fn(async () => []) as any,
+      collectAnalytics: jest.fn(async () => []) as any,
+      loadProjects: jest.fn(async () => [
+        {
+          id: '42',
+          name: 'Revenue',
+          path: projectRoot,
+          createdAt: fixedDate.toISOString(),
+          connectionId: 'warehouse',
+        },
+      ]) as any,
+      loadConnections: jest.fn(async () => [
+        {
+          id: 'warehouse',
+          connection: {
+            name: 'Warehouse',
+            type: 'postgres',
+            database: 'analytics',
+            schema: 'public',
+            username: 'must-not-project',
+            password: 'must-not-project',
+          },
+        },
+      ]) as any,
+      listNotebooks: jest.fn(async () => [
+        {
+          id: 'notebook-1',
+          name: 'Revenue checks',
+          description: 'Durable validation queries',
+          cells: [{ id: 'cell-1', type: 'sql', content: 'select 1', order: 0 }],
+          createdAt: fixedDate.toISOString(),
+          updatedAt: fixedDate.toISOString(),
+          cellCount: 1,
+        },
+      ]) as any,
+      collectGitStatus: jest.fn(async () => ({
+        branch: 'feature/wiki-memory',
+        modified: ['models/revenue.sql'],
+      })),
+    });
+
+    await refresh.refresh({ dryRun: true });
+
+    expect(new Set(capturedEvidence.map((item) => item.sourceKind))).toEqual(
+      new Set(['application', 'notebook', 'git']),
+    );
+    expect(JSON.stringify(capturedEvidence)).not.toContain('must-not-project');
+  });
+
   it('cancels before collection without a model call or state change', async () => {
     const controller = new AbortController();
     controller.abort();
     const generateOperations = jest.fn(async () => []);
     const collectSessions = jest.fn(async () => [sessionRow]);
     const refresh = new SecondBrainRefreshService(secondBrain, {
+      ...emptyAdditionalSources,
       generateOperations,
       collectSessions: collectSessions as any,
       collectAnalytics: jest.fn(async () => []) as any,

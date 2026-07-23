@@ -475,6 +475,11 @@ export type SecondBrainChannels =
   | 'second-brain:revision-read'
   | 'second-brain:restore'
   | 'second-brain:open-wiki-folder'
+  | 'second-brain:open-wiki-terminal'
+  | 'second-brain:support-status'
+  | 'second-brain:support-clear'
+  | 'second-brain:support-export-preview'
+  | 'second-brain:support-export'
   | 'second-brain:progress';
 
 export type Channels =

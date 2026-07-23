@@ -995,7 +995,7 @@ export const ChatWindow: React.FC<ChatWindowProps> = ({
             ))}
             <Divider sx={{ my: 0.5 }} />
             <MenuItem
-              onClick={() => navigateToAISettings('Second Brain')}
+              onClick={() => navigateToAISettings('Agent Memory')}
               dense
               sx={{
                 minHeight: 34,

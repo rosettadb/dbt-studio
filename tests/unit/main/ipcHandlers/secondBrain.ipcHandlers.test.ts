@@ -1,3 +1,4 @@
+/* eslint-disable class-methods-use-this */
 describe('secondBrain.ipcHandlers', () => {
   beforeEach(() => {
     jest.resetModules();
@@ -23,6 +24,7 @@ describe('secondBrain.ipcHandlers', () => {
         okfVersion: '0.1',
       })),
       openWikiFolder: jest.fn(async () => undefined),
+      openWikiTerminal: jest.fn(async () => undefined),
       listManagedPages: jest.fn(async () => []),
       readPage: jest.fn(async () => ({ pageId: 'memory.md' })),
       readArchivedPage: jest.fn(),
@@ -53,6 +55,18 @@ describe('secondBrain.ipcHandlers', () => {
       });
       return refreshResult;
     });
+    const support = {
+      getStatus: jest.fn(async () => ({
+        sources: [],
+        diagnosticEventCount: 2,
+        diagnosticBytes: 120,
+        retentionDays: 14,
+        maxLogFiles: 5,
+        maxLogBytes: 1048576,
+      })),
+      clear: jest.fn(async () => undefined),
+      writeExport: jest.fn(async () => undefined),
+    };
 
     jest.doMock('../../../../src/main/services/agent.service', () => ({
       loadAISettings: jest.fn(async () => ({
@@ -81,10 +95,59 @@ describe('secondBrain.ipcHandlers', () => {
       }),
     );
     jest.doMock(
-      '../../../../src/main/services/ai/secondBrain/secondBrainRefresh.service',
+      '../../../../src/main/services/ai/secondBrain/wikiMemorySupport.service',
       () => ({
         __esModule: true,
-        default: jest.fn(() => ({ refresh })),
+        default: jest.fn(() => support),
+      }),
+    );
+    jest.doMock(
+      '../../../../src/main/services/ai/secondBrain/secondBrainRefreshCoordinator.service',
+      () => ({
+        __esModule: true,
+        default: class {
+          private readonly dependencies: any;
+
+          constructor(dependencies: any) {
+            this.dependencies = dependencies;
+          }
+
+          getStatus() {
+            return { busy: false, activeOperationId: undefined };
+          }
+
+          async run(owner: any, options: any) {
+            if (!(await this.dependencies.isEnabled())) {
+              throw Object.assign(new Error('Wiki Memory is disabled'), {
+                code: 'DISABLED',
+              });
+            }
+            const operationId = 'operation-1';
+            const handleDestroyed = () => undefined;
+            const removeDestroyedListener = owner.onDestroyed(handleDestroyed);
+            try {
+              const result = await refresh({
+                ...options,
+                onProgress: (progress: any) =>
+                  owner.emitProgress({
+                    operationId,
+                    ...progress,
+                    timestamp: '2026-07-15T12:00:00.000Z',
+                    cancellable: true,
+                  }),
+              });
+              return { operationId, result };
+            } finally {
+              removeDestroyedListener();
+            }
+          }
+
+          cancel() {
+            return { cancelled: true };
+          }
+
+          reset() {}
+        },
       }),
     );
 
@@ -93,7 +156,7 @@ describe('secondBrain.ipcHandlers', () => {
       '../../../../src/main/ipcHandlers/secondBrain.ipcHandlers'
     );
     module.registerSecondBrainHandlers();
-    return { electron, module, service, refresh };
+    return { electron, module, service, refresh, support };
   };
 
   it('registers the frozen channel surface only once', async () => {
@@ -103,7 +166,7 @@ describe('secondBrain.ipcHandlers', () => {
 
     module.registerSecondBrainHandlers();
 
-    expect(registrationCount).toBe(14);
+    expect(registrationCount).toBe(19);
     expect(electron.ipcMain.handle).toHaveBeenCalledTimes(registrationCount);
     expect(electron.ipcMain.handle).toHaveBeenCalledWith(
       'second-brain:status',
@@ -111,6 +174,10 @@ describe('secondBrain.ipcHandlers', () => {
     );
     expect(electron.ipcMain.handle).toHaveBeenCalledWith(
       'second-brain:open-wiki-folder',
+      expect.any(Function),
+    );
+    expect(electron.ipcMain.handle).toHaveBeenCalledWith(
+      'second-brain:open-wiki-terminal',
       expect.any(Function),
     );
     expect(electron.ipcMain.handle).not.toHaveBeenCalledWith(
@@ -145,6 +212,18 @@ describe('secondBrain.ipcHandlers', () => {
     await handler({});
 
     expect(service.openWikiFolder).toHaveBeenCalledTimes(1);
+  });
+
+  it('delegates terminal opening without accepting a renderer path', async () => {
+    const { electron, service } = await setup();
+    const handler = getHandler(
+      electron.ipcMain,
+      'second-brain:open-wiki-terminal',
+    );
+
+    await handler({});
+
+    expect(service.openWikiTerminal).toHaveBeenCalledTimes(1);
   });
 
   it('validates page IDs and delegates page reads once', async () => {
@@ -199,5 +278,50 @@ describe('secondBrain.ipcHandlers', () => {
       code: 'DISABLED',
     });
     expect(refresh).not.toHaveBeenCalled();
+  });
+
+  it('exposes support status and clears support data without renderer paths', async () => {
+    const { electron, support } = await setup();
+    const statusHandler = getHandler(
+      electron.ipcMain,
+      'second-brain:support-status',
+    );
+    const clearHandler = getHandler(
+      electron.ipcMain,
+      'second-brain:support-clear',
+    );
+
+    await expect(statusHandler({})).resolves.toMatchObject({
+      diagnosticEventCount: 2,
+    });
+    await expect(clearHandler({})).resolves.toEqual({ cleared: true });
+    expect(support.clear).toHaveBeenCalledWith();
+  });
+
+  it('previews and exports only after a main-process save selection', async () => {
+    const { electron, support } = await setup();
+    const showSaveDialog = electron.dialog.showSaveDialog as jest.Mock;
+    showSaveDialog.mockResolvedValue({
+      canceled: false,
+      filePath: '/chosen/wiki-memory-support.json',
+    });
+    const previewHandler = getHandler(
+      electron.ipcMain,
+      'second-brain:support-export-preview',
+    );
+    const exportHandler = getHandler(
+      electron.ipcMain,
+      'second-brain:support-export',
+    );
+
+    await expect(previewHandler({})).resolves.toEqual({
+      sourceCount: 0,
+      diagnosticEventCount: 2,
+      diagnosticBytes: 120,
+    });
+    await expect(exportHandler({})).resolves.toEqual({ exported: true });
+    expect(support.writeExport).toHaveBeenCalledWith(
+      '/chosen/wiki-memory-support.json',
+    );
   });
 });

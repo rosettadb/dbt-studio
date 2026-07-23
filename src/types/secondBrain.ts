@@ -87,12 +87,15 @@ export type SecondBrainProgressEvent = {
 };
 
 export type SecondBrainRefreshResult = {
-  status: 'completed' | 'no-change' | 'cancelled';
+  status: 'completed' | 'partial' | 'no-change' | 'cancelled';
   dryRun: boolean;
   modelCalled: boolean;
   itemsCollected: number;
   operationsProposed: number;
+  operationsSkipped: number;
   operationsApplied: number;
+  operationsFailed: number;
+  failures: Array<{ pageId: string; code: string }>;
   changedPageIds: string[];
   truncated: boolean;
 };
@@ -107,4 +110,41 @@ export type SecondBrainRevisionContent = {
   pageId: string;
   content: string;
   frontmatter: SecondBrainFrontmatter;
+};
+
+export type WikiMemorySourceHealth = {
+  sourceKind:
+    | 'sessions'
+    | 'analytics'
+    | 'projects'
+    | 'application'
+    | 'notebooks'
+    | 'git'
+    | 'wiki';
+  lastAttemptedAt: string;
+  lastSuccessfulAt?: string;
+  itemCount: number;
+  characterCount: number;
+  aggregateHash: string;
+  changed: boolean;
+  truncated: boolean;
+  result: 'unchanged' | 'completed' | 'partial' | 'failed' | 'cancelled';
+  safeErrorCode?: string;
+  derivedPageIds: string[];
+  operationsApplied: number;
+};
+
+export type WikiMemorySupportStatus = {
+  sources: WikiMemorySourceHealth[];
+  diagnosticEventCount: number;
+  diagnosticBytes: number;
+  retentionDays: number;
+  maxLogFiles: number;
+  maxLogBytes: number;
+};
+
+export type WikiMemorySupportExportPreview = {
+  sourceCount: number;
+  diagnosticEventCount: number;
+  diagnosticBytes: number;
 };

@@ -30,7 +30,7 @@ import { SecondBrainTab } from './SecondBrainTab';
 const TABS = [
   'Providers',
   'Settings',
-  'Second Brain',
+  'Agent Memory',
   'MCP Servers',
   'Skills',
 ] as const;
@@ -179,7 +179,7 @@ export const AIProvidersSettings: React.FC = () => {
       {activeTab === 'Skills' && <SkillsTab />}
 
       {/* User-owned long-term memory */}
-      {activeTab === 'Second Brain' && <SecondBrainTab />}
+      {activeTab === 'Agent Memory' && <SecondBrainTab />}
 
       {/* General (was AI Settings) — includes DB info */}
       {activeTab === 'Settings' && (

@@ -30,6 +30,7 @@ describe('SecondBrainService', () => {
   let rootPath: string;
   let service: SecondBrainService;
   let idCounter: number;
+  let openTerminal: jest.Mock<Promise<void>, [string]>;
 
   const createId = () => {
     idCounter += 1;
@@ -42,10 +43,16 @@ describe('SecondBrainService', () => {
     );
     rootPath = path.join(temporaryDirectory, 'second-brain');
     idCounter = 0;
+    openTerminal = jest.fn(
+      // Signature verifies that the service supplies a working directory.
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
+      async (_workingDirectory: string) => undefined,
+    );
     service = new SecondBrainService({
       rootPath,
       now: () => fixedDate,
       createId,
+      openTerminal,
     });
   });
 
@@ -67,6 +74,19 @@ describe('SecondBrainService', () => {
 
     expect(openPath).toHaveBeenCalledTimes(1);
     expect(openPath).toHaveBeenCalledWith(path.join(rootPath, 'wiki'));
+  });
+
+  it('opens a terminal only in the initialized portable wiki folder', async () => {
+    await expect(service.openWikiTerminal()).rejects.toMatchObject({
+      code: 'NOT_INITIALIZED',
+    });
+    expect(openTerminal).not.toHaveBeenCalled();
+
+    await service.initializeRoot();
+    await service.openWikiTerminal();
+
+    expect(openTerminal).toHaveBeenCalledTimes(1);
+    expect(openTerminal).toHaveBeenCalledWith(path.join(rootPath, 'wiki'));
   });
 
   it('bootstraps an idempotent editable wiki with memory.md as entry page', async () => {
@@ -324,7 +344,7 @@ describe('SecondBrainService', () => {
       limitedService.writePage({
         pageId: 'memory.md',
         content: markdown(
-          'Second Brain',
+          'Wiki Memory',
           Array.from({ length: 201 }, (_, index) => `line ${index}`).join('\n'),
         ),
         expectedHash: memory.hash,
@@ -377,7 +397,7 @@ describe('SecondBrainService', () => {
     await service.initializeRoot();
     const rootIndex = await service.readPage('index.md');
     expect(rootIndex.frontmatter).toEqual({ okf_version: '0.1' });
-    expect(rootIndex.content).toContain('[Second Brain](memory.md)');
+    expect(rootIndex.content).toContain('[Wiki Memory](memory.md)');
 
     await service.writePage({
       pageId: 'topics/metrics.md',

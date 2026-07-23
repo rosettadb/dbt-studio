@@ -1,21 +1,19 @@
-import { randomUUID } from 'crypto';
-import { ipcMain } from 'electron';
+import { dialog, ipcMain } from 'electron';
 import type { IpcMainInvokeEvent } from 'electron';
 import type {
   SecondBrainArchiveRequest,
-  SecondBrainOperationResponse,
   SecondBrainProgressEvent,
-  SecondBrainRefreshResult,
   SecondBrainRestoreRequest,
   SecondBrainWriteRequest,
 } from '../../types/secondBrain';
 import { loadAISettings } from '../services/agent.service';
-import SecondBrainRefreshService from '../services/ai/secondBrain/secondBrainRefresh.service';
+import SecondBrainRefreshCoordinator from '../services/ai/secondBrain/secondBrainRefreshCoordinator.service';
 import SecondBrainService, {
   isSecondBrainGeneratedPageId,
   normalizeSecondBrainPageId,
 } from '../services/ai/secondBrain/secondBrain.service';
 import { SecondBrainError } from '../services/ai/secondBrain/secondBrain.types';
+import WikiMemorySupportService from '../services/ai/secondBrain/wikiMemorySupport.service';
 
 const channels = [
   'second-brain:status',
@@ -32,22 +30,20 @@ const channels = [
   'second-brain:revision-read',
   'second-brain:restore',
   'second-brain:open-wiki-folder',
+  'second-brain:open-wiki-terminal',
+  'second-brain:support-status',
+  'second-brain:support-clear',
+  'second-brain:support-export-preview',
+  'second-brain:support-export',
 ] as const;
 
-type ActiveOperation = {
-  operationId: string;
-  ownerWebContentsId: number;
-  controller: AbortController;
-};
-
-let activeOperation: ActiveOperation | null = null;
 let registered = false;
 
 const requireString = (value: unknown, field: string, max = 500): string => {
   if (typeof value !== 'string' || !value || value.length > max) {
     throw new SecondBrainError(
       'INVALID_CONTENT',
-      `Invalid Second Brain ${field}.`,
+      `Invalid Wiki Memory ${field}.`,
     );
   }
   return value;
@@ -64,74 +60,24 @@ const createService = async (): Promise<SecondBrainService> => {
   });
 };
 
-const cancelledResult = (dryRun: boolean): SecondBrainRefreshResult => ({
-  status: 'cancelled',
-  dryRun,
-  modelCalled: false,
-  itemsCollected: 0,
-  operationsProposed: 0,
-  operationsApplied: 0,
-  changedPageIds: [],
-  truncated: false,
+const refreshCoordinator = new SecondBrainRefreshCoordinator({
+  isEnabled: async () => (await loadAISettings()).secondBrain.enabled,
+  createService,
 });
 
-const runRefresh = async (
-  event: IpcMainInvokeEvent,
-  options: { initialize?: boolean; dryRun?: boolean },
-): Promise<SecondBrainOperationResponse> => {
-  const settings = await loadAISettings();
-  if (!settings.secondBrain.enabled) {
-    throw new SecondBrainError(
-      'DISABLED',
-      'Enable Second Brain before initializing or refreshing memory.',
-    );
-  }
-  if (activeOperation) {
-    throw new SecondBrainError(
-      'BUSY',
-      'Another Second Brain operation is already running.',
-      { operationId: activeOperation.operationId },
-    );
-  }
-  const operationId = randomUUID();
-  const controller = new AbortController();
-  activeOperation = {
-    operationId,
-    ownerWebContentsId: event.sender.id,
-    controller,
-  };
-  const abortOnOwnerDestroyed = () => controller.abort();
-  event.sender.once('destroyed', abortOnOwnerDestroyed);
-  try {
-    const service = await createService();
-    const refresh = new SecondBrainRefreshService(service);
-    const result = await refresh.refresh({
-      ...options,
-      abortSignal: controller.signal,
-      onProgress: (progress) => {
-        if (event.sender.isDestroyed()) return;
-        const payload: SecondBrainProgressEvent = {
-          operationId,
-          ...progress,
-          timestamp: new Date().toISOString(),
-          cancellable: !['completed', 'cancelled', 'failed'].includes(
-            progress.stage,
-          ),
-        };
-        event.sender.send('second-brain:progress', payload);
-      },
-    });
-    return { operationId, result };
-  } catch (error) {
-    if (error instanceof SecondBrainError && error.code === 'CANCELLED') {
-      return { operationId, result: cancelledResult(Boolean(options.dryRun)) };
-    }
-    throw error;
-  } finally {
-    event.sender.removeListener('destroyed', abortOnOwnerDestroyed);
-    if (activeOperation?.operationId === operationId) activeOperation = null;
-  }
-};
+const createSupportService = (): WikiMemorySupportService =>
+  new WikiMemorySupportService();
+
+const refreshOwner = (event: IpcMainInvokeEvent) => ({
+  ownerId: event.sender.id,
+  isDestroyed: () => event.sender.isDestroyed(),
+  onDestroyed: (callback: () => void) => {
+    event.sender.once('destroyed', callback);
+    return () => event.sender.removeListener('destroyed', callback);
+  },
+  emitProgress: (progress: SecondBrainProgressEvent) =>
+    event.sender.send('second-brain:progress', progress),
+});
 
 export const registerSecondBrainHandlers = (): void => {
   if (registered) return;
@@ -141,14 +87,15 @@ export const registerSecondBrainHandlers = (): void => {
     const settings = await loadAISettings();
     const service = await createService();
     const status = await service.getStatus();
+    const operationStatus = refreshCoordinator.getStatus();
     return {
       enabled: settings.secondBrain.enabled,
       initialized: status.initialized,
       pageCount: status.pageCount,
       totalBytes: status.totalBytes,
       lastSuccessfulRefreshAt: status.lastSuccessfulRefreshAt,
-      busy: Boolean(activeOperation),
-      activeOperationId: activeOperation?.operationId,
+      busy: operationStatus.busy,
+      activeOperationId: operationStatus.activeOperationId,
       layoutVersion: status.layoutVersion,
       okfVersion: status.okfVersion,
     };
@@ -204,12 +151,14 @@ export const registerSecondBrainHandlers = (): void => {
   );
 
   ipcMain.handle('second-brain:init', (event) =>
-    runRefresh(event, { initialize: true }),
+    refreshCoordinator.run(refreshOwner(event), { initialize: true }),
   );
   ipcMain.handle('second-brain:update-preview', (event) =>
-    runRefresh(event, { dryRun: true }),
+    refreshCoordinator.run(refreshOwner(event), { dryRun: true }),
   );
-  ipcMain.handle('second-brain:update-apply', (event) => runRefresh(event, {}));
+  ipcMain.handle('second-brain:update-apply', (event) =>
+    refreshCoordinator.run(refreshOwner(event), {}),
+  );
 
   ipcMain.handle(
     'second-brain:cancel',
@@ -219,18 +168,7 @@ export const registerSecondBrainHandlers = (): void => {
         'operation ID',
         100,
       );
-      if (
-        !activeOperation ||
-        activeOperation.operationId !== operationId ||
-        activeOperation.ownerWebContentsId !== event.sender.id
-      ) {
-        throw new SecondBrainError(
-          'NOT_FOUND',
-          'Active Second Brain operation not found.',
-        );
-      }
-      activeOperation.controller.abort();
-      return { cancelled: true };
+      return refreshCoordinator.cancel(event.sender.id, operationId);
     },
   );
 
@@ -275,12 +213,40 @@ export const registerSecondBrainHandlers = (): void => {
   ipcMain.handle('second-brain:open-wiki-folder', async () =>
     (await createService()).openWikiFolder(),
   );
+  ipcMain.handle('second-brain:open-wiki-terminal', async () =>
+    (await createService()).openWikiTerminal(),
+  );
+  ipcMain.handle('second-brain:support-status', async () =>
+    createSupportService().getStatus(),
+  );
+  ipcMain.handle('second-brain:support-clear', async () => {
+    await createSupportService().clear();
+    return { cleared: true };
+  });
+  ipcMain.handle('second-brain:support-export-preview', async () => {
+    const status = await createSupportService().getStatus();
+    return {
+      sourceCount: status.sources.length,
+      diagnosticEventCount: status.diagnosticEventCount,
+      diagnosticBytes: status.diagnosticBytes,
+    };
+  });
+  ipcMain.handle('second-brain:support-export', async () => {
+    const selection = await dialog.showSaveDialog({
+      title: 'Export Wiki Memory diagnostics',
+      defaultPath: 'wiki-memory-support.json',
+      filters: [{ name: 'JSON', extensions: ['json'] }],
+      properties: ['createDirectory', 'showOverwriteConfirmation'],
+    });
+    if (selection.canceled || !selection.filePath) return { exported: false };
+    await createSupportService().writeExport(selection.filePath);
+    return { exported: true };
+  });
 };
 
 export const resetSecondBrainHandlersForTests = (): void => {
   channels.forEach((channel) => ipcMain.removeHandler(channel));
-  activeOperation?.controller.abort();
-  activeOperation = null;
+  refreshCoordinator.reset();
   registered = false;
 };
 

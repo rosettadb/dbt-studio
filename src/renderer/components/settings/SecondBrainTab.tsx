@@ -15,32 +15,41 @@ import {
   Paper,
   Stack,
   Switch,
-  Tab,
-  Tabs,
   TextField,
   Tooltip,
   Typography,
-  useColorScheme,
+  useTheme,
 } from '@mui/material';
 import {
   Archive,
+  Code,
   CreateNewFolder,
+  DeleteSweep,
+  Download,
   FolderOpen,
+  PreviewOutlined,
   Refresh,
   Restore,
   Save,
   Search,
   Stop,
+  Terminal,
 } from '@mui/icons-material';
-import ReactMarkdown from 'react-markdown';
-import remarkGfm from 'remark-gfm';
-import rehypeSanitize from 'rehype-sanitize';
 import { toast } from 'react-toastify';
 import type * as monaco from 'monaco-editor';
 import { MonacoCodeEditor } from '../monaco/MonacoCodeEditor';
+import { FileIcon } from '../fileIcon';
+import { MarkdownPreview } from '../editor/markdownPreview';
+import {
+  ModifiedDot,
+  TabButton,
+  TabIconSlot,
+  TabTitle,
+} from '../editor/tabManager/styles';
 import { getMonaco } from '../../lib/monaco/bootstrap';
 import {
   openSecondBrainWikiFolder,
+  openSecondBrainWikiTerminal,
   useApplySecondBrainRefresh,
   useArchiveSecondBrainPage,
   useCancelSecondBrainRefresh,
@@ -55,14 +64,16 @@ import {
   useSecondBrainStatus,
   useSecondBrainTree,
   useWriteSecondBrainPage,
+  useWikiMemorySupportStatus,
+  useClearWikiMemorySupportData,
+  previewWikiMemorySupportExport,
+  exportWikiMemorySupportData,
 } from '../../controllers/secondBrain.controller';
 import {
   useGetAISettings,
   useSaveAISettings,
 } from '../../controllers/aiSettings.controller';
 import type { SecondBrainTreeItem } from '../../../types/secondBrain';
-
-type EditorMode = 'edit' | 'preview' | 'split';
 
 const canonicalPages = new Set(['memory.md', 'preferences.md', 'workflows.md']);
 
@@ -77,7 +88,7 @@ const emptyMarkdown = (pageId: string) => {
 type: Knowledge Note
 id: ${pageId.replace(/\.md$/u, '').replace(/\//gu, '-')}
 title: ${title}
-description: Durable Second Brain knowledge.
+description: Durable Wiki Memory knowledge.
 scope: global
 updated_by: user
 sources: []
@@ -88,18 +99,8 @@ sources: []
 `;
 };
 
-const MarkdownPreview: React.FC<{ content: string }> = ({ content }) => (
-  <Box
-    sx={{ height: '100%', overflow: 'auto', p: 2, bgcolor: 'background.paper' }}
-  >
-    <ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeSanitize]}>
-      {content}
-    </ReactMarkdown>
-  </Box>
-);
-
 export const SecondBrainTab: React.FC = () => {
-  const { mode } = useColorScheme();
+  const theme = useTheme();
   const { data: settings } = useGetAISettings();
   const saveSettings = useSaveAISettings();
   const statusQuery = useSecondBrainStatus();
@@ -110,11 +111,12 @@ export const SecondBrainTab: React.FC = () => {
   );
   const [newPageId, setNewPageId] = React.useState<string | null>(null);
   const [search, setSearch] = React.useState('');
-  const [modeValue, setModeValue] = React.useState<EditorMode>('edit');
   const [draft, setDraft] = React.useState('');
   const [dirty, setDirty] = React.useState(false);
+  const [showPreview, setShowPreview] = React.useState(false);
   const dirtyRef = React.useRef(false);
   const savedContentRef = React.useRef('');
+  const isApplyingExternalContentRef = React.useRef(false);
   const [selectedRevisionId, setSelectedRevisionId] = React.useState<
     string | undefined
   >();
@@ -142,6 +144,8 @@ export const SecondBrainTab: React.FC = () => {
   const applyRefresh = useApplySecondBrainRefresh();
   const cancelRefresh = useCancelSecondBrainRefresh();
   const progress = useSecondBrainProgress();
+  const supportQuery = useWikiMemorySupportStatus(Boolean(status?.initialized));
+  const clearSupportData = useClearWikiMemorySupportData();
   const model = React.useMemo(() => {
     const monacoNs = getMonaco();
     return monacoNs.editor.createModel(
@@ -155,11 +159,23 @@ export const SecondBrainTab: React.FC = () => {
 
   React.useEffect(() => {
     const page = pageQuery.data;
-    if (!page || dirtyRef.current) return;
+    if (!page || selectedRevisionId || dirtyRef.current) return;
     savedContentRef.current = page.content;
     setDraft(page.content);
-    if (model.getValue() !== page.content) model.setValue(page.content);
-  }, [model, pageQuery.data]);
+    if (model.getValue() !== page.content) {
+      isApplyingExternalContentRef.current = true;
+      model.setValue(page.content);
+      isApplyingExternalContentRef.current = false;
+    }
+  }, [model, pageQuery.data, selectedRevisionId]);
+
+  React.useEffect(() => {
+    if (!selectedRevisionId || !revisionQuery.data) return;
+    const { content } = revisionQuery.data;
+    isApplyingExternalContentRef.current = true;
+    model.setValue(content);
+    isApplyingExternalContentRef.current = false;
+  }, [model, revisionQuery.data, selectedRevisionId]);
 
   React.useEffect(() => {
     if (!selected && treeQuery.data?.length) {
@@ -173,7 +189,7 @@ export const SecondBrainTab: React.FC = () => {
   const selectPage = (item: SecondBrainTreeItem) => {
     if (
       dirtyRef.current &&
-      !window.confirm('Discard the unsaved Second Brain draft?')
+      !window.confirm('Discard the unsaved Wiki Memory draft?')
     ) {
       return;
     }
@@ -203,14 +219,16 @@ export const SecondBrainTab: React.FC = () => {
     setSelectedRevisionId(undefined);
     setDraft(content);
     savedContentRef.current = '';
+    isApplyingExternalContentRef.current = true;
     model.setValue(content);
+    isApplyingExternalContentRef.current = false;
     dirtyRef.current = true;
     setDirty(true);
-    setModeValue('edit');
   };
 
   const handleEditorMount = (editor: monaco.editor.IStandaloneCodeEditor) => {
     const subscription = editor.onDidChangeModelContent(() => {
+      if (isApplyingExternalContentRef.current) return;
       const value = editor.getValue();
       const isDirty = value !== savedContentRef.current;
       setDraft(value);
@@ -235,7 +253,7 @@ export const SecondBrainTab: React.FC = () => {
       setDirty(false);
       setNewPageId(null);
       setSelected({ ...saved, archived: false });
-      toast.success('Second Brain page saved.');
+      toast.success('Wiki Memory page saved.');
     } catch (error) {
       const { code } = error as Error & { code?: string };
       toast.error(
@@ -263,11 +281,14 @@ export const SecondBrainTab: React.FC = () => {
         response = await previewRefresh.mutateAsync();
       } else response = await applyRefresh.mutateAsync();
       const { result } = response;
-      setLastRefreshMessage(
-        result.status === 'no-change'
-          ? 'No source changes; no model call or file write was made.'
-          : `${result.operationsApplied} of ${result.operationsProposed} proposed changes applied.`,
-      );
+      let refreshMessage = `${result.operationsApplied} applied and ${result.operationsSkipped} skipped from ${result.operationsProposed} proposals.`;
+      if (result.status === 'no-change') {
+        refreshMessage =
+          'No source changes; no model call or file write was made.';
+      } else if (result.status === 'partial') {
+        refreshMessage = `${result.operationsApplied} applied, ${result.operationsSkipped} skipped, and ${result.operationsFailed} failed.`;
+      }
+      setLastRefreshMessage(refreshMessage);
       if (kind === 'init' && settings) {
         await saveSettings.mutateAsync({
           ...settings,
@@ -276,17 +297,47 @@ export const SecondBrainTab: React.FC = () => {
       }
       await statusQuery.refetch();
       await treeQuery.refetch();
+      await supportQuery.refetch();
     } catch (error) {
       toast.error((error as Error).message);
     }
   };
 
-  const displayContent = selectedRevisionId
-    ? (revisionQuery.data?.content ?? '')
-    : draft;
+  const handleExportSupportData = async () => {
+    try {
+      const preview = await previewWikiMemorySupportExport();
+      const approved = window.confirm(
+        `Export ${preview.sourceCount} source summaries and ${preview.diagnosticEventCount} diagnostic events? The export contains no wiki pages or raw source evidence.`,
+      );
+      if (!approved) return;
+      const result = await exportWikiMemorySupportData();
+      if (result.exported) {
+        toast.success('Wiki Memory support data exported.');
+      }
+    } catch (error) {
+      toast.error((error as Error).message);
+    }
+  };
+
+  const handleClearSupportData = async () => {
+    const approved = window.confirm(
+      'Clear source summaries and diagnostics? Wiki pages, archives, revisions, and refresh cursors will be preserved.',
+    );
+    if (!approved) return;
+    try {
+      await clearSupportData.mutateAsync();
+      toast.success('Wiki Memory support data cleared.');
+    } catch (error) {
+      toast.error((error as Error).message);
+    }
+  };
+
   const readOnly = Boolean(
     selected?.archived || selected?.generated || selectedRevisionId,
   );
+  const displayedContent = selectedRevisionId
+    ? (revisionQuery.data?.content ?? '')
+    : draft;
   const busy =
     initialize.isLoading || previewRefresh.isLoading || applyRefresh.isLoading;
   const visiblePages = search.trim()
@@ -296,6 +347,10 @@ export const SecondBrainTab: React.FC = () => {
         )
         .filter((page): page is SecondBrainTreeItem => Boolean(page))
     : (treeQuery.data ?? []);
+  const displayPageTitle = (item: SecondBrainTreeItem) =>
+    item.pageId === 'memory.md' || item.pageId === 'index.md'
+      ? 'Wiki Memory'
+      : item.title;
 
   return (
     <Stack spacing={2}>
@@ -306,7 +361,7 @@ export const SecondBrainTab: React.FC = () => {
           gap={2}
         >
           <Box>
-            <Typography variant="h6">Second Brain</Typography>
+            <Typography variant="h6">Wiki Memory</Typography>
             <Typography variant="body2" color="text.secondary">
               User-owned Markdown memory maintained through progressive
               discovery.
@@ -352,13 +407,28 @@ export const SecondBrainTab: React.FC = () => {
                 </IconButton>
               </span>
             </Tooltip>
+            <Tooltip title="Open terminal in the Wiki Memory folder">
+              <span>
+                <IconButton
+                  onClick={() =>
+                    openSecondBrainWikiTerminal().catch((error) =>
+                      toast.error(error.message),
+                    )
+                  }
+                  disabled={!status?.initialized}
+                  aria-label="Open terminal in Wiki Memory folder"
+                >
+                  <Terminal />
+                </IconButton>
+              </span>
+            </Tooltip>
           </Stack>
         </Stack>
       </Paper>
 
       {!settings?.secondBrain.enabled && (
         <Alert severity="info">
-          Enable Second Brain to let agents discover durable Markdown memory
+          Enable Wiki Memory to let agents discover durable Markdown memory
           across sessions.
         </Alert>
       )}
@@ -431,6 +501,85 @@ export const SecondBrainTab: React.FC = () => {
             </Stack>
           </Paper>
 
+          <Paper variant="outlined" sx={{ p: 1.5 }}>
+            <Stack gap={1.5}>
+              <Stack
+                direction={{ xs: 'column', md: 'row' }}
+                justifyContent="space-between"
+                alignItems={{ xs: 'stretch', md: 'center' }}
+                gap={1}
+              >
+                <Box>
+                  <Typography variant="subtitle2">Source health</Typography>
+                  <Typography variant="caption" color="text.secondary">
+                    Sanitized provenance and bounded diagnostics. Raw chats,
+                    SQL, notebook content, project files, prompts, credentials,
+                    and absolute paths are never stored here.
+                  </Typography>
+                </Box>
+                <Stack direction="row" gap={1}>
+                  <Button
+                    size="small"
+                    variant="outlined"
+                    startIcon={<Download />}
+                    disabled={!supportQuery.data || busy || status?.busy}
+                    onClick={handleExportSupportData}
+                  >
+                    Export
+                  </Button>
+                  <Button
+                    size="small"
+                    color="warning"
+                    variant="outlined"
+                    startIcon={<DeleteSweep />}
+                    disabled={
+                      clearSupportData.isLoading ||
+                      busy ||
+                      status?.busy ||
+                      !supportQuery.data ||
+                      (supportQuery.data.sources.length === 0 &&
+                        supportQuery.data.diagnosticEventCount === 0)
+                    }
+                    onClick={handleClearSupportData}
+                  >
+                    Clear
+                  </Button>
+                </Stack>
+              </Stack>
+              <Stack direction="row" gap={1} flexWrap="wrap">
+                {(supportQuery.data?.sources ?? []).map((source) => (
+                  <Tooltip
+                    key={source.sourceKind}
+                    title={`Last attempt: ${new Date(source.lastAttemptedAt).toLocaleString()} · ${source.itemCount} items${source.truncated ? ' · truncated' : ''}`}
+                  >
+                    <Chip
+                      size="small"
+                      color={
+                        source.result === 'failed' ||
+                        source.result === 'partial'
+                          ? 'warning'
+                          : 'default'
+                      }
+                      label={`${source.sourceKind}: ${source.result}`}
+                    />
+                  </Tooltip>
+                ))}
+                {supportQuery.data?.sources.length === 0 && (
+                  <Typography variant="body2" color="text.secondary">
+                    Source summaries appear after the next refresh.
+                  </Typography>
+                )}
+                {supportQuery.data && (
+                  <Chip
+                    size="small"
+                    variant="outlined"
+                    label={`${supportQuery.data.diagnosticEventCount} diagnostic events · ${supportQuery.data.retentionDays} day retention`}
+                  />
+                )}
+              </Stack>
+            </Stack>
+          </Paper>
+
           <Box
             sx={{
               display: 'grid',
@@ -453,7 +602,7 @@ export const SecondBrainTab: React.FC = () => {
                   value={search}
                   onChange={(event) => setSearch(event.target.value)}
                   placeholder="Search memory"
-                  inputProps={{ 'aria-label': 'Search Second Brain pages' }}
+                  inputProps={{ 'aria-label': 'Search Wiki Memory pages' }}
                 />
                 <Tooltip title="Create Markdown page">
                   <IconButton onClick={startNewPage}>
@@ -472,7 +621,7 @@ export const SecondBrainTab: React.FC = () => {
                     onClick={() => selectPage(item)}
                   >
                     <ListItemText
-                      primary={item.title}
+                      primary={displayPageTitle(item)}
                       secondary={`${item.archived ? 'Archived · ' : ''}${item.generated ? 'Generated · ' : ''}${item.pageId}`}
                     />
                   </ListItemButton>
@@ -481,66 +630,101 @@ export const SecondBrainTab: React.FC = () => {
             </Box>
 
             <Box sx={{ minWidth: 0, display: 'flex', flexDirection: 'column' }}>
-              <Stack
-                direction="row"
-                alignItems="center"
-                justifyContent="space-between"
-                px={1.5}
-                borderBottom={1}
-                borderColor="divider"
+              <Box
+                sx={{
+                  display: 'flex',
+                  minHeight: 40,
+                  bgcolor: 'background.paper',
+                }}
               >
-                <Tabs
-                  value={modeValue}
-                  onChange={(_, value) => setModeValue(value)}
-                  aria-label="Second Brain editor mode"
+                <TabButton active isLast sx={{ flex: '0 1 auto' }}>
+                  <TabIconSlot>
+                    <FileIcon
+                      fileName={newPageId ?? selected?.pageId ?? 'memory.md'}
+                    />
+                  </TabIconSlot>
+                  <TabTitle>
+                    {(newPageId ?? selected?.pageId ?? 'Select a page')
+                      .split('/')
+                      .at(-1)}
+                  </TabTitle>
+                  <ModifiedDot hidden={!dirty} />
+                </TabButton>
+                <Stack
+                  direction="row"
+                  alignItems="center"
+                  justifyContent="flex-end"
+                  gap={1}
+                  sx={{ flex: 1, px: 1.5 }}
                 >
-                  <Tab value="edit" label="Edit" disabled={readOnly} />
-                  <Tab value="preview" label="Preview" />
-                  <Tab value="split" label="Split" disabled={readOnly} />
-                </Tabs>
-                <Stack direction="row" alignItems="center" gap={1}>
-                  {dirty && (
-                    <Chip size="small" color="warning" label="Unsaved" />
-                  )}
-                  <Tooltip title="Save Markdown with expected revision hash">
+                  <Tooltip
+                    title={showPreview ? 'Close Preview' : 'Open Preview'}
+                  >
                     <span>
                       <IconButton
-                        onClick={handleSave}
-                        disabled={!dirty || readOnly || writePage.isLoading}
+                        onClick={() => setShowPreview((current) => !current)}
+                        size="small"
+                        sx={{
+                          color: showPreview
+                            ? 'primary.main'
+                            : 'text.secondary',
+                          bgcolor: showPreview
+                            ? 'action.selected'
+                            : 'transparent',
+                          '&:hover': {
+                            bgcolor: showPreview
+                              ? 'action.selected'
+                              : 'action.hover',
+                          },
+                        }}
+                        aria-label={
+                          showPreview
+                            ? 'Close Markdown preview'
+                            : 'Open Markdown preview'
+                        }
                       >
-                        <Save />
+                        {showPreview ? (
+                          <Code fontSize="small" />
+                        ) : (
+                          <PreviewOutlined fontSize="small" />
+                        )}
                       </IconButton>
                     </span>
                   </Tooltip>
+                  <Tooltip title="Save Markdown with expected revision hash">
+                    <span>
+                      <Button
+                        variant="contained"
+                        size="small"
+                        startIcon={<Save sx={{ fontSize: 16 }} />}
+                        onClick={handleSave}
+                        disabled={!dirty || readOnly || writePage.isLoading}
+                        sx={{ textTransform: 'none' }}
+                      >
+                        Save
+                      </Button>
+                    </span>
+                  </Tooltip>
                 </Stack>
-              </Stack>
-              <Box sx={{ height: 560, display: 'flex', minWidth: 0 }}>
-                {(modeValue === 'edit' || modeValue === 'split') &&
-                  !readOnly && (
-                    <Box sx={{ flex: 1, minWidth: 0 }}>
-                      <MonacoCodeEditor
-                        model={model}
-                        modelKey={newPageId ?? selected?.pageId ?? null}
-                        theme={mode === 'dark' ? 'vs-dark' : 'light'}
-                        readOnly={false}
-                        options={{ wordWrap: 'on', tabSize: 2 }}
-                        onMount={handleEditorMount}
-                      />
-                    </Box>
-                  )}
-                {(modeValue === 'preview' ||
-                  modeValue === 'split' ||
-                  readOnly) && (
-                  <Box
-                    sx={{
-                      flex: 1,
-                      minWidth: 0,
-                      borderLeft: modeValue === 'split' ? 1 : 0,
-                      borderColor: 'divider',
-                    }}
-                  >
-                    <MarkdownPreview content={displayContent} />
-                  </Box>
+              </Box>
+              <Box
+                sx={{
+                  height: 560,
+                  minWidth: 0,
+                  borderTop: 1,
+                  borderColor: 'divider',
+                }}
+              >
+                {showPreview ? (
+                  <MarkdownPreview content={displayedContent} />
+                ) : (
+                  <MonacoCodeEditor
+                    model={model}
+                    modelKey={newPageId ?? selected?.pageId ?? null}
+                    theme={theme.palette.mode === 'dark' ? 'vs-dark' : 'light'}
+                    readOnly={readOnly}
+                    onMount={handleEditorMount}
+                  />
                 )}
               </Box>
             </Box>
@@ -612,7 +796,6 @@ export const SecondBrainTab: React.FC = () => {
                         selected={selectedRevisionId === revision.revisionId}
                         onClick={() => {
                           setSelectedRevisionId(revision.revisionId);
-                          setModeValue('preview');
                         }}
                       >
                         <ListItemText

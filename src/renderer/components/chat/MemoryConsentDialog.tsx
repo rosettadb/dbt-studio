@@ -86,7 +86,7 @@ export const MemoryConsentDialog: React.FC = () => {
       setOpen(false);
       toast.success(
         enabled
-          ? 'Memory enabled. Your Second Brain is ready.'
+          ? 'Wiki Memory is enabled and ready.'
           : 'Memory will remain disabled.',
       );
     } catch (error) {
@@ -121,16 +121,17 @@ export const MemoryConsentDialog: React.FC = () => {
       PaperProps={{
         sx: {
           width: 'calc(100% - 32px)',
-          maxWidth: 420,
+          maxWidth: 480,
           m: 2,
           borderRadius: 2,
           border: 1,
           borderColor: 'divider',
+          overflow: 'hidden',
         },
       }}
     >
-      <DialogTitle id="memory-consent-title" sx={{ pb: 1 }}>
-        <Stack direction="row" spacing={1.5} alignItems="center">
+      <DialogTitle id="memory-consent-title" sx={{ px: 3, pt: 3, pb: 1.5 }}>
+        <Stack direction="row" spacing={1.5} alignItems="flex-start">
           <Box
             sx={{
               width: 40,
@@ -145,25 +146,29 @@ export const MemoryConsentDialog: React.FC = () => {
           >
             <MemoriesIcon />
           </Box>
-          <Box>
-            <Typography variant="h6" component="span">
-              Give your AI a memory?
+          <Box sx={{ minWidth: 0, pt: 0.25 }}>
+            <Typography variant="h6" component="div" sx={{ lineHeight: 1.3 }}>
+              Enable Wiki Memory?
             </Typography>
-            <Typography variant="body2" color="text.secondary">
+            <Typography
+              variant="body2"
+              color="text.secondary"
+              sx={{ mt: 0.5, lineHeight: 1.5 }}
+            >
               Keep useful knowledge available across sessions.
             </Typography>
           </Box>
         </Stack>
       </DialogTitle>
 
-      <DialogContent>
+      <DialogContent sx={{ px: 3, pt: '8px !important', pb: 1 }}>
         <Typography
           id="memory-consent-description"
           variant="body2"
           color="text.secondary"
-          sx={{ mb: 2 }}
+          sx={{ mb: 2.5, lineHeight: 1.55 }}
         >
-          Second Brain stores durable knowledge as local Markdown files. The AI
+          Wiki Memory stores durable knowledge as local Markdown files. The AI
           progressively discovers relevant pages instead of loading everything
           into every conversation.
         </Typography>
@@ -186,7 +191,9 @@ export const MemoryConsentDialog: React.FC = () => {
                   bgcolor: 'primary.main',
                 }}
               />
-              <Typography variant="body2">{item}</Typography>
+              <Typography variant="body2" sx={{ lineHeight: 1.5 }}>
+                {item}
+              </Typography>
             </Stack>
           ))}
         </Stack>
@@ -199,7 +206,7 @@ export const MemoryConsentDialog: React.FC = () => {
         )}
       </DialogContent>
 
-      <DialogActions sx={{ px: 3, pb: 2.5, gap: 1 }}>
+      <DialogActions sx={{ px: 3, pt: 2, pb: 3, gap: 1, flexWrap: 'wrap' }}>
         <Button
           variant="text"
           color="inherit"

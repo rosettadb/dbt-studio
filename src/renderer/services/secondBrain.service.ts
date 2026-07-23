@@ -9,6 +9,8 @@ import type {
   SecondBrainSearchHit,
   SecondBrainTreeItem,
   SecondBrainWriteRequest,
+  WikiMemorySupportExportPreview,
+  WikiMemorySupportStatus,
 } from '../../types/secondBrain';
 import type {
   SecondBrainPage,
@@ -79,6 +81,22 @@ export const restore = (
 
 export const openWikiFolder = (): Promise<void> =>
   window.electron.ipcRenderer.invoke('second-brain:open-wiki-folder');
+
+export const openWikiTerminal = (): Promise<void> =>
+  window.electron.ipcRenderer.invoke('second-brain:open-wiki-terminal');
+
+export const getSupportStatus = (): Promise<WikiMemorySupportStatus> =>
+  window.electron.ipcRenderer.invoke('second-brain:support-status');
+
+export const clearSupportData = (): Promise<{ cleared: boolean }> =>
+  window.electron.ipcRenderer.invoke('second-brain:support-clear');
+
+export const previewSupportExport =
+  (): Promise<WikiMemorySupportExportPreview> =>
+    window.electron.ipcRenderer.invoke('second-brain:support-export-preview');
+
+export const exportSupportData = (): Promise<{ exported: boolean }> =>
+  window.electron.ipcRenderer.invoke('second-brain:support-export');
 
 export const onProgress = (
   callback: (event: SecondBrainProgressEvent) => void,

@@ -40,13 +40,13 @@ describe('ToolCallFormatters arguments', () => {
       <>
         {renderResult('wiki_read', {
           ok: false,
-          error: { code: 'NOT_FOUND', message: 'Second Brain page not found.' },
+          error: { code: 'NOT_FOUND', message: 'Wiki Memory page not found.' },
         })}
       </>,
     );
 
     expect(
-      screen.getByText('NOT_FOUND: Second Brain page not found.'),
+      screen.getByText('NOT_FOUND: Wiki Memory page not found.'),
     ).toBeTruthy();
     expect(screen.queryByText('[object Object]')).toBeNull();
   });

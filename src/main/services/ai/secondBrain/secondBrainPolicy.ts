@@ -30,14 +30,14 @@ export const SECOND_BRAIN_BOOTSTRAP_PAGES: Record<string, string> = {
   'memory.md': `---
 type: Memory Map
 id: memory
-title: Second Brain
+title: Wiki Memory
 description: Compact navigation map for durable dbt Studio memory.
 scope: global
 updated_by: user
 sources: []
 ---
 
-# Second Brain
+# Wiki Memory
 
 This is the compact navigation map for durable memory.
 

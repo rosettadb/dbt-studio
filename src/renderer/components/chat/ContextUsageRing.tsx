@@ -248,7 +248,7 @@ export const ContextUsageRing: React.FC<ContextUsageRingProps> = ({
           color="#4caf50"
         />
         <UsageRow
-          label="Second Brain"
+          label="Wiki Memory"
           tokens={breakdown.secondBrain ?? 0}
           total={breakdown.contextWindow}
           color="#00acc1"

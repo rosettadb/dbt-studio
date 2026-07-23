@@ -35,6 +35,14 @@ describe('renderer/services/secondBrain.service', () => {
     expect(invoke).toHaveBeenCalledWith('second-brain:open-wiki-folder');
   });
 
+  it('opens a terminal without accepting or sending a filesystem path', async () => {
+    const invoke = (window as any).electron.ipcRenderer.invoke as jest.Mock;
+    invoke.mockResolvedValue(undefined);
+
+    await secondBrainService.openWikiTerminal();
+    expect(invoke).toHaveBeenCalledWith('second-brain:open-wiki-terminal');
+  });
+
   it('owns progress subscription and returns the preload unsubscribe function', () => {
     const unsubscribe = jest.fn();
     const on = (window as any).electron.ipcRenderer.on as jest.Mock;
@@ -59,5 +67,22 @@ describe('renderer/services/secondBrain.service', () => {
     );
     expect(callback).toHaveBeenCalledWith(progress);
     expect(returned).toBe(unsubscribe);
+  });
+
+  it('uses path-free support status, clear, preview, and export channels', async () => {
+    const invoke = (window as any).electron.ipcRenderer.invoke as jest.Mock;
+    invoke.mockResolvedValue({});
+
+    await secondBrainService.getSupportStatus();
+    await secondBrainService.clearSupportData();
+    await secondBrainService.previewSupportExport();
+    await secondBrainService.exportSupportData();
+
+    expect(invoke.mock.calls).toEqual([
+      ['second-brain:support-status'],
+      ['second-brain:support-clear'],
+      ['second-brain:support-export-preview'],
+      ['second-brain:support-export'],
+    ]);
   });
 });

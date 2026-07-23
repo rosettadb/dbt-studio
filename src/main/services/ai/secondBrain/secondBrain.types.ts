@@ -62,7 +62,7 @@ export type SecondBrainState = {
   sourceHashes: Record<string, string>;
   pageHashes: Record<string, string>;
   lastRefresh?: {
-    status: 'completed' | 'no-change' | 'failed' | 'cancelled';
+    status: 'completed' | 'partial' | 'no-change' | 'failed' | 'cancelled';
     completedAt: string;
     sources: string[];
     itemsCollected: number;
@@ -78,7 +78,7 @@ export type SecondBrainRefreshStateInput = {
     cursor: unknown;
     hash: string;
   }>;
-  status: 'completed' | 'no-change';
+  status: 'completed' | 'partial' | 'no-change';
   itemsCollected: number;
   operationsApplied: number;
   truncated: boolean;
@@ -96,6 +96,7 @@ export type SecondBrainServiceOptions = {
   revisionLimit?: number;
   now?: () => Date;
   createId?: () => string;
+  openTerminal?: (workingDirectory: string) => Promise<void>;
 };
 
 export type {

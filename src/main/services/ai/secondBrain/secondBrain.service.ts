@@ -1,5 +1,6 @@
 /* eslint-disable no-await-in-loop, no-continue, no-restricted-syntax */
 import { createHash, randomUUID } from 'crypto';
+import { spawn } from 'child_process';
 import { promises as nodeFs } from 'fs';
 import type { FileHandle } from 'fs/promises';
 import fs from 'fs-extra';
@@ -60,7 +61,7 @@ const normalizeContent = (content: string): string => {
   if (content.includes('\0')) {
     throw new SecondBrainError(
       'INVALID_CONTENT',
-      'Second Brain pages cannot contain NUL bytes.',
+      'Wiki Memory pages cannot contain NUL bytes.',
     );
   }
   return `${content.replace(/(?:\r?\n)+$/u, '')}\n`;
@@ -208,6 +209,64 @@ export const normalizeSecondBrainPageId = (pageId: string): string => {
   return normalized;
 };
 
+const launchDetached = (
+  command: string,
+  args: string[],
+  workingDirectory: string,
+): Promise<void> =>
+  new Promise((resolve, reject) => {
+    const child = spawn(command, args, {
+      cwd: workingDirectory,
+      detached: true,
+      stdio: 'ignore',
+      shell: false,
+    });
+    child.once('error', reject);
+    child.once('spawn', () => {
+      child.unref();
+      resolve();
+    });
+  });
+
+const openOsTerminal = async (workingDirectory: string): Promise<void> => {
+  if (process.platform === 'darwin') {
+    await launchDetached(
+      'open',
+      ['-a', 'Terminal', workingDirectory],
+      workingDirectory,
+    );
+    return;
+  }
+  if (process.platform === 'win32') {
+    await launchDetached(
+      'cmd.exe',
+      ['/d', '/s', '/c', 'start', '', 'cmd.exe', '/d'],
+      workingDirectory,
+    );
+    return;
+  }
+
+  const candidates: Array<[string, string[]]> = [
+    ['xdg-terminal-exec', []],
+    ['gnome-terminal', [`--working-directory=${workingDirectory}`]],
+    ['konsole', ['--workdir', workingDirectory]],
+    ['xfce4-terminal', ['--working-directory', workingDirectory]],
+    ['x-terminal-emulator', []],
+  ];
+  let lastError: unknown;
+  for (const [command, args] of candidates) {
+    try {
+      await launchDetached(command, args, workingDirectory);
+      return;
+    } catch (error) {
+      lastError = error;
+    }
+  }
+  throw lastError instanceof Error
+    ? lastError
+    : new Error('No supported terminal application was found.');
+};
+
 export default class SecondBrainService {
   private readonly rootPath: string;
 
@@ -220,6 +279,8 @@ export default class SecondBrainService {
   private readonly now: () => Date;
 
   private readonly createId: () => string;
+
+  private readonly openTerminal: (workingDirectory: string) => Promise<void>;
 
   private readonly pageLocks = new Map<string, Promise<void>>();
 
@@ -238,6 +299,7 @@ export default class SecondBrainService {
       options.revisionLimit ?? SECOND_BRAIN_DEFAULT_REVISION_LIMIT;
     this.now = options.now ?? (() => new Date());
     this.createId = options.createId ?? randomUUID;
+    this.openTerminal = options.openTerminal ?? openOsTerminal;
   }
 
   private wikiRoot(): string {
@@ -249,11 +311,22 @@ export default class SecondBrainService {
     if (!status.initialized) {
       throw new SecondBrainError(
         'NOT_INITIALIZED',
-        'Initialize Second Brain before opening its OKF bundle.',
+        'Initialize Wiki Memory before opening its OKF bundle.',
       );
     }
     const error = await shell.openPath(this.wikiRoot());
     if (error) throw new Error(error);
+  }
+
+  public async openWikiTerminal(): Promise<void> {
+    const status = await this.getStatus();
+    if (!status.initialized) {
+      throw new SecondBrainError(
+        'NOT_INITIALIZED',
+        'Initialize Wiki Memory before opening a terminal.',
+      );
+    }
+    await this.openTerminal(this.wikiRoot());
   }
 
   public async initializeRoot(): Promise<SecondBrainStatus> {
@@ -406,21 +479,21 @@ export default class SecondBrainService {
     const normalizedPageId = normalizeSecondBrainPageId(pageId);
     const pagePath = await this.resolvePagePath(normalizedPageId, true);
     if (!(await fs.pathExists(pagePath))) {
-      throw new SecondBrainError('NOT_FOUND', 'Second Brain page not found.', {
+      throw new SecondBrainError('NOT_FOUND', 'Wiki Memory page not found.', {
         pageId: normalizedPageId,
       });
     }
     await this.assertNoSymlink(pagePath);
     const stat = await fs.stat(pagePath);
     if (!stat.isFile()) {
-      throw new SecondBrainError('NOT_FOUND', 'Second Brain page not found.', {
+      throw new SecondBrainError('NOT_FOUND', 'Wiki Memory page not found.', {
         pageId: normalizedPageId,
       });
     }
     if (stat.size > this.maxPageBytes) {
       throw new SecondBrainError(
         'BUDGET_EXCEEDED',
-        'Second Brain page exceeds the configured read limit.',
+        'Wiki Memory page exceeds the configured read limit.',
         { pageId: normalizedPageId, sizeBytes: stat.size },
       );
     }
@@ -544,7 +617,7 @@ export default class SecondBrainService {
           const stat = await fs.stat(pagePath);
           throw new SecondBrainError(
             'CONFLICT',
-            'Second Brain page changed since it was read.',
+            'Wiki Memory page changed since it was read.',
             {
               pageId,
               currentHash,
@@ -553,13 +626,9 @@ export default class SecondBrainService {
           );
         }
       } else if (input.expectedHash) {
-        throw new SecondBrainError(
-          'NOT_FOUND',
-          'Second Brain page not found.',
-          {
-            pageId,
-          },
-        );
+        throw new SecondBrainError('NOT_FOUND', 'Wiki Memory page not found.', {
+          pageId,
+        });
       }
 
       await this.assertTotalBudget(
@@ -586,13 +655,9 @@ export default class SecondBrainService {
       await this.requireInitializedState();
       const pagePath = await this.resolvePagePath(pageId, true);
       if (!(await fs.pathExists(pagePath))) {
-        throw new SecondBrainError(
-          'NOT_FOUND',
-          'Second Brain page not found.',
-          {
-            pageId,
-          },
-        );
+        throw new SecondBrainError('NOT_FOUND', 'Wiki Memory page not found.', {
+          pageId,
+        });
       }
       await this.assertNoSymlink(pagePath);
       const current = await fs.readFile(pagePath);
@@ -601,7 +666,7 @@ export default class SecondBrainService {
         const stat = await fs.stat(pagePath);
         throw new SecondBrainError(
           'CONFLICT',
-          'Second Brain page changed since it was read.',
+          'Wiki Memory page changed since it was read.',
           { pageId, currentHash, modifiedAt: stat.mtime.toISOString() },
         );
       }
@@ -726,7 +791,7 @@ export default class SecondBrainService {
       if (currentPage.hash !== input.expectedHash) {
         throw new SecondBrainError(
           'CONFLICT',
-          'Second Brain page changed since it was read.',
+          'Wiki Memory page changed since it was read.',
           {
             pageId,
             currentHash: currentPage.hash,
@@ -800,7 +865,7 @@ export default class SecondBrainService {
       if (parsed.frontmatter.okf_version !== SECOND_BRAIN_OKF_VERSION) {
         throw new SecondBrainError(
           'UNSUPPORTED_BUNDLE_VERSION',
-          'Second Brain uses an unsupported OKF version.',
+          'Wiki Memory uses an unsupported OKF version.',
         );
       }
       return 'okf-v0.1';
@@ -880,7 +945,7 @@ export default class SecondBrainService {
       );
       const title = directory
         ? path.posix.basename(directory).replace(/[-_]/gu, ' ')
-        : 'Second Brain';
+        : 'Wiki Memory';
       const lines = [
         ...(directory
           ? []
@@ -919,7 +984,7 @@ export default class SecondBrainService {
     if (rootStat.isSymbolicLink()) {
       throw new SecondBrainError(
         'SYMLINK_NOT_ALLOWED',
-        'Second Brain root cannot be a symbolic link.',
+        'Wiki Memory root cannot be a symbolic link.',
       );
     }
   }
@@ -954,7 +1019,7 @@ export default class SecondBrainService {
     ) {
       throw new SecondBrainError(
         'OUTSIDE_ROOT',
-        'Resolved path is outside the Second Brain root.',
+        'Resolved path is outside the Wiki Memory root.',
       );
     }
     await this.assertExistingAncestorsAreSafe(candidate);
@@ -976,7 +1041,7 @@ export default class SecondBrainService {
       if (stat.isSymbolicLink()) {
         throw new SecondBrainError(
           'SYMLINK_NOT_ALLOWED',
-          'Symbolic links are not allowed in the Second Brain.',
+          'Symbolic links are not allowed in Wiki Memory.',
         );
       }
       const realCursor = await fs.realpath(cursor);
@@ -988,7 +1053,7 @@ export default class SecondBrainService {
       ) {
         throw new SecondBrainError(
           'OUTSIDE_ROOT',
-          'Resolved path is outside the Second Brain root.',
+          'Resolved path is outside the Wiki Memory root.',
         );
       }
     }
@@ -1000,13 +1065,13 @@ export default class SecondBrainService {
     if (stat.isSymbolicLink()) {
       throw new SecondBrainError(
         'SYMLINK_NOT_ALLOWED',
-        'Symbolic links are not allowed in the Second Brain.',
+        'Symbolic links are not allowed in Wiki Memory.',
       );
     }
     if (stat.isFile() && stat.nlink > 1) {
       throw new SecondBrainError(
         'HARD_LINK_NOT_ALLOWED',
-        'Hard-linked files are not allowed in the Second Brain.',
+        'Hard-linked files are not allowed in Wiki Memory.',
       );
     }
   }
@@ -1020,7 +1085,7 @@ export default class SecondBrainService {
     if (sizeBytes > maxBytes) {
       throw new SecondBrainError(
         'BUDGET_EXCEEDED',
-        'Second Brain page exceeds its configured size limit.',
+        'Wiki Memory page exceeds its configured size limit.',
         { pageId, sizeBytes, maxBytes },
       );
     }
@@ -1044,7 +1109,7 @@ export default class SecondBrainService {
     if (totalBytes + deltaBytes > this.maxTotalBytes) {
       throw new SecondBrainError(
         'BUDGET_EXCEEDED',
-        'Second Brain exceeds its configured total size limit.',
+        'Wiki Memory exceeds its configured total size limit.',
         { totalBytes, deltaBytes, maxTotalBytes: this.maxTotalBytes },
       );
     }
@@ -1061,7 +1126,7 @@ export default class SecondBrainService {
       if (entry.isSymbolicLink()) {
         throw new SecondBrainError(
           'SYMLINK_NOT_ALLOWED',
-          'Symbolic links are not allowed in the Second Brain.',
+          'Symbolic links are not allowed in Wiki Memory.',
         );
       }
       const relative = path.posix.join(relativeDirectory, entry.name);
@@ -1085,7 +1150,7 @@ export default class SecondBrainService {
       if (entry.isSymbolicLink()) {
         throw new SecondBrainError(
           'SYMLINK_NOT_ALLOWED',
-          'Symbolic links are not allowed in the Second Brain.',
+          'Symbolic links are not allowed in Wiki Memory.',
         );
       }
       if (
@@ -1206,7 +1271,7 @@ export default class SecondBrainService {
     ) {
       throw new SecondBrainError(
         'INVALID_STATE',
-        'Second Brain state file is invalid.',
+        'Wiki Memory state file is invalid.',
       );
     }
     return value as SecondBrainState;
@@ -1244,7 +1309,7 @@ export default class SecondBrainService {
     if (!state) {
       throw new SecondBrainError(
         'NOT_INITIALIZED',
-        'Second Brain must be initialized before pages can be changed.',
+        'Wiki Memory must be initialized before pages can be changed.',
       );
     }
     return state;
