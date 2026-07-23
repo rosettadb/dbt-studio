@@ -245,6 +245,12 @@ export type UpdateChannels =
   | 'updates:restart'
   | 'updates:reject-version';
 
+export type TaskManagerChannels =
+  | 'task:list'
+  | 'task:cancel'
+  | 'task:remove'
+  | 'task:event';
+
 export type CloudExplorerChannels =
   | 'cloudExplorer:listBuckets'
   | 'cloudExplorer:listObjects'
@@ -257,7 +263,8 @@ export type CloudExplorerChannels =
   | 'cloudExplorer:deleteObject'
   | 'cloudExplorer:uploadProgress'
   | 'cloudExplorer:createFolder'
-  | 'cloudExplorer:deleteBucket';
+  | 'cloudExplorer:deleteBucket'
+  | 'cloudExplorer:downloadObject';
 
 export type DuckLakeChannels =
   // Extension Management
@@ -471,6 +478,7 @@ export type Channels =
   | SecureStorageChannels
   | UpdateChannels
   | CloudExplorerChannels
+  | TaskManagerChannels
   | SourcesChannels
   | RosettaCloudChannels
   | AIChannels
@@ -546,6 +554,64 @@ export interface DeleteObjectRequest {
 export interface DeleteObjectResponse {
   success: boolean;
   deletedCount: number;
+}
+
+export interface DownloadObjectRequest {
+  objectUrl: string;
+  destinationPath: string;
+  taskId: string;
+  label?: string;
+}
+
+export interface DownloadObjectResponse {
+  success: boolean;
+  filePath: string;
+}
+
+// Generic long-running background task registry (downloads, uploads, etc.)
+// Renderer components subscribe to a task by its unique id, mirroring a
+// pub/sub "topic" — the task keeps running in the main process regardless
+// of which (if any) renderer component is currently subscribed.
+export type TaskStatus =
+  | 'pending'
+  | 'running'
+  | 'completed'
+  | 'error'
+  | 'cancelled';
+
+export interface TaskProgress {
+  loaded: number;
+  total: number;
+  percentage: number;
+}
+
+export interface TaskRecord {
+  id: string;
+  type: string;
+  label: string;
+  status: TaskStatus;
+  progress?: TaskProgress;
+  startedAt: number;
+  finishedAt?: number;
+  error?: string;
+  cancellable: boolean;
+}
+
+export interface TaskEvent {
+  type: 'created' | 'updated' | 'removed';
+  task: TaskRecord;
+}
+
+export interface CancelTaskRequest {
+  taskId: string;
+}
+
+export interface CancelTaskResponse {
+  success: boolean;
+}
+
+export interface RemoveTaskRequest {
+  taskId: string;
 }
 
 export interface UploadProgressEvent {
