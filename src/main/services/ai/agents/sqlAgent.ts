@@ -11,9 +11,13 @@ import {
   createSqlResultInspectorTools,
 } from '../tools/studio/sql.tools';
 import { composeAgentRuntime } from './composeAgentRuntime';
+import { createDbtTools } from '../tools/dbt.tools';
+import { createFilesystemTools } from '../tools/filesystem.tools';
+
+import { EnrichedConnectionMeta } from './agentTypes';
 
 export interface SqlAgentOptions {
-  connectionMeta: { name: string; type: string };
+  connectionMeta: EnrichedConnectionMeta;
   enabledTools: Record<string, any>;
   skills: string;
   conversationId: number;
@@ -96,13 +100,25 @@ You are connected to a DuckLake lakehouse. DuckLake is a DuckDB extension (not a
 
   const isAskMode = options.toolMode === 'chat';
 
+  const linkedProjectBlock = connectionMeta.linkedDbtProject
+    ? `\n## Linked dbt Project\n\nThis connection is also used by the dbt project **${connectionMeta.linkedDbtProject.name}** ` +
+      `at \`${connectionMeta.linkedDbtProject.path}\`. ` +
+      `You can refer to this project if the user asks about dbt models that query this database.`
+    : '';
+
+  const databaseBlock =
+    connectionMeta.database || connectionMeta.schema
+      ? `\nDatabase: ${connectionMeta.database ?? 'N/A'}\nSchema: ${connectionMeta.schema ?? 'N/A'}`
+      : '';
+
   const systemInstructions = isAskMode
     ? `You are an expert AI assistant for SQL data analysis. You are running in **Ask (read-only) mode**.
 
 ## Active Connection
 
 Name: ${connectionMeta.name}
-Type: ${connectionMeta.type}${connectionHints}
+Type: ${connectionMeta.type}${databaseBlock}${connectionHints}
+${linkedProjectBlock}
 
 ## Ask Mode Constraints
 
@@ -127,7 +143,8 @@ ${mcpToolsList}
 ## Active Connection
 
 Name: ${connectionMeta.name}
-Type: ${connectionMeta.type}${connectionHints}
+Type: ${connectionMeta.type}${databaseBlock}${connectionHints}
+${linkedProjectBlock}
 
 ## Context
 
@@ -222,6 +239,15 @@ ${mcpToolsList}
     ...createStudioMonacoTools(options.conversationId),
   };
 
+  // If a dbt project is linked, create the pure NodeJS filesystem/DBT tools
+  const projectPath = connectionMeta.linkedDbtProject?.path;
+  const projectTools: Record<string, any> = projectPath
+    ? {
+        ...createDbtTools(projectPath, undefined, base.mainWindow),
+        ...createFilesystemTools(projectPath),
+      }
+    : {};
+
   const READ_ONLY_TOOLS = [
     'studio_sql_schema_extract',
     'studio_ducklake_schema_extract',
@@ -231,6 +257,12 @@ ${mcpToolsList}
     'studio_cloud_preview_data',
     'studio_sql_get_query_results', // reads current UI result panel (context at session start)
     'studio_sql_get_agent_run_result', // reads last agent-triggered query result (push-based)
+    'readDbtModel',
+    'listDbtModels',
+    'getDbtLogs',
+    'listDirectory',
+    'readFile',
+    'pathExists',
   ];
 
   // Build a stub that immediately returns a "not available in Ask mode" error.
@@ -247,8 +279,15 @@ ${mcpToolsList}
   };
 
   const baseTools: Record<string, any> = {};
-  Object.entries(studioSqlTools).forEach(([name, toolDef]) => {
-    if (enabledTools?.[name] !== false) {
+
+  // Combine native UI tools and project filesystem tools
+  const allAvailableTools = { ...studioSqlTools, ...projectTools };
+
+  Object.entries(allAvailableTools).forEach(([name, toolDef]) => {
+    const isUI = name in studioSqlTools;
+    const isAllowedProjectTool = enabledTools && enabledTools[name];
+
+    if ((isUI && enabledTools?.[name] !== false) || isAllowedProjectTool) {
       if (isAskMode && !READ_ONLY_TOOLS.includes(name)) {
         baseTools[name] = makeAskModeStub(name);
       } else {

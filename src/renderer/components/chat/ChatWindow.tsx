@@ -14,6 +14,7 @@ import {
   MenuItem,
 } from '@mui/material';
 import { Close, MoreHoriz, Add as AddIcon, Tag } from '@mui/icons-material';
+import { useQueryClient } from 'react-query';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'react-toastify';
 import { ReactComponent as ProvidersIcon } from '../../assets/icons/lucide/bot.svg';
@@ -52,6 +53,7 @@ import {
   useOnStreamChunk,
   useOnContextUsage,
 } from '../../controllers/agent.controller';
+import { useGetFileContent } from '../../controllers/projects.controller';
 import { projectsServices } from '../../services';
 
 export interface ChatWindowProps {
@@ -157,6 +159,68 @@ export const ChatWindow: React.FC<ChatWindowProps> = ({
 
   // Tool mode — drives which tools are available in the backend
   const { currentMode } = useToolMode(selectedSessionId);
+
+  // agent.md: load project-specific AI context (project screen only)
+  const agentMdPath =
+    screenKey === 'project' && project?.path
+      ? `${project.path}/agent.md`
+      : undefined;
+  const agentMdDismissKey = project?.path
+    ? `agent-md-dismissed:${project.path}`
+    : null;
+  const isDismissed = agentMdDismissKey
+    ? localStorage.getItem(agentMdDismissKey) === 'true'
+    : false;
+
+  const {
+    data: agentMdRaw,
+    isError: agentMdMissing,
+    isFetched: agentMdFetched,
+  } = useGetFileContent(agentMdPath, {
+    // Re-fetch after a stream finishes in case the agent just created the file
+    refetchOnWindowFocus: false,
+    retry: false,
+  });
+
+  const agentMdExists = agentMdFetched ? !agentMdMissing : null;
+  const agentMdContent = agentMdRaw ? agentMdRaw.slice(0, 32 * 1024) : null; // cap at 32 KB
+
+  const handleGenerateAgentMd = () => {
+    const prompt =
+      `Please create an \`agent.md\` file at the root of this dbt project. ` +
+      `The file should include sections for: Project Overview, Naming Conventions, ` +
+      `Model Layers, and Rules for the AI. Use the project name from \`dbt_project.yml\` ` +
+      `and populate what you can from the project structure. Leave placeholder comments ` +
+      `for sections the user should fill in themselves.`;
+    startStream(
+      prompt,
+      [],
+      undefined,
+      currentMode,
+      screenKey,
+      connectionId,
+      notebookId,
+      pageId,
+      undefined,
+    );
+  };
+
+  const handleDismissAgentMd = () => {
+    if (agentMdDismissKey) {
+      localStorage.setItem(agentMdDismissKey, 'true');
+    }
+  };
+
+  // Invalidate the agent.md query when streaming ends so the banner re-checks
+  // (handles the case where the agent just created agent.md via writeFile tool)
+  const queryClient = useQueryClient();
+  const prevIsStreamingRef = React.useRef(false);
+  React.useEffect(() => {
+    if (prevIsStreamingRef.current && !streamState.isStreaming && agentMdPath) {
+      queryClient.invalidateQueries(['GET_FILE_CONTENT', agentMdPath]);
+    }
+    prevIsStreamingRef.current = streamState.isStreaming;
+  }, [streamState.isStreaming, agentMdPath, queryClient]);
 
   // Load messages for the selected session (used to estimate context usage on session switch)
   const { data: sessionMessages = [] } =
@@ -1040,7 +1104,53 @@ export const ChatWindow: React.FC<ChatWindowProps> = ({
       </Box>
 
       {/* Messages Area */}
-      <Box sx={{ flex: 1, minHeight: 0, display: 'flex' }}>
+      <Box
+        sx={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}
+      >
+        {screenKey === 'project' && agentMdExists === false && !isDismissed && (
+          <Box
+            sx={{
+              mx: 2,
+              mt: 1,
+              mb: 0.5,
+              p: 1.5,
+              borderRadius: 1,
+              bgcolor: 'action.hover',
+              border: '1px solid',
+              borderColor: 'divider',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              gap: 1,
+            }}
+          >
+            <Box>
+              <Typography variant="body2" fontWeight={600}>
+                No agent.md found
+              </Typography>
+              <Typography variant="caption" color="text.secondary">
+                Add project-specific instructions for the AI agent.
+              </Typography>
+            </Box>
+            <Box sx={{ display: 'flex', gap: 1 }}>
+              <Button
+                variant="text"
+                size="small"
+                color="inherit"
+                onClick={handleDismissAgentMd}
+              >
+                No thanks
+              </Button>
+              <Button
+                variant="outlined"
+                size="small"
+                onClick={handleGenerateAgentMd}
+              >
+                Generate agent.md
+              </Button>
+            </Box>
+          </Box>
+        )}
         {renderMessages()}
       </Box>
 
@@ -1064,6 +1174,7 @@ export const ChatWindow: React.FC<ChatWindowProps> = ({
                 connectionId,
                 notebookId,
                 pageId,
+                agentMdContent ?? undefined,
               )
             }
             onCancelStream={cancelStream}

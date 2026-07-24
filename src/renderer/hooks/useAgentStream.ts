@@ -354,6 +354,7 @@ export const useAgentStream = (sessionId: number | undefined) => {
       connectionId?: string,
       notebookId?: string,
       pageId?: string,
+      projectAiContext?: string,
     ) => {
       if (!sessionId) return;
 
@@ -402,6 +403,7 @@ export const useAgentStream = (sessionId: number | undefined) => {
           connectionId,
           notebookId,
           pageId,
+          projectAiContext,
         });
 
         // Agent completed — replace optimistic message with persisted data

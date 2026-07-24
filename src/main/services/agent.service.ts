@@ -8,6 +8,7 @@ import { createProjectAgent } from './ai/agents/projectAgent';
 import { createSqlAgent } from './ai/agents/sqlAgent';
 import { createNotebooksAgent } from './ai/agents/notebooksAgent';
 import { createAnalyticsAgent } from './ai/agents/analyticsAgent';
+import { EnrichedConnectionMeta } from './ai/agents/agentTypes';
 import ConnectorsService from './connectors.service';
 import { getVercelModel } from './ai/agentAdapter';
 import { buildMCPToolset } from './ai/mcp/mcpToolAdapter';
@@ -24,6 +25,7 @@ import {
 import MainDatabaseService from './mainDatabase.service';
 import ProjectsService from './projects.service';
 import SelectedFileContextProvider from './selectedFileContextProvider.service';
+import { buildSessionContextBlock } from './ai/sessionContext.service';
 import type {
   NewContextItem,
   ChatMessage,
@@ -279,6 +281,7 @@ export interface AgentRunRequest {
   connectionId?: string;
   notebookId?: string;
   pageId?: string; // Analytics: currently open page ID
+  projectAiContext?: string;
 }
 
 export type AgentContextOverheadRequest = Omit<
@@ -1166,17 +1169,73 @@ COMBINED SUMMARY:`,
     };
   }
 
+  static async resolveEnrichedConnectionMeta(
+    connectionId?: string,
+  ): Promise<EnrichedConnectionMeta> {
+    const base = { name: 'unknown', type: 'unknown' };
+    if (!connectionId) return base;
+    try {
+      let meta: typeof base & { database?: string; schema?: string } = base;
+      if (connectionId.startsWith('ducklake-')) {
+        const instanceId = connectionId.replace(/^ducklake-/, '');
+        const { default: DuckLakeService } = await import('./duckLake.service');
+        const instance = await DuckLakeService.getInstance(instanceId);
+        if (instance) {
+          meta = {
+            name: instance.name || 'DuckLake Instance',
+            type: 'ducklake',
+          };
+        }
+      } else {
+        const conn = await ConnectorsService.getConnectionById(connectionId);
+        if (conn?.connection) {
+          meta = {
+            name: conn.connection.name,
+            type: conn.connection.type,
+            database: (conn.connection as any).database,
+            schema: (conn.connection as any).schema,
+          };
+        }
+      }
+
+      // Detect if this connection backs a dbt project
+      let linkedDbtProject: {
+        id: string;
+        name: string;
+        path: string;
+      } | null = null;
+      try {
+        const projects = await ProjectsService.loadProjects();
+        const linked = projects.find((p) => p.connectionId === connectionId);
+        if (linked) {
+          linkedDbtProject = {
+            id: linked.id,
+            name: linked.name,
+            path: linked.path,
+          };
+        }
+      } catch {
+        // non-fatal — linkedDbtProject stays null
+      }
+      return { ...meta, linkedDbtProject };
+    } catch {
+      return base;
+    }
+  }
+
   static async runAgent(
     event: IpcMainInvokeEvent,
     request: AgentRunRequest,
   ): Promise<{ success: boolean }> {
     const { conversationId, content, contextItems, requestedModel } = request;
 
-    // Resolve projectPath: use what was sent, or fall back to the selected project
-    let { projectPath } = request;
-    if (!projectPath) {
+    // Resolve projectPath and connectionId from selected project if not provided
+    let { projectPath, connectionId } = request;
+    const screenKey = request.screenKey ?? 'project';
+    if (screenKey === 'project' && (!projectPath || !connectionId)) {
       const selectedProject = await ProjectsService.getSelectedProject();
-      projectPath = selectedProject?.path;
+      projectPath = projectPath ?? selectedProject?.path;
+      connectionId = connectionId ?? selectedProject?.connectionId;
     }
 
     try {
@@ -1184,8 +1243,8 @@ COMBINED SUMMARY:`,
       agentContexts.set(conversationId, {
         event,
         conversationId,
-        screenKey: request.screenKey ?? 'project',
-        connectionId: request.connectionId,
+        screenKey,
+        connectionId,
         notebookId: request.notebookId,
         pageId: request.pageId,
         projectPath,
@@ -1252,40 +1311,10 @@ COMBINED SUMMARY:`,
       const mainWindow =
         BrowserWindow.fromWebContents(event.sender) || undefined;
 
-      // Resolve connection name + type — no credentials returned
-      let connectionMeta: { name: string; type: string } = {
-        name: 'unknown',
-        type: 'unknown',
-      };
-      if (request.connectionId) {
-        try {
-          if (request.connectionId.startsWith('ducklake-')) {
-            const instanceId = request.connectionId.replace(/^ducklake-/, '');
-            const { default: DuckLakeService } = await import(
-              './duckLake.service'
-            );
-            const instance = await DuckLakeService.getInstance(instanceId);
-            if (instance) {
-              connectionMeta = {
-                name: instance.name || 'DuckLake Instance',
-                type: 'ducklake',
-              };
-            }
-          } else {
-            const conn = await ConnectorsService.getConnectionById(
-              request.connectionId,
-            );
-            if (conn) {
-              connectionMeta = {
-                name: conn.connection.name,
-                type: conn.connection.type,
-              };
-            }
-          }
-        } catch {
-          // safe fallback — agent still works without connection name
-        }
-      }
+      // Resolve enriched connection meta
+      const connectionMeta = await AgentService.resolveEnrichedConnectionMeta(
+        request.connectionId,
+      );
 
       const base = await buildBaseAgentConfig({
         requestedModel,
@@ -1298,12 +1327,86 @@ COMBINED SUMMARY:`,
         secondBrainTokens,
       });
 
+      let projectConnectionMeta: {
+        name?: string;
+        type?: string;
+        database?: string;
+        schema?: string;
+      } = {};
+
+      if (screenKey === 'project') {
+        try {
+          if (connectionId) {
+            const conn =
+              await ConnectorsService.getConnectionById(connectionId);
+            if (conn?.connection) {
+              projectConnectionMeta = {
+                name: conn.connection.name,
+                type: conn.connection.type,
+                database: (conn.connection as any).database,
+                schema: (conn.connection as any).schema,
+              };
+            }
+          } else {
+            // Fallback for older projects where connection might be nested
+            const selectedProject = await ProjectsService.getSelectedProject();
+            if (selectedProject?.dbtConnection) {
+              projectConnectionMeta = {
+                name: selectedProject.name,
+                type: (selectedProject.dbtConnection as any).type,
+                database: (selectedProject.dbtConnection as any).database,
+                schema: (selectedProject.dbtConnection as any).schema,
+              };
+            }
+          }
+        } catch (err) {
+          console.warn(
+            '[AgentService] Could not resolve project connection meta:',
+            err,
+          );
+        }
+      }
+
+      let sessionContextBlock = '';
+      if (screenKey === 'project') {
+        try {
+          // Derive the selected file path from contextItems (type 'file' entries)
+          // The file path is stored in the metadata JSON field as { path: string }
+          const fileContextItem = contextItems?.find(
+            (ci) => ci.type === 'file',
+          );
+          const selectedFilePath =
+            fileContextItem && (fileContextItem.metadata as any)?.path
+              ? ((fileContextItem.metadata as any).path as string)
+              : undefined;
+          sessionContextBlock = await buildSessionContextBlock(
+            projectPath,
+            selectedFilePath,
+          );
+        } catch (err) {
+          console.warn(
+            '[AgentService] Failed to build session context block:',
+            err,
+          );
+        }
+      }
+
       let agent: any;
+      const isProjectAgent = (request.screenKey ?? 'project') === 'project';
+
+      // SQL, Notebooks, and Analytics agents should only have read access to the project
+      const agentEnabledTools = { ...enabledTools };
+      if (!isProjectAgent) {
+        delete agentEnabledTools.writeDbtModel;
+        delete agentEnabledTools.runDbtCommand;
+        delete agentEnabledTools.writeFile;
+      }
+
       switch (request.screenKey ?? 'project') {
         case 'sql':
           agent = await createSqlAgent(base, {
             connectionMeta,
-            enabledTools,
+            enabledTools: agentEnabledTools,
             skills: base.skillsPrompt,
             conversationId,
             toolMode: request.toolMode || 'agent',
@@ -1314,8 +1417,7 @@ COMBINED SUMMARY:`,
             connectionMeta,
             notebookId: request.notebookId,
             connectionId: request.connectionId,
-            projectPath,
-            enabledTools,
+            enabledTools: agentEnabledTools,
             skills: base.skillsPrompt,
             conversationId,
             toolMode: request.toolMode || 'agent',
@@ -1326,7 +1428,7 @@ COMBINED SUMMARY:`,
             connectionMeta,
             connectionId: request.connectionId,
             pageId: request.pageId,
-            enabledTools,
+            enabledTools: agentEnabledTools,
             skills: base.skillsPrompt,
             conversationId,
             toolMode: request.toolMode || 'agent',
@@ -1339,6 +1441,9 @@ COMBINED SUMMARY:`,
             skills: base.skillsPrompt,
             conversationId,
             toolMode: request.toolMode || 'agent',
+            projectAiContext: request.projectAiContext,
+            sessionContextBlock,
+            connectionMeta: projectConnectionMeta,
           });
       }
 

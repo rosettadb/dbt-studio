@@ -12,9 +12,12 @@ import { AnalyticsPagesService } from '../../analyticsPages.service';
 import { TOOL_FLAGS } from '../tools/toolRegistry';
 import { evidenceComponentRef } from './analyticsAgent.prompts';
 import { composeAgentRuntime } from './composeAgentRuntime';
+import { createDbtTools } from '../tools/dbt.tools';
+import { createFilesystemTools } from '../tools/filesystem.tools';
+import { EnrichedConnectionMeta } from './agentTypes';
 
 export interface AnalyticsAgentOptions {
-  connectionMeta: { name: string; type: string };
+  connectionMeta: EnrichedConnectionMeta;
   connectionId?: string;
   pageId?: string; // Currently open analytics page
   enabledTools: Record<string, any>;
@@ -131,35 +134,53 @@ You are connected to a DuckLake lakehouse. DuckLake is a DuckDB extension (not a
     pageSummary = await buildAnalyticsPageContextSummary(connectionId, pageId);
   }
 
+  const linkedProjectBlock = connectionMeta.linkedDbtProject
+    ? `\n## Linked dbt Project\n\nThis connection is also used by the dbt project **${connectionMeta.linkedDbtProject.name}** ` +
+      `at \`${connectionMeta.linkedDbtProject.path}\`. ` +
+      `You can refer to this project if the user asks about dbt models that query this database.`
+    : '';
+
+  const databaseBlock =
+    connectionMeta.database || connectionMeta.schema
+      ? `\nDatabase: ${connectionMeta.database ?? 'N/A'}\nSchema: ${connectionMeta.schema ?? 'N/A'}`
+      : '';
+
   const systemInstructions = isAskMode
     ? `You are an expert AI assistant for Analytics dashboards in dbt Studio. You are running in **Ask (read-only) mode**.
 
 ## Active Connection
 
 Name: ${connectionMeta.name}
-Type: ${connectionMeta.type}${connectionHints}
-${pageId ? `\n## Active Analytics Page\n\nPage ID: ${pageId}\n` : ''}${pageSummary}
-${evidenceComponentRef}
+Type: ${connectionMeta.type}${databaseBlock}${connectionHints}
+${linkedProjectBlock}
+${pageSummary}
+
 ## Ask Mode Constraints
 
-You are in **Ask mode**. You can only read and analyze — you CANNOT execute queries or modify analytics pages.
-If the user asks you to write or modify a page, explain what it would look like and tell them to switch to **Code mode**.
+You are in **Ask mode**. You can only read and analyze — you CANNOT write, modify, or execute anything.
+Available tools: schema exploration, reading analytics page content, listing connections.
+NOT available: Modifying page Markdown, modifying component props, executing SQL.
 
-## Tool Use Rules
-- For greetings, acknowledgements, session checks, or requests like "say X", answer directly with no tools.
-- Only inspect the page/schema when the user explicitly asks to read, analyze, explain, inspect, summarize, or compare analytics content.
-- Never create dashboard content unless the user explicitly asks to create, add, build, generate, update, edit, run, or fix something.
-
-## Read-Only Context Rules
-- The active session is already scoped to the current connectionId and pageId.
-- Use \`analytics_active_page_read\` to inspect the currently open page. Do not ask the user for connectionId or pageId.
-- Use \`analytics_pages_list\` and \`analytics_page_db_read\` only to inspect other stored pages on the same connection.
-- Use schema inspection tools to understand available tables and columns.
+If the user asks you to create, modify, or execute something, explain what you would do, but clearly state they need to switch to **Code mode** to do it.
 
 ${skills ?? ''}
-${mcpToolsList}`
+${mcpToolsList}
+
+## Guidelines
+
+1. Explore schema to answer questions accurately.
+2. Read the page summary to understand the user's current dashboard context.
+3. Provide suggestions and explanations in your response text — do NOT attempt to use modifying tools.
+4. Explicitly tell the user to switch to **Code mode** if they want to run or apply changes.`
     : `You are an expert data engineering assistant in the Analytics screen of dbt Studio.
 Your goal is to help the user create and maintain Evidence-style analytics dashboards backed by real SQL queries.
+
+## Active Connection
+
+Name: ${connectionMeta.name}
+Type: ${connectionMeta.type}${databaseBlock}${connectionHints}
+${linkedProjectBlock}
+${pageSummary}
 
 ## Intent Gate
 Before using any tool, classify the user's request:
@@ -201,10 +222,6 @@ ${evidenceComponentRef}
 - **No manual IDs for active page**: Never ask the user for the active page ID or active connection ID. The active-page tools infer them from the current Analytics session.
 - **Verify before final answer**: Do not give a final success response until you have run the page and inspected \`analytics_active_page_get_results\`, unless the user explicitly asked for read-only analysis.
 
-## Active Connection
-Name: ${connectionMeta.name}
-Type: ${connectionMeta.type}${connectionHints}
-${pageId ? `\n## Active Analytics Page\n\nPage ID: ${pageId}\nConnection ID: ${connectionId}\n` : ''}${pageSummary}
 ${skills ?? ''}
 ${mcpToolsList}`;
 
@@ -229,7 +246,22 @@ ${mcpToolsList}`;
     'analytics_active_page_get_results',
     'analytics_pages_list',
     'analytics_page_db_read',
+    'readDbtModel',
+    'listDbtModels',
+    'getDbtLogs',
+    'listDirectory',
+    'readFile',
+    'pathExists',
   ];
+
+  // If a dbt project is linked, create the pure NodeJS filesystem/DBT tools
+  const linkedProjectPath = connectionMeta.linkedDbtProject?.path;
+  const projectTools: Record<string, any> = linkedProjectPath
+    ? {
+        ...createDbtTools(linkedProjectPath, undefined, base.mainWindow),
+        ...createFilesystemTools(linkedProjectPath),
+      }
+    : {};
 
   const makeAskModeStub = (toolName: string): any => {
     return tool({
@@ -242,12 +274,17 @@ ${mcpToolsList}`;
   };
 
   const baseTools: Record<string, any> = {};
-  Object.entries(studioAnalyticsTools).forEach(([name, toolDef]) => {
+
+  // Combine native UI tools and project filesystem tools
+  const allAvailableTools = { ...studioAnalyticsTools, ...projectTools };
+
+  Object.entries(allAvailableTools).forEach(([name, toolDef]) => {
     const isEnabledInRegistry =
       (TOOL_FLAGS as Record<string, boolean>)[name] !== false;
-    const isEnabledInMode = enabledTools?.[name] !== false;
+    const isUI = name in studioAnalyticsTools;
+    const isAllowedProjectTool = enabledTools && enabledTools[name];
 
-    if (isEnabledInRegistry && isEnabledInMode) {
+    if (isEnabledInRegistry && ((isUI && enabledTools?.[name] !== false) || isAllowedProjectTool)) {
       if (isAskMode && !READ_ONLY_TOOLS.includes(name)) {
         baseTools[name] = makeAskModeStub(name);
       } else {

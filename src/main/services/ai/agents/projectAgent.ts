@@ -3,6 +3,7 @@ import { z } from 'zod';
 import type { BaseAgentConfig } from './baseAgentConfig';
 import { createDbtTools, dbtTools } from '../tools/dbt.tools';
 import { createStudioCliTools } from '../tools/studio/cli.tools';
+import { createStudioSqlTools } from '../tools/studio/sql.tools';
 import {
   createFilesystemTools,
   filesystemTools,
@@ -16,6 +17,14 @@ export interface ProjectAgentOptions {
   onFileWritten?: (filePath: string) => void;
   conversationId?: number; // Added for retrofitting
   toolMode: 'chat' | 'agent';
+  projectAiContext?: string;
+  sessionContextBlock?: string;
+  connectionMeta?: {
+    name?: string;
+    type?: string;
+    database?: string;
+    schema?: string;
+  };
 }
 
 export async function createProjectAgent(
@@ -30,6 +39,26 @@ export async function createProjectAgent(
       ? `\n### MCP Server Tools\nThe following external tools are currently available:\n${mcpToolKeys.map((k) => `- ${k}`).join('\n')}`
       : '';
 
+  const connectionBlock = options.connectionMeta?.type
+    ? [
+        '\n## Active Database Connection\n',
+        `- **Type**: ${options.connectionMeta.type}`,
+        `- **Name**: ${options.connectionMeta.name ?? 'N/A'}`,
+        `- **Database**: ${options.connectionMeta.database ?? 'default'}`,
+        `- **Schema**: ${options.connectionMeta.schema ?? 'default'}`,
+      ].join('\n')
+    : '';
+
+  const sessionCtxBlock = options.sessionContextBlock
+    ? `\n<session_context>\n${options.sessionContextBlock}\n</session_context>\n`
+    : '';
+
+  const agentMdBlock = options.projectAiContext
+    ? `\n<project_ai_context source="agent.md">\n${options.projectAiContext}\n</project_ai_context>\n` +
+      `\n> Note: You can update the \`agent.md\` file using your \`writeFile\` tool if the user asks you to modify these instructions.\n` +
+      `> **CRITICAL PRECEDENCE RULE:** The rules and instructions in \`agent.md\` are STRONGER than the rules in your long term memory (\`memory.md\`). If there is a conflict, always follow \`agent.md\`.\n`
+    : '';
+
   const isAskMode = options.toolMode === 'chat';
 
   const systemInstructions = isAskMode
@@ -37,6 +66,17 @@ export async function createProjectAgent(
 You help users with dbt model development, debugging, and data operations by answering questions.
 
 ${projectPath ? `## Active dbt Project\n\nProject path: ${projectPath}\n` : ''}
+${connectionBlock}
+${sessionCtxBlock}
+${agentMdBlock}
+
+## Project AI Instructions (agent.md)
+
+At the start of each conversation:
+1. Use \`pathExists\` to check if \`agent.md\` exists at \`${projectPath}/agent.md\`.
+2. If it exists, use \`readFile\` to read its contents and follow the instructions.
+3. If absent, note this to the user if relevant. You cannot create it in Ask mode.
+
 ${skills ?? ''}
 
 ## Ask Mode Constraints
@@ -58,7 +98,25 @@ You help users with dbt model development, debugging, documentation, and data op
 You have access to the dbt project filesystem and can read, write, and run dbt commands.
 
 ${projectPath ? `## Active dbt Project\n\nProject path: ${projectPath}\n\nAll file operations and dbt commands should use this project path as the working directory unless the user specifies otherwise.\n` : ''}
+${connectionBlock}
+${sessionCtxBlock}
+${agentMdBlock}
+
+## Project AI Instructions (agent.md)
+
+At the start of each conversation on this project:
+1. Use \`pathExists\` to check if \`agent.md\` exists at the project root (\`${projectPath}/agent.md\`).
+2. If it exists, use \`readFile\` to read its full contents and follow all instructions in it for this conversation.
+3. If it does not exist, you may proactively offer to create one when the user asks about project conventions or AI instructions. Use \`writeFile\` to create it if the user agrees. Respect the user's decision if they decline — do not ask again in the same conversation.
+
 ${skills ?? ''}
+
+## Standard dbt Conventions
+
+Unless overridden by \`agent.md\`, always follow standard dbt project organization conventions:
+- **Staging (\`models/staging/\`)**: 1:1 mapping with sources. Name models \`stg_{source_name}.sql\`. Do basic renaming and casting here, no complex logic. Source definitions (\`sources.yml\`) belong here.
+- **Intermediate (\`models/intermediate/\`)**: Joins and complex transformations between staging models. Name models \`int_{name}.sql\`.
+- **Marts (\`models/marts/\`)**: Clean, business-level aggregates for BI tools. Name models \`dim_{name}.sql\` (dimensions) or \`fct_{name}.sql\` (facts).
 
 ## Guidelines
 
@@ -161,6 +219,9 @@ If the failure appears to be caused by invalid credentials, unreachable host, wr
 - pathExists: Check if a file or directory exists
 ${mcpToolsList}
 
+### Database Tools
+- studio_sql_schema_extract: Extract schema (tables, views, columns) for the active SQL connection to understand the database structure
+
 Always confirm before making destructive changes.`;
 
   const allBaseTools = projectPath
@@ -170,6 +231,9 @@ Always confirm before making destructive changes.`;
           projectPath,
           conversationId: options.conversationId,
           mainWindow: base.mainWindow,
+        }),
+        ...createStudioSqlTools(options.conversationId ?? 0, {
+          forceSchemaExtract: true,
         }),
         ...createFilesystemTools(projectPath),
       }
@@ -191,6 +255,7 @@ Always confirm before making destructive changes.`;
     'listDirectory',
     'readFile',
     'pathExists',
+    'studio_sql_schema_extract',
   ];
 
   const makeAskModeStub = (toolName: string): any => {
@@ -205,7 +270,7 @@ Always confirm before making destructive changes.`;
 
   const baseTools: Record<string, any> = {};
   Object.entries(allBaseTools).forEach(([name, toolDef]) => {
-    if (enabledToolNames.has(name)) {
+    if (enabledToolNames.has(name) || name === 'studio_sql_schema_extract') {
       if (isAskMode && !READ_ONLY_TOOLS.includes(name)) {
         baseTools[name] = makeAskModeStub(name);
       } else {
