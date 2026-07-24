@@ -7,6 +7,30 @@ import {
 
 const MAX_HISTORY = 50;
 const EVENT_NAME = 'dbt-run-history-changed';
+const SESSION_ID = `session-${Date.now()}-${Math.random()
+  .toString(36)
+  .slice(2, 11)}`;
+
+function recoverInterruptedRuns(entries: DbtRunHistoryEntry[]): {
+  entries: DbtRunHistoryEntry[];
+  changed: boolean;
+} {
+  let changed = false;
+  const recovered = entries.map((entry) => {
+    if (entry.status !== 'running' || entry.sessionId === SESSION_ID) {
+      return entry;
+    }
+    changed = true;
+    return {
+      ...entry,
+      status: 'cancelled' as const,
+      completedAt: entry.completedAt || new Date().toISOString(),
+      errorMessage:
+        entry.errorMessage || 'Command was interrupted before completion.',
+    };
+  });
+  return { entries: recovered, changed };
+}
 
 function dispatchChangeEvent() {
   window.dispatchEvent(new Event(EVENT_NAME));
@@ -91,7 +115,13 @@ export const useDbtRunHistory = (projectId?: string) => {
       if (!key) return [];
       try {
         const data = localStorage.getItem(key);
-        return data ? JSON.parse(data) : [];
+        if (!data) return [];
+        const parsed = JSON.parse(data) as DbtRunHistoryEntry[];
+        const recovered = recoverInterruptedRuns(parsed);
+        if (recovered.changed) {
+          localStorage.setItem(key, JSON.stringify(recovered.entries));
+        }
+        return recovered.entries;
       } catch {
         return [];
       }
@@ -131,6 +161,7 @@ export const useDbtRunHistory = (projectId?: string) => {
       const newEntry: DbtRunHistoryEntry = {
         ...request,
         id: `run-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+        sessionId: SESSION_ID,
         status: 'running',
         startedAt: new Date().toISOString(),
         summary: { total: 0, success: 0, error: 0, warn: 0, skipped: 0 },

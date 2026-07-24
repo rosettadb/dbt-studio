@@ -23,6 +23,7 @@ export interface DbtRunHistoryResult {
 
 export interface DbtRunHistoryEntry {
   id: string;
+  sessionId?: string;
   invocationId?: string;
   projectId?: string;
   projectName: string;

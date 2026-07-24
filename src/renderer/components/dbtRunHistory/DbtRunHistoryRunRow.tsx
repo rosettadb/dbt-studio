@@ -8,6 +8,7 @@ import HourglassEmptyIcon from '@mui/icons-material/HourglassEmpty';
 import AutoAwesomeIcon from '@mui/icons-material/AutoAwesome';
 import WarningIcon from '@mui/icons-material/Warning';
 import ContentCopyIcon from '@mui/icons-material/ContentCopy';
+import CancelOutlinedIcon from '@mui/icons-material/CancelOutlined';
 
 import { DbtRunHistoryEntry } from '../../../types/dbtRunHistory';
 import { DbtRunHistoryResultRow } from './DbtRunHistoryResultRow';
@@ -34,6 +35,8 @@ const getStatusIcon = (status: string) => {
           sx={{ animation: 'spin 2s linear infinite' }}
         />
       );
+    case 'cancelled':
+      return <CancelOutlinedIcon color="disabled" fontSize="small" />;
     default:
       return <CheckCircleIcon color="disabled" fontSize="small" />;
   }
