@@ -1015,6 +1015,7 @@ export default class ProjectsService {
       database: connection.database,
       schema: connection.schema,
       role: connection.role,
+      authMethod: connection.authMethod,
     });
 
     await extractor.connect();

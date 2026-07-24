@@ -8,10 +8,18 @@ import {
   CircularProgress,
   IconButton,
   InputAdornment,
+  Typography,
+  Tabs,
+  Tab,
 } from '@mui/material';
 import { Visibility, VisibilityOff } from '@mui/icons-material';
 import { toast } from 'react-toastify';
-import { ConnectionModel, SnowflakeConnection } from '../../../types/backend';
+import {
+  ConnectionModel,
+  ConnectionTestResult,
+  ConnectorTestResponse,
+  SnowflakeConnection,
+} from '../../../types/backend';
 import connectionIcons from '../../../../assets/connectionIcons';
 import {
   useConfigureConnection,
@@ -63,7 +71,6 @@ export const Snowflake: React.FC<Props> = ({
   >('idle');
   const [showPassword, setShowPassword] = React.useState(false);
   const [nameTouched, setNameTouched] = React.useState(false);
-
   const [formState, setFormState] = React.useState<SnowflakeConnection>({
     type: 'snowflake',
     name: existingConnection?.name ?? suggestedName ?? 'Snowflake Connection',
@@ -76,16 +83,45 @@ export const Snowflake: React.FC<Props> = ({
     username: '',
     password: '',
     role: existingConnection?.role ?? duplicateConnection?.role ?? 'SYSADMIN',
+    authMethod:
+      existingConnection?.authMethod ??
+      duplicateConnection?.authMethod ??
+      'password',
+    accountLocator:
+      existingConnection?.accountLocator ??
+      duplicateConnection?.accountLocator ??
+      '',
   });
 
+  const isWebBrowserAuth = formState.authMethod === 'web_browser';
+
   const { mutate: testConnection, isLoading: isTesting } = useTestConnection({
-    onSuccess: (success) => {
-      if (success) {
-        toast.success('Connection test successful!');
+    onMutate: () => {},
+    onSuccess: (response: ConnectorTestResponse) => {
+      let normalizedResult: ConnectionTestResult;
+      if (typeof response === 'boolean') {
+        normalizedResult = { ok: response };
+      } else if ('ok' in response) {
+        normalizedResult = response;
+      } else {
+        normalizedResult = { ok: response.success };
+      }
+
+      if (normalizedResult.ok) {
+        toast.success(
+          isWebBrowserAuth
+            ? 'Snowflake browser authentication succeeded!'
+            : 'Connection test successful!',
+        );
         setConnectionStatus('success');
         return;
       }
-      toast.error('Connection test failed');
+
+      toast.error(
+        normalizedResult.details
+          ? `${normalizedResult.message || 'Snowflake connection failed'}: ${normalizedResult.details}`
+          : normalizedResult.message || 'Snowflake connection failed',
+      );
       setConnectionStatus('failed');
     },
     onError: (error) => {
@@ -182,6 +218,19 @@ export const Snowflake: React.FC<Props> = ({
     setConnectionStatus('idle');
   };
 
+  const handleAuthMethodChange = (
+    _e: React.SyntheticEvent,
+    newValue: string,
+  ) => {
+    const authMethod = newValue as SnowflakeConnection['authMethod'];
+    setFormState((prev) => ({
+      ...prev,
+      authMethod,
+      password: authMethod === 'web_browser' ? '' : prev.password,
+    }));
+    setConnectionStatus('idle');
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
@@ -193,8 +242,16 @@ export const Snowflake: React.FC<Props> = ({
     }
 
     await setDatabaseUsername(formState.username, formState.name);
-    await setDatabasePassword(formState.password, formState.name);
+    await setDatabasePassword(
+      formState.authMethod === 'web_browser' ? '' : formState.password,
+      formState.name,
+    );
     await setConnectionField('account', formState.account, formState.name);
+    await setConnectionField(
+      'accountLocator',
+      formState.accountLocator || '',
+      formState.name,
+    );
     await setConnectionField('warehouse', formState.warehouse, formState.name);
     await setConnectionField('dbname', formState.database, formState.name);
     await setConnectionField('schema', formState.schema, formState.name);
@@ -222,6 +279,9 @@ export const Snowflake: React.FC<Props> = ({
 
   const handleTest = () => {
     setConnectionStatus('idle');
+    if (isWebBrowserAuth) {
+      toast.info('Opening Snowflake browser sign-in...');
+    }
     testConnection(formState);
   };
 
@@ -294,6 +354,31 @@ export const Snowflake: React.FC<Props> = ({
           placeholder="xy12345.us-east-2.aws"
         />
 
+        <Tabs
+          value={formState.authMethod || 'password'}
+          onChange={handleAuthMethodChange}
+          indicatorColor="primary"
+          textColor="primary"
+          variant="fullWidth"
+          sx={{ mb: 1, borderBottom: 1, borderColor: 'divider' }}
+        >
+          <Tab label="Password Login" value="password" />
+          <Tab label="Web Browser" value="web_browser" />
+        </Tabs>
+
+        {isWebBrowserAuth && (
+          <TextField
+            label="Account Locator"
+            name="accountLocator"
+            value={formState.accountLocator || ''}
+            onChange={handleChange}
+            fullWidth
+            required
+            placeholder="e.g. GZ12955"
+            helperText="Required for Web Browser authentication. Enter your Snowflake Account Locator."
+          />
+        )}
+
         <TextField
           label="Warehouse"
           name="warehouse"
@@ -335,37 +420,50 @@ export const Snowflake: React.FC<Props> = ({
           value={formState.username}
           onChange={handleChange}
           fullWidth
+          required
         />
 
-        <TextField
-          label="Password"
-          name="password"
-          type={showPassword ? 'text' : 'password'}
-          value={formState.password}
-          onChange={handleChange}
-          fullWidth
-          slotProps={{
-            input: {
-              endAdornment: (
-                <InputAdornment position="end">
-                  <IconButton
-                    onClick={() => setShowPassword(!showPassword)}
-                    onMouseDown={(e) => e.preventDefault()}
-                    edge="end"
-                  >
-                    {showPassword ? <VisibilityOff /> : <Visibility />}
-                  </IconButton>
-                </InputAdornment>
-              ),
-            },
-          }}
-        />
+        {!isWebBrowserAuth && (
+          <TextField
+            label="Password"
+            name="password"
+            type={showPassword ? 'text' : 'password'}
+            value={formState.password}
+            onChange={handleChange}
+            fullWidth
+            required
+            slotProps={{
+              input: {
+                endAdornment: (
+                  <InputAdornment position="end">
+                    <IconButton
+                      onClick={() => setShowPassword(!showPassword)}
+                      onMouseDown={(e) => e.preventDefault()}
+                      edge="end"
+                    >
+                      {showPassword ? <VisibilityOff /> : <Visibility />}
+                    </IconButton>
+                  </InputAdornment>
+                ),
+              },
+            }}
+          />
+        )}
+
+        {isWebBrowserAuth && (
+          <Typography variant="body2" color="text.secondary">
+            Snowflake will open your browser for sign-in during connection tests
+            and dbt authentication.
+          </Typography>
+        )}
 
         <Box
           sx={{
             mt: 3,
             display: 'flex',
-            justifyContent: 'flex-start',
+            flexDirection: 'column',
+            alignItems: 'flex-start',
+            gap: 1,
           }}
         >
           <Button
@@ -386,7 +484,9 @@ export const Snowflake: React.FC<Props> = ({
               ) : null
             }
           >
-            {isTesting ? 'Testing...' : 'Test Connection'}
+            {isTesting && isWebBrowserAuth && 'Opening Browser...'}
+            {isTesting && !isWebBrowserAuth && 'Testing...'}
+            {!isTesting && 'Test Connection'}
             <Box
               sx={{
                 position: 'absolute',
@@ -404,6 +504,11 @@ export const Snowflake: React.FC<Props> = ({
               }}
             />
           </Button>
+          {isTesting && isWebBrowserAuth && (
+            <Typography variant="body2" color="text.secondary">
+              Waiting for browser authentication to complete...
+            </Typography>
+          )}
         </Box>
       </Box>
     </Box>

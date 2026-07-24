@@ -220,7 +220,9 @@ class CloudExplorerService {
         Bucket: bucketName,
         Key: objectKey,
       });
-      return await getSignedUrl(client, command, { expiresIn: 3600 });
+      return await getSignedUrl(client as any, command as any, {
+        expiresIn: 3600,
+      });
     } catch (error) {
       throw new Error(`Error generating S3 signed URL: ${error}`);
     }
@@ -713,7 +715,9 @@ class CloudExplorerService {
         Bucket: bucketName,
         Key: objectKey,
       });
-      return await getSignedUrl(client, command, { expiresIn: 3600 });
+      return await getSignedUrl(client as any, command as any, {
+        expiresIn: 3600,
+      });
     } catch (error) {
       throw new Error(`Error generating MinIO signed URL: ${error}`);
     }
@@ -898,7 +902,9 @@ class CloudExplorerService {
         Bucket: bucketName,
         Key: objectKey,
       });
-      return await getSignedUrl(client, command, { expiresIn: 3600 });
+      return await getSignedUrl(client as any, command as any, {
+        expiresIn: 3600,
+      });
     } catch (error) {
       throw new Error(`Error generating Cloudflare R2 signed URL: ${error}`);
     }
@@ -1105,7 +1111,9 @@ class CloudExplorerService {
         Bucket: bucketName,
         Key: objectKey,
       });
-      return await getSignedUrl(client, command, { expiresIn: 3600 });
+      return await getSignedUrl(client as any, command as any, {
+        expiresIn: 3600,
+      });
     } catch (error) {
       throw new Error(`Error generating Backblaze B2 signed URL: ${error}`);
     }
@@ -1292,7 +1300,9 @@ class CloudExplorerService {
         Bucket: bucketName,
         Key: objectKey,
       });
-      return await getSignedUrl(client, command, { expiresIn: 3600 });
+      return await getSignedUrl(client as any, command as any, {
+        expiresIn: 3600,
+      });
     } catch (error) {
       throw new Error(`Error generating rustfs signed URL: ${error}`);
     }
@@ -1481,7 +1491,9 @@ class CloudExplorerService {
         Bucket: bucketName,
         Key: objectKey,
       });
-      return await getSignedUrl(client, command, { expiresIn: 3600 });
+      return await getSignedUrl(client as any, command as any, {
+        expiresIn: 3600,
+      });
     } catch (error) {
       throw new Error(`Error generating Garage signed URL: ${error}`);
     }

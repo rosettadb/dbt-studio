@@ -9,7 +9,7 @@
 import fs from 'fs';
 import yaml from 'js-yaml';
 import path from 'path';
-import { ConnectionInput } from '../../types/backend';
+import { ConnectionInput, SnowflakeConnection } from '../../types/backend';
 
 /**
  * Extracts the database name from a file path (filename without extension)
@@ -59,17 +59,31 @@ function generateProfileOutputFields(
         schema: envVar('schema'),
       };
 
-    case 'snowflake':
+    case 'snowflake': {
+      const snowflakeConnection = connection as SnowflakeConnection;
+      if (snowflakeConnection.authMethod === 'web_browser') {
+        return {
+          ...baseFields,
+          account: envVar('account'),
+          user: envVar('user'),
+          ...(snowflakeConnection.role ? { role: envVar('role') } : {}),
+          database: envVar('dbname'),
+          warehouse: envVar('warehouse'),
+          schema: envVar('schema'),
+          authenticator: 'externalbrowser',
+        };
+      }
       return {
         ...baseFields,
         account: envVar('account'),
         user: envVar('user'),
         password: envVar('password'),
-        role: envVar('role'),
+        ...(snowflakeConnection.role ? { role: envVar('role') } : {}),
         database: envVar('dbname'),
         warehouse: envVar('warehouse'),
         schema: envVar('schema'),
       };
+    }
 
     case 'bigquery':
       return {
@@ -141,7 +155,7 @@ function generateJdbcUrl(
       return `jdbc:postgresql://${ev('host')}:${ev('port')}/${ev('dbname')}?currentSchema=${ev('schema')}`;
 
     case 'snowflake':
-      return `jdbc:snowflake://${ev('account')}.snowflakecomputing.com/?warehouse=${ev('warehouse')}&db=${ev('dbname')}&schema=${ev('schema')}`;
+      return `jdbc:snowflake://${ev('account')}.snowflakecomputing.com/?warehouse=${ev('warehouse')}&db=${ev('dbname')}&schema=${ev('schema')}${(connection as SnowflakeConnection).authMethod === 'web_browser' ? '&authenticator=externalbrowser' : ''}`;
 
     case 'redshift':
       return `jdbc:redshift://${ev('host')}:${ev('port')}/${ev('dbname')}?currentSchema=${ev('schema')}`;
@@ -224,6 +238,15 @@ export async function updateProfilesYml(
       ...profiles[projectName].outputs.dev, // Keep existing custom fields
       ...newFields, // Override with new connection fields
     };
+
+    if (connection.type === 'snowflake') {
+      if ((connection as SnowflakeConnection).authMethod === 'web_browser') {
+        delete profiles[projectName].outputs.dev.password;
+        profiles[projectName].outputs.dev.authenticator = 'externalbrowser';
+      } else {
+        delete profiles[projectName].outputs.dev.authenticator;
+      }
+    }
 
     // Write back to file
     const updatedContent = yaml.dump(profiles, {
@@ -318,11 +341,21 @@ export async function updateMainConf(
     const typesWithoutCredentials = ['bigquery', 'databricks', 'duckdb'];
     if (!typesWithoutCredentials.includes(connection.type)) {
       connectionEntry.userName = ev('user');
-      connectionEntry.password = ev('password');
+      if (
+        connection.type === 'snowflake' &&
+        connection.authMethod === 'web_browser'
+      ) {
+        delete connectionEntry.password;
+        connectionEntry.authenticator = 'externalbrowser';
+      } else {
+        connectionEntry.password = ev('password');
+        delete connectionEntry.authenticator;
+      }
     } else {
       // Remove userName/password if they exist but shouldn't for this type
       delete connectionEntry.userName;
       delete connectionEntry.password;
+      delete connectionEntry.authenticator;
     }
 
     // For Databricks, handle token

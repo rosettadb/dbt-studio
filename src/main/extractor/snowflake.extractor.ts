@@ -1,6 +1,6 @@
 /* eslint-disable no-restricted-syntax, no-await-in-loop, consistent-return */
 import snowflake from 'snowflake-sdk';
-import { Column, Table } from '../../types/backend';
+import { Column, SnowflakeAuthMethod, Table } from '../../types/backend';
 
 export default class SnowflakeExtractor {
   private connection: snowflake.Connection;
@@ -8,13 +8,26 @@ export default class SnowflakeExtractor {
   constructor(config: {
     account: string;
     username: string;
-    password: string;
+    password?: string;
     warehouse: string;
     database: string;
     schema: string;
     role?: string;
+    authMethod?: SnowflakeAuthMethod;
   }) {
-    this.connection = snowflake.createConnection(config);
+    const authMethod =
+      config.authMethod === 'web_browser' ? 'web_browser' : 'password';
+    this.connection = snowflake.createConnection({
+      account: config.account,
+      username: config.username,
+      ...(authMethod === 'web_browser'
+        ? { authenticator: 'EXTERNALBROWSER' as const }
+        : { password: config.password }),
+      warehouse: config.warehouse,
+      database: config.database,
+      schema: config.schema,
+      role: config.role,
+    });
   }
 
   async connect(): Promise<void> {

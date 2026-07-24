@@ -49,6 +49,7 @@ const getConnectionInput = (conn: ConnectionModel) => {
         warehouse: sf.warehouse,
         schema: sf.schema || 'PUBLIC',
         role: sf.role,
+        authMethod: sf.authMethod,
       };
     case 'bigquery':
       const bq = connection as BigQueryConnection;
