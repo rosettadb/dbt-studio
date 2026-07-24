@@ -349,13 +349,13 @@ const useDbt = (
           }
           // Only attach run_results.json for commands that actually produce it
           const commandsWithRunResults = ['run', 'test', 'seed', 'snapshot'];
-          if (commandsWithRunResults.includes(command)) {
-            await recordCommandFinished(
-              runHistoryId,
-              project.id,
-              `${project.path}/target/run_results.json`,
-            );
-          }
+          await recordCommandFinished(
+            runHistoryId,
+            project.id,
+            commandsWithRunResults.includes(command)
+              ? `${project.path}/target/run_results.json`
+              : undefined,
+          );
           successCallback?.();
         } else {
           if (options.showToast) {

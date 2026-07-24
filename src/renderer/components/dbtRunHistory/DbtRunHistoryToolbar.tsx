@@ -66,6 +66,7 @@ export const DbtRunHistoryToolbar: React.FC<Props> = ({
         <MenuItem value="error">Error</MenuItem>
         <MenuItem value="warn">Warning</MenuItem>
         <MenuItem value="running">Running</MenuItem>
+        <MenuItem value="cancelled">Cancelled</MenuItem>
       </Select>
 
       <TextField
