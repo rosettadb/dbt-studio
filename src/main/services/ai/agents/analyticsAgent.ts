@@ -284,7 +284,10 @@ ${mcpToolsList}`;
     const isUI = name in studioAnalyticsTools;
     const isAllowedProjectTool = enabledTools && enabledTools[name];
 
-    if (isEnabledInRegistry && ((isUI && enabledTools?.[name] !== false) || isAllowedProjectTool)) {
+    if (
+      isEnabledInRegistry &&
+      ((isUI && enabledTools?.[name] !== false) || isAllowedProjectTool)
+    ) {
       if (isAskMode && !READ_ONLY_TOOLS.includes(name)) {
         baseTools[name] = makeAskModeStub(name);
       } else {
