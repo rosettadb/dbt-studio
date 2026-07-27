@@ -34,7 +34,7 @@ import {
   TaskManagerSettings,
 } from '../../components';
 import { AppLayout } from '../../layouts';
-import { settingsSidebarElements } from './settingsElements';
+import { settingsSidebarCategories } from './settingsElements';
 
 const Settings: React.FC = () => {
   const { mode, setMode } = useColorScheme();
@@ -199,33 +199,62 @@ const Settings: React.FC = () => {
                 },
               }}
             >
-              {settingsSidebarElements.map((element) => (
-                <StyledSettingsNavLink key={element.text} to={element.path}>
-                  <ListItem
-                    sx={{
-                      cursor: 'pointer',
-                      borderRadius: 1,
-                      mb: 0,
-                      width: '100%',
-                      backgroundColor:
-                        location.pathname === element.path
-                          ? theme.palette.divider
-                          : 'transparent',
-                    }}
-                  >
-                    <ListItemIcon sx={{ minWidth: 32 }}>
-                      <element.icon
-                        fontSize="small"
-                        color={
-                          location.pathname === element.path
-                            ? 'primary'
-                            : 'inherit'
-                        }
-                      />
-                    </ListItemIcon>
-                    <ListItemText primary={element.text} />
-                  </ListItem>
-                </StyledSettingsNavLink>
+              {settingsSidebarCategories.map((category, categoryIndex) => (
+                <React.Fragment key={category.label || `cat-${categoryIndex}`}>
+                  {categoryIndex > 0 && (
+                    <Box
+                      sx={{
+                        borderTop: `1px solid ${theme.palette.divider}`,
+                        my: 1,
+                      }}
+                    />
+                  )}
+                  {category.label && (
+                    <Typography
+                      variant="caption"
+                      sx={{
+                        px: 1,
+                        py: 0.5,
+                        display: 'block',
+                        color: theme.palette.text.secondary,
+                        fontWeight: 600,
+                        textTransform: 'uppercase',
+                        letterSpacing: '0.05em',
+                        fontSize: '0.65rem',
+                      }}
+                    >
+                      {category.label}
+                    </Typography>
+                  )}
+                  {category.items.map((element) => (
+                    <StyledSettingsNavLink key={element.text} to={element.path}>
+                      <ListItem
+                        sx={{
+                          cursor: 'pointer',
+                          borderRadius: 1,
+                          mb: 0,
+                          width: '100%',
+                          backgroundColor:
+                            location.pathname === element.path
+                              ? theme.palette.divider
+                              : 'transparent',
+                        }}
+                      >
+                        <ListItemIcon sx={{ minWidth: 32 }}>
+                          <element.icon
+                            fontSize="small"
+                            color={
+                              location.pathname === element.path
+                                ? 'primary'
+                                : 'inherit'
+                            }
+                          />
+                        </ListItemIcon>
+                        <ListItemText primary={element.text} />
+                      </ListItem>
+                    </StyledSettingsNavLink>
+                  ))}
+                </React.Fragment>
               ))}
             </List>
           </Box>
