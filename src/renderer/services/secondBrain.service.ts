@@ -1,5 +1,6 @@
 import type {
   SecondBrainArchiveRequest,
+  SecondBrainDisableResult,
   SecondBrainManagedPage,
   SecondBrainManagerStatus,
   SecondBrainOperationResponse,
@@ -9,8 +10,6 @@ import type {
   SecondBrainSearchHit,
   SecondBrainTreeItem,
   SecondBrainWriteRequest,
-  WikiMemorySupportExportPreview,
-  WikiMemorySupportStatus,
 } from '../../types/secondBrain';
 import type {
   SecondBrainPage,
@@ -57,6 +56,12 @@ export const previewRefresh = (): Promise<SecondBrainOperationResponse> =>
 export const applyRefresh = (): Promise<SecondBrainOperationResponse> =>
   window.electron.ipcRenderer.invoke('second-brain:update-apply');
 
+export const pause = (): Promise<SecondBrainDisableResult> =>
+  window.electron.ipcRenderer.invoke('second-brain:pause');
+
+export const clearAndDisable = (): Promise<SecondBrainDisableResult> =>
+  window.electron.ipcRenderer.invoke('second-brain:clear-and-disable');
+
 export const cancel = (operationId: string): Promise<{ cancelled: boolean }> =>
   window.electron.ipcRenderer.invoke('second-brain:cancel', { operationId });
 
@@ -84,19 +89,6 @@ export const openWikiFolder = (): Promise<void> =>
 
 export const openWikiTerminal = (): Promise<void> =>
   window.electron.ipcRenderer.invoke('second-brain:open-wiki-terminal');
-
-export const getSupportStatus = (): Promise<WikiMemorySupportStatus> =>
-  window.electron.ipcRenderer.invoke('second-brain:support-status');
-
-export const clearSupportData = (): Promise<{ cleared: boolean }> =>
-  window.electron.ipcRenderer.invoke('second-brain:support-clear');
-
-export const previewSupportExport =
-  (): Promise<WikiMemorySupportExportPreview> =>
-    window.electron.ipcRenderer.invoke('second-brain:support-export-preview');
-
-export const exportSupportData = (): Promise<{ exported: boolean }> =>
-  window.electron.ipcRenderer.invoke('second-brain:support-export');
 
 export const onProgress = (
   callback: (event: SecondBrainProgressEvent) => void,

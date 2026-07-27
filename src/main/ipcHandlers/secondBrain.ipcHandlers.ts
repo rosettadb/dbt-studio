@@ -1,19 +1,19 @@
-import { dialog, ipcMain } from 'electron';
+import { ipcMain } from 'electron';
 import type { IpcMainInvokeEvent } from 'electron';
 import type {
   SecondBrainArchiveRequest,
+  SecondBrainDisableResult,
   SecondBrainProgressEvent,
   SecondBrainRestoreRequest,
   SecondBrainWriteRequest,
 } from '../../types/secondBrain';
-import { loadAISettings } from '../services/agent.service';
+import { loadAISettings, saveAISettings } from '../services/agent.service';
 import SecondBrainRefreshCoordinator from '../services/ai/secondBrain/secondBrainRefreshCoordinator.service';
 import SecondBrainService, {
   isSecondBrainGeneratedPageId,
   normalizeSecondBrainPageId,
 } from '../services/ai/secondBrain/secondBrain.service';
 import { SecondBrainError } from '../services/ai/secondBrain/secondBrain.types';
-import WikiMemorySupportService from '../services/ai/secondBrain/wikiMemorySupport.service';
 
 const channels = [
   'second-brain:status',
@@ -25,16 +25,14 @@ const channels = [
   'second-brain:init',
   'second-brain:update-preview',
   'second-brain:update-apply',
+  'second-brain:pause',
+  'second-brain:clear-and-disable',
   'second-brain:cancel',
   'second-brain:revisions',
   'second-brain:revision-read',
   'second-brain:restore',
   'second-brain:open-wiki-folder',
   'second-brain:open-wiki-terminal',
-  'second-brain:support-status',
-  'second-brain:support-clear',
-  'second-brain:support-export-preview',
-  'second-brain:support-export',
 ] as const;
 
 let registered = false;
@@ -64,9 +62,6 @@ const refreshCoordinator = new SecondBrainRefreshCoordinator({
   isEnabled: async () => (await loadAISettings()).secondBrain.enabled,
   createService,
 });
-
-const createSupportService = (): WikiMemorySupportService =>
-  new WikiMemorySupportService();
 
 const refreshOwner = (event: IpcMainInvokeEvent) => ({
   ownerId: event.sender.id,
@@ -161,6 +156,40 @@ export const registerSecondBrainHandlers = (): void => {
   );
 
   ipcMain.handle(
+    'second-brain:pause',
+    async (): Promise<SecondBrainDisableResult> => {
+      const settings = await loadAISettings();
+      await saveAISettings({
+        ...settings,
+        secondBrain: { ...settings.secondBrain, enabled: false },
+      });
+      return {
+        enabled: false,
+        initialized: settings.secondBrain.initialized,
+        cleared: false,
+      };
+    },
+  );
+
+  ipcMain.handle(
+    'second-brain:clear-and-disable',
+    async (): Promise<SecondBrainDisableResult> => {
+      refreshCoordinator.cancelActive();
+      const settings = await loadAISettings();
+      await (await createService()).clearAll();
+      await saveAISettings({
+        ...settings,
+        secondBrain: {
+          ...settings.secondBrain,
+          enabled: false,
+          initialized: false,
+        },
+      });
+      return { enabled: false, initialized: false, cleared: true };
+    },
+  );
+
+  ipcMain.handle(
     'second-brain:cancel',
     (event, input: { operationId: string }) => {
       const operationId = requireString(
@@ -216,32 +245,6 @@ export const registerSecondBrainHandlers = (): void => {
   ipcMain.handle('second-brain:open-wiki-terminal', async () =>
     (await createService()).openWikiTerminal(),
   );
-  ipcMain.handle('second-brain:support-status', async () =>
-    createSupportService().getStatus(),
-  );
-  ipcMain.handle('second-brain:support-clear', async () => {
-    await createSupportService().clear();
-    return { cleared: true };
-  });
-  ipcMain.handle('second-brain:support-export-preview', async () => {
-    const status = await createSupportService().getStatus();
-    return {
-      sourceCount: status.sources.length,
-      diagnosticEventCount: status.diagnosticEventCount,
-      diagnosticBytes: status.diagnosticBytes,
-    };
-  });
-  ipcMain.handle('second-brain:support-export', async () => {
-    const selection = await dialog.showSaveDialog({
-      title: 'Export Wiki Memory diagnostics',
-      defaultPath: 'wiki-memory-support.json',
-      filters: [{ name: 'JSON', extensions: ['json'] }],
-      properties: ['createDirectory', 'showOverwriteConfirmation'],
-    });
-    if (selection.canceled || !selection.filePath) return { exported: false };
-    await createSupportService().writeExport(selection.filePath);
-    return { exported: true };
-  });
 };
 
 export const resetSecondBrainHandlersForTests = (): void => {

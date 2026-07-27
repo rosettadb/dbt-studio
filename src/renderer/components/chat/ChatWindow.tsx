@@ -111,6 +111,9 @@ const estimateMessagesTokens = (
     return sum + tokens + 4;
   }, 0);
 
+const projectMemoryEnabledKey = (projectId: number | string) =>
+  `project-memory-enabled:${projectId}`;
+
 export const ChatWindow: React.FC<ChatWindowProps> = ({
   screenKey = 'project',
   connectionId,
@@ -165,6 +168,10 @@ export const ChatWindow: React.FC<ChatWindowProps> = ({
     screenKey === 'project' && project?.path
       ? `${project.path}/agent.md`
       : undefined;
+  const projectMemoryEnabled =
+    screenKey === 'project' && projectId !== undefined && projectId !== null
+      ? localStorage.getItem(projectMemoryEnabledKey(projectId)) !== 'false'
+      : false;
   const agentMdDismissKey = project?.path
     ? `agent-md-dismissed:${project.path}`
     : null;
@@ -184,6 +191,9 @@ export const ChatWindow: React.FC<ChatWindowProps> = ({
 
   const agentMdExists = agentMdFetched ? !agentMdMissing : null;
   const agentMdContent = agentMdRaw ? agentMdRaw.slice(0, 32 * 1024) : null; // cap at 32 KB
+  const projectAiContext = projectMemoryEnabled
+    ? (agentMdContent ?? undefined)
+    : undefined;
 
   const handleGenerateAgentMd = () => {
     const prompt =
@@ -1107,50 +1117,53 @@ export const ChatWindow: React.FC<ChatWindowProps> = ({
       <Box
         sx={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}
       >
-        {screenKey === 'project' && agentMdExists === false && !isDismissed && (
-          <Box
-            sx={{
-              mx: 2,
-              mt: 1,
-              mb: 0.5,
-              p: 1.5,
-              borderRadius: 1,
-              bgcolor: 'action.hover',
-              border: '1px solid',
-              borderColor: 'divider',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'space-between',
-              gap: 1,
-            }}
-          >
-            <Box>
-              <Typography variant="body2" fontWeight={600}>
-                No agent.md found
-              </Typography>
-              <Typography variant="caption" color="text.secondary">
-                Add project-specific instructions for the AI agent.
-              </Typography>
+        {screenKey === 'project' &&
+          projectMemoryEnabled &&
+          agentMdExists === false &&
+          !isDismissed && (
+            <Box
+              sx={{
+                mx: 2,
+                mt: 1,
+                mb: 0.5,
+                p: 1.5,
+                borderRadius: 1,
+                bgcolor: 'action.hover',
+                border: '1px solid',
+                borderColor: 'divider',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                gap: 1,
+              }}
+            >
+              <Box>
+                <Typography variant="body2" fontWeight={600}>
+                  No agent.md found
+                </Typography>
+                <Typography variant="caption" color="text.secondary">
+                  Add project-specific instructions for the AI agent.
+                </Typography>
+              </Box>
+              <Box sx={{ display: 'flex', gap: 1 }}>
+                <Button
+                  variant="text"
+                  size="small"
+                  color="inherit"
+                  onClick={handleDismissAgentMd}
+                >
+                  No thanks
+                </Button>
+                <Button
+                  variant="outlined"
+                  size="small"
+                  onClick={handleGenerateAgentMd}
+                >
+                  Generate agent.md
+                </Button>
+              </Box>
             </Box>
-            <Box sx={{ display: 'flex', gap: 1 }}>
-              <Button
-                variant="text"
-                size="small"
-                color="inherit"
-                onClick={handleDismissAgentMd}
-              >
-                No thanks
-              </Button>
-              <Button
-                variant="outlined"
-                size="small"
-                onClick={handleGenerateAgentMd}
-              >
-                Generate agent.md
-              </Button>
-            </Box>
-          </Box>
-        )}
+          )}
         {renderMessages()}
       </Box>
 
@@ -1174,7 +1187,7 @@ export const ChatWindow: React.FC<ChatWindowProps> = ({
                 connectionId,
                 notebookId,
                 pageId,
-                agentMdContent ?? undefined,
+                projectAiContext,
               )
             }
             onCancelStream={cancelStream}

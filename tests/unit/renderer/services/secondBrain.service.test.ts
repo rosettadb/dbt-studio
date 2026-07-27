@@ -69,20 +69,4 @@ describe('renderer/services/secondBrain.service', () => {
     expect(returned).toBe(unsubscribe);
   });
 
-  it('uses path-free support status, clear, preview, and export channels', async () => {
-    const invoke = (window as any).electron.ipcRenderer.invoke as jest.Mock;
-    invoke.mockResolvedValue({});
-
-    await secondBrainService.getSupportStatus();
-    await secondBrainService.clearSupportData();
-    await secondBrainService.previewSupportExport();
-    await secondBrainService.exportSupportData();
-
-    expect(invoke.mock.calls).toEqual([
-      ['second-brain:support-status'],
-      ['second-brain:support-clear'],
-      ['second-brain:support-export-preview'],
-      ['second-brain:support-export'],
-    ]);
-  });
 });

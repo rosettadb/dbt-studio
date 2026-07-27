@@ -329,6 +329,12 @@ export default class SecondBrainService {
     await this.openTerminal(this.wikiRoot());
   }
 
+  public async clearAll(): Promise<void> {
+    if (!(await fs.pathExists(this.rootPath))) return;
+    await this.ensureSafeRoot();
+    await fs.remove(this.rootPath);
+  }
+
   public async initializeRoot(): Promise<SecondBrainStatus> {
     await this.ensureSafeRoot();
     await this.detectLayout();

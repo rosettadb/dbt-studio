@@ -18,7 +18,6 @@ export const SECOND_BRAIN_KEYS = {
   revisions: (pageId: string) => ['second-brain', 'revisions', pageId] as const,
   revision: (pageId: string, revisionId: string) =>
     ['second-brain', 'revision', pageId, revisionId] as const,
-  support: ['second-brain', 'support'] as const,
 };
 
 export const useSecondBrainStatus = () =>
@@ -103,6 +102,28 @@ export const useApplySecondBrainRefresh = () => {
   });
 };
 
+export const usePauseSecondBrain = () => {
+  const invalidate = useInvalidateSecondBrain();
+  const queryClient = useQueryClient();
+  return useMutation(secondBrainService.pause, {
+    onSuccess: async () => {
+      await invalidate();
+      await queryClient.invalidateQueries(['ai-settings']);
+    },
+  });
+};
+
+export const useClearAndDisableSecondBrain = () => {
+  const invalidate = useInvalidateSecondBrain();
+  const queryClient = useQueryClient();
+  return useMutation(secondBrainService.clearAndDisable, {
+    onSuccess: async () => {
+      await invalidate();
+      await queryClient.invalidateQueries(['ai-settings']);
+    },
+  });
+};
+
 export const useCancelSecondBrainRefresh = () =>
   useMutation((operationId: string) => secondBrainService.cancel(operationId));
 
@@ -112,22 +133,6 @@ export const useSecondBrainProgress = () => {
   React.useEffect(() => secondBrainService.onProgress(setProgress), []);
   return progress;
 };
-
-export const useWikiMemorySupportStatus = (enabled = true) =>
-  useQuery(SECOND_BRAIN_KEYS.support, secondBrainService.getSupportStatus, {
-    enabled,
-  });
-
-export const useClearWikiMemorySupportData = () => {
-  const queryClient = useQueryClient();
-  return useMutation(secondBrainService.clearSupportData, {
-    onSuccess: () => queryClient.invalidateQueries(SECOND_BRAIN_KEYS.support),
-  });
-};
-
-export const previewWikiMemorySupportExport =
-  secondBrainService.previewSupportExport;
-export const exportWikiMemorySupportData = secondBrainService.exportSupportData;
 
 export const openSecondBrainWikiFolder = secondBrainService.openWikiFolder;
 export const openSecondBrainWikiTerminal = secondBrainService.openWikiTerminal;

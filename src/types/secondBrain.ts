@@ -105,46 +105,15 @@ export type SecondBrainOperationResponse = {
   result: SecondBrainRefreshResult;
 };
 
+export type SecondBrainDisableResult = {
+  enabled: false;
+  initialized: boolean;
+  cleared: boolean;
+};
+
 export type SecondBrainRevisionContent = {
   revisionId: string;
   pageId: string;
   content: string;
   frontmatter: SecondBrainFrontmatter;
-};
-
-export type WikiMemorySourceHealth = {
-  sourceKind:
-    | 'sessions'
-    | 'analytics'
-    | 'projects'
-    | 'application'
-    | 'notebooks'
-    | 'git'
-    | 'wiki';
-  lastAttemptedAt: string;
-  lastSuccessfulAt?: string;
-  itemCount: number;
-  characterCount: number;
-  aggregateHash: string;
-  changed: boolean;
-  truncated: boolean;
-  result: 'unchanged' | 'completed' | 'partial' | 'failed' | 'cancelled';
-  safeErrorCode?: string;
-  derivedPageIds: string[];
-  operationsApplied: number;
-};
-
-export type WikiMemorySupportStatus = {
-  sources: WikiMemorySourceHealth[];
-  diagnosticEventCount: number;
-  diagnosticBytes: number;
-  retentionDays: number;
-  maxLogFiles: number;
-  maxLogBytes: number;
-};
-
-export type WikiMemorySupportExportPreview = {
-  sourceCount: number;
-  diagnosticEventCount: number;
-  diagnosticBytes: number;
 };

@@ -158,65 +158,7 @@ describe('SecondBrainRefreshService', () => {
     ).rejects.toMatchObject({ code: 'NOT_FOUND' });
   });
 
-  it('records aggregate source support data without making it authoritative', async () => {
-    const supportData = {
-      recordSource: jest.fn(async () => undefined),
-      appendDiagnostic: jest.fn(async () => undefined),
-    };
-    const refresh = new SecondBrainRefreshService(secondBrain, {
-      ...emptyAdditionalSources,
-      supportData: supportData as any,
-      generateOperations: jest.fn(async () => [durableOperation]),
-      collectSessions: jest.fn(async () => [sessionRow]) as any,
-      collectAnalytics: jest.fn(async () => []) as any,
-      loadProjects: jest.fn(async () => []),
-    });
-
-    await refresh.refresh({ operationId: 'operation-1' });
-
-    expect(supportData.recordSource).toHaveBeenCalledWith(
-      expect.objectContaining({
-        sourceKind: 'sessions',
-        itemCount: 1,
-        aggregateHash: expect.stringMatching(/^[a-f0-9]{64}$/u),
-      }),
-    );
-    expect(JSON.stringify(supportData.recordSource.mock.calls)).not.toContain(
-      sessionRow.content,
-    );
-    expect(supportData.appendDiagnostic).toHaveBeenCalledWith(
-      expect.objectContaining({
-        operationId: 'operation-1',
-        event: 'refresh-completed',
-      }),
-    );
-  });
-
-  it('does not fail refresh when support persistence fails', async () => {
-    const supportData = {
-      recordSource: jest.fn(async () => {
-        throw new Error('Support disk unavailable');
-      }),
-      appendDiagnostic: jest.fn(async () => {
-        throw new Error('Support disk unavailable');
-      }),
-    };
-    const refresh = new SecondBrainRefreshService(secondBrain, {
-      ...emptyAdditionalSources,
-      supportData: supportData as any,
-      generateOperations: jest.fn(async () => [durableOperation]),
-      collectSessions: jest.fn(async () => [sessionRow]) as any,
-      collectAnalytics: jest.fn(async () => []) as any,
-      loadProjects: jest.fn(async () => []),
-    });
-
-    await expect(refresh.refresh({})).resolves.toMatchObject({
-      status: 'completed',
-      operationsApplied: 1,
-    });
-  });
-
-  it('rejects generated pages containing credentials while advancing safe cursors', async () => {
+  it('rejects generated pages containing credentials without advancing source cursors', async () => {
     const unsafeOperation = {
       ...durableOperation,
       content: durableOperation.content.replace(
@@ -237,10 +179,38 @@ describe('SecondBrainRefreshService', () => {
     expect(result.operationsApplied).toBe(0);
     expect(
       (await secondBrain.readStateFile())?.sourceCursors.sessions,
-    ).toBeDefined();
+    ).toBeUndefined();
     await expect(
       secondBrain.readPage(durableOperation.pageId),
     ).rejects.toMatchObject({ code: 'NOT_FOUND' });
+  });
+
+  it('accepts OKF documents with type frontmatter and no title', async () => {
+    const operationWithoutTitle = {
+      ...durableOperation,
+      content: durableOperation.content.replace('title: Revenue validation\n', ''),
+    };
+    const refresh = new SecondBrainRefreshService(secondBrain, {
+      ...emptyAdditionalSources,
+      generateOperations: jest.fn(async () => [operationWithoutTitle]),
+      collectSessions: jest.fn(async () => [sessionRow]) as any,
+      collectAnalytics: jest.fn(async () => []) as any,
+      loadProjects: jest.fn(async () => []),
+    });
+
+    const result = await refresh.refresh({});
+
+    expect(result).toMatchObject({
+      status: 'completed',
+      operationsApplied: 1,
+      operationsSkipped: 0,
+    });
+    await expect(
+      secondBrain.readPage(durableOperation.pageId),
+    ).resolves.toBeDefined();
+    expect(
+      (await secondBrain.readStateFile())?.sourceCursors.sessions,
+    ).toBeDefined();
   });
 
   it('skips malformed model page IDs without aborting initialization', async () => {

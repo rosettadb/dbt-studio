@@ -5,7 +5,6 @@ import SecondBrainRefreshService, {
 } from './secondBrainRefresh.service';
 import type SecondBrainService from './secondBrain.service';
 import { SecondBrainError } from './secondBrain.types';
-import WikiMemorySupportService from './wikiMemorySupport.service';
 
 export type SecondBrainRefreshOwner = {
   ownerId: number;
@@ -18,7 +17,6 @@ type SecondBrainRefreshCoordinatorDependencies = {
   isEnabled: () => Promise<boolean>;
   createService: () => Promise<SecondBrainService>;
   createOperationId?: () => string;
-  createSupportData?: () => WikiMemorySupportService;
 };
 
 export default class SecondBrainRefreshCoordinator {
@@ -65,14 +63,7 @@ export default class SecondBrainRefreshCoordinator {
     const removeDestroyedListener = owner.onDestroyed(() => controller.abort());
     try {
       const service = await this.dependencies.createService();
-      const supportData =
-        this.dependencies.createSupportData?.() ??
-        new WikiMemorySupportService({
-          canPersist: async () =>
-            (await this.dependencies.isEnabled()) &&
-            (await service.getStatus()).initialized,
-        });
-      const refresh = new SecondBrainRefreshService(service, { supportData });
+      const refresh = new SecondBrainRefreshService(service);
       const result = await refresh.refresh({
         ...options,
         operationId,
@@ -130,6 +121,12 @@ export default class SecondBrainRefreshCoordinator {
         'Active Wiki Memory operation not found.',
       );
     }
+    this.activeOperation.controller.abort();
+    return { cancelled: true };
+  }
+
+  public cancelActive(): { cancelled: boolean } {
+    if (!this.activeOperation) return { cancelled: false };
     this.activeOperation.controller.abort();
     return { cancelled: true };
   }

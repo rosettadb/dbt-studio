@@ -21,11 +21,6 @@ import SecondBrainService, {
   parseSecondBrainDocument,
 } from './secondBrain.service';
 import { SecondBrainError, SecondBrainState } from './secondBrain.types';
-import WikiMemorySupportService, {
-  type WikiMemoryDiagnosticEvent,
-  type WikiMemorySourceKind,
-  type WikiMemorySourceResult,
-} from './wikiMemorySupport.service';
 
 const SOURCE_ITEM_LIMIT = 100;
 const SOURCE_ITEM_CHAR_LIMIT = 8_000;
@@ -197,7 +192,6 @@ type SecondBrainRefreshDependencies = {
   loadConnections?: typeof ConnectorsService.loadConnections;
   listNotebooks?: typeof NotebooksService.listNotebooks;
   collectGitStatus?: (projectPath: string) => Promise<Record<string, unknown>>;
-  supportData?: WikiMemorySupportService;
 };
 
 const operationZodSchema: z.ZodType<SecondBrainRefreshProposal> = z.object({
@@ -317,16 +311,11 @@ export default class SecondBrainRefreshService {
     projectPath: string,
   ) => Promise<Record<string, unknown>>;
 
-  private readonly supportData?: WikiMemorySupportService;
-
-  private collectedSupportBatches: SecondBrainSourceBatch[] = [];
-
   constructor(
     secondBrain: SecondBrainService,
     dependencies: SecondBrainRefreshDependencies = {},
   ) {
     this.secondBrain = secondBrain;
-    this.supportData = dependencies.supportData;
     this.getModel = dependencies.getModel ?? getVercelModel;
     this.customGenerateOperations = dependencies.generateOperations;
     this.loadProjects =
@@ -367,16 +356,10 @@ export default class SecondBrainRefreshService {
     options: SecondBrainRefreshOptions,
   ): Promise<SecondBrainRefreshResult> {
     const startedAt = Date.now();
-    this.collectedSupportBatches = [];
     logRefresh('started', {
       operationId: options.operationId ?? null,
       initialize: Boolean(options.initialize),
       dryRun: Boolean(options.dryRun),
-    });
-    await this.recordDiagnostic({
-      operationId: options.operationId,
-      event: 'refresh-started',
-      stage: 'preparing',
     });
     try {
       return await this.executeRefresh(options, startedAt);
@@ -392,29 +375,10 @@ export default class SecondBrainRefreshService {
       };
       if (cancelled) warnRefresh('cancelled', details);
       else console.error(REFRESH_LOG_PREFIX, 'failed', details);
-      await this.recordInterruptedSources(
-        cancelled ? 'cancelled' : 'failed',
-        error instanceof SecondBrainError ? error.code : 'REFRESH_FAILED',
-      );
-      await this.recordDiagnostic({
-        operationId: options.operationId,
-        event: cancelled ? 'refresh-cancelled' : 'refresh-failed',
-        stage: cancelled ? 'cancelled' : 'failed',
-        durationMs: Date.now() - startedAt,
-        cancelled,
-        errorCode:
-          error instanceof SecondBrainError ? error.code : 'REFRESH_FAILED',
-      });
       throw error;
     } finally {
       logRefresh('cleaned-up', {
         operationId: options.operationId ?? null,
-        durationMs: Date.now() - startedAt,
-      });
-      this.collectedSupportBatches = [];
-      await this.recordDiagnostic({
-        operationId: options.operationId,
-        event: 'refresh-cleaned-up',
         durationMs: Date.now() - startedAt,
       });
     }
@@ -470,7 +434,6 @@ export default class SecondBrainRefreshService {
       abortSignal,
       onProgress,
     );
-    this.collectedSupportBatches = batches;
     const changedBatches = batches.filter(
       (batch) => state.sourceHashes[batch.sourceId] !== batch.hash,
     );
@@ -521,12 +484,6 @@ export default class SecondBrainRefreshService {
         changedPageIds: [],
         truncated,
       };
-      await this.recordSupportOutcome(
-        batches,
-        changedBatches,
-        result,
-        options.operationId,
-      );
       return result;
     }
 
@@ -579,6 +536,31 @@ export default class SecondBrainRefreshService {
       })),
     });
 
+    if (operations.length > 0 && validated.length === 0) {
+      logRefresh('state-commit-skipped', {
+        reason: 'all-operations-rejected',
+        changedSources: changedBatches.map((batch) => batch.sourceId),
+      });
+      emit(
+        'completed',
+        'Wiki Memory refresh completed without valid memory operations.',
+      );
+      const result: SecondBrainRefreshResult = {
+        status: 'completed',
+        dryRun: Boolean(options.dryRun),
+        modelCalled: true,
+        itemsCollected,
+        operationsProposed: operations.length,
+        operationsSkipped: operations.length,
+        operationsApplied: 0,
+        operationsFailed: 0,
+        failures: [],
+        changedPageIds: [],
+        truncated,
+      };
+      return result;
+    }
+
     if (options.dryRun) {
       logRefresh('dry-run-completed', {
         durationMs: Date.now() - startedAt,
@@ -598,12 +580,6 @@ export default class SecondBrainRefreshService {
         changedPageIds: validated.map((operation) => operation.pageId),
         truncated,
       };
-      await this.recordSupportOutcome(
-        batches,
-        changedBatches,
-        result,
-        options.operationId,
-      );
       return result;
     }
 
@@ -703,165 +679,7 @@ export default class SecondBrainRefreshService {
       changedPageIds,
       truncated,
     };
-    await this.recordSupportOutcome(
-      batches,
-      changedBatches,
-      result,
-      options.operationId,
-      failedSourceIds,
-    );
     return result;
-  }
-
-  private async recordSupportOutcome(
-    batches: SecondBrainSourceBatch[],
-    changedBatches: SecondBrainSourceBatch[],
-    result: SecondBrainRefreshResult,
-    operationId?: string,
-    failedSourceIds: Set<string> = new Set(),
-  ): Promise<void> {
-    if (!this.supportData) return;
-    const attemptedAt = new Date().toISOString();
-    const changedSourceIds = new Set(
-      changedBatches.map((batch) => batch.sourceId),
-    );
-    await Promise.all(
-      batches.map(async (batch) => {
-        const sourceKind = this.toSupportSourceKind(batch.sourceId);
-        if (!sourceKind) return;
-        let sourceResult: WikiMemorySourceResult = changedSourceIds.has(
-          batch.sourceId,
-        )
-          ? 'completed'
-          : 'unchanged';
-        if (failedSourceIds.has(batch.sourceId)) sourceResult = 'partial';
-        if (result.status === 'cancelled') sourceResult = 'cancelled';
-        const successful =
-          !result.dryRun &&
-          sourceResult !== 'partial' &&
-          sourceResult !== 'cancelled';
-        await this.bestEffortSupportWrite(() =>
-          this.supportData!.recordSource({
-            sourceKind,
-            lastAttemptedAt: attemptedAt,
-            ...(successful ? { lastSuccessfulAt: attemptedAt } : {}),
-            itemCount: batch.items.length,
-            characterCount: batch.items.reduce(
-              (total, item) => total + stableJson(item.projection).length,
-              0,
-            ),
-            aggregateHash: batch.hash,
-            changed: changedSourceIds.has(batch.sourceId),
-            truncated: batch.truncated,
-            result: sourceResult,
-            derivedPageIds: result.changedPageIds,
-            operationsApplied: result.operationsApplied,
-          }),
-        );
-      }),
-    );
-    await this.bestEffortSupportWrite(async () => {
-      const pages = (await this.secondBrain.listPages()).filter(
-        (page) => !isSecondBrainGeneratedPageId(page.pageId),
-      );
-      await this.supportData!.recordSource({
-        sourceKind: 'wiki',
-        lastAttemptedAt: attemptedAt,
-        ...(!result.dryRun ? { lastSuccessfulAt: attemptedAt } : {}),
-        itemCount: pages.length,
-        characterCount: 0,
-        aggregateHash: hashValue(
-          pages.map((page) => ({ pageId: page.pageId, hash: page.hash })),
-        ),
-        changed: result.changedPageIds.length > 0,
-        truncated: pages.length > 500,
-        result: result.status === 'partial' ? 'partial' : 'completed',
-        derivedPageIds: result.changedPageIds,
-        operationsApplied: result.operationsApplied,
-      });
-    });
-    await this.recordDiagnostic({
-      operationId,
-      event: 'refresh-completed',
-      stage: result.status === 'cancelled' ? 'cancelled' : 'completed',
-      itemsCollected: result.itemsCollected,
-      operationsProposed: result.operationsProposed,
-      operationsApplied: result.operationsApplied,
-      operationsSkipped: result.operationsSkipped,
-      operationsFailed: result.operationsFailed,
-      truncated: result.truncated,
-      cancelled: result.status === 'cancelled',
-    });
-  }
-
-  private async recordInterruptedSources(
-    result: 'failed' | 'cancelled',
-    errorCode: string,
-  ): Promise<void> {
-    if (!this.supportData || this.collectedSupportBatches.length === 0) return;
-    const attemptedAt = new Date().toISOString();
-    await Promise.all(
-      this.collectedSupportBatches.map(async (batch) => {
-        const sourceKind = this.toSupportSourceKind(batch.sourceId);
-        if (!sourceKind) return;
-        await this.bestEffortSupportWrite(() =>
-          this.supportData!.recordSource({
-            sourceKind,
-            lastAttemptedAt: attemptedAt,
-            itemCount: batch.items.length,
-            characterCount: batch.items.reduce(
-              (total, item) => total + stableJson(item.projection).length,
-              0,
-            ),
-            aggregateHash: batch.hash,
-            changed: true,
-            truncated: batch.truncated,
-            result,
-            safeErrorCode: errorCode,
-            derivedPageIds: [],
-            operationsApplied: 0,
-          }),
-        );
-      }),
-    );
-  }
-
-  private toSupportSourceKind(
-    sourceId: string,
-  ): WikiMemorySourceKind | undefined {
-    if (
-      sourceId === 'sessions' ||
-      sourceId === 'analytics' ||
-      sourceId === 'projects' ||
-      sourceId === 'application' ||
-      sourceId === 'notebooks' ||
-      sourceId === 'git' ||
-      sourceId === 'wiki'
-    ) {
-      return sourceId;
-    }
-    return undefined;
-  }
-
-  private async recordDiagnostic(
-    event: WikiMemoryDiagnosticEvent,
-  ): Promise<void> {
-    if (!this.supportData) return;
-    await this.bestEffortSupportWrite(() =>
-      this.supportData!.appendDiagnostic(event),
-    );
-  }
-
-  private async bestEffortSupportWrite(
-    operation: () => Promise<void>,
-  ): Promise<void> {
-    try {
-      await operation();
-    } catch (error) {
-      warnRefresh('support-data-write-skipped', {
-        code: error instanceof Error ? error.name : 'UNKNOWN',
-      });
-    }
   }
 
   private async collectSourceBatches(
@@ -1483,7 +1301,6 @@ export default class SecondBrainRefreshService {
       const parsed = parseSecondBrainDocument(operation.content);
       if (
         !operation.content.startsWith('---\n') ||
-        typeof parsed.frontmatter.title !== 'string' ||
         typeof parsed.frontmatter.type !== 'string' ||
         !parsed.frontmatter.type.trim()
       ) {

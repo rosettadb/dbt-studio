@@ -56,7 +56,7 @@ export async function createProjectAgent(
   const agentMdBlock = options.projectAiContext
     ? `\n<project_ai_context source="agent.md">\n${options.projectAiContext}\n</project_ai_context>\n` +
       `\n> Note: You can update the \`agent.md\` file using your \`writeFile\` tool if the user asks you to modify these instructions.\n` +
-      `> **CRITICAL PRECEDENCE RULE:** The rules and instructions in \`agent.md\` are STRONGER than the rules in your long term memory (\`memory.md\`). If there is a conflict, always follow \`agent.md\`.\n`
+      `> **CRITICAL PRECEDENCE RULE:** Project-scoped \`agent.md\` context is STRONGER than long term Agent Memory (\`memory.md\`). If there is a conflict, follow \`agent.md\`.\n`
     : '';
 
   const isAskMode = options.toolMode === 'chat';

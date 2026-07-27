@@ -55,19 +55,6 @@ describe('secondBrain.ipcHandlers', () => {
       });
       return refreshResult;
     });
-    const support = {
-      getStatus: jest.fn(async () => ({
-        sources: [],
-        diagnosticEventCount: 2,
-        diagnosticBytes: 120,
-        retentionDays: 14,
-        maxLogFiles: 5,
-        maxLogBytes: 1048576,
-      })),
-      clear: jest.fn(async () => undefined),
-      writeExport: jest.fn(async () => undefined),
-    };
-
     jest.doMock('../../../../src/main/services/agent.service', () => ({
       loadAISettings: jest.fn(async () => ({
         secondBrain: {
@@ -92,13 +79,6 @@ describe('secondBrain.ipcHandlers', () => {
         },
         isSecondBrainGeneratedPageId: (pageId: string) =>
           pageId.endsWith('index.md') || pageId.endsWith('log.md'),
-      }),
-    );
-    jest.doMock(
-      '../../../../src/main/services/ai/secondBrain/wikiMemorySupport.service',
-      () => ({
-        __esModule: true,
-        default: jest.fn(() => support),
       }),
     );
     jest.doMock(
@@ -156,7 +136,7 @@ describe('secondBrain.ipcHandlers', () => {
       '../../../../src/main/ipcHandlers/secondBrain.ipcHandlers'
     );
     module.registerSecondBrainHandlers();
-    return { electron, module, service, refresh, support };
+    return { electron, module, service, refresh };
   };
 
   it('registers the frozen channel surface only once', async () => {
@@ -166,7 +146,7 @@ describe('secondBrain.ipcHandlers', () => {
 
     module.registerSecondBrainHandlers();
 
-    expect(registrationCount).toBe(19);
+    expect(registrationCount).toBe(17);
     expect(electron.ipcMain.handle).toHaveBeenCalledTimes(registrationCount);
     expect(electron.ipcMain.handle).toHaveBeenCalledWith(
       'second-brain:status',
@@ -280,48 +260,4 @@ describe('secondBrain.ipcHandlers', () => {
     expect(refresh).not.toHaveBeenCalled();
   });
 
-  it('exposes support status and clears support data without renderer paths', async () => {
-    const { electron, support } = await setup();
-    const statusHandler = getHandler(
-      electron.ipcMain,
-      'second-brain:support-status',
-    );
-    const clearHandler = getHandler(
-      electron.ipcMain,
-      'second-brain:support-clear',
-    );
-
-    await expect(statusHandler({})).resolves.toMatchObject({
-      diagnosticEventCount: 2,
-    });
-    await expect(clearHandler({})).resolves.toEqual({ cleared: true });
-    expect(support.clear).toHaveBeenCalledWith();
-  });
-
-  it('previews and exports only after a main-process save selection', async () => {
-    const { electron, support } = await setup();
-    const showSaveDialog = electron.dialog.showSaveDialog as jest.Mock;
-    showSaveDialog.mockResolvedValue({
-      canceled: false,
-      filePath: '/chosen/wiki-memory-support.json',
-    });
-    const previewHandler = getHandler(
-      electron.ipcMain,
-      'second-brain:support-export-preview',
-    );
-    const exportHandler = getHandler(
-      electron.ipcMain,
-      'second-brain:support-export',
-    );
-
-    await expect(previewHandler({})).resolves.toEqual({
-      sourceCount: 0,
-      diagnosticEventCount: 2,
-      diagnosticBytes: 120,
-    });
-    await expect(exportHandler({})).resolves.toEqual({ exported: true });
-    expect(support.writeExport).toHaveBeenCalledWith(
-      '/chosen/wiki-memory-support.json',
-    );
-  });
 });
