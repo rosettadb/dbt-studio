@@ -158,6 +158,7 @@ export const registerSecondBrainHandlers = (): void => {
   ipcMain.handle(
     'second-brain:pause',
     async (): Promise<SecondBrainDisableResult> => {
+      await refreshCoordinator.cancelActiveAndWait();
       const settings = await loadAISettings();
       await saveAISettings({
         ...settings,
@@ -174,7 +175,7 @@ export const registerSecondBrainHandlers = (): void => {
   ipcMain.handle(
     'second-brain:clear-and-disable',
     async (): Promise<SecondBrainDisableResult> => {
-      refreshCoordinator.cancelActive();
+      await refreshCoordinator.cancelActiveAndWait();
       const settings = await loadAISettings();
       await (await createService()).clearAll();
       await saveAISettings({

@@ -35,6 +35,7 @@ describe('secondBrain.ipcHandlers', () => {
       readRevision: jest.fn(),
       restoreArchivedPage: jest.fn(),
       restoreRevision: jest.fn(),
+      clearAll: jest.fn(),
     };
     const refreshResult = {
       status: 'no-change' as const,
@@ -55,14 +56,17 @@ describe('secondBrain.ipcHandlers', () => {
       });
       return refreshResult;
     });
+    const cancelActiveAndWait = jest.fn(async () => ({ cancelled: false }));
     jest.doMock('../../../../src/main/services/agent.service', () => ({
       loadAISettings: jest.fn(async () => ({
         secondBrain: {
           enabled,
+          initialized: true,
           maxPageBytes: 65536,
           maxTotalBytes: 10485760,
         },
       })),
+      saveAISettings: jest.fn(async () => undefined),
     }));
     jest.doMock(
       '../../../../src/main/services/ai/secondBrain/secondBrain.service',
@@ -126,6 +130,10 @@ describe('secondBrain.ipcHandlers', () => {
             return { cancelled: true };
           }
 
+          async cancelActiveAndWait() {
+            return cancelActiveAndWait();
+          }
+
           reset() {}
         },
       }),
@@ -136,7 +144,13 @@ describe('secondBrain.ipcHandlers', () => {
       '../../../../src/main/ipcHandlers/secondBrain.ipcHandlers'
     );
     module.registerSecondBrainHandlers();
-    return { electron, module, service, refresh };
+    return {
+      electron,
+      module,
+      service,
+      refresh,
+      cancelActiveAndWait,
+    };
   };
 
   it('registers the frozen channel surface only once', async () => {
@@ -260,4 +274,22 @@ describe('secondBrain.ipcHandlers', () => {
     expect(refresh).not.toHaveBeenCalled();
   });
 
+  it('drains active refresh work before pausing or clearing memory', async () => {
+    const { electron, service, cancelActiveAndWait } = await setup();
+    const pause = getHandler(electron.ipcMain, 'second-brain:pause');
+    const clear = getHandler(
+      electron.ipcMain,
+      'second-brain:clear-and-disable',
+    );
+
+    await pause({});
+    expect(cancelActiveAndWait).toHaveBeenCalledTimes(1);
+
+    await clear({});
+    expect(cancelActiveAndWait).toHaveBeenCalledTimes(2);
+    expect(service.clearAll).toHaveBeenCalledTimes(1);
+    expect(cancelActiveAndWait.mock.invocationCallOrder[1]).toBeLessThan(
+      service.clearAll.mock.invocationCallOrder[0],
+    );
+  });
 });

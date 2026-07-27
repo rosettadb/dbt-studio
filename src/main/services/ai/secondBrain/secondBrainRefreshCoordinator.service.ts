@@ -26,6 +26,7 @@ export default class SecondBrainRefreshCoordinator {
     operationId: string;
     ownerId: number;
     controller: AbortController;
+    completion: Promise<void>;
   } | null = null;
 
   constructor(dependencies: SecondBrainRefreshCoordinatorDependencies) {
@@ -59,7 +60,16 @@ export default class SecondBrainRefreshCoordinator {
 
     const operationId = this.dependencies.createOperationId?.() ?? randomUUID();
     const controller = new AbortController();
-    this.activeOperation = { operationId, ownerId: owner.ownerId, controller };
+    let resolveCompletion: () => void = () => {};
+    const completion = new Promise<void>((resolve) => {
+      resolveCompletion = resolve;
+    });
+    this.activeOperation = {
+      operationId,
+      ownerId: owner.ownerId,
+      controller,
+      completion,
+    };
     const removeDestroyedListener = owner.onDestroyed(() => controller.abort());
     try {
       const service = await this.dependencies.createService();
@@ -107,6 +117,7 @@ export default class SecondBrainRefreshCoordinator {
       if (this.activeOperation?.operationId === operationId) {
         this.activeOperation = null;
       }
+      resolveCompletion();
     }
   }
 
@@ -128,6 +139,15 @@ export default class SecondBrainRefreshCoordinator {
   public cancelActive(): { cancelled: boolean } {
     if (!this.activeOperation) return { cancelled: false };
     this.activeOperation.controller.abort();
+    return { cancelled: true };
+  }
+
+  public async cancelActiveAndWait(): Promise<{ cancelled: boolean }> {
+    const { activeOperation } = this;
+    if (!activeOperation) return { cancelled: false };
+    const { controller, completion } = activeOperation;
+    controller.abort();
+    await completion;
     return { cancelled: true };
   }
 

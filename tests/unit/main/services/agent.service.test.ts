@@ -178,7 +178,23 @@ describe('AgentService (Phase 1)', () => {
         'wiki_update',
         {
           pageId: 'memory.md',
-          operation: { type: 'append-section', content: 'new private fact' },
+          rationale: 'private rationale',
+          sourceRefs: ['private source reference'],
+          operation: {
+            type: 'create',
+            heading: 'private heading',
+            searchQuery: 'private search query',
+            content: 'new private fact',
+          },
+        },
+        { ok: true },
+      );
+      const archive = sanitizeWikiToolCallForPersistence(
+        'wiki_archive',
+        {
+          pageId: 'topics/private.md',
+          expectedHash: 'a'.repeat(64),
+          rationale: 'private archive rationale',
         },
         { ok: true },
       );
@@ -189,9 +205,31 @@ describe('AgentService (Phase 1)', () => {
       });
       expect(JSON.stringify(read.output)).not.toContain('private durable');
       expect(update.input).toMatchObject({
-        operation: { contentOmitted: true, contentChars: 16 },
+        operation: {
+          contentOmitted: true,
+          contentChars: 16,
+          headingOmitted: true,
+          searchQueryOmitted: true,
+        },
+        sourceRefsCount: 1,
+        sourceRefsOmitted: true,
+        rationaleOmitted: true,
       });
       expect(JSON.stringify(update.input)).not.toContain('new private fact');
+      expect(JSON.stringify(update.input)).not.toContain('private heading');
+      expect(JSON.stringify(update.input)).not.toContain(
+        'private search query',
+      );
+      expect(JSON.stringify(update.input)).not.toContain('private source');
+      expect(JSON.stringify(update.input)).not.toContain('private rationale');
+      expect(archive.input).toMatchObject({
+        pageId: 'topics/private.md',
+        rationaleChars: 25,
+        rationaleOmitted: true,
+      });
+      expect(JSON.stringify(archive.input)).not.toContain(
+        'private archive rationale',
+      );
     });
   });
 

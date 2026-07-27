@@ -340,8 +340,16 @@ export const sanitizeWikiToolCallForPersistence = (
       operation: operation
         ? {
             type: operation.type,
-            heading: operation.heading,
-            searchQuery: operation.searchQuery,
+            headingChars:
+              typeof operation.heading === 'string'
+                ? operation.heading.length
+                : 0,
+            headingOmitted: typeof operation.heading === 'string',
+            searchQueryChars:
+              typeof operation.searchQuery === 'string'
+                ? operation.searchQuery.length
+                : 0,
+            searchQueryOmitted: typeof operation.searchQuery === 'string',
             contentChars:
               typeof operation.content === 'string'
                 ? operation.content.length
@@ -349,7 +357,33 @@ export const sanitizeWikiToolCallForPersistence = (
             contentOmitted: true,
           }
         : undefined,
+      sourceRefsCount: Array.isArray(typedInput.sourceRefs)
+        ? typedInput.sourceRefs.length
+        : 0,
+      sourceRefsOmitted: Array.isArray(typedInput.sourceRefs),
+      rationaleChars:
+        typeof typedInput.rationale === 'string'
+          ? typedInput.rationale.length
+          : 0,
+      rationaleOmitted: typeof typedInput.rationale === 'string',
     };
+    delete (persistedInput as Record<string, any>).sourceRefs;
+    delete (persistedInput as Record<string, any>).rationale;
+  } else if (
+    toolName === 'wiki_archive' &&
+    input &&
+    typeof input === 'object'
+  ) {
+    const typedInput = input as Record<string, any>;
+    persistedInput = {
+      ...typedInput,
+      rationaleChars:
+        typeof typedInput.rationale === 'string'
+          ? typedInput.rationale.length
+          : 0,
+      rationaleOmitted: typeof typedInput.rationale === 'string',
+    };
+    delete (persistedInput as Record<string, any>).rationale;
   }
 
   let persistedOutput = output;

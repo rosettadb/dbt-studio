@@ -57,13 +57,7 @@ export const MemoryConsentDialog: React.FC = () => {
 
   const handleChoice = async (enabled: boolean) => {
     const settings = settingsQuery.data;
-    if (!settings) {
-      if (!enabled) {
-        storeMemoryConsentDecision(false);
-        setOpen(false);
-      }
-      return;
-    }
+    if (!settings) return;
 
     setSelectedChoice(enabled);
     try {
@@ -199,9 +193,22 @@ export const MemoryConsentDialog: React.FC = () => {
         </Stack>
 
         {settingsQuery.isError && (
-          <Alert severity="warning" sx={{ mt: 2 }}>
-            AI Settings could not be loaded. Keep memory off for now, then
-            enable it later from AI Settings.
+          <Alert
+            severity="warning"
+            sx={{ mt: 2 }}
+            action={
+              <Button
+                color="inherit"
+                size="small"
+                onClick={() => settingsQuery.refetch()}
+                disabled={settingsQuery.isFetching}
+              >
+                Retry
+              </Button>
+            }
+          >
+            AI Settings could not be loaded. Retry before choosing a memory
+            preference.
           </Alert>
         )}
       </DialogContent>
@@ -211,7 +218,7 @@ export const MemoryConsentDialog: React.FC = () => {
           variant="text"
           color="inherit"
           onClick={() => handleChoice(false)}
-          disabled={busy}
+          disabled={busy || !settingsQuery.data}
         >
           Keep memory off
         </Button>

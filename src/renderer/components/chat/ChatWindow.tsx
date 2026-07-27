@@ -194,25 +194,32 @@ export const ChatWindow: React.FC<ChatWindowProps> = ({
   const projectAiContext = projectMemoryEnabled
     ? (agentMdContent ?? undefined)
     : undefined;
+  const agentMdGenerationInFlightRef = React.useRef(false);
 
-  const handleGenerateAgentMd = () => {
+  const handleGenerateAgentMd = async () => {
+    if (streamState.isStreaming || agentMdGenerationInFlightRef.current) return;
+    agentMdGenerationInFlightRef.current = true;
     const prompt =
       `Please create an \`agent.md\` file at the root of this dbt project. ` +
       `The file should include sections for: Project Overview, Naming Conventions, ` +
       `Model Layers, and Rules for the AI. Use the project name from \`dbt_project.yml\` ` +
       `and populate what you can from the project structure. Leave placeholder comments ` +
       `for sections the user should fill in themselves.`;
-    startStream(
-      prompt,
-      [],
-      undefined,
-      currentMode,
-      screenKey,
-      connectionId,
-      notebookId,
-      pageId,
-      undefined,
-    );
+    try {
+      await startStream(
+        prompt,
+        [],
+        undefined,
+        currentMode,
+        screenKey,
+        connectionId,
+        notebookId,
+        pageId,
+        undefined,
+      );
+    } finally {
+      agentMdGenerationInFlightRef.current = false;
+    }
   };
 
   const handleDismissAgentMd = () => {
@@ -1158,6 +1165,7 @@ export const ChatWindow: React.FC<ChatWindowProps> = ({
                   variant="outlined"
                   size="small"
                   onClick={handleGenerateAgentMd}
+                  disabled={streamState.isStreaming}
                 >
                   Generate agent.md
                 </Button>

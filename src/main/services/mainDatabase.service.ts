@@ -21,6 +21,7 @@ import {
   ne,
   asc,
   gt,
+  sql as drizzleSql,
 } from 'drizzle-orm';
 import * as schema from '../schemas/mainDatabase.schema';
 import { MainDatabaseInfo, UsageStats } from '../../types/backend';
@@ -865,6 +866,7 @@ export default class MainDatabaseService {
   }): Promise<SecondBrainSessionEvidenceRow[]> {
     const db = await this.getDatabase();
     const limit = Math.max(1, Math.min(options.limit, 200));
+    const effectiveUpdatedAt = drizzleSql<string>`coalesce(${schema.chatMessages.updatedAt}, ${schema.chatMessages.createdAt}, '')`;
     const conditions = [
       inArray(schema.chatMessages.role, ['user', 'assistant']),
       or(
@@ -878,9 +880,9 @@ export default class MainDatabaseService {
       }
       conditions.push(
         or(
-          gt(schema.chatMessages.updatedAt, options.after.updatedAt),
+          gt(effectiveUpdatedAt, options.after.updatedAt),
           and(
-            eq(schema.chatMessages.updatedAt, options.after.updatedAt),
+            eq(effectiveUpdatedAt, options.after.updatedAt),
             gt(schema.chatMessages.id, Number(options.after.stableId)),
           ),
         )!,
@@ -902,7 +904,7 @@ export default class MainDatabaseService {
         toolCalls: schema.chatMessages.toolCalls,
         contextItems: schema.chatMessages.contextItems,
         createdAt: schema.chatMessages.createdAt,
-        updatedAt: schema.chatMessages.updatedAt,
+        updatedAt: effectiveUpdatedAt,
       })
       .from(schema.chatMessages)
       .innerJoin(
@@ -910,14 +912,14 @@ export default class MainDatabaseService {
         eq(schema.chatMessages.conversationId, schema.chatConversations.id),
       )
       .where(and(...conditions))
-      .orderBy(asc(schema.chatMessages.updatedAt), asc(schema.chatMessages.id))
+      .orderBy(asc(effectiveUpdatedAt), asc(schema.chatMessages.id))
       .limit(limit);
 
     return rows.map((row) => ({
       ...row,
       stableId: String(row.stableId),
       createdAt: row.createdAt ?? '',
-      updatedAt: row.updatedAt ?? row.createdAt ?? '',
+      updatedAt: row.updatedAt,
     }));
   }
 
@@ -927,13 +929,14 @@ export default class MainDatabaseService {
   }): Promise<SecondBrainAnalyticsEvidenceRow[]> {
     const db = await this.getDatabase();
     const limit = Math.max(1, Math.min(options.limit, 100));
+    const effectiveUpdatedAt = drizzleSql<string>`coalesce(${schema.analyticsPages.updatedAt}, ${schema.analyticsPages.createdAt}, '')`;
     const conditions = [];
     if (options.after) {
       conditions.push(
         or(
-          gt(schema.analyticsPages.updatedAt, options.after.updatedAt),
+          gt(effectiveUpdatedAt, options.after.updatedAt),
           and(
-            eq(schema.analyticsPages.updatedAt, options.after.updatedAt),
+            eq(effectiveUpdatedAt, options.after.updatedAt),
             gt(schema.analyticsPages.id, options.after.stableId),
           ),
         )!,
@@ -948,13 +951,10 @@ export default class MainDatabaseService {
         routePath: schema.analyticsPages.routePath,
         markdownContent: schema.analyticsPages.markdownContent,
         createdAt: schema.analyticsPages.createdAt,
-        updatedAt: schema.analyticsPages.updatedAt,
+        updatedAt: effectiveUpdatedAt,
       })
       .from(schema.analyticsPages)
-      .orderBy(
-        asc(schema.analyticsPages.updatedAt),
-        asc(schema.analyticsPages.id),
-      )
+      .orderBy(asc(effectiveUpdatedAt), asc(schema.analyticsPages.id))
       .limit(limit);
     const rows =
       conditions.length > 0
@@ -964,7 +964,7 @@ export default class MainDatabaseService {
     return rows.map((row) => ({
       ...row,
       createdAt: row.createdAt ?? '',
-      updatedAt: row.updatedAt ?? row.createdAt ?? '',
+      updatedAt: row.updatedAt,
     }));
   }
 

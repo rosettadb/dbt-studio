@@ -14,6 +14,7 @@ import SecondBrainRuntimeService, {
   isSecondBrainPageAuthorized,
 } from '../../secondBrain/secondBrainRuntime.service';
 import { SecondBrainError } from '../../secondBrain/secondBrain.types';
+import { containsLikelySecondBrainSecret } from '../../secondBrain/secondBrainSecrets';
 
 type SecondBrainToolOptions = {
   secondBrain: SecondBrainService;
@@ -23,14 +24,8 @@ type SecondBrainToolOptions = {
   toolMode: 'chat' | 'agent';
 };
 
-const secretPatterns = [
-  /\b(?:api[_-]?key|password|secret|token|authorization|credentials?|keyfile|access[_-]?key|refresh[_-]?token|private[_-]?key|client[_-]?secret)\b["']?\s*[:=]\s*["']?[^\s"',}]{6,}/iu,
-  /-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----/u,
-  /\b(?:sk|ghp|github_pat)_[a-z0-9_-]{16,}\b/iu,
-];
-
 const assertNoLikelySecret = (content: string): void => {
-  if (secretPatterns.some((pattern) => pattern.test(content))) {
+  if (containsLikelySecondBrainSecret(content)) {
     throw new SecondBrainError(
       'INVALID_CONTENT',
       'Potential credentials or secrets cannot be written to Wiki Memory.',

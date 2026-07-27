@@ -286,6 +286,8 @@ export default class SecondBrainService {
 
   private stateLock: Promise<void> = Promise.resolve();
 
+  private indexLock: Promise<void> = Promise.resolve();
+
   constructor(options: SecondBrainServiceOptions = {}) {
     this.rootPath = path.resolve(
       options.rootPath ??
@@ -392,7 +394,6 @@ export default class SecondBrainService {
         initialized: false,
         pageCount: 0,
         totalBytes: 0,
-        rootPath: this.rootPath,
         layoutVersion: 'empty',
       };
     }
@@ -410,7 +411,6 @@ export default class SecondBrainService {
       ),
       pageCount: pages.length,
       totalBytes: pages.reduce((total, page) => total + page.sizeBytes, 0),
-      rootPath: this.rootPath,
       stateVersion: state?.version,
       lastSuccessfulRefreshAt: state?.lastSuccessfulRefreshAt,
       layoutVersion,
@@ -900,6 +900,10 @@ export default class SecondBrainService {
   }
 
   private async regenerateIndexes(): Promise<void> {
+    return this.withIndexLock(() => this.regenerateIndexesUnlocked());
+  }
+
+  private async regenerateIndexesUnlocked(): Promise<void> {
     if (!(await fs.pathExists(this.wikiRoot()))) return;
     const pageIds = await this.walkMarkdownPages(this.wikiRoot(), '');
     const concepts = pageIds.filter(
@@ -1325,6 +1329,20 @@ export default class SecondBrainService {
     const previous = this.stateLock;
     let release: () => void = () => {};
     this.stateLock = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    await previous;
+    try {
+      return await operation();
+    } finally {
+      release();
+    }
+  }
+
+  private async withIndexLock<T>(operation: () => Promise<T>): Promise<T> {
+    const previous = this.indexLock;
+    let release: () => void = () => {};
+    this.indexLock = new Promise<void>((resolve) => {
       release = resolve;
     });
     await previous;

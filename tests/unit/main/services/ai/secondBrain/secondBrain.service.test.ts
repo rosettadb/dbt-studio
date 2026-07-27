@@ -98,6 +98,7 @@ describe('SecondBrainService', () => {
       okfVersion: '0.1',
       stateVersion: 2,
     });
+    expect(firstStatus).not.toHaveProperty('rootPath');
     expect(await fs.pathExists(path.join(rootPath, 'wiki', 'memory.md'))).toBe(
       true,
     );
@@ -202,6 +203,30 @@ describe('SecondBrainService', () => {
       (result): result is PromiseRejectedResult => result.status === 'rejected',
     );
     expect(rejected?.reason).toMatchObject({ code: 'CONFLICT' });
+  });
+
+  it('publishes complete indexes after concurrent writes to different pages', async () => {
+    await service.initializeRoot();
+
+    await Promise.all([
+      service.writePage({
+        pageId: 'topics/concurrent-topic.md',
+        content: markdown('Concurrent Topic'),
+        actor: 'user',
+      }),
+      service.writePage({
+        pageId: 'projects/concurrent-project.md',
+        content: markdown('Concurrent Project'),
+        actor: 'user',
+      }),
+    ]);
+
+    expect((await service.readPage('topics/index.md')).content).toContain(
+      '[Concurrent Topic](concurrent-topic.md)',
+    );
+    expect((await service.readPage('projects/index.md')).content).toContain(
+      '[Concurrent Project](concurrent-project.md)',
+    );
   });
 
   it('archives instead of deleting and removes the page from active listings', async () => {

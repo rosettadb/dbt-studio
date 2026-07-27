@@ -873,7 +873,6 @@ export type SecondBrainStatus = {
   initialized: boolean;
   pageCount: number;
   totalBytes: number;
-  rootPath: string;
   stateVersion?: number;
   lastSuccessfulRefreshAt?: string;
   layoutVersion: 'okf-v0.1' | 'empty';

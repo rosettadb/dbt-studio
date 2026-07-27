@@ -4,11 +4,15 @@ import path from 'path';
 import fs from 'fs-extra';
 import SecondBrainService from '../../../../../../src/main/services/ai/secondBrain/secondBrain.service';
 import SecondBrainRefreshService, {
+  buildSecondBrainGenerationPrompt,
   redactSecondBrainEvidence,
   SecondBrainEvidenceItem,
   SecondBrainRefreshOperation,
 } from '../../../../../../src/main/services/ai/secondBrain/secondBrainRefresh.service';
-import { SecondBrainSessionEvidenceRow } from '../../../../../../src/main/services/mainDatabase.service';
+import {
+  SecondBrainAnalyticsEvidenceRow,
+  SecondBrainSessionEvidenceRow,
+} from '../../../../../../src/main/services/mainDatabase.service';
 
 const fixedDate = new Date('2026-07-15T12:00:00.000Z');
 
@@ -25,6 +29,16 @@ const sessionRow: SecondBrainSessionEvidenceRow = {
   content: 'Always validate revenue totals before publishing.',
   toolCalls: [{ toolName: 'dbt_run', toolOutput: 'must not be projected' }],
   contextItems: [{ name: 'models/revenue.sql', content: 'large body' }],
+  createdAt: fixedDate.toISOString(),
+  updatedAt: fixedDate.toISOString(),
+};
+
+const analyticsRow: SecondBrainAnalyticsEvidenceRow = {
+  stableId: 'analytics-1',
+  connectionId: 'warehouse',
+  title: 'Revenue dashboard',
+  routePath: '/analytics/revenue',
+  markdownContent: 'Revenue reporting overview.',
   createdAt: fixedDate.toISOString(),
   updatedAt: fixedDate.toISOString(),
 };
@@ -80,7 +94,7 @@ describe('SecondBrainRefreshService', () => {
 
   it('redacts credentials, environment values, and absolute home paths', () => {
     const redacted = redactSecondBrainEvidence(
-      'api_key = abcdefghijklmnop\nrefreshToken: refresh-secret-value\n"authorization": "Bearer-secret-value"\nkeyfile=/private/key.json\nDB_PASSWORD=hunter2\n/Users/nuri/private/model.sql',
+      'api_key = abcdefghijklmnop\nrefreshToken: refresh-secret-value\n"authorization": "Bearer-secret-value"\nkeyfile=/private/key.json\nDB_PASSWORD=hunter2\npostgres://user:password@host/db\n-----BEGIN PRIVATE KEY-----\nprivate-material\n-----END PRIVATE KEY-----\n/Users/nuri/private/model.sql',
     );
 
     expect(redacted).not.toContain('abcdefghijklmnop');
@@ -88,8 +102,39 @@ describe('SecondBrainRefreshService', () => {
     expect(redacted).not.toContain('refresh-secret-value');
     expect(redacted).not.toContain('Bearer-secret-value');
     expect(redacted).not.toContain('/private/key.json');
+    expect(redacted).not.toContain('postgres://');
+    expect(redacted).not.toContain('private-material');
     expect(redacted).not.toContain('/Users/nuri');
     expect(redacted).toContain('[REDACTED]');
+  });
+
+  it('budgets evidence before serialization and marks omitted items', () => {
+    const evidence: SecondBrainEvidenceItem[] = Array.from(
+      { length: 60 },
+      (_, index) => ({
+        sourceId: 'sessions',
+        sourceKind: 'session',
+        stableId: String(index),
+        updatedAt: fixedDate.toISOString(),
+        contentHash: String(index).padStart(64, '0'),
+        scope: {},
+        provenance: `conversation:7:message:${index}`,
+        projection: { content: 'x'.repeat(8_000) },
+        truncated: false,
+      }),
+    );
+
+    const prompt = buildSecondBrainGenerationPrompt([], evidence);
+    const parsed = JSON.parse(prompt);
+
+    expect(prompt.length).toBeLessThanOrEqual(300_000);
+    expect(parsed.constraints.evidenceTruncated).toBe(true);
+    expect(parsed.evidence.length).toBeLessThan(evidence.length);
+    expect(
+      parsed.evidence.map((item: SecondBrainEvidenceItem) => item.stableId),
+    ).toEqual(
+      evidence.slice(0, parsed.evidence.length).map((item) => item.stableId),
+    );
   });
 
   it('applies structured operations, commits cursors, then performs a true no-op', async () => {
@@ -185,10 +230,40 @@ describe('SecondBrainRefreshService', () => {
     ).rejects.toMatchObject({ code: 'NOT_FOUND' });
   });
 
+  it('commits unaffected sources when every proposed operation is rejected', async () => {
+    const unsafeOperation = {
+      ...durableOperation,
+      content: durableOperation.content.replace(
+        'Validate revenue totals before publishing.',
+        'api_key = abcdefghijklmnop',
+      ),
+    };
+    const refresh = new SecondBrainRefreshService(secondBrain, {
+      ...emptyAdditionalSources,
+      generateOperations: jest.fn(async () => [unsafeOperation]),
+      collectSessions: jest.fn(async () => [sessionRow]) as any,
+      collectAnalytics: jest.fn(async () => [analyticsRow]) as any,
+      loadProjects: jest.fn(async () => []),
+    });
+
+    const result = await refresh.refresh({});
+    const state = await secondBrain.readStateFile();
+
+    expect(result.operationsApplied).toBe(0);
+    expect(state?.sourceCursors.sessions).toBeUndefined();
+    expect(state?.sourceCursors.analytics).toEqual({
+      updatedAt: fixedDate.toISOString(),
+      stableId: 'analytics-1',
+    });
+  });
+
   it('accepts OKF documents with type frontmatter and no title', async () => {
     const operationWithoutTitle = {
       ...durableOperation,
-      content: durableOperation.content.replace('title: Revenue validation\n', ''),
+      content: durableOperation.content.replace(
+        'title: Revenue validation\n',
+        '',
+      ),
     };
     const refresh = new SecondBrainRefreshService(secondBrain, {
       ...emptyAdditionalSources,

@@ -291,7 +291,12 @@ describe('Second Brain progressive discovery', () => {
     });
   });
 
-  it('rejects likely secrets before creating a page', async () => {
+  it.each([
+    'api_key = abcdefghijklmnop',
+    'postgres://user:password@host/database',
+    '-----BEGIN PRIVATE KEY-----\nprivate-material\n-----END PRIVATE KEY-----',
+    'token: sk_abcdefghijkl',
+  ])('rejects likely secrets before creating a page', async (secret) => {
     const tools = createSecondBrainTools({
       secondBrain,
       runtime,
@@ -306,7 +311,7 @@ describe('Second Brain progressive discovery', () => {
       operation: {
         type: 'create',
         searchQuery: 'unique credential page',
-        content: markdown('Credential', 'api_key = abcdefghijklmnop'),
+        content: markdown('Credential', secret),
       },
     });
 

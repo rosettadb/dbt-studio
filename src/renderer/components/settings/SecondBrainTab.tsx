@@ -132,6 +132,8 @@ export const SecondBrainTab: React.FC = () => {
     null,
   );
   const [newPageId, setNewPageId] = React.useState<string | null>(null);
+  const [newPageDialogOpen, setNewPageDialogOpen] = React.useState(false);
+  const [newPageInput, setNewPageInput] = React.useState('');
   const [search, setSearch] = React.useState('');
   const [draft, setDraft] = React.useState('');
   const [dirty, setDirty] = React.useState(false);
@@ -248,9 +250,12 @@ export const SecondBrainTab: React.FC = () => {
   };
 
   const startNewPage = () => {
-    const pageId = window.prompt(
-      'New Markdown page ID (for example topics/revenue-rules.md)',
-    );
+    setNewPageInput('');
+    setNewPageDialogOpen(true);
+  };
+
+  const confirmNewPage = () => {
+    const pageId = newPageInput.trim();
     if (!pageId) return;
     if (
       !/^(?:topics|projects|connections|notebooks|analytics)\/[a-z0-9][a-z0-9/_-]*\.md$/u.test(
@@ -260,6 +265,7 @@ export const SecondBrainTab: React.FC = () => {
       toast.error('Use a safe Markdown page ID under an allowed folder.');
       return;
     }
+    setNewPageDialogOpen(false);
     const content = emptyMarkdown(pageId);
     setSelected(null);
     setNewPageId(pageId);
@@ -946,6 +952,43 @@ export const SecondBrainTab: React.FC = () => {
             </Box>
           </>
         )}
+
+      <Dialog
+        open={newPageDialogOpen}
+        onClose={() => setNewPageDialogOpen(false)}
+        maxWidth="sm"
+        fullWidth
+      >
+        <DialogTitle>Create Markdown page</DialogTitle>
+        <DialogContent>
+          <TextField
+            autoFocus
+            fullWidth
+            margin="dense"
+            label="Page ID"
+            placeholder="topics/revenue-rules.md"
+            value={newPageInput}
+            onChange={(event) => setNewPageInput(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === 'Enter' && newPageInput.trim()) {
+                event.preventDefault();
+                confirmNewPage();
+              }
+            }}
+            helperText="Use a Markdown path under topics, projects, connections, notebooks, or analytics."
+          />
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setNewPageDialogOpen(false)}>Cancel</Button>
+          <Button
+            variant="contained"
+            onClick={confirmNewPage}
+            disabled={!newPageInput.trim()}
+          >
+            Create
+          </Button>
+        </DialogActions>
+      </Dialog>
 
       <Dialog
         open={disableDialogOpen}
