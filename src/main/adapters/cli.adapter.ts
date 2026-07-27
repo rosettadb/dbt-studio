@@ -1,6 +1,13 @@
 import { ChildProcessWithoutNullStreams, spawn } from 'child_process';
 import { BrowserWindow } from 'electron';
-import { CliMessage } from '../../types/backend';
+import { CliMessage, CliProcessEnvironment } from '../../types/backend';
+
+const createProcessEnvironment = (environment?: CliProcessEnvironment) => ({
+  ...process.env,
+  ...(environment?.DBT_ALLOW_EXPERIMENTAL_ADAPTERS === 'true'
+    ? { DBT_ALLOW_EXPERIMENTAL_ADAPTERS: 'true' }
+    : {}),
+});
 
 class CliAdapter {
   private process: ChildProcessWithoutNullStreams | null = null;
@@ -9,7 +16,11 @@ class CliAdapter {
     return this.process;
   }
 
-  async runCommandWithoutStreaming(command: string, args?: string[]) {
+  async runCommandWithoutStreaming(
+    command: string,
+    args?: string[],
+    environment?: CliProcessEnvironment,
+  ) {
     return new Promise<void>((resolve, reject) => {
       if (this.process) {
         reject(new Error('A command is already running. Please wait.'));
@@ -17,9 +28,15 @@ class CliAdapter {
       }
 
       if (args && args.length > 0) {
-        this.process = spawn(command, args, { shell: false });
+        this.process = spawn(command, args, {
+          shell: false,
+          env: createProcessEnvironment(environment),
+        });
       } else {
-        this.process = spawn(command, { shell: true });
+        this.process = spawn(command, {
+          shell: true,
+          env: createProcessEnvironment(environment),
+        });
       }
 
       // Drain stdout/stderr to avoid the child process blocking when buffers fill.
@@ -42,7 +59,12 @@ class CliAdapter {
     });
   }
 
-  runCommand(mainWindow: BrowserWindow, command: string, args?: string[]) {
+  runCommand(
+    mainWindow: BrowserWindow,
+    command: string,
+    args?: string[],
+    environment?: CliProcessEnvironment,
+  ) {
     return new Promise<void>((resolve, reject) => {
       if (this.process) {
         reject(new Error('A command is already running. Please wait.'));
@@ -52,9 +74,15 @@ class CliAdapter {
       mainWindow.webContents.send('cli:clear');
 
       if (args && args.length > 0) {
-        this.process = spawn(command, args, { shell: false });
+        this.process = spawn(command, args, {
+          shell: false,
+          env: createProcessEnvironment(environment),
+        });
       } else {
-        this.process = spawn(command, { shell: true });
+        this.process = spawn(command, {
+          shell: true,
+          env: createProcessEnvironment(environment),
+        });
       }
 
       this.messageHandler(
@@ -82,34 +110,19 @@ class CliAdapter {
       });
 
       this.process.on('close', (code) => {
-        // Send exit event first
-        mainWindow.webContents.send('cli:exit', code);
-
-        // Always send done event for frontend to know command completed
-        mainWindow.webContents.send('cli:done');
-
-        // Reset process
-        this.process = null;
-
-        // Handle promise resolution
         if (code === 0) {
-          this.messageHandler(
-            {
-              type: 'success',
-              message: `Command executed successfully.`,
-            },
-            mainWindow,
-          );
+          mainWindow.webContents.send('cli:exit', code);
+          mainWindow.webContents.send('cli:done', code);
           resolve();
         } else {
-          // Don't call messageHandler with error type here since it calls stopCommand
-          // Just add the exit code message directly
-          mainWindow.webContents.send(
-            'cli:output',
-            `Process exited with code ${code}`,
-          );
+          const exitMessage = `Process exited with code ${code}`;
+          mainWindow.webContents.send('cli:error', exitMessage);
+          mainWindow.webContents.send('cli:exit', code);
+          mainWindow.webContents.send('cli:done', code);
           reject(new Error(`Process exited with error code ${code}`));
         }
+
+        this.process = null;
       });
 
       this.process.on('error', (err) => {

@@ -38,6 +38,10 @@ import type {
 } from '../../types/agentEvents';
 import { getUserMessageLimitError } from '../../types/agentEvents';
 import { toError } from '../utils/errorSerializer';
+import {
+  getToolResultError,
+  isToolResultFailure,
+} from '../../shared/toolResult';
 import SecondBrainService from './ai/secondBrain/secondBrain.service';
 import SecondBrainRuntimeService from './ai/secondBrain/secondBrainRuntime.service';
 import { createSecondBrainTools } from './ai/tools/studio/secondBrain.tools';
@@ -1612,22 +1616,16 @@ COMBINED SUMMARY:`,
                   }
                   break;
                 case 'tool-result': {
-                  const persisted = sanitizeWikiToolCallForPersistence(
-                    chunk.toolName,
-                    (chunk as any).input ?? (chunk as any).args,
-                    (chunk as any).output ?? (chunk as any).result,
-                  );
-                  const failureMessage = getToolFailureMessage(
-                    persisted.output,
-                  );
+                  const toolOutput =
+                    (chunk as any).output ?? (chunk as any).result;
+                  const toolFailed = isToolResultFailure(toolOutput);
                   collectedToolCalls.push({
                     toolName: chunk.toolName,
                     toolCallId: chunk.toolCallId,
-                    input: persisted.input,
-                    output: persisted.output,
+                    input: (chunk as any).input ?? (chunk as any).args,
+                    output: toolOutput,
                     stepNumber: currentStepNumber >= 0 ? currentStepNumber : 0,
-                    status: failureMessage ? 'error' : 'done',
-                    error: failureMessage,
+                    status: toolFailed ? 'error' : 'done',
                   });
                   const part = collectedParts.find(
                     (p) =>
@@ -1635,46 +1633,11 @@ COMBINED SUMMARY:`,
                       p.toolCallId === chunk.toolCallId,
                   );
                   if (part) {
-                    part.result = persisted.output;
-                    part.error = failureMessage;
-                    part.status = failureMessage ? 'error' : 'done';
-                  }
-                  break;
-                }
-                case 'tool-error': {
-                  const errorValue = (chunk as any).error;
-                  let errorMessage =
-                    (chunk as any).errorText ??
-                    (chunk as any).message ??
-                    'Tool execution failed.';
-                  if (errorValue instanceof Error) {
-                    errorMessage = errorValue.message;
-                  } else if (typeof errorValue === 'string') {
-                    errorMessage = errorValue;
-                  }
-                  const persisted = sanitizeWikiToolCallForPersistence(
-                    chunk.toolName,
-                    (chunk as any).input ?? (chunk as any).args ?? {},
-                    { ok: false, error: { message: errorMessage } },
-                  );
-                  collectedToolCalls.push({
-                    toolName: chunk.toolName,
-                    toolCallId: chunk.toolCallId,
-                    input: persisted.input,
-                    output: persisted.output,
-                    stepNumber: currentStepNumber >= 0 ? currentStepNumber : 0,
-                    status: 'error',
-                    error: errorMessage,
-                  });
-                  const part = collectedParts.find(
-                    (candidate) =>
-                      candidate.type === 'tool-call' &&
-                      candidate.toolCallId === chunk.toolCallId,
-                  );
-                  if (part) {
-                    part.result = persisted.output;
-                    part.error = errorMessage;
-                    part.status = 'error';
+                    part.result = toolOutput;
+                    part.error = toolFailed
+                      ? getToolResultError(toolOutput)
+                      : undefined;
+                    part.status = toolFailed ? 'error' : 'done';
                   }
                   break;
                 }
@@ -1766,26 +1729,24 @@ COMBINED SUMMARY:`,
           // Collect tool calls from steps for persistence
           result.steps?.forEach((step: any, idx: number) => {
             step.toolResults?.forEach((tr: any) => {
-              const persisted = sanitizeWikiToolCallForPersistence(
-                tr.toolName,
-                (tr as any).input ?? (tr as any).args,
-                (tr as any).output ?? (tr as any).result,
-              );
+              const toolOutput = (tr as any).output ?? (tr as any).result;
+              const toolFailed = isToolResultFailure(toolOutput);
               collectedToolCalls.push({
                 toolName: tr.toolName,
                 toolCallId: tr.toolCallId,
-                input: persisted.input,
-                output: persisted.output,
+                input: (tr as any).input ?? (tr as any).args,
+                output: toolOutput,
                 stepNumber: idx,
-                status: 'done',
+                status: toolFailed ? 'error' : 'done',
               });
               collectedParts.push({
                 type: 'tool-call',
                 toolCallId: tr.toolCallId,
                 toolName: tr.toolName,
-                args: persisted.input,
-                result: persisted.output,
-                status: 'done',
+                args: (tr as any).input ?? (tr as any).args,
+                result: toolOutput,
+                error: toolFailed ? getToolResultError(toolOutput) : undefined,
+                status: toolFailed ? 'error' : 'done',
               });
             });
           });
@@ -1856,7 +1817,10 @@ COMBINED SUMMARY:`,
         status: tc.status === 'done' ? 'completed' : 'failed',
         startedAt: new Date().toISOString(),
         completedAt: new Date().toISOString(),
-        errorMessage: tc.error ?? null,
+        errorMessage:
+          tc.status === 'error'
+            ? getToolResultError(tc.output) || 'Tool execution failed'
+            : null,
       }));
 
       await MainDatabaseService.addMessageWithContext(

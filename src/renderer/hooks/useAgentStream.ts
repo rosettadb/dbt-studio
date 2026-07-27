@@ -9,6 +9,10 @@ import * as agentService from '../services/agent.service';
 import { parseAgentError } from '../utils/agentErrorParser';
 import { QUERY_KEYS } from '../config/constants';
 import type { ParsedAgentError } from '../utils/agentErrorParser';
+import {
+  getToolResultError,
+  isToolResultFailure,
+} from '../../shared/toolResult';
 
 // ---------------------------------------------------------------------------
 // Content part types — ordered interleaved stream units (Kiro/Claude style)
@@ -263,7 +267,7 @@ export const useAgentStream = (sessionId: number | undefined) => {
         case 'tool-result': {
           const resultToolCallId = (chunk as any).toolCallId as string;
           const { output } = chunk as any;
-          const failureMessage = getToolFailureMessage(output);
+          const failed = isToolResultFailure(output);
           setStreamState((prev) =>
             withParts(prev, (parts) =>
               parts.map((p) =>
@@ -271,10 +275,8 @@ export const useAgentStream = (sessionId: number | undefined) => {
                   ? {
                       ...p,
                       result: output,
-                      error: failureMessage,
-                      status: failureMessage
-                        ? ('error' as const)
-                        : ('done' as const),
+                      error: failed ? getToolResultError(output) : undefined,
+                      status: failed ? ('error' as const) : ('done' as const),
                     }
                   : p,
               ),

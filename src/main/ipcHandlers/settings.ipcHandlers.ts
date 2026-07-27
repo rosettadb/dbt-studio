@@ -3,7 +3,7 @@ import { initializeDataStorage } from '../utils/setupHelpers';
 import { FileDialogProperties, SettingsType } from '../../types/backend';
 import { SettingsService } from '../services';
 import { SettingsChannels } from '../../types/ipc';
-import { DbtVersionManagerService } from '../services/dbtVersionManager.service';
+import { DbtCoreVersionService } from '../services/dbtCoreVersion.service';
 
 const handlerChannels: SettingsChannels[] = [
   'settings:load',
@@ -19,6 +19,18 @@ const handlerChannels: SettingsChannels[] = [
   'settings:restart',
   'settings:getBasename',
   'settings:getDirname',
+  'dbt:versions:list',
+  'dbt:installed:get',
+  'dbt:versionChange:plan',
+  'dbt:versionChange:install',
+  'dbt:compatibility:check',
+  'dbt:adapters:active',
+  'dbt:adapters:check',
+  'dbt:packages:installed',
+  'dbt:package:installLatest',
+  'dbt:package:uninstall',
+  'dbt:packageVersions:list',
+  'dbt:packageVersion:install',
 ];
 
 const removeSettingsIpcHandlers = () => {
@@ -133,16 +145,56 @@ const registerSettingsHandlers = (mainWindow: BrowserWindow) => {
     return SettingsService.installSqlGlot();
   });
 
-  ipcMain.handle('dbt:versions:list', async () => {
-    return DbtVersionManagerService.listDbtCoreVersions();
+  ipcMain.handle('dbt:versions:list', async (_event, request) => {
+    return DbtCoreVersionService.listDbtCoreVersions(request);
+  });
+
+  ipcMain.handle('dbt:installed:get', async () => {
+    return DbtCoreVersionService.getInstalledDbtCore();
+  });
+
+  ipcMain.handle('dbt:versionChange:plan', async (_event, request) => {
+    return DbtCoreVersionService.planVersionChange(request);
+  });
+
+  ipcMain.handle('dbt:versionChange:install', async (_event, request) => {
+    return DbtCoreVersionService.installVersionChange(request);
+  });
+
+  ipcMain.handle('dbt:compatibility:check', async () => {
+    return DbtCoreVersionService.checkCurrentProjectCompatibility();
+  });
+
+  ipcMain.handle('dbt:adapters:active', async (_event, request) => {
+    return DbtCoreVersionService.getActiveAdapterCapabilities(
+      request?.projectPath,
+    );
+  });
+
+  ipcMain.handle('dbt:adapters:check', async (_event, request) => {
+    return DbtCoreVersionService.checkProjectAdapterCompatibility(
+      request?.projectPath,
+    );
+  });
+
+  ipcMain.handle('dbt:packages:installed', async () => {
+    return DbtCoreVersionService.getInstalledPackages();
+  });
+
+  ipcMain.handle('dbt:package:installLatest', async (_event, request) => {
+    return DbtCoreVersionService.installLatestPackage(request);
+  });
+
+  ipcMain.handle('dbt:package:uninstall', async (_event, request) => {
+    return DbtCoreVersionService.uninstallPackage(request);
   });
 
   ipcMain.handle('dbt:packageVersions:list', async (_event, req) => {
-    return DbtVersionManagerService.listPackageVersions(req?.packageName);
+    return DbtCoreVersionService.listPackageVersions(req?.packageName);
   });
 
   ipcMain.handle('dbt:packageVersion:install', async (_event, req) => {
-    return DbtVersionManagerService.installPackageVersion(req);
+    return DbtCoreVersionService.installPackageVersion(req);
   });
 };
 

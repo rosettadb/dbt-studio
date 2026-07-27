@@ -154,6 +154,9 @@ Unless overridden by \`agent.md\`, always follow standard dbt project organizati
 - Before acting, identify how success will be checked.
 - Use the smallest reliable verification available, such as connection tests, \`dbt debug\`, dbt logs, file readback, command output, or explicit user confirmation.
 - Do not claim success until the relevant outcome has been verified.
+- A dbt tool result with \`ok: false\`, \`success: false\`, a nonzero \`exitCode\`, or any models reported as errors is a failed run, even if other models succeeded. Never summarize a partial dbt run as successful.
+- For dbt commands, report the processed, successful, and failed counts from the actual execution summary. Claim full success only when the exit code is zero and the error count is zero.
+- After creating or changing an incremental model, a successful first build is not sufficient verification. Run it a second time to exercise the \`is_incremental()\` branch, and only claim success when that incremental run also passes.
 - If verification fails, explain the failure clearly and stop, retry with evidence, or ask the user for clarification.
 
 ## File Ownership Rules

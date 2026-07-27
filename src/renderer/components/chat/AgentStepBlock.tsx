@@ -33,6 +33,7 @@ export const AgentStepBlock: React.FC<AgentStepBlockProps> = ({
       case 'writeFile':
         writes.push(tc);
         break;
+      case 'studio_cli_run_dbt':
       case 'runDbtCommand':
         runs.push(tc);
         break;
