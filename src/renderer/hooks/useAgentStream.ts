@@ -119,15 +119,6 @@ function deriveSteps(parts: StreamContentPart[]): AgentStep[] {
   return [{ stepNumber: 0, toolCalls, startedAt: 0 }];
 }
 
-function getToolFailureMessage(value: unknown): string | undefined {
-  if (!value || typeof value !== 'object') return undefined;
-  const result = value as Record<string, any>;
-  if (result.ok !== false) return undefined;
-  if (typeof result.error === 'string') return result.error;
-  if (typeof result.error?.message === 'string') return result.error.message;
-  return 'Tool returned an unsuccessful result.';
-}
-
 const EMPTY_STATE: AgentStreamState = {
   isStreaming: false,
   contentParts: [],
