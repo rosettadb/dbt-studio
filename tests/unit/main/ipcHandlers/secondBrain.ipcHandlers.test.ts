@@ -56,7 +56,18 @@ describe('secondBrain.ipcHandlers', () => {
       });
       return refreshResult;
     });
-    const cancelActiveAndWait = jest.fn(async () => ({ cancelled: false }));
+    let resolveCancellation: (result: {
+      cancelled: boolean;
+    }) => void = () => {};
+    const pendingCancellation = new Promise<{ cancelled: boolean }>(
+      (resolve) => {
+        resolveCancellation = resolve;
+      },
+    );
+    const cancelActiveAndWait = jest
+      .fn()
+      .mockResolvedValueOnce({ cancelled: false })
+      .mockReturnValueOnce(pendingCancellation);
     jest.doMock('../../../../src/main/services/agent.service', () => ({
       loadAISettings: jest.fn(async () => ({
         secondBrain: {
@@ -150,6 +161,7 @@ describe('secondBrain.ipcHandlers', () => {
       service,
       refresh,
       cancelActiveAndWait,
+      resolveCancellation,
     };
   };
 
@@ -275,7 +287,8 @@ describe('secondBrain.ipcHandlers', () => {
   });
 
   it('drains active refresh work before pausing or clearing memory', async () => {
-    const { electron, service, cancelActiveAndWait } = await setup();
+    const { electron, service, cancelActiveAndWait, resolveCancellation } =
+      await setup();
     const pause = getHandler(electron.ipcMain, 'second-brain:pause');
     const clear = getHandler(
       electron.ipcMain,
@@ -285,11 +298,13 @@ describe('secondBrain.ipcHandlers', () => {
     await pause({});
     expect(cancelActiveAndWait).toHaveBeenCalledTimes(1);
 
-    await clear({});
+    const clearPromise = clear({});
     expect(cancelActiveAndWait).toHaveBeenCalledTimes(2);
+    expect(service.clearAll).not.toHaveBeenCalled();
+
+    resolveCancellation({ cancelled: true });
+    await clearPromise;
+
     expect(service.clearAll).toHaveBeenCalledTimes(1);
-    expect(cancelActiveAndWait.mock.invocationCallOrder[1]).toBeLessThan(
-      service.clearAll.mock.invocationCallOrder[0],
-    );
   });
 });

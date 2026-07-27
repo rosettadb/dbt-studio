@@ -1,4 +1,5 @@
 const secretPatterns = [
+  /\bauthorization\b["']?\s*[:=]\s*["']?(?:bearer|basic)\s+[^\s"',}]+/giu,
   /\b(?:api[_-]?key|password|secret|token|authorization|credentials?|keyfile|access[_-]?key|refresh[_-]?token|private[_-]?key|client[_-]?secret)\b["']?\s*[:=]\s*["']?[^\s"',}]{6,}/giu,
   /-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----[\s\S]*?-----END (?:RSA |EC |OPENSSH )?PRIVATE KEY-----/giu,
   /\b(?:sk|ghp|github_pat)_[a-z0-9_-]{12,}\b/giu,
