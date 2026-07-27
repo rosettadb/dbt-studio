@@ -134,16 +134,6 @@ export const PipelineView: React.FC<PipelineViewProps> = ({
     );
   }
 
-  if (config.jobs.length === 0) {
-    return (
-      <Box sx={{ p: 3 }}>
-        <Alert severity="info">
-          No jobs defined. Add a <code>jobs</code> array to get started.
-        </Alert>
-      </Box>
-    );
-  }
-
   return (
     <Box
       sx={{

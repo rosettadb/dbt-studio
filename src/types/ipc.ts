@@ -466,6 +466,10 @@ export type FlowfileChannels =
   | 'flowfile:start'
   | 'flowfile:stop';
 
+export type PipelineTemplatesChannels =
+  | 'pipeline-templates:list'
+  | 'pipeline-templates:fetch-content';
+
 export type Channels =
   | TestChannels
   | CliChannels
@@ -491,7 +495,8 @@ export type Channels =
   | SavedQueriesChannels
   | AnalyticsPagesChannels
   | StaticSiteChannels
-  | FlowfileChannels;
+  | FlowfileChannels
+  | PipelineTemplatesChannels;
 
 export type ConfigureConnectionBody = {
   projectId?: string;
