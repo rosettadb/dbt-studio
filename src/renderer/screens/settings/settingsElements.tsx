@@ -6,6 +6,10 @@ import CloudIcon from '@mui/icons-material/Cloud';
 import InfoIcon from '@mui/icons-material/Info';
 import AccountTreeIcon from '@mui/icons-material/AccountTree';
 import ChecklistIcon from '@mui/icons-material/Checklist';
+import ExtensionIcon from '@mui/icons-material/Extension';
+import StorageIcon from '@mui/icons-material/Storage';
+import SecurityIcon from '@mui/icons-material/Security';
+import SettingsIcon from '@mui/icons-material/Settings';
 import { SvgIconComponent } from '@mui/icons-material';
 import React from 'react';
 import { Icon } from '../../components/icon';
@@ -43,55 +47,103 @@ export interface SettingsSidebarElement {
   path: string;
 }
 
-export const settingsSidebarElements: SettingsSidebarElement[] = [
+export interface SettingsCategory {
+  name: string;
+  icon: SvgIconComponent;
+  items: SettingsSidebarElement[];
+}
+
+export const settingsCategories: SettingsCategory[] = [
   {
-    icon: ManageAccountsIcon,
-    text: 'General',
-    path: '/app/settings/general',
+    name: 'General',
+    icon: SettingsIcon,
+    items: [
+      {
+        icon: ManageAccountsIcon,
+        text: 'General',
+        path: '/app/settings/general',
+      },
+    ],
   },
   {
-    icon: DbtBlackIcon as any,
-    text: 'dbt™ Core',
-    path: '/app/settings/dbt',
+    name: 'Plugins',
+    icon: ExtensionIcon,
+    items: [
+      {
+        icon: DbtBlackIcon as any,
+        text: 'dbt™ Core',
+        path: '/app/settings/dbt',
+      },
+      {
+        icon: FolderIcon,
+        text: 'Rosetta CLI',
+        path: '/app/settings/rosetta',
+      },
+      {
+        icon: AccountTreeIcon as any,
+        text: 'Flowfile',
+        path: '/app/settings/flowfile',
+      },
+    ],
   },
   {
-    icon: FolderIcon,
-    text: 'Rosetta CLI',
-    path: '/app/settings/rosetta',
-  },
-  {
+    name: 'AI',
     icon: AutoAwesomeIcon,
-    text: 'AI Settings',
-    path: '/app/settings/ai-providers',
+    items: [
+      {
+        icon: AutoAwesomeIcon,
+        text: 'AI Settings',
+        path: '/app/settings/ai-providers',
+      },
+    ],
   },
   {
-    icon: DuckDBIcon as any,
-    text: 'DuckDB',
-    path: '/app/settings/duckdb',
+    name: 'Data',
+    icon: StorageIcon,
+    items: [
+      {
+        icon: DuckDBIcon as any,
+        text: 'DuckDB',
+        path: '/app/settings/duckdb',
+      },
+    ],
   },
   {
+    name: 'Cloud',
     icon: CloudIcon,
-    text: 'Rosetta Cloud',
-    path: '/app/settings/profile',
+    items: [
+      {
+        icon: CloudIcon,
+        text: 'Rosetta Cloud',
+        path: '/app/settings/profile',
+      },
+    ],
   },
   {
-    icon: AccountTreeIcon as any,
-    text: 'Flowfile',
-    path: '/app/settings/flowfile',
+    name: 'Security',
+    icon: SecurityIcon,
+    items: [
+      {
+        icon: VpnKeyIcon,
+        text: 'Keystore',
+        path: '/app/settings/keystore',
+      },
+    ],
   },
   {
-    icon: VpnKeyIcon,
-    text: 'Keystore',
-    path: '/app/settings/keystore',
-  },
-  {
-    icon: ChecklistIcon,
-    text: 'Task Manager',
-    path: '/app/settings/task-manager',
-  },
-  {
-    icon: InfoIcon,
-    text: 'About',
-    path: '/app/settings/about',
+    name: 'System',
+    icon: SettingsIcon,
+    items: [
+      {
+        icon: ChecklistIcon,
+        text: 'Task Manager',
+        path: '/app/settings/task-manager',
+      },
+      {
+        icon: InfoIcon,
+        text: 'About',
+        path: '/app/settings/about',
+      },
+    ],
   },
 ];

@@ -34,7 +34,7 @@ import {
   TaskManagerSettings,
 } from '../../components';
 import { AppLayout } from '../../layouts';
-import { settingsSidebarElements } from './settingsElements';
+import { settingsCategories } from './settingsElements';
 
 const Settings: React.FC = () => {
   const { mode, setMode } = useColorScheme();
@@ -199,33 +199,54 @@ const Settings: React.FC = () => {
                 },
               }}
             >
-              {settingsSidebarElements.map((element) => (
-                <StyledSettingsNavLink key={element.text} to={element.path}>
-                  <ListItem
+              {settingsCategories.map((category) => (
+                <Box key={category.name} sx={{ mb: 1 }}>
+                  <Typography
+                    variant="caption"
                     sx={{
-                      cursor: 'pointer',
-                      borderRadius: 1,
-                      mb: 0,
-                      width: '100%',
-                      backgroundColor:
-                        location.pathname === element.path
-                          ? theme.palette.divider
-                          : 'transparent',
+                      px: 1,
+                      fontWeight: 600,
+                      color: 'text.disabled',
+                      textTransform: 'uppercase',
+                      letterSpacing: 0.5,
+                      fontSize: '0.65rem',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 0.5,
                     }}
                   >
-                    <ListItemIcon sx={{ minWidth: 32 }}>
-                      <element.icon
-                        fontSize="small"
-                        color={
-                          location.pathname === element.path
-                            ? 'primary'
-                            : 'inherit'
-                        }
-                      />
-                    </ListItemIcon>
-                    <ListItemText primary={element.text} />
-                  </ListItem>
-                </StyledSettingsNavLink>
+                    <category.icon sx={{ fontSize: 12 }} />
+                    {category.name}
+                  </Typography>
+                  {category.items.map((element) => (
+                    <StyledSettingsNavLink key={element.text} to={element.path}>
+                      <ListItem
+                        sx={{
+                          cursor: 'pointer',
+                          borderRadius: 1,
+                          mb: 0,
+                          width: '100%',
+                          backgroundColor:
+                            location.pathname === element.path
+                              ? theme.palette.divider
+                              : 'transparent',
+                        }}
+                      >
+                        <ListItemIcon sx={{ minWidth: 32 }}>
+                          <element.icon
+                            fontSize="small"
+                            color={
+                              location.pathname === element.path
+                                ? 'primary'
+                                : 'inherit'
+                            }
+                          />
+                        </ListItemIcon>
+                        <ListItemText primary={element.text} />
+                      </ListItem>
+                    </StyledSettingsNavLink>
+                  ))}
+                </Box>
               ))}
             </List>
           </Box>
