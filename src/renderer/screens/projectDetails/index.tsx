@@ -41,6 +41,8 @@ import {
   PipelineSelectorModal,
   PushToCloudModal,
 } from '../../components';
+import { TerminalLayoutRef, TerminalPanelTab } from '../../components/terminal';
+import { ProjectQueryResultsPanel } from '../../components/projectQueryResults';
 import {
   ProjectSidebar,
   SidebarTab,
@@ -66,19 +68,17 @@ import {
   PipelineView,
   CloudLogViewer,
   isPipelineFile,
+  parsePipelineConfig,
 } from '../../components/pipelineView';
+import { DbtRunHistoryPanel } from '../../components/dbtRunHistory';
 import { Taskbar, TaskbarItem } from '../../components/terminal/styles';
 import { projectsServices } from '../../services';
-import {
-  Container,
-  Content,
-  EditorContainer,
-  Header,
-  NoFileSelected,
-} from './styles';
+import { Content, EditorContainer, Header, NoFileSelected } from './styles';
 import {
   useAppContext,
   useDbt,
+  useProjectQueryResultsPanel,
+  useProjectSqlExecution,
   useRosettaDBT,
   useTabManager,
 } from '../../hooks';
@@ -178,7 +178,22 @@ const ProjectDetails: React.FC = () => {
     onDiscardAndClose,
     onCancelClose,
   } = useTabManager(project?.id);
+  const terminalLayoutRef = React.useRef<TerminalLayoutRef>(null);
+
+  const handleTerminalTabSwitch = React.useCallback((tab: TerminalPanelTab) => {
+    terminalLayoutRef.current?.switchTab(tab);
+  }, []);
+
   const fileContent = activeTab?.content;
+  const projectQueryResults = useProjectQueryResultsPanel(project?.id);
+  const { executeProjectSql } = useProjectSqlExecution({
+    onStart: (payload) => {
+      handleTerminalTabSwitch('queryResults');
+      projectQueryResults.startPreview(payload);
+    },
+    onSuccess: projectQueryResults.completePreview,
+    onError: projectQueryResults.failPreview,
+  });
 
   const previousProjectPathRef = React.useRef<string | undefined>();
 
@@ -251,17 +266,11 @@ const ProjectDetails: React.FC = () => {
     setPipelineDraftTab(null);
   }, [activePipelineFilePath]);
 
-  // Cloud logs auto-minimize while editing YAML or the visual graph, and
-  // can be restored without leaving edit mode (mirrors the terminal's
-  // minimize/restore).
+  // Cloud logs auto-minimize once when a pipeline is first opened (mirrors
+  // the terminal's own minimize/restore) and can be freely restored
+  // afterward — restoring doesn't get overridden by mode changes.
   const [pipelineLogsMinimized, setPipelineLogsMinimized] =
     React.useState(false);
-  const [pipelineVisualEditing, setPipelineVisualEditing] =
-    React.useState(false);
-
-  React.useEffect(() => {
-    setPipelineLogsMinimized(pipelineCodeMode || pipelineVisualEditing);
-  }, [pipelineCodeMode, pipelineVisualEditing]);
 
   const handleEnterPipelineCodeMode = React.useCallback(
     (content?: string) => {
@@ -444,6 +453,98 @@ const ProjectDetails: React.FC = () => {
     );
     await updateStatuses();
   }, [tabs, markTabSavedByPath, setTabErrorByPath, updateStatuses]);
+
+  const handleOpenQuerySqlInEditor = React.useCallback(
+    (sql: string) => {
+      if (!activeTabId) {
+        toast.error('No active editor tab');
+        return;
+      }
+      updateTabContent(activeTabId, sql);
+    },
+    [activeTabId, updateTabContent],
+  );
+
+  const handleExecuteEditorQuery = React.useCallback(
+    async ({
+      sql,
+      filePath,
+      modelName,
+      compileModel,
+    }: {
+      sql: string;
+      filePath: string;
+      modelName?: string;
+      compileModel?: boolean;
+    }) => {
+      if (!project) {
+        toast.error('No active project');
+        return;
+      }
+      if (!settings?.dbtPath && compileModel) {
+        toast.info('Please configure dbt path in settings');
+        return;
+      }
+
+      await executeProjectSql({
+        project,
+        filePath,
+        rawSql: sql,
+        modelName,
+        compileModel,
+        limit: projectQueryResults.state.limit,
+      });
+    },
+    [
+      executeProjectSql,
+      project,
+      settings?.dbtPath,
+      projectQueryResults.state.limit,
+    ],
+  );
+
+  const handleExecuteEditorCte = React.useCallback(
+    async ({
+      sql,
+      filePath,
+      cteName,
+      modelName,
+      compileModel,
+    }: {
+      sql: string;
+      filePath: string;
+      cteName: string;
+      modelName?: string;
+      compileModel?: boolean;
+    }) => {
+      if (!project) {
+        toast.error('No active project');
+        return;
+      }
+      if (!settings?.dbtPath && compileModel) {
+        toast.info('Please configure dbt path in settings');
+        return;
+      }
+
+      await executeProjectSql({
+        project,
+        filePath,
+        rawSql: sql,
+        querySql: sql,
+        modelName,
+        label: `CTE ${cteName}`,
+        compileModel,
+        cteName,
+        limit: projectQueryResults.state.limit,
+      });
+    },
+    [
+      executeProjectSql,
+      project,
+      settings?.dbtPath,
+      projectQueryResults.state.limit,
+    ],
+  );
 
   const handleCloseAllTabs = React.useCallback(() => {
     const unmodifiedTabs = tabs.filter((tab) => !tab.isModified);
@@ -935,15 +1036,16 @@ const ProjectDetails: React.FC = () => {
     <AppLayout
       topMenuActions={
         <ProjectDbtSplitButton
-          rosettaPath={settings?.rosettaPath}
-          dbtPath={settings?.dbtPath}
-          project={project}
-          isDbtConfigured={!!settings?.dbtPath}
+          connection={connection}
+          isDbtConfigured={Boolean(settings?.dbtPath)}
           isRunningDbt={isRunningDbt}
           isRunningRosettaDbt={isRunningRosettaDbt}
-          connection={connection}
+          project={project}
+          rosettaPath={settings?.rosettaPath}
+          dbtPath={settings?.dbtPath}
           environment={env}
           rosettaDbt={rosettaDbt}
+          onBeforeExecute={() => handleTerminalTabSwitch('terminal')}
         />
       }
       panelTitle="DBT Studio"
@@ -1157,8 +1259,66 @@ const ProjectDetails: React.FC = () => {
       >
         <Pane minSize={200}>
           <Box height="100%" overflow="hidden">
-            <Container>
-              <TerminalLayout project={project}>
+            <div style={{ height: '100%', overflow: 'hidden' }}>
+              <TerminalLayout
+                ref={terminalLayoutRef}
+                project={project}
+                showQueryResultsTab={
+                  selectedFilePath?.endsWith('.sql') ||
+                  projectQueryResults.state.history.length > 0 ||
+                  Boolean(projectQueryResults.state.result) ||
+                  projectQueryResults.state.isRunning
+                }
+                queryResultsRevision={projectQueryResults.revision}
+                queryResultsPanel={
+                  <ProjectQueryResultsPanel
+                    state={projectQueryResults.state}
+                    onTabChange={projectQueryResults.setActiveTab}
+                    onLimitChange={projectQueryResults.setLimit}
+                    onClear={projectQueryResults.clear}
+                    onAddBookmark={projectQueryResults.addBookmark}
+                    onDeleteBookmark={projectQueryResults.deleteBookmark}
+                    onRunHistoryItem={async (item) => {
+                      if (!project) return;
+                      await executeProjectSql({
+                        project,
+                        filePath: item.filePath,
+                        modelName: item.modelName,
+                        rawSql: item.rawSql,
+                        querySql: item.compiledSql ?? item.rawSql,
+                        compileModel: false,
+                        limit: projectQueryResults.state.limit,
+                      });
+                    }}
+                    onRun={
+                      projectQueryResults.state.rawSql
+                        ? async () => {
+                            if (!project) return;
+                            await executeProjectSql({
+                              project,
+                              filePath: projectQueryResults.state.filePath,
+                              modelName: projectQueryResults.state.modelName,
+                              rawSql: projectQueryResults.state.rawSql!,
+                              querySql:
+                                projectQueryResults.state.compiledSql ??
+                                projectQueryResults.state.rawSql!,
+                              compileModel: false,
+                              limit: projectQueryResults.state.limit,
+                            });
+                          }
+                        : undefined
+                    }
+                    onOpenSqlInEditor={handleOpenQuerySqlInEditor}
+                  />
+                }
+                showRunHistoryTab
+                runHistoryPanel={
+                  <DbtRunHistoryPanel
+                    projectId={project.id}
+                    onFixWithAI={(prompt) => openChatWithMessage(prompt)}
+                  />
+                }
+              >
                 <Content>
                   <EditorContainer>
                     <Header>
@@ -1274,14 +1434,34 @@ const ProjectDetails: React.FC = () => {
                                 openTab(filePath);
                               }}
                               extraActions={
-                                <Tooltip title="Visual editor">
-                                  <IconButton
-                                    size="small"
-                                    onClick={handleExitPipelineCodeMode}
-                                  >
-                                    <AccountTree fontSize="small" />
-                                  </IconButton>
-                                </Tooltip>
+                                <>
+                                  {parsePipelineConfig(
+                                    pipelineDraftTab.savedContent ?? '',
+                                  ) === null && (
+                                    <Typography
+                                      variant="caption"
+                                      sx={{
+                                        bgcolor: 'warning.main',
+                                        color: 'warning.contrastText',
+                                        px: 1,
+                                        py: 0.25,
+                                        borderRadius: 1,
+                                        mr: 1,
+                                      }}
+                                    >
+                                      Pipeline YAML is invalid — check syntax
+                                      and required fields.
+                                    </Typography>
+                                  )}
+                                  <Tooltip title="Visual editor">
+                                    <IconButton
+                                      size="small"
+                                      onClick={handleExitPipelineCodeMode}
+                                    >
+                                      <AccountTree fontSize="small" />
+                                    </IconButton>
+                                  </Tooltip>
+                                </>
                               }
                             />
                           ) : (
@@ -1310,7 +1490,7 @@ const ProjectDetails: React.FC = () => {
                                       )
                                   : undefined
                               }
-                              onEditingChange={setPipelineVisualEditing}
+                              onEnterView={() => setPipelineLogsMinimized(true)}
                             />
                           )}
                         </Box>
@@ -1342,6 +1522,9 @@ const ProjectDetails: React.FC = () => {
                             >
                               <CloudLogViewer
                                 actionId={activePipelineActionId}
+                                onMinimize={() =>
+                                  setPipelineLogsMinimized(true)
+                                }
                               />
                             </Box>
                           ))}
@@ -1378,6 +1561,8 @@ const ProjectDetails: React.FC = () => {
                               openTab(filePath);
                             }}
                             onTogglePreviewTab={handleTogglePreviewTab}
+                            onExecuteQuery={handleExecuteEditorQuery}
+                            onExecuteCte={handleExecuteEditorCte}
                             extraActions={
                               <>
                                 {menuItems.length > 0 && (
@@ -1399,6 +1584,21 @@ const ProjectDetails: React.FC = () => {
                                       isRunningDbt={isRunningDbt}
                                       isRunningRosettaDbt={isRunningRosettaDbt}
                                       environment={env}
+                                      onBeforeExecute={() =>
+                                        handleTerminalTabSwitch('terminal')
+                                      }
+                                      onQueryPreviewStart={(payload) => {
+                                        handleTerminalTabSwitch('queryResults');
+                                        projectQueryResults.startPreview(
+                                          payload,
+                                        );
+                                      }}
+                                      onQueryPreviewSuccess={
+                                        projectQueryResults.completePreview
+                                      }
+                                      onQueryPreviewError={
+                                        projectQueryResults.failPreview
+                                      }
                                     />
                                   )}
                               </>
@@ -1488,12 +1688,13 @@ const ProjectDetails: React.FC = () => {
                     setPipelineCloudModal(false);
                     setPipelineRunArgs('');
                   }}
+                  onSuccess={() => setPipelineLogsMinimized(false)}
                   project={project}
                   command="pipeline"
                   initialDbtArguments={pipelineRunArgs}
                 />
               )}
-            </Container>
+            </div>
           </Box>
         </Pane>
         <Pane minSize={CHAT_MIN_WIDTH}>

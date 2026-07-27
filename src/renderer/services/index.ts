@@ -6,6 +6,7 @@ import * as updateServices from './update.service';
 import * as secureStorageService from './secureStorage.service';
 import * as utilsService from './utils.service';
 import cloudExplorerService from './cloudExplorer.service';
+import taskManagerService from './taskManager.service';
 import { connectionStorage } from './connectionStorage.service';
 import * as rosettaCloudServices from './rosettaCloud.service';
 import { DuckLakeService } from './duckLake.service';
@@ -21,6 +22,7 @@ export {
   updateServices,
   secureStorageService,
   cloudExplorerService,
+  taskManagerService,
   connectionStorage,
   utilsService,
   rosettaCloudServices,

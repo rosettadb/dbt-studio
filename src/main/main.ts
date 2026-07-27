@@ -1,5 +1,6 @@
 /* eslint global-require: off, no-console: off, promise/always-return: off, no-restricted-syntax: off, no-await-in-loop: off */
-import { app, ipcMain, protocol } from 'electron';
+import { app, ipcMain, protocol, net } from 'electron';
+import { pathToFileURL } from 'url';
 import fs from 'fs-extra';
 import { WindowManager } from './windows';
 import { loadEnvironment } from './utils/setupHelpers';
@@ -39,6 +40,15 @@ protocol.registerSchemesAsPrivileged([
     privileges: {
       standard: true,
       secure: true,
+    },
+  },
+  {
+    scheme: 'html-preview',
+    privileges: {
+      standard: true,
+      secure: true,
+      supportFetchAPI: true,
+      corsEnabled: true,
     },
   },
 ]);
@@ -218,6 +228,14 @@ if (!gotTheLock) {
       protocol.handle('app-asset', (request) => {
         const asset = new AssetUrl(request.url);
         return AssetServer.fromNodeModules(asset.relativeUrl);
+      });
+
+      protocol.handle('html-preview', (request) => {
+        console.log('[html-preview]', request.url);
+        const filePath = decodeURIComponent(new URL(request.url).pathname);
+        return net.fetch(pathToFileURL(filePath).toString(), {
+          bypassCustomProtocolHandlers: true,
+        });
       });
 
       app.on('activate', () => {

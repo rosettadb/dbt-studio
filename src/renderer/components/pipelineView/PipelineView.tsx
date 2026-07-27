@@ -27,6 +27,8 @@ type PipelineViewProps = {
   onRun?: () => void;
   /** Notifies parent when the visual graph enters/exits edit mode. */
   onEditingChange?: (isEditing: boolean) => void;
+  /** Fired once when the pipeline view first mounts (e.g. tab opened). */
+  onEnterView?: () => void;
 };
 
 const ACTION_STATUS_COLOR: Record<CloudActionStatus, string> = {
@@ -80,6 +82,7 @@ export const PipelineView: React.FC<PipelineViewProps> = ({
   onSave,
   onRun,
   onEditingChange,
+  onEnterView,
 }) => {
   const config = React.useMemo(() => parsePipelineConfig(content), [content]);
 
@@ -127,16 +130,6 @@ export const PipelineView: React.FC<PipelineViewProps> = ({
             Open pipeline.yml in editor
           </Button>
         )}
-      </Box>
-    );
-  }
-
-  if (config.jobs.length === 0) {
-    return (
-      <Box sx={{ p: 3 }}>
-        <Alert severity="info">
-          No jobs defined. Add a <code>jobs</code> array to get started.
-        </Alert>
       </Box>
     );
   }
@@ -201,6 +194,7 @@ export const PipelineView: React.FC<PipelineViewProps> = ({
         onSave={onSave}
         onRun={onRun}
         onEditingChange={onEditingChange}
+        onEnterView={onEnterView}
       />
     </Box>
   );

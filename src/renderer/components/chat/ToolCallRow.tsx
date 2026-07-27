@@ -41,6 +41,21 @@ export const ToolCallRow: React.FC<ToolCallRowProps> = ({
     let suffix: React.ReactNode = null;
 
     const { toolName, args, result, status } = toolCall;
+    const isDone = status === 'done';
+    const isError = status === 'error';
+    const labelForStatus = ({
+      done,
+      error,
+      running,
+    }: {
+      done: string;
+      error: string;
+      running: string;
+    }) => {
+      if (isError) return error;
+      if (isDone) return done;
+      return running;
+    };
 
     switch (toolName) {
       case 'readDbtModel':
@@ -94,10 +109,11 @@ export const ToolCallRow: React.FC<ToolCallRowProps> = ({
             sx={{ color: theme.palette.text.secondary }}
           />
         );
-        label =
-          status === 'done'
-            ? `Analyzed database schema`
-            : `Analyzing database schema`;
+        label = labelForStatus({
+          done: `Analyzed database schema`,
+          error: `Failed database schema analysis`,
+          running: `Analyzing database schema`,
+        });
         category = 'read';
         break;
       }
@@ -108,8 +124,11 @@ export const ToolCallRow: React.FC<ToolCallRowProps> = ({
             sx={{ color: theme.palette.text.secondary }}
           />
         );
-        label =
-          status === 'done' ? `Updated SQL editor` : `Updating SQL editor`;
+        label = labelForStatus({
+          done: `Updated SQL editor`,
+          error: `Failed SQL editor update`,
+          running: `Updating SQL editor`,
+        });
         category = 'write';
         break;
       }
@@ -121,8 +140,11 @@ export const ToolCallRow: React.FC<ToolCallRowProps> = ({
             sx={{ color: theme.palette.text.secondary }}
           />
         );
-        label =
-          status === 'done' ? `Executed SQL query` : `Executing SQL query`;
+        label = labelForStatus({
+          done: `Executed SQL query`,
+          error: `Failed SQL query`,
+          running: `Executing SQL query`,
+        });
         category = 'run';
         break;
       }
@@ -134,7 +156,7 @@ export const ToolCallRow: React.FC<ToolCallRowProps> = ({
         label = `Edited ${filename}`;
         category = 'write';
         // Check for diff stats in result
-        if (status === 'done' && result && typeof result === 'object') {
+        if (isDone && result && typeof result === 'object') {
           const r = result as any;
           if (r.linesAdded !== undefined && r.linesRemoved !== undefined) {
             suffix = (
@@ -189,12 +211,13 @@ export const ToolCallRow: React.FC<ToolCallRowProps> = ({
             sx={{ color: theme.palette.text.secondary }}
           />
         );
-        label =
-          status === 'done'
-            ? `Ran ${fullCmd}`.substring(0, 50) +
-              (fullCmd.length > 50 ? '...' : '')
-            : `Running ${fullCmd}`.substring(0, 50) +
-              (fullCmd.length > 50 ? '...' : '');
+        const truncatedCommand =
+          fullCmd.substring(0, 50) + (fullCmd.length > 50 ? '...' : '');
+        label = labelForStatus({
+          done: `Ran ${truncatedCommand}`,
+          error: `Failed ${truncatedCommand}`,
+          running: `Running ${truncatedCommand}`,
+        });
         category = 'run';
         break;
       }
@@ -204,10 +227,11 @@ export const ToolCallRow: React.FC<ToolCallRowProps> = ({
             sx={{ fontSize: '0.9rem', color: theme.palette.text.secondary }}
           />
         );
-        label =
-          status === 'done'
-            ? `Loaded skill: ${args.name}`
-            : `Loading skill: ${args.name}`;
+        label = labelForStatus({
+          done: `Loaded skill: ${args.name}`,
+          error: `Failed loading skill: ${args.name}`,
+          running: `Loading skill: ${args.name}`,
+        });
         category = 'read';
         break;
       }
@@ -229,8 +253,11 @@ export const ToolCallRow: React.FC<ToolCallRowProps> = ({
             sx={{ color: theme.palette.text.secondary }}
           />
         );
-        label =
-          status === 'done' ? `Listed connections` : `Listing connections`;
+        label = labelForStatus({
+          done: `Listed connections`,
+          error: `Failed listing connections`,
+          running: `Listing connections`,
+        });
         category = 'read';
         break;
       }
@@ -242,7 +269,11 @@ export const ToolCallRow: React.FC<ToolCallRowProps> = ({
             sx={{ color: theme.palette.text.secondary }}
           />
         );
-        label = status === 'done' ? `Tested connection` : `Testing connection`;
+        label = labelForStatus({
+          done: `Tested connection`,
+          error: `Failed connection test`,
+          running: `Testing connection`,
+        });
         category = 'run';
         break;
       }
@@ -253,8 +284,11 @@ export const ToolCallRow: React.FC<ToolCallRowProps> = ({
             sx={{ color: theme.palette.text.secondary }}
           />
         );
-        label =
-          status === 'done' ? `Listed cloud objects` : `Listing cloud objects`;
+        label = labelForStatus({
+          done: `Listed cloud objects`,
+          error: `Failed listing cloud objects`,
+          running: `Listing cloud objects`,
+        });
         category = 'read';
         break;
       }
@@ -265,8 +299,11 @@ export const ToolCallRow: React.FC<ToolCallRowProps> = ({
             sx={{ color: theme.palette.text.secondary }}
           />
         );
-        label =
-          status === 'done' ? `Previewed cloud data` : `Previewing cloud data`;
+        label = labelForStatus({
+          done: `Previewed cloud data`,
+          error: `Failed cloud data preview`,
+          running: `Previewing cloud data`,
+        });
         category = 'read';
         break;
       }

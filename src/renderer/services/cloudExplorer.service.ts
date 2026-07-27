@@ -20,6 +20,8 @@ import type {
   CreateFolderResponse,
   DeleteBucketRequest,
   DeleteBucketResponse,
+  DownloadObjectRequest,
+  DownloadObjectResponse,
 } from '../../types/ipc';
 import { client } from '../config/client';
 
@@ -186,6 +188,16 @@ class CloudExplorerService {
       DeleteBucketRequest,
       DeleteBucketResponse
     >('cloudExplorer:deleteBucket', params);
+    return data;
+  }
+
+  static async downloadObject(
+    params: DownloadObjectRequest,
+  ): Promise<DownloadObjectResponse> {
+    const { data } = await client.post<
+      DownloadObjectRequest,
+      DownloadObjectResponse
+    >('cloudExplorer:downloadObject', params);
     return data;
   }
 }

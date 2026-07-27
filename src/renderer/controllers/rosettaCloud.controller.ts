@@ -82,9 +82,26 @@ export const useGetSecrets = (
   options?: UseQueryOptions<Secret[], CustomError, Secret[]>,
 ) => {
   return useQuery({
-    queryKey: [QUERY_KEYS.CLOUD_SECRETS],
-    queryFn: () => rosettaCloudServices.getSecrets(projectId ?? ''),
+    queryKey: [QUERY_KEYS.CLOUD_SECRETS, projectId],
+    queryFn: () => rosettaCloudServices.getSecrets(projectId!),
     ...options,
+    enabled: !!projectId && (options?.enabled ?? true),
+  });
+};
+
+export const useDeleteSecret = () => {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      projectId,
+      secretId,
+    }: {
+      projectId: string;
+      secretId: string;
+    }) => rosettaCloudServices.deleteSecret(projectId, secretId),
+    onSuccess: () => {
+      queryClient.invalidateQueries([QUERY_KEYS.CLOUD_SECRETS]);
+    },
   });
 };
 

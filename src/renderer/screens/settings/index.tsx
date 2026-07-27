@@ -31,6 +31,7 @@ import {
   DuckDBSettings,
   FlowfileSettings,
   KeystoreSettings,
+  TaskManagerSettings,
 } from '../../components';
 import { AppLayout } from '../../layouts';
 import { settingsSidebarElements } from './settingsElements';
@@ -102,6 +103,7 @@ const Settings: React.FC = () => {
     if (section === 'duckdb') return 'DuckDB';
     if (section === 'flowfile') return 'Flowfile';
     if (section === 'keystore') return 'Keystore';
+    if (section === 'task-manager') return 'Task Manager';
     return section.charAt(0).toUpperCase() + section.slice(1).replace('-', ' ');
   };
 
@@ -146,6 +148,8 @@ const Settings: React.FC = () => {
         );
       case 'keystore':
         return <KeystoreSettings />;
+      case 'task-manager':
+        return <TaskManagerSettings />;
       case 'about':
         return <AboutSettings />;
       default:

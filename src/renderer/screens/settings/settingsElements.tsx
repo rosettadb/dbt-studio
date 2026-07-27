@@ -5,6 +5,7 @@ import ManageAccountsIcon from '@mui/icons-material/ManageAccounts';
 import CloudIcon from '@mui/icons-material/Cloud';
 import InfoIcon from '@mui/icons-material/Info';
 import AccountTreeIcon from '@mui/icons-material/AccountTree';
+import ChecklistIcon from '@mui/icons-material/Checklist';
 import { SvgIconComponent } from '@mui/icons-material';
 import React from 'react';
 import { Icon } from '../../components/icon';
@@ -82,6 +83,11 @@ export const settingsSidebarElements: SettingsSidebarElement[] = [
     icon: VpnKeyIcon,
     text: 'Keystore',
     path: '/app/settings/keystore',
+  },
+  {
+    icon: ChecklistIcon,
+    text: 'Task Manager',
+    path: '/app/settings/task-manager',
   },
   {
     icon: InfoIcon,
