@@ -1045,7 +1045,13 @@ const ProjectDetails: React.FC = () => {
           dbtPath={settings?.dbtPath}
           environment={env}
           rosettaDbt={rosettaDbt}
-          onBeforeExecute={() => handleTerminalTabSwitch('terminal')}
+          onBeforeExecute={() => {
+            if (env === 'cloud') {
+              setPipelineLogsMinimized(false);
+            } else {
+              handleTerminalTabSwitch('terminal');
+            }
+          }}
         />
       }
       panelTitle="DBT Studio"
@@ -1584,9 +1590,13 @@ const ProjectDetails: React.FC = () => {
                                       isRunningDbt={isRunningDbt}
                                       isRunningRosettaDbt={isRunningRosettaDbt}
                                       environment={env}
-                                      onBeforeExecute={() =>
-                                        handleTerminalTabSwitch('terminal')
-                                      }
+                                      onBeforeExecute={() => {
+                                        if (env === 'cloud') {
+                                          setPipelineLogsMinimized(false);
+                                        } else {
+                                          handleTerminalTabSwitch('terminal');
+                                        }
+                                      }}
                                       onQueryPreviewStart={(payload) => {
                                         handleTerminalTabSwitch('queryResults');
                                         projectQueryResults.startPreview(
