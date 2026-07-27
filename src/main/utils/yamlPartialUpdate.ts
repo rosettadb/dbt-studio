@@ -147,7 +147,7 @@ function generateJdbcUrl(
       return `jdbc:redshift://${ev('host')}:${ev('port')}/${ev('dbname')}?currentSchema=${ev('schema')}`;
 
     case 'bigquery':
-      return `jdbc:bigquery://https://www.googleapis.com/bigquery/v2:443;ProjectId=${ev('project')};`;
+      return `jdbc:bigquery://https://www.googleapis.com/bigquery/v2:443;ProjectId=${ev('project')};OAuthType=0;OAuthServiceAcctEmail=${ev('bigquery-email')};OAuthPvtKeyPath=${ev('bigquery')};`;
 
     case 'databricks':
       return `jdbc:databricks://${ev('host')}:443/default;transportMode=http;ssl=1;AuthMech=3;httpPath=${ev('httppath')};PWD=${ev('token')}`;
@@ -305,12 +305,14 @@ export async function updateMainConf(
     const databaseName =
       connection.type === 'duckdb'
         ? extractDbNameFromPath(connection.database_path)
-        : ev('dbname');
+        : ev(connection.type === 'bigquery' ? 'project' : 'dbname');
 
     // Update connection fields (preserve other custom fields in connectionEntry)
     connectionEntry.databaseName = databaseName;
     connectionEntry.schemaName =
-      connection.type === 'duckdb' ? connection.schema : ev('schema');
+      connection.type === 'duckdb'
+        ? connection.schema
+        : ev(connection.type === 'bigquery' ? 'dataset' : 'schema');
     connectionEntry.dbType = connection.type;
     connectionEntry.url = generateJdbcUrl(connection, projectName);
 

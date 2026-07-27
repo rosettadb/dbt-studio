@@ -36,6 +36,10 @@ import type {
 } from '../../types/agentEvents';
 import { getUserMessageLimitError } from '../../types/agentEvents';
 import { toError } from '../utils/errorSerializer';
+import {
+  getToolResultError,
+  isToolResultFailure,
+} from '../../shared/toolResult';
 
 // ─── AI Settings ─────────────────────────────────────────────────────────────
 
@@ -1214,13 +1218,16 @@ COMBINED SUMMARY:`,
                   });
                   break;
                 case 'tool-result': {
+                  const toolOutput =
+                    (chunk as any).output ?? (chunk as any).result;
+                  const toolFailed = isToolResultFailure(toolOutput);
                   collectedToolCalls.push({
                     toolName: chunk.toolName,
                     toolCallId: chunk.toolCallId,
                     input: (chunk as any).input ?? (chunk as any).args,
-                    output: (chunk as any).output ?? (chunk as any).result,
+                    output: toolOutput,
                     stepNumber: currentStepNumber >= 0 ? currentStepNumber : 0,
-                    status: 'done',
+                    status: toolFailed ? 'error' : 'done',
                   });
                   const part = collectedParts.find(
                     (p) =>
@@ -1228,9 +1235,11 @@ COMBINED SUMMARY:`,
                       p.toolCallId === chunk.toolCallId,
                   );
                   if (part) {
-                    part.result =
-                      (chunk as any).output ?? (chunk as any).result;
-                    part.status = 'done';
+                    part.result = toolOutput;
+                    part.error = toolFailed
+                      ? getToolResultError(toolOutput)
+                      : undefined;
+                    part.status = toolFailed ? 'error' : 'done';
                   }
                   break;
                 }
@@ -1298,21 +1307,24 @@ COMBINED SUMMARY:`,
           // Collect tool calls from steps for persistence
           result.steps?.forEach((step: any, idx: number) => {
             step.toolResults?.forEach((tr: any) => {
+              const toolOutput = (tr as any).output ?? (tr as any).result;
+              const toolFailed = isToolResultFailure(toolOutput);
               collectedToolCalls.push({
                 toolName: tr.toolName,
                 toolCallId: tr.toolCallId,
                 input: (tr as any).input ?? (tr as any).args,
-                output: (tr as any).output ?? (tr as any).result,
+                output: toolOutput,
                 stepNumber: idx,
-                status: 'done',
+                status: toolFailed ? 'error' : 'done',
               });
               collectedParts.push({
                 type: 'tool-call',
                 toolCallId: tr.toolCallId,
                 toolName: tr.toolName,
                 args: (tr as any).input ?? (tr as any).args,
-                result: (tr as any).output ?? (tr as any).result,
-                status: 'done',
+                result: toolOutput,
+                error: toolFailed ? getToolResultError(toolOutput) : undefined,
+                status: toolFailed ? 'error' : 'done',
               });
             });
           });
@@ -1383,7 +1395,10 @@ COMBINED SUMMARY:`,
         status: tc.status === 'done' ? 'completed' : 'failed',
         startedAt: new Date().toISOString(),
         completedAt: new Date().toISOString(),
-        errorMessage: null,
+        errorMessage:
+          tc.status === 'error'
+            ? getToolResultError(tc.output) || 'Tool execution failed'
+            : null,
       }));
 
       await MainDatabaseService.addMessageWithContext(

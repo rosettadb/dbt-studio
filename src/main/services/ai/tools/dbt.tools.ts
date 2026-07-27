@@ -8,6 +8,7 @@ import type { BrowserWindow } from 'electron';
 import * as fs from 'fs';
 import * as path from 'path';
 import SettingsService from '../../settings.service';
+import { DbtCoreVersionService } from '../../dbtCoreVersion.service';
 import AgentService from '../../agent.service';
 import SecureStorageService from '../../secureStorage.service';
 import { TerminalConfirmGate } from './terminalConfirmGate';
@@ -139,6 +140,16 @@ export async function executeDbtCommand(opts: {
   }
 
   try {
+    const adapterCheck =
+      await DbtCoreVersionService.checkProjectAdapterCompatibility(projectPath);
+    if (!adapterCheck.adapter.canExecute) {
+      return {
+        ok: false,
+        error: `dbt command blocked: ${adapterCheck.adapter.notes}`,
+        adapter: adapterCheck.adapter,
+      };
+    }
+
     const dbtExe = await SettingsService.getDbtExePath();
     const args = normalizedCommand.split(' ').filter(Boolean);
     if (select) args.push('--select', select);
@@ -214,6 +225,8 @@ export async function executeDbtCommand(opts: {
           ok: false,
           command: displayCmd,
           error: err.message,
+          exitCode: null,
+          output: fullOutput,
           stdout: '',
           stderr: err.message,
         });
@@ -221,15 +234,13 @@ export async function executeDbtCommand(opts: {
 
       child.on('close', (code) => {
         if (mainWindow && !mainWindow.isDestroyed()) {
-          mainWindow.webContents.send(
-            'cli:done',
-            `Process exited with code ${code}`,
-          );
+          mainWindow.webContents.send('cli:done', code);
         }
         if (code === 0) {
           resolve({
             ok: true,
             command: displayCmd,
+            exitCode: 0,
             output: fullOutput,
           });
         } else {
@@ -237,6 +248,8 @@ export async function executeDbtCommand(opts: {
             ok: false,
             command: displayCmd,
             error: `Command failed with code ${code}`,
+            exitCode: code,
+            output: fullOutput,
             stdout: fullOutput,
             stderr: '',
           });
@@ -248,6 +261,8 @@ export async function executeDbtCommand(opts: {
       ok: false,
       command: `dbt ${normalizedCommand}`,
       error: error.message || 'Command failed',
+      exitCode: typeof error.status === 'number' ? error.status : null,
+      output: error.stdout || error.stderr || '',
       stdout: error.stdout || '',
       stderr: error.stderr || '',
     };
@@ -428,6 +443,18 @@ export const runDbtCommand = tool({
         };
       }
 
+      const adapterCheck =
+        await DbtCoreVersionService.checkProjectAdapterCompatibility(
+          projectPath,
+        );
+      if (!adapterCheck.adapter.canExecute) {
+        return {
+          success: false,
+          error: `dbt command blocked: ${adapterCheck.adapter.notes}`,
+          adapter: adapterCheck.adapter,
+        };
+      }
+
       // Resolve dbt executable from app-managed venv
       const dbtExe = await SettingsService.getDbtExePath();
 
@@ -485,6 +512,7 @@ export const runDbtCommand = tool({
       return {
         success: true,
         command: displayCmd,
+        exitCode: 0,
         output,
       };
     } catch (error: any) {
@@ -492,6 +520,8 @@ export const runDbtCommand = tool({
         success: false,
         command: `dbt ${command}`,
         error: error.message || 'Command execution failed',
+        exitCode: typeof error.status === 'number' ? error.status : null,
+        output: error.stdout || error.stderr || '',
         stdout: error.stdout || '',
         stderr: error.stderr || '',
       };

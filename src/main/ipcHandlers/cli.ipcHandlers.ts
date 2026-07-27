@@ -1,5 +1,6 @@
 import { ipcMain, BrowserWindow } from 'electron';
 import { CliAdapter } from '../adapters';
+import { CliProcessEnvironment } from '../../types/backend';
 
 const cliAdapter = new CliAdapter();
 
@@ -38,11 +39,17 @@ const registerCliHandlers = (mainWindow: BrowserWindow) => {
       args: {
         command: string;
         args?: string[];
+        environment?: CliProcessEnvironment;
         cb?: (message: string) => void;
       },
     ) => {
       try {
-        await cliAdapter.runCommand(mainWindow, args.command, args.args);
+        await cliAdapter.runCommand(
+          mainWindow,
+          args.command,
+          args.args,
+          args.environment,
+        );
         return { success: true };
       } catch (error: any) {
         const errorMessage =
