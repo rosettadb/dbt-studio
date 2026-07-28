@@ -92,20 +92,31 @@ export default class RosettaCloudService {
     if (body.EXECUTION_MODE === 'pipeline' && body.PIPELINE_FILE) {
       runBody.PIPELINE_FILE = body.PIPELINE_FILE;
     }
-    await postJson(runEndpoint, runBody);
+    const runResult = await postJson(runEndpoint, runBody);
+
     await ProjectsService.updateProject({
       ...project,
       externalId,
       lastRun: new Date().toISOString(),
     });
 
-    // Resolve and persist the newly-created action id by querying the
-    // cloud's actions list — the run response shape is unreliable (cloud-api
-    // wraps it as { data: <Action> }), so we go to the source.
+    // Persist the action id returned by the run endpoint. If the cloud API
+    // doesn't return one, throw so the caller knows the run was incomplete.
     if (body.EXECUTION_MODE === 'pipeline' && body.PIPELINE_FILE) {
-      await this.findActionForPipeline(id, body.PIPELINE_FILE).catch((e) => {
-        // eslint-disable-next-line no-console
-        console.error('Failed to record action id for pipeline:', e);
+      const actionId = runResult?.data?.id ?? runResult?.id ?? null;
+      if (!actionId) {
+        throw new Error(
+          'Cloud run did not return an action id. The run may not have started.',
+        );
+      }
+      const fresh = await ProjectsService.getProject(id);
+      const base = fresh ?? project;
+      await ProjectsService.updateProject({
+        ...base,
+        pipelineRuns: {
+          ...(base.pipelineRuns ?? {}),
+          [body.PIPELINE_FILE]: actionId,
+        },
       });
     }
   }
@@ -337,6 +348,7 @@ export default class RosettaCloudService {
   static async findActionForPipeline(
     projectId: string,
     pipelineFile: string,
+    retries = 10,
   ): Promise<string | null> {
     const apiKey = await this.getApiKey();
     if (!apiKey) return null;
@@ -349,38 +361,47 @@ export default class RosettaCloudService {
       project.externalId,
     )}&limit=20&sortBy=createdAt&sortOrder=desc`;
 
-    const response = await fetch(url, {
-      method: 'GET',
-      headers: {
-        Authorization: `Bearer ${apiKey}`,
-        'Content-Type': 'application/json',
-      },
-    });
+    for (let attempt = 0; attempt < retries; attempt += 1) {
+      const response = await fetch(url, {
+        method: 'GET',
+        headers: {
+          Authorization: `Bearer ${apiKey}`,
+          'Content-Type': 'application/json',
+        },
+      });
 
-    if (!response.ok) return null;
+      if (response.ok) {
+        const body = (await response.json()) as {
+          actions?: { id: string; data?: { PIPELINE_FILE?: string } }[];
+        };
 
-    const body = (await response.json()) as {
-      actions?: { id: string; data?: { PIPELINE_FILE?: string } }[];
-    };
+        const match = body.actions?.find(
+          (a) => a.data?.PIPELINE_FILE === pipelineFile,
+        );
 
-    const match = body.actions?.find(
-      (a) => a.data?.PIPELINE_FILE === pipelineFile,
-    );
-    if (!match?.id) return null;
+        if (match?.id) {
+          const fresh = await ProjectsService.getProject(projectId);
+          const base = fresh ?? project;
+          await ProjectsService.updateProject({
+            ...base,
+            pipelineRuns: {
+              ...(base.pipelineRuns ?? {}),
+              [pipelineFile]: match.id,
+            },
+          });
 
-    // Re-read the project before merging — the cloud-action call may have
-    // raced with a separate update.
-    const fresh = await ProjectsService.getProject(projectId);
-    const base = fresh ?? project;
-    await ProjectsService.updateProject({
-      ...base,
-      pipelineRuns: {
-        ...(base.pipelineRuns ?? {}),
-        [pipelineFile]: match.id,
-      },
-    });
+          return match.id;
+        }
+      }
 
-    return match.id;
+      if (attempt < retries - 1) {
+        await new Promise<void>((resolve) => {
+          setTimeout(resolve, 1000 * 2 ** attempt);
+        });
+      }
+    }
+
+    return null;
   }
 
   /**
