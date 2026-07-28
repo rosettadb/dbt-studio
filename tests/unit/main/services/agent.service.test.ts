@@ -165,10 +165,10 @@ describe('AgentService (Phase 1)', () => {
     it('omits wiki page bodies and update content from persisted tool metadata', () => {
       const read = sanitizeWikiToolCallForPersistence(
         'wiki_read',
-        { pageId: 'memory.md' },
+        { pageId: 'MEMORY.md' },
         {
           ok: true,
-          pageId: 'memory.md',
+          pageId: 'MEMORY.md',
           title: 'Second Brain',
           body: 'private durable page body',
           hash: 'a'.repeat(64),
@@ -177,7 +177,7 @@ describe('AgentService (Phase 1)', () => {
       const update = sanitizeWikiToolCallForPersistence(
         'wiki_update',
         {
-          pageId: 'memory.md',
+          pageId: 'MEMORY.md',
           rationale: 'private rationale',
           sourceRefs: ['private source reference'],
           operation: {

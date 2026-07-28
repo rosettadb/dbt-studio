@@ -121,9 +121,11 @@ export default class SecondBrainRefreshCoordinator {
     }
   }
 
-  public cancel(ownerId: number, operationId: string): { cancelled: true } {
+  public cancel(ownerId: number, operationId: string): { cancelled: boolean } {
+    if (!this.activeOperation) {
+      return { cancelled: false };
+    }
     if (
-      !this.activeOperation ||
       this.activeOperation.operationId !== operationId ||
       this.activeOperation.ownerId !== ownerId
     ) {

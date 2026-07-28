@@ -20,13 +20,13 @@ describe('secondBrain.ipcHandlers', () => {
         pageCount: 3,
         totalBytes: 1024,
         rootPath: '/private/user/second-brain',
-        layoutVersion: 'okf-v0.1',
-        okfVersion: '0.1',
+        layoutVersion: 'okf-v0.2',
+        okfVersion: '0.2',
       })),
       openWikiFolder: jest.fn(async () => undefined),
       openWikiTerminal: jest.fn(async () => undefined),
       listManagedPages: jest.fn(async () => []),
-      readPage: jest.fn(async () => ({ pageId: 'memory.md' })),
+      readPage: jest.fn(async () => ({ pageId: 'MEMORY.md' })),
       readArchivedPage: jest.fn(),
       writePage: jest.fn(),
       searchManagedPages: jest.fn(async () => []),
@@ -201,8 +201,8 @@ describe('secondBrain.ipcHandlers', () => {
     expect(status).toMatchObject({
       enabled: true,
       initialized: true,
-      layoutVersion: 'okf-v0.1',
-      okfVersion: '0.1',
+      layoutVersion: 'okf-v0.2',
+      okfVersion: '0.2',
     });
     expect(status).not.toHaveProperty('rootPath');
     expect(status).not.toHaveProperty('rootDisplayName');
@@ -236,9 +236,9 @@ describe('secondBrain.ipcHandlers', () => {
     const { electron, service } = await setup();
     const handler = getHandler(electron.ipcMain, 'second-brain:read');
 
-    const editable = await handler({}, { pageId: 'memory.md' });
+    const editable = await handler({}, { pageId: 'MEMORY.md' });
 
-    expect(service.readPage).toHaveBeenCalledWith('memory.md');
+    expect(service.readPage).toHaveBeenCalledWith('MEMORY.md');
     expect(editable.readOnly).toBe(false);
     expect((await handler({}, { pageId: 'index.md' })).readOnly).toBe(true);
     await expect(handler({}, { pageId: '../secret.md' })).rejects.toMatchObject(

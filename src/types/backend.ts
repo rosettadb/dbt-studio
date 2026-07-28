@@ -994,8 +994,8 @@ export type SecondBrainStatus = {
   totalBytes: number;
   stateVersion?: number;
   lastSuccessfulRefreshAt?: string;
-  layoutVersion: 'okf-v0.1' | 'empty';
-  okfVersion?: '0.1';
+  layoutVersion: 'okf-v0.2' | 'empty';
+  okfVersion?: '0.2';
 };
 
 export type SecondBrainWriteInput = {

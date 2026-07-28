@@ -5,6 +5,7 @@ import {
   Stack,
   Divider,
   CircularProgress,
+  Button,
 } from '@mui/material';
 import ChatIcon from '@mui/icons-material/Chat';
 import CodeIcon from '@mui/icons-material/Code';
@@ -43,6 +44,12 @@ interface ChatMessageListProps {
   onConfirmTerminal?: (allow: boolean) => void;
   onClearError?: () => void;
   onOpenFile?: (path: string) => void;
+  projectMemoryPrompt?: {
+    fileName: string;
+    disabled: boolean;
+    onAccept: () => void;
+    onDecline: () => void;
+  };
 }
 
 export const ChatMessageList: React.FC<ChatMessageListProps> = ({
@@ -55,12 +62,14 @@ export const ChatMessageList: React.FC<ChatMessageListProps> = ({
   onClearError,
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   onOpenFile,
+  projectMemoryPrompt,
 }) => {
   const { data: messages = [], isLoading } =
     useGetChatMessagesWithContext(sessionId);
   const { data: aiSettings } = useGetAISettings();
   const containerRef = React.useRef<HTMLDivElement | null>(null);
   const bottomRef = React.useRef<HTMLDivElement | null>(null);
+  const projectMemoryAssistantRole = 'assistant' as const;
 
   // Track whether auto-compaction fired during this session
   const [compactionInfo, setCompactionInfo] = React.useState<{
@@ -145,6 +154,7 @@ export const ChatMessageList: React.FC<ChatMessageListProps> = ({
     lastMessageContentKey,
     scrollToBottom,
     streamState?.pendingConfirm,
+    Boolean(projectMemoryPrompt),
   ]);
 
   // Keep scrolled to bottom on container resize (layout changes)
@@ -278,7 +288,10 @@ export const ChatMessageList: React.FC<ChatMessageListProps> = ({
           Loading messages...
         </Typography>
       )}
-      {!isLoading && messages.length === 0 && !isAgentRunning ? (
+      {!isLoading &&
+      messages.length === 0 &&
+      !isAgentRunning &&
+      !projectMemoryPrompt ? (
         <Box
           sx={{
             flex: 1,
@@ -434,6 +447,40 @@ export const ChatMessageList: React.FC<ChatMessageListProps> = ({
               </React.Fragment>
             );
           })}
+
+          {projectMemoryPrompt && (
+            <Box sx={{ mt: 0.5 }}>
+              <MessageRenderer
+                messageId={-2}
+                role={projectMemoryAssistantRole}
+                content={`I don't see an \`${projectMemoryPrompt.fileName}\` file in this project. Would you like me to create Project Memory with starter project conventions and AI instructions?`}
+                isStreaming={false}
+              />
+              <Stack
+                direction="row"
+                spacing={1}
+                sx={{ pl: 0.5, pt: 0.25, pb: 0.75 }}
+              >
+                <Button
+                  variant="text"
+                  size="small"
+                  color="inherit"
+                  onClick={projectMemoryPrompt.onDecline}
+                  disabled={projectMemoryPrompt.disabled}
+                >
+                  No thanks
+                </Button>
+                <Button
+                  variant="outlined"
+                  size="small"
+                  onClick={projectMemoryPrompt.onAccept}
+                  disabled={projectMemoryPrompt.disabled}
+                >
+                  Create {projectMemoryPrompt.fileName}
+                </Button>
+              </Stack>
+            </Box>
+          )}
 
           {/* Live interleaved stream — text parts + tool-call parts in arrival order */}
           {(streamState?.contentParts.length ?? 0) > 0 &&

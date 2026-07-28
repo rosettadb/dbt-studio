@@ -1,5 +1,6 @@
 /* eslint-disable no-await-in-loop, no-restricted-syntax */
 import { createHash } from 'crypto';
+import path from 'path';
 import type {
   SecondBrainScope,
   SecondBrainSettings,
@@ -9,6 +10,7 @@ import SecondBrainService, {
   isSecondBrainGeneratedPageId,
 } from './secondBrain.service';
 import { SecondBrainError } from './secondBrain.types';
+import { SECOND_BRAIN_ENTRY_PAGE } from './secondBrainPolicy';
 
 export type SecondBrainRuntimeContext = {
   screenKey: SecondBrainScope['screenKey'];
@@ -98,7 +100,7 @@ const globalPageAllowed = (
   pageId: string,
   includeGlobalPages: boolean,
 ): boolean => {
-  if (pageId === 'memory.md') return true;
+  if (pageId === SECOND_BRAIN_ENTRY_PAGE) return true;
   if (!includeGlobalPages) return false;
   return (
     pageId === 'preferences.md' ||
@@ -264,7 +266,7 @@ export const isSecondBrainPageAuthorized = (
 export const getSecondBrainInitialPageIds = (
   scope: SecondBrainScope,
 ): string[] => {
-  const candidates: string[] = ['memory.md'];
+  const candidates: string[] = [SECOND_BRAIN_ENTRY_PAGE];
   const scopePrefixes = getSecondBrainScopePrefixes(scope);
   const exactPage = [...scopePrefixes]
     .reverse()
@@ -281,7 +283,7 @@ const getSecondBrainSuggestedCreatePageIds = (
   scope: SecondBrainScope,
 ): string[] =>
   getSecondBrainInitialPageIds(scope)
-    .filter((pageId) => pageId !== 'memory.md')
+    .filter((pageId) => pageId !== SECOND_BRAIN_ENTRY_PAGE)
     .map((pageId) =>
       pageId.endsWith('/index.md')
         ? pageId.replace(/index\.md$/u, 'overview.md')
@@ -439,7 +441,6 @@ export default class SecondBrainRuntimeService {
     scope: SecondBrainScope,
     includeGlobalPages = true,
   ): Promise<string[]> {
-    const targetWithoutExtension = targetPageId.replace(/\.md$/u, '');
     const pageIds = (await this.secondBrain.listPageIds()).filter(
       (pageId) =>
         pageId !== targetPageId &&
@@ -449,9 +450,19 @@ export default class SecondBrainRuntimeService {
     const inbound: string[] = [];
     for (const pageId of pageIds.slice(0, MAX_SCANNED_PAGES)) {
       const page = await this.secondBrain.readPage(pageId);
-      const links = [`[[${targetPageId}]]`, `[[${targetWithoutExtension}]]`];
-      if (links.some((link) => page.content.includes(link)))
-        inbound.push(pageId);
+      const links = [
+        ...page.content.matchAll(/\[[^\]]+\]\(([^)#]+)(?:#[^)]*)?\)/gu),
+      ].map((match) => {
+        const reference = match[1].trim();
+        if (/^[a-z][a-z0-9+.-]*:/iu.test(reference)) return null;
+        const resolved = reference.startsWith('/')
+          ? reference.slice(1)
+          : path.posix.normalize(
+              path.posix.join(path.posix.dirname(pageId), reference),
+            );
+        return resolved.startsWith('../') ? null : resolved;
+      });
+      if (links.includes(targetPageId)) inbound.push(pageId);
     }
     return inbound.sort((left, right) => left.localeCompare(right));
   }
@@ -492,7 +503,7 @@ export default class SecondBrainRuntimeService {
       (prefix) => !prefix.endsWith('.md'),
     );
     const scopedPageIds = getSecondBrainInitialPageIds(scope).filter(
-      (pageId) => pageId !== 'memory.md',
+      (pageId) => pageId !== SECOND_BRAIN_ENTRY_PAGE,
     );
     const existingScopedPageIds = scopedPageIds.filter((pageId) =>
       existingPageIds.has(pageId),

@@ -11,14 +11,18 @@ import {
   DialogContent,
   DialogTitle,
   Divider,
+  FormControl,
   FormControlLabel,
   IconButton,
+  LinearProgress,
   List,
   ListItemButton,
   ListItemText,
+  MenuItem,
   Paper,
   Radio,
   RadioGroup,
+  Select,
   Stack,
   Switch,
   Tab,
@@ -26,6 +30,7 @@ import {
   TextField,
   Tooltip,
   Typography,
+  useMediaQuery,
   useTheme,
 } from '@mui/material';
 import {
@@ -44,6 +49,7 @@ import {
 } from '@mui/icons-material';
 import { toast } from 'react-toastify';
 import type * as monaco from 'monaco-editor';
+import { useNavigate } from 'react-router-dom';
 import { MonacoCodeEditor } from '../monaco/MonacoCodeEditor';
 import { FileIcon } from '../fileIcon';
 import { MarkdownPreview } from '../editor/markdownPreview';
@@ -78,13 +84,81 @@ import {
   useGetAISettings,
   useSaveAISettings,
 } from '../../controllers/aiSettings.controller';
+import {
+  useGetAIProviders,
+  useGetActiveAIProvider,
+  useSetActiveAIProvider,
+} from '../../controllers/aiProviders.controller';
 import { useGetSelectedProject } from '../../controllers/projects.controller';
-import type { SecondBrainTreeItem } from '../../../types/secondBrain';
+import {
+  type SecondBrainProgressEvent,
+  type SecondBrainRefreshResult,
+  type SecondBrainTreeItem,
+} from '../../../types/secondBrain';
+import {
+  AGENT_MEMORY_ENTRY_FILE,
+  PROJECT_AGENT_CONTEXT_FILE,
+} from '../../../shared/agentMemoryConstants';
+import {
+  aiProviderImages,
+  defaultIcon,
+} from '../../../../assets/connectionIcons';
+import {
+  getSecondBrainOperationTitle,
+  getSecondBrainProgressMessage,
+  getSecondBrainProviderTooltip,
+  isCurrentSecondBrainProgress,
+  isSecondBrainTerminalStage,
+  SECOND_BRAIN_GENERATION_HELPERS,
+  type SecondBrainOperationKind,
+} from './secondBrainOperationUi';
 
-const canonicalPages = new Set(['memory.md', 'preferences.md', 'workflows.md']);
+const canonicalPages = new Set([
+  AGENT_MEMORY_ENTRY_FILE,
+  'preferences.md',
+  'workflows.md',
+]);
 
 const projectMemoryEnabledKey = (projectId: number | string) =>
   `project-memory-enabled:${projectId}`;
+
+type SecondBrainOperationDialogState = {
+  kind: SecondBrainOperationKind;
+  phase: 'running' | 'stopping' | 'succeeded' | 'failed' | 'cancelled';
+  startedAt: number;
+  providerName: string;
+  operationId?: string;
+  progress?: SecondBrainProgressEvent;
+  result?: SecondBrainRefreshResult;
+  error?: string;
+  stopError?: string;
+};
+
+const getOperationPrimaryMessage = (
+  operation: SecondBrainOperationDialogState | null,
+): string => {
+  if (operation?.phase === 'failed') {
+    return 'Agent Memory could not be updated.';
+  }
+  if (operation?.phase === 'cancelled') {
+    return 'Agent Memory operation stopped.';
+  }
+  if (operation?.phase === 'succeeded') return 'Agent Memory is ready.';
+  return getSecondBrainProgressMessage(
+    operation?.progress,
+    operation?.phase === 'stopping',
+  );
+};
+
+const getOperationResultMessage = (
+  result?: SecondBrainRefreshResult,
+): string | undefined => {
+  if (!result) return undefined;
+  if (result.status === 'no-change') {
+    return 'No source changes were found. No model call or memory write was needed.';
+  }
+  return `${result.operationsApplied} applied, ${result.operationsSkipped} skipped, and ${result.operationsFailed} failed from ${result.operationsProposed} proposals.`;
+};
 
 const memorySwitchSx = {
   '& .MuiSwitch-switchBase.Mui-checked': {
@@ -123,8 +197,23 @@ sources: []
 
 export const SecondBrainTab: React.FC = () => {
   const theme = useTheme();
+  const navigate = useNavigate();
+  const prefersReducedMotion = useMediaQuery(
+    '(prefers-reduced-motion: reduce)',
+  );
   const { data: settings } = useGetAISettings();
   const saveSettings = useSaveAISettings();
+  const {
+    data: providers = [],
+    isLoading: providersLoading,
+    error: providersError,
+  } = useGetAIProviders();
+  const {
+    data: activeProvider,
+    isLoading: activeProviderLoading,
+    error: activeProviderError,
+  } = useGetActiveAIProvider();
+  const setActiveProvider = useSetActiveAIProvider();
   const statusQuery = useSecondBrainStatus();
   const status = statusQuery.data;
   const treeQuery = useSecondBrainTree(Boolean(status?.initialized));
@@ -169,7 +258,13 @@ export const SecondBrainTab: React.FC = () => {
   const pauseMemory = usePauseSecondBrain();
   const clearAndDisableMemory = useClearAndDisableSecondBrain();
   const cancelRefresh = useCancelSecondBrainRefresh();
-  const progress = useSecondBrainProgress();
+  const { progress, clearProgress } = useSecondBrainProgress();
+  const [providerSelectionError, setProviderSelectionError] =
+    React.useState<string>();
+  const [operationDialog, setOperationDialog] =
+    React.useState<SecondBrainOperationDialogState | null>(null);
+  const [elapsedSeconds, setElapsedSeconds] = React.useState(0);
+  const [generationHelperIndex, setGenerationHelperIndex] = React.useState(0);
   const [memorySettingsTab, setMemorySettingsTab] = React.useState<
     'global' | 'project'
   >('global');
@@ -206,6 +301,78 @@ export const SecondBrainTab: React.FC = () => {
     );
   }, [projectMemoryEnabledStorageKey]);
 
+  const operationActive =
+    operationDialog?.phase === 'running' ||
+    operationDialog?.phase === 'stopping';
+
+  React.useEffect(() => {
+    if (!operationDialog || !operationActive || !progress) return;
+    if (
+      !isCurrentSecondBrainProgress(
+        progress,
+        operationDialog.operationId,
+        operationDialog.startedAt,
+      )
+    ) {
+      return;
+    }
+    setOperationDialog((current) => {
+      if (
+        !current ||
+        current.progress === progress ||
+        !isCurrentSecondBrainProgress(
+          progress,
+          current.operationId,
+          current.startedAt,
+        )
+      ) {
+        return current;
+      }
+      return {
+        ...current,
+        operationId: current.operationId ?? progress.operationId,
+        progress,
+      };
+    });
+  }, [
+    operationActive,
+    operationDialog?.operationId,
+    operationDialog?.startedAt,
+    progress,
+  ]);
+
+  React.useEffect(() => {
+    if (!operationDialog || !operationActive) {
+      setElapsedSeconds(0);
+      return undefined;
+    }
+    const updateElapsed = () =>
+      setElapsedSeconds(
+        Math.max(
+          0,
+          Math.floor((Date.now() - operationDialog.startedAt) / 1000),
+        ),
+      );
+    updateElapsed();
+    const intervalId = window.setInterval(updateElapsed, 1_000);
+    return () => window.clearInterval(intervalId);
+  }, [operationActive, operationDialog?.startedAt]);
+
+  React.useEffect(() => {
+    const generating =
+      operationActive && operationDialog?.progress?.stage === 'generating';
+    setGenerationHelperIndex(0);
+    if (!generating || prefersReducedMotion) return undefined;
+    const intervalId = window.setInterval(
+      () =>
+        setGenerationHelperIndex(
+          (current) => (current + 1) % SECOND_BRAIN_GENERATION_HELPERS.length,
+        ),
+      6_000,
+    );
+    return () => window.clearInterval(intervalId);
+  }, [operationActive, operationDialog?.progress?.stage, prefersReducedMotion]);
+
   React.useEffect(() => {
     const page = pageQuery.data;
     if (!page || selectedRevisionId || dirtyRef.current) return;
@@ -229,8 +396,9 @@ export const SecondBrainTab: React.FC = () => {
   React.useEffect(() => {
     if (!selected && treeQuery.data?.length) {
       setSelected(
-        treeQuery.data.find((page) => page.pageId === 'memory.md') ??
-          treeQuery.data[0],
+        treeQuery.data.find(
+          (page) => page.pageId === AGENT_MEMORY_ENTRY_FILE,
+        ) ?? treeQuery.data[0],
       );
     }
   }, [selected, treeQuery.data]);
@@ -372,7 +540,26 @@ export const SecondBrainTab: React.FC = () => {
     setProjectMemoryEnabled(enabled);
   };
 
-  const handleRefresh = async (kind: 'init' | 'preview' | 'apply') => {
+  const handleProviderChange = async (providerId: string) => {
+    setProviderSelectionError(undefined);
+    try {
+      await setActiveProvider.mutateAsync(providerId);
+    } catch (error) {
+      setProviderSelectionError((error as Error).message);
+    }
+  };
+
+  const handleRefresh = async (kind: SecondBrainOperationKind) => {
+    if (!activeProvider?.id || operationActive) return;
+    const startedAt = Date.now();
+    clearProgress();
+    setLastRefreshMessage('');
+    setOperationDialog({
+      kind,
+      phase: 'running',
+      startedAt,
+      providerName: activeProvider.name,
+    });
     try {
       let response;
       if (kind === 'init') response = await initialize.mutateAsync();
@@ -388,6 +575,16 @@ export const SecondBrainTab: React.FC = () => {
         refreshMessage = `${result.operationsApplied} applied, ${result.operationsSkipped} skipped, and ${result.operationsFailed} failed.`;
       }
       setLastRefreshMessage(refreshMessage);
+      setOperationDialog((current) =>
+        current
+          ? {
+              ...current,
+              phase: result.status === 'cancelled' ? 'cancelled' : 'succeeded',
+              result,
+              progress: undefined,
+            }
+          : current,
+      );
       if (kind === 'init' && settings) {
         await saveSettings.mutateAsync({
           ...settings,
@@ -397,8 +594,51 @@ export const SecondBrainTab: React.FC = () => {
       await statusQuery.refetch();
       await treeQuery.refetch();
     } catch (error) {
-      toast.error((error as Error).message);
+      setOperationDialog((current) =>
+        current
+          ? {
+              ...current,
+              phase: 'failed',
+              error: (error as Error).message,
+              progress: undefined,
+            }
+          : current,
+      );
+    } finally {
+      clearProgress();
     }
+  };
+
+  const handleStopRefresh = async () => {
+    if (
+      !operationDialog?.operationId ||
+      operationDialog.phase !== 'running' ||
+      !operationDialog.progress?.cancellable
+    ) {
+      return;
+    }
+    const { operationId } = operationDialog;
+    setOperationDialog((current) =>
+      current ? { ...current, phase: 'stopping', stopError: undefined } : null,
+    );
+    try {
+      await cancelRefresh.mutateAsync(operationId);
+    } catch (error) {
+      setOperationDialog((current) =>
+        current
+          ? {
+              ...current,
+              stopError: (error as Error).message,
+            }
+          : current,
+      );
+    }
+  };
+
+  const closeOperationDialog = () => {
+    if (operationActive) return;
+    clearProgress();
+    setOperationDialog(null);
   };
 
   const readOnly = Boolean(
@@ -408,7 +648,141 @@ export const SecondBrainTab: React.FC = () => {
     ? (revisionQuery.data?.content ?? '')
     : draft;
   const busy =
-    initialize.isLoading || previewRefresh.isLoading || applyRefresh.isLoading;
+    initialize.isLoading ||
+    previewRefresh.isLoading ||
+    applyRefresh.isLoading ||
+    operationActive;
+  const providerLoading = providersLoading || activeProviderLoading;
+  const hasActiveProvider = Boolean(activeProvider?.id);
+  const providerError =
+    providerSelectionError ||
+    (providersError as Error | null)?.message ||
+    (activeProviderError as Error | null)?.message;
+  const getProviderIcon = (providerType: string) =>
+    aiProviderImages[providerType as keyof typeof aiProviderImages] ??
+    defaultIcon;
+  const providerIconSx = (providerType?: string) => ({
+    width: 18,
+    height: 18,
+    flexShrink: 0,
+    filter:
+      theme.palette.mode === 'dark' &&
+      providerType !== 'gemini' &&
+      providerType !== 'lmstudio'
+        ? 'brightness(0) invert(1) opacity(0.85)'
+        : undefined,
+  });
+  const providerSelector = (
+    <Stack
+      direction={{ xs: 'column', sm: 'row' }}
+      gap={1}
+      alignItems={{ xs: 'stretch', sm: 'center' }}
+    >
+      <FormControl
+        size="small"
+        sx={{
+          minWidth: 200,
+          '& .MuiInputBase-root': { height: 32 },
+        }}
+      >
+        <Select
+          displayEmpty
+          value={activeProvider?.id?.toString() ?? ''}
+          onChange={(event) => handleProviderChange(event.target.value)}
+          inputProps={{ 'aria-label': 'AI provider' }}
+          sx={{
+            '& .MuiSelect-select': {
+              display: 'flex',
+              alignItems: 'center',
+            },
+          }}
+          disabled={
+            providerLoading ||
+            providers.length === 0 ||
+            operationActive ||
+            setActiveProvider.isLoading
+          }
+          renderValue={(providerId) => {
+            const provider = providers.find(
+              (item) => item.id?.toString() === providerId,
+            );
+            if (!provider) {
+              return (
+                <Typography variant="body2" color="text.secondary">
+                  AI provider
+                </Typography>
+              );
+            }
+            return (
+              <Stack direction="row" spacing={1} alignItems="center">
+                <Box
+                  component="img"
+                  src={getProviderIcon(provider.type)}
+                  alt=""
+                  sx={providerIconSx(provider.type)}
+                />
+                <Typography variant="body2" noWrap>
+                  {provider.name}
+                </Typography>
+              </Stack>
+            );
+          }}
+        >
+          <MenuItem value="" disabled>
+            {providerLoading
+              ? 'Loading AI providers…'
+              : 'Select an AI provider'}
+          </MenuItem>
+          {providers.map((provider) => (
+            <MenuItem key={provider.id} value={provider.id?.toString() ?? ''}>
+              <Box
+                component="img"
+                src={getProviderIcon(provider.type)}
+                alt=""
+                sx={{ ...providerIconSx(provider.type), mr: 1 }}
+              />
+              {provider.name} ({provider.type})
+            </MenuItem>
+          ))}
+        </Select>
+      </FormControl>
+      {providers.length === 0 && !providerLoading && (
+        <Button
+          size="small"
+          variant="outlined"
+          onClick={() => navigate('/app/settings/ai-providers?tab=Providers')}
+        >
+          Configure providers
+        </Button>
+      )}
+    </Stack>
+  );
+  const operationProgress = operationDialog?.progress;
+  const operationStopping = operationDialog?.phase === 'stopping';
+  const operationPrimaryMessage = getOperationPrimaryMessage(operationDialog);
+  const showStop = Boolean(
+    operationDialog?.phase === 'running' &&
+      operationDialog.operationId &&
+      operationProgress?.cancellable &&
+      !isSecondBrainTerminalStage(operationProgress.stage),
+  );
+  const operationHasDeterminateProgress = Boolean(
+    operationProgress?.total &&
+      operationProgress.total > 0 &&
+      operationProgress.completed >= 0 &&
+      operationProgress.completed <= operationProgress.total &&
+      operationProgress.stage !== 'generating',
+  );
+  const operationProgressValue = operationHasDeterminateProgress
+    ? ((operationProgress?.completed ?? 0) / (operationProgress?.total ?? 1)) *
+      100
+    : undefined;
+  const elapsedLabel = `${Math.floor(elapsedSeconds / 60)}:${String(
+    elapsedSeconds % 60,
+  ).padStart(2, '0')}`;
+  const operationResultMessage = getOperationResultMessage(
+    operationDialog?.result,
+  );
   const visiblePages = search.trim()
     ? (searchQuery.data ?? [])
         .map((hit) =>
@@ -417,25 +791,24 @@ export const SecondBrainTab: React.FC = () => {
         .filter((page): page is SecondBrainTreeItem => Boolean(page))
     : (treeQuery.data ?? []);
   const displayPageTitle = (item: SecondBrainTreeItem) =>
-    item.pageId === 'memory.md' || item.pageId === 'index.md'
+    item.pageId === AGENT_MEMORY_ENTRY_FILE || item.pageId === 'index.md'
       ? 'Agent Memory'
       : item.title;
   return (
-    <Stack spacing={2}>
+    <Stack spacing={1.5}>
       <Paper variant="outlined">
-        <Box sx={{ px: 2, pt: 1.5 }}>
-          <Typography variant="subtitle2">Memory</Typography>
-          <Typography variant="caption" color="text.secondary">
-            Configure global Agent Memory and project-owned agent.md context
-            separately.
-          </Typography>
-        </Box>
         <Tabs
           value={memorySettingsTab}
           onChange={(_, value: 'global' | 'project') =>
             setMemorySettingsTab(value)
           }
-          sx={{ px: 2, borderBottom: 1, borderColor: 'divider' }}
+          sx={{
+            px: 1.5,
+            minHeight: 40,
+            borderBottom: 1,
+            borderColor: 'divider',
+            '& .MuiTab-root': { minHeight: 40, py: 0.5 },
+          }}
         >
           <Tab value="global" label="Global" />
           <Tab value="project" label="Project" />
@@ -523,9 +896,10 @@ export const SecondBrainTab: React.FC = () => {
             <Box>
               <Typography variant="subtitle1">Project Memory</Typography>
               <Typography variant="body2" color="text.secondary">
-                Project Memory is stored as <code>agent.md</code> in this dbt
-                project. It travels with the repository and is separate from
-                global Agent Memory.
+                Project Memory is stored as{' '}
+                <code>{PROJECT_AGENT_CONTEXT_FILE}</code> in this dbt project.
+                It travels with the repository and is separate from global Agent
+                Memory.
               </Typography>
             </Box>
             {!selectedProject ? (
@@ -540,11 +914,12 @@ export const SecondBrainTab: React.FC = () => {
               >
                 <Box>
                   <Typography variant="subtitle2">
-                    Include agent.md in Project Agent context
+                    Include {PROJECT_AGENT_CONTEXT_FILE} in Project Agent
+                    context
                   </Typography>
                   <Typography variant="caption" color="text.secondary">
                     The Project Agent reads the current project&apos;s root
-                    agent.md file when starting a request.
+                    {PROJECT_AGENT_CONTEXT_FILE} file when starting a request.
                   </Typography>
                 </Box>
                 <Switch
@@ -609,72 +984,133 @@ export const SecondBrainTab: React.FC = () => {
                   </Typography>
                 </Box>
               </Stack>
-              <Button
-                variant="contained"
-                onClick={() => handleRefresh('init')}
-                disabled={busy}
-                startIcon={
-                  busy ? <CircularProgress color="inherit" size={16} /> : null
-                }
-                sx={{
-                  alignSelf: { xs: 'stretch', md: 'center' },
-                  minWidth: 170,
-                  fontWeight: 700,
-                }}
+              <Stack
+                direction={{ xs: 'column', lg: 'row' }}
+                alignItems={{ xs: 'stretch', lg: 'center' }}
+                gap={1}
               >
-                Initialize memory
-              </Button>
+                <Tooltip
+                  title={
+                    !hasActiveProvider
+                      ? getSecondBrainProviderTooltip('init')
+                      : ''
+                  }
+                >
+                  <span>
+                    <Button
+                      size="small"
+                      variant="contained"
+                      onClick={() => handleRefresh('init')}
+                      disabled={
+                        busy ||
+                        providerLoading ||
+                        setActiveProvider.isLoading ||
+                        !hasActiveProvider
+                      }
+                      startIcon={
+                        busy ? (
+                          <CircularProgress color="inherit" size={16} />
+                        ) : null
+                      }
+                      sx={{
+                        width: { xs: '100%', lg: 'auto' },
+                        minWidth: 170,
+                        fontWeight: 700,
+                      }}
+                    >
+                      Initialize memory
+                    </Button>
+                  </span>
+                </Tooltip>
+                {providerSelector}
+              </Stack>
             </Stack>
+            {providerError && (
+              <Alert severity="error" sx={{ mt: 1.5 }}>
+                {providerError}
+              </Alert>
+            )}
           </Paper>
         )}
       {memorySettingsTab === 'global' &&
         settings?.secondBrain.enabled &&
         status?.initialized && (
           <>
-            <Paper variant="outlined" sx={{ p: 1.5 }}>
-              <Stack
-                direction="row"
-                gap={1}
-                alignItems="center"
-                flexWrap="wrap"
-              >
-                <Button
-                  variant="outlined"
-                  startIcon={<Search />}
-                  onClick={() => handleRefresh('preview')}
-                  disabled={busy}
+            <Paper variant="outlined" sx={{ p: 1 }}>
+              <Stack spacing={1}>
+                <Stack
+                  direction={{ xs: 'column', md: 'row' }}
+                  gap={1}
+                  alignItems={{ xs: 'stretch', md: 'center' }}
+                  justifyContent="space-between"
                 >
-                  Preview refresh
-                </Button>
-                <Button
-                  variant="contained"
-                  startIcon={
-                    busy ? <CircularProgress size={16} /> : <Refresh />
-                  }
-                  onClick={() => handleRefresh('apply')}
-                  disabled={busy}
-                >
-                  Refresh memory
-                </Button>
-                {progress?.cancellable && (
-                  <Button
-                    color="warning"
-                    startIcon={<Stop />}
-                    onClick={() => cancelRefresh.mutate(progress.operationId)}
+                  <Stack
+                    direction={{ xs: 'column', sm: 'row' }}
+                    gap={1}
+                    alignItems={{ xs: 'stretch', sm: 'center' }}
                   >
-                    Cancel
-                  </Button>
-                )}
-                {progress && (
-                  <Chip
-                    size="small"
-                    label={`${progress.stage}: ${progress.message}`}
-                  />
-                )}
+                    <Tooltip
+                      title={
+                        !hasActiveProvider
+                          ? getSecondBrainProviderTooltip('preview')
+                          : ''
+                      }
+                    >
+                      <span>
+                        <Button
+                          size="small"
+                          variant="outlined"
+                          startIcon={<Search />}
+                          onClick={() => handleRefresh('preview')}
+                          disabled={
+                            busy ||
+                            providerLoading ||
+                            setActiveProvider.isLoading ||
+                            !hasActiveProvider
+                          }
+                          sx={{ width: { xs: '100%', sm: 'auto' } }}
+                        >
+                          Preview refresh
+                        </Button>
+                      </span>
+                    </Tooltip>
+                    <Tooltip
+                      title={
+                        !hasActiveProvider
+                          ? getSecondBrainProviderTooltip('apply')
+                          : ''
+                      }
+                    >
+                      <span>
+                        <Button
+                          size="small"
+                          variant="contained"
+                          startIcon={
+                            busy ? <CircularProgress size={16} /> : <Refresh />
+                          }
+                          onClick={() => handleRefresh('apply')}
+                          disabled={
+                            busy ||
+                            providerLoading ||
+                            setActiveProvider.isLoading ||
+                            !hasActiveProvider
+                          }
+                          sx={{ width: { xs: '100%', sm: 'auto' } }}
+                        >
+                          Refresh memory
+                        </Button>
+                      </span>
+                    </Tooltip>
+                  </Stack>
+                  {providerSelector}
+                </Stack>
                 {lastRefreshMessage && (
                   <Typography variant="body2" color="text.secondary">
                     {lastRefreshMessage}
                   </Typography>
+                )}
+                {providerError && (
+                  <Alert severity="error">{providerError}</Alert>
                 )}
               </Stack>
             </Paper>
@@ -704,9 +1140,17 @@ export const SecondBrainTab: React.FC = () => {
                     onChange={(event) => setSearch(event.target.value)}
                     placeholder="Search memory"
                     inputProps={{ 'aria-label': 'Search Agent Memory pages' }}
+                    sx={{
+                      '& .MuiInputBase-root': { height: 32 },
+                      '& .MuiInputBase-input': { py: 0.5 },
+                    }}
                   />
                   <Tooltip title="Create Markdown page">
-                    <IconButton onClick={startNewPage}>
+                    <IconButton
+                      size="small"
+                      onClick={startNewPage}
+                      sx={{ width: 32, height: 32 }}
+                    >
                       <CreateNewFolder />
                     </IconButton>
                   </Tooltip>
@@ -743,7 +1187,11 @@ export const SecondBrainTab: React.FC = () => {
                   <TabButton active isLast sx={{ flex: '0 1 auto' }}>
                     <TabIconSlot>
                       <FileIcon
-                        fileName={newPageId ?? selected?.pageId ?? 'memory.md'}
+                        fileName={
+                          newPageId ??
+                          selected?.pageId ??
+                          AGENT_MEMORY_ENTRY_FILE
+                        }
                       />
                     </TabIconSlot>
                     <TabTitle>
@@ -954,6 +1402,122 @@ export const SecondBrainTab: React.FC = () => {
         )}
 
       <Dialog
+        open={Boolean(operationDialog)}
+        onClose={() => closeOperationDialog()}
+        disableEscapeKeyDown={operationActive}
+        maxWidth="sm"
+        fullWidth
+        aria-labelledby="agent-memory-operation-title"
+        aria-describedby="agent-memory-operation-status"
+      >
+        <DialogTitle id="agent-memory-operation-title">
+          {operationDialog
+            ? getSecondBrainOperationTitle(operationDialog.kind)
+            : 'Agent Memory'}
+        </DialogTitle>
+        <DialogContent>
+          <Stack spacing={2} sx={{ pt: 0.5 }}>
+            {operationDialog && (
+              <Stack direction="row" justifyContent="space-between" gap={2}>
+                <Typography variant="caption" color="text.secondary">
+                  Provider: {operationDialog.providerName}
+                </Typography>
+                <Typography variant="caption" color="text.secondary">
+                  Elapsed: {elapsedLabel}
+                </Typography>
+              </Stack>
+            )}
+
+            {operationActive && (
+              <LinearProgress
+                variant={
+                  operationHasDeterminateProgress
+                    ? 'determinate'
+                    : 'indeterminate'
+                }
+                value={operationProgressValue}
+                aria-label="Agent Memory operation progress"
+              />
+            )}
+
+            <Box
+              id="agent-memory-operation-status"
+              role="status"
+              aria-live="polite"
+            >
+              <Typography variant="body1" fontWeight={600}>
+                {operationPrimaryMessage}
+              </Typography>
+              {operationActive &&
+                operationProgress?.message &&
+                operationProgress.message !== operationPrimaryMessage && (
+                  <Typography variant="body2" color="text.secondary" mt={0.5}>
+                    {operationProgress.message}
+                  </Typography>
+                )}
+            </Box>
+
+            {operationActive && operationProgress?.stage === 'generating' && (
+              <Typography
+                variant="body2"
+                color="text.secondary"
+                aria-hidden="true"
+              >
+                {
+                  SECOND_BRAIN_GENERATION_HELPERS[
+                    prefersReducedMotion ? 0 : generationHelperIndex
+                  ]
+                }
+              </Typography>
+            )}
+
+            {operationResultMessage && (
+              <Alert severity="success">{operationResultMessage}</Alert>
+            )}
+            {operationDialog?.phase === 'cancelled' && (
+              <Alert severity="info">
+                No additional memory updates applied.
+              </Alert>
+            )}
+            {operationDialog?.error && (
+              <Alert severity="error">{operationDialog.error}</Alert>
+            )}
+            {operationDialog?.stopError && (
+              <Alert severity="error">
+                Could not stop the operation: {operationDialog.stopError}
+              </Alert>
+            )}
+          </Stack>
+        </DialogContent>
+        <DialogActions>
+          {showStop && (
+            <Button
+              color="warning"
+              startIcon={<Stop />}
+              onClick={handleStopRefresh}
+              disabled={cancelRefresh.isLoading}
+            >
+              Stop
+            </Button>
+          )}
+          {operationStopping && (
+            <Button
+              color="warning"
+              startIcon={<CircularProgress size={16} />}
+              disabled
+            >
+              Stopping…
+            </Button>
+          )}
+          {!operationActive && (
+            <Button variant="contained" onClick={closeOperationDialog}>
+              Close
+            </Button>
+          )}
+        </DialogActions>
+      </Dialog>
+
+      <Dialog
         open={newPageDialogOpen}
         onClose={() => setNewPageDialogOpen(false)}
         maxWidth="sm"
@@ -1070,8 +1634,8 @@ export const SecondBrainTab: React.FC = () => {
         <DialogContent>
           <Typography variant="body2" color="text.secondary">
             This will permanently delete all saved Agent Memory, including wiki
-            pages, revisions, archive, and state. Project agent.md files are not
-            deleted.
+            pages, revisions, archive, and state. Project{' '}
+            {PROJECT_AGENT_CONTEXT_FILE} files are not deleted.
           </Typography>
         </DialogContent>
         <DialogActions>

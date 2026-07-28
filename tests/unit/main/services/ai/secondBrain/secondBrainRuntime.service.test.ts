@@ -90,20 +90,20 @@ describe('Second Brain runtime scope resolution', () => {
     };
 
     expect(getSecondBrainInitialPageIds(scopes.project)).toEqual([
-      'memory.md',
+      'MEMORY.md',
       `projects/${projectKey}/index.md`,
     ]);
     expect(getSecondBrainInitialPageIds(scopes.sql)).toEqual([
-      'memory.md',
+      'MEMORY.md',
       `connections/${connectionKey}/index.md`,
     ]);
     expect(getSecondBrainInitialPageIds(scopes.notebooks)).toEqual([
-      'memory.md',
+      'MEMORY.md',
       `notebooks/${connectionKey}/${notebookKey}.md`,
       `connections/${connectionKey}/index.md`,
     ]);
     expect(getSecondBrainInitialPageIds(scopes.analytics)).toEqual([
-      'memory.md',
+      'MEMORY.md',
       `analytics/${connectionKey}/${analyticsKey}.md`,
       `connections/${connectionKey}/index.md`,
     ]);

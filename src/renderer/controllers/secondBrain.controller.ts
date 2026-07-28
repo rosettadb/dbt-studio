@@ -131,7 +131,8 @@ export const useSecondBrainProgress = () => {
   const [progress, setProgress] =
     React.useState<SecondBrainProgressEvent | null>(null);
   React.useEffect(() => secondBrainService.onProgress(setProgress), []);
-  return progress;
+  const clearProgress = React.useCallback(() => setProgress(null), []);
+  return { progress, clearProgress };
 };
 
 export const openSecondBrainWikiFolder = secondBrainService.openWikiFolder;

@@ -68,6 +68,13 @@ const emptyAdditionalSources = {
   loadConnections: jest.fn(async () => []),
   listNotebooks: jest.fn(async () => []),
   collectGitStatus: jest.fn(async () => ({})),
+  collectDbtRuntimeEvidence: jest.fn(async () => ({
+    version: null,
+    pythonPath: '',
+    dbtPath: null,
+    isDbtCorePackage: false,
+    isExecutableVerified: false,
+  })),
 };
 
 describe('SecondBrainRefreshService', () => {
@@ -157,7 +164,18 @@ describe('SecondBrainRefreshService', () => {
       operationsApplied: 1,
     });
     const page = await secondBrain.readPage(durableOperation.pageId);
-    expect(page.content).toContain('second-brain-sources');
+    expect(page.frontmatter.sources).toEqual([
+      {
+        id: expect.stringMatching(/^source-[a-f0-9]{12}$/u),
+        resource: 'session://7/summary',
+      },
+    ]);
+    expect(page.frontmatter.generated).toMatchObject({
+      by: 'process:rosetta-agent-memory-refresh',
+      at: expect.any(String),
+    });
+    expect(page.frontmatter.verified).toBeUndefined();
+    expect(page.content).not.toContain('second-brain-sources');
     expect((await secondBrain.readStateFile())?.sourceCursors.sessions).toEqual(
       { updatedAt: fixedDate.toISOString(), stableId: '11' },
     );
@@ -288,6 +306,57 @@ describe('SecondBrainRefreshService', () => {
     ).toBeDefined();
   });
 
+  it('collects only verified Apache dbt runtime evidence without paths or output', async () => {
+    const runtimeOperation: SecondBrainRefreshOperation = {
+      ...durableOperation,
+      pageId: 'topics/dbt-runtime.md',
+      provenanceIds: ['rosetta:dbt-core:installed-package'],
+    };
+    const generateOperations = jest.fn(async ({ evidence }) => {
+      expect(evidence).toContainEqual(
+        expect.objectContaining({
+          sourceId: 'dbt-runtime',
+          provenance: 'rosetta:dbt-core:installed-package',
+          projection: {
+            package: 'apache-dbt-core',
+            version: '2.1.0',
+            runtime: 'v2',
+            executableVerified: true,
+          },
+        }),
+      );
+      expect(JSON.stringify(evidence)).not.toContain('/private/runtime');
+      expect(JSON.stringify(evidence)).not.toContain('raw dbt output');
+      return [runtimeOperation];
+    });
+    const refresh = new SecondBrainRefreshService(secondBrain, {
+      ...emptyAdditionalSources,
+      collectDbtRuntimeEvidence: jest.fn(async () => ({
+        version: '2.1.0',
+        pythonPath: '/private/runtime/python',
+        dbtPath: '/private/runtime/dbt',
+        dbtVersionOutput: 'raw dbt output',
+        isDbtCorePackage: true,
+        isExecutableVerified: true,
+      })),
+      generateOperations,
+      collectSessions: jest.fn(async () => []) as any,
+      collectAnalytics: jest.fn(async () => []) as any,
+      loadProjects: jest.fn(async () => []),
+    });
+
+    const result = await refresh.refresh({});
+    const page = await secondBrain.readPage(runtimeOperation.pageId);
+
+    expect(result.operationsApplied).toBe(1);
+    expect(page.frontmatter.sources).toEqual([
+      {
+        id: expect.stringMatching(/^source-[a-f0-9]{12}$/u),
+        resource: 'rosetta://dbt-core/installed-package',
+      },
+    ]);
+  });
+
   it('skips malformed model page IDs without aborting initialization', async () => {
     const malformedOperation = {
       ...durableOperation,
@@ -379,10 +448,16 @@ describe('SecondBrainRefreshService', () => {
       collectAnalytics: jest.fn(async () => []) as any,
       loadProjects: jest.fn(async () => []),
     });
+    const onProgress = jest.fn();
 
-    await expect(refresh.refresh({ initialize: true })).rejects.toThrow(
-      'Provider unavailable',
-    );
+    await expect(
+      refresh.refresh({ initialize: true, onProgress }),
+    ).rejects.toThrow('Provider unavailable');
+    expect(onProgress).toHaveBeenLastCalledWith({
+      stage: 'failed',
+      completed: 0,
+      message: 'Wiki Memory operation failed.',
+    });
     expect(await fs.pathExists(uninitializedRoot)).toBe(false);
   });
 
@@ -478,10 +553,16 @@ describe('SecondBrainRefreshService', () => {
       collectAnalytics: jest.fn(async () => []) as any,
       loadProjects: jest.fn(async () => []),
     });
+    const onProgress = jest.fn();
 
     await expect(
-      refresh.refresh({ abortSignal: controller.signal }),
+      refresh.refresh({ abortSignal: controller.signal, onProgress }),
     ).rejects.toMatchObject({ code: 'CANCELLED' });
+    expect(onProgress).toHaveBeenLastCalledWith({
+      stage: 'cancelled',
+      completed: 0,
+      message: 'Wiki Memory operation cancelled.',
+    });
     expect(collectSessions).not.toHaveBeenCalled();
     expect(generateOperations).not.toHaveBeenCalled();
     expect((await secondBrain.readStateFile())?.sourceCursors).toEqual({});

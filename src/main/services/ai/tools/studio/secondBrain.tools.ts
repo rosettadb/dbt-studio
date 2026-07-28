@@ -15,6 +15,7 @@ import SecondBrainRuntimeService, {
 } from '../../secondBrain/secondBrainRuntime.service';
 import { SecondBrainError } from '../../secondBrain/secondBrain.types';
 import { containsLikelySecondBrainSecret } from '../../secondBrain/secondBrainSecrets';
+import { SECOND_BRAIN_ENTRY_PAGE } from '../../secondBrain/secondBrainPolicy';
 
 type SecondBrainToolOptions = {
   secondBrain: SecondBrainService;
@@ -109,18 +110,14 @@ const applySectionOperation = (
 };
 
 const wikiLinks = (content: string): string[] =>
-  [...content.matchAll(/\[\[([^\]|#]+)(?:[|#][^\]]*)?\]\]/gu)]
+  [...content.matchAll(/\[[^\]]+\]\(([^)#]+)(?:#[^)]*)?\)/gu)]
     .map((match) => match[1].trim())
     .filter(Boolean)
     .slice(0, 100);
 
 const normalizeWikiPageReference = (reference: string): string => {
   let pageId = reference.trim();
-  const wikiLink = /^\[\[([^\]]+)\]\]$/u.exec(pageId);
-  if (wikiLink) {
-    [pageId] = wikiLink[1].split(/[|#]/u, 1);
-    pageId = pageId.trim();
-  }
+  if (pageId === 'MEMORY') pageId = SECOND_BRAIN_ENTRY_PAGE;
   if (!pageId.toLowerCase().endsWith('.md')) pageId = `${pageId}.md`;
   return normalizeSecondBrainPageId(pageId);
 };
@@ -205,8 +202,7 @@ export const createSecondBrainTools = (
       },
     }),
     wiki_read: tool({
-      description:
-        'Read one authorized Wiki Memory Markdown page by page ID. The global entry page is memory.md; memory and [[memory]] are accepted aliases. Read before relying on or changing durable knowledge.',
+      description: `Read one authorized Wiki Memory Markdown page by page ID. The global entry page is ${SECOND_BRAIN_ENTRY_PAGE}. Read before relying on or changing durable knowledge.`,
       inputSchema: z.object({ pageId: z.string().min(3).max(500) }),
       execute: async ({ pageId: pageReference }) => {
         try {
@@ -256,7 +252,7 @@ export const createSecondBrainTools = (
             ),
           );
           const candidatePageIds = getSecondBrainInitialPageIds(scope).filter(
-            (pageId) => pageId !== 'memory.md',
+            (pageId) => pageId !== SECOND_BRAIN_ENTRY_PAGE,
           );
           return {
             ok: true,
@@ -398,7 +394,11 @@ export const createSecondBrainTools = (
             settings.includeGlobalPages,
           );
           if (
-            ['memory.md', 'preferences.md', 'workflows.md'].includes(pageId)
+            [
+              SECOND_BRAIN_ENTRY_PAGE,
+              'preferences.md',
+              'workflows.md',
+            ].includes(pageId)
           ) {
             throw new SecondBrainError(
               'INVALID_CONTENT',

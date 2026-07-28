@@ -55,7 +55,7 @@ export class SecondBrainError extends Error {
 export type SecondBrainState = {
   version: 2;
   layoutVersion: 2;
-  okfVersion: '0.1';
+  okfVersion: '0.2';
   initializedAt: string;
   lastSuccessfulRefreshAt?: string;
   sourceCursors: Record<string, unknown>;

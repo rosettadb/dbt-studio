@@ -30,7 +30,7 @@ export interface AgentRunRequest {
   connectionId?: string;
   notebookId?: string;
   pageId?: string;
-  projectAiContext?: string;
+  includeProjectAiContext?: boolean;
 }
 
 export type AgentContextOverheadRequest = Omit<

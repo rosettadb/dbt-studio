@@ -45,6 +45,7 @@ import {
 import SecondBrainService from './ai/secondBrain/secondBrain.service';
 import SecondBrainRuntimeService from './ai/secondBrain/secondBrainRuntime.service';
 import { createSecondBrainTools } from './ai/tools/studio/secondBrain.tools';
+import { readProjectAgentContext } from './ai/projectAgentContext';
 
 // ─── AI Settings ─────────────────────────────────────────────────────────────
 
@@ -285,7 +286,7 @@ export interface AgentRunRequest {
   connectionId?: string;
   notebookId?: string;
   pageId?: string; // Analytics: currently open page ID
-  projectAiContext?: string;
+  includeProjectAiContext?: boolean;
 }
 
 export type AgentContextOverheadRequest = Omit<
@@ -1406,6 +1407,10 @@ COMBINED SUMMARY:`,
       }
 
       let sessionContextBlock = '';
+      const projectAiContext =
+        screenKey === 'project' && request.includeProjectAiContext
+          ? await readProjectAgentContext(projectPath)
+          : undefined;
       if (screenKey === 'project') {
         try {
           // Derive the selected file path from contextItems (type 'file' entries)
@@ -1479,7 +1484,7 @@ COMBINED SUMMARY:`,
             skills: base.skillsPrompt,
             conversationId,
             toolMode: request.toolMode || 'agent',
-            projectAiContext: request.projectAiContext,
+            projectAiContext,
             sessionContextBlock,
             connectionMeta: projectConnectionMeta,
           });

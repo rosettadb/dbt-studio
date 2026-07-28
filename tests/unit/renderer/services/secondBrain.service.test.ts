@@ -7,21 +7,21 @@ describe('renderer/services/secondBrain.service', () => {
 
   it('uses typed page IDs and hashes for read and write operations', async () => {
     const invoke = (window as any).electron.ipcRenderer.invoke as jest.Mock;
-    invoke.mockResolvedValue({ pageId: 'memory.md' });
+    invoke.mockResolvedValue({ pageId: 'MEMORY.md' });
 
-    await secondBrainService.readPage('memory.md');
+    await secondBrainService.readPage('MEMORY.md');
     await secondBrainService.writePage({
-      pageId: 'memory.md',
+      pageId: 'MEMORY.md',
       content: '# Memory',
       expectedHash: 'a'.repeat(64),
     });
 
     expect(invoke).toHaveBeenNthCalledWith(1, 'second-brain:read', {
-      pageId: 'memory.md',
+      pageId: 'MEMORY.md',
       archived: false,
     });
     expect(invoke).toHaveBeenNthCalledWith(2, 'second-brain:write', {
-      pageId: 'memory.md',
+      pageId: 'MEMORY.md',
       content: '# Memory',
       expectedHash: 'a'.repeat(64),
     });
@@ -68,5 +68,4 @@ describe('renderer/services/secondBrain.service', () => {
     expect(callback).toHaveBeenCalledWith(progress);
     expect(returned).toBe(unsubscribe);
   });
-
 });

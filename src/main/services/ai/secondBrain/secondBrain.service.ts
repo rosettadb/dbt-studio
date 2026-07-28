@@ -54,6 +54,13 @@ import {
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   value !== null && typeof value === 'object' && !Array.isArray(value);
 
+const TRUSTED_OKF_FIELDS = [
+  'sources',
+  'generated',
+  'verified',
+  'usage_window',
+] as const;
+
 const hashContent = (content: string | Buffer): string =>
   createHash('sha256').update(content).digest('hex');
 
@@ -94,12 +101,16 @@ export const parseSecondBrainDocument = (
   }
 
   try {
-    const parsed = yaml.load(frontmatterMatch[1]);
+    const parsed = yaml.load(frontmatterMatch[1], { schema: yaml.JSON_SCHEMA });
     if (parsed !== undefined && !isRecord(parsed)) {
       throw new Error('Frontmatter must be a mapping.');
     }
+    const frontmatter = (parsed ?? {}) as SecondBrainFrontmatter;
+    if (isRecord(frontmatter.verified)) {
+      frontmatter.verified = [frontmatter.verified];
+    }
     return {
-      frontmatter: (parsed ?? {}) as SecondBrainFrontmatter,
+      frontmatter,
       body: content.slice(frontmatterMatch[0].length),
     };
   } catch (error) {
@@ -115,6 +126,26 @@ export const isSecondBrainGeneratedPageId = (pageId: string): boolean => {
   return (
     basename === SECOND_BRAIN_INDEX_PAGE || basename === SECOND_BRAIN_LOG_PAGE
   );
+};
+
+export const getSecondBrainConceptLifecycle = (
+  frontmatter: SecondBrainFrontmatter,
+  today = new Date(),
+): {
+  status: 'draft' | 'stable' | 'deprecated';
+  stale: boolean;
+} => {
+  const status =
+    frontmatter.status === 'draft' || frontmatter.status === 'deprecated'
+      ? frontmatter.status
+      : 'stable';
+  const todayString = today.toISOString().slice(0, 10);
+  return {
+    status,
+    stale:
+      typeof frontmatter.stale_after === 'string' &&
+      todayString >= frontmatter.stale_after,
+  };
 };
 
 const inferConceptType = (pageId: string): string => {
@@ -156,6 +187,7 @@ const ensureConceptType = (pageId: string, content: string): string => {
 };
 
 export const normalizeSecondBrainPageId = (pageId: string): string => {
+  const isCanonicalEntry = pageId === SECOND_BRAIN_ENTRY_PAGE;
   if (
     typeof pageId !== 'string' ||
     pageId.length === 0 ||
@@ -164,13 +196,13 @@ export const normalizeSecondBrainPageId = (pageId: string): string => {
     path.posix.isAbsolute(pageId) ||
     pageId.normalize('NFC') !== pageId ||
     !pageId.toLowerCase().endsWith('.md') ||
-    pageId !== pageId.toLowerCase() ||
+    (!isCanonicalEntry && pageId !== pageId.toLowerCase()) ||
     /%[0-9a-f]{2}/iu.test(pageId) ||
     /\p{Cf}/u.test(pageId)
   ) {
     throw new SecondBrainError(
       'INVALID_PAGE_ID',
-      'Page IDs must be relative POSIX paths ending in .md.',
+      `Page IDs must be lowercase relative POSIX paths ending in .md, except ${SECOND_BRAIN_ENTRY_PAGE}.`,
     );
   }
 
@@ -407,14 +439,14 @@ export default class SecondBrainService {
     );
     return {
       initialized: Boolean(
-        state && requiredPagesExist && layoutVersion === 'okf-v0.1',
+        state && requiredPagesExist && layoutVersion === 'okf-v0.2',
       ),
       pageCount: pages.length,
       totalBytes: pages.reduce((total, page) => total + page.sizeBytes, 0),
       stateVersion: state?.version,
       lastSuccessfulRefreshAt: state?.lastSuccessfulRefreshAt,
       layoutVersion,
-      okfVersion: layoutVersion === 'okf-v0.1' ? '0.1' : undefined,
+      okfVersion: layoutVersion === 'okf-v0.2' ? '0.2' : undefined,
     };
   }
 
@@ -606,7 +638,7 @@ export default class SecondBrainService {
     return this.withPageLock(pageId, async () => {
       await this.requireInitializedState();
       const content = normalizeContent(input.content);
-      SecondBrainService.assertValidOkfConcept(pageId, content);
+      SecondBrainService.assertValidOkfConcept(pageId, content, input.actor);
       this.assertPageBudget(pageId, content);
       const pagePath = await this.resolvePagePath(pageId, false);
       const exists = await fs.pathExists(pagePath);
@@ -635,6 +667,25 @@ export default class SecondBrainService {
         throw new SecondBrainError('NOT_FOUND', 'Wiki Memory page not found.', {
           pageId,
         });
+      }
+      if (input.actor === 'agent') {
+        const nextFrontmatter = parseSecondBrainDocument(content).frontmatter;
+        const currentFrontmatter = previousContent
+          ? parseSecondBrainDocument(previousContent.toString('utf8'))
+              .frontmatter
+          : {};
+        const changedTrustedMetadata = TRUSTED_OKF_FIELDS.some(
+          (field) =>
+            JSON.stringify(nextFrontmatter[field]) !==
+            JSON.stringify(currentFrontmatter[field]),
+        );
+        if (changedTrustedMetadata) {
+          throw new SecondBrainError(
+            'INVALID_FRONTMATTER',
+            'Agent-authored changes cannot add or modify trusted provenance or identity metadata.',
+            { pageId },
+          );
+        }
       }
 
       await this.assertTotalBudget(
@@ -862,7 +913,7 @@ export default class SecondBrainService {
     });
   }
 
-  private async detectLayout(): Promise<'okf-v0.1' | 'empty'> {
+  private async detectLayout(): Promise<'okf-v0.2' | 'empty'> {
     const wikiIndex = path.join(this.wikiRoot(), SECOND_BRAIN_INDEX_PAGE);
     if (await fs.pathExists(wikiIndex)) {
       const parsed = parseSecondBrainDocument(
@@ -874,7 +925,7 @@ export default class SecondBrainService {
           'Wiki Memory uses an unsupported OKF version.',
         );
       }
-      return 'okf-v0.1';
+      return 'okf-v0.2';
     }
     return 'empty';
   }
@@ -887,13 +938,139 @@ export default class SecondBrainService {
     return path.join(this.rootPath, SECOND_BRAIN_STATE_FILE);
   }
 
-  private static assertValidOkfConcept(pageId: string, content: string): void {
+  public static assertValidOkfConcept(
+    pageId: string,
+    content: string,
+    actor?: SecondBrainWriteInput['actor'],
+  ): void {
     if (isSecondBrainGeneratedPageId(pageId)) return;
     const { frontmatter } = parseSecondBrainDocument(content);
     if (typeof frontmatter.type !== 'string' || !frontmatter.type.trim()) {
       throw new SecondBrainError(
         'INVALID_FRONTMATTER',
         'OKF concept frontmatter requires a non-empty type.',
+        { pageId },
+      );
+    }
+    if (
+      actor === 'refresh' &&
+      (!isRecord(frontmatter.generated) ||
+        frontmatter.generated.by !== 'process:rosetta-agent-memory-refresh' ||
+        frontmatter.verified !== undefined)
+    ) {
+      throw new SecondBrainError(
+        'INVALID_FRONTMATTER',
+        'Refresh concepts require backend-grounded generation metadata and cannot claim verification.',
+        { pageId },
+      );
+    }
+    const isAbsoluteDate = (value: unknown): value is string => {
+      if (typeof value !== 'string' || !/^\d{4}-\d{2}-\d{2}$/u.test(value)) {
+        return false;
+      }
+      const date = new Date(`${value}T00:00:00.000Z`);
+      return (
+        !Number.isNaN(date.getTime()) && date.toISOString().startsWith(value)
+      );
+    };
+    const isDateRange = (value: unknown): boolean =>
+      isRecord(value) &&
+      isAbsoluteDate(value.from) &&
+      isAbsoluteDate(value.to) &&
+      value.from <= value.to;
+    if (
+      frontmatter.status !== undefined &&
+      !['draft', 'stable', 'deprecated'].includes(String(frontmatter.status))
+    ) {
+      throw new SecondBrainError(
+        'INVALID_FRONTMATTER',
+        'OKF status must be draft, stable, or deprecated.',
+        { pageId },
+      );
+    }
+    if (
+      frontmatter.stale_after !== undefined &&
+      !isAbsoluteDate(frontmatter.stale_after)
+    ) {
+      throw new SecondBrainError(
+        'INVALID_FRONTMATTER',
+        'OKF stale_after must be an absolute YYYY-MM-DD date.',
+        { pageId },
+      );
+    }
+    if (
+      frontmatter.sources !== undefined &&
+      (!Array.isArray(frontmatter.sources) ||
+        frontmatter.sources.some((source) => {
+          if (
+            !isRecord(source) ||
+            typeof source.resource !== 'string' ||
+            !source.resource.trim()
+          ) {
+            return true;
+          }
+          if (
+            source.last_modified !== undefined &&
+            !isAbsoluteDate(source.last_modified)
+          ) {
+            return true;
+          }
+          return (
+            source.usage_window !== undefined &&
+            !isDateRange(source.usage_window)
+          );
+        }))
+    ) {
+      throw new SecondBrainError(
+        'INVALID_FRONTMATTER',
+        'Every OKF source must contain a non-empty resource.',
+        { pageId },
+      );
+    }
+    if (
+      frontmatter.generated !== undefined &&
+      (!isRecord(frontmatter.generated) ||
+        typeof frontmatter.generated.by !== 'string' ||
+        !frontmatter.generated.by.trim() ||
+        (frontmatter.generated.at !== undefined &&
+          (typeof frontmatter.generated.at !== 'string' ||
+            Number.isNaN(Date.parse(frontmatter.generated.at)))))
+    ) {
+      throw new SecondBrainError(
+        'INVALID_FRONTMATTER',
+        'OKF generated metadata must contain a non-empty by actor.',
+        { pageId },
+      );
+    }
+    if (frontmatter.verified !== undefined) {
+      const verifications = Array.isArray(frontmatter.verified)
+        ? frontmatter.verified
+        : [frontmatter.verified];
+      if (
+        verifications.length === 0 ||
+        verifications.some(
+          (verification) =>
+            !isRecord(verification) ||
+            typeof verification.by !== 'string' ||
+            !verification.by.trim() ||
+            typeof verification.at !== 'string' ||
+            Number.isNaN(Date.parse(verification.at)),
+        )
+      ) {
+        throw new SecondBrainError(
+          'INVALID_FRONTMATTER',
+          'Every OKF verification must contain a non-empty by actor.',
+          { pageId },
+        );
+      }
+    }
+    if (
+      frontmatter.usage_window !== undefined &&
+      !isDateRange(frontmatter.usage_window)
+    ) {
+      throw new SecondBrainError(
+        'INVALID_FRONTMATTER',
+        'OKF usage_window must contain an ordered YYYY-MM-DD from/to range.',
         { pageId },
       );
     }
@@ -1105,7 +1282,7 @@ export default class SecondBrainService {
     ) {
       throw new SecondBrainError(
         'BUDGET_EXCEEDED',
-        'memory.md exceeds its 200-line navigation-map limit.',
+        `${SECOND_BRAIN_ENTRY_PAGE} exceeds its 200-line navigation-map limit.`,
         { pageId, maxLines: SECOND_BRAIN_ENTRY_MAX_LINES },
       );
     }

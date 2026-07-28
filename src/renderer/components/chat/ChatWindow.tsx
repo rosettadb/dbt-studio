@@ -55,6 +55,7 @@ import {
 } from '../../controllers/agent.controller';
 import { useGetFileContent } from '../../controllers/projects.controller';
 import { projectsServices } from '../../services';
+import { PROJECT_AGENT_CONTEXT_FILE } from '../../../shared/agentMemoryConstants';
 
 export interface ChatWindowProps {
   screenKey?: 'project' | 'sql' | 'notebooks' | 'analytics';
@@ -163,44 +164,44 @@ export const ChatWindow: React.FC<ChatWindowProps> = ({
   // Tool mode — drives which tools are available in the backend
   const { currentMode } = useToolMode(selectedSessionId);
 
-  // agent.md: load project-specific AI context (project screen only)
-  const agentMdPath =
+  // Load canonical project-specific AI context on the project screen only.
+  const projectAgentContextPath =
     screenKey === 'project' && project?.path
-      ? `${project.path}/agent.md`
+      ? `${project.path}/${PROJECT_AGENT_CONTEXT_FILE}`
       : undefined;
   const projectMemoryEnabled =
     screenKey === 'project' && projectId !== undefined && projectId !== null
       ? localStorage.getItem(projectMemoryEnabledKey(projectId)) !== 'false'
       : false;
-  const agentMdDismissKey = project?.path
-    ? `agent-md-dismissed:${project.path}`
-    : null;
-  const isDismissed = agentMdDismissKey
-    ? localStorage.getItem(agentMdDismissKey) === 'true'
+  const projectContextDismissKey =
+    projectId !== undefined && projectId !== null
+      ? `agents-md-dismissed:${projectId}`
+      : null;
+  const [, setProjectContextDismissalRevision] = React.useState(0);
+  const isDismissed = projectContextDismissKey
+    ? localStorage.getItem(projectContextDismissKey) === 'true'
     : false;
 
   const {
-    data: agentMdRaw,
-    isError: agentMdMissing,
-    isFetched: agentMdFetched,
-  } = useGetFileContent(agentMdPath, {
+    isError: projectAgentContextMissing,
+    isFetched: projectAgentContextFetched,
+  } = useGetFileContent(projectAgentContextPath, {
     // Re-fetch after a stream finishes in case the agent just created the file
     refetchOnWindowFocus: false,
     retry: false,
   });
 
-  const agentMdExists = agentMdFetched ? !agentMdMissing : null;
-  const agentMdContent = agentMdRaw ? agentMdRaw.slice(0, 32 * 1024) : null; // cap at 32 KB
-  const projectAiContext = projectMemoryEnabled
-    ? (agentMdContent ?? undefined)
-    : undefined;
-  const agentMdGenerationInFlightRef = React.useRef(false);
+  const projectAgentContextExists = projectAgentContextFetched
+    ? !projectAgentContextMissing
+    : null;
+  const projectContextGenerationInFlightRef = React.useRef(false);
 
-  const handleGenerateAgentMd = async () => {
-    if (streamState.isStreaming || agentMdGenerationInFlightRef.current) return;
-    agentMdGenerationInFlightRef.current = true;
+  const handleGenerateProjectContext = async () => {
+    if (streamState.isStreaming || projectContextGenerationInFlightRef.current)
+      return;
+    projectContextGenerationInFlightRef.current = true;
     const prompt =
-      `Please create an \`agent.md\` file at the root of this dbt project. ` +
+      `Please create an \`${PROJECT_AGENT_CONTEXT_FILE}\` file at the root of this dbt project. ` +
       `The file should include sections for: Project Overview, Naming Conventions, ` +
       `Model Layers, and Rules for the AI. Use the project name from \`dbt_project.yml\` ` +
       `and populate what you can from the project structure. Leave placeholder comments ` +
@@ -218,26 +219,33 @@ export const ChatWindow: React.FC<ChatWindowProps> = ({
         undefined,
       );
     } finally {
-      agentMdGenerationInFlightRef.current = false;
+      projectContextGenerationInFlightRef.current = false;
     }
   };
 
-  const handleDismissAgentMd = () => {
-    if (agentMdDismissKey) {
-      localStorage.setItem(agentMdDismissKey, 'true');
+  const handleDismissProjectContext = () => {
+    if (projectContextDismissKey) {
+      localStorage.setItem(projectContextDismissKey, 'true');
+      setProjectContextDismissalRevision((revision) => revision + 1);
     }
   };
 
-  // Invalidate the agent.md query when streaming ends so the banner re-checks
-  // (handles the case where the agent just created agent.md via writeFile tool)
+  // Re-check project context after the agent may have created the file.
   const queryClient = useQueryClient();
   const prevIsStreamingRef = React.useRef(false);
   React.useEffect(() => {
-    if (prevIsStreamingRef.current && !streamState.isStreaming && agentMdPath) {
-      queryClient.invalidateQueries(['GET_FILE_CONTENT', agentMdPath]);
+    if (
+      prevIsStreamingRef.current &&
+      !streamState.isStreaming &&
+      projectAgentContextPath
+    ) {
+      queryClient.invalidateQueries([
+        'GET_FILE_CONTENT',
+        projectAgentContextPath,
+      ]);
     }
     prevIsStreamingRef.current = streamState.isStreaming;
-  }, [streamState.isStreaming, agentMdPath, queryClient]);
+  }, [streamState.isStreaming, projectAgentContextPath, queryClient]);
 
   // Load messages for the selected session (used to estimate context usage on session switch)
   const { data: sessionMessages = [] } =
@@ -799,6 +807,19 @@ export const ChatWindow: React.FC<ChatWindowProps> = ({
           onConfirmTerminal={confirmTerminal}
           onClearError={clearError}
           onOpenFile={handleOpenFile}
+          projectMemoryPrompt={
+            screenKey === 'project' &&
+            projectMemoryEnabled &&
+            projectAgentContextExists === false &&
+            !isDismissed
+              ? {
+                  fileName: PROJECT_AGENT_CONTEXT_FILE,
+                  disabled: streamState.isStreaming,
+                  onAccept: handleGenerateProjectContext,
+                  onDecline: handleDismissProjectContext,
+                }
+              : undefined
+          }
         />
 
         {changedFiles.length > 0 && (
@@ -1124,54 +1145,6 @@ export const ChatWindow: React.FC<ChatWindowProps> = ({
       <Box
         sx={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}
       >
-        {screenKey === 'project' &&
-          projectMemoryEnabled &&
-          agentMdExists === false &&
-          !isDismissed && (
-            <Box
-              sx={{
-                mx: 2,
-                mt: 1,
-                mb: 0.5,
-                p: 1.5,
-                borderRadius: 1,
-                bgcolor: 'action.hover',
-                border: '1px solid',
-                borderColor: 'divider',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'space-between',
-                gap: 1,
-              }}
-            >
-              <Box>
-                <Typography variant="body2" fontWeight={600}>
-                  No agent.md found
-                </Typography>
-                <Typography variant="caption" color="text.secondary">
-                  Add project-specific instructions for the AI agent.
-                </Typography>
-              </Box>
-              <Box sx={{ display: 'flex', gap: 1 }}>
-                <Button
-                  variant="text"
-                  size="small"
-                  color="inherit"
-                  onClick={handleDismissAgentMd}
-                >
-                  No thanks
-                </Button>
-                <Button
-                  variant="outlined"
-                  size="small"
-                  onClick={handleGenerateAgentMd}
-                  disabled={streamState.isStreaming}
-                >
-                  Generate agent.md
-                </Button>
-              </Box>
-            </Box>
-          )}
         {renderMessages()}
       </Box>
 
@@ -1195,7 +1168,7 @@ export const ChatWindow: React.FC<ChatWindowProps> = ({
                 connectionId,
                 notebookId,
                 pageId,
-                projectAiContext,
+                projectMemoryEnabled,
               )
             }
             onCancelStream={cancelStream}

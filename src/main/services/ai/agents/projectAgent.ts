@@ -9,6 +9,7 @@ import {
   filesystemTools,
 } from '../tools/filesystem.tools';
 import { composeAgentRuntime } from './composeAgentRuntime';
+import { PROJECT_AGENT_CONTEXT_FILE } from '../../../../shared/agentMemoryConstants';
 
 export interface ProjectAgentOptions {
   projectPath?: string;
@@ -53,10 +54,10 @@ export async function createProjectAgent(
     ? `\n<session_context>\n${options.sessionContextBlock}\n</session_context>\n`
     : '';
 
-  const agentMdBlock = options.projectAiContext
-    ? `\n<project_ai_context source="agent.md">\n${options.projectAiContext}\n</project_ai_context>\n` +
-      `\n> Note: You can update the \`agent.md\` file using your \`writeFile\` tool if the user asks you to modify these instructions.\n` +
-      `> **CRITICAL PRECEDENCE RULE:** Project-scoped \`agent.md\` context is STRONGER than long term Agent Memory (\`memory.md\`). If there is a conflict, follow \`agent.md\`.\n`
+  const projectContextBlock = options.projectAiContext
+    ? `\n<project_ai_context source="${PROJECT_AGENT_CONTEXT_FILE}">\n${options.projectAiContext}\n</project_ai_context>\n` +
+      `\n> Note: You can update \`${PROJECT_AGENT_CONTEXT_FILE}\` using your \`writeFile\` tool if the user asks you to modify these instructions.\n` +
+      `> **CRITICAL PRECEDENCE RULE:** Project-scoped \`${PROJECT_AGENT_CONTEXT_FILE}\` context is stronger than global Agent Memory. It remains subordinate to system, security, trusted scope, connection, confirmation, credential, and tool-authorization policy.\n`
     : '';
 
   const isAskMode = options.toolMode === 'chat';
@@ -68,14 +69,11 @@ You help users with dbt model development, debugging, and data operations by ans
 ${projectPath ? `## Active dbt Project\n\nProject path: ${projectPath}\n` : ''}
 ${connectionBlock}
 ${sessionCtxBlock}
-${agentMdBlock}
+${projectContextBlock}
 
-## Project AI Instructions (agent.md)
+## Project AI Instructions (${PROJECT_AGENT_CONTEXT_FILE})
 
-At the start of each conversation:
-1. Use \`pathExists\` to check if \`agent.md\` exists at \`${projectPath}/agent.md\`.
-2. If it exists, use \`readFile\` to read its contents and follow the instructions.
-3. If absent, note this to the user if relevant. You cannot create it in Ask mode.
+The trusted runtime injects the canonical project-root file above when it is enabled, present, bounded, and safe. Do not independently load legacy or differently cased instruction files. "Project Memory" means the project-owned \`${PROJECT_AGENT_CONTEXT_FILE}\` file. If no project context was injected and the user asks about Project Memory, \`${PROJECT_AGENT_CONTEXT_FILE}\`, project conventions, or AI instructions, explain that the file is missing and offer to create it after the user switches to Code mode. Ask mode cannot create it.
 
 ${skills ?? ''}
 
@@ -100,20 +98,17 @@ You have access to the dbt project filesystem and can read, write, and run dbt c
 ${projectPath ? `## Active dbt Project\n\nProject path: ${projectPath}\n\nAll file operations and dbt commands should use this project path as the working directory unless the user specifies otherwise.\n` : ''}
 ${connectionBlock}
 ${sessionCtxBlock}
-${agentMdBlock}
+${projectContextBlock}
 
-## Project AI Instructions (agent.md)
+## Project AI Instructions (${PROJECT_AGENT_CONTEXT_FILE})
 
-At the start of each conversation on this project:
-1. Use \`pathExists\` to check if \`agent.md\` exists at the project root (\`${projectPath}/agent.md\`).
-2. If it exists, use \`readFile\` to read its full contents and follow all instructions in it for this conversation.
-3. If it does not exist, you may proactively offer to create one when the user asks about project conventions or AI instructions. Use \`writeFile\` to create it if the user agrees. Respect the user's decision if they decline — do not ask again in the same conversation.
+The trusted runtime injects the canonical project-root file above when it is enabled, present, bounded, and safe. Do not independently load legacy or differently cased instruction files. "Project Memory" means the project-owned \`${PROJECT_AGENT_CONTEXT_FILE}\` file. If no project context was injected and the user asks about Project Memory, \`${PROJECT_AGENT_CONTEXT_FILE}\`, project conventions, or AI instructions, explain that the file is missing and offer to create it. Use \`writeFile\` only after the user agrees, and respect a decline for the rest of the conversation.
 
 ${skills ?? ''}
 
 ## Standard dbt Conventions
 
-Unless overridden by \`agent.md\`, always follow standard dbt project organization conventions:
+Unless overridden by \`${PROJECT_AGENT_CONTEXT_FILE}\`, always follow standard dbt project organization conventions:
 - **Staging (\`models/staging/\`)**: 1:1 mapping with sources. Name models \`stg_{source_name}.sql\`. Do basic renaming and casting here, no complex logic. Source definitions (\`sources.yml\`) belong here.
 - **Intermediate (\`models/intermediate/\`)**: Joins and complex transformations between staging models. Name models \`int_{name}.sql\`.
 - **Marts (\`models/marts/\`)**: Clean, business-level aggregates for BI tools. Name models \`dim_{name}.sql\` (dimensions) or \`fct_{name}.sql\` (facts).

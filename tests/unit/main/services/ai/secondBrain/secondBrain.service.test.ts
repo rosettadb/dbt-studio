@@ -4,6 +4,7 @@ import path from 'path';
 import fs from 'fs-extra';
 import { shell } from 'electron';
 import SecondBrainService, {
+  getSecondBrainConceptLifecycle,
   normalizeSecondBrainPageId,
 } from '../../../../../../src/main/services/ai/secondBrain/secondBrain.service';
 import { SecondBrainError } from '../../../../../../src/main/services/ai/secondBrain/secondBrain.types';
@@ -89,17 +90,17 @@ describe('SecondBrainService', () => {
     expect(openTerminal).toHaveBeenCalledWith(path.join(rootPath, 'wiki'));
   });
 
-  it('bootstraps an idempotent editable wiki with memory.md as entry page', async () => {
+  it('bootstraps an idempotent editable wiki with MEMORY.md as entry page', async () => {
     const firstStatus = await service.initializeRoot();
     expect(firstStatus).toMatchObject({
       initialized: true,
       pageCount: 9,
-      layoutVersion: 'okf-v0.1',
-      okfVersion: '0.1',
+      layoutVersion: 'okf-v0.2',
+      okfVersion: '0.2',
       stateVersion: 2,
     });
     expect(firstStatus).not.toHaveProperty('rootPath');
-    expect(await fs.pathExists(path.join(rootPath, 'wiki', 'memory.md'))).toBe(
+    expect(await fs.pathExists(path.join(rootPath, 'wiki', 'MEMORY.md'))).toBe(
       true,
     );
     expect(await fs.pathExists(path.join(rootPath, 'wiki', 'projects'))).toBe(
@@ -108,15 +109,15 @@ describe('SecondBrainService', () => {
     expect(await fs.pathExists(path.join(rootPath, 'state.json'))).toBe(true);
     expect(await fs.pathExists(path.join(rootPath, 'revisions'))).toBe(true);
 
-    const memory = await service.readPage('memory.md');
+    const memory = await service.readPage('MEMORY.md');
     await fs.writeFile(
-      path.join(rootPath, 'wiki', 'memory.md'),
+      path.join(rootPath, 'wiki', 'MEMORY.md'),
       memory.content.replace('compact navigation map', 'user-owned map'),
       'utf8',
     );
 
     await service.initializeRoot();
-    expect((await service.readPage('memory.md')).content).toContain(
+    expect((await service.readPage('MEMORY.md')).content).toContain(
       'user-owned map',
     );
   });
@@ -347,7 +348,7 @@ describe('SecondBrainService', () => {
     });
   });
 
-  it('enforces page and memory.md line budgets', async () => {
+  it('enforces page and MEMORY.md line budgets', async () => {
     const limitedService = new SecondBrainService({
       rootPath,
       maxPageBytes: 1024,
@@ -364,10 +365,10 @@ describe('SecondBrainService', () => {
       }),
     ).rejects.toMatchObject({ code: 'BUDGET_EXCEEDED' });
 
-    const memory = await limitedService.readPage('memory.md');
+    const memory = await limitedService.readPage('MEMORY.md');
     await expect(
       limitedService.writePage({
-        pageId: 'memory.md',
+        pageId: 'MEMORY.md',
         content: markdown(
           'Wiki Memory',
           Array.from({ length: 201 }, (_, index) => `line ${index}`).join('\n'),
@@ -421,8 +422,8 @@ describe('SecondBrainService', () => {
   it('generates deterministic OKF indexes and protects reserved pages', async () => {
     await service.initializeRoot();
     const rootIndex = await service.readPage('index.md');
-    expect(rootIndex.frontmatter).toEqual({ okf_version: '0.1' });
-    expect(rootIndex.content).toContain('[Wiki Memory](memory.md)');
+    expect(rootIndex.frontmatter).toEqual({ okf_version: '0.2' });
+    expect(rootIndex.content).toContain('[Wiki Memory](MEMORY.md)');
 
     await service.writePage({
       pageId: 'topics/metrics.md',
@@ -480,19 +481,109 @@ describe('SecondBrainService', () => {
     ).rejects.toMatchObject({ code: 'INVALID_FRONTMATTER' });
   });
 
-  it('rejects an unsupported OKF bundle version before initialization writes', async () => {
-    await fs.ensureDir(path.join(rootPath, 'wiki'));
-    await fs.writeFile(
-      path.join(rootPath, 'wiki', 'index.md'),
-      '---\nokf_version: "9.0"\n---\n\n# Future bundle\n',
-      'utf8',
-    );
-
-    await expect(service.initializeRoot()).rejects.toMatchObject({
-      code: 'UNSUPPORTED_BUNDLE_VERSION',
+  it('accepts a minimal v0.2 concept and defaults lifecycle to stable', async () => {
+    await service.initializeRoot();
+    const page = await service.writePage({
+      pageId: 'topics/minimal.md',
+      content: '---\ntype: Concept\n---\n\n# Minimal\n',
+      actor: 'user',
     });
-    expect(await fs.pathExists(path.join(rootPath, 'wiki', 'memory.md'))).toBe(
-      false,
+
+    expect(getSecondBrainConceptLifecycle(page.frontmatter, fixedDate)).toEqual(
+      {
+        status: 'stable',
+        stale: false,
+      },
     );
   });
+
+  it('validates v0.2 provenance, trust, and lifecycle metadata', async () => {
+    await service.initializeRoot();
+    const page = await service.writePage({
+      pageId: 'topics/trusted.md',
+      content: `---
+type: Topic
+status: draft
+stale_after: 2026-07-15
+usage_window: { from: 2026-07-01, to: 2026-07-15 }
+sources:
+  - resource: project://42/working-tree
+    last_modified: 2026-07-14
+generated: { by: process:test-producer, at: 2026-07-14T10:00:00Z }
+verified: { by: process:test-verifier, at: 2026-07-14T11:00:00Z }
+---
+
+# Trusted
+`,
+      actor: 'user',
+    });
+
+    expect(page.frontmatter.verified).toEqual([
+      {
+        by: 'process:test-verifier',
+        at: '2026-07-14T11:00:00Z',
+      },
+    ]);
+    expect(getSecondBrainConceptLifecycle(page.frontmatter, fixedDate)).toEqual(
+      {
+        status: 'draft',
+        stale: true,
+      },
+    );
+
+    await expect(
+      service.writePage({
+        pageId: 'topics/invalid-source.md',
+        content:
+          '---\ntype: Topic\nsources:\n  - title: Missing resource\n---\n',
+        actor: 'user',
+      }),
+    ).rejects.toMatchObject({ code: 'INVALID_FRONTMATTER' });
+    await expect(
+      service.writePage({
+        pageId: 'topics/invalid-status.md',
+        content: '---\ntype: Topic\nstatus: current\n---\n',
+        actor: 'user',
+      }),
+    ).rejects.toMatchObject({ code: 'INVALID_FRONTMATTER' });
+  });
+
+  it('prevents agent-authored trusted metadata and refresh human verification', async () => {
+    await service.initializeRoot();
+    await expect(
+      service.writePage({
+        pageId: 'topics/forged-agent.md',
+        content:
+          '---\ntype: Topic\ngenerated: { by: human:forged }\n---\n\n# Forged\n',
+        actor: 'agent',
+      }),
+    ).rejects.toMatchObject({ code: 'INVALID_FRONTMATTER' });
+    await expect(
+      service.writePage({
+        pageId: 'topics/forged-refresh.md',
+        content:
+          '---\ntype: Topic\ngenerated: { by: process:rosetta-agent-memory-refresh }\nverified: { by: human:forged, at: 2026-07-15T10:00:00Z }\n---\n',
+        actor: 'refresh',
+      }),
+    ).rejects.toMatchObject({ code: 'INVALID_FRONTMATTER' });
+  });
+
+  it.each(['0.1', '9.0'])(
+    'rejects unsupported OKF %s before initialization writes',
+    async (version) => {
+      await fs.ensureDir(path.join(rootPath, 'wiki'));
+      await fs.writeFile(
+        path.join(rootPath, 'wiki', 'index.md'),
+        `---\nokf_version: "${version}"\n---\n\n# Unsupported bundle\n`,
+        'utf8',
+      );
+
+      await expect(service.initializeRoot()).rejects.toMatchObject({
+        code: 'UNSUPPORTED_BUNDLE_VERSION',
+      });
+      expect(
+        await fs.pathExists(path.join(rootPath, 'wiki', 'MEMORY.md')),
+      ).toBe(false);
+    },
+  );
 });

@@ -72,7 +72,7 @@ describe('Second Brain progressive discovery', () => {
       pageId: `projects/${projectKey}/overview.md`,
       content: markdown(
         'Project 42',
-        `Project navigation. [[projects/${projectKey}/decisions.md]]`,
+        `Project navigation. [Decisions](/projects/${projectKey}/decisions.md).`,
       ),
       actor: 'user',
     });
@@ -135,11 +135,11 @@ describe('Second Brain progressive discovery', () => {
     ).toBe(true);
   });
 
-  it('injects only memory.md and the scoped index under the prompt budget', async () => {
+  it('injects only MEMORY.md and the scoped index under the prompt budget', async () => {
     const result = await runtime.buildContext(scope, settings);
 
     expect(result.includedPageIds).toEqual([
-      'memory.md',
+      'MEMORY.md',
       `projects/${projectKey}/index.md`,
     ]);
     expect(result.context).toContain('user-controlled reference data');
@@ -167,7 +167,7 @@ describe('Second Brain progressive discovery', () => {
     const result = await runtime.buildContext(scope, settings);
 
     expect(result.includedPageIds).toEqual([
-      'memory.md',
+      'MEMORY.md',
       `projects/${projectKey}/index.md`,
     ]);
     expect(result.context).toContain(
@@ -179,8 +179,8 @@ describe('Second Brain progressive discovery', () => {
     expect(result.context).not.toContain(`Page: ${pageId}`);
   });
 
-  it.each(['memory', 'memory.md', '[[memory]]'])(
-    'reads the global entry page from the %s wiki reference',
+  it.each(['MEMORY', 'MEMORY.md'])(
+    'reads the canonical global entry page from the %s reference',
     async (pageId) => {
       const tools = createSecondBrainTools({
         secondBrain,
@@ -194,8 +194,27 @@ describe('Second Brain progressive discovery', () => {
         executeTool(tools, 'wiki_read', { pageId }),
       ).resolves.toMatchObject({
         ok: true,
-        pageId: 'memory.md',
+        pageId: 'MEMORY.md',
         title: 'Wiki Memory',
+      });
+    },
+  );
+
+  it.each(['memory.md', '[[memory]]'])(
+    'rejects the legacy %s global entry reference',
+    async (pageId) => {
+      const tools = createSecondBrainTools({
+        secondBrain,
+        runtime,
+        scope,
+        settings: { ...settings, includeGlobalPages: false },
+        toolMode: 'chat',
+      });
+
+      await expect(
+        executeTool(tools, 'wiki_read', { pageId }),
+      ).resolves.toMatchObject({
+        ok: false,
       });
     },
   );
