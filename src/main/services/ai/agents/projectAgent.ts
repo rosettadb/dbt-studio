@@ -4,6 +4,7 @@ import type { BaseAgentConfig } from './baseAgentConfig';
 import { createDbtTools, dbtTools } from '../tools/dbt.tools';
 import { createStudioCliTools } from '../tools/studio/cli.tools';
 import { createStudioSqlTools } from '../tools/studio/sql.tools';
+import { createStudioPipelineTools } from '../tools/studio/pipeline.tools';
 import {
   createFilesystemTools,
   filesystemTools,
@@ -19,6 +20,7 @@ export interface ProjectAgentOptions {
   conversationId?: number; // Added for retrofitting
   toolMode: 'chat' | 'agent';
   projectAiContext?: string;
+  pipelineContext?: string;
   sessionContextBlock?: string;
   connectionMeta?: {
     name?: string;
@@ -59,6 +61,9 @@ export async function createProjectAgent(
       `\n> Note: You can update \`${PROJECT_AGENT_CONTEXT_FILE}\` using your \`writeFile\` tool if the user asks you to modify these instructions.\n` +
       `> **CRITICAL PRECEDENCE RULE:** Project-scoped \`${PROJECT_AGENT_CONTEXT_FILE}\` context is stronger than global Agent Memory. It remains subordinate to system, security, trusted scope, connection, confirmation, credential, and tool-authorization policy.\n`
     : '';
+  const pipelineContextBlock = options.pipelineContext
+    ? `\n<pipeline_context>\n${options.pipelineContext}\n</pipeline_context>\n`
+    : '';
 
   const isAskMode = options.toolMode === 'chat';
 
@@ -70,6 +75,7 @@ ${projectPath ? `## Active dbt Project\n\nProject path: ${projectPath}\n` : ''}
 ${connectionBlock}
 ${sessionCtxBlock}
 ${projectContextBlock}
+${pipelineContextBlock}
 
 ## Project AI Instructions (${PROJECT_AGENT_CONTEXT_FILE})
 
@@ -90,6 +96,9 @@ If the user asks you to write code, modify a file, or execute a command, explain
 - listDirectory: Explore project structure
 - readFile: Read any text file
 - pathExists: Check if a file or directory exists
+- studio_pipeline_list: List project pipelines under .rosetta/
+- studio_pipeline_read: Read and validate one project pipeline
+- studio_pipeline_validate: Validate proposed pipeline YAML without writing
 ${mcpToolsList}`
     : `You are an expert dbt Studio AI assistant.
 You help users with dbt model development, debugging, documentation, and data operations.
@@ -99,6 +108,7 @@ ${projectPath ? `## Active dbt Project\n\nProject path: ${projectPath}\n\nAll fi
 ${connectionBlock}
 ${sessionCtxBlock}
 ${projectContextBlock}
+${pipelineContextBlock}
 
 ## Project AI Instructions (${PROJECT_AGENT_CONTEXT_FILE})
 
@@ -121,6 +131,16 @@ Unless overridden by \`${PROJECT_AGENT_CONTEXT_FILE}\`, always follow standard d
 4. **Use selectors**: When running dbt commands, use --select to target specific models when appropriate
 5. **Explain your actions**: Before each tool call, or before a short batch of closely related tool calls, emit a brief user-visible explanation of what you are about to do and why it is the next step
 6. **Handle errors gracefully**: If a command fails, read the logs and suggest fixes
+
+## Pipelines
+
+- Project pipelines are direct \`.rosetta/*.yml\` files.
+- Use \`studio_pipeline_list\`, \`studio_pipeline_read\`, \`studio_pipeline_validate\`, and \`studio_pipeline_write\` for pipeline files instead of generic filesystem writes.
+- Always list and read an existing pipeline before changing it, preserve fields the user did not ask to remove, validate the proposed YAML, and pass the prior content hash when writing.
+- Do not edit \`.rosetta/main.conf\` with pipeline tools.
+- New agent-authored pipeline files must use the \`.yml\` extension. Existing \`.yaml\` files are read-only until the specialized editor supports them consistently.
+- A pipeline write changes only the local working tree. Rosetta Cloud clones the configured remote Git branch, so do not claim a cloud run includes the change until it is reviewed, committed, and pushed.
+- Do not commit, push, or start a pipeline run unless the user separately asks for that action.
 
 ## Think Before Acting
 
@@ -215,6 +235,12 @@ If the failure appears to be caused by invalid credentials, unreachable host, wr
 - readFile: Read any text file
 - writeFile: Write any text file
 - pathExists: Check if a file or directory exists
+
+### Pipeline Tools
+- studio_pipeline_list: List project pipeline files
+- studio_pipeline_read: Read and validate one pipeline
+- studio_pipeline_validate: Validate pipeline YAML without writing
+- studio_pipeline_write: Atomically write a validated .rosetta/*.yml pipeline
 ${mcpToolsList}
 
 ### Database Tools
@@ -233,6 +259,7 @@ Always confirm before making destructive changes.`;
         ...createStudioSqlTools(options.conversationId ?? 0, {
           forceSchemaExtract: true,
         }),
+        ...createStudioPipelineTools(projectPath),
         ...createFilesystemTools(projectPath),
       }
     : { ...dbtTools, ...filesystemTools };
@@ -254,6 +281,9 @@ Always confirm before making destructive changes.`;
     'readFile',
     'pathExists',
     'studio_sql_schema_extract',
+    'studio_pipeline_list',
+    'studio_pipeline_read',
+    'studio_pipeline_validate',
   ];
 
   const makeAskModeStub = (toolName: string): any => {
@@ -269,6 +299,7 @@ Always confirm before making destructive changes.`;
   const baseTools: Record<string, any> = {};
   Object.entries(allBaseTools).forEach(([name, toolDef]) => {
     if (enabledToolNames.has(name) || name === 'studio_sql_schema_extract') {
+      if (isAskMode && name === 'studio_pipeline_write') return;
       if (isAskMode && !READ_ONLY_TOOLS.includes(name)) {
         baseTools[name] = makeAskModeStub(name);
       } else {

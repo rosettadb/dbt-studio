@@ -106,10 +106,12 @@ export const renderArguments = (toolName: string, args: any) => {
 
     case 'readDbtModel':
     case 'readFile':
+    case 'studio_pipeline_read':
       return <Box>File: {args.filePath || args.path}</Box>;
 
     case 'writeDbtModel':
     case 'writeFile':
+    case 'studio_pipeline_write':
       return (
         <Box>
           <Box>File: {args.filePath || args.path}</Box>
@@ -145,6 +147,12 @@ export const renderArguments = (toolName: string, args: any) => {
           {args.recursive && ' (recursive)'}
         </Box>
       );
+
+    case 'studio_pipeline_list':
+      return <Box>Listing project pipelines under .rosetta/</Box>;
+
+    case 'studio_pipeline_validate':
+      return <Box>Validating pipeline YAML</Box>;
 
     case 'listDbtModels':
       return <Box>Filter: {args.filter ? `"${args.filter}"` : 'None'}</Box>;
@@ -280,6 +288,7 @@ export const renderResult = (toolName: string, result: any) => {
 
       case 'writeDbtModel':
       case 'writeFile':
+      case 'studio_pipeline_write':
         if (result.success || result.bytesWritten !== undefined) {
           return (
             <Box>
@@ -294,6 +303,7 @@ export const renderResult = (toolName: string, result: any) => {
 
       case 'readDbtModel':
       case 'readFile':
+      case 'studio_pipeline_read':
         if (result.content) {
           return (
             <Box
@@ -319,6 +329,26 @@ export const renderResult = (toolName: string, result: any) => {
           );
         }
         break;
+
+      case 'studio_pipeline_list':
+        if (Array.isArray(result.pipelines)) {
+          return (
+            <Box>
+              Found {result.count ?? result.pipelines.length} pipeline
+              {(result.count ?? result.pipelines.length) === 1 ? '' : 's'}.
+            </Box>
+          );
+        }
+        break;
+
+      case 'studio_pipeline_validate':
+        return (
+          <Box>
+            {result.valid
+              ? 'Pipeline YAML is valid.'
+              : 'Pipeline YAML is invalid.'}
+          </Box>
+        );
 
       case 'listDirectory':
         if (result.entries && Array.isArray(result.entries)) {

@@ -1,53 +1,17 @@
-import yaml from 'js-yaml';
-import { z } from 'zod';
+import {
+  isPipelineFile,
+  PIPELINE_CONFIG_DIR,
+  PIPELINE_CONFIG_FILENAME,
+  validatePipelineContent,
+} from '../../../shared/pipelines/pipelineConfig';
 import type { PipelineConfig } from './types';
 
-// Mirrors PipelineStep/PipelineJob/PipelineConfig in ./types. Every field
-// that downstream rendering (PipelineNode, PipelineGraph) accesses without a
-// null-check is required here, so a structurally-broken pipeline.yml is
-// rejected at parse time instead of throwing later during render.
-const pipelineStepSchema = z.object({
-  name: z.string(),
-  plugin: z.string(),
-  command: z.string().optional(),
-  working_dir: z.string().optional(),
-  url: z.string().optional(),
-  branch: z.string().optional(),
-  dest: z.string().optional(),
-});
-
-const pipelineJobSchema = z.object({
-  name: z.string(),
-  type: z.string().optional(),
-  steps: z.array(pipelineStepSchema),
-});
-
-const pipelineConfigSchema = z.object({
-  name: z.string(),
-  jobs: z.array(pipelineJobSchema),
-});
-
 export function parsePipelineConfig(content: string): PipelineConfig | null {
-  try {
-    const parsed = yaml.load(content);
-    const result = pipelineConfigSchema.safeParse(parsed);
-    if (!result.success) return null;
-    return result.data;
-  } catch {
-    return null;
-  }
+  const result = validatePipelineContent(content);
+  return result.valid ? (result.config as PipelineConfig) : null;
 }
 
-// Filename detection
-export const PIPELINE_CONFIG_FILENAME = 'pipeline.yml';
-export const PIPELINE_CONFIG_DIR = '.rosetta';
-
-export function isPipelineFile(filePath: string): boolean {
-  const parts = filePath.replace(/\\/g, '/').split('/');
-  const fileName = parts[parts.length - 1];
-  const dirName = parts[parts.length - 2];
-  return dirName === PIPELINE_CONFIG_DIR && fileName.endsWith('.yml');
-}
+export { isPipelineFile, PIPELINE_CONFIG_DIR, PIPELINE_CONFIG_FILENAME };
 
 export const PIPELINE_CONFIG_TEMPLATE = `name: "CI"
 jobs:

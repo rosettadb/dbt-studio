@@ -12,8 +12,10 @@ import {
   Edit,
 } from '@mui/icons-material';
 import {
+  Alert,
   Badge,
   Box,
+  Button,
   IconButton,
   ListItemIcon,
   ListItemText,
@@ -24,6 +26,7 @@ import {
   Tooltip,
   Typography,
 } from '@mui/material';
+import { useQueryClient } from 'react-query';
 import { toast } from 'react-toastify';
 import yaml from 'js-yaml';
 import { useTheme } from '@mui/material/styles';
@@ -89,7 +92,10 @@ import { AppLayout } from '../../layouts';
 import ChatScreen from '../chat';
 import { getFileName } from '../../services/settings.services';
 import type { EditorTabId, EditorTabState } from '../../../types/editor';
-import { subscribeToToolResult } from '../../services/agentEvents.service';
+import {
+  resolveProjectMutationPath,
+  subscribeToProjectFileMutation,
+} from '../../services/agentEvents.service';
 import {
   toPreviewPath,
   isVirtualPreviewPath,
@@ -129,6 +135,7 @@ const VerticalSash = (_: number, active: boolean) => (
 
 const ProjectDetails: React.FC = () => {
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const [verticalSizes, setVerticalSizes] = React.useState<(number | string)[]>(
     ['auto', 500],
   );
@@ -260,10 +267,20 @@ const ProjectDetails: React.FC = () => {
   const [pipelineCodeMode, setPipelineCodeMode] = React.useState(false);
   const [pipelineDraftTab, setPipelineDraftTab] =
     React.useState<EditorTabState | null>(null);
+  const [pipelineVisualEditing, setPipelineVisualEditing] =
+    React.useState(false);
+  const [pipelineVisualDirty, setPipelineVisualDirty] = React.useState(false);
+  const [pipelineExternalRevision, setPipelineExternalRevision] =
+    React.useState(0);
+  const [pipelineExternalChangePath, setPipelineExternalChangePath] =
+    React.useState<string | null>(null);
 
   React.useEffect(() => {
     setPipelineCodeMode(false);
     setPipelineDraftTab(null);
+    setPipelineVisualEditing(false);
+    setPipelineVisualDirty(false);
+    setPipelineExternalChangePath(null);
   }, [activePipelineFilePath]);
 
   // Cloud logs auto-minimize once when a pipeline is first opened (mirrors
@@ -306,6 +323,25 @@ const ProjectDetails: React.FC = () => {
     setPipelineCodeMode(false);
     setPipelineDraftTab(null);
   }, [pipelineDraftTab]);
+
+  const handleReloadExternalPipeline = React.useCallback(async () => {
+    const refreshed = await refetchPipelineContent();
+    if (pipelineCodeMode && refreshed.data !== undefined) {
+      setPipelineDraftTab((current) =>
+        current
+          ? {
+              ...current,
+              content: refreshed.data,
+              savedContent: refreshed.data,
+              isModified: false,
+            }
+          : current,
+      );
+    }
+    setPipelineVisualDirty(false);
+    setPipelineExternalRevision((revision) => revision + 1);
+    setPipelineExternalChangePath(null);
+  }, [pipelineCodeMode, refetchPipelineContent]);
 
   const handleTabSelect = React.useCallback(
     (tabId: string) => {
@@ -716,6 +752,12 @@ const ProjectDetails: React.FC = () => {
   const openTabRef = React.useRef(openTab);
   const switchTabRef = React.useRef(switchTab);
   const refreshTabContentByPathRef = React.useRef(refreshTabContentByPath);
+  const activePipelineFilePathRef = React.useRef(activePipelineFilePath);
+  const pipelineCodeModeRef = React.useRef(pipelineCodeMode);
+  const pipelineDraftTabRef = React.useRef(pipelineDraftTab);
+  const pipelineVisualEditingRef = React.useRef(pipelineVisualEditing);
+  const pipelineVisualDirtyRef = React.useRef(pipelineVisualDirty);
+  const refetchPipelineContentRef = React.useRef(refetchPipelineContent);
   React.useEffect(() => {
     fetchDirectoriesRef.current = fetchDirectories;
   }, [fetchDirectories]);
@@ -734,75 +776,121 @@ const ProjectDetails: React.FC = () => {
   React.useEffect(() => {
     refreshTabContentByPathRef.current = refreshTabContentByPath;
   }, [refreshTabContentByPath]);
+  React.useEffect(() => {
+    activePipelineFilePathRef.current = activePipelineFilePath;
+  }, [activePipelineFilePath]);
+  React.useEffect(() => {
+    pipelineCodeModeRef.current = pipelineCodeMode;
+  }, [pipelineCodeMode]);
+  React.useEffect(() => {
+    pipelineDraftTabRef.current = pipelineDraftTab;
+  }, [pipelineDraftTab]);
+  React.useEffect(() => {
+    pipelineVisualEditingRef.current = pipelineVisualEditing;
+  }, [pipelineVisualEditing]);
+  React.useEffect(() => {
+    pipelineVisualDirtyRef.current = pipelineVisualDirty;
+  }, [pipelineVisualDirty]);
+  React.useEffect(() => {
+    refetchPipelineContentRef.current = refetchPipelineContent;
+  }, [refetchPipelineContent]);
 
   // Refresh file tree and open/update tab when agent writes a file
   // Uses refs so the subscription is created only once per project/hydration change
   React.useEffect(() => {
     if (!project?.path || !isHydrated) return undefined;
 
-    // Deduplicate: track files being processed to avoid concurrent duplicate calls
+    // Deduplicate only concurrently repeated delivery of the same tool result.
     const inFlight = new Set<string>();
 
-    const unsub = subscribeToToolResult(async (payload) => {
-      const isFileWrite =
-        payload.toolName === 'writeFile' ||
-        payload.toolName === 'writeDbtModel';
-      if (!isFileWrite || payload.status !== 'done') return;
-
-      const filePath =
-        (payload.args as any)?.filePath || (payload.args as any)?.path;
+    const unsub = subscribeToProjectFileMutation(async (payload) => {
+      const filePath = resolveProjectMutationPath(project.path, payload.path);
       if (!filePath) return;
-
-      // Skip if already processing this file
-      if (inFlight.has(filePath)) {
-        // eslint-disable-next-line no-console
-        console.log('[ProjectDetails] Skipping duplicate event for:', filePath);
-        return;
-      }
-      inFlight.add(filePath);
+      const eventKey = `${payload.toolCallId}:${filePath}`;
+      if (inFlight.has(eventKey)) return;
+      inFlight.add(eventKey);
 
       try {
-        // eslint-disable-next-line no-console
-        console.log(
-          '[ProjectDetails] Agent wrote file, refreshing tree and opening tab:',
-          filePath,
-        );
-
         await fetchDirectoriesRef.current();
         await updateStatusesRef.current();
 
-        // eslint-disable-next-line no-console
-        console.log(
-          '[ProjectDetails] fetchDirectories done, checking for existing tab',
-        );
+        if (
+          payload.kind === 'pipeline-file-written' ||
+          isPipelineFile(filePath)
+        ) {
+          await queryClient.invalidateQueries(['listPipelines', project.id]);
+          const activeHasDirtyDraft =
+            (pipelineCodeModeRef.current &&
+              pipelineDraftTabRef.current?.isModified) ||
+            (pipelineVisualEditingRef.current &&
+              pipelineVisualDirtyRef.current);
+          if (
+            activeHasDirtyDraft &&
+            activePipelineFilePathRef.current &&
+            activePipelineFilePathRef.current !== filePath
+          ) {
+            toast.info(
+              'A pipeline changed, but the current unsaved pipeline draft was kept open.',
+            );
+            return;
+          }
+          const pipelineTabPath = toPipelineTabPath(filePath);
+          const existingPipelineTab = getTabByPathRef.current(pipelineTabPath);
+          if (existingPipelineTab) {
+            switchTabRef.current(existingPipelineTab.id);
+          } else {
+            const tabId = await openTabRef.current(pipelineTabPath, {
+              title: filePath.split('/').pop() ?? 'pipeline.yml',
+              content: '',
+              isReadOnly: true,
+            });
+            if (tabId) switchTabRef.current(tabId);
+          }
+
+          if (activePipelineFilePathRef.current === filePath) {
+            const hasDirtyDraft =
+              (pipelineCodeModeRef.current &&
+                pipelineDraftTabRef.current?.isModified) ||
+              (pipelineVisualEditingRef.current &&
+                pipelineVisualDirtyRef.current);
+            if (hasDirtyDraft) {
+              setPipelineExternalChangePath(filePath);
+              return;
+            }
+
+            const refreshed = await refetchPipelineContentRef.current();
+            if (pipelineCodeModeRef.current && refreshed.data !== undefined) {
+              setPipelineDraftTab((current) =>
+                current
+                  ? {
+                      ...current,
+                      content: refreshed.data,
+                      savedContent: refreshed.data,
+                      isModified: false,
+                    }
+                  : current,
+              );
+            }
+            setPipelineExternalRevision((revision) => revision + 1);
+          }
+          return;
+        }
 
         const existingTab = getTabByPathRef.current(filePath);
-        // eslint-disable-next-line no-console
-        console.log('[ProjectDetails] existingTab:', existingTab?.id ?? 'none');
-
         if (existingTab) {
-          // eslint-disable-next-line no-console
-          console.log(
-            '[ProjectDetails] Tab already exists, switching to:',
-            existingTab.id,
-          );
           await refreshTabContentByPathRef.current(filePath);
           switchTabRef.current(existingTab.id);
         } else {
-          // eslint-disable-next-line no-console
-          console.log('[ProjectDetails] Opening new tab for:', filePath);
           const tabId = await openTabRef.current(filePath);
-          // eslint-disable-next-line no-console
-          console.log('[ProjectDetails] openTab returned tabId:', tabId);
           if (tabId) switchTabRef.current(tabId);
         }
       } finally {
-        inFlight.delete(filePath);
+        inFlight.delete(eventKey);
       }
     });
 
     return unsub;
-  }, [project?.path, isHydrated]);
+  }, [project?.id, project?.path, isHydrated, queryClient]);
 
   // Auto-refresh tab content when focusing on a tab
   const previousActiveTabIdRef = React.useRef<EditorTabId | null>(null);
@@ -1382,6 +1470,36 @@ const ProjectDetails: React.FC = () => {
                           overflow: 'hidden',
                         }}
                       >
+                        {pipelineExternalChangePath ===
+                          activePipelineFilePath && (
+                          <Alert
+                            severity="warning"
+                            action={
+                              <Box sx={{ display: 'flex', gap: 0.5 }}>
+                                <Button
+                                  color="inherit"
+                                  size="small"
+                                  onClick={handleReloadExternalPipeline}
+                                >
+                                  Reload from disk
+                                </Button>
+                                <Button
+                                  color="inherit"
+                                  size="small"
+                                  onClick={() =>
+                                    setPipelineExternalChangePath(null)
+                                  }
+                                >
+                                  Keep my draft
+                                </Button>
+                              </Box>
+                            }
+                            sx={{ borderRadius: 0 }}
+                          >
+                            This pipeline changed on disk. Your unsaved draft
+                            has been preserved.
+                          </Alert>
+                        )}
                         <Box
                           sx={{
                             flex:
@@ -1496,6 +1614,9 @@ const ProjectDetails: React.FC = () => {
                                       )
                                   : undefined
                               }
+                              onEditingChange={setPipelineVisualEditing}
+                              onDirtyChange={setPipelineVisualDirty}
+                              externalRevision={pipelineExternalRevision}
                               onEnterView={() => setPipelineLogsMinimized(true)}
                             />
                           )}

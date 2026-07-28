@@ -27,6 +27,10 @@ type PipelineViewProps = {
   onRun?: () => void;
   /** Notifies parent when the visual graph enters/exits edit mode. */
   onEditingChange?: (isEditing: boolean) => void;
+  /** Reports whether visual edit mode differs from its disk-backed snapshot. */
+  onDirtyChange?: (isDirty: boolean) => void;
+  /** Incremented when clean editor state should reload from external disk data. */
+  externalRevision?: number;
   /** Fired once when the pipeline view first mounts (e.g. tab opened). */
   onEnterView?: () => void;
 };
@@ -82,6 +86,8 @@ export const PipelineView: React.FC<PipelineViewProps> = ({
   onSave,
   onRun,
   onEditingChange,
+  onDirtyChange,
+  externalRevision,
   onEnterView,
 }) => {
   const config = React.useMemo(() => parsePipelineConfig(content), [content]);
@@ -194,6 +200,8 @@ export const PipelineView: React.FC<PipelineViewProps> = ({
         onSave={onSave}
         onRun={onRun}
         onEditingChange={onEditingChange}
+        onDirtyChange={onDirtyChange}
+        externalRevision={externalRevision}
         onEnterView={onEnterView}
       />
     </Box>

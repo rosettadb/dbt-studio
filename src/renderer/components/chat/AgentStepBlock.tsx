@@ -27,10 +27,14 @@ export const AgentStepBlock: React.FC<AgentStepBlockProps> = ({
       case 'listDirectory':
       case 'listDbtModels':
       case 'getDbtLogs':
+      case 'studio_pipeline_list':
+      case 'studio_pipeline_read':
+      case 'studio_pipeline_validate':
         reads.push(tc);
         break;
       case 'writeDbtModel':
       case 'writeFile':
+      case 'studio_pipeline_write':
         writes.push(tc);
         break;
       case 'studio_cli_run_dbt':

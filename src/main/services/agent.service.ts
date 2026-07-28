@@ -46,6 +46,7 @@ import SecondBrainService from './ai/secondBrain/secondBrain.service';
 import SecondBrainRuntimeService from './ai/secondBrain/secondBrainRuntime.service';
 import { createSecondBrainTools } from './ai/tools/studio/secondBrain.tools';
 import { readProjectAgentContext } from './ai/projectAgentContext';
+import { buildProjectPipelineContext } from './ai/tools/studio/pipeline.tools';
 
 // ─── AI Settings ─────────────────────────────────────────────────────────────
 
@@ -66,6 +67,10 @@ export const AI_SETTINGS_DEFAULTS: AISettingsConfig = {
     readFile: true,
     writeFile: true,
     pathExists: true,
+    studio_pipeline_list: true,
+    studio_pipeline_read: true,
+    studio_pipeline_validate: true,
+    studio_pipeline_write: true,
   },
   configuration: {
     allowAIInBackground: true,
@@ -243,15 +248,34 @@ const TOOL_CATEGORIES = {
     'listDirectory',
     'readFile',
     'pathExists',
+    'studio_pipeline_list',
+    'studio_pipeline_read',
+    'studio_pipeline_validate',
   ],
-  action: ['writeDbtModel', 'runDbtCommand', 'writeFile'],
+  action: [
+    'writeDbtModel',
+    'runDbtCommand',
+    'writeFile',
+    'studio_pipeline_write',
+  ],
+};
+
+const PIPELINE_TOOL_CATALOG = {
+  studio_pipeline_list: {},
+  studio_pipeline_read: {},
+  studio_pipeline_validate: {},
+  studio_pipeline_write: {},
 };
 
 export function getToolsForMode(
   mode: 'chat' | 'agent',
   aiSettings: AISettingsConfig,
 ) {
-  const allTools = { ...dbtTools, ...filesystemTools };
+  const allTools = {
+    ...dbtTools,
+    ...filesystemTools,
+    ...PIPELINE_TOOL_CATALOG,
+  };
 
   if (mode === 'chat') {
     // Chat Mode: only analysis tools
@@ -1411,6 +1435,10 @@ COMBINED SUMMARY:`,
         screenKey === 'project' && request.includeProjectAiContext
           ? await readProjectAgentContext(projectPath)
           : undefined;
+      const pipelineContext =
+        screenKey === 'project' && projectPath
+          ? buildProjectPipelineContext(projectPath)
+          : undefined;
       if (screenKey === 'project') {
         try {
           // Derive the selected file path from contextItems (type 'file' entries)
@@ -1485,6 +1513,7 @@ COMBINED SUMMARY:`,
             conversationId,
             toolMode: request.toolMode || 'agent',
             projectAiContext,
+            pipelineContext,
             sessionContextBlock,
             connectionMeta: projectConnectionMeta,
           });
@@ -1940,6 +1969,26 @@ COMBINED SUMMARY:`,
           name: 'pathExists',
           description: 'Check if a file or directory exists',
           category: 'filesystem',
+        },
+        {
+          name: 'studio_pipeline_list',
+          description: 'List project pipeline files',
+          category: 'pipeline',
+        },
+        {
+          name: 'studio_pipeline_read',
+          description: 'Read and validate a project pipeline',
+          category: 'pipeline',
+        },
+        {
+          name: 'studio_pipeline_validate',
+          description: 'Validate pipeline YAML without writing',
+          category: 'pipeline',
+        },
+        {
+          name: 'studio_pipeline_write',
+          description: 'Write a validated project pipeline atomically',
+          category: 'pipeline',
         },
       ];
 

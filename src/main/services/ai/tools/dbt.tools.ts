@@ -12,6 +12,7 @@ import { DbtCoreVersionService } from '../../dbtCoreVersion.service';
 import AgentService from '../../agent.service';
 import SecureStorageService from '../../secureStorage.service';
 import { TerminalConfirmGate } from './terminalConfirmGate';
+import { isReadablePipelineRelativePath } from '../../../../shared/pipelines/pipelineConfig';
 
 // Security constraints
 const ALLOWED_DBT_COMMANDS = [
@@ -309,7 +310,6 @@ export const readDbtModel = tool({
     console.log('[Tool][DBT] readDbtModel', { filePath, projectPath });
     try {
       assertWithinProject(filePath, projectPath);
-
       if (!fs.existsSync(filePath)) {
         return { error: `File not found: ${filePath}` };
       }
@@ -363,6 +363,15 @@ export const writeDbtModel = tool({
     });
     try {
       assertWithinProject(filePath, projectPath);
+      if (
+        isReadablePipelineRelativePath(path.relative(projectPath, filePath))
+      ) {
+        return {
+          success: false,
+          error:
+            'Use studio_pipeline_write for .rosetta pipeline files so the YAML is validated and the Pipeline Editor is refreshed safely.',
+        };
+      }
 
       // Only allow writing SQL and YAML files
       if (!/\.(sql|yml|yaml)$/i.test(filePath)) {
@@ -722,6 +731,15 @@ export function createDbtTools(
       execute: async ({ filePath, content }) => {
         try {
           assertWithinProject(filePath, projectPath);
+          if (
+            isReadablePipelineRelativePath(path.relative(projectPath, filePath))
+          ) {
+            return {
+              success: false,
+              error:
+                'Use studio_pipeline_write for .rosetta pipeline files so the YAML is validated and the Pipeline Editor is refreshed safely.',
+            };
+          }
           if (!/\.(sql|yml|yaml)$/i.test(filePath))
             return {
               error: 'Only .sql, .yml, and .yaml files can be written.',
@@ -731,6 +749,7 @@ export function createDbtTools(
           if (context) {
             // File writes don't require confirmation — only shell commands do.
           }
+          const existed = fs.existsSync(filePath);
           const dir = path.dirname(filePath);
           if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
           fs.writeFileSync(filePath, content, 'utf-8');
@@ -738,6 +757,7 @@ export function createDbtTools(
           return {
             success: true,
             filePath,
+            created: !existed,
             bytesWritten: Buffer.byteLength(content, 'utf-8'),
           };
         } catch (error) {

@@ -1,3 +1,5 @@
+import { isPipelineFile } from '../../../shared/pipelines/pipelineConfig';
+
 /**
  * Prefix used to identify virtual markdown preview tabs.
  * A preview tab path looks like: `__md_preview__:/absolute/path/to/file.md`
@@ -40,3 +42,13 @@ export const getPipelineFilePath = (path: string): string | null =>
 /** Returns the pipeline tab path for a given pipeline file path. */
 export const toPipelineTabPath = (filePath: string): string =>
   `${PIPELINE_TAB_PREFIX}${filePath}`;
+
+/**
+ * Returns the one canonical tab path for a file. Pipeline YAML always maps to
+ * its virtual Pipeline Editor tab so callers cannot also open a Monaco tab for
+ * the same disk file.
+ */
+export const toCanonicalEditorTabPath = (filePath: string): string =>
+  !isPipelineTabPath(filePath) && isPipelineFile(filePath)
+    ? toPipelineTabPath(filePath)
+    : filePath;

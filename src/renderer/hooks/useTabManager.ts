@@ -2,8 +2,10 @@ import React from 'react';
 import { projectsServices } from '../services';
 import {
   MD_PREVIEW_PREFIX,
+  getPipelineFilePath,
   isVirtualPreviewPath,
   isPipelineTabPath,
+  toCanonicalEditorTabPath,
 } from '../components/editor/previewConstants';
 import { getLanguageFromExtension } from '../components/editor/helpers';
 import { getNonEditableFileMessage, isEditableFile } from '../helpers/utils';
@@ -299,9 +301,11 @@ const useTabManager = (projectId?: string): UseTabManagerReturn => {
   const closeTabByPath = React.useCallback(
     (path: string) => {
       const currentTabs = tabsRef.current;
+      const canonicalPath = toCanonicalEditorTabPath(path);
       const tabsToClose = currentTabs.filter(
         (tab) =>
           tab.path === path ||
+          tab.path === canonicalPath ||
           tab.path.startsWith(`${path}/`) ||
           tab.path.startsWith(`${path}\\`),
       );
@@ -432,7 +436,8 @@ const useTabManager = (projectId?: string): UseTabManagerReturn => {
 
   const updateTabContentByPath = React.useCallback(
     (path: string, content: string, options?: UpdateTabByPathOptions) => {
-      const target = tabsRef.current.find((tab) => tab.path === path);
+      const canonicalPath = toCanonicalEditorTabPath(path);
+      const target = tabsRef.current.find((tab) => tab.path === canonicalPath);
       if (!target) {
         return;
       }
@@ -551,10 +556,10 @@ const useTabManager = (projectId?: string): UseTabManagerReturn => {
     }
   }, [projectId]);
 
-  const getTabByPath = React.useCallback(
-    (path: string) => tabsRef.current.find((tab) => tab.path === path),
-    [],
-  );
+  const getTabByPath = React.useCallback((path: string) => {
+    const canonicalPath = toCanonicalEditorTabPath(path);
+    return tabsRef.current.find((tab) => tab.path === canonicalPath);
+  }, []);
 
   const openTab = React.useCallback(
     async (
@@ -565,19 +570,43 @@ const useTabManager = (projectId?: string): UseTabManagerReturn => {
         return null;
       }
 
+      const sourcePath = path;
+      const tabPath = toCanonicalEditorTabPath(sourcePath);
+      const pipelineSourcePath = isPipelineTabPath(tabPath)
+        ? getPipelineFilePath(tabPath)
+        : null;
       let shouldLoadContent = false;
       let isEditable = false;
       let hasInitialContent = false;
 
       // Virtual tabs (preview, pipeline) are never loaded from disk
-      const isVirtual = isVirtualPreviewPath(path) || isPipelineTabPath(path);
-      isEditable = !isVirtual && isEditableFile(path);
+      const isVirtual =
+        isVirtualPreviewPath(tabPath) || isPipelineTabPath(tabPath);
+      isEditable = !isVirtual && isEditableFile(tabPath);
       hasInitialContent = typeof options?.content === 'string';
 
       // Read current tabs synchronously from ref to avoid React 18 batching issues
       // (setTabs callback may be deferred when called from outside React event handlers)
-      const currentTabs = tabsRef.current;
-      const existingTab = currentTabs.find((tab) => tab.path === path);
+      let currentTabs = tabsRef.current;
+      if (pipelineSourcePath) {
+        const legacyTab = currentTabs.find(
+          (tab) => tab.path === pipelineSourcePath,
+        );
+        if (legacyTab?.isModified) {
+          setActiveTabId(legacyTab.id);
+          return legacyTab.id;
+        }
+        if (legacyTab) {
+          currentTabs = currentTabs.filter((tab) => tab.id !== legacyTab.id);
+          tabsRef.current = currentTabs;
+          setTabs((current) =>
+            current.filter((tab) => tab.id !== legacyTab.id),
+          );
+          disposeModelForPath(projectId, pipelineSourcePath);
+          clearViewState(legacyTab.id);
+        }
+      }
+      const existingTab = currentTabs.find((tab) => tab.path === tabPath);
 
       let targetId: EditorTabId;
 
@@ -586,23 +615,23 @@ const useTabManager = (projectId?: string): UseTabManagerReturn => {
         // Update existing tab options if needed
         setTabs((current) =>
           current.map((tab) =>
-            tab.path === path
+            tab.path === tabPath
               ? { ...tab, isReadOnly: options?.isReadOnly ?? tab.isReadOnly }
               : tab,
           ),
         );
       } else {
         // Generate ID before setTabs so we have it synchronously
-        targetId = ensureUniqueId(path, currentTabs);
+        targetId = ensureUniqueId(tabPath, currentTabs);
 
         const initialContent =
           options?.content ??
-          (isEditable ? '' : getNonEditableFileMessage(path));
+          (isEditable ? '' : getNonEditableFileMessage(tabPath));
 
         const newTab: EditorTabState = {
           id: targetId,
-          path,
-          title: options?.title ?? deriveTitleFromPath(path),
+          path: tabPath,
+          title: options?.title ?? deriveTitleFromPath(tabPath),
           content: initialContent,
           // If we're about to fetch from disk, leave savedContent undefined
           // until the load completes; otherwise the initial content IS the
@@ -610,7 +639,7 @@ const useTabManager = (projectId?: string): UseTabManagerReturn => {
           savedContent:
             isEditable && !hasInitialContent ? undefined : initialContent,
           isModified: false,
-          language: getLanguageFromExtension(path),
+          language: getLanguageFromExtension(tabPath),
           isLoading: isEditable && !hasInitialContent,
           error: undefined,
           viewState: null,
@@ -635,7 +664,7 @@ const useTabManager = (projectId?: string): UseTabManagerReturn => {
       }
 
       try {
-        const data = await projectsServices.getFileContent({ path });
+        const data = await projectsServices.getFileContent({ path: tabPath });
         setTabs((current) =>
           current.map((tab) =>
             tab.id === targetId
@@ -668,7 +697,7 @@ const useTabManager = (projectId?: string): UseTabManagerReturn => {
 
       return targetId;
     },
-    [],
+    [projectId],
   );
 
   const refreshTabContentByPath = React.useCallback(

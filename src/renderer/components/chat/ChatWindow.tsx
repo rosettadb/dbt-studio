@@ -54,8 +54,13 @@ import {
   useOnContextUsage,
 } from '../../controllers/agent.controller';
 import { useGetFileContent } from '../../controllers/projects.controller';
-import { projectsServices } from '../../services';
 import { PROJECT_AGENT_CONTEXT_FILE } from '../../../shared/agentMemoryConstants';
+import { QUERY_KEYS } from '../../config/constants';
+import {
+  discardAgentChanges,
+  mergeAgentChangedFile,
+  type AgentChangedFile,
+} from './discardAgentChanges';
 
 export interface ChatWindowProps {
   screenKey?: 'project' | 'sql' | 'notebooks' | 'analytics';
@@ -127,6 +132,7 @@ export const ChatWindow: React.FC<ChatWindowProps> = ({
     setIsChatOpen,
     openFile,
     setEditingFilePath,
+    syncEditorContent,
     closeFile,
     refreshFileTree,
   } = useAppContext();
@@ -674,25 +680,66 @@ export const ChatWindow: React.FC<ChatWindowProps> = ({
     }
 
     // Use a Map to keep only the latest update per file
-    const fileMap = new Map<
-      string,
-      { path: string; added: number; removed: number }
-    >();
+    const fileMap = new Map<string, AgentChangedFile>();
+    const originalPipelineContent = new Map<string, string>();
 
     streamState.steps.forEach((step) => {
       step.toolCalls.forEach((tc) => {
         if (
-          (tc.toolName === 'writeDbtModel' || tc.toolName === 'writeFile') &&
+          tc.toolName === 'studio_pipeline_read' &&
+          tc.status === 'done' &&
+          project?.path
+        ) {
+          const result = tc.result as any;
+          const rawPath = result?.path || (tc.args as any)?.path;
+          const filePath =
+            rawPath &&
+            !String(rawPath).startsWith('/') &&
+            !/^[A-Za-z]:[\\/]/.test(String(rawPath))
+              ? `${project.path}/${rawPath}`
+              : rawPath;
+          if (
+            filePath &&
+            typeof result?.content === 'string' &&
+            !fileMap.has(filePath)
+          ) {
+            originalPipelineContent.set(filePath, result.content);
+          }
+          return;
+        }
+        if (
+          (tc.toolName === 'writeDbtModel' ||
+            tc.toolName === 'writeFile' ||
+            tc.toolName === 'studio_pipeline_write') &&
           tc.status === 'done'
         ) {
-          const path = (tc.args as any)?.filePath || (tc.args as any)?.path;
-          if (path) {
-            const result = tc.result as any;
-            fileMap.set(path, {
-              path,
-              added: result?.linesAdded ?? 0,
-              removed: result?.linesRemoved ?? 0,
-            });
+          const result = tc.result as any;
+          if (result?.success === false) return;
+          const rawPath =
+            result?.path ||
+            (tc.args as any)?.filePath ||
+            (tc.args as any)?.path;
+          const filePath =
+            tc.toolName === 'studio_pipeline_write' &&
+            rawPath &&
+            project?.path &&
+            !String(rawPath).startsWith('/') &&
+            !/^[A-Za-z]:[\\/]/.test(String(rawPath))
+              ? `${project.path}/${rawPath}`
+              : rawPath;
+          if (filePath) {
+            fileMap.set(
+              filePath,
+              mergeAgentChangedFile(fileMap.get(filePath), {
+                path: filePath,
+                added: result?.linesAdded ?? 0,
+                removed: result?.linesRemoved ?? 0,
+                created: result?.created === true,
+                originalContent:
+                  fileMap.get(filePath)?.originalContent ??
+                  originalPipelineContent.get(filePath),
+              }),
+            );
           }
         }
       });
@@ -705,6 +752,7 @@ export const ChatWindow: React.FC<ChatWindowProps> = ({
     selectedSessionId,
     currentRunKey,
     dismissedRunKey,
+    project?.path,
   ]);
 
   const handleOpenFile = (path: string) => {
@@ -831,18 +879,30 @@ export const ChatWindow: React.FC<ChatWindowProps> = ({
                 if (currentRunKey) setDismissedRunKey(currentRunKey);
               }}
               onDiscard={async () => {
-                // Close tabs for discarded files
-                changedFiles.forEach((f) => closeFile?.(f.path));
-                // Delete files from disk
-                await Promise.allSettled(
-                  changedFiles.map((f) =>
-                    projectsServices.deleteItem({ filePath: f.path }),
-                  ),
-                );
-                // Refresh file tree to remove deleted files
-                await refreshFileTree?.();
-                if (currentRunKey) setDismissedRunKey(currentRunKey);
-                toast.success('Agent-created files discarded.');
+                if (!project?.path) {
+                  toast.error('Unable to discard changes without a project.');
+                  return;
+                }
+                try {
+                  await discardAgentChanges(
+                    project.path,
+                    changedFiles,
+                    syncEditorContent,
+                    closeFile,
+                  );
+                  await queryClient.invalidateQueries([
+                    QUERY_KEYS.GET_FILE_CONTENT,
+                  ]);
+                  await refreshFileTree?.();
+                  if (currentRunKey) setDismissedRunKey(currentRunKey);
+                  toast.success('Agent changes discarded.');
+                } catch (error) {
+                  toast.error(
+                    error instanceof Error
+                      ? error.message
+                      : 'Failed to discard agent changes.',
+                  );
+                }
               }}
             />
           </Box>

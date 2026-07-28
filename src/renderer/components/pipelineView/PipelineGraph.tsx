@@ -61,6 +61,8 @@ type PipelineGraphProps = {
   /** When provided (cloud mode), shows a Run button that triggers a cloud run. */
   onRun?: () => void;
   onEditingChange?: (isEditing: boolean) => void;
+  onDirtyChange?: (isDirty: boolean) => void;
+  externalRevision?: number;
   /** Fired once when the pipeline view first mounts (e.g. tab opened). */
   onEnterView?: () => void;
 };
@@ -178,6 +180,8 @@ const PipelineGraphContent: React.FC<PipelineGraphProps> = ({
   onSave,
   onRun,
   onEditingChange,
+  onDirtyChange,
+  externalRevision = 0,
   onEnterView,
 }) => {
   const theme = useTheme();
@@ -203,6 +207,7 @@ const PipelineGraphContent: React.FC<PipelineGraphProps> = ({
   // so we can tell whether anything actually changed before warning about
   // unsaved changes.
   const editSnapshotRef = React.useRef('');
+  const externalRevisionRef = React.useRef(externalRevision);
 
   const openEditForNode = useCallback((id: string) => {
     const node = nodesRef.current.find((n) => n.id === id);
@@ -231,6 +236,23 @@ const PipelineGraphContent: React.FC<PipelineGraphProps> = ({
   useEffect(() => {
     onEditingChange?.(isEditing);
   }, [isEditing, onEditingChange]);
+
+  useEffect(() => {
+    if (!isEditing) {
+      onDirtyChange?.(false);
+      return;
+    }
+    const currentSnapshot = serializePipelineConfig(pipelineName, nodes, edges);
+    onDirtyChange?.(currentSnapshot !== editSnapshotRef.current);
+  }, [isEditing, pipelineName, nodes, edges, onDirtyChange]);
+
+  useEffect(() => {
+    if (externalRevisionRef.current === externalRevision) return;
+    externalRevisionRef.current = externalRevision;
+    setIsEditing(false);
+    setValidationError('');
+    onDirtyChange?.(false);
+  }, [externalRevision, onDirtyChange]);
 
   // Collapse terminal/cloud logs once when the pipeline view is first shown
   // (mirrors what edit mode already did), leaving later manual restores alone.
@@ -728,6 +750,8 @@ export const PipelineGraph: React.FC<PipelineGraphProps> = ({
   onSave,
   onRun,
   onEditingChange,
+  onDirtyChange,
+  externalRevision,
   onEnterView,
 }) => (
   <ReactFlowProvider>
@@ -738,6 +762,8 @@ export const PipelineGraph: React.FC<PipelineGraphProps> = ({
       onSave={onSave}
       onRun={onRun}
       onEditingChange={onEditingChange}
+      onDirtyChange={onDirtyChange}
+      externalRevision={externalRevision}
       onEnterView={onEnterView}
     />
   </ReactFlowProvider>

@@ -292,11 +292,15 @@ describe('AgentService (Phase 1)', () => {
           'listDirectory',
           'readFile',
           'pathExists',
+          'studio_pipeline_list',
+          'studio_pipeline_read',
+          'studio_pipeline_validate',
         ]),
       );
       expect(Object.keys(tools)).not.toContain('writeDbtModel');
       expect(Object.keys(tools)).not.toContain('runDbtCommand');
       expect(Object.keys(tools)).not.toContain('writeFile');
+      expect(Object.keys(tools)).not.toContain('studio_pipeline_write');
     });
 
     it('returns all enabled tools in agent mode', () => {
@@ -312,6 +316,10 @@ describe('AgentService (Phase 1)', () => {
           'readFile',
           'writeFile',
           'pathExists',
+          'studio_pipeline_list',
+          'studio_pipeline_read',
+          'studio_pipeline_validate',
+          'studio_pipeline_write',
         ]),
       );
     });

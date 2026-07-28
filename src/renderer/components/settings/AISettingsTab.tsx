@@ -109,6 +109,30 @@ const TOOLS: ToolItem[] = [
     description: 'Check if a file or directory exists at a given path',
     icon: <SearchIcon sx={{ fontSize: 16 }} />,
   },
+  {
+    id: 'studio_pipeline_list',
+    label: 'studio_pipeline_list',
+    description: 'List pipeline YAML files under the project .rosetta folder',
+    icon: <FolderOpenIcon sx={{ fontSize: 16 }} />,
+  },
+  {
+    id: 'studio_pipeline_read',
+    label: 'studio_pipeline_read',
+    description: 'Read and validate a project pipeline file',
+    icon: <ArticleIcon sx={{ fontSize: 16 }} />,
+  },
+  {
+    id: 'studio_pipeline_validate',
+    label: 'studio_pipeline_validate',
+    description: 'Validate pipeline YAML without changing the project',
+    icon: <SearchIcon sx={{ fontSize: 16 }} />,
+  },
+  {
+    id: 'studio_pipeline_write',
+    label: 'studio_pipeline_write',
+    description: 'Atomically write a validated .rosetta pipeline file',
+    icon: <EditIcon sx={{ fontSize: 16 }} />,
+  },
 
   // ── Planned — MCP Servers (Plan 28a, Wk 5-6) ──────────────────────────────
   {

@@ -6,6 +6,7 @@ import { z } from 'zod';
 import * as fs from 'fs';
 import * as path from 'path';
 import AgentService from '../../agent.service';
+import { isReadablePipelineRelativePath } from '../../../../shared/pipelines/pipelineConfig';
 
 const MAX_FILE_SIZE = 1_000_000; // 1 MB for general files
 const MAX_DIRECTORY_DEPTH = 5;
@@ -149,7 +150,6 @@ export const readFile = tool({
     console.log('[Tool][FS] readFile', { filePath, projectPath });
     try {
       assertWithinProject(filePath, projectPath);
-
       if (!fs.existsSync(filePath)) {
         return { error: `File not found: ${filePath}` };
       }
@@ -199,6 +199,15 @@ export const writeFile = tool({
     });
     try {
       assertWithinProject(filePath, projectPath);
+      if (
+        isReadablePipelineRelativePath(path.relative(projectPath, filePath))
+      ) {
+        return {
+          success: false,
+          error:
+            'Use studio_pipeline_write for .rosetta pipeline files so the YAML is validated and the Pipeline Editor is refreshed safely.',
+        };
+      }
 
       const context = AgentService.currentAgentContext;
       if (context) {
@@ -418,12 +427,22 @@ export function createFilesystemTools(
       execute: async ({ filePath, content }) => {
         try {
           assertWithinProject(filePath, projectPath);
+          if (
+            isReadablePipelineRelativePath(path.relative(projectPath, filePath))
+          ) {
+            return {
+              success: false,
+              error:
+                'Use studio_pipeline_write for .rosetta pipeline files so the YAML is validated and the Pipeline Editor is refreshed safely.',
+            };
+          }
 
           const context = AgentService.currentAgentContext;
           if (context) {
             // File writes don't require confirmation — only shell commands do.
           }
 
+          const existed = fs.existsSync(filePath);
           const dir = path.dirname(filePath);
           if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
           fs.writeFileSync(filePath, content, 'utf-8');
@@ -431,6 +450,7 @@ export function createFilesystemTools(
           return {
             success: true,
             filePath: path.relative(projectPath, filePath),
+            created: !existed,
             bytesWritten: Buffer.byteLength(content, 'utf-8'),
           };
         } catch (error) {

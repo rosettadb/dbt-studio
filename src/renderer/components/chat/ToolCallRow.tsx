@@ -63,7 +63,8 @@ export const ToolCallRow: React.FC<ToolCallRowProps> = ({
 
     switch (toolName) {
       case 'readDbtModel':
-      case 'readFile': {
+      case 'readFile':
+      case 'studio_pipeline_read': {
         const filePath = (args.filePath || args.path || '') as string;
         const filename = filePath.split('/').pop() || 'file';
         icon = <FileTypeBadge filename={filename} />;
@@ -80,6 +81,28 @@ export const ToolCallRow: React.FC<ToolCallRowProps> = ({
           />
         );
         label = `Listed ${dir}`;
+        category = 'read';
+        break;
+      }
+      case 'studio_pipeline_list': {
+        icon = (
+          <FolderOpenIcon
+            fontSize="small"
+            sx={{ color: theme.palette.text.secondary }}
+          />
+        );
+        label = 'Listed pipelines';
+        category = 'read';
+        break;
+      }
+      case 'studio_pipeline_validate': {
+        icon = (
+          <DescriptionIcon
+            fontSize="small"
+            sx={{ color: theme.palette.text.secondary }}
+          />
+        );
+        label = 'Validated pipeline YAML';
         category = 'read';
         break;
       }
@@ -153,7 +176,8 @@ export const ToolCallRow: React.FC<ToolCallRowProps> = ({
         break;
       }
       case 'writeDbtModel':
-      case 'writeFile': {
+      case 'writeFile':
+      case 'studio_pipeline_write': {
         const filePath = (args.filePath || args.path || '') as string;
         const filename = filePath.split('/').pop() || 'file';
         icon = <FileTypeBadge filename={filename} />;
