@@ -80,6 +80,8 @@ export function createStudioCliTools(options: {
               error: result?.error ?? 'dbt command failed',
               data: {
                 command: result?.command ?? command,
+                exitCode: result?.exitCode ?? null,
+                output: result?.output ?? result?.stdout ?? '',
                 stdout: result?.stdout ?? '',
                 stderr: result?.stderr ?? '',
               },
@@ -93,6 +95,7 @@ export function createStudioCliTools(options: {
             ok: true,
             data: {
               command: result.command,
+              exitCode: result.exitCode ?? 0,
               output: result.output ?? '',
             },
             meta: {

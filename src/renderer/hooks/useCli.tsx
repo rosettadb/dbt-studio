@@ -8,12 +8,19 @@ import React, {
   ReactNode,
 } from 'react';
 import { projectsServices } from '../services';
+import { CliProcessEnvironment } from '../../types/backend';
+
+export interface CliCommandResult {
+  output: string[];
+  error: string[];
+  exitCode: number | null;
+}
 
 interface CliCommand {
   id: string;
   command: string;
   startTime: number;
-  resolve?: (result: { output: string[]; error: string[] }) => void;
+  resolve?: (result: CliCommandResult) => void;
   reject?: (error: Error) => void;
   // eslint-disable-next-line no-undef
   timeoutId?: NodeJS.Timeout;
@@ -32,8 +39,13 @@ interface CliContextValue extends CliState {
     command: string,
     args?: string[],
     timeoutMs?: number,
-  ) => Promise<{ output: string[]; error: string[] }>;
-  runCommandAsync: (command: string, args?: string[]) => void; // Fire and forget for terminal usage
+    environment?: CliProcessEnvironment,
+  ) => Promise<CliCommandResult>;
+  runCommandAsync: (
+    command: string,
+    args?: string[],
+    environment?: CliProcessEnvironment,
+  ) => void; // Fire and forget for terminal usage
   stopCommand: () => void;
   clearOutput: () => void;
   sendInput: (input: string) => void;
@@ -86,13 +98,15 @@ export const CliProvider: React.FC<CliProviderProps> = ({ children }) => {
       }));
     };
 
-    const handleDone = () => {
+    const handleDone = (...args: unknown[]) => {
+      const exitCode = typeof args[0] === 'number' ? args[0] : null;
       setState((prev) => {
         // Resolve promise if it exists
         if (prev.currentCommand?.resolve) {
           prev.currentCommand.resolve({
             output: prev.output,
             error: prev.error,
+            exitCode,
           });
         }
 
@@ -193,46 +207,49 @@ export const CliProvider: React.FC<CliProviderProps> = ({ children }) => {
     async (
       commandString: string,
       args?: string[],
-      timeoutMs: number = 60000,
-    ): Promise<{ output: string[]; error: string[] }> => {
+      timeoutMs?: number,
+      environment?: CliProcessEnvironment,
+    ): Promise<CliCommandResult> => {
       if (state.isRunning) {
         throw new Error('Another command is already running');
       }
 
       const commandId = generateCommandId();
 
-      return new Promise<{ output: string[]; error: string[] }>(
-        (resolve, reject) => {
-          const timeoutId = setTimeout(() => {
-            setState((prev) => ({
-              ...prev,
-              isRunning: false,
-              currentCommand: null,
-            }));
-            reject(new Error(`Command timeout after ${timeoutMs}ms`));
-          }, timeoutMs);
-
-          const command: CliCommand = {
-            id: commandId,
-            command: commandString,
-            startTime: Date.now(),
-            resolve,
-            reject,
-            timeoutId,
-          };
-
-          // Clear previous output and start command
+      return new Promise<CliCommandResult>((resolve, reject) => {
+        const commandTimeoutMs = timeoutMs ?? 60000;
+        const timeoutId = setTimeout(() => {
           setState((prev) => ({
             ...prev,
-            output: [],
-            error: [],
-            isRunning: true,
-            currentCommand: command,
-            commandHistory: [...prev.commandHistory.slice(-19), commandString], // Keep last 20 commands
+            isRunning: false,
+            currentCommand: null,
           }));
+          reject(new Error(`Command timeout after ${commandTimeoutMs}ms`));
+        }, commandTimeoutMs);
 
-          // Execute command
-          projectsServices.runCliCommand(commandString, args).catch((err) => {
+        const command: CliCommand = {
+          id: commandId,
+          command: commandString,
+          startTime: Date.now(),
+          resolve,
+          reject,
+          timeoutId,
+        };
+
+        // Clear previous output and start command
+        setState((prev) => ({
+          ...prev,
+          output: [],
+          error: [],
+          isRunning: true,
+          currentCommand: command,
+          commandHistory: [...prev.commandHistory.slice(-19), commandString], // Keep last 20 commands
+        }));
+
+        // Execute command
+        projectsServices
+          .runCliCommand(commandString, args, environment)
+          .catch((err) => {
             const errorMessage =
               err?.message || err?.toString() || 'Command failed';
             setState((prev) => ({
@@ -243,15 +260,18 @@ export const CliProvider: React.FC<CliProviderProps> = ({ children }) => {
             }));
             reject(new Error(errorMessage));
           });
-        },
-      );
+      });
     },
     [state.isRunning, generateCommandId],
   );
 
   // Run command without waiting for result (for terminal usage)
   const runCommandAsync = useCallback(
-    (commandString: string, args?: string[]) => {
+    (
+      commandString: string,
+      args?: string[],
+      environment?: CliProcessEnvironment,
+    ) => {
       if (state.isRunning) {
         // Add to output to show command was ignored
         setState((prev) => ({
@@ -280,14 +300,16 @@ export const CliProvider: React.FC<CliProviderProps> = ({ children }) => {
       }));
 
       // Execute command
-      projectsServices.runCliCommand(commandString, args).catch((err) => {
-        const errorMessage =
-          err?.message || err?.toString() || 'Command failed';
-        setState((prev) => ({
-          ...prev,
-          error: [...prev.error, errorMessage],
-        }));
-      });
+      projectsServices
+        .runCliCommand(commandString, args, environment)
+        .catch((err) => {
+          const errorMessage =
+            err?.message || err?.toString() || 'Command failed';
+          setState((prev) => ({
+            ...prev,
+            error: [...prev.error, errorMessage],
+          }));
+        });
     },
     [state.isRunning, generateCommandId],
   );

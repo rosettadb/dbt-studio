@@ -6,10 +6,12 @@ import {
   useApiKey,
   useGetConnections,
   useGetSettings,
+  useCheckProjectAdapterCompatibility,
   useSetConnectionEnvVariable,
 } from '../controllers';
 import { Project, DbtCommandType, ConnectionInput } from '../../types/backend';
 import { useAppContext } from './index';
+import { extractCliErrorDetails } from '../utils/dbtCommandResult';
 import { useDbtRunHistory } from './useDbtRunHistory';
 
 interface UseDbtReturn {
@@ -29,57 +31,6 @@ interface UseDbtReturn {
   isRunning: boolean;
   activeCommand: DbtCommandType | null;
 }
-
-const ANSI_ESCAPE_REGEX = /\[[0-9;]*m/g;
-const ERROR_SUMMARY_REGEX = /ERROR=(\d+)/i;
-const NON_ZERO_EXIT_REGEX = /Process exited with code\s+(\d+)/i;
-const ERROR_HINT_REGEX =
-  /(Error importing adapter|Encountered an error|Runtime Error|Traceback|Database Error|Compilation Error|^ERROR:?\b|\bERROR\b)/i;
-const ERROR_HINT_IGNORE_REGEX = /ERROR=0\b/i;
-
-const sanitizeCliLine = (line: string): string =>
-  line.replace(ANSI_ESCAPE_REGEX, '').trimEnd();
-
-const extractCliErrorDetails = (
-  output: string[],
-  errors: string[],
-): string[] => {
-  const details = new Set<string>();
-
-  errors.forEach((err) => {
-    const sanitizedError = sanitizeCliLine(err);
-    if (sanitizedError) {
-      details.add(sanitizedError);
-    }
-  });
-
-  const cleanedOutput = output.map(sanitizeCliLine);
-
-  cleanedOutput.forEach((line) => {
-    const match = line.match(ERROR_SUMMARY_REGEX);
-    if (match && Number(match[1]) > 0) {
-      details.add(line);
-    }
-  });
-
-  cleanedOutput.forEach((line) => {
-    const match = line.match(NON_ZERO_EXIT_REGEX);
-    if (match && Number(match[1]) !== 0) {
-      details.add(line);
-    }
-  });
-
-  cleanedOutput.forEach((line) => {
-    if (ERROR_HINT_IGNORE_REGEX.test(line)) {
-      return;
-    }
-    if (ERROR_HINT_REGEX.test(line)) {
-      details.add(line);
-    }
-  });
-
-  return Array.from(details);
-};
 
 const useDbt = (
   successCallback?: () => void,
@@ -102,6 +53,8 @@ const useDbt = (
     getConnectionField,
   } = useSecureStorage();
   const setEnvVariables = useSetConnectionEnvVariable();
+  const checkProjectAdapterCompatibility =
+    useCheckProjectAdapterCompatibility();
 
   const env = React.useMemo(() => {
     return apiKey ? environment : 'local';
@@ -308,6 +261,14 @@ const useDbt = (
           return;
         }
 
+        const adapterCheck = await checkProjectAdapterCompatibility(
+          project.path,
+        );
+        if (!adapterCheck.adapter.canExecute) {
+          if (options.showToast) toast.error(adapterCheck.adapter.notes);
+          return;
+        }
+
         setActiveCommand(command);
 
         // Setup environment variables
@@ -340,6 +301,7 @@ const useDbt = (
         const aggregatedError = extractCliErrorDetails(
           result.output,
           result.error,
+          result.exitCode,
         );
 
         // Handle success vs failure
@@ -395,6 +357,8 @@ const useDbt = (
       runCommand,
       successCallback,
       settings?.dbtPath,
+      settings?.dbtVersion,
+      checkProjectAdapterCompatibility,
       recordCommandStart,
       recordCommandFinished,
       recordCommandFailed,
@@ -437,6 +401,14 @@ const useDbt = (
             return '';
           }
 
+          const adapterCheck = await checkProjectAdapterCompatibility(
+            project.path,
+          );
+          if (!adapterCheck.adapter.canExecute) {
+            toast.error(adapterCheck.adapter.notes);
+            return '';
+          }
+
           setActiveCommand('compile');
 
           // Setup environment variables
@@ -462,6 +434,7 @@ const useDbt = (
           const aggregatedError = extractCliErrorDetails(
             result.output,
             result.error,
+            result.exitCode,
           );
           if (aggregatedError.length === 0) {
             // Extract the compiled SQL from the output
@@ -526,7 +499,14 @@ const useDbt = (
           setActiveCommand(null);
         }
       },
-      [connections, setupConnectionEnv, buildCommand, runCommand],
+      [
+        connections,
+        setupConnectionEnv,
+        buildCommand,
+        runCommand,
+        settings?.dbtVersion,
+        checkProjectAdapterCompatibility,
+      ],
     ),
 
     compileProject: useCallback(
@@ -552,6 +532,14 @@ const useDbt = (
             return '';
           }
 
+          const adapterCheck = await checkProjectAdapterCompatibility(
+            project.path,
+          );
+          if (!adapterCheck.adapter.canExecute) {
+            toast.error(adapterCheck.adapter.notes);
+            return '';
+          }
+
           setActiveCommand('list');
           await setupConnectionEnv(
             connection.connection.name,
@@ -566,6 +554,7 @@ const useDbt = (
           const aggregatedError = extractCliErrorDetails(
             result.output,
             result.error,
+            result.exitCode,
           );
           if (aggregatedError.length === 0) {
             return result.output.join('\n');
@@ -581,7 +570,14 @@ const useDbt = (
           setActiveCommand(null);
         }
       },
-      [connections, setupConnectionEnv, buildCommand, runCommand],
+      [
+        connections,
+        setupConnectionEnv,
+        buildCommand,
+        runCommand,
+        settings?.dbtVersion,
+        checkProjectAdapterCompatibility,
+      ],
     ),
 
     debug: useCallback(

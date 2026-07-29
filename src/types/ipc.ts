@@ -30,6 +30,15 @@ export type SettingsChannels =
   | 'settings:duckdb:diagnose'
   | 'settings:installSqlGlot'
   | 'dbt:versions:list'
+  | 'dbt:installed:get'
+  | 'dbt:versionChange:plan'
+  | 'dbt:versionChange:install'
+  | 'dbt:compatibility:check'
+  | 'dbt:adapters:active'
+  | 'dbt:adapters:check'
+  | 'dbt:packages:installed'
+  | 'dbt:package:installLatest'
+  | 'dbt:package:uninstall'
   | 'dbt:packageVersions:list'
   | 'dbt:packageVersion:install';
 
@@ -466,6 +475,10 @@ export type FlowfileChannels =
   | 'flowfile:start'
   | 'flowfile:stop';
 
+export type PipelineTemplatesChannels =
+  | 'pipeline-templates:list'
+  | 'pipeline-templates:fetch-content';
+
 export type Channels =
   | TestChannels
   | CliChannels
@@ -491,7 +504,8 @@ export type Channels =
   | SavedQueriesChannels
   | AnalyticsPagesChannels
   | StaticSiteChannels
-  | FlowfileChannels;
+  | FlowfileChannels
+  | PipelineTemplatesChannels;
 
 export type ConfigureConnectionBody = {
   projectId?: string;

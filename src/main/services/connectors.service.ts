@@ -50,6 +50,82 @@ import DuckLakeService from './duckLake.service';
 import DuckLakeInstanceStore from './duckLake/instanceStore.service';
 
 export default class ConnectorsService {
+  private static readonly bigQueryKeyFiles = new Map<string, string>();
+
+  private static isBigQueryCleanupRegistered = false;
+
+  private static registerBigQueryCleanup(): void {
+    if (this.isBigQueryCleanupRegistered) return;
+    this.isBigQueryCleanupRegistered = true;
+
+    process.once('exit', () => this.cleanupBigQueryKeyFiles());
+
+    const cleanupAndExit = (exitCode: number): void => {
+      this.cleanupBigQueryKeyFiles();
+      process.exitCode = exitCode;
+      setImmediate(() => process.exit(exitCode));
+    };
+
+    process.once('SIGINT', () => cleanupAndExit(130));
+    process.once('SIGTERM', () => cleanupAndExit(143));
+  }
+
+  private static async materializeBigQueryServiceAccount(
+    connectionName: string,
+    value: string,
+  ): Promise<void> {
+    let credentials: { client_email?: unknown };
+    try {
+      credentials = JSON.parse(value);
+    } catch {
+      throw new Error('Invalid BigQuery service account key JSON format.');
+    }
+
+    if (
+      typeof credentials.client_email !== 'string' ||
+      !credentials.client_email.trim()
+    ) {
+      throw new Error('BigQuery service account key is missing client_email.');
+    }
+
+    const key = `db-bigquery-${connectionName}`;
+    this.registerBigQueryCleanup();
+    const tempKeyPath = path.join(
+      os.tmpdir(),
+      `rosetta-bigquery-${uuidV4()}.json`,
+    );
+    await fs.promises.writeFile(tempKeyPath, value, {
+      encoding: 'utf8',
+      mode: 0o600,
+    });
+
+    const previousKeyPath = this.bigQueryKeyFiles.get(key);
+    this.bigQueryKeyFiles.set(key, tempKeyPath);
+    process.env[key] = tempKeyPath;
+    process.env[`db-bigquery-email-${connectionName}`] =
+      credentials.client_email;
+
+    if (previousKeyPath) {
+      await fs.promises.rm(previousKeyPath, { force: true });
+    }
+  }
+
+  static cleanupBigQueryKeyFiles(): void {
+    const keyFiles = Array.from(this.bigQueryKeyFiles.entries());
+    this.bigQueryKeyFiles.clear();
+
+    keyFiles.forEach(([key, keyPath]) => {
+      if (process.env[key] === keyPath) delete process.env[key];
+      const connectionName = key.slice('db-bigquery-'.length);
+      delete process.env[`db-bigquery-email-${connectionName}`];
+      try {
+        fs.rmSync(keyPath, { force: true });
+      } catch {
+        // Continue removing the remaining materialized credentials.
+      }
+    });
+  }
+
   static async loadConnections(
     includeDataLake: boolean = false,
   ): Promise<ConnectionModel[]> {
@@ -352,6 +428,23 @@ export default class ConnectorsService {
 
     if (!connection) {
       throw new Error('Missing connection');
+    }
+
+    if (
+      connection.connection.type === 'bigquery' &&
+      connection.connection.method === 'service-account'
+    ) {
+      const account = `db-bigquery-${connection.connection.name}`;
+      const serviceAccount = await SecureStorageService.getCredential(account);
+      if (!serviceAccount) {
+        throw new Error(
+          'BigQuery service account key not found in secure storage',
+        );
+      }
+      await this.materializeBigQueryServiceAccount(
+        connection.connection.name,
+        serviceAccount,
+      );
     }
 
     // Load credentials into environment variables for ducklake S3 connections
@@ -980,7 +1073,7 @@ export default class ConnectorsService {
         return redshiftUrl;
       }
       case 'bigquery': {
-        return `jdbc:bigquery://https://www.googleapis.com/bigquery/v2:443;ProjectId=${ev('project')};`;
+        return `jdbc:bigquery://https://www.googleapis.com/bigquery/v2:443;ProjectId=${ev('project')};OAuthType=0;OAuthServiceAcctEmail=${ev('bigquery-email')};OAuthPvtKeyPath=${ev('bigquery')};`;
       }
       case 'databricks':
         return `jdbc:databricks://${ev('host')}:443/default;transportMode=http;ssl=1;AuthMech=3;httpPath=${ev('httppath')};PWD=${ev('token')}`;
@@ -1025,21 +1118,6 @@ export default class ConnectorsService {
     project: Project,
   ): Promise<RosettaConnection> {
     const rosettaJdbcUrl = await this.generateJdbcUrl(connection);
-    if (
-      connection.type === 'bigquery' &&
-      connection.method === 'service-account'
-    ) {
-      // Fetch the key from secure storage
-      const key = await SecureStorageService.getCredential(
-        `db-bigquery-${connection.name}`,
-      );
-      if (!key) {
-        throw new Error(
-          'BigQuery service account key not found in secure storage',
-        );
-      }
-      (connection as any).keyfile = key;
-    }
 
     return {
       name: connection.name || project.name,
@@ -1182,31 +1260,6 @@ export default class ConnectorsService {
     name: string,
     connection: ConnectionInput,
   ): Promise<string> {
-    // If BigQuery, write key to temp file and set env var
-    if (
-      connection.type === 'bigquery' &&
-      connection.method === 'service-account'
-    ) {
-      let { keyfile } = connection;
-      if (!keyfile) {
-        keyfile =
-          (await SecureStorageService.getCredential(
-            `db-bigquery-${connection.name}`,
-          )) || '';
-        if (!keyfile) {
-          throw new Error(
-            'BigQuery service account key not found in secure storage',
-          );
-        }
-      }
-      const tempKeyPath = path.join(
-        os.tmpdir(),
-        `dbt_bq_key_${connection.name}_${Date.now()}.json`,
-      );
-      fs.writeFileSync(tempKeyPath, keyfile, { mode: 0o600 });
-      process.env[`db-bigquery-${connection.name}`] = tempKeyPath;
-      // Optionally, schedule cleanup after dbt run
-    }
     return this.mapToDbtProfiles(name, connection);
   }
 
@@ -1654,6 +1707,13 @@ export default class ConnectorsService {
     key: string,
     value: string,
   ): Promise<void> {
+    const bigQueryPrefix = 'db-bigquery-';
+    if (key.startsWith(bigQueryPrefix)) {
+      const connectionName = key.slice(bigQueryPrefix.length);
+      await this.materializeBigQueryServiceAccount(connectionName, value);
+      return;
+    }
+
     process.env[key] = value;
   }
 

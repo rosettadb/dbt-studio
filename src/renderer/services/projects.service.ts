@@ -6,6 +6,7 @@ import {
   Project,
   Table,
   EnhanceModelResponseType,
+  CliProcessEnvironment,
 } from '../../types/backend';
 
 export const getProjects = async (): Promise<Project[]> => {
@@ -244,10 +245,16 @@ export const getSelectedProject = async (): Promise<Project | undefined> => {
 export const runCliCommand = async (
   command: string,
   args?: string[],
+  environment?: CliProcessEnvironment,
 ): Promise<void> => {
-  await client.post<{ command: string; args?: string[] }>('cli:run', {
+  await client.post<{
+    command: string;
+    args?: string[];
+    environment?: CliProcessEnvironment;
+  }>('cli:run', {
     command,
     args,
+    environment,
   });
 };
 
