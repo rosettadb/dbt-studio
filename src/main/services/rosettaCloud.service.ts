@@ -362,36 +362,40 @@ export default class RosettaCloudService {
     )}&limit=20&sortBy=createdAt&sortOrder=desc`;
 
     for (let attempt = 0; attempt < retries; attempt += 1) {
-      const response = await fetch(url, {
-        method: 'GET',
-        headers: {
-          Authorization: `Bearer ${apiKey}`,
-          'Content-Type': 'application/json',
-        },
-      });
+      try {
+        const response = await fetch(url, {
+          method: 'GET',
+          headers: {
+            Authorization: `Bearer ${apiKey}`,
+            'Content-Type': 'application/json',
+          },
+        });
 
-      if (response.ok) {
-        const body = (await response.json()) as {
-          actions?: { id: string; data?: { PIPELINE_FILE?: string } }[];
-        };
+        if (response.ok) {
+          const body = (await response.json()) as {
+            actions?: { id: string; data?: { PIPELINE_FILE?: string } }[];
+          };
 
-        const match = body.actions?.find(
-          (a) => a.data?.PIPELINE_FILE === pipelineFile,
-        );
+          const match = body.actions?.find(
+            (a) => a.data?.PIPELINE_FILE === pipelineFile,
+          );
 
-        if (match?.id) {
-          const fresh = await ProjectsService.getProject(projectId);
-          const base = fresh ?? project;
-          await ProjectsService.updateProject({
-            ...base,
-            pipelineRuns: {
-              ...(base.pipelineRuns ?? {}),
-              [pipelineFile]: match.id,
-            },
-          });
+          if (match?.id) {
+            const fresh = await ProjectsService.getProject(projectId);
+            const base = fresh ?? project;
+            await ProjectsService.updateProject({
+              ...base,
+              pipelineRuns: {
+                ...(base.pipelineRuns ?? {}),
+                [pipelineFile]: match.id,
+              },
+            });
 
-          return match.id;
+            return match.id;
+          }
         }
+      } catch {
+        // Transient network/response failure; retry below.
       }
 
       if (attempt < retries - 1) {

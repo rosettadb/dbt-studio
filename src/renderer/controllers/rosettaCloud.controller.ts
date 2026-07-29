@@ -38,7 +38,7 @@ export const usePushProjectToCloud = (
       return rosettaCloudServices.pushProjectToCloud(data);
     },
     onSuccess: async (...args) => {
-      toast.success('Cloud run completed successfully');
+      toast.success('Cloud run started successfully');
       // GET_SELECTED_PROJECT invalidation refreshes the project row from
       // database.json — that's where pipelineRuns now lives, so the
       // CI/CD view picks up the freshly-recorded actionId.
