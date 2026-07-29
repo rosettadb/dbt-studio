@@ -43,55 +43,79 @@ export interface SettingsSidebarElement {
   path: string;
 }
 
-export const settingsSidebarElements: SettingsSidebarElement[] = [
+export interface SettingsSidebarCategory {
+  label: string;
+  items: SettingsSidebarElement[];
+}
+
+export const settingsSidebarCategories: SettingsSidebarCategory[] = [
   {
-    icon: ManageAccountsIcon,
-    text: 'General',
-    path: '/app/settings/general',
+    label: 'General',
+    items: [
+      {
+        icon: ManageAccountsIcon,
+        text: 'General',
+        path: '/app/settings/general',
+      },
+      {
+        icon: AutoAwesomeIcon,
+        text: 'AI Settings',
+        path: '/app/settings/ai-providers',
+      },
+      {
+        icon: CloudIcon,
+        text: 'Rosetta Cloud',
+        path: '/app/settings/profile',
+      },
+      {
+        icon: VpnKeyIcon,
+        text: 'Keystore',
+        path: '/app/settings/keystore',
+      },
+      {
+        icon: ChecklistIcon,
+        text: 'Task Manager',
+        path: '/app/settings/task-manager',
+      },
+    ],
   },
   {
-    icon: DbtBlackIcon as any,
-    text: 'dbt™ Core',
-    path: '/app/settings/dbt',
+    label: 'Plugins',
+    items: [
+      {
+        icon: DbtBlackIcon as any,
+        text: 'dbt™ Core',
+        path: '/app/settings/dbt',
+      },
+      {
+        icon: FolderIcon,
+        text: 'Rosetta CLI',
+        path: '/app/settings/rosetta',
+      },
+      {
+        icon: DuckDBIcon as any,
+        text: 'DuckDB',
+        path: '/app/settings/duckdb',
+      },
+      {
+        icon: AccountTreeIcon as any,
+        text: 'Flowfile',
+        path: '/app/settings/flowfile',
+      },
+    ],
   },
   {
-    icon: FolderIcon,
-    text: 'Rosetta CLI',
-    path: '/app/settings/rosetta',
-  },
-  {
-    icon: AutoAwesomeIcon,
-    text: 'AI Settings',
-    path: '/app/settings/ai-providers',
-  },
-  {
-    icon: DuckDBIcon as any,
-    text: 'DuckDB',
-    path: '/app/settings/duckdb',
-  },
-  {
-    icon: CloudIcon,
-    text: 'Rosetta Cloud',
-    path: '/app/settings/profile',
-  },
-  {
-    icon: AccountTreeIcon as any,
-    text: 'Flowfile',
-    path: '/app/settings/flowfile',
-  },
-  {
-    icon: VpnKeyIcon,
-    text: 'Keystore',
-    path: '/app/settings/keystore',
-  },
-  {
-    icon: ChecklistIcon,
-    text: 'Task Manager',
-    path: '/app/settings/task-manager',
-  },
-  {
-    icon: InfoIcon,
-    text: 'About',
-    path: '/app/settings/about',
+    label: '',
+    items: [
+      {
+        icon: InfoIcon,
+        text: 'About',
+        path: '/app/settings/about',
+      },
+    ],
   },
 ];
+
+// Flat list for backward compatibility
+export const settingsSidebarElements: SettingsSidebarElement[] =
+  settingsSidebarCategories.flatMap((category) => category.items);
