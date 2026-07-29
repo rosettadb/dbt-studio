@@ -110,6 +110,16 @@ export interface AgentContextCompactedPayload {
   coversUpToMessageId: number;
 }
 
+export interface PipelineCloudRunRequestIntent {
+  success: true;
+  mutation: 'pipeline-cloud-run-requested';
+  projectId: string;
+  path: string;
+  pipelineFile: string;
+  requiresUserConfirmation: true;
+  runStarted: false;
+}
+
 export interface ChatStreamChunkPayload {
   conversationId: number;
   /**

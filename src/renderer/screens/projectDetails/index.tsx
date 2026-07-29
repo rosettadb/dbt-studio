@@ -94,8 +94,11 @@ import { getFileName } from '../../services/settings.services';
 import type { EditorTabId, EditorTabState } from '../../../types/editor';
 import {
   resolveProjectMutationPath,
+  subscribeToAgentDbtCommandLifecycle,
+  subscribeToPipelineCloudRunRequest,
   subscribeToProjectFileMutation,
 } from '../../services/agentEvents.service';
+import { useDbtRunHistory } from '../../hooks/useDbtRunHistory';
 import {
   toPreviewPath,
   isVirtualPreviewPath,
@@ -155,6 +158,11 @@ const ProjectDetails: React.FC = () => {
   } = useAppContext();
 
   const { data: project, isLoading, refetch } = useGetSelectedProject();
+  const {
+    recordCommandStart: recordAgentDbtCommandStart,
+    recordCommandFinished: recordAgentDbtCommandFinished,
+    recordCommandFailed: recordAgentDbtCommandFailed,
+  } = useDbtRunHistory(project?.id);
   const { data: connection } = useGetConnectionById(project?.connectionId);
   const { data: settings } = useGetSettings();
   const { mutate: updateFileContent } = useSaveFileContent();
@@ -251,6 +259,17 @@ const ProjectDetails: React.FC = () => {
     const parts = activePipelineFilePath.split(/[\\/]/);
     return parts[parts.length - 1] || null;
   }, [activePipelineFilePath]);
+  const activePipelineRelativePath = React.useMemo(() => {
+    if (!activePipelineFilePath || !project?.path) return undefined;
+    const normalizedProject = project.path
+      .replace(/\\/g, '/')
+      .replace(/\/+$/, '');
+    const normalizedPipeline = activePipelineFilePath.replace(/\\/g, '/');
+    if (!normalizedPipeline.startsWith(`${normalizedProject}/`))
+      return undefined;
+    const relative = normalizedPipeline.slice(normalizedProject.length + 1);
+    return relative.startsWith('.rosetta/') ? relative : undefined;
+  }, [activePipelineFilePath, project?.path]);
 
   const recordedPipelineActionId = activePipelineBasename
     ? (project?.pipelineRuns?.[activePipelineBasename] ?? null)
@@ -466,6 +485,153 @@ const ProjectDetails: React.FC = () => {
     closeTabByPath,
     markTabSavedByPath,
     refreshTabContentByPath,
+  ]);
+
+  React.useEffect(() => {
+    if (!project?.path || !isHydrated) return undefined;
+    const processed = new Set<string>();
+    return subscribeToPipelineCloudRunRequest(async (payload) => {
+      if (
+        payload.projectId !== project.id ||
+        env !== 'cloud' ||
+        processed.has(payload.toolCallId)
+      ) {
+        return;
+      }
+      processed.add(payload.toolCallId);
+      const filePath = resolveProjectMutationPath(project.path, payload.path);
+      if (!filePath || !isPipelineFile(filePath)) return;
+      const hasDirtyDraft =
+        (pipelineCodeMode && pipelineDraftTab?.isModified) ||
+        (pipelineVisualEditing && pipelineVisualDirty);
+      if (hasDirtyDraft) {
+        toast.info(
+          'Save or discard the unsaved pipeline draft before requesting a cloud run.',
+        );
+        return;
+      }
+      const pipelineTabPath = toPipelineTabPath(filePath);
+      const existing = getTabByPath(pipelineTabPath);
+      if (existing) {
+        switchTab(existing.id);
+      } else {
+        const tabId = await openTab(pipelineTabPath, {
+          title: payload.pipelineFile,
+          content: '',
+          isReadOnly: true,
+        });
+        if (tabId) switchTab(tabId);
+      }
+      handleRunPipelineFile(filePath);
+    });
+  }, [
+    env,
+    getTabByPath,
+    handleRunPipelineFile,
+    isHydrated,
+    openTab,
+    pipelineCodeMode,
+    pipelineDraftTab?.isModified,
+    pipelineVisualDirty,
+    pipelineVisualEditing,
+    project?.id,
+    project?.path,
+    switchTab,
+  ]);
+
+  const agentDbtRunIdsRef = React.useRef(
+    new Map<
+      string,
+      {
+        runId: string;
+        command: string;
+        projectId: string;
+        projectPath: string;
+      }
+    >(),
+  );
+  React.useEffect(() => {
+    if (!project?.id || !project.path) return undefined;
+    return subscribeToAgentDbtCommandLifecycle((event) => {
+      if (event.phase === 'started') {
+        if (agentDbtRunIdsRef.current.has(event.toolCallId)) return;
+        const command =
+          typeof event.args.command === 'string'
+            ? event.args.command.trim()
+            : 'unknown';
+        const args = [
+          typeof event.args.select === 'string' && event.args.select
+            ? `--select ${event.args.select}`
+            : '',
+          typeof event.args.extraArgs === 'string'
+            ? event.args.extraArgs.trim()
+            : '',
+        ]
+          .filter(Boolean)
+          .join(' ');
+        const fullCommand = `dbt ${command}${args ? ` ${args}` : ''}`;
+        const runId = recordAgentDbtCommandStart({
+          projectId: project.id,
+          projectName: project.name,
+          projectPath: project.path,
+          command,
+          args: args || undefined,
+          fullCommand,
+          shellCommand: fullCommand,
+        });
+        agentDbtRunIdsRef.current.set(event.toolCallId, {
+          runId,
+          command,
+          projectId: project.id,
+          projectPath: project.path,
+        });
+        return;
+      }
+
+      const tracked = agentDbtRunIdsRef.current.get(event.toolCallId);
+      if (!tracked) return;
+      agentDbtRunIdsRef.current.delete(event.toolCallId);
+      const result =
+        event.result && typeof event.result === 'object'
+          ? (event.result as Record<string, any>)
+          : {};
+      const data =
+        result.data && typeof result.data === 'object'
+          ? (result.data as Record<string, any>)
+          : result;
+      let rawOutput = '';
+      if (typeof data.output === 'string') {
+        rawOutput = data.output;
+      } else if (typeof result.output === 'string') {
+        rawOutput = result.output;
+      }
+
+      if (event.failed) {
+        recordAgentDbtCommandFailed(
+          tracked.runId,
+          tracked.projectId,
+          event.error ?? 'Agent dbt command failed.',
+          rawOutput.slice(-4_000),
+        );
+        return;
+      }
+
+      const commandWithArtifacts = ['run', 'test', 'seed', 'snapshot'];
+      recordAgentDbtCommandFinished(
+        tracked.runId,
+        tracked.projectId,
+        commandWithArtifacts.includes(tracked.command)
+          ? `${tracked.projectPath}/target/run_results.json`
+          : undefined,
+      ).catch(() => undefined);
+    });
+  }, [
+    project?.id,
+    project?.name,
+    project?.path,
+    recordAgentDbtCommandFailed,
+    recordAgentDbtCommandFinished,
+    recordAgentDbtCommandStart,
   ]);
 
   const handleSaveAllTabs = React.useCallback(async () => {
@@ -1837,7 +2003,7 @@ const ProjectDetails: React.FC = () => {
           >
             {isChatOpen && (
               <Box height="100%">
-                <ChatScreen />
+                <ChatScreen activePipelinePath={activePipelineRelativePath} />
               </Box>
             )}
           </Box>

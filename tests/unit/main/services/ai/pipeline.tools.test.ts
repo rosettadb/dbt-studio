@@ -5,6 +5,7 @@ import fsExtra from 'fs-extra';
 import {
   buildProjectPipelineContext,
   createStudioPipelineTools,
+  normalizeExistingPipelinePath,
 } from '../../../../../src/main/services/ai/tools/studio/pipeline.tools';
 import { createFilesystemTools } from '../../../../../src/main/services/ai/tools/filesystem.tools';
 
@@ -47,6 +48,19 @@ describe('Project Agent pipeline tools', () => {
     expect(context).toContain('.rosetta/ci.yml');
     expect(context).not.toContain('Run models');
     expect(context).not.toContain(projectPath);
+    expect(
+      normalizeExistingPipelinePath(
+        projectPath,
+        path.join(projectPath, '.rosetta', 'ci.yml'),
+      ),
+    ).toBe('.rosetta/ci.yml');
+    expect(
+      buildProjectPipelineContext(projectPath, {
+        activePipelinePath: '.rosetta/ci.yml',
+        cloudAvailable: true,
+        hasCloudActionMapping: true,
+      }),
+    ).toContain('Active pipeline: `.rosetta/ci.yml`');
   });
 
   it('creates, reads, validates, and hash-guards pipeline writes', async () => {

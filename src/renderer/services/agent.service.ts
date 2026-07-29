@@ -31,6 +31,7 @@ export interface AgentRunRequest {
   notebookId?: string;
   pageId?: string;
   includeProjectAiContext?: boolean;
+  activePipelinePath?: string;
 }
 
 export type AgentContextOverheadRequest = Omit<

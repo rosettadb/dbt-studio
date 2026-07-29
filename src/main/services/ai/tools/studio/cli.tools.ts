@@ -55,7 +55,7 @@ export function createStudioCliTools(options: {
   return {
     studio_cli_run_dbt: tool({
       description:
-        'Run an approved dbt CLI command for the active project. Always requires explicit user approval before execution.',
+        'Run an approved dbt CLI command for the active project. Never use this tool to execute a .rosetta project pipeline; pipeline runs use pipeline_cloud_request_run. Always requires explicit user approval before execution.',
       inputSchema: studioCliRunDbtInputSchema as any,
       execute: async ({ command, select, extraArgs }: StudioCliRunDbtInput) => {
         const startedAt = Date.now();

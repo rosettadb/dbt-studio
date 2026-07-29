@@ -133,6 +133,30 @@ const TOOLS: ToolItem[] = [
     description: 'Atomically write a validated .rosetta pipeline file',
     icon: <EditIcon sx={{ fontSize: 16 }} />,
   },
+  {
+    id: 'pipeline_cloud_status',
+    label: 'pipeline_cloud_status',
+    description: 'Cloud only: inspect the latest mapped pipeline action status',
+    icon: <SearchIcon sx={{ fontSize: 16 }} />,
+  },
+  {
+    id: 'pipeline_cloud_logs',
+    label: 'pipeline_cloud_logs',
+    description: 'Cloud only: read bounded, sanitized pipeline action logs',
+    icon: <ArticleIcon sx={{ fontSize: 16 }} />,
+  },
+  {
+    id: 'pipeline_cloud_request_run',
+    label: 'pipeline_cloud_request_run',
+    description: 'Cloud Code mode: open the existing run confirmation modal',
+    icon: <EditIcon sx={{ fontSize: 16 }} />,
+  },
+  {
+    id: 'pipeline_plugins_list',
+    label: 'pipeline_plugins_list',
+    description: 'Cloud only: list Pipeline Editor plugins and required fields',
+    icon: <FolderOpenIcon sx={{ fontSize: 16 }} />,
+  },
 
   // ── Planned — MCP Servers (Plan 28a, Wk 5-6) ──────────────────────────────
   {

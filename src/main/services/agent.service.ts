@@ -46,7 +46,12 @@ import SecondBrainService from './ai/secondBrain/secondBrain.service';
 import SecondBrainRuntimeService from './ai/secondBrain/secondBrainRuntime.service';
 import { createSecondBrainTools } from './ai/tools/studio/secondBrain.tools';
 import { readProjectAgentContext } from './ai/projectAgentContext';
-import { buildProjectPipelineContext } from './ai/tools/studio/pipeline.tools';
+import {
+  buildProjectPipelineContext,
+  normalizeExistingPipelinePath,
+} from './ai/tools/studio/pipeline.tools';
+import { isPipelineCloudMode } from './ai/tools/studio/pipelineCloud.tools';
+import { isPipelineExecutionRequest } from './ai/pipelineIntent';
 
 // ─── AI Settings ─────────────────────────────────────────────────────────────
 
@@ -71,6 +76,10 @@ export const AI_SETTINGS_DEFAULTS: AISettingsConfig = {
     studio_pipeline_read: true,
     studio_pipeline_validate: true,
     studio_pipeline_write: true,
+    pipeline_cloud_status: true,
+    pipeline_cloud_logs: true,
+    pipeline_cloud_request_run: true,
+    pipeline_plugins_list: true,
   },
   configuration: {
     allowAIInBackground: true,
@@ -251,12 +260,16 @@ const TOOL_CATEGORIES = {
     'studio_pipeline_list',
     'studio_pipeline_read',
     'studio_pipeline_validate',
+    'pipeline_cloud_status',
+    'pipeline_cloud_logs',
+    'pipeline_plugins_list',
   ],
   action: [
     'writeDbtModel',
     'runDbtCommand',
     'writeFile',
     'studio_pipeline_write',
+    'pipeline_cloud_request_run',
   ],
 };
 
@@ -265,6 +278,10 @@ const PIPELINE_TOOL_CATALOG = {
   studio_pipeline_read: {},
   studio_pipeline_validate: {},
   studio_pipeline_write: {},
+  pipeline_cloud_status: {},
+  pipeline_cloud_logs: {},
+  pipeline_cloud_request_run: {},
+  pipeline_plugins_list: {},
 };
 
 export function getToolsForMode(
@@ -311,6 +328,7 @@ export interface AgentRunRequest {
   notebookId?: string;
   pageId?: string; // Analytics: currently open page ID
   includeProjectAiContext?: boolean;
+  activePipelinePath?: string;
 }
 
 export type AgentContextOverheadRequest = Omit<
@@ -1295,10 +1313,13 @@ COMBINED SUMMARY:`,
     // Resolve projectPath and connectionId from selected project if not provided
     let { projectPath, connectionId } = request;
     const screenKey = request.screenKey ?? 'project';
-    if (screenKey === 'project' && (!projectPath || !connectionId)) {
-      const selectedProject = await ProjectsService.getSelectedProject();
-      projectPath = projectPath ?? selectedProject?.path;
-      connectionId = connectionId ?? selectedProject?.connectionId;
+    const selectedProject =
+      screenKey === 'project'
+        ? await ProjectsService.getSelectedProject()
+        : undefined;
+    if (screenKey === 'project') {
+      projectPath = selectedProject?.path;
+      connectionId = selectedProject?.connectionId;
     }
 
     try {
@@ -1412,13 +1433,13 @@ COMBINED SUMMARY:`,
             }
           } else {
             // Fallback for older projects where connection might be nested
-            const selectedProject = await ProjectsService.getSelectedProject();
-            if (selectedProject?.dbtConnection) {
+            const fallbackProject = await ProjectsService.getSelectedProject();
+            if (fallbackProject?.dbtConnection) {
               projectConnectionMeta = {
-                name: selectedProject.name,
-                type: (selectedProject.dbtConnection as any).type,
-                database: (selectedProject.dbtConnection as any).database,
-                schema: (selectedProject.dbtConnection as any).schema,
+                name: fallbackProject.name,
+                type: (fallbackProject.dbtConnection as any).type,
+                database: (fallbackProject.dbtConnection as any).database,
+                schema: (fallbackProject.dbtConnection as any).schema,
               };
             }
           }
@@ -1435,9 +1456,27 @@ COMBINED SUMMARY:`,
         screenKey === 'project' && request.includeProjectAiContext
           ? await readProjectAgentContext(projectPath)
           : undefined;
+      const pipelineCloudMode =
+        screenKey === 'project' ? await isPipelineCloudMode() : false;
+      const pipelineExecutionRequested =
+        screenKey === 'project' && isPipelineExecutionRequest(content);
+      const trustedActivePipelinePath = projectPath
+        ? normalizeExistingPipelinePath(projectPath, request.activePipelinePath)
+        : undefined;
+      const activePipelineBasename = trustedActivePipelinePath
+        ?.replace(/\\/g, '/')
+        .split('/')
+        .pop();
       const pipelineContext =
         screenKey === 'project' && projectPath
-          ? buildProjectPipelineContext(projectPath)
+          ? buildProjectPipelineContext(projectPath, {
+              activePipelinePath: trustedActivePipelinePath,
+              cloudAvailable: pipelineCloudMode,
+              hasCloudActionMapping:
+                !!activePipelineBasename &&
+                !!selectedProject?.pipelineRuns?.[activePipelineBasename],
+              lastRun: pipelineCloudMode ? selectedProject?.lastRun : undefined,
+            })
           : undefined;
       if (screenKey === 'project') {
         try {
@@ -1514,6 +1553,10 @@ COMBINED SUMMARY:`,
             toolMode: request.toolMode || 'agent',
             projectAiContext,
             pipelineContext,
+            activePipelinePath: trustedActivePipelinePath,
+            project: selectedProject,
+            pipelineCloudMode,
+            pipelineExecutionRequested,
             sessionContextBlock,
             connectionMeta: projectConnectionMeta,
           });
@@ -1989,6 +2032,26 @@ COMBINED SUMMARY:`,
           name: 'studio_pipeline_write',
           description: 'Write a validated project pipeline atomically',
           category: 'pipeline',
+        },
+        {
+          name: 'pipeline_cloud_status',
+          description: 'Inspect the latest mapped cloud pipeline action',
+          category: 'pipeline-cloud',
+        },
+        {
+          name: 'pipeline_cloud_logs',
+          description: 'Read bounded sanitized cloud pipeline logs',
+          category: 'pipeline-cloud',
+        },
+        {
+          name: 'pipeline_cloud_request_run',
+          description: 'Open the existing pipeline run confirmation modal',
+          category: 'pipeline-cloud',
+        },
+        {
+          name: 'pipeline_plugins_list',
+          description: 'List supported Pipeline Editor plugins',
+          category: 'pipeline-cloud',
         },
       ];
 

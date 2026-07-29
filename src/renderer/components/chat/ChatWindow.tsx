@@ -68,6 +68,7 @@ export interface ChatWindowProps {
   notebookId?: string;
   pageId?: string;
   projectId?: number | null;
+  activePipelinePath?: string;
   onClose?: () => void;
 }
 
@@ -126,6 +127,7 @@ export const ChatWindow: React.FC<ChatWindowProps> = ({
   notebookId,
   pageId,
   projectId: propProjectId,
+  activePipelinePath,
   onClose,
 }) => {
   const {
@@ -223,6 +225,7 @@ export const ChatWindow: React.FC<ChatWindowProps> = ({
         notebookId,
         pageId,
         undefined,
+        activePipelinePath,
       );
     } finally {
       projectContextGenerationInFlightRef.current = false;
@@ -284,6 +287,7 @@ export const ChatWindow: React.FC<ChatWindowProps> = ({
             connectionId,
             notebookId,
             pageId,
+            activePipelinePath,
           }
         : undefined,
     [
@@ -295,6 +299,7 @@ export const ChatWindow: React.FC<ChatWindowProps> = ({
       connectionId,
       notebookId,
       pageId,
+      activePipelinePath,
     ],
   );
   const { data: contextOverhead } = useGetAgentContextOverhead(
@@ -1229,6 +1234,7 @@ export const ChatWindow: React.FC<ChatWindowProps> = ({
                 notebookId,
                 pageId,
                 projectMemoryEnabled,
+                activePipelinePath,
               )
             }
             onCancelStream={cancelStream}

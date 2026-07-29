@@ -5,11 +5,19 @@ import { executeDbtCommand } from '../../../../../src/main/services/ai/tools/dbt
 
 jest.mock('child_process', () => ({
   spawn: jest.fn(),
+  exec: jest.fn(),
   execFileSync: jest.fn(),
 }));
 jest.mock('../../../../../src/main/services/settings.service', () => ({
   __esModule: true,
   default: { getDbtExePath: jest.fn() },
+}));
+jest.mock('../../../../../src/main/services/dbtCoreVersion.service', () => ({
+  DbtCoreVersionService: {
+    checkProjectAdapterCompatibility: jest.fn().mockResolvedValue({
+      adapter: { canExecute: true },
+    }),
+  },
 }));
 jest.mock('../../../../../src/main/services/agent.service', () => ({
   __esModule: true,

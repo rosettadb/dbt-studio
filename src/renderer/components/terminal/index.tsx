@@ -376,7 +376,7 @@ export const TerminalLayout = React.forwardRef<TerminalLayoutRef, Props>(
             </TerminalMinimizeContext.Provider>
           </EditorWrapper>
           <TerminalWrapper>
-            {isMinimized ? (
+            {isMinimized && (
               <Taskbar>
                 <TaskbarItem onClick={handleRestore}>
                   <Typography fontSize={13} sx={{ mr: 1 }} fontWeight="bold">
@@ -410,234 +410,237 @@ export const TerminalLayout = React.forwardRef<TerminalLayoutRef, Props>(
                   </TaskbarItem>
                 )}
               </Taskbar>
-            ) : (
-              <>
-                <TerminalHeader
-                  sx={{
-                    backgroundColor:
-                      theme.palette.mode === 'dark'
-                        ? theme.palette.grey[900]
-                        : theme.palette.grey[50],
-                    borderBottom: `1px solid ${theme.palette.divider}`,
-                    padding: '4px 6px',
-                    height: 32,
-                  }}
+            )}
+            <Box
+              sx={{
+                display: isMinimized ? 'none' : 'contents',
+              }}
+            >
+              <TerminalHeader
+                sx={{
+                  backgroundColor:
+                    theme.palette.mode === 'dark'
+                      ? theme.palette.grey[900]
+                      : theme.palette.grey[50],
+                  borderBottom: `1px solid ${theme.palette.divider}`,
+                  padding: '4px 6px',
+                  height: 32,
+                }}
+              >
+                {/* CLI Terminal Tab */}
+                {/* CLI Terminal Tab */}
+                <Button
+                  size="small"
+                  disableRipple
+                  sx={tabButtonSx(selectedTab === 'terminal')}
+                  onClick={() => setSelectedTab('terminal')}
                 >
-                  {/* CLI Terminal Tab */}
-                  {/* CLI Terminal Tab */}
+                  <Typography
+                    sx={{ fontWeight: 500, fontSize: 10.5, lineHeight: 1 }}
+                  >
+                    TERMINAL
+                  </Typography>
+                </Button>
+                {/* Lineage Terminal Tab */}
+                {showLineageTab && (
                   <Button
                     size="small"
                     disableRipple
-                    sx={tabButtonSx(selectedTab === 'terminal')}
-                    onClick={() => setSelectedTab('terminal')}
+                    sx={tabButtonSx(selectedTab === 'lineage')}
+                    onClick={() => setSelectedTab('lineage')}
                   >
                     <Typography
                       sx={{ fontWeight: 500, fontSize: 10.5, lineHeight: 1 }}
                     >
-                      TERMINAL
+                      LINEAGE
                     </Typography>
                   </Button>
-                  {/* Lineage Terminal Tab */}
-                  {showLineageTab && (
-                    <Button
-                      size="small"
-                      disableRipple
-                      sx={tabButtonSx(selectedTab === 'lineage')}
-                      onClick={() => setSelectedTab('lineage')}
+                )}
+                {/* Process Tab - Only show when running */}
+                {hasStartedProcess && (
+                  <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                    <Box
+                      component="button"
+                      type="button"
+                      onClick={() => setSelectedTab('process')}
+                      sx={{
+                        ...tabButtonSx(selectedTab === 'process'),
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 0.75,
+                        padding: '0 6px 0 10px',
+                        cursor: 'pointer',
+                        outline: 'none',
+                      }}
                     >
                       <Typography
-                        sx={{ fontWeight: 500, fontSize: 10.5, lineHeight: 1 }}
-                      >
-                        LINEAGE
-                      </Typography>
-                    </Button>
-                  )}
-                  {/* Process Tab - Only show when running */}
-                  {hasStartedProcess && (
-                    <Box sx={{ display: 'flex', alignItems: 'center' }}>
-                      <Box
-                        component="button"
-                        type="button"
-                        onClick={() => setSelectedTab('process')}
                         sx={{
-                          ...tabButtonSx(selectedTab === 'process'),
+                          fontWeight: 500,
+                          fontSize: 10.5,
+                          lineHeight: 1,
+                        }}
+                      >
+                        PID SERVER
+                      </Typography>
+
+                      <Box
+                        sx={{
                           display: 'flex',
                           alignItems: 'center',
-                          gap: 0.75,
-                          padding: '0 6px 0 10px',
-                          cursor: 'pointer',
-                          outline: 'none',
+                          gap: 0.5,
                         }}
                       >
-                        <Typography
-                          sx={{
-                            fontWeight: 500,
-                            fontSize: 10.5,
-                            lineHeight: 1,
-                          }}
-                        >
-                          PID SERVER
-                        </Typography>
-
-                        <Box
-                          sx={{
-                            display: 'flex',
-                            alignItems: 'center',
-                            gap: 0.5,
-                          }}
-                        >
-                          {pid && (
-                            <Chip
-                              label={`PID: ${pid}`}
-                              size="small"
-                              variant="outlined"
-                              sx={{ height: 16, fontSize: '0.6rem' }}
-                            />
-                          )}
-                          {duration && (
-                            <Chip
-                              label={formatDuration(duration)}
-                              size="small"
-                              color={getStatusColor(status)}
-                              sx={{ height: 16, fontSize: '0.6rem' }}
-                            />
-                          )}
-                        </Box>
-
-                        {/* Stop Options Menu */}
-                        <Tooltip title="Stop options">
-                          <IconButton
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              handleMenuOpen(e);
-                            }}
+                        {pid && (
+                          <Chip
+                            label={`PID: ${pid}`}
                             size="small"
-                            sx={{
-                              padding: 0.25,
-                              color: 'inherit',
-                              minWidth: 'auto',
-                            }}
-                          >
-                            <MoreVertRounded style={{ fontSize: 16 }} />
-                          </IconButton>
-                        </Tooltip>
-
-                        {/* Close Tab */}
-                        <Tooltip title="Close PID server tab">
-                          <IconButton
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              handleCloseProcessTab();
-                            }}
+                            variant="outlined"
+                            sx={{ height: 16, fontSize: '0.6rem' }}
+                          />
+                        )}
+                        {duration && (
+                          <Chip
+                            label={formatDuration(duration)}
                             size="small"
-                            sx={{
-                              padding: 0.25,
-                              color: 'inherit',
-                              minWidth: 'auto',
-                            }}
-                          >
-                            <CloseRounded style={{ fontSize: 14 }} />
-                          </IconButton>
-                        </Tooltip>
+                            color={getStatusColor(status)}
+                            sx={{ height: 16, fontSize: '0.6rem' }}
+                          />
+                        )}
                       </Box>
-                    </Box>
-                  )}
-                  {/* Query Results Tab */}
-                  {showQueryResultsTab && (
-                    <Button
-                      size="small"
-                      disableRipple
-                      sx={tabButtonSx(selectedTab === 'queryResults')}
-                      onClick={() => setSelectedTab('queryResults')}
-                    >
-                      <Typography
-                        sx={{ fontWeight: 500, fontSize: 10.5, lineHeight: 1 }}
-                      >
-                        QUERY RESULTS
-                      </Typography>
-                    </Button>
-                  )}
-                  {/* Run History Tab */}
-                  {showRunHistoryTab && (
-                    <Button
-                      size="small"
-                      disableRipple
-                      sx={tabButtonSx(selectedTab === 'runHistory')}
-                      onClick={() => setSelectedTab('runHistory')}
-                    >
-                      <Typography
-                        sx={{ fontWeight: 500, fontSize: 10.5, lineHeight: 1 }}
-                      >
-                        RUN HISTORY
-                      </Typography>
-                    </Button>
-                  )}
-                  {/* Minimize Button */}
-                  <IconButton
-                    onClick={handleMinimize}
-                    size="small"
-                    style={{ marginLeft: 'auto' }}
-                  >
-                    <div style={{ marginTop: -8 }}>
-                      <MinimizeRounded
-                        style={{
-                          color: getTextColor(mode),
-                        }}
-                      />
-                    </div>
-                  </IconButton>
-                </TerminalHeader>
 
-                {/* Tab Content */}
+                      {/* Stop Options Menu */}
+                      <Tooltip title="Stop options">
+                        <IconButton
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleMenuOpen(e);
+                          }}
+                          size="small"
+                          sx={{
+                            padding: 0.25,
+                            color: 'inherit',
+                            minWidth: 'auto',
+                          }}
+                        >
+                          <MoreVertRounded style={{ fontSize: 16 }} />
+                        </IconButton>
+                      </Tooltip>
+
+                      {/* Close Tab */}
+                      <Tooltip title="Close PID server tab">
+                        <IconButton
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleCloseProcessTab();
+                          }}
+                          size="small"
+                          sx={{
+                            padding: 0.25,
+                            color: 'inherit',
+                            minWidth: 'auto',
+                          }}
+                        >
+                          <CloseRounded style={{ fontSize: 14 }} />
+                        </IconButton>
+                      </Tooltip>
+                    </Box>
+                  </Box>
+                )}
+                {/* Query Results Tab */}
+                {showQueryResultsTab && (
+                  <Button
+                    size="small"
+                    disableRipple
+                    sx={tabButtonSx(selectedTab === 'queryResults')}
+                    onClick={() => setSelectedTab('queryResults')}
+                  >
+                    <Typography
+                      sx={{ fontWeight: 500, fontSize: 10.5, lineHeight: 1 }}
+                    >
+                      QUERY RESULTS
+                    </Typography>
+                  </Button>
+                )}
+                {/* Run History Tab */}
+                {showRunHistoryTab && (
+                  <Button
+                    size="small"
+                    disableRipple
+                    sx={tabButtonSx(selectedTab === 'runHistory')}
+                    onClick={() => setSelectedTab('runHistory')}
+                  >
+                    <Typography
+                      sx={{ fontWeight: 500, fontSize: 10.5, lineHeight: 1 }}
+                    >
+                      RUN HISTORY
+                    </Typography>
+                  </Button>
+                )}
+                {/* Minimize Button */}
+                <IconButton
+                  onClick={handleMinimize}
+                  size="small"
+                  style={{ marginLeft: 'auto' }}
+                >
+                  <div style={{ marginTop: -8 }}>
+                    <MinimizeRounded
+                      style={{
+                        color: getTextColor(mode),
+                      }}
+                    />
+                  </div>
+                </IconButton>
+              </TerminalHeader>
+
+              {/* Tab Content */}
+              <Box
+                sx={{
+                  display: selectedTab === 'terminal' ? 'block' : 'none',
+                  height: '100%',
+                  overflow: 'hidden',
+                }}
+              >
+                <Terminal project={project} />
+              </Box>
+              <Box
+                sx={{
+                  display: selectedTab === 'process' ? 'block' : 'none',
+                  height: '100%',
+                  overflow: 'hidden',
+                }}
+              >
+                <ProcessTerminal />
+              </Box>
+              {selectedTab === 'lineage' && showLineageTab && (
+                <LineageView
+                  projectId={project.id}
+                  filePath={selectedFilePath}
+                  onExpandClick={() => setOpenLineageModal(true)}
+                />
+              )}
+              {selectedTab === 'queryResults' && showQueryResultsTab && (
                 <Box
                   sx={{
-                    display: selectedTab === 'terminal' ? 'block' : 'none',
                     height: '100%',
+                    bgcolor: 'background.default',
                     overflow: 'hidden',
                   }}
                 >
-                  <Terminal project={project} />
+                  {queryResultsPanel}
                 </Box>
+              )}
+              {selectedTab === 'runHistory' && showRunHistoryTab && (
                 <Box
                   sx={{
-                    display: selectedTab === 'process' ? 'block' : 'none',
                     height: '100%',
+                    bgcolor: 'background.default',
                     overflow: 'hidden',
                   }}
                 >
-                  <ProcessTerminal />
+                  {runHistoryPanel}
                 </Box>
-                {selectedTab === 'lineage' && showLineageTab && (
-                  <LineageView
-                    projectId={project.id}
-                    filePath={selectedFilePath}
-                    onExpandClick={() => setOpenLineageModal(true)}
-                  />
-                )}
-                {selectedTab === 'queryResults' && showQueryResultsTab && (
-                  <Box
-                    sx={{
-                      height: '100%',
-                      bgcolor: 'background.default',
-                      overflow: 'hidden',
-                    }}
-                  >
-                    {queryResultsPanel}
-                  </Box>
-                )}
-                {selectedTab === 'runHistory' && showRunHistoryTab && (
-                  <Box
-                    sx={{
-                      height: '100%',
-                      bgcolor: 'background.default',
-                      overflow: 'hidden',
-                    }}
-                  >
-                    {runHistoryPanel}
-                  </Box>
-                )}
-              </>
-            )}
+              )}
+            </Box>
           </TerminalWrapper>
         </SplitPane>
 
