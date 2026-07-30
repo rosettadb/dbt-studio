@@ -60,6 +60,8 @@ export default class MainDatabaseService {
 
   private static db: BetterSQLite3Database<typeof schema> | null = null;
 
+  private static factoryResetInProgress = false;
+
   private static readonly DB_PATH = path.join(
     app.getPath('userData'),
     'main-database.db',
@@ -67,6 +69,9 @@ export default class MainDatabaseService {
 
   // Initialize database following SettingsService patterns
   static async initializeDatabase(): Promise<void> {
+    if (this.factoryResetInProgress) {
+      throw new Error('Main database is unavailable during factory reset');
+    }
     try {
       if (!this.sqlite) {
         // Create SQLite connection with optimizations
@@ -1401,10 +1406,20 @@ export default class MainDatabaseService {
       }
 
       // Reinitialize
+      this.factoryResetInProgress = false;
       await this.initializeDatabase();
     } catch (error) {
       throw error;
     }
+  }
+
+  static async beginFactoryReset(): Promise<void> {
+    this.factoryResetInProgress = true;
+    await this.closeDatabase();
+  }
+
+  static cancelFactoryReset(): void {
+    this.factoryResetInProgress = false;
   }
 
   // Database Information Methods

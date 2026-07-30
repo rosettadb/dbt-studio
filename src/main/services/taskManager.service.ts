@@ -107,6 +107,30 @@ class TaskManagerServiceImpl {
     return true;
   }
 
+  cancelAll(): void {
+    Array.from(this.tasks.keys()).forEach((id) => {
+      const task = this.tasks.get(id);
+      if (!task || task.status !== 'running') return;
+
+      const canceller = this.cancellers.get(id);
+      if (canceller) {
+        try {
+          canceller();
+        } catch {
+          // Continue cancelling the remaining tasks.
+        }
+      }
+
+      task.status = 'cancelled';
+      task.finishedAt = Date.now();
+      this.broadcast({ type: 'updated', task });
+    });
+
+    this.tasks.clear();
+    this.cancellers.clear();
+    this.lastProgressEmit.clear();
+  }
+
   remove(id: string) {
     const task = this.tasks.get(id);
     if (!task) return;

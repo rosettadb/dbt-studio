@@ -28,7 +28,10 @@ export const ResetFactoryModal: React.FC<Props> = ({
   return (
     <Dialog
       open={isOpen}
-      onClose={onClose}
+      onClose={() => {
+        if (!isLoading) onClose();
+      }}
+      disableEscapeKeyDown={isLoading}
       aria-labelledby="reset-factory-dialog-title"
       aria-describedby="reset-factory-dialog-description"
       maxWidth="sm"
@@ -48,7 +51,11 @@ export const ResetFactoryModal: React.FC<Props> = ({
           </Typography>
         </Alert>
 
-        <DialogContentText id="reset-factory-dialog-description" sx={{ mb: 2 }}>
+        <DialogContentText
+          component="div"
+          id="reset-factory-dialog-description"
+          sx={{ mb: 2 }}
+        >
           <Typography variant="body1" sx={{ mb: 1 }}>
             Before proceeding, please make sure you have backed up your projects
             to GitHub or your file system.
@@ -63,21 +70,38 @@ export const ResetFactoryModal: React.FC<Props> = ({
               All projects and their files
             </Typography>
             <Typography component="li" variant="body2" color="text.secondary">
-              All database connections
+              All database and cloud storage connections
             </Typography>
             <Typography component="li" variant="body2" color="text.secondary">
-              All cloud storage connections
+              All DuckLake registrations and DBT Studio-owned local state
+            </Typography>
+            <Typography component="li" variant="body2" color="text.secondary">
+              All notebooks, including archived notebooks and cell output
             </Typography>
             <Typography component="li" variant="body2" color="text.secondary">
               All saved queries
             </Typography>
             <Typography component="li" variant="body2" color="text.secondary">
-              All application settings
+              AI conversations, providers, settings, and usage history
+            </Typography>
+            <Typography component="li" variant="body2" color="text.secondary">
+              MCP configuration and installed Agent Skills
+            </Typography>
+            <Typography component="li" variant="body2" color="text.secondary">
+              Managed Python, Rosetta, DuckDB data, and application settings
+            </Typography>
+            <Typography component="li" variant="body2" color="text.secondary">
+              Browser history and preferences, including tabs and run history
             </Typography>
             <Typography component="li" variant="body2" color="text.secondary">
               All stored credentials (database passwords, API keys, etc.)
             </Typography>
           </Box>
+
+          <Alert severity="info" sx={{ mb: 2 }}>
+            External databases, cloud objects, and DuckLake locations that DBT
+            Studio does not own will be disconnected but will not be deleted.
+          </Alert>
 
           <Typography variant="body2" color="text.secondary">
             After reset, the application will automatically restart with factory
@@ -101,7 +125,6 @@ export const ResetFactoryModal: React.FC<Props> = ({
           variant="contained"
           disabled={isLoading}
           startIcon={<DeleteForever />}
-          autoFocus
         >
           {isLoading ? 'Resetting...' : 'Reset All Data'}
         </Button>

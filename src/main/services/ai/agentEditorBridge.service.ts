@@ -110,6 +110,27 @@ export class AgentEditorBridgeService {
     pending.resolve(payload.snapshot);
   }
 
+  static resetForFactoryReset(): void {
+    const emptySnapshot: QueryResultSnapshot = {
+      status: 'pending',
+      columns: [],
+      rows: [],
+      totalRowCount: 0,
+    };
+
+    pendingRequests.forEach(({ resolve, timer }) => {
+      clearTimeout(timer);
+      resolve(emptySnapshot);
+    });
+    pendingRequests.clear();
+    lastRunResultByTab.clear();
+    lastRunResultPushedAtByTab.clear();
+    lastQueryFiredAtByConv.clear();
+    lastRunResult = null;
+    lastRunResultPushedAt = 0;
+    lastQueryFiredAt = 0;
+  }
+
   // ─── Push channel ─────────────────────────────────────────────────────────
 
   /**

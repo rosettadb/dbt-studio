@@ -37,7 +37,12 @@ export default class DuckDBBootstrap {
 
   private static initializationPromise: Promise<void> | null = null;
 
+  private static factoryResetInProgress = false;
+
   static async initialize(): Promise<void> {
+    if (this.factoryResetInProgress) {
+      throw new Error('DuckDB is unavailable during factory reset');
+    }
     if (this.initializationPromise) return this.initializationPromise;
 
     this.initializationPromise = (async () => {
@@ -239,6 +244,7 @@ export default class DuckDBBootstrap {
   }): Promise<DuckDBMetadataPayload> {
     // Close all connections
     await this.shutdown();
+    this.factoryResetInProgress = false;
 
     if (options?.dropExisting && this.dbPath) {
       try {
@@ -304,16 +310,36 @@ export default class DuckDBBootstrap {
   }
 
   static async shutdown(): Promise<void> {
-    // Close all connections
-    // Note: DuckDB node api might not have explicit disconnect on connection object if it's just a handle
-    // But we should close the instance
-    this.pool = []; // Clear pool
+    this.waitQueue = [];
+
+    this.pool.forEach(({ connection }) => {
+      try {
+        connection.closeSync?.();
+      } catch {
+        // Continue closing the remaining handles.
+      }
+    });
+    this.pool = [];
 
     if (this.instance) {
-      // this.instance.close(); // If close exists
+      try {
+        this.instance.closeSync();
+      } catch {
+        // The instance may already be closed by its final connection.
+      }
       this.instance = null;
     }
     this.status = 'stopped';
+    this.initializationPromise = null;
+  }
+
+  static async beginFactoryReset(): Promise<void> {
+    this.factoryResetInProgress = true;
+    await this.shutdown();
+  }
+
+  static cancelFactoryReset(): void {
+    this.factoryResetInProgress = false;
   }
 
   private static formatBytes(bytes: number, decimals = 2): string {
