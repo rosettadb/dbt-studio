@@ -1,3 +1,13 @@
+import { app } from 'electron';
+import fs from 'fs-extra';
+import SettingsService from '../../../../src/main/services/settings.service';
+import SecureStorageService from '../../../../src/main/services/secureStorage.service';
+import DuckDBBootstrap from '../../../../src/main/services/duckdb.service';
+import MainDatabaseService from '../../../../src/main/services/mainDatabase.service';
+import { TaskManagerService } from '../../../../src/main/services/taskManager.service';
+import { FlowfileService } from '../../../../src/main/services/flowfile.service';
+import * as fileHelper from '../../../../src/main/utils/fileHelper';
+
 jest.mock('openai', () => ({
   OpenAI: jest.fn(),
 }));
@@ -28,26 +38,20 @@ jest.mock('../../../../src/main/services/agent.service', () => ({
   __esModule: true,
   default: { cancelAllForFactoryReset: jest.fn() },
 }));
-jest.mock(
-  '../../../../src/main/services/ai/agentEditorBridge.service',
-  () => ({
-    AgentEditorBridgeService: { resetForFactoryReset: jest.fn() },
-  }),
-);
+jest.mock('../../../../src/main/services/ai/agentEditorBridge.service', () => ({
+  AgentEditorBridgeService: { resetForFactoryReset: jest.fn() },
+}));
 jest.mock('../../../../src/main/services/taskManager.service', () => ({
-  TaskManagerService: { cancelAll: jest.fn() },
+  TaskManagerService: { cancelAll: jest.fn().mockReturnValue(0) },
 }));
 jest.mock('../../../../src/main/services/flowfile.service', () => ({
   FlowfileService: {
     stop: jest.fn().mockResolvedValue({ ok: true }),
   },
 }));
-jest.mock(
-  '../../../../src/main/services/ai/mcp/mcpClientManager',
-  () => ({
-    MCPClientManager: { disconnectAll: jest.fn().mockResolvedValue(undefined) },
-  }),
-);
+jest.mock('../../../../src/main/services/ai/mcp/mcpClientManager', () => ({
+  MCPClientManager: { disconnectAll: jest.fn().mockResolvedValue(undefined) },
+}));
 jest.mock('../../../../src/main/services/connectors.service', () => ({
   __esModule: true,
   default: { cleanupBigQueryKeyFiles: jest.fn() },
@@ -72,14 +76,10 @@ jest.mock('../../../../src/main/services/mainDatabase.service', () => ({
   },
 }));
 
-const loadDatabaseFile = jest.fn();
-const updateDatabase = jest.fn();
-const loadDefaultSettings = jest.fn();
-
 jest.mock('../../../../src/main/utils/fileHelper', () => ({
-  loadDatabaseFile: (...args: any[]) => loadDatabaseFile(...args),
-  updateDatabase: (...args: any[]) => updateDatabase(...args),
-  loadDefaultSettings: (...args: any[]) => loadDefaultSettings(...args),
+  loadDatabaseFile: jest.fn(),
+  updateDatabase: jest.fn(),
+  loadDefaultSettings: jest.fn(),
   deleteDirectory: jest.fn(),
 }));
 
@@ -94,17 +94,16 @@ jest.mock('../../../../src/main/adapters', () => ({
   })),
 }));
 
-import SettingsService from '../../../../src/main/services/settings.service';
-import fs from 'fs-extra';
-import { app } from 'electron';
-import SecureStorageService from '../../../../src/main/services/secureStorage.service';
-import DuckDBBootstrap from '../../../../src/main/services/duckdb.service';
-import MainDatabaseService from '../../../../src/main/services/mainDatabase.service';
+const loadDatabaseFile = fileHelper.loadDatabaseFile as jest.Mock;
+const updateDatabase = fileHelper.updateDatabase as jest.Mock;
+const loadDefaultSettings = fileHelper.loadDefaultSettings as jest.Mock;
 
 describe('SettingsService (main)', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     (SettingsService as any).factoryResetPromise = null;
+    (TaskManagerService.cancelAll as jest.Mock).mockReturnValue(0);
+    (FlowfileService.stop as jest.Mock).mockResolvedValue({ ok: true });
     (app.getPath as jest.Mock).mockImplementation((name: string) =>
       name === 'home' ? '/tmp/dbt-studio-home' : '/tmp/dbt-studio-user-data',
     );
@@ -120,7 +119,9 @@ describe('SettingsService (main)', () => {
 
   describe('loadSettings', () => {
     it('returns existing settings when present in database', async () => {
-      loadDatabaseFile.mockResolvedValue({ settings: { pythonPath: '/x/python' } });
+      loadDatabaseFile.mockResolvedValue({
+        settings: { pythonPath: '/x/python' },
+      });
       loadDefaultSettings.mockReturnValue({ pythonPath: '/default/python' });
 
       await expect(SettingsService.loadSettings()).resolves.toEqual({
@@ -194,7 +195,9 @@ describe('SettingsService (main)', () => {
 
       await expect(
         SettingsService.resetFactorySettings(session as any),
-      ).rejects.toThrow('Factory reset failed while clearing browser data');
+      ).rejects.toThrow(
+        'Factory reset failed while clearing browser data. Restart Rosetta DBT Studio before continuing.',
+      );
 
       expect(SecureStorageService.clearAllCredentials).not.toHaveBeenCalled();
       expect(DuckDBBootstrap.cancelFactoryReset).toHaveBeenCalled();
@@ -216,19 +219,73 @@ describe('SettingsService (main)', () => {
       expect(session.clearStorageData).not.toHaveBeenCalled();
       expect(fs.remove).not.toHaveBeenCalled();
     });
+
+    it('preserves the macOS credential verification detail and requires restart', async () => {
+      loadDatabaseFile.mockResolvedValue({ projects: [], settings: {} });
+      (
+        SecureStorageService.clearAllCredentials as jest.Mock
+      ).mockRejectedValueOnce(
+        new Error(
+          'Failed to verify secure credential account removal (1 remaining)',
+        ),
+      );
+      const session = makeSession();
+
+      await expect(
+        SettingsService.resetFactorySettings(session as any),
+      ).rejects.toThrow(
+        'Failed to verify secure credential account removal (1 remaining) Restart Rosetta DBT Studio before continuing.',
+      );
+    });
+
+    it('fails when a running task cannot be cancelled', async () => {
+      loadDatabaseFile.mockResolvedValue({ projects: [], settings: {} });
+      (TaskManagerService.cancelAll as jest.Mock).mockReturnValueOnce(1);
+
+      await expect(
+        SettingsService.resetFactorySettings(makeSession() as any),
+      ).rejects.toThrow(
+        'Could not stop 1 background task(s) Restart Rosetta DBT Studio before continuing.',
+      );
+    });
+
+    it('times out a shutdown operation instead of waiting indefinitely', async () => {
+      jest.useFakeTimers();
+      loadDatabaseFile.mockResolvedValue({ projects: [], settings: {} });
+      (FlowfileService.stop as jest.Mock).mockReturnValueOnce(
+        new Promise(() => {
+          // Simulate a shutdown operation that never settles.
+        }),
+      );
+
+      const reset = SettingsService.resetFactorySettings(makeSession() as any);
+      const rejection = reset.catch((error) => error);
+      await jest.advanceTimersByTimeAsync(0);
+      await jest.advanceTimersByTimeAsync(10_000);
+
+      await expect(rejection).resolves.toEqual(
+        expect.objectContaining({
+          message: expect.stringContaining(
+            'Timed out while stopping Flowfile Restart Rosetta DBT Studio before continuing.',
+          ),
+        }),
+      );
+    });
   });
 
   describe('usePathJoin', () => {
     it('joins path chunks', async () => {
-      await expect(SettingsService.usePathJoin(['a', 'b'])).resolves.toContain('a');
+      await expect(SettingsService.usePathJoin(['a', 'b'])).resolves.toContain(
+        'a',
+      );
     });
   });
 
   describe('getFileName', () => {
     it('returns the basename without extension', async () => {
-      await expect(SettingsService.getFileName(['a', 'b', 'file.sql'])).resolves.toBe(
-        'file',
-      );
+      await expect(
+        SettingsService.getFileName(['a', 'b', 'file.sql']),
+      ).resolves.toBe('file');
     });
   });
 });

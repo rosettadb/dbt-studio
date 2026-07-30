@@ -25,6 +25,8 @@ import { DB_FILE } from '../utils/setupHelpers';
 import DuckDBBootstrap from './duckdb.service';
 import SecureStorageService from './secureStorage.service';
 
+const FACTORY_RESET_SHUTDOWN_TIMEOUT_MS = 10_000;
+
 const cliConfig: Record<
   keyof CliUpdateResponseType,
   {
@@ -469,6 +471,7 @@ export default class SettingsService {
 
   private static async performFactoryReset(session: Session): Promise<void> {
     let stage = 'preparing cleanup';
+    let teardownStarted = false;
 
     try {
       const dataBase = await loadDatabaseFile();
@@ -480,6 +483,7 @@ export default class SettingsService {
       );
 
       stage = 'stopping active resources';
+      teardownStarted = true;
       await this.stopFactoryResetResources();
 
       stage = 'clearing browser data';
@@ -606,7 +610,12 @@ export default class SettingsService {
     } catch (error: unknown) {
       await this.resumeAfterFailedFactoryReset();
       const detail = this.getSanitizedResetDetail(error);
-      throw new Error(`Factory reset failed while ${stage}.${detail}`);
+      const restartInstruction = teardownStarted
+        ? ' Restart Rosetta DBT Studio before continuing.'
+        : '';
+      throw new Error(
+        `Factory reset failed while ${stage}.${detail}${restartInstruction}`,
+      );
     }
   }
 
@@ -629,9 +638,11 @@ export default class SettingsService {
       'The managed Rosetta ',
       'Could not remove:',
       'Data remains for:',
-      'Could not stop Flowfile',
+      'Could not stop ',
       'Failed to delete ',
       'Failed to verify removal ',
+      'Failed to verify secure credential account removal',
+      'Timed out while ',
     ];
     return safePrefixes.some((prefix) => error.message.startsWith(prefix))
       ? ` ${error.message}`
@@ -747,19 +758,61 @@ export default class SettingsService {
 
     AgentService.cancelAllForFactoryReset();
     AgentEditorBridgeService.resetForFactoryReset();
-    TaskManagerService.cancelAll();
+    const uncancelledTaskCount = TaskManagerService.cancelAll();
+    if (uncancelledTaskCount > 0) {
+      throw new Error(
+        `Could not stop ${uncancelledTaskCount} background task(s)`,
+      );
+    }
 
-    const flowfileResult = await FlowfileService.stop();
+    const flowfileResult = await this.withFactoryResetTimeout(
+      'stopping Flowfile',
+      FlowfileService.stop(),
+    );
     if (!flowfileResult.ok) {
       throw new Error('Could not stop Flowfile');
     }
 
-    await MCPClientManager.disconnectAll();
+    await this.withFactoryResetTimeout(
+      'disconnecting MCP clients',
+      MCPClientManager.disconnectAll(),
+    );
     ConnectorsService.cleanupBigQueryKeyFiles();
-    await DuckLakeConnectionManager.disconnectAll();
-    await CatalogAdapterFactory.disconnectAll();
-    await DuckDBBootstrap.beginFactoryReset();
-    await MainDatabaseService.beginFactoryReset();
+    await this.withFactoryResetTimeout(
+      'disconnecting DuckLake connections',
+      DuckLakeConnectionManager.disconnectAll(),
+    );
+    await this.withFactoryResetTimeout(
+      'disconnecting catalog adapters',
+      CatalogAdapterFactory.disconnectAll(),
+    );
+    await this.withFactoryResetTimeout(
+      'stopping DuckDB',
+      DuckDBBootstrap.beginFactoryReset(),
+    );
+    await this.withFactoryResetTimeout(
+      'stopping the main database',
+      MainDatabaseService.beginFactoryReset(),
+    );
+  }
+
+  private static async withFactoryResetTimeout<T>(
+    description: string,
+    operation: Promise<T>,
+  ): Promise<T> {
+    let timeout: ReturnType<typeof setTimeout> | undefined;
+    try {
+      return await Promise.race([
+        operation,
+        new Promise<T>((_resolve, reject) => {
+          timeout = setTimeout(() => {
+            reject(new Error(`Timed out while ${description}`));
+          }, FACTORY_RESET_SHUTDOWN_TIMEOUT_MS);
+        }),
+      ]);
+    } finally {
+      if (timeout) clearTimeout(timeout);
+    }
   }
 
   // Rosetta version management

@@ -1,17 +1,16 @@
-const findCredentials = jest.fn();
-const deletePassword = jest.fn();
-const execFile = jest.fn();
+import { execFile as childProcessExecFile } from 'child_process';
+import SecureStorageService from '../../../../src/main/services/secureStorage.service';
 
 jest.mock('keytar', () => ({
   __esModule: true,
   default: {
-    findCredentials: (...args: unknown[]) => findCredentials(...args),
-    deletePassword: (...args: unknown[]) => deletePassword(...args),
+    findCredentials: jest.fn(),
+    deletePassword: jest.fn(),
   },
 }));
 
 jest.mock('child_process', () => ({
-  execFile: (...args: unknown[]) => execFile(...args),
+  execFile: jest.fn(),
 }));
 
 jest.mock('../../../../src/main/services/mainDatabase.service', () => ({
@@ -19,7 +18,10 @@ jest.mock('../../../../src/main/services/mainDatabase.service', () => ({
   default: {},
 }));
 
-import SecureStorageService from '../../../../src/main/services/secureStorage.service';
+const mockedKeytar = jest.requireMock('keytar').default;
+const findCredentials = mockedKeytar.findCredentials as jest.Mock;
+const deletePassword = mockedKeytar.deletePassword as jest.Mock;
+const execFile = childProcessExecFile as unknown as jest.Mock;
 
 describe('SecureStorageService.clearAllCredentials', () => {
   const originalPlatform = process.platform;
